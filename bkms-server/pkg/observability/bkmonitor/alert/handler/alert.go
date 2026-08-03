@@ -231,7 +231,7 @@ func (h *Handler) UpdateAlertStrategy(c *gin.Context) {
 //	@Param		workspaceID	path		string	true	"工作空间 ID"
 //	@Param		appID		path		string	true	"应用 ID"
 //	@Param		strategyID		path		string	true	"规则 ID"
-//	@Success	200			{object}	serializer.EmptyOutput
+//	@Success	200			{object}	slz.EmptyOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID} [delete]
 func (h *Handler) DeleteAlertStrategy(c *gin.Context) {
