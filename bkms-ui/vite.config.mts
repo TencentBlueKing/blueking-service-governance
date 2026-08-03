@@ -63,7 +63,7 @@ export default ({ mode }: { mode: string }) => {
           },
         },
         '/api-bk-user-selector': {
-          target: env.BK_API_URL_TMPL.replace('{api_name}', 'bk-user-web'),
+          target: (env.BK_API_URL_TMPL || '').replace('{api_name}', 'bk-user-web'),
           changeOrigin: true,
           secure: false,
           cookieDomainRewrite: '',
