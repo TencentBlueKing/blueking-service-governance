@@ -77,7 +77,7 @@ bkms-server migrate --srvCfg <config_path> down 1
 
 ```
 # 创建空的 migration json 文件
-./bin/migrate create -ext json -dir db/migrations some_model_idx
+./bin/migrate create -ext json -seq -dir db/migrations some_model_idx
 ```
 
 之后，修改空 json 文件内容以添加索引（参考： https://github.com/golang-migrate/migrate/tree/master/database/mongodb/examples/migrations）。注意 up/down 两个 json 文件都需要提供。
