@@ -24,7 +24,9 @@ func PortForward(ctx context.Context, cli client.Client, opts PortForwardOptions
 	}
 
 	// 预检 server 端权限（环境类型 + 白名单），避免启动 listener 后才发现无权限
-	if err := cli.CheckPortForwardPermission(ctx, opts.AppID, opts.EnvName, opts.InstanceID, opts.RemotePort, opts.LocalPort); err != nil {
+	if err := cli.CheckPortForwardPermission(
+		ctx, opts.AppID, opts.EnvName, opts.InstanceID, opts.RemotePort, opts.LocalPort,
+	); err != nil {
 		return err
 	}
 
