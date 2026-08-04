@@ -38,11 +38,11 @@ unless explicitly overridden in the YAML file.`,
   #     - ./server
   #   args:
   #     - --config
-  #     - /app/conf/trpc_go.yaml
+  #     - /usr/local/trpc/conf/trpc_go.yaml
   #   trpcSpec:
   #     language: go
   #     fileName: trpc_go.yaml
-  #     filePath: /app/conf`,
+  #     filePath: /usr/local/trpc/conf`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := appspec.EditStartCommandHandler(cmd.Context(), appID, specFile); err != nil {
 				return errors.Wrap(err, "edit start command")

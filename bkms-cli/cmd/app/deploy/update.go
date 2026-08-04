@@ -75,7 +75,7 @@ This command supports four update modes, specified via the 'updateMode' field in
   # 4. Grayscale update (update-grayscale.yaml):
   updateMode: Grayscale
   imageTag: v1.0.0
-  instanceIDs: "pod-A;pod-B"
+  instanceIDs: "pod-1;pod-2"
   # Or use array format:
   # instanceIDs:
   #   - pod-1

@@ -29,7 +29,7 @@ When an application has multiple config files in the same environment, use --nam
   bkms-cli app app-cfg-file delete-version --app demo --version 7
 
   # Delete one version by version record ID
-  bkms-cli app app-cfg-file delete-version --app demo --env prod --version-id version-record-7
+  bkms-cli app app-cfg-file delete-version --app demo --env prod --version-id <record-id>
 
   # Delete one Helm config file version by name
   bkms-cli app app-cfg-file delete-version --app demo --name values --version 3`,

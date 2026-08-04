@@ -33,7 +33,7 @@ Displays the current container entrypoint command and arguments for the applicat
 				return errors.Wrap(err, "view start command")
 			}
 
-			if outputFormat == "json" || outputFormat == "yaml" {
+			if outputFormat != "" {
 				formatted, fmtErr := output.FormatData(cmd.Context(), result, outputFormat)
 				if fmtErr != nil {
 					return errors.Wrap(fmtErr, "format output")

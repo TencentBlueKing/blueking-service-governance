@@ -29,7 +29,7 @@ When an application has multiple config files in the same environment, use --nam
   bkms-cli app app-cfg-file rollback-version --app demo --version 7
 
   # Roll back one version by version record ID
-  bkms-cli app app-cfg-file rollback-version --app demo --env prod --version-id version-record-7
+  bkms-cli app app-cfg-file rollback-version --app demo --env prod --version-id <record-id>
 
   # Roll back one Helm config file version by name
   bkms-cli app app-cfg-file rollback-version --app demo --name values --version 3
