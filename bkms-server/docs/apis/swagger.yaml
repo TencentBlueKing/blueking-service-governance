@@ -1278,7 +1278,13 @@ definitions:
     type: object
   serializer.AppModelDeployRecordOutputObj:
     properties:
+      branch:
+        description: 代码分支（仅构建+部署记录返回）
+        type: string
       clusterID:
+        type: string
+      commitID:
+        description: Commit ID（仅构建+部署记录返回）
         type: string
       createdAt:
         type: string
@@ -1286,6 +1292,9 @@ definitions:
         type: string
       imageTag:
         type: string
+      isBuildAutoDeploy:
+        description: 是否由“构建+部署”触发
+        type: boolean
       message:
         type: string
       namespace:

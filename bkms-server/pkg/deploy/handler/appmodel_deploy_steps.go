@@ -8,7 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
+	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -58,14 +61,77 @@ func (h *Handler) listAppModelDeployRecords(c *gin.Context) {
 		return
 	}
 
-	// 转换成输出格式
-	outputRecords := make([]*serializer.AppModelDeployRecordOutputObj, 0, len(records))
-	for _, record := range records {
-		outputRecords = append(outputRecords, new(serializer.AppModelDeployRecordOutputObj).FromModel(record))
-	}
+	// 转换成输出格式，并在可关联到构建+部署记录时补充构建信息
+	outputRecords := buildAppModelDeployRecordOutputs(
+		ctx,
+		app.ID,
+		records,
+		h.registry.BuildAutoDeployRecordStore,
+		h.registry.BuildRecordStore,
+	)
 	ginutils.OK(c, serializer.ListAppModelDeployRecordsOutput{
 		Data: serializer.PaginatedAppModelDeployRecordsOutputObjs{Count: total, Results: outputRecords},
 	})
+}
+
+// buildAppModelDeployRecordOutputs 将部署记录转换为接口输出，并按需补充构建关联信息。
+func buildAppModelDeployRecordOutputs(
+	ctx context.Context,
+	appID string,
+	records []appmodeldeploy.Record,
+	buildAutoDeployRecordStore autodeploy.RecordStore,
+	buildRecordStore build.RecordStore,
+) []*serializer.AppModelDeployRecordOutputObj {
+	outputs := make([]*serializer.AppModelDeployRecordOutputObj, 0, len(records))
+	for _, record := range records {
+		output := new(serializer.AppModelDeployRecordOutputObj).FromModel(record)
+		enrichAppModelDeployRecordOutput(ctx, appID, record, output, buildAutoDeployRecordStore, buildRecordStore)
+		outputs = append(outputs, output)
+	}
+	return outputs
+}
+
+// enrichAppModelDeployRecordOutput 根据部署记录关联的一键构建部署记录，补充构建信息字段。
+func enrichAppModelDeployRecordOutput(
+	ctx context.Context,
+	appID string,
+	record appmodeldeploy.Record,
+	output *serializer.AppModelDeployRecordOutputObj,
+	buildAutoDeployRecordStore autodeploy.RecordStore,
+	buildRecordStore build.RecordStore,
+) {
+	if buildAutoDeployRecordStore == nil {
+		return
+	}
+
+	autoDeployRecord, err := buildAutoDeployRecordStore.GetByDeployID(ctx, appID, record.ID.Hex())
+	if err != nil {
+		if !errors.Is(err, autodeploy.ErrRecordNotFound) {
+			log.Warnf(ctx, "get build auto deploy record for deploy %s failed: %v", record.ID.Hex(), err)
+		}
+		return
+	}
+
+	output.IsBuildAutoDeploy = true
+	output.Branch = autoDeployRecord.Branch
+
+	if buildRecordStore == nil || autoDeployRecord.BuildID == "" {
+		return
+	}
+
+	buildRecord, err := buildRecordStore.Get(ctx, appID, autoDeployRecord.BuildID)
+	if err != nil {
+		log.Warnf(ctx, "get build record %s for deploy %s failed: %v", autoDeployRecord.BuildID, record.ID.Hex(), err)
+		return
+	}
+	if buildRecord == nil {
+		return
+	}
+
+	if output.Branch == "" {
+		output.Branch = buildRecord.Params[pipelineparam.RepoRevision]
+	}
+	output.CommitID = buildRecord.Extras[pipelinevar.GitRepoHeadCommitID]
 }
 
 // preCheckDeployEnvVars 检查 AppModel 部署中引用但未定义的环境变量
