@@ -883,6 +883,9 @@ definitions:
         type: string
       beginTime:
         type: integer
+      bkMonitorStrategyID:
+        example: "0"
+        type: string
       content:
         type: string
       createTime:
@@ -910,7 +913,6 @@ definitions:
       status:
         type: string
       strategyID:
-        example: "0"
         type: string
       strategyName:
         type: string
@@ -6235,12 +6237,12 @@ definitions:
     type: object
   serializer.RemoteRefOutput:
     properties:
+      bkMonitorStrategyID:
+        example: "0"
+        type: string
       envID:
         type: string
       envName:
-        type: string
-      remoteStrategyID:
-        example: "0"
         type: string
       remoteStrategyName:
         type: string
@@ -16384,7 +16386,7 @@ paths:
         name: appID
         required: true
         type: string
-      - description: 规则 ID
+      - description: 本地策略 ID
         in: path
         name: strategyID
         required: true
@@ -16419,7 +16421,7 @@ paths:
         name: appID
         required: true
         type: string
-      - description: 规则 ID
+      - description: 本地策略 ID
         in: path
         name: strategyID
         required: true
@@ -16430,7 +16432,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput'
+            $ref: '#/definitions/serializer.GetAlertStrategyResp'
         "400":
           description: Bad Request
           schema:
@@ -16460,7 +16462,7 @@ paths:
         name: appID
         required: true
         type: string
-      - description: 规则 ID
+      - description: 本地策略 ID
         in: path
         name: strategyID
         required: true
@@ -16502,7 +16504,7 @@ paths:
         name: appID
         required: true
         type: string
-      - description: 规则 ID
+      - description: 本地策略 ID
         in: path
         name: strategyID
         required: true
@@ -16514,6 +16516,21 @@ paths:
           type: string
         name: status
         type: array
+      - collectionFormat: csv
+        description: 告警级别
+        in: query
+        items:
+          type: integer
+        name: severity
+        type: array
+      - description: 开始时间
+        in: query
+        name: startTime
+        type: integer
+      - description: 结束时间
+        in: query
+        name: endTime
+        type: integer
       - description: 页码，从 1 开始
         in: query
         name: page
@@ -16524,6 +16541,29 @@ paths:
         name: pageSize
         required: true
         type: integer
+      - description: 按告警名称过滤
+        in: query
+        name: alertName
+        type: string
+      - description: 按策略名称过滤
+        in: query
+        name: strategyName
+        type: string
+      - description: 按事件 ID 过滤
+        in: query
+        name: eventID
+        type: string
+      - description: 按目标实例过滤
+        in: query
+        name: target
+        type: string
+      - collectionFormat: csv
+        description: 排序字段列表，默认 -create_time
+        in: query
+        items:
+          type: string
+        name: ordering
+        type: array
       produces:
       - application/json
       responses:
@@ -16557,7 +16597,7 @@ paths:
         name: appID
         required: true
         type: string
-      - description: 规则 ID
+      - description: 本地策略 ID
         in: path
         name: strategyID
         required: true
@@ -16599,7 +16639,7 @@ paths:
         name: appID
         required: true
         type: string
-      - description: 规则 ID
+      - description: 本地策略 ID
         in: path
         name: strategyID
         required: true
@@ -16619,6 +16659,96 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 同步告警策略到远端
+      tags:
+      - bkintegrations-bkmonitor
+  /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alerts:
+    get:
+      operationId: ListAlertEvents
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 环境名称
+        in: query
+        name: envName
+        type: string
+      - collectionFormat: csv
+        description: 告警状态
+        in: query
+        items:
+          type: string
+        name: status
+        type: array
+      - collectionFormat: csv
+        description: 告警级别
+        in: query
+        items:
+          type: integer
+        name: severity
+        type: array
+      - description: 开始时间
+        in: query
+        name: startTime
+        type: integer
+      - description: 结束时间
+        in: query
+        name: endTime
+        type: integer
+      - description: 页码，从 1 开始
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: 每页数量，仅支持 5/10/20/50/100
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      - description: 按告警名称过滤
+        in: query
+        name: alertName
+        type: string
+      - description: 按策略名称过滤
+        in: query
+        name: strategyName
+        type: string
+      - description: 按事件 ID 过滤
+        in: query
+        name: eventID
+        type: string
+      - description: 按目标实例过滤
+        in: query
+        name: target
+        type: string
+      - collectionFormat: csv
+        description: 排序字段列表，默认 -create_time
+        in: query
+        items:
+          type: string
+        name: ordering
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListAlertEventsResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询应用下的告警事件列表
       tags:
       - bkintegrations-bkmonitor
   /workspaces/{workspaceID}/bkci-git-projects:
@@ -16849,64 +16979,6 @@ paths:
       summary: 获取蓝盾流水线变量列表
       tags:
       - bkintegrations-bkci
-  /workspaces/{workspaceID}/bkmonitor/alerts:
-    get:
-      operationId: ListAlertEvents
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - collectionFormat: csv
-        description: 告警状态
-        in: query
-        items:
-          type: string
-        name: status
-        type: array
-      - collectionFormat: csv
-        description: 告警级别
-        in: query
-        items:
-          type: integer
-        name: severity
-        type: array
-      - description: 开始时间
-        in: query
-        name: startTime
-        type: integer
-      - description: 结束时间
-        in: query
-        name: endTime
-        type: integer
-      - description: 页码，从 1 开始
-        in: query
-        name: page
-        required: true
-        type: integer
-      - description: 每页数量，仅支持 5/10/20/50/100
-        in: query
-        name: pageSize
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListAlertEventsResp'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 查询告警事件列表
-      tags:
-      - bkintegrations-bkmonitor
   /workspaces/{workspaceID}/bkmonitor/alerts/{alertID}:
     get:
       operationId: GetAlertDetail

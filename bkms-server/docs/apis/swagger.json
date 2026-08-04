@@ -13305,7 +13305,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "规则 ID",
+                        "description": "本地策略 ID",
                         "name": "strategyID",
                         "in": "path",
                         "required": true
@@ -13315,7 +13315,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
+                            "$ref": "#/definitions/serializer.GetAlertStrategyResp"
                         }
                     },
                     "400": {
@@ -13369,7 +13369,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "规则 ID",
+                        "description": "本地策略 ID",
                         "name": "strategyID",
                         "in": "path",
                         "required": true
@@ -13433,7 +13433,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "规则 ID",
+                        "description": "本地策略 ID",
                         "name": "strategyID",
                         "in": "path",
                         "required": true
@@ -13490,7 +13490,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "规则 ID",
+                        "description": "本地策略 ID",
                         "name": "strategyID",
                         "in": "path",
                         "required": true
@@ -13506,6 +13506,28 @@
                         "in": "query"
                     },
                     {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "告警级别",
+                        "name": "severity",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "开始时间",
+                        "name": "startTime",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "结束时间",
+                        "name": "endTime",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "页码，从 1 开始",
                         "name": "page",
@@ -13518,6 +13540,40 @@
                         "name": "pageSize",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "按告警名称过滤",
+                        "name": "alertName",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "按策略名称过滤",
+                        "name": "strategyName",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "按事件 ID 过滤",
+                        "name": "eventID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "按目标实例过滤",
+                        "name": "target",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "排序字段列表，默认 -create_time",
+                        "name": "ordering",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -13574,7 +13630,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "规则 ID",
+                        "description": "本地策略 ID",
                         "name": "strategyID",
                         "in": "path",
                         "required": true
@@ -13640,7 +13696,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "规则 ID",
+                        "description": "本地策略 ID",
                         "name": "strategyID",
                         "in": "path",
                         "required": true
@@ -13651,6 +13707,142 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alerts": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "查询应用下的告警事件列表",
+                "operationId": "ListAlertEvents",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称",
+                        "name": "envName",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "告警状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "告警级别",
+                        "name": "severity",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "开始时间",
+                        "name": "startTime",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "结束时间",
+                        "name": "endTime",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，从 1 开始",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，仅支持 5/10/20/50/100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "按告警名称过滤",
+                        "name": "alertName",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "按策略名称过滤",
+                        "name": "strategyName",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "按事件 ID 过滤",
+                        "name": "eventID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "按目标实例过滤",
+                        "name": "target",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "排序字段列表，默认 -create_time",
+                        "name": "ordering",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListAlertEventsResp"
                         }
                     },
                     "400": {
@@ -14018,95 +14210,6 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.GetBkCIPipelineVariablesOutput"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{workspaceID}/bkmonitor/alerts": {
-            "get": {
-                "security": [
-                    {
-                        "BkUserInfo": []
-                    },
-                    {
-                        "BkUserCredential": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "bkintegrations-bkmonitor"
-                ],
-                "summary": "查询告警事件列表",
-                "operationId": "ListAlertEvents",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "工作空间 ID",
-                        "name": "workspaceID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "告警状态",
-                        "name": "status",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "告警级别",
-                        "name": "severity",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "开始时间",
-                        "name": "startTime",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "结束时间",
-                        "name": "endTime",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "页码，从 1 开始",
-                        "name": "page",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "每页数量，仅支持 5/10/20/50/100",
-                        "name": "pageSize",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/serializer.ListAlertEventsResp"
                         }
                     },
                     "400": {
@@ -16862,6 +16965,10 @@
                 "beginTime": {
                     "type": "integer"
                 },
+                "bkMonitorStrategyID": {
+                    "type": "string",
+                    "example": "0"
+                },
                 "content": {
                     "type": "string"
                 },
@@ -16900,8 +17007,7 @@
                     "type": "string"
                 },
                 "strategyID": {
-                    "type": "string",
-                    "example": "0"
+                    "type": "string"
                 },
                 "strategyName": {
                     "type": "string"
@@ -24760,15 +24866,15 @@
         "serializer.RemoteRefOutput": {
             "type": "object",
             "properties": {
+                "bkMonitorStrategyID": {
+                    "type": "string",
+                    "example": "0"
+                },
                 "envID": {
                     "type": "string"
                 },
                 "envName": {
                     "type": "string"
-                },
-                "remoteStrategyID": {
-                    "type": "string",
-                    "example": "0"
                 },
                 "remoteStrategyName": {
                     "type": "string"

@@ -183,11 +183,11 @@ type SwitchAlertStrategyBody struct {
 
 // RemoteRefOutput 远端策略引用输出
 type RemoteRefOutput struct {
-	EnvID              string `json:"envID"`
-	EnvName            string `json:"envName"`
-	TrafficLaneName    string `json:"trafficLaneName,omitempty"`
-	RemoteStrategyName string `json:"remoteStrategyName"`
-	RemoteStrategyID   int64  `json:"remoteStrategyID,string"`
+	EnvID               string `json:"envID"`
+	EnvName             string `json:"envName"`
+	TrafficLaneName     string `json:"trafficLaneName,omitempty"`
+	RemoteStrategyName  string `json:"remoteStrategyName"`
+	BKMonitorStrategyID int64  `json:"bkMonitorStrategyID,string"`
 }
 
 // AlertStrategyOutput 告警策略输出
@@ -224,11 +224,11 @@ func (o *AlertStrategyOutput) FromModel(strategy alertstrategy.AlertStrategy) *A
 	remoteRefs := make([]RemoteRefOutput, 0, len(strategy.RemoteRefs))
 	for _, ref := range strategy.RemoteRefs {
 		remoteRefs = append(remoteRefs, RemoteRefOutput{
-			EnvID:              ref.EnvID.Hex(),
-			EnvName:            ref.EnvName,
-			TrafficLaneName:    ref.TrafficLaneName,
-			RemoteStrategyName: ref.RemoteStrategyName,
-			RemoteStrategyID:   ref.RemoteStrategyID,
+			EnvID:               ref.EnvID.Hex(),
+			EnvName:             ref.EnvName,
+			TrafficLaneName:     ref.TrafficLaneName,
+			RemoteStrategyName:  ref.RemoteStrategyName,
+			BKMonitorStrategyID: ref.RemoteStrategyID,
 		})
 	}
 

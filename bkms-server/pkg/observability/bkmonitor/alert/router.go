@@ -26,6 +26,8 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	{
 		// 查询告警策略列表
 		appGroup.GET("/alert-strategies", h.ListAlertStrategies)
+		// 查询应用下的告警事件列表
+		appGroup.GET("/alerts", h.ListAlertEvents)
 		// 查询单个告警策略详情
 		appGroup.GET("/alert-strategies/:strategyID", h.GetAlertStrategy)
 		// 创建告警策略
@@ -45,8 +47,6 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	// 告警事件（按工作空间维度）
 	wsGroup := rg.Group("/workspaces/:workspaceID/bkmonitor")
 	{
-		// 查询告警事件列表
-		wsGroup.GET("/alerts", h.ListAlertEvents)
 		// 查询单个告警事件详情
 		wsGroup.GET("/alerts/:alertID", h.GetAlertDetail)
 	}

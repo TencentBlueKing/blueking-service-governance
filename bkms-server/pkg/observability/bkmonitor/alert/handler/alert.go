@@ -67,8 +67,8 @@ func (h *Handler) ListAlertStrategies(c *gin.Context) {
 //	@Security	BkUserCredential
 //	@Param		workspaceID	path		string	true	"工作空间 ID"
 //	@Param		appID		path		string	true	"应用 ID"
-//	@Param		strategyID		path		string	true	"规则 ID"
-//	@Success	200			{object}	slz.EmptyOutput
+//	@Param		strategyID	path		string	true	"本地策略 ID"
+//	@Success	200			{object}	serializer.GetAlertStrategyResp
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID} [get]
@@ -170,7 +170,7 @@ func (h *Handler) CreateAlertStrategy(c *gin.Context) {
 //	@Security	BkUserCredential
 //	@Param		workspaceID	path		string						true	"工作空间 ID"
 //	@Param		appID		path		string						true	"应用 ID"
-//	@Param		strategyID		path		string						true	"规则 ID"
+//	@Param		strategyID	path		string						true	"本地策略 ID"
 //	@Param		body		body		serializer.UpdateAlertStrategyBody	true	"请求体"
 //	@Success	200			{object}	serializer.GetAlertStrategyResp
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
@@ -230,7 +230,7 @@ func (h *Handler) UpdateAlertStrategy(c *gin.Context) {
 //	@Security	BkUserCredential
 //	@Param		workspaceID	path		string	true	"工作空间 ID"
 //	@Param		appID		path		string	true	"应用 ID"
-//	@Param		strategyID		path		string	true	"规则 ID"
+//	@Param		strategyID	path		string	true	"本地策略 ID"
 //	@Success	200			{object}	slz.EmptyOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID} [delete]
@@ -277,7 +277,7 @@ func (h *Handler) DeleteAlertStrategy(c *gin.Context) {
 //	@Security	BkUserCredential
 //	@Param		workspaceID	path		string	true	"工作空间 ID"
 //	@Param		appID		path		string	true	"应用 ID"
-//	@Param		strategyID		path		string	true	"规则 ID"
+//	@Param		strategyID	path		string	true	"本地策略 ID"
 //	@Success	200			{object}	slz.EmptyOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/sync [post]
@@ -321,7 +321,7 @@ func (h *Handler) SyncAlertStrategy(c *gin.Context) {
 //	@Security	BkUserCredential
 //	@Param		workspaceID	path		string						true	"工作空间 ID"
 //	@Param		appID		path		string						true	"应用 ID"
-//	@Param		strategyID		path		string						true	"规则 ID"
+//	@Param		strategyID	path		string						true	"本地策略 ID"
 //	@Param		body		body		serializer.SwitchAlertStrategyBody	true	"请求体"
 //	@Success	200			{object}	slz.EmptyOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput

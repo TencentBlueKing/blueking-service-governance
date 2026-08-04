@@ -5,6 +5,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/timex"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
+	alertevent "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/event"
 )
 
 // AlertQueryInput 告警事件查询参数
@@ -29,29 +30,53 @@ func (q *AlertQueryInput) Normalize() {
 	}
 }
 
+// ToSearchInput 将查询参数转换为告警事件服务层输入。
+func (q AlertQueryInput) ToSearchInput() alertevent.SearchInput {
+	return alertevent.SearchInput{
+		Status:       q.Status,
+		Severity:     q.Severity,
+		StartTime:    q.StartTime,
+		EndTime:      q.EndTime,
+		Page:         q.Page,
+		PageSize:     q.PageSize,
+		AlertName:    q.AlertName,
+		StrategyName: q.StrategyName,
+		EventID:      q.EventID,
+		Target:       q.Target,
+		Ordering:     q.Ordering,
+	}
+}
+
+// AppScopedAlertQueryInput 应用维度告警事件查询参数。
+type AppScopedAlertQueryInput struct {
+	AlertQueryInput
+	EnvName string `form:"envName"`
+}
+
 // AlertEventOutput 告警事件输出
 type AlertEventOutput struct {
-	ID           string `json:"id"`
-	EventID      string `json:"eventID,omitempty"`
-	AlertName    string `json:"alertName"`
-	Status       string `json:"status"`
-	Severity     int    `json:"severity"`
-	Description  string `json:"description"`
-	StrategyID   int64  `json:"strategyID,string"`
-	StrategyName string `json:"strategyName"`
-	TargetType   string `json:"targetType"`
-	Target       string `json:"target"`
-	Dimensions   any    `json:"dimensions,omitempty"`
-	CurrentValue any    `json:"currentValue,omitempty"`
-	DataSource   string `json:"dataSource,omitempty"`
-	Content      string `json:"content,omitempty"`
-	Detail       any    `json:"detail,omitempty"`
-	RelatedInfo  any    `json:"relatedInfo,omitempty"`
-	Duration     string `json:"duration,omitempty"`
-	BeginTime    int64  `json:"beginTime"`
-	EndTime      int64  `json:"endTime"`
-	LatestTime   int64  `json:"latestTime"`
-	CreateTime   int64  `json:"createTime"`
+	StrategyID          string `json:"strategyID,omitempty"`
+	ID                  string `json:"id"`
+	EventID             string `json:"eventID,omitempty"`
+	AlertName           string `json:"alertName"`
+	Status              string `json:"status"`
+	Severity            int    `json:"severity"`
+	Description         string `json:"description"`
+	BKMonitorStrategyID int64  `json:"bkMonitorStrategyID,string"`
+	StrategyName        string `json:"strategyName"`
+	TargetType          string `json:"targetType"`
+	Target              string `json:"target"`
+	Dimensions          any    `json:"dimensions,omitempty"`
+	CurrentValue        any    `json:"currentValue,omitempty"`
+	DataSource          string `json:"dataSource,omitempty"`
+	Content             string `json:"content,omitempty"`
+	Detail              any    `json:"detail,omitempty"`
+	RelatedInfo         any    `json:"relatedInfo,omitempty"`
+	Duration            string `json:"duration,omitempty"`
+	BeginTime           int64  `json:"beginTime"`
+	EndTime             int64  `json:"endTime"`
+	LatestTime          int64  `json:"latestTime"`
+	CreateTime          int64  `json:"createTime"`
 }
 
 // ListAlertEventsOutput 告警事件列表输出
@@ -77,29 +102,30 @@ type GetAlertDetailResp struct {
 }
 
 // NewAlertEventOutput 从云 API 告警事件转换为输出。
-func NewAlertEventOutput(a bkmapi.AlertEvent) *AlertEventOutput {
+func NewAlertEventOutput(a bkmapi.AlertEvent, strategyID string) *AlertEventOutput {
 	return &AlertEventOutput{
-		ID:           a.ID,
-		EventID:      a.EventID,
-		AlertName:    a.AlertName,
-		Status:       a.Status,
-		Severity:     a.Severity,
-		Description:  a.Description,
-		StrategyID:   a.StrategyID,
-		StrategyName: a.StrategyName,
-		TargetType:   a.TargetType,
-		Target:       a.Target,
-		Dimensions:   a.Dimensions,
-		CurrentValue: a.CurrentValue,
-		DataSource:   a.DataSource,
-		Content:      a.Content,
-		Detail:       a.Detail,
-		RelatedInfo:  a.RelatedInfo,
-		Duration:     calcAlertDuration(a.BeginTime, a.EndTime, a.LatestTime),
-		BeginTime:    a.BeginTime,
-		EndTime:      a.EndTime,
-		LatestTime:   a.LatestTime,
-		CreateTime:   a.CreateTime,
+		StrategyID:          strategyID,
+		ID:                  a.ID,
+		EventID:             a.EventID,
+		AlertName:           a.AlertName,
+		Status:              a.Status,
+		Severity:            a.Severity,
+		Description:         a.Description,
+		BKMonitorStrategyID: a.StrategyID,
+		StrategyName:        a.StrategyName,
+		TargetType:          a.TargetType,
+		Target:              a.Target,
+		Dimensions:          a.Dimensions,
+		CurrentValue:        a.CurrentValue,
+		DataSource:          a.DataSource,
+		Content:             a.Content,
+		Detail:              a.Detail,
+		RelatedInfo:         a.RelatedInfo,
+		Duration:            calcAlertDuration(a.BeginTime, a.EndTime, a.LatestTime),
+		BeginTime:           a.BeginTime,
+		EndTime:             a.EndTime,
+		LatestTime:          a.LatestTime,
+		CreateTime:          a.CreateTime,
 	}
 }
 
