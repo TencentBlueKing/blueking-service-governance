@@ -47,29 +47,12 @@ func ResolvePublicRecord(record parserpkg.ParsedEnvVarRecord) (*RecordResolution
 }
 
 // NewEnvRecordResolver 返回单环境导入场景的记录解析策略。
-// 导入文件必须显式声明 env scope，且 scopeValue 必须与当前目标环境一致。
+// 导入目标完全由当前页面上下文决定，因此文件中不允许声明任何 scope 元数据。
 func NewEnvRecordResolver(environment envmodel.Environment) RecordResolver {
 	scope := envvartypes.ScopeEnv(environment.Name)
 	return func(record parserpkg.ParsedEnvVarRecord) (*RecordResolution, error) {
-		if !record.ScopeTypeSpecified() {
-			return nil, pkgerrors.New("scopeType is required in env import")
-		}
-		declared, err := parseDeclaredRecordScope(record)
-		if err != nil {
-			return nil, err
-		}
-		if declared.ScopeType != envvartypes.ScopeTypeEnv {
-			return nil, pkgerrors.Errorf(
-				`scopeType %q is not allowed in env import; expected "env"`,
-				recordScopeType(record),
-			)
-		}
-		if declared.ScopeValue != environment.Name {
-			return nil, pkgerrors.Errorf(
-				`scopeValue %q must equal target environment %q`,
-				declared.ScopeValue,
-				environment.Name,
-			)
+		if record.ScopeTypeSpecified() || record.ScopeValueSpecified() {
+			return nil, pkgerrors.New("env import does not allow scope metadata")
 		}
 		return &RecordResolution{
 			EffectiveScope: scope,

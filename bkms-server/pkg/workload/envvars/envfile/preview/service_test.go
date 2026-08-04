@@ -160,10 +160,8 @@ SHARED_KEY=override-dev-value
 		Expect(preview.Summary.Overwrite).To(Equal(0))
 	})
 
-	It("should require explicit matching env scope in env import preview", func() {
+	It("should preview env import without scope metadata", func() {
 		preview, err := service.PreviewEnv(ctx, environment, `
-# scopeType: env
-# scopeValue: prod-env
 ENV_ONLY_KEY=env-override-value
 `)
 		Expect(err).NotTo(HaveOccurred())
@@ -173,7 +171,7 @@ ENV_ONLY_KEY=env-override-value
 			Key:            "ENV_ONLY_KEY",
 			Value:          "env-override-value",
 			OriginalValue:  "env-only-value",
-			DeclaredScope:  previewScope(string(envvartypes.ScopeTypeEnv), environment.Name),
+			DeclaredScope:  nil,
 			EffectiveScope: previewScope(string(envvartypes.ScopeTypeEnv), environment.Name),
 			Action:         previewpkg.ImportActionOverwrite,
 			EffectScope:    previewpkg.ImportEffectScopeApplied,
@@ -184,8 +182,6 @@ ENV_ONLY_KEY=env-override-value
 
 	It("should treat inherited public vars as new in env import preview", func() {
 		preview, err := service.PreviewEnv(ctx, environment, `
-# scopeType: env
-# scopeValue: prod-env
 WORKSPACE_ONLY_KEY=env-level-value
 `)
 		Expect(err).NotTo(HaveOccurred())
@@ -194,7 +190,7 @@ WORKSPACE_ONLY_KEY=env-level-value
 		Expect(preview.Items[0]).To(Equal(previewpkg.ImportPreviewItem{
 			Key:            "WORKSPACE_ONLY_KEY",
 			Value:          "env-level-value",
-			DeclaredScope:  previewScope(string(envvartypes.ScopeTypeEnv), environment.Name),
+			DeclaredScope:  nil,
 			EffectiveScope: previewScope(string(envvartypes.ScopeTypeEnv), environment.Name),
 			Action:         previewpkg.ImportActionNew,
 			EffectScope:    previewpkg.ImportEffectScopeApplied,
@@ -385,15 +381,14 @@ STAGING_KEY=staging-value
 		Expect(err.Error()).To(ContainSubstring("scopeType is required in public import"))
 	})
 
-	It("should reject mismatched env scope in env import", func() {
+	It("should reject scope metadata in env import", func() {
 		_, err := service.PreviewEnv(ctx, environment, `
-# scopeType: env
-# scopeValue: other-env
+# scopeType: workspace
 ENV_ONLY_KEY=env-override-value
 `)
 		Expect(err).To(HaveOccurred())
 		Expect(errors.Is(err, parserpkg.ErrInvalidEnvFileContent)).To(BeTrue())
-		Expect(err.Error()).To(ContainSubstring(`scopeValue "other-env" must equal target environment "prod-env"`))
+		Expect(err.Error()).To(ContainSubstring("env import does not allow scope metadata"))
 	})
 
 	It("should reject scope metadata in app import", func() {
@@ -408,8 +403,7 @@ ENV_ONLY_KEY=env-override-value
 		})
 
 		_, err := service.PreviewApp(ctx, app, `
-# scopeType: env
-# scopeValue: prod-env
+# scopeType: workspace
 BKMS_APP_NAME=custom-app-name
 `)
 		Expect(err).To(HaveOccurred())

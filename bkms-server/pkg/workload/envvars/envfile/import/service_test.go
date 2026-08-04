@@ -111,13 +111,9 @@ SHARED_KEY=dev-override
 	It("imports env-scoped vars into the target environment only", func() {
 		err := service.ImportEnv(ctx, environment, `
 # desc: overwrite existing env key
-# scopeType: env
-# scopeValue: prod-env
 ENV_ONLY_KEY=updated-env-value
 
 # desc: add another env key
-# scopeType: env
-# scopeValue: prod-env
 ANOTHER_ENV_KEY=another-value
 `)
 		Expect(err).NotTo(HaveOccurred())
@@ -181,6 +177,15 @@ APP_REGION=ap-guangzhou
 		Expect(envVarsByKey["APP_MODE"].Description).To(Equal("overwrite app var"))
 		Expect(envVarsByKey["APP_REGION"].Value).To(Equal("ap-guangzhou"))
 		Expect(envVarsByKey["APP_REGION"].Description).To(Equal("add app var"))
+	})
+
+	It("rejects scope metadata in env import", func() {
+		err := service.ImportEnv(ctx, environment, `
+# scopeType: workspace
+ENV_ONLY_KEY=updated-env-value
+`)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("env import does not allow scope metadata"))
 	})
 })
 

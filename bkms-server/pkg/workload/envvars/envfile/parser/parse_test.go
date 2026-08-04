@@ -87,6 +87,17 @@ GOOD_KEY=good-value
 		Expect(err.Error()).To(ContainSubstring("scopeValue requires scopeType"))
 	})
 
+	It("rejects env scopeType metadata", func() {
+		_, err := parserpkg.ParseEnvFileRecords(`
+# scopeType: env
+# scopeValue: prod-env
+GOOD_KEY=good-value
+`)
+		Expect(err).To(HaveOccurred())
+		Expect(errors.Is(err, parserpkg.ErrInvalidEnvFileContent)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring(`scopeType "env" is not supported`))
+	})
+
 	It("rejects export syntax even if the remainder is valid", func() {
 		_, err := parserpkg.ParseEnvFileRecords(`export GOOD_KEY=good-value`)
 		Expect(err).To(HaveOccurred())

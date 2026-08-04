@@ -60,6 +60,7 @@ func (s *Service) ExportPublic(ctx context.Context, workspaceID string) (string,
 }
 
 // ExportEnv exports vars directly defined in the target env scope.
+// 目标环境由页面上下文提供，因此导出的 env file 不再携带 scope 元数据。
 func (s *Service) ExportEnv(ctx context.Context, environment envmodel.Environment) (string, error) {
 	vars, err := s.scopedEnvVarStore.List(
 		ctx,
@@ -71,16 +72,12 @@ func (s *Service) ExportEnv(ctx context.Context, environment envmodel.Environmen
 	}
 	vars = filterOutSensitiveScopedVars(vars)
 
-	scope := envvartypes.ScopeEnv(environment.Name)
 	records := make([]renderRecord, 0, len(vars))
 	for _, item := range vars {
-		// 同一个导出文件里的每条记录都复用同一个 env scope，明确声明该文件
-		// 只面向当前目标环境。
 		records = append(records, renderRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
-			Scope:       &scope,
 		})
 	}
 	return renderRecords(records), nil

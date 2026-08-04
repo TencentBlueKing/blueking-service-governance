@@ -18,6 +18,7 @@ const maxEnvFileContentBytes = 1 << 20
 
 // metadataDirectiveLineRegexp 匹配 `.env` 文件中的元数据注释行，格式为 `# field_name: value`。
 // 当前支持的 field_name 有 desc（描述）、scopeType 和 scopeValue。
+// 其中 scopeType 在 env file 语义上仅支持 workspace / envType。
 var metadataDirectiveLineRegexp = regexp.MustCompile(`^#\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$`)
 
 // ErrInvalidEnvFileContent 表示 `.env` 文件内容本身不合法。
@@ -371,6 +372,11 @@ func collectMetadataDirective(trimmed string, lineNo int, pending *pendingRecord
 		}
 		pending.desc = &pendingMetadataDirective{line: lineNo, value: desc}
 	case "scopetype":
+		switch fieldValue {
+		case string(envvartypes.ScopeTypeWorkspace), string(envvartypes.ScopeTypeEnvType):
+		default:
+			return true, wrapLineError(lineNo, `scopeType %q is not supported`, fieldValue)
+		}
 		pending.scopeType = &pendingMetadataDirective{line: lineNo, value: fieldValue}
 	case "scopevalue":
 		pending.scopeValue = &pendingMetadataDirective{line: lineNo, value: fieldValue}

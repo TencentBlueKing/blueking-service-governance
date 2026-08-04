@@ -114,7 +114,7 @@ var _ = Describe("ExportService", func() {
 		Expect(content).To(ContainSubstring("PROD_KEY=prod-value"))
 	})
 
-	It("exports env vars with explicit env scope metadata", func() {
+	It("exports env vars without scope metadata", func() {
 		_, err := scopedEnvVarStore.CreateSimpleEnvScopeVar(
 			ctx,
 			environment,
@@ -127,9 +127,9 @@ var _ = Describe("ExportService", func() {
 		content, err := service.ExportEnv(ctx, environment)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(content).To(ContainSubstring("# desc: env desc"))
-		Expect(content).To(ContainSubstring("# scopeType: env"))
-		Expect(content).To(ContainSubstring("# scopeValue: prod-env"))
 		Expect(content).To(ContainSubstring("ENV_ONLY_KEY=env-only-value"))
+		Expect(content).NotTo(ContainSubstring("# scopeType:"))
+		Expect(content).NotTo(ContainSubstring("# scopeValue:"))
 	})
 
 	It("exports app-defined vars without scope metadata", func() {

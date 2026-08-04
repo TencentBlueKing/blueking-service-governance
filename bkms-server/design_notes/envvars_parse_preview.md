@@ -1,6 +1,6 @@
 # 环境变量导入解析与预览设计说明
 
-本文档只讨论**解析与预览能力**，不覆盖正式导入执行、页面导出能力、应用页按范围导出等后续能力。
+本文档主要讨论**解析与预览能力**，并约束 env file 的文本格式约定；不覆盖正式导入执行流程、页面交互细节、应用页按范围导出等后续能力。
 
 ## 1. 需求范围
 
@@ -11,7 +11,8 @@
 - 应用环境变量页面
 
 - 解析 `.env` 文本中的 `KEY=VALUE`
-- 解析固定注释行语法 `# desc:`、`# scopeType:`、`# scopeValue:`
+- 解析固定注释行语法 `# desc:`
+- 在公共环境变量导入场景下解析 `# scopeType:`、`# scopeValue:`
 - 结合页面上下文计算逐条预览结果
 - 输出新增/覆盖等逐条结果与汇总信息
 - 保证预览语义可以作为后续正式导入的前置基础
@@ -32,10 +33,13 @@
 为了服务 BKMS 的预览需求，当前实现引入了三类完整注释行元数据：
 
 - `# desc: <描述>`
-- `# scopeType: <workspace|envType|env>`
+- `# scopeType: <workspace|envType>`
 - `# scopeValue: <作用域值>`
 
-这不是通用 dotenv 规范的一部分，而是 BKMS 自己在 env file 边界上增加的约定，用来承载描述与目标作用域信息。
+这不是通用 dotenv 规范的一部分，而是 BKMS 自己在 env file 边界上增加的约定，用来承载描述与目标作用域信息。其中：
+
+- `# desc:` 可用于三类页面
+- `# scopeType:` / `# scopeValue:` 只用于公共环境变量页面
 
 ### 2.3 当前没有支持的部分
 
@@ -69,13 +73,15 @@ DB_LABEL="primary # main"
 - 仍不支持 `export KEY=value`
 - `# desc:`、`# scopeType:`、`# scopeValue:` 都是完整注释行
 - 元数据只作用于紧随其后的下一条变量记录
+- `# desc:` 可用于所有导入页面
+- `# scopeType:` / `# scopeValue:` 仅用于公共环境变量页面
 - 普通注释行和空行忽略
 - 若注释行匹配 `# field: value` 形式，但字段名不是 `desc` / `scopeType` / `scopeValue`，则直接报错
 - 若声明了 `scopeValue` 但未声明 `scopeType`，则直接报错
 
 ## 4. 三类页面上下文下的预览语义
 
-虽然三类页面都复用同一个 parser，但 preview 阶段对 `scopeType` / `scopeValue` 的校验规则不同，`overwrite` 的判断口径保持一致。
+虽然三类页面都复用同一个 parser，但 preview 阶段对 `scopeType` / `scopeValue` 的使用方式不同，`overwrite` 的判断口径保持一致。
 
 ### 4.1 公共环境变量页面
 
@@ -98,25 +104,22 @@ KEY=value
 
 - `scopeType=workspace`：`scopeValue` 必须省略
 - `scopeType=envType`：`scopeValue` 必须存在，且取值只能是 `development` / `test` / `production`
-- `scopeType=env`：公共导入不允许
 - 未声明 `scopeType`：直接报错
 
 ### 4.2 单环境变量页面
 
-单环境页面要求文件中**显式**声明目标 env scope：
+单环境页面改为和应用环境变量页面一致，由**当前页面上下文**决定目标导入范围，文件中不再声明目标 env scope：
 
 ```dotenv
-# scopeType: env
-# scopeValue: prod-env
 KEY=value
 ```
 
 规则如下：
 
-- `scopeType` 必须为 `env`
-- `scopeValue` 必须存在
-- `scopeValue` 必须与当前导入目标环境名称完全一致
-- 若缺失、scopeType 不匹配、或 scopeValue 与当前环境不一致，直接报错
+- 不要求声明 `scopeType`
+- 不要求声明 `scopeValue`
+- 导入目标环境由当前页面的环境上下文唯一确定
+- 若文件中出现 `# scopeType:` 或 `# scopeValue:`，直接报错
 
 ### 4.3 应用环境变量页面
 
@@ -126,6 +129,14 @@ KEY=value
 - 不允许 `# scopeValue:`
 
 若出现上述字段，直接报错。
+
+### 4.4 三类页面的职责分界
+
+三类页面在 env file 上的职责划分调整为：
+
+- 公共环境变量页面：文件内显式声明 scope，文件本身携带目标范围
+- 单环境变量页面：目标范围完全由页面上下文决定，文件只描述 key/value/desc
+- 应用环境变量页面：目标范围完全由页面上下文决定，文件只描述 key/value/desc
 
 ## 5. 预览中的覆盖判断
 
@@ -145,7 +156,9 @@ KEY=value
 - 不支持未知元数据字段
 - `# desc:` / `# scopeType:` / `# scopeValue:` 不能悬空出现在文件结尾
 - `scopeValue` 不能脱离 `scopeType` 单独出现
-- public / env / app 三类导入场景都会对 scope 元数据做严格校验，不存在“写了但忽略”的语义
+- 公共环境变量页面：要求显式声明合法 scope 元数据
+- 单环境变量页面：不要求 scope 元数据，若出现则报错
+- 应用环境变量页面：不要求 scope 元数据，若出现则报错
 
 其中 key 的正则和 key/value 的长度约束已收敛到共享定义中，目的是保证：
 

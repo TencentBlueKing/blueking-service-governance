@@ -35,16 +35,22 @@ var _ = Describe("Record resolvers", func() {
 		Expect(err.Error()).To(ContainSubstring(`scopeType "env" is not allowed in public import`))
 	})
 
-	It("requires exact target environment metadata in env import", func() {
+	It("uses page context for env import without requiring metadata", func() {
 		resolve := previewpkg.NewEnvRecordResolver(envmodel.Environment{Name: "prod-env"})
-		res, err := resolve(parserpkg.ParsedEnvVarRecord{
-			DeclaredScopeType:  lo.ToPtr(string(envvartypes.ScopeTypeEnv)),
-			DeclaredScopeValue: lo.ToPtr("prod-env"),
-		})
+		res, err := resolve(parserpkg.ParsedEnvVarRecord{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res).NotTo(BeNil())
 		Expect(res.EffectiveScope.ScopeType).To(Equal(envvartypes.ScopeTypeEnv))
 		Expect(res.EffectiveScope.ScopeValue).To(Equal("prod-env"))
+	})
+
+	It("rejects scope metadata in env import records", func() {
+		resolve := previewpkg.NewEnvRecordResolver(envmodel.Environment{Name: "prod-env"})
+		_, err := resolve(parserpkg.ParsedEnvVarRecord{
+			DeclaredScopeType: lo.ToPtr(string(envvartypes.ScopeTypeWorkspace)),
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("env import does not allow scope metadata"))
 	})
 
 	It("rejects scope metadata in app import records", func() {

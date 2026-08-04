@@ -75,7 +75,7 @@ func (s *ImportPreviewService) PreviewPublic(
 }
 
 // PreviewEnv 预览将环境变量导入到指定的单一环境作用域。
-// 导入文件必须显式声明 env scope，且 scopeValue 必须与目标环境名称一致。
+// 导入目标由当前页面上下文决定，文件中不允许声明任何 scope 元数据。
 // 注意：overwrite 仅表示目标 env scope 下已直接定义过同名 key；
 // 若只是 workspace / envType 公共变量在该环境中生效，不视为 overwrite。
 func (s *ImportPreviewService) PreviewEnv(

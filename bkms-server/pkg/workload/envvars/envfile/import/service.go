@@ -101,6 +101,7 @@ func resolveRecord(
 }
 
 // ImportEnv imports vars into the target env scope.
+// 目标环境由页面上下文指定，因此输入文件不允许声明任何 scope 元数据。
 func (s *Service) ImportEnv(ctx context.Context, environment envmodel.Environment, content string) error {
 	records, err := parserpkg.ParseEnvFileRecords(content)
 	if err != nil {
@@ -111,8 +112,7 @@ func (s *Service) ImportEnv(ctx context.Context, environment envmodel.Environmen
 	var vars []envvars.ScopedEnvVar
 	resolve := previewpkg.NewEnvRecordResolver(environment)
 	for _, record := range records {
-		// 单环境导入把 preview resolver 当作校验使用：只有显式指向当前环境
-		// 的记录才允许继续写入。
+		// 单环境导入与应用导入保持一致：目标 scope 完全由页面上下文决定
 		if _, err := resolveRecord(record, resolve); err != nil {
 			return err
 		}
