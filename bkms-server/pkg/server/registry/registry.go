@@ -36,6 +36,7 @@ import (
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/admin"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/portforward"
 	workspaceadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -119,6 +120,8 @@ type Registry struct {
 	PlatAdminStore admin.Store
 	// 平台空间临时管理员类
 	TempAdminRecordStore workspaceadmin.Store
+	// Port-Forward 白名单类
+	PortForwardWhitelistStore portforward.Store
 }
 
 var (
@@ -221,6 +224,8 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	r.PlatAdminStore = mustInit(admin.NewStoreMongo(mongoClient, dbName))
 	// 临时空间管理员
 	r.TempAdminRecordStore = mustInit(workspaceadmin.NewStoreMongo(mongoClient, dbName))
+	// Port-Forward 白名单
+	r.PortForwardWhitelistStore = mustInit(portforward.NewStoreMongo(mongoClient, dbName))
 }
 
 // registerStoreHooks 注册钩子函数。

@@ -839,13 +839,23 @@ func (c *SvcBasedClient) GetAppDetail(ctx context.Context, appID string) (*AppDe
 }
 
 // GetAppSpecDefaultSection 获取应用默认 section 配置。
-func (c *SvcBasedClient) GetAppSpecDefaultSection(ctx context.Context, appID string, section AppSpecSectionName, result any) error {
+func (c *SvcBasedClient) GetAppSpecDefaultSection(
+	ctx context.Context,
+	appID string,
+	section AppSpecSectionName,
+	result any,
+) error {
 	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-spec/default-%s", appID, section)
 	return c.getAppSpecSection(ctx, url, fmt.Sprintf("get default %s", section), result)
 }
 
 // GetAppSpecEnvEffectiveSection 获取应用环境生效 section 配置。
-func (c *SvcBasedClient) GetAppSpecEnvEffectiveSection(ctx context.Context, appID, envName string, section AppSpecSectionName, result any) error {
+func (c *SvcBasedClient) GetAppSpecEnvEffectiveSection(
+	ctx context.Context,
+	appID, envName string,
+	section AppSpecSectionName,
+	result any,
+) error {
 	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/envs/%s/app-spec/%s/effective", appID, envName, section)
 	return c.getAppSpecSection(ctx, url, fmt.Sprintf("get env effective %s", section), result)
 }
@@ -866,7 +876,12 @@ func (c *SvcBasedClient) getAppSpecSection(ctx context.Context, url, desc string
 }
 
 // SetAppSpecDefaultSection sets the default section config for an application.
-func (c *SvcBasedClient) SetAppSpecDefaultSection(ctx context.Context, appID string, section AppSpecSectionName, body any) error {
+func (c *SvcBasedClient) SetAppSpecDefaultSection(
+	ctx context.Context,
+	appID string,
+	section AppSpecSectionName,
+	body any,
+) error {
 	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-spec/default-%s", appID, section)
 
 	resp, err := c.cli.R().SetContext(ctx).SetBody(body).Put(url)
@@ -881,7 +896,12 @@ func (c *SvcBasedClient) SetAppSpecDefaultSection(ctx context.Context, appID str
 }
 
 // SetAppSpecEnvSection sets the environment-specific section override.
-func (c *SvcBasedClient) SetAppSpecEnvSection(ctx context.Context, appID, envName string, section AppSpecSectionName, body any) error {
+func (c *SvcBasedClient) SetAppSpecEnvSection(
+	ctx context.Context,
+	appID, envName string,
+	section AppSpecSectionName,
+	body any,
+) error {
 	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/envs/%s/app-spec/%s", appID, envName, section)
 
 	resp, err := c.cli.R().SetContext(ctx).SetBody(body).Put(url)
@@ -889,14 +909,24 @@ func (c *SvcBasedClient) SetAppSpecEnvSection(ctx context.Context, appID, envNam
 		return errors.Wrapf(err, "set %s config for env %s", section, envName)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("set %s config for env %s failed: [%d] -> %s", section, envName, resp.StatusCode(), resp.Body())
+		return errors.Errorf(
+			"set %s config for env %s failed: [%d] -> %s",
+			section,
+			envName,
+			resp.StatusCode(),
+			resp.Body(),
+		)
 	}
 
 	return nil
 }
 
 // DeleteAppSpecEnvSection deletes the environment-specific section override (resets to default).
-func (c *SvcBasedClient) DeleteAppSpecEnvSection(ctx context.Context, appID, envName string, section AppSpecSectionName) error {
+func (c *SvcBasedClient) DeleteAppSpecEnvSection(
+	ctx context.Context,
+	appID, envName string,
+	section AppSpecSectionName,
+) error {
 	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/envs/%s/app-spec/%s", appID, envName, section)
 
 	resp, err := c.cli.R().SetContext(ctx).Delete(url)
@@ -932,7 +962,12 @@ func (c *SvcBasedClient) UpdateAppStartCommand(ctx context.Context, appID, appTy
 		return errors.Wrapf(err, "update start command for app %s", appID)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("update start command for app %s failed: [%d] -> %s", appID, resp.StatusCode(), resp.Body())
+		return errors.Errorf(
+			"update start command for app %s failed: [%d] -> %s",
+			appID,
+			resp.StatusCode(),
+			resp.Body(),
+		)
 	}
 
 	return nil

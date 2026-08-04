@@ -34,18 +34,38 @@ type portForwardNetConn struct {
 	closeErr  error
 }
 
+// CheckPortForwardPermission 预检 port-forward 权限。
+// 通过普通 HTTP GET 请求 port-forward 接口，server 端在 WebSocket 升级前会执行权限校验。
+// 如果返回 403 则说明无权限；其他错误码（如 400 WebSocket upgrade required）说明权限通过。
+func (c *SvcBasedClient) CheckPortForwardPermission(
+	ctx context.Context,
+	appID, envName, instanceID string,
+	remotePort, localPort int,
+) error {
+	path, query := portForwardConnectPath(appID, envName, instanceID, remotePort, localPort)
+
+	resp, err := c.cli.R().SetContext(ctx).SetQueryParamsFromValues(query).Get(path)
+	if err != nil {
+		return errors.Wrap(err, "check port-forward permission")
+	}
+
+	// 403 表示权限校验不通过
+	if resp.StatusCode() == http.StatusForbidden {
+		return errors.Errorf("port-forward permission denied: %s", ExtractServerErrorFromBytes(resp.Body()))
+	}
+
+	// 其他非 2xx 状态码中，400 通常是 WebSocket 升级失败（权限已通过），视为正常
+	// 只有 403 才是真正的权限拒绝
+	return nil
+}
+
 // OpenPortForwardTunnel 打开应用实例端口转发 WebSocket 隧道。
 func (c *SvcBasedClient) OpenPortForwardTunnel(
 	ctx context.Context,
 	appID, envName string,
 	opts PortForwardTunnelOptions,
 ) (io.ReadWriteCloser, error) {
-	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/envs/%s/instances/%s/port-forward/connect",
-		url.PathEscape(appID), url.PathEscape(envName), url.PathEscape(opts.InstanceID))
-
-	query := url.Values{}
-	query.Set("remotePort", strconv.Itoa(opts.RemotePort))
-	query.Set("localPort", strconv.Itoa(opts.LocalPort))
+	path, query := portForwardConnectPath(appID, envName, opts.InstanceID, opts.RemotePort, opts.LocalPort)
 
 	conn, err := c.dialWebSocket(ctx, path, query)
 	if err != nil {
@@ -107,7 +127,14 @@ func ExtractServerError(resp *http.Response) string {
 	if err != nil || len(body) == 0 {
 		return "server error"
 	}
-	// 尝试解析 bkerrs JSON 格式：{"error":{"message":"..."}}
+	return ExtractServerErrorFromBytes(body)
+}
+
+// ExtractServerErrorFromBytes 从响应体字节中提取 Server 端返回的错误信息。
+func ExtractServerErrorFromBytes(body []byte) string {
+	if len(body) == 0 {
+		return "server error"
+	}
 	var errResp struct {
 		Error struct {
 			Message string `json:"message"`
@@ -116,7 +143,6 @@ func ExtractServerError(resp *http.Response) string {
 	if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil && errResp.Error.Message != "" {
 		return errResp.Error.Message
 	}
-	// fallback：直接返回响应体文本。
 	return strings.TrimSpace(string(body))
 }
 
@@ -186,4 +212,14 @@ func (c *portForwardNetConn) Close() error {
 		c.closeErr = c.Conn.Close()
 	})
 	return c.closeErr
+}
+
+// portForwardConnectPath 构建 port-forward 连接路径和查询参数。
+func portForwardConnectPath(appID, envName, instanceID string, remotePort, localPort int) (string, url.Values) {
+	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/envs/%s/instances/%s/port-forward/connect",
+		url.PathEscape(appID), url.PathEscape(envName), url.PathEscape(instanceID))
+	query := url.Values{}
+	query.Set("remotePort", strconv.Itoa(remotePort))
+	query.Set("localPort", strconv.Itoa(localPort))
+	return path, query
 }

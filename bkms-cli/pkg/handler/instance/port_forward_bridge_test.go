@@ -26,7 +26,9 @@ var _ = Describe("port-forward tunnel bridge", func() {
 			},
 			tunnelOpened: make(chan struct{}),
 		}
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    freeTCPPort(),
@@ -90,7 +92,9 @@ var _ = Describe("port-forward tunnel bridge", func() {
 		defer serverSide.Close()
 
 		fake := &fakePortForwardTunnelClient{tunnel: remoteSide}
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    18080,
@@ -150,7 +154,9 @@ var _ = Describe("port-forward tunnel bridge", func() {
 				return <-tunnels
 			},
 		}
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    freeTCPPort(),
@@ -213,7 +219,9 @@ var _ = Describe("port-forward tunnel bridge", func() {
 		defer serverSide.Close()
 
 		fake := &fakePortForwardTunnelClient{tunnel: remoteSide}
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    18080,
@@ -241,7 +249,9 @@ var _ = Describe("port-forward tunnel bridge", func() {
 		defer serverSide.Close()
 
 		fake := &fakePortForwardTunnelClient{tunnel: remoteSide}
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    18080,
@@ -263,7 +273,9 @@ var _ = Describe("port-forward tunnel bridge", func() {
 
 		serverErr := errors.New("connect target pod: k8s resource not found (HTTP 500 Internal Server Error)")
 		fake := &fakePortForwardTunnelClient{err: serverErr}
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    18080,
@@ -288,7 +300,9 @@ var _ = Describe("port-forward tunnel bridge", func() {
 		defer cliSide.Close()
 
 		fake := &fakePortForwardTunnelClient{err: errFakeTunnel}
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    18080,
@@ -362,7 +376,4 @@ func (b *blockingReadWriteCloser) Close() error {
 	return nil
 }
 
-var (
-	errFakeTunnel      = bytes.ErrTooLarge
-	errSensitiveTunnel = errors.New("dial tcp 127.0.0.1:5432 with Authorization: Bearer token: connection refused")
-)
+var errFakeTunnel = bytes.ErrTooLarge

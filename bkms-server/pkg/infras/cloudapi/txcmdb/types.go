@@ -3,18 +3,18 @@ package txcmdb
 
 const (
 	// apiName Tx CMDB API 名称，用于 metrics 上报
-	apiName = "tx-cmdb"
+	apiName = "tx-cmdb" //nolint:unused
 
 	// defaultPageSize 默认分页大小
-	defaultPageSize = 200
+	defaultPageSize = 200 //nolint:unused
 
 	// maxScrollPages 全量拉取时的最大分页数，防止死循环
-	maxScrollPages = 1000
+	maxScrollPages = 1000 //nolint:unused
 )
 
 const (
 	// queryLevel2BusinessDetailPath 查询二级业务明细接口路径
-	queryLevel2BusinessDetailPath = "/cmdb-service-business-domain/queryBusinessLevel2DetailInfo"
+	queryLevel2BusinessDetailPath = "/cmdb-service-business-domain/queryBusinessLevel2DetailInfo" //nolint:unused
 )
 
 // Level2BusinessDetail 二级业务明细信息
@@ -39,7 +39,7 @@ type Level2BusinessDetail struct {
 }
 
 // queryLevel2BusinessDetailResult 查询二级业务明细接口响应结果
-type queryLevel2BusinessDetailResult struct {
+type queryLevel2BusinessDetailResult struct { //nolint:unused
 	// List 二级业务明细列表
 	List []Level2BusinessDetail
 
@@ -54,7 +54,7 @@ type queryLevel2BusinessDetailResult struct {
 }
 
 // queryLevel2BusinessDetailParams 查询二级业务明细接口请求参数
-type queryLevel2BusinessDetailParams struct {
+type queryLevel2BusinessDetailParams struct { //nolint:unused
 	// ResultColumn 指定返回的字段列表，为空时返回所有字段
 	ResultColumn []string `json:"resultColumn,omitempty"`
 

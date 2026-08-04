@@ -14,29 +14,83 @@ func EditHandler(ctx context.Context, appID, envName, specFile string, section c
 	cli := client.New()
 	switch section {
 	case client.AppSpecSectionResources:
-		return editSectionHandler(ctx, cli, appID, envName, specFile, section, ParseResourcesFile, func(v *ResourcesInput) any {
-			return &SetDefaultResourcesRequest{AppSpecResources: v}
-		})
+		return editSectionHandler(
+			ctx,
+			cli,
+			appID,
+			envName,
+			specFile,
+			section,
+			ParseResourcesFile,
+			func(v *ResourcesInput) any {
+				return &SetDefaultResourcesRequest{AppSpecResources: v}
+			},
+		)
 	case client.AppSpecSectionUpdateStrategy:
-		return editSectionHandler(ctx, cli, appID, envName, specFile, section, ParseUpdateStrategyFile, func(v *UpdateStrategyInput) any {
-			return &SetDefaultUpdateStrategyRequest{AppSpecUpdateStrategy: v}
-		})
+		return editSectionHandler(
+			ctx,
+			cli,
+			appID,
+			envName,
+			specFile,
+			section,
+			ParseUpdateStrategyFile,
+			func(v *UpdateStrategyInput) any {
+				return &SetDefaultUpdateStrategyRequest{AppSpecUpdateStrategy: v}
+			},
+		)
 	case client.AppSpecSectionLifecycle:
-		return editSectionHandler(ctx, cli, appID, envName, specFile, section, ParseLifecycleFile, func(v *LifecycleInput) any {
-			return &SetDefaultLifecycleRequest{AppSpecLifecycle: v}
-		})
+		return editSectionHandler(
+			ctx,
+			cli,
+			appID,
+			envName,
+			specFile,
+			section,
+			ParseLifecycleFile,
+			func(v *LifecycleInput) any {
+				return &SetDefaultLifecycleRequest{AppSpecLifecycle: v}
+			},
+		)
 	case client.AppSpecSectionProbe:
-		return editSectionHandler(ctx, cli, appID, envName, specFile, section, ParseProbeFile, func(v *ProbeInput) any {
-			return &SetDefaultProbeRequest{AppSpecProbe: v}
-		})
+		return editSectionHandler(
+			ctx,
+			cli,
+			appID,
+			envName,
+			specFile,
+			section,
+			ParseProbeFile,
+			func(v *ProbeInput) any {
+				return &SetDefaultProbeRequest{AppSpecProbe: v}
+			},
+		)
 	case client.AppSpecSectionLabels:
-		return editSectionHandler(ctx, cli, appID, envName, specFile, section, ParseLabelsFile, func(v *LabelsInput) any {
-			return &SetDefaultLabelsRequest{AppSpecLabels: v}
-		})
+		return editSectionHandler(
+			ctx,
+			cli,
+			appID,
+			envName,
+			specFile,
+			section,
+			ParseLabelsFile,
+			func(v *LabelsInput) any {
+				return &SetDefaultLabelsRequest{AppSpecLabels: v}
+			},
+		)
 	case client.AppSpecSectionAnnotations:
-		return editSectionHandler(ctx, cli, appID, envName, specFile, section, ParseAnnotationsFile, func(v *AnnotationsInput) any {
-			return &SetDefaultAnnotationsRequest{AppSpecAnnotations: v}
-		})
+		return editSectionHandler(
+			ctx,
+			cli,
+			appID,
+			envName,
+			specFile,
+			section,
+			ParseAnnotationsFile,
+			func(v *AnnotationsInput) any {
+				return &SetDefaultAnnotationsRequest{AppSpecAnnotations: v}
+			},
+		)
 	default:
 		return errors.Errorf("unsupported section: %s", section)
 	}
@@ -84,6 +138,7 @@ func ResetHandler(ctx context.Context, appID, envName string, section client.App
 func isAppModelType(appType string) bool {
 	return appType == "trpc" || appType == "taf"
 }
+
 func editSectionHandler[T any](
 	ctx context.Context,
 	cli client.Client,

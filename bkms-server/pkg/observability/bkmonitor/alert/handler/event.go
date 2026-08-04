@@ -65,9 +65,9 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 
 	envName := strings.TrimSpace(queryInput.EnvName)
 	if envName != "" {
-		_, _, err := ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, envName, ginperm.TypeView)
-		if err != nil {
-			bkerrs.AbortWithErr(c, err)
+		_, _, err2 := ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, envName, ginperm.TypeView)
+		if err2 != nil {
+			bkerrs.AbortWithErr(c, err2)
 			return
 		}
 	}
@@ -87,7 +87,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 
 	operator := auth.MustGetUser(ctx).ID
 	resp, err := alertevent.NewService().SearchByStrategyIDs(
-		ctx, ws, operator, strategyIDs, queryInput.AlertQueryInput.ToSearchInput(),
+		ctx, ws, operator, strategyIDs, queryInput.ToSearchInput(),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "search alerts by app"))

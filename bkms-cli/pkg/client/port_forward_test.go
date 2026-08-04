@@ -29,7 +29,9 @@ var _ = Describe("buildWebSocketURL", func() {
 			url.Values{"remotePort": {"80"}, "localPort": {"8080"}},
 		)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(Equal("wss://bkms.example.com/bkms/v1/apps/myapp/envs/test/instances/pod-1/port-forward/connect?localPort=8080&remotePort=80"))
+		Expect(
+			result,
+		).To(Equal("wss://bkms.example.com/bkms/v1/apps/myapp/envs/test/instances/pod-1/port-forward/connect?localPort=8080&remotePort=80"))
 	})
 
 	It("preserves base url path prefix", func() {

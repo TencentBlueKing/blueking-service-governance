@@ -10,6 +10,7 @@ import (
 
 // NewPortForwardCmd returns a Command instance for 'app instance port-forward' sub command.
 func NewPortForwardCmd() *cobra.Command {
+	// opts is the options for port-forward
 	var opts handler.PortForwardOptions
 
 	cmd := &cobra.Command{

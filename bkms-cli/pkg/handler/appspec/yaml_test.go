@@ -31,7 +31,7 @@ var _ = Describe("YAML Parsing", func() {
 
 		It("should return error when file is empty", func() {
 			emptyFile := filepath.Join(tmpDir, "empty.yaml")
-			err := os.WriteFile(emptyFile, []byte(""), 0644)
+			err := os.WriteFile(emptyFile, []byte(""), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			var target map[string]any
@@ -42,7 +42,7 @@ var _ = Describe("YAML Parsing", func() {
 
 		It("should return error when YAML format is invalid", func() {
 			badFile := filepath.Join(tmpDir, "bad.yaml")
-			err := os.WriteFile(badFile, []byte("invalid: [yaml: content"), 0644)
+			err := os.WriteFile(badFile, []byte("invalid: [yaml: content"), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			var target map[string]any
@@ -61,7 +61,7 @@ memoryRequests: "256Mi"
 memoryLimits: "2Gi"
 `
 			file := filepath.Join(tmpDir, "resources.yaml")
-			err := os.WriteFile(file, []byte(content), 0644)
+			err := os.WriteFile(file, []byte(content), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := ParseResourcesFile(file)
@@ -79,7 +79,7 @@ memoryLimits: "2Gi"
 cpuRequests: "1"
 `
 			file := filepath.Join(tmpDir, "resources-partial.yaml")
-			err := os.WriteFile(file, []byte(content), 0644)
+			err := os.WriteFile(file, []byte(content), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := ParseResourcesFile(file)
@@ -99,7 +99,7 @@ cpuRequests: "1"
 maxUnavailable: "25%"
 `
 			file := filepath.Join(tmpDir, "update-strategy.yaml")
-			err := os.WriteFile(file, []byte(content), 0644)
+			err := os.WriteFile(file, []byte(content), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := ParseUpdateStrategyFile(file)
@@ -119,7 +119,7 @@ maxUnavailable: "25%"
 terminationGracePeriodSeconds: 60
 `
 			file := filepath.Join(tmpDir, "lifecycle.yaml")
-			err := os.WriteFile(file, []byte(content), 0644)
+			err := os.WriteFile(file, []byte(content), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := ParseLifecycleFile(file)
@@ -142,7 +142,7 @@ terminationGracePeriodSeconds: 60
       X-Custom: "value"
 `
 			file := filepath.Join(tmpDir, "lifecycle-http.yaml")
-			err := os.WriteFile(file, []byte(content), 0644)
+			err := os.WriteFile(file, []byte(content), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := ParseLifecycleFile(file)
@@ -174,7 +174,7 @@ readiness:
   periodSeconds: 10
 `
 			file := filepath.Join(tmpDir, "probe.yaml")
-			err := os.WriteFile(file, []byte(content), 0644)
+			err := os.WriteFile(file, []byte(content), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := ParseProbeFile(file)
@@ -211,7 +211,7 @@ readiness:
   app.kubernetes.io/version: "v1.0"
 `
 			file := filepath.Join(tmpDir, "labels.yaml")
-			err := os.WriteFile(file, []byte(content), 0644)
+			err := os.WriteFile(file, []byte(content), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := ParseLabelsFile(file)
@@ -230,7 +230,7 @@ readiness:
   prometheus.io/port: "9090"
 `
 			file := filepath.Join(tmpDir, "annotations.yaml")
-			err := os.WriteFile(file, []byte(content), 0644)
+			err := os.WriteFile(file, []byte(content), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := ParseAnnotationsFile(file)

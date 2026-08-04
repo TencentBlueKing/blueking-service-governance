@@ -66,7 +66,7 @@ func RunPortForwardListener(
 			// 获取信号量，达到最大并发数时阻塞等待。
 			if acquireErr := sem.Acquire(gCtx, 1); acquireErr != nil {
 				_ = conn.Close()
-				return nil // context 已取消
+				return acquireErr //nolint:wrapcheck // context 已取消，直接返回
 			}
 
 			g.Go(func() error {
@@ -81,7 +81,7 @@ func RunPortForwardListener(
 					slog.Error("port-forward connection failed",
 						"instance_id", opts.InstanceID,
 						"remote_port", opts.RemotePort,
-						"error", connErr,
+						"error", connErr.Error(),
 					)
 				} else {
 					slog.Debug("port-forward connection closed normally",

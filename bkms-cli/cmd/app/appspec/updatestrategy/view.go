@@ -30,7 +30,13 @@ When --env is provided, this command views the effective update strategy for tha
   # Output in JSON format
   bkms-cli app appspec update-strategy view --app my-app -o json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return appspec.ViewHandler(cmd.Context(), appID, envName, client.AppSpecSectionUpdateStrategy, outputFormat)
+			return appspec.ViewHandler(
+				cmd.Context(),
+				appID,
+				envName,
+				client.AppSpecSectionUpdateStrategy,
+				outputFormat,
+			)
 		},
 	}
 

@@ -149,7 +149,12 @@ type Client interface {
 	// GetAppSpecDefaultSection 获取应用默认 section 配置，result 传入具体类型指针接收结果
 	GetAppSpecDefaultSection(ctx context.Context, appID string, section AppSpecSectionName, result any) error
 	// GetAppSpecEnvEffectiveSection 获取应用环境生效 section 配置，result 传入具体类型指针接收结果
-	GetAppSpecEnvEffectiveSection(ctx context.Context, appID, envName string, section AppSpecSectionName, result any) error
+	GetAppSpecEnvEffectiveSection(
+		ctx context.Context,
+		appID, envName string,
+		section AppSpecSectionName,
+		result any,
+	) error
 
 	// SetAppSpecDefaultSection 设置应用默认 section 配置
 	SetAppSpecDefaultSection(ctx context.Context, appID string, section AppSpecSectionName, body any) error
@@ -161,6 +166,12 @@ type Client interface {
 	UpdateAppStartCommand(ctx context.Context, appID, appType string, body any) error
 
 	// --- 实例端口转发 ---
+	// CheckPortForwardPermission 预检 port-forward 权限（仅当 403 时返回错误）。
+	CheckPortForwardPermission(
+		ctx context.Context,
+		appID, envName, instanceID string,
+		remotePort, localPort int,
+	) error
 	// OpenPortForwardTunnel 打开应用实例端口转发隧道。
 	OpenPortForwardTunnel(
 		ctx context.Context,

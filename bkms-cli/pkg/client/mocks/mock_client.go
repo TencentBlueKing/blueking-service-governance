@@ -2106,6 +2106,88 @@ func (_c *MockClient_ListWorkspaces_Call) RunAndReturn(run func(ctx context.Cont
 }
 
 // OpenPortForwardTunnel provides a mock function for the type MockClient
+// CheckPortForwardPermission provides a mock function for the type MockClient
+func (_mock *MockClient) CheckPortForwardPermission(ctx context.Context, appID string, envName string, instanceID string, remotePort int, localPort int) error {
+	ret := _mock.Called(ctx, appID, envName, instanceID, remotePort, localPort)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CheckPortForwardPermission")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int, int) error); ok {
+		r0 = returnFunc(ctx, appID, envName, instanceID, remotePort, localPort)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_CheckPortForwardPermission_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CheckPortForwardPermission'
+type MockClient_CheckPortForwardPermission_Call struct {
+	*mock.Call
+}
+
+// CheckPortForwardPermission is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - envName string
+//   - instanceID string
+//   - remotePort int
+//   - localPort int
+func (_e *MockClient_Expecter) CheckPortForwardPermission(ctx any, appID any, envName any, instanceID any, remotePort any, localPort any) *MockClient_CheckPortForwardPermission_Call {
+	return &MockClient_CheckPortForwardPermission_Call{Call: _e.mock.On("CheckPortForwardPermission", ctx, appID, envName, instanceID, remotePort, localPort)}
+}
+
+func (_c *MockClient_CheckPortForwardPermission_Call) Run(run func(ctx context.Context, appID string, envName string, instanceID string, remotePort int, localPort int)) *MockClient_CheckPortForwardPermission_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 int
+		if args[4] != nil {
+			arg4 = args[4].(int)
+		}
+		var arg5 int
+		if args[5] != nil {
+			arg5 = args[5].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_CheckPortForwardPermission_Call) Return(err error) *MockClient_CheckPortForwardPermission_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_CheckPortForwardPermission_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, instanceID string, remotePort int, localPort int) error) *MockClient_CheckPortForwardPermission_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// OpenPortForwardTunnel provides a mock function for the type MockClient
 func (_mock *MockClient) OpenPortForwardTunnel(ctx context.Context, appID string, envName string, opts client.PortForwardTunnelOptions) (io.ReadWriteCloser, error) {
 	ret := _mock.Called(ctx, appID, envName, opts)
 

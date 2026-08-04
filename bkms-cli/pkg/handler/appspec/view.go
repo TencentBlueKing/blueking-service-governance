@@ -5,13 +5,19 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/pkg/errors"
+
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
-	"github.com/pkg/errors"
 )
 
 // ViewHandler 查询并输出指定 section 配置，支持多种输出格式。
-func ViewHandler(ctx context.Context, appID, envName string, section client.AppSpecSectionName, outputFormat string) error {
+func ViewHandler(
+	ctx context.Context,
+	appID, envName string,
+	section client.AppSpecSectionName,
+	outputFormat string,
+) error {
 	data, err := viewSection(ctx, appID, envName, section)
 	if err != nil {
 		return errors.Wrapf(err, "view %s", section)
@@ -73,7 +79,12 @@ func viewSection(ctx context.Context, appID, envName string, section client.AppS
 	return viewSectionWith(ctx, cli, appID, envName, section)
 }
 
-func viewSectionWith(ctx context.Context, cli client.Client, appID, envName string, section client.AppSpecSectionName) (any, error) {
+func viewSectionWith(
+	ctx context.Context,
+	cli client.Client,
+	appID, envName string,
+	section client.AppSpecSectionName,
+) (any, error) {
 	switch section {
 	case client.AppSpecSectionResources:
 		return viewSectionTyped[client.ResourcesConfig](ctx, cli, appID, envName, section)
@@ -94,7 +105,7 @@ func viewSectionWith(ctx context.Context, cli client.Client, appID, envName stri
 			return nil, err
 		}
 		if v.IsEmpty() {
-			return nil, nil
+			return nil, nil //nolint:nilnil // 空配置时返回 nil 表示无数据
 		}
 		return v, nil
 	case client.AppSpecSectionAnnotations:
@@ -103,15 +114,20 @@ func viewSectionWith(ctx context.Context, cli client.Client, appID, envName stri
 			return nil, err
 		}
 		if v.IsEmpty() {
-			return nil, nil
+			return nil, nil //nolint:nilnil // 空配置时返回 nil 表示无数据
 		}
 		return v, nil
 	default:
-		return nil, nil
+		return nil, nil //nolint:nilnil // 未知 section 返回 nil 表示无数据
 	}
 }
 
-func viewSectionTyped[T any](ctx context.Context, cli client.Client, appID, envName string, section client.AppSpecSectionName) (*T, error) {
+func viewSectionTyped[T any](
+	ctx context.Context,
+	cli client.Client,
+	appID, envName string,
+	section client.AppSpecSectionName,
+) (*T, error) {
 	result := new(T)
 	var err error
 	if envName == "" {

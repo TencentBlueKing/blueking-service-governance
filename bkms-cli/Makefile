@@ -231,5 +231,7 @@ ginkgo: | $(LOCALBIN)  ## Install ginkgo tool
 .PHONY: install-golangci-lint
 install-golangci-lint: $(GOCILINT) ## 下载 golangci-lint 二进制
 $(GOCILINT): $(LOCALBIN)
-	test -s $(LOCALBIN)/golangci-lint && $(LOCALBIN)/golangci-lint --version | grep -q $(GOCILINT_VERSION) || \
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(LOCALBIN) $(GOCILINT_VERSION)
+	@if ! (test -s $(GOCILINT) && $(GOCILINT) --version | grep -q "$(patsubst v%,%,$(GOCILINT_VERSION))"); then \
+		rm -f $(GOCILINT); \
+		GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOCILINT_VERSION); \
+	fi

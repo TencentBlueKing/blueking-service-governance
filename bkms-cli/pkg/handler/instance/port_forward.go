@@ -6,12 +6,12 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/stringx"
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/stringx"
 )
 
 // PortForward 启动应用实例端口转发。
@@ -20,6 +20,11 @@ func PortForward(ctx context.Context, cli client.Client, opts PortForwardOptions
 		return err
 	}
 	if err := preflightCheckInstance(ctx, cli, opts.AppID, opts.EnvName, opts.InstanceID); err != nil {
+		return err
+	}
+
+	// 预检 server 端权限（环境类型 + 白名单），避免启动 listener 后才发现无权限
+	if err := cli.CheckPortForwardPermission(ctx, opts.AppID, opts.EnvName, opts.InstanceID, opts.RemotePort, opts.LocalPort); err != nil {
 		return err
 	}
 
@@ -104,6 +109,29 @@ func preflightCheckInstance(ctx context.Context, cli client.Client, appID, envNa
 	if !running {
 		return errors.Errorf("instance %q not found or not running in app %q env %q", instanceID, appID, envName)
 	}
+	return nil
+}
+
+// preflightCheckEnvType 预检目标环境是否为非 production 类型。
+// 如果环境在列表中找不到（如 feature env），则跳过检查。
+func preflightCheckEnvType(ctx context.Context, cli client.Client, workspaceID, envName string) error {
+	envs, err := cli.ListEnvs(ctx, workspaceID)
+	if err != nil {
+		return errors.Wrap(err, "list envs for env type check")
+	}
+
+	for _, env := range envs {
+		if env.Name == envName {
+			if env.Type == "production" {
+				return errors.Errorf(
+					"port-forward is only allowed in non-production environments, but %q is %q type",
+					envName, env.Type,
+				)
+			}
+			return nil
+		}
+	}
+	// 环境不在标准列表中（可能是 feature env），跳过检查
 	return nil
 }
 

@@ -2,7 +2,6 @@ package instance
 
 import (
 	"context"
-	"io"
 	"net"
 	"time"
 
@@ -13,7 +12,9 @@ import (
 var _ = Describe("RunPortForwardListener", func() {
 	It("starts a local listener and exits when context is cancelled", func() {
 		ctx, cancel := context.WithCancel(context.Background())
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    freeTCPPort(),
@@ -40,7 +41,9 @@ var _ = Describe("RunPortForwardListener", func() {
 	It("starts listener with non-loopback address without error", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    freeTCPPort(),
@@ -69,7 +72,9 @@ var _ = Describe("RunPortForwardListener", func() {
 		Expect(err).NotTo(HaveOccurred())
 		defer ln.Close()
 
-		cfg := &PortForwardOptions{AppID: "myapp", EnvName: "test",
+		cfg := &PortForwardOptions{
+			AppID:        "myapp",
+			EnvName:      "test",
 			InstanceID:   "pod-1",
 			RemotePort:   8080,
 			LocalPort:    ln.Addr().(*net.TCPAddr).Port,
@@ -93,16 +98,4 @@ func freeTCPPort() int {
 	Expect(err).NotTo(HaveOccurred())
 	defer ln.Close()
 	return ln.Addr().(*net.TCPAddr).Port
-}
-
-// fakeReadWriteCloser 用于测试的假 ReadWriteCloser。
-type fakeReadWriteCloser struct {
-	io.Reader
-	io.Writer
-	closed bool
-}
-
-func (f *fakeReadWriteCloser) Close() error {
-	f.closed = true
-	return nil
 }

@@ -61,3 +61,9 @@ const (
 	// DefaultHelmValueFile Helm 默认 values 文件名
 	DefaultHelmValueFile = "values.yaml"
 )
+
+// 环境类型
+const (
+	// EnvTypeProduction 正式环境类型
+	EnvTypeProduction = "production"
+)
