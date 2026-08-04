@@ -36,7 +36,7 @@ func GetEnvEffective(
 	envSpec, err := GetEnv(ctx, store, appID, envName)
 	if err != nil {
 		if errors.Is(err, ErrAppSpecNotFound) {
-			effective := cloneSpec(defaultSpec)
+			effective := Clone(defaultSpec)
 			effective.EnvName = envName
 			return effective, nil
 		}

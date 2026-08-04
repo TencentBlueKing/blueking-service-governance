@@ -144,6 +144,12 @@ func (h *Handler) CreateApp(c *gin.Context) {
 
 	// 根据应用类型创建特定资源（复用现有逻辑）
 	if err = h.createAppByType(ctx, app, &input); err != nil {
+		// AppModel 默认规则在类型服务内、任何类型资源写入前完成解析。
+		// 公共流程此前只写入了 BuildConfig，因此失败时将其回收，避免规则
+		// 校验失败或后续类型资源创建失败后留下孤立构建配置。
+		if cleanupErr := h.registry.BuildConfigStore.Delete(context.WithoutCancel(ctx), app.ID); cleanupErr != nil {
+			err = errors.Wrapf(err, "cleanup build config after app creation failed: %v", cleanupErr)
+		}
 		bkerrs.AbortWithErr(c, err)
 		return
 	}

@@ -1,0 +1,39 @@
+meta {
+  name: create-invalid-env-type-should-fail
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/resources
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "envType": "invalid-type",
+    "spec": {
+      "replicas": 1,
+      "cpuRequests": "1",
+      "cpuLimits": "2",
+      "memoryRequests": "2Gi",
+      "memoryLimits": "4Gi"
+    }
+  }
+}
+
+assert {
+  res.status: eq 400
+}
+
+tests {
+  test("should reject invalid envType value", () => {
+    expect(res.status).to.equal(400);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

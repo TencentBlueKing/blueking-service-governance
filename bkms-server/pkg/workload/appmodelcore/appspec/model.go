@@ -78,9 +78,9 @@ func Merge(base, override *AppSpec) *AppSpec {
 	case base == nil && override == nil:
 		return nil
 	case base == nil:
-		return cloneSpec(override)
+		return Clone(override)
 	case override == nil:
-		return cloneSpec(base)
+		return Clone(base)
 	}
 
 	merged := &AppSpec{
@@ -93,8 +93,8 @@ func Merge(base, override *AppSpec) *AppSpec {
 	return merged
 }
 
-// cloneSpec creates a deep copy of the given AppSpec.
-func cloneSpec(spec *AppSpec) *AppSpec {
+// Clone creates a deep copy of the given AppSpec.
+func Clone(spec *AppSpec) *AppSpec {
 	if spec == nil {
 		return nil
 	}

@@ -20,3 +20,11 @@ func init() {
 		}
 	})
 }
+
+// Validate validates an AppSpec and all configured sections.
+func Validate(spec *AppSpec) error {
+	if err := validate.Struct(spec); err != nil {
+		return wrapValidationErr(err)
+	}
+	return nil
+}

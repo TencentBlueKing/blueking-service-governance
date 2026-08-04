@@ -1,0 +1,27 @@
+meta {
+  name: list-empty-update-strategy-rules
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/update-strategy
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should not persist platform defaults as rules", () => {
+    expect(res.body.data).to.deep.equal([]);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

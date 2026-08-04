@@ -1,0 +1,17 @@
+meta {
+  name: edge_cases
+  seq: 3
+}
+
+auth {
+  mode: inherit
+}
+
+script:pre-request {
+  const common = require("./common")
+  if (!bru.getVar("appDefaultsWorkspaceID")) {
+    const suffix = bru.getVar("randomSuffix");
+    const ws = await common.createWorkspace({id: `appdefaults-ws-${suffix}`})
+    bru.setVar("appDefaultsWorkspaceID", ws.id);
+  }
+}

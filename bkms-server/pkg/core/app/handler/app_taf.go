@@ -11,8 +11,20 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	tafapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/taf"
 )
+
+func (h *Handler) newTafService() *tafapp.Service {
+	return tafapp.NewService(
+		h.registry.AppModelStore,
+		h.registry.AppSpecStore,
+		appdefaults.NewService(h.registry.AppDefaultRuleStore, h.registry.EnvStore),
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileVersionStore,
+		h.registry.AppStore,
+	)
+}
 
 // UpdateAppTafSpec 更新应用 Taf 配置。
 //
@@ -73,13 +85,7 @@ func (h *Handler) createTafApp(
 	params := input.ToTafCreateParams()
 
 	// 调用 taf 服务
-	svc := tafapp.NewService(
-		h.registry.AppModelStore,
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileVersionStore,
-		h.registry.AppStore,
-	)
-	return svc.Create(ctx, app, params)
+	return h.newTafService().Create(ctx, app, params)
 }
 
 // updateTafApp 更新 TAF 应用（handler 层，负责参数转换和审计）
@@ -92,13 +98,7 @@ func (h *Handler) updateTafApp(
 	params := input.ToTafUpdateParams()
 
 	// 调用 taf 服务
-	svc := tafapp.NewService(
-		h.registry.AppModelStore,
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileVersionStore,
-		h.registry.AppStore,
-	)
-	oldModel, newModel, err := svc.Update(ctx, app, params)
+	oldModel, newModel, err := h.newTafService().Update(ctx, app, params)
 	if err != nil {
 		return err
 	}

@@ -58,7 +58,7 @@ func SetDefault(
 		return errors.New("app spec is nil")
 	}
 
-	scoped := cloneSpec(spec)
+	scoped := Clone(spec)
 	scoped.AppID = appID
 	scoped.EnvName = DefaultEnvName
 	if err := validate.Struct(scoped); err != nil {

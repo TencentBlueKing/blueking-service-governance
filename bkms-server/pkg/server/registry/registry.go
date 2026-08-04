@@ -38,6 +38,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/admin"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/portforward"
 	workspaceadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
+	appdefaultshooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/hooks"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	scopedenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -71,6 +73,7 @@ type Registry struct {
 	AppStore                  bkmsapp.ApplicationStore
 	AppModelStore             appmodel.AppModelStore
 	AppSpecStore              appspec.AppSpecStore
+	AppDefaultRuleStore       appdefaults.RuleStore
 	AppConfigFileStore        appcfg.AppConfigFileStore
 	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	AppServiceStore           appnetworking.ServiceStore
@@ -163,6 +166,7 @@ func Reset() {
 	GlobalRegistry = nil
 	globalInitOnce = sync.Once{}
 	bkmsenv.ResetDeleteHooksForTest()
+	workspace.ResetLifecycleHooksForTest()
 }
 
 func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
@@ -180,6 +184,7 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	r.AppStore = mustInit(bkmsapp.NewApplicationStoreMongo(mongoClient, dbName))
 	r.AppModelStore = mustInit(appmodel.NewAppModelStoreMongo(mongoClient, dbName))
 	r.AppSpecStore = mustInit(appspec.NewAppSpecStoreMongo(mongoClient, dbName))
+	r.AppDefaultRuleStore = mustInit(appdefaults.NewRuleStoreMongo(mongoClient, dbName))
 	r.AppConfigFileStore = mustInit(appcfg.NewAppConfigFileStoreMongo(mongoClient, dbName))
 	r.AppConfigFileVersionStore = mustInit(appcfg.NewAppConfigFileVersionStoreMongo(mongoClient, dbName))
 	r.PolarisConfigStore = mustInit(polaris.NewPolarisConfigStoreMongo(mongoClient, dbName))
@@ -234,6 +239,7 @@ func (r *Registry) registerStoreHooks() {
 	r.WorkspaceCompsStore.SetComponentHooks(workspace.NewComponentRefCountHooks(r.ComponentDefStore))
 	r.AppModelStore.SetComponentHooks(appmodel.NewComponentRefCountHooks(r.ComponentDefStore))
 	envvarhooks.RegisterDeleteHooks(r.ScopedEnvVarStore)
+	appdefaultshooks.RegisterDeleteHooks(r.AppDefaultRuleStore)
 }
 
 // initStoreData 初始化 Store 中的基础数据，例如依赖服务的数据。

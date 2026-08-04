@@ -233,8 +233,17 @@ var _ = Describe("Builder Shared Tests", func() {
 			app, appModel := createApplication(ctx, tc, stores, nil, nil)
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			// Reset the app model to default values first
-			appspec.ResetAppModelToDefaultValues(appModel)
+			// The environment override changes only replicas and memory request.
+			// Set the AppModel fields expected to remain unchanged explicitly.
+			appModel.Replicas = lo.ToPtr(int32(1))
+			appModel.UpdateStrategy = &appmodel.UpdateStrategy{
+				MaxUnavailable: lo.ToPtr("25%"),
+				MaxSurge:       lo.ToPtr("25%"),
+			}
+			appModel.Workload.Resources = map[string]string{
+				"cpu":    "1-2",
+				"memory": "2Gi-4Gi",
+			}
 			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -285,7 +294,8 @@ var _ = Describe("Builder Shared Tests", func() {
 			app, appModel := createApplication(ctx, tc, stores, nil, nil)
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			appspec.ResetAppModelToDefaultValues(appModel)
+			// Replicas is outside the update-strategy override and should be preserved.
+			appModel.Replicas = lo.ToPtr(int32(1))
 			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
 			Expect(err).NotTo(HaveOccurred())
 

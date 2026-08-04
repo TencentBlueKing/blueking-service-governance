@@ -166,6 +166,8 @@ const (
 	AttributeUserRole Attribute = "userRole"
 	// AttributeWorkspaceComponent 空间组件
 	AttributeWorkspaceComponent Attribute = "workspaceComponent"
+	// AttributeWorkspaceAppSpecDefaults 工作空间应用默认配置
+	AttributeWorkspaceAppSpecDefaults Attribute = "workspaceAppSpecDefaults"
 	// AttributeReplicas 副本数
 	AttributeReplicas Attribute = "replicas"
 	// AttributeInstance 应用实例
@@ -205,6 +207,8 @@ func (t Attribute) DisplayName() string {
 		return "应用组件"
 	case AttributeWorkspaceComponent:
 		return "空间组件"
+	case AttributeWorkspaceAppSpecDefaults:
+		return "应用默认配置"
 	case AttributeReplicas:
 		return "副本数"
 	case AttributeInstance:

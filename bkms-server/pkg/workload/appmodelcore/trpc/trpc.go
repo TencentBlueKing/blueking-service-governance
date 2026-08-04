@@ -9,6 +9,7 @@ import (
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
@@ -50,6 +51,8 @@ type UpdateParams struct {
 // Service tRPC 应用服务
 type Service struct {
 	appModelStore        appmodel.AppModelStore
+	appSpecStore         appspec.AppSpecStore
+	appDefaultsService   *appdefaults.Service
 	appStore             bkmsapp.ApplicationStore
 	appConfigFileService *appcfg.AppConfigFileService
 }
@@ -57,12 +60,16 @@ type Service struct {
 // NewService 创建服务实例
 func NewService(
 	appModelStore appmodel.AppModelStore,
+	appSpecStore appspec.AppSpecStore,
+	appDefaultsService *appdefaults.Service,
 	appConfigFileStore appcfg.AppConfigFileStore,
 	appConfigFileVersionStore appcfg.AppConfigFileVersionStore,
 	appStore bkmsapp.ApplicationStore,
 ) *Service {
 	return &Service{
 		appModelStore:        appModelStore,
+		appSpecStore:         appSpecStore,
+		appDefaultsService:   appDefaultsService,
 		appStore:             appStore,
 		appConfigFileService: appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore),
 	}
@@ -70,13 +77,19 @@ func NewService(
 
 // Create 创建 tRPC 应用资源（AppModel + AppConfigFile + App）
 func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *CreateParams) error {
+	// 在写入任何应用数据前读取初始化规则，避免读取失败时留下部分应用数据。
+	resolution, err := s.appDefaultsService.Resolve(ctx, app.WorkspaceID, app.ID)
+	if err != nil {
+		return errors.Wrap(err, "resolve application defaults")
+	}
+
 	// 设置配置文件内容
 	var fileContent *string
 	if params.TrpcConfig != nil && params.TrpcConfig.FileContent != "" {
 		fileContent = &params.TrpcConfig.FileContent
 	}
 
-	if _, err := s.appConfigFileService.Create(
+	if _, err = s.appConfigFileService.Create(
 		ctx,
 		appcfg.CreateCfgFileParams{
 			AppID:             app.ID,
@@ -114,12 +127,22 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 		}
 	}
 
-	// 设置默认值
-	appspec.ResetAppModelToDefaultValues(appModel)
+	// 将平台默认 AppSpec 应用到 AppModel。
+	appspec.ApplyToAppModel(&resolution.Default, appModel)
 
 	// 创建 AppModel
-	if err := s.appModelStore.CreateAppModel(ctx, appModel); err != nil {
+	if err = s.appModelStore.CreateAppModel(ctx, appModel); err != nil {
 		return errors.Wrapf(err, "create app(%s) model", app.Name)
+	}
+
+	// 插入 appspec 初始配置
+	if err = s.appSpecStore.Upsert(ctx, &resolution.Default); err != nil {
+		return errors.Wrap(err, "create default app spec")
+	}
+	for _, spec := range resolution.Environments {
+		if err = s.appSpecStore.Upsert(ctx, spec); err != nil {
+			return errors.Wrapf(err, "create app spec for environment %q", spec.EnvName)
+		}
 	}
 
 	// 创建应用基础数据

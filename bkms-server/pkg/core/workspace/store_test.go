@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
@@ -133,6 +134,31 @@ var _ = Describe("WorkspaceStore", func() {
 			err = store.Create(ctx, &duplicateWorkspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("duplicate key error collection"))
+		})
+	})
+
+	Context("Create Hook Failure", func() {
+		It("should roll back the workspace and clean hook dependencies", func() {
+			ResetLifecycleHooksForTest()
+			DeferCleanup(ResetLifecycleHooksForTest)
+
+			cleanupCalled := false
+			Expect(RegisterDeleteHook("cleanup", func(context.Context, string) error {
+				cleanupCalled = true
+				return nil
+			})).To(BeTrue())
+
+			hookErr := errors.New("initialize workspace dependency")
+			Expect(RegisterCreateHook("failing", func(context.Context, Workspace) error {
+				return hookErr
+			})).To(BeTrue())
+
+			err := store.Create(ctx, &workspaceA)
+			Expect(errors.Is(err, hookErr)).To(BeTrue())
+			Expect(cleanupCalled).To(BeTrue())
+
+			_, err = store.Get(ctx, workspaceA.ID)
+			Expect(errors.Is(err, ErrWorkspaceNotFound)).To(BeTrue())
 		})
 	})
 

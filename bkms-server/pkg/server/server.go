@@ -65,6 +65,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic"
 	basichandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic/handler"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
+	appdefaultshandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	appspechandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -133,6 +135,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 	appcfg.Register(v1, appcfghandler.New(storereg.G()))
 	helmchart.Register(v1, helmcharthandler.New(storereg.G()))
 	instancelog.Register(v1, instanceloghandler.New(storereg.G()))
+	appdefaults.Register(v1, appdefaultshandler.New(storereg.G()))
 	appspec.Register(v1, appspechandler.New(storereg.G()))
 	arrangement.Register(v1, arrangementhandler.New(storereg.G()))
 	instance.Register(v1, instancehandler.New(storereg.G()))

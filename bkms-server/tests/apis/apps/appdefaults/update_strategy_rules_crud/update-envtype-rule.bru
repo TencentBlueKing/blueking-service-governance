@@ -1,0 +1,40 @@
+meta {
+  name: update-envtype-strategy-rule
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/update-strategy/{{envTypeStrategyRuleID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "envType": "production",
+    "spec": {
+      "maxUnavailable": "1",
+      "maxSurge": "25%"
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should update the envType strategy rule", () => {
+    const rule = res.body.data;
+    expect(rule.id).to.equal(bru.getVar('envTypeStrategyRuleID'));
+    expect(rule.spec.maxUnavailable).to.equal('1');
+    expect(rule.spec.maxSurge).to.equal('25%');
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -13061,6 +13061,1846 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/app-spec/annotations": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "查询工作空间注解默认配置规则",
+                "operationId": "ListWorkspaceAppSpecAnnotationsRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListAnnotationsRulesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "新增工作空间注解默认配置规则",
+                "operationId": "CreateWorkspaceAppSpecAnnotationsRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "注解默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AnnotationsRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AnnotationsRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/annotations/{ruleID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "编辑工作空间注解默认配置规则",
+                "operationId": "UpdateWorkspaceAppSpecAnnotationsRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "注解默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AnnotationsRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AnnotationsRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "删除工作空间注解默认配置规则",
+                "operationId": "DeleteWorkspaceAppSpecAnnotationsRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/dev-mode": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "查询工作空间开发模式默认配置规则",
+                "operationId": "ListWorkspaceAppSpecDevModeRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListDevModeRulesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "新增工作空间开发模式默认配置规则",
+                "operationId": "CreateWorkspaceAppSpecDevModeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "开发模式默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.DevModeRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.DevModeRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/dev-mode/{ruleID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "编辑工作空间开发模式默认配置规则",
+                "operationId": "UpdateWorkspaceAppSpecDevModeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "开发模式默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.DevModeRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.DevModeRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "删除工作空间开发模式默认配置规则",
+                "operationId": "DeleteWorkspaceAppSpecDevModeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/labels": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "查询工作空间标签默认配置规则",
+                "operationId": "ListWorkspaceAppSpecLabelsRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListLabelsRulesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "新增工作空间标签默认配置规则",
+                "operationId": "CreateWorkspaceAppSpecLabelsRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "标签默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.LabelsRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.LabelsRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/labels/{ruleID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "编辑工作空间标签默认配置规则",
+                "operationId": "UpdateWorkspaceAppSpecLabelsRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "标签默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.LabelsRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.LabelsRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "删除工作空间标签默认配置规则",
+                "operationId": "DeleteWorkspaceAppSpecLabelsRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/lifecycle": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "查询工作空间生命周期默认配置规则",
+                "operationId": "ListWorkspaceAppSpecLifecycleRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListLifecycleRulesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "新增工作空间生命周期默认配置规则",
+                "operationId": "CreateWorkspaceAppSpecLifecycleRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "生命周期默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.LifecycleRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.LifecycleRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/lifecycle/{ruleID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "编辑工作空间生命周期默认配置规则",
+                "operationId": "UpdateWorkspaceAppSpecLifecycleRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "生命周期默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.LifecycleRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.LifecycleRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "删除工作空间生命周期默认配置规则",
+                "operationId": "DeleteWorkspaceAppSpecLifecycleRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/probe": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "查询工作空间探针默认配置规则",
+                "operationId": "ListWorkspaceAppSpecProbeRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListProbeRulesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "新增工作空间探针默认配置规则",
+                "operationId": "CreateWorkspaceAppSpecProbeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "探针默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ProbeRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ProbeRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/probe/{ruleID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "编辑工作空间探针默认配置规则",
+                "operationId": "UpdateWorkspaceAppSpecProbeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "探针默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ProbeRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ProbeRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "删除工作空间探针默认配置规则",
+                "operationId": "DeleteWorkspaceAppSpecProbeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/resources": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "查询工作空间资源规格默认配置规则",
+                "operationId": "ListWorkspaceAppSpecResourcesRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListResourcesRulesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "新增工作空间资源规格默认配置规则",
+                "operationId": "CreateWorkspaceAppSpecResourcesRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "资源规格默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ResourcesRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ResourcesRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/resources/{ruleID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "编辑工作空间资源规格默认配置规则",
+                "operationId": "UpdateWorkspaceAppSpecResourcesRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "资源规格默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ResourcesRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ResourcesRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "删除工作空间资源规格默认配置规则",
+                "operationId": "DeleteWorkspaceAppSpecResourcesRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/tke-route-eni": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "查询工作空间 TKE Route ENI 默认配置规则",
+                "operationId": "ListWorkspaceAppSpecTkeRouteEniRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListTkeRouteEniRulesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "新增工作空间 TKE Route ENI 默认配置规则",
+                "operationId": "CreateWorkspaceAppSpecTkeRouteEniRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "TKE Route ENI 默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TkeRouteEniRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TkeRouteEniRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/tke-route-eni/{ruleID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "编辑工作空间 TKE Route ENI 默认配置规则",
+                "operationId": "UpdateWorkspaceAppSpecTkeRouteEniRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "TKE Route ENI 默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TkeRouteEniRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TkeRouteEniRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "删除工作空间 TKE Route ENI 默认配置规则",
+                "operationId": "DeleteWorkspaceAppSpecTkeRouteEniRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/update-strategy": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "查询工作空间更新策略默认配置规则",
+                "operationId": "ListWorkspaceAppSpecUpdateStrategyRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListUpdateStrategyRulesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "新增工作空间更新策略默认配置规则",
+                "operationId": "CreateWorkspaceAppSpecUpdateStrategyRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新策略默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateStrategyRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateStrategyRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/app-spec/update-strategy/{ruleID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "编辑工作空间更新策略默认配置规则",
+                "operationId": "UpdateWorkspaceAppSpecUpdateStrategyRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新策略默认配置规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateStrategyRuleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateStrategyRuleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-spec"
+                ],
+                "summary": "删除工作空间更新策略默认配置规则",
+                "operationId": "DeleteWorkspaceAppSpecUpdateStrategyRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "ruleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/apps": {
             "get": {
                 "security": [
@@ -16931,6 +18771,9 @@ const docTemplate = `{
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_observability_bkmonitor_usergroup_serializer.EmptyOutput": {
             "type": "object"
         },
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput": {
+            "type": "object"
+        },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput": {
             "type": "object"
         },
@@ -17090,6 +18933,49 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "workspaceID": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.AnnotationsRuleInput": {
+            "type": "object",
+            "required": [
+                "envType",
+                "spec"
+            ],
+            "properties": {
+                "envType": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecAnnotationsInput"
+                }
+            }
+        },
+        "serializer.AnnotationsRuleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.AnnotationsRuleOutputObj"
+                }
+            }
+        },
+        "serializer.AnnotationsRuleOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "envType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecAnnotationsOutput"
+                },
+                "updatedAt": {
                     "type": "string"
                 }
             }
@@ -20274,6 +22160,68 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.DevModeRuleInput": {
+            "type": "object",
+            "required": [
+                "envType",
+                "spec"
+            ],
+            "properties": {
+                "envType": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.DevModeSpecInput"
+                }
+            }
+        },
+        "serializer.DevModeRuleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.DevModeRuleOutputObj"
+                }
+            }
+        },
+        "serializer.DevModeRuleOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "envType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.DevModeSpecOutput"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.DevModeSpecInput": {
+            "type": "object",
+            "required": [
+                "enabled"
+            ],
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.DevModeSpecOutput": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
         "serializer.EdgeReasonOutputObj": {
             "type": "object",
             "properties": {
@@ -22276,6 +24224,49 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.LabelsRuleInput": {
+            "type": "object",
+            "required": [
+                "envType",
+                "spec"
+            ],
+            "properties": {
+                "envType": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecLabelsInput"
+                }
+            }
+        },
+        "serializer.LabelsRuleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.LabelsRuleOutputObj"
+                }
+            }
+        },
+        "serializer.LabelsRuleOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "envType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecLabelsOutput"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
         "serializer.LatestDeployStatus": {
             "type": "object",
             "properties": {
@@ -22450,6 +24441,49 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.LifecycleRuleInput": {
+            "type": "object",
+            "required": [
+                "envType",
+                "spec"
+            ],
+            "properties": {
+                "envType": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecLifecycleInput"
+                }
+            }
+        },
+        "serializer.LifecycleRuleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.LifecycleRuleOutputObj"
+                }
+            }
+        },
+        "serializer.LifecycleRuleOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "envType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecLifecycleOutput"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
         "serializer.ListAlertEventsOutput": {
             "type": "object",
             "properties": {
@@ -22493,6 +24527,17 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.ListAlertStrategiesOutput"
+                }
+            }
+        },
+        "serializer.ListAnnotationsRulesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.AnnotationsRuleOutputObj"
+                    }
                 }
             }
         },
@@ -22932,6 +24977,17 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListDevModeRulesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.DevModeRuleOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListEnvAvailableEnvVarsOutput": {
             "type": "object",
             "properties": {
@@ -23036,6 +25092,28 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListLabelsRulesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.LabelsRuleOutputObj"
+                    }
+                }
+            }
+        },
+        "serializer.ListLifecycleRulesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.LifecycleRuleOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListNamespacesByClusterOutput": {
             "type": "object",
             "properties": {
@@ -23086,6 +25164,17 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListProbeRulesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.ProbeRuleOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListPublicScopedEnvVarsOutput": {
             "type": "object",
             "properties": {
@@ -23094,6 +25183,17 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/serializer.ScopedEnvVarOutputObj"
+                    }
+                }
+            }
+        },
+        "serializer.ListResourcesRulesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.ResourcesRuleOutputObj"
                     }
                 }
             }
@@ -23133,6 +25233,17 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.RuntimeImagesOutputObjs"
+                }
+            }
+        },
+        "serializer.ListTkeRouteEniRulesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.TkeRouteEniRuleOutputObj"
+                    }
                 }
             }
         },
@@ -23181,6 +25292,17 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.ListUpdateStrategyRulesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.UpdateStrategyRuleOutputObj"
                     }
                 }
             }
@@ -24703,6 +26825,49 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ProbeRuleInput": {
+            "type": "object",
+            "required": [
+                "envType",
+                "spec"
+            ],
+            "properties": {
+                "envType": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecProbeInput"
+                }
+            }
+        },
+        "serializer.ProbeRuleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ProbeRuleOutputObj"
+                }
+            }
+        },
+        "serializer.ProbeRuleOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "envType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecProbeOutput"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
         "serializer.PropertyDefInput": {
             "type": "object",
             "required": [
@@ -25170,6 +27335,77 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "serializer.ResourcesRuleInput": {
+            "type": "object",
+            "required": [
+                "envType",
+                "spec"
+            ],
+            "properties": {
+                "envType": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.ResourcesSpecInput"
+                }
+            }
+        },
+        "serializer.ResourcesRuleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ResourcesRuleOutputObj"
+                }
+            }
+        },
+        "serializer.ResourcesRuleOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "envType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecResourcesOutput"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ResourcesSpecInput": {
+            "type": "object",
+            "required": [
+                "cpuLimits",
+                "cpuRequests",
+                "memoryLimits",
+                "memoryRequests",
+                "replicas"
+            ],
+            "properties": {
+                "cpuLimits": {
+                    "type": "string"
+                },
+                "cpuRequests": {
+                    "type": "string"
+                },
+                "memoryLimits": {
+                    "type": "string"
+                },
+                "memoryRequests": {
+                    "type": "string"
+                },
+                "replicas": {
+                    "type": "integer",
+                    "minimum": 0
                 }
             }
         },
@@ -26037,6 +28273,68 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.TkeRouteEniRuleInput": {
+            "type": "object",
+            "required": [
+                "envType",
+                "spec"
+            ],
+            "properties": {
+                "envType": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.TkeRouteEniSpecInput"
+                }
+            }
+        },
+        "serializer.TkeRouteEniRuleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.TkeRouteEniRuleOutputObj"
+                }
+            }
+        },
+        "serializer.TkeRouteEniRuleOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "envType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.TkeRouteEniSpecOutput"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.TkeRouteEniSpecInput": {
+            "type": "object",
+            "required": [
+                "enabled"
+            ],
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.TkeRouteEniSpecOutput": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
         "serializer.ToggleGPAConfigInput": {
             "type": "object",
             "properties": {
@@ -26873,6 +29171,64 @@ const docTemplate = `{
                             "$ref": "#/definitions/serializer.ScopedEnvVarOutputObj"
                         }
                     ]
+                }
+            }
+        },
+        "serializer.UpdateStrategyRuleInput": {
+            "type": "object",
+            "required": [
+                "envType",
+                "spec"
+            ],
+            "properties": {
+                "envType": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.UpdateStrategySpecInput"
+                }
+            }
+        },
+        "serializer.UpdateStrategyRuleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.UpdateStrategyRuleOutputObj"
+                }
+            }
+        },
+        "serializer.UpdateStrategyRuleOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "envType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "spec": {
+                    "$ref": "#/definitions/serializer.AppSpecUpdateStrategyOutput"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.UpdateStrategySpecInput": {
+            "type": "object",
+            "required": [
+                "maxSurge",
+                "maxUnavailable"
+            ],
+            "properties": {
+                "maxSurge": {
+                    "type": "string"
+                },
+                "maxUnavailable": {
+                    "type": "string"
                 }
             }
         },

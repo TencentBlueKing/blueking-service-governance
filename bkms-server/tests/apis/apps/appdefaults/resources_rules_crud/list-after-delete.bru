@@ -1,0 +1,27 @@
+meta {
+  name: list-after-delete
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/resources
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should have no resources rules after deletion", () => {
+    expect(res.body.data).to.deep.equal([]);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

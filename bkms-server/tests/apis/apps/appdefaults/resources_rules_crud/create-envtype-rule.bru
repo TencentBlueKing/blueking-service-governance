@@ -1,0 +1,50 @@
+meta {
+  name: create-envtype-rule
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/resources
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "envType": "production",
+    "spec": {
+      "replicas": 3,
+      "cpuRequests": "2",
+      "cpuLimits": "4",
+      "memoryRequests": "4Gi",
+      "memoryLimits": "8Gi"
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should create envType production resources rule", () => {
+    const rule = res.body.data;
+    expect(rule).to.be.an('object');
+    expect(rule.id).to.be.a('string');
+    expect(rule.envType).to.equal('production');
+    expect(rule.spec.replicas).to.equal(3);
+    expect(rule.spec.cpuRequests).to.equal('2');
+    expect(rule.spec.cpuLimits).to.equal('4');
+    expect(rule.spec.memoryRequests).to.equal('4Gi');
+    expect(rule.spec.memoryLimits).to.equal('8Gi');
+
+    bru.setVar('envTypeResourcesRuleID', rule.id);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
