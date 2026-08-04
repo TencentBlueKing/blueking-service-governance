@@ -125,7 +125,7 @@ func (s *Service) ExportEffectiveAppEnv(
 	}
 	// BuildAppEnvVars 在拼装最终生效视图时，可能把同一个 key 从多个来源带出来；
 	// 这里保留最后一个，代表已经过覆盖决议后的最终结果。
-	vars = deduplicateEnvVariableList(vars)
+	vars = vars.ToDeduplicatedList()
 	vars = filterOutSensitiveEffectiveVars(vars)
 
 	records := make([]renderRecord, 0, len(vars))
@@ -202,24 +202,6 @@ func renderMetadataValue(value string) string {
 		return strconv.Quote(value)
 	}
 	return value
-}
-
-func deduplicateEnvVariableList(vars envvartypes.EnvVariableList) envvartypes.EnvVariableList {
-	latestIndexByKey := make(map[string]int, len(vars))
-	for i, item := range vars {
-		latestIndexByKey[item.Key] = i
-	}
-
-	result := make(envvartypes.EnvVariableList, 0, len(latestIndexByKey))
-	for i, item := range vars {
-		// 同一个 key 只保留最后一次出现的记录，因为后面的环境变量层已经在
-		// 生效结果里覆盖了前面的值。
-		if latestIndexByKey[item.Key] != i {
-			continue
-		}
-		result = append(result, item)
-	}
-	return result
 }
 
 func filterOutSensitiveScopedVars(vars []envvars.ScopedEnvVar) []envvars.ScopedEnvVar {

@@ -68,9 +68,14 @@ func (h *Handler) ListAppEnvVars(c *gin.Context) {
 	}
 
 	ginutils.OK(c, serializer.ListAppEnvVarsOutput{
-		Data: lo.Map(envVars, func(item envvartypes.EnvVariableObj, _ int) *serializer.EnvVarOutputObj {
-			return new(serializer.EnvVarOutputObj).FromModel(item)
-		}),
+		Data: lo.Map(
+			// 该接口面向“最终生效环境变量”视图，因此在序列化前需要按优先级去重，
+			// 仅保留同 Key 中最终生效的那一个值。
+			envVars.ToDeduplicatedList(),
+			func(item envvartypes.EnvVariableObj, _ int) *serializer.EnvVarOutputObj {
+				return new(serializer.EnvVarOutputObj).FromModel(item)
+			},
+		),
 	})
 }
 

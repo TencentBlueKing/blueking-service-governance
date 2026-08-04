@@ -66,14 +66,14 @@ func TestRenderRecordsEscapesMultilineDescription(t *testing.T) {
 	}
 }
 
-func TestDeduplicateEnvVariableListKeepsLastOccurrence(t *testing.T) {
+func TestEnvVariableListToDeduplicatedListKeepsLastOccurrence(t *testing.T) {
 	vars := envvartypes.EnvVariableList{
 		{Key: "SHARED", Value: "workspace"},
 		{Key: "OTHER", Value: "other"},
 		{Key: "SHARED", Value: "app"},
 	}
 
-	deduped := deduplicateEnvVariableList(vars)
+	deduped := vars.ToDeduplicatedList()
 	if len(deduped) != 2 {
 		t.Fatalf("expected 2 items after deduplication, got %d", len(deduped))
 	}

@@ -79,6 +79,26 @@ func (varList EnvVariableList) ToMap() map[string]string {
 	return result
 }
 
+// ToDeduplicatedList returns the effective env var list with duplicate keys removed.
+// Later items have higher priority, so only the last item for the same key is kept.
+func (varList EnvVariableList) ToDeduplicatedList() EnvVariableList {
+	latestIndexByKey := make(map[string]int, len(varList))
+	for i, item := range varList {
+		latestIndexByKey[item.Key] = i
+	}
+
+	result := make(EnvVariableList, 0, len(latestIndexByKey))
+	for i, item := range varList {
+		// 同一个 key 只保留最后一次出现的记录，因为后面的环境变量层已经在
+		// 生效结果里覆盖了前面的值。
+		if latestIndexByKey[item.Key] != i {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
 // EnvVariableRichItem wraps EnvVariableObj with source info.
 type EnvVariableRichItem struct {
 	// Obj is the env variable object.
