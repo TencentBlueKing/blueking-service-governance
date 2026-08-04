@@ -89,13 +89,13 @@
           @update="handleUpdate"
         />
       </Tab.TabPanel>
-      <Tab.TabPanel
+      <!-- <Tab.TabPanel
         :label="$t('泳道配置')"
         name="laneConfig"
         render-directive="if"
       >
         <LaneConfig :data="data" />
-      </Tab.TabPanel>
+      </Tab.TabPanel> -->
       <Tab.TabPanel
         :label="$t('观测数据')"
         name="observability"
@@ -150,7 +150,6 @@
 
   import ApmInstance from './apm-instance.vue';
   import BasicInfo from './basic-info.vue';
-  import LaneConfig from './lane-config.vue';
   import Setting from './setting.vue';
 
   // 定义所有可用的 Tab 值
