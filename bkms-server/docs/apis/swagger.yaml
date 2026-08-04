@@ -2656,15 +2656,10 @@ definitions:
         description: 北极星 Token（当 createNewService 为 false 时必填，为 true 时由平台创建后回填）
         type: string
       scopeEnvNames:
-        description: 组件生效的环境列表，当 scopeType 为 environment 时有效
+        description: 生效的环境列表
         items:
           type: string
         type: array
-      scopeType:
-        description: 组件生效范围类型，可选值只能为 environment
-        enum:
-        - environment
-        type: string
       serviceLabels:
         additionalProperties:
           type: string
@@ -2675,15 +2670,10 @@ definitions:
         maximum: 65535
         minimum: 1
         type: integer
-      weight:
-        description: 服务权重，默认 10
-        minimum: 0
-        type: integer
     required:
     - instanceKey
     - polarisName
     - polarisNamespace
-    - scopeType
     - servicePort
     type: object
   serializer.CreateAppPolarisConfigOutput:
@@ -5529,10 +5519,11 @@ definitions:
       polarisToken:
         description: 北极星 Token（可选更新）
         type: string
-      scope:
-        allOf:
-        - $ref: '#/definitions/serializer.PatchPolarisScopeInput'
-        description: 组件生效范围（可选更新）
+      scopeEnvNames:
+        description: 生效的环境列表（可选更新；传入时全量替换，空数组表示清空，nil 表示不更新）
+        items:
+          type: string
+        type: array
       serviceLabels:
         additionalProperties:
           type: string
@@ -5542,10 +5533,6 @@ definitions:
         description: 服务端口（可选更新）
         maximum: 65535
         minimum: 1
-        type: integer
-      weight:
-        description: 服务权重（可选更新）
-        minimum: 0
         type: integer
     type: object
   serializer.PatchAppPolarisConfigOutput:
@@ -5616,21 +5603,6 @@ definitions:
         description: WorkloadName 指定被注入 bscp 配置的目标 workload 名称（传入则更新）
         type: string
     type: object
-  serializer.PatchPolarisScopeInput:
-    properties:
-      scopeEnvNames:
-        description: 组件生效的环境列表，当 scopeType 为 environment 时有效
-        items:
-          type: string
-        type: array
-      scopeType:
-        description: 组件生效范围类型，可选值只能为 environment
-        enum:
-        - environment
-        type: string
-    required:
-    - scopeType
-    type: object
   serializer.PatchWorkspaceComponentInput:
     properties:
       name:
@@ -5694,6 +5666,12 @@ definitions:
           $ref: '#/definitions/serializer.PolarisEnvStateOutput'
         description: 各环境中已经生效的关键字段、下发错误和部署状态
         type: object
+      envWeights:
+        additionalProperties:
+          format: int32
+          type: integer
+        description: 各环境的单实例权重，key 为环境名称
+        type: object
       instanceKey:
         description: 组件实例标识，用于环境变量拼接
         type: string
@@ -5716,13 +5694,10 @@ definitions:
         description: 北极星 Token（敏感信息，返回时脱敏）
         type: string
       scopeEnvNames:
-        description: 组件生效的环境列表
+        description: 生效的环境列表
         items:
           type: string
         type: array
-      scopeType:
-        description: 组件生效范围类型
-        type: string
       serviceLabels:
         additionalProperties:
           type: string
@@ -5739,9 +5714,6 @@ definitions:
         items:
           type: string
         type: array
-      weight:
-        description: 服务权重
-        type: integer
     type: object
   serializer.PolarisConfigVarOutput:
     properties:
@@ -6182,6 +6154,23 @@ definitions:
         type: string
       value:
         type: string
+    type: object
+  serializer.PutEnvWeightInput:
+    properties:
+      weight:
+        description: 单实例权重，取值范围 0-10000
+        maximum: 10000
+        minimum: 0
+        type: integer
+    required:
+    - weight
+    type: object
+  serializer.PutEnvWeightOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.PolarisConfigOutputObj'
+        description: 更新后的北极星配置
     type: object
   serializer.RecoverConditionInput:
     properties:
@@ -10149,6 +10138,50 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 更新北极星配置
+      tags:
+      - polaris-config
+  /apps/{appID}/deps/polaris-configs/{configName}/envs/{envName}/weight:
+    put:
+      consumes:
+      - application/json
+      operationId: PutEnvWeight
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 配置名称
+        in: path
+        name: configName
+        required: true
+        type: string
+      - description: 环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.PutEnvWeightInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PutEnvWeightOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新指定环境的北极星实例权重
       tags:
       - polaris-config
   /apps/{appID}/deps/polaris-configs/{configName}/vars:

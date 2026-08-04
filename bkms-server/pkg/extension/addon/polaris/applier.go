@@ -4,9 +4,11 @@ package polaris
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -75,6 +77,49 @@ func (a *polarisCRApplier) upsertCR(
 	}
 	if _, err = k8sClient.Upsert(ctx, env.Cluster.Namespace, manifest, metav1.PatchOptions{}); err != nil {
 		return errors.Wrap(err, "upsert polaris CR to k8s")
+	}
+	return nil
+}
+
+type jsonPatchOperation struct {
+	Op    string `json:"op"`
+	Path  string `json:"path"`
+	Value any    `json:"value"`
+}
+
+func buildWeightPatch(serviceName string, weight int32) ([]byte, error) {
+	return json.Marshal([]jsonPatchOperation{
+		{Op: "test", Path: "/spec/services/0/name", Value: serviceName},
+		{Op: "add", Path: "/spec/services/0/weight", Value: int64(weight)},
+	})
+}
+
+// patchWeight 仅更新现有 PolarisConfig CR 的服务权重，不修改其他配置字段。
+func (a *polarisCRApplier) patchWeight(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	env *bkmsenv.Environment,
+	config *PolarisConfig,
+) error {
+	crName, serviceName := polarisResourceNames(app.Name, config.Name)
+	patch, err := buildWeightPatch(serviceName, config.GetEnvWeight(env.Name))
+	if err != nil {
+		return errors.Wrap(err, "build polaris CR weight patch")
+	}
+
+	k8sClient, err := a.newK8sClient(env.Cluster.ClusterID)
+	if err != nil {
+		return errors.Wrap(err, "create k8s client for polaris CR")
+	}
+	if _, err = k8sClient.Patch(
+		ctx,
+		env.Cluster.Namespace,
+		crName,
+		types.JSONPatchType,
+		patch,
+		metav1.PatchOptions{},
+	); err != nil {
+		return errors.Wrap(err, "patch polaris CR weight")
 	}
 	return nil
 }

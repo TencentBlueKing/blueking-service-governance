@@ -1,0 +1,34 @@
+meta {
+  name: put-env-weight-out-of-scope
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{serviceURL}}/apps/{{componentsTrpcAppID}}/deps/polaris-configs/{{testPolarisEnvConfigName}}/envs/production/weight
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "weight": 100
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject an environment outside the config scope", () => {
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+    expect(res.body.error.message).to.contain("is not in scope");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

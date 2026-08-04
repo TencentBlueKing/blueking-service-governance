@@ -1,0 +1,39 @@
+meta {
+  name: put-env-weight-pending-deploy
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{serviceURL}}/apps/{{componentsTrpcAppID}}/deps/polaris-configs/{{testPolarisEnvConfigName}}/envs/test/weight
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "weight": 0
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+  res.body.data.envStates.test.status: eq pendingCreate
+  res.body.data.envWeights.test: eq 0
+}
+
+tests {
+  test("should persist a weight before the environment is deployed", () => {
+    expect(res.body.data.envStates.test.appliedFields).to.equal(null);
+    expect(res.body.data.envWeights).to.deep.equal({
+      test: 0,
+      staging: 100
+    });
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

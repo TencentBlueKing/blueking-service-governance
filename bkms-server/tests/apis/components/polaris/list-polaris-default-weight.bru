@@ -1,0 +1,29 @@
+meta {
+  name: list-polaris-default-weight
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{serviceURL}}/apps/{{componentsTrpcAppID}}/deps/polaris-configs
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should initialize the scoped environment weight to 100", () => {
+    const config = res.body.data.find(c => c.name === bru.getVar('testPolarisConfigName'));
+    expect(config).to.not.be.undefined;
+    expect(config.envWeights).to.deep.equal({"env-1": 100});
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

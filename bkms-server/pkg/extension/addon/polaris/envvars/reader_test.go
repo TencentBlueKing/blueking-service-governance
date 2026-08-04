@@ -15,7 +15,6 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
@@ -54,7 +53,6 @@ var _ = Describe("Reader", func() {
 				PolarisToken:     "test-token-12345",
 				ServicePort:      8080,
 			},
-			ScopeType:     component.ScopeTypeEnvironment,
 			ScopeEnvNames: []string{environment.Name},
 		}
 		Expect(store.Create(ctx, config)).To(Succeed())

@@ -3,6 +3,7 @@ package polaris_test
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
@@ -17,7 +18,6 @@ import (
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -100,7 +100,6 @@ var _ = Describe("PolarisConfigService", func() {
 				Properties: polaris.Properties{
 					InstanceKey: "k1", PolarisToken: "t1", ServicePort: 8080,
 				},
-				ScopeType:     component.ScopeTypeEnvironment,
 				ScopeEnvNames: []string{environment.Name, otherEnvironment.Name, environment.Name},
 			}
 			Expect(service.Create(ctx, app, config, false)).To(Succeed())
@@ -110,6 +109,10 @@ var _ = Describe("PolarisConfigService", func() {
 			Expect(stored.EnvStates).To(BeEmpty())
 			Expect(stored.GetEnvState(environment.Name).AppliedFields).To(BeNil())
 			Expect(stored.GetEnvState(environment.Name).UpdatedAt).To(BeZero())
+			Expect(stored.EnvWeights).To(Equal(map[string]int32{
+				environment.Name:      polaris.DefaultEnvWeight,
+				otherEnvironment.Name: polaris.DefaultEnvWeight,
+			}))
 		})
 
 		It("should create no env states for an empty scope", func() {
@@ -119,13 +122,13 @@ var _ = Describe("PolarisConfigService", func() {
 				Properties: polaris.Properties{
 					InstanceKey: "k1", PolarisToken: "t1", ServicePort: 8080,
 				},
-				ScopeType: component.ScopeTypeEnvironment,
 			}
 			Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
 			stored, err := store.Get(ctx, app.ID, config.Name)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).To(BeEmpty())
+			Expect(stored.EnvWeights).To(BeEmpty())
 		})
 
 		It("should create and link a managed Polaris service", func() {
@@ -150,7 +153,6 @@ var _ = Describe("PolarisConfigService", func() {
 						InstanceKey: "managed", PolarisName: "managed-service",
 						PolarisNamespace: "Test", ServicePort: 8080, Operator: "owner",
 					},
-					ScopeType:     component.ScopeTypeEnvironment,
 					ScopeEnvNames: []string{environment.Name},
 				}
 				Expect(service.Create(ctx, app, config, true)).To(Succeed())
@@ -160,6 +162,7 @@ var _ = Describe("PolarisConfigService", func() {
 				Expect(stored.DepSvcInstID).To(Equal(serviceInstanceID))
 				Expect(stored.PolarisToken).To(Equal("managed-token"))
 				Expect(stored.GetEnvState(environment.Name).AppliedFields).To(BeNil())
+				Expect(stored.EnvWeights[environment.Name]).To(Equal(polaris.DefaultEnvWeight))
 			})
 		})
 	})
@@ -170,13 +173,159 @@ var _ = Describe("PolarisConfigService", func() {
 			Expect(store.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
-				Scope: &polaris.PatchPolarisScope{
-					ScopeType:     component.ScopeTypeEnvironment,
-					ScopeEnvNames: []string{environment.Name},
-				},
+				ScopeEnvNames: []string{environment.Name},
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.EnvStates).NotTo(HaveKey(environment.Name))
+			Expect(updated.EnvWeights[environment.Name]).To(Equal(polaris.DefaultEnvWeight))
+		})
+	})
+
+	Describe("Environment weights", func() {
+		It("should persist a pending environment weight without touching deployment state", func() {
+			config := newTestConfig(
+				app.ID,
+				"cfg-weight-pending-deploy",
+				[]string{environment.Name},
+				nil,
+			)
+			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+
+			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 0)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnvWeights).To(Equal(map[string]int32{environment.Name: 0}))
+			Expect(updated.GetEnvState(environment.Name).AppliedFields).To(BeNil())
+			Consistently(func(g Gomega) {
+				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				g.Expect(getErr).NotTo(HaveOccurred())
+				g.Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
+			}).WithTimeout(200 * time.Millisecond).Should(Succeed())
+		})
+
+		It("should drop weight when an undeployed environment leaves scope", func() {
+			config := newTestConfig(
+				app.ID,
+				"cfg-weight-drop-undeployed",
+				[]string{environment.Name},
+				nil,
+			)
+			config.EnvWeights = map[string]int32{environment.Name: 35}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnvWeights).NotTo(HaveKey(environment.Name))
+		})
+
+		It("should retain weight when a deployed environment leaves scope", func() {
+			applied := redeployFields("k1", "t1", 8080)
+			config := newTestConfig(
+				app.ID,
+				"cfg-weight-retain-deployed",
+				[]string{environment.Name},
+				map[string]polaris.PolarisEnvState{
+					environment.Name: envState(applied),
+				},
+			)
+			config.EnvWeights = map[string]int32{environment.Name: 35}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnvWeights[environment.Name]).To(Equal(int32(35)))
+			Expect(updated.EnvStates).To(HaveKey(environment.Name))
+		})
+
+		It("should reuse retained weight when a deployed environment returns to scope", func() {
+			applied := redeployFields("old-key", "t1", 8080)
+			config := newTestConfig(
+				app.ID,
+				"cfg-weight-readd",
+				[]string{environment.Name},
+				map[string]polaris.PolarisEnvState{
+					environment.Name: envState(applied),
+				},
+			)
+			config.EnvWeights = map[string]int32{environment.Name: 35}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			removed, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			readded, err := service.Update(ctx, app, removed, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{environment.Name},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(readded.EnvWeights[environment.Name]).To(Equal(int32(35)))
+		})
+
+		It("should patch a deployed environment even when other fields are pending modify", func() {
+			applied := redeployFields("k1", "t1", 8080)
+			staleApplied := redeployFields("old-key", "t1", 8080)
+			config := newTestConfig(
+				app.ID,
+				"cfg-weight-put",
+				[]string{environment.Name, otherEnvironment.Name},
+				map[string]polaris.PolarisEnvState{
+					environment.Name:      envState(staleApplied),
+					otherEnvironment.Name: envState(applied),
+				},
+			)
+			config.EnvWeights = map[string]int32{otherEnvironment.Name: 20}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
+				mockPolarisDiscoveryFailure()
+
+				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 0)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnvWeights[environment.Name]).To(BeZero())
+				Expect(updated.EnvWeights[otherEnvironment.Name]).To(Equal(int32(20)))
+				Expect(polaris.PolarisEnvStatus(
+					updated, environment.Name, updated.GetEnvState(environment.Name),
+				)).To(Equal(polaris.PolarisEnvStatusPendingModify))
+
+				Eventually(func(g Gomega) {
+					stored, getErr := store.Get(ctx, app.ID, config.Name)
+					g.Expect(getErr).NotTo(HaveOccurred())
+					g.Expect(stored.GetEnvState(environment.Name).LastError).NotTo(BeEmpty())
+				}).WithTimeout(5 * time.Second).Should(Succeed())
+			})
+		})
+
+		It("should update a deployed environment outside scope and trigger a patch", func() {
+			applied := redeployFields("k1", "t1", 8080)
+			config := newTestConfig(
+				app.ID,
+				"cfg-weight-put-pending-delete",
+				nil,
+				map[string]polaris.PolarisEnvState{
+					environment.Name: envState(applied),
+				},
+			)
+			config.EnvWeights = map[string]int32{environment.Name: 20}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
+				mockPolarisDiscoveryFailure()
+
+				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 25)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnvWeights[environment.Name]).To(Equal(int32(25)))
+
+				Eventually(func(g Gomega) {
+					stored, getErr := store.Get(ctx, app.ID, config.Name)
+					g.Expect(getErr).NotTo(HaveOccurred())
+					g.Expect(stored.GetEnvState(environment.Name).LastError).NotTo(BeEmpty())
+				}).WithTimeout(5 * time.Second).Should(Succeed())
+			})
 		})
 	})
 

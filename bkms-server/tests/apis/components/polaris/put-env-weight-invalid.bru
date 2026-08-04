@@ -1,0 +1,33 @@
+meta {
+  name: put-env-weight-invalid
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{serviceURL}}/apps/{{componentsTrpcAppID}}/deps/polaris-configs/{{testPolarisEnvConfigName}}/envs/test/weight
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "weight": 10001
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject an environment weight above the upper bound", () => {
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -1,7 +1,7 @@
 meta {
   name: create-polaris-config-env-scope
   type: http
-  seq: 2
+  seq: 3
 }
 
 post {
@@ -13,7 +13,6 @@ post {
 body:json {
   {
     "createNewService": false,
-    "scopeType": "environment",
     "scopeEnvNames": ["test", "staging"],
     "instanceKey": "testPolarisEnv",
     "polarisName": "test-polaris-env-service",
@@ -23,7 +22,6 @@ body:json {
     "direct": true,
     "keepNotReadyPod": false,
     "enableHealthCheck": true,
-    "weight": 50,
     "serviceLabels": {
       "scope": "environment",
       "version": "v1"

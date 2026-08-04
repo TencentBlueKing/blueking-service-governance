@@ -1,7 +1,7 @@
 meta {
   name: patch-polaris-config
   type: http
-  seq: 3
+  seq: 7
 }
 
 patch {
@@ -17,18 +17,13 @@ body:json {
     "direct": true,
     "keepNotReadyPod": false,
     "enableHealthCheck": true,
-    "weight": 20,
     "polarisToken": "updated-polaris-token-xxx",
     "serviceLabels": {
       "env": "test",
       "team": "api-test",
       "updated": "true"
     },
-    "scope": {
-      "scopeType": "environment",
-      "scopeEnvNames": [
-      ]
-    }
+    "scopeEnvNames": []
   }
 }
 
@@ -51,17 +46,16 @@ tests {
     expect(config.direct).to.equal(true);
     expect(config.keepNotReadyPod).to.equal(false);
     expect(config.enableHealthCheck).to.equal(true);
-    expect(config.weight).to.equal(20);
     expect(config.polarisToken).to.equal("updated-polaris-token-xxx");
     expect(config.serviceLabels).to.deep.equal({
       env: "test",
       team: "api-test",
       updated: "true"
     });
-    expect(config.scopeType).to.equal("environment");
     expect(config.scopeEnvNames).to.deep.equal([]);
     expect(config.envStates).to.be.an('object');
     expect(Object.keys(config.envStates)).to.have.length(0);
+    expect(config.envWeights).to.deep.equal({});
   });
 }
 

@@ -1,9 +1,19 @@
 package polaris_test
 
 import (
+	"errors"
+
+	"github.com/bytedance/mockey"
+
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 )
+
+func mockPolarisDiscoveryFailure() {
+	mockey.Mock(cluster.NewConfig).Return(&cluster.Config{ClusterID: "test-cluster"}).Build()
+	mockey.Mock(discovery.GetGroupVersionResource).Return(nil, errors.New("test discovery error")).Build()
+}
 
 func newTestConfig(
 	appID, name string,
@@ -19,9 +29,7 @@ func newTestConfig(
 			PolarisNamespace: "Test",
 			PolarisToken:     "t1",
 			ServicePort:      8080,
-			Weight:           10,
 		},
-		ScopeType:     component.ScopeTypeEnvironment,
 		ScopeEnvNames: scopeEnvNames,
 		EnvStates:     envStates,
 	}

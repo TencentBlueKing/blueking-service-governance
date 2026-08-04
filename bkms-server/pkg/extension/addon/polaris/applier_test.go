@@ -21,7 +21,6 @@ import (
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
@@ -97,7 +96,7 @@ var _ = Describe("Polaris CR applier", func() {
 		diApp.RequireStop()
 	})
 
-	It("should record only the error when asynchronous apply fails", func() {
+	It("should record only the error when an asynchronous weight patch fails", func() {
 		applied := redeployFields("k1", "t1", 8080)
 		config := newTestConfig(
 			app.ID,
@@ -109,20 +108,24 @@ var _ = Describe("Polaris CR applier", func() {
 		Expect(store.UpsertEnvState(ctx, app.ID, config.Name, environment.Name, polaris.PolarisEnvStateUpdate{
 			AppliedFields: applied,
 		})).To(Succeed())
-		weight := int32(20)
-		_, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{Weight: &weight})
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(func(g Gomega) {
-			stored, getErr := store.Get(ctx, app.ID, config.Name)
-			g.Expect(getErr).NotTo(HaveOccurred())
-			state := stored.GetEnvState(environment.Name)
-			g.Expect(state.LastError).NotTo(BeEmpty())
-			g.Expect(state.AppliedFields).To(Equal(applied))
-		}).Should(Succeed())
+
+		mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
+			mockPolarisDiscoveryFailure()
+
+			_, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 20)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				g.Expect(getErr).NotTo(HaveOccurred())
+				state := stored.GetEnvState(environment.Name)
+				g.Expect(state.LastError).NotTo(BeEmpty())
+				g.Expect(state.AppliedFields).To(Equal(applied))
+			}).Should(Succeed())
+		})
 	})
 
 	Context("when the test cluster supports PolarisConfig", Label("k8s"), func() {
-		It("should apply a CR and clear only the previous error", func() {
+		It("should patch only weight and record service mismatch or missing resource errors", func() {
 			clusterCfg, err := testutil.TestClusterConfig("test-cluster")
 			if errors.Is(err, testutil.ErrKubeConfigNotFound) {
 				Skip(err.Error())
@@ -153,10 +156,11 @@ var _ = Describe("Polaris CR applier", func() {
 				Properties: polaris.Properties{
 					InstanceKey: "key", PolarisName: "polaris-service",
 					PolarisNamespace: "Test", PolarisToken: "token",
-					ServicePort: 8080, Weight: 10,
+					ServicePort: 8080, Direct: true, KeepNotReadyPod: true,
+					EnableHealthCheck: true,
 				},
-				ScopeType:     component.ScopeTypeEnvironment,
 				ScopeEnvNames: []string{clusterEnv.Name},
+				EnvWeights:    map[string]int32{clusterEnv.Name: 10},
 				EnvStates: map[string]polaris.PolarisEnvState{
 					clusterEnv.Name: {AppliedFields: applied, LastError: "previous error"},
 				},
@@ -181,6 +185,12 @@ var _ = Describe("Polaris CR applier", func() {
 			}
 			Expect(manifest).NotTo(BeNil())
 			crName := mapx.GetStr(manifest, "metadata.name")
+			services := mapx.GetList(manifest, "spec.services")
+			Expect(services).To(HaveLen(1))
+			serviceSpec := services[0].(map[string]any)
+			expectedServiceName := serviceSpec["name"]
+			delete(serviceSpec, "weight")
+			serviceSpec["name"] = "unexpected-service"
 			_, err = client.Upsert(ctx, "default", manifest, metav1.PatchOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			DeferCleanup(func() {
@@ -190,22 +200,57 @@ var _ = Describe("Polaris CR applier", func() {
 			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
 				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 
-				weight := int32(20)
-				_, updateErr := service.Update(ctx, app, config, &polaris.ConfigUpdateData{Weight: &weight})
+				_, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 20)
 				Expect(updateErr).NotTo(HaveOccurred())
 
 				Eventually(func(g Gomega) {
 					obj, getErr := client.Get(ctx, "default", crName, metav1.GetOptions{})
 					g.Expect(getErr).NotTo(HaveOccurred())
-					services := mapx.GetList(obj.Object, "spec.services")
-					g.Expect(services).To(HaveLen(1))
-					g.Expect(mapx.GetInt64(services[0].(map[string]any), "weight")).To(Equal(int64(weight)))
+					currentServices := mapx.GetList(obj.Object, "spec.services")
+					g.Expect(currentServices).To(HaveLen(1))
+					g.Expect(currentServices[0].(map[string]any)).NotTo(HaveKey("weight"))
+
+					stored, getErr := store.Get(ctx, app.ID, config.Name)
+					g.Expect(getErr).NotTo(HaveOccurred())
+					state := stored.GetEnvState(clusterEnv.Name)
+					g.Expect(state.LastError).NotTo(BeEmpty())
+					g.Expect(state.AppliedFields).To(Equal(applied))
+				}).WithTimeout(30 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+
+				serviceSpec["name"] = expectedServiceName
+				_, upsertErr := client.Upsert(ctx, "default", manifest, metav1.PatchOptions{})
+				Expect(upsertErr).NotTo(HaveOccurred())
+
+				_, updateErr = service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 0)
+				Expect(updateErr).NotTo(HaveOccurred())
+
+				Eventually(func(g Gomega) {
+					obj, getErr := client.Get(ctx, "default", crName, metav1.GetOptions{})
+					g.Expect(getErr).NotTo(HaveOccurred())
+					currentServices := mapx.GetList(obj.Object, "spec.services")
+					g.Expect(currentServices).To(HaveLen(1))
+					currentService := currentServices[0].(map[string]any)
+					g.Expect(mapx.GetInt64(currentService, "weight")).To(BeZero())
+					g.Expect(currentService["port"]).To(BeEquivalentTo(8080))
+					g.Expect(currentService["direct"]).To(BeTrue())
+					g.Expect(currentService["keepNotReadyPod"]).To(BeTrue())
+					g.Expect(currentService["enableHealthCheck"]).To(BeTrue())
+					g.Expect(mapx.GetStr(obj.Object, "spec.polaris.token")).To(Equal("token"))
 
 					stored, getErr := store.Get(ctx, app.ID, config.Name)
 					g.Expect(getErr).NotTo(HaveOccurred())
 					state := stored.GetEnvState(clusterEnv.Name)
 					g.Expect(state.LastError).To(BeEmpty())
 					g.Expect(state.AppliedFields).To(Equal(applied))
+				}).WithTimeout(30 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+
+				Expect(client.Delete(ctx, "default", crName, metav1.DeleteOptions{})).To(Succeed())
+				_, updateErr = service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 25)
+				Expect(updateErr).NotTo(HaveOccurred())
+				Eventually(func(g Gomega) {
+					stored, getErr := store.Get(ctx, app.ID, config.Name)
+					g.Expect(getErr).NotTo(HaveOccurred())
+					g.Expect(stored.GetEnvState(clusterEnv.Name).LastError).NotTo(BeEmpty())
 				}).WithTimeout(30 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 			})
 		})

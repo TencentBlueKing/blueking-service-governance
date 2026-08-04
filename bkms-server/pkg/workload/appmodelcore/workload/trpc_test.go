@@ -326,7 +326,6 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				ServicePort:      8080,
 				ServiceLabels:    map[string]string{"missing": "${{ env.MISSING }}"},
 			},
-			ScopeType:     component.ScopeTypeEnvironment,
 			ScopeEnvNames: []string{appEnv.Name},
 		})).To(Succeed())
 
@@ -385,7 +384,6 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 					ServicePort:       8080,
 					EnableHealthCheck: true,
 				},
-				ScopeType:     component.ScopeTypeEnvironment,
 				ScopeEnvNames: []string{testEnv.Name},
 			}
 			err := polarisConfigStore.Create(ctx, pc)
@@ -442,7 +440,6 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 					ServicePort:       8080,
 					EnableHealthCheck: false,
 				},
-				ScopeType:     component.ScopeTypeEnvironment,
 				ScopeEnvNames: []string{testEnv.Name},
 			}
 			err := polarisConfigStore.Create(ctx, pc)

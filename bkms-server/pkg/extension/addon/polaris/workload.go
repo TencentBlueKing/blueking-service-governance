@@ -92,9 +92,7 @@ func buildExtraResources(
 	vars map[string]string,
 	collector *envvarrefs.Collector,
 ) ([]unstructured.Unstructured, error) {
-	baseName := strings.ToLower(fmt.Sprintf("%s-%s", app.Name, cfg.Name))
-	crName := baseName + "-polaris"
-	serviceName := baseName + "-polaris-service"
+	crName, serviceName := polarisResourceNames(app.Name, cfg.Name)
 
 	serviceSpec := map[string]any{
 		"name":              serviceName,
@@ -103,7 +101,7 @@ func buildExtraResources(
 		"direct":            cfg.Direct,
 		"keepNotReadyPod":   cfg.KeepNotReadyPod,
 		"enableHealthCheck": cfg.EnableHealthCheck,
-		"weight":            int64(cfg.Weight),
+		"weight":            int64(cfg.GetEnvWeight(env.Name)),
 	}
 	if len(cfg.ServiceLabels) > 0 {
 		extraMeta, err := renderServiceLabels(cfg.Name, cfg.ServiceLabels, vars, collector)
@@ -157,6 +155,11 @@ func buildExtraResources(
 		{Object: crConverted},
 		{Object: serviceMap},
 	}, nil
+}
+
+func polarisResourceNames(appName, configName string) (crName, serviceName string) {
+	baseName := strings.ToLower(fmt.Sprintf("%s-%s", appName, configName))
+	return baseName + "-polaris", baseName + "-polaris-service"
 }
 
 // injectContainerPorts injects Polaris service ports using the same merge key as the old component patch.

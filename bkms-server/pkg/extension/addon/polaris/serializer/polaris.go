@@ -97,14 +97,10 @@ type PolarisConfigOutputObj struct {
 	KeepNotReadyPod bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查
 	EnableHealthCheck bool `json:"enableHealthCheck"`
-	// 服务权重
-	Weight int32 `json:"weight"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
 
-	// 组件生效范围类型
-	ScopeType string `json:"scopeType"`
-	// 组件生效的环境列表
+	// 生效的环境列表
 	ScopeEnvNames []string `json:"scopeEnvNames"`
 	// 负责人
 	Operator string `json:"operator"`
@@ -116,6 +112,8 @@ type PolarisConfigOutputObj struct {
 	Warnings []string `json:"warnings"`
 	// 各环境中已经生效的关键字段、下发错误和部署状态
 	EnvStates map[string]PolarisEnvStateOutput `json:"envStates"`
+	// 各环境的单实例权重，key 为环境名称
+	EnvWeights map[string]int32 `json:"envWeights"`
 }
 
 // PolarisEnvStateOutput is the JSON representation of a single environment's applied state.
@@ -143,19 +141,12 @@ type RedeployRequiredFieldsOutput struct {
 	ServicePort int32 `json:"servicePort"`
 }
 
-const (
-	// PolarisEnvStatusDeployed 表示环境在 scope 内，且部署关联字段均与部署快照一致。
-	PolarisEnvStatusDeployed = "deployed"
-	// PolarisEnvStatusPendingCreate 表示环境在 scope 内，但尚无部署快照。
-	PolarisEnvStatusPendingCreate = "pendingCreate"
-	// PolarisEnvStatusPendingModify 表示环境在 scope 内，且至少一个部署关联字段与部署快照不同。
-	PolarisEnvStatusPendingModify = "pendingModify"
-	// PolarisEnvStatusPendingDelete 表示环境已移出 scope，但仍保留部署快照等待下次部署删除。
-	PolarisEnvStatusPendingDelete = "pendingDelete"
-)
-
 // FromModel fills output fields from a PolarisConfig domain model and optional warnings.
 func (o *PolarisConfigOutputObj) FromModel(config polaris.PolarisConfig, warnings []string) *PolarisConfigOutputObj {
+	envWeights := config.EnvWeights
+	if envWeights == nil {
+		envWeights = map[string]int32{}
+	}
 	*o = PolarisConfigOutputObj{
 		AppID:             config.AppID,
 		Name:              config.Name,
@@ -168,15 +159,14 @@ func (o *PolarisConfigOutputObj) FromModel(config polaris.PolarisConfig, warning
 		Direct:            config.Direct,
 		KeepNotReadyPod:   config.KeepNotReadyPod,
 		EnableHealthCheck: config.EnableHealthCheck,
-		Weight:            config.Weight,
 		ServiceLabels:     config.ServiceLabels,
-		ScopeType:         string(config.ScopeType),
 		ScopeEnvNames:     config.ScopeEnvNames,
 		Operator:          config.Operator,
 		CreatedAt:         config.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:         config.UpdatedAt.Format(time.RFC3339),
 		Warnings:          warnings,
 		EnvStates:         toEnvStateOutputs(&config),
+		EnvWeights:        envWeights,
 	}
 	return o
 }
@@ -191,7 +181,7 @@ func toEnvStateOutputs(config *polaris.PolarisConfig) map[string]PolarisEnvState
 		if _, ok := result[envName]; ok {
 			continue
 		}
-		result[envName] = PolarisEnvStateOutput{Status: PolarisEnvStatusPendingCreate}
+		result[envName] = PolarisEnvStateOutput{Status: polaris.PolarisEnvStatusPendingCreate}
 	}
 	return result
 }
@@ -205,8 +195,8 @@ func newPolarisEnvStateOutput(
 		AppliedFields:       toRedeployRequiredFieldsOutput(state.AppliedFields),
 		LastError:           state.LastError,
 		UpdatedAt:           state.UpdatedAt.Format(time.RFC3339),
-		PolarisTokenChanged: polarisTokenChanged(config, envName, state),
-		Status:              polarisEnvStatus(config, envName, state),
+		PolarisTokenChanged: polaris.PolarisTokenChanged(config, envName, state),
+		Status:              polaris.PolarisEnvStatus(config, envName, state),
 	}
 }
 
@@ -221,31 +211,6 @@ func toRedeployRequiredFieldsOutput(fields *polaris.RedeployRequiredFields) *Red
 	}
 }
 
-func polarisEnvStatus(
-	config *polaris.PolarisConfig,
-	envName string,
-	state polaris.PolarisEnvState,
-) string {
-	if !config.IsAvailableInEnv(envName) {
-		return PolarisEnvStatusPendingDelete
-	}
-	if state.AppliedFields == nil {
-		return PolarisEnvStatusPendingCreate
-	}
-	if state.AppliedFields.InstanceKey != config.InstanceKey ||
-		state.AppliedFields.PolarisToken != config.PolarisToken ||
-		state.AppliedFields.ServicePort != config.ServicePort {
-		return PolarisEnvStatusPendingModify
-	}
-	return PolarisEnvStatusDeployed
-}
-
-// polarisTokenChanged 比较响应生成时的配置期望 Token 与该环境最近一次部署快照中的 Token。
-func polarisTokenChanged(config *polaris.PolarisConfig, envName string, state polaris.PolarisEnvState) bool {
-	return config.IsAvailableInEnv(envName) &&
-		state.AppliedFields != nil && state.AppliedFields.PolarisToken != config.PolarisToken
-}
-
 // -----------------------------------------------------------------------------
 // Create app polaris config
 // -----------------------------------------------------------------------------
@@ -254,9 +219,7 @@ func polarisTokenChanged(config *polaris.PolarisConfig, envName string, state po
 type CreateAppPolarisConfigInput struct {
 	// 是否由平台创建新的北极星服务
 	CreateNewService bool `json:"createNewService"`
-	// 组件生效范围类型，可选值只能为 environment
-	ScopeType string `json:"scopeType" binding:"required,oneof=environment"`
-	// 组件生效的环境列表，当 scopeType 为 environment 时有效
+	// 生效的环境列表
 	ScopeEnvNames []string `json:"scopeEnvNames"`
 	// 组件实例标识，用于环境变量拼接，只能包含字母、数字、下划线
 	InstanceKey string `json:"instanceKey" binding:"required,instance_key"`
@@ -274,8 +237,6 @@ type CreateAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查，默认 false
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
-	// 服务权重，默认 10
-	Weight *int32 `json:"weight" binding:"omitempty,min=0"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
 	// 操作人(即北极星负责人, 仅 createNewService 为 true 时有效)
@@ -308,24 +269,14 @@ type PatchAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查（可选更新）
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
-	// 服务权重（可选更新）
-	Weight *int32 `json:"weight" binding:"omitempty,min=0"`
 	// 服务标签（可选更新，传入时全量替换）
 	ServiceLabels map[string]string `json:"serviceLabels"`
 	// 组件实例标识（可选更新）
 	InstanceKey *string `json:"instanceKey"`
-	// 组件生效范围（可选更新）
-	Scope *PatchPolarisScopeInput `json:"scope"`
+	// 生效的环境列表（可选更新；传入时全量替换，空数组表示清空，nil 表示不更新）
+	ScopeEnvNames []string `json:"scopeEnvNames"`
 	// 北极星 Token（可选更新）
 	PolarisToken *string `json:"polarisToken"`
-}
-
-// PatchPolarisScopeInput is the JSON input for updating polaris config scope.
-type PatchPolarisScopeInput struct {
-	// 组件生效范围类型，可选值只能为 environment
-	ScopeType string `json:"scopeType" binding:"required,oneof=environment"`
-	// 组件生效的环境列表，当 scopeType 为 environment 时有效
-	ScopeEnvNames []string `json:"scopeEnvNames"`
 }
 
 // PatchAppPolarisConfigOutput is the JSON response for updating a polaris config.
@@ -373,4 +324,36 @@ func (o *PolarisConfigVarOutput) FromModel(v polaris.ConfigVar) *PolarisConfigVa
 type ValidateAppPolarisConfigOutput struct {
 	// 校验警告信息
 	Warnings []string `json:"warnings"`
+}
+
+// -----------------------------------------------------------------------------
+// Put env weight
+// -----------------------------------------------------------------------------
+
+// AppConfigEnvNameURIInput is the path input for APIs scoped by application, config name, and env name.
+type AppConfigEnvNameURIInput struct {
+	// 应用 ID
+	AppID string `uri:"appID" binding:"required,uri_slug"`
+	// 配置名称
+	ConfigName string `uri:"configName" binding:"required,min=1"`
+	// 环境名称
+	EnvName string `uri:"envName" binding:"required,min=1"`
+}
+
+// PutEnvWeightInput is the JSON input for updating an environment's weight.
+type PutEnvWeightInput struct {
+	// 单实例权重，取值范围 0-10000
+	Weight *int32 `json:"weight" binding:"required,min=0,max=10000"`
+}
+
+// PutEnvWeightOutput is the JSON response for updating an environment's weight.
+type PutEnvWeightOutput struct {
+	// 更新后的北极星配置
+	Data *PolarisConfigOutputObj `json:"data"`
+}
+
+// FromModel fills output fields from the updated config.
+func (o *PutEnvWeightOutput) FromModel(config *polaris.PolarisConfig) *PutEnvWeightOutput {
+	o.Data = new(PolarisConfigOutputObj).FromModel(*config, nil)
+	return o
 }

@@ -35,8 +35,12 @@ type PolarisConfigStore interface {
 	Update(ctx context.Context, appID, name string, updateData *ConfigUpdateData) error
 	// UpsertEnvState 幂等新增或更新指定环境的信息
 	UpsertEnvState(ctx context.Context, appID, name, envName string, update PolarisEnvStateUpdate) error
+	// UpsertEnvWeight 幂等设置指定环境的单实例权重
+	UpsertEnvWeight(ctx context.Context, appID, name, envName string, weight int32) error
 	// RemoveEnvStates 幂等移除多个指定环境的信息
 	RemoveEnvStates(ctx context.Context, appID, name string, envNames []string) error
+	// RemoveEnvWeights 幂等移除多个指定环境的单实例权重
+	RemoveEnvWeights(ctx context.Context, appID, name string, envNames []string) error
 	// Delete 根据应用 ID 和配置名称删除北极星配置
 	Delete(ctx context.Context, appID, name string) error
 	// DeleteByApp 删除应用下的所有北极星配置（仅测试使用）
@@ -155,10 +159,6 @@ func (s *PolarisConfigStoreMongo) Update(
 		updateSet["enableHealthCheck"] = *updateData.EnableHealthCheck
 		needUpdate = true
 	}
-	if updateData.Weight != nil {
-		updateSet["weight"] = *updateData.Weight
-		needUpdate = true
-	}
 	if updateData.ServiceLabels != nil {
 		updateSet["serviceLabels"] = updateData.ServiceLabels
 		needUpdate = true
@@ -167,9 +167,12 @@ func (s *PolarisConfigStoreMongo) Update(
 		updateSet["polarisToken"] = *updateData.PolarisToken
 		needUpdate = true
 	}
-	if updateData.Scope != nil {
-		updateSet["scopeType"] = updateData.Scope.ScopeType
-		updateSet["scopeEnvNames"] = updateData.Scope.ScopeEnvNames
+	if updateData.ScopeEnvNames != nil {
+		updateSet["scopeEnvNames"] = updateData.ScopeEnvNames
+		needUpdate = true
+	}
+	if updateData.envWeights != nil {
+		updateSet["envWeights"] = updateData.envWeights
 		needUpdate = true
 	}
 
@@ -210,7 +213,7 @@ func (s *PolarisConfigStoreMongo) UpsertEnvState(
 	appID, name, envName string,
 	update PolarisEnvStateUpdate,
 ) error {
-	fieldPrefix, err := envStateFieldPrefix(envName)
+	fieldPrefix, err := envFieldPrefix("envStates", envName)
 	if err != nil {
 		return err
 	}
@@ -235,6 +238,32 @@ func (s *PolarisConfigStoreMongo) UpsertEnvState(
 	return nil
 }
 
+// UpsertEnvWeight 幂等设置指定环境的单实例权重。
+func (s *PolarisConfigStoreMongo) UpsertEnvWeight(
+	ctx context.Context,
+	appID, name, envName string,
+	weight int32,
+) error {
+	fieldPath, err := envFieldPrefix("envWeights", envName)
+	if err != nil {
+		return err
+	}
+	result, err := s.collection.UpdateOne(ctx,
+		bson.M{"appID": appID, "name": name},
+		bson.M{"$set": bson.M{
+			fieldPath:   weight,
+			"updatedAt": time.Now(),
+		}},
+	)
+	if err != nil {
+		return errors.Wrap(err, "upsert polaris env weight")
+	}
+	if result.MatchedCount == 0 {
+		return ErrConfigNotFound
+	}
+	return nil
+}
+
 // RemoveEnvStates 幂等移除多个指定环境的信息。
 func (s *PolarisConfigStoreMongo) RemoveEnvStates(
 	ctx context.Context, appID, name string, envNames []string,
@@ -245,7 +274,7 @@ func (s *PolarisConfigStoreMongo) RemoveEnvStates(
 
 	unsetFields := make(bson.M, len(envNames))
 	for _, envName := range envNames {
-		fieldPrefix, err := envStateFieldPrefix(envName)
+		fieldPrefix, err := envFieldPrefix("envStates", envName)
 		if err != nil {
 			return err
 		}
@@ -261,11 +290,38 @@ func (s *PolarisConfigStoreMongo) RemoveEnvStates(
 	return nil
 }
 
-func envStateFieldPrefix(envName string) (string, error) {
+// RemoveEnvWeights 幂等移除多个指定环境的单实例权重。
+func (s *PolarisConfigStoreMongo) RemoveEnvWeights(
+	ctx context.Context, appID, name string, envNames []string,
+) error {
+	if len(envNames) == 0 {
+		return nil
+	}
+
+	unsetFields := make(bson.M, len(envNames))
+	for _, envName := range envNames {
+		fieldPath, err := envFieldPrefix("envWeights", envName)
+		if err != nil {
+			return err
+		}
+		unsetFields[fieldPath] = ""
+	}
+	_, err := s.collection.UpdateOne(ctx,
+		bson.M{"appID": appID, "name": name},
+		bson.M{"$unset": unsetFields},
+	)
+	if err != nil {
+		return errors.Wrap(err, "remove polaris env weights")
+	}
+	return nil
+}
+
+// envFieldPrefix 校验环境名并生成 envStates/envWeights 嵌套字段路径前缀
+func envFieldPrefix(root, envName string) (string, error) {
 	if envName == "" || strings.ContainsAny(envName, ".$") {
 		return "", errors.Errorf("invalid env name %q", envName)
 	}
-	return "envStates." + envName, nil
+	return root + "." + envName, nil
 }
 
 // DeleteByApp 删除应用下的所有北极星配置

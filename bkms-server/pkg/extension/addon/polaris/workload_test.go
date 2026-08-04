@@ -16,7 +16,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 )
 
 var _ = Describe("WorkloadBuilder", func() {
@@ -64,10 +63,8 @@ var _ = Describe("WorkloadBuilder", func() {
 				Direct:            true,
 				KeepNotReadyPod:   true,
 				EnableHealthCheck: true,
-				Weight:            90,
 				ServiceLabels:     labels,
 			},
-			ScopeType:     component.ScopeTypeEnvironment,
 			ScopeEnvNames: scopeEnvNames,
 		}
 		Expect(store.Create(ctx, config)).To(Succeed())
@@ -126,7 +123,7 @@ var _ = Describe("WorkloadBuilder", func() {
 		Expect(serviceSpec["direct"]).To(BeTrue())
 		Expect(serviceSpec["keepNotReadyPod"]).To(BeTrue())
 		Expect(serviceSpec["enableHealthCheck"]).To(BeTrue())
-		Expect(serviceSpec["weight"]).To(BeEquivalentTo(90))
+		Expect(serviceSpec["weight"]).To(BeEquivalentTo(polaris.DefaultEnvWeight))
 		extraMeta, ok := serviceSpec["extraMeta"].(map[string]any)
 		Expect(ok).To(BeTrue())
 		Expect(extraMeta).To(Equal(map[string]any{
@@ -142,6 +139,35 @@ var _ = Describe("WorkloadBuilder", func() {
 		Expect(found).To(BeTrue())
 		Expect(ports).To(HaveLen(1))
 		Expect(ports[0].(map[string]any)["port"]).To(BeEquivalentTo(8080))
+	})
+
+	It("uses the environment weight in the PolarisConfig resource", func() {
+		config := createConfig("env-weight", []string{environment.Name}, 8080, nil)
+		Expect(store.UpsertEnvWeight(ctx, app.ID, config.Name, environment.Name, 35)).To(Succeed())
+
+		result, err := builder.Build(
+			ctx,
+			app,
+			environment,
+			nil,
+			corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}},
+			"main",
+			nil,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		var polarisConfig unstructured.Unstructured
+		for _, object := range result.ExtraObjects {
+			if object.GetKind() == "PolarisConfig" {
+				polarisConfig = object
+				break
+			}
+		}
+		Expect(polarisConfig.Object).NotTo(BeNil())
+		services, found, err := unstructured.NestedSlice(polarisConfig.Object, "spec", "services")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeTrue())
+		Expect(services[0].(map[string]any)["weight"]).To(BeEquivalentTo(int32(35)))
 	})
 
 	It("filters configs by environment and replaces a conflicting container port", func() {

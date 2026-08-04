@@ -8,17 +8,13 @@ import (
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
 // CollectConfigWarnings 为单个 PolarisConfig 收集校验 warnings。
 // 校验逻辑：
 // 1. 检查应用是否为 tRPC 类型，不是则跳过
-// 2. 根据 ScopeType 确定校验环境：
-//   - global/空 → 使用应用级别配置（envName=""）
-//   - environment → 对 ScopeEnvNames 中每个环境都校验
-//
+// 2. 对 ScopeEnvNames 中每个环境分别校验
 // 3. 对每个环境调用 appcfg.GetTrpcServiceNames 获取服务名列表
 // 4. 检查 PolarisName 是否在服务名列表中，不在则生成 warning
 func CollectConfigWarnings(
@@ -39,27 +35,13 @@ func CollectConfigWarnings(
 		return nil
 	}
 
-	// 确定需要校验的环境列表
-	envNames := getValidationEnvNames(config)
-
-	for _, envName := range envNames {
+	for _, envName := range config.ScopeEnvNames {
 		warning := validateServiceNameInEnv(ctx, config, appConfigFileStore, envName)
 		if warning != "" {
 			warnings = append(warnings, warning)
 		}
 	}
 	return warnings
-}
-
-// getValidationEnvNames 根据 PolarisConfig 的 ScopeType 确定需要校验的环境列表
-func getValidationEnvNames(config *PolarisConfig) []string {
-	switch config.ScopeType {
-	case component.ScopeTypeEnvironment:
-		return config.ScopeEnvNames
-	default:
-		// global 或空类型，使用应用级别配置（envName=""）
-		return []string{appcfg.EnvNameDefault}
-	}
 }
 
 // validateServiceNameInEnv 校验指定环境下 PolarisConfig 的服务名是否与 tRPC 配置匹配

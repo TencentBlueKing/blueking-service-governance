@@ -43,7 +43,6 @@ func newTestPolarisConfig(
 			ServicePort:      8080,
 			ServiceLabels:    serviceLabels,
 		},
-		ScopeType:     component.ScopeTypeEnvironment,
 		ScopeEnvNames: scopeEnvNames,
 	}
 }

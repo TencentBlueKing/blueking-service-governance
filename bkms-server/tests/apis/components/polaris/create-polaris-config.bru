@@ -13,7 +13,6 @@ post {
 body:json {
   {
     "createNewService": false,
-    "scopeType": "environment",
     "scopeEnvNames": ["env-1"],
     "instanceKey": "testPolaris",
     "polarisName": "test-polaris-service",
@@ -23,7 +22,6 @@ body:json {
     "direct": false,
     "keepNotReadyPod": true,
     "enableHealthCheck": false,
-    "weight": 10,
     "serviceLabels": {
       "env": "test",
       "team": "api-test"

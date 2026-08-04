@@ -1,7 +1,7 @@
 meta {
   name: list-polaris-configs
   type: http
-  seq: 4
+  seq: 8
 }
 
 get {
@@ -34,15 +34,14 @@ tests {
     expect(patchedConfig.direct).to.equal(true);
     expect(patchedConfig.keepNotReadyPod).to.equal(false);
     expect(patchedConfig.enableHealthCheck).to.equal(true);
-    expect(patchedConfig.weight).to.equal(20);
-    expect(patchedConfig.scopeType).to.equal("environment")
+    expect(patchedConfig.envWeights).to.deep.equal({});
     // Verify updated polarisToken
     expect(patchedConfig.polarisToken).to.equal("updated-polaris-token-xxx");
     // Verify updated serviceLabels
     expect(patchedConfig.serviceLabels).to.deep.include({ updated: "true" });
   });
 
-  test("should have second config unchanged (testPolarisEnv)", () => {
+  test("should keep second config unchanged", () => {
     const configs = res.body.data;
     const envConfig = configs.find(c => c.name === bru.getVar('testPolarisEnvConfigName'));
     console.log(envConfig)
@@ -51,23 +50,28 @@ tests {
     // Verify original values unchanged
     expect(envConfig.servicePort).to.equal(9090);
     expect(envConfig.direct).to.equal(true);
-    expect(envConfig.weight).to.equal(50);
   });
 
-  test("should expose pending-create env states before deployment", () => {
+  test("should expose pending-create states and environment weights before deployment", () => {
     const configs = res.body.data;
     const envConfig = configs.find(c => c.name === bru.getVar('testPolarisEnvConfigName'));
     expect(envConfig).to.not.be.undefined;
     expect(envConfig.envStates).to.be.an('object');
     expect(Object.keys(envConfig.envStates).sort()).to.deep.equal(["staging", "test"]);
-
-    Object.values(envConfig.envStates).forEach(state => {
-      expect(state.status).to.equal("pendingCreate");
-      expect(state.appliedFields).to.equal(null);
-      expect(state.polarisTokenChanged).to.equal(false);
-      expect(state.lastError).to.equal("");
-      expect(state.updatedAt).to.equal("");
+    expect(envConfig.envWeights).to.deep.equal({
+      test: 0,
+      staging: 100
     });
+
+    const testState = envConfig.envStates.test;
+    expect(testState.status).to.equal("pendingCreate");
+    expect(testState.appliedFields).to.equal(null);
+    expect(testState.updatedAt).to.equal("");
+
+    const stagingState = envConfig.envStates.staging;
+    expect(stagingState.status).to.equal("pendingCreate");
+    expect(stagingState.appliedFields).to.equal(null);
+    expect(stagingState.updatedAt).to.equal("");
   });
 }
 

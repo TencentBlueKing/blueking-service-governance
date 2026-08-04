@@ -18,7 +18,6 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 )
 
@@ -52,8 +51,6 @@ type Properties struct {
 	KeepNotReadyPod bool `bson:"keepNotReadyPod"`
 	// EnableHealthCheck 是否启用健康检查
 	EnableHealthCheck bool `bson:"enableHealthCheck"`
-	// Weight 权重
-	Weight int32 `bson:"weight"`
 	// ServiceLabels 服务标签
 	ServiceLabels map[string]string `bson:"serviceLabels"`
 	// Operator 操作人
@@ -70,9 +67,7 @@ type PolarisConfig struct {
 	// Properties 北极星配置属性
 	Properties `bson:",inline" mapstructure:",squash"`
 
-	// ScopeType 生效范围类型: environment
-	ScopeType component.ScopeType `bson:"scopeType"`
-	// ScopeEnvNames 生效的环境列表，当 ScopeType 为 environment 时有效
+	// ScopeEnvNames 生效的环境列表
 	ScopeEnvNames []string `bson:"scopeEnvNames"`
 
 	// DepSvcInstID 关联的依赖服务实例 ID（平台创建时有值，用于后续管理）
@@ -80,6 +75,11 @@ type PolarisConfig struct {
 
 	// EnvStates 各环境中已经生效的关键字段和下发错误
 	EnvStates map[string]PolarisEnvState `bson:"envStates,omitempty"`
+
+	// EnvWeights 各环境的单实例权重（key 为环境名）。
+	// 基本与 EnvStates 同生命周期：未部署离域立即删除；已部署离域保留至下次离域部署/卸载；
+	// 仍在 scope 内卸载时保留，供再次部署使用。缺省使用 DefaultEnvWeight。
+	EnvWeights map[string]int32 `bson:"envWeights,omitempty"`
 
 	// CreatedAt 创建时间
 	CreatedAt time.Time `bson:"createdAt"`
@@ -125,16 +125,12 @@ type ConfigUpdateData struct {
 	Direct            *bool
 	KeepNotReadyPod   *bool
 	EnableHealthCheck *bool
-	Weight            *int32
 	ServiceLabels     map[string]string
-	Scope             *PatchPolarisScope
-	PolarisToken      *string
-}
-
-// PatchPolarisScope 更新 PolarisConfig 的生效范围
-type PatchPolarisScope struct {
-	ScopeType     component.ScopeType
+	// ScopeEnvNames 生效环境列表；nil 表示不更新，非 nil（含空切片）表示覆盖
 	ScopeEnvNames []string
+	PolarisToken  *string
+	// envWeights 仅由 service 在 scope 变化时生成并交给 store 持久化。
+	envWeights map[string]int32
 }
 
 // RegistryServiceEntry 表示 tRPC 配置中 plugins.registry.polaris.service 的单条服务配置
@@ -184,6 +180,22 @@ type PolarisEnvState struct {
 	LastError string `bson:"lastError,omitempty"`
 	// UpdatedAt 环境信息最后更新时间
 	UpdatedAt time.Time `bson:"updatedAt"`
+}
+
+// IsDeployed 该环境是否已完成首次应用部署。
+func (s PolarisEnvState) IsDeployed() bool {
+	return s.AppliedFields != nil
+}
+
+// DefaultEnvWeight 环境未单独设置权重时使用的默认值。
+const DefaultEnvWeight int32 = 100
+
+// GetEnvWeight 获取指定环境的有效权重：优先使用环境级别值，否则使用默认值。
+func (c *PolarisConfig) GetEnvWeight(envName string) int32 {
+	if w, ok := c.EnvWeights[envName]; ok {
+		return w
+	}
+	return DefaultEnvWeight
 }
 
 // GetEnvState 返回指定环境的状态；不存在时返回零值。

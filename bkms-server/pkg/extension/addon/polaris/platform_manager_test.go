@@ -12,7 +12,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	polarisinfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 )
@@ -65,7 +64,6 @@ var _ = Describe("PolarisPlatformManager", func() {
 						PolarisNamespace: "Test",
 						ServicePort:      8080,
 					},
-					ScopeType:     component.ScopeTypeEnvironment,
 					ScopeEnvNames: []string{"dev"},
 				}
 				Expect(store.Create(ctx, config)).To(Succeed())

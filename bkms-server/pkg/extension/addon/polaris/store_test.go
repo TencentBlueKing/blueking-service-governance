@@ -2,6 +2,7 @@ package polaris_test
 
 import (
 	"context"
+	"errors"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
@@ -10,7 +11,6 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 )
 
 var _ = Describe("PolarisConfigStore", func() {
@@ -51,7 +51,6 @@ var _ = Describe("PolarisConfigStore", func() {
 						Direct:            true,
 						KeepNotReadyPod:   false,
 						EnableHealthCheck: true,
-						Weight:            20,
 						ServiceLabels: map[string]string{
 							"env": "test",
 							"app": "demo",
@@ -72,7 +71,6 @@ var _ = Describe("PolarisConfigStore", func() {
 					"env": "test",
 					"app": "demo",
 				}))
-				Expect(storedConfig.Weight).To(Equal(int32(20)))
 				Expect(storedConfig.Direct).To(BeTrue())
 			})
 		})
@@ -141,6 +139,61 @@ var _ = Describe("PolarisConfigStore", func() {
 				updatedConfig, err := store.Get(ctx, testAppID, configName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.ServicePort).To(Equal(newPort))
+			})
+		})
+
+		Context("when upserting an environment weight", func() {
+			It("should set the weight of a single environment without touching others", func() {
+				before, err := store.Get(ctx, testAppID, configName)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 0)).To(Succeed())
+
+				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updatedConfig.EnvWeights["dev"]).To(BeZero())
+				Expect(updatedConfig.EnvWeights).NotTo(HaveKey("staging"))
+				Expect(updatedConfig.UpdatedAt).To(BeTemporally(">", before.UpdatedAt))
+			})
+
+			It("should return not found when the config does not exist", func() {
+				err := store.UpsertEnvWeight(ctx, testAppID, "missing-config", "dev", 10)
+				Expect(errors.Is(err, polaris.ErrConfigNotFound)).To(BeTrue())
+			})
+		})
+
+		Context("when removing environment weights", func() {
+			It("should remove selected weights and preserve others", func() {
+				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 10)).To(Succeed())
+				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "staging", 20)).To(Succeed())
+				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "prod", 30)).To(Succeed())
+
+				Expect(store.RemoveEnvWeights(
+					ctx, testAppID, configName, []string{"dev", "staging"},
+				)).To(Succeed())
+				Expect(store.RemoveEnvWeights(
+					ctx, testAppID, configName, []string{"dev", "staging"},
+				)).To(Succeed())
+
+				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updatedConfig.EnvWeights).To(Equal(map[string]int32{"prod": 30}))
+			})
+
+			It("should do nothing for an empty environment list", func() {
+				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 10)).To(Succeed())
+
+				Expect(store.RemoveEnvWeights(ctx, testAppID, configName, nil)).To(Succeed())
+
+				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updatedConfig.EnvWeights["dev"]).To(Equal(int32(10)))
+			})
+
+			It("should reject unsafe environment names", func() {
+				Expect(store.RemoveEnvWeights(
+					ctx, testAppID, configName, []string{"dev.test"},
+				)).To(MatchError(ContainSubstring("invalid env name")))
 			})
 		})
 
@@ -296,7 +349,6 @@ var _ = Describe("PolarisConfigStore", func() {
 					PolarisNamespace: "get-ns",
 					PolarisToken:     "get-token-123456789",
 					ServicePort:      8080,
-					Weight:           20,
 				},
 			}
 			err := store.Create(ctx, config)
@@ -312,7 +364,6 @@ var _ = Describe("PolarisConfigStore", func() {
 				Expect(config.Name).To(Equal(configName))
 				Expect(config.InstanceKey).To(Equal("get-test"))
 				Expect(config.PolarisName).To(Equal("get-polaris"))
-				Expect(config.Weight).To(Equal(int32(20)))
 			})
 		})
 
@@ -337,7 +388,6 @@ var _ = Describe("PolarisConfigStore", func() {
 						PolarisToken:     "env-token",
 						ServicePort:      8080,
 					},
-					ScopeType:     component.ScopeTypeEnvironment,
 					ScopeEnvNames: []string{"dev", "staging"},
 				}
 				err := store.Create(ctx, config)
@@ -372,7 +422,6 @@ var _ = Describe("PolarisConfigStore", func() {
 					PolarisToken:     "t1",
 					ServicePort:      8080,
 				},
-				ScopeType:     component.ScopeTypeEnvironment,
 				ScopeEnvNames: []string{"dev", "staging"},
 			}
 			Expect(store.Create(ctx, config)).NotTo(HaveOccurred())
