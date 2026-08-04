@@ -877,6 +877,97 @@ definitions:
     required:
     - userIDs
     type: object
+  serializer.AlertEventOutput:
+    properties:
+      alertName:
+        type: string
+      beginTime:
+        type: integer
+      bkMonitorStrategyID:
+        example: "0"
+        type: string
+      content:
+        type: string
+      createTime:
+        type: integer
+      currentValue: {}
+      dataSource:
+        type: string
+      description:
+        type: string
+      detail: {}
+      dimensions: {}
+      duration:
+        type: string
+      endTime:
+        type: integer
+      eventID:
+        type: string
+      id:
+        type: string
+      latestTime:
+        type: integer
+      relatedInfo: {}
+      severity:
+        type: integer
+      status:
+        type: string
+      strategyID:
+        type: string
+      strategyName:
+        type: string
+      target:
+        type: string
+      targetType:
+        type: string
+    type: object
+  serializer.AlertStrategyOutput:
+    properties:
+      appID:
+        type: string
+      appName:
+        type: string
+      createdAt:
+        type: string
+      creator:
+        type: string
+      displayName:
+        type: string
+      effectiveScope:
+        $ref: '#/definitions/serializer.EffectiveScopeInput'
+      effectiveTimeRange:
+        $ref: '#/definitions/serializer.EffectiveTimeRangeInput'
+      enabled:
+        type: boolean
+      id:
+        type: string
+      monitorMetric:
+        type: string
+      noticeGroupIDs:
+        items:
+          type: integer
+        type: array
+      recoverCondition:
+        $ref: '#/definitions/serializer.RecoverConditionInput'
+      remoteRefs:
+        items:
+          $ref: '#/definitions/serializer.RemoteRefOutput'
+        type: array
+      severity:
+        type: integer
+      strategyCode:
+        type: string
+      threshold:
+        $ref: '#/definitions/serializer.ThresholdConfigInput'
+      triggerCondition:
+        $ref: '#/definitions/serializer.TriggerConditionInput'
+      updatedAt:
+        type: string
+      updater:
+        type: string
+      workspaceID:
+        type: string
+    type: object
   serializer.ApmEnvInfoOutput:
     properties:
       envID:
@@ -2299,6 +2390,49 @@ definitions:
         description: 组件版本
         type: string
     type: object
+  serializer.CreateAlertStrategyBody:
+    properties:
+      displayName:
+        type: string
+      effectiveScope:
+        $ref: '#/definitions/serializer.EffectiveScopeInput'
+      effectiveTimeRange:
+        $ref: '#/definitions/serializer.EffectiveTimeRangeInput'
+      enabled:
+        type: boolean
+      monitorMetric:
+        type: string
+      noticeGroupIDs:
+        items:
+          type: integer
+        type: array
+      recoverCondition:
+        $ref: '#/definitions/serializer.RecoverConditionInput'
+      severity:
+        enum:
+        - 1
+        - 2
+        - 3
+        type: integer
+      strategyCode:
+        type: string
+      threshold:
+        $ref: '#/definitions/serializer.ThresholdConfigInput'
+      triggerCondition:
+        $ref: '#/definitions/serializer.TriggerConditionInput'
+    required:
+    - displayName
+    - effectiveScope
+    - monitorMetric
+    - severity
+    - strategyCode
+    - threshold
+    type: object
+  serializer.CreateAlertStrategyResp:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.AlertStrategyOutput'
+    type: object
   serializer.CreateAppComponentInput:
     properties:
       compName:
@@ -3022,6 +3156,32 @@ definitions:
         - $ref: '#/definitions/topology.RelationType'
         description: 判定类型（owner_reference、label_selector、volume_mount、backend_ref、helm_manifest）
     type: object
+  serializer.EffectiveScopeInput:
+    properties:
+      envIDs:
+        items:
+          type: string
+        type: array
+      envTypes:
+        items:
+          type: string
+        type: array
+      type:
+        enum:
+        - all
+        - env_type
+        - specific_envs
+        type: string
+    required:
+    - type
+    type: object
+  serializer.EffectiveTimeRangeInput:
+    properties:
+      endTime:
+        type: string
+      startTime:
+        type: string
+    type: object
   serializer.EnvAppDeployStatusOutput:
     properties:
       appID:
@@ -3695,6 +3855,17 @@ definitions:
       schedule:
         description: 标准 5 段 Crontab 表达式
         type: string
+    type: object
+  serializer.GetAlertDetailResp:
+    properties:
+      data:
+        additionalProperties: {}
+        type: object
+    type: object
+  serializer.GetAlertStrategyResp:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.AlertStrategyOutput'
     type: object
   serializer.GetApmServiceNameOutput:
     properties:
@@ -4437,6 +4608,36 @@ definitions:
       type:
         description: 处理器类型：EXEC 或 HTTP
         type: string
+    type: object
+  serializer.ListAlertEventsOutput:
+    properties:
+      count:
+        example: "0"
+        type: string
+      results:
+        items:
+          $ref: '#/definitions/serializer.AlertEventOutput'
+        type: array
+    type: object
+  serializer.ListAlertEventsResp:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.ListAlertEventsOutput'
+    type: object
+  serializer.ListAlertStrategiesOutput:
+    properties:
+      count:
+        example: "0"
+        type: string
+      results:
+        items:
+          $ref: '#/definitions/serializer.AlertStrategyOutput'
+        type: array
+    type: object
+  serializer.ListAlertStrategiesResp:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.ListAlertStrategiesOutput'
     type: object
   serializer.ListApmOutput:
     properties:
@@ -5982,6 +6183,11 @@ definitions:
       value:
         type: string
     type: object
+  serializer.RecoverConditionInput:
+    properties:
+      checkWindow:
+        type: integer
+    type: object
   serializer.RedeployRequiredFieldsOutput:
     properties:
       instanceKey:
@@ -6027,6 +6233,20 @@ definitions:
       status:
         type: string
       vendor:
+        type: string
+    type: object
+  serializer.RemoteRefOutput:
+    properties:
+      bkMonitorStrategyID:
+        example: "0"
+        type: string
+      envID:
+        type: string
+      envName:
+        type: string
+      remoteStrategyName:
+        type: string
+      trafficLaneName:
         type: string
     type: object
   serializer.RepoBuildConfigInput:
@@ -6678,6 +6898,11 @@ definitions:
       zone:
         type: string
     type: object
+  serializer.SwitchAlertStrategyBody:
+    properties:
+      enabled:
+        type: boolean
+    type: object
   serializer.TafSpecInput:
     properties:
       fileContent:
@@ -6739,6 +6964,22 @@ definitions:
       type:
         description: 版本号类型
         type: string
+    type: object
+  serializer.ThresholdConfigInput:
+    properties:
+      method:
+        enum:
+        - gte
+        - gt
+        - lte
+        - lt
+        - eq
+        - neq
+        type: string
+      value:
+        type: number
+    required:
+    - method
     type: object
   serializer.TimeSeriesItem:
     properties:
@@ -7005,6 +7246,13 @@ definitions:
         description: 更新时间
         type: string
     type: object
+  serializer.TriggerConditionInput:
+    properties:
+      checkWindow:
+        type: integer
+      count:
+        type: integer
+    type: object
   serializer.TrpcSpecInput:
     properties:
       fileContent:
@@ -7050,6 +7298,33 @@ definitions:
         items:
           $ref: '#/definitions/serializer.EnvVarReferenceSourceOutput'
         type: array
+    type: object
+  serializer.UpdateAlertStrategyBody:
+    properties:
+      displayName:
+        type: string
+      effectiveScope:
+        $ref: '#/definitions/serializer.EffectiveScopeInput'
+      effectiveTimeRange:
+        $ref: '#/definitions/serializer.EffectiveTimeRangeInput'
+      enabled:
+        type: boolean
+      noticeGroupIDs:
+        items:
+          type: integer
+        type: array
+      recoverCondition:
+        $ref: '#/definitions/serializer.RecoverConditionInput'
+      severity:
+        enum:
+        - 1
+        - 2
+        - 3
+        type: integer
+      threshold:
+        $ref: '#/definitions/serializer.ThresholdConfigInput'
+      triggerCondition:
+        $ref: '#/definitions/serializer.TriggerConditionInput'
     type: object
   serializer.UpdateAppConfigFileContentInput:
     properties:
@@ -16028,6 +16303,454 @@ paths:
       summary: 创建应用
       tags:
       - app
+  /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies:
+    get:
+      operationId: ListAlertStrategies
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListAlertStrategiesResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询告警策略列表
+      tags:
+      - bkintegrations-bkmonitor
+    post:
+      consumes:
+      - application/json
+      operationId: CreateAlertStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CreateAlertStrategyBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.CreateAlertStrategyResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 创建告警策略
+      tags:
+      - bkintegrations-bkmonitor
+  /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}:
+    delete:
+      operationId: DeleteAlertStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 本地策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_networking_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除告警策略
+      tags:
+      - bkintegrations-bkmonitor
+    get:
+      operationId: GetAlertStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 本地策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.GetAlertStrategyResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取告警策略详情
+      tags:
+      - bkintegrations-bkmonitor
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateAlertStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 本地策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateAlertStrategyBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.GetAlertStrategyResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新告警策略
+      tags:
+      - bkintegrations-bkmonitor
+  /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/alerts:
+    get:
+      operationId: ListAlertEventsByStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 本地策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      - collectionFormat: csv
+        description: 告警状态
+        in: query
+        items:
+          type: string
+        name: status
+        type: array
+      - collectionFormat: csv
+        description: 告警级别
+        in: query
+        items:
+          type: integer
+        name: severity
+        type: array
+      - description: 开始时间
+        in: query
+        name: startTime
+        type: integer
+      - description: 结束时间
+        in: query
+        name: endTime
+        type: integer
+      - description: 页码，从 1 开始
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: 每页数量，仅支持 5/10/20/50/100
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      - description: 按告警名称过滤
+        in: query
+        name: alertName
+        type: string
+      - description: 按策略名称过滤
+        in: query
+        name: strategyName
+        type: string
+      - description: 按事件 ID 过滤
+        in: query
+        name: eventID
+        type: string
+      - description: 按目标实例过滤
+        in: query
+        name: target
+        type: string
+      - collectionFormat: csv
+        description: 排序字段列表，默认 -create_time
+        in: query
+        items:
+          type: string
+        name: ordering
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListAlertEventsResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询规则关联的告警事件
+      tags:
+      - bkintegrations-bkmonitor
+  /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/switch:
+    post:
+      consumes:
+      - application/json
+      operationId: SwitchAlertStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 本地策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.SwitchAlertStrategyBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_networking_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 切换告警策略启停状态
+      tags:
+      - bkintegrations-bkmonitor
+  /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/sync:
+    post:
+      operationId: SyncAlertStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 本地策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_networking_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 同步告警策略到远端
+      tags:
+      - bkintegrations-bkmonitor
+  /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alerts:
+    get:
+      operationId: ListAlertEvents
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 环境名称
+        in: query
+        name: envName
+        type: string
+      - collectionFormat: csv
+        description: 告警状态
+        in: query
+        items:
+          type: string
+        name: status
+        type: array
+      - collectionFormat: csv
+        description: 告警级别
+        in: query
+        items:
+          type: integer
+        name: severity
+        type: array
+      - description: 开始时间
+        in: query
+        name: startTime
+        type: integer
+      - description: 结束时间
+        in: query
+        name: endTime
+        type: integer
+      - description: 页码，从 1 开始
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: 每页数量，仅支持 5/10/20/50/100
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      - description: 按告警名称过滤
+        in: query
+        name: alertName
+        type: string
+      - description: 按策略名称过滤
+        in: query
+        name: strategyName
+        type: string
+      - description: 按事件 ID 过滤
+        in: query
+        name: eventID
+        type: string
+      - description: 按目标实例过滤
+        in: query
+        name: target
+        type: string
+      - collectionFormat: csv
+        description: 排序字段列表，默认 -create_time
+        in: query
+        items:
+          type: string
+        name: ordering
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListAlertEventsResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询应用下的告警事件列表
+      tags:
+      - bkintegrations-bkmonitor
   /workspaces/{workspaceID}/bkci-git-projects:
     get:
       operationId: ListBkCIOAuthGitProjects
@@ -16256,6 +16979,37 @@ paths:
       summary: 获取蓝盾流水线变量列表
       tags:
       - bkintegrations-bkci
+  /workspaces/{workspaceID}/bkmonitor/alerts/{alertID}:
+    get:
+      operationId: GetAlertDetail
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 告警 ID
+        in: path
+        name: alertID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.GetAlertDetailResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询单条告警详情
+      tags:
+      - bkintegrations-bkmonitor
   /workspaces/{workspaceID}/bkmonitor/apms:
     get:
       operationId: ListApms
