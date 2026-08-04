@@ -61,7 +61,7 @@ services:
     ports:
       - "26379:6379"
   rabbitmq:
-    image: "rabbitmq:3.13.7-management"
+    image: "rabbitmq:3.13.7"
     volumes:
       - /home/bkmsusr/sysapps_store/rabbitmq:/var/lib/rabbitmq
     environment:

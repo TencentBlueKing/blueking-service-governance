@@ -12,7 +12,7 @@ services:
     privileged: true
     command: redis-server --requirepass ${REDIS_PASSWORD:-utdepspass}
   rabbitmq:
-    image: "rabbitmq:3.13.7-management"
+    image: "rabbitmq:3.13.7"
     privileged: true
     volumes:
       - ./rabbitmq:/var/lib/rabbitmq

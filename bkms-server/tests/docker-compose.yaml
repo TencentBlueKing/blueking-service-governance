@@ -199,7 +199,7 @@ services:
       - bkms-apitest-net
 
   rabbitmq:
-    image: "rabbitmq:3.13.7-management"
+    image: "rabbitmq:3.13.7"
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: bkms_svr_e2e
@@ -207,7 +207,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "rabbitmq-diagnostics -q ping && rabbitmq-diagnostics -q listeners | grep -q 'port: 5672'",
+          "rabbitmq-diagnostics -q listeners | grep -q 'port: 5672'",
         ]
       interval: 10s
       timeout: 5s
