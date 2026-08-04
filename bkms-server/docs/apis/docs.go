@@ -17573,7 +17573,15 @@ const docTemplate = `{
         "serializer.AppModelDeployRecordOutputObj": {
             "type": "object",
             "properties": {
+                "branch": {
+                    "description": "代码分支（仅构建+部署记录返回）",
+                    "type": "string"
+                },
                 "clusterID": {
+                    "type": "string"
+                },
+                "commitID": {
+                    "description": "Commit ID（仅构建+部署记录返回）",
                     "type": "string"
                 },
                 "createdAt": {
@@ -17584,6 +17592,10 @@ const docTemplate = `{
                 },
                 "imageTag": {
                     "type": "string"
+                },
+                "isBuildAutoDeploy": {
+                    "description": "是否由“构建+部署”触发",
+                    "type": "boolean"
                 },
                 "message": {
                     "type": "string"

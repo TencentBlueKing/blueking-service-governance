@@ -156,10 +156,16 @@ type PaginatedAppModelDeployRecordsOutputObjs struct {
 
 // AppModelDeployRecordOutputObj contains one AppModel deploy record.
 type AppModelDeployRecordOutputObj struct {
-	ID        string    `json:"id"`
-	ClusterID string    `json:"clusterID"`
-	Namespace string    `json:"namespace"`
-	ImageTag  string    `json:"imageTag"`
+	ID        string `json:"id"`
+	ClusterID string `json:"clusterID"`
+	Namespace string `json:"namespace"`
+	ImageTag  string `json:"imageTag"`
+	// 是否由“构建+部署”触发
+	IsBuildAutoDeploy bool `json:"isBuildAutoDeploy"`
+	// 代码分支（仅构建+部署记录返回）
+	Branch string `json:"branch"`
+	// Commit ID（仅构建+部署记录返回）
+	CommitID  string    `json:"commitID"`
 	Replicas  int32     `json:"replicas"`
 	Message   string    `json:"message"`
 	Status    string    `json:"status"`
