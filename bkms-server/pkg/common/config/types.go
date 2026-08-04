@@ -387,6 +387,11 @@ type DevConfig struct {
 	// 仅当 UseKubeConfigCluster 的值为 true 时生效
 	// 如该项为空值时，会默认使用 ~/.kube/config
 	StubKubeConfigPath string
+	// AllowSkipNewerDBMigration 启用后，当数据库记录的 migration 版本高于本二进制内嵌的最大版本时，
+	// migrate up 会静默跳过而不报错。用于测试环境：开发分支可能已执行更高 seq 的 migration，
+	// 而 main 尚未合入对应文件，导致 main 发布时 golang-migrate 找不到该版本而失败。
+	// 禁止在生产环境开启：跳过只保证本次发布不失败，不会补执行本二进制内未执行的 migration
+	AllowSkipNewerDBMigration bool
 }
 
 // Config SaaS 配置

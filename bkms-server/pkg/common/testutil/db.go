@@ -51,7 +51,7 @@ func SetUpGlobalDatabase() error {
 	mongoCfg.Database = mongoCfg.Database + "_for_test"
 	log.Infof(ctx, "Initializing the database, the DATABASE NAME is %s", mongoCfg.Database)
 	log.Infof(ctx, "Applying all pending database migrations to %s", mongoCfg.Database)
-	if err = dbmigration.UpAll(ctx, mongoCfg); err != nil {
+	if err = dbmigration.UpAll(ctx, mongoCfg, cfg.Development.AllowSkipNewerDBMigration); err != nil {
 		return errors.Wrap(err, "apply test database migrations")
 	}
 	database.InitClient(ctx, mongoCfg)

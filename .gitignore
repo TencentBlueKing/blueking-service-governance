@@ -10,7 +10,15 @@
 *exvim*
 *vendor*
 build/
+
+# Local AI coding agent config directories
 .codebuddy/
+.cursor/
+.claude/
+.codex/
+.gemini/
+.windsurf/
+.qwen/
 
 !bkms-server/pkg/build/
 !bkms-server/pkg/build/build/

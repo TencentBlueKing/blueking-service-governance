@@ -246,3 +246,6 @@ development:
   allowSetUserInHeader: false
   # 启用后权限管理器返回 stub 实现，总是通过所有鉴权请求；仅本地开发使用，禁止在生产环境中打开。
   useStubPerm: false
+  # 启用后，数据库已执行更高 seq 的 migration 时，migrate up 会静默跳过而不报错；
+  # 仅供测试环境使用（避免开发分支的高版本 migration 阻塞 main 发布），禁止在生产环境中打开。
+  allowSkipNewerDBMigration: false

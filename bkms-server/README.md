@@ -62,7 +62,7 @@ make docker  # 构建 docker 镜像
 ```bash
 bkms-server migrate --srvCfg <config_path> up
 bkms-server migrate --srvCfg <config_path> up 2
-bkms-server migrate --srvCfg <config_path> goto 20260720115901
+bkms-server migrate --srvCfg <config_path> goto 2
 bkms-server migrate --srvCfg <config_path> down 1
 ```
 
@@ -70,6 +70,29 @@ bkms-server migrate --srvCfg <config_path> down 1
 - 复杂的迁移任务，多增加一个 markdown 文件作为各项改动的注释（json 文件不支持注释，只能采取这种方式）；
 - 对于特别复杂的数据迁移任务，json 文件无法胜任的，可以编写 Go 子命令完成；
 - 测试数据库在 `SetUpGlobalDatabase` 初始化连接前会自动执行 `migrate up`；
+
+#### seq 序号唯一性
+
+迁移文件使用 golang-migrate 的 seq 命名（`000001_initial_idx.up.json`），序号必须全局唯一：
+golang-migrate 在数据库中只保存**单个版本游标**，而不是逐条执行台账，一旦两个分支用了相同 seq，
+后合入的那份 migration 会被视为"已执行"而被永久跳过，且不会报任何错误。
+
+因此新增 migration 前，需确认序号未被目标分支占用。
+
+#### 测试环境兼容高版本 migration
+
+测试环境常出现"开发分支已执行更高 seq 的 migration，而 main 尚未合入该文件"的情况，
+此时 golang-migrate 找不到数据库记录的版本，`migrate up` 会直接失败，导致 main 无法发布。
+为此提供开关 `development.allowSkipNewerDBMigration`（默认 `false`）：
+
+- 开启后，若数据库记录的版本高于当前二进制内嵌的最大版本，`migrate up` 会打印 WARN 日志并静默跳过；
+- 数据库处于 dirty 状态时不会跳过，仍按原逻辑报错，避免掩盖真实的迁移失败；
+- 只影响 `up`，`goto` / `down` / `force` 等人工运维命令行为不变。
+
+**该开关禁止在生产环境开启**。它只保证本次发布不失败，并不会补执行本二进制内尚未执行的 migration：
+例如测试环境游标已被开发分支推到 `7`，之后 main 合入了别人的 `000006`、`000007`，`migrate up`
+会直接从 7 往后走，这两个 migration 永远不会执行且不报错。遇到这种情况只能人工
+`bkms-server migrate force <N>` 把游标回退后重跑，或直接重建测试库。
 
 #### 示例：创建索引
 

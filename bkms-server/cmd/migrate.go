@@ -136,7 +136,7 @@ func openDatabaseMigrator(ctx context.Context, srvCfg string) (databaseMigrator,
 		return nil, errors.Wrap(err, "init logger")
 	}
 
-	migrator, err := dbmigration.New(ctx, cfg.Mongo)
+	migrator, err := dbmigration.New(ctx, cfg.Mongo, cfg.Development.AllowSkipNewerDBMigration)
 	if err != nil {
 		return nil, err
 	}

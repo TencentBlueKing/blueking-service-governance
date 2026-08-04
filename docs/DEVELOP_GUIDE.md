@@ -23,6 +23,7 @@
   - ui（基于 vue 前端）
 - 推荐使用 [tmuxinator](https://github.com/tmuxinator/tmuxinator) 工具来启动每个服务
 - 文档中所有涉及设置环境变量的部分，都使用 `export ...` 命令，你完全可以用其他方式（比如 .env 文件）来替代，只要能达到效果
+- 公用的 AI coding agent 配置统一放置在仓库根目录的 `.agents` 目录下；如果本地使用的工具需要读取专属目录（如 `.codebuddy`、`.cursor`、`.claude` 等），请在本地创建指向 `.agents` 的软链，不要提交这些工具专属目录
 
 ### 依赖服务与准备工作
 

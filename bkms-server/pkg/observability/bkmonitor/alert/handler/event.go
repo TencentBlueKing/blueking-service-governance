@@ -65,9 +65,9 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 
 	envName := strings.TrimSpace(queryInput.EnvName)
 	if envName != "" {
-		_, _, err2 := ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, envName, ginperm.TypeView)
-		if err2 != nil {
-			bkerrs.AbortWithErr(c, err2)
+		_, _, err = ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, envName, ginperm.TypeView)
+		if err != nil {
+			bkerrs.AbortWithErr(c, err)
 			return
 		}
 	}
