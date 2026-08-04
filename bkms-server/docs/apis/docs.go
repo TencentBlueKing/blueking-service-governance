@@ -115,7 +115,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -231,7 +231,7 @@ const docTemplate = `{
                     }
                 ],
                 "consumes": [
-                    "multipart/form-data"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
@@ -979,7 +979,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -1087,7 +1087,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -1195,7 +1195,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -1303,7 +1303,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -1411,7 +1411,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -1519,7 +1519,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -1627,7 +1627,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -2343,7 +2343,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.CreateBuildOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.CreateBuildOutput"
                         }
                     },
                     "400": {
@@ -3055,7 +3055,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -3115,7 +3115,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -3521,7 +3521,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -3742,7 +3742,7 @@ const docTemplate = `{
                 ],
                 "description": "解析并导入应用直接定义的环境变量，导入语义与预览接口保持一致。",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -3850,7 +3850,7 @@ const docTemplate = `{
                 ],
                 "description": "key 表示当前变量 key，updatedKey 表示更新后的变量 key，因此该接口支持“重命名 key”。",
                 "consumes": [
-                    "multipart/form-data"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
@@ -3936,7 +3936,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_envvars_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -4095,7 +4095,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -4149,7 +4149,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -4327,7 +4327,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -4381,7 +4381,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -4559,7 +4559,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -4613,7 +4613,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -4791,7 +4791,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -4845,7 +4845,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5023,7 +5023,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5077,7 +5077,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5196,7 +5196,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5318,7 +5318,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5372,7 +5372,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5550,7 +5550,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5604,7 +5604,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5782,7 +5782,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -5836,7 +5836,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -6008,7 +6008,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -6056,7 +6056,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -6118,7 +6118,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -6675,7 +6675,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_deploy_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -6820,7 +6820,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_deploy_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -6881,7 +6881,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_deploy_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -7074,7 +7074,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_instance_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_instance_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -7257,7 +7257,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_instance_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_instance_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -7319,7 +7319,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_instance_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_instance_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -7381,7 +7381,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_instance_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_instance_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -8062,7 +8062,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_autodeploy_serializer.CreateBuildOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_autodeploy_serializer.CreateBuildOutput"
                         }
                     },
                     "400": {
@@ -8210,7 +8210,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_deploy_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -8264,7 +8264,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_deploy_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -8573,7 +8573,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_autodeploy_serializer.CreateBuildOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_autodeploy_serializer.CreateBuildOutput"
                         }
                     },
                     "400": {
@@ -8721,7 +8721,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_deploy_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -8775,7 +8775,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_deploy_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -9186,7 +9186,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -9746,7 +9746,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -9814,7 +9814,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -9868,7 +9868,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -9929,7 +9929,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -9984,7 +9984,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -10747,7 +10747,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_extension_component_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_component_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -10871,7 +10871,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_extension_component_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_component_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -10924,7 +10924,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_extension_component_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_component_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -11056,7 +11056,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_env_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_env_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -11155,7 +11155,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_env_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_env_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -11339,7 +11339,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_bkintegrations_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_bkintegrations_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -11394,7 +11394,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_env_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_env_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -12620,7 +12620,7 @@ const docTemplate = `{
                 ],
                 "description": "解析并导入当前环境作用域的环境变量，导入语义与预览接口保持一致。",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -12895,7 +12895,7 @@ const docTemplate = `{
                 ],
                 "description": "1. 级联创建/绑定蓝盾、BCS、镜像仓库、监控、日志等\\n2. 初始化用户权限\\n3. 写入 DB workspace\\n4. 创建默认环境",
                 "consumes": [
-                    "multipart/form-data"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
@@ -13049,7 +13049,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -13152,6 +13152,508 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.CreateAppOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "查询告警策略列表",
+                "operationId": "ListAlertStrategies",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListAlertStrategiesResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "创建告警策略",
+                "operationId": "CreateAlertStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateAlertStrategyBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateAlertStrategyResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "获取告警策略详情",
+                "operationId": "GetAlertStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "更新告警策略",
+                "operationId": "UpdateAlertStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateAlertStrategyBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetAlertStrategyResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "删除告警策略",
+                "operationId": "DeleteAlertStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/alerts": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "查询规则关联的告警事件",
+                "operationId": "ListAlertEventsByStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "告警状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，从 1 开始",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，仅支持 5/10/20/50/100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListAlertEventsResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/switch": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "切换告警策略启停状态",
+                "operationId": "SwitchAlertStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.SwitchAlertStrategyBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/sync": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "同步告警策略到远端",
+                "operationId": "SyncAlertStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "规则 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -13530,6 +14032,145 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/bkmonitor/alerts": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "查询告警事件列表",
+                "operationId": "ListAlertEvents",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "告警状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "告警级别",
+                        "name": "severity",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "开始时间",
+                        "name": "startTime",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "结束时间",
+                        "name": "endTime",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，从 1 开始",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，仅支持 5/10/20/50/100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListAlertEventsResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/bkmonitor/alerts/{alertID}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "查询单条告警详情",
+                "operationId": "GetAlertDetail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "告警 ID",
+                        "name": "alertID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetAlertDetailResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/bkmonitor/apms": {
             "get": {
                 "security": [
@@ -13815,7 +14456,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_observability_bkmonitor_usergroup_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_observability_bkmonitor_usergroup_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -13961,7 +14602,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -14021,7 +14662,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -14223,7 +14864,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -14445,7 +15086,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -14611,7 +15252,7 @@ const docTemplate = `{
                 ],
                 "description": "解析并导入公共环境变量，导入语义与预览接口保持一致。",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -14805,7 +15446,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_envvars_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -14860,7 +15501,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -14959,7 +15600,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -15490,10 +16131,10 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_bkintegrations_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_bkintegrations_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_autodeploy_serializer.BuildRecordOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_autodeploy_serializer.BuildRecordOutputObj": {
             "type": "object",
             "properties": {
                 "artifact": {
@@ -15557,20 +16198,20 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_autodeploy_serializer.CreateBuildOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_autodeploy_serializer.CreateBuildOutput": {
             "type": "object",
             "properties": {
                 "data": {
                     "description": "构建记录详情",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_autodeploy_serializer.BuildRecordOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_autodeploy_serializer.BuildRecordOutputObj"
                         }
                     ]
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildCommandsInput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildCommandsInput": {
             "type": "object",
             "properties": {
                 "build": {
@@ -15600,7 +16241,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildCommandsOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildCommandsOutputObj": {
             "type": "object",
             "properties": {
                 "build": {
@@ -15630,7 +16271,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildConfigOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildConfigOutputObj": {
             "type": "object",
             "properties": {
                 "appID": {
@@ -15653,7 +16294,7 @@ const docTemplate = `{
                     "description": "镜像仓库配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.ImageBuildConfigOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.ImageBuildConfigOutputObj"
                         }
                     ]
                 },
@@ -15679,7 +16320,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj": {
             "type": "object",
             "properties": {
                 "artifact": {
@@ -15743,20 +16384,20 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.CreateBuildOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.CreateBuildOutput": {
             "type": "object",
             "properties": {
                 "data": {
                     "description": "新创建的构建记录",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj"
                         }
                     ]
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.ImageBuildConfigInput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.ImageBuildConfigInput": {
             "type": "object",
             "required": [
                 "name"
@@ -15780,7 +16421,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.ImageBuildConfigOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.ImageBuildConfigOutputObj": {
             "type": "object",
             "properties": {
                 "name": {
@@ -15793,7 +16434,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.PipelineBuildConfigInput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PipelineBuildConfigInput": {
             "type": "object",
             "required": [
                 "pipelineID"
@@ -15813,7 +16454,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput": {
             "type": "object",
             "properties": {
                 "builderImage": {
@@ -15824,7 +16465,7 @@ const docTemplate = `{
                     "description": "命令配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildCommandsInput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildCommandsInput"
                         }
                     ]
                 },
@@ -15834,7 +16475,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.PlatformBuildConfigOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigOutputObj": {
             "type": "object",
             "properties": {
                 "builderImage": {
@@ -15845,7 +16486,7 @@ const docTemplate = `{
                     "description": "命令配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildCommandsOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildCommandsOutputObj"
                         }
                     ]
                 },
@@ -15855,7 +16496,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.AppDeployedEnvOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.AppDeployedEnvOutputObj": {
             "type": "object",
             "properties": {
                 "deployStatus": {
@@ -15892,7 +16533,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.AppInfoOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.AppInfoOutputObj": {
             "type": "object",
             "properties": {
                 "creator": {
@@ -15903,7 +16544,7 @@ const docTemplate = `{
                     "description": "应用部署的环境列表",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.AppDeployedEnvOutputObj"
+                        "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.AppDeployedEnvOutputObj"
                     }
                 },
                 "displayName": {
@@ -15936,7 +16577,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.BuildCommandsOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.BuildCommandsOutputObj": {
             "type": "object",
             "properties": {
                 "build": {
@@ -15966,14 +16607,14 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.BuildConfigOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.BuildConfigOutputObj": {
             "type": "object",
             "properties": {
                 "imageBuildConfig": {
                     "description": "镜像仓库配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.ImageBuildConfigOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.ImageBuildConfigOutputObj"
                         }
                     ]
                 },
@@ -16007,10 +16648,10 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.ImageBuildConfigInput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.ImageBuildConfigInput": {
             "type": "object",
             "required": [
                 "name"
@@ -16034,7 +16675,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.ImageBuildConfigOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.ImageBuildConfigOutputObj": {
             "type": "object",
             "properties": {
                 "name": {
@@ -16047,7 +16688,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.PipelineBuildConfigInput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.PipelineBuildConfigInput": {
             "type": "object",
             "required": [
                 "pipelineID"
@@ -16067,7 +16708,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.PlatformBuildConfigOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.PlatformBuildConfigOutputObj": {
             "type": "object",
             "properties": {
                 "builderImage": {
@@ -16078,7 +16719,7 @@ const docTemplate = `{
                     "description": "命令配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.BuildCommandsOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.BuildCommandsOutputObj"
                         }
                     ]
                 },
@@ -16088,10 +16729,10 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_env_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_env_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.AppDeployedEnvOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.AppDeployedEnvOutputObj": {
             "type": "object",
             "properties": {
                 "deployStatus": {
@@ -16128,7 +16769,7 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.AppInfoOutputObj": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.AppInfoOutputObj": {
             "type": "object",
             "properties": {
                 "creator": {
@@ -16139,7 +16780,7 @@ const docTemplate = `{
                     "description": "应用部署的环境列表",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.AppDeployedEnvOutputObj"
+                        "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.AppDeployedEnvOutputObj"
                     }
                 },
                 "displayName": {
@@ -16172,31 +16813,31 @@ const docTemplate = `{
                 }
             }
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_deploy_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_extension_component_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_component_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_observability_bkmonitor_usergroup_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_observability_bkmonitor_usergroup_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_envvars_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_instance_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_instance_serializer.EmptyOutput": {
             "type": "object"
         },
-        "git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_workload_networking_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput": {
             "type": "object"
         },
         "serializer.AddWorkspaceUserInput": {
@@ -16212,6 +16853,138 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "serializer.AlertEventOutput": {
+            "type": "object",
+            "properties": {
+                "alertName": {
+                    "type": "string"
+                },
+                "beginTime": {
+                    "type": "integer"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "createTime": {
+                    "type": "integer"
+                },
+                "currentValue": {},
+                "dataSource": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "detail": {},
+                "dimensions": {},
+                "duration": {
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "integer"
+                },
+                "eventID": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "latestTime": {
+                    "type": "integer"
+                },
+                "relatedInfo": {},
+                "severity": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "strategyID": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "strategyName": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
+                },
+                "targetType": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.AlertStrategyOutput": {
+            "type": "object",
+            "properties": {
+                "appID": {
+                    "type": "string"
+                },
+                "appName": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "creator": {
+                    "type": "string"
+                },
+                "displayName": {
+                    "type": "string"
+                },
+                "effectiveScope": {
+                    "$ref": "#/definitions/serializer.EffectiveScopeInput"
+                },
+                "effectiveTimeRange": {
+                    "$ref": "#/definitions/serializer.EffectiveTimeRangeInput"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "monitorMetric": {
+                    "type": "string"
+                },
+                "noticeGroupIDs": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "recoverCondition": {
+                    "$ref": "#/definitions/serializer.RecoverConditionInput"
+                },
+                "remoteRefs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RemoteRefOutput"
+                    }
+                },
+                "severity": {
+                    "type": "integer"
+                },
+                "strategyCode": {
+                    "type": "string"
+                },
+                "threshold": {
+                    "$ref": "#/definitions/serializer.ThresholdConfigInput"
+                },
+                "triggerCondition": {
+                    "$ref": "#/definitions/serializer.TriggerConditionInput"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "updater": {
+                    "type": "string"
+                },
+                "workspaceID": {
+                    "type": "string"
                 }
             }
         },
@@ -16480,7 +17253,7 @@ const docTemplate = `{
                     "description": "构建配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.BuildConfigOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.BuildConfigOutputObj"
                         }
                     ]
                 },
@@ -17856,7 +18629,7 @@ const docTemplate = `{
                     "description": "镜像仓库配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.ImageBuildConfigInput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.ImageBuildConfigInput"
                         }
                     ]
                 },
@@ -17864,7 +18637,7 @@ const docTemplate = `{
                     "description": "流水线配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.PipelineBuildConfigInput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.PipelineBuildConfigInput"
                         }
                     ]
                 },
@@ -18340,6 +19113,68 @@ const docTemplate = `{
                 "version": {
                     "description": "组件版本",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.CreateAlertStrategyBody": {
+            "type": "object",
+            "required": [
+                "displayName",
+                "effectiveScope",
+                "monitorMetric",
+                "severity",
+                "strategyCode",
+                "threshold"
+            ],
+            "properties": {
+                "displayName": {
+                    "type": "string"
+                },
+                "effectiveScope": {
+                    "$ref": "#/definitions/serializer.EffectiveScopeInput"
+                },
+                "effectiveTimeRange": {
+                    "$ref": "#/definitions/serializer.EffectiveTimeRangeInput"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "monitorMetric": {
+                    "type": "string"
+                },
+                "noticeGroupIDs": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "recoverCondition": {
+                    "$ref": "#/definitions/serializer.RecoverConditionInput"
+                },
+                "severity": {
+                    "type": "integer",
+                    "enum": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "strategyCode": {
+                    "type": "string"
+                },
+                "threshold": {
+                    "$ref": "#/definitions/serializer.ThresholdConfigInput"
+                },
+                "triggerCondition": {
+                    "$ref": "#/definitions/serializer.TriggerConditionInput"
+                }
+            }
+        },
+        "serializer.CreateAlertStrategyResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.AlertStrategyOutput"
                 }
             }
         },
@@ -19365,6 +20200,45 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.EffectiveScopeInput": {
+            "type": "object",
+            "required": [
+                "type"
+            ],
+            "properties": {
+                "envIDs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "envTypes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "all",
+                        "env_type",
+                        "specific_envs"
+                    ]
+                }
+            }
+        },
+        "serializer.EffectiveTimeRangeInput": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string"
+                },
+                "startTime": {
+                    "type": "string"
+                }
+            }
+        },
         "serializer.EnvAppDeployStatusOutput": {
             "type": "object",
             "properties": {
@@ -20328,6 +21202,23 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.GetAlertDetailResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "serializer.GetAlertStrategyResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.AlertStrategyOutput"
+                }
+            }
+        },
         "serializer.GetApmServiceNameOutput": {
             "type": "object",
             "properties": {
@@ -20396,7 +21287,7 @@ const docTemplate = `{
                     "description": "应用部署的环境列表，包含标准环境和当前应用拥有的特性环境",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.AppDeployedEnvOutputObj"
+                        "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.AppDeployedEnvOutputObj"
                     }
                 }
             }
@@ -21453,6 +22344,52 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListAlertEventsOutput": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.AlertEventOutput"
+                    }
+                }
+            }
+        },
+        "serializer.ListAlertEventsResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ListAlertEventsOutput"
+                }
+            }
+        },
+        "serializer.ListAlertStrategiesOutput": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.AlertStrategyOutput"
+                    }
+                }
+            }
+        },
+        "serializer.ListAlertStrategiesResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ListAlertStrategiesOutput"
+                }
+            }
+        },
         "serializer.ListApmOutput": {
             "type": "object",
             "properties": {
@@ -21642,7 +22579,7 @@ const docTemplate = `{
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.AppInfoOutputObj"
+                        "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.AppInfoOutputObj"
                     }
                 }
             }
@@ -22597,7 +23534,7 @@ const docTemplate = `{
                     "description": "当前页结果",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj"
+                        "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj"
                     }
                 }
             }
@@ -23747,6 +24684,14 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.RecoverConditionInput": {
+            "type": "object",
+            "properties": {
+                "checkWindow": {
+                    "type": "integer"
+                }
+            }
+        },
         "serializer.RedeployRequiredFieldsOutput": {
             "type": "object",
             "properties": {
@@ -23815,6 +24760,27 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.RemoteRefOutput": {
+            "type": "object",
+            "properties": {
+                "envID": {
+                    "type": "string"
+                },
+                "envName": {
+                    "type": "string"
+                },
+                "remoteStrategyID": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "remoteStrategyName": {
+                    "type": "string"
+                },
+                "trafficLaneName": {
+                    "type": "string"
+                }
+            }
+        },
         "serializer.RepoBuildConfigInput": {
             "type": "object",
             "required": [
@@ -23854,7 +24820,7 @@ const docTemplate = `{
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput"
                         }
                     ]
                 },
@@ -23911,7 +24877,7 @@ const docTemplate = `{
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时返回",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_app_serializer.PlatformBuildConfigOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.PlatformBuildConfigOutputObj"
                         }
                     ]
                 },
@@ -23972,7 +24938,7 @@ const docTemplate = `{
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput"
                         }
                     ]
                 },
@@ -24029,7 +24995,7 @@ const docTemplate = `{
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时返回",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.PlatformBuildConfigOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigOutputObj"
                         }
                     ]
                 },
@@ -24764,6 +25730,14 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.SwitchAlertStrategyBody": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
         "serializer.TafSpecInput": {
             "type": "object",
             "required": [
@@ -24857,6 +25831,28 @@ const docTemplate = `{
                 "type": {
                     "description": "版本号类型",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.ThresholdConfigInput": {
+            "type": "object",
+            "required": [
+                "method"
+            ],
+            "properties": {
+                "method": {
+                    "type": "string",
+                    "enum": [
+                        "gte",
+                        "gt",
+                        "lte",
+                        "lt",
+                        "eq",
+                        "neq"
+                    ]
+                },
+                "value": {
+                    "type": "number"
                 }
             }
         },
@@ -25236,6 +26232,17 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.TriggerConditionInput": {
+            "type": "object",
+            "properties": {
+                "checkWindow": {
+                    "type": "integer"
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
         "serializer.TrpcSpecInput": {
             "type": "object",
             "required": [
@@ -25298,6 +26305,46 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/serializer.EnvVarReferenceSourceOutput"
                     }
+                }
+            }
+        },
+        "serializer.UpdateAlertStrategyBody": {
+            "type": "object",
+            "properties": {
+                "displayName": {
+                    "type": "string"
+                },
+                "effectiveScope": {
+                    "$ref": "#/definitions/serializer.EffectiveScopeInput"
+                },
+                "effectiveTimeRange": {
+                    "$ref": "#/definitions/serializer.EffectiveTimeRangeInput"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "noticeGroupIDs": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "recoverCondition": {
+                    "$ref": "#/definitions/serializer.RecoverConditionInput"
+                },
+                "severity": {
+                    "type": "integer",
+                    "enum": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "threshold": {
+                    "$ref": "#/definitions/serializer.ThresholdConfigInput"
+                },
+                "triggerCondition": {
+                    "$ref": "#/definitions/serializer.TriggerConditionInput"
                 }
             }
         },
@@ -25572,7 +26619,7 @@ const docTemplate = `{
                     "description": "镜像仓库配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.ImageBuildConfigInput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.ImageBuildConfigInput"
                         }
                     ]
                 },
@@ -25580,7 +26627,7 @@ const docTemplate = `{
                     "description": "蓝盾流水线配置",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.PipelineBuildConfigInput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PipelineBuildConfigInput"
                         }
                     ]
                 },
@@ -25610,7 +26657,7 @@ const docTemplate = `{
                     "description": "构建配置详情",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_build_build_serializer.BuildConfigOutputObj"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildConfigOutputObj"
                         }
                     ]
                 }
@@ -26199,7 +27246,7 @@ const docTemplate = `{
                     "description": "该空间下的应用列表（按当前用户操作时间倒序排序）",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/git_woa_com_bcs_bkms-govern_apps_bkms-server_pkg_core_workspace_serializer.AppInfoOutputObj"
+                        "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.AppInfoOutputObj"
                     }
                 },
                 "createdAt": {
