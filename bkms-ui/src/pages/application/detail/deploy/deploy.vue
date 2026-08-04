@@ -450,6 +450,16 @@
     return Array.isArray(envName) ? envName[0] || '' : envName || '';
   });
 
+  /**
+   * envName 仅用于跨页面跳转时的首次环境定位。
+   * 定位完成后移除该参数，避免它在后续返回页面时持续覆盖用户的环境选择。
+   */
+  function clearRouteEnvName() {
+    if (!('envName' in route.query)) return;
+    const { envName: _envName, ...query } = route.query;
+    router.replace({ query });
+  }
+
   const curEnvs = ref<string[]>([...(initialEnvSelection.value?.selectedEnvs || [])]);
   const requestableMultiEnvNames = computed(() => {
     const deployStatusEnvNames = new Set(
@@ -483,15 +493,26 @@
     if (!envSelectionScopeKey.value) return;
     isRestoringEnvSelection.value = true;
     const selection = envStore.getAppEnvSelection(envSelectionScopeKey.value);
-    const selectedEnvs = targetEnvName.value ? [targetEnvName.value] : [...(selection?.selectedEnvs || [])];
+    const routeEnvName = targetEnvName.value;
+    const selectedEnvs = routeEnvName ? [routeEnvName] : [...(selection?.selectedEnvs || [])];
     curEnvs.value = selectedEnvs;
-    isMultiEnvMode.value = targetEnvName.value ? false : selection?.mode === 'multi';
+    isMultiEnvMode.value = routeEnvName ? false : selection?.mode === 'multi';
     if (!isMultiEnvMode.value) {
       envStore.updateCurrentEnv(selectedEnvs[0] || '');
     }
     envStore.updateSelectedEnvs(curEnvs.value);
+    if (routeEnvName) {
+      // 先将路由指定环境写入缓存，再清理 URL；新标签页首次加载和后续手动选择均可正确恢复。
+      envStore.updateAppEnvSelection(envSelectionScopeKey.value, {
+        mode: 'single',
+        selectedEnvs,
+      });
+    }
     nextTick(() => {
       isRestoringEnvSelection.value = false;
+      if (routeEnvName) {
+        clearRouteEnvName();
+      }
     });
   }
 
@@ -675,6 +696,7 @@
 
   /** 需要环境select有值后才能获取到数据 */
   function handleEnvChange(env?: EnvOutput) {
+    curEnvs.value = env?.name ? [env.name] : [];
     trpcDeployStore.updateCurEnvItem(env);
     latestDeployStatus.value = null;
     initLoading.value = true;
