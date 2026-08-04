@@ -304,9 +304,10 @@
       multiple: true,
       children: [
         { name: t('所有'), id: 'workspace' },
-        { name: t('生产'), id: 'production' },
-        { name: t('测试'), id: 'test' },
         { name: t('开发'), id: 'development' },
+        { name: t('测试'), id: 'test' },
+        { name: t('预发布'), id: 'staging' },
+        { name: t('生产'), id: 'production' },
       ],
     },
   ]);
@@ -319,7 +320,7 @@
 
   /** Tab 标签页配置（带计数） */
   const tabs = computed(() => {
-    const counts: Record<string, number> = { all: 0, workspace: 0, development: 0, test: 0, production: 0 };
+    const counts: Record<string, number> = { all: 0, workspace: 0, development: 0, test: 0, staging: 0, production: 0 };
     for (const item of list.value) {
       counts.all++;
       const key = getTabKey(item);
@@ -328,9 +329,10 @@
     return [
       { key: 'all', label: t('全部'), count: counts.all },
       { key: 'workspace', label: t('所有'), count: counts.workspace },
-      { key: 'production', label: t('生产'), count: counts.production },
-      { key: 'test', label: t('测试'), count: counts.test },
       { key: 'development', label: t('开发'), count: counts.development },
+      { key: 'test', label: t('测试'), count: counts.test },
+      { key: 'staging', label: t('预发布'), count: counts.staging },
+      { key: 'production', label: t('生产'), count: counts.production },
     ];
   });
 
