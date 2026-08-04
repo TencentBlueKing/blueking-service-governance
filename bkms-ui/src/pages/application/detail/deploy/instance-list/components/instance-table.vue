@@ -178,6 +178,7 @@
           field="image"
           :filters="showFilter ? filterOptions.image : undefined"
           min-width="100"
+          :show-overflow="false"
         >
           <template #header>
             <CustomFilter
@@ -190,7 +191,12 @@
             <span v-else>{{ $t('镜像 Tag') }}</span>
           </template>
           <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <span v-bk-tooltips="row.image">{{ row.image?.split(':')?.pop() }}</span>
+            <span
+              v-bk-tooltips="row.image"
+              class="inline-block max-w-full truncate align-middle"
+            >
+              {{ row.image?.split(':')?.pop() }}
+            </span>
           </template>
         </TableColumn>
 
