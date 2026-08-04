@@ -207,10 +207,7 @@
                                 theme="popover-dark-translucent"
                                 trigger="hover"
                               >
-                                <Tag
-                                  class="mr-[4px]"
-                                  :theme="envTypeMap[getGroupedEnvType(env)]?.theme || 'info'"
-                                >
+                                <Tag :class="['mr-[4px]', envTypeTagClassMap[getGroupedEnvType(env)]]">
                                   {{ getGroupedEnvLabel(env) }}（{{ getGroupedEnvCount(env) }}）
                                 </Tag>
                                 <template #content>
@@ -297,7 +294,7 @@
   import Layout from '~/components/skeleton/skeleton-layout';
   import { AppType } from '~/composables/app-type';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import { formatRelativeTimeWithTooltip, useGreeting } from '~/composables/use-time';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';

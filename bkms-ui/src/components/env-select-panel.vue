@@ -25,7 +25,7 @@
     placement="bottom-start"
     theme="light"
     trigger="click"
-    :width="626"
+    :width="800"
     @after-hidden="handlePopoverHidden"
     @after-show="handlePopoverShow"
   >
@@ -86,8 +86,8 @@
                   <!-- 环境 Tag -->
                   <Tag
                     v-if="getEnvTypeConfig(selectedMultiEnvItems[index])"
+                    :class="getEnvTypeTagClass(selectedMultiEnvItems[index])"
                     size="small"
-                    :theme="getEnvTypeConfig(selectedMultiEnvItems[index])?.theme || ''"
                   >
                     {{ getEnvTypeConfig(selectedMultiEnvItems[index])?.name || '' }}
                   </Tag>
@@ -118,8 +118,8 @@
             <span class="truncate">{{ selectedEnvItem.displayName }}</span>
             <Tag
               v-if="selectedEnvItem?.type && envTypeMap[selectedEnvItem.type]"
+              :class="envTypeTagClassMap[selectedEnvItem.type]"
               size="small"
-              :theme="envTypeMap[selectedEnvItem.type]?.theme || ''"
             >
               {{ envTypeMap[selectedEnvItem.type]?.name || '' }}
             </Tag>
@@ -194,7 +194,7 @@
           >
             <!-- 分组标题 -->
             <div class="h-[32px] flex items-center justify-between px-[8px] bg-[#f5f7fa]">
-              <Tag :theme="envTypeMap[group.type]?.theme || ''">
+              <Tag :class="envTypeTagClassMap[group.type]">
                 {{ group.label }}
               </Tag>
               <Checkbox
@@ -277,7 +277,12 @@
   import ColorIcon from '~/components/color-icon.vue';
   import OverflowTags from '~/components/overflow-tags.vue';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
-  import { buildStandardEnvMap, envTypeMap, getFeatureSourceEnv } from '~/composables/use-env-manager';
+  import {
+    buildStandardEnvMap,
+    envTypeMap,
+    envTypeTagClassMap,
+    getFeatureSourceEnv,
+  } from '~/composables/use-env-manager';
   import { useAppDetail } from '~/stores/app-detail';
   import { useDeployEnvStore } from '~/stores/deploy-env';
 
@@ -353,8 +358,8 @@
   /** 当前选择模式 */
   const mode = ref<'multi' | 'single'>(props.mode || 'single');
 
-  /** 环境类型分组顺序：开发 -> 测试 -> 生产 */
-  const envTypeOrder = ['development', 'test', 'production'];
+  /** 环境类型分组顺序：开发 -> 测试 -> 预发布 -> 生产 */
+  const envTypeOrder = ['development', 'test', 'staging', 'production'];
   const FEATURE_ENV_KIND = 'feature';
 
   /** 单选模式下当前选中的环境对象 */
@@ -413,6 +418,11 @@
   /** 获取环境类型对应的展示配置 */
   function getEnvTypeConfig(env?: EnvOutput) {
     return env?.type ? envTypeMap[env.type] : undefined;
+  }
+
+  /** 获取环境类型对应的无边框 Tag 样式 */
+  function getEnvTypeTagClass(env?: EnvOutput) {
+    return env?.type ? envTypeTagClassMap[env.type] : '';
   }
 
   /** 组装指定类型下的标准环境及其可见特性环境 */

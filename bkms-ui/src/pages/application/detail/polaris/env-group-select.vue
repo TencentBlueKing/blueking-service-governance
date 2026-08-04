@@ -17,14 +17,14 @@
 -->
 
 <template>
-  <div class="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[12px]">
+  <div class="grid grid-cols-[repeat(4,minmax(0,1fr))] gap-[12px]">
     <div
       v-for="group in groupedEnvList"
       :key="group.type"
       class="min-w-0"
     >
-      <div :class="['h-[32px] flex items-center justify-between px-[12px]', group.headerClass]">
-        <span :class="['text-[12px] font-bold', group.titleClass]">
+      <div :class="['h-[32px] flex items-center justify-between px-[12px]', envTypeTagClassMap[group.type]]">
+        <span class="text-[12px] font-bold">
           {{ group.label }}
         </span>
         <div class="flex items-center">
@@ -89,6 +89,7 @@
 
   import { Checkbox, Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
+  import { envTypeTagClassMap } from '~/composables/use-env-manager';
 
   import type { EnvOutput } from '~/@types/v1/env';
 
@@ -101,7 +102,7 @@
   const FEATURE_ENV_KIND = 'feature';
 
   // 组件可用环境分组展示顺序
-  const envTypeOrder = ['development', 'test', 'production'] as const;
+  const envTypeOrder = ['development', 'test', 'staging', 'production'] as const;
   // 环境分组类型，约束分组配置必须覆盖所有展示类型
   type EnvType = (typeof envTypeOrder)[number];
 
@@ -109,29 +110,24 @@
   const envTypePanelMap: Record<
     EnvType,
     {
-      headerClass: string;
       label: string;
-      titleClass: string;
     }
   > = {
     development: {
       label: t('开发环境'),
-      headerClass: 'bg-[#E1ECFF]',
-      titleClass: 'text-[#3A84FF]',
     },
     test: {
       label: t('测试环境'),
-      headerClass: 'bg-[#FFF1DB]',
-      titleClass: 'text-[#F59500]',
+    },
+    staging: {
+      label: t('预发布环境'),
     },
     production: {
       label: t('生产环境'),
-      headerClass: 'bg-[#E5F6EA]',
-      titleClass: 'text-[#299E56]',
     },
   };
 
-  // 按环境类型将接口返回的环境列表归组，用于模板三列展示
+  // 按环境类型将接口返回的环境列表归组，用于模板四列展示
   const groupedEnvList = computed(() =>
     envTypeOrder.map(type => ({
       type,

@@ -74,7 +74,7 @@
         <div class="flex items-center gap-[8px]">
           <span class="font-bold">{{ data.name }}</span>
           <Tag
-            :theme="envTagTheme"
+            :class="envTagClass"
             type="stroke"
             >{{ envTagText }}</Tag
           >
@@ -178,13 +178,13 @@
   import { EnvOutput } from '~/@types/v1/env';
   import { BkintegrationsBkmonitorService } from '~/api/modules/v1';
   import { useCopy } from '~/composables/use-copy';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagStrokeClassMap } from '~/composables/use-env-manager';
   import { useSpaceStore } from '~/stores/space';
 
   // 特殊值：表示"新建 APM"
   const CREATE_NEW_APM_ID = -1;
   // APM 分组排序
-  const APM_GROUP_ORDER = ['test', 'development', 'production', 'custom'] as const;
+  const APM_GROUP_ORDER = ['development', 'test', 'staging', 'production', 'custom'] as const;
 
   interface IProps {
     currentApm: GetEnvApmOutput | null;
@@ -227,12 +227,7 @@
     custom: t('自定义'),
   }));
 
-  const envTagTheme = computed(() => {
-    if (props.data?.type && envTypeMap[props.data.type]) {
-      return envTypeMap[props.data.type]?.theme;
-    }
-    return 'default';
-  });
+  const envTagClass = computed(() => (props.data?.type ? envTypeTagStrokeClassMap[props.data.type] : ''));
 
   const envTagText = computed(() => {
     if (props.data?.type && envTypeMap[props.data.type]) {

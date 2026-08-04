@@ -71,8 +71,8 @@
                 <span>{{ env.displayName || env.name }}</span>
                 <Tag
                   v-if="env.type && envTypeMap[env.type]"
+                  :class="envTypeTagClassMap[env.type]"
                   size="small"
-                  :theme="envTypeMap[env.type]?.theme || ''"
                 >
                   {{ envTypeMap[env.type]?.name || '' }}
                 </Tag>
@@ -131,7 +131,7 @@
   import { EnvService } from '~/api/modules/v1';
   import { BKMS_REGEX } from '~/common/const';
   import DividerHeader from '~/components/divider-header.vue';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';

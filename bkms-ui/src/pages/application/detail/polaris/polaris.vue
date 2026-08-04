@@ -278,7 +278,7 @@
   import MoreTag from '~/components/more-tag.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import SvgIcon from '~/components/svg-icon.vue';
-  import useEnvManager, { envTypeMap } from '~/composables/use-env-manager';
+  import useEnvManager, { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import { useErrorHandler } from '~/composables/use-error-handler';
   import useSearchFilter from '~/composables/use-search-filter';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
@@ -844,7 +844,10 @@
             env.envType && envTypeMap[env.envType]
               ? h(
                   Tag,
-                  { class: 'ml-[8px] shrink-0', size: 'small', theme: envTypeMap[env.envType].theme },
+                  {
+                    class: ['ml-[8px] shrink-0', envTypeTagClassMap[env.envType]],
+                    size: 'small',
+                  },
                   { default: () => envTypeMap[env.envType!].name },
                 )
               : null,

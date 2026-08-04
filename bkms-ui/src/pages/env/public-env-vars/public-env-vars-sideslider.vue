@@ -157,7 +157,7 @@
           :width="160"
         >
           <template #default="{ row }">
-            <Tag :type="getScopeDisplay(row.scopeType, row.scopeValue).tagType">
+            <Tag :class="getScopeDisplay(row.scopeType, row.scopeValue).tagClass">
               {{ getScopeDisplay(row.scopeType, row.scopeValue).label }}
             </Tag>
           </template>

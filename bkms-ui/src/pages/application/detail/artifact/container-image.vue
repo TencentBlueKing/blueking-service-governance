@@ -204,7 +204,7 @@
                 v-for="item in getDeployedEnvTags(row.deployedEnvs)"
                 :key="item.key"
                 v-bk-tooltips="{ content: getEnvTooltipContent(item.envNames) }"
-                :theme="item.theme"
+                :class="envTypeTagClassMap[item.key]"
               >
                 {{ item.label }}（{{ item.count }}）
               </Tag>
@@ -276,7 +276,7 @@
               <Tag
                 v-for="env in promoteRow?.deployedEnvs || []"
                 :key="env.envName"
-                :theme="env.envType ? envTypeMap[env.envType]?.theme : 'info'"
+                :class="envTypeTagClassMap[env.envType || '']"
               >
                 {{ getEnvDisplayName(env?.envName ?? '') }}
               </Tag>
@@ -292,7 +292,7 @@
         <Tag
           v-for="envName in productionEnvNames"
           :key="envName"
-          :theme="getEnvTheme(envName)"
+          :class="getEnvTagClass(envName)"
         >
           {{ getEnvDisplayName(envName) }}
         </Tag>
@@ -349,7 +349,7 @@
   import { formatSize } from '~/common/util';
   import FieldItem from '~/components/field-item.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import usePageConf from '~/composables/use-page';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -367,14 +367,13 @@
   import 'tippy.js/themes/light.css';
 
   const ARTIFACT_POLLING_INTERVAL = 60 * 1000;
-  const DEPLOYED_ENV_TYPES = ['development', 'production', 'test'] as const;
+  const DEPLOYED_ENV_TYPES = ['development', 'test', 'staging', 'production'] as const;
 
   type DeployedEnvTag = {
     count: number;
     envNames: string[];
     key: (typeof DEPLOYED_ENV_TYPES)[number];
     label: string;
-    theme: string;
   };
 
   type DeployedEnvType = (typeof DEPLOYED_ENV_TYPES)[number];
@@ -512,6 +511,7 @@
 
     const typeEnvNamesMap: Record<DeployedEnvType, string[]> = {
       development: [],
+      staging: [],
       production: [],
       test: [],
     };
@@ -526,7 +526,6 @@
       envNames: typeEnvNamesMap[envType],
       key: envType,
       label: envTypeMap[envType]?.name || envType,
-      theme: envTypeMap[envType]?.theme || 'info',
     }));
   }
 
@@ -534,9 +533,8 @@
     return envNameDisplayMap.value[envName] || envName;
   }
 
-  function getEnvTheme(envName: string) {
-    const envType = envNameTypeMap.value[envName];
-    return envTypeMap[envType]?.theme || 'info';
+  function getEnvTagClass(envName: string) {
+    return envTypeTagClassMap[envNameTypeMap.value[envName]];
   }
 
   function getEnvTooltipContent(envNames: string[]) {

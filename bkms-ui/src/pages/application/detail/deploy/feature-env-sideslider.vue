@@ -119,9 +119,8 @@
             <!-- 特性环境使用创建时的来源环境分类快照。 -->
             <Tag
               v-if="row.envTypeText !== '--'"
-              class="ml-[4px]"
+              :class="['ml-[4px]', envTypeTagClassMap[row.envType]]"
               size="small"
-              :theme="row.envTypeTheme"
             >
               {{ row.envTypeText }}
             </Tag>
@@ -347,7 +346,7 @@
   import DividerHeader from '~/components/divider-header.vue';
   import TableException from '~/components/table-exception.vue';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import { IInputKey, ISelectKey, useTableSearchInput, useTableSearchSelect } from '~/composables/use-search';
   import useTableEmpty from '~/composables/use-table-empty';
   import useTime from '~/composables/use-time';
@@ -371,7 +370,6 @@
     displayName: string;
     envType: string;
     envTypeText: string;
-    envTypeTheme: 'danger' | 'info' | 'success' | 'warning';
     id: string;
     name: string;
     namespace: string;
@@ -474,7 +472,6 @@
         deployStatusText: deployStatusInfo.text || t('未知'),
         envType,
         envTypeText: envTypeInfo?.name || '--',
-        envTypeTheme: envTypeInfo?.theme || 'info',
         sourceEnvText: env.sourceEnv?.displayName || env.sourceEnv?.name || '--',
         sourceEnvName: env.sourceEnv?.name || '',
         namespace: env.cluster?.namespace || '--',

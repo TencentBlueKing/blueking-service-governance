@@ -25,8 +25,8 @@
       <div class="flex items-center gap-[8px]">
         <div class="text-[14px] text-[#313238] font-bold">{{ data?.displayName }}</div>
         <Tag
-          v-if="envTypeConfig?.theme"
-          :theme="envTypeConfig.theme"
+          v-if="envTypeConfig"
+          :class="envTypeTagStrokeClassMap[data?.type || '']"
           type="stroke"
           >{{ envTypeConfig.name || data?.type }}</Tag
         >
@@ -164,7 +164,7 @@
   import { BkintegrationsBkmonitorService } from '~/api/modules/v1';
   import MonitorIframe from '~/components/monitor-iframe.vue';
   import SlideDetail from '~/components/slide-detail.vue';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagStrokeClassMap } from '~/composables/use-env-manager';
 
   import ApmInstance from './apm-instance.vue';
   import BasicInfo from './basic-info.vue';

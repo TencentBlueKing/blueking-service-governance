@@ -27,17 +27,29 @@ import {
 
 export default defineConfig({
   shortcuts: [
-    ['btn', 'px-4 py-1 rounded inline-block bg-teal-700 text-white cursor-pointer !outline-none hover:bg-teal-800 disabled:cursor-default disabled:bg-gray-600 disabled:opacity-50'],
-    ['icon-btn', 'inline-block cursor-pointer select-none opacity-75 transition duration-200 ease-in-out hover:opacity-100 hover:text-teal-600'],
+    [
+      'btn',
+      'px-4 py-1 rounded inline-block bg-teal-700 text-white cursor-pointer !outline-none hover:bg-teal-800 disabled:cursor-default disabled:bg-gray-600 disabled:opacity-50',
+    ],
+    [
+      'icon-btn',
+      'inline-block cursor-pointer select-none opacity-75 transition duration-200 ease-in-out hover:opacity-100 hover:text-teal-600',
+    ],
+    ['env-tag-development', '!border-[#A3C5FD] !bg-[#E1ECFF] !text-[#1768EF]'],
+    ['env-tag-test', '!border-[#94D6FF] !bg-[#E5FEFF] !text-[#28B0E5]'],
+    ['env-tag-staging', '!border-[#F9D090] !bg-[#FDEED8] !text-[#E38B02]'],
+    ['env-tag-production', '!border-[#A1E3BA] !bg-[#DAF6E5] !text-[#299E56]'],
   ],
-  presets: [
-    presetUno(),
-    presetAttributify(),
-    presetTypography(),
+  presets: [presetUno(), presetAttributify(), presetTypography()],
+  transformers: [transformerDirectives(), transformerVariantGroup()],
+  safelist: [
+    'prose',
+    'prose-sm',
+    'm-auto',
+    'text-left',
+    'env-tag-development',
+    'env-tag-test',
+    'env-tag-staging',
+    'env-tag-production',
   ],
-  transformers: [
-    transformerDirectives(),
-    transformerVariantGroup(),
-  ],
-  safelist: 'prose prose-sm m-auto text-left'.split(' '),
 });

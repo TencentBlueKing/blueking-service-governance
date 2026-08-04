@@ -15,25 +15,24 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
-
-import { envTypeMap } from './use-env-manager';
+import { envTypeMap, envTypeTagClassMap } from './use-env-manager';
 
 /** 作用域展示配置 */
 export interface ScopeDisplay {
   label: string;
-  tagType: string;
+  tagClass?: string;
 }
 
-const WORKSPACE_DISPLAY: ScopeDisplay = { label: '所有', tagType: 'default' };
+const WORKSPACE_DISPLAY: ScopeDisplay = { label: '所有' };
 
-/** 获取作用域展示配置（label + tagType） */
+/** 获取作用域展示配置（label + tagClass） */
 export function getScopeDisplay(scopeType: string, scopeValue: string): ScopeDisplay {
   if (scopeType === 'workspace') return WORKSPACE_DISPLAY;
   if (scopeType === 'envType') {
     const cfg = envTypeMap[scopeValue];
-    return cfg ? { label: cfg.name, tagType: cfg.theme } : { label: scopeValue, tagType: 'info' };
+    return cfg ? { label: cfg.name, tagClass: envTypeTagClassMap[scopeValue] } : { label: scopeValue };
   }
-  return { label: scopeValue || '--', tagType: 'default' };
+  return { label: scopeValue || '--' };
 }
 
 /** 获取作用域展示标签文本 */

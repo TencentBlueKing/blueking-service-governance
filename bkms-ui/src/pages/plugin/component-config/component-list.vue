@@ -132,9 +132,8 @@
                     <span class="text-[12px] truncate">{{ item.displayName || item.name }}</span>
                     <Tag
                       v-if="item.type && viewMode === 'environment'"
-                      class="ml-[8px] pointer-events-none"
+                      :class="['ml-[8px] pointer-events-none', envTypeTagClassMap[item.type]]"
                       size="small"
-                      :theme="envTypeMap[item.type].theme"
                     >
                       {{ envTypeMap[item.type].name }}
                     </Tag>
@@ -168,8 +167,8 @@
               <template v-if="currentTreeNode?.type">
                 <span class="mx-[8px] text-[#979BA5]">( {{ currentTreeNode.name }} )</span>
                 <Tag
+                  :class="envTypeTagClassMap[currentTreeNode.type]"
                   size="small"
-                  theme="success"
                 >
                   {{ envTypeMap[currentTreeNode.type].name }}
                 </Tag>
@@ -499,7 +498,7 @@
   import Skeleton from '~/components/skeleton/skeleton.vue';
   import Exception from '~/components/table-exception.vue';
   import { useElementHeight } from '~/composables/use-element-height';
-  import useEnvManager, { envTypeMap } from '~/composables/use-env-manager';
+  import useEnvManager, { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import usePageConf from '~/composables/use-page';
   import { ISelectKey, ITableFilterItem, useTableSearchSelect } from '~/composables/use-search';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';

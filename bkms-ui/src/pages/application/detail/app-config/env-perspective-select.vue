@@ -25,7 +25,7 @@
     placement="bottom-start"
     theme="light"
     trigger="click"
-    :width="626"
+    :width="800"
     @after-hidden="handlePopoverHidden"
     @after-show="handlePopoverShow"
   >
@@ -45,9 +45,8 @@
           <span class="truncate">{{ selectedEnvItem.displayName }}</span>
           <Tag
             v-if="selectedEnvItem?.type && envTypeMap[selectedEnvItem.type]"
-            class="shrink-0"
+            :class="[envTypeTagClassMap[selectedEnvItem.type], 'shrink-0']"
             size="small"
-            :theme="envTypeMap[selectedEnvItem.type]?.theme || ''"
           >
             {{ envTypeMap[selectedEnvItem.type]?.name || '' }}
           </Tag>
@@ -118,7 +117,7 @@
           >
             <!-- 分组标题 -->
             <div class="h-[32px] flex items-center px-[8px] bg-[#f5f7fa]">
-              <Tag :theme="envTypeMap[group.type]?.theme || ''">
+              <Tag :class="envTypeTagClassMap[group.type] || ''">
                 {{ group.label }}
               </Tag>
             </div>
@@ -189,7 +188,12 @@
 
   import { Checkbox, Input, OverflowTitle, Popover, Tag } from 'bkui-vue';
   import { AngleDownLine, Search } from 'bkui-vue/lib/icon';
-  import { buildStandardEnvMap, envTypeMap, getFeatureSourceEnv } from '~/composables/use-env-manager';
+  import {
+    buildStandardEnvMap,
+    envTypeMap,
+    envTypeTagClassMap,
+    getFeatureSourceEnv,
+  } from '~/composables/use-env-manager';
 
   import type { EnvOutput } from '~/@types/v1/env';
 
@@ -219,7 +223,7 @@
   const searchKeyword = ref('');
   const onlyModified = ref(false);
 
-  const envTypeOrder = ['development', 'test', 'production'];
+  const envTypeOrder = ['development', 'test', 'staging', 'production'];
   const FEATURE_ENV_KIND = 'feature';
 
   type GroupEnvItem = EnvOutput & {

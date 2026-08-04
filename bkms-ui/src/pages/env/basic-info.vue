@@ -416,6 +416,7 @@
   const envTypeList = [
     { id: 'development', name: t('开发') },
     { id: 'test', name: t('测试') },
+    { id: 'staging', name: t('预发布') },
     { id: 'production', name: t('生产') },
   ];
 

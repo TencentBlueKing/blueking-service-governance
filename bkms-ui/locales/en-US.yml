@@ -228,6 +228,13 @@ tag不能为空: Tag cannot be empty
 立即启用: Enable immediately
 环境名称/ID: Environment name/ID
 环境分类: Environment type
+环境分类说明: Environment Type Description
+镜像与部署: Image and Deployment
+允许: Allowed
+禁止: Disabled
+可直接部署: Direct deployment
+镜像晋级: Image promotion
+"需{0}后才能部署": "Requires {0} before deployment"
 泳道: Swimlane
 开发: Development
 生产: Production

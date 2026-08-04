@@ -58,10 +58,15 @@
           />
         </Form.FormItem>
         <Form.FormItem
-          :label="$t('环境分类')"
           property="type"
           required
         >
+          <template #label>
+            <span class="inline-flex items-center">
+              <span class="mr-[4px]">{{ $t('环境分类') }}</span>
+              <EnvCategoryDescription />
+            </span>
+          </template>
           <Select
             v-model="formData.type"
             :filterable="false"
@@ -209,6 +214,7 @@
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useSpaceStore } from '~/stores/space';
 
+  import EnvCategoryDescription from './components/env-category-description.vue';
   import ProjectSelector from './components/project-selector/project-selector.vue';
 
   interface ClusterInfo {
@@ -397,7 +403,7 @@
     }
 
     // 转为数组，按固定顺序排列
-    const order = ['production', 'development', 'test', 'custom'];
+    const order = ['production', 'development', 'test', 'staging', 'custom'];
     return order
       .filter(type => groups[type]?.length)
       .map(type => ({

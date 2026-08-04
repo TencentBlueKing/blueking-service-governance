@@ -119,7 +119,9 @@
           v-if="isEdit"
           :label="$t('生效环境类型')"
         >
-          <Tag :type="scopeDisplay.tagType">{{ scopeDisplay.label }}</Tag>
+          <Tag :class="scopeDisplay.tagClass">
+            {{ scopeDisplay.label }}
+          </Tag>
         </Form.FormItem>
 
         <!-- 描述 -->

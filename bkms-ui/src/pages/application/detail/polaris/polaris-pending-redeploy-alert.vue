@@ -73,9 +73,8 @@
               </span>
               <Tag
                 v-if="row.envType && envTypeMap[row.envType]"
-                class="ml-[8px] shrink-0"
+                :class="['ml-[8px] shrink-0', envTypeTagClassMap[row.envType]]"
                 size="small"
-                :theme="envTypeMap[row.envType].theme"
               >
                 {{ envTypeMap[row.envType].name }}
               </Tag>
@@ -151,7 +150,7 @@
   import { Button, Tag } from 'bkui-vue';
   import { AngleRight } from 'bkui-vue/lib/icon';
   import { PolarisConfigOutputObj } from '~/@types/v1/polaris-config';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
 
   import { formatPolarisRedeployValue, getPolarisRedeployChanges } from './redeploy-utils';
 

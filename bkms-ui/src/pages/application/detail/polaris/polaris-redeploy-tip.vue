@@ -71,9 +71,8 @@
                   </span>
                   <Tag
                     v-if="env.envType && envTypeMap[env.envType]"
-                    class="ml-[8px] shrink-0"
+                    :class="['ml-[8px] shrink-0', envTypeTagClassMap[env.envType]]"
                     size="small"
-                    :theme="envTypeMap[env.envType].theme"
                   >
                     {{ envTypeMap[env.envType].name }}
                   </Tag>
@@ -119,7 +118,7 @@
   import { Share, Success } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { PolarisConfigOutputObj } from '~/@types/v1/polaris-config';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
 
   import type { EnvOutput } from '~/@types/v1/env';
 

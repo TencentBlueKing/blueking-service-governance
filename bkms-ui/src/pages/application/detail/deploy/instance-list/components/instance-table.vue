@@ -40,7 +40,7 @@
       </Tag>
       <Tag
         v-if="envType && envTypeMap[envType]"
-        :theme="envTypeMap[envType]?.theme || ''"
+        :class="envTypeTagClassMap[envType]"
       >
         {{ envTypeMap[envType]?.name || '' }}
       </Tag>
@@ -517,7 +517,7 @@
   import HoverCopy from '~/components/hover-copy.vue';
   import StatusIcon from '~/components/status-icon.vue';
   import TableException from '~/components/table-exception.vue';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import { useGPAConfigPolling } from '~/composables/use-gpa-config-polling';
   import useTableCheckbox from '~/composables/use-table-checkbox';
   import useTableEmpty from '~/composables/use-table-empty';

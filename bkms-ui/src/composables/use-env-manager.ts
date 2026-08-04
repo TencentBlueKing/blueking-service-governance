@@ -38,15 +38,29 @@ export interface StandardEnvMap {
 
 interface EnvTypeConfig {
   name: string;
-  theme: TagTheme;
 }
 
-type TagTheme = 'danger' | 'info' | 'success' | 'warning';
-
 export const envTypeMap: Record<string, EnvTypeConfig> = {
-  development: { name: i18n.global.t('开发'), theme: 'info' },
-  test: { name: i18n.global.t('测试'), theme: 'warning' },
-  production: { name: i18n.global.t('生产'), theme: 'success' },
+  development: { name: i18n.global.t('开发') },
+  test: { name: i18n.global.t('测试') },
+  staging: { name: i18n.global.t('预发布') },
+  production: { name: i18n.global.t('生产') },
+};
+
+/** 环境分类无边框 Tag 颜色，统一供列表及选择器使用。 */
+export const envTypeTagClassMap: Record<string, string> = {
+  development: 'env-tag-development !border-none',
+  test: 'env-tag-test !border-none',
+  staging: 'env-tag-staging !border-none',
+  production: 'env-tag-production !border-none',
+};
+
+/** 环境分类有边框 Tag 颜色，仅供详情及分类说明使用。 */
+export const envTypeTagStrokeClassMap: Record<string, string> = {
+  development: 'env-tag-development',
+  test: 'env-tag-test',
+  staging: 'env-tag-staging',
+  production: 'env-tag-production',
 };
 
 /** 建立标准环境索引，避免 id/name/displayName 的 key 空间互相冲突。 */

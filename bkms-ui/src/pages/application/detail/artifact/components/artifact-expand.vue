@@ -75,7 +75,9 @@
               :key="envType"
               class="flex flex-wrap items-center gap-[4px]"
             >
-              <Tag :theme="getEnvTheme(envType)"> {{ getEnvTypeLabel(envType) }} </Tag>
+              <Tag :class="envTypeTagClassMap[envType]">
+                {{ getEnvTypeLabel(envType) }}
+              </Tag>
               <Tag
                 v-for="env in envs"
                 :key="env.envName"
@@ -136,7 +138,7 @@
   import { formatSize } from '~/common/util';
   import FieldItem from '~/components/field-item.vue';
   import SvgIcon from '~/components/svg-icon.vue';
-  import { envTypeMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import useTime from '~/composables/use-time';
   import { useAppDetail } from '~/stores/app-detail';
 
@@ -155,10 +157,6 @@
 
   function getEnvDisplayName(envName: string) {
     return props.envNameDisplayMap?.[envName] || envName;
-  }
-
-  function getEnvTheme(envType: string) {
-    return envTypeMap[envType]?.theme || 'info';
   }
 
   function getEnvTypeLabel(envType: string) {
