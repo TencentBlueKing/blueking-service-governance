@@ -17,6 +17,8 @@ const (
 	RefreshStatusProgressing = "progressing"
 	// RefreshStatusSuccess 刷新成功，数据可用于拓扑构图
 	RefreshStatusSuccess = "success"
+	// RefreshStatusPartialSuccess 部分成功，非成功部署但仍生成了可用于排障的资源快照
+	RefreshStatusPartialSuccess = "partial_success"
 	// RefreshStatusFailed 刷新失败，保留上一版可用数据
 	RefreshStatusFailed = "failed"
 )

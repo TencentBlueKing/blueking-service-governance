@@ -90,11 +90,21 @@ func (s *Service) GetTopology(ctx context.Context, appID, envName, trafficLaneNa
 		return nil, errors.Wrap(err, "build topology graph")
 	}
 
-	if snapshot.RefreshStatus == RefreshStatusFailed {
+	switch snapshot.RefreshStatus {
+	case RefreshStatusFailed:
 		graph.IsPartial = true
 		graph.Warnings = append(graph.Warnings, fmt.Sprintf(
 			"resource snapshot data may be stale (last refresh failed: %s)", snapshot.WarningSummary,
 		))
+	case RefreshStatusPartialSuccess:
+		graph.IsPartial = true
+		if snapshot.WarningSummary != "" {
+			graph.Warnings = append(graph.Warnings, fmt.Sprintf(
+				"resource snapshot is partial: %s", snapshot.WarningSummary,
+			))
+		} else {
+			graph.Warnings = append(graph.Warnings, "resource snapshot is partial")
+		}
 	}
 
 	return graph, nil

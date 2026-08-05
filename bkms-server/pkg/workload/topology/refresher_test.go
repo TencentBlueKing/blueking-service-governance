@@ -7,9 +7,15 @@ import (
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/storage/driver"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	helminfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
@@ -271,6 +277,167 @@ var _ = Describe("supplementOwnerRefChain", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clusterResources).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("Refresher", func() {
+	Describe("Refresh", func() {
+		var (
+			ctx   context.Context
+			store *ResourceSnapshotStoreMongo
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			var err error
+			// 构建真实 ResourceSnapshotStoreMongo，并在每个用例前清空测试数据
+			store, err = NewResourceSnapshotStoreMongo(database.Client(), database.Name())
+			Expect(err).NotTo(HaveOccurred())
+			err = store.DeleteAll(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			_ = store.DeleteAll(ctx)
+		})
+
+		It("should generate success snapshot when all declared resources exist", func() {
+			refresher := NewRefresher(store)
+
+			mockey.PatchConvey("all-declared-resources-exist", GinkgoT(), func() {
+				cfg := &cluster.Config{ClusterID: "test-cluster"}
+				mockey.Mock(cluster.NewConfig).Return(cfg).Build()
+				mockey.Mock(discovery.GetGroupVersionResource).Return(
+					&schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, nil,
+				).Build()
+				mockey.Mock(k8sclient.NewWithGVR).Return(&k8sclient.Client{}).Build()
+				mockey.Mock((*k8sclient.Client).Get).Return(&unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "v1",
+					"kind":       k8skind.CM,
+					"metadata": map[string]any{
+						"name":      "existing-cm",
+						"namespace": "default",
+					},
+				}}, nil).Build()
+
+				err := refresher.Refresh(ctx, RefreshArgs{
+					AppID:     "test-app",
+					EnvName:   "dev",
+					ClusterID: "test-cluster",
+					Namespace: "default",
+					ResourceKeys: []ResourceKeyEntry{
+						{Kind: k8skind.CM, Name: "existing-cm"},
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// 直接从真实 store 回读 snapshot 断言
+				got, err := store.Get(ctx, "test-app", "dev", "")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got).NotTo(BeNil())
+				Expect(got.RefreshStatus).To(Equal(RefreshStatusSuccess))
+				Expect(got.WarningSummary).To(BeEmpty())
+				// 首次刷新：DataVersion 从初始 0 推进到 1
+				Expect(got.DataVersion).To(Equal(int64(1)))
+				Expect(got.RefreshedAt).NotTo(BeZero())
+				Expect(got.Resources).To(HaveLen(1))
+				Expect(got.Resources[0].Name).To(Equal("existing-cm"))
+			})
+		})
+
+		It("should generate partial success snapshot when some declared resources are missing", func() {
+			refresher := NewRefresher(store)
+
+			mockey.PatchConvey("appmodel-partial-success", GinkgoT(), func() {
+				cfg := &cluster.Config{ClusterID: "test-cluster"}
+				mockey.Mock(cluster.NewConfig).Return(cfg).Build()
+				mockey.Mock(discovery.GetGroupVersionResource).Return(
+					&schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, nil,
+				).Build()
+				mockey.Mock(k8sclient.NewWithGVR).Return(&k8sclient.Client{}).Build()
+				mockey.Mock((*k8sclient.Client).Get).To(func(
+					_ *k8sclient.Client, _ context.Context, _, name string, _ metav1.GetOptions,
+				) (*unstructured.Unstructured, error) {
+					if name == "existing-cm" {
+						return &unstructured.Unstructured{Object: map[string]any{
+							"apiVersion": "v1",
+							"kind":       k8skind.CM,
+							"metadata": map[string]any{
+								"name":      "existing-cm",
+								"namespace": "default",
+							},
+						}}, nil
+					}
+					return nil, k8sclient.ErrResourceNotFound
+				}).Build()
+
+				err := refresher.Refresh(ctx, RefreshArgs{
+					AppID:     "test-app",
+					EnvName:   "dev",
+					ClusterID: "test-cluster",
+					Namespace: "default",
+					ResourceKeys: []ResourceKeyEntry{
+						{Kind: k8skind.CM, Name: "existing-cm"},
+						{Kind: k8skind.CM, Name: "missing-cm"},
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				got, err := store.Get(ctx, "test-app", "dev", "")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got).NotTo(BeNil())
+				Expect(got.RefreshStatus).To(Equal(RefreshStatusPartialSuccess))
+				Expect(got.WarningSummary).To(
+					Equal("partial success: 1 of 2 declared resources missing in cluster"),
+				)
+				Expect(got.DataVersion).To(Equal(int64(1)))
+				Expect(got.Resources).To(HaveLen(1))
+				Expect(got.Resources[0].Name).To(Equal("existing-cm"))
+			})
+		})
+
+		It("should keep previous snapshot when helm release is not found", func() {
+			previousSnapshot := &ResourceSnapshot{
+				AppID:         "test-app",
+				EnvName:       "dev",
+				ClusterID:     "test-cluster",
+				Namespace:     "default",
+				DataVersion:   3,
+				RefreshStatus: RefreshStatusSuccess,
+				Resources: []ResourceEntry{
+					{Kind: k8skind.CM, Namespace: "default", Name: "existing-cm"},
+				},
+			}
+			err := store.UpsertWithVersion(ctx, previousSnapshot, 2)
+			Expect(err).NotTo(HaveOccurred())
+
+			refresher := NewRefresher(store)
+
+			mockey.PatchConvey("helm-release-not-found", GinkgoT(), func() {
+				mockey.Mock(helminfra.NewActionConfiguration).Return(&action.Configuration{}, nil).Build()
+				mockey.Mock(helminfra.GetReleaseManifest).Return(
+					"", errors.Wrap(driver.ErrReleaseNotFound, "wrapped release error"),
+				).Build()
+
+				refreshErr := refresher.Refresh(ctx, RefreshArgs{
+					AppID:       "test-app",
+					EnvName:     "dev",
+					ClusterID:   "test-cluster",
+					Namespace:   "default",
+					ReleaseName: "missing-release",
+				})
+				Expect(refreshErr).NotTo(HaveOccurred())
+
+				got, err := store.Get(ctx, "test-app", "dev", "")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got).NotTo(BeNil())
+				Expect(got.DataVersion).To(Equal(int64(3)))
+				Expect(got.RefreshStatus).To(Equal(RefreshStatusSuccess))
+				Expect(got.WarningSummary).To(BeEmpty())
+				Expect(got.Resources).To(HaveLen(1))
+				Expect(got.Resources[0].Name).To(Equal("existing-cm"))
+			})
 		})
 	})
 })

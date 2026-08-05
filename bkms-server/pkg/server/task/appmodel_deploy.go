@@ -37,6 +37,21 @@ func pollingTrpcDeployStatus(ctx context.Context, args PollingTrpcDeployStatusAr
 	if err != nil {
 		return nil, errors.Wrapf(err, "get deploy record")
 	}
+
+	// 进入部署轮询后先异步触发一次资源范围刷新，稳定终态后仍会再刷新校准最终结果
+	var topologyResourceKeys []topology.ResourceKeyEntry
+	for _, rk := range record.ResourceKeys {
+		topologyResourceKeys = append(topologyResourceKeys, topology.ResourceKeyEntry{Kind: rk.Kind, Name: rk.Name})
+	}
+	go triggerTopologyRefreshAfterAppModelDeploy(
+		context.WithoutCancel(ctx),
+		args,
+		record.ClusterID,
+		record.Namespace,
+		topologyResourceKeys,
+		record.LabelSelector,
+	)
+
 	var buildAutoDeployOperator *autodeploy.Operator
 	if reg.BuildAutoDeployRecordStore != nil {
 		buildAutoDeployOperator, err = autodeploy.NewOperator(reg.BuildAutoDeployRecordStore)
@@ -150,70 +165,18 @@ func pollingTrpcDeployStatus(ctx context.Context, args PollingTrpcDeployStatusAr
 
 			// 部署成功时，记录应用到环境的关联
 			if record.Status == appmodeldeploy.StatusDeployed {
-				log.Infof(
-					ctx,
-					"deploy succeeded, start post-deploy hooks for workspace=%s app=%s env=%s lane=%s operator=%s",
-					args.WorkspaceID,
-					args.AppID,
-					args.EnvName,
-					args.TrafficLaneName,
-					record.Creator,
-				)
-				// 1. 记录应用到环境的部署关联（envStore 未初始化时仅告警，不阻断主流程）。
-				if reg.EnvStore == nil {
-					log.Errorf(ctx, "track env add app: env store is not initialized")
-				} else {
-					deploy.TrackEnvAddApp(ctx, reg.EnvStore, args.WorkspaceID, args.EnvName, args.AppID)
-				}
-
-				// 2. 异步将应用关联的告警策略同步到当前环境（失败仅记录日志，不影响部署结果）。
-				ws, wsErr := reg.WorkspaceStore.Get(ctx, args.WorkspaceID)
-				if wsErr != nil {
-					log.Errorf(ctx, "get workspace %s for alert sync failed: %v", args.WorkspaceID, wsErr)
-				}
-				var env *envmodel.Environment
-				if reg.EnvStore == nil {
-					log.Errorf(ctx, "env store is not initialized for alert sync")
-				} else {
-					env, err = reg.EnvStore.GetByName(ctx, args.WorkspaceID, args.AppID, args.EnvName)
-					if err != nil {
-						log.Errorf(ctx, "get env %s for alert sync failed: %v", args.EnvName, err)
-					}
-				}
-				if ws != nil && env != nil {
-					log.Infof(
-						ctx,
-						"dispatch alert strategy sync, workspace=%s app=%s env=%s envID=%s lane=%s operator=%s",
-						args.WorkspaceID, args.AppID, env.Name, env.ID.Hex(), args.TrafficLaneName, record.Creator,
-					)
-					// TODO(alertstrategy): 用 go 裸起 goroutine 无法保证跨 Pod 串行，
-					// 后续迁移到 asynq 任务队列以解决多 Pod 并发风险。
-					go alertstrategy.NewService(
-						reg.AlertStrategyStore, reg.EnvStore, reg.AppStore, reg.ResourceSnapshotStore,
-					).SyncStrategiesForAppInEnv(
-						context.WithoutCancel(ctx), ws, args.AppID, env.ID, args.TrafficLaneName, record.Creator,
-					)
-				} else {
-					log.Warnf(
-						ctx,
-						"skip alert strategy sync: ws or env is nil, workspace=%s app=%s envName=%s wsNil=%v envNil=%v",
-						args.WorkspaceID, args.AppID, args.EnvName, ws == nil, env == nil,
-					)
-				}
-				// 3. 部署成功后异步触发资源范围刷新
-				var resourceKeys []topology.ResourceKeyEntry
-				for _, rk := range record.ResourceKeys {
-					resourceKeys = append(resourceKeys, topology.ResourceKeyEntry{Kind: rk.Kind, Name: rk.Name})
-				}
-				go triggerTopologyRefreshAfterAppModelDeploy(
-					context.WithoutCancel(ctx),
-					args,
-					record.ClusterID,
-					record.Namespace,
-					resourceKeys,
-					record.LabelSelector,
-				)
+				handleAppModelDeploySucceeded(ctx, args, record)
 			}
+
+			// 部署进入稳定终态后异步触发资源范围刷新
+			go triggerTopologyRefreshAfterAppModelDeploy(
+				context.WithoutCancel(ctx),
+				args,
+				record.ClusterID,
+				record.Namespace,
+				topologyResourceKeys,
+				record.LabelSelector,
+			)
 
 			// 转换为操作结果 & 记录操作审计
 			opResult := lo.Ternary(
@@ -229,5 +192,66 @@ func pollingTrpcDeployStatus(ctx context.Context, args PollingTrpcDeployStatusAr
 			)
 			return &emptyResult, nil
 		}
+	}
+}
+
+// handleAppModelDeploySucceeded 处理 AppModel 部署成功后的后置动作
+// 包括记录应用与环境的部署关联，以及异步同步当前环境下的告警策略；这些动作失败时只记录日志，不阻断部署轮询结果
+func handleAppModelDeploySucceeded(
+	ctx context.Context,
+	args PollingTrpcDeployStatusArgs,
+	record *appmodeldeploy.Record,
+) {
+	reg := storereg.G()
+
+	log.Infof(
+		ctx,
+		"deploy succeeded, start post-deploy hooks for workspace=%s app=%s env=%s lane=%s operator=%s",
+		args.WorkspaceID,
+		args.AppID,
+		args.EnvName,
+		args.TrafficLaneName,
+		record.Creator,
+	)
+	// 1. 记录应用到环境的部署关联（envStore 未初始化时仅告警，不阻断主流程）
+	if reg.EnvStore == nil {
+		log.Errorf(ctx, "track env add app: env store is not initialized")
+	} else {
+		deploy.TrackEnvAddApp(ctx, reg.EnvStore, args.WorkspaceID, args.EnvName, args.AppID)
+	}
+
+	// 2. 异步将应用关联的告警策略同步到当前环境（失败仅记录日志，不影响部署结果）
+	ws, wsErr := reg.WorkspaceStore.Get(ctx, args.WorkspaceID)
+	if wsErr != nil {
+		log.Errorf(ctx, "get workspace %s for alert sync failed: %v", args.WorkspaceID, wsErr)
+	}
+	var env *envmodel.Environment
+	if reg.EnvStore == nil {
+		log.Errorf(ctx, "env store is not initialized for alert sync")
+	} else {
+		env, wsErr = reg.EnvStore.GetByName(ctx, args.WorkspaceID, args.AppID, args.EnvName)
+		if wsErr != nil {
+			log.Errorf(ctx, "get env %s for alert sync failed: %v", args.EnvName, wsErr)
+		}
+	}
+	if ws != nil && env != nil {
+		log.Infof(
+			ctx,
+			"dispatch alert strategy sync, workspace=%s app=%s env=%s envID=%s lane=%s operator=%s",
+			args.WorkspaceID, args.AppID, env.Name, env.ID.Hex(), args.TrafficLaneName, record.Creator,
+		)
+		// TODO(alertstrategy): 用 go 裸起 goroutine 无法保证跨 Pod 串行，
+		// 后续迁移到 asynq 任务队列以解决多 Pod 并发风险
+		go alertstrategy.NewService(
+			reg.AlertStrategyStore, reg.EnvStore, reg.AppStore, reg.ResourceSnapshotStore,
+		).SyncStrategiesForAppInEnv(
+			context.WithoutCancel(ctx), ws, args.AppID, env.ID, args.TrafficLaneName, record.Creator,
+		)
+	} else {
+		log.Warnf(
+			ctx,
+			"skip alert strategy sync: ws or env is nil, workspace=%s app=%s envName=%s wsNil=%v envNil=%v",
+			args.WorkspaceID, args.AppID, args.EnvName, ws == nil, env == nil,
+		)
 	}
 }
