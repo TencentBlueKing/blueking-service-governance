@@ -7,7 +7,7 @@
         content: item.disabledTip,
         disabled: !item.disabled || !item.disabledTip,
       }"
-      class="flex items-center gap-[12px] p-[16px] rounded-[2px] border transition-all duration-200"
+      class="flex items-center gap-[12px] px-[16px] py-[12px] rounded-[4px] border transition-all duration-200"
       :class="[
         item.disabled
           ? 'border-[#DCDEE5] bg-[#FAFBFD] cursor-not-allowed opacity-60'
@@ -28,7 +28,7 @@
       </div>
       <div class="flex-1 min-w-0">
         <div
-          class="text-[14px] font-medium leading-[22px]"
+          class="text-[12px] leading-[20px] font-bold"
           :class="[modelValue === item.value ? 'text-[#3A84FF]' : 'text-[#313238]']"
         >
           {{ item.label }}
