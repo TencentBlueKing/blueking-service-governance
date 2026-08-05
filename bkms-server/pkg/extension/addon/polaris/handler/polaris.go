@@ -487,7 +487,7 @@ func (h *Handler) PutEnvWeight(c *gin.Context) {
 	}
 
 	// 权重更新仅允许在已部署的环境或配置作用域内的环境中进行
-	// 其中已部署的环境讲自动同步到集群，没部署的则存入配置，下发时使用
+	// 其中已部署的环境将自动同步到集群，没部署的则存入配置，下发时使用
 	if !config.IsAvailableInEnv(uriInput.EnvName) &&
 		!config.GetEnvState(uriInput.EnvName).IsDeployed() {
 		bkerrs.AbortWithErr(c, bkerrs.Errorf(

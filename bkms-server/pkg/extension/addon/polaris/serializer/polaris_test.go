@@ -3,6 +3,7 @@ package serializer_test
 import (
 	"time"
 
+	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -247,4 +248,28 @@ var _ = Describe("PutEnvWeightInput", func() {
 
 		Expect(validate.Struct(input)).NotTo(Succeed())
 	})
+})
+
+var _ = Describe("AppConfigEnvNameURIInput", func() {
+	DescribeTable(
+		"URI slug validation",
+		func(envName string, wantErr bool) {
+			input := serializer.AppConfigEnvNameURIInput{
+				AppID:      "demo-app",
+				ConfigName: "demo-config",
+				EnvName:    envName,
+			}
+
+			err := binding.Validator.ValidateStruct(input)
+			if wantErr {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed on the 'uri_slug' tag"))
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+		},
+		Entry("accepts a URI slug environment name", "env_123-Test", false),
+		Entry("rejects an environment name containing a dot", "env.test", true),
+		Entry("rejects an environment name containing a dollar sign", "env$test", true),
+	)
 })

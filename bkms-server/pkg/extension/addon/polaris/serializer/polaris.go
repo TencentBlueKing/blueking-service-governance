@@ -337,7 +337,7 @@ type AppConfigEnvNameURIInput struct {
 	// 配置名称
 	ConfigName string `uri:"configName" binding:"required,min=1"`
 	// 环境名称
-	EnvName string `uri:"envName" binding:"required,min=1"`
+	EnvName string `uri:"envName" binding:"required,uri_slug"`
 }
 
 // PutEnvWeightInput is the JSON input for updating an environment's weight.
