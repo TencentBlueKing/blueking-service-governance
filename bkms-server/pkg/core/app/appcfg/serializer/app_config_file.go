@@ -124,8 +124,6 @@ type ListAppConfigFilesQueryInput struct {
 type UpdateAppConfigFileContentInput struct {
 	// 应用配置文件 content
 	Content string `json:"content"`
-	// 是否仅预览结果，不真正保存变更
-	PreviewOnly bool `json:"previewOnly"`
 	// 版本描述
 	Description string `json:"description"`
 	// 编辑开始时的当前版本号，用于乐观锁冲突检测
@@ -136,8 +134,6 @@ type UpdateAppConfigFileContentInput struct {
 type UpdateAppConfigFileOverlayContentInput struct {
 	// 应用配置文件 overlayContent
 	OverlayContent string `json:"overlayContent"`
-	// 是否仅预览结果，不真正保存变更
-	PreviewOnly bool `json:"previewOnly"`
 	// 版本描述
 	Description string `json:"description"`
 	// 编辑开始时的当前版本号，用于乐观锁冲突检测

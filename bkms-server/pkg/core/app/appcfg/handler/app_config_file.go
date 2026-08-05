@@ -396,7 +396,6 @@ func (h *Handler) UpdateAppConfigFileContent(c *gin.Context) {
 		uriInput.ID,
 		input.Content,
 		appcfg.AppConfigFileTypeNormal,
-		input.PreviewOnly,
 		input.Description,
 		input.CurrentVersion,
 	)
@@ -436,7 +435,6 @@ func (h *Handler) UpdateAppConfigFileOverlayContent(c *gin.Context) {
 		uriInput.ID,
 		input.OverlayContent,
 		appcfg.AppConfigFileTypeOverlay,
-		input.PreviewOnly,
 		input.Description,
 		input.CurrentVersion,
 	)
@@ -515,26 +513,23 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 	ginutils.OK(c, slz.PreviewOverlayMergeOutput{Data: compiledContent})
 }
 
-// updateContentOrOverlay validates, compiles, and optionally persists file content changes.
+// updateContentOrOverlay validates, compiles, and persists file content changes.
 //
 // - appID/id: identify the target app config file to load and permission-check.
 // - fileType: selects whether the incoming payload should update `content` or `overlayContent`.
-// - previewOnly: when true, only compile and validate the result without writing a new version.
-// - description/expectedCurrentVersion: only participate in version creation when persisting changes.
+// - description/expectedCurrentVersion: participate in version creation when persisting changes.
 func (h *Handler) updateContentOrOverlay(
 	ctx context.Context,
 	appID string,
 	id string,
 	content string,
 	fileType appcfg.AppConfigFileType,
-	previewOnly bool,
 	description string,
 	expectedCurrentVersion *int64,
 ) (*slz.UpdateAppConfigFileContentOutput, error) {
 	if fileType != appcfg.AppConfigFileTypeNormal && fileType != appcfg.AppConfigFileTypeOverlay {
 		return nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid values file type: %s", fileType)
 	}
-
 	app, acf, err := h.validateAndGetAppConfigFile(ctx, appID, id, perm.TypeEdit)
 	if err != nil {
 		return nil, err
@@ -570,36 +565,34 @@ func (h *Handler) updateContentOrOverlay(
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating file content")
 	}
 
-	if !previewOnly {
-		operator := auth.MustGetUser(ctx).ID
-		cfgService := appcfg.NewAppConfigFileService(
-			h.registry.AppConfigFileStore,
-			h.registry.AppConfigFileVersionStore,
-		)
-		if err = cfgService.UpdateFile(
-			ctx,
-			acf,
-			operator,
-			appcfg.UpdateCfgFileOptions{
-				OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
-				Description:            description,
-				ExpectedCurrentVersion: expectedCurrentVersion,
-			},
-		); err != nil {
-			if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
-				return nil, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex())
-			}
-			return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create app config file version")
+	operator := auth.MustGetUser(ctx).ID
+	cfgService := appcfg.NewAppConfigFileService(
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileVersionStore,
+	)
+	if err = cfgService.UpdateFile(
+		ctx,
+		acf,
+		operator,
+		appcfg.UpdateCfgFileOptions{
+			OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
+			Description:            description,
+			ExpectedCurrentVersion: expectedCurrentVersion,
+		},
+	); err != nil {
+		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
+			return nil, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex())
 		}
-		h.addAppConfigFileAudit(
-			ctx,
-			app,
-			acf.EnvName,
-			audit.OperationTypeUpdate,
-			buildAppConfigFileAuditData(&oldAcf),
-			buildAppConfigFileAuditData(acf),
-		)
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create app config file version")
 	}
+	h.addAppConfigFileAudit(
+		ctx,
+		app,
+		acf.EnvName,
+		audit.OperationTypeUpdate,
+		buildAppConfigFileAuditData(&oldAcf),
+		buildAppConfigFileAuditData(acf),
+	)
 
 	return &slz.UpdateAppConfigFileContentOutput{
 		CompiledContent: compiledContent,

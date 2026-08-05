@@ -456,7 +456,6 @@ func (c *SvcBasedClient) UpdateAppConfigFileContent(
 	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-files/%s/content", appID, fileID)
 	body := map[string]any{
 		"content":        opts.Content,
-		"previewOnly":    false,
 		"description":    opts.Description,
 		"currentVersion": opts.CurrentVersion,
 	}
@@ -482,7 +481,6 @@ func (c *SvcBasedClient) UpdateAppConfigFileOverlayContent(
 	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-files/%s/overlay-content", appID, fileID)
 	body := map[string]any{
 		"overlayContent": opts.Content,
-		"previewOnly":    false,
 		"description":    opts.Description,
 		"currentVersion": opts.CurrentVersion,
 	}

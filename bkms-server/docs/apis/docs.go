@@ -26498,10 +26498,6 @@ const docTemplate = `{
                 "description": {
                     "description": "版本描述",
                     "type": "string"
-                },
-                "previewOnly": {
-                    "description": "是否仅预览结果，不真正保存变更",
-                    "type": "boolean"
                 }
             }
         },
@@ -26583,10 +26579,6 @@ const docTemplate = `{
                 "overlayContent": {
                     "description": "应用配置文件 overlayContent",
                     "type": "string"
-                },
-                "previewOnly": {
-                    "description": "是否仅预览结果，不真正保存变更",
-                    "type": "boolean"
                 }
             }
         },
