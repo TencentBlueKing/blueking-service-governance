@@ -74,25 +74,14 @@ func makeWsCompKey(workspaceID, name string) wsCompKey {
 }
 
 // Run migrates tkeRouteEni mounts to AppSpec. dryRun=true only reports counts.
-func (m *Migrator) Run(
-	ctx context.Context, dryRun bool,
-) (Result, error) {
+func (m *Migrator) Run(ctx context.Context, dryRun bool) (Result, error) {
 	result := Result{DryRun: dryRun}
-	enabled := true
-	enabledSpec := &appspec.TkeRouteEniSpec{Enabled: &enabled}
-	seenApp := map[string]struct{}{}
 
 	wsComps, err := m.listWorkspaceTkeRouteEni(ctx)
 	if err != nil {
 		return result, err
 	}
-	// workspace components are unique by (workspaceID, name), not name alone.
-	wsByKey := make(map[wsCompKey]*workspace.Component, len(wsComps))
-	wsNames := make([]string, 0, len(wsComps))
-	for _, c := range wsComps {
-		wsByKey[makeWsCompKey(c.WorkspaceID, c.Name)] = c
-		wsNames = append(wsNames, c.Name)
-	}
+	wsByKey, wsNames := indexWorkspaceComps(wsComps)
 
 	appModels, err := m.listAffectedAppModels(ctx, wsNames)
 	if err != nil {
@@ -103,80 +92,159 @@ func (m *Migrator) Run(
 		return result, err
 	}
 
-	// 1) Write AppSpec + remove app components / refs.
+	if err = m.migrateAppComponents(ctx, dryRun, appModels, appWorkspaceIDs, wsByKey, &result); err != nil {
+		return result, err
+	}
+	if err = m.removeWorkspaceComponents(ctx, dryRun, wsComps, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func indexWorkspaceComps(
+	wsComps []*workspace.Component,
+) (map[wsCompKey]*workspace.Component, []string) {
+	// workspace components are unique by (workspaceID, name), not name alone.
+	wsByKey := make(map[wsCompKey]*workspace.Component, len(wsComps))
+	wsNames := make([]string, 0, len(wsComps))
+	for _, c := range wsComps {
+		wsByKey[makeWsCompKey(c.WorkspaceID, c.Name)] = c
+		wsNames = append(wsNames, c.Name)
+	}
+	return wsByKey, wsNames
+}
+
+// resolveTargetEnvs returns AppSpec env targets for one app component.
+// ok=false means the component is unrelated or cannot be matched in this workspace.
+func resolveTargetEnvs(
+	comp *component.Component,
+	workspaceID string,
+	wsByKey map[wsCompKey]*workspace.Component,
+) (envNames []string, ok bool, err error) {
+	switch {
+	case comp.Type == tkeRouteEniComponentName && comp.RefWorkspaceCompName == "":
+		return []string{appspec.DefaultEnvName}, true, nil
+	case comp.RefWorkspaceCompName != "":
+		if workspaceID == "" {
+			return nil, false, fmt.Errorf("application workspace not found for ref %s", comp.RefWorkspaceCompName)
+		}
+		wsComp, found := wsByKey[makeWsCompKey(workspaceID, comp.RefWorkspaceCompName)]
+		if !found {
+			// Same ref name may exist in another workspace; ignore non-local matches.
+			return nil, false, nil
+		}
+		switch wsComp.ScopeType {
+		case component.ScopeTypeGlobal:
+			return []string{appspec.DefaultEnvName}, true, nil
+		case component.ScopeTypeEnvironment:
+			return wsComp.ScopeEnvNames, true, nil
+		default:
+			return nil, false, nil
+		}
+	default:
+		return nil, false, nil
+	}
+}
+
+func (m *Migrator) migrateAppComponents(
+	ctx context.Context,
+	dryRun bool,
+	appModels []*appmodel.AppModel,
+	appWorkspaceIDs map[string]string,
+	wsByKey map[wsCompKey]*workspace.Component,
+	result *Result,
+) error {
+	enabled := true
+	enabledSpec := &appspec.TkeRouteEniSpec{Enabled: &enabled}
+	seenApp := map[string]struct{}{}
+
 	for _, am := range appModels {
 		workspaceID := appWorkspaceIDs[am.AppID]
 		for _, comp := range am.Components {
 			if comp == nil {
 				continue
 			}
-			var envNames []string
-			switch {
-			case comp.Type == tkeRouteEniComponentName && comp.RefWorkspaceCompName == "":
-				envNames = []string{appspec.DefaultEnvName}
-			case comp.RefWorkspaceCompName != "":
-				if workspaceID == "" {
-					return result, fmt.Errorf("application %s not found for workspace component ref", am.AppID)
-				}
-				wsComp, ok := wsByKey[makeWsCompKey(workspaceID, comp.RefWorkspaceCompName)]
-				if !ok {
-					// Same ref name may exist in another workspace; ignore non-local matches.
-					continue
-				}
-				switch wsComp.ScopeType {
-				case component.ScopeTypeGlobal:
-					envNames = []string{appspec.DefaultEnvName}
-				case component.ScopeTypeEnvironment:
-					envNames = wsComp.ScopeEnvNames
-				}
-			default:
+			envNames, ok, err := resolveTargetEnvs(comp, workspaceID, wsByKey)
+			if err != nil {
+				return fmt.Errorf("application %s: %w", am.AppID, err)
+			}
+			if !ok {
 				continue
 			}
-
-			for _, envName := range envNames {
-				if dryRun {
-					result.AppSpecWrites++
-					continue
-				}
-				wrote, enableErr := m.enableTkeRouteEni(ctx, am.AppID, envName, enabledSpec)
-				if enableErr != nil {
-					return result, enableErr
-				}
-				if wrote {
-					result.AppSpecWrites++
-					log.Infof(ctx, "set tkeRouteEni.enabled=true appID=%s envName=%q", am.AppID, envName)
-				}
+			if len(envNames) == 0 {
+				log.Warnf(ctx, "skip appID=%s component=%s: no target envs to migrate", am.AppID, comp.Name)
+				continue
 			}
-
-			if dryRun {
-				result.AppComponentsRemoved++
-			} else if err = m.appModelStore.RemoveComponent(ctx, am.AppID, comp.Name); err != nil {
-				return result, errors.Wrapf(err, "remove component appID=%s name=%s", am.AppID, comp.Name)
-			} else {
-				result.AppComponentsRemoved++
-				log.Infof(ctx, "removed app component appID=%s name=%s", am.AppID, comp.Name)
+			if err = m.writeAppSpecEnvs(ctx, dryRun, am.AppID, envNames, enabledSpec, result); err != nil {
+				return err
 			}
-			if _, ok := seenApp[am.AppID]; !ok {
+			if err = m.removeAppComponent(ctx, dryRun, am.AppID, comp.Name, result); err != nil {
+				return err
+			}
+			if _, exists := seenApp[am.AppID]; !exists {
 				seenApp[am.AppID] = struct{}{}
 				result.AppIDs = append(result.AppIDs, am.AppID)
 			}
 		}
 	}
+	return nil
+}
 
-	// 2) Remove workspace components.
+func (m *Migrator) writeAppSpecEnvs(
+	ctx context.Context,
+	dryRun bool,
+	appID string,
+	envNames []string,
+	spec *appspec.TkeRouteEniSpec,
+	result *Result,
+) error {
+	for _, envName := range envNames {
+		if dryRun {
+			result.AppSpecWrites++
+			continue
+		}
+		wrote, err := m.enableTkeRouteEni(ctx, appID, envName, spec)
+		if err != nil {
+			return err
+		}
+		if wrote {
+			result.AppSpecWrites++
+			log.Infof(ctx, "set tkeRouteEni.enabled=true appID=%s envName=%q", appID, envName)
+		}
+	}
+	return nil
+}
+
+func (m *Migrator) removeAppComponent(
+	ctx context.Context, dryRun bool, appID, compName string, result *Result,
+) error {
+	if dryRun {
+		result.AppComponentsRemoved++
+		return nil
+	}
+	if err := m.appModelStore.RemoveComponent(ctx, appID, compName); err != nil {
+		return errors.Wrapf(err, "remove component appID=%s name=%s", appID, compName)
+	}
+	result.AppComponentsRemoved++
+	log.Infof(ctx, "removed app component appID=%s name=%s", appID, compName)
+	return nil
+}
+
+func (m *Migrator) removeWorkspaceComponents(
+	ctx context.Context, dryRun bool, wsComps []*workspace.Component, result *Result,
+) error {
 	for _, wsComp := range wsComps {
 		if dryRun {
 			result.WorkspaceComponentsRemoved++
 			continue
 		}
-		if err = m.wsCompStore.Remove(ctx, wsComp.ID); err != nil {
-			return result, errors.Wrapf(err, "remove workspace component %s/%s", wsComp.WorkspaceID, wsComp.Name)
+		if err := m.wsCompStore.Remove(ctx, wsComp.ID); err != nil {
+			return errors.Wrapf(err, "remove workspace component %s/%s", wsComp.WorkspaceID, wsComp.Name)
 		}
 		result.WorkspaceComponentsRemoved++
 		log.Infof(ctx, "removed workspace component workspaceID=%s name=%s", wsComp.WorkspaceID, wsComp.Name)
 	}
-
-	return result, nil
+	return nil
 }
 
 func (m *Migrator) loadAppWorkspaceIDs(
