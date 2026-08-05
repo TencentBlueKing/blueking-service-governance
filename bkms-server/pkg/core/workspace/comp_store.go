@@ -270,7 +270,7 @@ func (s *WorkspaceCompsStoreMongo) Remove(ctx context.Context, compIDs ...bson.O
 		return err
 	}
 	if ret.DeletedCount == 0 {
-		return errors.New("component not found")
+		return ErrComponentNotFound
 	}
 
 	if len(removedComps) > 0 {

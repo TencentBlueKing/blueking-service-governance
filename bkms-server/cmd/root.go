@@ -20,6 +20,7 @@ func init() {
 	rootCmd.AddCommand(NewMigrateCmd())
 	rootCmd.AddCommand(migration.NewLoadBuiltinComponentCmd())
 	rootCmd.AddCommand(migration.NewMigrateComponentPatchCmd())
+	rootCmd.AddCommand(migration.NewMigrateTkeRouteEniComponentCmd())
 	rootCmd.AddCommand(migration.NewMigrateIAMSystemModelCmd())
 	rootCmd.AddCommand(migration.NewCleanupExpiredWorkspaceTempAdminsCmd())
 	rootCmd.AddCommand(migration.NewCleanupOrphanAppConfigFileVersionsCmd())
