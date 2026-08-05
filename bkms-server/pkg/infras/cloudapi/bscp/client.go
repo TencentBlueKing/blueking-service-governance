@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -74,6 +75,27 @@ type Client interface {
 type ApiClient struct {
 	define.BkApiClient
 	user auth.User
+}
+
+// ErrNoPermission indicates BSCP rejected the request with an auth/perm status.
+var ErrNoPermission = errors.New("bscp no permission")
+
+func wrapOperationHTTPError(operationName string, statusCode int, errMsg []byte) error {
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return errors.Wrapf(
+			ErrNoPermission,
+			"call bscp api %s failed, http code: %d, err: %s",
+			operationName,
+			statusCode,
+			errMsg,
+		)
+	}
+	return errors.Errorf(
+		"call bscp api %s failed, http code: %d, err: %s",
+		operationName,
+		statusCode,
+		errMsg,
+	)
 }
 
 // New 创建 BSCP API 客户端，根据配置返回真实客户端或 stub 客户端
@@ -154,12 +176,7 @@ func (c *ApiClient) handleOperation(
 
 	if !httpresp.IsSuccess(resp) {
 		errMsg, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf(
-			"call bcs api %s failed, http code: %d, err: %s",
-			op.FullName(),
-			resp.StatusCode,
-			errMsg,
-		)
+		return nil, wrapOperationHTTPError(op.FullName(), resp.StatusCode, errMsg)
 	}
 
 	return result, nil

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/serializer"
@@ -10,6 +11,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
+
+func wrapBSCPAPIError(err error, msg string) error {
+	if errors.Is(err, bscp.ErrNoPermission) {
+		return bkerrs.WrapBSCPNoPermission(err, msg)
+	}
+	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, msg)
+}
 
 // ListBSCPBizs 获取用户的 BSCP 业务列表
 //
@@ -32,7 +40,7 @@ func (h *Handler) ListBSCPBizs(c *gin.Context) {
 
 	bizs, err := client.ListUserBizs(ctx)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bscp user bizs"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp user bizs"))
 		return
 	}
 
@@ -72,7 +80,7 @@ func (h *Handler) ListBSCPServices(c *gin.Context) {
 
 	services, err := client.ListBizServices(ctx, uriInput.BizID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bscp biz services"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp biz services"))
 		return
 	}
 
@@ -116,7 +124,7 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 
 	versions, err := client.ListServiceVersions(ctx, uriInput.BizID, uriInput.ServiceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bscp service versions"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp service versions"))
 		return
 	}
 
@@ -132,7 +140,7 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 
 	cfgs, err := client.ListServiceConfigs(ctx, uriInput.BizID, uriInput.ServiceID, ver.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bscp service configs"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp service configs"))
 		return
 	}
 
@@ -182,7 +190,7 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 
 	versions, err := client.ListServiceVersions(ctx, uriInput.BizID, uriInput.ServiceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bscp service versions"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp service versions"))
 		return
 	}
 
@@ -198,25 +206,25 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 
 	cfg, err := client.GetServiceConfig(ctx, uriInput.BizID, uriInput.ServiceID, ver.ID, uriInput.ConfigID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscp service config"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "get bscp service config"))
 		return
 	}
 
 	content, err := cfg.Content(ctx)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscp config content"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "get bscp config content"))
 		return
 	}
 
 	biz, err := client.GetBiz(ctx, uriInput.BizID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscp biz"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "get bscp biz"))
 		return
 	}
 
 	svc, err := client.GetBizService(ctx, uriInput.BizID, uriInput.ServiceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscp service"))
+		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "get bscp service"))
 		return
 	}
 

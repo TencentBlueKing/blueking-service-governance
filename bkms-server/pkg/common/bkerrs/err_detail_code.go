@@ -23,6 +23,9 @@ const (
 	// ErrDetailCodeImageRepositoryAuthRequired 删除镜像时镜像仓库鉴权缺失或失败
 	ErrDetailCodeImageRepositoryAuthRequired ErrDetailCode = "IMAGE_REPOSITORY_AUTH_REQUIRED"
 
+	// ErrDetailCodeBSCPNoPermission BSCP 服务无权限
+	ErrDetailCodeBSCPNoPermission ErrDetailCode = "BSCP_NO_PERMISSION"
+
 	// ErrDetailCodeComponentNotInstalled 环境所在集群未安装所需的组件（通过 module 区分具体组件）
 	ErrDetailCodeComponentNotInstalled ErrDetailCode = "COMPONENT_NOT_INSTALLED"
 
