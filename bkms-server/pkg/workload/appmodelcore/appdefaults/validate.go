@@ -7,9 +7,12 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
 
-// ValidateRule requires a valid environment type and exactly one complete
-// AppSpec section.
+// ValidateRule requires a valid environment type and exactly one complete,
+// supported AppSpec section.
 func ValidateRule(rule *Rule) error {
+	if rule.ConfigType != appspec.AppSpecSectionResources && rule.ConfigType != appspec.AppSpecSectionDevMode {
+		return fmt.Errorf("%w: unsupported config type %q", ErrInvalidRule, rule.ConfigType)
+	}
 	if !bkmsenv.IsValidEnvType(rule.EnvType) {
 		return fmt.Errorf("%w: envType must be a valid environment type", ErrInvalidRule)
 	}
@@ -48,18 +51,9 @@ func validateSpecCompleteness(configType ConfigType, spec *appspec.AppSpec) erro
 			r.MemoryLimits == nil {
 			return fmt.Errorf("%w: resources rule must contain all fields", ErrInvalidRule)
 		}
-	case appspec.AppSpecSectionUpdateStrategy:
-		s := spec.UpdateStrategy
-		if s.MaxUnavailable == nil || s.MaxSurge == nil {
-			return fmt.Errorf("%w: updateStrategy rule must contain all fields", ErrInvalidRule)
-		}
 	case appspec.AppSpecSectionDevMode:
 		if spec.DevMode.Enabled == nil {
 			return fmt.Errorf("%w: devMode rule must contain enabled", ErrInvalidRule)
-		}
-	case appspec.AppSpecSectionTkeRouteEni:
-		if spec.TkeRouteEni.Enabled == nil {
-			return fmt.Errorf("%w: tkeRouteEni rule must contain enabled", ErrInvalidRule)
 		}
 	}
 	return nil

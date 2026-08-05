@@ -7,6 +7,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -85,21 +86,25 @@ var _ = Describe("tRPC application service", func() {
 	It("initializes AppModel and AppSpecs from platform defaults and workspace rules", func() {
 		err := ruleStore.Create(ctx, &appdefaults.Rule{
 			WorkspaceID: workspace.ID,
-			ConfigType:  appspec.AppSpecSectionLabels,
+			ConfigType:  appspec.AppSpecSectionResources,
 			EnvType:     environment.Type,
 			Spec: &appspec.AppSpec{
-				Labels: &appspec.LabelsSpec{Labels: map[string]string{"tier": "production"}},
+				Resources: &appspec.ResourcesSpec{
+					Replicas:       lo.ToPtr(int32(2)),
+					CPURequests:    lo.ToPtr("500m"),
+					CPULimits:      lo.ToPtr("1"),
+					MemoryRequests: lo.ToPtr("1Gi"),
+					MemoryLimits:   lo.ToPtr("2Gi"),
+				},
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
 		err = ruleStore.Create(ctx, &appdefaults.Rule{
 			WorkspaceID: workspace.ID,
-			ConfigType:  appspec.AppSpecSectionAnnotations,
+			ConfigType:  appspec.AppSpecSectionDevMode,
 			EnvType:     environment.Type,
 			Spec: &appspec.AppSpec{
-				Annotations: &appspec.AnnotationsSpec{
-					Annotations: map[string]string{"owner": "platform"},
-				},
+				DevMode: &appspec.DevModeSpec{Enabled: lo.ToPtr(true)},
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -155,9 +160,9 @@ var _ = Describe("tRPC application service", func() {
 
 		envSpec, err := appSpecStore.Get(ctx, application.ID, environment.Name)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(envSpec.Labels.Labels).To(Equal(map[string]string{"tier": "production"}))
-		Expect(envSpec.Annotations.Annotations).To(Equal(map[string]string{"owner": "platform"}))
-		Expect(envSpec.Resources).To(BeNil())
+		Expect(*envSpec.Resources.Replicas).To(Equal(int32(2)))
+		Expect(*envSpec.Resources.CPURequests).To(Equal("500m"))
+		Expect(*envSpec.DevMode.Enabled).To(BeTrue())
 		Expect(envSpec.UpdateStrategy).To(BeNil())
 	})
 

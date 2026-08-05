@@ -100,17 +100,13 @@ demo-workspace + resources + production
 | section | API 路径 | 内容 |
 |---------|----------|------|
 | `resources` | `resources` | 实例数、CPU 和内存规格 |
-| `updateStrategy` | `update-strategy` | 滚动更新策略 |
 | `devMode` | `dev-mode` | 开发模式 |
-| `lifecycle` | `lifecycle` | 生命周期处理器 |
-| `probe` | `probe` | 健康检查探针 |
-| `labels` | `labels` | Pod Labels |
-| `annotations` | `annotations` | Pod Annotations |
-| `tkeRouteEni` | `tke-route-eni` | TKE Route ENI 开关 |
+
+第一期只开放 `resources` 和 `devMode` 的规则接口。
 
 ### 规则的完整性
 
-每条规则只能包含 URL 所表示的一个 section，并且需要提交该 section 的完整配置。例如，资源规格规则必须同时包含实例数、CPU Requests/Limits 和 Memory Requests/Limits，不能只提交其中一个字段。
+每次接口请求只能包含 URL 所表示的一个 section，并且需要提交该 section 的完整配置。例如，资源规格规则必须同时包含实例数、CPU Requests/Limits 和 Memory Requests/Limits，不能只提交其中一个字段。
 
 更新规则时会整体替换原有 section，不做字段级合并。
 
@@ -124,10 +120,9 @@ demo-workspace + resources + production
 | `test` | `test` |
 | `prod` | `production` |
 
-Workspace 配置了三条规则：
+Workspace 配置了两类规则：
 
 - `production` 的资源规格规则。
-- `production` 的 Labels 规则。
 - `test` 的开发模式规则。
 
 创建一个新的 tRPC 或 TAF 应用后，会得到：
@@ -137,13 +132,13 @@ Workspace 配置了三条规则：
 | 默认 AppSpec | 平台资源规格、平台更新策略 |
 | `dev` 环境 AppSpec | 不创建，因为没有规则命中 |
 | `test` 环境 AppSpec | 开发模式 |
-| `prod` 环境 AppSpec | 资源规格、Labels |
+| `prod` 环境 AppSpec | 资源规格 |
 
 `prod` 环境的资源规格来自 Workspace 规则；默认 AppSpec 中的平台资源规格仍然保持不变。两者是不同的 AppSpec 记录。
 
 ## API
 
-每个 section 都有独立的增删改查接口：
+第一期的 `resources` 和 `dev-mode` 各自保留独立的增删改查接口：
 
 ```text
 GET    /workspaces/:workspaceID/app-spec/:section
@@ -203,9 +198,9 @@ DELETE /workspaces/:workspaceID/app-spec/:section/:ruleID
 
 - `envType` 必须是支持的标准环境类型。
 - `spec` 必须存在。
-- `spec` 只能包含当前接口对应的 section。
+- 请求中的 `spec` 只能包含当前接口对应的 section。
 - 需要完整提交的字段不能缺失。
-- CPU、内存、更新策略等字段需要通过 AppSpec 原有校验。
+- CPU、内存和开发模式等字段需要通过 AppSpec 原有校验。
 
 请求内容不合法时返回 `400`，规则不存在时返回 `404`。
 
@@ -239,7 +234,6 @@ MongoDB 使用唯一索引 `(workspaceID, configType, envType)` 防止同一规�
 | `model.go` | Rule 数据结构和 section 写入逻辑 |
 | `validate.go` | 规则内容校验 |
 | `service.go` | 规则 CRUD 和创建配置解析入口 |
-| `resolver.go` | 生成默认 AppSpec 和环境 AppSpec |
 | `store.go` | MongoDB 读写和唯一索引 |
 | `router.go` | API 路由 |
 | `handler/` | 各 section 的接口处理和审计 |

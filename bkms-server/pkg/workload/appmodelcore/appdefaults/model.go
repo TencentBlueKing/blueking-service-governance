@@ -51,19 +51,7 @@ func (r Rule) applyTo(target *appspec.AppSpec) {
 	switch r.ConfigType {
 	case appspec.AppSpecSectionResources:
 		target.Resources = r.Spec.Resources
-	case appspec.AppSpecSectionUpdateStrategy:
-		target.UpdateStrategy = r.Spec.UpdateStrategy
 	case appspec.AppSpecSectionDevMode:
 		target.DevMode = r.Spec.DevMode
-	case appspec.AppSpecSectionLifecycle:
-		target.Lifecycle = r.Spec.Lifecycle
-	case appspec.AppSpecSectionProbe:
-		target.Probes = r.Spec.Probes
-	case appspec.AppSpecSectionLabels:
-		target.Labels = r.Spec.Labels
-	case appspec.AppSpecSectionAnnotations:
-		target.Annotations = r.Spec.Annotations
-	case appspec.AppSpecSectionTkeRouteEni:
-		target.TkeRouteEni = r.Spec.TkeRouteEni
 	}
 }

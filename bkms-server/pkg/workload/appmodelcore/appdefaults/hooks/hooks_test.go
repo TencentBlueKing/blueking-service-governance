@@ -48,12 +48,13 @@ var _ = Describe("Application default lifecycle hooks", func() {
 	It("removes rules when their workspace is deleted", func() {
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
 		workspaceID := workspace.ID
+		enabled := true
 		Expect(ruleStore.Create(ctx, &appdefaults.Rule{
 			WorkspaceID: workspaceID,
-			ConfigType:  appspec.AppSpecSectionLabels,
+			ConfigType:  appspec.AppSpecSectionDevMode,
 			EnvType:     "production",
 			Spec: &appspec.AppSpec{
-				Labels: &appspec.LabelsSpec{Labels: map[string]string{"team": "platform"}},
+				DevMode: &appspec.DevModeSpec{Enabled: &enabled},
 			},
 		})).To(Succeed())
 
