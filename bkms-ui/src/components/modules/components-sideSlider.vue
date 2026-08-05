@@ -594,7 +594,7 @@
   import ComponentItem from '~/components/modules/component-item.vue';
   import SpaceComponentItem from '~/components/modules/space-component-item.vue';
   import useDebouncedRef from '~/composables/use-debounce';
-  import useEnvManager, { envTypeTagClassMap } from '~/composables/use-env-manager';
+  import useEnvManager, { envTypeTagClassMap, envTypeTagStrokeClassMap } from '~/composables/use-env-manager';
   import { useFocusOnErrorField } from '~/composables/use-focus-on-error-field';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import usePageConf from '~/composables/use-page';
@@ -706,16 +706,20 @@
   const { envList, handleGetEnvList } = useEnvManager();
   const envTypes = ref([
     {
-      label: t('生产环境'),
-      theme: 'bg-[#EBFAF0] border-[#299E56]',
+      label: t('开发环境'),
+      theme: envTypeTagStrokeClassMap.development,
     },
     {
       label: t('测试环境'),
-      theme: 'bg-[#F0F5FF] border-[#3A84FF]',
+      theme: envTypeTagStrokeClassMap.test,
     },
     {
-      label: t('开发环境'),
-      theme: 'bg-[#FDF4E8] border-[#F59500]',
+      label: t('预发布环境'),
+      theme: envTypeTagStrokeClassMap.staging,
+    },
+    {
+      label: t('生产环境'),
+      theme: envTypeTagStrokeClassMap.production,
     },
   ]);
 

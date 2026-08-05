@@ -108,6 +108,7 @@
               >
                 <Radio label="development">{{ $t('开发') }}</Radio>
                 <Radio label="test">{{ $t('测试') }}</Radio>
+                <Radio label="staging">{{ $t('预发布') }}</Radio>
                 <Radio label="production">{{ $t('生产') }}</Radio>
               </Radio.Group>
             </div>
