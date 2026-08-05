@@ -24,6 +24,43 @@ export interface ListDetailedAppEnvVarsRequest {
   appID: string;
 }
 
+export interface ExportAppEnvVarsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 导出范围：appDefined 或 effectiveByEnv
+   */
+  scope: string;
+  /**
+   * 环境名称；scope=effectiveByEnv 时必填
+   */
+  envName?: string;
+}
+
+export interface ImportAppDefinedEnvVarRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 应用环境变量导入请求文件
+   */
+  file: unknown;
+}
+
+export interface PreviewAppDefinedEnvVarRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 应用环境变量导入预览请求文件
+   */
+  file: unknown;
+}
+
 export type UpdateAppEnvVarsRequest = UpdateAppDefinedEnvVarInput & {
   /**
    * 应用 ID
@@ -89,6 +126,35 @@ export interface ListDetailedEnvScopedEnvVarsRequest {
   envID: string;
 }
 
+export interface ExportEnvScopedEnvVarsRequest {
+  /**
+   * 环境 ID
+   */
+  envID: string;
+}
+
+export interface ImportEnvScopedEnvVarRequest {
+  /**
+   * 环境 ID
+   */
+  envID: string;
+  /**
+   * 单环境环境变量导入请求文件
+   */
+  file: unknown;
+}
+
+export interface PreviewEnvScopedEnvVarRequest {
+  /**
+   * 环境 ID
+   */
+  envID: string;
+  /**
+   * 单环境环境变量导入预览请求文件
+   */
+  file: unknown;
+}
+
 export type CreateScopedEnvVarRequest = CreateScopedEnvVarInput & {
   /**
    * 工作空间 ID
@@ -101,6 +167,35 @@ export interface ListPublicScopedEnvVarsRequest {
    * 工作空间 ID
    */
   workspaceID: string;
+}
+
+export interface ExportPublicScopedEnvVarsRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
+export interface ImportPublicScopedEnvVarRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 公共环境变量导入请求文件
+   */
+  file: unknown;
+}
+
+export interface PreviewPublicScopedEnvVarRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 公共环境变量导入预览请求文件
+   */
+  file: unknown;
 }
 
 export type UpdateScopedEnvVarRequest = UpdateScopedEnvVarInput & {
@@ -163,6 +258,20 @@ export interface ListDetailedAppEnvVarsOutput {
    * 应用环境变量详情列表
    */
   data?: AppEnvVarDetailedOutputObj[];
+}
+
+export interface ImportEnvVarOutput {
+  /**
+   * 导入结果汇总
+   */
+  data?: EnvVarImportPreviewSummaryOutputObj;
+}
+
+export interface PreviewEnvVarOutput {
+  /**
+   * 预览结果
+   */
+  data?: EnvVarImportPreviewOutputObj;
 }
 
 export interface UpdateAppDefinedEnvVarInput {
@@ -324,7 +433,7 @@ export interface ScopedEnvVarOutputObj {
   /**
    * 作用域值
    * - 当 scopeType 为 workspace 时，固定为空字符串
-   * - 当 scopeType 为 envType 时，可选值为 development、test、production
+   * - 当 scopeType 为 envType 时，可选值为 development、test、staging、production
    * - 当 scopeType 为 env 时，值为具体环境名称
    */
   scopeValue?: string;
@@ -444,6 +553,82 @@ export interface AppDefinedEnvVarOutputObj {
   updatedAt?: string;
   /**
    * 环境变量值
+   */
+  value?: string;
+}
+
+export interface EnvVarImportPreviewOutputObj {
+  /**
+   * 逐条预览结果
+   */
+  items?: EnvVarImportPreviewItemOutputObj[];
+  /**
+   * 汇总统计
+   */
+  summary?: EnvVarImportPreviewSummaryOutputObj;
+}
+
+export interface EnvVarImportPreviewItemOutputObj {
+  /**
+   * 导入动作：new（新增）/ overwrite（覆盖）
+   */
+  action?: string;
+  /**
+   * 输入中显式声明的原始 scope 信息；未声明时省略该字段
+   */
+  declaredScope?: EnvVarImportPreviewScopeOutputObj;
+  /**
+   * 描述信息
+   */
+  description?: string;
+  /**
+   * scope 生效状态：none / applied
+   */
+  effectScope?: string;
+  /**
+   * 预览后实际生效的 scope 信息；不适用时省略该字段
+   */
+  effectiveScope?: EnvVarImportPreviewScopeOutputObj;
+  /**
+   * 环境变量 Key
+   */
+  key?: string;
+  /**
+   * 额外提示信息；无提示时省略该字段
+   */
+  messages?: string[];
+  /**
+   * 被覆盖变量的原值，仅当 action 为 overwrite 时返回；其他场景省略该字段
+   */
+  originalValue?: string;
+  /**
+   * 环境变量 Value（导入值）
+   */
+  value?: string;
+}
+
+export interface EnvVarImportPreviewSummaryOutputObj {
+  /**
+   * 新增条数
+   */
+  new?: number;
+  /**
+   * 覆盖条数
+   */
+  overwrite?: number;
+  /**
+   * 导入条目总数
+   */
+  total?: number;
+}
+
+export interface EnvVarImportPreviewScopeOutputObj {
+  /**
+   * scope 类型（workspace / envType / env）
+   */
+  type?: string;
+  /**
+   * scope 值；workspace 时省略
    */
   value?: string;
 }

@@ -61,13 +61,9 @@ export interface CreateComponentDefInput {
    */
   managedByWorkspaceIDs?: string[];
   /**
-   * 组件输出模板：YAML 模式（与 outputForm 二选一）
+   * 根节点 YAML Patch 模板列表
    */
-  output?: string;
-  /**
-   * 组件输出模板：表单模式（与 output 二选一）
-   */
-  outputForm?: ComponentDefOutputFormInput;
+  patchers?: string[];
   /**
    * 属性定义列表
    */
@@ -80,6 +76,10 @@ export interface CreateComponentDefInput {
    * 生效的工作空间列表
    */
   scopeWorkspaceIDs?: string[];
+  /**
+   * 额外 Kubernetes 资源 YAML 模板列表
+   */
+  specs?: string[];
 }
 
 export interface EmptyOutput {
@@ -95,17 +95,17 @@ export interface PreviewComponentDefInput {
    */
   compDefName: string;
   /**
-   * 组件输出模板：YAML 模式（与 OutputForm 二选一）
+   * 根节点 YAML Patch 模板列表
    */
-  output?: string;
-  /**
-   * 组件输出模板：表单模式（与 Output 二选一）
-   */
-  outputForm?: ComponentDefOutputFormInput;
+  patchers?: string[];
   /**
    * 属性定义列表
    */
   properties?: PropertyDefInput[];
+  /**
+   * 额外 Kubernetes 资源 YAML 模板列表
+   */
+  specs?: string[];
 }
 
 export interface PreviewOutput {
@@ -133,13 +133,9 @@ export interface PatchComponentDefInput {
    */
   managedByWorkspaceIDs?: string[];
   /**
-   * 组件输出模板：YAML 模式（与 outputForm 二选一）
+   * 根节点 YAML Patch 模板列表（传入时全量替换）
    */
-  output?: string;
-  /**
-   * 组件输出模板：表单模式（与 output 二选一）
-   */
-  outputForm?: ComponentDefOutputFormInput;
+  patchers?: string[];
   /**
    * 属性定义列表（传入时全量替换）
    */
@@ -152,12 +148,10 @@ export interface PatchComponentDefInput {
    * 生效的工作空间列表
    */
   scopeWorkspaceIDs?: string[];
-}
-
-export interface ComponentDefOutputFormInput {
-  name?: string;
-  patcher?: PatcherItemInput[];
-  spec?: string[];
+  /**
+   * 额外 Kubernetes 资源 YAML 模板列表（传入时全量替换）
+   */
+  specs?: string[];
 }
 
 export interface ComponentDefPropertiesInput {
@@ -190,11 +184,6 @@ export interface PropertyDefInput {
 export interface PropertyOptionInput {
   label: string;
   value: string;
-}
-
-export interface PatcherItemInput {
-  patch?: string;
-  path?: string;
 }
 
 export interface PreviewPatchOutput {
@@ -236,22 +225,15 @@ export interface ComponentDefOutputObj {
   isBuiltin?: boolean;
   managedByWorkspaceIDs?: string[];
   name?: string;
-  output?: string;
-  outputForm?: ComponentDefOutputFormOutput;
+  patchers?: string[];
   properties?: PropertyDefOutputObj[];
   scopeType?: string;
   scopeWorkspaceIDs?: string[];
+  specs?: string[];
   updatedAt?: string;
   updater?: string;
   version?: string;
   workspaceCompInstanceCount?: number;
-}
-
-export interface ComponentDefOutputFormOutput {
-  error?: string;
-  name?: string;
-  patcher?: PatcherItemOutput[];
-  spec?: string[];
 }
 
 export interface PropertyDefOutputObj {
@@ -265,9 +247,4 @@ export interface PropertyDefOutputObj {
 export interface PropertyOptionOutputObj {
   label?: string;
   value?: string;
-}
-
-export interface PatcherItemOutput {
-  patch?: string;
-  path?: string;
 }

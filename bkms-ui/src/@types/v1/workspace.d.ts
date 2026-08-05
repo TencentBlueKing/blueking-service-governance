@@ -414,7 +414,7 @@ export interface AppDeployedEnvOutputObj {
    */
   trafficLaneName?: string;
   /**
-   * 环境类型（development / test / production）
+   * 环境类型（development / test / staging / production）
    */
   type?: string;
 }

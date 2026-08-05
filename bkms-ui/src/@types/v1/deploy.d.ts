@@ -174,6 +174,17 @@ export interface DeleteTafDeployRequest {
   trafficLaneName?: string;
 }
 
+export interface PreCheckTafDeployEnvVarsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+}
+
 export interface GetLatestTafDeployStatusRequest {
   /**
    * 应用 ID
@@ -282,6 +293,17 @@ export interface DeleteTrpcDeployRequest {
    * 部署的泳道名称（空字符串表示不使用泳道）
    */
   trafficLaneName?: string;
+}
+
+export interface PreCheckTrpcDeployEnvVarsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
 }
 
 export interface GetLatestTrpcDeployStatusRequest {
@@ -415,6 +437,10 @@ export interface CreateAppModelDeployInput {
   trafficLaneName?: string;
 }
 
+export interface EnvVarPreCheckOutput {
+  undefinedVars?: UndefinedEnvVarOutput[];
+}
+
 export interface GetLatestAppModelDeployStatusOutput {
   data?: LatestDeployStatus;
 }
@@ -456,6 +482,16 @@ export interface LatestDeployStatus {
   stage?: string;
   startedAt?: string;
   status?: string;
+}
+
+export interface UndefinedEnvVarOutput {
+  key?: string;
+  sources?: EnvVarReferenceSourceOutput[];
+}
+
+export interface EnvVarReferenceSourceOutput {
+  name?: string;
+  type?: string;
 }
 
 export interface PaginatedAppModelDeployRecordsOutputObjs {

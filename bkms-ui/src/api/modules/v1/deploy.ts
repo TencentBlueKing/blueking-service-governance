@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListHelmDeployRecordsRequest, PaginatedHelmDeployRecordOutputObjs, CreateHelmDeployRequest, PreviewHelmDeployRequest, PreviewHelmDeployOutput, RollbackHelmDeployRequest, EmptyOutput, DeleteHelmDeployRequest, PreviewRollbackHelmDeployRequest, ListTafDeployRecordsRequest, PaginatedAppModelDeployRecordsOutputObjs, CreateTafDeployRequest, DeleteTafDeployRequest, GetLatestTafDeployStatusRequest, LatestDeployStatus, ListTafResourceSnapshotsRequest, PaginatedAppModelResourceSnapshotsOutputObjs, GetTafResourceSnapshotRequest, GetAppModelResourceSnapshotOutput, ListTrpcDeployRecordsRequest, CreateTrpcDeployRequest, DeleteTrpcDeployRequest, GetLatestTrpcDeployStatusRequest, ListTrpcResourceSnapshotsRequest, GetTrpcResourceSnapshotRequest } from '~/@types/v1/deploy';
+import type { ListHelmDeployRecordsRequest, PaginatedHelmDeployRecordOutputObjs, CreateHelmDeployRequest, PreviewHelmDeployRequest, PreviewHelmDeployOutput, RollbackHelmDeployRequest, EmptyOutput, DeleteHelmDeployRequest, PreviewRollbackHelmDeployRequest, ListTafDeployRecordsRequest, PaginatedAppModelDeployRecordsOutputObjs, CreateTafDeployRequest, DeleteTafDeployRequest, PreCheckTafDeployEnvVarsRequest, EnvVarPreCheckOutput, GetLatestTafDeployStatusRequest, LatestDeployStatus, ListTafResourceSnapshotsRequest, PaginatedAppModelResourceSnapshotsOutputObjs, GetTafResourceSnapshotRequest, GetAppModelResourceSnapshotOutput, ListTrpcDeployRecordsRequest, CreateTrpcDeployRequest, DeleteTrpcDeployRequest, PreCheckTrpcDeployEnvVarsRequest, GetLatestTrpcDeployStatusRequest, ListTrpcResourceSnapshotsRequest, GetTrpcResourceSnapshotRequest } from '~/@types/v1/deploy';
 
 export const DeployService = {
   /**
@@ -166,6 +166,22 @@ export const DeployService = {
     config?: Config,
   ) => await v1Fetch.delete<Request, ResponseData>('/apps/{appID}/envs/{envName}/taf-deploys')(params, config),
   /**
+   * TAF 部署前环境变量校验
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/taf-deploys/env-var-precheck
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @response 200 EnvVarPreCheckOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  preCheckTafDeployEnvVars: async <Request extends PreCheckTafDeployEnvVarsRequest = PreCheckTafDeployEnvVarsRequest, ResponseData = EnvVarPreCheckOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/taf-deploys/env-var-precheck')(params, config),
+  /**
    * 获取 TAF 应用最新一次部署的状态
    *
    * @method GET
@@ -267,6 +283,22 @@ export const DeployService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.delete<Request, ResponseData>('/apps/{appID}/envs/{envName}/trpc-deploys')(params, config),
+  /**
+   * Trpc 部署前环境变量校验
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/trpc-deploys/env-var-precheck
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @response 200 EnvVarPreCheckOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  preCheckTrpcDeployEnvVars: async <Request extends PreCheckTrpcDeployEnvVarsRequest = PreCheckTrpcDeployEnvVarsRequest, ResponseData = EnvVarPreCheckOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/trpc-deploys/env-var-precheck')(params, config),
   /**
    * 获取 Trpc 应用最新一次部署的状态
    *

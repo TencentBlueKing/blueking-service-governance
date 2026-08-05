@@ -117,9 +117,9 @@ export interface UpdateEnvBasicInfoInput {
    */
   displayName?: string;
   /**
-   * 环境类型, 可选值 development、test、production
+   * 环境类型, 可选值 development、test、staging 或 production
    */
-  type?: "development" | "test" | "production";
+  type?: string;
 }
 
 export interface UpdateEnvClusterInput {
@@ -159,9 +159,9 @@ export interface CreateEnvInput {
    */
   name: string;
   /**
-   * 环境类型, 可选值 development、test、production
+   * 环境类型, 可选值 development、test、staging 或 production
    */
-  type: "development" | "test" | "production";
+  type: string;
 }
 
 export interface CreateEnvOutput {
@@ -415,7 +415,7 @@ export interface FeatureEnvOutput {
    */
   status?: string;
   /**
-   * 环境类型，可选值 development、test 或 production
+   * 环境类型，可选值 development、test、staging 或 production
    */
   type?: string;
 }

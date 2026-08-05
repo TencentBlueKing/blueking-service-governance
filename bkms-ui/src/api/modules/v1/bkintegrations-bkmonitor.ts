@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetApmServiceNameRequest, GetApmServiceNameOutput, GetInstanceTimeSeriesRequest, MetricTimeSeries, GetEnvApmRequest, GetEnvApmOutput, CreateEnvApmRequest, ApmOutput, BindApmToEnvRequest, EmptyOutput, ListApmsRequest, ListApmOutput } from '~/@types/v1/bkintegrations-bkmonitor';
+import type { GetApmServiceNameRequest, GetApmServiceNameOutput, GetInstanceTimeSeriesRequest, MetricTimeSeries, GetEnvApmRequest, GetEnvApmOutput, CreateEnvApmRequest, ApmOutput, BindApmToEnvRequest, EmptyOutput, ListAlertStrategiesRequest, ListAlertStrategiesOutput, CreateAlertStrategyRequest, AlertStrategyOutput, GetAlertStrategyRequest, UpdateAlertStrategyRequest, DeleteAlertStrategyRequest, ListAlertEventsByStrategyRequest, ListAlertEventsOutput, SwitchAlertStrategyRequest, SyncAlertStrategyRequest, ListAlertEventsRequest, GetAlertDetailRequest, ListApmsRequest, ListApmOutput, ListUserGroupsRequest, ListUserGroupsOutput, CreateUserGroupRequest, UserGroupDetail, GetUserGroupRequest, UpdateUserGroupRequest, DeleteUserGroupRequest } from '~/@types/v1/bkintegrations-bkmonitor';
 
 export const BkintegrationsBkmonitorService = {
   /**
@@ -91,6 +91,189 @@ export const BkintegrationsBkmonitorService = {
     config?: Config,
   ) => await v1Fetch.put<Request, ResponseData>('/envs/{envID}/bkmonitor/apms/{apmID}')(params, config),
   /**
+   * 查询告警策略列表
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @response 200 ListAlertStrategiesResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listAlertStrategies: async <Request extends ListAlertStrategiesRequest = ListAlertStrategiesRequest, ResponseData = ListAlertStrategiesOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies')(params, config),
+  /**
+   * 创建告警策略
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @param body body CreateAlertStrategyBody required 请求体
+   * @response 200 CreateAlertStrategyResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  createAlertStrategy: async <Request extends CreateAlertStrategyRequest = CreateAlertStrategyRequest, ResponseData = AlertStrategyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies')(params, config),
+  /**
+   * 获取告警策略详情
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @param strategyID path string required 本地策略 ID
+   * @response 200 GetAlertStrategyResp OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  getAlertStrategy: async <Request extends GetAlertStrategyRequest = GetAlertStrategyRequest, ResponseData = AlertStrategyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}')(params, config),
+  /**
+   * 更新告警策略
+   *
+   * @method PUT
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @param strategyID path string required 本地策略 ID
+   * @param body body UpdateAlertStrategyBody required 请求体
+   * @response 200 GetAlertStrategyResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  updateAlertStrategy: async <Request extends UpdateAlertStrategyRequest = UpdateAlertStrategyRequest, ResponseData = AlertStrategyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}')(params, config),
+  /**
+   * 删除告警策略
+   *
+   * @method DELETE
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @param strategyID path string required 本地策略 ID
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  deleteAlertStrategy: async <Request extends DeleteAlertStrategyRequest = DeleteAlertStrategyRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.delete<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}')(params, config),
+  /**
+   * 查询规则关联的告警事件
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/alerts
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @param strategyID path string required 本地策略 ID
+   * @param status query string[] 告警状态
+   * @param severity query number[] 告警级别
+   * @param startTime query number 开始时间
+   * @param endTime query number 结束时间
+   * @param page query number required 页码，从 1 开始
+   * @param pageSize query number required 每页数量，仅支持 5/10/20/50/100
+   * @param alertName query string 按告警名称过滤
+   * @param strategyName query string 按策略名称过滤
+   * @param eventID query string 按事件 ID 过滤
+   * @param target query string 按目标实例过滤
+   * @param ordering query string[] 排序字段列表，默认 -create_time
+   * @response 200 ListAlertEventsResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listAlertEventsByStrategy: async <Request extends ListAlertEventsByStrategyRequest = ListAlertEventsByStrategyRequest, ResponseData = ListAlertEventsOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/alerts')(params, config),
+  /**
+   * 切换告警策略启停状态
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/switch
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @param strategyID path string required 本地策略 ID
+   * @param body body SwitchAlertStrategyBody required 请求体
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  switchAlertStrategy: async <Request extends SwitchAlertStrategyRequest = SwitchAlertStrategyRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/switch')(params, config),
+  /**
+   * 同步告警策略到远端
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/sync
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @param strategyID path string required 本地策略 ID
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  syncAlertStrategy: async <Request extends SyncAlertStrategyRequest = SyncAlertStrategyRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alert-strategies/{strategyID}/sync')(params, config),
+  /**
+   * 查询应用下的告警事件列表
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/apps/{appID}/bkmonitor/alerts
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param appID path string required 应用 ID
+   * @param envName query string 环境名称
+   * @param status query string[] 告警状态
+   * @param severity query number[] 告警级别
+   * @param startTime query number 开始时间
+   * @param endTime query number 结束时间
+   * @param page query number required 页码，从 1 开始
+   * @param pageSize query number required 每页数量，仅支持 5/10/20/50/100
+   * @param alertName query string 按告警名称过滤
+   * @param strategyName query string 按策略名称过滤
+   * @param eventID query string 按事件 ID 过滤
+   * @param target query string 按目标实例过滤
+   * @param ordering query string[] 排序字段列表，默认 -create_time
+   * @response 200 ListAlertEventsResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listAlertEvents: async <Request extends ListAlertEventsRequest = ListAlertEventsRequest, ResponseData = ListAlertEventsOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/apps/{appID}/bkmonitor/alerts')(params, config),
+  /**
+   * 查询单条告警详情
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/bkmonitor/alerts/{alertID}
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param alertID path string required 告警 ID
+   * @response 200 GetAlertDetailResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getAlertDetail: async <Request extends GetAlertDetailRequest = GetAlertDetailRequest, ResponseData = Record<string, unknown>>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/alerts/{alertID}')(params, config),
+  /**
    * 获取工作空间下的 APM 列表
    *
    * @method GET
@@ -104,4 +287,79 @@ export const BkintegrationsBkmonitorService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/apms')(params, config),
+  /**
+   * 查询告警组列表
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/bkmonitor/user-groups
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 ListUserGroupsResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listUserGroups: async <Request extends ListUserGroupsRequest = ListUserGroupsRequest, ResponseData = ListUserGroupsOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/user-groups')(params, config),
+  /**
+   * 创建告警组
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/bkmonitor/user-groups
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param body body SaveUserGroupBody required 请求体
+   * @response 200 SaveUserGroupResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  createUserGroup: async <Request extends CreateUserGroupRequest = CreateUserGroupRequest, ResponseData = UserGroupDetail>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/user-groups')(params, config),
+  /**
+   * 获取告警组详情
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/bkmonitor/user-groups/{groupID}
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param groupID path number required 告警组 ID
+   * @response 200 GetUserGroupResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getUserGroup: async <Request extends GetUserGroupRequest = GetUserGroupRequest, ResponseData = UserGroupDetail>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/user-groups/{groupID}')(params, config),
+  /**
+   * 更新告警组
+   *
+   * @method PUT
+   * @path /workspaces/{workspaceID}/bkmonitor/user-groups/{groupID}
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param groupID path number required 告警组 ID
+   * @param body body SaveUserGroupBody required 请求体
+   * @response 200 SaveUserGroupResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  updateUserGroup: async <Request extends UpdateUserGroupRequest = UpdateUserGroupRequest, ResponseData = UserGroupDetail>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/user-groups/{groupID}')(params, config),
+  /**
+   * 删除告警组
+   *
+   * @method DELETE
+   * @path /workspaces/{workspaceID}/bkmonitor/user-groups/{groupID}
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @param groupID path number required 告警组 ID
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  deleteUserGroup: async <Request extends DeleteUserGroupRequest = DeleteUserGroupRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.delete<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/user-groups/{groupID}')(params, config),
 };

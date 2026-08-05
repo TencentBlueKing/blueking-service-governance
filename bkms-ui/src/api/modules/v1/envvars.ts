@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetAppEnvVarsRequest, AppDefinedEnvVarOutputObj, CreateAppEnvVarsRequest, ListDetailedAppEnvVarsRequest, AppEnvVarDetailedOutputObj, UpdateAppEnvVarsRequest, DeleteAppEnvVarsRequest, EmptyOutput, ListAppBgEnvVarsRequest, BgEnvVarOutputObj, ListAppEnvVarsRequest, EnvVarOutputObj, ListEnvAvailableEnvVarsRequest, ListEnvBgEnvVarsRequest, ListDetailedEnvScopedEnvVarsRequest, ScopedEnvVarDetailedOutputObj, CreateScopedEnvVarRequest, ScopedEnvVarOutputObj, ListPublicScopedEnvVarsRequest, UpdateScopedEnvVarRequest, DeleteScopedEnvVarRequest } from '~/@types/v1/envvars';
+import type { GetAppEnvVarsRequest, AppDefinedEnvVarOutputObj, CreateAppEnvVarsRequest, ListDetailedAppEnvVarsRequest, AppEnvVarDetailedOutputObj, ExportAppEnvVarsRequest, ImportAppDefinedEnvVarRequest, EnvVarImportPreviewSummaryOutputObj, PreviewAppDefinedEnvVarRequest, EnvVarImportPreviewOutputObj, UpdateAppEnvVarsRequest, DeleteAppEnvVarsRequest, EmptyOutput, ListAppBgEnvVarsRequest, BgEnvVarOutputObj, ListAppEnvVarsRequest, EnvVarOutputObj, ListEnvAvailableEnvVarsRequest, ListEnvBgEnvVarsRequest, ListDetailedEnvScopedEnvVarsRequest, ScopedEnvVarDetailedOutputObj, ExportEnvScopedEnvVarsRequest, ImportEnvScopedEnvVarRequest, PreviewEnvScopedEnvVarRequest, CreateScopedEnvVarRequest, ScopedEnvVarOutputObj, ListPublicScopedEnvVarsRequest, ExportPublicScopedEnvVarsRequest, ImportPublicScopedEnvVarRequest, PreviewPublicScopedEnvVarRequest, UpdateScopedEnvVarRequest, DeleteScopedEnvVarRequest } from '~/@types/v1/envvars';
 
 export const EnvvarsService = {
   /**
@@ -58,6 +58,58 @@ export const EnvvarsService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/env-vars/detailed-list')(params, config),
+  /**
+   * 下载应用环境变量
+   *
+   * 支持导出应用直接定义的环境变量，或按环境导出最终生效的全部环境变量。
+   *
+   * @method GET
+   * @path /apps/{appID}/env-vars/export
+   * @tag envvars
+   * @param appID path string required 应用 ID
+   * @param scope query string required 导出范围：appDefined 或 effectiveByEnv
+   * @param envName query string 环境名称；scope=effectiveByEnv 时必填
+   * @response 200 string dotenv file
+   * @response 400 GinErrorOutput Bad Request
+   */
+  exportAppEnvVars: async <Request extends ExportAppEnvVarsRequest = ExportAppEnvVarsRequest, ResponseData = string>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/env-vars/export')(params, config),
+  /**
+   * 正式导入应用直接定义的环境变量
+   *
+   * 解析并导入应用直接定义的环境变量，导入语义与预览接口保持一致。
+   *
+   * @method POST
+   * @path /apps/{appID}/env-vars/import
+   * @tag envvars
+   * @param appID path string required 应用 ID
+   * @param file formData unknown required 应用环境变量导入请求文件
+   * @response 200 ImportEnvVarOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  importAppDefinedEnvVar: async <Request extends ImportAppDefinedEnvVarRequest = ImportAppDefinedEnvVarRequest, ResponseData = EnvVarImportPreviewSummaryOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/env-vars/import')(params, config),
+  /**
+   * 预览导入应用直接定义的环境变量
+   *
+   * 解析 `.env` 文本并返回应用环境变量导入预览结果，不会保存任何变更。
+   *
+   * @method POST
+   * @path /apps/{appID}/env-vars/preview
+   * @tag envvars
+   * @param appID path string required 应用 ID
+   * @param file formData unknown required 应用环境变量导入预览请求文件
+   * @response 200 PreviewEnvVarOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  previewAppDefinedEnvVar: async <Request extends PreviewAppDefinedEnvVarRequest = PreviewAppDefinedEnvVarRequest, ResponseData = EnvVarImportPreviewOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/env-vars/preview')(params, config),
   /**
    * 更新应用直接定义的环境变量
    *
@@ -172,6 +224,54 @@ export const EnvvarsService = {
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/scoped-env-vars/detailed-list/{envID}')(params, config),
   /**
+   * 下载单环境环境变量
+   *
+   * @method GET
+   * @path /scoped-env-vars/export/{envID}
+   * @tag envvars
+   * @param envID path string required 环境 ID
+   * @response 200 string dotenv file
+   * @response 400 GinErrorOutput Bad Request
+   */
+  exportEnvScopedEnvVars: async <Request extends ExportEnvScopedEnvVarsRequest = ExportEnvScopedEnvVarsRequest, ResponseData = string>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/scoped-env-vars/export/{envID}')(params, config),
+  /**
+   * 正式导入单环境环境变量
+   *
+   * 解析并导入当前环境作用域的环境变量，导入语义与预览接口保持一致。
+   *
+   * @method POST
+   * @path /scoped-env-vars/import/{envID}
+   * @tag envvars
+   * @param envID path string required 环境 ID
+   * @param file formData unknown required 单环境环境变量导入请求文件
+   * @response 200 ImportEnvVarOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  importEnvScopedEnvVar: async <Request extends ImportEnvScopedEnvVarRequest = ImportEnvScopedEnvVarRequest, ResponseData = EnvVarImportPreviewSummaryOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/scoped-env-vars/import/{envID}')(params, config),
+  /**
+   * 预览导入单环境环境变量
+   *
+   * 解析 `.env` 文本并返回当前环境的导入预览结果，不会保存任何变更。
+   *
+   * @method POST
+   * @path /scoped-env-vars/preview/{envID}
+   * @tag envvars
+   * @param envID path string required 环境 ID
+   * @param file formData unknown required 单环境环境变量导入预览请求文件
+   * @response 200 PreviewEnvVarOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  previewEnvScopedEnvVar: async <Request extends PreviewEnvScopedEnvVarRequest = PreviewEnvScopedEnvVarRequest, ResponseData = EnvVarImportPreviewOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/scoped-env-vars/preview/{envID}')(params, config),
+  /**
    * 创建作用域级别的环境变量（ScopedEnvVar）
    *
    * @method POST
@@ -202,6 +302,54 @@ export const EnvvarsService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/scoped-env-vars/public-vars')(params, config),
+  /**
+   * 下载公共环境变量
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/scoped-env-vars/public-vars/export
+   * @tag envvars
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 string dotenv file
+   * @response 400 GinErrorOutput Bad Request
+   */
+  exportPublicScopedEnvVars: async <Request extends ExportPublicScopedEnvVarsRequest = ExportPublicScopedEnvVarsRequest, ResponseData = string>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/scoped-env-vars/public-vars/export')(params, config),
+  /**
+   * 正式导入公共环境变量
+   *
+   * 解析并导入公共环境变量，导入语义与预览接口保持一致。
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/scoped-env-vars/public-vars/import
+   * @tag envvars
+   * @param workspaceID path string required 工作空间 ID
+   * @param file formData unknown required 公共环境变量导入请求文件
+   * @response 200 ImportEnvVarOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  importPublicScopedEnvVar: async <Request extends ImportPublicScopedEnvVarRequest = ImportPublicScopedEnvVarRequest, ResponseData = EnvVarImportPreviewSummaryOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/scoped-env-vars/public-vars/import')(params, config),
+  /**
+   * 预览导入公共环境变量
+   *
+   * 解析 `.env` 文本并返回公共环境变量导入预览结果，不会保存任何变更。
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/scoped-env-vars/public-vars/preview
+   * @tag envvars
+   * @param workspaceID path string required 工作空间 ID
+   * @param file formData unknown required 公共环境变量导入预览请求文件
+   * @response 200 PreviewEnvVarOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  previewPublicScopedEnvVar: async <Request extends PreviewPublicScopedEnvVarRequest = PreviewPublicScopedEnvVarRequest, ResponseData = EnvVarImportPreviewOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/scoped-env-vars/public-vars/preview')(params, config),
   /**
    * 更新作用域级别的环境变量（ScopedEnvVar）
    *

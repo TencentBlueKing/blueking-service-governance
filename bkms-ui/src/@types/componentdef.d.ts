@@ -28,16 +28,10 @@
  */
 
 import {
-  type ComponentDefOutputFormInput as ComponentDefOutputFormInputV1,
   type ComponentDefOutputObj as ComponentDefOutputObjV1,
   type PropertyDefInput as PropertyDefInputV1,
   type PropertyDefOutputObj,
 } from './v1/component-defs';
-
-/**
- * @deprecated 请改用 `~/@types/v1` 下对应 type（本属性已绑定 v1 实现）。
- */
-export type ComponentDefOutputFormInput = ComponentDefOutputFormInputV1;
 
 /**
  * @deprecated 请改用 `~/@types/v1` 下对应 type（本属性已绑定 v1 实现）。

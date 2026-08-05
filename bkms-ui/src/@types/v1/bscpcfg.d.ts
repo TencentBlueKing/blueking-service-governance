@@ -107,6 +107,10 @@ export interface PatchMetadataInput {
    */
   mountPath?: string;
   /**
+   * WorkloadKind 目标工作负载类型（传入则更新）
+   */
+  workloadKind?: string;
+  /**
    * WorkloadName 指定被注入 bscp 配置的目标 workload 名称（传入则更新）
    */
   workloadName?: string;
@@ -120,8 +124,10 @@ export interface MetadataOutput {
   feedAddr?: string;
   mountPath?: string;
   operator?: string;
+  postHookID?: string;
   token?: string;
   updatedAt?: string;
+  workloadKind?: string;
   workloadName?: string;
 }
 
@@ -142,6 +148,7 @@ export interface EnvBindingOutput {
   operator?: string;
   token?: string;
   updatedAt?: string;
+  workloadKind?: string;
   workloadName?: string;
 }
 
