@@ -1,7 +1,7 @@
 meta {
-  name: list-empty-resources-rules
+  name: list-empty-resources-after-delete
   type: http
-  seq: 1
+  seq: 3
 }
 
 get {
@@ -16,7 +16,7 @@ assert {
 }
 
 tests {
-  test("should not persist platform defaults as rules", () => {
+  test("should remove the resources rule", () => {
     expect(res.body.data).to.deep.equal([]);
   });
 }

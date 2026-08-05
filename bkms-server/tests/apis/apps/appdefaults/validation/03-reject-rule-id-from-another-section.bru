@@ -1,0 +1,36 @@
+meta {
+  name: reject-rule-id-from-another-section
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/dev-mode/{{resourcesRuleID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "envType": "staging",
+    "spec": {
+      "enabled": true
+    }
+  }
+}
+
+assert {
+  res.status: eq 404
+  res.body: isJson
+}
+
+tests {
+  test("should scope rule IDs to their section", () => {
+    expect(res.status).to.equal(404);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

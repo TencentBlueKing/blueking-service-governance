@@ -1,0 +1,21 @@
+meta {
+  name: delete-appdefaults-workspace
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

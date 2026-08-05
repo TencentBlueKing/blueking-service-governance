@@ -1,0 +1,20 @@
+meta {
+  name: delete-dev-mode-rule
+  type: http
+  seq: 1
+}
+
+delete {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/dev-mode/{{devModeRuleID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

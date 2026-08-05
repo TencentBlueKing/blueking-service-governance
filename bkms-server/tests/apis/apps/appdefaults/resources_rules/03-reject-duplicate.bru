@@ -1,7 +1,7 @@
 meta {
-  name: create-duplicate-should-fail
+  name: reject-duplicate-resources-rule
   type: http
-  seq: 1
+  seq: 3
 }
 
 post {
@@ -12,7 +12,7 @@ post {
 
 body:json {
   {
-    "envType": "development",
+    "envType": "production",
     "spec": {
       "replicas": 1,
       "cpuRequests": "500m",
@@ -24,11 +24,14 @@ body:json {
 }
 
 assert {
-  res.status: eq 200
+  res.status: eq 400
+  res.body: isJson
 }
 
-script:post-response {
-  bru.setVar('duplicateTestRuleID', res.body.data.id);
+tests {
+  test("should reject a second resources rule for the same environment type", () => {
+    expect(res.status).to.equal(400);
+  });
 }
 
 settings {

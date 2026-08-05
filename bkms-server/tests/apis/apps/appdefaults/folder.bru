@@ -1,3 +1,18 @@
 meta {
   name: appdefaults
+  seq: 11
+}
+
+auth {
+  mode: inherit
+}
+
+script:pre-request {
+  const common = require("./common")
+
+  if (!bru.getVar("appDefaultsWorkspaceID")) {
+    const suffix = bru.getVar("randomSuffix");
+    const ws = await common.createWorkspace({id: `appdefaults-ws-${suffix}`});
+    bru.setVar("appDefaultsWorkspaceID", ws.id);
+  }
 }

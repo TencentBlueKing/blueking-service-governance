@@ -1,0 +1,51 @@
+meta {
+  name: create-resources-rule
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/resources
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "envType": "production",
+    "spec": {
+      "replicas": 3,
+      "cpuRequests": "2",
+      "cpuLimits": "4",
+      "memoryRequests": "4Gi",
+      "memoryLimits": "8Gi"
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should create a complete production resources rule", () => {
+    const rule = res.body.data;
+    expect(rule.id).to.be.a("string").and.not.be.empty;
+    expect(rule.envType).to.equal("production");
+    expect(rule.spec).to.deep.equal({
+      replicas: 3,
+      cpuRequests: "2",
+      cpuLimits: "4",
+      memoryRequests: "4Gi",
+      memoryLimits: "8Gi"
+    });
+
+    bru.setVar("resourcesRuleID", rule.id);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -1,0 +1,39 @@
+meta {
+  name: update-dev-mode-rule-to-disabled
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/dev-mode/{{devModeRuleID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "envType": "staging",
+    "spec": {
+      "enabled": false
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should preserve an explicit false value", () => {
+    const rule = res.body.data;
+    expect(rule.id).to.equal(bru.getVar("devModeRuleID"));
+    expect(rule.envType).to.equal("staging");
+    expect(rule.spec).to.deep.equal({enabled: false});
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

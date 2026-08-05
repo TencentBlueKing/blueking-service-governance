@@ -1,11 +1,11 @@
 meta {
-  name: list-after-delete
+  name: list-empty-dev-mode-after-delete
   type: http
-  seq: 5
+  seq: 4
 }
 
 get {
-  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/resources
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/dev-mode
   body: none
   auth: inherit
 }
@@ -16,7 +16,7 @@ assert {
 }
 
 tests {
-  test("should have no resources rules after deletion", () => {
+  test("should remove the dev-mode rule", () => {
     expect(res.body.data).to.deep.equal([]);
   });
 }

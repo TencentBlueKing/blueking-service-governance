@@ -1,0 +1,27 @@
+meta {
+  name: list-empty-dev-mode-rules
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/dev-mode
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should keep dev-mode rules independent from resources rules", () => {
+    expect(res.body.data).to.deep.equal([]);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

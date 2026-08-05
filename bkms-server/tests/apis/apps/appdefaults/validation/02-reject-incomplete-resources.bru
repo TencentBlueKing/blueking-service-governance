@@ -1,5 +1,5 @@
 meta {
-  name: create-duplicate-should-conflict
+  name: reject-incomplete-resources-rule
   type: http
   seq: 2
 }
@@ -12,23 +12,23 @@ post {
 
 body:json {
   {
-    "envType": "development",
+    "envType": "production",
     "spec": {
-      "replicas": 2,
+      "replicas": 1,
       "cpuRequests": "1",
       "cpuLimits": "2",
-      "memoryRequests": "2Gi",
-      "memoryLimits": "4Gi"
+      "memoryRequests": "2Gi"
     }
   }
 }
 
 assert {
   res.status: eq 400
+  res.body: isJson
 }
 
 tests {
-  test("should reject duplicate environment type rule", () => {
+  test("should require every resources field", () => {
     expect(res.status).to.equal(400);
   });
 }

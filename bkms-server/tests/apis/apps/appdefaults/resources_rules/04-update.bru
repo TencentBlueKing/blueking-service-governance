@@ -1,0 +1,49 @@
+meta {
+  name: update-resources-rule
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{serviceURL}}/workspaces/{{appDefaultsWorkspaceID}}/app-spec/resources/{{resourcesRuleID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "envType": "staging",
+    "spec": {
+      "replicas": 5,
+      "cpuRequests": "4",
+      "cpuLimits": "8",
+      "memoryRequests": "8Gi",
+      "memoryLimits": "16Gi"
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should replace the rule and allow changing its environment type", () => {
+    const rule = res.body.data;
+    expect(rule.id).to.equal(bru.getVar("resourcesRuleID"));
+    expect(rule.envType).to.equal("staging");
+    expect(rule.spec).to.deep.equal({
+      replicas: 5,
+      cpuRequests: "4",
+      cpuLimits: "8",
+      memoryRequests: "8Gi",
+      memoryLimits: "16Gi"
+    });
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
