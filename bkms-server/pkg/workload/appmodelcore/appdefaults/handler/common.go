@@ -206,7 +206,7 @@ func recordAudit(
 		options = append(options, audit.WithDataAfter(after))
 	}
 	go audit.AddOperationRecordAsync(
-		ctx,
+		context.WithoutCancel(ctx),
 		operation,
 		audit.ResourceTypeWorkspace,
 		workspaceID,
