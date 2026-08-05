@@ -16,7 +16,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
-	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
@@ -179,40 +178,5 @@ func handleHelmDeploySucceeded(ctx context.Context, args PollingDeployStatusArgs
 	}
 
 	// 2. 异步将应用关联的告警策略同步到当前环境（失败仅记录日志，不影响部署结果）
-	ws, wsErr := reg.WorkspaceStore.Get(ctx, args.WorkspaceID)
-	if wsErr != nil {
-		log.Errorf(ctx, "get workspace %s for alert sync failed: %v", args.WorkspaceID, wsErr)
-	}
-	var env *envmodel.Environment
-	if envStore == nil {
-		log.Errorf(ctx, "env store is not initialized for alert sync")
-	} else {
-		env, sErr = envStore.GetByName(ctx, args.WorkspaceID, args.AppID, args.EnvName)
-		if sErr != nil {
-			log.Errorf(ctx, "get env %s for alert sync failed: %v", args.EnvName, sErr)
-		}
-	}
-	if ws != nil && env != nil {
-		log.Infof(
-			ctx,
-			"dispatch alert strategy sync, workspace=%s app=%s env=%s envID=%s lane=%s operator=%s",
-			args.WorkspaceID, args.AppID, env.Name, env.ID.Hex(), args.TrafficLaneName, record.Operator,
-		)
-		// TODO(alertstrategy): 用 go 裸起 goroutine 无法保证跨 Pod 串行，
-		// 后续迁移到 asynq 任务队列以解决多 Pod 并发风险
-		go alertstrategy.NewService(
-			reg.AlertStrategyStore,
-			reg.EnvStore,
-			reg.AppStore,
-			reg.ResourceSnapshotStore,
-		).SyncStrategiesForAppInEnv(
-			context.WithoutCancel(ctx), ws, args.AppID, env.ID, args.TrafficLaneName, record.Operator,
-		)
-	} else {
-		log.Warnf(
-			ctx,
-			"skip alert strategy sync: ws or env is nil, workspace=%s app=%s envName=%s wsNil=%v envNil=%v",
-			args.WorkspaceID, args.AppID, args.EnvName, ws == nil, env == nil,
-		)
-	}
+	syncAlertStrategiesAfterDeploy(ctx, reg, envStore, args, record.Operator)
 }
