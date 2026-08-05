@@ -2869,3 +2869,479 @@ func (_mock *MockClient) ExchangeBkTicketForToken(username, bkTicket string) (st
 	}
 	return r0, r1
 }
+
+// --- 环境变量导入导出 mock methods ---
+
+// ImportPublicEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ImportPublicEnvVars(ctx context.Context, workspaceID string, filePath string) (*client.EnvVarImportResult, error) {
+	ret := _mock.Called(ctx, workspaceID, filePath)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ImportPublicEnvVars")
+	}
+
+	var r0 *client.EnvVarImportResult
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.EnvVarImportResult); ok {
+		r0 = returnFunc(ctx, workspaceID, filePath)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.EnvVarImportResult)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, workspaceID, filePath)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// ExportPublicEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ExportPublicEnvVars(ctx context.Context, workspaceID string) (string, error) {
+	ret := _mock.Called(ctx, workspaceID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ExportPublicEnvVars")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
+		r0 = returnFunc(ctx, workspaceID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, workspaceID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// ImportEnvScopedEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ImportEnvScopedEnvVars(ctx context.Context, envID string, filePath string) (*client.EnvVarImportResult, error) {
+	ret := _mock.Called(ctx, envID, filePath)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ImportEnvScopedEnvVars")
+	}
+
+	var r0 *client.EnvVarImportResult
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.EnvVarImportResult); ok {
+		r0 = returnFunc(ctx, envID, filePath)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.EnvVarImportResult)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, envID, filePath)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// ExportEnvScopedEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ExportEnvScopedEnvVars(ctx context.Context, envID string) (string, error) {
+	ret := _mock.Called(ctx, envID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ExportEnvScopedEnvVars")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
+		r0 = returnFunc(ctx, envID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, envID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// ImportAppEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ImportAppEnvVars(ctx context.Context, appID string, filePath string) (*client.EnvVarImportResult, error) {
+	ret := _mock.Called(ctx, appID, filePath)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ImportAppEnvVars")
+	}
+
+	var r0 *client.EnvVarImportResult
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.EnvVarImportResult); ok {
+		r0 = returnFunc(ctx, appID, filePath)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.EnvVarImportResult)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, filePath)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// ExportAppEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ExportAppEnvVars(ctx context.Context, appID string, opts client.ExportAppEnvVarsOptions) (string, error) {
+	ret := _mock.Called(ctx, appID, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ExportAppEnvVars")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.ExportAppEnvVarsOptions) string); ok {
+		r0 = returnFunc(ctx, appID, opts)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, client.ExportAppEnvVarsOptions) error); ok {
+		r1 = returnFunc(ctx, appID, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// --- 环境变量 CRUD mock methods ---
+
+// ListPublicEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ListPublicEnvVars(ctx context.Context, workspaceID string) ([]client.ScopedEnvVar, error) {
+	ret := _mock.Called(ctx, workspaceID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListPublicEnvVars")
+	}
+
+	var r0 []client.ScopedEnvVar
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []client.ScopedEnvVar); ok {
+		r0 = returnFunc(ctx, workspaceID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.ScopedEnvVar)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, workspaceID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// CreateScopedEnvVar provides a mock function for the type MockClient
+func (_mock *MockClient) CreateScopedEnvVar(ctx context.Context, workspaceID string, opts client.CreateScopedEnvVarOptions) (*client.ScopedEnvVar, error) {
+	ret := _mock.Called(ctx, workspaceID, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateScopedEnvVar")
+	}
+
+	var r0 *client.ScopedEnvVar
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateScopedEnvVarOptions) *client.ScopedEnvVar); ok {
+		r0 = returnFunc(ctx, workspaceID, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.ScopedEnvVar)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, client.CreateScopedEnvVarOptions) error); ok {
+		r1 = returnFunc(ctx, workspaceID, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// UpdateScopedEnvVar provides a mock function for the type MockClient
+func (_mock *MockClient) UpdateScopedEnvVar(ctx context.Context, workspaceID string, scopedEnvVarID string, opts client.UpdateScopedEnvVarOptions) (*client.ScopedEnvVar, error) {
+	ret := _mock.Called(ctx, workspaceID, scopedEnvVarID, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateScopedEnvVar")
+	}
+
+	var r0 *client.ScopedEnvVar
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.UpdateScopedEnvVarOptions) *client.ScopedEnvVar); ok {
+		r0 = returnFunc(ctx, workspaceID, scopedEnvVarID, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.ScopedEnvVar)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, client.UpdateScopedEnvVarOptions) error); ok {
+		r1 = returnFunc(ctx, workspaceID, scopedEnvVarID, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// DeleteScopedEnvVar provides a mock function for the type MockClient
+func (_mock *MockClient) DeleteScopedEnvVar(ctx context.Context, workspaceID string, scopedEnvVarID string) error {
+	ret := _mock.Called(ctx, workspaceID, scopedEnvVarID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteScopedEnvVar")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, workspaceID, scopedEnvVarID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// ListAppDefinedEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ListAppDefinedEnvVars(ctx context.Context, appID string) ([]client.AppDefinedEnvVar, error) {
+	ret := _mock.Called(ctx, appID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListAppDefinedEnvVars")
+	}
+
+	var r0 []client.AppDefinedEnvVar
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []client.AppDefinedEnvVar); ok {
+		r0 = returnFunc(ctx, appID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.AppDefinedEnvVar)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, appID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// CreateAppDefinedEnvVar provides a mock function for the type MockClient
+func (_mock *MockClient) CreateAppDefinedEnvVar(ctx context.Context, appID string, opts client.CreateAppDefinedEnvVarOptions) (*client.AppDefinedEnvVar, error) {
+	ret := _mock.Called(ctx, appID, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateAppDefinedEnvVar")
+	}
+
+	var r0 *client.AppDefinedEnvVar
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateAppDefinedEnvVarOptions) *client.AppDefinedEnvVar); ok {
+		r0 = returnFunc(ctx, appID, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.AppDefinedEnvVar)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, client.CreateAppDefinedEnvVarOptions) error); ok {
+		r1 = returnFunc(ctx, appID, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// UpdateAppDefinedEnvVar provides a mock function for the type MockClient
+func (_mock *MockClient) UpdateAppDefinedEnvVar(ctx context.Context, appID string, key string, opts client.UpdateAppDefinedEnvVarOptions) (*client.AppDefinedEnvVar, error) {
+	ret := _mock.Called(ctx, appID, key, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateAppDefinedEnvVar")
+	}
+
+	var r0 *client.AppDefinedEnvVar
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.UpdateAppDefinedEnvVarOptions) *client.AppDefinedEnvVar); ok {
+		r0 = returnFunc(ctx, appID, key, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.AppDefinedEnvVar)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, client.UpdateAppDefinedEnvVarOptions) error); ok {
+		r1 = returnFunc(ctx, appID, key, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// DeleteAppDefinedEnvVar provides a mock function for the type MockClient
+func (_mock *MockClient) DeleteAppDefinedEnvVar(ctx context.Context, appID string, key string) error {
+	ret := _mock.Called(ctx, appID, key)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteAppDefinedEnvVar")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, appID, key)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// ListAppEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ListAppEnvVars(ctx context.Context, appID string, envName string) ([]client.AppEnvVar, error) {
+	ret := _mock.Called(ctx, appID, envName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListAppEnvVars")
+	}
+
+	var r0 []client.AppEnvVar
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []client.AppEnvVar); ok {
+		r0 = returnFunc(ctx, appID, envName)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.AppEnvVar)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, envName)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// --- 环境变量导入预览 mock methods ---
+
+// PreviewPublicEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) PreviewPublicEnvVars(ctx context.Context, workspaceID string, filePath string) (*client.EnvVarImportPreview, error) {
+	ret := _mock.Called(ctx, workspaceID, filePath)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PreviewPublicEnvVars")
+	}
+
+	var r0 *client.EnvVarImportPreview
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.EnvVarImportPreview); ok {
+		r0 = returnFunc(ctx, workspaceID, filePath)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.EnvVarImportPreview)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, workspaceID, filePath)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// PreviewEnvScopedEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) PreviewEnvScopedEnvVars(ctx context.Context, envID string, filePath string) (*client.EnvVarImportPreview, error) {
+	ret := _mock.Called(ctx, envID, filePath)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PreviewEnvScopedEnvVars")
+	}
+
+	var r0 *client.EnvVarImportPreview
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.EnvVarImportPreview); ok {
+		r0 = returnFunc(ctx, envID, filePath)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.EnvVarImportPreview)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, envID, filePath)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// PreviewAppEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) PreviewAppEnvVars(ctx context.Context, appID string, filePath string) (*client.EnvVarImportPreview, error) {
+	ret := _mock.Called(ctx, appID, filePath)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PreviewAppEnvVars")
+	}
+
+	var r0 *client.EnvVarImportPreview
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.EnvVarImportPreview); ok {
+		r0 = returnFunc(ctx, appID, filePath)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.EnvVarImportPreview)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, filePath)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// ListEnvScopedEnvVars provides a mock function for the type MockClient
+func (_mock *MockClient) ListEnvScopedEnvVars(ctx context.Context, envID string) ([]client.ScopedEnvVarDetailed, error) {
+	ret := _mock.Called(ctx, envID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListEnvScopedEnvVars")
+	}
+
+	var r0 []client.ScopedEnvVarDetailed
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []client.ScopedEnvVarDetailed); ok {
+		r0 = returnFunc(ctx, envID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.ScopedEnvVarDetailed)
+		}
+	}
+
+	var r1 error
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, envID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}

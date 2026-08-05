@@ -196,4 +196,63 @@ type Client interface {
 		appID, envName string,
 		opts PortForwardTunnelOptions,
 	) (io.ReadWriteCloser, error)
+
+	// ---------- 环境变量导入导出 ----------
+
+	// ImportPublicEnvVars 导入公共环境变量
+	ImportPublicEnvVars(ctx context.Context, workspaceID, filePath string) (*EnvVarImportResult, error)
+	// ExportPublicEnvVars 导出公共环境变量
+	ExportPublicEnvVars(ctx context.Context, workspaceID string) (string, error)
+	// ImportEnvScopedEnvVars 导入单环境环境变量
+	ImportEnvScopedEnvVars(ctx context.Context, envID, filePath string) (*EnvVarImportResult, error)
+	// ExportEnvScopedEnvVars 导出单环境环境变量
+	ExportEnvScopedEnvVars(ctx context.Context, envID string) (string, error)
+	// ImportAppEnvVars 导入应用直接定义的环境变量
+	ImportAppEnvVars(ctx context.Context, appID, filePath string) (*EnvVarImportResult, error)
+	// ExportAppEnvVars 导出应用环境变量
+	ExportAppEnvVars(ctx context.Context, appID string, opts ExportAppEnvVarsOptions) (string, error)
+
+	// ---------- 环境变量导入预览 ----------
+
+	// PreviewPublicEnvVars 预览公共环境变量导入
+	PreviewPublicEnvVars(ctx context.Context, workspaceID, filePath string) (*EnvVarImportPreview, error)
+	// PreviewEnvScopedEnvVars 预览单环境环境变量导入
+	PreviewEnvScopedEnvVars(ctx context.Context, envID, filePath string) (*EnvVarImportPreview, error)
+	// PreviewAppEnvVars 预览应用环境变量导入
+	PreviewAppEnvVars(ctx context.Context, appID, filePath string) (*EnvVarImportPreview, error)
+
+	// ---------- 环境变量 CRUD ----------
+
+	// ListPublicEnvVars 获取公共环境变量列表
+	ListPublicEnvVars(ctx context.Context, workspaceID string) ([]ScopedEnvVar, error)
+	// ListEnvScopedEnvVars 获取指定环境下的环境变量详情列表（含冲突信息）
+	ListEnvScopedEnvVars(ctx context.Context, envID string) ([]ScopedEnvVarDetailed, error)
+	// CreateScopedEnvVar 创建公共作用域环境变量
+	CreateScopedEnvVar(ctx context.Context, workspaceID string, opts CreateScopedEnvVarOptions) (*ScopedEnvVar, error)
+	// UpdateScopedEnvVar 更新公共作用域环境变量
+	UpdateScopedEnvVar(
+		ctx context.Context,
+		workspaceID, scopedEnvVarID string,
+		opts UpdateScopedEnvVarOptions,
+	) (*ScopedEnvVar, error)
+	// DeleteScopedEnvVar 删除公共作用域环境变量
+	DeleteScopedEnvVar(ctx context.Context, workspaceID, scopedEnvVarID string) error
+	// ListAppDefinedEnvVars 获取应用直接定义的环境变量列表
+	ListAppDefinedEnvVars(ctx context.Context, appID string) ([]AppDefinedEnvVar, error)
+	// CreateAppDefinedEnvVar 创建应用直接定义的环境变量
+	CreateAppDefinedEnvVar(
+		ctx context.Context,
+		appID string,
+		opts CreateAppDefinedEnvVarOptions,
+	) (*AppDefinedEnvVar, error)
+	// UpdateAppDefinedEnvVar 更新应用直接定义的环境变量
+	UpdateAppDefinedEnvVar(
+		ctx context.Context,
+		appID, key string,
+		opts UpdateAppDefinedEnvVarOptions,
+	) (*AppDefinedEnvVar, error)
+	// DeleteAppDefinedEnvVar 删除应用直接定义的环境变量
+	DeleteAppDefinedEnvVar(ctx context.Context, appID, key string) error
+	// ListAppEnvVars 获取应用在某环境下最终生效的全部环境变量
+	ListAppEnvVars(ctx context.Context, appID, envName string) ([]AppEnvVar, error)
 }

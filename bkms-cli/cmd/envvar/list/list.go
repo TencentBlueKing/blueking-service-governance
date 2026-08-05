@@ -1,0 +1,26 @@
+// Package listcmd provides the 'env-var list' sub-command group.
+package list
+
+import "github.com/spf13/cobra"
+
+// NewCmd creates the list sub-command group.
+func NewCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List environment variables",
+		Long: `List environment variables from the server.
+
+Supports listing public (workspace/envType/env) scoped vars, app-defined vars,
+and effective vars for an app in a specific environment.`,
+		DisableFlagsInUseLine: true,
+	}
+
+	// 查询公共环境变量
+	cmd.AddCommand(NewPublicCmd())
+	// 查询应用环境变量
+	cmd.AddCommand(NewAppCmd())
+	// 查询环境变量
+	cmd.AddCommand(NewEnvCmd())
+
+	return cmd
+}

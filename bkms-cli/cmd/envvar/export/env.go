@@ -1,0 +1,54 @@
+package export
+
+import (
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	handler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/env"
+	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+)
+
+// NewEnvCmd returns a Command instance for 'env-var export env' sub command.
+func NewEnvCmd() *cobra.Command {
+	var workspaceID, envName, filePath string
+
+	cmd := &cobra.Command{
+		Use:   "env",
+		Short: "Export environment-scoped environment variables",
+		Long: `Export environment-scoped environment variables from the server.
+
+The --env flag accepts an environment name (e.g. prod, stag, teamdev).
+The exported content is in dotenv format. By default it is printed to stdout.
+Use -f to write it to a file.`,
+		Example: `  # Export env-scoped env vars to stdout
+  bkms-cli env-var export env --env <env-name>
+
+  # Export env-scoped env vars to a file
+  bkms-cli env-var export env --env <env-name> -f vars.env`,
+		PreRun: cmdutil.CommonPreRun,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
+
+			envID, err := handler.ResolveEnvIDByName(cmd.Context(), client.New(), workspaceID, envName)
+			if err != nil {
+				return err
+			}
+
+			content, err := client.New().ExportEnvScopedEnvVars(cmd.Context(), envID)
+			if err != nil {
+				return errors.Wrap(err, "export env scoped env vars")
+			}
+
+			return writeExportContent(content, filePath)
+		},
+	}
+
+	cmd.Flags().StringVar(&workspaceID, "workspace", "", "workspace ID")
+	cmd.Flags().StringVar(&envName, "env", "", "environment name (required)")
+	cmd.Flags().StringVarP(&filePath, "file", "f", "", "output file path (default: stdout)")
+
+	_ = cmd.MarkFlagRequired("env")
+
+	return cmd
+}
