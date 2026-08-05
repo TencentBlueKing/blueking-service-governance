@@ -62,8 +62,8 @@ func pollingHelmDeployStatus(ctx context.Context, args PollingHelmDeployStatusAr
 		return nil, errors.Wrapf(err, "get deploy record")
 	}
 
-	// 进入部署轮询后先异步触发一次资源范围刷新，稳定终态后仍会再刷新校准最终结果
-	go triggerTopologyRefreshAfterHelmDeploy(
+	// 进入部署轮询后异步触发一次资源范围刷新
+	go triggerTopologyRefreshForHelmDeploy(
 		context.WithoutCancel(ctx),
 		args,
 		record.ClusterID,
@@ -140,15 +140,6 @@ func pollingHelmDeployStatus(ctx context.Context, args PollingHelmDeployStatusAr
 			if record.Status == helm.StatusDeployed {
 				handleHelmDeploySucceeded(ctx, args, record)
 			}
-
-			// 部署进入稳定终态后异步触发资源范围刷新
-			go triggerTopologyRefreshAfterHelmDeploy(
-				context.WithoutCancel(ctx),
-				args,
-				record.ClusterID,
-				record.Namespace,
-				record.ReleaseName,
-			)
 
 			// 转换为操作结果 & 记录操作审计
 			opResult := lo.Ternary(record.Status == helm.StatusDeployed, audit.ResultSuccess, audit.ResultFailed)

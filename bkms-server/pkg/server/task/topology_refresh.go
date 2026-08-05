@@ -8,9 +8,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
-// triggerTopologyRefreshAfterHelmDeploy Helm 应用部署进入稳定终态后触发拓扑资源范围刷新
-// 该函数应在 goroutine 中调用
-func triggerTopologyRefreshAfterHelmDeploy(
+// triggerTopologyRefreshForHelmDeploy 为 Helm 部署触发拓扑资源范围刷新
+// 该函数应在 goroutine 中调用，调用方负责控制触发时机
+func triggerTopologyRefreshForHelmDeploy(
 	ctx context.Context,
 	args PollingDeployStatusArgs,
 	clusterID, namespace, releaseName string,
@@ -40,10 +40,10 @@ func triggerTopologyRefreshAfterHelmDeploy(
 	)
 }
 
-// triggerTopologyRefreshAfterAppModelDeploy AppModel 部署进入稳定终态后触发拓扑资源范围刷新
+// triggerTopologyRefreshForAppModelDeploy 为 AppModel 部署触发拓扑资源范围刷新
 // 基于部署记录中的 ResourceKeys 和 LabelSelector 进行刷新
-// 该函数应在 goroutine 中调用
-func triggerTopologyRefreshAfterAppModelDeploy(
+// 该函数应在 goroutine 中调用，调用方负责控制触发时机
+func triggerTopologyRefreshForAppModelDeploy(
 	ctx context.Context,
 	args PollingDeployStatusArgs,
 	clusterID, namespace string,

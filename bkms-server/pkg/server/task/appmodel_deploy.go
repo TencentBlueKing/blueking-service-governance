@@ -36,12 +36,12 @@ func pollingTrpcDeployStatus(ctx context.Context, args PollingTrpcDeployStatusAr
 		return nil, errors.Wrapf(err, "get deploy record")
 	}
 
-	// 进入部署轮询后先异步触发一次资源范围刷新，稳定终态后仍会再刷新校准最终结果
+	// 进入部署轮询后异步触发一次资源范围刷新
 	var topologyResourceKeys []topology.ResourceKeyEntry
 	for _, rk := range record.ResourceKeys {
 		topologyResourceKeys = append(topologyResourceKeys, topology.ResourceKeyEntry{Kind: rk.Kind, Name: rk.Name})
 	}
-	go triggerTopologyRefreshAfterAppModelDeploy(
+	go triggerTopologyRefreshForAppModelDeploy(
 		context.WithoutCancel(ctx),
 		args,
 		record.ClusterID,
@@ -165,16 +165,6 @@ func pollingTrpcDeployStatus(ctx context.Context, args PollingTrpcDeployStatusAr
 			if record.Status == appmodeldeploy.StatusDeployed {
 				handleAppModelDeploySucceeded(ctx, args, record)
 			}
-
-			// 部署进入稳定终态后异步触发资源范围刷新
-			go triggerTopologyRefreshAfterAppModelDeploy(
-				context.WithoutCancel(ctx),
-				args,
-				record.ClusterID,
-				record.Namespace,
-				topologyResourceKeys,
-				record.LabelSelector,
-			)
 
 			// 转换为操作结果 & 记录操作审计
 			opResult := lo.Ternary(

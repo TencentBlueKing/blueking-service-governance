@@ -346,10 +346,10 @@ var _ = Describe("Refresher", func() {
 			})
 		})
 
-		It("should generate partial success snapshot when some declared resources are missing", func() {
+		It("should keep declared resources in snapshot when some resources are missing", func() {
 			refresher := NewRefresher(store)
 
-			mockey.PatchConvey("appmodel-partial-success", GinkgoT(), func() {
+			mockey.PatchConvey("appmodel-keeps-missing-declared-resources", GinkgoT(), func() {
 				cfg := &cluster.Config{ClusterID: "test-cluster"}
 				mockey.Mock(cluster.NewConfig).Return(cfg).Build()
 				mockey.Mock(discovery.GetGroupVersionResource).Return(
@@ -387,13 +387,12 @@ var _ = Describe("Refresher", func() {
 				got, err := store.Get(ctx, "test-app", "dev", "")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got).NotTo(BeNil())
-				Expect(got.RefreshStatus).To(Equal(RefreshStatusPartialSuccess))
-				Expect(got.WarningSummary).To(
-					Equal("partial success: 1 of 2 declared resources missing in cluster"),
-				)
+				Expect(got.RefreshStatus).To(Equal(RefreshStatusSuccess))
+				Expect(got.WarningSummary).To(BeEmpty())
 				Expect(got.DataVersion).To(Equal(int64(1)))
-				Expect(got.Resources).To(HaveLen(1))
+				Expect(got.Resources).To(HaveLen(2))
 				Expect(got.Resources[0].Name).To(Equal("existing-cm"))
+				Expect(got.Resources[1].Name).To(Equal("missing-cm"))
 			})
 		})
 

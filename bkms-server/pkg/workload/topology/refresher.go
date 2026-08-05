@@ -2,7 +2,6 @@ package topology
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -137,36 +136,6 @@ func (r *Refresher) Refresh(ctx context.Context, args RefreshArgs) error {
 	return nil
 }
 
-// refreshStatusForCounts 根据补链后集群中实际存在的资源数量与声明的资源数量判定刷新态
-// - existingCount >= declaredCount 视为全部落地，返回 Success
-// - existingCount < declaredCount 且 declaredCount > 0 视为部分落地，返回 PartialSuccess
-// - declaredCount == 0 为保护式分支，正常路径由 ErrNoRefreshableResources 提前短路
-func refreshStatusForCounts(existingCount, declaredCount int) string {
-	if declaredCount <= 0 {
-		return RefreshStatusSuccess
-	}
-	if existingCount >= declaredCount {
-		return RefreshStatusSuccess
-	}
-	return RefreshStatusPartialSuccess
-}
-
-// buildRefreshWarningSummary 根据缺失资源数量拼装 PartialSuccess 场景下的 Warning 文案
-// 完整落地或 declaredCount<=0 时返回空串；missingCount<=0 兜底同样返回空串
-func buildRefreshWarningSummary(existingCount, declaredCount int) string {
-	if declaredCount <= 0 {
-		return ""
-	}
-	missingCount := declaredCount - existingCount
-	if missingCount <= 0 {
-		return ""
-	}
-	return fmt.Sprintf(
-		"partial success: %d of %d declared resources missing in cluster",
-		missingCount, declaredCount,
-	)
-}
-
 // isHelmReleaseNotFound 判断 Helm Release 缺失错误
 // Helm SDK 可能返回 driver.ErrReleaseNotFound，也可能在外层包装后只保留 release: not found 文案
 func isHelmReleaseNotFound(err error) bool {
@@ -204,23 +173,22 @@ func (r *Refresher) doRefreshFromHelmRelease(ctx context.Context, args RefreshAr
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "parse manifest")
 	}
-	declaredCount := len(entries)
+	if len(entries) == 0 {
+		return nil, 0, ErrNoRefreshableResources
+	}
 
 	// 3. 从集群补充资源（ownerRef 链，如 Deployment → ReplicaSet / CronJob → Job）
 	clusterCfg := cluster.NewConfig(args.ClusterID)
-	supplementedEntries, clusterResources, err := r.supplementFromCluster(ctx, clusterCfg, args.Namespace, entries)
+	clusterResources, err := r.supplementFromCluster(ctx, clusterCfg, args.Namespace, entries)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "supplement from cluster")
-	}
-	if len(supplementedEntries) == 0 {
-		return nil, 0, ErrNoRefreshableResources
 	}
 
 	// 4. 收集扩展关系
 	relations := NewRelationCollector(clusterResources).Collect()
 
 	// 5. 构建最终的 ResourceSnapshot（含乐观锁版本号）
-	return r.buildSnapshotWithVersion(ctx, args, supplementedEntries, relations, declaredCount)
+	return r.buildSnapshotWithVersion(ctx, args, entries, relations)
 }
 
 // doRefreshFromResourceKeys 基于部署记录中的 ResourceKeys 执行刷新（AppModel 部署场景）
@@ -244,34 +212,33 @@ func (r *Refresher) doRefreshFromResourceKeys(ctx context.Context, args RefreshA
 			SourceType: SourceTypeAppModelDeploy,
 		})
 	}
-	declaredCount := len(entries)
+	if len(entries) == 0 {
+		return nil, 0, ErrNoRefreshableResources
+	}
 
 	// 2. 从集群补充 ownerRef 链
 	clusterCfg := cluster.NewConfig(args.ClusterID)
-	supplementedEntries, clusterResources, err := r.supplementFromCluster(ctx, clusterCfg, args.Namespace, entries)
+	clusterResources, err := r.supplementFromCluster(ctx, clusterCfg, args.Namespace, entries)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "supplement from cluster")
-	}
-	if len(supplementedEntries) == 0 {
-		return nil, 0, ErrNoRefreshableResources
 	}
 
 	// 3. 收集扩展关系
 	relations := NewRelationCollector(clusterResources).Collect()
 
 	// 4. 构建最终的 ResourceSnapshot（含乐观锁版本号）
-	return r.buildSnapshotWithVersion(ctx, args, supplementedEntries, relations, declaredCount)
+	return r.buildSnapshotWithVersion(ctx, args, entries, relations)
 }
 
-// supplementFromCluster 从集群中补充 ownerRef 链中的资源到 clusterResources（用于关系收集）
-// 动态子资源（RS/Job/Pod）不写入 entries，由 Builder 实时发现
-// 返回原始 entries（不含动态子资源）和集群中获取到的非结构化资源对象映射
+// supplementFromCluster 从集群中获取已存在的声明资源，并补充 ownerRef 链资源到 clusterResources
+// 刷新快照始终保留原始声明资源，缺失资源由 Builder 查询拓扑时标记为 NotFound
+// 动态子资源（RS/Job/Pod）不写入 snapshot entries，由 Builder 实时发现
 func (r *Refresher) supplementFromCluster(
 	ctx context.Context,
 	clusterCfg *cluster.Config,
 	namespace string,
 	entries []ResourceEntry,
-) ([]ResourceEntry, map[string]*unstructured.Unstructured, error) {
+) (map[string]*unstructured.Unstructured, error) {
 	clusterResources := make(map[string]*unstructured.Unstructured)
 	var mu sync.Mutex
 
@@ -309,10 +276,8 @@ func (r *Refresher) supplementFromCluster(
 	}
 
 	if err := g.Wait(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
-	entries = filterExistingEntries(entries, clusterResources)
 
 	// 补充 Deployment/StatefulSet → ReplicaSet 链（Pod 需要在 Builder 中实时获取）
 	supplementG, supplementCtx := errgroup.WithContext(ctx)
@@ -334,10 +299,10 @@ func (r *Refresher) supplementFromCluster(
 	}
 
 	if err := supplementG.Wait(); err != nil {
-		return nil, nil, errors.Wrap(err, "supplement owner ref chain")
+		return nil, errors.Wrap(err, "supplement owner ref chain")
 	}
 
-	return entries, clusterResources, nil
+	return clusterResources, nil
 }
 
 // ownerRefChainSpec 描述某种工作负载的 ownerRef 补链规则
@@ -388,10 +353,11 @@ func (r *Refresher) supplementOwnerRefChain(
 	workloadObj := clusterResources[workloadKey]
 	mu.Unlock()
 
-	var labelSelector string
-	if workloadObj != nil {
-		labelSelector = extractLabelSelector(workloadObj)
+	// 父资源实时对象不存在时不做子资源补链，缺失节点由 Builder 标记为 NotFound
+	if workloadObj == nil {
+		return nil
 	}
+	labelSelector := extractLabelSelector(workloadObj)
 
 	childGVR, gvrErr := discovery.GetGroupVersionResource(clusterCfg, spec.childKind, "")
 	if gvrErr != nil {
@@ -431,13 +397,13 @@ func (r *Refresher) supplementOwnerRefChain(
 }
 
 // buildSnapshotWithVersion 获取当前版本号并构建 ResourceSnapshot（乐观锁公共逻辑）
+// 快照保存声明资源范围，资源实时缺失由 Builder 查询时标记为 NotFound
 // 返回 snapshot 和 expectedVersion，供 Refresh 中 UpsertWithVersion 使用
 func (r *Refresher) buildSnapshotWithVersion(
 	ctx context.Context,
 	args RefreshArgs,
 	entries []ResourceEntry,
 	relations []ResourceRelation,
-	declaredCount int,
 ) (*ResourceSnapshot, int64, error) {
 	var expectedVersion int64
 	dataVersion := int64(1)
@@ -458,28 +424,11 @@ func (r *Refresher) buildSnapshotWithVersion(
 		Namespace:       args.Namespace,
 		ReleaseName:     args.ReleaseName,
 		DataVersion:     dataVersion,
-		RefreshStatus:   refreshStatusForCounts(len(entries), declaredCount),
-		WarningSummary:  buildRefreshWarningSummary(len(entries), declaredCount),
+		RefreshStatus:   RefreshStatusSuccess,
 		Resources:       entries,
 		Relations:       relations,
 	}
 	return snapshot, expectedVersion, nil
-}
-
-// filterExistingEntries 过滤掉集群中已确认不存在的声明资源
-// 仅保留成功读取到实时对象的资源，避免失败部署时把尚未创建的资源写入拓扑快照
-func filterExistingEntries(
-	entries []ResourceEntry,
-	clusterResources map[string]*unstructured.Unstructured,
-) []ResourceEntry {
-	filtered := make([]ResourceEntry, 0, len(entries))
-	for _, entry := range entries {
-		key := ResourceKey(entry.Kind, entry.Namespace, entry.Name)
-		if _, ok := clusterResources[key]; ok {
-			filtered = append(filtered, entry)
-		}
-	}
-	return filtered
 }
 
 // hasOwnerRef 检查资源是否有指定的 ownerReference
