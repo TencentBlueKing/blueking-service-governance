@@ -10,7 +10,6 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
@@ -169,14 +168,13 @@ func pollingHelmDeployStatus(ctx context.Context, args PollingHelmDeployStatusAr
 func handleHelmDeploySucceeded(ctx context.Context, args PollingDeployStatusArgs, record *helmdeploy.Record) {
 	reg := storereg.G()
 
-	// 1. 记录应用到环境的部署关联（envStore 初始化失败时仅告警，不阻断主流程）
-	envStore, sErr := envmodel.NewEnvironmentStoreMongo(database.Client(), database.Name())
-	if sErr != nil {
-		log.Errorf(ctx, "track env add app: create env store: %v", sErr)
+	// 1. 记录应用到环境的部署关联（envStore 未初始化时仅告警，不阻断主流程）
+	if reg.EnvStore == nil {
+		log.Errorf(ctx, "track env add app: env store is not initialized")
 	} else {
-		deploy.TrackEnvAddApp(ctx, envStore, args.WorkspaceID, args.EnvName, args.AppID)
+		deploy.TrackEnvAddApp(ctx, reg.EnvStore, args.WorkspaceID, args.EnvName, args.AppID)
 	}
 
 	// 2. 异步将应用关联的告警策略同步到当前环境（失败仅记录日志，不影响部署结果）
-	syncAlertStrategiesAfterDeploy(ctx, reg, envStore, args, record.Operator)
+	syncAlertStrategiesAfterDeploy(ctx, reg, args, record.Operator)
 }

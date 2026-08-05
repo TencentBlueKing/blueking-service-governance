@@ -214,5 +214,5 @@ func handleAppModelDeploySucceeded(
 	}
 
 	// 2. 异步将应用关联的告警策略同步到当前环境（失败仅记录日志，不影响部署结果）
-	syncAlertStrategiesAfterDeploy(ctx, reg, reg.EnvStore, args, record.Creator)
+	syncAlertStrategiesAfterDeploy(ctx, reg, args, record.Creator)
 }
