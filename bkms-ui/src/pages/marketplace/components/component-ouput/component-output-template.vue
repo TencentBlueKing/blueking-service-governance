@@ -9,16 +9,8 @@
       <template #header-right>
         <slot name="header-right" />
       </template>
-      <!-- Patch 已有的工作负载 -->
-      <ResourceListCard
-        ref="patchCardRef"
-        v-model:items="patches"
-        :add-button-text="$t('添加 Patch 路径')"
-        class="pb-[12px] mb-[24px]"
-        :disable-remove="disableRemove"
-        :editor-title="$t('输出模板')"
-        @add="handleAddPatch"
-      >
+
+      <CollapseCard class="pb-[12px] mb-[24px]">
         <template #header-left>
           <div class="flex items-center min-w-0">
             <span class="font-bold text-[#313238] shrink-0">
@@ -30,12 +22,6 @@
             >
               {{ $t('工作负载 Patch') }}
             </Tag>
-            <span
-              class="text-[12px] text-[#979BA5] truncate min-w-0"
-              :title="$t('（将内容合并到已有的工作负载中）')"
-            >
-              {{ $t('（将内容合并到已有的工作负载中）') }}
-            </span>
           </div>
         </template>
         <template #header-right>
@@ -54,65 +40,21 @@
             />
           </Select>
         </template>
-        <!-- <template #header>
-        <FlexRow class="w-full">
-          <template #left>
-            <div class="flex items-center min-w-0">
-              <span class="font-bold text-[#313238] shrink-0">
-                {{ $t('Patch 已有的工作负载') }}
-              </span>
-              <Tag
-                class="ml-[12px] mr-[4px] shrink-0"
-                theme="info"
-              >
-                {{ $t('工作负载 Patch') }}
-              </Tag>
-              <span class="text-[12px] text-[#979BA5] truncate min-w-0">
-                {{ $t('（将内容合并到已有的工作负载中）') }}
-              </span>
-            </div>
-          </template>
-          <template #right>
-            <slot name="patch-header-right">
-              <Select
-                v-model="workloadType"
-                :clearable="false"
-              >
-                <template #prefix>
-                  <span
-                    class="px-[8px] text-[#63656E] border-r-[#c4c6cc] border-r text-[12px] bg-[#FAFBFD] leading-[32px]"
-                  >
-                    {{ $t('工作负载类型') }}
-                  </span>
-                </template>
-                <Select.Option
-                  name="GameDeployment"
-                  value="GameDeployment"
-                />
-              </Select>
-            </slot>
-          </template>
-        </FlexRow>
-      </template> -->
-        <template #item-header-left="{ item }">
-          <Input
-            class="flex-1 h-[32px]"
-            :model-value="getPatchPath(item)"
-            :placeholder="$t('请输入 Patch 路径，如 {0}', ['spec.replicas、metadata.labels'])"
-            @update:model-value="handlePatchPathUpdate(item, String($event))"
-          >
-            <template #prefix>
-              <span
-                class="px-[12px] bg-[#FAFBFD] text-[#313238] text-[12px] h-full flex items-center border-r border-[#DCDEE5] whitespace-nowrap"
-              >
-                {{ $t('Patch 路径') }}
-              </span>
-            </template>
-          </Input>
-        </template>
-      </ResourceListCard>
 
-      <!-- 新建 K8s 资源 -->
+        <Alert
+          class="mb-[12px]"
+          theme="info"
+          :title="$t('仅填写需要修改的字段（如副本数），保存后将合并覆盖到工作负载，未填写的字段保持不变。')"
+        />
+        <MsEditorPlus
+          ref="patchEditorRef"
+          :model-value="patchContent"
+          :title="$t('Patch 内容（YAML 片段）')"
+          :validator="[validatePatchContent]"
+          @update:model-value="patchContent = $event"
+        />
+      </CollapseCard>
+
       <ResourceListCard
         ref="k8sCardRef"
         v-model:items="k8sResources"
@@ -153,60 +95,52 @@
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
 
-  import { Input, Select, Tag } from 'bkui-vue';
-  import yaml from 'js-yaml';
+  import { Alert, Select, Tag } from 'bkui-vue';
+  import * as monaco from 'monaco-editor';
+  import { useI18n } from 'vue-i18n';
+  import MsEditorPlus from '~/components/monaco-editor/ms-editor-plus.vue';
 
   import ResourceListCard from './resource-list-card.vue';
 
-  import type { IResourceListItem } from './resource-list-card.vue';
-  import type { ComponentDefOutputFormInput } from '~/@types/v1/component-defs';
+  import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
 
   export interface IK8sResourceItemData {
     content: string;
   }
 
-  export interface IPatchItemData {
-    content: string;
-    path: string;
-  }
-
   export interface OutputTemplateData {
-    k8sResources: (IK8sResourceItemData & { id: number })[];
-    patches: (IPatchItemData & { id: number })[];
+    patchers: string[];
+    specs: string[];
   }
 
-  /** 输出模板默认数据 */
-  const DEFAULT_OUTPUT_TEMPLATE = {
-    patcher: {
-      'spec.template.spec': {
-        terminationGracePeriodSeconds: '{{ .graceSeconds }}',
-      },
-    },
-    spec: [],
+  const DEFAULT_OUTPUT_TEMPLATE: OutputTemplateData = {
+    patchers: ['spec:\n  template:\n    spec:\n      terminationGracePeriodSeconds: {{ .graceSeconds }}'],
+    specs: [],
   };
 
+  /** 单个编辑器中以 YAML 文档分隔符表示多个按顺序执行的 patcher。 */
+  const YAML_DOCUMENT_SEPARATOR = /^\s*(?:---|\.\.\.)\s*(?:#.*)?$/m;
+
   interface IProps {
-    /** 初始输出模板数据，传入后自动初始化 */
-    initialData?: ComponentDefOutputFormInput;
+    initialData?: OutputTemplateData;
   }
 
   const props = withDefaults(defineProps<IProps>(), {
     initialData: undefined,
   });
 
-  const patches = ref<OutputTemplateData['patches']>([]);
-  const k8sResources = ref<OutputTemplateData['k8sResources']>([]);
+  const { t } = useI18n();
+  const patchContent = ref('');
+  const k8sResources = ref<(IK8sResourceItemData & { id: number })[]>([]);
 
-  // id 计数器
-  let patchIdCounter = 0;
   let k8sResourceIdCounter = 0;
 
   const workloadType = ref('GameDeployment');
-  const patchCardRef = ref<InstanceType<typeof ResourceListCard>>();
+  const patchEditorRef = ref<InstanceType<typeof MsEditorPlus>>();
   const k8sCardRef = ref<InstanceType<typeof ResourceListCard>>();
 
-  /** Patch 和 K8s 总数 ≤ 1 时禁用删除，保证至少保留一个资源 */
-  const disableRemove = computed(() => patches.value.length + k8sResources.value.length <= 1);
+  /** Patch 与 K8s 总数至少为 1，保证至少保留一个资源。 */
+  const disableRemove = computed(() => !patchContent.value.trim() && k8sResources.value.length <= 1);
 
   function createK8sResourceItem(): IK8sResourceItemData & { id: number } {
     return {
@@ -215,83 +149,56 @@
     };
   }
 
-  function createPatchItem(): IPatchItemData & { id: number } {
+  /** 获取输出模板表单数据（提交用）。 */
+  function getOutputData(): OutputTemplateData {
     return {
-      id: ++patchIdCounter,
-      path: '',
-      content: '',
+      patchers: getPatchers(patchContent.value),
+      specs: k8sResources.value.map(resource => resource.content),
     };
   }
 
-  function getDefaultOutputInitData(): Omit<ComponentDefOutputFormInput, 'name'> {
-    const patcher = Object.entries(DEFAULT_OUTPUT_TEMPLATE.patcher).map(([path, patch]) => ({
-      path,
-      patch: unquoteTemplateExpressions(yaml.dump(patch)),
-    }));
-    const spec = DEFAULT_OUTPUT_TEMPLATE.spec.map(s => unquoteTemplateExpressions(yaml.dump(s)));
-    return { patcher, spec };
-  }
-
-  /** 获取输出模板表单数据（提交用） */
-  function getOutputForm(): Omit<ComponentDefOutputFormInput, 'name'> {
-    return {
-      patcher: patches.value.map(p => ({ path: p.path, patch: p.content })),
-      spec: k8sResources.value.map(r => r.content),
-    };
-  }
-
-  function getPatchPath(item: IResourceListItem): string {
-    return (item as IPatchItemData & { id: number }).path;
+  function getPatchers(content: string): string[] {
+    return content.split(YAML_DOCUMENT_SEPARATOR).filter(fragment => fragment.trim());
   }
 
   function handleAddK8sResource() {
     k8sResources.value.push(createK8sResourceItem());
   }
 
-  function handleAddPatch() {
-    patches.value.push(createPatchItem());
-  }
-
-  function handlePatchPathUpdate(item: IResourceListItem, val: string) {
-    (item as IPatchItemData & { id: number }).path = val;
-  }
-
   /** 重置 id 计数器并初始化数据，无参数时使用默认模板 */
-  function init(data?: ComponentDefOutputFormInput) {
-    const initData = data ?? getDefaultOutputInitData();
-    patchIdCounter = 0;
+  function init(data?: OutputTemplateData) {
+    const initData = data ?? DEFAULT_OUTPUT_TEMPLATE;
     k8sResourceIdCounter = 0;
-    patches.value = initData.patcher?.length
-      ? initData.patcher.map(item => ({ id: ++patchIdCounter, path: item.path ?? '', content: item.patch ?? '' }))
-      : [];
-    k8sResources.value = initData.spec?.length
-      ? initData.spec.map(content => ({ id: ++k8sResourceIdCounter, content }))
-      : [];
+    patchContent.value = initData.patchers?.join('\n---\n') ?? '';
+    k8sResources.value = initData.specs?.map(content => ({ id: ++k8sResourceIdCounter, content })) ?? [];
   }
 
   /** 校验所有子编辑器是否有错误 */
   function isValid(): boolean {
-    const patchValid = patchCardRef.value?.isValid() ?? true;
+    const patchValid = patchEditorRef.value?.validate() ?? true;
     const k8sValid = k8sCardRef.value?.isValid() ?? true;
     return patchValid && k8sValid;
   }
 
-  /**
-   * 移除 YAML 字符串中 Go 模板表达式（{{ ... }}）两侧的引号
-   * js-yaml 会对以 { 开头的值加引号，导致数字类型字段渲染后仍是字符串
-   */
-  function unquoteTemplateExpressions(yamlStr: string): string {
-    return yamlStr.replace(/["'](\{\{[\s\S]*?\}\})["']/g, '$1');
+  function validatePatchContent(value: string): IMonacoEditorErrorMarkerItem[] {
+    if (getPatchers(value).length || k8sResources.value.length) return [];
+    return [
+      {
+        severity: monaco.MarkerSeverity.Error,
+        message: t('组件输出至少要包含一个资源'),
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 1,
+        endColumn: 1,
+      },
+    ];
   }
 
-  // 监听 initialData 变化自动初始化
   watch(
     () => props.initialData,
-    val => {
-      init(val);
-    },
+    data => init(data),
     { immediate: true },
   );
 
-  defineExpose({ isValid, getOutputForm });
+  defineExpose({ isValid, getOutputData });
 </script>

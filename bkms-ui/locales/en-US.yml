@@ -1490,9 +1490,8 @@ Patch 已有的工作负载: Patch existing workloads
 工作负载 Patch: Workload Patch
 将内容合并到已有的工作负载中: Merge content into existing workloads
 工作负载类型: Workload Type
-Patch 路径: Patch Path
-"请输入 Patch 路径，如 {0}": "Enter Patch path, e.g. {0}"
-添加 Patch 路径: Add Patch Path
+Patch 内容（YAML 片段）: Patch Content (YAML Fragment)
+仅填写需要修改的字段（如副本数），保存后将合并覆盖到工作负载，未填写的字段保持不变。: Only fill in the fields to modify (such as replicas). On save, they will be merged into the workload, while omitted fields remain unchanged.
 新建 Kubernetes 资源: Create Kubernetes Resource
 附加资源: Additional Resource
 将随工作负载一起创建独立的 Kubernetes 资源: Will create independent Kubernetes resources along with the workload

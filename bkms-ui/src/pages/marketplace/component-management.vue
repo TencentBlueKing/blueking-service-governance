@@ -193,11 +193,8 @@
   import RefVarPanel from '~/pages/marketplace/components/ref-var-panel.vue';
   import { useSpaceStore } from '~/stores/space';
 
-  import type {
-    ComponentDefOutputFormInput,
-    ComponentDefOutputObj,
-    PropertyDefInput,
-  } from '~/@types/v1/component-defs';
+  import type { ComponentDefOutputObj, PropertyDefInput } from '~/@types/v1/component-defs';
+  import type { OutputTemplateData } from '~/pages/marketplace/components/component-ouput/component-output-template.vue';
 
   interface IEmit {
     (e: 'refresh'): void;
@@ -249,7 +246,7 @@
   /** 编辑模式下当前组件的 properties，传给 ComponentInputTemplate 初始化 */
   const inputData = ref<PropertyDefInput[]>([]);
   /** 编辑模式下当前组件的输出模板数据，传给 ComponentOutputTemplate 初始化 */
-  const outputData = ref<ComponentDefOutputFormInput>();
+  const outputData = ref<OutputTemplateData>();
 
   const isShow = ref(false);
   const isLoading = ref(false);
@@ -313,7 +310,7 @@
   // 侧边栏关闭前确认
   function handleBeforeClose(): Promise<boolean> {
     const inputChanged = JSON.stringify(inputTemplateRef.value?.getValue() ?? []) !== originInputData.value;
-    const outputChanged = JSON.stringify(outputTemplateRef.value?.getOutputForm()) !== originOutputData.value;
+    const outputChanged = JSON.stringify(outputTemplateRef.value?.getOutputData()) !== originOutputData.value;
     const subComponentClean = !inputChanged && !outputChanged;
     return confirmBox(true, { validates: [() => subComponentClean] });
   }
@@ -332,7 +329,8 @@
     const baseParams = {
       compDefName: formData.value.name,
       description: formData.value.description,
-      outputForm: { name: formData.value.name, ...outputData.value },
+      patchers: outputData.value?.patchers ?? [],
+      specs: outputData.value?.specs ?? [],
       scopeType: (formData.value.isPublic ? 'global' : 'workspace') as 'global' | 'workspace',
       scopeWorkspaceIDs: formData.value.isPublic ? [] : [spaceStore.currentSpace],
       managedByWorkspaceIDs: [spaceStore.currentSpace],
@@ -380,18 +378,19 @@
     try {
       if (!(await validateForm())) return;
       isTrialRunning.value = true;
-      const outputForm = outputTemplateRef.value?.getOutputForm();
+      const outputTemplateData = outputTemplateRef.value?.getOutputData();
       const properties = inputTemplateRef.value?.getValue() || [];
       trialRunResult.value = await ComponentDefsService.previewComponentDef(
         {
           compDefName: formData.value.name,
-          outputForm: { name: formData.value.name, ...outputForm },
+          patchers: outputTemplateData?.patchers ?? [],
+          specs: outputTemplateData?.specs ?? [],
           properties,
         },
         { needRes: true },
       );
       inputData.value = properties;
-      outputData.value = outputForm;
+      outputData.value = outputTemplateData;
       currentStep.value = 2;
     } finally {
       isTrialRunning.value = false;
@@ -435,14 +434,10 @@
         // 编辑模式
         currentEditComponent.value = componentData;
         inputData.value = (componentData.properties || []) as PropertyDefInput[];
-        outputData.value =
-          componentData.outputForm?.patcher?.length || componentData.outputForm?.spec?.length
-            ? {
-                patcher: componentData.outputForm?.patcher || [],
-                spec: componentData.outputForm?.spec || [],
-                name: componentData.outputForm?.name,
-              }
-            : undefined;
+        outputData.value = {
+          patchers: componentData.patchers || [],
+          specs: componentData.specs || [],
+        };
         formData.value = {
           name: componentData.name || '',
           isPublic: componentData.scopeType === 'global',
@@ -476,7 +471,7 @@
       if (!ref || !isShow.value) return;
       nextTick(() => {
         originInputData.value = JSON.stringify(ref.getValue() ?? []);
-        originOutputData.value = JSON.stringify(outputTemplateRef.value?.getOutputForm() ?? '');
+        originOutputData.value = JSON.stringify(outputTemplateRef.value?.getOutputData() ?? '');
       });
     },
     { flush: 'post' },
