@@ -3,6 +3,7 @@ package event
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -30,8 +31,12 @@ type SearchInput struct {
 	Page int
 	// PageSize 分页大小。
 	PageSize int
+	// AlertID 按告警 ID 过滤。
+	AlertID string
 	// AlertName 按告警名称过滤。
 	AlertName string
+	// Description 按告警内容过滤。
+	Description string
 	// StrategyName 按策略名称过滤。
 	StrategyName string
 	// EventID 按事件 ID 过滤。
@@ -121,14 +126,15 @@ func (s *Service) buildSearchAlertReq(
 		startTime = endTime - int64(defaultSearchAlertLookback/time.Second)
 	}
 	req := &bkmapi.SearchAlertReq{
-		BkBizIDs:  []int64{bkBizID},
-		Status:    input.Status,
-		Severity:  input.Severity,
-		StartTime: startTime,
-		EndTime:   endTime,
-		Page:      input.Page,
-		PageSize:  input.PageSize,
-		Ordering:  input.Ordering,
+		BkBizIDs:    []int64{bkBizID},
+		Status:      input.Status,
+		Severity:    input.Severity,
+		StartTime:   startTime,
+		EndTime:     endTime,
+		Page:        input.Page,
+		PageSize:    input.PageSize,
+		Ordering:    input.Ordering,
+		QueryString: buildSearchQueryString(input),
 	}
 	conditions := buildSearchConditions(input, strategyIDs)
 	if len(conditions) > 0 {
@@ -140,7 +146,7 @@ func (s *Service) buildSearchAlertReq(
 // buildSearchConditions 将事件查询输入转换为蓝鲸监控 search_alert 接口使用的 conditions 数组。
 // 这里只处理“可选过滤条件”的拼装：策略 ID 走整型数组，其余字符串字段按接口要求包装成单元素字符串数组。
 func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]any {
-	conditions := make([]map[string]any, 0, 5)
+	conditions := make([]map[string]any, 0, 6)
 	appendIf := func(ok bool, key string, value any) {
 		if ok {
 			conditions = append(conditions, map[string]any{"key": key, "value": value})
@@ -151,6 +157,7 @@ func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]
 		key string
 		val string
 	}{
+		{key: "id", val: input.AlertID},
 		{key: "alert_name", val: input.AlertName},
 		{key: "strategy_name", val: input.StrategyName},
 		{key: "event_id", val: input.EventID},
@@ -159,4 +166,11 @@ func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]
 		appendIf(item.val != "", item.key, []string{item.val})
 	}
 	return conditions
+}
+
+func buildSearchQueryString(input SearchInput) string {
+	if input.Description == "" {
+		return ""
+	}
+	return "description:" + strconv.Quote(input.Description)
 }

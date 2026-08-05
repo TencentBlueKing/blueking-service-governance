@@ -13546,8 +13546,20 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "按告警 ID 过滤",
+                        "name": "alertID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "按告警名称过滤",
                         "name": "alertName",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "按告警内容过滤（映射到 query_string）",
+                        "name": "description",
                         "in": "query"
                     },
                     {
@@ -13808,8 +13820,20 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "按告警 ID 过滤",
+                        "name": "alertID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "按告警名称过滤",
                         "name": "alertName",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "按告警内容过滤（映射到 query_string）",
+                        "name": "description",
                         "in": "query"
                     },
                     {
@@ -16964,6 +16988,12 @@ const docTemplate = `{
             "properties": {
                 "alertName": {
                     "type": "string"
+                },
+                "assignee": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "beginTime": {
                     "type": "integer"

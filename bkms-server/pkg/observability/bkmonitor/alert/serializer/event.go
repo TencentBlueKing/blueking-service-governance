@@ -16,7 +16,9 @@ type AlertQueryInput struct {
 	EndTime      int64    `form:"endTime"`
 	Page         int      `form:"page" binding:"required,gte=1"`
 	PageSize     int      `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
+	AlertID      string   `form:"alertID"`
 	AlertName    string   `form:"alertName"`
+	Description  string   `form:"description"`
 	StrategyName string   `form:"strategyName"`
 	EventID      string   `form:"eventID"`
 	Target       string   `form:"target"`
@@ -39,7 +41,9 @@ func (q AlertQueryInput) ToSearchInput() alertevent.SearchInput {
 		EndTime:      q.EndTime,
 		Page:         q.Page,
 		PageSize:     q.PageSize,
+		AlertID:      q.AlertID,
 		AlertName:    q.AlertName,
+		Description:  q.Description,
 		StrategyName: q.StrategyName,
 		EventID:      q.EventID,
 		Target:       q.Target,
@@ -55,28 +59,29 @@ type AppScopedAlertQueryInput struct {
 
 // AlertEventOutput 告警事件输出
 type AlertEventOutput struct {
-	StrategyID          string `json:"strategyID,omitempty"`
-	ID                  string `json:"id"`
-	EventID             string `json:"eventID,omitempty"`
-	AlertName           string `json:"alertName"`
-	Status              string `json:"status"`
-	Severity            int    `json:"severity"`
-	Description         string `json:"description"`
-	BKMonitorStrategyID int64  `json:"bkMonitorStrategyID,string"`
-	StrategyName        string `json:"strategyName"`
-	TargetType          string `json:"targetType"`
-	Target              string `json:"target"`
-	Dimensions          any    `json:"dimensions,omitempty"`
-	CurrentValue        any    `json:"currentValue,omitempty"`
-	DataSource          string `json:"dataSource,omitempty"`
-	Content             string `json:"content,omitempty"`
-	Detail              any    `json:"detail,omitempty"`
-	RelatedInfo         any    `json:"relatedInfo,omitempty"`
-	Duration            string `json:"duration,omitempty"`
-	BeginTime           int64  `json:"beginTime"`
-	EndTime             int64  `json:"endTime"`
-	LatestTime          int64  `json:"latestTime"`
-	CreateTime          int64  `json:"createTime"`
+	StrategyID          string   `json:"strategyID,omitempty"`
+	ID                  string   `json:"id"`
+	EventID             string   `json:"eventID,omitempty"`
+	AlertName           string   `json:"alertName"`
+	Assignee            []string `json:"assignee,omitempty"`
+	Status              string   `json:"status"`
+	Severity            int      `json:"severity"`
+	Description         string   `json:"description"`
+	BKMonitorStrategyID int64    `json:"bkMonitorStrategyID,string"`
+	StrategyName        string   `json:"strategyName"`
+	TargetType          string   `json:"targetType"`
+	Target              string   `json:"target"`
+	Dimensions          any      `json:"dimensions,omitempty"`
+	CurrentValue        any      `json:"currentValue,omitempty"`
+	DataSource          string   `json:"dataSource,omitempty"`
+	Content             string   `json:"content,omitempty"`
+	Detail              any      `json:"detail,omitempty"`
+	RelatedInfo         any      `json:"relatedInfo,omitempty"`
+	Duration            string   `json:"duration,omitempty"`
+	BeginTime           int64    `json:"beginTime"`
+	EndTime             int64    `json:"endTime"`
+	LatestTime          int64    `json:"latestTime"`
+	CreateTime          int64    `json:"createTime"`
 }
 
 // ListAlertEventsOutput 告警事件列表输出
@@ -108,6 +113,7 @@ func NewAlertEventOutput(a bkmapi.AlertEvent, strategyID string) *AlertEventOutp
 		ID:                  a.ID,
 		EventID:             a.EventID,
 		AlertName:           a.AlertName,
+		Assignee:            a.Assignee,
 		Status:              a.Status,
 		Severity:            a.Severity,
 		Description:         a.Description,

@@ -881,6 +881,10 @@ definitions:
     properties:
       alertName:
         type: string
+      assignee:
+        items:
+          type: string
+        type: array
       beginTime:
         type: integer
       bkMonitorStrategyID:
@@ -16541,9 +16545,17 @@ paths:
         name: pageSize
         required: true
         type: integer
+      - description: 按告警 ID 过滤
+        in: query
+        name: alertID
+        type: string
       - description: 按告警名称过滤
         in: query
         name: alertName
+        type: string
+      - description: 按告警内容过滤（映射到 query_string）
+        in: query
+        name: description
         type: string
       - description: 按策略名称过滤
         in: query
@@ -16711,9 +16723,17 @@ paths:
         name: pageSize
         required: true
         type: integer
+      - description: 按告警 ID 过滤
+        in: query
+        name: alertID
+        type: string
       - description: 按告警名称过滤
         in: query
         name: alertName
+        type: string
+      - description: 按告警内容过滤（映射到 query_string）
+        in: query
+        name: description
         type: string
       - description: 按策略名称过滤
         in: query

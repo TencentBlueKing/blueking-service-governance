@@ -7,10 +7,30 @@ import (
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 )
 
 var _ = Describe("Alert serializer", func() {
+	Describe("NewAlertEventOutput", func() {
+		It("keeps assignees from alert event", func() {
+			output := NewAlertEventOutput(bkmapi.AlertEvent{
+				ID:         "alert-1",
+				AlertName:  "cpu high",
+				Status:     "ABNORMAL",
+				Severity:   2,
+				StrategyID: 1001,
+				Assignee:   []string{"alice", "bob"},
+				BeginTime:  1710000000,
+				EndTime:    1710000300,
+				LatestTime: 1710000300,
+				CreateTime: 1710000000,
+			}, "strategy-1")
+
+			Expect(output.Assignee).To(Equal([]string{"alice", "bob"}))
+		})
+	})
+
 	Describe("AlertStrategyOutput", func() {
 		It("keeps app fields from model", func() {
 			envID := bson.NewObjectID()
@@ -194,6 +214,20 @@ var _ = Describe("Alert serializer", func() {
 	})
 
 	Describe("AlertQueryInput", func() {
+		It("converts alert id and description to search input", func() {
+			input := AlertQueryInput{
+				Page:        1,
+				PageSize:    10,
+				AlertID:     "178583503311905195",
+				Description: "memory_request_usage_high",
+			}
+
+			searchInput := input.ToSearchInput()
+
+			Expect(searchInput.AlertID).To(Equal("178583503311905195"))
+			Expect(searchInput.Description).To(Equal("memory_request_usage_high"))
+		})
+
 		It("uses required paging binding tags", func() {
 			typ := reflect.TypeOf(AlertQueryInput{})
 

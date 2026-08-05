@@ -508,6 +508,8 @@ type AlertEvent struct {
 	EventID string `json:"event_id" mapstructure:"event_id"`
 	// AlertName 告警名称
 	AlertName string `json:"alert_name" mapstructure:"alert_name"`
+	// Assignee 负责人列表
+	Assignee []string `json:"assignee" mapstructure:"assignee"`
 	// Status 告警状态：ABNORMAL / RECOVERED / CLOSED
 	Status string `json:"status" mapstructure:"status"`
 	// Severity 告警级别
@@ -554,6 +556,8 @@ type SearchAlertReq struct {
 	Severity []int `json:"severity,omitempty"`
 	// Conditions 额外过滤条件
 	Conditions []map[string]any `json:"conditions,omitempty"`
+	// QueryString 查询字符串，支持按 description 等字段做文本检索。
+	QueryString string `json:"query_string,omitempty"`
 	// StartTime 开始时间（Unix 时间戳）
 	StartTime int64 `json:"start_time" validate:"required"`
 	// EndTime 结束时间（Unix 时间戳）

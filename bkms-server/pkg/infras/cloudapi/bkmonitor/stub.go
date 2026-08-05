@@ -449,6 +449,7 @@ func (s *StubClient) SearchAlert(ctx context.Context, req *SearchAlertReq) (*Sea
 				ID:           "stub-alert-001",
 				EventID:      "stub-event-001",
 				AlertName:    "CPU 使用率过高",
+				Assignee:     []string{"stub-owner"},
 				Status:       "ABNORMAL",
 				Severity:     2,
 				Description:  "CPU usage exceeds 80%",
