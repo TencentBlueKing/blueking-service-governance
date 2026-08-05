@@ -1,0 +1,51 @@
+name: Release bkms-cli
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: bkms-cli/go.mod
+          cache-dependency-path: bkms-cli/go.sum
+
+      - name: Validate release configuration
+        env:
+          BCS_API_HOST: ${{ vars.BCS_API_HOST }}
+          BKMS_BASE_URL: ${{ vars.BKMS_BASE_URL }}
+        shell: bash
+        run: |
+          if [[ -z "$BCS_API_HOST" || -z "$BKMS_BASE_URL" ]]; then
+            echo "repository variables BCS_API_HOST and BKMS_BASE_URL are required"
+            exit 1
+          fi
+
+      - name: Test bkms-cli packages
+        working-directory: bkms-cli
+        run: go test ./pkg/...
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+          workdir: bkms-cli
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BCS_API_HOST: ${{ vars.BCS_API_HOST }}
+          BKMS_BASE_URL: ${{ vars.BKMS_BASE_URL }}

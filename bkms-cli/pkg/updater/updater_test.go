@@ -1,0 +1,61 @@
+package updater
+
+import (
+	"errors"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+var _ = Describe("Updater", func() {
+	Describe("provider selection", func() {
+		It("rejects builds without an update source", func() {
+			originalSource := updateSource
+			updateSource = ""
+			DeferCleanup(func() { updateSource = originalSource })
+
+			_, err := newProvider()
+			Expect(err).To(MatchError(MatchRegexp("self-update is not configured.*update source")))
+			Expect(errors.Is(err, ErrUpdateNotConfigured)).To(BeTrue())
+		})
+	})
+
+	Describe("version comparison", func() {
+		DescribeTable("only reports a strictly newer SemVer as available",
+			func(currentValue, latestValue string, expected bool) {
+				current, err := parseVersion(currentValue)
+				Expect(err).NotTo(HaveOccurred())
+				latest, err := parseVersion(latestValue)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(buildInfo(current, latest).Available).To(Equal(expected))
+			},
+			Entry("newer", "v1.2.3", "v1.3.0", true),
+			Entry("same with optional v prefix", "v1.2.3", "1.2.3", false),
+			Entry("older", "v1.3.0", "v1.2.3", false),
+			Entry("prerelease of the current version", "v1.2.3", "v1.2.3-fix.1", false),
+		)
+
+		It("rejects development builds without a version", func() {
+			_, err := parseVersion("")
+			Expect(errors.Is(err, ErrInvalidVersion)).To(BeTrue())
+		})
+
+		DescribeTable("rejects non-SemVer tags",
+			func(value string) {
+				_, err := parseVersion(value)
+				Expect(errors.Is(err, ErrInvalidVersion)).To(BeTrue())
+			},
+			Entry("date tag", "v20260101"),
+			Entry("date fix tag", "v20260101-fix"),
+			Entry("partial version", "v1.2"),
+			Entry("leading zero", "v01.2.3"),
+		)
+
+		It("trims version files and linker values", func() {
+			version, err := parseVersion("  v1.2.3\n")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version.String()).To(Equal("1.2.3"))
+		})
+	})
+})

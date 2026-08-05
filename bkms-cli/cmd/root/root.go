@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/auth"
 	cfgCmd "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/env"
+	updateCmd "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/update"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/version"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
@@ -87,6 +88,8 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(cfgCmd.NewCmd())
 	// 版本信息
 	rootCmd.AddCommand(version.NewCmd())
+	// 自动更新
+	rootCmd.AddCommand(updateCmd.NewCmd())
 
 	// 工作空间相关命令
 	rootCmd.AddCommand(workspace.NewCmd())

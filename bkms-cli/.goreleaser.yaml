@@ -1,0 +1,38 @@
+version: 2
+
+project_name: bkms-cli
+
+builds:
+  - id: bkms-cli
+    main: .
+    binary: "bkms-cli-{{ .Os }}-{{ .Arch }}"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.Version={{ .Version }}
+        -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.GitHash={{ .FullCommit }}
+        -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime={{ .Date }}
+        -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.updateSource=github
+        -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/publish.bcsAPIHost={{ .Env.BCS_API_HOST }}
+        -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/config.bkmsBaseURL={{ .Env.BKMS_BASE_URL }}
+
+archives:
+  - ids:
+      - bkms-cli
+    formats:
+      - binary
+    name_template: "{{ .Binary }}"
+
+checksum:
+  name_template: checksums.txt
