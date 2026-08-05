@@ -26,7 +26,7 @@ The --env flag specifies the target environment name.`,
   bkms-cli envvar create env --env <env-name> --key MY_VAR --value my-value
 
   # Create a sensitive env-scoped env var
-  bkms-cli envvar create env --env <env-name> --key MY_SECRET --value my-value --sensitive`,
+  bkms-cli envvar create env --env <env-name> --key MY_VAR --value my-value --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)

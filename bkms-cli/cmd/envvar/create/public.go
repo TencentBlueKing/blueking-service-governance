@@ -34,7 +34,7 @@ The --scope-type flag determines the scope level:
   bkms-cli envvar create public --key MY_VAR --value my-value --scope-type env --scope-value <env-name>
 
   # Create a sensitive env var
-  bkms-cli envvar create public --key MY_SECRET --value my-value --scope-type workspace --sensitive`,
+  bkms-cli envvar create public --key MY_VAR --value my-value --scope-type workspace --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// 校验：scope-type 为 envType 或 env 时必须提供 scope-value
