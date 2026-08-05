@@ -54,7 +54,7 @@ var _ = Describe("tkeRouteEni component migration", func() {
 
 		migrator = migrate.New(
 			database.Client().Database(database.Name()),
-			appSpecStore, appModelStore, wsCompStore, compDefStore,
+			appStore, appSpecStore, appModelStore, wsCompStore, compDefStore,
 		)
 		Expect(compDefStore.Create(ctx, &component.ComponentDef{
 			Name:    tkeRouteEniName,
@@ -168,5 +168,65 @@ var _ = Describe("tkeRouteEni component migration", func() {
 		}
 		_, err = wsCompStore.GetByName(ctx, app.WorkspaceID, wsComp.Name)
 		Expect(err).To(MatchError(workspace.ErrComponentNotFound))
+	})
+
+	It("matches workspace refs by workspaceID+name, not name alone", func() {
+		const sharedName = "tkerouteeni-shared"
+
+		appA := dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{
+			WorkspaceID: "ws-a",
+		})
+		appB := dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{
+			WorkspaceID: "ws-b",
+		})
+		for _, app := range []*bkmsapp.Application{appA, appB} {
+			Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+				AppID:    app.ID,
+				Workload: appmodel.Workload{Type: appmodel.WorkloadTypeTrpc, Name: app.Name},
+			})).To(Succeed())
+		}
+
+		Expect(wsCompStore.Add(ctx,
+			&workspace.Component{
+				ComponentInst: component.ComponentInst{
+					Type: tkeRouteEniName, Version: component.DefaultComponentDefVersion,
+				},
+				Name: sharedName, WorkspaceID: "ws-a",
+				ScopeType: component.ScopeTypeEnvironment, ScopeEnvNames: []string{"prod"},
+			},
+			&workspace.Component{
+				ComponentInst: component.ComponentInst{
+					Type: tkeRouteEniName, Version: component.DefaultComponentDefVersion,
+				},
+				Name: sharedName, WorkspaceID: "ws-b",
+				ScopeType: component.ScopeTypeEnvironment, ScopeEnvNames: []string{"stag"},
+			},
+		)).To(Succeed())
+
+		Expect(appModelStore.AddComponent(ctx, appA.ID, &component.Component{
+			Name:         "ref-a",
+			ComponentRef: component.ComponentRef{RefWorkspaceCompName: sharedName},
+		})).To(Succeed())
+		Expect(appModelStore.AddComponent(ctx, appB.ID, &component.Component{
+			Name:         "ref-b",
+			ComponentRef: component.ComponentRef{RefWorkspaceCompName: sharedName},
+		})).To(Succeed())
+
+		result, err := migrator.Run(ctx, false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.AppSpecWrites).To(Equal(2))
+		Expect(result.WorkspaceComponentsRemoved).To(Equal(2))
+
+		specA, err := appSpecStore.Get(ctx, appA.ID, "prod")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*specA.TkeRouteEni.Enabled).To(BeTrue())
+		_, err = appSpecStore.Get(ctx, appA.ID, "stag")
+		Expect(err).To(MatchError(appspec.ErrAppSpecNotFound))
+
+		specB, err := appSpecStore.Get(ctx, appB.ID, "stag")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*specB.TkeRouteEni.Enabled).To(BeTrue())
+		_, err = appSpecStore.Get(ctx, appB.ID, "prod")
+		Expect(err).To(MatchError(appspec.ErrAppSpecNotFound))
 	})
 })

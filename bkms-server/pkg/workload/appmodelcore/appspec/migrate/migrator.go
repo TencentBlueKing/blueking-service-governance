@@ -3,12 +3,14 @@ package migrate
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -34,6 +36,7 @@ type Result struct {
 // Migrator migrates tkeRouteEni component mounts onto AppSpec sections.
 type Migrator struct {
 	db            *mongo.Database
+	appStore      bkmsapp.ApplicationStore
 	appSpecStore  appspec.AppSpecStore
 	appModelStore appmodel.AppModelStore
 	wsCompStore   workspace.WorkspaceCompsStore
@@ -43,6 +46,7 @@ type Migrator struct {
 // New creates a tkeRouteEni component migrator with reference-count hooks wired.
 func New(
 	db *mongo.Database,
+	appStore bkmsapp.ApplicationStore,
 	appSpecStore appspec.AppSpecStore,
 	appModelStore appmodel.AppModelStore,
 	wsCompStore workspace.WorkspaceCompsStore,
@@ -52,11 +56,21 @@ func New(
 	wsCompStore.SetComponentHooks(workspace.NewComponentRefCountHooks(compDefStore))
 	return &Migrator{
 		db:            db,
+		appStore:      appStore,
 		appSpecStore:  appSpecStore,
 		appModelStore: appModelStore,
 		wsCompStore:   wsCompStore,
 		compDefStore:  compDefStore,
 	}
+}
+
+type wsCompKey struct {
+	workspaceID string
+	name        string
+}
+
+func makeWsCompKey(workspaceID, name string) wsCompKey {
+	return wsCompKey{workspaceID: workspaceID, name: name}
 }
 
 // Run migrates tkeRouteEni mounts to AppSpec. dryRun=true only reports counts.
@@ -72,10 +86,11 @@ func (m *Migrator) Run(
 	if err != nil {
 		return result, err
 	}
-	wsByName := make(map[string]*workspace.Component, len(wsComps))
+	// workspace components are unique by (workspaceID, name), not name alone.
+	wsByKey := make(map[wsCompKey]*workspace.Component, len(wsComps))
 	wsNames := make([]string, 0, len(wsComps))
 	for _, c := range wsComps {
-		wsByName[c.Name] = c
+		wsByKey[makeWsCompKey(c.WorkspaceID, c.Name)] = c
 		wsNames = append(wsNames, c.Name)
 	}
 
@@ -83,9 +98,14 @@ func (m *Migrator) Run(
 	if err != nil {
 		return result, err
 	}
+	appWorkspaceIDs, err := m.loadAppWorkspaceIDs(ctx, appModels)
+	if err != nil {
+		return result, err
+	}
 
 	// 1) Write AppSpec + remove app components / refs.
 	for _, am := range appModels {
+		workspaceID := appWorkspaceIDs[am.AppID]
 		for _, comp := range am.Components {
 			if comp == nil {
 				continue
@@ -95,8 +115,12 @@ func (m *Migrator) Run(
 			case comp.Type == tkeRouteEniComponentName && comp.RefWorkspaceCompName == "":
 				envNames = []string{appspec.DefaultEnvName}
 			case comp.RefWorkspaceCompName != "":
-				wsComp, ok := wsByName[comp.RefWorkspaceCompName]
+				if workspaceID == "" {
+					return result, fmt.Errorf("application %s not found for workspace component ref", am.AppID)
+				}
+				wsComp, ok := wsByKey[makeWsCompKey(workspaceID, comp.RefWorkspaceCompName)]
 				if !ok {
+					// Same ref name may exist in another workspace; ignore non-local matches.
 					continue
 				}
 				switch wsComp.ScopeType {
@@ -153,6 +177,24 @@ func (m *Migrator) Run(
 	}
 
 	return result, nil
+}
+
+func (m *Migrator) loadAppWorkspaceIDs(
+	ctx context.Context, appModels []*appmodel.AppModel,
+) (map[string]string, error) {
+	ids := make([]string, 0, len(appModels))
+	for _, am := range appModels {
+		ids = append(ids, am.AppID)
+	}
+	apps, err := m.appStore.GetAppsByIDs(ctx, ids)
+	if err != nil {
+		return nil, errors.Wrap(err, "load applications for workspace lookup")
+	}
+	out := make(map[string]string, len(apps))
+	for _, app := range apps {
+		out[app.ID] = app.WorkspaceID
+	}
+	return out, nil
 }
 
 func (m *Migrator) enableTkeRouteEni(
