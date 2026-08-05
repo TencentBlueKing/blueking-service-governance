@@ -1,4 +1,4 @@
-// Package deletecmd provides the 'env-var delete' sub-command group.
+// Package deletecmd provides the 'envvar delete' sub-command group.
 package delete
 
 import "github.com/spf13/cobra"

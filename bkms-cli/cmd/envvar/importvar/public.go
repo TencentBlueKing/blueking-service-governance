@@ -11,7 +11,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
-// NewPublicCmd returns a Command instance for 'env-var import public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar import public' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, filePath, outputFormat string
 	var preview bool
@@ -26,13 +26,13 @@ and/or envType-level scoped environment variables.
 
 Use --preview to see what would be imported without making any changes.`,
 		Example: `  # Import public env vars from a file
-  bkms-cli env-var import public --workspace <workspaceID> -f vars.env
+  bkms-cli envvar import public --workspace <workspaceID> -f vars.env
 
   # Preview import without making changes
-  bkms-cli env-var import public --workspace <workspaceID> -f vars.env --preview
+  bkms-cli envvar import public --workspace <workspaceID> -f vars.env --preview
 
   # Preview with JSON output
-  bkms-cli env-var import public -f vars.env --preview -o json`,
+  bkms-cli envvar import public -f vars.env --preview -o json`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)

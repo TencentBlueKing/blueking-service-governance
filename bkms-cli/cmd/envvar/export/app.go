@@ -13,7 +13,7 @@ const (
 	exportScopeEffectiveByEnv = "effectiveByEnv"
 )
 
-// NewAppCmd returns a Command instance for 'env-var export app' sub command.
+// NewAppCmd returns a Command instance for 'envvar export app' sub command.
 func NewAppCmd() *cobra.Command {
 	var appID, scope, envName, filePath string
 
@@ -30,16 +30,16 @@ Supports two export scopes:
 The exported content is in dotenv format. By default it is printed to stdout.
 Use -f to write it to a file.`,
 		Example: `  # Export app-defined env vars to stdout
-  bkms-cli env-var export app --app <appID>
+  bkms-cli envvar export app --app <appID>
 
   # Export app-defined env vars to a file
-  bkms-cli env-var export app --app <appID> -f vars.env
+  bkms-cli envvar export app --app <appID> -f vars.env
 
   # Export effective env vars for a specific environment
-  bkms-cli env-var export app --app <appID> --scope effectiveByEnv --env <env-name>
+  bkms-cli envvar export app --app <appID> --scope effectiveByEnv --env <env-name>
 
   # Export effective env vars to a file
-  bkms-cli env-var export app --app <appID> --scope effectiveByEnv --env <env-name> -f vars.env`,
+  bkms-cli envvar export app --app <appID> --scope effectiveByEnv --env <env-name> -f vars.env`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if scope == exportScopeEffectiveByEnv && envName == "" {

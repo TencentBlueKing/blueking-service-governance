@@ -10,7 +10,7 @@ import (
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 )
 
-// NewAppCmd returns a Command instance for 'env-var update app' sub command.
+// NewAppCmd returns a Command instance for 'envvar update app' sub command.
 func NewAppCmd() *cobra.Command {
 	var appID, key, updatedKey, value, description string
 	var sensitive, noSensitive bool
@@ -23,13 +23,13 @@ func NewAppCmd() *cobra.Command {
 The --updated-key flag allows renaming the variable key.
 Use --sensitive to mark as sensitive, or --no-sensitive to unmark.`,
 		Example: `  # Update value
-  bkms-cli env-var update app --app <appID> --key MY_VAR --updated-key MY_VAR --value new-value
+  bkms-cli envvar update app --app <appID> --key MY_VAR --updated-key MY_VAR --value new-value
 
   # Rename key
-  bkms-cli env-var update app --app <appID> --key MY_VAR --updated-key MY_NEW_VAR --value new-value
+  bkms-cli envvar update app --app <appID> --key MY_VAR --updated-key MY_NEW_VAR --value new-value
 
   # Mark as sensitive
-  bkms-cli env-var update app --app <appID> --key MY_VAR --updated-key MY_VAR --sensitive`,
+  bkms-cli envvar update app --app <appID> --key MY_VAR --updated-key MY_VAR --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if sensitive && noSensitive {

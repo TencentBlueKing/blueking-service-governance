@@ -12,7 +12,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
-// NewEnvCmd returns a Command instance for 'env-var list env' sub command.
+// NewEnvCmd returns a Command instance for 'envvar list env' sub command.
 func NewEnvCmd() *cobra.Command {
 	var workspaceID, envName, outputFormat string
 
@@ -24,10 +24,10 @@ func NewEnvCmd() *cobra.Command {
 The --env flag accepts an environment name (e.g. prod, stag, teamdev).
 Displays detailed information including conflict info.`,
 		Example: `  # List env-scoped env vars
-  bkms-cli env-var list env --env <env-name>
+  bkms-cli envvar list env --env <env-name>
 
   # Output as JSON
-  bkms-cli env-var list env --env <env-name> -o json`,
+  bkms-cli envvar list env --env <env-name> -o json`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)

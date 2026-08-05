@@ -11,7 +11,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
-// NewAppCmd returns a Command instance for 'env-var import app' sub command.
+// NewAppCmd returns a Command instance for 'envvar import app' sub command.
 func NewAppCmd() *cobra.Command {
 	var appID, filePath, outputFormat string
 	var preview bool
@@ -26,10 +26,10 @@ environment variables (workload.envVars).
 
 Use --preview to see what would be imported without making any changes.`,
 		Example: `  # Import app env vars
-  bkms-cli env-var import app --app <appID> -f vars.env
+  bkms-cli envvar import app --app <appID> -f vars.env
 
   # Preview import without making changes
-  bkms-cli env-var import app --app <appID> -f vars.env --preview`,
+  bkms-cli envvar import app --app <appID> -f vars.env --preview`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if preview {

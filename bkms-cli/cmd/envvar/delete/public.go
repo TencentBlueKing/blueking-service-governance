@@ -10,7 +10,7 @@ import (
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 )
 
-// NewPublicCmd returns a Command instance for 'env-var delete public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar delete public' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, id string
 
@@ -19,10 +19,10 @@ func NewPublicCmd() *cobra.Command {
 		Short: "Delete a public (workspace/envType/env) scoped environment variable",
 		Long:  `Delete an existing public scoped environment variable by its ID.`,
 		Example: `  # Delete a public env var
-  bkms-cli env-var delete public --id <varID>
+  bkms-cli envvar delete public --id <varID>
 
   # Delete with explicit workspace
-  bkms-cli env-var delete public --workspace <workspaceID> --id <varID>`,
+  bkms-cli envvar delete public --workspace <workspaceID> --id <varID>`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)

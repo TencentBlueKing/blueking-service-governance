@@ -12,7 +12,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
-// NewEnvCmd returns a Command instance for 'env-var import env' sub command.
+// NewEnvCmd returns a Command instance for 'envvar import env' sub command.
 func NewEnvCmd() *cobra.Command {
 	var workspaceID, envName, filePath, outputFormat string
 	var preview bool
@@ -28,10 +28,10 @@ environment variables for the specified environment.
 
 Use --preview to see what would be imported without making any changes.`,
 		Example: `  # Import env-scoped env vars
-  bkms-cli env-var import env --env <env-name> -f vars.env
+  bkms-cli envvar import env --env <env-name> -f vars.env
 
   # Preview import without making changes
-  bkms-cli env-var import env --env <env-name> -f vars.env --preview`,
+  bkms-cli envvar import env --env <env-name> -f vars.env --preview`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)

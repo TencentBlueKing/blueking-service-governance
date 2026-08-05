@@ -1,4 +1,4 @@
-// Package listcmd provides the 'env-var list' sub-command group.
+// Package listcmd provides the 'envvar list' sub-command group.
 package list
 
 import "github.com/spf13/cobra"

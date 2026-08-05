@@ -1,4 +1,4 @@
-// Package importcmd provides the 'env-var import' sub-command group.
+// Package importcmd provides the 'envvar import' sub-command group.
 package importvar
 
 import "github.com/spf13/cobra"

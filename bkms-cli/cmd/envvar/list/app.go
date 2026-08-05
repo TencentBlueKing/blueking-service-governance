@@ -11,7 +11,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
-// NewAppCmd returns a Command instance for 'env-var list app' sub command.
+// NewAppCmd returns a Command instance for 'envvar list app' sub command.
 func NewAppCmd() *cobra.Command {
 	var appID, envName, outputFormat string
 
@@ -27,13 +27,13 @@ and app-defined vars after priority-based deduplication).
 
 Sensitive values are masked with '******'.`,
 		Example: `  # List app-defined env vars only
-  bkms-cli env-var list app --app <appID>
+  bkms-cli envvar list app --app <appID>
 
   # List all effective env vars for an app in a specific environment
-  bkms-cli env-var list app --app <appID> --env <env-name>
+  bkms-cli envvar list app --app <appID> --env <env-name>
 
   # Output as JSON
-  bkms-cli env-var list app --app <appID> --env <env-name> -o json`,
+  bkms-cli envvar list app --app <appID> --env <env-name> -o json`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var data any

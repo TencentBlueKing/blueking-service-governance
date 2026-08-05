@@ -11,7 +11,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
-// NewPublicCmd returns a Command instance for 'env-var list public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar list public' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, outputFormat string
 
@@ -23,13 +23,13 @@ func NewPublicCmd() *cobra.Command {
 Displays key, value, scopeType, scopeValue, description, and isSensitive fields.
 Sensitive values are masked with '******'.`,
 		Example: `  # List public env vars in default workspace
-  bkms-cli env-var list public
+  bkms-cli envvar list public
 
   # List public env vars in a specific workspace
-  bkms-cli env-var list public --workspace <workspaceID>
+  bkms-cli envvar list public --workspace <workspaceID>
 
   # Output as JSON
-  bkms-cli env-var list public --workspace <workspaceID> -o json`,
+  bkms-cli envvar list public --workspace <workspaceID> -o json`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)

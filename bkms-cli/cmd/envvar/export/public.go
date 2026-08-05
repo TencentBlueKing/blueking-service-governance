@@ -11,7 +11,7 @@ import (
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 )
 
-// NewPublicCmd returns a Command instance for 'env-var export public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar export public' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, filePath string
 
@@ -23,13 +23,13 @@ func NewPublicCmd() *cobra.Command {
 The exported content is in dotenv format. By default it is printed to stdout.
 Use -f to write it to a file.`,
 		Example: `  # Export public env vars to stdout
-  bkms-cli env-var export public --workspace <workspaceID>
+  bkms-cli envvar export public --workspace <workspaceID>
 
   # Export public env vars to a file
-  bkms-cli env-var export public --workspace <workspaceID> -f vars.env
+  bkms-cli envvar export public --workspace <workspaceID> -f vars.env
 
   # Use default workspace
-  bkms-cli env-var export public -f vars.env`,
+  bkms-cli envvar export public -f vars.env`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)

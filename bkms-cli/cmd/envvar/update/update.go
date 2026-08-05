@@ -1,4 +1,4 @@
-// Package updatecmd provides the 'env-var update' sub-command group.
+// Package updatecmd provides the 'envvar update' sub-command group.
 package update
 
 import "github.com/spf13/cobra"

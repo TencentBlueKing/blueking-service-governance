@@ -10,7 +10,7 @@ import (
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 )
 
-// NewPublicCmd returns a Command instance for 'env-var create public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar create public' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, key, value, scopeType, scopeValue, description string
 	var sensitive bool
@@ -25,16 +25,16 @@ The --scope-type flag determines the scope level:
   - envType: applies to a specific environment type (requires --scope-value)
   - env: applies to a specific environment (requires --scope-value)`,
 		Example: `  # Create a workspace-level env var
-  bkms-cli env-var create public --key MY_VAR --value my-value --scope-type workspace
+  bkms-cli envvar create public --key MY_VAR --value my-value --scope-type workspace
 
   # Create an envType-level env var
-  bkms-cli env-var create public --key MY_VAR --value my-value --scope-type envType --scope-value <env-type>
+  bkms-cli envvar create public --key MY_VAR --value my-value --scope-type envType --scope-value <env-type>
 
   # Create an env-level env var
-  bkms-cli env-var create public --key MY_VAR --value my-value --scope-type env --scope-value <env-name>
+  bkms-cli envvar create public --key MY_VAR --value my-value --scope-type env --scope-value <env-name>
 
   # Create a sensitive env var
-  bkms-cli env-var create public --key MY_SECRET --value my-value --scope-type workspace --sensitive`,
+  bkms-cli envvar create public --key MY_SECRET --value my-value --scope-type workspace --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// 校验：scope-type 为 envType 或 env 时必须提供 scope-value

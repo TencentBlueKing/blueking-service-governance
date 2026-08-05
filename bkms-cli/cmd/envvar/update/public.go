@@ -10,7 +10,7 @@ import (
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 )
 
-// NewPublicCmd returns a Command instance for 'env-var update public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar update public' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, id, key, value, description string
 	var sensitive, noSensitive bool
@@ -23,13 +23,13 @@ func NewPublicCmd() *cobra.Command {
 Use --sensitive to mark as sensitive, or --no-sensitive to unmark.
 Only specified fields will be updated.`,
 		Example: `  # Update value
-  bkms-cli env-var update public --id <varID> --key MY_VAR --value new-value
+  bkms-cli envvar update public --id <varID> --key MY_VAR --value new-value
 
   # Update description
-  bkms-cli env-var update public --id <varID> --key MY_VAR --description "New description"
+  bkms-cli envvar update public --id <varID> --key MY_VAR --description "New description"
 
   # Mark as sensitive
-  bkms-cli env-var update public --id <varID> --key MY_VAR --sensitive`,
+  bkms-cli envvar update public --id <varID> --key MY_VAR --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if sensitive && noSensitive {

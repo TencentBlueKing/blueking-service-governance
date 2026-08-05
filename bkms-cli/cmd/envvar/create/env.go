@@ -10,9 +10,9 @@ import (
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 )
 
-// NewEnvCmd returns a Command instance for 'env-var create env' sub command.
+// NewEnvCmd returns a Command instance for 'envvar create env' sub command.
 func NewEnvCmd() *cobra.Command {
-	var workspaceID, key, value, scopeValue, description string
+	var workspaceID, envName, key, value, description string
 	var sensitive bool
 
 	cmd := &cobra.Command{
@@ -21,12 +21,12 @@ func NewEnvCmd() *cobra.Command {
 		Long: `Create a new environment-scoped environment variable.
 
 The variable will be scoped to a specific environment (scopeType=env).
-The --scope-value flag specifies the target environment name.`,
+The --env flag specifies the target environment name.`,
 		Example: `  # Create an env-scoped env var
-  bkms-cli env-var create env --key MY_VAR --value my-value --scope-value <env-name>
+  bkms-cli envvar create env --env <env-name> --key MY_VAR --value my-value
 
   # Create a sensitive env-scoped env var
-  bkms-cli env-var create env --key MY_SECRET --value my-value --scope-value <env-name> --sensitive`,
+  bkms-cli envvar create env --env <env-name> --key MY_SECRET --value my-value --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
@@ -34,7 +34,7 @@ The --scope-value flag specifies the target environment name.`,
 			result, err := client.New().
 				CreateScopedEnvVar(cmd.Context(), workspaceID, client.CreateScopedEnvVarOptions{
 					ScopeType:   "env",
-					ScopeValue:  scopeValue,
+					ScopeValue:  envName,
 					Key:         key,
 					Value:       value,
 					Description: description,
@@ -51,14 +51,14 @@ The --scope-value flag specifies the target environment name.`,
 	}
 
 	cmd.Flags().StringVar(&workspaceID, "workspace", "", "workspace ID")
+	cmd.Flags().StringVar(&envName, "env", "", "environment name (required)")
 	cmd.Flags().StringVar(&key, "key", "", "environment variable key (required)")
 	cmd.Flags().StringVar(&value, "value", "", "environment variable value")
-	cmd.Flags().StringVar(&scopeValue, "scope-value", "", "environment name (required)")
 	cmd.Flags().StringVar(&description, "description", "", "variable description")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "mark as sensitive variable")
 
+	_ = cmd.MarkFlagRequired("env")
 	_ = cmd.MarkFlagRequired("key")
-	_ = cmd.MarkFlagRequired("scope-value")
 
 	return cmd
 }

@@ -1,4 +1,4 @@
-// Package envvar provide env-var command group for environment variable import/export.
+// Package envvar provide envvar command group for environment variable import/export.
 package envvar
 
 import (
