@@ -351,6 +351,7 @@
       <EditBuilderConfig
         v-model:builder-data="builderData"
         v-model:is-show="showBuilderDialog"
+        :app-name="appData?.name"
         :language="appData?.appModelSpec?.trpcSpec?.language"
         :type="builderType"
         @confirm="handleUpdateApp('buildConfig', builderData)"

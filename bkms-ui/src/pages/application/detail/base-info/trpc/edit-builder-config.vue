@@ -211,9 +211,13 @@
                   </div>
                   <Input
                     v-model="buildText"
-                    :placeholder="$t('留空则使用平台默认：{0}', ['CGO_ENABLED=0 go build -trimpath -o <app> .'])"
+                    :placeholder="buildPlaceholder"
                     :rows="4"
                     type="textarea"
+                  />
+                  <BuildOutputHint
+                    :app-name="props.appName"
+                    class="mt-[16px]"
                   />
                 </div>
                 <div class="mb-[24px] last:mb-0">
@@ -250,9 +254,9 @@
             :label="$t('构建参数')"
             property="repoBuildConfig.dockerBuildArgs"
           >
-            <KeyValue
-              :model-value="builderData!.repoBuildConfig!.dockerBuildArgs"
-              @update:model-value="handleDockerBuildArgsChange"
+            <GoBuildArgs
+              v-model="builderData!.repoBuildConfig!.dockerBuildArgs"
+              :language="props.language"
             />
           </Form.FormItem>
           <TagConfigForm
@@ -351,6 +355,8 @@
   import TagConfigForm from '~/components/tag-config-form.vue';
   import ToggleCard from '~/components/toggle-card.vue';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
+  import BuildOutputHint from '~/pages/application/components/build-output-hint.vue';
+  import GoBuildArgs from '~/pages/application/components/go-build-args.vue';
   import PipelineParamsForm from '~/pages/application/components/pipeline-params-form.vue';
   import { usePlatformBuildImages } from '~/pages/application/template/trpc/use-platform-build-images';
   import { useSpaceStore } from '~/stores/space';
@@ -365,6 +371,7 @@
 
   type BuilderType = 'codeRepository' | 'pipeline';
   interface IProps {
+    appName?: string;
     language?: string;
     type: BuilderType;
   }
@@ -415,6 +422,9 @@
   };
 
   const { t } = useI18n();
+  const buildPlaceholder = computed(
+    () => `${t('留空则使用平台默认：')}\ngo build -o /out/${props.appName || '{{ appName }}'} .`,
+  );
 
   // 镜像字段的 required 规则覆盖 FormItem 默认的 trigger: 'change' 规则，
   // 避免自动选中镜像时（selectedImageId 程序化变化）触发校验导致红色错误闪烁
@@ -801,24 +811,6 @@
     if (await handleBeforeClose()) {
       isShow.value = false;
     }
-  }
-
-  // 构建参数变更处理
-  function handleDockerBuildArgsChange(newArgs: Record<string, string> | Record<string, string>[]) {
-    let argsObject: Record<string, string> = {};
-
-    if (Array.isArray(newArgs)) {
-      newArgs.forEach(arg => {
-        const key = arg['key'];
-        const value = arg['value'];
-        if (key && value) {
-          argsObject[key] = value;
-        }
-      });
-    } else {
-      argsObject = newArgs || {};
-    }
-    builderData.value.repoBuildConfig!.dockerBuildArgs = argsObject;
   }
 
   /**

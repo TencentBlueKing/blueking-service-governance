@@ -274,6 +274,8 @@
       v-else
       v-model:builder-data="builderData"
       v-model:is-show="showBuilderSideslider"
+      :app-name="appDetailStore.appDetail?.name"
+      :language="appDetailStore.appDetail?.appModelSpec?.trpcSpec?.language"
       :type="builderType"
       @confirm="handleUpdateBuildConfig(builderData)"
     />
@@ -526,31 +528,29 @@
         return { count: 0, results: [] };
       });
     count.value = Number(res.count);
-    buildList.value = (res?.results ?? []).map(
-      (item: BuildRecordOutputObj, index): BuildListType => ({
-        activeRowIndex: index,
-        buildInfo: createBuildInfo(item),
-        buildNum: item.num || '',
-        sourceMaterial: item.extras?.BK_CI_GIT_REPO_URL
-          ? {
-              revision: item.revision || '',
-              commitID: item.commitID || '',
-              commitUrl: `${item.extras.BK_CI_GIT_REPO_URL.replace(/\.git$/, '')}/commit/${item.extras?.BK_CI_GIT_REPO_HEAD_COMMIT_ID}`,
-            }
-          : null,
-        creator: item.operator || '',
-        createAt: item.startedAt ? formatDateString(item.startedAt) : '--',
-        updatedAt:
-          item.endedAt && !isRunning(item.status ?? '') && String(item.endedAt) !== '0001-01-01T00:00:00Z'
-            ? formatDateString(item.endedAt)
-            : '--',
-        constructionTime: calculateTimeDifference(String(item.startedAt), String(item.endedAt)),
-        products: item.artifact || '',
-        status: item.status || '',
-        pipeline: item.pipelineID || '',
-        pipelineBuildID: item.buildID || '',
-      }),
-    );
+    buildList.value = (res?.results ?? []).map((item: BuildRecordOutputObj, index): BuildListType => ({
+      activeRowIndex: index,
+      buildInfo: createBuildInfo(item),
+      buildNum: item.num || '',
+      sourceMaterial: item.extras?.BK_CI_GIT_REPO_URL
+        ? {
+            revision: item.revision || '',
+            commitID: item.commitID || '',
+            commitUrl: `${item.extras.BK_CI_GIT_REPO_URL.replace(/\.git$/, '')}/commit/${item.extras?.BK_CI_GIT_REPO_HEAD_COMMIT_ID}`,
+          }
+        : null,
+      creator: item.operator || '',
+      createAt: item.startedAt ? formatDateString(item.startedAt) : '--',
+      updatedAt:
+        item.endedAt && !isRunning(item.status ?? '') && String(item.endedAt) !== '0001-01-01T00:00:00Z'
+          ? formatDateString(item.endedAt)
+          : '--',
+      constructionTime: calculateTimeDifference(String(item.startedAt), String(item.endedAt)),
+      products: item.artifact || '',
+      status: item.status || '',
+      pipeline: item.pipelineID || '',
+      pipelineBuildID: item.buildID || '',
+    }));
     await syncCurrentBuildLogInfo(res?.results ?? []);
   }
 

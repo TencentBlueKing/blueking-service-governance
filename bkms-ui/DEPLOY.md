@@ -53,6 +53,7 @@
 | `BK_DOC_URL` | 文档地址 |
 | `BK_API_URL_TMPL` | 蓝鲸 API 网关模板 |
 | `BK_REPO_URL` | 代码库数据源地址 |
+| `BK_GOLANG_PROXY_URL` | Go 代理地址 |
 
 ### 2.3 添加新的运行时变量
 
@@ -125,6 +126,7 @@ BK_BCS_API_BASE_URL = 'https://bcs-api.example.com'
 BK_POLARIS_URL = 'https://polaris.example.com'
 BK_API_URL_TMPL = 'https://{api_name}.apigw.example.com'
 BK_REPO_URL = 'https://devops.example.com'
+BK_GOLANG_PROXY_URL = 'https://goproxy.example.com'
 ```
 
 ### 4.2 方式二：单个指定环境变量

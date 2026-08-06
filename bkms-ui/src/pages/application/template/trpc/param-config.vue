@@ -261,9 +261,13 @@
                     </div>
                     <Input
                       v-model="buildText"
-                      :placeholder="$t('留空则使用平台默认：{0}', ['CGO_ENABLED=0 go build -trimpath -o <app> .'])"
+                      :placeholder="buildPlaceholder"
                       :rows="4"
                       type="textarea"
+                    />
+                    <BuildOutputHint
+                      :app-name="formData.name"
+                      class="mt-[16px]"
                     />
                   </div>
                   <div class="mb-[24px] last:mb-0">
@@ -301,8 +305,9 @@
               :label="$t('构建参数')"
               property="buildConfig.repoBuildConfig.dockerBuildArgs"
             >
-              <KeyValue
-                :model-value="dockerBuildArgs"
+              <GoBuildArgs
+                :language="formData.appModelSpec.trpcSpec.language"
+                :model-value="formData.buildConfig.repoBuildConfig.dockerBuildArgs"
                 @update:model-value="handleDockerBuildArgsChange"
               />
               <!-- 等价构建命令（示意） -->
@@ -368,6 +373,8 @@
   import { DOC_LINKS } from '~/common/const';
   import { BKMS_REGEX } from '~/common/const';
   import CardRadio, { type CardRadioOption } from '~/components/card-radio.vue';
+  import BuildOutputHint from '~/pages/application/components/build-output-hint.vue';
+  import GoBuildArgs from '~/pages/application/components/go-build-args.vue';
 
   import PipelineConfig from '../components/pipeline-config.vue';
   import { usePlatformBuildImages } from './use-platform-build-images';
@@ -423,6 +430,9 @@
   const { t } = useI18n();
 
   const formData = ref<TrpcFormRequest>(props.form as TrpcFormRequest);
+  const buildPlaceholder = computed(
+    () => `${t('留空则使用平台默认：')}\ngo build -o /out/${formData.value.name || '{{ appName }}'} .`,
+  );
   const formRef = ref<InstanceType<typeof Form> | null>(null);
   async function validate() {
     try {
@@ -696,13 +706,6 @@
     appIdSuffix.value = ret.suffix ?? '';
   }
 
-  const dockerBuildArgs = computed(() =>
-    Object.entries(formData.value.buildConfig.repoBuildConfig.dockerBuildArgs).map(([key, value]) => ({
-      key,
-      value,
-    })),
-  );
-
   // 等价构建命令（示意）
   const equivalentBuildCommand = computed(() => {
     const sourceDir = formData.value.buildConfig.repoBuildConfig.sourceDir?.trim();
@@ -731,19 +734,9 @@
   );
 
   // 构建参数变化
-  function handleDockerBuildArgsChange(newArgs: Record<string, string> | Record<string, string>[]) {
-    const argsObject: Record<string, string> = {};
-    if (Array.isArray(newArgs)) {
-      newArgs.forEach(arg => {
-        if (arg.key && arg.value) {
-          argsObject[arg.key] = arg.value;
-        }
-      });
-    } else {
-      Object.assign(argsObject, newArgs);
-    }
+  function handleDockerBuildArgsChange(newArgs: Record<string, string> | undefined) {
     formData.value.buildConfig.repoBuildConfig.type = 'TGit';
-    formData.value.buildConfig.repoBuildConfig.dockerBuildArgs = argsObject;
+    formData.value.buildConfig.repoBuildConfig.dockerBuildArgs = newArgs ?? {};
   }
 
   // 查看流水线构建操作指引

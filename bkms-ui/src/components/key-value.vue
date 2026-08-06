@@ -67,7 +67,7 @@
               autosize
               class="hover-expand-textarea"
               :disabled="disabled"
-              :placeholder="valuePlaceholder"
+              :placeholder="getValuePlaceholder(item)"
               :resize="false"
               type="textarea"
             />
@@ -76,7 +76,7 @@
             v-else
             v-model.trim="item[keyOfValue]"
             :disabled="disabled"
-            :placeholder="valuePlaceholder"
+            :placeholder="getValuePlaceholder(item)"
           />
         </Form.FormItem>
         <Button
@@ -142,7 +142,7 @@
       default: 'key',
     },
     valuePlaceholder: {
-      type: String,
+      type: [String, Object] as PropType<Record<string, string> | string>,
       default: 'value',
     },
     keyOfKey: {
@@ -242,9 +242,22 @@
     ];
   }
 
+  /**
+   * 获取当前行 value 输入框的提示文本。
+   * `valuePlaceholder` 既支持传入统一的字符串，也支持按 key 传入提示文本映射；
+   * 后者用于同一组键值对中，不同 key 需要展示不同输入示例的场景。
+   */
+  function getValuePlaceholder(item: Record<string, string>) {
+    if (typeof prop.valuePlaceholder === 'string') {
+      return prop.valuePlaceholder;
+    }
+    return prop.valuePlaceholder[item[prop.keyOfKey]] ?? 'value';
+  }
+
   function handleAdd() {
     value.value.push({ [prop.keyOfKey]: '', [prop.keyOfValue]: '' });
   }
+
   function handleDel(index: number) {
     // 如果设置了最少行数限制，且当前行数已经是最少行数，则不允许删除
     if (prop.minRows > 0 && value.value.length <= prop.minRows) {

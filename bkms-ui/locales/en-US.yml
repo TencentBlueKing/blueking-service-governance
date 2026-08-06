@@ -1743,3 +1743,7 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 "北极星 {0} 已关联以下环境，需要按以下顺序完成后才能删除：": "Polaris {0} is associated with the following environments. Complete them in the following order before deletion:"
 "共有 {0} 个环境的北极星更新，需要重新部署后方可生效": "Polaris updates for {0} environment(s) require redeployment to take effect"
 "默认值为{0}": "The default value is {0}"
+一键添加: One-click Add
+"构建产物需放到 {0} 下，runner 阶段仅从此路径拷贝进运行镜像。不限定命令形式（{1} 等均可），只要最终产物落到该路径即可，例如：": "Build artifacts must be placed under {0}. The runner stage only copies from this path into the runtime image. There is no restriction on command format (e.g., {1}), as long as the final artifacts are placed in this path, for example:"
+"若 go.mod 有使用工蜂私有仓库依赖包，构建参数中需要添加 {0}，取值见：": "If go.mod uses dependencies from Woa's private repository, you need to add {0} to the build parameters. Refer to:"
+一般可留空: Can generally be left empty
