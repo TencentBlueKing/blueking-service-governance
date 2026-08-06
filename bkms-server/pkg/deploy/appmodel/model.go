@@ -106,6 +106,47 @@ func (s Status) IsUninstall() bool {
 	return s == StatusUninstalling || s == StatusUninstalled
 }
 
+const (
+	// 部署记录 Extras 字段 key
+	// ExtraKeyDeploySource 标记本次部署记录的来源
+	ExtraKeyDeploySource = "deploySource"
+	// ExtraKeyBuildBranch 记录触发本次部署的代码分支
+	ExtraKeyBuildBranch = "buildBranch"
+	// ExtraKeyBuildCommitID 记录触发本次部署的提交 ID
+	ExtraKeyBuildCommitID = "buildCommitID"
+)
+
+const (
+	// deploySource 可选值
+	// DeploySourceBuildAutoDeploy 表示部署由“构建+部署”链路触发
+	DeploySourceBuildAutoDeploy = "buildAutoDeploy"
+	// DeploySourceDirectDeploy 表示部署由直接部署链路触发
+	DeploySourceDirectDeploy = "directDeploy"
+)
+
+// BuildAutoDeployInfo 表示构建阶段透传到部署记录中的构建信息快照。
+type BuildAutoDeployInfo struct {
+	Branch   string
+	CommitID string
+}
+
+// NewBuildAutoDeployExtras 将构建+部署信息编码到部署记录 Extras 中。
+func NewBuildAutoDeployExtras(info *BuildAutoDeployInfo) map[string]string {
+	if info == nil {
+		return nil
+	}
+	extras := map[string]string{
+		ExtraKeyDeploySource: DeploySourceBuildAutoDeploy,
+	}
+	if info.Branch != "" {
+		extras[ExtraKeyBuildBranch] = info.Branch
+	}
+	if info.CommitID != "" {
+		extras[ExtraKeyBuildCommitID] = info.CommitID
+	}
+	return extras
+}
+
 // Record 部署记录
 type Record struct {
 	// ID 部署记录 ID（唯一）

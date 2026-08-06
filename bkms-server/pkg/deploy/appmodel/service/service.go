@@ -49,11 +49,12 @@ import (
 
 // DeployParams appmodel 部署动作所需参数
 type DeployParams struct {
-	EnvName         string
-	TrafficLaneName string
-	ImageTag        string
-	UpdateStrategy  string
-	Replicas        int32
+	EnvName             string
+	TrafficLaneName     string
+	ImageTag            string
+	UpdateStrategy      string
+	Replicas            int32
+	BuildAutoDeployInfo *deployappmodel.BuildAutoDeployInfo
 }
 
 // Service 负责 appmodel 部署相关编排，不负责权限校验与任务投递
@@ -240,6 +241,7 @@ func (s *Service) Deploy(ctx context.Context, app *bkmsapp.Application, params D
 		params.ImageTag,
 		updateStrategy,
 		params.Replicas,
+		params.BuildAutoDeployInfo,
 	)
 	if err != nil {
 		return "", errors.Wrap(err, "deploy appmodel")

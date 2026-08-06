@@ -110,6 +110,7 @@ func (d *Deployer) Deploy(
 	imageRegistry *registry.ImageRegistry,
 	trafficLaneName, imageTag, updateStrategy string,
 	replicas int32,
+	buildAutoDeployInfo *BuildAutoDeployInfo,
 ) (deployID string, retErr error) {
 	// 前置准备 & 预设配置
 	// 设置环境下的部署规格，调整 replicas 副本数
@@ -140,7 +141,7 @@ func (d *Deployer) Deploy(
 	}
 	deployID, err = d.createDeployRecord(
 		ctx, env, trafficLaneName, imageTag, updateStrategy,
-		replicas, gameDeploy.Spec.Selector.MatchLabels, resourceKeys,
+		replicas, buildAutoDeployInfo, gameDeploy.Spec.Selector.MatchLabels, resourceKeys,
 	)
 	if err != nil {
 		return "", errors.Wrap(err, "create deploy record")
@@ -700,6 +701,7 @@ func (d *Deployer) createDeployRecord(
 	env *bkmsenv.Environment,
 	trafficLaneName, imageTag, updateStrategy string,
 	replicas int32,
+	buildAutoDeployInfo *BuildAutoDeployInfo,
 	labelSelector map[string]string,
 	resourceKeys ResourceKeys,
 ) (string, error) {
@@ -720,6 +722,7 @@ func (d *Deployer) createDeployRecord(
 		ResourceKeys:    resourceKeys,
 		Message:         "",
 		Status:          StatusDeploying,
+		Extras:          NewBuildAutoDeployExtras(buildAutoDeployInfo),
 		Creator:         operator,
 		Updater:         operator,
 		StartedAt:       timeNow,

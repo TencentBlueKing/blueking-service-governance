@@ -90,6 +90,7 @@ var _ = Describe("AppModel deploy serializers", func() {
 
 			Expect(buildStatus.Stage).To(Equal(string(autodeploy.StageBuild)))
 			Expect(buildStatus.IsBuildAutoDeploy).To(BeTrue())
+			Expect(buildStatus.DeploySource).To(Equal(appmodeldeploy.DeploySourceBuildAutoDeploy))
 			Expect(buildStatus.BuildID).To(Equal("build-1"))
 			Expect(buildStatus.DeployID).To(Equal("deploy-1"))
 			Expect(buildStatus.Branch).To(Equal("main"))
@@ -108,9 +109,35 @@ var _ = Describe("AppModel deploy serializers", func() {
 
 			Expect(directStatus.Stage).To(Equal(string(autodeploy.StageDeploy)))
 			Expect(directStatus.IsBuildAutoDeploy).To(BeFalse())
+			Expect(directStatus.DeploySource).To(Equal(appmodeldeploy.DeploySourceDirectDeploy))
 			Expect(directStatus.DeployID).To(Equal(recordID.Hex()))
 			Expect(directStatus.BuildID).To(BeEmpty())
 			Expect(directStatus.ImageTag).To(BeEmpty())
+		})
+	})
+
+	Describe("AppModelDeployRecordOutputObj", func() {
+		It("reads build info directly from deploy record extras", func() {
+			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
+				ID:        bson.NewObjectID(),
+				ClusterID: "cls-1",
+				Namespace: "default",
+				ImageTag:  "v1.0.0",
+				Replicas:  3,
+				Message:   "deploying",
+				Status:    appmodeldeploy.StatusDeploying,
+				Updater:   "tester",
+				Extras: map[string]string{
+					appmodeldeploy.ExtraKeyDeploySource:  appmodeldeploy.DeploySourceBuildAutoDeploy,
+					appmodeldeploy.ExtraKeyBuildBranch:   "release",
+					appmodeldeploy.ExtraKeyBuildCommitID: "commit-123",
+				},
+			})
+
+			Expect(output.IsBuildAutoDeploy).To(BeTrue())
+			Expect(output.DeploySource).To(Equal(appmodeldeploy.DeploySourceBuildAutoDeploy))
+			Expect(output.Branch).To(Equal("release"))
+			Expect(output.CommitID).To(Equal("commit-123"))
 		})
 	})
 

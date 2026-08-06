@@ -85,3 +85,22 @@ var _ = Describe("ResourceKeys", func() {
 		})
 	})
 })
+
+var _ = Describe("BuildAutoDeployExtras", func() {
+	Describe("NewBuildAutoDeployExtras", func() {
+		It("should encode build auto deploy info into deploy record extras", func() {
+			extras := appmodel.NewBuildAutoDeployExtras(&appmodel.BuildAutoDeployInfo{
+				Branch:   "release/v1.2.3",
+				CommitID: "abc123def456",
+			})
+
+			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyDeploySource, appmodel.DeploySourceBuildAutoDeploy))
+			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyBuildBranch, "release/v1.2.3"))
+			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyBuildCommitID, "abc123def456"))
+		})
+
+		It("should return nil when build auto deploy info is absent", func() {
+			Expect(appmodel.NewBuildAutoDeployExtras(nil)).To(BeNil())
+		})
+	})
+})

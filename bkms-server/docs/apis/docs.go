@@ -17587,6 +17587,10 @@ const docTemplate = `{
                 "createdAt": {
                     "type": "string"
                 },
+                "deploySource": {
+                    "description": "部署来源",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -17594,7 +17598,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "isBuildAutoDeploy": {
-                    "description": "是否由“构建+部署”触发",
+                    "description": "兼容字段：供前端迁移期使用，待前端全部改用 deploySource 后删除。",
                     "type": "boolean"
                 },
                 "message": {
@@ -22330,6 +22334,9 @@ const docTemplate = `{
                 "deployID": {
                     "type": "string"
                 },
+                "deploySource": {
+                    "type": "string"
+                },
                 "endedAt": {
                     "type": "string"
                 },
@@ -22340,6 +22347,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "isBuildAutoDeploy": {
+                    "description": "兼容字段：供前端迁移期使用，待前端全部改用 deploySource 后删除。",
                     "type": "boolean"
                 },
                 "message": {

@@ -143,6 +143,10 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Polli
 		ImageTag:        record.Params[pipelineparam.ImageTag],
 		UpdateStrategy:  string(tkex.RollingGameDeploymentUpdateStrategyType),
 		Replicas:        args.AutoDeploy.Replicas,
+		BuildAutoDeployInfo: &appmodeldeploy.BuildAutoDeployInfo{
+			Branch:   record.Params[pipelineparam.RepoRevision],
+			CommitID: record.Extras[pipelinevar.GitRepoHeadCommitID],
+		},
 	})
 	if err != nil {
 		return "", errors.Wrap(err, "start appmodel deploy after build")
