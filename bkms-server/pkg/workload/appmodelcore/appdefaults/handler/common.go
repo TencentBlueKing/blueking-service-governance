@@ -27,10 +27,6 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
-func (h *Handler) newService() *appdefaults.Service {
-	return appdefaults.NewService(h.registry.AppDefaultRuleStore, h.registry.EnvStore)
-}
-
 type listRulesOutput[T any] struct {
 	Data []T `json:"data"`
 }
@@ -58,7 +54,7 @@ func listRules[Output any](
 		return
 	}
 
-	rules, err := h.newService().List(ctx, workspace.ID, configType)
+	rules, err := h.registry.AppDefaultRuleStore.ListByConfigType(ctx, workspace.ID, configType)
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "list "+configType.String()+" application default rules"))
 		return
@@ -91,8 +87,18 @@ func createRule[Input, Output any](
 		return
 	}
 
-	created, err := h.newService().Create(ctx, workspace.ID, configType, toModel(*input))
-	if err != nil {
+	definition := toModel(*input)
+	created := &appdefaults.Rule{
+		WorkspaceID: workspace.ID,
+		ConfigType:  configType,
+		EnvType:     definition.EnvType,
+		Spec:        definition.Spec,
+	}
+	if err = appdefaults.ValidateRule(created); err != nil {
+		bkerrs.AbortWithErr(c, apiError(err, "create "+configType.String()+" application default rule"))
+		return
+	}
+	if err = h.registry.AppDefaultRuleStore.Create(ctx, created); err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "create "+configType.String()+" application default rule"))
 		return
 	}
@@ -128,19 +134,25 @@ func updateRule[Input, Output any](
 
 	// Workspace and config type stay fixed by the route; updating another
 	// section with the same rule ID therefore resolves as not found.
-	before, updated, err := h.newService().Update(
-		ctx,
-		workspace.ID,
-		configType,
-		ruleID,
-		toModel(*input),
-	)
+	before, err := h.registry.AppDefaultRuleStore.Get(ctx, workspace.ID, configType, ruleID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
 		return
 	}
-	recordAudit(ctx, workspace.ID, audit.OperationTypeUpdate, before, updated)
-	ginutils.OK(c, ruleOutput[*Output]{Data: fromModel(new(Output), *updated)})
+	definition := toModel(*input)
+	updated := *before
+	updated.EnvType = definition.EnvType
+	updated.Spec = definition.Spec
+	if err = appdefaults.ValidateRule(&updated); err != nil {
+		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
+		return
+	}
+	if err = h.registry.AppDefaultRuleStore.Update(ctx, workspace.ID, configType, &updated); err != nil {
+		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
+		return
+	}
+	recordAudit(ctx, workspace.ID, audit.OperationTypeUpdate, before, &updated)
+	ginutils.OK(c, ruleOutput[*Output]{Data: fromModel(new(Output), updated)})
 }
 
 func deleteRule(
@@ -166,7 +178,7 @@ func deleteRule(
 		return
 	}
 
-	deleted, err := h.newService().Delete(ctx, workspace.ID, configType, ruleID)
+	deleted, err := h.registry.AppDefaultRuleStore.Delete(ctx, workspace.ID, configType, ruleID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "delete "+configType.String()+" application default rule"))
 		return

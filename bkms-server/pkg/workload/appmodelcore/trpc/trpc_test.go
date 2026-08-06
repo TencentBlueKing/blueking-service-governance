@@ -109,8 +109,6 @@ var _ = Describe("tRPC application service", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		defaultsService := appdefaults.NewService(ruleStore, envStore)
-
 		name := "trpc-defaults-" + stringx.Random(6)
 		application = &bkmsapp.Application{
 			ID:          name + stringx.Random(6),
@@ -122,7 +120,8 @@ var _ = Describe("tRPC application service", func() {
 		err = trpc.NewService(
 			appModelStore,
 			appSpecStore,
-			defaultsService,
+			ruleStore,
+			envStore,
 			appConfigFileStore,
 			appConfigFileVersionStore,
 			appStore,
@@ -182,7 +181,8 @@ var _ = Describe("tRPC application service", func() {
 		err = trpc.NewService(
 			appModelStore,
 			appSpecStore,
-			appdefaults.NewService(ruleStore, envStore),
+			ruleStore,
+			envStore,
 			appConfigFileStore,
 			appConfigFileVersionStore,
 			appStore,

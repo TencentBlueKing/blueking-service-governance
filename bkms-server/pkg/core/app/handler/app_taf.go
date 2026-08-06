@@ -11,7 +11,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	tafapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/taf"
 )
 
@@ -19,7 +18,8 @@ func (h *Handler) newTafService() *tafapp.Service {
 	return tafapp.NewService(
 		h.registry.AppModelStore,
 		h.registry.AppSpecStore,
-		appdefaults.NewService(h.registry.AppDefaultRuleStore, h.registry.EnvStore),
+		h.registry.AppDefaultRuleStore,
+		h.registry.EnvStore,
 		h.registry.AppConfigFileStore,
 		h.registry.AppConfigFileVersionStore,
 		h.registry.AppStore,

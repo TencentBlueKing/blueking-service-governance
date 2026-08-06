@@ -233,9 +233,9 @@ MongoDB 使用唯一索引 `(workspaceID, configType, envType)` 防止同一规�
 | `defaults.go` | 平台默认资源规格和更新策略 |
 | `model.go` | Rule 数据结构和 section 写入逻辑 |
 | `validate.go` | 规则内容校验 |
-| `service.go` | 规则 CRUD 和创建配置解析入口 |
+| `resolve.go` | 创建应用时解析默认 AppSpec |
 | `store.go` | MongoDB 读写和唯一索引 |
 | `router.go` | API 路由 |
-| `handler/` | 各 section 的接口处理和审计 |
+| `handler/` | 各 section 的规则校验、数据库操作和审计 |
 | `serializer/` | 各 section 的请求和响应结构 |
 | `hooks/` | 删除 Workspace 时清理规则 |

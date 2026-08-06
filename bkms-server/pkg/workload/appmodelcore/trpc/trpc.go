@@ -9,6 +9,7 @@ import (
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -52,7 +53,8 @@ type UpdateParams struct {
 type Service struct {
 	appModelStore        appmodel.AppModelStore
 	appSpecStore         appspec.AppSpecStore
-	appDefaultsService   *appdefaults.Service
+	appDefaultRuleStore  appdefaults.RuleStore
+	envStore             envmodel.EnvironmentStore
 	appStore             bkmsapp.ApplicationStore
 	appConfigFileService *appcfg.AppConfigFileService
 }
@@ -61,7 +63,8 @@ type Service struct {
 func NewService(
 	appModelStore appmodel.AppModelStore,
 	appSpecStore appspec.AppSpecStore,
-	appDefaultsService *appdefaults.Service,
+	appDefaultRuleStore appdefaults.RuleStore,
+	envStore envmodel.EnvironmentStore,
 	appConfigFileStore appcfg.AppConfigFileStore,
 	appConfigFileVersionStore appcfg.AppConfigFileVersionStore,
 	appStore bkmsapp.ApplicationStore,
@@ -69,7 +72,8 @@ func NewService(
 	return &Service{
 		appModelStore:        appModelStore,
 		appSpecStore:         appSpecStore,
-		appDefaultsService:   appDefaultsService,
+		appDefaultRuleStore:  appDefaultRuleStore,
+		envStore:             envStore,
 		appStore:             appStore,
 		appConfigFileService: appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore),
 	}
@@ -78,7 +82,13 @@ func NewService(
 // Create 创建 tRPC 应用资源（AppModel + AppConfigFile + App）
 func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *CreateParams) error {
 	// 在写入任何应用数据前读取初始化规则，避免读取失败时留下部分应用数据。
-	resolution, err := s.appDefaultsService.Resolve(ctx, app.WorkspaceID, app.ID)
+	resolution, err := appdefaults.Resolve(
+		ctx,
+		s.appDefaultRuleStore,
+		s.envStore,
+		app.WorkspaceID,
+		app.ID,
+	)
 	if err != nil {
 		return errors.Wrap(err, "resolve application defaults")
 	}

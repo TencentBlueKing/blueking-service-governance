@@ -118,3 +118,16 @@ var _ = Describe("Application default rule model", func() {
 		)).To(BeTrue())
 	})
 })
+
+func resourcesSpec(
+	replicas int32,
+	cpuRequests, cpuLimits, memoryRequests, memoryLimits string,
+) *appspec.ResourcesSpec {
+	return &appspec.ResourcesSpec{
+		Replicas:       lo.ToPtr(replicas),
+		CPURequests:    lo.ToPtr(cpuRequests),
+		CPULimits:      lo.ToPtr(cpuLimits),
+		MemoryRequests: lo.ToPtr(memoryRequests),
+		MemoryLimits:   lo.ToPtr(memoryLimits),
+	}
+}

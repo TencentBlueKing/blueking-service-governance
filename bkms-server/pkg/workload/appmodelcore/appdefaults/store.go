@@ -20,7 +20,7 @@ type RuleStore interface {
 	Get(ctx context.Context, workspaceID string, configType ConfigType, id bson.ObjectID) (*Rule, error)
 	Create(ctx context.Context, rule *Rule) error
 	Update(ctx context.Context, workspaceID string, configType ConfigType, rule *Rule) error
-	Delete(ctx context.Context, workspaceID string, configType ConfigType, id bson.ObjectID) error
+	Delete(ctx context.Context, workspaceID string, configType ConfigType, id bson.ObjectID) (*Rule, error)
 	DeleteByWorkspace(ctx context.Context, workspaceID string) error
 	Drop(ctx context.Context) error
 }
@@ -127,7 +127,7 @@ func (s *RuleStoreMongo) Update(
 ) error {
 	rule.UpdatedAt = time.Now()
 	// Replace the complete document so removed configuration cannot survive as
-	// stale BSON. The service supplies the existing rule's immutable identity.
+	// stale BSON. The caller supplies the existing rule's immutable identity.
 	result, err := s.collection.ReplaceOne(ctx, bson.M{
 		"_id":         rule.ID,
 		"workspaceID": workspaceID,
@@ -145,25 +145,26 @@ func (s *RuleStoreMongo) Update(
 	return nil
 }
 
-// Delete deletes one rule by workspace, config type, and ID.
+// Delete deletes and returns one rule by workspace, config type, and ID.
 func (s *RuleStoreMongo) Delete(
 	ctx context.Context,
 	workspaceID string,
 	configType ConfigType,
 	id bson.ObjectID,
-) error {
-	result, err := s.collection.DeleteOne(ctx, bson.M{
+) (*Rule, error) {
+	rule := new(Rule)
+	err := s.collection.FindOneAndDelete(ctx, bson.M{
 		"_id":         id,
 		"workspaceID": workspaceID,
 		"configType":  configType,
-	})
+	}).Decode(rule)
 	if err != nil {
-		return err
+		if err == mongo.ErrNoDocuments {
+			return nil, ErrRuleNotFound
+		}
+		return nil, err
 	}
-	if result.DeletedCount == 0 {
-		return ErrRuleNotFound
-	}
-	return nil
+	return rule, nil
 }
 
 // DeleteByWorkspace deletes all rules in a workspace.

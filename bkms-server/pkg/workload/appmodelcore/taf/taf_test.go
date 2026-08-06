@@ -109,8 +109,6 @@ var _ = Describe("TAF application service", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		defaultsService := appdefaults.NewService(ruleStore, envStore)
-
 		name := "taf-defaults-" + stringx.Random(6)
 		application = &bkmsapp.Application{
 			ID:          name + stringx.Random(6),
@@ -122,7 +120,8 @@ var _ = Describe("TAF application service", func() {
 		err = taf.NewService(
 			appModelStore,
 			appSpecStore,
-			defaultsService,
+			ruleStore,
+			envStore,
 			appConfigFileStore,
 			appConfigFileVersionStore,
 			appStore,
@@ -181,7 +180,8 @@ var _ = Describe("TAF application service", func() {
 		err = taf.NewService(
 			appModelStore,
 			appSpecStore,
-			appdefaults.NewService(ruleStore, envStore),
+			ruleStore,
+			envStore,
 			appConfigFileStore,
 			appConfigFileVersionStore,
 			appStore,
