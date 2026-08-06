@@ -195,19 +195,15 @@ var _ = Describe("port-forward tunnel bridge", func() {
 			if err != nil {
 				return err
 			}
-			if err = conn.Close(); err != nil {
-				return err
-			}
-			probeTunnel.Close()
-			return nil
+			return conn.Close()
 		}, time.Second).Should(Succeed())
+		// Wait until the readiness probe has consumed its tunnel before opening
+		// real connections, so tunnel assignment does not depend on goroutine order.
+		Eventually(probeTunnel.closed, time.Second).Should(BeClosed())
 
 		localA, err := net.Dial("tcp", cfg.ListenAddress())
 		Expect(err).NotTo(HaveOccurred())
 		defer localA.Close()
-		localB, err := net.Dial("tcp", cfg.ListenAddress())
-		Expect(err).NotTo(HaveOccurred())
-		defer localB.Close()
 
 		_, err = localA.Write([]byte("aaaa"))
 		Expect(err).NotTo(HaveOccurred())
@@ -215,6 +211,10 @@ var _ = Describe("port-forward tunnel bridge", func() {
 		_, err = io.ReadFull(tunnelAServer, bufA)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(bufA)).To(Equal("aaaa"))
+
+		localB, err := net.Dial("tcp", cfg.ListenAddress())
+		Expect(err).NotTo(HaveOccurred())
+		defer localB.Close()
 
 		_, err = localB.Write([]byte("bbbb"))
 		Expect(err).NotTo(HaveOccurred())
