@@ -20,24 +20,30 @@ func NewAppCmd() *cobra.Command {
 		Short: "Update an app-defined environment variable",
 		Long: `Update an existing app-defined environment variable.
 
-The --updated-key flag allows renaming the variable key.
+The --updated-key flag allows renaming the variable key (optional, defaults to --key).
 Use --sensitive to mark as sensitive, or --no-sensitive to unmark.`,
 		Example: `  # Update value
-  bkms-cli envvar update app --app <appID> --key MY_VAR --updated-key MY_VAR --value new-value
+  bkms-cli envvar update app --app <appID> --key MY_VAR --value new-value
 
   # Rename key
-  bkms-cli envvar update app --app <appID> --key MY_VAR --updated-key MY_NEW_VAR --value new-value
+  bkms-cli envvar update app --app <appID> --key MY_VAR --updated-key MY_NEW_VAR
 
   # Mark as sensitive
-  bkms-cli envvar update app --app <appID> --key MY_VAR --updated-key MY_VAR --sensitive`,
+  bkms-cli envvar update app --app <appID> --key MY_VAR --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if sensitive && noSensitive {
 				return errors.New("--sensitive and --no-sensitive cannot be used together")
 			}
 
+			// --updated-key 不传时默认使用 --key 的值（不改名）
+			effectiveKey := updatedKey
+			if effectiveKey == "" {
+				effectiveKey = key
+			}
+
 			opts := client.UpdateAppDefinedEnvVarOptions{
-				UpdatedKey:  updatedKey,
+				UpdatedKey:  effectiveKey,
 				Description: description,
 			}
 			if cmd.Flags().Changed("value") {
@@ -63,7 +69,7 @@ Use --sensitive to mark as sensitive, or --no-sensitive to unmark.`,
 
 	cmd.Flags().StringVar(&appID, "app", "", "application ID (required)")
 	cmd.Flags().StringVar(&key, "key", "", "current environment variable key (required)")
-	cmd.Flags().StringVar(&updatedKey, "updated-key", "", "new environment variable key (required)")
+	cmd.Flags().StringVar(&updatedKey, "updated-key", "", "new environment variable key (optional, defaults to --key)")
 	cmd.Flags().StringVar(&value, "value", "", "environment variable value")
 	cmd.Flags().StringVar(&description, "description", "", "variable description")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "mark as sensitive variable")
@@ -71,7 +77,6 @@ Use --sensitive to mark as sensitive, or --no-sensitive to unmark.`,
 
 	_ = cmd.MarkFlagRequired("app")
 	_ = cmd.MarkFlagRequired("key")
-	_ = cmd.MarkFlagRequired("updated-key")
 
 	return cmd
 }
