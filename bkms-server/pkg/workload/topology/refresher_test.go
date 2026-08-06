@@ -108,6 +108,24 @@ var _ = Describe("supplementOwnerRefChain", func() {
 	Describe("Deployment scenario", func() {
 		It("should supplement only ReplicaSet without Pod", func() {
 			mockey.PatchConvey("deploy supplements RS only", GinkgoT(), func() {
+				clusterResources[ResourceKey(k8skind.Deploy, "default", "nginx")] = &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name":      "nginx",
+							"namespace": "default",
+						},
+						"spec": map[string]any{
+							"selector": map[string]any{
+								"matchLabels": map[string]any{
+									"app": "nginx",
+								},
+							},
+						},
+					},
+				}
+
 				mockGVR := &schema.GroupVersionResource{
 					Group: "apps", Version: "v1", Resource: "replicasets",
 				}
@@ -189,6 +207,24 @@ var _ = Describe("supplementOwnerRefChain", func() {
 	Describe("CronJob scenario", func() {
 		It("should supplement only Job without Pod", func() {
 			mockey.PatchConvey("cronjob supplements Job only", GinkgoT(), func() {
+				clusterResources[ResourceKey(k8skind.CJ, "default", "my-cj")] = &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": "batch/v1",
+						"kind":       "CronJob",
+						"metadata": map[string]any{
+							"name":      "my-cj",
+							"namespace": "default",
+						},
+						"spec": map[string]any{
+							"selector": map[string]any{
+								"matchLabels": map[string]any{
+									"app": "my-cj",
+								},
+							},
+						},
+					},
+				}
+
 				mockGVR := &schema.GroupVersionResource{
 					Group: "batch", Version: "v1", Resource: "jobs",
 				}

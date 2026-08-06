@@ -14,7 +14,7 @@ help:
     @echo "  just e2e-logs          Show bruno e2e logs"
     @echo "  just e2e-logs-tail [N] Show last N lines of bruno e2e logs (default 100)"
     @echo "  just e2e-logs-failures Show failed bruno e2e requests with assertion reasons"
-    @echo "  just dump-logs [N]     Dump tail logs of bkms-server/worker/migration/chartmuseum (default 200)"
+    @echo "  just dump-logs [N]     Dump tail logs of bkms-server/worker/migration/chartmuseum/rabbitmq (default 200)"
 
 COMPOSE := "docker-compose -p bkms-apitest"
 PODMAN_COMPOSE := "podman compose -p bkms-apitest"
@@ -259,7 +259,7 @@ e2e-logs-failures:
 dump-logs lines="200":
     #!/usr/bin/env bash
     set -u
-    for svc in bkms-server bkms-worker migration chartmuseum chartmuseum-init; do
+    for svc in bkms-server bkms-worker migration chartmuseum chartmuseum-init rabbitmq; do
         echo "=========================================="
         echo "=== docker-compose logs ${svc} (tail {{lines}}) ==="
         echo "=========================================="
