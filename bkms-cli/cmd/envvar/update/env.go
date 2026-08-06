@@ -1,3 +1,4 @@
+// Package update provides the 'envvar update' sub-command group.
 package update
 
 import (

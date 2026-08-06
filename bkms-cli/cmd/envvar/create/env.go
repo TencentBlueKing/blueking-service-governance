@@ -1,3 +1,4 @@
+// Package create provides the 'envvar create' sub-command group.
 package create
 
 import (

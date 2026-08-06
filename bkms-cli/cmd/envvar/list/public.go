@@ -1,3 +1,4 @@
+// Package list provides the 'envvar list' sub-command group.
 package list
 
 import (

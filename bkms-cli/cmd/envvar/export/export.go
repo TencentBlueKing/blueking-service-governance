@@ -1,4 +1,4 @@
-// Package exportcmd provides the 'envvar export' sub-command group.
+// Package export provides the 'envvar export' sub-command group.
 package export
 
 import "github.com/spf13/cobra"

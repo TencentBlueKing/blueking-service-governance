@@ -1,4 +1,4 @@
-// Package createcmd provides the 'envvar create' sub-command group.
+// Package create provides the 'envvar create' sub-command group.
 package create
 
 import "github.com/spf13/cobra"

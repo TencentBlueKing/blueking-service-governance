@@ -1,3 +1,4 @@
+// Package delete provides the 'envvar delete' sub-command group.
 package delete
 
 import (

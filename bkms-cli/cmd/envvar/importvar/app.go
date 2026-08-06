@@ -1,3 +1,4 @@
+// Package importvar provides the 'envvar import' sub-command group.
 package importvar
 
 import (

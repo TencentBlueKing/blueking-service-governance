@@ -1,3 +1,4 @@
+// Package export provides the 'envvar export' sub-command group.
 package export
 
 import (
