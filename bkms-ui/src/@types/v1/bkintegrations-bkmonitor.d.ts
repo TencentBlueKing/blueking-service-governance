@@ -175,9 +175,17 @@ export interface ListAlertEventsByStrategyRequest {
    */
   pageSize: number;
   /**
+   * 按告警 ID 过滤
+   */
+  alertID?: string;
+  /**
    * 按告警名称过滤
    */
   alertName?: string;
+  /**
+   * 按告警内容过滤（映射到 query_string）
+   */
+  description?: string;
   /**
    * 按策略名称过滤
    */
@@ -264,9 +272,17 @@ export interface ListAlertEventsRequest {
    */
   pageSize: number;
   /**
+   * 按告警 ID 过滤
+   */
+  alertID?: string;
+  /**
    * 按告警名称过滤
    */
   alertName?: string;
+  /**
+   * 按告警内容过滤（映射到 query_string）
+   */
+  description?: string;
   /**
    * 按策略名称过滤
    */
@@ -802,6 +818,7 @@ export interface ListAlertEventsOutput {
 
 export interface AlertEventOutput {
   alertName?: string;
+  assignee?: string[];
   beginTime?: number;
   bkMonitorStrategyID?: string;
   content?: string;

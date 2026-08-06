@@ -310,10 +310,6 @@ export interface UpdateAppConfigFileContentInput {
    * 版本描述
    */
   description?: string;
-  /**
-   * 是否仅预览结果，不真正保存变更
-   */
-  previewOnly?: boolean;
 }
 
 export interface UpdateAppConfigFileContentOutput {
@@ -371,10 +367,6 @@ export interface UpdateAppConfigFileOverlayContentInput {
    * 应用配置文件 overlayContent
    */
   overlayContent?: string;
-  /**
-   * 是否仅预览结果，不真正保存变更
-   */
-  previewOnly?: boolean;
 }
 
 export interface PreviewOverlayMergeInput {

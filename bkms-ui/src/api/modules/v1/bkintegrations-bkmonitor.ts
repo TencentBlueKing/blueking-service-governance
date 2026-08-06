@@ -1,21 +1,3 @@
-/*
- * TencentBlueKing is pleased to support the open source community by making
- * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
- * Copyright (C) Tencent. All rights reserved.
- * Licensed under the MIT License (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
- *
- *  http://opensource.org/licenses/MIT
- *
- * Unless required by applicable law or agreed to in writing, software distributed under
- * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * We undertake not to change the open source license (MIT license) applicable
- * to the current version of the project delivered to anyone in the future.
- */
-
 /* eslint-disable */
 // gen-api-v1.js 自动生成，请勿手动修改
 // 来源：apps/bkms-server/docs/apis/swagger.json
@@ -204,7 +186,9 @@ export const BkintegrationsBkmonitorService = {
    * @param endTime query number 结束时间
    * @param page query number required 页码，从 1 开始
    * @param pageSize query number required 每页数量，仅支持 5/10/20/50/100
+   * @param alertID query string 按告警 ID 过滤
    * @param alertName query string 按告警名称过滤
+   * @param description query string 按告警内容过滤（映射到 query_string）
    * @param strategyName query string 按策略名称过滤
    * @param eventID query string 按事件 ID 过滤
    * @param target query string 按目标实例过滤
@@ -264,7 +248,9 @@ export const BkintegrationsBkmonitorService = {
    * @param endTime query number 结束时间
    * @param page query number required 页码，从 1 开始
    * @param pageSize query number required 每页数量，仅支持 5/10/20/50/100
+   * @param alertID query string 按告警 ID 过滤
    * @param alertName query string 按告警名称过滤
+   * @param description query string 按告警内容过滤（映射到 query_string）
    * @param strategyName query string 按策略名称过滤
    * @param eventID query string 按事件 ID 过滤
    * @param target query string 按目标实例过滤
