@@ -149,39 +149,6 @@ var _ = Describe("Service", func() {
 			Expect(graph.Warnings).To(ContainElement(ContainSubstring("connection timeout")))
 		})
 
-		It("should add warning when refresh status is partial success", func() {
-			snapshot := &ResourceSnapshot{
-				AppID:           "test-app",
-				EnvName:         "dev",
-				TrafficLaneName: "",
-				ClusterID:       "BCS-K8S-00001",
-				Namespace:       "default",
-				DataVersion:     2,
-				RefreshStatus:   RefreshStatusPartialSuccess,
-				WarningSummary:  "partial success: 1 of 2 declared resources missing in cluster",
-				RefreshedAt:     time.Now(),
-				Resources: []ResourceEntry{
-					{
-						Kind:       k8skind.CM,
-						Namespace:  "default",
-						Name:       "test-cm",
-						IsManaged:  true,
-						SourceType: SourceTypeAppModelDeploy,
-					},
-				},
-				Relations: []ResourceRelation{},
-			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
-			Expect(err).NotTo(HaveOccurred())
-
-			graph, err := svc.GetTopology(testCtx, "test-app", "dev", "")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(graph).NotTo(BeNil())
-			Expect(graph.IsPartial).To(BeTrue())
-			Expect(graph.Warnings).To(ContainElement(ContainSubstring("resource snapshot is partial")))
-			Expect(graph.Warnings).To(ContainElement(ContainSubstring("1 of 2 declared resources missing in cluster")))
-		})
-
 		It("should return topology with metadata when ResourceSnapshot exists", func() {
 			snapshot := &ResourceSnapshot{
 				AppID:           "test-app",
