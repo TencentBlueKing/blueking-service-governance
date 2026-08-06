@@ -11,7 +11,7 @@
       <div
         v-for="(item, index) in validValue"
         :key="`${index}`"
-        class="flex items-center mb-[10px]"
+        class="flex items-center mb-[16px]"
       >
         <Form.FormItem
           class="!mb-0 flex-1"
