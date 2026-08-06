@@ -67,11 +67,13 @@ Only specified fields will be updated.`,
 			}
 
 			opts := client.UpdateScopedEnvVarOptions{
-				Key:         effectiveKey,
-				Description: description,
+				Key: effectiveKey,
 			}
 			if cmd.Flags().Changed("value") {
 				opts.Value = &value
+			}
+			if cmd.Flags().Changed("description") {
+				opts.Description = &description
 			}
 			if sensitive {
 				t := true

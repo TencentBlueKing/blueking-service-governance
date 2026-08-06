@@ -152,7 +152,7 @@ type CreateScopedEnvVarOptions struct {
 type UpdateScopedEnvVarOptions struct {
 	Key         string  `json:"key"`
 	Value       *string `json:"value,omitempty"`
-	Description string  `json:"description"`
+	Description *string `json:"description,omitempty"`
 	IsSensitive *bool   `json:"isSensitive,omitempty"`
 }
 
@@ -168,7 +168,7 @@ type CreateAppDefinedEnvVarOptions struct {
 type UpdateAppDefinedEnvVarOptions struct {
 	UpdatedKey  string  `json:"updatedKey"`
 	Value       *string `json:"value,omitempty"`
-	Description string  `json:"description"`
+	Description *string `json:"description,omitempty"`
 	IsSensitive *bool   `json:"isSensitive,omitempty"`
 }
 

@@ -48,11 +48,13 @@ Use --sensitive to mark as sensitive, or --no-sensitive to unmark.`,
 			}
 
 			opts := client.UpdateAppDefinedEnvVarOptions{
-				UpdatedKey:  effectiveKey,
-				Description: description,
+				UpdatedKey: effectiveKey,
 			}
 			if cmd.Flags().Changed("value") {
 				opts.Value = &value
+			}
+			if cmd.Flags().Changed("description") {
+				opts.Description = &description
 			}
 			if sensitive {
 				t := true
