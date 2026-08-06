@@ -51,10 +51,17 @@ var _ = Describe("Updater", func() {
 			Entry("date fix tag", "v20260101-fix"),
 			Entry("partial version", "v1.2"),
 			Entry("leading zero", "v01.2.3"),
+			Entry("another product tag", "bkms-server/v1.2.3"),
 		)
 
 		It("trims version files and linker values", func() {
 			version, err := parseVersion("  v1.2.3\n")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version.String()).To(Equal("1.2.3"))
+		})
+
+		It("accepts the bkms-cli Git tag format", func() {
+			version, err := parseVersion("bkms-cli/v1.2.3")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(version.String()).To(Equal("1.2.3"))
 		})

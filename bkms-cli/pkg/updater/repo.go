@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	// versionFilename points at the latest published SemVer in the flat repository.
+	// versionFilename points at the latest published bkms-cli Git tag in the flat repository.
 	versionFilename = "version"
 	// checksumHeader is supplied by the artifact repository for binary downloads.
 	checksumHeader = "X-Checksum-Sha256"

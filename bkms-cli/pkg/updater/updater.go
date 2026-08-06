@@ -16,6 +16,8 @@ import (
 const (
 	sourceGitHub = "github"
 	sourceRepo   = "repo"
+	// cliTagPrefix identifies bkms-cli releases in the monorepo.
+	cliTagPrefix = "bkms-cli/"
 	// maxBinarySize bounds memory use while go-selfupdate verifies a release.
 	maxBinarySize = 512 * 1024 * 1024
 )
@@ -99,7 +101,7 @@ func platformAssetName(goos, goarch string) (string, error) {
 	return name, nil
 }
 
-// parseVersion accepts the conventional optional "v" prefix but otherwise
+// parseVersion accepts the optional bkms-cli tag and "v" prefixes but otherwise
 // requires strict SemVer so comparison behavior stays deterministic.
 func parseVersion(value string) (*semver.Version, error) {
 	value = strings.TrimSpace(value)
@@ -107,7 +109,8 @@ func parseVersion(value string) (*semver.Version, error) {
 		return nil, fmt.Errorf("%w: version is empty", ErrInvalidVersion)
 	}
 
-	parsed, err := semver.StrictNewVersion(strings.TrimPrefix(value, "v"))
+	normalized := strings.TrimPrefix(value, cliTagPrefix)
+	parsed, err := semver.StrictNewVersion(strings.TrimPrefix(normalized, "v"))
 	if err != nil {
 		return nil, fmt.Errorf("%w %q: %v", ErrInvalidVersion, value, err)
 	}
