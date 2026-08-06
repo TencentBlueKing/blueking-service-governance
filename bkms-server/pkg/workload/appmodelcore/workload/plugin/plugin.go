@@ -1,3 +1,21 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
 // Package plugin 定义了基于应用模型的 workload 插件扩展机制，目前支持按照应用类型扩展不同的
 // workload 行为，比如 tRPC 类型的应用会注入额外的 volume 挂载和创建额外的 ConfigMap 文件
 package plugin

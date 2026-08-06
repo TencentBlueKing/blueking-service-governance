@@ -1,3 +1,21 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
 // Package component 组件输出「预览」（本文件中的 PreviewBuilder）用于在**不接入真实应用、环境** 的前提下，
 // 对组件定义的 patcher/spec 模板做一次试运行：得到附加资源清单与基于固定 GameDeployment（后面可能拓展到其他资源）
 // 底稿的 patch 合并结果。

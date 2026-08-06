@@ -1,3 +1,21 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
 // Package envvars 中的模型当前主要包含作用范围为空间级、环境类型级的公共类环境变量。
 // TODO: 把目前由 env 模块管理的单一环境级环境变量也迁移到这里来统一管理。为什么必须要迁移？因为新的产品设计中
 // 所有作用范围的环境变量会在同一个列表中展示，假如不迁移，整体的实现就无法统一，非常别扭。
