@@ -121,3 +121,8 @@
 .no-padding-popover {
   padding: 0 !important;
 }
+
+.bk-popover.bk-pop2-content.no-border-popover,
+.bk-popover.bk-pop2-content.no-border-popover .bk-pop2-arrow {
+  border: none !important;
+}

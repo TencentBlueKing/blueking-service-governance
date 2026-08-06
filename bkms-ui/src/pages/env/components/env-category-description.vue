@@ -6,7 +6,7 @@
       crossAxis: -10,
     }"
     placement="bottom-start"
-    theme="light"
+    theme="light no-border-popover"
     trigger="hover"
   >
     <Help
