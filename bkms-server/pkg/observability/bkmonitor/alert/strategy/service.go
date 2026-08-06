@@ -232,17 +232,13 @@ func (s *Service) InitDefaultAlertStrategiesForApp(
 }
 
 func buildStrategyFromCreateReq(req *CreateReq) *AlertStrategy {
-	monitorMetric := req.MonitorMetric
-	if monitorMetric == "" {
-		monitorMetric = defaultMonitorMetricForStrategyCode(req.StrategyCode)
-	}
 	return &AlertStrategy{
 		WorkspaceID:        req.WorkspaceID,
 		AppID:              req.AppID,
 		AppName:            req.AppName,
 		StrategyCode:       req.StrategyCode,
 		DisplayName:        req.DisplayName,
-		MonitorMetric:      monitorMetric,
+		MonitorMetric:      MonitorMetricForStrategyCode(req.StrategyCode),
 		Severity:           req.Severity,
 		Threshold:          req.Threshold,
 		TriggerCondition:   req.TriggerCondition,

@@ -19933,9 +19933,6 @@ const docTemplate = `{
                 "enabled": {
                     "type": "boolean"
                 },
-                "monitorMetric": {
-                    "type": "string"
-                },
                 "noticeGroupIDs": {
                     "type": "array",
                     "items": {

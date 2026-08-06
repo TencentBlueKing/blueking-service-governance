@@ -199,14 +199,13 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			)
 
 			rule, err := svc.Create(ctx, &CreateReq{
-				WorkspaceID:   "test-ws",
-				AppID:         "app-1",
-				AppName:       "order-svc",
-				StrategyCode:  "cpu_limit_usage_high",
-				DisplayName:   "CPU Limit 使用率过高",
-				MonitorMetric: "container_cpu_usage_seconds_total",
-				Severity:      AlertSeverityFatal,
-				Threshold:     ThresholdConfig{Method: "gte", Value: 90},
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "order-svc",
+				StrategyCode: "cpu_limit_usage_high",
+				DisplayName:  "CPU Limit 使用率过高",
+				Severity:     AlertSeverityFatal,
+				Threshold:    ThresholdConfig{Method: "gte", Value: 90},
 				EffectiveScope: EffectiveScope{
 					Type:     EffectiveScopeEnvType,
 					EnvTypes: []string{"production"},
@@ -272,14 +271,13 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			)
 
 			rule, err := svc.Create(ctx, &CreateReq{
-				WorkspaceID:   "test-ws",
-				AppID:         "app-1",
-				AppName:       "trpc-test-app",
-				StrategyCode:  "memory_limit_usage_high",
-				DisplayName:   "Memory Limit 使用率过高",
-				MonitorMetric: "container_memory_working_set_bytes",
-				Severity:      AlertSeverityWarning,
-				Threshold:     ThresholdConfig{Method: "gte", Value: 80},
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "trpc-test-app",
+				StrategyCode: "memory_limit_usage_high",
+				DisplayName:  "Memory Limit 使用率过高",
+				Severity:     AlertSeverityWarning,
+				Threshold:    ThresholdConfig{Method: "gte", Value: 80},
 				EffectiveScope: EffectiveScope{
 					Type:     EffectiveScopeEnvType,
 					EnvTypes: []string{"staging"},
@@ -319,14 +317,13 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			)
 
 			rule, err := svc.Create(ctx, &CreateReq{
-				WorkspaceID:   "test-ws",
-				AppID:         "app-1",
-				AppName:       "trpc-test-app",
-				StrategyCode:  "pod_restart_frequent",
-				DisplayName:   "Pod 重启频繁",
-				MonitorMetric: "kube_pod_container_status_restarts_total",
-				Severity:      AlertSeverityWarning,
-				Threshold:     ThresholdConfig{Method: "gte", Value: 3},
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "trpc-test-app",
+				StrategyCode: "pod_restart_frequent",
+				DisplayName:  "Pod 重启频繁",
+				Severity:     AlertSeverityWarning,
+				Threshold:    ThresholdConfig{Method: "gte", Value: 3},
 				EffectiveScope: EffectiveScope{
 					Type:     EffectiveScopeEnvType,
 					EnvTypes: []string{"staging"},

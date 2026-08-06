@@ -2418,8 +2418,6 @@ definitions:
         $ref: '#/definitions/serializer.EffectiveTimeRangeInput'
       enabled:
         type: boolean
-      monitorMetric:
-        type: string
       noticeGroupIDs:
         items:
           type: integer

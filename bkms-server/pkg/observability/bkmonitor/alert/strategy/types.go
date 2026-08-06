@@ -187,7 +187,6 @@ type CreateReq struct {
 	AppName            string
 	StrategyCode       string
 	DisplayName        string
-	MonitorMetric      string
 	Severity           AlertSeverity
 	Threshold          ThresholdConfig
 	TriggerCondition   TriggerCondition

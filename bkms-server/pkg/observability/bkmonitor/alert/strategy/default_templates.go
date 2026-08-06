@@ -18,6 +18,8 @@
 
 package strategy
 
+import "github.com/samber/lo"
+
 // defaultTemplates 定义应用创建后自动初始化的默认告警模板。
 // 这些模板通过 StrategyCode 与 buildAppScopedAlertPromQL() 的分支逻辑一一对应。
 var defaultTemplates = []DefaultTemplate{
@@ -78,11 +80,12 @@ var defaultTemplates = []DefaultTemplate{
 	},
 }
 
-func defaultMonitorMetricForStrategyCode(strategyCode string) string {
-	for _, tmpl := range defaultTemplates {
-		if tmpl.StrategyCode == strategyCode {
-			return tmpl.MonitorMetric
-		}
+// MonitorMetricForStrategyCode returns the built-in monitor metric bound to a strategy code.
+func MonitorMetricForStrategyCode(strategyCode string) string {
+	if tmpl, ok := lo.Find(defaultTemplates, func(t DefaultTemplate) bool {
+		return t.StrategyCode == strategyCode
+	}); ok {
+		return tmpl.MonitorMetric
 	}
 	return ""
 }

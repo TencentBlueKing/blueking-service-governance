@@ -92,14 +92,13 @@ var _ = Describe("AlertStrategyService", func() {
 
 	newCreateReq := func() *CreateReq {
 		return &CreateReq{
-			WorkspaceID:   "test-ws",
-			AppID:         "app-1",
-			AppName:       "demo-app",
-			StrategyCode:  "test_strategy",
-			DisplayName:   "Test Strategy",
-			MonitorMetric: "test_metric",
-			Severity:      AlertSeverityInfo,
-			Threshold:     ThresholdConfig{Method: "gte", Value: 50},
+			WorkspaceID:  "test-ws",
+			AppID:        "app-1",
+			AppName:      "demo-app",
+			StrategyCode: "test_strategy",
+			DisplayName:  "Test Strategy",
+			Severity:     AlertSeverityInfo,
+			Threshold:    ThresholdConfig{Method: "gte", Value: 50},
 			EffectiveScope: EffectiveScope{
 				Type: EffectiveScopeAll,
 			},
@@ -164,7 +163,6 @@ var _ = Describe("AlertStrategyService", func() {
 			req.AppName = "app-one"
 			req.StrategyCode = "cpu_high"
 			req.DisplayName = "CPU 过高"
-			req.MonitorMetric = "cpu_usage"
 			req.Severity = AlertSeverityWarning
 			req.Threshold = ThresholdConfig{Method: "gte", Value: 80}
 			req.Enabled = true
@@ -180,7 +178,6 @@ var _ = Describe("AlertStrategyService", func() {
 		It("should fill monitorMetric from strategyCode when request omits it", func() {
 			req := newCreateReq()
 			req.StrategyCode = "cpu_limit_usage_high"
-			req.MonitorMetric = ""
 
 			rule, err := svc.Create(ctx, req)
 
@@ -194,7 +191,6 @@ var _ = Describe("AlertStrategyService", func() {
 			firstReq.AppName = "app-a"
 			firstReq.StrategyCode = "dup_code"
 			firstReq.DisplayName = "First"
-			firstReq.MonitorMetric = "metric"
 
 			_, err := svc.Create(ctx, firstReq)
 			Expect(err).NotTo(HaveOccurred())
@@ -204,7 +200,6 @@ var _ = Describe("AlertStrategyService", func() {
 			secondReq.AppName = "app-b"
 			secondReq.StrategyCode = "dup_code"
 			secondReq.DisplayName = "Second"
-			secondReq.MonitorMetric = "metric"
 
 			_, err = svc.Create(ctx, secondReq)
 			Expect(err).NotTo(HaveOccurred())
@@ -579,7 +574,6 @@ var _ = Describe("AlertStrategyService", func() {
 				req := newCreateReq()
 				req.StrategyCode = "cpu_limit_usage_high"
 				req.DisplayName = "CPU Limit 使用率过高"
-				req.MonitorMetric = "container_cpu_usage_seconds_total"
 				req.Severity = AlertSeverityFatal
 				req.Threshold = ThresholdConfig{Method: "gte", Value: 90}
 				req.Enabled = false
