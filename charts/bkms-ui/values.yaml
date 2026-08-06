@@ -54,4 +54,4 @@ env:
   # 代码库数据源地址
   BK_REPO_URL: ""
   # Golang Proxy 地址
-  GOLANG_PROXY_URL: ""
+  BK_GOLANG_PROXY_URL: ""
