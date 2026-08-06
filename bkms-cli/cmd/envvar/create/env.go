@@ -2,6 +2,7 @@ package create
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -29,6 +30,7 @@ The --env flag specifies the target environment name.`,
   bkms-cli envvar create env --env <env-name> --key MY_VAR --value my-value --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			key = strings.TrimSpace(key)
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
 
 			result, err := client.New().

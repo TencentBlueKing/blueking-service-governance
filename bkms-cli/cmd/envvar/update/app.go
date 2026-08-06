@@ -2,6 +2,7 @@ package update
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -35,6 +36,9 @@ Use --sensitive to mark as sensitive, or --no-sensitive to unmark.`,
 			if sensitive && noSensitive {
 				return errors.New("--sensitive and --no-sensitive cannot be used together")
 			}
+
+			key = strings.TrimSpace(key)
+			updatedKey = strings.TrimSpace(updatedKey)
 
 			// --updated-key 不传时默认使用 --key 的值（不改名）
 			effectiveKey := updatedKey

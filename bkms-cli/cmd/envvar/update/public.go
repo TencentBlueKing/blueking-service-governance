@@ -2,6 +2,7 @@ package update
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -40,6 +41,9 @@ Only specified fields will be updated.`,
   bkms-cli envvar update public --key MY_VAR --scope-type workspace --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			key = strings.TrimSpace(key)
+			updatedKey = strings.TrimSpace(updatedKey)
+
 			if sensitive && noSensitive {
 				return errors.New("--sensitive and --no-sensitive cannot be used together")
 			}

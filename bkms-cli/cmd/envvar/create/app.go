@@ -2,6 +2,7 @@ package create
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -31,6 +32,8 @@ The key must be unique within the application.`,
   bkms-cli envvar create app --app <appID> --key MY_VAR --value my-value --description "My variable"`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			key = strings.TrimSpace(key)
+
 			result, err := client.New().
 				CreateAppDefinedEnvVar(cmd.Context(), appID, client.CreateAppDefinedEnvVarOptions{
 					Key:         key,

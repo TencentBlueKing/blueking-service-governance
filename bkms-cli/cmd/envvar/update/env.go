@@ -2,6 +2,7 @@ package update
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -39,6 +40,9 @@ Only specified fields will be updated.`,
 			if sensitive && noSensitive {
 				return errors.New("--sensitive and --no-sensitive cannot be used together")
 			}
+
+			key = strings.TrimSpace(key)
+			updatedKey = strings.TrimSpace(updatedKey)
 
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
 			cli := client.New()

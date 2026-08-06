@@ -2,6 +2,7 @@ package create
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -37,6 +38,8 @@ The --scope-type flag determines the scope level:
   bkms-cli envvar create public --key MY_VAR --value my-value --scope-type workspace --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			key = strings.TrimSpace(key)
+
 			// 校验：scope-type 为 envType 或 env 时必须提供 scope-value
 			if (scopeType == "envType" || scopeType == "env") && scopeValue == "" {
 				return errors.Errorf("--scope-value is required when --scope-type is %s", scopeType)
