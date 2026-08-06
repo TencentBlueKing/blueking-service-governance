@@ -51,6 +51,8 @@ const (
 	DeleteFailedStatus InstanceStatus = "deleteFailed"
 	// AvailableStatus 可用状态
 	AvailableStatus InstanceStatus = "available"
+	// DeletingStatus 删除中状态（异步删除流程进行中）
+	DeletingStatus InstanceStatus = "deleting"
 	// UnavailableStatus 不可用状态. 即服务实例已创建成功, 但由于某些原因处于不可用, 比如数据库在不断重启等
 	UnavailableStatus InstanceStatus = "unavailable"
 )

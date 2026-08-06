@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/hibiken/asynq"
 
@@ -41,6 +42,31 @@ var (
 	// 业务用法: return fmt.Errorf("still provisioning: %w", taskq.ErrFixedRetry)。
 	ErrFixedRetry = errors.New("taskq: retry with fixed interval")
 )
+
+// ExhaustedHandlerFunc 是重试耗尽时的回调函数签名。
+// payload 为原始 JSON 负载，lastErr 为最后一次执行时的错误。
+type ExhaustedHandlerFunc func(ctx context.Context, payload []byte, lastErr error)
+
+// exhaustedHandlers 全局注册表：task type name → exhausted 回调。
+var (
+	exhaustedHandlers   = make(map[string]ExhaustedHandlerFunc)
+	exhaustedHandlersMu sync.RWMutex
+)
+
+// registerExhaustedHandler 注册指定 task type 的 exhausted 回调。
+func registerExhaustedHandler(name string, fn ExhaustedHandlerFunc) {
+	exhaustedHandlersMu.Lock()
+	defer exhaustedHandlersMu.Unlock()
+	exhaustedHandlers[name] = fn
+}
+
+// getExhaustedHandler 查找指定 task type 的 exhausted 回调。
+func getExhaustedHandler(name string) (ExhaustedHandlerFunc, bool) {
+	exhaustedHandlersMu.RLock()
+	defer exhaustedHandlersMu.RUnlock()
+	fn, ok := exhaustedHandlers[name]
+	return fn, ok
+}
 
 // TaskType 是一种强类型异步任务的定义(模板), 由 NewTaskType 构造。
 //
@@ -70,6 +96,20 @@ func NewTaskType[Args any](name string, h HandlerFunc[Args], opts ...asynq.Optio
 
 // Name 返回任务名(用于 mux.Handle 与投递)。
 func (t *TaskType[Args]) Name() string { return t.name }
+
+// OnExhausted 注册重试耗尽时的回调。框架会自动反序列化 payload 为 Args 并调用 fn。
+// 返回 TaskType 自身以支持链式调用。
+func (t *TaskType[Args]) OnExhausted(fn func(ctx context.Context, args Args, lastErr error)) *TaskType[Args] {
+	registerExhaustedHandler(t.name, func(ctx context.Context, payload []byte, lastErr error) {
+		var args Args
+		if err := json.Unmarshal(payload, &args); err != nil {
+			logging.ErrorNoContextf("taskq: unmarshal args in exhausted handler for %q: %v", t.name, err)
+			return
+		}
+		fn(ctx, args, lastErr)
+	})
+	return t
+}
 
 // Handler 返回可挂载到 asynq.ServeMux 的底层处理函数。
 //

@@ -16,408 +16,271 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package depservice
+package depservice_test
 
 import (
 	"context"
-	"time"
 
-	. "github.com/bytedance/mockey"
+	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/fake"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
 )
 
-var _ = Describe("Test ServiceManager on service instance operations", func() {
-	var mgr *ServiceManager
+// fakeProvisionParams 满足 types.ProvisionParams，供 CreateServiceInstance 入参使用。
+type fakeProvisionParams struct{}
 
-	var ctx context.Context
+func (fakeProvisionParams) Validate() error { return nil }
+
+var _ = Describe("ServiceManager", func() {
+	var (
+		ctx       context.Context
+		diApp     *fxtest.App
+		svcStore  model.ServiceStore
+		instStore model.ServiceInstanceStore
+		mgr       *depservice.ServiceManager
+
+		planName string
+	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		mgr = &ServiceManager{
-			svcStore:  &model.ServiceStoreMongo{},
-			instStore: &model.ServiceInstanceStoreMongo{},
+		fake.Reset()
+
+		diApp = fxtest.New(
+			GinkgoT(),
+			model.FxModule,
+			fx.Provide(depservice.New),
+			fx.Populate(&svcStore, &instStore, &mgr),
+		)
+		diApp.RequireStart()
+
+		// serviceName 使用 "fake"，provider.New 会走注册表返回 fake.Provider，无需 Mock
+		planName = "default"
+		Expect(svcStore.Create(ctx, &model.Service{
+			Name:        "fake",
+			DisplayName: "fake",
+			Plans: []model.ServicePlan{{
+				Name:         planName,
+				ProviderType: model.ProviderTypeSystemAllocated,
+				Config:       map[string]any{},
+			}},
+		})).To(Succeed())
+	})
+
+	AfterEach(func() {
+		fake.Reset()
+		Expect(instStore.DeleteAll(ctx)).To(Succeed())
+		Expect(svcStore.DeleteAll(ctx)).To(Succeed())
+		diApp.RequireStop()
+	})
+
+	createInstance := func(status model.InstanceStatus, attachedApps []string) bson.ObjectID {
+		if attachedApps == nil {
+			attachedApps = []string{}
 		}
-	})
-
-	Context("test GetServiceInstance", func() {
-		It("get successfully", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{ID: instID}, nil).
-					Build()
-
-				inst, err := mgr.GetServiceInstance(ctx, instID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(inst.ID).To(Equal(instID))
-			})
+		id, err := instStore.Create(ctx, &model.ServiceInstance{
+			Name:         "inst-" + stringx.Random(6),
+			ServiceName:  "fake",
+			PlanName:     planName,
+			ProviderType: model.ProviderTypeSystemAllocated,
+			ScopeType:    model.ScopeTypeWorkspace,
+			WorkspaceID:  "ws-" + stringx.Random(6),
+			AttachedApps: attachedApps,
+			Status:       status,
+			Operator:     "tester",
 		})
-		It("service instance not found", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(nil, model.NewNotFoundError("service instance")).
-					Build()
-				_, err := mgr.GetServiceInstance(ctx, bson.NewObjectID())
-				Expect(model.AsNotFoundError(err)).To(Equal(true))
-			})
-		})
-	})
+		Expect(err).NotTo(HaveOccurred())
+		return id
+	}
 
-	Context("test DeleteServiceInstance", func() {
-		It("delete successfully", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				serviceName := "test-service"
-				planName := "test-plan"
+	Context("GetServiceInstance", func() {
+		It("returns the instance from mongodb", func() {
+			instID := createInstance(model.AvailableStatus, nil)
 
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{
-					ID:           instID,
-					ServiceName:  serviceName,
-					PlanName:     planName,
-					Status:       model.AvailableStatus,
-					AttachedApps: []string{},
-				}, nil).
-					Build()
-
-				Mock((*model.ServiceStoreMongo).Get).Return(&model.Service{
-					Name:  serviceName,
-					Plans: []model.ServicePlan{{Name: planName, ProviderType: model.ProviderTypeSystemAllocated}},
-				}, nil).Build()
-
-				Mock(provider.New).Return(&polaris.Provider{}, nil).Build()
-				Mock((*polaris.Provider).DeleteInstance).Return(nil).Build()
-				Mock((*model.ServiceInstanceStoreMongo).Delete).Return(nil).Build()
-
-				err := mgr.DeleteServiceInstance(ctx, instID)
-				Expect(err).NotTo(HaveOccurred())
-			})
+			inst, err := mgr.GetServiceInstance(ctx, instID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(inst.ID).To(Equal(instID))
+			Expect(inst.ServiceName).To(Equal("fake"))
 		})
 
-		It("delete failed because instance is used by apps", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{
-					ID:           instID,
-					AttachedApps: []string{"app1"},
-				}, nil).
-					Build()
-				err := mgr.DeleteServiceInstance(ctx, instID)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("is used by apps"))
-			})
-		})
-
-		It("delete successfully when instance status is provisioning", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{
-					ID:           instID,
-					Status:       model.ProvisioningStatus,
-					AttachedApps: []string{},
-				}, nil).
-					Build()
-				Mock((*model.ServiceInstanceStoreMongo).Delete).Return(nil).Build()
-
-				err := mgr.DeleteServiceInstance(ctx, instID)
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		It("delete successfully when instance status is createFailed", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{
-					ID:           instID,
-					Status:       model.CreateFailedStatus,
-					AttachedApps: []string{},
-				}, nil).
-					Build()
-				Mock((*model.ServiceInstanceStoreMongo).Delete).Return(nil).Build()
-
-				err := mgr.DeleteServiceInstance(ctx, instID)
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		It("delete failed because provider failed", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				serviceName := "test-service"
-				planName := "test-plan"
-
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{
-					ID:           instID,
-					ServiceName:  serviceName,
-					PlanName:     planName,
-					Status:       model.AvailableStatus,
-					AttachedApps: []string{},
-				}, nil).
-					Build()
-
-				Mock((*model.ServiceStoreMongo).Get).Return(&model.Service{
-					Name:  serviceName,
-					Plans: []model.ServicePlan{{Name: planName, ProviderType: model.ProviderTypeSystemAllocated}},
-				}, nil).Build()
-
-				Mock(provider.New).Return(&polaris.Provider{}, nil).Build()
-				Mock((*polaris.Provider).DeleteInstance).Return(errors.New("delete failed")).Build()
-				Mock((*model.ServiceInstanceStoreMongo).UpdateStatus).Return(nil).Build()
-
-				err := mgr.DeleteServiceInstance(ctx, instID)
-				Expect(err).To(HaveOccurred())
-			})
+		It("returns not found for a missing instance", func() {
+			_, err := mgr.GetServiceInstance(ctx, bson.NewObjectID())
+			Expect(model.AsNotFoundError(err)).To(BeTrue())
 		})
 	})
 
-	Context("test CreateServiceInstance", func() {
-		It("test create successfully", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				serviceName := "test-service"
-				planName := "test-plan"
+	Context("DeleteServiceInstance", func() {
+		It("deletes an available instance through a sync provider", func() {
+			instID := createInstance(model.AvailableStatus, nil)
 
-				Mock(
-					(*model.ServiceStoreMongo).Get,
-				).Return(&model.Service{
-					Name: serviceName,
-					Plans: []model.ServicePlan{{
-						Name:         planName,
-						ProviderType: model.ProviderTypeSystemAllocated,
-						Config:       map[string]any{},
-					}},
-				}, nil).
-					Build()
+			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
+			_, err := instStore.Get(ctx, instID)
+			Expect(model.AsNotFoundError(err)).To(BeTrue())
+		})
 
-				Mock(provider.New).Return(&polaris.Provider{}, nil).Build()
-				Mock((*model.ServiceInstanceStoreMongo).Create).Return(instID, nil).Build()
-				Mock((*polaris.Provider).CreateInstance).Return(&types.CreateInstanceResult{
-					InstConfig:  map[string]any{},
-					Credentials: map[string]any{},
-				}, nil).Build()
-				Mock((*model.ServiceInstanceStoreMongo).UpdateConfig).Return(nil).Build()
-				Mock((*model.ServiceInstanceStoreMongo).UpdateCredentials).Return(nil).Build()
-				Mock((*ServiceManager).startPollingInstance).Return(nil).Build()
+		It("rejects delete when the instance is attached to apps", func() {
+			instID := createInstance(model.AvailableStatus, []string{"app-1"})
 
-				id, err := mgr.CreateServiceInstance(ctx, &CreateServiceInstanceParams{
-					Name:        "test-instance",
-					ServiceName: serviceName,
-					PlanName:    planName,
-					ScopeType:   model.ScopeTypeWorkspace,
-					WorkspaceID: "test-workspace",
-					Operator:    "test-operator",
-					Params: &polaris.CreateParams{
-						PolarisName:      "test-service",
-						PolarisNamespace: "test-namespace",
-					},
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(id).To(Equal(instID))
+			err := mgr.DeleteServiceInstance(ctx, instID)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("is used by apps"))
 
-				// 等待一小段时间，确保 goroutine 在 Mock 作用域内执行完毕, 否则 startPollingInstance mock 会失效
-				// TODO: 将 startPollingInstance 改成异步执行, 从而避免此问题
-				time.Sleep(1 * time.Second)
-			})
+			inst, getErr := instStore.Get(ctx, instID)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(inst.Status).To(Equal(model.AvailableStatus))
+		})
+
+		It("rejects delete while provisioning", func() {
+			instID := createInstance(model.ProvisioningStatus, nil)
+
+			err := mgr.DeleteServiceInstance(ctx, instID)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("does not allow delete"))
+
+			inst, getErr := instStore.Get(ctx, instID)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(inst.Status).To(Equal(model.ProvisioningStatus))
+		})
+
+		It("keeps deleting status for an async provider", func() {
+			fake.Use(&fake.Provider{DeleteAsync: true})
+			instID := createInstance(model.AvailableStatus, nil)
+
+			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
+
+			inst, err := instStore.Get(ctx, instID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(inst.Status).To(Equal(model.DeletingStatus))
+		})
+
+		It("directly deletes a createFailed instance", func() {
+			instID := createInstance(model.CreateFailedStatus, nil)
+
+			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
+			_, err := instStore.Get(ctx, instID)
+			Expect(model.AsNotFoundError(err)).To(BeTrue())
+		})
+
+		It("marks deleteFailed when the provider fails", func() {
+			fake.Use(&fake.Provider{DeleteErr: errors.New("delete failed")})
+			instID := createInstance(model.AvailableStatus, nil)
+
+			err := mgr.DeleteServiceInstance(ctx, instID)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("delete failed"))
+
+			inst, getErr := instStore.Get(ctx, instID)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(inst.Status).To(Equal(model.DeleteFailedStatus))
+			Expect(inst.Message).To(ContainSubstring("delete failed"))
 		})
 	})
 
-	Context("test startPollingInstance", func() {
-		It("test success", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{
-					ID:          instID,
-					Config:      map[string]any{},
-					Credentials: map[string]any{},
-				}, nil).
-					Build()
-
-				Mock(
-					(*polaris.Provider).QueryInstance,
-				).Return(&types.QueryInstanceResult{Status: types.AvailableStatus}, nil).
-					Build()
-
-				Mock((*ServiceManager).updateInstanceByResult).Return(nil).Build()
-
-				err := mgr.startPollingInstance(
-					ctx,
-					instID,
-					&polaris.Provider{},
-					make(map[string]any),
-					60*time.Second,
-				)
-
-				Expect(err).NotTo(HaveOccurred())
+	Context("CreateServiceInstance", func() {
+		It("creates an available instance with a sync provider", func() {
+			fake.Use(&fake.Provider{
+				CreateResult: &types.CreateInstanceResult{
+					InstConfig:  map[string]any{"key": "val"},
+					Credentials: map[string]any{"token": "secret"},
+				},
 			})
+
+			id, err := mgr.CreateServiceInstance(ctx, &depservice.CreateServiceInstanceParams{
+				Name:        "inst-" + stringx.Random(6),
+				ServiceName: "fake",
+				PlanName:    planName,
+				ScopeType:   model.ScopeTypeWorkspace,
+				WorkspaceID: "ws-" + stringx.Random(6),
+				Operator:    "tester",
+				Params:      fakeProvisionParams{},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(id).NotTo(Equal(bson.NilObjectID))
+
+			inst, getErr := instStore.Get(ctx, id)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(inst.Status).To(Equal(model.AvailableStatus))
+			Expect(inst.Config["key"]).To(Equal("val"))
+			Expect(inst.Credentials["token"]).To(Equal("secret"))
 		})
 
-		It("test timeout", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
+		It("keeps provisioning status for an async provider", func() {
+			fake.Use(&fake.Provider{CreateAsync: true})
 
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{
-					ID:          instID,
-					Config:      map[string]any{},
-					Credentials: map[string]any{},
-				}, nil).
-					Build()
-
-				Mock(
-					(*polaris.Provider).QueryInstance,
-				).Return(&types.QueryInstanceResult{Status: types.ProvisioningStatus}, nil).
-					Build()
-
-				Mock((*model.ServiceInstanceStoreMongo).UpdateStatus).Return(nil).Build()
-
-				err := mgr.startPollingInstance(
-					ctx,
-					instID,
-					&polaris.Provider{},
-					make(map[string]any),
-					5*time.Second,
-				)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("polling service instance by provider exceeded 5s"))
+			id, err := mgr.CreateServiceInstance(ctx, &depservice.CreateServiceInstanceParams{
+				Name:        "inst-" + stringx.Random(6),
+				ServiceName: "fake",
+				PlanName:    planName,
+				ScopeType:   model.ScopeTypeWorkspace,
+				WorkspaceID: "ws-" + stringx.Random(6),
+				Operator:    "tester",
+				Params:      fakeProvisionParams{},
 			})
+			Expect(err).NotTo(HaveOccurred())
+
+			inst, getErr := instStore.Get(ctx, id)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(inst.Status).To(Equal(model.ProvisioningStatus))
 		})
 
-		It("test query instance failed", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
+		It("fails before writing an instance when provider is unknown", func() {
+			unknownName := "unknown-" + stringx.Random(6)
+			Expect(svcStore.Create(ctx, &model.Service{
+				Name:        unknownName,
+				DisplayName: unknownName,
+				Plans: []model.ServicePlan{{
+					Name:         planName,
+					ProviderType: model.ProviderTypeSystemAllocated,
+					Config:       map[string]any{},
+				}},
+			})).To(Succeed())
 
-				Mock(
-					(*model.ServiceInstanceStoreMongo).Get,
-				).Return(&model.ServiceInstance{
-					ID:          instID,
-					Config:      map[string]any{},
-					Credentials: map[string]any{},
-				}, nil).
-					Build()
-
-				Mock(
-					(*polaris.Provider).QueryInstance,
-				).Return(nil, errors.New("query failed")).
-					Build()
-
-				Mock((*model.ServiceInstanceStoreMongo).UpdateStatus).Return(nil).Build()
-
-				err := mgr.startPollingInstance(
-					ctx,
-					instID,
-					&polaris.Provider{},
-					make(map[string]any),
-					60*time.Second,
-				)
-				Expect(err).To(HaveOccurred())
+			id, err := mgr.CreateServiceInstance(ctx, &depservice.CreateServiceInstanceParams{
+				Name:        "inst-" + stringx.Random(6),
+				ServiceName: unknownName,
+				PlanName:    planName,
+				ScopeType:   model.ScopeTypeWorkspace,
+				WorkspaceID: "ws-" + stringx.Random(6),
+				Operator:    "tester",
+				Params:      fakeProvisionParams{},
 			})
-		})
-	})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("provider not found"))
+			Expect(id).To(Equal(bson.NilObjectID))
 
-	Context("test updateInstanceByResult", func() {
-		It("update successfully when status is available", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				credentials := map[string]any{"username": "test", "password": "test123"}
-
-				Mock((*model.ServiceInstanceStoreMongo).UpdateCredentials).Return(nil).Build()
-				Mock((*model.ServiceInstanceStoreMongo).UpdateStatus).Return(nil).Build()
-
-				err := mgr.updateInstanceByResult(
-					ctx,
-					&types.QueryInstanceResult{Status: types.AvailableStatus},
-					instID,
-					credentials,
-				)
-				Expect(err).NotTo(HaveOccurred())
-			})
+			insts, listErr := instStore.List(ctx, nil)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(insts).To(BeEmpty())
 		})
 
-		It("update failed when status is unavailable", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				credentials := map[string]any{"username": "test", "password": "test123"}
+		It("marks createFailed when the provider create fails", func() {
+			fake.Use(&fake.Provider{CreateErr: errors.New("provider create failed")})
 
-				Mock((*model.ServiceInstanceStoreMongo).UpdateStatus).Return(nil).Build()
-
-				err := mgr.updateInstanceByResult(
-					ctx,
-					&types.QueryInstanceResult{Status: types.UnavailableStatus},
-					instID,
-					credentials,
-				)
-				Expect(err).To(HaveOccurred())
+			id, err := mgr.CreateServiceInstance(ctx, &depservice.CreateServiceInstanceParams{
+				Name:        "inst-" + stringx.Random(6),
+				ServiceName: "fake",
+				PlanName:    planName,
+				ScopeType:   model.ScopeTypeWorkspace,
+				WorkspaceID: "ws-" + stringx.Random(6),
+				Operator:    "tester",
+				Params:      fakeProvisionParams{},
 			})
-		})
+			Expect(err).To(HaveOccurred())
+			Expect(id).NotTo(Equal(bson.NilObjectID))
 
-		It("update credentials failed", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				credentials := map[string]any{"username": "test", "password": "test123"}
-
-				Mock(
-					(*model.ServiceInstanceStoreMongo).UpdateCredentials,
-				).Return(errors.New("update failed")).
-					Build()
-				Mock((*model.ServiceInstanceStoreMongo).UpdateStatus).Return(nil).Build()
-
-				err := mgr.updateInstanceByResult(
-					ctx,
-					&types.QueryInstanceResult{Status: types.AvailableStatus},
-					instID,
-					credentials,
-				)
-				Expect(err).To(HaveOccurred())
-			})
-		})
-	})
-
-	Context("test updateInstanceStatus", func() {
-		It("update status successfully", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-
-				Mock((*model.ServiceInstanceStoreMongo).UpdateStatus).Return(nil).Build()
-
-				err := mgr.updateInstanceStatus(ctx, instID, model.AvailableStatus, nil)
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		It("update status with error message", func() {
-			PatchConvey("test", GinkgoT(), func() {
-				instID := bson.NewObjectID()
-				statusError := errors.New("some error")
-
-				Mock((*model.ServiceInstanceStoreMongo).UpdateStatus).Return(nil).Build()
-
-				err := mgr.updateInstanceStatus(ctx, instID, model.CreateFailedStatus, statusError)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(statusError))
-			})
+			inst, getErr := instStore.Get(ctx, id)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(inst.Status).To(Equal(model.CreateFailedStatus))
+			Expect(inst.Message).To(ContainSubstring("provider create failed"))
 		})
 	})
 })

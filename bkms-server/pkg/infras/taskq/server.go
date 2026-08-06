@@ -94,7 +94,8 @@ func retryDelayFunc(fixed time.Duration) asynq.RetryDelayFunc {
 	}
 }
 
-// errorHandler 构造 server 级错误处理器: 在重试耗尽(非 StopRetry)时记录错误日志。
+// errorHandler 构造 server 级错误处理器: 在重试耗尽(非 StopRetry)时记录错误日志，
+// 并调用业务注册的 exhausted 回调。
 func errorHandler() asynq.ErrorHandler {
 	return asynq.ErrorHandlerFunc(func(ctx context.Context, t *asynq.Task, err error) {
 		if errors.Is(err, asynq.SkipRetry) {
@@ -107,6 +108,11 @@ func errorHandler() asynq.ErrorHandler {
 			return // 仍有重试机会。
 		}
 		log.Errorf(ctx, "taskq task exhausted after %d retries: type=%s err=%v", retried, t.Type(), err)
+
+		// 调用业务注册的 exhausted 回调
+		if fn, ok := getExhaustedHandler(t.Type()); ok {
+			fn(ctx, t.Payload(), err)
+		}
 	})
 }
 

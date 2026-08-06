@@ -19,17 +19,8 @@
 // Package types defines shared dependency service provider types and conversion helpers.
 package types
 
-import "github.com/mitchellh/mapstructure"
-
-type InstanceStatus string
-
-const (
-	// ProvisioningStatus 创建状态
-	ProvisioningStatus InstanceStatus = "provisioning"
-	// AvailableStatus 可用状态
-	AvailableStatus InstanceStatus = "available"
-	// UnavailableStatus 不可用状态
-	UnavailableStatus InstanceStatus = "unavailable"
+import (
+	"github.com/mitchellh/mapstructure"
 )
 
 // ProvisionParams 是所有 provider 创建参数的公共接口。
@@ -68,16 +59,15 @@ type CreateInstanceResult struct {
 	InstConfig map[string]any
 	// Credentials represents the instance credentials
 	Credentials map[string]any
+
+	// Async 为 true 表示创建请求已提交但尚未完成，
+	// 实例应保持 provisioning 状态，后续由异步 task 推进完成。
+	Async bool
 }
 
-// QueryInstanceResult represents the result of query instance
-type QueryInstanceResult struct {
-	Status InstanceStatus
-	// Credentials represents the instance credentials
-	Credentials map[string]any
-}
-
-// IsProvisioningComplete returns true if the instance is provisioning completed
-func (r QueryInstanceResult) IsProvisioningComplete() bool {
-	return r.Status == AvailableStatus || r.Status == UnavailableStatus
+// DeleteInstanceResult represents the result of delete instance
+type DeleteInstanceResult struct {
+	// Async 为 true 表示删除请求已提交但尚未完成，
+	// 实例应保持 deleting 状态，后续由异步 task 推进完成。
+	Async bool
 }

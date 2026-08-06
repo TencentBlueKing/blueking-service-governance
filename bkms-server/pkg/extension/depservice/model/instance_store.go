@@ -130,7 +130,7 @@ type ServiceInstanceStore interface {
 	//
 	// Return an error if the operation fails.
 	Update(ctx context.Context, id bson.ObjectID, updateData *SvcInstUpdateData) error
-	// UpdateConfig updates the config of a service instance
+	// UpdateConfig 整量替换服务实例的 Config。
 	//
 	// - ctx: The context object for cancellation and timeout
 	// - id: The id of the service instance
@@ -138,7 +138,10 @@ type ServiceInstanceStore interface {
 	//
 	// Return an error if the operation fails.
 	UpdateConfig(ctx context.Context, id bson.ObjectID, config map[string]any) error
-	// UpdateCredentials updates the credentials of a service instance
+	// PatchConfig 将 patch 合并进现有 Config（同名 key 覆盖），再写回。
+	// Config 在库中以 JSON blob 存储，因此实现为读改写，而非 Mongo 点路径原子更新。
+	PatchConfig(ctx context.Context, id bson.ObjectID, patch map[string]any) error
+	// UpdateCredentials 整量替换服务实例的 Credentials。
 	//
 	// - ctx: The context object for cancellation and timeout
 	// - id: The id of the service instance
@@ -146,6 +149,9 @@ type ServiceInstanceStore interface {
 	//
 	// Return an error if the operation fails.
 	UpdateCredentials(ctx context.Context, id bson.ObjectID, credentials map[string]any) error
+	// PatchCredentials 将 patch 合并进现有 Credentials（同名 key 覆盖），再写回。
+	// Credentials 加密后整段存储，因此实现为读改写。
+	PatchCredentials(ctx context.Context, id bson.ObjectID, patch map[string]any) error
 	// UpdateStatus updates the status of a service instance
 	//
 	// - ctx: The context object for cancellation and timeout
@@ -382,13 +388,7 @@ func (s *ServiceInstanceStoreMongo) Update(
 	return err
 }
 
-// UpdateConfig updates the config of a service instance
-//
-// - ctx: The context object for cancellation and timeout
-// - id: The id of the service instance
-// - config: The config of the service instance to update
-//
-// Return an error if the operation fails.
+// UpdateConfig 整量替换服务实例的 Config。
 func (s *ServiceInstanceStoreMongo) UpdateConfig(
 	ctx context.Context,
 	id bson.ObjectID,
@@ -411,13 +411,23 @@ func (s *ServiceInstanceStoreMongo) UpdateConfig(
 	return err
 }
 
-// UpdateCredentials updates the credentials of a service instance
-//
-// - ctx: The context object for cancellation and timeout
-// - id: The id of the service instance
-// - credentials: The credentials of the service instance to update
-//
-// Return an error if the operation fails.
+// PatchConfig 将 patch 合并进现有 Config 后写回。
+func (s *ServiceInstanceStoreMongo) PatchConfig(
+	ctx context.Context,
+	id bson.ObjectID,
+	patch map[string]any,
+) error {
+	if len(patch) == 0 {
+		return nil
+	}
+	inst, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	return s.UpdateConfig(ctx, id, lo.Assign(map[string]any{}, inst.Config, patch))
+}
+
+// UpdateCredentials 整量替换服务实例的 Credentials。
 func (s *ServiceInstanceStoreMongo) UpdateCredentials(
 	ctx context.Context,
 	id bson.ObjectID,
@@ -438,6 +448,22 @@ func (s *ServiceInstanceStoreMongo) UpdateCredentials(
 		return NewNotFoundError(fmt.Sprintf("service instance(id:%s)", id))
 	}
 	return err
+}
+
+// PatchCredentials 将 patch 合并进现有 Credentials 后写回。
+func (s *ServiceInstanceStoreMongo) PatchCredentials(
+	ctx context.Context,
+	id bson.ObjectID,
+	patch map[string]any,
+) error {
+	if len(patch) == 0 {
+		return nil
+	}
+	inst, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	return s.UpdateCredentials(ctx, id, lo.Assign(map[string]any{}, inst.Credentials, patch))
 }
 
 // UpdateStatus updates the status of a service instance
