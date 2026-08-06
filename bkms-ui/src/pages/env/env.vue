@@ -160,12 +160,12 @@
             </span>
           </template>
           <template #default="{ row }">
-            <div
-              class="env-normal w-[50px] rounded-[2px] text-center"
-              :class="envTypeTagStrokeClassMap[row.type]"
+            <span
+              class="env-normal inline-flex items-center justify-center min-w-[40px] px-[8px] rounded-[2px]"
+              :class="envTypeTagClassMap[row.type]"
             >
               {{ envTypeMap(row.type) || '--' }}
-            </div>
+            </span>
           </template>
         </TableColumn>
         <TableColumn
@@ -293,7 +293,7 @@
   import { EnvService } from '~/api/modules/v1';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { useElementHeight } from '~/composables/use-element-height';
-  import { envTypeTagStrokeClassMap } from '~/composables/use-env-manager';
+  import { envTypeTagClassMap } from '~/composables/use-env-manager';
   import { useTableSearchSelect } from '~/composables/use-search';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -574,8 +574,9 @@
     isShowDeleteEnvDialog.value = true;
   }
 
-  // 更新环境详情后，重新获取列表
-  async function handleUpdate() {
+  // 更新环境详情后，同步详情抽屉数据并重新获取列表
+  async function handleUpdate(row: EnvOutput) {
+    curRow.value = row;
     await handleGetEnvList();
   }
 
@@ -609,10 +610,13 @@
     ::-webkit-scrollbar {
       height: 8px !important;
     }
+
+    .row--current .env-normal.env-tag-development {
+      background-color: #cddffe !important;
+    }
   }
   .env-normal {
     color: #63656e;
     background-color: #f0f1f5;
-    border: 1px solid #979ba54d;
   }
 </style>

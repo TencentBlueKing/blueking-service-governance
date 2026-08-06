@@ -26,7 +26,7 @@
         <div class="text-[14px] text-[#313238] font-bold">{{ data?.displayName }}</div>
         <Tag
           v-if="envTypeConfig"
-          :class="envTypeTagStrokeClassMap[data?.type || '']"
+          :class="envTypeTagClassMap[data?.type || '']"
           type="stroke"
           >{{ envTypeConfig.name || data?.type }}</Tag
         >
@@ -164,7 +164,7 @@
   import { BkintegrationsBkmonitorService } from '~/api/modules/v1';
   import MonitorIframe from '~/components/monitor-iframe.vue';
   import SlideDetail from '~/components/slide-detail.vue';
-  import { envTypeMap, envTypeTagStrokeClassMap } from '~/composables/use-env-manager';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
 
   import ApmInstance from './apm-instance.vue';
   import BasicInfo from './basic-info.vue';

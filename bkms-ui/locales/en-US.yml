@@ -234,7 +234,7 @@ tag不能为空: Tag cannot be empty
 禁止: Disabled
 可直接部署: Direct deployment
 镜像晋级: Image promotion
-"需{0}后才能部署": "Requires {0} before deployment"
+"需 {0} 后才能部署": "Requires {0} before deployment"
 泳道: Swimlane
 开发: Development
 生产: Production
