@@ -56,6 +56,11 @@ func buildSaveParams() *SaveParams {
 		ActionNotice: []bkmapi.ActionNotice{
 			{TimeRange: "00:00--23:59"},
 		},
+		Users: []bkmapi.UserGroupUser{{
+			ID:          "tester",
+			Type:        "user",
+			DisplayName: "tester",
+		}},
 		Operator: "tester",
 	}
 }
@@ -106,6 +111,54 @@ var _ = Describe("Usergroup Service", func() {
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("new bkmonitor client"))
+		})
+	})
+
+	Describe("FindByName", func() {
+		It("uses workspace bk biz id and group name when searching user groups", func() {
+			client := bkmapi.NewStub("tester")
+			_, err := client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+				ID:           lo.ToPtr(int64(1001)),
+				BkBizID:      testUserGroupBkBizID,
+				Name:         "ops",
+				Channels:     []string{"user"},
+				AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
+				ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+				Operator:     "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+				ID:           lo.ToPtr(int64(1002)),
+				BkBizID:      testUserGroupBkBizID,
+				Name:         "other",
+				Channels:     []string{"user"},
+				AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
+				ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+				Operator:     "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			svc = &Service{
+				newClient: func(string) (bkmapi.MonitorClient, error) { return client, nil },
+			}
+
+			got, err := svc.FindByName(context.Background(), ws, "ops", "tester")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).NotTo(BeNil())
+			Expect(got.ID).To(Equal(int64(1001)))
+			Expect(got.Name).To(Equal("ops"))
+		})
+
+		It("returns nil when the target user group does not exist", func() {
+			client := bkmapi.NewStub("tester")
+			svc = &Service{
+				newClient: func(string) (bkmapi.MonitorClient, error) { return client, nil },
+			}
+
+			got, err := svc.FindByName(context.Background(), ws, "missing", "tester")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(BeNil())
 		})
 	})
 
@@ -198,7 +251,222 @@ var _ = Describe("Usergroup Service", func() {
 			Expect(detail).NotTo(BeNil())
 			Expect(detail.BkBizID).To(Equal(testUserGroupBkBizID))
 			Expect(detail.Timezone).To(Equal(saveUserGroupDefaultTimezone))
+			Expect(detail.DutyArranges).To(HaveLen(1))
+			Expect(detail.DutyArranges[0].GroupType).To(Equal("specified"))
+			Expect(detail.DutyArranges[0].NeedRotation).To(BeFalse())
+			Expect(detail.DutyArranges[0].DutyTime).To(Equal([]map[string]any{}))
+			Expect(detail.DutyArranges[0].HandoffTime).To(Equal(map[string]any{}))
+			Expect(detail.DutyArranges[0].DutyUsers).To(Equal([][]bkmapi.UserGroupUser{}))
+			Expect(detail.DutyArranges[0].Backups).To(Equal([]map[string]any{}))
+			Expect(detail.DutyArranges[0].Users).To(HaveLen(1))
+			Expect(detail.DutyArranges[0].Users[0].ID).To(Equal("tester"))
 			Expect(factoryCalls).To(Equal(1))
+		})
+
+		It("normalizes nested notice slices before calling bkmonitor", func() {
+			params := &SaveParams{
+				Name:     "ops",
+				Channels: []string{"user"},
+				AlertNotice: []bkmapi.AlertNotice{{
+					TimeRange: "00:00--23:59",
+					NotifyConfig: []bkmapi.AlertNoticeConfig{{
+						Level:      1,
+						NoticeWays: []bkmapi.NoticeWay{{Name: "weixin"}},
+					}},
+				}},
+				ActionNotice: []bkmapi.ActionNotice{{
+					TimeRange: "00:00--23:59",
+					NotifyConfig: []bkmapi.ActionNoticeConfig{{
+						Phase:      1,
+						NoticeWays: []bkmapi.NoticeWay{{Name: "mail"}},
+					}},
+				}},
+				Users: []bkmapi.UserGroupUser{{
+					ID:   "tester",
+					Type: "user",
+				}},
+				Operator: "tester",
+			}
+
+			req := buildSaveUserGroupReq(testUserGroupBkBizID, nil, params)
+
+			Expect(req.AlertNotice[0].NotifyConfig[0].Type).To(Equal([]string{}))
+			Expect(req.AlertNotice[0].NotifyConfig[0].NoticeWays).To(HaveLen(1))
+			Expect(req.AlertNotice[0].NotifyConfig[0].NoticeWays[0].Receivers).To(Equal([]string{}))
+			Expect(req.ActionNotice[0].NotifyConfig[0].Type).To(Equal([]string{}))
+			Expect(req.ActionNotice[0].NotifyConfig[0].NoticeWays).To(HaveLen(1))
+			Expect(req.ActionNotice[0].NotifyConfig[0].NoticeWays[0].Receivers).To(Equal([]string{}))
+		})
+
+		It("rewrites existing groups into the simplified monitor-compatible payload on update", func() {
+			client := bkmapi.NewStub("tester")
+			factoryCalls := 0
+			groupID := int64(1001)
+			effectiveTime := "2026-08-06 00:00:00"
+			_, err := client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+				ID:           &groupID,
+				BkBizID:      testUserGroupBkBizID,
+				Name:         "ops",
+				Timezone:     "UTC",
+				Channels:     []string{"user"},
+				Desc:         "before",
+				AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
+				ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+				DutyArranges: []bkmapi.DutyArrange{{
+					ID:            88,
+					Hash:          "arrange-hash",
+					GroupType:     "specified",
+					GroupNumber:   0,
+					UserGroupID:   groupID,
+					NeedRotation:  false,
+					DutyTime:      []map[string]any{},
+					EffectiveTime: &effectiveTime,
+					HandoffTime:   map[string]any{},
+					DutyUsers:     [][]bkmapi.UserGroupUser{},
+					Users: []bkmapi.UserGroupUser{{
+						ID:          "legacy",
+						Type:        "user",
+						DisplayName: "legacy",
+					}},
+					Backups: []map[string]any{},
+					Order:   1,
+				}},
+				MentionList: []bkmapi.UserGroupUser{{
+					ID:          "observer",
+					Type:        "user",
+					DisplayName: "observer",
+				}},
+				DutyNotice:  &bkmapi.DutyNotice{},
+				MentionType: 2,
+				Path:        "biz/path",
+				Operator:    "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			svc = &Service{
+				newClient: func(string) (bkmapi.MonitorClient, error) {
+					factoryCalls++
+					return client, nil
+				},
+			}
+
+			detail, err := svc.Save(context.Background(), ws, buildSaveParams())
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.Timezone).To(Equal(saveUserGroupDefaultTimezone))
+			Expect(detail.Path).To(BeEmpty())
+			Expect(detail.MentionType).To(Equal(int64(0)))
+			Expect(detail.MentionList).To(BeNil())
+			Expect(detail.DutyArranges).To(HaveLen(1))
+			Expect(detail.DutyArranges[0].ID).To(Equal(int64(0)))
+			Expect(detail.DutyArranges[0].Hash).To(BeEmpty())
+			Expect(detail.DutyArranges[0].UserGroupID).To(Equal(int64(0)))
+			Expect(detail.DutyArranges[0].EffectiveTime).To(BeNil())
+			Expect(detail.DutyArranges[0].NeedRotation).To(BeFalse())
+			Expect(detail.DutyArranges[0].DutyTime).To(Equal([]map[string]any{}))
+			Expect(detail.DutyArranges[0].HandoffTime).To(Equal(map[string]any{}))
+			Expect(detail.DutyArranges[0].DutyUsers).To(Equal([][]bkmapi.UserGroupUser{}))
+			Expect(detail.DutyArranges[0].Backups).To(Equal([]map[string]any{}))
+			Expect(detail.DutyArranges[0].GroupType).To(Equal("specified"))
+			Expect(detail.DutyArranges[0].GroupNumber).To(Equal(int64(0)))
+			Expect(detail.DutyArranges[0].Users).To(HaveLen(1))
+			Expect(detail.DutyArranges[0].Users[0].ID).To(Equal("tester"))
+			Expect(factoryCalls).To(Equal(1))
+		})
+
+		It("rewrites existing duty groups into the simplified monitor-compatible payload on update", func() {
+			client := bkmapi.NewStub("tester")
+			groupID := int64(1001)
+			hitFirstDuty := true
+			_, err := client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+				ID:           &groupID,
+				BkBizID:      testUserGroupBkBizID,
+				Name:         "duty-group",
+				Timezone:     "UTC",
+				Channels:     []string{"user"},
+				AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
+				ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+				NeedDuty:     true,
+				DutyRules:    []int64{9001},
+				DutyNotice: &bkmapi.DutyNotice{
+					HitFirstDuty: &hitFirstDuty,
+				},
+				DutyArranges: []bkmapi.DutyArrange{{
+					GroupType:    "auto",
+					GroupNumber:  2,
+					NeedRotation: true,
+					DutyTime:     []map[string]any{{"type": "daily"}},
+					HandoffTime:  map[string]any{"time": "09:00"},
+					DutyUsers: [][]bkmapi.UserGroupUser{{
+						{ID: "legacy-duty", Type: "user", DisplayName: "legacy-duty"},
+					}},
+					Backups: []map[string]any{},
+					Order:   1,
+				}},
+				Operator: "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			svc = &Service{
+				newClient: func(string) (bkmapi.MonitorClient, error) { return client, nil },
+			}
+
+			detail, err := svc.Save(context.Background(), ws, buildSaveParams())
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.NeedDuty).To(BeFalse())
+			Expect(detail.DutyRules).To(BeNil())
+			Expect(detail.DutyNotice).To(BeNil())
+			Expect(detail.DutyArranges).To(HaveLen(1))
+			Expect(detail.DutyArranges[0].GroupType).To(Equal("specified"))
+			Expect(detail.DutyArranges[0].GroupNumber).To(Equal(int64(0)))
+			Expect(detail.DutyArranges[0].NeedRotation).To(BeFalse())
+			Expect(detail.DutyArranges[0].DutyTime).To(Equal([]map[string]any{}))
+			Expect(detail.DutyArranges[0].HandoffTime).To(Equal(map[string]any{}))
+			Expect(detail.DutyArranges[0].DutyUsers).To(Equal([][]bkmapi.UserGroupUser{}))
+			Expect(detail.DutyArranges[0].Backups).To(Equal([]map[string]any{}))
+			Expect(detail.DutyArranges[0].Users).To(HaveLen(1))
+			Expect(detail.DutyArranges[0].Users[0].ID).To(Equal("tester"))
+		})
+
+		It("rewrites legacy duty-like groups into the simplified monitor-compatible payload on update", func() {
+			client := bkmapi.NewStub("tester")
+			groupID := int64(1001)
+			dutyRuleID := int64(9001)
+			_, err := client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+				ID:           &groupID,
+				BkBizID:      testUserGroupBkBizID,
+				Name:         "legacy-duty-group",
+				Channels:     []string{"user"},
+				AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
+				ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+				DutyArranges: []bkmapi.DutyArrange{{
+					GroupType:    "specified",
+					GroupNumber:  0,
+					DutyRuleID:   &dutyRuleID,
+					NeedRotation: false,
+					DutyTime:     []map[string]any{{"type": "weekly"}},
+					HandoffTime:  map[string]any{"hour": 9},
+					DutyUsers: [][]bkmapi.UserGroupUser{{
+						{ID: "legacy", Type: "user", DisplayName: "legacy"},
+					}},
+					Order: 1,
+				}},
+				Operator: "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			svc = &Service{
+				newClient: func(string) (bkmapi.MonitorClient, error) { return client, nil },
+			}
+
+			detail, err := svc.Save(context.Background(), ws, buildSaveParams())
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.DutyArranges).To(HaveLen(1))
+			Expect(detail.DutyArranges[0].DutyRuleID).To(BeNil())
+			Expect(detail.DutyArranges[0].DutyTime).To(Equal([]map[string]any{}))
+			Expect(detail.DutyArranges[0].HandoffTime).To(Equal(map[string]any{}))
+			Expect(detail.DutyArranges[0].DutyUsers).To(Equal([][]bkmapi.UserGroupUser{}))
+			Expect(detail.DutyArranges[0].Users).To(HaveLen(1))
+			Expect(detail.DutyArranges[0].Users[0].ID).To(Equal("tester"))
 		})
 
 		DescribeTable(
@@ -233,6 +501,9 @@ var _ = Describe("Usergroup Service", func() {
 			Entry("missing action notice", func(params *SaveParams) {
 				params.ActionNotice = nil
 			}, "field ActionNotice failed on min"),
+			Entry("missing users", func(params *SaveParams) {
+				params.Users = nil
+			}, "field Users failed on min"),
 			Entry("empty operator", func(params *SaveParams) {
 				params.Operator = ""
 			}, "field Operator failed on required"),

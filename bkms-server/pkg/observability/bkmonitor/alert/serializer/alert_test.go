@@ -90,10 +90,9 @@ var _ = Describe("Alert serializer", func() {
 		It("converts request body to create req", func() {
 			envID := bson.NewObjectID()
 			body := CreateAlertStrategyBody{
-				StrategyCode:  "cpu_limit_usage_high",
-				DisplayName:   "CPU Limit",
-				MonitorMetric: "container_cpu_usage_seconds_total",
-				Severity:      1,
+				StrategyCode: "cpu_limit_usage_high",
+				DisplayName:  "CPU Limit",
+				Severity:     1,
 				Threshold: ThresholdConfigInput{
 					Method: "gte",
 					Value:  90,
@@ -121,13 +120,12 @@ var _ = Describe("Alert serializer", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(req).To(Equal(&alertstrategy.CreateReq{
-				WorkspaceID:   "ws-1",
-				AppID:         "app-1",
-				AppName:       "demo-app",
-				StrategyCode:  "cpu_limit_usage_high",
-				DisplayName:   "CPU Limit",
-				MonitorMetric: "container_cpu_usage_seconds_total",
-				Severity:      alertstrategy.AlertSeverityFatal,
+				WorkspaceID:  "ws-1",
+				AppID:        "app-1",
+				AppName:      "demo-app",
+				StrategyCode: "cpu_limit_usage_high",
+				DisplayName:  "CPU Limit",
+				Severity:     alertstrategy.AlertSeverityFatal,
 				Threshold: alertstrategy.ThresholdConfig{
 					Method: "gte",
 					Value:  90,
@@ -256,6 +254,14 @@ var _ = Describe("Alert serializer", func() {
 			pageSizeField, ok := typ.FieldByName("PageSize")
 			Expect(ok).To(BeTrue())
 			Expect(pageSizeField.Tag.Get("binding")).To(Equal("required,oneof=5 10 20 50 100"))
+		})
+
+		It("binds alert id from id query parameter", func() {
+			typ := reflect.TypeOf(AlertQueryInput{})
+
+			alertIDField, ok := typ.FieldByName("AlertID")
+			Expect(ok).To(BeTrue())
+			Expect(alertIDField.Tag.Get("form")).To(Equal("id"))
 		})
 
 		It("keeps explicit paging and ordering unchanged", func() {

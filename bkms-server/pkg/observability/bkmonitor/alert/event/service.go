@@ -22,6 +22,7 @@ package event
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -175,8 +176,6 @@ func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]
 		key string
 		val string
 	}{
-		{key: "id", val: input.AlertID},
-		{key: "alert_name", val: input.AlertName},
 		{key: "strategy_name", val: input.StrategyName},
 		{key: "event_id", val: input.EventID},
 		{key: "target", val: input.Target},
@@ -187,8 +186,19 @@ func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]
 }
 
 func buildSearchQueryString(input SearchInput) string {
-	if input.Description == "" {
+	parts := make([]string, 0, 3)
+	appendPhrase := func(field, value string) {
+		if value == "" {
+			return
+		}
+		parts = append(parts, field+":"+strconv.Quote(value))
+	}
+
+	appendPhrase("id", input.AlertID)
+	appendPhrase("alert_name", input.AlertName)
+	appendPhrase("description", input.Description)
+	if len(parts) == 0 {
 		return ""
 	}
-	return "description:" + strconv.Quote(input.Description)
+	return strings.Join(parts, " AND ")
 }

@@ -18,49 +18,24 @@
 
 package strategy
 
+var builtinStrategyMetrics = map[string]string{
+	"cpu_request_usage_high":    "container_cpu_usage_seconds_total",
+	"memory_request_usage_high": "container_memory_working_set_bytes",
+	"pod_restart_frequent":      "kube_pod_container_status_restarts_total",
+	"cpu_limit_usage_high":      "container_cpu_usage_seconds_total",
+	"memory_limit_usage_high":   "container_memory_working_set_bytes",
+}
+
 // defaultTemplates 定义应用创建后自动初始化的默认告警模板。
-// 这些模板通过 StrategyCode 与 buildAppScopedAlertPromQL() 的分支逻辑一一对应。
+// 这里只放“应用创建后自动初始化”的默认模板，不等于系统支持创建的全部策略类型。
 var defaultTemplates = []DefaultTemplate{
-	// CPU Request 使用率高：关注容器实际 CPU 使用量相对 request 的比例。
-	{
-		StrategyCode:       "cpu_request_usage_high",
-		DisplayName:        "CPU Request 使用率过高",
-		MonitorMetric:      "container_cpu_usage_seconds_total",
-		Severity:           AlertSeverityWarning,
-		Threshold:          ThresholdConfig{Method: "gte", Value: 80},
-		TriggerCondition:   TriggerCondition{Count: 3, CheckWindow: 5},
-		RecoverCondition:   RecoverCondition{CheckWindow: 5},
-		EffectiveTimeRange: EffectiveTimeRange{StartTime: "00:00:00", EndTime: "23:59:59"},
-	},
-	// 内存 Request 使用率高：关注 working set 相对 request 的比例。
-	{
-		StrategyCode:       "memory_request_usage_high",
-		DisplayName:        "内存 Request 使用率过高",
-		MonitorMetric:      "container_memory_working_set_bytes",
-		Severity:           AlertSeverityWarning,
-		Threshold:          ThresholdConfig{Method: "gte", Value: 80},
-		TriggerCondition:   TriggerCondition{Count: 3, CheckWindow: 5},
-		RecoverCondition:   RecoverCondition{CheckWindow: 5},
-		EffectiveTimeRange: EffectiveTimeRange{StartTime: "00:00:00", EndTime: "23:59:59"},
-	},
-	// Pod 频繁重启：统计观察窗口内的重启增量，避免直接比较累计 counter。
-	{
-		StrategyCode:       "pod_restart_frequent",
-		DisplayName:        "Pod 频繁重启",
-		MonitorMetric:      "kube_pod_container_status_restarts_total",
-		Severity:           AlertSeverityFatal,
-		Threshold:          ThresholdConfig{Method: "gte", Value: 3},
-		TriggerCondition:   TriggerCondition{Count: 1, CheckWindow: 5},
-		RecoverCondition:   RecoverCondition{CheckWindow: 10},
-		EffectiveTimeRange: EffectiveTimeRange{StartTime: "00:00:00", EndTime: "23:59:59"},
-	},
 	// CPU Limit 使用率高：用于发现接近 CPU 限流的 Pod。
 	{
 		StrategyCode:       "cpu_limit_usage_high",
-		DisplayName:        "CPU Limit 使用率过高（即将被限流）",
+		DisplayName:        "CPU 使用率过高",
 		MonitorMetric:      "container_cpu_usage_seconds_total",
 		Severity:           AlertSeverityFatal,
-		Threshold:          ThresholdConfig{Method: "gte", Value: 90},
+		Threshold:          ThresholdConfig{Method: "gte", Value: 80},
 		TriggerCondition:   TriggerCondition{Count: 3, CheckWindow: 5},
 		RecoverCondition:   RecoverCondition{CheckWindow: 5},
 		EffectiveTimeRange: EffectiveTimeRange{StartTime: "00:00:00", EndTime: "23:59:59"},
@@ -68,12 +43,28 @@ var defaultTemplates = []DefaultTemplate{
 	// 内存 Limit 使用率高：用于发现接近 OOM Kill 的 Pod。
 	{
 		StrategyCode:       "memory_limit_usage_high",
-		DisplayName:        "内存 Limit 使用率过高（即将被 OOM Kill）",
+		DisplayName:        "内存使用率过高",
 		MonitorMetric:      "container_memory_working_set_bytes",
 		Severity:           AlertSeverityFatal,
-		Threshold:          ThresholdConfig{Method: "gte", Value: 90},
+		Threshold:          ThresholdConfig{Method: "gte", Value: 80},
 		TriggerCondition:   TriggerCondition{Count: 2, CheckWindow: 5},
 		RecoverCondition:   RecoverCondition{CheckWindow: 5},
 		EffectiveTimeRange: EffectiveTimeRange{StartTime: "00:00:00", EndTime: "23:59:59"},
 	},
+	// 容器异常重启：统计观察窗口内的重启增量，避免直接比较累计 counter。
+	{
+		StrategyCode:       "pod_restart_frequent",
+		DisplayName:        "容器异常重启",
+		MonitorMetric:      "kube_pod_container_status_restarts_total",
+		Severity:           AlertSeverityFatal,
+		Threshold:          ThresholdConfig{Method: "gte", Value: 3},
+		TriggerCondition:   TriggerCondition{Count: 1, CheckWindow: 5},
+		RecoverCondition:   RecoverCondition{CheckWindow: 10},
+		EffectiveTimeRange: EffectiveTimeRange{StartTime: "00:00:00", EndTime: "23:59:59"},
+	},
+}
+
+// MonitorMetricForStrategyCode returns the built-in monitor metric bound to a strategy code.
+func MonitorMetricForStrategyCode(strategyCode string) string {
+	return builtinStrategyMetrics[strategyCode]
 }

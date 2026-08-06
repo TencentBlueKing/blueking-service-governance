@@ -47,9 +47,8 @@ type AlertStrategyAppURIInput struct {
 
 // CreateAlertStrategyBody 创建告警策略请求体
 type CreateAlertStrategyBody struct {
-	StrategyCode       string                  `json:"strategyCode" binding:"required"`
+	StrategyCode       string                  `json:"strategyCode" binding:"required,alert_strategy_code"`
 	DisplayName        string                  `json:"displayName" binding:"required"`
-	MonitorMetric      string                  `json:"monitorMetric" binding:"required"`
 	Severity           int                     `json:"severity" binding:"required,oneof=1 2 3"`
 	Threshold          ThresholdConfigInput    `json:"threshold" binding:"required"`
 	TriggerCondition   TriggerConditionInput   `json:"triggerCondition"`
@@ -69,13 +68,12 @@ func (b CreateAlertStrategyBody) ToCreateReq(
 		return nil, errors.Wrap(err, "parse effective scope envIDs")
 	}
 	return &alertstrategy.CreateReq{
-		WorkspaceID:   workspaceID,
-		AppID:         appID,
-		AppName:       appName,
-		StrategyCode:  b.StrategyCode,
-		DisplayName:   b.DisplayName,
-		MonitorMetric: b.MonitorMetric,
-		Severity:      alertstrategy.AlertSeverity(b.Severity),
+		WorkspaceID:  workspaceID,
+		AppID:        appID,
+		AppName:      appName,
+		StrategyCode: b.StrategyCode,
+		DisplayName:  b.DisplayName,
+		Severity:     alertstrategy.AlertSeverity(b.Severity),
 		Threshold: alertstrategy.ThresholdConfig{
 			Method: b.Threshold.Method,
 			Value:  b.Threshold.Value,

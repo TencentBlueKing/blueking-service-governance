@@ -43,18 +43,11 @@ type Service struct {
 type SaveParams struct {
 	ID           int64
 	Name         string                 `json:"name" binding:"required" validate:"required"`
-	Timezone     string                 `json:"timezone"`
-	NeedDuty     bool                   `json:"needDuty"`
 	Channels     []string               `json:"channels" binding:"required,min=1" validate:"min=1"`
 	Desc         string                 `json:"desc"`
 	AlertNotice  []bkmapi.AlertNotice   `json:"alertNotice" binding:"required,min=1" validate:"min=1"`
 	ActionNotice []bkmapi.ActionNotice  `json:"actionNotice" binding:"required,min=1" validate:"min=1"`
-	DutyArranges []bkmapi.DutyArrange   `json:"dutyArranges"`
-	DutyRules    []int64                `json:"dutyRules"`
-	DutyNotice   *bkmapi.DutyNotice     `json:"dutyNotice"`
-	MentionList  []bkmapi.UserGroupUser `json:"mentionList"`
-	MentionType  int64                  `json:"mentionType"`
-	Path         string                 `json:"path"`
+	Users        []bkmapi.UserGroupUser `json:"users" binding:"required,min=1" validate:"min=1"`
 	Operator     string                 `validate:"required"`
 }
 
@@ -80,6 +73,35 @@ func (s *Service) List(ctx context.Context, ws *workspace.Workspace, operator st
 		return nil, errors.Wrapf(err, "search user groups, bk_biz_id=%d", bkBizID)
 	}
 	return groups, nil
+}
+
+// FindByName 按名称查询 workspace 对应监控空间下的告警组。
+func (s *Service) FindByName(
+	ctx context.Context,
+	ws *workspace.Workspace,
+	name, operator string,
+) (*bkmapi.UserGroup, error) {
+	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve bkmonitor space id")
+	}
+	client, err := s.newClient(operator)
+	if err != nil {
+		return nil, errors.Wrap(err, "new bkmonitor client")
+	}
+	groups, err := client.SearchUserGroups(ctx, &bkmapi.SearchUserGroupsReq{
+		BkBizIDs: []int64{bkBizID},
+		Name:     name,
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "search user groups by name, bk_biz_id=%d, name=%s", bkBizID, name)
+	}
+	for _, group := range groups {
+		if group != nil && group.Name == name {
+			return group, nil
+		}
+	}
+	return nil, nil
 }
 
 // Get 获取告警组详情，并校验其属于 workspace 对应监控空间。
@@ -133,43 +155,115 @@ func (s *Service) Save(
 		return nil, errors.Wrap(err, "new bkmonitor client")
 	}
 
+	var requestID *int64
 	if params.ID > 0 {
 		if _, err = s.getWithClient(ctx, client, params.ID, bkBizID); err != nil {
 			return nil, errors.Wrap(err, "validate user group ownership before save")
 		}
-	}
-
-	timezone := params.Timezone
-	if timezone == "" {
-		timezone = saveUserGroupDefaultTimezone
-	}
-	var requestID *int64
-	if params.ID > 0 {
 		requestID = &params.ID
 	}
 
-	detail, err := client.SaveUserGroup(ctx, &bkmapi.SaveUserGroupReq{
-		ID:           requestID,
-		BkBizID:      bkBizID,
-		Name:         params.Name,
-		Timezone:     timezone,
-		NeedDuty:     params.NeedDuty,
-		Channels:     params.Channels,
-		Desc:         params.Desc,
-		AlertNotice:  params.AlertNotice,
-		ActionNotice: params.ActionNotice,
-		Operator:     params.Operator,
-		DutyArranges: params.DutyArranges,
-		DutyRules:    params.DutyRules,
-		DutyNotice:   params.DutyNotice,
-		MentionList:  params.MentionList,
-		MentionType:  params.MentionType,
-		Path:         params.Path,
-	})
+	detail, err := client.SaveUserGroup(ctx, buildSaveUserGroupReq(bkBizID, requestID, params))
 	if err != nil {
 		return nil, errors.Wrapf(err, "save user group, bk_biz_id=%d, id=%d", bkBizID, params.ID)
 	}
 	return detail, nil
+}
+
+// buildSaveUserGroupReq 将前端简化请求模型转换为 BKMonitor 写接口所需的最小合法请求。
+// BKMonitor 虽然暴露了大量轮值相关字段，但当前场景只需要固定组装一个非轮值 duty arrange，
+// 以避免把底层结构细节暴露给前端。
+func buildSaveUserGroupReq(
+	bkBizID int64,
+	requestID *int64,
+	params *SaveParams,
+) *bkmapi.SaveUserGroupReq {
+	return &bkmapi.SaveUserGroupReq{
+		ID:           requestID,
+		BkBizID:      bkBizID,
+		Name:         params.Name,
+		Timezone:     saveUserGroupDefaultTimezone,
+		NeedDuty:     false,
+		Channels:     params.Channels,
+		Desc:         params.Desc,
+		AlertNotice:  normalizeAlertNotices(params.AlertNotice),
+		ActionNotice: normalizeActionNotices(params.ActionNotice),
+		Operator:     params.Operator,
+		DutyArranges: buildSaveDutyArranges(params.Users),
+	}
+}
+
+// buildSaveDutyArranges 组装 BKMonitor 非轮值场景下最小可用的 duty arrange。
+// 把列表/对象字段显式初始化为空结构，避免被序列化成 null 后被监控接口拒绝。
+func buildSaveDutyArranges(users []bkmapi.UserGroupUser) []bkmapi.DutyArrange {
+	return []bkmapi.DutyArrange{{
+		GroupType:    "specified",
+		GroupNumber:  0,
+		NeedRotation: false,
+		DutyTime:     []map[string]any{},
+		HandoffTime:  map[string]any{},
+		DutyUsers:    [][]bkmapi.UserGroupUser{},
+		Users:        append([]bkmapi.UserGroupUser(nil), users...),
+		Backups:      []map[string]any{},
+		Order:        1,
+	}}
+}
+
+// normalizeAlertNotices 将 alert notice 中可能出现的 nil slice 统一改成空数组。
+// 这么做是因为 BKMonitor 写接口会把 nil 序列化成 null，而像 notify_config/type/notice_ways/receivers
+// 这类字段传 null 会被监控侧直接判为非法；由于这些字段嵌套在多层 slice 里，只能逐层遍历补齐。
+func normalizeAlertNotices(notices []bkmapi.AlertNotice) []bkmapi.AlertNotice {
+	normalized := append([]bkmapi.AlertNotice(nil), notices...)
+	for i := range normalized {
+		notice := &normalized[i]
+		if notice.NotifyConfig == nil {
+			notice.NotifyConfig = []bkmapi.AlertNoticeConfig{}
+		}
+		for j := range notice.NotifyConfig {
+			config := &notice.NotifyConfig[j]
+			if config.Type == nil {
+				config.Type = []string{}
+			}
+			if config.NoticeWays == nil {
+				config.NoticeWays = []bkmapi.NoticeWay{}
+			}
+			for k := range config.NoticeWays {
+				noticeWay := &config.NoticeWays[k]
+				if noticeWay.Receivers == nil {
+					noticeWay.Receivers = []string{}
+				}
+			}
+		}
+	}
+	return normalized
+}
+
+// normalizeActionNotices 与 normalizeAlertNotices 同理，
+// 需要在下发前把 action notice 中的 nil slice 规范化成空数组，避免被 BKMonitor 拒绝。
+func normalizeActionNotices(notices []bkmapi.ActionNotice) []bkmapi.ActionNotice {
+	normalized := append([]bkmapi.ActionNotice(nil), notices...)
+	for i := range normalized {
+		notice := &normalized[i]
+		if notice.NotifyConfig == nil {
+			notice.NotifyConfig = []bkmapi.ActionNoticeConfig{}
+		}
+		for j := range notice.NotifyConfig {
+			config := &notice.NotifyConfig[j]
+			if config.Type == nil {
+				config.Type = []string{}
+			}
+			if config.NoticeWays == nil {
+				config.NoticeWays = []bkmapi.NoticeWay{}
+			}
+			for k := range config.NoticeWays {
+				noticeWay := &config.NoticeWays[k]
+				if noticeWay.Receivers == nil {
+					noticeWay.Receivers = []string{}
+				}
+			}
+		}
+	}
+	return normalized
 }
 
 // Delete 删除告警组。删除前会先校验告警组归属。

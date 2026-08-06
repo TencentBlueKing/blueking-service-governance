@@ -20712,7 +20712,6 @@ const docTemplate = `{
             "required": [
                 "displayName",
                 "effectiveScope",
-                "monitorMetric",
                 "severity",
                 "strategyCode",
                 "threshold"
@@ -20729,9 +20728,6 @@ const docTemplate = `{
                 },
                 "enabled": {
                     "type": "boolean"
-                },
-                "monitorMetric": {
-                    "type": "string"
                 },
                 "noticeGroupIDs": {
                     "type": "array",
@@ -27371,7 +27367,8 @@ const docTemplate = `{
                 "actionNotice",
                 "alertNotice",
                 "channels",
-                "name"
+                "name",
+                "users"
             ],
             "properties": {
                 "actionNotice": {
@@ -27398,41 +27395,15 @@ const docTemplate = `{
                 "desc": {
                     "type": "string"
                 },
-                "dutyArranges": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/bkmonitor.DutyArrange"
-                    }
-                },
-                "dutyNotice": {
-                    "$ref": "#/definitions/bkmonitor.DutyNotice"
-                },
-                "dutyRules": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "mentionList": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/bkmonitor.UserGroupUser"
-                    }
-                },
-                "mentionType": {
-                    "type": "integer"
-                },
                 "name": {
                     "type": "string"
                 },
-                "needDuty": {
-                    "type": "boolean"
-                },
-                "path": {
-                    "type": "string"
-                },
-                "timezone": {
-                    "type": "string"
+                "users": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/bkmonitor.UserGroupUser"
+                    }
                 }
             }
         },

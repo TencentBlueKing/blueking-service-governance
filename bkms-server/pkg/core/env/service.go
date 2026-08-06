@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
 
@@ -64,20 +65,41 @@ func (s *EnvService) Update(
 	envID bson.ObjectID,
 	updateData *model.EnvironmentUpdateData,
 ) error {
+	environment, err := s.Get(ctx, envID)
+	if err != nil {
+		return errors.Wrap(err, "get environment")
+	}
+
 	// 更新集群信息时, 需要检查环境是否有部署应用
 	if updateData.ClusterID != nil || updateData.Namespace != nil {
-		environment, err := s.Get(ctx, envID)
-		if err != nil {
-			return errors.Wrap(err, "get environment")
-		}
-
 		appCount := len(environment.AppIDs)
 		if appCount != 0 {
 			return errors.Errorf("environment has %d apps, cannot update cluster", appCount)
 		}
 	}
 
-	return s.EnvironmentStore.Update(ctx, envID, updateData)
+	if err = s.EnvironmentStore.Update(ctx, envID, updateData); err != nil {
+		return err
+	}
+
+	updated, err := s.Get(ctx, envID)
+	if err != nil {
+		return errors.Wrap(err, "get updated environment")
+	}
+
+	go func(before, after model.Environment) {
+		if hookErr := runUpdateHooks(context.WithoutCancel(ctx), before, after); hookErr != nil {
+			log.Errorf(
+				context.WithoutCancel(ctx),
+				"run env update hooks failed, envID=%s envName=%s err=%v",
+				after.ID.Hex(),
+				after.Name,
+				hookErr,
+			)
+		}
+	}(*environment, *updated)
+
+	return nil
 }
 
 // Delete 删除环境

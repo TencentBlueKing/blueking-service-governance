@@ -2542,8 +2542,6 @@ definitions:
         $ref: '#/definitions/serializer.EffectiveTimeRangeInput'
       enabled:
         type: boolean
-      monitorMetric:
-        type: string
       noticeGroupIDs:
         items:
           type: integer
@@ -2565,7 +2563,6 @@ definitions:
     required:
     - displayName
     - effectiveScope
-    - monitorMetric
     - severity
     - strategyCode
     - threshold
@@ -7099,35 +7096,19 @@ definitions:
         type: array
       desc:
         type: string
-      dutyArranges:
-        items:
-          $ref: '#/definitions/bkmonitor.DutyArrange'
-        type: array
-      dutyNotice:
-        $ref: '#/definitions/bkmonitor.DutyNotice'
-      dutyRules:
-        items:
-          type: integer
-        type: array
-      mentionList:
-        items:
-          $ref: '#/definitions/bkmonitor.UserGroupUser'
-        type: array
-      mentionType:
-        type: integer
       name:
         type: string
-      needDuty:
-        type: boolean
-      path:
-        type: string
-      timezone:
-        type: string
+      users:
+        items:
+          $ref: '#/definitions/bkmonitor.UserGroupUser'
+        minItems: 1
+        type: array
     required:
     - actionNotice
     - alertNotice
     - channels
     - name
+    - users
     type: object
   serializer.SaveUserGroupResp:
     properties:

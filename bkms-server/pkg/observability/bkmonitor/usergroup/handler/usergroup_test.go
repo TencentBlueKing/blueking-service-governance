@@ -95,19 +95,9 @@ var _ = Describe("Usergroup Handler", func() {
 					{"phase": 3, "type": []string{}, "notice_ways": []map[string]any{{"name": "sms"}}},
 				},
 			}},
-			"dutyArranges": []map[string]any{{
-				"group_type":    "specified",
-				"group_number":  0,
-				"need_rotation": false,
-				"duty_time":     []map[string]any{},
-				"handoff_time":  map[string]any{},
-				"duty_users":    [][]map[string]any{},
-				"users": []map[string]any{
-					{"id": memberID, "type": "user", "display_name": memberID},
-				},
-				"backups": []map[string]any{},
-				"order":   1,
-			}},
+			"users": []map[string]any{
+				{"id": memberID, "type": "user", "display_name": memberID},
+			},
 		}
 	}
 
@@ -290,6 +280,9 @@ var _ = Describe("Usergroup Handler", func() {
 				"actionNotice": []map[string]any{
 					{"time_range": "00:00--23:59"},
 				},
+				"users": []map[string]any{
+					{"id": "tester", "type": "user", "display_name": "tester"},
+				},
 			}
 
 			rec := httptest.NewRecorder()
@@ -327,6 +320,9 @@ var _ = Describe("Usergroup Handler", func() {
 				},
 				"actionNotice": []map[string]any{
 					{"time_range": "00:00--23:59"},
+				},
+				"users": []map[string]any{
+					{"id": "tester-2", "type": "user", "display_name": "tester-2"},
 				},
 			}
 
