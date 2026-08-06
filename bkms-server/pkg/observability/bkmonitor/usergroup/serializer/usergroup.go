@@ -38,36 +38,22 @@ type UserGroupWorkspaceURIInput struct {
 // SaveUserGroupBody 告警组创建/更新请求体。
 type SaveUserGroupBody struct {
 	Name         string                 `json:"name" binding:"required"`
-	Timezone     string                 `json:"timezone"`
-	NeedDuty     bool                   `json:"needDuty"`
 	Channels     []string               `json:"channels" binding:"required,min=1"`
 	Desc         string                 `json:"desc"`
 	AlertNotice  []bkmapi.AlertNotice   `json:"alertNotice" binding:"required,min=1"`
 	ActionNotice []bkmapi.ActionNotice  `json:"actionNotice" binding:"required,min=1"`
-	DutyArranges []bkmapi.DutyArrange   `json:"dutyArranges"`
-	DutyRules    []int64                `json:"dutyRules"`
-	DutyNotice   *bkmapi.DutyNotice     `json:"dutyNotice"`
-	MentionList  []bkmapi.UserGroupUser `json:"mentionList"`
-	MentionType  int64                  `json:"mentionType"`
-	Path         string                 `json:"path"`
+	Users        []bkmapi.UserGroupUser `json:"users" binding:"required,min=1"`
 }
 
 // NewSaveParams converts the request body into service-layer save params.
 func NewSaveParams(body SaveUserGroupBody, operator string) bkmusergroup.SaveParams {
 	return bkmusergroup.SaveParams{
 		Name:         body.Name,
-		Timezone:     body.Timezone,
-		NeedDuty:     body.NeedDuty,
 		Channels:     body.Channels,
 		Desc:         body.Desc,
 		AlertNotice:  body.AlertNotice,
 		ActionNotice: body.ActionNotice,
-		DutyArranges: body.DutyArranges,
-		DutyRules:    body.DutyRules,
-		DutyNotice:   body.DutyNotice,
-		MentionList:  body.MentionList,
-		MentionType:  body.MentionType,
-		Path:         body.Path,
+		Users:        body.Users,
 		Operator:     operator,
 	}
 }
