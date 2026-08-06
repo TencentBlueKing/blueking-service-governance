@@ -4,6 +4,8 @@
 
 `github` 更新源从 GitHub Releases 查找当前平台的 `bkms-cli` 制品，并使用 Release 中的 `checksums.txt` 校验下载内容。`repo` 更新源从构建时指定的 `latest` 目录读取 `version` 纯文本文件，再下载当前平台对应的二进制，并使用响应头 `X-Checksum-Sha256` 校验。
 
+两个更新源的单个下载制品均不能超过 200 MiB。
+
 ## 检查更新
 
 ```bash

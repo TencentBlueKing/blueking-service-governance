@@ -25,15 +25,17 @@ func NewCmd() *cobra.Command {
 		Short: "Check for and install bkms-cli updates.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Do update check or installation
-			info, err := func(ctx context.Context, checkOnly bool) (updater.Info, error) {
-				if !checkOnly {
-					return updater.Update(ctx)
-				}
-				checkContext, cancel := context.WithTimeout(ctx, updateCheckTimeout)
+			var (
+				info updater.Info
+				err  error
+			)
+			if checkOnly {
+				checkContext, cancel := context.WithTimeout(cmd.Context(), updateCheckTimeout)
 				defer cancel()
-				return updater.Check(checkContext)
-			}(cmd.Context(), checkOnly)
+				info, err = updater.Check(checkContext)
+			} else {
+				info, err = updater.Update(cmd.Context())
+			}
 			if err != nil {
 				return err
 			}

@@ -44,10 +44,17 @@ type repoProvider struct {
 // newRepoProvider validates the latest-directory URL and resolves the exact
 // platform asset name once for subsequent checks and updates.
 func newRepoProvider(baseURL string) (*repoProvider, error) {
-	parsedURL, err := url.ParseRequestURI(strings.TrimSpace(baseURL))
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return nil, fmt.Errorf("%w: repo base URL is empty", ErrUpdateNotConfigured)
+	}
+
+	parsedURL, err := url.ParseRequestURI(baseURL)
 	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
 		return nil, fmt.Errorf("%w: invalid repo update URL %q", ErrUpdateNotConfigured, baseURL)
 	}
+	// The repository address is fixed at build time, and internal builds may
+	// intentionally use an HTTP endpoint.
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return nil, fmt.Errorf(
 			"%w: unsupported repo update URL scheme %q",
@@ -97,7 +104,11 @@ func (p *repoProvider) Update(ctx context.Context, current string) (Info, error)
 	if err != nil {
 		return info, err
 	}
-	defer response.Body.Close()
+	body := http.MaxBytesReader(nil, response.Body, maxBinarySize)
+	defer body.Close()
+	if err = validateBinarySize(response.ContentLength); err != nil {
+		return info, err
+	}
 
 	// The repository exposes SHA256 in the response headers. Apply verifies it
 	// before replacing the current executable and rolls back a failed swap.
@@ -105,10 +116,11 @@ func (p *repoProvider) Update(ctx context.Context, current string) (Info, error)
 	if err != nil {
 		return info, err
 	}
-	if err := binaryupdate.Apply(response.Body, binaryupdate.Options{
+	if err := binaryupdate.Apply(body, binaryupdate.Options{
 		TargetPath: p.targetPath,
 		Checksum:   checksum,
 	}); err != nil {
+		err = normalizeBinarySizeError(err)
 		// A rollback failure leaves the executable path inconsistent and therefore
 		// needs to be visible separately from the original replacement error.
 		if rollbackErr := binaryupdate.RollbackError(err); rollbackErr != nil {

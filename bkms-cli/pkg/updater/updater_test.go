@@ -2,6 +2,7 @@ package updater
 
 import (
 	"errors"
+	"net/http"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -56,6 +57,23 @@ var _ = Describe("Updater", func() {
 			version, err := parseVersion("  v1.2.3\n")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(version.String()).To(Equal("1.2.3"))
+		})
+	})
+
+	Describe("binary size", func() {
+		It("accepts an unknown or maximum-sized asset", func() {
+			Expect(validateBinarySize(-1)).To(Succeed())
+			Expect(validateBinarySize(maxBinarySize)).To(Succeed())
+		})
+
+		It("rejects an asset larger than the limit", func() {
+			err := validateBinarySize(maxBinarySize + 1)
+			Expect(errors.Is(err, ErrBinaryTooLarge)).To(BeTrue())
+		})
+
+		It("normalizes the standard library size error", func() {
+			err := normalizeBinarySizeError(&http.MaxBytesError{Limit: maxBinarySize})
+			Expect(errors.Is(err, ErrBinaryTooLarge)).To(BeTrue())
 		})
 	})
 })

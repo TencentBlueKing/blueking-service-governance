@@ -3,6 +3,8 @@ package updater
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"regexp"
 	"runtime"
 
@@ -27,20 +29,56 @@ type githubProvider struct {
 // and requires the shared GoReleaser checksum file before an update can run.
 func newGitHubProvider() (*githubProvider, error) {
 	slug := selfupdate.ParseSlug(githubRepository)
-	assetName, err := platformAssetName(runtime.GOOS, runtime.GOARCH)
+	config, err := githubUpdaterConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	instance, err := selfupdate.NewUpdater(selfupdate.Config{
-		Validator: &selfupdate.ChecksumValidator{UniqueFilename: checksumFilename},
-		Filters:   []string{"^" + regexp.QuoteMeta(assetName) + "$"},
-	})
+	instance, err := selfupdate.NewUpdater(config)
 	if err != nil {
 		return nil, fmt.Errorf("create GitHub updater: %w", err)
 	}
 
 	return &githubProvider{updater: instance, repository: slug}, nil
+}
+
+// githubUpdaterConfig defines the GitHub release asset and checksum contract.
+func githubUpdaterConfig() (selfupdate.Config, error) {
+	assetName, err := platformAssetName(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		return selfupdate.Config{}, err
+	}
+	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
+	if err != nil {
+		return selfupdate.Config{}, fmt.Errorf("create GitHub source: %w", err)
+	}
+
+	return selfupdate.Config{
+		Source:    maxBytesSource{Source: source, limit: maxBinarySize},
+		Validator: &selfupdate.ChecksumValidator{UniqueFilename: checksumFilename},
+		Filters:   []string{"^" + regexp.QuoteMeta(assetName) + "$"},
+	}, nil
+}
+
+// maxBytesSource limits every downloaded release asset before go-selfupdate
+// reads it into memory.
+type maxBytesSource struct {
+	selfupdate.Source
+	limit int64
+}
+
+func (s maxBytesSource) DownloadReleaseAsset(
+	ctx context.Context,
+	release *selfupdate.Release,
+	assetID int64,
+) (io.ReadCloser, error) {
+	body, err := s.Source.DownloadReleaseAsset(ctx, release, assetID)
+	if err != nil {
+		return nil, err
+	}
+	// GitHubSource returns a streaming response body, so this limit applies
+	// before go-selfupdate reads the asset into memory.
+	return http.MaxBytesReader(nil, body, s.limit), nil
 }
 
 // Check discovers the latest compatible release without downloading its binary.
@@ -55,13 +93,16 @@ func (p *githubProvider) Update(ctx context.Context, current string) (Info, erro
 	if err != nil || !info.Available {
 		return info, err
 	}
+	if err = validateBinarySize(int64(release.AssetByteSize)); err != nil {
+		return info, fmt.Errorf("validate GitHub release size: %w", err)
+	}
 
 	executable, err := selfupdate.ExecutablePath()
 	if err != nil {
 		return info, fmt.Errorf("locate executable: %w", err)
 	}
 	if err := p.updater.UpdateTo(ctx, release, executable); err != nil {
-		return info, fmt.Errorf("apply GitHub update: %w", err)
+		return info, fmt.Errorf("apply GitHub update: %w", normalizeBinarySizeError(err))
 	}
 	return info, nil
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -15,6 +16,8 @@ import (
 const (
 	sourceGitHub = "github"
 	sourceRepo   = "repo"
+	// maxBinarySize bounds memory use while go-selfupdate verifies a release.
+	maxBinarySize = 200 * 1024 * 1024
 )
 
 var (
@@ -31,6 +34,8 @@ var (
 	ErrInvalidVersion = errors.New("invalid update version")
 	// ErrNoRelease indicates that no release asset matches the current platform.
 	ErrNoRelease = errors.New("no compatible release found")
+	// ErrBinaryTooLarge indicates that a release asset exceeds the supported size.
+	ErrBinaryTooLarge = errors.New("update binary exceeds size limit")
 )
 
 // Info describes the result of an update check.
@@ -115,4 +120,19 @@ func buildInfo(current, latest *semver.Version) Info {
 		LatestVersion:  latest.String(),
 		Available:      latest.GreaterThan(current),
 	}
+}
+
+func validateBinarySize(size int64) error {
+	if size > maxBinarySize {
+		return fmt.Errorf("%w: %d bytes exceeds %d-byte limit", ErrBinaryTooLarge, size, maxBinarySize)
+	}
+	return nil
+}
+
+func normalizeBinarySizeError(err error) error {
+	var sizeError *http.MaxBytesError
+	if errors.As(err, &sizeError) {
+		return fmt.Errorf("%w: exceeds %d-byte limit", ErrBinaryTooLarge, sizeError.Limit)
+	}
+	return err
 }

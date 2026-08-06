@@ -36,6 +36,20 @@ var _ = Describe("Repo provider", func() {
 		Expect(err).To(MatchError("unsupported update platform freebsd/amd64"))
 	})
 
+	Describe("configuration", func() {
+		It("rejects an empty repository URL as missing configuration", func() {
+			_, err := newRepoProvider("  ")
+			Expect(errors.Is(err, ErrUpdateNotConfigured)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("repo base URL is empty")))
+		})
+
+		It("accepts an HTTPS repository URL", func() {
+			provider, err := newRepoProvider("https://repo.example.com/latest/")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(provider.baseURL).To(Equal("https://repo.example.com/latest/"))
+		})
+	})
+
 	Describe("flat artifact repository", func() {
 		var (
 			server       *httptest.Server
