@@ -24,9 +24,6 @@ jobs:
           cache-dependency-path: bkms-cli/go.sum
 
       - name: Validate release configuration
-        env:
-          BCS_API_HOST: ${{ vars.BCS_API_HOST }}
-          BKMS_BASE_URL: ${{ vars.BKMS_BASE_URL }}
         shell: bash
         run: |
           if [[ -z "$BCS_API_HOST" || -z "$BKMS_BASE_URL" ]]; then
@@ -47,5 +44,3 @@ jobs:
           workdir: bkms-cli
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          BCS_API_HOST: ${{ vars.BCS_API_HOST }}
-          BKMS_BASE_URL: ${{ vars.BKMS_BASE_URL }}

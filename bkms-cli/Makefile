@@ -27,14 +27,14 @@ UPX ?= $(shell command -v upx 2>/dev/null)
 # -s: 去除符号表
 # -w: 去除 DWARF 调试信息
 
-# BCS API 网关地址，构建时必须通过 BCS_API_HOST=xxx 传入
-BCS_API_HOST ?=
+# BCS API 网关地址，构建时可以通过 BCS_API_HOST=xxx 传入
+BCS_API_HOST ?= api.example.com
 
-# bkms_server 服务地址，作为配置文件中 bkmsBaseUrl 的值，构建时必须通过 BKMS_BASE_URL=xxx 传入
-BKMS_BASE_URL ?=
+# bkms_server 服务地址，作为配置文件中 bkmsBaseUrl 的值，构建时可以通过 BKMS_BASE_URL=xxx 传入
+BKMS_BASE_URL ?= example.com
 
 # 更新源：github 使用 GitHub Releases，repo 使用平铺制品仓库
-UPDATE_SOURCE ?=
+UPDATE_SOURCE ?= github
 
 # repo 更新源的 latest 目录地址，例如 https://repo.example.com/path/to/bkms-cli/latest/
 UPDATE_REPO_BASE_URL ?=
