@@ -96,26 +96,12 @@ func (p *repoProvider) Update(ctx context.Context, current string) (Info, error)
 		return info, err
 	}
 
-	// The asset path is stable, so include the version in the cache key and ask
-	// intermediary caches to serve the binary matching the advertised version.
-	response, err := p.fetchFile(ctx, p.assetName, url.Values{
-		"version": {info.LatestVersion},
-	})
+	body, checksum, err := p.fetchBinary(ctx)
 	if err != nil {
 		return info, err
 	}
-	body := http.MaxBytesReader(nil, response.Body, maxBinarySize)
 	defer body.Close()
-	if err = validateBinarySize(response.ContentLength); err != nil {
-		return info, err
-	}
 
-	// The repository exposes SHA256 in the response headers. Apply verifies it
-	// before replacing the current executable and rolls back a failed swap.
-	checksum, err := decodeChecksum(response.Header.Get(checksumHeader))
-	if err != nil {
-		return info, err
-	}
 	if err := binaryupdate.Apply(body, binaryupdate.Options{
 		TargetPath: p.targetPath,
 		Checksum:   checksum,
@@ -133,7 +119,7 @@ func (p *repoProvider) Update(ctx context.Context, current string) (Info, error)
 
 // fetchLatestVersion reads and validates the repository's plain-text version file.
 func (p *repoProvider) fetchLatestVersion(ctx context.Context) (*semver.Version, error) {
-	response, err := p.fetchFile(ctx, versionFilename, nil)
+	response, err := p.fetchFile(ctx, versionFilename)
 	if err != nil {
 		return nil, err
 	}
@@ -155,13 +141,28 @@ func (p *repoProvider) fetchLatestVersion(ctx context.Context) (*semver.Version,
 	return latestVersion, nil
 }
 
+// fetchBinary returns a size-limited binary and its advertised checksum.
+func (p *repoProvider) fetchBinary(ctx context.Context) (io.ReadCloser, []byte, error) {
+	response, err := p.fetchFile(ctx, p.assetName)
+	if err != nil {
+		return nil, nil, err
+	}
+	if sizeErr := validateBinarySize(response.ContentLength); sizeErr != nil {
+		_ = response.Body.Close()
+		return nil, nil, sizeErr
+	}
+
+	checksum, err := decodeChecksum(response.Header.Get(checksumHeader))
+	if err != nil {
+		_ = response.Body.Close()
+		return nil, nil, err
+	}
+	return http.MaxBytesReader(nil, response.Body, maxBinarySize), checksum, nil
+}
+
 // fetchFile sends a no-cache GET request to a file in the repository's latest
 // directory and returns only successful responses. The caller closes the body.
-func (p *repoProvider) fetchFile(
-	ctx context.Context,
-	filename string,
-	query url.Values,
-) (*http.Response, error) {
+func (p *repoProvider) fetchFile(ctx context.Context, filename string) (*http.Response, error) {
 	fileURL, err := url.JoinPath(p.baseURL, filename)
 	if err != nil {
 		return nil, fmt.Errorf("build repo file URL: %w", err)
@@ -170,7 +171,6 @@ func (p *repoProvider) fetchFile(
 	if err != nil {
 		return nil, fmt.Errorf("create repo file request: %w", err)
 	}
-	request.URL.RawQuery = query.Encode()
 	request.Header.Set("Cache-Control", "no-cache")
 
 	response, err := http.DefaultClient.Do(request)

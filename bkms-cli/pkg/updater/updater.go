@@ -17,7 +17,7 @@ const (
 	sourceGitHub = "github"
 	sourceRepo   = "repo"
 	// maxBinarySize bounds memory use while go-selfupdate verifies a release.
-	maxBinarySize = 200 * 1024 * 1024
+	maxBinarySize = 512 * 1024 * 1024
 )
 
 var (

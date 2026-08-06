@@ -52,15 +52,15 @@ var _ = Describe("Repo provider", func() {
 
 	Describe("flat artifact repository", func() {
 		var (
-			server       *httptest.Server
-			binary       []byte
-			checksum     string
-			versionValue string
-			includeHash  bool
-			requestLock  sync.Mutex
-			assetQuery   string
-			assetPath    string
-			cacheHeaders []string
+			server        *httptest.Server
+			binary        []byte
+			checksum      string
+			versionValue  string
+			includeHash   bool
+			requestLock   sync.Mutex
+			assetRequests int
+			assetPath     string
+			cacheHeaders  []string
 		)
 
 		BeforeEach(func() {
@@ -69,7 +69,7 @@ var _ = Describe("Repo provider", func() {
 			checksum = hex.EncodeToString(hash[:])
 			versionValue = "v1.3.0\n"
 			includeHash = true
-			assetQuery = ""
+			assetRequests = 0
 			cacheHeaders = nil
 			assetName, err := platformAssetName(runtime.GOOS, runtime.GOARCH)
 			Expect(err).NotTo(HaveOccurred())
@@ -85,7 +85,7 @@ var _ = Describe("Repo provider", func() {
 					_, _ = response.Write([]byte(versionValue))
 				case assetPath:
 					requestLock.Lock()
-					assetQuery = request.URL.Query().Get("version")
+					assetRequests++
 					requestLock.Unlock()
 					if includeHash {
 						response.Header().Set(checksumHeader, checksum)
@@ -119,7 +119,7 @@ var _ = Describe("Repo provider", func() {
 
 			requestLock.Lock()
 			defer requestLock.Unlock()
-			Expect(assetQuery).To(BeEmpty())
+			Expect(assetRequests).To(BeZero())
 			Expect(cacheHeaders).To(Equal([]string{"no-cache"}))
 		})
 
@@ -136,7 +136,7 @@ var _ = Describe("Repo provider", func() {
 
 			requestLock.Lock()
 			defer requestLock.Unlock()
-			Expect(assetQuery).To(Equal("1.3.0"))
+			Expect(assetRequests).To(Equal(1))
 			Expect(cacheHeaders).To(Equal([]string{"no-cache", "no-cache"}))
 		})
 
@@ -155,7 +155,7 @@ var _ = Describe("Repo provider", func() {
 
 			requestLock.Lock()
 			defer requestLock.Unlock()
-			Expect(assetQuery).To(BeEmpty())
+			Expect(assetRequests).To(BeZero())
 			Expect(cacheHeaders).To(Equal([]string{"no-cache"}))
 		})
 
