@@ -19916,7 +19916,6 @@ const docTemplate = `{
             "required": [
                 "displayName",
                 "effectiveScope",
-                "monitorMetric",
                 "severity",
                 "strategyCode",
                 "threshold"

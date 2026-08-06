@@ -177,6 +177,17 @@ var _ = Describe("AlertStrategyService", func() {
 			Expect(rule.ID).NotTo(Equal(bson.NilObjectID))
 		})
 
+		It("should fill monitorMetric from strategyCode when request omits it", func() {
+			req := newCreateReq()
+			req.StrategyCode = "cpu_limit_usage_high"
+			req.MonitorMetric = ""
+
+			rule, err := svc.Create(ctx, req)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rule.MonitorMetric).To(Equal("container_cpu_usage_seconds_total"))
+		})
+
 		It("should allow duplicate strategyCode in same workspace for different apps", func() {
 			firstReq := newCreateReq()
 			firstReq.AppID = "app-a"

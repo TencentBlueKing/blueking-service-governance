@@ -2441,7 +2441,6 @@ definitions:
     required:
     - displayName
     - effectiveScope
-    - monitorMetric
     - severity
     - strategyCode
     - threshold

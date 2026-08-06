@@ -49,7 +49,7 @@ type AlertStrategyAppURIInput struct {
 type CreateAlertStrategyBody struct {
 	StrategyCode       string                  `json:"strategyCode" binding:"required"`
 	DisplayName        string                  `json:"displayName" binding:"required"`
-	MonitorMetric      string                  `json:"monitorMetric" binding:"required"`
+	MonitorMetric      string                  `json:"monitorMetric"`
 	Severity           int                     `json:"severity" binding:"required,oneof=1 2 3"`
 	Threshold          ThresholdConfigInput    `json:"threshold" binding:"required"`
 	TriggerCondition   TriggerConditionInput   `json:"triggerCondition"`

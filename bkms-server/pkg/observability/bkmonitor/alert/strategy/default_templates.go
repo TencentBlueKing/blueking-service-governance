@@ -77,3 +77,12 @@ var defaultTemplates = []DefaultTemplate{
 		EffectiveTimeRange: EffectiveTimeRange{StartTime: "00:00:00", EndTime: "23:59:59"},
 	},
 }
+
+func defaultMonitorMetricForStrategyCode(strategyCode string) string {
+	for _, tmpl := range defaultTemplates {
+		if tmpl.StrategyCode == strategyCode {
+			return tmpl.MonitorMetric
+		}
+	}
+	return ""
+}
