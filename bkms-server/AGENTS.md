@@ -32,6 +32,7 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * Be consistent with existing nearby code style unless asked to do otherwise.
 * NEVER leave trailing whitespace on any line.
 * ALWAYS preserve the newline at the end of files.
+* Every new source file starts with the MIT license header. Copy it verbatim from an existing file of the same type, for example `main.go`. See "License headers" in the repository root [`AGENTS.md`](../AGENTS.md) for placement rules and exceptions.
 
 ### Running our tests
 
