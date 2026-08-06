@@ -1,0 +1,82 @@
+name: Build and release bkms-cli
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*.*.*"
+    paths:
+      - "bkms-cli/**"
+      - ".github/workflows/bkms-cli.yml"
+  pull_request:
+    paths:
+      - "bkms-cli/**"
+      - ".github/workflows/bkms-cli.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: bkms-cli/go.mod
+          cache-dependency-path: bkms-cli/go.sum
+
+      - name: Install UPX
+        uses: crazy-max/ghaction-upx@v4
+        with:
+          install-only: true
+
+      - name: Test bkms-cli packages
+        working-directory: bkms-cli
+        run: make test
+
+      - name: Build and compress binaries
+        working-directory: bkms-cli
+        env:
+          BKMS_CLI_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.0-dev' }}
+        run: make build-all compress VERSION=${BKMS_CLI_VERSION} UPDATE_GITHUB_REPOSITORY=${{ github.repository }}
+
+      - name: Generate checksums
+        working-directory: bkms-cli/build
+        run: sha256sum bkms-cli-* > checksums.txt
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bkms-cli
+          path: bkms-cli/build/
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: bkms-cli
+          path: bkms-cli/build
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          working_directory: bkms-cli/build
+          files: |
+            bkms-cli-*
+            checksums.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true

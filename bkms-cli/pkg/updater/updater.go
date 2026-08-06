@@ -23,8 +23,9 @@ const (
 var (
 	// Build pipelines inject these values with -ldflags so one binary has exactly
 	// one update source and does not need a runtime update configuration file.
-	updateSource = ""
-	repoBaseURL  = ""
+	updateSource     = ""
+	repoBaseURL      = ""
+	githubRepository = ""
 )
 
 var (

@@ -91,6 +91,9 @@ make build-all compress
 | `pkg/version.Version` | 版本号（`git describe --always`） |
 | `pkg/version.GitHash` | Git commit hash |
 | `pkg/version.BuildTime` | 构建时间 |
+| `pkg/updater.updateSource` | 更新源类型（`github` 或 `repo`） |
+| `pkg/updater.githubRepository` | GitHub 更新仓库（默认官方仓库） |
+| `pkg/updater.repoBaseURL` | 平铺制品仓库的 `latest` 目录地址 |
 | `pkg/handler/publish.bcsAPIHost` | BCS API 网关地址 |
 
 ### 代码检查 & 格式化

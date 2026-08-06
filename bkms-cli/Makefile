@@ -36,6 +36,9 @@ BKMS_BASE_URL ?= example.com
 # 更新源：github 使用 GitHub Releases，repo 使用平铺制品仓库
 UPDATE_SOURCE ?= github
 
+# github 更新源的仓库，格式为 owner/repository
+UPDATE_GITHUB_REPOSITORY ?= TencentBlueKing/blueking-service-governance
+
 # repo 更新源的 latest 目录地址，例如 https://repo.example.com/path/to/bkms-cli/latest/
 UPDATE_REPO_BASE_URL ?=
 
@@ -55,6 +58,7 @@ LDFLAGS="-s -w \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.GitHash=${GIT_HASH} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime=${BUILD_TIME} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.updateSource=${UPDATE_SOURCE} \
+	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.githubRepository=${UPDATE_GITHUB_REPOSITORY} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.repoBaseURL=${UPDATE_REPO_BASE_URL} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/publish.bcsAPIHost=${BCS_API_HOST} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/config.bkmsBaseURL=${BKMS_BASE_URL}"

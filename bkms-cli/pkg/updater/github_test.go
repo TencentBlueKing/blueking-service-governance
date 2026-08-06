@@ -35,12 +35,25 @@ var _ = Describe("GitHub provider", func() {
 		return name
 	}
 
-	It("uses the GoReleaser checksum file", func() {
+	It("uses the release checksum file", func() {
 		config, err := githubUpdaterConfig()
 		Expect(err).NotTo(HaveOccurred())
 		validator, ok := config.Validator.(*selfupdate.ChecksumValidator)
 		Expect(ok).To(BeTrue())
 		Expect(validator.UniqueFilename).To(Equal(checksumFilename))
+	})
+
+	It("uses the configured GitHub repository", func() {
+		originalRepository := githubRepository
+		githubRepository = "example/bkms-cli"
+		DeferCleanup(func() { githubRepository = originalRepository })
+
+		provider, err := newGitHubProvider()
+		Expect(err).NotTo(HaveOccurred())
+		owner, repository, err := provider.repository.GetSlug()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(owner).To(Equal("example"))
+		Expect(repository).To(Equal("bkms-cli"))
 	})
 
 	It("configures a limit for GitHub asset downloads", func() {
