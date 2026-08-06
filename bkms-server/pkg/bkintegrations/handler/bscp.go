@@ -12,13 +12,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
 
-func wrapBSCPAPIError(err error, msg string) error {
-	if errors.Is(err, bscp.ErrNoPermission) {
-		return bkerrs.WrapBSCPNoPermission(err, msg)
-	}
-	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, msg)
-}
-
 // ListBSCPBizs 获取用户的 BSCP 业务列表
 //
 //	@ID			ListBSCPBizs
@@ -242,4 +235,11 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 		VersionID:    ver.ID,
 		VersionName:  ver.Name,
 	}})
+}
+
+func wrapBSCPAPIError(err error, msg string) error {
+	if errors.Is(err, bscp.ErrNoPermission) {
+		return bkerrs.WrapBSCPNoPermission(err, msg)
+	}
+	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, msg)
 }

@@ -77,27 +77,6 @@ type ApiClient struct {
 	user auth.User
 }
 
-// ErrNoPermission indicates BSCP rejected the request with an auth/perm status.
-var ErrNoPermission = errors.New("bscp no permission")
-
-func wrapOperationHTTPError(operationName string, statusCode int, errMsg []byte) error {
-	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
-		return errors.Wrapf(
-			ErrNoPermission,
-			"call bscp api %s failed, http code: %d, err: %s",
-			operationName,
-			statusCode,
-			errMsg,
-		)
-	}
-	return errors.Errorf(
-		"call bscp api %s failed, http code: %d, err: %s",
-		operationName,
-		statusCode,
-		errMsg,
-	)
-}
-
 // New 创建 BSCP API 客户端，根据配置返回真实客户端或 stub 客户端
 func New(user auth.User) (Client, error) {
 	// 测试时使用 stub 客户端
@@ -180,4 +159,25 @@ func (c *ApiClient) handleOperation(
 	}
 
 	return result, nil
+}
+
+// ErrNoPermission indicates BSCP rejected the request with an auth/perm status.
+var ErrNoPermission = errors.New("bscp no permission")
+
+func wrapOperationHTTPError(operationName string, statusCode int, errMsg []byte) error {
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return errors.Wrapf(
+			ErrNoPermission,
+			"call bscp api %s failed, http code: %d, err: %s",
+			operationName,
+			statusCode,
+			errMsg,
+		)
+	}
+	return errors.Errorf(
+		"call bscp api %s failed, http code: %d, err: %s",
+		operationName,
+		statusCode,
+		errMsg,
+	)
 }
