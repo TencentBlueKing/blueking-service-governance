@@ -195,16 +195,6 @@ func (s *PolarisConfigService) applyToEnv(
 	return s.applier.apply(ctx, app, env, config, envVars.ToMap())
 }
 
-// triggerEnvWeightPatch 异步更新单个已部署环境中的 PolarisConfig CR 权重。
-func (s *PolarisConfigService) triggerEnvWeightPatch(
-	ctx context.Context,
-	app *bkmsapp.Application,
-	config *PolarisConfig,
-	envName string,
-) {
-	go s.patchEnvWeight(context.WithoutCancel(ctx), app, config, envName)
-}
-
 func (s *PolarisConfigService) patchEnvWeight(
 	ctx context.Context,
 	app *bkmsapp.Application,
@@ -238,7 +228,7 @@ func (s *PolarisConfigService) recordDynamicApplyResult(
 	}
 }
 
-// UpdateEnvWeight 持久化指定环境的北极星实例权重；已部署环境会异步 Patch 集群资源。
+// UpdateEnvWeight 持久化指定环境的北极星实例权重；已部署环境会同步 Patch 集群资源。
 func (s *PolarisConfigService) UpdateEnvWeight(
 	ctx context.Context,
 	app *bkmsapp.Application,
@@ -256,9 +246,14 @@ func (s *PolarisConfigService) UpdateEnvWeight(
 		return nil, errors.Wrap(err, "get updated polaris config")
 	}
 
-	if newConfig.GetEnvState(envName).IsDeployed() {
-		s.triggerEnvWeightPatch(ctx, app, newConfig, envName)
+	if !newConfig.GetEnvState(envName).IsDeployed() {
+		return newConfig, nil
 	}
 
+	s.patchEnvWeight(ctx, app, newConfig, envName)
+	newConfig, err = s.polarisConfigStore.Get(ctx, app.ID, config.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "get polaris config after patch env weight")
+	}
 	return newConfig, nil
 }

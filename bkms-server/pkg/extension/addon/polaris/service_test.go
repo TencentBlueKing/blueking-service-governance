@@ -291,12 +291,7 @@ var _ = Describe("PolarisConfigService", func() {
 				Expect(polaris.PolarisEnvStatus(
 					updated, environment.Name, updated.GetEnvState(environment.Name),
 				)).To(Equal(polaris.PolarisEnvStatusPendingModify))
-
-				Eventually(func(g Gomega) {
-					stored, getErr := store.Get(ctx, app.ID, config.Name)
-					g.Expect(getErr).NotTo(HaveOccurred())
-					g.Expect(stored.GetEnvState(environment.Name).LastError).NotTo(BeEmpty())
-				}).WithTimeout(5 * time.Second).Should(Succeed())
+				Expect(updated.GetEnvState(environment.Name).LastError).NotTo(BeEmpty())
 			})
 		})
 
@@ -319,12 +314,7 @@ var _ = Describe("PolarisConfigService", func() {
 				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 25)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updated.EnvWeights[environment.Name]).To(Equal(int32(25)))
-
-				Eventually(func(g Gomega) {
-					stored, getErr := store.Get(ctx, app.ID, config.Name)
-					g.Expect(getErr).NotTo(HaveOccurred())
-					g.Expect(stored.GetEnvState(environment.Name).LastError).NotTo(BeEmpty())
-				}).WithTimeout(5 * time.Second).Should(Succeed())
+				Expect(updated.GetEnvState(environment.Name).LastError).NotTo(BeEmpty())
 			})
 		})
 	})

@@ -21,6 +21,9 @@ import (
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 )
 
+// DefaultEnvWeight 环境未单独设置权重时使用的默认值。
+const DefaultEnvWeight int32 = 100
+
 // PolarisServiceInstances 存储单个北极星服务的配置和实例信息
 type PolarisServiceInstances struct {
 	// ServiceNamespace 北极星命名空间
@@ -186,9 +189,6 @@ type PolarisEnvState struct {
 func (s PolarisEnvState) IsDeployed() bool {
 	return s.AppliedFields != nil
 }
-
-// DefaultEnvWeight 环境未单独设置权重时使用的默认值。
-const DefaultEnvWeight int32 = 100
 
 // GetEnvWeight 获取指定环境的有效权重：优先使用环境级别值，否则使用默认值。
 func (c *PolarisConfig) GetEnvWeight(envName string) int32 {

@@ -75,7 +75,7 @@ AND AppliedFields == DesiredFields  // 部署关联字段没变
 - 用户把部署关联字段改回集群里的值，下次 PATCH 又能满足条件；
 - 某次动态下发失败了，下次 PATCH 按同样规则重算，不需要失败状态位。
 
-环境权重 PUT 不受这条快照一致性规则限制：只要环境已经部署过（包括 `pendingModify` 和 `pendingDelete`），就异步 Patch 权重；scope 内尚未部署的环境只持久化，等首次部署时随完整 CR 生效。
+环境权重 PUT 不受这条快照一致性规则限制：只要环境已经部署过（包括 `pendingModify` 和 `pendingDelete`），就在请求内同步 Patch 权重；scope 内尚未部署的环境只持久化，等首次部署时随完整 CR 生效。
 
 ## 4. 环境维度的数据
 
@@ -132,7 +132,7 @@ flowchart LR
 - 创建配置，按需让平台创建托管的北极星服务；
 - 创建时为 scope 环境补齐默认权重；PATCH 修改 scope 时规范化 `envWeights`，落库后再算出哪些环境可以动态下发；
 - 为这些环境准备 AppModel、Environment 和环境变量，异步调用下发器；
-- PUT 权重先持久化；待部署环境直接返回，已部署环境异步调用权重专用 Patch；
+- PUT 权重先持久化；待部署环境直接返回，已部署环境同步调用权重专用 Patch；
 - 把每个环境的下发结果交回 Manager 记录；
 - 删除配置，并处理托管北极星服务的生命周期。
 
@@ -221,18 +221,19 @@ sequenceDiagram
     API->>Service: UpdateEnvWeight(envName, weight)
     Service->>Store: $set envWeights.envName
     Service->>Store: 读回最新配置
-    Service-->>API: 返回更新后的配置
     alt 尚未部署但在 scope
         Service-->>Service: 不访问集群
     else 已部署（含 pendingModify / pendingDelete）
-        Service->>Applier: patchWeight（异步）
+        Service->>Applier: patchWeight（同步）
         Applier->>K8s: JSON Patch test service name + add weight
         Applier-->>Service: 返回 error
         Service->>Store: 成功清空 LastError，失败记录 LastError
+        Service->>Store: 读回包含最新 LastError 的配置
     end
+    Service-->>API: 返回更新后的配置
 ```
 
-JSON Patch 固定针对 `/spec/services/0`：先 `test /spec/services/0/name`，再 `add /spec/services/0/weight`。`add` 同时兼容 weight 字段存在和不存在；service 名不匹配、CR 不存在或集群调用失败时，只记录 `LastError`，PUT 仍保持异步 200 语义。
+JSON Patch 固定针对 `/spec/services/0`：先 `test /spec/services/0/name`，再 `add /spec/services/0/weight`。`add` 同时兼容 weight 字段存在和不存在；service 名不匹配、CR 不存在或集群调用失败时，只记录 `LastError`。PUT 会等待本次同步尝试和结果记录完成，但因为期望权重已经持久化，仍返回 200，并在响应中带回最新 `LastError`。
 
 ## 7. 部署和卸载之后
 
@@ -358,7 +359,7 @@ RemoveEnvWeights(ctx, appID, configName, envNames)
 | --- | --- | --- |
 | Create | `scopeEnvNames` | 环境维度生效范围；所有 scope 环境自动初始化权重 `100` |
 | PATCH | `scopeEnvNames` | 传了就全量替换，`[]` 清空，不传（`nil`）表示不更新 |
-| PUT | `/envs/{envName}/weight` | 允许 scope 内环境或任何已部署环境；待部署只持久化，已部署异步 Patch 集群 |
+| PUT | `/envs/{envName}/weight` | 允许 scope 内环境或任何已部署环境；待部署只持久化，已部署同步 Patch 集群 |
 
 PUT 的 `weight` 取值范围是 `0 - 10000`，`0` 是合法值（表示不接流量）。没有显式环境值时固定使用 `DefaultEnvWeight = 100`。
 
@@ -379,7 +380,7 @@ Create/PATCH serializer 不声明 `weight` 或 `envWeights`；旧客户端继续
 | 首次部署前改配置 | 否 | 等应用部署 |
 | 已部署，只改普通 CR 字段 | 是（快照匹配时） | 异步 Upsert 完整 CR |
 | scope 内待部署环境 PUT 权重 | 否 | 仅持久化，下次部署写进 CR |
-| 已部署环境 PUT 权重 | 是 | 不受 readiness 限制，异步 JSON Patch 该环境的 weight |
+| 已部署环境 PUT 权重 | 是 | 不受 readiness 限制，同步 JSON Patch 该环境的 weight |
 | scope 外且未部署环境 PUT 权重 | 不适用 | 返回 400，不持久化 |
 | 改部署关联字段 | 否 | 等应用部署更新完整资源和快照 |
 | 把部署关联字段改回快照的值 | 是 | 下次 PATCH 重新满足条件 |
