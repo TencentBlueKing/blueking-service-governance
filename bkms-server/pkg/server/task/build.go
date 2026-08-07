@@ -371,10 +371,16 @@ func pollingBuildStatus(ctx context.Context, args PollingBuildStatusArgs) (*Empt
 
 			// 构建成功后异步触发镜像快照刷新（包含从远程拉取新 tag 和详情补全）
 			if record.Status == build.StatusSuccess {
+				imageTag := record.Params[pipelineparam.ImageTag]
 				go func() {
 					tCtx := context.WithoutCancel(ctx)
-					if err = triggerSnapshotRefreshAfterBuild(tCtx, args.AppID); err != nil {
-						log.Errorf(tCtx, "trigger snapshot refresh after build for app %s failed: %v", args.AppID, err)
+					if refreshErr := triggerSnapshotRefreshAfterBuild(
+						tCtx, args.AppID, imageTag,
+					); refreshErr != nil {
+						log.Errorf(
+							tCtx, "trigger snapshot refresh after build for app %s failed: %v",
+							args.AppID, refreshErr,
+						)
 					}
 				}()
 			}
@@ -385,11 +391,17 @@ func pollingBuildStatus(ctx context.Context, args PollingBuildStatusArgs) (*Empt
 }
 
 // triggerSnapshotRefreshAfterBuild 构建成功后异步触发镜像快照刷新
-// 调用完整的 RefreshSnapshots 流程，确保新构建产物的 tag 先从远程拉取写入快照表，再异步补全详情
-func triggerSnapshotRefreshAfterBuild(ctx context.Context, appID string) error {
+// 调用完整的 RefreshSnapshots 流程，确保新构建产物的 tag 先从远程拉取写入快照表，再异步补全详情。
+// imageTag 为本次构建产出的标签，作为强制同步标签下发，使重复使用同一标签构建时详情也能刷新；
+// 解析不到标签时退化为默认刷新行为。
+func triggerSnapshotRefreshAfterBuild(ctx context.Context, appID, imageTag string) error {
 	reg := storereg.G()
 	svc := newSnapshotServiceFromRegistry(reg)
-	if _, err := svc.RefreshAppSnapshots(ctx, appID); err != nil {
+	var forceDetailSyncTags []string
+	if imageTag != "" {
+		forceDetailSyncTags = []string{imageTag}
+	}
+	if _, err := svc.RefreshAppSnapshots(ctx, appID, forceDetailSyncTags...); err != nil {
 		return errors.Wrapf(err, "refresh snapshots for app %s after build", appID)
 	}
 	return nil
