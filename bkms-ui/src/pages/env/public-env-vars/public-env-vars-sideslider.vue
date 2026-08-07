@@ -42,11 +42,14 @@
             />
             {{ $t('新增环境变量') }}
           </Button>
-          <Button>
+          <Button @click="showImportSlider = true">
             <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
             {{ $t('导入') }}
           </Button>
-          <Button>
+          <Button
+            :loading="isExporting"
+            @click="handleExport"
+          >
             <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
             {{ $t('导出') }}
           </Button>
@@ -226,6 +229,17 @@
       :workspace-id="space"
       @deleted="fetchList"
     />
+
+    <!-- 公共环境变量导入侧栏 -->
+    <EnvVarsImportSideslider
+      v-model:visible="showImportSlider"
+      :import-request="handleImportRequest"
+      :preview-request="handlePreviewRequest"
+      show-effective-scope
+      :show-target-info="false"
+      :title="$t('导入公共环境变量')"
+      @success="fetchList"
+    />
   </Sideslider>
 </template>
 
@@ -236,12 +250,13 @@
   import { Alert, Button, Radio, SearchSelect, Sideslider, Tag } from 'bkui-vue';
   import { Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import { ScopedEnvVarOutputObj } from '~/@types/v1/envvars';
   import { EnvvarsService } from '~/api/modules/v1';
   import { sortByDate } from '~/common/util';
   import SensitiveValuePlaceholder from '~/components/editable-variable-table/sensitive-value-placeholder.vue';
+  import EnvVarsImportSideslider from '~/components/env-vars-import-sideslider.vue';
   import HoverCopy from '~/components/hover-copy.vue';
   import TableException from '~/components/table-exception.vue';
+  import { useFileExport } from '~/composables/use-file-export';
   import { getScopeDisplay } from '~/composables/use-scope-display';
   import useSearchFilter from '~/composables/use-search-filter';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
@@ -251,6 +266,7 @@
   import EnvVarFormDialog from './env-var-form-dialog.vue';
 
   import type { ISearchItem, ISearchValue } from 'bkui-vue/lib/search-select/utils';
+  import type { ExportPublicScopedEnvVarsRequest, ScopedEnvVarOutputObj } from '~/@types/v1/envvars';
 
   interface Emits {
     (e: 'update:visible', value: boolean): void;
@@ -266,6 +282,8 @@
 
   const { t } = useI18n();
   const { createPlaceholder } = useSearchPlaceholder();
+  const showImportSlider = ref(false);
+  const { exportFile, isExporting } = useFileExport();
 
   const visible = computed({
     get: () => props.visible,
@@ -438,6 +456,19 @@
     isShowFormDialog.value = true;
   }
 
+  /** 导出工作空间的全部公共环境变量 */
+  function handleExport() {
+    if (!props.space) return;
+    return exportFile({
+      request: () =>
+        EnvvarsService.exportPublicScopedEnvVars<ExportPublicScopedEnvVarsRequest, Response>(
+          { workspaceID: props.space },
+          { originalResponse: true },
+        ),
+      fallbackFilename: 'public-scoped-env-vars.env',
+    });
+  }
+
   /** 面板关闭时重置状态 */
   function handleHidden() {
     list.value = [];
@@ -445,6 +476,14 @@
     activeTab.value = 'all';
     editingVar.value = null;
     deletingVar.value = null;
+    showImportSlider.value = false;
+  }
+
+  function handleImportRequest(file: File) {
+    return EnvvarsService.importPublicScopedEnvVar(
+      { workspaceID: props.space, file },
+      { interceptorErr: false, multipart: true },
+    );
   }
 
   /** 从列表数据中提取去重值，填充筛选项 children */
@@ -481,6 +520,13 @@
 
     if (keyItem) keyItem.children = toChildren(keySet, hasEmptyKey);
     if (valueItem) valueItem.children = toChildren(valueSet, hasEmptyValue);
+  }
+
+  function handlePreviewRequest(file: File) {
+    return EnvvarsService.previewPublicScopedEnvVar(
+      { workspaceID: props.space, file },
+      { interceptorErr: false, multipart: true },
+    );
   }
 
   watch(

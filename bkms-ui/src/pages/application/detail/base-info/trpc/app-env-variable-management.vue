@@ -40,11 +40,14 @@
           />
           {{ $t('新增应用变量') }}
         </Button>
-        <Button>
+        <Button @click="showImportSlider = true">
           <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
           {{ $t('导入') }}
         </Button>
-        <Button>
+        <Button
+          :loading="isExporting"
+          @click="handleExport"
+        >
           <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
           {{ $t('导出') }}
         </Button>
@@ -77,6 +80,16 @@
       source="app"
       :title="$t('环境级变量')"
     />
+
+    <!-- 应用环境变量导入侧栏 -->
+    <EnvVarsImportSideslider
+      v-model:visible="showImportSlider"
+      :import-request="handleImportRequest"
+      :preview-request="handlePreviewRequest"
+      :target-label="$t('应用')"
+      :target-name="appName"
+      @success="fetchAppEnvVarList"
+    />
   </div>
 </template>
 
@@ -86,17 +99,23 @@
   import { Alert, Button, Input, Message } from 'bkui-vue';
   import { Plus, Search } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import { AppEnvVarDetailedOutputObj } from '~/@types/v1/envvars';
   import { EnvvarsService } from '~/api/modules/v1';
   import { sortByDate } from '~/common/util';
   import EditableVariableTable, { type EnvVariableConfig } from '~/components/editable-variable-table/index.vue';
+  import EnvVarsImportSideslider from '~/components/env-vars-import-sideslider.vue';
+  import { useFileExport } from '~/composables/use-file-export';
   import { type IInputKey, useTableSearchInput } from '~/composables/use-search';
   import { useAppDetail } from '~/stores/app-detail';
 
   import EnvBgVarsSideslider from './env-bg-vars-sideslider.vue';
 
+  import type { AppEnvVarDetailedOutputObj, ExportAppEnvVarsRequest } from '~/@types/v1/envvars';
+
   const appDetailStore = useAppDetail();
   const { t } = useI18n();
+  const appName = computed(() => appDetailStore.app || appDetailStore.appID);
+  const showImportSlider = ref(false);
+  const { exportFile, isExporting } = useFileExport();
 
   // 自定义环境变量列表 - 通过 ListDetailedAppEnvVars 接口获取
   const customEnvVarList = ref<EnvVariableConfig[]>([]);
@@ -178,6 +197,33 @@
   // 添加变量
   function handleAddVariable() {
     editableTableRef.value?.addVariable();
+  }
+
+  // 导出应用直接定义的环境变量
+  function handleExport() {
+    if (!appDetailStore.appID) return;
+    return exportFile({
+      request: () =>
+        EnvvarsService.exportAppEnvVars<ExportAppEnvVarsRequest, Response>(
+          { appID: appDetailStore.appID, scope: 'appDefined' },
+          { originalResponse: true },
+        ),
+      fallbackFilename: `app-${appName.value}-env-vars.env`,
+    });
+  }
+
+  function handleImportRequest(file: File) {
+    return EnvvarsService.importAppDefinedEnvVar(
+      { appID: appDetailStore.appID, file },
+      { interceptorErr: false, multipart: true },
+    );
+  }
+
+  function handlePreviewRequest(file: File) {
+    return EnvvarsService.previewAppDefinedEnvVar(
+      { appID: appDetailStore.appID, file },
+      { interceptorErr: false, multipart: true },
+    );
   }
 
   // 查看环境级变量侧栏

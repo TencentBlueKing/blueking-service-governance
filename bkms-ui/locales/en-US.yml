@@ -1423,6 +1423,7 @@ CLB 区域: CLB Region
 环境级变量: Environment-level Variables
 查看环境级变量: View Environment-level Variables
 公共环境变量: Public Environment Variables
+导入公共环境变量: Import Public Environment Variables
 生效环境类型: Effective Environment Type
 确定要删除公共变量: Confirm to Delete Public Variable
 我已了解风险，确认删除: I understand the risks and confirm deletion

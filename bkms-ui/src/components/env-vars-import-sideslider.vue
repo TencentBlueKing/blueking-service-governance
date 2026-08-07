@@ -9,17 +9,27 @@
   >
     <template #header>
       <div class="flex items-center gap-[12px]">
-        <span>{{ $t('导入变量') }}</span>
-        <span class="h-[14px] border-l border-solid border-[#DCDEE5]"></span>
-        <span class="text-[12px] font-normal text-[#979BA5]">{{ $t('环境') }}：{{ targetName || '--' }}</span>
-        <Tag
-          v-if="targetTag"
-          size="small"
-          >{{ targetTag }}</Tag
-        >
+        <span>{{ title || $t('导入变量') }}</span>
+        <template v-if="showTargetInfo">
+          <Divider
+            class="h-[14px] mx-[0] text-[12px]"
+            color="#DCDEE5"
+            direction="vertical"
+            type="solid"
+          />
+          <span class="text-[12px] font-normal text-[#979BA5]">
+            {{ targetLabel || $t('环境') }}：{{ targetName || '--' }}
+          </span>
+          <Tag
+            v-if="targetTag"
+            size="small"
+          >
+            {{ targetTag }}
+          </Tag>
+        </template>
       </div>
     </template>
-    <div class="h-full overflow-y-auto p-[24px] pb-[16px]">
+    <div class="h-full overflow-y-auto p-[24px] pb-[0px]">
       <Upload
         :key="uploadKey"
         accept=".env"
@@ -42,25 +52,25 @@
             height="32"
             width="32"
           />
-          <span
-            >{{ $t('将文件拖到此处或') }} <span class="text-[#3A84FF]">{{ $t('点击上传') }}</span></span
-          >
+          <span class="text-[12px]">
+            {{ $t('将文件拖到此处或') }} <span class="text-[#3A84FF]">{{ $t('点击上传') }}</span>
+          </span>
         </div>
       </Upload>
-      <div class="mt-[8px] text-[12px] text-[#63656E]">{{ $t('仅支持 .env 类型文件，文件大小不超过 1 MiB') }}</div>
+      <div class="mt-[8px] text-[12px]">{{ $t('仅支持 .env 类型文件，文件大小不超过 1 MiB') }}</div>
       <div
         v-if="previewLoading"
         class="flex min-h-[360px] flex-col items-center justify-center"
       >
         <Loading class="animate-spin text-[52px] text-[#3A84FF]" />
-        <div class="mt-[20px] text-[18px] text-[#313238]">{{ $t('文件正在解析中...') }}</div>
+        <div class="mt-[20px] text-[20px] text-[#313238]">{{ $t('文件正在解析中...') }}</div>
       </div>
       <section
         v-else-if="previewData"
         class="mt-[24px]"
       >
         <div class="mb-[16px] flex items-center justify-between">
-          <div class="text-[14px] font-bold text-[#313238]">
+          <div class="text-[14px] font-bold">
             {{ $t('请确认以下变量信息（共 {count} 个）', { count: totalCount }) }}
           </div>
           <Radio.Group
@@ -104,6 +114,17 @@
             show-overflow-tooltip
           />
           <TableColumn
+            v-if="showEffectiveScope"
+            :label="$t('生效环境类型')"
+            width="160"
+          >
+            <template #default="{ row }">
+              <Tag :class="getScopeDisplay(row.effectiveScope?.type || '', row.effectiveScope?.value || '').tagClass">
+                {{ getScopeDisplay(row.effectiveScope?.type || '', row.effectiveScope?.value || '').label }}
+              </Tag>
+            </template>
+          </TableColumn>
+          <TableColumn
             :label="$t('操作')"
             width="140"
           >
@@ -138,10 +159,11 @@
   import { computed, ref } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
-  import { Button, Message, Radio, Sideslider, Tag, Upload } from 'bkui-vue';
+  import { Button, Divider, Message, Radio, Sideslider, Tag, Upload } from 'bkui-vue';
   import { Loading, Upload as UploadIcon } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { appendTraceId } from '~/api/trace-id';
+  import { getScopeDisplay } from '~/composables/use-scope-display';
 
   import type { UploadRequestOptions } from 'bkui-vue/lib/upload/upload.type';
   import type { EnvVarImportPreviewOutputObj, EnvVarImportPreviewSummaryOutputObj } from '~/@types/v1/envvars';
@@ -151,11 +173,22 @@
     defineProps<{
       importRequest: (file: File) => Promise<EnvVarImportPreviewSummaryOutputObj>;
       previewRequest: (file: File) => Promise<EnvVarImportPreviewOutputObj>;
-      targetName: string;
+      showEffectiveScope?: boolean;
+      showTargetInfo?: boolean;
+      targetLabel?: string;
+      targetName?: string;
       targetTag?: string;
+      title?: string;
       visible: boolean;
     }>(),
-    { targetTag: '' },
+    {
+      showEffectiveScope: false,
+      showTargetInfo: true,
+      targetLabel: '',
+      targetName: '',
+      targetTag: '',
+      title: '',
+    },
   );
   const emit = defineEmits<{
     success: [summary: EnvVarImportPreviewSummaryOutputObj];
