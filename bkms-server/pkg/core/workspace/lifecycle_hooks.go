@@ -10,34 +10,34 @@ import (
 var (
 	lifecycleHooksMu sync.RWMutex
 
-	// deleteHooksByName 用于按名称去重和查找 Hook；deleteHookNames 保存注册顺序，
+	// preDeleteHooksByName 用于按名称去重和查找 Hook；preDeleteHookNames 保存注册顺序，
 	// 避免直接遍历 map 时因顺序不确定而改变删除 Hook 的执行顺序。
-	deleteHooksByName = map[string]DeleteHook{}
-	deleteHookNames   []string
+	preDeleteHooksByName = map[string]PreDeleteHook{}
+	preDeleteHookNames   []string
 )
 
-// DeleteHook runs before a workspace is removed.
-type DeleteHook func(ctx context.Context, workspaceID string) error
+// PreDeleteHook runs before a workspace is removed.
+type PreDeleteHook func(ctx context.Context, workspaceID string) error
 
-// RegisterDeleteHook registers a named workspace delete hook.
-func RegisterDeleteHook(name string, hook DeleteHook) bool {
+// RegisterPreDeleteHook registers a named workspace pre-delete hook.
+func RegisterPreDeleteHook(name string, hook PreDeleteHook) bool {
 	lifecycleHooksMu.Lock()
 	defer lifecycleHooksMu.Unlock()
 
-	if _, exists := deleteHooksByName[name]; exists {
+	if _, exists := preDeleteHooksByName[name]; exists {
 		return false
 	}
-	deleteHooksByName[name] = hook
-	deleteHookNames = append(deleteHookNames, name)
+	preDeleteHooksByName[name] = hook
+	preDeleteHookNames = append(preDeleteHookNames, name)
 	return true
 }
 
-// IsDeleteHookRegistered reports whether a named delete hook is registered.
-func IsDeleteHookRegistered(name string) bool {
+// IsPreDeleteHookRegistered reports whether a named pre-delete hook is registered.
+func IsPreDeleteHookRegistered(name string) bool {
 	lifecycleHooksMu.RLock()
 	defer lifecycleHooksMu.RUnlock()
 
-	_, exists := deleteHooksByName[name]
+	_, exists := preDeleteHooksByName[name]
 	return exists
 }
 
@@ -46,22 +46,22 @@ func ResetLifecycleHooksForTest() {
 	lifecycleHooksMu.Lock()
 	defer lifecycleHooksMu.Unlock()
 
-	deleteHooksByName = map[string]DeleteHook{}
-	deleteHookNames = nil
+	preDeleteHooksByName = map[string]PreDeleteHook{}
+	preDeleteHookNames = nil
 }
 
-func runDeleteHooks(ctx context.Context, workspaceID string) error {
+func runPreDeleteHooks(ctx context.Context, workspaceID string) error {
 	lifecycleHooksMu.RLock()
-	names := append([]string(nil), deleteHookNames...)
-	hooks := make([]DeleteHook, len(names))
+	names := append([]string(nil), preDeleteHookNames...)
+	hooks := make([]PreDeleteHook, len(names))
 	for index, name := range names {
-		hooks[index] = deleteHooksByName[name]
+		hooks[index] = preDeleteHooksByName[name]
 	}
 	lifecycleHooksMu.RUnlock()
 
 	for index, name := range names {
 		if err := hooks[index](ctx, workspaceID); err != nil {
-			return errors.Wrapf(err, "run workspace delete hook %s", name)
+			return errors.Wrapf(err, "run workspace pre-delete hook %s", name)
 		}
 	}
 	return nil

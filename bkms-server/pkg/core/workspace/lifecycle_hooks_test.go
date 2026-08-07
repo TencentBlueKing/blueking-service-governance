@@ -18,28 +18,28 @@ var _ = Describe("Workspace lifecycle hooks", func() {
 	})
 
 	It("does not replace a hook registered with the same name", func() {
-		Expect(RegisterDeleteHook("cleanup", func(context.Context, string) error {
+		Expect(RegisterPreDeleteHook("cleanup", func(context.Context, string) error {
 			return nil
 		})).To(BeTrue())
-		Expect(RegisterDeleteHook("cleanup", func(context.Context, string) error {
+		Expect(RegisterPreDeleteHook("cleanup", func(context.Context, string) error {
 			return nil
 		})).To(BeFalse())
-		Expect(IsDeleteHookRegistered("cleanup")).To(BeTrue())
+		Expect(IsPreDeleteHookRegistered("cleanup")).To(BeTrue())
 	})
 
 	It("stops the lifecycle when a hook fails", func() {
 		expected := errors.New("cleanup failed")
 		calledAfterFailure := false
-		Expect(RegisterDeleteHook("failing", func(context.Context, string) error {
+		Expect(RegisterPreDeleteHook("failing", func(context.Context, string) error {
 			return expected
 		})).To(BeTrue())
-		Expect(RegisterDeleteHook("later", func(context.Context, string) error {
+		Expect(RegisterPreDeleteHook("later", func(context.Context, string) error {
 			calledAfterFailure = true
 			return nil
 		})).To(BeTrue())
 
-		err := runDeleteHooks(context.Background(), "workspace-hooks")
-		Expect(err).To(MatchError(ContainSubstring("run workspace delete hook failing")))
+		err := runPreDeleteHooks(context.Background(), "workspace-hooks")
+		Expect(err).To(MatchError(ContainSubstring("run workspace pre-delete hook failing")))
 		Expect(errors.Is(err, expected)).To(BeTrue())
 		Expect(calledAfterFailure).To(BeFalse())
 	})

@@ -33,7 +33,7 @@ var _ = Describe("Application default lifecycle hooks", func() {
 			fx.Populate(&ruleStore, &workspaceStore),
 		)
 		diApp.RequireStart()
-		appdefaultshooks.RegisterDeleteHooks(ruleStore)
+		appdefaultshooks.RegisterPreDeleteHooks(ruleStore)
 	})
 
 	AfterEach(func() {

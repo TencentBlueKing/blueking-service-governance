@@ -13,13 +13,13 @@ import (
 // workspace's environment-type rules during workspace deletion.
 const CleanupRulesByWorkspaceHookName = "appdefaults.cleanup_rules_by_workspace"
 
-// RegisterDeleteHooks registers application-default cleanup on workspace deletion.
-func RegisterDeleteHooks(store appdefaults.RuleStore) {
-	bkmsworkspace.RegisterDeleteHook(CleanupRulesByWorkspaceHookName, NewCleanupRulesByWorkspaceHook(store))
+// RegisterPreDeleteHooks registers application-default cleanup before workspace deletion.
+func RegisterPreDeleteHooks(store appdefaults.RuleStore) {
+	bkmsworkspace.RegisterPreDeleteHook(CleanupRulesByWorkspaceHookName, NewCleanupRulesByWorkspaceHook(store))
 }
 
 // NewCleanupRulesByWorkspaceHook removes all rules before deleting a workspace.
-func NewCleanupRulesByWorkspaceHook(store appdefaults.RuleStore) bkmsworkspace.DeleteHook {
+func NewCleanupRulesByWorkspaceHook(store appdefaults.RuleStore) bkmsworkspace.PreDeleteHook {
 	return func(ctx context.Context, workspaceID string) error {
 		if err := store.DeleteByWorkspace(ctx, workspaceID); err != nil {
 			return fmt.Errorf("delete application default rules: %w", err)

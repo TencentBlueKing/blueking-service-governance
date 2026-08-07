@@ -80,7 +80,7 @@ func NewService(
 // Create 创建 TAF 应用资源（AppModel + AppConfigFile + App）
 func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *CreateParams) error {
 	// 在写入任何应用数据前读取初始化规则，避免读取失败时留下部分应用数据。
-	resolution, err := appdefaults.Resolve(
+	resolved, err := appdefaults.Resolve(
 		ctx,
 		s.appDefaultRuleStore,
 		s.envStore,
@@ -135,7 +135,7 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 	}
 
 	// 将平台默认 AppSpec 应用到 AppModel。
-	appspec.ApplyToAppModel(&resolution.Default, appModel)
+	appspec.ApplyToAppModel(&resolved.Default, appModel)
 
 	// 创建 AppModel
 	if err = s.appModelStore.CreateAppModel(ctx, appModel); err != nil {
@@ -143,10 +143,10 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 	}
 
 	// 插入 appspec 初始配置
-	if err = s.appSpecStore.Upsert(ctx, &resolution.Default); err != nil {
+	if err = s.appSpecStore.Upsert(ctx, &resolved.Default); err != nil {
 		return errors.Wrap(err, "create default app spec")
 	}
-	for _, spec := range resolution.Environments {
+	for _, spec := range resolved.Environments {
 		if err = s.appSpecStore.Upsert(ctx, spec); err != nil {
 			return errors.Wrapf(err, "create app spec for environment %q", spec.EnvName)
 		}

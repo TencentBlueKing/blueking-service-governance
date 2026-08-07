@@ -52,13 +52,13 @@ var _ = Describe("Application default resolution", func() {
 	})
 
 	It("uses platform defaults without persisting rules", func() {
-		resolution, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-without-rules")
+		resolved, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-without-rules")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(resolution.Default.AppID).To(Equal("app-without-rules"))
-		Expect(resolution.Default.EnvName).To(Equal(appspec.DefaultEnvName))
-		Expect(*resolution.Default.Resources.Replicas).To(Equal(int32(1)))
-		Expect(*resolution.Default.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
-		Expect(resolution.Environments).To(BeEmpty())
+		Expect(resolved.Default.AppID).To(Equal("app-without-rules"))
+		Expect(resolved.Default.EnvName).To(Equal(appspec.DefaultEnvName))
+		Expect(*resolved.Default.Resources.Replicas).To(Equal(int32(1)))
+		Expect(*resolved.Default.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
+		Expect(resolved.Environments).To(BeEmpty())
 
 		persisted, err := ruleStore.List(ctx, workspace.ID)
 		Expect(err).NotTo(HaveOccurred())
@@ -73,10 +73,10 @@ var _ = Describe("Application default resolution", func() {
 		Expect(ruleStore.Create(ctx, resourcesRule(workspace.ID, "production"))).To(Succeed())
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "production", true))).To(Succeed())
 
-		resolution, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-combined-defaults")
+		resolved, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-combined-defaults")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(resolution.Environments).To(HaveLen(1))
-		spec := resolution.Environments[0]
+		Expect(resolved.Environments).To(HaveLen(1))
+		spec := resolved.Environments[0]
 		Expect(spec.AppID).To(Equal("app-combined-defaults"))
 		Expect(spec.EnvName).To(Equal(production.Name))
 		Expect(*spec.Resources.Replicas).To(Equal(int32(2)))
@@ -98,12 +98,12 @@ var _ = Describe("Application default resolution", func() {
 		})
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "production", true))).To(Succeed())
 
-		resolution, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-matching-envs")
+		resolved, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-matching-envs")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(resolution.Environments).To(HaveLen(2))
+		Expect(resolved.Environments).To(HaveLen(2))
 
-		specs := make(map[string]*appspec.AppSpec, len(resolution.Environments))
-		for _, spec := range resolution.Environments {
+		specs := make(map[string]*appspec.AppSpec, len(resolved.Environments))
+		for _, spec := range resolved.Environments {
 			specs[spec.EnvName] = spec
 		}
 		Expect(specs).To(HaveKey(productionA.Name))

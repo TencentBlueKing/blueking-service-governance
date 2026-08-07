@@ -25,7 +25,7 @@ var _ = Describe("Store registry", func() {
 			bkmsenv.IsDeleteHookRegistered(envvarhooks.CleanupScopedEnvVarsByEnvHookName),
 		).To(BeTrue(), "envvars cleanup hook must be registered by store registry")
 		Expect(
-			bkmsworkspace.IsDeleteHookRegistered(appdefaultshooks.CleanupRulesByWorkspaceHookName),
+			bkmsworkspace.IsPreDeleteHookRegistered(appdefaultshooks.CleanupRulesByWorkspaceHookName),
 		).To(BeTrue(), "workspace AppSpec rule cleanup hook must be registered by store registry")
 	})
 })

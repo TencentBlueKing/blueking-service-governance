@@ -8,8 +8,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
 
-// Resolution contains the AppSpecs selected for one new application.
-type Resolution struct {
+// ResolvedAppSpec contains the AppSpecs selected for one new application.
+type ResolvedAppSpec struct {
 	// Default always contains the platform resources and update-strategy
 	// baselines.
 	Default appspec.AppSpec
@@ -24,7 +24,7 @@ func Resolve(
 	ruleStore RuleStore,
 	envStore envmodel.EnvironmentStore,
 	workspaceID, appID string,
-) (*Resolution, error) {
+) (*ResolvedAppSpec, error) {
 	rules, err := ruleStore.List(ctx, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("list workspace application defaults: %w", err)
@@ -50,5 +50,5 @@ func Resolve(
 		}
 	}
 
-	return &Resolution{Default: defaultSpec, Environments: envSpecs}, nil
+	return &ResolvedAppSpec{Default: defaultSpec, Environments: envSpecs}, nil
 }

@@ -239,7 +239,7 @@ func (r *Registry) registerStoreHooks() {
 	r.WorkspaceCompsStore.SetComponentHooks(workspace.NewComponentRefCountHooks(r.ComponentDefStore))
 	r.AppModelStore.SetComponentHooks(appmodel.NewComponentRefCountHooks(r.ComponentDefStore))
 	envvarhooks.RegisterDeleteHooks(r.ScopedEnvVarStore)
-	appdefaultshooks.RegisterDeleteHooks(r.AppDefaultRuleStore)
+	appdefaultshooks.RegisterPreDeleteHooks(r.AppDefaultRuleStore)
 }
 
 // initStoreData 初始化 Store 中的基础数据，例如依赖服务的数据。
