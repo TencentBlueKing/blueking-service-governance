@@ -24,6 +24,7 @@ export type Config = {
   interceptorErr?: boolean; // 是否自动拦截http异常弹出message
   irrevocable?: boolean; // 请求不能取消
   isBodyParam?: boolean; // 是否将请求参数放在body中
+  multipart?: boolean; // 是否将非路径参数组装为 multipart/form-data
   needRes?: boolean;
   needStatus?: boolean; // 是否需要返回 status 等响应信息
   originalResponse?: boolean; // 返回原始res对象

@@ -266,6 +266,19 @@ export default class ConsoleFetch {
     if ((method === 'GET' || method === 'DELETE') && !fetchConfig.isBodyParam) {
       const query = objectToQueryParams(parseData.params);
       parseData.url += query ? `?${query}` : '';
+    } else if (fetchConfig.multipart) {
+      const formData = new FormData();
+      Object.entries(parseData.params).forEach(([key, value]) => appendFormDataValue(formData, key, value));
+      body = formData;
+
+      // multipart boundary 必须由浏览器生成，不能沿用默认的 application/json。
+      const headers = new Headers(fetchConfig.headers as HeadersInit);
+      headers.delete('Content-Type');
+      const multipartHeaders: Record<string, string> = {};
+      headers.forEach((value, key) => {
+        multipartHeaders[key] = value;
+      });
+      fetchConfig.headers = multipartHeaders;
     } else {
       body = isObject(params) ? JSON.stringify(parseData.params || {}) : (params as BodyInit | null | undefined);
     }
@@ -279,6 +292,19 @@ export default class ConsoleFetch {
 
     return response;
   }
+}
+
+function appendFormDataValue(formData: FormData, key: string, value: unknown) {
+  if (value === undefined || value === null) return;
+  if (Array.isArray(value)) {
+    value.forEach(item => appendFormDataValue(formData, key, item));
+    return;
+  }
+  if (value instanceof Blob) {
+    formData.append(key, value);
+    return;
+  }
+  formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
 }
 
 async function resultReduction(response: Response, config: Config): Promise<ResponseData> {

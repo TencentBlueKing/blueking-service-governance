@@ -475,6 +475,24 @@ export function downloadByLink(url: string, filename: string) {
   document.body.removeChild(a);
 }
 
+/*
+ * 下载原始文件响应，优先使用 Content-Disposition 中的服务端文件名。
+ */
+export async function downloadResponseFile(response: Response, fallbackFilename: string) {
+  const blob = await response.blob();
+  const encodedFilename =
+    response.headers.get('Content-Disposition')?.match(/filename\*?\s*=\s*(?:UTF-8'')?"?([^";]+)"?/i)?.[1] ||
+    fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = decodeURIComponent(encodedFilename);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /**
  * 格式化文件大小
  * @param size 文件大小（字节）

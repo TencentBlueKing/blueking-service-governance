@@ -102,7 +102,9 @@
         <Setting
           :key="tabKey"
           :env="data.id ?? ''"
+          :env-display-name="data.displayName ?? data.name ?? ''"
           :env-name="data.name ?? ''"
+          :env-type="data.type ?? ''"
           :workspace="workspace"
           @update="handleUpdate"
         />

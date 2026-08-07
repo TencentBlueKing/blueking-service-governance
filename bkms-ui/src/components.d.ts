@@ -38,6 +38,7 @@ declare module 'vue' {
     EnvGroupSelector: typeof import('./components/env-group-selector.vue')['default']
     EnvSelectPanel: typeof import('./components/env-select-panel.vue')['default']
     EnvVarCopyDropdown: typeof import('./components/view-default-env-vars/env-var-copy-dropdown.vue')['default']
+    EnvVarsImportSideslider: typeof import('./components/env-vars-import-sideslider.vue')['default']
     FieldItem: typeof import('./components/field-item.vue')['default']
     FlexRow: typeof import('./components/flex-row.vue')['default']
     FormPrefix: typeof import('./components/form-prefix.vue')['default']

@@ -41,18 +41,30 @@
         </Button>
       </Alert>
 
-      <div class="flex justify-between">
-        <Button
-          class="mb-[16px]"
-          theme="primary"
-          @click="handleAddVariable"
-        >
-          <Plus
-            :height="24"
-            :width="24"
-          />
-          {{ $t('新增自定义变量') }}
-        </Button>
+      <div class="mb-[16px] flex justify-between">
+        <div class="flex gap-[8px]">
+          <Button
+            theme="primary"
+            @click="handleAddVariable"
+          >
+            <Plus
+              :height="24"
+              :width="24"
+            />
+            {{ $t('新增自定义变量') }}
+          </Button>
+          <Button @click="showImportSlider = true">
+            <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
+            {{ $t('导入') }}
+          </Button>
+          <Button
+            :loading="isExporting"
+            @click="handleExport"
+          >
+            <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
+            {{ $t('导出') }}
+          </Button>
+        </div>
         <Input
           v-model.trim="searchKeyword"
           class="w-[430px]"
@@ -81,11 +93,20 @@
         :env-id="env"
         :title="$t('内置与公共环境变量')"
       />
+      <!-- 环境变量导入侧栏 -->
+      <EnvVarsImportSideslider
+        v-model:visible="showImportSlider"
+        :import-request="handleImportRequest"
+        :preview-request="handlePreviewRequest"
+        :target-name="envDisplayName || envName"
+        :target-tag="envTypeConfig?.name"
+        @success="getEnvConfigList"
+      />
     </div>
   </Skeleton>
 </template>
 <script lang="ts" setup>
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
 
   import { Alert, Button, Input, Message } from 'bkui-vue';
   import { Plus, Search } from 'bkui-vue/lib/icon';
@@ -94,15 +115,22 @@
   import { EnvvarsService } from '~/api/modules/v1';
   import { sortByDate } from '~/common/util';
   import EditableVariableTable, { type EnvVariableConfig } from '~/components/editable-variable-table/index.vue';
+  import EnvVarsImportSideslider from '~/components/env-vars-import-sideslider.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import { envTypeMap } from '~/composables/use-env-manager';
+  import { useFileExport } from '~/composables/use-file-export';
   import { type IInputKey, useTableSearchInput } from '~/composables/use-search';
   import { useSpaceStore } from '~/stores/space';
 
   import EnvBgVarsSideslider from '../application/detail/base-info/trpc/env-bg-vars-sideslider.vue';
 
+  import type { ExportEnvScopedEnvVarsRequest } from '~/@types/v1/envvars';
+
   const props = defineProps<{
     env: string;
+    envDisplayName?: string;
     envName: string;
+    envType?: string;
     workspace: string;
   }>();
 
@@ -113,6 +141,9 @@
   const variableList = ref<EnvVariableConfig[]>([]);
   const isLoading = ref(false);
   const showEnvBgVarsSlider = ref(false);
+  const showImportSlider = ref(false);
+  const { exportFile, isExporting } = useFileExport();
+  const envTypeConfig = computed(() => (props.envType ? envTypeMap[props.envType] : undefined));
 
   /** 搜索配置 */
   const searchKeys = ref<IInputKey[]>([
@@ -230,6 +261,30 @@
       });
       variableList.value = cloneDeep(variableList.value);
     }
+  }
+
+  // 环境变量导出
+  function handleExport() {
+    if (!props.env) return;
+    return exportFile({
+      request: () =>
+        EnvvarsService.exportEnvScopedEnvVars<ExportEnvScopedEnvVarsRequest, Response>(
+          { envID: props.env },
+          { originalResponse: true },
+        ),
+      fallbackFilename: `env-${props.envName}-scoped-env-vars.env`,
+    });
+  }
+
+  function handleImportRequest(file: File) {
+    return EnvvarsService.importEnvScopedEnvVar({ envID: props.env, file }, { interceptorErr: false, multipart: true });
+  }
+
+  function handlePreviewRequest(file: File) {
+    return EnvvarsService.previewEnvScopedEnvVar(
+      { envID: props.env, file },
+      { interceptorErr: false, multipart: true },
+    );
   }
 
   // 初始化
