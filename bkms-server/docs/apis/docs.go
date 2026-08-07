@@ -10984,6 +10984,111 @@ const docTemplate = `{
                 }
             }
         },
+        "/env-var-templates/app": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回不带 scope 元数据的 ` + "`" + `.env` + "`" + ` 模板，供应用环境变量导入使用。",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "envvars"
+                ],
+                "summary": "下载应用环境变量导入模板",
+                "operationId": "DownloadAppEnvVarTemplate",
+                "responses": {
+                    "200": {
+                        "description": "dotenv file",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/env-var-templates/env": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回不带 scope 元数据的 ` + "`" + `.env` + "`" + ` 模板，供单环境环境变量导入使用。",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "envvars"
+                ],
+                "summary": "下载单环境环境变量导入模板",
+                "operationId": "DownloadSingleEnvVarTemplate",
+                "responses": {
+                    "200": {
+                        "description": "dotenv file",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/env-var-templates/scoped": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回带 scope 元数据示例的 ` + "`" + `.env` + "`" + ` 模板，供 scoped 环境变量导入使用。",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "envvars"
+                ],
+                "summary": "下载 scoped 环境变量导入模板",
+                "operationId": "DownloadScopedEnvVarTemplate",
+                "responses": {
+                    "200": {
+                        "description": "dotenv file",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/envs/{envID}": {
             "get": {
                 "security": [

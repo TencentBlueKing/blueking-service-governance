@@ -72,7 +72,7 @@ func TestFilterOutSensitiveEffectiveVars(t *testing.T) {
 }
 
 func TestRenderRecordsEscapesMultilineDescription(t *testing.T) {
-	content := renderRecords([]renderRecord{
+	content := renderRecords([]envFileRecord{
 		{
 			Key:         "KEY",
 			Value:       "value",

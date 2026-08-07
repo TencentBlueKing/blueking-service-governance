@@ -30,14 +30,24 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/envfile/export"
+	exporter "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/envfile/export"
 	importer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/envfile/import"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/serializer"
 )
 
 const (
-	exportScopeAppDefined     = "appDefined"
+	// exportScopeAppDefined 表示导出应用直接定义的环境变量（appDefined 范围）。
+	// 仅导出由应用自身定义、未经环境层叠覆盖的变量。
+	exportScopeAppDefined = "appDefined"
+	// exportScopeEffectiveByEnv 表示按环境导出最终生效的全部环境变量（effectiveByEnv 范围）。
+	// 导出结果依赖指定环境下的 workspace / envType / env / app 层叠覆盖后的实际生效值，因此该范围必须携带 envName。
 	exportScopeEffectiveByEnv = "effectiveByEnv"
+	// scopedEnvVarTemplateFilename scoped 模板文件名。
+	scopedEnvVarTemplateFilename = "scoped-env-vars-template.env"
+	// singleEnvVarTemplateFilename 单环境模板文件名，模板内容不带 scope 元数据。
+	singleEnvVarTemplateFilename = "single-env-vars-template.env"
+	// appEnvVarTemplateFilename 应用环境变量模板文件名，模板内容不带 scope 元数据。
+	appEnvVarTemplateFilename = "app-env-vars-template.env"
 )
 
 // ImportPublicScopedEnvVar 正式导入公共环境变量。
@@ -381,6 +391,54 @@ func (h *Handler) ExportAppEnvVars(c *gin.Context) {
 	}
 }
 
+// DownloadScopedEnvVarTemplate 下载 scoped 环境变量导入模板。
+//
+//	@ID				DownloadScopedEnvVarTemplate
+//	@Summary		下载 scoped 环境变量导入模板
+//	@Description	返回带 scope 元数据示例的 `.env` 模板，供 scoped 环境变量导入使用。
+//	@Tags			envvars
+//	@Produce		octet-stream
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Success		200	{string}	string	"dotenv file"
+//	@Failure		400	{object}	bkerrs.GinErrorOutput
+//	@Router			/env-var-templates/scoped [get]
+func (h *Handler) DownloadScopedEnvVarTemplate(c *gin.Context) {
+	writeEnvFileAttachment(c, scopedEnvVarTemplateFilename, exporter.RenderScopedImportTemplate())
+}
+
+// DownloadSingleEnvVarTemplate 下载单环境环境变量导入模板。
+//
+//	@ID				DownloadSingleEnvVarTemplate
+//	@Summary		下载单环境环境变量导入模板
+//	@Description	返回不带 scope 元数据的 `.env` 模板，供单环境环境变量导入使用。
+//	@Tags			envvars
+//	@Produce		octet-stream
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Success		200	{string}	string	"dotenv file"
+//	@Failure		400	{object}	bkerrs.GinErrorOutput
+//	@Router			/env-var-templates/env [get]
+func (h *Handler) DownloadSingleEnvVarTemplate(c *gin.Context) {
+	writeEnvFileAttachment(c, singleEnvVarTemplateFilename, exporter.RenderEnvAppImportTemplate())
+}
+
+// DownloadAppEnvVarTemplate 下载应用环境变量导入模板。
+//
+//	@ID				DownloadAppEnvVarTemplate
+//	@Summary		下载应用环境变量导入模板
+//	@Description	返回不带 scope 元数据的 `.env` 模板，供应用环境变量导入使用。
+//	@Tags			envvars
+//	@Produce		octet-stream
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Success		200	{string}	string	"dotenv file"
+//	@Failure		400	{object}	bkerrs.GinErrorOutput
+//	@Router			/env-var-templates/app [get]
+func (h *Handler) DownloadAppEnvVarTemplate(c *gin.Context) {
+	writeEnvFileAttachment(c, appEnvVarTemplateFilename, exporter.RenderEnvAppImportTemplate())
+}
+
 func writeEnvFileAttachment(c *gin.Context, filename, content string) {
 	c.Header("Content-Disposition", httpresp.BuildAttachmentDisposition(filename))
 	c.Data(http.StatusOK, httpresp.AttachmentContentType, []byte(content))
@@ -402,8 +460,8 @@ func (h *Handler) newImportService() *importer.Service {
 	return importer.NewService(h.registry.ScopedEnvVarStore, h.registry.AppModelStore)
 }
 
-func (h *Handler) newExportService() *export.Service {
-	return export.NewService(
+func (h *Handler) newExportService() *exporter.Service {
+	return exporter.NewService(
 		h.registry.ScopedEnvVarStore,
 		h.registry.AppModelStore,
 		envvars.NewUnifiedEnvVarsReader(

@@ -62,9 +62,9 @@ func (s *Service) ExportPublic(ctx context.Context, workspaceID string) (string,
 
 	// 保留显式 scope 元数据，确保导出的文件再次导入时，不会丢失记录原本
 	// 属于 workspace 还是 envType 作用域的信息。
-	records := make([]renderRecord, 0, len(vars))
+	records := make([]envFileRecord, 0, len(vars))
 	for _, item := range vars {
-		records = append(records, renderRecord{
+		records = append(records, envFileRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
@@ -90,9 +90,9 @@ func (s *Service) ExportEnv(ctx context.Context, environment envmodel.Environmen
 	}
 	vars = filterOutSensitiveScopedVars(vars)
 
-	records := make([]renderRecord, 0, len(vars))
+	records := make([]envFileRecord, 0, len(vars))
 	for _, item := range vars {
-		records = append(records, renderRecord{
+		records = append(records, envFileRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
@@ -112,9 +112,9 @@ func (s *Service) ExportAppDefined(ctx context.Context, appID string) (string, e
 	}
 	vars = filterOutSensitiveAppVars(vars)
 
-	records := make([]renderRecord, 0, len(vars))
+	records := make([]envFileRecord, 0, len(vars))
 	for _, item := range vars {
-		records = append(records, renderRecord{
+		records = append(records, envFileRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
@@ -146,9 +146,9 @@ func (s *Service) ExportEffectiveAppEnv(
 	vars = vars.ToDeduplicatedList()
 	vars = filterOutSensitiveEffectiveVars(vars)
 
-	records := make([]renderRecord, 0, len(vars))
+	records := make([]envFileRecord, 0, len(vars))
 	for _, item := range vars {
-		records = append(records, renderRecord{
+		records = append(records, envFileRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
@@ -157,14 +157,16 @@ func (s *Service) ExportEffectiveAppEnv(
 	return renderRecords(records), nil
 }
 
-type renderRecord struct {
+// envFileRecord describes a single `.env` record rendered by export/template flows.
+type envFileRecord struct {
 	Key         string
 	Value       string
 	Description string
 	Scope       *envvartypes.ScopedEnvVarScope
 }
 
-func renderRecords(records []renderRecord) string {
+// renderRecords renders import-compatible dotenv content from records.
+func renderRecords(records []envFileRecord) string {
 	if len(records) == 0 {
 		return ""
 	}

@@ -31,14 +31,17 @@ type ScopedEnvVarHandler interface {
 	PreviewPublicScopedEnvVar(c *gin.Context)
 	ImportPublicScopedEnvVar(c *gin.Context)
 	ExportPublicScopedEnvVars(c *gin.Context)
+	DownloadScopedEnvVarTemplate(c *gin.Context)
 	ListDetailedEnvScopedEnvVars(c *gin.Context)
 	PreviewEnvScopedEnvVar(c *gin.Context)
 	ImportEnvScopedEnvVar(c *gin.Context)
 	ExportEnvScopedEnvVars(c *gin.Context)
+	DownloadSingleEnvVarTemplate(c *gin.Context)
 	ListDetailedAppEnvVars(c *gin.Context)
 	PreviewAppDefinedEnvVar(c *gin.Context)
 	ImportAppDefinedEnvVar(c *gin.Context)
 	ExportAppEnvVars(c *gin.Context)
+	DownloadAppEnvVarTemplate(c *gin.Context)
 	ListEnvAvailableEnvVars(c *gin.Context)
 	ListAppDefinedEnvVars(c *gin.Context)
 	CreateAppDefinedEnvVar(c *gin.Context)
@@ -65,6 +68,8 @@ func Register(rg *gin.RouterGroup, h ScopedEnvVarHandler) {
 	rg.POST("/workspaces/:workspaceID/scoped-env-vars/public-vars/import", h.ImportPublicScopedEnvVar)
 	// 导出公共环境变量
 	rg.GET("/workspaces/:workspaceID/scoped-env-vars/public-vars/export", h.ExportPublicScopedEnvVars)
+	// 下载 scoped 环境变量导入模板
+	rg.GET("/env-var-templates/scoped", h.DownloadScopedEnvVarTemplate)
 
 	// 获取指定环境下作用域为当前环境的环境变量详情
 	rg.GET("/scoped-env-vars/detailed-list/:envID", h.ListDetailedEnvScopedEnvVars)
@@ -74,6 +79,8 @@ func Register(rg *gin.RouterGroup, h ScopedEnvVarHandler) {
 	rg.POST("/scoped-env-vars/import/:envID", h.ImportEnvScopedEnvVar)
 	// 导出单环境环境变量
 	rg.GET("/scoped-env-vars/export/:envID", h.ExportEnvScopedEnvVars)
+	// 下载单环境环境变量导入模板
+	rg.GET("/env-var-templates/env", h.DownloadSingleEnvVarTemplate)
 
 	// 获取指定应用的环境变量详情，包含可能的 Key 冲突信息
 	rg.GET("/apps/:appID/env-vars/detailed-list", h.ListDetailedAppEnvVars)
@@ -83,6 +90,8 @@ func Register(rg *gin.RouterGroup, h ScopedEnvVarHandler) {
 	rg.POST("/apps/:appID/env-vars/import", h.ImportAppDefinedEnvVar)
 	// 导出应用环境变量
 	rg.GET("/apps/:appID/env-vars/export", h.ExportAppEnvVars)
+	// 下载应用环境变量导入模板
+	rg.GET("/env-var-templates/app", h.DownloadAppEnvVarTemplate)
 	// 获取应用直接定义的环境变量列表
 	rg.GET("/apps/:appID/env-vars", h.ListAppDefinedEnvVars)
 	// 创建应用直接定义的环境变量

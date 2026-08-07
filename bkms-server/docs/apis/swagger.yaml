@@ -15058,6 +15058,69 @@ paths:
       summary: 预览组件实例（试运行）
       tags:
       - component-insts
+  /env-var-templates/app:
+    get:
+      description: 返回不带 scope 元数据的 `.env` 模板，供应用环境变量导入使用。
+      operationId: DownloadAppEnvVarTemplate
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: dotenv file
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 下载应用环境变量导入模板
+      tags:
+      - envvars
+  /env-var-templates/env:
+    get:
+      description: 返回不带 scope 元数据的 `.env` 模板，供单环境环境变量导入使用。
+      operationId: DownloadSingleEnvVarTemplate
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: dotenv file
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 下载单环境环境变量导入模板
+      tags:
+      - envvars
+  /env-var-templates/scoped:
+    get:
+      description: 返回带 scope 元数据示例的 `.env` 模板，供 scoped 环境变量导入使用。
+      operationId: DownloadScopedEnvVarTemplate
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: dotenv file
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 下载 scoped 环境变量导入模板
+      tags:
+      - envvars
   /envs/{envID}:
     delete:
       operationId: DeleteEnv
