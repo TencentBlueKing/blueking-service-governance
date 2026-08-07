@@ -43,12 +43,10 @@ jobs:
 
       - name: Build and compress binaries
         working-directory: bkms-cli
-        run: |
-          cli_version="v0.0.0-dev"
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            cli_version="${GITHUB_REF_NAME#bkms-cli/}"
-          fi
-          make build-all compress VERSION="${cli_version}" UPDATE_GITHUB_REPOSITORY="${GITHUB_REPOSITORY}"
+        env:
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.0-dev' }}
+          UPDATE_GITHUB_REPOSITORY: ${{ github.repository }}
+        run: make build-all compress
 
       - name: Generate checksums
         working-directory: bkms-cli/build

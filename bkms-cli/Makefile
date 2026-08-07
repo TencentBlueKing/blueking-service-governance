@@ -57,7 +57,7 @@ check-build-vars: ## 校验构建所需变量
 	fi
 
 LDFLAGS="-s -w \
-	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.Version=${VERSION} \
+	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.Version=${ASSET_VERSION} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.GitHash=${GIT_HASH} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime=${BUILD_TIME} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.updateSource=${UPDATE_SOURCE} \
