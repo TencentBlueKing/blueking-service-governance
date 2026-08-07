@@ -81,6 +81,7 @@ make build-all compress
 构建产物位于 `./build/` 目录，命名规则：
 - 当前平台：`bkms-cli`（或 `bkms-cli.exe`）
 - 指定平台：`bkms-cli-{os}-{arch}`
+- 平台发布构建：`bkms-cli-{os}-{arch}-{version}`
 
 ### 编译期注入参数
 

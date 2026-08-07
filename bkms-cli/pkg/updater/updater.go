@@ -9,8 +9,6 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
 
 const (
@@ -50,8 +48,8 @@ type Info struct {
 
 // provider checks for and applies updates from one release source.
 type provider interface {
-	Check(ctx context.Context, current string) (Info, error)
-	Update(ctx context.Context, current string) (Info, error)
+	Check(ctx context.Context) (Info, error)
+	Update(ctx context.Context) (Info, error)
 }
 
 // Check reports whether this binary has a newer release.
@@ -60,7 +58,7 @@ func Check(ctx context.Context) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
-	return instance.Check(ctx, version.Version)
+	return instance.Check(ctx)
 }
 
 // Update installs a newer release when one is available.
@@ -69,7 +67,7 @@ func Update(ctx context.Context) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
-	return instance.Update(ctx, version.Version)
+	return instance.Update(ctx)
 }
 
 // newProvider creates the provider configured for this binary's update source.
@@ -84,9 +82,8 @@ func newProvider() (provider, error) {
 	}
 }
 
-// platformAssetName is the shared release contract for both update sources.
-// Exact names keep bkms-cli assets distinct from other products in the same release.
-func platformAssetName(goos, goarch string) (string, error) {
+// platformAssetName returns the complete release asset name for a platform.
+func platformAssetName(goos, goarch, version string) (string, error) {
 	if goos != "linux" && goos != "darwin" && goos != "windows" {
 		return "", fmt.Errorf("unsupported update platform %s/%s", goos, goarch)
 	}
@@ -94,7 +91,7 @@ func platformAssetName(goos, goarch string) (string, error) {
 		return "", fmt.Errorf("unsupported update platform %s/%s", goos, goarch)
 	}
 
-	name := fmt.Sprintf("bkms-cli-%s-%s", goos, goarch)
+	name := fmt.Sprintf("bkms-cli-%s-%s-v%s", goos, goarch, version)
 	if goos == "windows" {
 		name += ".exe"
 	}

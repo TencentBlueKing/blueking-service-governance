@@ -6,7 +6,15 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
+
+func useCurrentVersion(value string) {
+	originalVersion := version.Version
+	version.Version = value
+	DeferCleanup(func() { version.Version = originalVersion })
+}
 
 var _ = Describe("Updater", func() {
 	Describe("provider selection", func() {

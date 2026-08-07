@@ -5,6 +5,9 @@ GIT_HASH ?= $(shell git rev-parse HEAD)
 GOOS ?= ""
 GOARCH ?= ""
 
+# 发布产物只保留 tag 中的版本部分，例如 bkms-cli/v1.2.3 -> v1.2.3。
+ASSET_VERSION := $(notdir $(VERSION))
+
 ifeq (${GOOS}, windows)
     BIN_NAME=bkms-cli.exe
 else
@@ -88,8 +91,8 @@ define build-platforms
 		$(eval EXT := $(if $(filter windows,$(OS)),.exe,)) \
 		echo "构建 $(OS)/$(ARCH)..." && \
 		CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -ldflags ${LDFLAGS} \
-			-o ./build/bkms-cli-$(OS)-$(ARCH)$(EXT) ./main.go && \
-		echo "✓ $(OS)/$(ARCH) 构建完成: bkms-cli-$(OS)-$(ARCH)$(EXT)" || exit 1; \
+			-o ./build/bkms-cli-$(OS)-$(ARCH)-$(ASSET_VERSION)$(EXT) ./main.go && \
+		echo "✓ $(OS)/$(ARCH) 构建完成: bkms-cli-$(OS)-$(ARCH)-$(ASSET_VERSION)$(EXT)" || exit 1; \
 	)
 	@echo "✓ $(2) 平台构建完成"
 	@ls -lh ./build/bkms-cli-$(word 1,$(subst /, ,$(firstword $(1))))-*
@@ -113,7 +116,7 @@ build: check-build-vars tidy ## 构建 bkms-cli 可执行文件（当前平台�
 	fi
 
 .PHONY: build-all
-build-all: check-build-vars tidy ## 构建所有支持平台的二进制文件（命名格式: bkms-cli-{os}-{arch}）
+build-all: check-build-vars tidy ## 构建所有支持平台的发布二进制（命名格式: bkms-cli-{os}-{arch}-{version}）
 	@echo "开始构建所有平台的二进制文件..."
 	@mkdir -p ./build/
 	@$(foreach platform,$(PLATFORMS), \
@@ -122,8 +125,8 @@ build-all: check-build-vars tidy ## 构建所有支持平台的二进制文件�
 		$(eval EXT := $(if $(filter windows,$(OS)),.exe,)) \
 		echo "构建 $(OS)/$(ARCH)..." && \
 		CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -ldflags ${LDFLAGS} \
-			-o ./build/bkms-cli-$(OS)-$(ARCH)$(EXT) ./main.go && \
-		echo "✓ $(OS)/$(ARCH) 构建完成: bkms-cli-$(OS)-$(ARCH)$(EXT)" || exit 1; \
+			-o ./build/bkms-cli-$(OS)-$(ARCH)-$(ASSET_VERSION)$(EXT) ./main.go && \
+		echo "✓ $(OS)/$(ARCH) 构建完成: bkms-cli-$(OS)-$(ARCH)-$(ASSET_VERSION)$(EXT)" || exit 1; \
 	)
 	@echo ""
 	@echo "所有平台构建完成！"

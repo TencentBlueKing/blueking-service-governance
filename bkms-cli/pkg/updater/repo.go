@@ -14,6 +14,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	binaryupdate "github.com/creativeprojects/go-selfupdate/update"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
 
 const (
@@ -33,16 +35,14 @@ var (
 )
 
 // repoProvider reads a flat latest directory instead of release metadata.
-// targetPath is empty in production, which makes go-selfupdate replace the
-// running executable; tests set it to a temporary file.
 type repoProvider struct {
-	baseURL    string
-	assetName  string
+	baseURL string
+	// targetPath is empty in production, which makes go-selfupdate replace the
+	// running executable; tests set it to a temporary file.
 	targetPath string
 }
 
-// newRepoProvider validates the latest-directory URL and resolves the exact
-// platform asset name once for subsequent checks and updates.
+// newRepoProvider validates the latest-directory URL.
 func newRepoProvider(baseURL string) (*repoProvider, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
@@ -63,20 +63,12 @@ func newRepoProvider(baseURL string) (*repoProvider, error) {
 		)
 	}
 
-	assetName, err := platformAssetName(runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return nil, err
-	}
-
-	return &repoProvider{
-		baseURL:   parsedURL.String(),
-		assetName: assetName,
-	}, nil
+	return &repoProvider{baseURL: parsedURL.String()}, nil
 }
 
 // Check fetches only the small version file and never downloads the binary.
-func (p *repoProvider) Check(ctx context.Context, current string) (Info, error) {
-	currentVersion, err := parseVersion(current)
+func (p *repoProvider) Check(ctx context.Context) (Info, error) {
+	currentVersion, err := parseVersion(version.Version)
 	if err != nil {
 		return Info{}, fmt.Errorf("parse current version: %w", err)
 	}
@@ -90,13 +82,13 @@ func (p *repoProvider) Check(ctx context.Context, current string) (Info, error) 
 
 // Update downloads, verifies, and atomically replaces the executable when the
 // repository advertises a newer version.
-func (p *repoProvider) Update(ctx context.Context, current string) (Info, error) {
-	info, err := p.Check(ctx, current)
+func (p *repoProvider) Update(ctx context.Context) (Info, error) {
+	info, err := p.Check(ctx)
 	if err != nil || !info.Available {
 		return info, err
 	}
 
-	body, checksum, err := p.fetchBinary(ctx)
+	body, checksum, err := p.fetchBinary(ctx, info.LatestVersion)
 	if err != nil {
 		return info, err
 	}
@@ -141,9 +133,14 @@ func (p *repoProvider) fetchLatestVersion(ctx context.Context) (*semver.Version,
 	return latestVersion, nil
 }
 
-// fetchBinary returns a size-limited binary and its advertised checksum.
-func (p *repoProvider) fetchBinary(ctx context.Context) (io.ReadCloser, []byte, error) {
-	response, err := p.fetchFile(ctx, p.assetName)
+// fetchBinary returns the versioned binary advertised by the latest version
+// file, together with its checksum and a size-limited response body.
+func (p *repoProvider) fetchBinary(ctx context.Context, version string) (io.ReadCloser, []byte, error) {
+	assetName, err := platformAssetName(runtime.GOOS, runtime.GOARCH, version)
+	if err != nil {
+		return nil, nil, err
+	}
+	response, err := p.fetchFile(ctx, assetName)
 	if err != nil {
 		return nil, nil, err
 	}

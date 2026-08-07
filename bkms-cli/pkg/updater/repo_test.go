@@ -17,22 +17,27 @@ import (
 )
 
 var _ = Describe("Repo provider", func() {
-	DescribeTable("builds the platform artifact name",
-		func(goos, goarch, expected string) {
-			name, err := platformAssetName(goos, goarch)
+	BeforeEach(func() {
+		useCurrentVersion("v1.2.0")
+	})
+
+	DescribeTable("builds the versioned platform artifact name",
+		func(goos, goarch, version, expected string) {
+			name, err := platformAssetName(goos, goarch, version)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(name).To(Equal(expected))
 		},
-		Entry("Linux AMD64", "linux", "amd64", "bkms-cli-linux-amd64"),
-		Entry("Linux ARM64", "linux", "arm64", "bkms-cli-linux-arm64"),
-		Entry("macOS AMD64", "darwin", "amd64", "bkms-cli-darwin-amd64"),
-		Entry("macOS ARM64", "darwin", "arm64", "bkms-cli-darwin-arm64"),
-		Entry("Windows AMD64", "windows", "amd64", "bkms-cli-windows-amd64.exe"),
-		Entry("Windows ARM64", "windows", "arm64", "bkms-cli-windows-arm64.exe"),
+		Entry("Linux AMD64", "linux", "amd64", "1.2.3", "bkms-cli-linux-amd64-v1.2.3"),
+		Entry("Linux ARM64", "linux", "arm64", "1.2.3", "bkms-cli-linux-arm64-v1.2.3"),
+		Entry("macOS AMD64", "darwin", "amd64", "1.2.3", "bkms-cli-darwin-amd64-v1.2.3"),
+		Entry("macOS ARM64", "darwin", "arm64", "1.2.3", "bkms-cli-darwin-arm64-v1.2.3"),
+		Entry("Windows AMD64", "windows", "amd64", "1.2.3", "bkms-cli-windows-amd64-v1.2.3.exe"),
+		Entry("Windows ARM64", "windows", "arm64", "1.2.3", "bkms-cli-windows-arm64-v1.2.3.exe"),
+		Entry("prerelease", "darwin", "arm64", "1.2.3-rc.1", "bkms-cli-darwin-arm64-v1.2.3-rc.1"),
 	)
 
 	It("rejects unsupported platforms", func() {
-		_, err := platformAssetName("freebsd", "amd64")
+		_, err := platformAssetName("freebsd", "amd64", "1.2.3")
 		Expect(err).To(MatchError("unsupported update platform freebsd/amd64"))
 	})
 
@@ -67,11 +72,11 @@ var _ = Describe("Repo provider", func() {
 			binary = []byte("new bkms-cli binary")
 			hash := sha256.Sum256(binary)
 			checksum = hex.EncodeToString(hash[:])
-			versionValue = "v1.3.0\n"
+			versionValue = "bkms-cli/v1.3.0\n"
 			includeHash = true
 			assetRequests = 0
 			cacheHeaders = nil
-			assetName, err := platformAssetName(runtime.GOOS, runtime.GOARCH)
+			assetName, err := platformAssetName(runtime.GOOS, runtime.GOARCH, "1.3.0")
 			Expect(err).NotTo(HaveOccurred())
 			assetPath = "/" + assetName
 
@@ -109,7 +114,7 @@ var _ = Describe("Repo provider", func() {
 		}
 
 		It("checks the plain-text version without downloading the binary", func() {
-			info, err := providerForTarget("").Check(context.Background(), "v1.2.0")
+			info, err := providerForTarget("").Check(context.Background())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(info).To(Equal(Info{
 				CurrentVersion: "1.2.0",
@@ -127,7 +132,7 @@ var _ = Describe("Repo provider", func() {
 			targetPath := filepath.Join(GinkgoT().TempDir(), "bkms-cli")
 			Expect(os.WriteFile(targetPath, []byte("old binary"), 0o755)).To(Succeed())
 
-			info, err := providerForTarget(targetPath).Update(context.Background(), "v1.2.0")
+			info, err := providerForTarget(targetPath).Update(context.Background())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(info.Available).To(BeTrue())
 			updated, err := os.ReadFile(targetPath)
@@ -146,7 +151,7 @@ var _ = Describe("Repo provider", func() {
 			oldBinary := []byte("current binary")
 			Expect(os.WriteFile(targetPath, oldBinary, 0o755)).To(Succeed())
 
-			info, err := providerForTarget(targetPath).Update(context.Background(), "v1.2.0")
+			info, err := providerForTarget(targetPath).Update(context.Background())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(info.Available).To(BeFalse())
 			current, readErr := os.ReadFile(targetPath)
@@ -165,7 +170,7 @@ var _ = Describe("Repo provider", func() {
 			oldBinary := []byte("old binary")
 			Expect(os.WriteFile(targetPath, oldBinary, 0o755)).To(Succeed())
 
-			_, err := providerForTarget(targetPath).Update(context.Background(), "v1.2.0")
+			_, err := providerForTarget(targetPath).Update(context.Background())
 			Expect(errors.Is(err, ErrChecksumMissing)).To(BeTrue())
 			current, readErr := os.ReadFile(targetPath)
 			Expect(readErr).NotTo(HaveOccurred())
@@ -179,7 +184,7 @@ var _ = Describe("Repo provider", func() {
 			oldBinary := []byte("old binary")
 			Expect(os.WriteFile(targetPath, oldBinary, 0o755)).To(Succeed())
 
-			_, err := providerForTarget(targetPath).Update(context.Background(), "v1.2.0")
+			_, err := providerForTarget(targetPath).Update(context.Background())
 			Expect(err).To(HaveOccurred())
 			current, readErr := os.ReadFile(targetPath)
 			Expect(readErr).NotTo(HaveOccurred())

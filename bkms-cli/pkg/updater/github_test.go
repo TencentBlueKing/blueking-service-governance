@@ -14,6 +14,10 @@ import (
 )
 
 var _ = Describe("GitHub provider", func() {
+	BeforeEach(func() {
+		useCurrentVersion("v1.2.0")
+	})
+
 	providerWithRelease := func(tag string, assets ...selfupdate.SourceAsset) *githubProvider {
 		config, err := githubUpdaterConfig()
 		Expect(err).NotTo(HaveOccurred())
@@ -30,7 +34,7 @@ var _ = Describe("GitHub provider", func() {
 	}
 
 	currentAssetName := func() string {
-		name, err := platformAssetName(runtime.GOOS, runtime.GOARCH)
+		name, err := platformAssetName(runtime.GOOS, runtime.GOARCH, "1.3.0")
 		Expect(err).NotTo(HaveOccurred())
 		return name
 	}
@@ -64,18 +68,17 @@ var _ = Describe("GitHub provider", func() {
 		Expect(source.limit).To(Equal(int64(maxBinarySize)))
 	})
 
-	It("selects only the exact bkms-cli platform asset", func() {
+	It("selects the versioned bkms-cli asset for the current platform", func() {
 		assetName := currentAssetName()
-		provider := providerWithRelease("v1.3.0",
+		provider := providerWithRelease("bkms-cli/v1.3.0",
 			githubTestAsset{id: 1, name: strings.Replace(assetName, "bkms-cli", "bkms-server", 1)},
-			githubTestAsset{id: 2, name: assetName + ".bak"},
-			githubTestAsset{id: 3, name: assetName, size: 1024},
-			githubTestAsset{id: 4, name: checksumFilename},
+			githubTestAsset{id: 2, name: assetName, size: 1024},
+			githubTestAsset{id: 3, name: checksumFilename},
 		)
 
-		info, release, err := provider.detect(context.Background(), "v1.2.0")
+		info, release, err := provider.detect(context.Background())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(info.Available).To(BeTrue())
+		Expect(info.LatestVersion).To(Equal("1.3.0"))
 		Expect(release.AssetName).To(Equal(assetName))
 	})
 
@@ -84,7 +87,7 @@ var _ = Describe("GitHub provider", func() {
 			githubTestAsset{id: 1, name: currentAssetName(), size: 1024},
 		)
 
-		_, err := provider.Check(context.Background(), "v1.2.0")
+		_, err := provider.Check(context.Background())
 		Expect(errors.Is(err, selfupdate.ErrValidationAssetNotFound)).To(BeTrue())
 	})
 
@@ -94,7 +97,7 @@ var _ = Describe("GitHub provider", func() {
 			githubTestAsset{id: 2, name: checksumFilename},
 		)
 
-		_, err := provider.Check(context.Background(), "v1.2.0")
+		_, err := provider.Check(context.Background())
 		Expect(errors.Is(err, ErrNoRelease)).To(BeTrue())
 	})
 
@@ -104,7 +107,7 @@ var _ = Describe("GitHub provider", func() {
 			githubTestAsset{id: 2, name: checksumFilename},
 		)
 
-		_, err := provider.Update(context.Background(), "v1.2.0")
+		_, err := provider.Update(context.Background())
 		Expect(errors.Is(err, ErrBinaryTooLarge)).To(BeTrue())
 	})
 
@@ -130,7 +133,7 @@ var _ = Describe("GitHub provider", func() {
 			repository: selfupdate.ParseSlug(githubRepository),
 		}
 
-		_, err = provider.Update(context.Background(), "v1.2.0")
+		_, err = provider.Update(context.Background())
 		Expect(errors.Is(err, ErrBinaryTooLarge)).To(BeTrue())
 	})
 })
