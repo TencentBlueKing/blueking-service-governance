@@ -703,7 +703,7 @@
 
   const { focusOnErrorField } = useFocusOnErrorField();
 
-  const { envList, handleGetEnvList } = useEnvManager();
+  const { envList, getAppEnvList, handleGetEnvList } = useEnvManager();
   const envTypes = ref([
     {
       label: t('开发环境'),
@@ -1190,7 +1190,11 @@
 
   onBeforeMount(async () => {
     await handleGetInstance();
-    await handleGetEnvList(); // 获取环境列表
+    if (props.moduleType === 'app') {
+      await getAppEnvList(appDetailStore.appID);
+    } else {
+      await handleGetEnvList();
+    }
     await getComponentInstanceList();
     const tempEnvNameMap: Record<string, EnvOutput> = {};
     envList.value.forEach(item => {
@@ -1200,6 +1204,15 @@
     });
     envNameMap.value = tempEnvNameMap;
   });
+
+  watch(
+    () => appDetailStore.appID,
+    appID => {
+      if (props.moduleType === 'app') {
+        getAppEnvList(appID);
+      }
+    },
+  );
 </script>
 <style scoped lang="postcss">
   :deep(.bk-tab-content) {

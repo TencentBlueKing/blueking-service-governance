@@ -115,8 +115,7 @@
                 class="m-0 p-[18px] overflow-x-auto font-mono text-[12px] leading-[22px] whitespace-pre"
               >
 imagePullSecret:
-  - name:  ${{ bkms.APP_IMAGE_PULL_SECRET }}</pre
-              >
+  - name:  ${{ bkms.APP_IMAGE_PULL_SECRET }}</pre>
             </div>
           </Alert>
         </div>
@@ -140,7 +139,7 @@ imagePullSecret:
   </div>
 </template>
 <script lang="ts" setup>
-  import { ref } from 'vue';
+  import { ref, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
   import { Alert, Button, Tab } from 'bkui-vue';
@@ -150,13 +149,15 @@ imagePullSecret:
   import TableException from '~/components/table-exception.vue';
   import ViewDefaultEnvVars from '~/components/view-default-env-vars/index.vue';
   import useEnvManager from '~/composables/use-env-manager';
+  import { useAppDetail } from '~/stores/app-detail';
 
   import type { PlaceholderVarOutputObj } from '~/@types/v1/arrangement';
 
   const activeTab = ref<'component' | 'env'>('component');
   const isLoading = ref(false);
   const variablesData = ref<PlaceholderVarOutputObj[]>([]);
-  const { envList, handleGetEnvList } = useEnvManager();
+  const appDetailStore = useAppDetail();
+  const { envList, getAppEnvList } = useEnvManager();
 
   async function getListPlaceholderVars() {
     isLoading.value = true;
@@ -171,7 +172,12 @@ imagePullSecret:
   }
 
   getListPlaceholderVars();
-  handleGetEnvList();
+
+  watch(
+    () => appDetailStore.appID,
+    appID => getAppEnvList(appID),
+    { immediate: true },
+  );
 </script>
 
 <style lang="postcss" scoped>
