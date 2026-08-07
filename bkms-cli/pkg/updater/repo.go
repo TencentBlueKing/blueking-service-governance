@@ -1,11 +1,27 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
 package updater
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +30,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	binaryupdate "github.com/creativeprojects/go-selfupdate/update"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
@@ -46,19 +63,19 @@ type repoProvider struct {
 func newRepoProvider(baseURL string) (*repoProvider, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
-		return nil, fmt.Errorf("%w: repo base URL is empty", ErrUpdateNotConfigured)
+		return nil, errors.Wrap(ErrUpdateNotConfigured, "repo base URL is empty")
 	}
 
 	parsedURL, err := url.ParseRequestURI(baseURL)
 	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return nil, fmt.Errorf("%w: invalid repo update URL %q", ErrUpdateNotConfigured, baseURL)
+		return nil, errors.Wrapf(ErrUpdateNotConfigured, "invalid repo update URL %q", baseURL)
 	}
 	// The repository address is fixed at build time, and internal builds may
 	// intentionally use an HTTP endpoint.
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return nil, fmt.Errorf(
-			"%w: unsupported repo update URL scheme %q",
+		return nil, errors.Wrapf(
 			ErrUpdateNotConfigured,
+			"unsupported repo update URL scheme %q",
 			parsedURL.Scheme,
 		)
 	}
@@ -70,7 +87,7 @@ func newRepoProvider(baseURL string) (*repoProvider, error) {
 func (p *repoProvider) Check(ctx context.Context) (Info, error) {
 	currentVersion, err := parseVersion(version.Version)
 	if err != nil {
-		return Info{}, fmt.Errorf("parse current version: %w", err)
+		return Info{}, errors.Wrap(err, "parse current version")
 	}
 
 	latestVersion, err := p.fetchLatestVersion(ctx)
@@ -102,9 +119,9 @@ func (p *repoProvider) Update(ctx context.Context) (Info, error) {
 		// A rollback failure leaves the executable path inconsistent and therefore
 		// needs to be visible separately from the original replacement error.
 		if rollbackErr := binaryupdate.RollbackError(err); rollbackErr != nil {
-			return info, fmt.Errorf("apply repo update: %w; rollback failed: %v", err, rollbackErr)
+			return info, errors.Wrapf(err, "apply repo update; rollback failed: %v", rollbackErr)
 		}
-		return info, fmt.Errorf("apply repo update: %w", err)
+		return info, errors.Wrap(err, "apply repo update")
 	}
 	return info, nil
 }
@@ -121,14 +138,14 @@ func (p *repoProvider) fetchLatestVersion(ctx context.Context) (*semver.Version,
 	// valid response exactly at the configured limit.
 	content, err := io.ReadAll(io.LimitReader(response.Body, maxVersionSize+1))
 	if err != nil {
-		return nil, fmt.Errorf("read repo version: %w", err)
+		return nil, errors.Wrap(err, "read repo version")
 	}
 	if len(content) > maxVersionSize {
-		return nil, fmt.Errorf("%w: repo version file exceeds %d bytes", ErrInvalidVersion, maxVersionSize)
+		return nil, errors.Wrapf(ErrInvalidVersion, "repo version file exceeds %d bytes", maxVersionSize)
 	}
 	latestVersion, err := parseVersion(string(content))
 	if err != nil {
-		return nil, fmt.Errorf("parse repo version: %w", err)
+		return nil, errors.Wrap(err, "parse repo version")
 	}
 	return latestVersion, nil
 }
@@ -162,21 +179,21 @@ func (p *repoProvider) fetchBinary(ctx context.Context, version string) (io.Read
 func (p *repoProvider) fetchFile(ctx context.Context, filename string) (*http.Response, error) {
 	fileURL, err := url.JoinPath(p.baseURL, filename)
 	if err != nil {
-		return nil, fmt.Errorf("build repo file URL: %w", err)
+		return nil, errors.Wrap(err, "build repo file URL")
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("create repo file request: %w", err)
+		return nil, errors.Wrap(err, "create repo file request")
 	}
 	request.Header.Set("Cache-Control", "no-cache")
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("fetch repo file %q: %w", filename, err)
+		return nil, errors.Wrapf(err, "fetch repo file %q", filename)
 	}
 	if response.StatusCode != http.StatusOK {
 		_ = response.Body.Close()
-		return nil, fmt.Errorf(
+		return nil, errors.Errorf(
 			"fetch repo file %q: unexpected HTTP status %s",
 			filename,
 			response.Status,
@@ -193,7 +210,7 @@ func decodeChecksum(value string) ([]byte, error) {
 	}
 	checksum, err := hex.DecodeString(value)
 	if err != nil || len(checksum) != sha256.Size {
-		return nil, fmt.Errorf("%w: expected a hexadecimal SHA256 value", ErrChecksumInvalid)
+		return nil, errors.Wrap(ErrChecksumInvalid, "expected a hexadecimal SHA256 value")
 	}
 	return checksum, nil
 }

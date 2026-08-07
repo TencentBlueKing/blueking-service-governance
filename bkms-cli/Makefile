@@ -36,14 +36,9 @@ BCS_API_HOST ?= https://api.example.com
 # bkms_server 服务地址，作为配置文件中 bkmsBaseUrl 的值，构建时可以通过 BKMS_BASE_URL=xxx 传入
 BKMS_BASE_URL ?= https://example.com
 
-# 更新源：github 使用 GitHub Releases，repo 使用平铺制品仓库
-UPDATE_SOURCE ?= github
-
-# github 更新源的仓库，格式为 owner/repository
-UPDATE_GITHUB_REPOSITORY ?= TencentBlueKing/blueking-service-governance
-
-# repo 更新源的 latest 目录地址，例如 https://repo.example.com/path/to/bkms-cli/latest/
-UPDATE_REPO_BASE_URL ?=
+# 更新源：owner/repository 使用 GitHub Releases，http(s) URL 使用制品仓库
+# 例如 TencentBlueKing/blueking-service-governance 或 https://repo.example.com/path/bkms-cli/latest/
+UPDATE_SOURCE ?= TencentBlueKing/blueking-service-governance
 
 .PHONY: check-build-vars
 check-build-vars: ## 校验构建所需变量
@@ -61,8 +56,6 @@ LDFLAGS="-s -w \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.GitHash=${GIT_HASH} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime=${BUILD_TIME} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.updateSource=${UPDATE_SOURCE} \
-	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.githubRepository=${UPDATE_GITHUB_REPOSITORY} \
-	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.repoBaseURL=${UPDATE_REPO_BASE_URL} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/publish.bcsAPIHost=${BCS_API_HOST} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/config.bkmsBaseURL=${BKMS_BASE_URL}"
 

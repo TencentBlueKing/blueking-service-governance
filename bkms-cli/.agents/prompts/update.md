@@ -2,10 +2,6 @@
 
 `bkms-cli update` 用于检查并安装 bkms-cli 的新版本，执行时不需要登录 BKMS。
 
-`github` 更新源从 GitHub Releases 查找当前平台的 `bkms-cli` 制品，并使用 Release 中的 `checksums.txt` 校验下载内容。`repo` 更新源从构建时指定的 `latest` 目录读取 `version` 纯文本文件，再下载当前平台对应的二进制，并使用响应头 `X-Checksum-Sha256` 校验。
-
-两个更新源的单个下载制品均不能超过 512 MiB。
-
 ## 检查更新
 
 ```bash
@@ -22,19 +18,12 @@ bkms-cli update
 
 只有远端 SemVer 严格高于当前版本时，命令才会下载并替换二进制。校验失败、无写入权限或替换失败时，命令返回错误。
 
-GitHub 发布 tag 必须使用 `vX.Y.Z` SemVer 格式。每个平台的资产名必须与下面的 `bkms-cli-{os}-{arch}` 格式完全匹配，因此不会误选同仓库里 `bkms-server` 等其他产品的制品。
+GitHub 发布 tag 和 repo 的 `version` 文件使用 `bkms-cli/vX.Y.Z` 格式。发布资产名使用 `bkms-cli-{os}-{arch}-{version}` 格式。
 
-## repo 制品目录
+## 错误语义
 
-```text
-latest/
-├── version
-├── bkms-cli-linux-amd64
-├── bkms-cli-linux-arm64
-├── bkms-cli-darwin-amd64
-├── bkms-cli-darwin-arm64
-├── bkms-cli-windows-amd64.exe
-└── bkms-cli-windows-arm64.exe
-```
-
-`version` 只包含一行 SemVer，例如 `v1.3.0`。发布时先上传全部平台二进制，最后覆盖 `version` 文件。
+- `ErrUpdateNotConfigured`：当前构建没有有效的更新源。
+- `ErrInvalidVersion`：当前或远端版本不是有效的 SemVer。
+- `ErrNoRelease`：GitHub Release 中没有当前平台可用的资产。
+- `ErrBinaryTooLarge`：下载的更新资产超过大小限制。
+- `ErrChecksumMissing`、`ErrChecksumInvalid`：repo 更新资产缺少有效的 SHA256 校验值。

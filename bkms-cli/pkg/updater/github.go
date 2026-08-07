@@ -1,3 +1,21 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
 package updater
 
 import (
@@ -6,8 +24,10 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"strings"
 
 	selfupdate "github.com/creativeprojects/go-selfupdate"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
@@ -24,8 +44,12 @@ type githubProvider struct {
 
 // newGitHubProvider restricts discovery to bkms-cli assets for the current platform
 // and requires the shared release checksum file before an update can run.
-func newGitHubProvider() (*githubProvider, error) {
-	slug := selfupdate.ParseSlug(githubRepository)
+func newGitHubProvider(repository string) (*githubProvider, error) {
+	repository = strings.TrimSpace(repository)
+	slug := selfupdate.ParseSlug(repository)
+	if _, _, err := slug.GetSlug(); err != nil {
+		return nil, errors.Wrapf(ErrUpdateNotConfigured, "invalid GitHub repository %q", repository)
+	}
 	config, err := githubUpdaterConfig()
 	if err != nil {
 		return nil, err
@@ -33,7 +57,7 @@ func newGitHubProvider() (*githubProvider, error) {
 
 	instance, err := selfupdate.NewUpdater(config)
 	if err != nil {
-		return nil, fmt.Errorf("create GitHub updater: %w", err)
+		return nil, errors.Wrap(err, "create GitHub updater")
 	}
 
 	return &githubProvider{updater: instance, repository: slug}, nil
@@ -43,7 +67,7 @@ func newGitHubProvider() (*githubProvider, error) {
 func githubUpdaterConfig() (selfupdate.Config, error) {
 	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
 	if err != nil {
-		return selfupdate.Config{}, fmt.Errorf("create GitHub source: %w", err)
+		return selfupdate.Config{}, errors.Wrap(err, "create GitHub source")
 	}
 
 	return selfupdate.Config{
@@ -87,15 +111,15 @@ func (p *githubProvider) Update(ctx context.Context) (Info, error) {
 		return info, err
 	}
 	if err = validateBinarySize(int64(release.AssetByteSize)); err != nil {
-		return info, fmt.Errorf("validate GitHub release size: %w", err)
+		return info, errors.Wrap(err, "validate GitHub release size")
 	}
 
 	executable, err := selfupdate.ExecutablePath()
 	if err != nil {
-		return info, fmt.Errorf("locate executable: %w", err)
+		return info, errors.Wrap(err, "locate executable")
 	}
 	if err := p.updater.UpdateTo(ctx, release, executable); err != nil {
-		return info, fmt.Errorf("apply GitHub update: %w", normalizeBinarySizeError(err))
+		return info, errors.Wrap(normalizeBinarySizeError(err), "apply GitHub update")
 	}
 	return info, nil
 }
@@ -105,12 +129,12 @@ func (p *githubProvider) Update(ctx context.Context) (Info, error) {
 func (p *githubProvider) detect(ctx context.Context) (Info, *selfupdate.Release, error) {
 	currentVersion, err := parseVersion(version.Version)
 	if err != nil {
-		return Info{}, nil, fmt.Errorf("parse current version: %w", err)
+		return Info{}, nil, errors.Wrap(err, "parse current version")
 	}
 
 	release, found, err := p.updater.DetectLatest(ctx, p.repository)
 	if err != nil {
-		return Info{}, nil, fmt.Errorf("detect latest GitHub release: %w", err)
+		return Info{}, nil, errors.Wrap(err, "detect latest GitHub release")
 	}
 	if !found {
 		return Info{}, nil, ErrNoRelease
@@ -118,7 +142,7 @@ func (p *githubProvider) detect(ctx context.Context) (Info, *selfupdate.Release,
 
 	latestVersion, err := parseVersion(release.Version())
 	if err != nil {
-		return Info{}, nil, fmt.Errorf("parse latest GitHub version: %w", err)
+		return Info{}, nil, errors.Wrap(err, "parse latest GitHub version")
 	}
 	return buildInfo(currentVersion, latestVersion), release, nil
 }

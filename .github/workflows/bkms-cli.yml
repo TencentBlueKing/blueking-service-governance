@@ -45,7 +45,7 @@ jobs:
         working-directory: bkms-cli
         env:
           VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.0-dev' }}
-          UPDATE_GITHUB_REPOSITORY: ${{ github.repository }}
+          UPDATE_SOURCE: ${{ github.repository }}
         run: make build-all compress
 
       - name: Generate checksums

@@ -1,32 +1,44 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
 // Package updater checks for and applies bkms-cli updates.
 package updater
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/pkg/errors"
 )
 
 const (
-	sourceGitHub = "github"
-	sourceRepo   = "repo"
 	// cliTagPrefix identifies bkms-cli releases in the monorepo.
 	cliTagPrefix = "bkms-cli/"
 	// maxBinarySize bounds memory use while go-selfupdate verifies a release.
 	maxBinarySize = 512 * 1024 * 1024
 )
 
-var (
-	// Build pipelines inject these values with -ldflags so one binary has exactly
-	// one update source and does not need a runtime update configuration file.
-	updateSource     = ""
-	repoBaseURL      = ""
-	githubRepository = ""
-)
+// Build pipelines inject either an owner/repository slug or an HTTP(S) latest
+// directory URL, so the binary needs no runtime update configuration file.
+var updateSource = ""
 
 var (
 	// ErrUpdateNotConfigured indicates that the binary has no usable update source.
@@ -72,23 +84,25 @@ func Update(ctx context.Context) (Info, error) {
 
 // newProvider creates the provider configured for this binary's update source.
 func newProvider() (provider, error) {
-	switch strings.ToLower(strings.TrimSpace(updateSource)) {
-	case sourceGitHub:
-		return newGitHubProvider()
-	case sourceRepo:
-		return newRepoProvider(repoBaseURL)
-	default:
-		return nil, fmt.Errorf("%w: update source %q", ErrUpdateNotConfigured, updateSource)
+	source := strings.TrimSpace(updateSource)
+	if source == "" {
+		return nil, errors.Wrap(ErrUpdateNotConfigured, "update source is empty")
 	}
+
+	lowerSource := strings.ToLower(source)
+	if strings.HasPrefix(lowerSource, "http://") || strings.HasPrefix(lowerSource, "https://") {
+		return newRepoProvider(source)
+	}
+	return newGitHubProvider(source)
 }
 
 // platformAssetName returns the complete release asset name for a platform.
 func platformAssetName(goos, goarch, version string) (string, error) {
 	if goos != "linux" && goos != "darwin" && goos != "windows" {
-		return "", fmt.Errorf("unsupported update platform %s/%s", goos, goarch)
+		return "", errors.Errorf("unsupported update platform %s/%s", goos, goarch)
 	}
 	if goarch != "amd64" && goarch != "arm64" {
-		return "", fmt.Errorf("unsupported update platform %s/%s", goos, goarch)
+		return "", errors.Errorf("unsupported update platform %s/%s", goos, goarch)
 	}
 
 	name := fmt.Sprintf("bkms-cli-%s-%s-v%s", goos, goarch, version)
@@ -103,13 +117,13 @@ func platformAssetName(goos, goarch, version string) (string, error) {
 func parseVersion(value string) (*semver.Version, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return nil, fmt.Errorf("%w: version is empty", ErrInvalidVersion)
+		return nil, errors.Wrap(ErrInvalidVersion, "version is empty")
 	}
 
 	normalized := strings.TrimPrefix(value, cliTagPrefix)
 	parsed, err := semver.StrictNewVersion(strings.TrimPrefix(normalized, "v"))
 	if err != nil {
-		return nil, fmt.Errorf("%w %q: %v", ErrInvalidVersion, value, err)
+		return nil, errors.Wrapf(ErrInvalidVersion, "version %q: %v", value, err)
 	}
 	return parsed, nil
 }
@@ -125,7 +139,7 @@ func buildInfo(current, latest *semver.Version) Info {
 
 func validateBinarySize(size int64) error {
 	if size > maxBinarySize {
-		return fmt.Errorf("%w: %d bytes exceeds %d-byte limit", ErrBinaryTooLarge, size, maxBinarySize)
+		return errors.Wrapf(ErrBinaryTooLarge, "%d bytes exceeds %d-byte limit", size, maxBinarySize)
 	}
 	return nil
 }
@@ -133,7 +147,7 @@ func validateBinarySize(size int64) error {
 func normalizeBinarySizeError(err error) error {
 	var sizeError *http.MaxBytesError
 	if errors.As(err, &sizeError) {
-		return fmt.Errorf("%w: exceeds %d-byte limit", ErrBinaryTooLarge, sizeError.Limit)
+		return errors.Wrapf(ErrBinaryTooLarge, "exceeds %d-byte limit", sizeError.Limit)
 	}
 	return err
 }
