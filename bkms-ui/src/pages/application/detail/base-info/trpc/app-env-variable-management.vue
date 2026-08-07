@@ -29,16 +29,26 @@
       </Button>
     </Alert>
     <div class="flex items-center justify-between">
-      <Button
-        theme="primary"
-        @click="handleAddVariable"
-      >
-        <Plus
-          :height="24"
-          :width="24"
-        />
-        {{ $t('新增应用变量') }}
-      </Button>
+      <div class="flex gap-[8px]">
+        <Button
+          theme="primary"
+          @click="handleAddVariable"
+        >
+          <Plus
+            :height="24"
+            :width="24"
+          />
+          {{ $t('新增应用变量') }}
+        </Button>
+        <Button>
+          <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
+          {{ $t('导入') }}
+        </Button>
+        <Button>
+          <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
+          {{ $t('导出') }}
+        </Button>
+      </div>
       <Input
         v-model.trim="searchKeyword"
         class="w-[420px]"

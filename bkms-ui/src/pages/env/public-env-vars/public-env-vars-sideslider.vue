@@ -26,9 +26,12 @@
     @hidden="handleHidden"
   >
     <div class="flex flex-col px-6 pt-[18px] pb-6 h-full gap-[16px]">
+      <!-- 提示信息 -->
+      <Alert theme="info"> {{ $t('可添加公共环境变量，对全部环境或某类环境生效。') }} </Alert>
+
       <!-- 操作栏：新增按钮 + Tab 筛选 + 搜索 -->
       <div class="flex items-center justify-between flex-wrap">
-        <div class="flex items-center gap-[12px]">
+        <div class="flex items-center gap-[8px]">
           <Button
             theme="primary"
             @click="handleCreate"
@@ -39,45 +42,49 @@
             />
             {{ $t('新增环境变量') }}
           </Button>
-          <Radio.Group
-            v-model="activeTab"
-            type="capsule"
-          >
-            <Radio.Button
-              v-for="tab in tabs"
-              :key="tab.key"
-              :label="tab.key"
-            >
-              <div class="flex items-center justify-center">
-                {{ tab.label }}
-                <span
-                  :class="[
-                    'h-[16px] leading-[16px] ml-[4px] px-[6px] rounded-[8px]',
-                    tab.key === activeTab ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'bg-[#fff]',
-                  ]"
-                  >{{ tab.count }}</span
-                >
-              </div>
-            </Radio.Button>
-          </Radio.Group>
+          <Button>
+            <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
+            {{ $t('导入') }}
+          </Button>
+          <Button>
+            <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
+            {{ $t('导出') }}
+          </Button>
         </div>
-        <SearchSelect
-          v-model="searchValue"
-          class="w-[360px]"
-          :data="searchSelectData"
-          :placeholder="
-            createPlaceholder({
-              type: 'searchSelect',
-              labels: ['Key', 'Value', '描述', '生效环境类型'],
-            })
-          "
-          unique-select
-          value-behavior="need-key"
-        />
+        <Radio.Group
+          v-model="activeTab"
+          type="capsule"
+        >
+          <Radio.Button
+            v-for="tab in tabs"
+            :key="tab.key"
+            :label="tab.key"
+          >
+            <div class="flex items-center justify-center">
+              {{ tab.label }}
+              <span
+                :class="[
+                  'h-[16px] leading-[16px] ml-[4px] px-[6px] rounded-[8px]',
+                  tab.key === activeTab ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'bg-[#fff]',
+                ]"
+                >{{ tab.count }}</span
+              >
+            </div>
+          </Radio.Button>
+        </Radio.Group>
       </div>
-
-      <!-- 提示信息 -->
-      <Alert theme="info"> {{ $t('可添加公共环境变量，对全部环境或某类环境生效。') }} </Alert>
+      <SearchSelect
+        v-model="searchValue"
+        :data="searchSelectData"
+        :placeholder="
+          createPlaceholder({
+            type: 'searchSelect',
+            labels: ['Key', 'Value', '描述', '生效环境类型'],
+          })
+        "
+        unique-select
+        value-behavior="need-key"
+      />
 
       <Table
         class="public-env-var-table"
