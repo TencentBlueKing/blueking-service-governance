@@ -100,9 +100,10 @@ func (a *polarisCRApplier) patchWeight(
 	app *bkmsapp.Application,
 	env *bkmsenv.Environment,
 	config *PolarisConfig,
+	weight int32,
 ) error {
 	crName, serviceName := polarisResourceNames(app.Name, config.Name)
-	patch, err := buildWeightPatch(serviceName, config.GetEnvWeight(env.Name))
+	patch, err := buildWeightPatch(serviceName, weight)
 	if err != nil {
 		return errors.Wrap(err, "build polaris CR weight patch")
 	}

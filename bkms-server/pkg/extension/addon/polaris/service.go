@@ -200,19 +200,13 @@ func (s *PolarisConfigService) patchEnvWeight(
 	app *bkmsapp.Application,
 	config *PolarisConfig,
 	envName string,
-) {
-	env, patchErr := s.envStore.GetByName(ctx, app.WorkspaceID, app.ID, envName)
-	if patchErr != nil {
-		patchErr = errors.Wrapf(patchErr, "get env %s", envName)
-	} else {
-		patchErr = s.applier.patchWeight(ctx, app, env, config)
+	weight int32,
+) error {
+	env, err := s.envStore.GetByName(ctx, app.WorkspaceID, app.ID, envName)
+	if err != nil {
+		return errors.Wrapf(err, "get env %s", envName)
 	}
-
-	s.recordDynamicApplyResult(ctx, app.ID, config.Name, envName, patchErr)
-	if patchErr != nil {
-		log.Errorf(ctx, "patch polaris CR weight failed, app=%s config=%s env=%s: %v",
-			app.ID, config.Name, envName, patchErr)
-	}
+	return s.applier.patchWeight(ctx, app, env, config, weight)
 }
 
 func (s *PolarisConfigService) recordDynamicApplyResult(
@@ -228,7 +222,7 @@ func (s *PolarisConfigService) recordDynamicApplyResult(
 	}
 }
 
-// UpdateEnvWeight 持久化指定环境的北极星实例权重；已部署环境会同步 Patch 集群资源。
+// UpdateEnvWeight 更新指定环境的北极星实例权重；已部署环境会先同步 Patch 集群资源，成功后再持久化。
 func (s *PolarisConfigService) UpdateEnvWeight(
 	ctx context.Context,
 	app *bkmsapp.Application,
@@ -236,7 +230,20 @@ func (s *PolarisConfigService) UpdateEnvWeight(
 	envName string,
 	weight int32,
 ) (*PolarisConfig, error) {
+	isDeployed := config.GetEnvState(envName).IsDeployed()
+	if isDeployed {
+		if err := s.patchEnvWeight(ctx, app, config, envName, weight); err != nil {
+			log.Errorf(ctx, "patch polaris CR weight failed, app=%s config=%s env=%s: %v",
+				app.ID, config.Name, envName, err)
+			return nil, errors.Wrap(err, "patch env weight")
+		}
+	}
+
 	if err := s.polarisConfigStore.UpsertEnvWeight(ctx, app.ID, config.Name, envName, weight); err != nil {
+		if isDeployed {
+			log.Errorf(ctx, "persist polaris env weight after cluster patch failed, app=%s config=%s env=%s: %v",
+				app.ID, config.Name, envName, err)
+		}
 		return nil, errors.Wrap(err, "update env weight")
 	}
 
@@ -246,14 +253,5 @@ func (s *PolarisConfigService) UpdateEnvWeight(
 		return nil, errors.Wrap(err, "get updated polaris config")
 	}
 
-	if !newConfig.GetEnvState(envName).IsDeployed() {
-		return newConfig, nil
-	}
-
-	s.patchEnvWeight(ctx, app, newConfig, envName)
-	newConfig, err = s.polarisConfigStore.Get(ctx, app.ID, config.Name)
-	if err != nil {
-		return nil, errors.Wrap(err, "get polaris config after patch env weight")
-	}
 	return newConfig, nil
 }

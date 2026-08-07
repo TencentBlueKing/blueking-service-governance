@@ -95,7 +95,7 @@ var _ = Describe("Polaris CR applier", func() {
 		diApp.RequireStop()
 	})
 
-	It("should record only the error when a synchronous weight patch fails", func() {
+	It("should return an error without persisting weight or changing env state", func() {
 		applied := redeployFields("k1", "t1", 8080)
 		config := newTestConfig(
 			app.ID,
@@ -112,9 +112,13 @@ var _ = Describe("Polaris CR applier", func() {
 			mockPolarisDiscoveryFailure()
 
 			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 20)
-			Expect(err).NotTo(HaveOccurred())
-			state := updated.GetEnvState(environment.Name)
-			Expect(state.LastError).NotTo(BeEmpty())
+			Expect(err).To(MatchError(ContainSubstring("patch env weight")))
+			Expect(updated).To(BeNil())
+			stored, getErr := store.Get(ctx, app.ID, config.Name)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(stored.EnvWeights).NotTo(HaveKey(environment.Name))
+			state := stored.GetEnvState(environment.Name)
+			Expect(state.LastError).To(BeEmpty())
 			Expect(state.AppliedFields).To(Equal(applied))
 		})
 	})
@@ -204,7 +208,7 @@ var _ = Describe("Polaris CR applier", func() {
 			})
 		})
 
-		It("should record a service mismatch without changing weight", func() {
+		It("should return a service mismatch without persisting weight or changing env state", func() {
 			services := mapx.GetList(manifest, "spec.services")
 			serviceSpec := services[0].(map[string]any)
 			serviceSpec["name"] = "unexpected-service"
@@ -215,25 +219,30 @@ var _ = Describe("Polaris CR applier", func() {
 				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 
 				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 20)
-				Expect(updateErr).NotTo(HaveOccurred())
+				Expect(updateErr).To(MatchError(ContainSubstring("patch env weight")))
+				Expect(updated).To(BeNil())
 
 				obj, getErr := client.Get(ctx, "default", crName, metav1.GetOptions{})
 				Expect(getErr).NotTo(HaveOccurred())
 				currentServices := mapx.GetList(obj.Object, "spec.services")
 				Expect(currentServices).To(HaveLen(1))
 				Expect(currentServices[0].(map[string]any)).NotTo(HaveKey("weight"))
-				state := updated.GetEnvState(clusterEnv.Name)
-				Expect(state.LastError).NotTo(BeEmpty())
+				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(stored.EnvWeights[clusterEnv.Name]).To(Equal(int32(10)))
+				state := stored.GetEnvState(clusterEnv.Name)
+				Expect(state.LastError).To(Equal("previous error"))
 				Expect(state.AppliedFields).To(Equal(applied))
 			})
 		})
 
-		It("should patch only weight and clear the previous error", func() {
+		It("should patch only weight without clearing the previous error", func() {
 			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
 				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 
 				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 0)
 				Expect(updateErr).NotTo(HaveOccurred())
+				Expect(updated.EnvWeights[clusterEnv.Name]).To(BeZero())
 
 				obj, getErr := client.Get(ctx, "default", crName, metav1.GetOptions{})
 				Expect(getErr).NotTo(HaveOccurred())
@@ -248,21 +257,25 @@ var _ = Describe("Polaris CR applier", func() {
 				Expect(currentService["enableHealthCheck"]).To(BeTrue())
 				Expect(mapx.GetStr(obj.Object, "spec.polaris.token")).To(Equal("token"))
 				state := updated.GetEnvState(clusterEnv.Name)
-				Expect(state.LastError).To(BeEmpty())
+				Expect(state.LastError).To(Equal("previous error"))
 				Expect(state.AppliedFields).To(Equal(applied))
 			})
 		})
 
-		It("should record an error when the PolarisConfig resource is missing", func() {
+		It("should not persist weight when the PolarisConfig resource is missing", func() {
 			Expect(client.Delete(ctx, "default", crName, metav1.DeleteOptions{})).To(Succeed())
 
 			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
 				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 
 				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 25)
-				Expect(updateErr).NotTo(HaveOccurred())
-				state := updated.GetEnvState(clusterEnv.Name)
-				Expect(state.LastError).NotTo(BeEmpty())
+				Expect(updateErr).To(MatchError(ContainSubstring("patch env weight")))
+				Expect(updated).To(BeNil())
+				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(stored.EnvWeights[clusterEnv.Name]).To(Equal(int32(10)))
+				state := stored.GetEnvState(clusterEnv.Name)
+				Expect(state.LastError).To(Equal("previous error"))
 				Expect(state.AppliedFields).To(Equal(applied))
 			})
 		})

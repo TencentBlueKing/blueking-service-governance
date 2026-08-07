@@ -455,6 +455,7 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 //	@Param		body		body		serializer.PutEnvWeightInput	true	"请求体"
 //	@Success	200			{object}	serializer.PutEnvWeightOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Failure	500			{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/deps/polaris-configs/{configName}/envs/{envName}/weight [put]
 func (h *Handler) PutEnvWeight(c *gin.Context) {
 	var uriInput serializer.AppConfigEnvNameURIInput

@@ -132,8 +132,8 @@ flowchart LR
 - 创建配置，按需让平台创建托管的北极星服务；
 - 创建时为 scope 环境补齐默认权重；PATCH 修改 scope 时规范化 `envWeights`，落库后再算出哪些环境可以动态下发；
 - 为这些环境准备 AppModel、Environment 和环境变量，异步调用下发器；
-- PUT 权重先持久化；待部署环境直接返回，已部署环境同步调用权重专用 Patch；
-- 把每个环境的下发结果交回 Manager 记录；
+- PUT 权重时，待部署环境直接持久化；已部署环境先同步调用权重专用 Patch，成功后再持久化，失败时记录日志并返回错误；
+- 把普通配置 PATCH 的每个环境下发结果交回 Manager 记录；
 - 删除配置，并处理托管北极星服务的生命周期。
 
 Service 不含资源构建算法，也不含环境状态算法。托管服务的增删查由 `PolarisPlatformManager` 封装。
@@ -219,21 +219,27 @@ sequenceDiagram
 
     API->>API: 校验 inScope 或 IsDeployed
     API->>Service: UpdateEnvWeight(envName, weight)
-    Service->>Store: $set envWeights.envName
-    Service->>Store: 读回最新配置
     alt 尚未部署但在 scope
-        Service-->>Service: 不访问集群
+        Service->>Store: $set envWeights.envName
+        Service->>Store: 读回最新配置
+        Service-->>API: 返回配置（200）
     else 已部署（含 pendingModify / pendingDelete）
-        Service->>Applier: patchWeight（同步）
+        Service->>Applier: patchWeight(weight)（同步）
         Applier->>K8s: JSON Patch test service name + add weight
-        Applier-->>Service: 返回 error
-        Service->>Store: 成功清空 LastError，失败记录 LastError
-        Service->>Store: 读回包含最新 LastError 的配置
+        alt Patch 成功
+            Applier-->>Service: nil
+            Service->>Store: $set envWeights.envName
+            Service->>Store: 读回最新配置
+            Service-->>API: 返回配置（200）
+        else Patch 失败
+            Applier-->>Service: error
+            Service->>Service: 记录错误日志
+            Service-->>API: 返回 error（500）
+        end
     end
-    Service-->>API: 返回更新后的配置
 ```
 
-JSON Patch 固定针对 `/spec/services/0`：先 `test /spec/services/0/name`，再 `add /spec/services/0/weight`。`add` 同时兼容 weight 字段存在和不存在；service 名不匹配、CR 不存在或集群调用失败时，只记录 `LastError`。PUT 会等待本次同步尝试和结果记录完成，但因为期望权重已经持久化，仍返回 200，并在响应中带回最新 `LastError`。
+JSON Patch 固定针对 `/spec/services/0`：先 `test /spec/services/0/name`，再 `add /spec/services/0/weight`。`add` 同时兼容 weight 字段存在和不存在。PUT 会等待本次同步尝试完成；service 名不匹配、CR 不存在或集群调用失败时记录错误日志并返回 500，不持久化新权重，也不修改 `LastError`。Patch 成功后才持久化并记录配置变更审计，返回 200，已有的 `LastError` 保持不变。Kubernetes 与 MongoDB 不具备跨系统事务；若 Patch 成功后持久化失败，接口记录错误并返回 500，此时集群权重可能已变化，后续重试可重新收敛。
 
 ## 7. 部署和卸载之后
 

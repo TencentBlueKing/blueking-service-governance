@@ -266,7 +266,7 @@ var _ = Describe("PolarisConfigService", func() {
 			Expect(readded.EnvWeights[environment.Name]).To(Equal(int32(35)))
 		})
 
-		It("should patch a deployed environment even when other fields are pending modify", func() {
+		It("should return a patch error without persisting weight when other fields are pending modify", func() {
 			applied := redeployFields("k1", "t1", 8080)
 			staleApplied := redeployFields("old-key", "t1", 8080)
 			config := newTestConfig(
@@ -285,17 +285,20 @@ var _ = Describe("PolarisConfigService", func() {
 				mockPolarisDiscoveryFailure()
 
 				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 0)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.EnvWeights[environment.Name]).To(BeZero())
-				Expect(updated.EnvWeights[otherEnvironment.Name]).To(Equal(int32(20)))
+				Expect(err).To(MatchError(ContainSubstring("patch env weight")))
+				Expect(updated).To(BeNil())
+				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(stored.EnvWeights).NotTo(HaveKey(environment.Name))
+				Expect(stored.EnvWeights[otherEnvironment.Name]).To(Equal(int32(20)))
 				Expect(polaris.PolarisEnvStatus(
-					updated, environment.Name, updated.GetEnvState(environment.Name),
+					stored, environment.Name, stored.GetEnvState(environment.Name),
 				)).To(Equal(polaris.PolarisEnvStatusPendingModify))
-				Expect(updated.GetEnvState(environment.Name).LastError).NotTo(BeEmpty())
+				Expect(stored.GetEnvState(environment.Name).LastError).To(BeEmpty())
 			})
 		})
 
-		It("should update a deployed environment outside scope and trigger a patch", func() {
+		It("should return a patch error without changing an out-of-scope deployed weight", func() {
 			applied := redeployFields("k1", "t1", 8080)
 			config := newTestConfig(
 				app.ID,
@@ -312,9 +315,12 @@ var _ = Describe("PolarisConfigService", func() {
 				mockPolarisDiscoveryFailure()
 
 				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 25)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.EnvWeights[environment.Name]).To(Equal(int32(25)))
-				Expect(updated.GetEnvState(environment.Name).LastError).NotTo(BeEmpty())
+				Expect(err).To(MatchError(ContainSubstring("patch env weight")))
+				Expect(updated).To(BeNil())
+				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(stored.EnvWeights[environment.Name]).To(Equal(int32(20)))
+				Expect(stored.GetEnvState(environment.Name).LastError).To(BeEmpty())
 			})
 		})
 	})
