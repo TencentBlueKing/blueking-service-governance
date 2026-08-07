@@ -177,20 +177,6 @@ func (s *WorkspaceStoreMongo) Create(ctx context.Context, workspace *Workspace) 
 	if _, err := s.collection.InsertOne(ctx, workspace); err != nil {
 		return err
 	}
-	if err := runCreateHooks(ctx, *workspace); err != nil {
-		// A create hook may have persisted only part of its dependent data.
-		// Do not expose a successfully stored workspace unless every hook
-		// succeeds. Use a non-cancelled context so request cancellation does
-		// not prevent the best-effort rollback.
-		rollbackCtx := context.WithoutCancel(ctx)
-		if _, rollbackErr := s.collection.DeleteOne(rollbackCtx, bson.M{"id": workspace.ID}); rollbackErr != nil {
-			return errors.Wrapf(err, "rollback workspace after create hook failed: %v", rollbackErr)
-		}
-		if rollbackErr := runDeleteHooks(rollbackCtx, workspace.ID); rollbackErr != nil {
-			return errors.Wrapf(err, "cleanup workspace dependencies after create hook failed: %v", rollbackErr)
-		}
-		return err
-	}
 	return nil
 }
 

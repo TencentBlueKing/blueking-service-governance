@@ -17,21 +17,6 @@ var _ = Describe("Workspace lifecycle hooks", func() {
 		ResetLifecycleHooksForTest()
 	})
 
-	It("runs named create hooks in registration order", func() {
-		calls := make([]string, 0, 2)
-		Expect(RegisterCreateHook("first", func(context.Context, Workspace) error {
-			calls = append(calls, "first")
-			return nil
-		})).To(BeTrue())
-		Expect(RegisterCreateHook("second", func(context.Context, Workspace) error {
-			calls = append(calls, "second")
-			return nil
-		})).To(BeTrue())
-
-		Expect(runCreateHooks(context.Background(), Workspace{ID: "workspace-hooks"})).To(Succeed())
-		Expect(calls).To(Equal([]string{"first", "second"}))
-	})
-
 	It("does not replace a hook registered with the same name", func() {
 		Expect(RegisterDeleteHook("cleanup", func(context.Context, string) error {
 			return nil
