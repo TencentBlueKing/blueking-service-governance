@@ -25,7 +25,7 @@
       type="unborder-card"
     >
       <Tab.TabPanel
-        name="instance"
+        :name="TAB_NAMES.instance"
         render-directive="if"
       >
         <template #label>
@@ -34,7 +34,7 @@
         <ComponentInstances />
       </Tab.TabPanel>
       <Tab.TabPanel
-        name="component"
+        :name="TAB_NAMES.component"
         render-directive="if"
       >
         <template #label>
@@ -47,15 +47,27 @@
 </template>
 
 <script setup lang="ts">
-  import { ref } from 'vue';
-
   import { Tab } from 'bkui-vue';
+  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
 
   import ComponentInstances from './component-list.vue';
   import SpaceComponent from './space-component.vue';
 
-  // 状态管理
-  const activeTab = ref<'component' | 'instance'>('instance');
+  // Tab 名称常量（模板与校验同源）
+  const TAB_NAMES = {
+    instance: 'instance',
+    component: 'component',
+  } as const;
+
+  // Tab 与 URL query（activeTab）双向同步锚定
+  const { fields } = useUrlActiveTab({
+    activeTab: {
+      queryKey: 'activeTab',
+      tabValues: Object.values(TAB_NAMES),
+      defaultTab: TAB_NAMES.instance,
+    },
+  });
+  const activeTab = fields.activeTab;
 </script>
 <style lang="postcss" scoped>
   :deep(.bk-tab-header) {

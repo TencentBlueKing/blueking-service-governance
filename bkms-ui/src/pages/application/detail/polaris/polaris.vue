@@ -684,7 +684,7 @@
         menuName: 'deployment',
         type: appDetailStore.appType,
       },
-      query: envName ? { envName } : undefined,
+      query: envName ? { env: envName } : undefined,
     });
     window.open(route.href, '_blank');
   }

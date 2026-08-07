@@ -152,7 +152,7 @@
         type="unborder-card"
       >
         <Tab.TabPanel
-          name="instance"
+          :name="TAB_NAMES.instance"
           render-directive="if"
         >
           <template #label>
@@ -263,7 +263,7 @@
         </Tab.TabPanel>
         <Tab.TabPanel
           v-if="!isMultiEnvMode"
-          name="topo"
+          :name="TAB_NAMES.topo"
           render-directive="if"
         >
           <template #label>
@@ -273,7 +273,7 @@
         </Tab.TabPanel>
         <Tab.TabPanel
           v-if="!isMultiEnvMode"
-          name="event"
+          :name="TAB_NAMES.event"
           render-directive="if"
         >
           <template #label>
@@ -283,7 +283,7 @@
         </Tab.TabPanel>
         <Tab.TabPanel
           v-if="!isMultiEnvMode"
-          name="history"
+          :name="TAB_NAMES.history"
           render-directive="if"
         >
           <template #label>
@@ -358,6 +358,7 @@
   import { useAlertVisibility } from '~/composables/use-alert-visibility';
   import { type DeployStatusInfo, useDeployStatusMap } from '~/composables/use-deploy-status';
   import useInterval from '~/composables/use-interval';
+  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
   import ViewBuildLog from '~/pages/application/detail/components/view-build-log/index.vue';
   import { useAppDetail } from '~/stores/app-detail';
   import { useDeployEnvStore } from '~/stores/deploy-env';
@@ -463,11 +464,6 @@
     envSelectionScopeKey.value ? envStore.getAppEnvSelection(envSelectionScopeKey.value) : undefined,
   );
 
-  const targetEnvName = computed(() => {
-    const envName = route.query.envName;
-    return Array.isArray(envName) ? envName[0] || '' : envName || '';
-  });
-
   /**
    * envName 仅用于跨页面跳转时的首次环境定位。
    * 定位完成后移除该参数，避免它在后续返回页面时持续覆盖用户的环境选择。
@@ -502,8 +498,34 @@
   const isShowQuicklyDeploy = ref(false);
   const isShowFeatureEnvSideslider = ref(false);
   const isShowRemoveDeploy = ref(false);
-  const activeTab = ref<string>('instance');
   const isMultiEnvMode = ref(initialEnvSelection.value?.mode === 'multi');
+
+  // Tab 名称常量（模板与校验同源，多环境模式下仅展示实例列表）
+  const TAB_NAMES = {
+    instance: 'instance',
+    topo: 'topo',
+    event: 'event',
+    history: 'history',
+  } as const;
+
+  // Tab 与 URL query（activeTab）双向同步锚定；多环境模式下固定为 instance
+  // env 参数与当前环境双向同步（环境列表异步加载，不配置 tabValues 直接透传；区别于一次性定位参数 envName）
+  const { fields } = useUrlActiveTab({
+    activeTab: {
+      queryKey: 'activeTab',
+      tabValues: Object.values(TAB_NAMES),
+      defaultTab: TAB_NAMES.instance,
+      // 多环境模式下固定为 instance；单环境分支的合法性与回退由 composable 的 tabValues 校验处理
+      getTab: tabFromQuery => (isMultiEnvMode.value ? TAB_NAMES.instance : (tabFromQuery ?? TAB_NAMES.instance)),
+    },
+    env: {
+      queryKey: 'env',
+      defaultTab: '',
+    },
+  });
+  const activeTab = fields.activeTab;
+  const targetEnvName = fields.env;
+
   const isRestoringEnvSelection = ref(false);
   const envSelectMode = computed(() => (isMultiEnvMode.value ? 'multi' : 'single'));
 
@@ -534,9 +556,10 @@
     });
   }
 
+  // 多环境模式下仅展示实例列表，URL 通过 activeTab setter 同步重置为 instance
   watch(isMultiEnvMode, val => {
-    if (val && activeTab.value !== 'instance') {
-      activeTab.value = 'instance';
+    if (val && activeTab.value !== TAB_NAMES.instance) {
+      activeTab.value = TAB_NAMES.instance;
     }
   });
 
@@ -718,6 +741,10 @@
     trpcDeployStore.updateCurEnvItem(env);
     latestDeployStatus.value = null;
     initLoading.value = true;
+    // 单选模式下同步环境锚定到 URL
+    if (!isMultiEnvMode.value && env?.name) {
+      targetEnvName.value = env.name;
+    }
   }
 
   /** 多选环境变化 */
@@ -793,7 +820,7 @@
       envSelectRefreshKey.value += 1;
       envStore.updateCurrentEnv(env.name);
       trpcDeployStore.updateCurEnvItem(env);
-      activeTab.value = 'instance';
+      activeTab.value = TAB_NAMES.instance;
     }
     fetchFeatureEnvList();
   }
@@ -817,7 +844,7 @@
       stop();
       latestDeployStatus.value = null;
       effectiveDeploySpec.value = undefined;
-      activeTab.value = 'instance';
+      activeTab.value = TAB_NAMES.instance;
 
       if (fallbackEnv?.name) {
         initLoading.value = true;

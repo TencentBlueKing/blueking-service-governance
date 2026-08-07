@@ -94,7 +94,7 @@
       type="unborder-card"
     >
       <Tab.TabPanel
-        name="topo"
+        :name="TAB_NAMES.topo"
         render-directive="if"
       >
         <template #label>
@@ -113,7 +113,7 @@
         </ResourceTopology>
       </Tab.TabPanel>
       <Tab.TabPanel
-        name="history"
+        :name="TAB_NAMES.history"
         render-directive="show"
       >
         <template #label>
@@ -159,7 +159,7 @@
   </div>
 </template>
 <script setup lang="ts">
-  import { computed, h, ref, watch } from 'vue';
+  import { computed, h, nextTick, ref, watch } from 'vue';
 
   import { Button, Exception, InfoBox, Message, Popover, Tab } from 'bkui-vue';
   import { Ellipsis } from 'bkui-vue/lib/icon';
@@ -168,6 +168,7 @@
   import { EnvOutput } from '~/@types/v1/env';
   import { DeployService } from '~/api/modules/v1';
   import { isHelmLikeAppType } from '~/composables/app-type';
+  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
   import { useAppDetail } from '~/stores/app-detail';
 
   import ResourceTopology from '../../components/topo/index.vue';
@@ -197,7 +198,33 @@
   const hasSearchValue = ref(false);
   const isShowDeploy = ref(false);
   const curDeployType = ref<'Recreate' | 'RollingUpdate'>('Recreate');
-  const activeTab = ref<'history' | 'topo'>('topo');
+
+  // Tab 名称常量（模板与校验同源）
+  const TAB_NAMES = {
+    topo: 'topo',
+    history: 'history',
+  } as const;
+
+  // Tab 与 URL query（activeTab）双向同步锚定
+  // env 参数与当前环境双向同步（环境列表异步加载，不配置 tabValues 直接透传；区别于一次性定位参数 envName）
+  const { fields } = useUrlActiveTab({
+    activeTab: {
+      queryKey: 'activeTab',
+      tabValues: Object.values(TAB_NAMES),
+      defaultTab: TAB_NAMES.topo,
+    },
+    env: {
+      queryKey: 'env',
+      defaultTab: '',
+    },
+  });
+  const activeTab = fields.activeTab;
+  const targetEnvName = fields.env;
+
+  // URL 中的 envName → 初始化当前环境（首次进入时生效）
+  // curEnv → 写回 URL（首次默认环境与用户切换环境都写入，便于分享直达）
+  const isInitializingEnvFromUrl = ref(false);
+
   // 泳道
   const curLaneName = ref('');
   const moreOperationsRef = ref<InstanceType<typeof Popover>>();
@@ -325,6 +352,30 @@
     () => appDetailStore.app,
     async () => {
       await appDetailStore.fetchAppDetail();
+    },
+    { immediate: true },
+  );
+
+  watch(
+    targetEnvName,
+    envName => {
+      if (envName && envName !== curEnv.value && !isInitializingEnvFromUrl.value) {
+        isInitializingEnvFromUrl.value = true;
+        curEnv.value = envName;
+        nextTick(() => {
+          isInitializingEnvFromUrl.value = false;
+        });
+      }
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => curEnv.value,
+    envName => {
+      if (envName && envName !== targetEnvName.value && !isInitializingEnvFromUrl.value) {
+        targetEnvName.value = envName;
+      }
     },
     { immediate: true },
   );

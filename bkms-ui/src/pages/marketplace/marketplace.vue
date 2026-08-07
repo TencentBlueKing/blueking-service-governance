@@ -27,7 +27,7 @@
       <Tab.TabPanel
         :disabled="isLoading"
         :label="t('空间组件')"
-        name="space"
+        :name="TAB_NAMES.space"
       >
         <template #label>
           <span class="text-[14px] text-[#4D4F56]">
@@ -38,7 +38,7 @@
       <Tab.TabPanel
         :disabled="isLoading"
         :label="t('市场组件')"
-        name="marketplace"
+        :name="TAB_NAMES.marketplace"
       >
         <template #label>
           <span class="text-[14px] text-[#4D4F56]"> {{ t('市场组件') }}</span>
@@ -66,7 +66,7 @@
         <template #left>
           <div class="flex items-center gap-[8px]">
             <Button
-              v-if="activeTab === 'space'"
+              v-if="activeTab === TAB_NAMES.space"
               theme="primary"
               @click="handleCreateComponent('component')"
             >
@@ -141,7 +141,7 @@
             </template>
           </TableColumn>
           <TableColumn
-            v-if="activeTab === 'space'"
+            v-if="activeTab === TAB_NAMES.space"
             field="public"
             filter-multiple
             :filters="isPublicOptions"
@@ -196,7 +196,7 @@
                 >
                   {{ t('编辑') }}
                 </Button>
-                <template v-if="activeTab === 'space'">
+                <template v-if="activeTab === TAB_NAMES.space">
                   <!-- 删除 -->
                   <PopConfirm
                     :confirm-config="{
@@ -237,7 +237,7 @@
     <!-- 组件详情 -->
     <!-- <ComponentDetail
       ref="ComponentDetailRef"
-      :allowed-range="activeTab === 'space' ? spaceStore.currentSpace : ''"
+      :allowed-range="activeTab === TAB_NAMES.space ? spaceStore.currentSpace : ''"
       :row="currentRow"
       @refresh="fetchComponentList"
     >
@@ -252,7 +252,6 @@
   import { Button, Message, PopConfirm, SearchSelect, Tab, Tag } from 'bkui-vue';
   import { Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
   import { ApiServerService } from '~/api/modules/bkmsserver';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { useElementHeight } from '~/composables/use-element-height';
@@ -261,22 +260,22 @@
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
   import useTime from '~/composables/use-time';
+  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
   import { useSpaceStore } from '~/stores/space';
 
   import ComponentManagement from './component-management.vue';
 
   import type { ComponentDefOutputObj } from '~/@types/v1/component-defs';
 
-  type IActive = 'marketplace' | 'space';
-  interface IProps {
-    active?: IActive; // 当前tab
-    space: string;
-  }
-  const props = defineProps<IProps>();
+  // Tab 名称常量（模板与校验同源）
+  const TAB_NAMES = {
+    marketplace: 'marketplace',
+    space: 'space',
+  } as const;
+  type IActive = (typeof TAB_NAMES)[keyof typeof TAB_NAMES];
   // 引入国际化
   const { t } = useI18n();
   const { createPlaceholder } = useSearchPlaceholder();
-  const router = useRouter();
   const spaceStore = useSpaceStore();
   const { formatDateString } = useTime();
 
@@ -287,7 +286,15 @@
     { label: t('不公开'), value: 'false' },
   ]);
 
-  const activeTab = ref<IActive>(props.active || 'space');
+  // Tab 与 URL query（active）双向同步锚定
+  const { fields } = useUrlActiveTab({
+    activeTab: {
+      queryKey: 'active',
+      tabValues: Object.values(TAB_NAMES),
+      defaultTab: TAB_NAMES.space,
+    },
+  });
+  const activeTab = fields.activeTab;
   const isLoading = ref(false);
   const componentList = ref<ComponentDefOutputObj[]>([]);
   // 分页数据
@@ -357,7 +364,7 @@
         isLoading.value = true;
       }
       // 获取组件列表接口替换为： ApiServerService.ListComponentDefs
-      if (activeTab.value === 'space') {
+      if (activeTab.value === TAB_NAMES.space) {
         // 空间组件
         const list = await ApiServerService.ListComponentDefs({}).catch(() => []);
         componentList.value = list.filter(item => item.scopeWorkspaceIDs?.includes(spaceStore.currentSpace));
@@ -383,16 +390,9 @@
     }
   }
 
-  // 切换详情
+  // 切换 Tab（activeTab setter 会同步 URL query）
   function handleActiveTabChange(active: IActive) {
     activeTab.value = active;
-    // 更新query参数
-    router.replace({
-      query: {
-        ...router.currentRoute.value.query,
-        active,
-      },
-    });
     fetchComponentList();
   }
 
