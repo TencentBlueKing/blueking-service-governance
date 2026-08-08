@@ -332,7 +332,7 @@ var _ = Describe("Service", func() {
 				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).Return([]string{TagLatest}, nil).Build()
 				mockey.Mock(NewImageDetailSyncArgs).
 					To(func(
-						repoKey, repoName, username, password string, _ []string,
+						repoKey, repoName, username, password string,
 					) (*ImageDetailSyncArgs, error) {
 						preparedArgs = &ImageDetailSyncArgs{RepoKey: repoKey, RepoName: repoName}
 						Expect(username).To(BeEmpty())
