@@ -132,8 +132,9 @@ func (p *Provider) DeleteInstance(
 	if err != nil {
 		return nil, errors.Wrap(err, "parse polaris inst config")
 	}
+	// 配置不完整视为外部资源不存在，跳过 Polaris 调用（幂等删除）
 	if err = instCfg.Validate(); err != nil {
-		// 无有效外部资源标识时无需调用 Polaris
+		//nolint:nilerr // intentional: incomplete config means nothing to delete remotely
 		return &types.DeleteInstanceResult{}, nil
 	}
 	if err = p.deleteService(ctx, instCfg.PolarisName, instCfg.PolarisNamespace, instCfg.Token); err != nil {

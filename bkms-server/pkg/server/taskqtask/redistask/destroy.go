@@ -64,14 +64,15 @@ func destroySubmit(ctx context.Context, objID bson.ObjectID, args DestroyArgs) e
 		return taskq.Enqueue(ctx, DestroyTask.NewTask(args))
 	}
 
-	clusterID := cast.ToInt(inst.Config[configKeyClusterID])
-	bkBizID := cast.ToInt(inst.Config["bkBizID"])
-	clusterType := dbm.ClusterType(cast.ToString(inst.Config["clusterType"]))
+	ref, err := clusterRefFromConfig(inst.Config)
+	if err != nil {
+		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
+	}
 
 	ticketID, err := dbmClient.DeleteRedis(ctx, &dbm.DeleteRedisParams{
-		BkBizID:    bkBizID,
-		TicketType: dbm.DeleteTicketType(clusterType),
-		ClusterID:  clusterID,
+		BkBizID:    ref.BkBizID,
+		TicketType: dbm.DeleteTicketType(ref.ClusterType),
+		ClusterID:  ref.ClusterID,
 	}, args.Username)
 	if err != nil {
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)

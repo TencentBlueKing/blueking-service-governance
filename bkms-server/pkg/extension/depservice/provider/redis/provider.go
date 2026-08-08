@@ -48,27 +48,33 @@ func (p *Provider) CreateInstance(
 	if !ok {
 		return nil, errors.New("invalid params type for redis service, expected *redis.CreateParams")
 	}
+	if err := redisParams.Validate(); err != nil {
+		return nil, errors.Wrap(err, "validate redis create params")
+	}
 
 	operator := auth.MustGetUser(ctx).ID
+	dbmParams := redisParams.ToCreateRedisParams()
 
 	task := redistask.CreateTask.NewTask(redistask.CreateArgs{
 		InstanceID:             instID,
 		Username:               operator,
-		BkBizID:                redisParams.BkBizID,
-		TicketType:             redisParams.ToTicketType(),
-		BkCloudID:              redisParams.BkCloudID,
-		DBAppAbbr:              redisParams.DBAppAbbr,
-		ClusterType:            redisParams.ClusterType,
-		ClusterName:            redisParams.ClusterName,
-		ClusterAlias:           redisParams.ClusterAlias,
-		DBVersion:              redisParams.DBVersion,
-		ProxyPort:              redisParams.ProxyPort,
-		ClusterShardNum:        redisParams.ClusterShardNum,
-		IPSource:               redisParams.IPSource,
-		ResourceSpec:           redisParams.ResourceSpec,
-		DisasterToleranceLevel: redisParams.DisasterToleranceLevel,
-		Port:                   redisParams.Port,
-		RedisPwd:               redisParams.RedisPwd,
+		BkBizID:                dbmParams.BkBizID,
+		TicketType:             dbmParams.TicketType,
+		BkCloudID:              dbmParams.BkCloudID,
+		DBAppAbbr:              dbmParams.DBAppAbbr,
+		ClusterType:            dbmParams.ClusterType,
+		ClusterName:            redisParams.ClusterName, // 回查与 Infos[].cluster_name 共用
+		ClusterAlias:           dbmParams.ClusterAlias,
+		DBVersion:              dbmParams.DBVersion,
+		ProxyPort:              dbmParams.ProxyPort,
+		ClusterShardNum:        dbmParams.ClusterShardNum,
+		IPSource:               dbmParams.IPSource,
+		ResourceSpec:           dbmParams.ResourceSpec,
+		DisasterToleranceLevel: dbmParams.DisasterToleranceLevel,
+		Port:                   dbmParams.Port,
+		Databases:              redisParams.Databases,
+		RedisPwd:               dbmParams.RedisPwd,
+		Infos:                  dbmParams.Infos,
 	})
 	if err := taskq.Enqueue(ctx, task); err != nil {
 		return nil, errors.Wrap(err, "enqueue redis create task")

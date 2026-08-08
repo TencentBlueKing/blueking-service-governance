@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -43,6 +44,11 @@ const (
 	configKeyDisableTicketID = "disableTicketID"
 	configKeyDestroyTicketID = "destroyTicketID"
 	configKeyClusterID       = "clusterID"
+	configKeyClusterName     = "clusterName"
+	configKeyClusterType     = "clusterType"
+	configKeyDomain          = "domain"
+	configKeyPort            = "port"
+	configKeyBkBizID         = "bkBizID"
 )
 
 var (
@@ -106,6 +112,29 @@ func failOnExhausted(ctx context.Context, instID string, status model.InstanceSt
 	if updateErr := instStore.UpdateStatus(ctx, objID, status, msg); updateErr != nil {
 		log.Errorf(ctx, "redistask exhausted: update status for %s: %v", instID, updateErr)
 	}
+}
+
+// clusterRef 是 disable/destroy 提交 DBM 工单所需的集群定位信息。
+type clusterRef struct {
+	ClusterID   int
+	BkBizID     int
+	ClusterType dbm.ClusterType
+}
+
+// clusterRefFromConfig 从实例 Config 解析集群定位信息。
+func clusterRefFromConfig(cfg map[string]any) (clusterRef, error) {
+	ref := clusterRef{
+		ClusterID:   cast.ToInt(cfg[configKeyClusterID]),
+		BkBizID:     cast.ToInt(cfg[configKeyBkBizID]),
+		ClusterType: dbm.ClusterType(cast.ToString(cfg[configKeyClusterType])),
+	}
+	if ref.ClusterID <= 0 || ref.BkBizID <= 0 || ref.ClusterType == "" {
+		return clusterRef{}, fmt.Errorf(
+			"incomplete cluster config: clusterID=%d bkBizID=%d clusterType=%q",
+			ref.ClusterID, ref.BkBizID, ref.ClusterType,
+		)
+	}
+	return ref, nil
 }
 
 // parseObjectID 解析实例 ID，失败时终止重试。

@@ -55,24 +55,13 @@ func (m *ServiceManager) CreateServiceInstance(
 		return bson.NilObjectID, errors.Wrap(err, "validate params")
 	}
 
-	// 1. 根据服务和指定的 plan, 获取 provider
-	svc, err := m.svcStore.Get(ctx, params.ServiceName)
+	// 先构造 provider，失败时无需写库，避免残留无效记录
+	plan, svcProvider, err := m.getPlanAndProvider(ctx, params.ServiceName, params.PlanName)
 	if err != nil {
-		return bson.NilObjectID, errors.Wrapf(err, "get service %s", params.ServiceName)
+		return bson.NilObjectID, err
 	}
 
-	plan, err := svc.GetPlanByName(params.PlanName)
-	if err != nil {
-		return bson.NilObjectID, errors.Wrapf(err, "get service plan %s", params.PlanName)
-	}
-
-	// 2. 先构造 provider（不依赖 instID），失败时无需写库，避免残留无效记录
-	svcProvider, err := provider.New(svc.Name, plan)
-	if err != nil {
-		return bson.NilObjectID, errors.Wrap(err, "create service provider")
-	}
-
-	// 3. 初始化服务实例数据到 db 中（异步 CreateInstance 需要先拿到 instID）
+	// 初始化服务实例数据到 db 中（异步 CreateInstance 需要先拿到 instID）
 	attachedApps := params.AttachedApps
 	if attachedApps == nil {
 		attachedApps = make([]string, 0)
@@ -80,29 +69,24 @@ func (m *ServiceManager) CreateServiceInstance(
 	instID, err := m.instStore.Create(
 		ctx,
 		&model.ServiceInstance{
-			Name:         params.Name,
-			ServiceName:  params.ServiceName,
-			PlanName:     params.PlanName,
-			ProviderType: plan.ProviderType,
-
-			ScopeType:   params.ScopeType,
-			ScopeValue:  params.ScopeValue,
-			WorkspaceID: params.WorkspaceID,
-
-			AttachedApps: attachedApps,
-
+			Name:          params.Name,
+			ServiceName:   params.ServiceName,
+			PlanName:      params.PlanName,
+			ProviderType:  plan.ProviderType,
+			ScopeType:     params.ScopeType,
+			ScopeValue:    params.ScopeValue,
+			WorkspaceID:   params.WorkspaceID,
+			AttachedApps:  attachedApps,
 			CustomEnvVars: params.CustomEnvVars,
-
-			Operator:    params.Operator,
-			Description: params.Description,
-			Status:      model.ProvisioningStatus,
+			Operator:      params.Operator,
+			Description:   params.Description,
+			Status:        model.ProvisioningStatus,
 		},
 	)
 	if err != nil {
 		return instID, errors.Wrap(err, "init service instance to db")
 	}
 
-	// 4. 通过 provider 创建服务实例
 	createResult, err := svcProvider.CreateInstance(ctx, instID.Hex(), &types.ServicePlanConfig{
 		Config: plan.Config,
 	}, params.Params)
@@ -130,8 +114,27 @@ func (m *ServiceManager) CreateServiceInstance(
 		}
 	}
 
-	// 标记实例可用
 	return instID, m.updateInstanceStatus(ctx, instID, model.AvailableStatus, nil)
+}
+
+// getPlanAndProvider 按服务名与 plan 名解析 plan 并构造对应 provider。
+func (m *ServiceManager) getPlanAndProvider(
+	ctx context.Context,
+	serviceName, planName string,
+) (*model.ServicePlan, provider.ServiceProvider, error) {
+	svc, err := m.svcStore.Get(ctx, serviceName)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "get service %s", serviceName)
+	}
+	plan, err := svc.GetPlanByName(planName)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "get service plan %s", planName)
+	}
+	svcProvider, err := provider.New(svc.Name, plan)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "create service provider")
+	}
+	return plan, svcProvider, nil
 }
 
 // GetServiceInstance 查询服务实例
@@ -168,24 +171,13 @@ func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.
 		)
 	}
 
-	if err = m.updateInstanceStatus(ctx, instID, model.DeletingStatus, nil); err != nil {
+	plan, svcProvider, err := m.getPlanAndProvider(ctx, inst.ServiceName, inst.PlanName)
+	if err != nil {
 		return err
 	}
 
-	svc, err := m.svcStore.Get(ctx, inst.ServiceName)
-	if err != nil {
-		return errors.Wrap(err, "get service")
-	}
-
-	plan, err := svc.GetPlanByName(inst.PlanName)
-	if err != nil {
-		return errors.Wrap(err, "get service plan")
-	}
-
-	svcProvider, err := provider.New(inst.ServiceName, plan)
-	if err != nil {
-		createErr := errors.Wrap(err, "create service provider")
-		return m.updateInstanceStatus(ctx, instID, model.DeleteFailedStatus, createErr)
+	if err = m.updateInstanceStatus(ctx, instID, model.DeletingStatus, nil); err != nil {
+		return err
 	}
 
 	deleteResult, err := svcProvider.DeleteInstance(ctx, instID.Hex(), &types.ServicePlanConfig{

@@ -63,14 +63,15 @@ func disableSubmit(ctx context.Context, objID bson.ObjectID, args DisableArgs) e
 		return taskq.Enqueue(ctx, DisableTask.NewTask(args))
 	}
 
-	clusterID := cast.ToInt(inst.Config[configKeyClusterID])
-	bkBizID := cast.ToInt(inst.Config["bkBizID"])
-	clusterType := dbm.ClusterType(cast.ToString(inst.Config["clusterType"]))
+	ref, err := clusterRefFromConfig(inst.Config)
+	if err != nil {
+		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
+	}
 
 	ticketID, err := dbmClient.DisableRedis(ctx, &dbm.DisableRedisParams{
-		BkBizID:    bkBizID,
-		TicketType: dbm.DisableTicketType(clusterType),
-		ClusterID:  clusterID,
+		BkBizID:    ref.BkBizID,
+		TicketType: dbm.DisableTicketType(ref.ClusterType),
+		ClusterID:  ref.ClusterID,
 	}, args.Username)
 	if err != nil {
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
