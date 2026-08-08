@@ -1,0 +1,40 @@
+[
+  {
+    "createIndexes": "build_trigger_policies",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "name": 1
+        },
+        "name": "appID_1_name_1",
+        "unique": true
+      },
+      {
+        "key": {
+          "appID": 1
+        },
+        "name": "appID_1"
+      }
+    ]
+  },
+  {
+    "createIndexes": "build_trigger_records",
+    "indexes": [
+      {
+        "key": {
+          "policyID": 1,
+          "triggeredAt": -1
+        },
+        "name": "policyID_1_triggeredAt_-1"
+      },
+      {
+        "key": {
+          "policyID": 1,
+          "commitID": 1
+        },
+        "name": "policyID_1_commitID_1"
+      }
+    ]
+  }
+]

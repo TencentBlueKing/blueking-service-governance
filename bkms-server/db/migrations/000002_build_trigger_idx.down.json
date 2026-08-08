@@ -1,0 +1,16 @@
+[
+  {
+    "dropIndexes": "build_trigger_policies",
+    "index": [
+      "appID_1_name_1",
+      "appID_1"
+    ]
+  },
+  {
+    "dropIndexes": "build_trigger_records",
+    "index": [
+      "policyID_1_triggeredAt_-1",
+      "policyID_1_commitID_1"
+    ]
+  }
+]

@@ -554,6 +554,12 @@ definitions:
       status:
         description: 构建状态
         type: string
+      triggerPolicyID:
+        description: 自动触发时关联的触发策略 ID，手动触发为空
+        type: string
+      triggerType:
+        description: 触发方式：manual 手动，auto 自动。存量记录无该字段，一律输出 manual
+        type: string
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.CreateBuildOutput:
     properties:
@@ -2120,6 +2126,58 @@ definitions:
       obsProductName:
         type: string
     type: object
+  serializer.CallbackEventInput:
+    properties:
+      branch:
+        description: 推送的分支名，构建时使用该分支而非构建配置中的默认分支
+        maxLength: 255
+        type: string
+      commitAuthor:
+        description: commit 作者，用于审计
+        maxLength: 255
+        type: string
+      commitID:
+        description: 本次推送的 HEAD commit 哈希
+        maxLength: 64
+        type: string
+      event:
+        description: 事件类型，本期仅 push
+        enum:
+        - push
+        type: string
+      eventTime:
+        description: 事件发生时间
+        type: string
+      policyID:
+        description: 触发策略 ID，用于定位策略
+        maxLength: 63
+        minLength: 1
+        type: string
+    required:
+    - branch
+    - commitID
+    - event
+    - policyID
+    type: object
+  serializer.CallbackOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.CallbackResultOutputObj'
+        description: 回调处理结果
+    type: object
+  serializer.CallbackResultOutputObj:
+    properties:
+      buildID:
+        description: 结果为 built 时的构建号，其余为空
+        type: string
+      reason:
+        description: 跳过或失败原因，结果为 built 时为空
+        type: string
+      result:
+        description: 处理结果：built 已发起构建，skipped 已跳过，failed 触发失败
+        type: string
+    type: object
   serializer.CandidateAppServiceOutput:
     properties:
       name:
@@ -2394,6 +2452,36 @@ definitions:
         type: string
       version:
         description: 组件版本
+        type: string
+    type: object
+  serializer.ConflictCheckInput:
+    properties:
+      excludeTriggerID:
+        description: 排除的策略 ID，编辑场景下用于排除自身；新建场景留空
+        type: string
+      policy:
+        allOf:
+        - $ref: '#/definitions/serializer.PolicyFormInput'
+        description: 待检测的策略表单
+    required:
+    - policy
+    type: object
+  serializer.ConflictCheckOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.ConflictCheckOutputObj'
+        description: 冲突检测结果
+    type: object
+  serializer.ConflictCheckOutputObj:
+    properties:
+      conflictPolicyNames:
+        description: 发生冲突的已有策略名列表，无冲突时为空数组
+        items:
+          type: string
+        type: array
+      level:
+        description: 冲突级别：none 无冲突，warn 软冲突（可保存），error 硬冲突（禁止保存）
         type: string
     type: object
   serializer.CreateAlertStrategyBody:
@@ -5046,6 +5134,13 @@ definitions:
           $ref: '#/definitions/serializer.PlaceholderVarOutputObj'
         type: array
     type: object
+  serializer.ListPoliciesOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.PolicyListOutputObjs'
+        description: 触发策略列表
+    type: object
   serializer.ListPortPoolsOutput:
     properties:
       data:
@@ -5106,6 +5201,13 @@ definitions:
         items:
           $ref: '#/definitions/serializer.TrafficLaneCandidateAppOutput'
         type: array
+    type: object
+  serializer.ListTriggerRecordsOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.PaginatedTriggerRecordOutputObjs'
+        description: 触发记录分页结果
     type: object
   serializer.ListTrpcAdminCmdsOutput:
     properties:
@@ -5530,6 +5632,18 @@ definitions:
           $ref: '#/definitions/serializer.TopologyNodeEventOutputObj'
         type: array
     type: object
+  serializer.PaginatedTriggerRecordOutputObjs:
+    properties:
+      count:
+        description: 记录总数，按当前筛选条件统计
+        example: "0"
+        type: string
+      results:
+        description: 当前页结果，按触发时间倒序
+        items:
+          $ref: '#/definitions/serializer.TriggerRecordOutputObj'
+        type: array
+    type: object
   serializer.PaginatedWorkspaceOutput:
     properties:
       count:
@@ -5662,6 +5776,14 @@ definitions:
       workloadName:
         description: WorkloadName 指定被注入 bscp 配置的目标 workload 名称（传入则更新）
         type: string
+    type: object
+  serializer.PatchPolicyStatusInput:
+    properties:
+      enabled:
+        description: 是否启用；用指针以区分「未传」与「显式传 false」
+        type: boolean
+    required:
+    - enabled
     type: object
   serializer.PatchWorkspaceComponentInput:
     properties:
@@ -5843,6 +5965,111 @@ definitions:
       name:
         description: 配置名称
         type: string
+    type: object
+  serializer.PolicyFormInput:
+    properties:
+      branchMatchMode:
+        description: 分支匹配方式：eq 等于，prefix 前缀，all 全部
+        enum:
+        - eq
+        - prefix
+        - all
+        type: string
+      branchMatchValue:
+        description: 分支匹配值，多值以英文逗号分隔；匹配方式为 all 时必须留空
+        maxLength: 512
+        type: string
+      event:
+        description: 触发事件，本期仅支持 push（推送分支）
+        enum:
+        - push
+        type: string
+      name:
+        description: 策略名称，应用内唯一，由汉字、大小写字母、数字、- 与 _ 组成
+        maxLength: 32
+        minLength: 1
+        type: string
+      pathFilter:
+        description: 文件路径条件，留空表示全匹配
+        maxLength: 512
+        type: string
+      versionRule:
+        allOf:
+        - $ref: '#/definitions/serializer.VersionRuleInput'
+        description: 镜像版本号规则
+    required:
+    - branchMatchMode
+    - event
+    - name
+    - versionRule
+    type: object
+  serializer.PolicyListOutputObjs:
+    properties:
+      count:
+        description: 策略总数，生效中与已停用合并计数
+        example: "0"
+        type: string
+      results:
+        description: 全部策略
+        items:
+          $ref: '#/definitions/serializer.PolicyOutputObj'
+        type: array
+    type: object
+  serializer.PolicyOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.PolicyOutputObj'
+        description: 触发策略
+    type: object
+  serializer.PolicyOutputObj:
+    properties:
+      appID:
+        description: 所属应用 ID
+        type: string
+      branchMatchMode:
+        description: 分支匹配方式
+        type: string
+      branchMatchValue:
+        description: 分支匹配值
+        type: string
+      createdAt:
+        description: 创建时间
+        type: string
+      creator:
+        description: 创建人
+        type: string
+      event:
+        description: 触发事件
+        type: string
+      health:
+        description: 流水线与触发器健康状态：unknown / healthy / unauthorized
+        type: string
+      id:
+        description: 策略 ID
+        type: string
+      name:
+        description: 策略名称
+        type: string
+      pathFilter:
+        description: 文件路径条件
+        type: string
+      pipelineID:
+        description: 关联的蓝盾触发专用流水线 ID
+        type: string
+      status:
+        description: 启停状态：enabled 生效中，disabled 已停用
+        type: string
+      triggerID:
+        description: 关联的蓝盾触发器标识
+        type: string
+      updatedAt:
+        description: 更新时间
+        type: string
+      versionRule:
+        allOf:
+        - $ref: '#/definitions/serializer.VersionRuleOutput'
+        description: 镜像版本号规则
     type: object
   serializer.PoolItemStatusOutput:
     properties:
@@ -7350,6 +7577,39 @@ definitions:
       count:
         type: integer
     type: object
+  serializer.TriggerRecordOutputObj:
+    properties:
+      appID:
+        description: 归属应用 ID
+        type: string
+      branch:
+        description: 分支名
+        type: string
+      buildID:
+        description: 结果为 built 时关联的构建号，其余为空
+        type: string
+      commitAuthor:
+        description: commit 作者
+        type: string
+      commitID:
+        description: commit 哈希
+        type: string
+      event:
+        description: 事件类型
+        type: string
+      policyID:
+        description: 归属策略 ID
+        type: string
+      reason:
+        description: 跳过或失败原因，结果为 built 时为空
+        type: string
+      result:
+        description: 处理结果：built 已构建，skipped 已跳过，failed 触发失败
+        type: string
+      triggeredAt:
+        description: 触发时间
+        type: string
+    type: object
   serializer.TrpcSpecInput:
     properties:
       fileContent:
@@ -7856,6 +8116,36 @@ definitions:
       value:
         description: 变量值
         type: string
+    type: object
+  serializer.VersionRuleInput:
+    properties:
+      prefix:
+        description: 自定义前缀，仅 custom 类型使用
+        maxLength: 16
+        type: string
+      type:
+        description: 版本号规则类型：custom 自定义版本，semver 语义化版本
+        enum:
+        - custom
+        - semver
+        type: string
+      withBranch:
+        description: 版本号是否拼接分支名，仅 custom 类型使用
+        type: boolean
+    required:
+    - type
+    type: object
+  serializer.VersionRuleOutput:
+    properties:
+      prefix:
+        description: 自定义前缀
+        type: string
+      type:
+        description: 版本号规则类型
+        type: string
+      withBranch:
+        description: 版本号是否拼接分支名
+        type: boolean
     type: object
   serializer.WebConsoleInfoOutputObj:
     properties:
@@ -9527,6 +9817,326 @@ paths:
       summary: 更新应用构建配置
       tags:
       - builds
+  /apps/{appID}/build-triggers:
+    get:
+      operationId: ListBuildTriggers
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListPoliciesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取应用的触发策略列表
+      tags:
+      - build-triggers
+    post:
+      consumes:
+      - application/json
+      operationId: CreateBuildTrigger
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 触发策略表单
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.PolicyFormInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolicyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 新增触发策略
+      tags:
+      - build-triggers
+  /apps/{appID}/build-triggers/{triggerID}:
+    delete:
+      operationId: DeleteBuildTrigger
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 触发策略 ID
+        in: path
+        name: triggerID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除触发策略
+      tags:
+      - build-triggers
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateBuildTrigger
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 触发策略 ID
+        in: path
+        name: triggerID
+        required: true
+        type: string
+      - description: 触发策略表单
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.PolicyFormInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolicyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新触发策略
+      tags:
+      - build-triggers
+  /apps/{appID}/build-triggers/{triggerID}/records:
+    get:
+      operationId: ListBuildTriggerRecords
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 触发策略 ID
+        in: path
+        name: triggerID
+        required: true
+        type: string
+      - description: 结果筛选：built / skipped / failed，留空表示不筛选
+        in: query
+        name: result
+        type: string
+      - description: 分页参数：页码，从 1 开始
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: 分页参数：每页数量，支持 5/10/20/50/100
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListTriggerRecordsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取触发策略的触发记录列表
+      tags:
+      - build-triggers
+  /apps/{appID}/build-triggers/{triggerID}/status:
+    patch:
+      consumes:
+      - application/json
+      operationId: PatchBuildTriggerStatus
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 触发策略 ID
+        in: path
+        name: triggerID
+        required: true
+        type: string
+      - description: 启停参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.PatchPolicyStatusInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolicyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 启用或停用触发策略
+      tags:
+      - build-triggers
+  /apps/{appID}/build-triggers/callback:
+    post:
+      consumes:
+      - application/json
+      operationId: HandleBuildTriggerCallback
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 应用独享的回调凭证
+        in: header
+        name: X-Bkms-Build-Trigger-Token
+        required: true
+        type: string
+      - description: 回调事件
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CallbackEventInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.CallbackOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      summary: 接收构建触发回调
+      tags:
+      - build-triggers
+  /apps/{appID}/build-triggers/conflict-check:
+    post:
+      consumes:
+      - application/json
+      operationId: CheckBuildTriggerConflict
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 冲突预检参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.ConflictCheckInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ConflictCheckOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 预检触发策略的重叠冲突
+      tags:
+      - build-triggers
   /apps/{appID}/builds:
     get:
       operationId: ListBuildRecords
