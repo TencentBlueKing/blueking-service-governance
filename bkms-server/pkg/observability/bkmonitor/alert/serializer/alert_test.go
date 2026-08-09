@@ -256,6 +256,14 @@ var _ = Describe("Alert serializer", func() {
 			Expect(pageSizeField.Tag.Get("binding")).To(Equal("required,oneof=5 10 20 50 100"))
 		})
 
+		It("binds alert id from id query parameter", func() {
+			typ := reflect.TypeOf(AlertQueryInput{})
+
+			alertIDField, ok := typ.FieldByName("AlertID")
+			Expect(ok).To(BeTrue())
+			Expect(alertIDField.Tag.Get("form")).To(Equal("id"))
+		})
+
 		It("keeps explicit paging and ordering unchanged", func() {
 			input := &AlertQueryInput{
 				Page:      2,

@@ -34,7 +34,7 @@ type AlertQueryInput struct {
 	EndTime      int64    `form:"endTime"`
 	Page         int      `form:"page" binding:"required,gte=1"`
 	PageSize     int      `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
-	AlertID      string   `form:"alertID"`
+	AlertID      string   `form:"id"`
 	AlertName    string   `form:"alertName"`
 	Description  string   `form:"description"`
 	StrategyName string   `form:"strategyName"`

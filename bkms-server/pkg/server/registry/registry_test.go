@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	alertstrategyenvhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/envhooks"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	appdefaultshooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/hooks"
@@ -45,5 +46,13 @@ var _ = Describe("Store registry", func() {
 		Expect(
 			bkmsworkspace.IsPreDeleteHookRegistered(appdefaultshooks.CleanupRulesByWorkspaceHookName),
 		).To(BeTrue(), "workspace AppSpec rule cleanup hook must be registered by store registry")
+	})
+
+	It("should register alert strategy env update hook during initialization", func() {
+		storereg.Init(context.Background())
+
+		Expect(
+			bkmsenv.IsUpdateHookRegistered(alertstrategyenvhooks.ReconcileEnvTypeChangeHookName),
+		).To(BeTrue(), "alert strategy env type change hook must be registered by store registry")
 	})
 })

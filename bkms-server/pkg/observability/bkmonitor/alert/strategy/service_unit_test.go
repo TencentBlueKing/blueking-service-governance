@@ -677,4 +677,75 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			))
 		})
 	})
+
+	Describe("ReconcileStrategiesForEnvTypeChange", func() {
+		It("removes stale old-type refs and syncs newly matched strategies", func() {
+			createApp("test-ws", "app-1", "demo-app")
+			env := createEnv(
+				"test-ws",
+				"shared",
+				"test",
+				[]string{"app-1"},
+				envmodel.BizCluster{ClusterID: "BCS-K8S-00001", Namespace: "ns-shared"},
+			)
+			before := *env
+
+			oldTypeStrategyID := createStrategy(&AlertStrategy{
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "demo-app",
+				StrategyCode: "scope_old_type",
+				DisplayName:  "Old Type Strategy",
+				Enabled:      true,
+				EffectiveScope: EffectiveScope{
+					Type:     EffectiveScopeEnvType,
+					EnvTypes: []string{"test"},
+				},
+				RemoteRefs: []RemoteStrategyRef{
+					{EnvID: env.ID, EnvName: env.Name, RemoteStrategyID: 101},
+				},
+			})
+			newTypeStrategyID := createStrategy(&AlertStrategy{
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "demo-app",
+				StrategyCode: "scope_new_type",
+				DisplayName:  "New Type Strategy",
+				Enabled:      true,
+				EffectiveScope: EffectiveScope{
+					Type:     EffectiveScopeEnvType,
+					EnvTypes: []string{"staging"},
+				},
+			})
+
+			newType := "staging"
+			Expect(envStore.Update(ctx, env.ID, &envmodel.EnvironmentUpdateData{Type: &newType})).To(Succeed())
+			after, err := envStore.Get(ctx, env.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(
+				svc.ReconcileStrategiesForEnvTypeChange(
+					ctx,
+					buildWorkspace("test-ws"),
+					before,
+					*after,
+					"tester",
+				),
+			).To(Succeed())
+
+			Expect(client.deleteReqs).To(HaveLen(1))
+			Expect(client.deleteReqs[0].IDs).To(Equal([]int64{101}))
+			Expect(client.saveReqs).To(HaveLen(1))
+
+			oldTypeUpdated, err := store.Get(ctx, oldTypeStrategyID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oldTypeUpdated.RemoteRefs).To(BeEmpty())
+
+			newTypeUpdated, err := store.Get(ctx, newTypeStrategyID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(newTypeUpdated.RemoteRefs).To(HaveLen(1))
+			Expect(newTypeUpdated.RemoteRefs[0].EnvID).To(Equal(env.ID))
+			Expect(newTypeUpdated.RemoteRefs[0].EnvName).To(Equal(env.Name))
+		})
+	})
 })

@@ -31,6 +31,9 @@ var (
 	deleteHooksMu     sync.RWMutex
 	deleteHooksByName = map[string]DeleteHook{}
 	deleteHookNames   []string
+	updateHooksMu     sync.RWMutex
+	updateHooksByName = map[string]UpdateHook{}
+	updateHookNames   []string
 )
 
 // DeleteHook 在环境被物理删除前执行，用于清理依赖环境存在的下游资源。
@@ -39,6 +42,12 @@ var (
 // Delete 会按注册顺序串行执行所有 Hook；任意 Hook 返回错误时，删除流程会立即停止并保留环境数据，
 // 方便调用方修复清理失败的问题后重试删除。Hook 实现需要保持幂等，因为同一个删除请求可能被重试。
 type DeleteHook func(ctx context.Context, environment model.Environment) error
+
+// UpdateHook 在环境更新成功后执行，用于感知环境前后状态变化并触发下游收敛。
+//
+// Hook 会同时拿到更新前与更新后的 Environment 快照。Update 属于后置通知语义：
+// 环境更新一旦成功，不会因为 Hook 失败而回滚；调用方应记录错误并视需要重试下游动作。
+type UpdateHook func(ctx context.Context, before, after model.Environment) error
 
 // RegisterDeleteHook 注册环境删除 Hook。
 //
@@ -82,6 +91,37 @@ func ResetDeleteHooksForTest() {
 	deleteHookNames = nil
 }
 
+// RegisterUpdateHook 注册环境更新 Hook。
+func RegisterUpdateHook(name string, hook UpdateHook) bool {
+	updateHooksMu.Lock()
+	defer updateHooksMu.Unlock()
+
+	if _, ok := updateHooksByName[name]; ok {
+		return false
+	}
+	updateHooksByName[name] = hook
+	updateHookNames = append(updateHookNames, name)
+	return true
+}
+
+// IsUpdateHookRegistered 返回指定名称的更新 Hook 是否已注册。
+func IsUpdateHookRegistered(name string) bool {
+	updateHooksMu.RLock()
+	defer updateHooksMu.RUnlock()
+
+	_, ok := updateHooksByName[name]
+	return ok
+}
+
+// ResetUpdateHooksForTest removes registered update hooks.
+func ResetUpdateHooksForTest() {
+	updateHooksMu.Lock()
+	defer updateHooksMu.Unlock()
+
+	updateHooksByName = map[string]UpdateHook{}
+	updateHookNames = nil
+}
+
 // runDeleteHooks 按注册顺序运行所有环境删除 Hook。
 //
 // 注意：Hook 执行成功后不可回滚（如已清理的作用域变量无法恢复），
@@ -99,6 +139,25 @@ func runDeleteHooks(ctx context.Context, environment model.Environment) error {
 	for i, name := range names {
 		if err := hooks[i](ctx, environment); err != nil {
 			return errors.Wrapf(err, "run environment delete hook %s", name)
+		}
+	}
+	return nil
+}
+
+// runUpdateHooks 按注册顺序运行所有环境更新 Hook。
+func runUpdateHooks(ctx context.Context, before, after model.Environment) error {
+	updateHooksMu.RLock()
+	names := make([]string, len(updateHookNames))
+	copy(names, updateHookNames)
+	hooks := make([]UpdateHook, len(names))
+	for i, name := range names {
+		hooks[i] = updateHooksByName[name]
+	}
+	updateHooksMu.RUnlock()
+
+	for i, name := range names {
+		if err := hooks[i](ctx, before, after); err != nil {
+			return errors.Wrapf(err, "run environment update hook %s", name)
 		}
 	}
 	return nil

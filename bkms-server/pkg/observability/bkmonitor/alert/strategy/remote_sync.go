@@ -251,6 +251,53 @@ func (s *Service) SyncStrategiesForAppInEnv(
 	}
 }
 
+// ReconcileStrategiesForEnvTypeChange 在环境类型变更后，收敛该环境下受影响应用的告警策略远端状态。
+func (s *Service) ReconcileStrategiesForEnvTypeChange(
+	ctx context.Context,
+	ws *workspace.Workspace,
+	before, after envmodel.Environment,
+	operator string,
+) error {
+	if before.ID != after.ID || before.Type == after.Type {
+		return nil
+	}
+
+	for _, appID := range affectedAppIDsForEnvTypeChange(before, after) {
+		appStrategies, err := s.store.ListByApp(ctx, ws.ID, appID)
+		if err != nil {
+			return errors.Wrapf(err, "list alert strategies for app %s", appID)
+		}
+		matchedStrategies, err := s.store.ListEnabledByAppMatchingEnv(ctx, ws.ID, appID, after.Type, after.ID)
+		if err != nil {
+			return errors.Wrapf(err, "list matched alert strategies for app %s", appID)
+		}
+
+		candidates := make(map[string]AlertStrategy, len(appStrategies)+len(matchedStrategies))
+		for _, strategy := range appStrategies {
+			if hasRemoteRefForEnv(strategy, after.ID) {
+				candidates[strategy.ID.Hex()] = strategy
+			}
+		}
+		for _, strategy := range matchedStrategies {
+			candidates[strategy.ID.Hex()] = strategy
+		}
+
+		for _, strategy := range candidates {
+			if err := s.SyncToRemote(ctx, ws, strategy.ID, operator); err != nil {
+				return errors.Wrapf(
+					err,
+					"reconcile strategy %s for env %s type change %s->%s",
+					strategy.ID.Hex(),
+					after.Name,
+					before.Type,
+					after.Type,
+				)
+			}
+		}
+	}
+	return nil
+}
+
 // CleanupStrategiesForAppInEnv 清理某个应用在指定环境或泳道下不再需要保留的远端策略引用。
 func (s *Service) CleanupStrategiesForAppInEnv(
 	ctx context.Context,
@@ -281,6 +328,26 @@ func (s *Service) CleanupStrategiesForAppInEnv(
 			log.Errorf(ctx, "cleanup strategy %s failed: %v", strategies[i].ID.Hex(), cleanupErr)
 		}
 	}
+}
+
+func affectedAppIDsForEnvTypeChange(before, after envmodel.Environment) []string {
+	appIDs := append([]string(nil), before.AppIDs...)
+	appIDs = append(appIDs, after.AppIDs...)
+	if before.OwnerAppID != "" {
+		appIDs = append(appIDs, before.OwnerAppID)
+	}
+	if after.OwnerAppID != "" {
+		appIDs = append(appIDs, after.OwnerAppID)
+	}
+	return lo.Uniq(lo.Filter(appIDs, func(appID string, _ int) bool {
+		return appID != ""
+	}))
+}
+
+func hasRemoteRefForEnv(strategy AlertStrategy, envID bson.ObjectID) bool {
+	return lo.ContainsBy(strategy.RemoteRefs, func(ref RemoteStrategyRef) bool {
+		return ref.EnvID == envID
+	})
 }
 
 // ListRemoteStrategies 按分页查询当前工作空间在蓝鲸监控远端创建的策略列表。
