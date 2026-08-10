@@ -44,10 +44,7 @@
           <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
           {{ $t('导入') }}
         </Button>
-        <Button
-          :loading="isExporting"
-          @click="handleExport"
-        >
+        <Button @click="handleShowExportDialog">
           <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
           {{ $t('导出') }}
         </Button>
@@ -92,16 +89,93 @@
       template-filename="app-env-vars-template.env"
       @success="fetchAppEnvVarList"
     />
+
+    <!-- 应用环境变量导出弹窗 -->
+    <Dialog
+      v-model:is-show="showExportDialog"
+      :width="560"
+      @closed="resetExportForm"
+    >
+      <template #header>
+        <div class="flex items-center gap-[12px]">
+          <span>{{ $t('导出环境变量') }}</span>
+          <Divider
+            class="h-[16px] mx-[0] text-[12px]"
+            color="#DCDEE5"
+            direction="vertical"
+            type="solid"
+          />
+          <span class="text-[14px] font-normal text-[#979BA5]">{{ $t('应用') }}：{{ appName }}</span>
+        </div>
+      </template>
+      <Form
+        ref="exportFormRef"
+        class="mt-[8px]"
+        form-type="vertical"
+        :model="exportForm"
+      >
+        <Form.FormItem
+          :label="$t('导出范围')"
+          property="scope"
+          required
+        >
+          <Radio.Group v-model="exportForm.scope">
+            <Radio label="appDefined">{{ $t('应用自定义变量') }}</Radio>
+            <Radio
+              class="ml-[24px]"
+              label="effectiveByEnv"
+            >
+              {{ $t('导出指定环境生效全集') }}
+            </Radio>
+          </Radio.Group>
+        </Form.FormItem>
+        <Form.FormItem
+          v-if="exportForm.scope === 'effectiveByEnv'"
+          :label="$t('选择环境')"
+          property="envName"
+          required
+        >
+          <Select
+            v-model="exportForm.envName"
+            :loading="envListLoading"
+            :placeholder="$t('请选择环境')"
+          >
+            <Select.Option
+              v-for="env in envList"
+              :key="env.id || env.name"
+              :label="env.displayName || env.name"
+              :value="env.name"
+            />
+          </Select>
+        </Form.FormItem>
+      </Form>
+      <template #footer>
+        <Button
+          :loading="isExporting"
+          theme="primary"
+          @click="handleExport"
+        >
+          {{ $t('确定') }}
+        </Button>
+        <Button
+          class="ml-[8px]"
+          :disabled="isExporting"
+          @click="showExportDialog = false"
+        >
+          {{ $t('取消') }}
+        </Button>
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
 
-  import { Alert, Button, Input, Message } from 'bkui-vue';
+  import { Alert, Button, Dialog, Divider, Form, Input, Message, Radio, Select } from 'bkui-vue';
   import { Plus, Search } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import { EnvvarsService } from '~/api/modules/v1';
+  import { EnvService, EnvvarsService } from '~/api/modules/v1';
   import { sortByDate } from '~/common/util';
   import EditableVariableTable, { type EnvVariableConfig } from '~/components/editable-variable-table/index.vue';
   import EnvVarsImportSideslider from '~/components/env-vars-import-sideslider.vue';
@@ -111,6 +185,7 @@
 
   import EnvBgVarsSideslider from './env-bg-vars-sideslider.vue';
 
+  import type { EnvOutput } from '~/@types/v1/env';
   import type {
     AppEnvVarDetailedOutputObj,
     DownloadAppEnvVarTemplateRequest,
@@ -122,6 +197,15 @@
   const appName = computed(() => appDetailStore.app || appDetailStore.appID);
   const showImportSlider = ref(false);
   const { exportFile, isExporting } = useFileExport();
+  type ExportScope = 'appDefined' | 'effectiveByEnv';
+  const showExportDialog = ref(false);
+  const exportFormRef = ref<InstanceType<typeof Form>>();
+  const exportForm = ref<{ envName: string; scope: ExportScope }>({
+    scope: 'appDefined',
+    envName: '',
+  });
+  const envList = ref<EnvOutput[]>([]);
+  const envListLoading = ref(false);
 
   // 自定义环境变量列表 - 通过 ListDetailedAppEnvVars 接口获取
   const customEnvVarList = ref<EnvVariableConfig[]>([]);
@@ -212,16 +296,24 @@
   }
 
   // 导出应用直接定义的环境变量
-  function handleExport() {
+  async function handleExport() {
     if (!appDetailStore.appID) return;
-    return exportFile({
+    const valid = await exportFormRef.value?.validate().catch(() => false);
+    if (!valid) return;
+    const { envName, scope } = exportForm.value;
+    const success = await exportFile({
       request: () =>
         EnvvarsService.exportAppEnvVars<ExportAppEnvVarsRequest, Response>(
-          { appID: appDetailStore.appID, scope: 'appDefined' },
+          {
+            appID: appDetailStore.appID,
+            scope,
+            ...(scope === 'effectiveByEnv' ? { envName } : {}),
+          },
           { originalResponse: true },
         ),
       fallbackFilename: `app-${appName.value}-env-vars.env`,
     });
+    if (success) showExportDialog.value = false;
   }
 
   function handleImportRequest(file: File) {
@@ -236,6 +328,19 @@
       { appID: appDetailStore.appID, file },
       { interceptorErr: false, multipart: true },
     );
+  }
+
+  async function handleShowExportDialog() {
+    if (!appDetailStore.appID) return;
+    showExportDialog.value = true;
+    envListLoading.value = true;
+    envList.value = await EnvService.listAppEnvs({ appID: appDetailStore.appID }).catch(() => []);
+    envListLoading.value = false;
+  }
+
+  function resetExportForm() {
+    exportForm.value = { scope: 'appDefined', envName: '' };
+    exportFormRef.value?.clearValidate();
   }
 
   // 查看环境级变量侧栏

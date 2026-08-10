@@ -29,7 +29,7 @@
         </template>
       </div>
     </template>
-    <div class="h-full overflow-y-auto p-[24px] pb-[0px]">
+    <div class="h-full overflow-y-auto p-[24px]">
       <Upload
         :key="uploadKey"
         accept=".env"
@@ -110,23 +110,30 @@
             </Radio.Button>
           </Radio.Group>
         </div>
-        <Table :data="filteredItems">
+        <Table
+          :data="filteredItems"
+          :row-height="48"
+        >
           <TableColumn
             field="key"
             label="Key"
             :min-width="160"
-            show-overflow-tooltip
           />
           <TableColumn
-            field="value"
             label="Value"
             :min-width="200"
-            show-overflow-tooltip
-          />
+          >
+            <template #default="{ row }">
+              <template v-if="row.action === 'overwrite'">
+                <div class="leading-[20px]">{{ row.value || '--' }}</div>
+                <div class="text-[#979BA5] leading-[20px]">{{ $t('原值') }}：{{ row.originalValue || '--' }}</div>
+              </template>
+              <template v-else>{{ row.value || '--' }}</template>
+            </template>
+          </TableColumn>
           <TableColumn
             :label="$t('描述')"
             :min-width="180"
-            show-overflow-tooltip
           >
             <template #default="{ row }">
               {{ row.description || '--' }}
@@ -138,8 +145,15 @@
             width="140"
           >
             <template #default="{ row }">
-              <Tag :class="getScopeDisplay(row.effectiveScope?.type || '', row.effectiveScope?.value || '').tagClass">
-                {{ getScopeDisplay(row.effectiveScope?.type || '', row.effectiveScope?.value || '').label }}
+              <template v-if="!row.effectiveScope?.type">
+                <Tag theme="danger">{{ $t('缺失') }}</Tag>
+                <div class="text-[#979BA5] text-[12px] leading-[20px]">{{ $t('默认设置为「所有」') }}</div>
+              </template>
+              <Tag
+                v-else
+                :class="getScopeDisplay(row.effectiveScope.type, row.effectiveScope.value || '').tagClass"
+              >
+                {{ getScopeDisplay(row.effectiveScope.type, row.effectiveScope.value || '').label }}
               </Tag>
             </template>
           </TableColumn>
