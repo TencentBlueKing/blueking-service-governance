@@ -195,6 +195,7 @@ func (s *Service) InitDefaultAlertStrategiesForApp(
 	ctx context.Context,
 	workspaceID, appID, appName string,
 	operator string,
+	noticeGroupIDs []int64,
 ) error {
 	for _, tmpl := range defaultTemplates {
 		rule := &AlertStrategy{
@@ -210,6 +211,7 @@ func (s *Service) InitDefaultAlertStrategiesForApp(
 			RecoverCondition:   tmpl.RecoverCondition,
 			EffectiveTimeRange: tmpl.EffectiveTimeRange,
 			EffectiveScope:     EffectiveScope{Type: EffectiveScopeAll},
+			NoticeGroupIDs:     append([]int64(nil), noticeGroupIDs...),
 			Enabled:            true,
 			Creator:            operator,
 			Updater:            operator,

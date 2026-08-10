@@ -75,6 +75,35 @@ func (s *Service) List(ctx context.Context, ws *workspace.Workspace, operator st
 	return groups, nil
 }
 
+// FindByName 按名称查询 workspace 对应监控空间下的告警组。
+func (s *Service) FindByName(
+	ctx context.Context,
+	ws *workspace.Workspace,
+	name, operator string,
+) (*bkmapi.UserGroup, error) {
+	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve bkmonitor space id")
+	}
+	client, err := s.newClient(operator)
+	if err != nil {
+		return nil, errors.Wrap(err, "new bkmonitor client")
+	}
+	groups, err := client.SearchUserGroups(ctx, &bkmapi.SearchUserGroupsReq{
+		BkBizIDs: []int64{bkBizID},
+		Name:     name,
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "search user groups by name, bk_biz_id=%d, name=%s", bkBizID, name)
+	}
+	for _, group := range groups {
+		if group != nil && group.Name == name {
+			return group, nil
+		}
+	}
+	return nil, nil
+}
+
 // Get 获取告警组详情，并校验其属于 workspace 对应监控空间。
 func (s *Service) Get(
 	ctx context.Context,

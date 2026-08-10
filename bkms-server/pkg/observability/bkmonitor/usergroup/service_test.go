@@ -114,6 +114,54 @@ var _ = Describe("Usergroup Service", func() {
 		})
 	})
 
+	Describe("FindByName", func() {
+		It("uses workspace bk biz id and group name when searching user groups", func() {
+			client := bkmapi.NewStub("tester")
+			_, err := client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+				ID:           lo.ToPtr(int64(1001)),
+				BkBizID:      testUserGroupBkBizID,
+				Name:         "ops",
+				Channels:     []string{"user"},
+				AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
+				ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+				Operator:     "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+				ID:           lo.ToPtr(int64(1002)),
+				BkBizID:      testUserGroupBkBizID,
+				Name:         "other",
+				Channels:     []string{"user"},
+				AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
+				ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+				Operator:     "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			svc = &Service{
+				newClient: func(string) (bkmapi.MonitorClient, error) { return client, nil },
+			}
+
+			got, err := svc.FindByName(context.Background(), ws, "ops", "tester")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).NotTo(BeNil())
+			Expect(got.ID).To(Equal(int64(1001)))
+			Expect(got.Name).To(Equal("ops"))
+		})
+
+		It("returns nil when the target user group does not exist", func() {
+			client := bkmapi.NewStub("tester")
+			svc = &Service{
+				newClient: func(string) (bkmapi.MonitorClient, error) { return client, nil },
+			}
+
+			got, err := svc.FindByName(context.Background(), ws, "missing", "tester")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(BeNil())
+		})
+	})
+
 	Describe("resolve bkmonitor space id", func() {
 		DescribeTable(
 			"rejects invalid workspace monitor project ids",

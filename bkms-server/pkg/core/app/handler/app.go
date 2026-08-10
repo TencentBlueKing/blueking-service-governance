@@ -43,6 +43,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/usergroup"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
@@ -169,12 +170,35 @@ func (h *Handler) CreateApp(c *gin.Context) {
 	// 创建应用后，异步为该应用初始化默认监控告警策略，应用部署后真正下发到监控平台
 	go func() {
 		bgCtx := context.WithoutCancel(ctx)
+		ws, wsErr := h.registry.WorkspaceStore.Get(bgCtx, app.WorkspaceID)
+		if wsErr != nil {
+			log.Errorf(bgCtx, "get workspace %s for default alert strategies failed: %v", app.WorkspaceID, wsErr)
+			return
+		}
+		noticeGroupIDs, groupErr := resolveDefaultAlertNoticeGroupIDs(
+			bgCtx,
+			ws,
+			usergroup.New(),
+			perm.NewManager(),
+			auth.MustGetUser(ctx).ID,
+		)
+		if groupErr != nil {
+			log.Errorf(
+				bgCtx,
+				"resolve default alert user group for workspace %s failed: %v",
+				app.WorkspaceID,
+				groupErr,
+			)
+			return
+		}
 		initErr := alertstrategy.NewService(
 			storereg.G().AlertStrategyStore,
 			storereg.G().EnvStore,
 			storereg.G().AppStore,
 			storereg.G().ResourceSnapshotStore,
-		).InitDefaultAlertStrategiesForApp(bgCtx, app.WorkspaceID, app.ID, app.Name, auth.MustGetUser(ctx).ID)
+		).InitDefaultAlertStrategiesForApp(
+			bgCtx, app.WorkspaceID, app.ID, app.Name, auth.MustGetUser(ctx).ID, noticeGroupIDs,
+		)
 		if initErr != nil {
 			// 初始化失败不影响应用创建结果，仅记录错误日志，由后续重试/手动补偿处理。
 			log.Errorf(bgCtx, "init default alert strategies for app %s failed: %v", app.ID, initErr)

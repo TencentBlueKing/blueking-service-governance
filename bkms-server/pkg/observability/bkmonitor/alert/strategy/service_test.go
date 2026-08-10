@@ -489,7 +489,9 @@ var _ = Describe("AlertStrategyService", func() {
 
 	Describe("InitDefaultAlertStrategiesForApp", func() {
 		It("should create default rules enabled with scope=all for app (local only, no remote sync)", func() {
-			err := svc.InitDefaultAlertStrategiesForApp(ctx, "default-ws", "app-1", "demo-app", "test-user")
+			err := svc.InitDefaultAlertStrategiesForApp(
+				ctx, "default-ws", "app-1", "demo-app", "test-user", []int64{1001},
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			rules, err := store.ListByApp(ctx, "default-ws", "app-1")
@@ -503,6 +505,7 @@ var _ = Describe("AlertStrategyService", func() {
 				Expect(r.EffectiveScope.Type).To(Equal(EffectiveScopeAll))
 				Expect(r.EffectiveTimeRange.StartTime).To(Equal(defaultEffectiveStartTime))
 				Expect(r.EffectiveTimeRange.EndTime).To(Equal(defaultEffectiveEndTime))
+				Expect(r.NoticeGroupIDs).To(Equal([]int64{1001}))
 				Expect(r.Creator).To(Equal("test-user"))
 				Expect(r.RemoteRefs).To(BeEmpty())
 			}
