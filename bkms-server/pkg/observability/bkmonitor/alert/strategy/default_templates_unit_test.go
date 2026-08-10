@@ -23,20 +23,24 @@ import "testing"
 func TestDefaultTemplatesOnlyContainThreeBuiltins(t *testing.T) {
 	type expectedTemplate struct {
 		displayName string
+		severity    AlertSeverity
 		threshold   float64
 	}
 
 	expected := map[string]expectedTemplate{
 		"cpu_limit_usage_high": {
 			displayName: "CPU 使用率过高",
+			severity:    AlertSeverityWarning,
 			threshold:   80,
 		},
 		"memory_limit_usage_high": {
 			displayName: "内存使用率过高",
+			severity:    AlertSeverityWarning,
 			threshold:   80,
 		},
 		"pod_restart_frequent": {
 			displayName: "容器异常重启",
+			severity:    AlertSeverityWarning,
 			threshold:   3,
 		},
 	}
@@ -52,6 +56,9 @@ func TestDefaultTemplatesOnlyContainThreeBuiltins(t *testing.T) {
 		}
 		if tmpl.DisplayName != want.displayName {
 			t.Fatalf("expected %s displayName %s, got %s", tmpl.StrategyCode, want.displayName, tmpl.DisplayName)
+		}
+		if tmpl.Severity != want.severity {
+			t.Fatalf("expected %s severity %v, got %v", tmpl.StrategyCode, want.severity, tmpl.Severity)
 		}
 		if tmpl.Threshold.Value != want.threshold {
 			t.Fatalf("expected %s threshold %v, got %v", tmpl.StrategyCode, want.threshold, tmpl.Threshold.Value)

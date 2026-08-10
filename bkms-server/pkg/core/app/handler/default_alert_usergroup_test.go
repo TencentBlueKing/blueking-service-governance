@@ -157,6 +157,64 @@ var _ = Describe("default alert user group resolution", func() {
 			{ID: "shared", Type: "user"},
 			{ID: "sre-a", Type: "user"},
 		}))
+		Expect(groupSvc.savedParams.AlertNotice).To(Equal([]bkmapi.AlertNotice{{
+			TimeRange: "00:00--23:59",
+			NotifyConfig: []bkmapi.AlertNoticeConfig{
+				{
+					Level: 1,
+					Type:  []string{},
+					NoticeWays: []bkmapi.NoticeWay{
+						{Name: "weixin", Receivers: []string{}},
+						{Name: "mail", Receivers: []string{}},
+						{Name: "sms", Receivers: []string{}},
+						{Name: "voice", Receivers: []string{}},
+					},
+				},
+				{
+					Level: 2,
+					Type:  []string{},
+					NoticeWays: []bkmapi.NoticeWay{
+						{Name: "weixin", Receivers: []string{}},
+					},
+				},
+				{
+					Level: 3,
+					Type:  []string{},
+					NoticeWays: []bkmapi.NoticeWay{
+						{Name: "weixin", Receivers: []string{}},
+					},
+				},
+			},
+		}}))
+		Expect(groupSvc.savedParams.ActionNotice).To(Equal([]bkmapi.ActionNotice{{
+			TimeRange: "00:00--23:59",
+			NotifyConfig: []bkmapi.ActionNoticeConfig{
+				{
+					Phase: 1,
+					Type:  []string{},
+					NoticeWays: []bkmapi.NoticeWay{
+						{Name: "weixin", Receivers: []string{}},
+						{Name: "mail", Receivers: []string{}},
+						{Name: "sms", Receivers: []string{}},
+						{Name: "voice", Receivers: []string{}},
+					},
+				},
+				{
+					Phase: 2,
+					Type:  []string{},
+					NoticeWays: []bkmapi.NoticeWay{
+						{Name: "weixin", Receivers: []string{}},
+					},
+				},
+				{
+					Phase: 3,
+					Type:  []string{},
+					NoticeWays: []bkmapi.NoticeWay{
+						{Name: "weixin", Receivers: []string{}},
+					},
+				},
+			},
+		}}))
 	})
 
 	It("skips creating default alert user group when both roles have no members", func() {

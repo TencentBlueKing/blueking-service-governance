@@ -81,8 +81,8 @@ func resolveDefaultAlertNoticeGroupIDs(
 		Name:         groupName,
 		Channels:     []string{"user"},
 		Desc:         defaultAlertUserGroupDesc,
-		AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
-		ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+		AlertNotice:  buildDefaultAlertUserGroupAlertNotices(),
+		ActionNotice: buildDefaultAlertUserGroupActionNotices(),
 		Users:        buildDefaultAlertUserGroupUsers(members),
 		Operator:     operator,
 	})
@@ -161,4 +161,67 @@ func buildDefaultAlertUserGroupUsers(members []string) []bkmapi.UserGroupUser {
 		})
 	}
 	return users
+}
+
+func buildDefaultAlertUserGroupAlertNotices() []bkmapi.AlertNotice {
+	return []bkmapi.AlertNotice{{
+		TimeRange: "00:00--23:59",
+		NotifyConfig: []bkmapi.AlertNoticeConfig{
+			{
+				Level:      1,
+				Type:       []string{},
+				NoticeWays: buildDefaultAlertUserGroupUrgentNoticeWays(),
+			},
+			{
+				Level: 2,
+				Type:  []string{},
+				NoticeWays: []bkmapi.NoticeWay{
+					{Name: "weixin", Receivers: []string{}},
+				},
+			},
+			{
+				Level: 3,
+				Type:  []string{},
+				NoticeWays: []bkmapi.NoticeWay{
+					{Name: "weixin", Receivers: []string{}},
+				},
+			},
+		},
+	}}
+}
+
+func buildDefaultAlertUserGroupActionNotices() []bkmapi.ActionNotice {
+	return []bkmapi.ActionNotice{{
+		TimeRange: "00:00--23:59",
+		NotifyConfig: []bkmapi.ActionNoticeConfig{
+			{
+				Phase:      1,
+				Type:       []string{},
+				NoticeWays: buildDefaultAlertUserGroupUrgentNoticeWays(),
+			},
+			{
+				Phase: 2,
+				Type:  []string{},
+				NoticeWays: []bkmapi.NoticeWay{
+					{Name: "weixin", Receivers: []string{}},
+				},
+			},
+			{
+				Phase: 3,
+				Type:  []string{},
+				NoticeWays: []bkmapi.NoticeWay{
+					{Name: "weixin", Receivers: []string{}},
+				},
+			},
+		},
+	}}
+}
+
+func buildDefaultAlertUserGroupUrgentNoticeWays() []bkmapi.NoticeWay {
+	return []bkmapi.NoticeWay{
+		{Name: "weixin", Receivers: []string{}},
+		{Name: "mail", Receivers: []string{}},
+		{Name: "sms", Receivers: []string{}},
+		{Name: "voice", Receivers: []string{}},
+	}
 }
