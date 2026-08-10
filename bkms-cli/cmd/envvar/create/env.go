@@ -2,7 +2,6 @@
 package create
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -10,9 +9,10 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
-// NewEnvCmd returns a Command instance for 'envvar create env' sub command.
+// NewEnvCmd returns a Command instance for 'envvar create for env' sub command.
 func NewEnvCmd() *cobra.Command {
 	var workspaceID, envName, key, value, description string
 	var sensitive bool
@@ -47,7 +47,7 @@ The --env flag specifies the target environment name.`,
 				return errors.Wrap(err, "create env scoped env var")
 			}
 
-			fmt.Printf("Created env var: key=%s, scopeType=env, scopeValue=%s, id=%s\n",
+			console.Info("Created env var: key=%s, scopeType=env, scopeValue=%s, id=%s\n",
 				result.Key, result.ScopeValue, result.ID)
 			return nil
 		},

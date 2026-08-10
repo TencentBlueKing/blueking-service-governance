@@ -2,14 +2,13 @@
 package delete
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	envhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/env"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewPublicCmd returns a Command instance for 'envvar delete public' sub command.
@@ -51,7 +50,7 @@ The --scope-value flag is required when scope-type is envType.`,
 				return errors.Wrap(err, "delete public env var")
 			}
 
-			fmt.Printf("Deleted env var: key=%s, scopeType=%s, scopeValue=%s\n", key, scopeType, scopeValue)
+			console.Info("Deleted env var: key=%s, scopeType=%s, scopeValue=%s\n", key, scopeType, scopeValue)
 			return nil
 		},
 	}

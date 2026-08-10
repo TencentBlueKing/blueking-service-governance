@@ -2,7 +2,6 @@
 package update
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -11,6 +10,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	envhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/env"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewPublicCmd returns a Command instance for 'envvar update public' sub command.
@@ -92,7 +92,7 @@ Only specified fields will be updated.`,
 				return errors.Wrap(err, "update public env var")
 			}
 
-			fmt.Printf("Updated env var: key=%s, id=%s\n", result.Key, result.ID)
+			console.Info("Updated env var: key=%s, id=%s\n", result.Key, result.ID)
 			return nil
 		},
 	}

@@ -2,7 +2,6 @@
 package create
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -10,9 +9,10 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
-// NewAppCmd returns a Command instance for 'envvar create app' sub command.
+// NewAppCmd returns a Command instance for 'envvar create for app' sub command.
 func NewAppCmd() *cobra.Command {
 	var appID, key, value, description string
 	var sensitive bool
@@ -46,7 +46,7 @@ The key must be unique within the application.`,
 				return errors.Wrap(err, "create app env var")
 			}
 
-			fmt.Printf("Created app env var: key=%s\n", result.Key)
+			console.Info("Created app env var: key=%s\n", result.Key)
 			return nil
 		},
 	}

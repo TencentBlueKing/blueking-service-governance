@@ -2,7 +2,6 @@
 package update
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewAppCmd returns a Command instance for 'envvar update app' sub command.
@@ -69,7 +69,7 @@ Use --sensitive to mark as sensitive, or --no-sensitive to unmark.`,
 				return errors.Wrap(err, "update app env var")
 			}
 
-			fmt.Printf("Updated app env var: key=%s\n", result.Key)
+			console.Info("Updated app env var: key=%s\n", result.Key)
 			return nil
 		},
 	}

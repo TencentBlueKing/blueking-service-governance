@@ -2,13 +2,12 @@
 package importvar
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
@@ -30,7 +29,19 @@ Use --preview to see what would be imported without making any changes.`,
   bkms-cli envvar import app --app <appID> -f vars.env
 
   # Preview import without making changes
-  bkms-cli envvar import app --app <appID> -f vars.env --preview`,
+  bkms-cli envvar import app --app <appID> -f vars.env --preview
+
+  # Example .env file content for app import:
+  # ─────────────────────────────────────────
+  # # desc: Application log level
+  # LOG_LEVEL=info
+  #
+  # # desc: Feature toggle for new UI
+  # ENABLE_NEW_UI=true
+  #
+  # APP_TIMEOUT=30s
+  # ─────────────────────────────────────────
+  # Note: app import does NOT allow scope metadata (scopeType/scopeValue).`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if preview {
@@ -46,7 +57,7 @@ Use --preview to see what would be imported without making any changes.`,
 				return errors.Wrap(err, "import app env vars")
 			}
 
-			fmt.Printf("Import completed: total=%d, new=%d, overwrite=%d\n",
+			console.Info("Import completed: total=%d, new=%d, overwrite=%d\n",
 				result.Total, result.New, result.Overwrite)
 			return nil
 		},

@@ -2,14 +2,13 @@
 package delete
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	envhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/env"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewEnvCmd returns a Command instance for 'envvar delete env' sub command.
@@ -47,7 +46,7 @@ The --key flag specifies the variable key to delete.`,
 				return errors.Wrap(err, "delete env scoped env var")
 			}
 
-			fmt.Printf("Deleted env var: key=%s, env=%s\n", key, envName)
+			console.Info("Deleted env var: key=%s, env=%s\n", key, envName)
 			return nil
 		},
 	}

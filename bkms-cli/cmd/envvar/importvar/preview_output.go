@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
@@ -36,7 +37,7 @@ func formatPreviewOutput(ctx context.Context, preview *client.EnvVarImportPrevie
 	}
 
 	// 输出汇总信息
-	fmt.Printf("\nSummary: total=%d, new=%d, overwrite=%d\n",
+	console.Info("\nSummary: total=%d, new=%d, overwrite=%d\n",
 		preview.Summary.Total, preview.Summary.New, preview.Summary.Overwrite)
 	return nil
 }

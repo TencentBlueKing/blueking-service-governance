@@ -2,14 +2,13 @@
 package importvar
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	handler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/env"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
@@ -32,7 +31,20 @@ Use --preview to see what would be imported without making any changes.`,
   bkms-cli envvar import env --env <env-name> -f vars.env
 
   # Preview import without making changes
-  bkms-cli envvar import env --env <env-name> -f vars.env --preview`,
+  bkms-cli envvar import env --env <env-name> -f vars.env --preview
+
+  # Example .env file content for env import:
+  # ─────────────────────────────────────────
+  # # desc: overwrite existing env key
+  # ENV_ONLY_KEY=updated-env-value
+  #
+  # # desc: add another env key
+  # ANOTHER_ENV_KEY=another-value
+  #
+  # MY_CONFIG=some-config-value
+  # ─────────────────────────────────────────
+  # Note: env import does NOT allow scope metadata (scopeType/scopeValue).
+  # The target scope is determined by the --env flag.`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
@@ -55,7 +67,7 @@ Use --preview to see what would be imported without making any changes.`,
 				return errors.Wrap(err, "import env scoped env vars")
 			}
 
-			fmt.Printf("Import completed: total=%d, new=%d, overwrite=%d\n",
+			console.Info("Import completed: total=%d, new=%d, overwrite=%d\n",
 				result.Total, result.New, result.Overwrite)
 			return nil
 		},

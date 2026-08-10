@@ -2,13 +2,12 @@
 package importvar
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
@@ -33,7 +32,25 @@ Use --preview to see what would be imported without making any changes.`,
   bkms-cli envvar import public --workspace <workspaceID> -f vars.env --preview
 
   # Preview with JSON output
-  bkms-cli envvar import public -f vars.env --preview -o json`,
+  bkms-cli envvar import public -f vars.env --preview -o json
+
+  # Example .env file content for public (workspace/envType) import:
+  # ─────────────────────────────────────────
+  # # desc: workspace key shared across all envs
+  # # scopeType: workspace
+  # WORKSPACE_KEY=workspace-value
+  #
+  # # desc: override for development env type
+  # # scopeType: envType
+  # # scopeValue: development
+  # SHARED_KEY=dev-override
+  #
+  # # scopeType: workspace
+  # ANOTHER_GLOBAL=global-value
+  # ─────────────────────────────────────────
+  # Note: public import REQUIRES scopeType metadata for each variable.
+  # Supported scopeType values: workspace, envType.
+  # scopeValue is required when scopeType is envType.`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
@@ -51,7 +68,7 @@ Use --preview to see what would be imported without making any changes.`,
 				return errors.Wrap(err, "import public env vars")
 			}
 
-			fmt.Printf("Import completed: total=%d, new=%d, overwrite=%d\n",
+			console.Info("Import completed: total=%d, new=%d, overwrite=%d\n",
 				result.Total, result.New, result.Overwrite)
 			return nil
 		},

@@ -2,13 +2,12 @@
 package delete
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewAppCmd returns a Command instance for 'envvar delete app' sub command.
@@ -27,7 +26,7 @@ func NewAppCmd() *cobra.Command {
 				return errors.Wrap(err, "delete app env var")
 			}
 
-			fmt.Printf("Deleted app env var: key=%s\n", key)
+			console.Info("Deleted app env var: key=%s\n", key)
 			return nil
 		},
 	}

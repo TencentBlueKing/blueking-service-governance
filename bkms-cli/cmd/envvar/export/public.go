@@ -10,6 +10,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewPublicCmd returns a Command instance for 'envvar export public' sub command.
@@ -59,6 +60,6 @@ func writeExportContent(content, filePath string) error {
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		return errors.Wrap(err, "write export file")
 	}
-	fmt.Printf("Exported to %s\n", filePath)
+	console.Info("Exported to %s\n", filePath)
 	return nil
 }
