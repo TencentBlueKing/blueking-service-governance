@@ -20,10 +20,9 @@ package depsvcredis
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strconv"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -68,9 +67,9 @@ func createHandler(ctx context.Context, args CreateArgs) error {
 	inst, err := instStore.Get(ctx, objID)
 	if err != nil {
 		if model.AsNotFoundError(err) {
-			return fmt.Errorf("instance %s already gone: %w", args.InstanceID, taskq.ErrStopRetry)
+			return errors.Wrapf(taskq.ErrStopRetry, "instance %s already gone", args.InstanceID)
 		}
-		return fmt.Errorf("get instance %s: %w: %w", args.InstanceID, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "get instance %s: %v", args.InstanceID, err)
 	}
 
 	if args.Handle == "" {
@@ -103,14 +102,14 @@ func createSubmit(ctx context.Context, objID bson.ObjectID, inst *model.ServiceI
 	// 先持久化 ticketID，再入队 Poll。Enqueue 失败时 asynq 重试会走上面的恢复分支，不会重复 CreateRedis。
 	if err = instStore.PatchConfig(ctx, objID, map[string]any{configKeyCreateTicketID: ticketID}); err != nil {
 		// 工单已创建但未能落库：停止重试以免重复开单，错误信息中保留 ticketID 便于人工恢复
-		persistErr := fmt.Errorf("persist createTicketID=%d after DBM submit: %w", ticketID, err)
+		persistErr := errors.Wrapf(err, "persist createTicketID=%d after DBM submit", ticketID)
 		return failWithStopErr(ctx, args.InstanceID, model.CreateFailedStatus, persistErr)
 	}
 
 	args.Handle = strconv.Itoa(ticketID)
 	if err = taskq.Enqueue(ctx, CreateTask.NewTask(args)); err != nil {
 		// ticket 已落库，返回可重试错误即可安全恢复
-		return fmt.Errorf("enqueue create poll task for ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "enqueue create poll task for ticket %d: %v", ticketID, err)
 	}
 	return nil
 }
@@ -126,10 +125,10 @@ func createPoll(ctx context.Context, objID bson.ObjectID, args CreateArgs) error
 		if errors.Is(err, taskq.ErrStopRetry) {
 			return failWithStopErr(ctx, args.InstanceID, model.CreateFailedStatus, err)
 		}
-		return fmt.Errorf("poll create ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "poll create ticket %d: %v", ticketID, err)
 	}
 	if !done {
-		return fmt.Errorf("create ticket %s in progress: %w", args.Handle, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "create ticket %s in progress", args.Handle)
 	}
 
 	// 工单已 SUCCEEDED：后续收尾失败多为瞬时错误，必须可重试。
@@ -158,7 +157,7 @@ func createPoll(ctx context.Context, objID bson.ObjectID, args CreateArgs) error
 		ctx, args.DBMParams.BkBizID, clusterName, args.DBMParams.ClusterType, args.Username,
 	)
 	if err != nil {
-		return fmt.Errorf("find cluster by name %s: %w: %w", clusterName, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "find cluster by name %s: %v", clusterName, err)
 	}
 
 	if err = instStore.PatchConfig(ctx, objID, map[string]any{
@@ -169,19 +168,19 @@ func createPoll(ctx context.Context, objID bson.ObjectID, args CreateArgs) error
 		configKeyPort:        clusterInfo.Port,
 		configKeyBkBizID:     args.DBMParams.BkBizID,
 	}); err != nil {
-		return fmt.Errorf("persist cluster config after create ticket: %w: %w", err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "persist cluster config after create ticket: %v", err)
 	}
 
 	if args.DBMParams.RedisPwd != "" {
 		if err = instStore.PatchCredentials(ctx, objID, map[string]any{
 			"password": args.DBMParams.RedisPwd,
 		}); err != nil {
-			return fmt.Errorf("persist credentials after create ticket: %w: %w", err, taskq.ErrFixedRetry)
+			return errors.Wrapf(taskq.ErrFixedRetry, "persist credentials after create ticket: %v", err)
 		}
 	}
 
 	if err = instStore.UpdateStatus(ctx, objID, model.AvailableStatus, ""); err != nil {
-		return fmt.Errorf("mark instance available after create ticket: %w: %w", err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "mark instance available after create ticket: %v", err)
 	}
 
 	return nil

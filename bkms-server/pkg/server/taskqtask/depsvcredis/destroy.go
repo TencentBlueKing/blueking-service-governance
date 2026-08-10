@@ -20,10 +20,9 @@ package depsvcredis
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strconv"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -80,13 +79,13 @@ func destroySubmit(ctx context.Context, objID bson.ObjectID, args DestroyArgs) e
 	}
 
 	if err = instStore.PatchConfig(ctx, objID, map[string]any{configKeyDestroyTicketID: ticketID}); err != nil {
-		persistErr := fmt.Errorf("persist destroyTicketID=%d after DBM submit: %w", ticketID, err)
+		persistErr := errors.Wrapf(err, "persist destroyTicketID=%d after DBM submit", ticketID)
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, persistErr)
 	}
 
 	args.Handle = strconv.Itoa(ticketID)
 	if err = taskq.Enqueue(ctx, DestroyTask.NewTask(args)); err != nil {
-		return fmt.Errorf("enqueue destroy poll task for ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "enqueue destroy poll task for ticket %d: %v", ticketID, err)
 	}
 	return nil
 }
@@ -102,10 +101,10 @@ func destroyPoll(ctx context.Context, objID bson.ObjectID, args DestroyArgs) err
 		if errors.Is(err, taskq.ErrStopRetry) {
 			return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 		}
-		return fmt.Errorf("poll destroy ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "poll destroy ticket %d: %v", ticketID, err)
 	}
 	if !done {
-		return fmt.Errorf("destroy ticket %s in progress: %w", args.Handle, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "destroy ticket %s in progress", args.Handle)
 	}
 
 	// ─── 完成: 删除实例记录；失败需重试，避免永久卡在 deleting ───
@@ -114,7 +113,7 @@ func destroyPoll(ctx context.Context, objID bson.ObjectID, args DestroyArgs) err
 			log.Infof(ctx, "depsvcredis: instance %s already deleted after destroy", args.InstanceID)
 			return nil
 		}
-		return fmt.Errorf("delete instance %s after destroy: %w: %w", args.InstanceID, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "delete instance %s after destroy: %v", args.InstanceID, err)
 	}
 	return nil
 }

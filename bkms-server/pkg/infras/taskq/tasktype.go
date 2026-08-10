@@ -21,27 +21,27 @@ package taskq
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
+	stderrors "errors"
 	"sync"
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 )
 
-// 内建哨兵错误: 业务 handler 直接返回(或用 %w 包装)即可控制重试行为,
+// 内建哨兵错误: 业务 handler 直接返回(或用 errors.Wrap 包装)即可控制重试行为,
 //
 // 其余错误(未命中任一哨兵)一律走默认指数退避重试。
 var (
 	// ErrStopRetry 标记不可恢复的失败, 框架停止重试(置为终态失败)。
-	// 业务用法: return fmt.Errorf("invalid arg: %w", taskq.ErrStopRetry)。
-	ErrStopRetry = errors.New("taskq: stop retry")
+	// 业务用法: return errors.Wrap(taskq.ErrStopRetry, "invalid arg")。
+	ErrStopRetry = stderrors.New("taskq: stop retry")
 	// ErrFixedRetry 标记"任务仍在进行中", 框架以固定间隔重试(而非指数退避)。
 	// 间隔优先取 TaskType.WithFixedRetryInterval 注册值，否则用 config.Asynq.RetryInterval。
-	// 业务用法: return fmt.Errorf("still provisioning: %w", taskq.ErrFixedRetry)。
-	ErrFixedRetry = errors.New("taskq: retry with fixed interval")
+	// 业务用法: return errors.Wrap(taskq.ErrFixedRetry, "still provisioning")。
+	ErrFixedRetry = stderrors.New("taskq: retry with fixed interval")
 )
 
 // ExhaustedHandlerFunc 是重试耗尽时的回调函数签名。
@@ -146,14 +146,14 @@ func (t *TaskType[Args]) Handler() asynq.HandlerFunc {
 		var args Args
 		if err := json.Unmarshal(task.Payload(), &args); err != nil {
 			// 负载无法解析属不可恢复, 停止重试。
-			return wrapStopRetry(fmt.Errorf("unmarshal args for task %q: %w", t.name, err))
+			return wrapStopRetry(errors.Wrapf(err, "unmarshal args for task %q", t.name))
 		}
 		err := t.handler(ctx, args)
 		if err == nil {
 			return nil
 		}
 		// 业务显式要求停止重试。
-		if errors.Is(err, ErrStopRetry) {
+		if stderrors.Is(err, ErrStopRetry) {
 			return wrapStopRetry(err)
 		}
 		// 其余错误直接抛给上层，由上层决定重试策略

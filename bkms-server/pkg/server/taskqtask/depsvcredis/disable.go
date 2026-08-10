@@ -20,10 +20,9 @@ package depsvcredis
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strconv"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -79,13 +78,13 @@ func disableSubmit(ctx context.Context, objID bson.ObjectID, args DisableArgs) e
 	}
 
 	if err = instStore.PatchConfig(ctx, objID, map[string]any{configKeyDisableTicketID: ticketID}); err != nil {
-		persistErr := fmt.Errorf("persist disableTicketID=%d after DBM submit: %w", ticketID, err)
+		persistErr := errors.Wrapf(err, "persist disableTicketID=%d after DBM submit", ticketID)
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, persistErr)
 	}
 
 	args.Handle = strconv.Itoa(ticketID)
 	if err = taskq.Enqueue(ctx, DisableTask.NewTask(args)); err != nil {
-		return fmt.Errorf("enqueue disable poll task for ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "enqueue disable poll task for ticket %d: %v", ticketID, err)
 	}
 	return nil
 }
@@ -101,10 +100,10 @@ func disablePoll(ctx context.Context, args DisableArgs) error {
 		if errors.Is(err, taskq.ErrStopRetry) {
 			return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 		}
-		return fmt.Errorf("poll disable ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "poll disable ticket %d: %v", ticketID, err)
 	}
 	if !done {
-		return fmt.Errorf("disable ticket %s in progress: %w", args.Handle, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "disable ticket %s in progress", args.Handle)
 	}
 
 	// ─── 完成 → 串联 DestroyTask ───

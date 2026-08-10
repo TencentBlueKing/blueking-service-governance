@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -82,7 +83,7 @@ func pollTicket(ctx context.Context, ticketID int, username string) (bool, error
 	case dbm.TicketStatusSucceeded:
 		return true, nil
 	case dbm.TicketStatusFailed, dbm.TicketStatusTerminated:
-		return false, fmt.Errorf("DBM ticket %d terminal status: %s: %w", ticketID, ticket.Status, taskq.ErrStopRetry)
+		return false, errors.Wrapf(taskq.ErrStopRetry, "DBM ticket %d terminal status: %s", ticketID, ticket.Status)
 	default:
 		return false, nil // PENDING / RUNNING
 	}
@@ -93,12 +94,12 @@ func failWithStopErr(ctx context.Context, instID string, status model.InstanceSt
 	objID, parseErr := bson.ObjectIDFromHex(instID)
 	if parseErr != nil {
 		log.Errorf(ctx, "depsvcredis: invalid instID %q: %v", instID, parseErr)
-		return fmt.Errorf("invalid instID: %w", taskq.ErrStopRetry)
+		return errors.Wrap(taskq.ErrStopRetry, "invalid instID")
 	}
 	if updateErr := instStore.UpdateStatus(ctx, objID, status, err.Error()); updateErr != nil {
 		log.Errorf(ctx, "depsvcredis: update status for %s: %v", instID, updateErr)
 	}
-	return fmt.Errorf("%s: %w", err.Error(), taskq.ErrStopRetry)
+	return errors.Wrap(taskq.ErrStopRetry, err.Error())
 }
 
 // failOnExhausted 在重试耗尽回调中标记实例为失败状态
@@ -129,7 +130,7 @@ func clusterRefFromConfig(cfg map[string]any) (clusterRef, error) {
 		ClusterType: dbm.ClusterType(cast.ToString(cfg[configKeyClusterType])),
 	}
 	if ref.ClusterID <= 0 || ref.BkBizID <= 0 || ref.ClusterType == "" {
-		return clusterRef{}, fmt.Errorf(
+		return clusterRef{}, errors.Errorf(
 			"incomplete cluster config: clusterID=%d bkBizID=%d clusterType=%q",
 			ref.ClusterID, ref.BkBizID, ref.ClusterType,
 		)
@@ -141,7 +142,7 @@ func clusterRefFromConfig(cfg map[string]any) (clusterRef, error) {
 func parseObjectID(instID string) (bson.ObjectID, error) {
 	objID, err := bson.ObjectIDFromHex(instID)
 	if err != nil {
-		return bson.NilObjectID, fmt.Errorf("invalid instID %q: %w", instID, taskq.ErrStopRetry)
+		return bson.NilObjectID, errors.Wrapf(taskq.ErrStopRetry, "invalid instID %q", instID)
 	}
 	return objID, nil
 }
@@ -150,7 +151,7 @@ func parseObjectID(instID string) (bson.ObjectID, error) {
 func parseTicketID(handle string) (int, error) {
 	ticketID, err := strconv.Atoi(handle)
 	if err != nil || ticketID <= 0 {
-		return 0, fmt.Errorf("invalid ticket handle %q: %w", handle, taskq.ErrStopRetry)
+		return 0, errors.Wrapf(taskq.ErrStopRetry, "invalid ticket handle %q", handle)
 	}
 	return ticketID, nil
 }

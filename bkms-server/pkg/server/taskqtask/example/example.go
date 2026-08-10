@@ -24,9 +24,9 @@ package example
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hibiken/asynq"
+	"github.com/pkg/errors"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
@@ -65,11 +65,9 @@ func handler(ctx context.Context, args Args) error {
 	switch {
 	case args.ErrStopRetry:
 		// 不可恢复错误: 包装 ErrStopRetry, 框架翻译为 asynq.SkipRetry, 立即终止不再重试。
-		return fmt.Errorf("taskq example handler unrecoverable error: msg=%s: %w",
-			args.Msg, taskq.ErrStopRetry)
+		return errors.Wrapf(taskq.ErrStopRetry, "taskq example handler unrecoverable error: msg=%s", args.Msg)
 	case args.ErrFixedRetry:
-		return fmt.Errorf("taskq example handler simulated failure: msg=%s: %w",
-			args.Msg, taskq.ErrFixedRetry)
+		return errors.Wrapf(taskq.ErrFixedRetry, "taskq example handler simulated failure: msg=%s", args.Msg)
 	default:
 		return nil
 	}

@@ -21,13 +21,13 @@ package taskq
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
+	stderrors "errors"
 	"time"
 
 	"github.com/hibiken/asynq"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
 
@@ -55,35 +55,35 @@ var _ = Describe("Test taskq TaskType handler", func() {
 		err := task.Handler()(context.Background(), asynq.NewTask("bad", []byte("not-json")))
 		Expect(err).To(HaveOccurred())
 		// 反序列化失败应停止重试。
-		Expect(errors.Is(err, asynq.SkipRetry)).To(BeTrue())
+		Expect(stderrors.Is(err, asynq.SkipRetry)).To(BeTrue())
 	})
 
 	It("wraps StopRetry when handler returns ErrStopRetry", func() {
 		task := NewTaskType[sampleArgs]("skip", func(_ context.Context, _ sampleArgs) error {
-			return fmt.Errorf("bad arg: %w", ErrStopRetry)
+			return errors.Wrap(ErrStopRetry, "bad arg")
 		})
 		payload := lo.Must(json.Marshal(sampleArgs{ID: "a"}))
 		err := task.Handler()(context.Background(), asynq.NewTask("skip", payload))
-		Expect(errors.Is(err, asynq.SkipRetry)).To(BeTrue())
+		Expect(stderrors.Is(err, asynq.SkipRetry)).To(BeTrue())
 	})
 
 	It("returns error as-is for retryable failures", func() {
 		task := NewTaskType[sampleArgs]("retry", func(_ context.Context, _ sampleArgs) error {
-			return fmt.Errorf("still running: %w", ErrFixedRetry)
+			return errors.Wrap(ErrFixedRetry, "still running")
 		})
 		payload := lo.Must(json.Marshal(sampleArgs{ID: "a"}))
 		err := task.Handler()(context.Background(), asynq.NewTask("retry", payload))
 		Expect(err).To(HaveOccurred())
 		// 非 StopRetry, 交由重试策略处理。
-		Expect(errors.Is(err, asynq.SkipRetry)).To(BeFalse())
-		Expect(errors.Is(err, ErrFixedRetry)).To(BeTrue())
+		Expect(stderrors.Is(err, asynq.SkipRetry)).To(BeFalse())
+		Expect(stderrors.Is(err, ErrFixedRetry)).To(BeTrue())
 	})
 })
 
 var _ = Describe("Test taskq retry semantics", func() {
 	It("returns fixed interval when error wraps ErrFixedRetry", func() {
 		fn := retryDelayFunc(30 * time.Second)
-		err := fmt.Errorf("still running: %w", ErrFixedRetry)
+		err := errors.Wrap(ErrFixedRetry, "still running")
 		Expect(fn(1, err, asynq.NewTask("x", nil))).To(Equal(30 * time.Second))
 	})
 
@@ -93,7 +93,7 @@ var _ = Describe("Test taskq retry semantics", func() {
 		}).WithFixedRetryInterval(45 * time.Second)
 
 		fn := retryDelayFunc(5 * time.Second)
-		err := fmt.Errorf("still running: %w", ErrFixedRetry)
+		err := errors.Wrap(ErrFixedRetry, "still running")
 		Expect(fn(1, err, asynq.NewTask("test.fixed-interval", nil))).To(Equal(45 * time.Second))
 		Expect(fn(1, err, asynq.NewTask("other", nil))).To(Equal(5 * time.Second))
 	})
@@ -102,14 +102,14 @@ var _ = Describe("Test taskq retry semantics", func() {
 		interval := 5 * time.Second
 		fn := retryDelayFunc(interval)
 		// 非 ErrFixedRetry 走默认退避
-		Expect(fn(1, errors.New("transient"), asynq.NewTask("x", nil))).NotTo(Equal(interval))
+		Expect(fn(1, stderrors.New("transient"), asynq.NewTask("x", nil))).NotTo(Equal(interval))
 	})
 
 	It("wrapStopRetry makes error match asynq.SkipRetry", func() {
-		base := errors.New("terminal")
+		base := stderrors.New("terminal")
 		err := wrapStopRetry(base)
-		Expect(errors.Is(err, asynq.SkipRetry)).To(BeTrue())
-		Expect(errors.Is(err, base)).To(BeTrue())
+		Expect(stderrors.Is(err, asynq.SkipRetry)).To(BeTrue())
+		Expect(stderrors.Is(err, base)).To(BeTrue())
 	})
 })
 
