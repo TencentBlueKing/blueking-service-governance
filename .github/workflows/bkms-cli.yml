@@ -2,17 +2,8 @@ name: Build and release bkms-cli
 
 on:
   push:
-    branches:
-      - "**"
     tags:
       - "bkms-cli/v*.*.*"
-    paths:
-      - "bkms-cli/**"
-      - ".github/workflows/bkms-cli.yml"
-  pull_request:
-    paths:
-      - "bkms-cli/**"
-      - ".github/workflows/bkms-cli.yml"
 
 permissions:
   contents: read
