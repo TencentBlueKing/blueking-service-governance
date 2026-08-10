@@ -21,10 +21,14 @@ package serializer
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/timex"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	podstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/pod"
@@ -60,7 +64,35 @@ type AppInstanceURIInput struct {
 // -----------------------------------------------------------------------------
 // 实例管理
 
+// 实例列表筛选排序参数的取值约束，与接口契约保持一致，
+// 详见 design_notes/pod_instance_cache.md
+const (
+	// KeywordMaxLen 关键字长度上限
+	KeywordMaxLen = 128
+
+	// OrderByName 按实例名称排序
+	OrderByName = "name"
+	// OrderByAge 按存在时长排序
+	OrderByAge = "age"
+	// OrderByRestartCount 按重启次数排序
+	OrderByRestartCount = "restartCount"
+
+	// OrderAsc 升序
+	OrderAsc = "asc"
+	// OrderDesc 降序
+	OrderDesc = "desc"
+)
+
+// orderByChoices / orderChoices 排序参数的合法取值，顺序固定以保证校验错误提示稳定
+var (
+	orderByChoices = []string{OrderByName, OrderByAge, OrderByRestartCount}
+	orderChoices   = []string{OrderAsc, OrderDesc}
+)
+
 // ListAppInstancesQueryInput 查询应用实例列表的请求参数。
+//
+// keyword / status / orderBy / order 为筛选排序参数，全部可选，缺省行为与未引入这些参数时一致。
+// 参数绑定后必须调用 Validate 完成校验（校验前会做必要的归一），实际的筛选排序能力尚未实现。
 type ListAppInstancesQueryInput struct {
 	// 部署的泳道名称（空字符串表示不使用泳道）
 	TrafficLaneName string `form:"trafficLaneName"`
@@ -68,6 +100,65 @@ type ListAppInstancesQueryInput struct {
 	Page int64 `form:"page" binding:"required,gte=1"`
 	// 每页数量，仅支持固定枚举值
 	PageSize int64 `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
+	// 关键字，对实例名称、Pod IP、节点 IP 做不区分大小写的子串匹配，长度上限 128
+	Keyword string `form:"keyword"`
+	// 实例状态多选筛选，取值来自实例状态封闭枚举，多个状态之间取并集
+	Status []string `form:"status"`
+	// 排序字段，取值 name / age / restartCount，缺省 name
+	OrderBy string `form:"orderBy"`
+	// 排序方向，取值 asc / desc，缺省 asc
+	Order string `form:"order"`
+}
+
+// Validate 校验筛选排序参数，须在参数绑定之后、使用参数之前调用。
+//
+// 校验前先做必要归一：keyword 去除首尾空白后为空、status 过滤空串后为空，都等价于未传该参数，
+// 因此 ?keyword=%20 与 ?status= 不会被判为非法取值。校验失败返回 ErrCodeInvalidArgument（HTTP 400），
+// 未知状态值不静默忽略。
+func (i *ListAppInstancesQueryInput) Validate() error {
+	i.Keyword = strings.TrimSpace(i.Keyword)
+	if utf8.RuneCountInString(i.Keyword) > KeywordMaxLen {
+		return bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidArgument,
+			"keyword length must not exceed %d characters",
+			KeywordMaxLen,
+		)
+	}
+
+	statuses := make([]string, 0, len(i.Status))
+	for _, s := range i.Status {
+		if s == "" {
+			continue
+		}
+		if !podstatus.IsValid(s) {
+			return bkerrs.Errorf(
+				bkerrs.ErrCodeInvalidArgument,
+				"invalid status %s, allowed values: %s", s, strings.Join(podstatus.AllStatuses(), " / "),
+			)
+		}
+		statuses = append(statuses, s)
+	}
+	i.Status = statuses
+
+	if i.OrderBy == "" {
+		i.OrderBy = OrderByName
+	} else if !slices.Contains(orderByChoices, i.OrderBy) {
+		return bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidArgument,
+			"invalid orderBy %s, allowed values: %s", i.OrderBy, strings.Join(orderByChoices, " / "),
+		)
+	}
+
+	if i.Order == "" {
+		i.Order = OrderAsc
+	} else if !slices.Contains(orderChoices, i.Order) {
+		return bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidArgument,
+			"invalid order %s, allowed values: %s", i.Order, strings.Join(orderChoices, " / "),
+		)
+	}
+
+	return nil
 }
 
 // PolarisInstanceInfoOutputObj 关联到应用实例的北极星实例状态。
@@ -224,7 +315,7 @@ func MergePolarisInfoToAppInstances(
 
 // PaginatedAppInstancesOutputObj 分页查询应用实例列表的输出载荷。
 type PaginatedAppInstancesOutputObj struct {
-	// 结果数量
+	// 结果数量，为应用 keyword / status 筛选条件之后的总数；不传筛选条件时即全量总数
 	Count int64 `json:"count,string"`
 	// 查询结果
 	Results []*AppInstanceOutputObj `json:"results"`

@@ -65,11 +65,18 @@ func New(registry *storereg.Registry) *Handler {
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
-//	@Param		appID			path		string	true	"应用 ID"
-//	@Param		envName			path		string	true	"部署环境名称"
-//	@Param		trafficLaneName	query		string	false	"部署的泳道名称（空字符串表示不使用泳道）"
-//	@Param		page			query		int		true	"页码，从 1 开始"
-//	@Param		pageSize		query		int		true	"每页数量"
+//	@Param		appID			path		string		true	"应用 ID"
+//	@Param		envName			path		string		true	"部署环境名称"
+//	@Param		trafficLaneName	query		string		false	"部署的泳道名称（空字符串表示不使用泳道）"
+//	@Param		page			query		int			true	"页码，从 1 开始"
+//	@Param		pageSize		query		int			true	"每页数量"
+//	@Param		keyword			query		string		false	"关键字，对实例名称、Pod IP、节点 IP
+//
+// 做不区分大小写的子串匹配，长度上限 128"
+//
+//	@Param		status			query		[]string	false	"实例状态多选筛选，多个状态之间取并集"	collectionFormat(multi)
+//	@Param		orderBy			query		string		false	"排序字段，缺省 name"						Enums(name, age, restartCount)
+//	@Param		order			query		string		false	"排序方向，缺省 asc"						Enums(asc, desc)
 //	@Success	200				{object}	serializer.ListAppInstancesOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/envs/{envName}/instances [get]
@@ -77,6 +84,10 @@ func (h *Handler) ListAppInstances(c *gin.Context) {
 	var uriInput serializer.AppEnvURIInput
 	var queryInput serializer.ListAppInstancesQueryInput
 	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	if err := queryInput.Validate(); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -104,55 +115,16 @@ func (h *Handler) ListAppInstances(c *gin.Context) {
 	}
 
 	// 获取应用实例（Pod）列表
-	client := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
-	// 根据命名空间 + 标签选择器获取 Pod 列表
-	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
-	pods, err := client.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
+	appInstances, total, err := h.listPagedAppInstances(ctx, record, queryInput.Page, queryInput.PageSize)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError,
-			"list namespace %s labelsSelector [%s] pods", record.Namespace, labelSelector,
-		))
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
-
-	// 计算总数
-	total := int64(len(pods.Items))
-
-	// 计算分页参数（使用 max 确保最小值）
-	page := max(queryInput.Page, int64(1))
-	pageSize := max(queryInput.PageSize, int64(1))
-
-	// 计算起始和结束索引（使用 min 确保不越界）
-	startIdx := min((page-1)*pageSize, total)
-	endIdx := min(startIdx+pageSize, total)
-
-	// 只解析当前页的数据
-	// TODO 未来支持按状态 / IP 等过滤，应该还是需要全量数据处理？
-	appInstances := make([]*serializer.AppInstanceOutputObj, 0, endIdx-startIdx)
-	for i := startIdx; i < endIdx; i++ {
-		p := pods.Items[i]
-		instance, pErr := new(serializer.AppInstanceOutputObj).FromPodManifest(p.Object, record.ID.Hex())
-		if pErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-				pErr, bkerrs.ErrCodeInternalServerError, "parse pod %s", mapx.GetStr(p.Object, "metadata.name"),
-			))
-			return
-		}
-		appInstances = append(appInstances, instance)
-	}
-
-	mgr := polaris.NewPolarisPlatformManager(
-		h.registry.DepSvcStore,
-		h.registry.DepSvcInstStore,
-		h.registry.PolarisConfigStore,
-	)
-	svcInstances, err := mgr.ListPolarisServiceInstances(ctx, app.ID, uriInput.EnvName)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list polaris service instances"))
+	// 追加应用实例的北极星信息
+	if err = h.attachPolarisToAppInstances(ctx, app.ID, uriInput.EnvName, appInstances); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	serializer.MergePolarisInfoToAppInstances(appInstances, svcInstances)
 
 	ginutils.OK(c, serializer.ListAppInstancesOutput{
 		Data: &serializer.PaginatedAppInstancesOutputObj{
@@ -160,6 +132,70 @@ func (h *Handler) ListAppInstances(c *gin.Context) {
 			Results: appInstances,
 		},
 	})
+}
+
+// listPagedAppInstances 按部署记录拉取 Pod 全量后做内存分页，只解析当前页
+func (h *Handler) listPagedAppInstances(
+	ctx context.Context,
+	record *appmodeldeploy.Record,
+	page, pageSize int64,
+) ([]*serializer.AppInstanceOutputObj, int64, error) {
+	client := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
+	// 根据命名空间 + 标签选择器获取 Pod 列表
+	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
+	pods, err := client.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
+	if err != nil {
+		return nil, 0, bkerrs.Wrapf(
+			err, bkerrs.ErrCodeInternalServerError,
+			"list namespace %s labelsSelector [%s] pods", record.Namespace, labelSelector,
+		)
+	}
+
+	// 计算总数
+	total := int64(len(pods.Items))
+
+	// 计算分页参数（使用 max 确保最小值）
+	page = max(page, int64(1))
+	pageSize = max(pageSize, int64(1))
+
+	// 计算起始和结束索引（使用 min 确保不越界）
+	startIdx := min((page-1)*pageSize, total)
+	endIdx := min(startIdx+pageSize, total)
+
+	// 只解析当前页的数据
+	// TODO 未来支持按状态 / IP 等过滤，应该还是需要全量数据处理？
+	deployID := record.ID.Hex()
+	appInstances := make([]*serializer.AppInstanceOutputObj, 0, endIdx-startIdx)
+	for i := startIdx; i < endIdx; i++ {
+		p := pods.Items[i]
+		instance, pErr := new(serializer.AppInstanceOutputObj).FromPodManifest(p.Object, deployID)
+		if pErr != nil {
+			return nil, 0, bkerrs.Wrapf(
+				pErr, bkerrs.ErrCodeInternalServerError, "parse pod %s", mapx.GetStr(p.Object, "metadata.name"),
+			)
+		}
+		appInstances = append(appInstances, instance)
+	}
+	return appInstances, total, nil
+}
+
+// attachPolarisToAppInstances 拉取北极星实例信息并合并到当前页应用实例
+func (h *Handler) attachPolarisToAppInstances(
+	ctx context.Context,
+	appID, envName string,
+	appInstances []*serializer.AppInstanceOutputObj,
+) error {
+	mgr := polaris.NewPolarisPlatformManager(
+		h.registry.DepSvcStore,
+		h.registry.DepSvcInstStore,
+		h.registry.PolarisConfigStore,
+	)
+	svcInstances, err := mgr.ListPolarisServiceInstances(ctx, appID, envName)
+	if err != nil {
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list polaris service instances")
+	}
+	serializer.MergePolarisInfoToAppInstances(appInstances, svcInstances)
+	return nil
 }
 
 // UpdateAppInstances 更新应用实例（支持单/多/全量实例更新）。

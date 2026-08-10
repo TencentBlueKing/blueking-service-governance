@@ -7083,6 +7083,43 @@ const docTemplate = `{
                         "name": "pageSize",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键字，对实例名称、Pod IP、节点 IP 做不区分大小写的子串匹配，长度上限 128",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "实例状态多选筛选，多个状态之间取并集",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "age",
+                            "restartCount"
+                        ],
+                        "type": "string",
+                        "description": "排序字段，缺省 name",
+                        "name": "orderBy",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "排序方向，缺省 asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -24209,7 +24246,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "count": {
-                    "description": "结果数量",
+                    "description": "结果数量，为应用 keyword / status 筛选条件之后的总数；不传筛选条件时即全量总数",
                     "type": "string",
                     "example": "0"
                 },
