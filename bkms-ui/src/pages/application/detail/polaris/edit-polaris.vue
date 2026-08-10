@@ -115,7 +115,7 @@
               :name="$t('组件可用环境')"
               type="normal"
             >
-              <EnvGroupSelect
+              <EnvGroupSelector
                 v-model="formModel.scopeEnvNames"
                 :env-list="envList"
               />
@@ -423,6 +423,7 @@
   import { WorkspaceService } from '~/api/modules/v1/workspace';
   import { BKMS_REGEX } from '~/common/const';
   import { copyText } from '~/common/util';
+  import EnvGroupSelector from '~/components/env-group-selector.vue';
   import KeyValue from '~/components/key-value.vue';
   import { useFocusOnErrorField } from '~/composables/use-focus-on-error-field';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
@@ -430,7 +431,6 @@
   import { useAppDetail } from '~/stores/app-detail';
   import { useUserStore } from '~/stores/user';
 
-  import EnvGroupSelect from './env-group-select.vue';
   import PolarisRedeployTip from './polaris-redeploy-tip.vue';
 
   const expressTemplate = '${{ env.<Key> }}';
