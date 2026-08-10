@@ -52,10 +52,10 @@ func NewServer(
 		log.Infof(ctx, "taskq server concurrency is not positive, set to 10")
 	}
 
-	interval := time.Duration(defaultRetryInterval) * time.Second
+	defaultInterval := time.Duration(defaultRetryInterval) * time.Second
 	if cfg.RetryInterval > 0 {
-		interval = time.Duration(cfg.RetryInterval) * time.Second
-		log.Infof(ctx, "taskq server retry interval is %d, set to %d", cfg.RetryInterval, interval)
+		defaultInterval = time.Duration(cfg.RetryInterval) * time.Second
+		log.Infof(ctx, "taskq server retry interval is %d, set to %d", cfg.RetryInterval, defaultInterval)
 	}
 
 	queue := cfg.Queue
@@ -67,7 +67,7 @@ func NewServer(
 	inner := asynq.NewServer(redisConnOpt(cfg.Redis), asynq.Config{
 		Concurrency:    concurrency,
 		Queues:         map[string]int{queue: 1},
-		RetryDelayFunc: retryDelayFunc(interval),
+		RetryDelayFunc: retryDelayFunc(defaultInterval),
 		ErrorHandler:   errorHandler(),
 	})
 	return Server{inner: inner, mux: mux}
@@ -84,17 +84,23 @@ func (s Server) Shutdown() {
 	s.inner.Shutdown()
 }
 
-// retryDelayFunc 决定重试延迟: 错误链含 ErrFixedRetry 时用固定间隔, 否则默认退避。
+// retryDelayFunc 决定重试延迟:
+//   - ErrFixedRetry: 优先任务类型注册的固定间隔，否则用全局默认 fixed；
+//   - 其余错误: asynq 默认指数退避。
 func retryDelayFunc(fixed time.Duration) asynq.RetryDelayFunc {
 	return func(n int, e error, t *asynq.Task) time.Duration {
 		if errors.Is(e, ErrFixedRetry) {
+			if d, ok := getFixedRetryInterval(t.Type()); ok {
+				return d
+			}
 			return fixed
 		}
 		return asynq.DefaultRetryDelayFunc(n, e, t)
 	}
 }
 
-// errorHandler 构造 server 级错误处理器: 在重试耗尽(非 StopRetry)时记录错误日志。
+// errorHandler 构造 server 级错误处理器: 在重试耗尽(非 StopRetry)时记录错误日志，
+// 并调用业务注册的 exhausted 回调。
 func errorHandler() asynq.ErrorHandler {
 	return asynq.ErrorHandlerFunc(func(ctx context.Context, t *asynq.Task, err error) {
 		if errors.Is(err, asynq.SkipRetry) {
@@ -107,6 +113,11 @@ func errorHandler() asynq.ErrorHandler {
 			return // 仍有重试机会。
 		}
 		log.Errorf(ctx, "taskq task exhausted after %d retries: type=%s err=%v", retried, t.Type(), err)
+
+		// 调用业务注册的 exhausted 回调
+		if fn, ok := getExhaustedHandler(t.Type()); ok {
+			fn(ctx, t.Payload(), err)
+		}
 	})
 }
 

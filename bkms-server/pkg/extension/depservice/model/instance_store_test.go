@@ -174,6 +174,21 @@ var _ = Describe("Test ServiceInstanceStoreMongo", func() {
 			Expect(store.UpdateConfig(ctx, initInstID, initConfig)).NotTo(HaveOccurred())
 		})
 
+		It("test patch config merges into existing keys", func() {
+			Expect(store.PatchConfig(ctx, initInstID, map[string]any{
+				"foo":            "patched",
+				"createTicketID": 123,
+			})).To(Succeed())
+
+			inst, err := store.Get(ctx, initInstID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(inst.Config["foo"]).To(Equal("patched"))
+			Expect(inst.Config["funny"]).To(Equal(true))
+			Expect(inst.Config["createTicketID"]).To(BeEquivalentTo(123))
+
+			Expect(store.UpdateConfig(ctx, initInstID, initConfig)).To(Succeed())
+		})
+
 		It("test update credentials", func() {
 			newCreds := map[string]any{stringx.Random(6): stringx.Random(6)}
 
@@ -187,6 +202,21 @@ var _ = Describe("Test ServiceInstanceStoreMongo", func() {
 
 			// 还原 credentials
 			Expect(store.UpdateCredentials(ctx, initInstID, initCreds)).NotTo(HaveOccurred())
+		})
+
+		It("test patch credentials merges into existing keys", func() {
+			Expect(store.PatchCredentials(ctx, initInstID, map[string]any{
+				"password": "new-password",
+				"extra":    "keep-me",
+			})).To(Succeed())
+
+			inst, err := store.Get(ctx, initInstID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(inst.Credentials["username"]).To(Equal(initCreds["username"]))
+			Expect(inst.Credentials["password"]).To(Equal("new-password"))
+			Expect(inst.Credentials["extra"]).To(Equal("keep-me"))
+
+			Expect(store.UpdateCredentials(ctx, initInstID, initCreds)).To(Succeed())
 		})
 
 		It("test update status", func() {

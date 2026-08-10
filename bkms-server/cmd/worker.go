@@ -89,6 +89,7 @@ func NewWorkerCmd() *cobra.Command {
 			taskq.InitClient(ctx, cfg.Asynq)
 			// 初始化 worker 侧可复用的 store registry
 			storereg.Init(ctx)
+
 			// 启动阶段主动初始化权限管理器，提前暴露 IAM client、角色存储等构造问题，避免延迟到异步任务首次鉴权时才失败
 			_ = perm.NewManager()
 
@@ -115,9 +116,11 @@ func NewWorkerCmd() *cobra.Command {
 				return errors.Wrap(err, "start task consumer")
 			}
 
-			// 启动通用任务框架 server: 构建 mux 并显式挂载所有业务任务 handler
+			// 启动通用任务框架 server: 初始化任务依赖并挂载所有业务任务 handler
 			mux := asynq.NewServeMux()
-			taskqtask.RegisterAll(mux)
+			if err = taskqtask.Setup(mux); err != nil {
+				return errors.Wrap(err, "setup taskq tasks")
+			}
 			taskSrv := taskq.NewServer(ctx, cfg.Asynq, mux)
 			if err = taskSrv.Start(); err != nil {
 				log.Fatalf("failed to start taskq server: %v", err)

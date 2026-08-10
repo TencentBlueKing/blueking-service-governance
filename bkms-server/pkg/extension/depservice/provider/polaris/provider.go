@@ -76,7 +76,8 @@ func NewProvider(planConfig map[string]any) (*Provider, error) {
 // CreateInstance creates a Polaris service instance
 func (p *Provider) CreateInstance(
 	ctx context.Context,
-	config *types.ServicePlanConfig,
+	_ string,
+	_ *types.ServicePlanConfig,
 	params types.ProvisionParams,
 ) (*types.CreateInstanceResult, error) {
 	createParams, ok := params.(*CreateParams)
@@ -97,18 +98,16 @@ func (p *Provider) CreateInstance(
 		return nil, errors.Wrap(err, "create polaris service")
 	}
 
-	instConfig := &InstConfig{
+	instConfigMap, err := types.ToMap(&InstConfig{
 		PolarisName:      createParams.PolarisName,
 		PolarisNamespace: createParams.PolarisNamespace,
 		Token:            token,
-	}
-	instConfigMap, err := types.ToMap(instConfig)
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal inst config")
 	}
 
-	credentials := &Credentials{Token: token}
-	credentialsMap, err := types.ToMap(credentials)
+	credentialsMap, err := types.ToMap(&Credentials{Token: token})
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal credentials")
 	}
@@ -119,48 +118,29 @@ func (p *Provider) CreateInstance(
 	}, nil
 }
 
-// QueryInstance queries a Polaris service instance
-func (p *Provider) QueryInstance(
+// DeleteInstance 删除 Polaris 服务实例，同步完成。
+//
+// 若实例配置不完整（例如仍处于 provisioning、尚未写出 polaris 资源标识），
+// 视为外部资源不存在，直接返回成功，由 Manager 删除本地记录。
+func (p *Provider) DeleteInstance(
 	ctx context.Context,
-	config *types.ServicePlanConfig,
+	_ string,
+	_ *types.ServicePlanConfig,
 	instConfig map[string]any,
-) (*types.QueryInstanceResult, error) {
+) (*types.DeleteInstanceResult, error) {
 	instCfg, err := ParseInstConfig(instConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse polaris inst config")
 	}
+	// 配置不完整视为外部资源不存在，跳过 Polaris 调用（幂等删除）
 	if err = instCfg.Validate(); err != nil {
-		return nil, errors.Wrap(err, "validate polaris inst config")
+		//nolint:nilerr // intentional: incomplete config means nothing to delete remotely
+		return &types.DeleteInstanceResult{}, nil
 	}
-
-	credentials := &Credentials{Token: instCfg.Token}
-	credentialsMap, err := types.ToMap(credentials)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshal credentials")
+	if err = p.deleteService(ctx, instCfg.PolarisName, instCfg.PolarisNamespace, instCfg.Token); err != nil {
+		return nil, err
 	}
-
-	return &types.QueryInstanceResult{
-		Status:      types.AvailableStatus,
-		Credentials: credentialsMap,
-	}, nil
-}
-
-// DeleteInstance deletes a Polaris service instance
-func (p *Provider) DeleteInstance(
-	ctx context.Context,
-	config *types.ServicePlanConfig,
-	instConfig map[string]any,
-) error {
-	instCfg, err := ParseInstConfig(instConfig)
-	if err != nil {
-		return errors.Wrap(err, "parse polaris inst config")
-	}
-
-	if err = instCfg.Validate(); err != nil {
-		return errors.Wrap(err, "validate polaris inst config")
-	}
-
-	return p.deleteService(ctx, instCfg.PolarisName, instCfg.PolarisNamespace, instCfg.Token)
+	return &types.DeleteInstanceResult{}, nil
 }
 
 // createService calls Polaris API to create a service

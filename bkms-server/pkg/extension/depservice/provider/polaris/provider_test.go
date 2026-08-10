@@ -52,7 +52,7 @@ var _ = Describe("Test polaris provider", func() {
 		gock.Off()
 	})
 
-	It("test create", func() {
+	It("test create instance", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
 			defer gock.Off()
 
@@ -64,6 +64,7 @@ var _ = Describe("Test polaris provider", func() {
 
 			result, err := p.CreateInstance(
 				ctx,
+				"test-inst-id",
 				&types.ServicePlanConfig{Config: planConfig},
 				&CreateParams{
 					PolarisName:      "test-service",
@@ -77,7 +78,7 @@ var _ = Describe("Test polaris provider", func() {
 		})
 	})
 
-	It("test delete", func() {
+	It("test delete instance", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
 			defer gock.Off()
 
@@ -86,8 +87,9 @@ var _ = Describe("Test polaris provider", func() {
 				Reply(200).
 				JSON(map[string]any{})
 
-			err := p.DeleteInstance(
+			_, err := p.DeleteInstance(
 				ctx,
+				"test-inst-id",
 				&types.ServicePlanConfig{Config: planConfig},
 				map[string]any{
 					"polarisName":      "test-service",
@@ -99,22 +101,16 @@ var _ = Describe("Test polaris provider", func() {
 		})
 	})
 
-	It("test get", func() {
+	It("test delete instance with incomplete config is no-op", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
-			defer gock.Off()
-
-			result, err := p.QueryInstance(
+			result, err := p.DeleteInstance(
 				ctx,
+				"test-inst-id",
 				&types.ServicePlanConfig{Config: planConfig},
-				map[string]any{
-					"polarisName":      "test-service",
-					"polarisNamespace": "test-namespace",
-					"token":            "test-token",
-				},
+				map[string]any{},
 			)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(types.AvailableStatus))
-			Expect(result.Credentials["token"]).To(Equal("test-token"))
+			Expect(result.Async).To(BeFalse())
 		})
 	})
 
@@ -129,6 +125,7 @@ var _ = Describe("Test polaris provider", func() {
 
 			_, err := p.CreateInstance(
 				ctx,
+				"test-inst-id",
 				&types.ServicePlanConfig{Config: planConfig},
 				&CreateParams{
 					PolarisName:      "test-service",
@@ -145,6 +142,7 @@ var _ = Describe("Test polaris provider", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
 			_, err := p.CreateInstance(
 				ctx,
+				"test-inst-id",
 				&types.ServicePlanConfig{Config: planConfig},
 				&CreateParams{},
 			)

@@ -58,13 +58,14 @@ var _ Client = (*ApiClient)(nil)
 // New 创建 DBM API 客户端，根据配置返回真实客户端或 stub 客户端
 // 使用蓝鲸应用账号（bk_app_code / bk_app_secret）进行认证；
 // bk_username（DBM 网关要求的用户身份）在每次 API 调用时由调用方按操作发起人传入。
-func New(appCode, appSecret string) (Client, error) {
+func New() (Client, error) {
 	// 测试时使用 stub 客户端
 	if config.G.Development.UseStubDBM {
 		slog.Info("use stub dbm client according to config")
 		return NewStub(), nil
 	}
 
+	appCode, appSecret := config.G.BkApp.Code, config.G.BkApp.Secret
 	if appCode == "" || appSecret == "" {
 		return nil, errors.New("dbm appCode and appSecret are required")
 	}
