@@ -20,7 +20,7 @@
   <Sideslider
     v-model:is-show="localValue"
     :before-close="handleBeforeClose"
-    :width="isCollaspeAside ? 640 : 1400"
+    :width="isCollaspeAside ? 680 : 1400"
     @hidden="handleClose"
   >
     <template #header>
@@ -346,6 +346,7 @@
                 <ToggleCard
                   v-if="moduleType === 'space'"
                   class="mt-[24px]"
+                  content-class="!p-0 !mt-[12px]"
                   :name="$t('组件可用环境')"
                   type="normal"
                 >
@@ -361,32 +362,12 @@
                     >
                       {{ $t('可用环境') }}
                     </Radio>
-                    <div
+                    <EnvGroupSelector
                       v-show="componentScoped === 'environment'"
-                      ref="scopedEnvsRef"
-                      class="mt-[12px] bg-[#F5F7FA] py-[16px] px-[12px] max-h-[500px] overflow-auto"
-                    >
-                      <Checkbox.Group
-                        v-model="scopedEnvs"
-                        class="flex flex-col"
-                      >
-                        <Checkbox
-                          v-for="env in envList"
-                          :key="env.id"
-                          class="!ml-0 mb-[10px] last:mb-0"
-                          :label="env.name"
-                        >
-                          <span class="text-[#4D4F56]">{{ env.displayName }}</span>
-                          <span class="text-[#979BA5]"> ( {{ env.name }} ) </span>
-                        </Checkbox>
-                      </Checkbox.Group>
-                      <p
-                        v-if="!envList.length"
-                        class="text-[#979BA5] text-align-center"
-                      >
-                        {{ $t('暂无数据') }}
-                      </p>
-                    </div>
+                      v-model="scopedEnvs"
+                      class="mt-[12px]"
+                      :env-list="envList"
+                    />
                   </Radio.Group>
                 </ToggleCard>
               </template>
@@ -569,7 +550,6 @@
   import {
     Alert,
     Button,
-    Checkbox,
     Divider,
     Exception,
     Form,
@@ -591,6 +571,7 @@
     WorkspaceComponentsService,
   } from '~/api/modules/v1';
   import { BKMS_REGEX } from '~/common/const';
+  import EnvGroupSelector from '~/components/env-group-selector.vue';
   import ComponentItem from '~/components/modules/component-item.vue';
   import SpaceComponentItem from '~/components/modules/space-component-item.vue';
   import useDebouncedRef from '~/composables/use-debounce';
@@ -1092,23 +1073,11 @@
     }
   }
 
-  const scopedEnvsRef = ref<HTMLElement>();
   /**
    * 组件可用环境变化时触发
    */
-  function handleScopedChange(value: ScopedType) {
+  function handleScopedChange() {
     scopedEnvs.value = [];
-
-    // 当选中 environment 时,滚动到盒子中间
-    if (value === 'environment') {
-      nextTick(() => {
-        if (scopedEnvsRef.value) {
-          scopedEnvsRef.value.scrollIntoView({
-            block: 'center',
-          });
-        }
-      });
-    }
   }
 
   /**

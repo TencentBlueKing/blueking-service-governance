@@ -101,7 +101,7 @@
   const { t } = useI18n();
   const FEATURE_ENV_KIND = 'feature';
 
-  // 组件可用环境分组展示顺序
+  // 按环境类型分组的可用环境展示顺序
   const envTypeOrder = ['development', 'test', 'staging', 'production'] as const;
   // 环境分组类型，约束分组配置必须覆盖所有展示类型
   type EnvType = (typeof envTypeOrder)[number];
