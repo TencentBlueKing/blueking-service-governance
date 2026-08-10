@@ -11,30 +11,30 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
-// NewPublicCmd returns a Command instance for 'envvar import public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar import scoped' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, filePath, outputFormat string
 	var preview bool
 
 	cmd := &cobra.Command{
-		Use:   "public",
-		Short: "Import public (workspace/envType) environment variables",
-		Long: `Import public environment variables from a local .env file.
+		Use:   "scoped",
+		Short: "Import scoped (workspace/envType) environment variables",
+		Long: `Import scoped environment variables from a local .env file.
 
 The file will be uploaded to the server and parsed as workspace-level
 and/or envType-level scoped environment variables.
 
 Use --preview to see what would be imported without making any changes.`,
-		Example: `  # Import public env vars from a file
-  bkms-cli envvar import public --workspace <workspaceID> -f vars.env
+		Example: `  # Import scoped env vars from a file
+  bkms-cli envvar import scoped --workspace <workspaceID> -f vars.env
 
   # Preview import without making changes
-  bkms-cli envvar import public --workspace <workspaceID> -f vars.env --preview
+  bkms-cli envvar import scoped --workspace <workspaceID> -f vars.env --preview
 
   # Preview with JSON output
-  bkms-cli envvar import public -f vars.env --preview -o json
+  bkms-cli envvar import scoped -f vars.env --preview -o json
 
-  # Example .env file content for public (workspace/envType) import:
+  # Example .env file content for scoped (workspace/envType) import:
   # ─────────────────────────────────────────
   # # desc: workspace key shared across all envs
   # # scopeType: workspace
@@ -48,7 +48,7 @@ Use --preview to see what would be imported without making any changes.`,
   # # scopeType: workspace
   # ANOTHER_GLOBAL=global-value
   # ─────────────────────────────────────────
-  # Note: public import REQUIRES scopeType metadata for each variable.
+  # Note: scoped import REQUIRES scopeType metadata for each variable.
   # Supported scopeType values: workspace, envType.
   # scopeValue is required when scopeType is envType.`,
 		PreRun: cmdutil.CommonPreRun,
@@ -58,14 +58,14 @@ Use --preview to see what would be imported without making any changes.`,
 			if preview {
 				previewResult, err := client.New().PreviewPublicEnvVars(cmd.Context(), workspaceID, filePath)
 				if err != nil {
-					return errors.Wrap(err, "preview public env vars")
+					return errors.Wrap(err, "preview scoped env vars")
 				}
 				return formatPreviewOutput(cmd.Context(), previewResult, outputFormat)
 			}
 
 			result, err := client.New().ImportPublicEnvVars(cmd.Context(), workspaceID, filePath)
 			if err != nil {
-				return errors.Wrap(err, "import public env vars")
+				return errors.Wrap(err, "import scoped env vars")
 			}
 
 			console.Info("Import completed: total=%d, new=%d, overwrite=%d\n",

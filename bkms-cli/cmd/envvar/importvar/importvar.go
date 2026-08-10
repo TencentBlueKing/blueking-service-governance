@@ -10,11 +10,11 @@ func NewCmd() *cobra.Command {
 		Short: "Import environment variables from a local .env file",
 		Long: `Import environment variables from a local .env file to the server.
 
-Supports importing public (workspace/envType), env-scoped, and app-defined env vars.`,
+Supports importing scoped (workspace/envType), env-scoped, and app-defined env vars.`,
 		DisableFlagsInUseLine: true,
 	}
 
-	// 导入公共环境变量
+	// 导入 scoped 环境变量（workspace/envType）
 	cmd.AddCommand(NewPublicCmd())
 	// 导入环境变量
 	cmd.AddCommand(NewEnvCmd())

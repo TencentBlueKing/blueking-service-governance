@@ -12,32 +12,32 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
-// NewPublicCmd returns a Command instance for 'envvar list public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar list scoped' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, outputFormat string
 
 	cmd := &cobra.Command{
-		Use:   "public",
-		Short: "List public (workspace/envType/env) scoped environment variables",
-		Long: `List all public scoped environment variables in a workspace.
+		Use:   "scoped",
+		Short: "List scoped (workspace/envType/env) environment variables",
+		Long: `List all scoped environment variables in a workspace.
 
 Displays key, value, scopeType, scopeValue, description, and isSensitive fields.
 Sensitive values are masked with '******'.`,
-		Example: `  # List public env vars in default workspace
-  bkms-cli envvar list public
+		Example: `  # List scoped env vars in default workspace
+  bkms-cli envvar list scoped
 
-  # List public env vars in a specific workspace
-  bkms-cli envvar list public --workspace <workspaceID>
+  # List scoped env vars in a specific workspace
+  bkms-cli envvar list scoped --workspace <workspaceID>
 
   # Output as JSON
-  bkms-cli envvar list public --workspace <workspaceID> -o json`,
+  bkms-cli envvar list scoped --workspace <workspaceID> -o json`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
 
 			envVars, err := client.New().ListPublicEnvVars(cmd.Context(), workspaceID)
 			if err != nil {
-				return errors.Wrap(err, "list public env vars")
+				return errors.Wrap(err, "list scoped env vars")
 			}
 
 			formatted, err := output.FormatData(cmd.Context(), envVars, outputFormat)

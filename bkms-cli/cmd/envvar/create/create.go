@@ -10,11 +10,11 @@ func NewCmd() *cobra.Command {
 		Short: "Create an environment variable",
 		Long: `Create a new environment variable on the server.
 
-Supports creating public (workspace/envType/env) scoped vars and app-defined vars.`,
+Supports creating scoped (workspace/envType) vars, env-scoped vars, and app-defined vars.`,
 		DisableFlagsInUseLine: true,
 	}
 
-	// 创建公共环境变量
+	// 创建 scoped 环境变量（workspace/envType）
 	cmd.AddCommand(NewPublicCmd())
 	// 创建应用环境变量
 	cmd.AddCommand(NewAppCmd())

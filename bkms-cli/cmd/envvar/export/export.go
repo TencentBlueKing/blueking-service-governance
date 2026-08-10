@@ -10,11 +10,11 @@ func NewCmd() *cobra.Command {
 		Short: "Export environment variables to a local .env file",
 		Long: `Export environment variables from the server to stdout or a local .env file.
 
-Supports exporting public (workspace/envType), env-scoped, and app-defined env vars.`,
+Supports exporting scoped (workspace/envType), env-scoped, and app-defined env vars.`,
 		DisableFlagsInUseLine: true,
 	}
 
-	// 导出公共环境变量
+	// 导出 scoped 环境变量（workspace/envType）
 	cmd.AddCommand(NewPublicCmd())
 	// 导出环境变量
 	cmd.AddCommand(NewEnvCmd())

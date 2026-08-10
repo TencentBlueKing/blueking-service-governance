@@ -10,11 +10,11 @@ func NewCmd() *cobra.Command {
 		Short: "Delete an environment variable",
 		Long: `Delete an environment variable from the server.
 
-Supports deleting public (workspace/envType/env) scoped vars and app-defined vars.`,
+Supports deleting scoped (workspace/envType) vars, env-scoped vars, and app-defined vars.`,
 		DisableFlagsInUseLine: true,
 	}
 
-	// 删除公共环境变量
+	// 删除 scoped 环境变量（workspace/envType）
 	cmd.AddCommand(NewPublicCmd())
 	// 删除应用环境变量
 	cmd.AddCommand(NewAppCmd())

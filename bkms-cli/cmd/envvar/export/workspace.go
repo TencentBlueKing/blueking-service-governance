@@ -13,32 +13,32 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
-// NewPublicCmd returns a Command instance for 'envvar export public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar export scoped' sub command.
 func NewPublicCmd() *cobra.Command {
 	var workspaceID, filePath string
 
 	cmd := &cobra.Command{
-		Use:   "public",
-		Short: "Export public (workspace/envType) environment variables",
-		Long: `Export public environment variables from the server.
+		Use:   "scoped",
+		Short: "Export scoped (workspace/envType) environment variables",
+		Long: `Export scoped environment variables from the server.
 
 The exported content is in dotenv format. By default it is printed to stdout.
 Use -f to write it to a file.`,
-		Example: `  # Export public env vars to stdout
-  bkms-cli envvar export public --workspace <workspaceID>
+		Example: `  # Export scoped env vars to stdout
+  bkms-cli envvar export scoped --workspace <workspaceID>
 
-  # Export public env vars to a file
-  bkms-cli envvar export public --workspace <workspaceID> -f vars.env
+  # Export scoped env vars to a file
+  bkms-cli envvar export scoped --workspace <workspaceID> -f vars.env
 
   # Use default workspace
-  bkms-cli envvar export public -f vars.env`,
+  bkms-cli envvar export scoped -f vars.env`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
 
 			content, err := client.New().ExportPublicEnvVars(cmd.Context(), workspaceID)
 			if err != nil {
-				return errors.Wrap(err, "export public env vars")
+				return errors.Wrap(err, "export scoped env vars")
 			}
 
 			return writeExportContent(content, filePath)

@@ -10,12 +10,12 @@ func NewCmd() *cobra.Command {
 		Short: "List environment variables",
 		Long: `List environment variables from the server.
 
-Supports listing public (workspace/envType/env) scoped vars, app-defined vars,
+Supports listing scoped (workspace/envType/env) vars, app-defined vars,
 and effective vars for an app in a specific environment.`,
 		DisableFlagsInUseLine: true,
 	}
 
-	// 查询公共环境变量
+	// 查询 scoped 环境变量（workspace/envType）
 	cmd.AddCommand(NewPublicCmd())
 	// 查询应用环境变量
 	cmd.AddCommand(NewAppCmd())

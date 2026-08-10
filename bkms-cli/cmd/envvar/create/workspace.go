@@ -8,44 +8,41 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	envhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/env"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
-// NewPublicCmd returns a Command instance for 'envvar create for public' sub command.
+// NewPublicCmd returns a Command instance for 'envvar create scoped' sub command.
 func NewPublicCmd() *cobra.Command {
-	var workspaceID, key, value, scopeType, scopeValue, description string
+	var workspaceID, key, value, scope, description string
 	var sensitive bool
 
 	cmd := &cobra.Command{
-		Use:   "public",
-		Short: "Create a public (workspace/envType) scoped environment variable",
-		Long: `Create a new public scoped environment variable in a workspace.
+		Use:   "scoped",
+		Short: "Create a scoped (workspace/envType) environment variable",
+		Long: `Create a new scoped environment variable in a workspace.
 
-The --scope-type flag determines the scope level:
-  - workspace: applies to all environments
-  - envType: applies to a specific environment type (requires --scope-value)`,
-		Example: `  # Create a workspace-level env var
-  bkms-cli envvar create public --key MY_VAR --value my-value --scope-type workspace
+The --scope flag determines the scope level using the format "type[:value]":
+  - (default)          : workspace scope, applies to all environments
+  - envType:<value>    : applies to a specific environment type (e.g. envType:development)
+
+If --scope is not specified, the variable is created at workspace level.`,
+		Example: `  # Create a workspace-level env var (default scope)
+  bkms-cli envvar create scoped --key MY_VAR --value my-value
 
   # Create an envType-level env var
-  bkms-cli envvar create public --key MY_VAR --value my-value --scope-type envType --scope-value <env-type>
+  bkms-cli envvar create scoped --scope envType:development --key MY_VAR --value my-value
 
-  # Create a sensitive env var
-  bkms-cli envvar create public --key MY_VAR --value my-value --scope-type workspace --sensitive`,
+  # Create a sensitive workspace-level env var
+  bkms-cli envvar create scoped --key MY_VAR --value my-value --sensitive`,
 		PreRun: cmdutil.CommonPreRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key = strings.TrimSpace(key)
 
-			// 校验：scope-type 仅支持 workspace 和 envType
-			if scopeType == "env" {
-				return errors.New(
-					"scope-type 'env' is not supported here, please use 'bkms-cli envvar create env' instead",
-				)
-			}
-			// scope-type 为 envType 时必须提供 scope-value
-			if scopeType == "envType" && scopeValue == "" {
-				return errors.New("--scope-value is required when --scope-type is envType")
+			scopeType, scopeValue, err := envhandler.ParseScope(scope)
+			if err != nil {
+				return err
 			}
 
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
@@ -60,7 +57,7 @@ The --scope-type flag determines the scope level:
 					IsSensitive: sensitive,
 				})
 			if err != nil {
-				return errors.Wrap(err, "create public env var")
+				return errors.Wrap(err, "create scoped env var")
 			}
 
 			console.Info("Created env var: key=%s, scopeType=%s, scopeValue=%s, id=%s\n",
@@ -72,13 +69,11 @@ The --scope-type flag determines the scope level:
 	cmd.Flags().StringVar(&workspaceID, "workspace", "", "workspace ID")
 	cmd.Flags().StringVar(&key, "key", "", "environment variable key (required)")
 	cmd.Flags().StringVar(&value, "value", "", "environment variable value")
-	cmd.Flags().StringVar(&scopeType, "scope-type", "", "scope type: workspace or envType (required)")
-	cmd.Flags().StringVar(&scopeValue, "scope-value", "", "scope value (required for envType)")
+	cmd.Flags().StringVar(&scope, "scope", "", "scope in format 'workspace' or 'envType:<value>' (default: workspace)")
 	cmd.Flags().StringVar(&description, "description", "", "variable description")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "mark as sensitive variable")
 
 	_ = cmd.MarkFlagRequired("key")
-	_ = cmd.MarkFlagRequired("scope-type")
 
 	return cmd
 }

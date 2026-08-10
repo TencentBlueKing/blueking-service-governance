@@ -3,6 +3,7 @@ package env
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -82,4 +83,38 @@ func ResolveEnvScopedEnvVarID(ctx context.Context, cli client.Client, envID, key
 	default:
 		return "", errors.Errorf("ambiguous match: found %d variables with key '%s' in env", len(matched), key)
 	}
+}
+
+// ParseScope 解析 --scope 参数值，格式为 "workspace" 或 "envType:<value>"。
+// 未指定时默认为 workspace 级别。
+// 返回 scopeType 和 scopeValue。
+func ParseScope(scope string) (scopeType, scopeValue string, err error) {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return "workspace", "", nil
+	}
+
+	// 不含冒号：仅支持 "workspace"
+	if !strings.Contains(scope, ":") {
+		if scope != "workspace" {
+			return "", "", errors.Errorf(
+				"invalid --scope %q: expected 'workspace' or 'envType:<value>'", scope)
+		}
+		return "workspace", "", nil
+	}
+
+	// 含冒号：按第一个冒号分割
+	parts := strings.SplitN(scope, ":", 2)
+	scopeType = strings.TrimSpace(parts[0])
+	scopeValue = strings.TrimSpace(parts[1])
+
+	if scopeType != "envType" {
+		return "", "", errors.Errorf(
+			"invalid --scope %q: only 'workspace' and 'envType:<value>' are supported", scope)
+	}
+	if scopeValue == "" {
+		return "", "", errors.New("--scope 'envType:' requires a non-empty value, e.g. 'envType:development'")
+	}
+
+	return scopeType, scopeValue, nil
 }
