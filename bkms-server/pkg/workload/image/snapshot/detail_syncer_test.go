@@ -195,6 +195,73 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(status.LastError).To(BeEmpty())
 		})
 
+		It("should re-fetch pending tags and keep stale details on lookup failure", func() {
+			err := store.UpsertSnapshots(ctx, info.RepoKey, []Image{
+				{Tag: "core-test-01"},
+				{Tag: "core-test-02"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			staleBuiltAt := time.Date(2026, 4, 13, 14, 32, 31, 0, time.UTC)
+			err = store.UpdateDetail(ctx, info.RepoKey, "core-test-01", &registry.ImageDetail{
+				Tag:     "core-test-01",
+				Digest:  "sha256:a376477a",
+				Size:    317,
+				BuiltAt: staleBuiltAt,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			err = store.UpdateDetail(ctx, info.RepoKey, "core-test-02", &registry.ImageDetail{
+				Tag:     "core-test-02",
+				Digest:  "sha256:old02",
+				Size:    128,
+				BuiltAt: staleBuiltAt,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// 两个标签详情均已补全，只有被标记为待刷新才会重新拉取
+			err = store.MarkDetailSyncPending(ctx, info.RepoKey, []string{"core-test-01", "core-test-02"})
+			Expect(err).NotTo(HaveOccurred())
+
+			freshBuiltAt := time.Date(2026, 4, 23, 11, 52, 14, 0, time.UTC)
+			mockey.Mock((*registry.Client).GetTagDetail).
+				To(func(_ *registry.Client, _, tag string) (registry.ImageDetail, error) {
+					if tag == "core-test-02" {
+						return registry.ImageDetail{}, errors.Errorf("registry unreachable")
+					}
+					return registry.ImageDetail{
+						Tag:     tag,
+						Digest:  "sha256:9f3c21be",
+						Size:    512,
+						BuiltAt: freshBuiltAt,
+					}, nil
+				}).
+				Build()
+
+			err = syncer.SyncDetails(ctx, info)
+			Expect(err).NotTo(HaveOccurred())
+
+			snapshots, _, listErr := store.ListByRepoKey(ctx, info.RepoKey, "", 1, 10)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(snapshots).To(HaveLen(2))
+			snapshotsByTag := make(map[string]Image, len(snapshots))
+			for _, snapshot := range snapshots {
+				snapshotsByTag[snapshot.Tag] = snapshot
+			}
+			Expect(snapshotsByTag["core-test-01"].Digest).To(Equal("sha256:9f3c21be"))
+			Expect(snapshotsByTag["core-test-01"].Size).To(Equal(int64(512)))
+			Expect(snapshotsByTag["core-test-01"].BuiltAt.UTC()).To(Equal(freshBuiltAt))
+			Expect(snapshotsByTag["core-test-02"].Digest).To(Equal("sha256:old02"))
+			Expect(snapshotsByTag["core-test-02"].Size).To(Equal(int64(128)))
+			Expect(snapshotsByTag["core-test-02"].BuiltAt.UTC()).To(Equal(staleBuiltAt))
+			// 成功的标签清除待刷新标记；失败的保留，等待后续刷新重试
+			Expect(snapshotsByTag["core-test-01"].DetailSyncPending).To(BeFalse())
+			Expect(snapshotsByTag["core-test-02"].DetailSyncPending).To(BeTrue())
+
+			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+			Expect(status.LastError).To(ContainSubstring("get detail for core-test-02"))
+		})
+
 		It("should skip sync when status is refreshing", func() {
 			// 先将状态设为 refreshing
 			err := store.UpsertStatus(ctx, &RepoSnapshotStatus{

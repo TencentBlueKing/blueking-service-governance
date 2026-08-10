@@ -169,13 +169,18 @@ func (s *Service) listSnapshotsByRepoInfo(
 	return snapshots, total, status, nil
 }
 
-// RefreshAppSnapshots 刷新应用镜像快照
-func (s *Service) RefreshAppSnapshots(ctx context.Context, appID string) (*RefreshResult, error) {
+// RefreshAppSnapshots 刷新应用镜像快照。
+//
+// forceDetailSyncTags 中的标签会无条件重新拉取详情，即使本地快照已有详情；
+// 不传该参数时，只有新增标签和 latest 会同步详情。
+func (s *Service) RefreshAppSnapshots(
+	ctx context.Context, appID string, forceDetailSyncTags ...string,
+) (*RefreshResult, error) {
 	info, err := s.ResolveRepoKeyForApp(ctx, appID)
 	if err != nil {
 		return nil, err
 	}
-	return s.refreshSnapshotsByRepoInfo(ctx, info)
+	return s.refreshSnapshotsByRepoInfo(ctx, info, forceDetailSyncTags...)
 }
 
 // RefreshRepositorySnapshots 刷新指定镜像仓库的快照。
@@ -189,7 +194,14 @@ func (s *Service) RefreshRepositorySnapshots(ctx context.Context, repoName strin
 	return s.refreshSnapshotsByRepoInfo(ctx, info)
 }
 
-func (s *Service) refreshSnapshotsByRepoInfo(ctx context.Context, info *RepoKeyInfo) (*RefreshResult, error) {
+func (s *Service) refreshSnapshotsByRepoInfo(
+	ctx context.Context, info *RepoKeyInfo, forceDetailSyncTags ...string,
+) (*RefreshResult, error) {
+	// 先落库标记，确保即使抢不到刷新权，这些标签也会在后续任意一次刷新中被重新拉取详情
+	if err := s.snapshotStore.MarkDetailSyncPending(ctx, info.RepoKey, forceDetailSyncTags); err != nil {
+		return nil, errors.Wrap(err, "mark detail sync pending")
+	}
+
 	// 幂等性检查
 	acquired, err := s.snapshotStore.TrySetRefreshing(ctx, info.RepoKey)
 	if err != nil {
@@ -282,18 +294,23 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	if err != nil {
 		return nil, errors.Wrap(err, "list unsynced detail tags")
 	}
+
 	if len(unsyncedDetailTags) > 0 {
 		// 通过任务队列异步触发详情同步（构造时即完成凭据加密）
-		detailSyncArgs, encryptErr := NewImageDetailSyncArgs(info.RepoKey, info.RepoName, info.Username, info.Password)
+		detailSyncArgs, encryptErr := NewImageDetailSyncArgs(
+			info.RepoKey, info.RepoName, info.Username, info.Password,
+		)
 		if encryptErr != nil {
 			log.Errorf(ctx, "encrypt credentials for detail sync task %s failed: %v", info.RepoKey, encryptErr)
+			resultMsg = "Snapshot refresh completed, but the detail sync task was not submitted"
 		} else if _, applyErr := worker.ApplyTask(
 			ctx, config.G.RabbitMQ.GetURI(), config.G.RabbitMQ.Queue, TaskImageDetailSync, *detailSyncArgs,
 		); applyErr != nil {
 			log.Errorf(ctx, "apply image detail sync task for %s failed: %v", info.RepoKey, applyErr)
 			return nil, errors.Wrap(applyErr, "apply image detail sync task")
+		} else {
+			resultMsg = "Snapshot refresh completed, and the detail sync task has started asynchronously"
 		}
-		resultMsg = "Snapshot refresh completed, and the detail sync task has started asynchronously"
 	}
 
 	return &RefreshResult{

@@ -32,6 +32,9 @@ type Image struct {
 	Size int64 `bson:"size,omitempty"`
 	// BuiltAt 镜像构建时间（可为空，由 detail syncer 补全）
 	BuiltAt *time.Time `bson:"builtAt,omitempty"`
+	// DetailSyncPending 标记该标签的详情需要重新拉取（如标签被同名构建覆盖），
+	// 详情同步成功后清除
+	DetailSyncPending bool `bson:"detailSyncPending,omitempty"`
 	// CreatedAt 创建时间
 	CreatedAt time.Time `bson:"createdAt"`
 	// UpdatedAt 更新时间

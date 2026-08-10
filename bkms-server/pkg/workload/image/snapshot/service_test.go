@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
@@ -276,6 +277,38 @@ var _ = Describe("Service", func() {
 				Expect(result.Message).To(Equal("Snapshot refresh completed, no tags need detail sync"))
 			})
 		})
+
+		It("should submit detail sync task for a forced tag that already has details", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "core-test-01"}})
+				Expect(err).NotTo(HaveOccurred())
+				// 详情已补全，常规查询不会返回它
+				err = store.UpdateDetail(ctx, repoKey, "core-test-01", &registry.ImageDetail{
+					Tag:     "core-test-01",
+					Digest:  "sha256:a376477a",
+					BuiltAt: time.Now().Add(-time.Hour),
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"core-test-01"}, nil).Build()
+				mockey.Mock(worker.ApplyTask).Return("task-id-1", nil).Build()
+
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1, "core-test-01")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal("success"))
+				Expect(result.AddedTagCnt).To(BeEquivalentTo(0))
+				Expect(result.Message).To(Equal(
+					"Snapshot refresh completed, and the detail sync task has started asynchronously",
+				))
+
+				// 标记已落库，即使本次任务被跳过，后续刷新仍会重新拉取该标签
+				tags, listErr := store.ListUnsyncedDetailTags(ctx, repoKey)
+				Expect(listErr).NotTo(HaveOccurred())
+				Expect(tags).To(ContainElement("core-test-01"))
+			})
+		})
 	})
 
 	Describe("RefreshRepositorySnapshots", func() {
@@ -298,7 +331,9 @@ var _ = Describe("Service", func() {
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest, "v1.0.0"}, nil).Build()
 				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).Return([]string{TagLatest}, nil).Build()
 				mockey.Mock(NewImageDetailSyncArgs).
-					To(func(repoKey, repoName, username, password string) (*ImageDetailSyncArgs, error) {
+					To(func(
+						repoKey, repoName, username, password string,
+					) (*ImageDetailSyncArgs, error) {
 						preparedArgs = &ImageDetailSyncArgs{RepoKey: repoKey, RepoName: repoName}
 						Expect(username).To(BeEmpty())
 						Expect(password).To(BeEmpty())
