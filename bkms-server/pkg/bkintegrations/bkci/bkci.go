@@ -19,6 +19,8 @@
 // Package bkci 蓝盾项目、流水线、凭证等相关接入实现
 package bkci
 
+import "strings"
+
 // PipelineType 流水线类型
 type PipelineType string
 
@@ -34,4 +36,28 @@ const (
 var builtinPipelineTypes = []PipelineType{
 	PipelineTypeDockerfile,
 	PipelineTypeHelmGitBuild,
+}
+
+// PipelineTypeBuildTriggerPrefix 触发专用流水线的类型前缀。
+//
+// 触发专用流水线只监听工蜂 Git 事件并回调 bkms，自身不执行构建，且要求**应用级唯一**。
+// bkci_pipelines 的唯一索引仍为 workspaceID + type，应用级唯一是通过把 appID 编码进 type
+// 达成的——workspaceID + build-trigger-{appID} 等价于 workspaceID + appID + 触发专用类型，
+// 因此无需变更任何索引。这沿用了 type 字段已有的语义：它本就不是纯枚举，用户自定义流水线的
+// type 直接就是 pipelineID。
+//
+// 注意 isBuiltinPipelineType 目前按精确匹配判定，复合 type 会被误判为用户自定义流水线。
+// 「触发专用流水线按应用下发」子需求落地时需将其改为前缀匹配，详见
+// design_notes/build_trigger_contract.md
+const PipelineTypeBuildTriggerPrefix = "build-trigger-"
+
+// BuildTriggerPipelineType 拼装指定应用的触发专用流水线类型
+func BuildTriggerPipelineType(appID string) PipelineType {
+	return PipelineType(PipelineTypeBuildTriggerPrefix + appID)
+}
+
+// ParseBuildTriggerPipelineType 从触发专用流水线类型中解析出 appID，
+// 类型前缀不匹配时返回空字符串与 false
+func ParseBuildTriggerPipelineType(pipelineType string) (string, bool) {
+	return strings.CutPrefix(pipelineType, PipelineTypeBuildTriggerPrefix)
 }

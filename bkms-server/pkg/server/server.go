@@ -35,6 +35,8 @@ import (
 	buildhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build/handler"
 	helmchart "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
 	helmcharthandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/handler"
+	buildtrigger "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger"
+	buildtriggerhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -138,6 +140,13 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 	}
 	account.Register(r.Group(""), accountHandler, auth.Optional(authConfig, tokenClient))
 
+	// 构建触发回调由蓝盾触发专用流水线调用，携带应用独享凭证而非用户票据，
+	// 因此单独挂在不带 auth.Required 的路由组上，鉴权由 handler 自行完成
+	buildTriggerHandler := buildtriggerhandler.New()
+	callbackGroup := r.Group("/bkms/v1/bkms-server")
+	callbackGroup.Use(bkerrs.ErrorHandler())
+	buildtrigger.RegisterCallback(callbackGroup, buildTriggerHandler)
+
 	// Register authenticated business APIs under /v1.
 	// 以下 Group 的所有 API 均要求请求必须携带有效身份信息
 	v1 := r.Group("/bkms/v1/bkms-server")
@@ -149,6 +158,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 	networking.Register(v1, networkinghandler.New(storereg.G()))
 	autodeploy.Register(v1, autodeployhandler.New(storereg.G()))
 	build.Register(v1, buildhandler.New(storereg.G()))
+	buildtrigger.Register(v1, buildTriggerHandler)
 	imageapi.Register(v1, imagehandler.New(storereg.G()))
 	appcfg.Register(v1, appcfghandler.New(storereg.G()))
 	helmchart.Register(v1, helmcharthandler.New(storereg.G()))

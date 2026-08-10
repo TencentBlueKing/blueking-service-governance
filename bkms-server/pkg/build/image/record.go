@@ -54,6 +54,16 @@ func (s Status) IsTerminated() bool {
 	}
 }
 
+// TriggerType 构建的触发方式
+type TriggerType string
+
+const (
+	// TriggerTypeManual 手动触发，即前端「执行构建」按钮或 bkms-cli
+	TriggerTypeManual TriggerType = "manual"
+	// TriggerTypeAuto 自动触发，由触发策略经蓝盾回调发起
+	TriggerTypeAuto TriggerType = "auto"
+)
+
 // Record 构建记录
 type Record struct {
 	// WorkspaceID 工作空间名称
@@ -76,6 +86,11 @@ type Record struct {
 	Operator string `bson:"operator"`
 	// Extras 额外信息
 	Extras map[string]string `bson:"extras"`
+	// TriggerType 触发方式。存量记录无此字段，反序列化后为空串，读取时一律视为 TriggerTypeManual，
+	// 不做数据回填；统一走 serializer 的 FromModel 转换，不要直接比较该字段
+	TriggerType TriggerType `bson:"triggerType,omitempty"`
+	// TriggerPolicyID 自动触发时关联的触发策略 ID，手动触发为空
+	TriggerPolicyID string `bson:"triggerPolicyID,omitempty"`
 	// StartedAt 开始时间
 	StartedAt time.Time `bson:"startedAt"`
 	// EndedAt 结束时间

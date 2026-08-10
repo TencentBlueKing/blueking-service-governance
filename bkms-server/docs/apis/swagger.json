@@ -2224,6 +2224,510 @@
                 }
             }
         },
+        "/apps/{appID}/build-triggers": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "build-triggers"
+                ],
+                "summary": "获取应用的触发策略列表",
+                "operationId": "ListBuildTriggers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListPoliciesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "build-triggers"
+                ],
+                "summary": "新增触发策略",
+                "operationId": "CreateBuildTrigger",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "触发策略表单",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolicyFormInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolicyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/build-triggers/callback": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "build-triggers"
+                ],
+                "summary": "接收构建触发回调",
+                "operationId": "HandleBuildTriggerCallback",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用独享的回调凭证",
+                        "name": "X-Bkms-Build-Trigger-Token",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "回调事件",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CallbackEventInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CallbackOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/build-triggers/conflict-check": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "build-triggers"
+                ],
+                "summary": "预检触发策略的重叠冲突",
+                "operationId": "CheckBuildTriggerConflict",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "冲突预检参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ConflictCheckInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ConflictCheckOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/build-triggers/{triggerID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "build-triggers"
+                ],
+                "summary": "更新触发策略",
+                "operationId": "UpdateBuildTrigger",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "触发策略 ID",
+                        "name": "triggerID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "触发策略表单",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolicyFormInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolicyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "build-triggers"
+                ],
+                "summary": "删除触发策略",
+                "operationId": "DeleteBuildTrigger",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "触发策略 ID",
+                        "name": "triggerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/build-triggers/{triggerID}/records": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "build-triggers"
+                ],
+                "summary": "获取触发策略的触发记录列表",
+                "operationId": "ListBuildTriggerRecords",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "触发策略 ID",
+                        "name": "triggerID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结果筛选：built / skipped / failed，留空表示不筛选",
+                        "name": "result",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分页参数：页码，从 1 开始",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分页参数：每页数量，支持 5/10/20/50/100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListTriggerRecordsOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/build-triggers/{triggerID}/status": {
+            "patch": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "build-triggers"
+                ],
+                "summary": "启用或停用触发策略",
+                "operationId": "PatchBuildTriggerStatus",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "触发策略 ID",
+                        "name": "triggerID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "启停参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PatchPolicyStatusInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolicyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/builds": {
             "get": {
                 "security": [
@@ -17145,6 +17649,14 @@
                 "status": {
                     "description": "构建状态",
                     "type": "string"
+                },
+                "triggerPolicyID": {
+                    "description": "自动触发时关联的触发策略 ID，手动触发为空",
+                    "type": "string"
+                },
+                "triggerType": {
+                    "description": "触发方式：manual 手动，auto 自动。存量记录无该字段，一律输出 manual",
+                    "type": "string"
                 }
             }
         },
@@ -19492,6 +20004,79 @@
                 }
             }
         },
+        "serializer.CallbackEventInput": {
+            "type": "object",
+            "required": [
+                "branch",
+                "commitID",
+                "event",
+                "policyID"
+            ],
+            "properties": {
+                "branch": {
+                    "description": "推送的分支名，构建时使用该分支而非构建配置中的默认分支",
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "commitAuthor": {
+                    "description": "commit 作者，用于审计",
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "commitID": {
+                    "description": "本次推送的 HEAD commit 哈希",
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "event": {
+                    "description": "事件类型，本期仅 push",
+                    "type": "string",
+                    "enum": [
+                        "push"
+                    ]
+                },
+                "eventTime": {
+                    "description": "事件发生时间",
+                    "type": "string"
+                },
+                "policyID": {
+                    "description": "触发策略 ID，用于定位策略",
+                    "type": "string",
+                    "maxLength": 63,
+                    "minLength": 1
+                }
+            }
+        },
+        "serializer.CallbackOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "回调处理结果",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.CallbackResultOutputObj"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.CallbackResultOutputObj": {
+            "type": "object",
+            "properties": {
+                "buildID": {
+                    "description": "结果为 built 时的构建号，其余为空",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "跳过或失败原因，结果为 built 时为空",
+                    "type": "string"
+                },
+                "result": {
+                    "description": "处理结果：built 已发起构建，skipped 已跳过，failed 触发失败",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.CandidateAppServiceOutput": {
             "type": "object",
             "properties": {
@@ -19904,6 +20489,55 @@
                 },
                 "version": {
                     "description": "组件版本",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ConflictCheckInput": {
+            "type": "object",
+            "required": [
+                "policy"
+            ],
+            "properties": {
+                "excludeTriggerID": {
+                    "description": "排除的策略 ID，编辑场景下用于排除自身；新建场景留空",
+                    "type": "string"
+                },
+                "policy": {
+                    "description": "待检测的策略表单",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.PolicyFormInput"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.ConflictCheckOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "冲突检测结果",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.ConflictCheckOutputObj"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.ConflictCheckOutputObj": {
+            "type": "object",
+            "properties": {
+                "conflictPolicyNames": {
+                    "description": "发生冲突的已有策略名列表，无冲突时为空数组",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "level": {
+                    "description": "冲突级别：none 无冲突，warn 软冲突（可保存），error 硬冲突（禁止保存）",
                     "type": "string"
                 }
             }
@@ -23824,6 +24458,19 @@
                 }
             }
         },
+        "serializer.ListPoliciesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "触发策略列表",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.PolicyListOutputObjs"
+                        }
+                    ]
+                }
+            }
+        },
         "serializer.ListPortPoolsOutput": {
             "type": "object",
             "properties": {
@@ -23918,6 +24565,19 @@
                     "items": {
                         "$ref": "#/definitions/serializer.TrafficLaneCandidateAppOutput"
                     }
+                }
+            }
+        },
+        "serializer.ListTriggerRecordsOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "触发记录分页结果",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.PaginatedTriggerRecordOutputObjs"
+                        }
+                    ]
                 }
             }
         },
@@ -24549,6 +25209,23 @@
                 }
             }
         },
+        "serializer.PaginatedTriggerRecordOutputObjs": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "description": "记录总数，按当前筛选条件统计",
+                    "type": "string",
+                    "example": "0"
+                },
+                "results": {
+                    "description": "当前页结果，按触发时间倒序",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.TriggerRecordOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.PaginatedWorkspaceOutput": {
             "type": "object",
             "properties": {
@@ -24739,6 +25416,18 @@
                 "workloadName": {
                     "description": "WorkloadName 指定被注入 bscp 配置的目标 workload 名称（传入则更新）",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.PatchPolicyStatusInput": {
+            "type": "object",
+            "required": [
+                "enabled"
+            ],
+            "properties": {
+                "enabled": {
+                    "description": "是否启用；用指针以区分「未传」与「显式传 false」",
+                    "type": "boolean"
                 }
             }
         },
@@ -24990,6 +25679,156 @@
                 "name": {
                     "description": "配置名称",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.PolicyFormInput": {
+            "type": "object",
+            "required": [
+                "branchMatchMode",
+                "event",
+                "name",
+                "versionRule"
+            ],
+            "properties": {
+                "branchMatchMode": {
+                    "description": "分支匹配方式：eq 等于，prefix 前缀，all 全部",
+                    "type": "string",
+                    "enum": [
+                        "eq",
+                        "prefix",
+                        "all"
+                    ]
+                },
+                "branchMatchValue": {
+                    "description": "分支匹配值，多值以英文逗号分隔；匹配方式为 all 时必须留空",
+                    "type": "string",
+                    "maxLength": 512
+                },
+                "event": {
+                    "description": "触发事件，本期仅支持 push（推送分支）",
+                    "type": "string",
+                    "enum": [
+                        "push"
+                    ]
+                },
+                "name": {
+                    "description": "策略名称，应用内唯一，由汉字、大小写字母、数字、- 与 _ 组成",
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 1
+                },
+                "pathFilter": {
+                    "description": "文件路径条件，留空表示全匹配",
+                    "type": "string",
+                    "maxLength": 512
+                },
+                "versionRule": {
+                    "description": "镜像版本号规则",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.VersionRuleInput"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.PolicyListOutputObjs": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "description": "策略总数，生效中与已停用合并计数",
+                    "type": "string",
+                    "example": "0"
+                },
+                "results": {
+                    "description": "全部策略",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PolicyOutputObj"
+                    }
+                }
+            }
+        },
+        "serializer.PolicyOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "触发策略",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.PolicyOutputObj"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.PolicyOutputObj": {
+            "type": "object",
+            "properties": {
+                "appID": {
+                    "description": "所属应用 ID",
+                    "type": "string"
+                },
+                "branchMatchMode": {
+                    "description": "分支匹配方式",
+                    "type": "string"
+                },
+                "branchMatchValue": {
+                    "description": "分支匹配值",
+                    "type": "string"
+                },
+                "createdAt": {
+                    "description": "创建时间",
+                    "type": "string"
+                },
+                "creator": {
+                    "description": "创建人",
+                    "type": "string"
+                },
+                "event": {
+                    "description": "触发事件",
+                    "type": "string"
+                },
+                "health": {
+                    "description": "流水线与触发器健康状态：unknown / healthy / unauthorized",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "策略 ID",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "策略名称",
+                    "type": "string"
+                },
+                "pathFilter": {
+                    "description": "文件路径条件",
+                    "type": "string"
+                },
+                "pipelineID": {
+                    "description": "关联的蓝盾触发专用流水线 ID",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "启停状态：enabled 生效中，disabled 已停用",
+                    "type": "string"
+                },
+                "triggerID": {
+                    "description": "关联的蓝盾触发器标识",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "更新时间",
+                    "type": "string"
+                },
+                "versionRule": {
+                    "description": "镜像版本号规则",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.VersionRuleOutput"
+                        }
+                    ]
                 }
             }
         },
@@ -27180,6 +28019,51 @@
                 }
             }
         },
+        "serializer.TriggerRecordOutputObj": {
+            "type": "object",
+            "properties": {
+                "appID": {
+                    "description": "归属应用 ID",
+                    "type": "string"
+                },
+                "branch": {
+                    "description": "分支名",
+                    "type": "string"
+                },
+                "buildID": {
+                    "description": "结果为 built 时关联的构建号，其余为空",
+                    "type": "string"
+                },
+                "commitAuthor": {
+                    "description": "commit 作者",
+                    "type": "string"
+                },
+                "commitID": {
+                    "description": "commit 哈希",
+                    "type": "string"
+                },
+                "event": {
+                    "description": "事件类型",
+                    "type": "string"
+                },
+                "policyID": {
+                    "description": "归属策略 ID",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "跳过或失败原因，结果为 built 时为空",
+                    "type": "string"
+                },
+                "result": {
+                    "description": "处理结果：built 已构建，skipped 已跳过，failed 触发失败",
+                    "type": "string"
+                },
+                "triggeredAt": {
+                    "description": "触发时间",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.TrpcSpecInput": {
             "type": "object",
             "required": [
@@ -27924,6 +28808,48 @@
                 "value": {
                     "description": "变量值",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.VersionRuleInput": {
+            "type": "object",
+            "required": [
+                "type"
+            ],
+            "properties": {
+                "prefix": {
+                    "description": "自定义前缀，仅 custom 类型使用",
+                    "type": "string",
+                    "maxLength": 16
+                },
+                "type": {
+                    "description": "版本号规则类型：custom 自定义版本，semver 语义化版本",
+                    "type": "string",
+                    "enum": [
+                        "custom",
+                        "semver"
+                    ]
+                },
+                "withBranch": {
+                    "description": "版本号是否拼接分支名，仅 custom 类型使用",
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.VersionRuleOutput": {
+            "type": "object",
+            "properties": {
+                "prefix": {
+                    "description": "自定义前缀",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "版本号规则类型",
+                    "type": "string"
+                },
+                "withBranch": {
+                    "description": "版本号是否拼接分支名",
+                    "type": "boolean"
                 }
             }
         },
