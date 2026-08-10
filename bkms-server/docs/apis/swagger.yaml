@@ -887,6 +887,8 @@ definitions:
     type: object
   serializer.AlertEventOutput:
     properties:
+      alertID:
+        type: string
       alertName:
         type: string
       assignee:
@@ -914,8 +916,6 @@ definitions:
       endTime:
         type: integer
       eventID:
-        type: string
-      id:
         type: string
       latestTime:
         type: integer

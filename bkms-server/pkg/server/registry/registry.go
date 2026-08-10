@@ -53,7 +53,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
-	alertstrategyenvhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/envhooks"
+	alertstrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/hooks"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/admin"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/portforward"
 	workspaceadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin"
@@ -259,7 +259,7 @@ func (r *Registry) registerStoreHooks() {
 	r.WorkspaceCompsStore.SetComponentHooks(workspace.NewComponentRefCountHooks(r.ComponentDefStore))
 	r.AppModelStore.SetComponentHooks(appmodel.NewComponentRefCountHooks(r.ComponentDefStore))
 	envvarhooks.RegisterDeleteHooks(r.ScopedEnvVarStore)
-	alertstrategyenvhooks.RegisterUpdateHooks(
+	alertstrategyhooks.RegisterUpdateHooks(
 		r.WorkspaceStore,
 		r.AlertStrategyStore,
 		r.EnvStore,

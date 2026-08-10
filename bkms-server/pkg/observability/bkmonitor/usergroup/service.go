@@ -58,7 +58,7 @@ func New() *Service {
 
 // List 列出 workspace 对应监控空间下的全部告警组。
 func (s *Service) List(ctx context.Context, ws *workspace.Workspace, operator string) ([]*bkmapi.UserGroup, error) {
-	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve bkmonitor space id")
 	}
@@ -67,10 +67,10 @@ func (s *Service) List(ctx context.Context, ws *workspace.Workspace, operator st
 		return nil, errors.Wrap(err, "new bkmonitor client")
 	}
 	groups, err := client.SearchUserGroups(ctx, &bkmapi.SearchUserGroupsReq{
-		BkBizIDs: []int64{bkBizID},
+		BkBizIDs: []int64{bkMonitorProjectID},
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "search user groups, bk_biz_id=%d", bkBizID)
+		return nil, errors.Wrapf(err, "search user groups, bk_biz_id=%d", bkMonitorProjectID)
 	}
 	return groups, nil
 }
@@ -81,7 +81,7 @@ func (s *Service) FindByName(
 	ws *workspace.Workspace,
 	name, operator string,
 ) (*bkmapi.UserGroup, error) {
-	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve bkmonitor space id")
 	}
@@ -90,11 +90,11 @@ func (s *Service) FindByName(
 		return nil, errors.Wrap(err, "new bkmonitor client")
 	}
 	groups, err := client.SearchUserGroups(ctx, &bkmapi.SearchUserGroupsReq{
-		BkBizIDs: []int64{bkBizID},
+		BkBizIDs: []int64{bkMonitorProjectID},
 		Name:     name,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "search user groups by name, bk_biz_id=%d, name=%s", bkBizID, name)
+		return nil, errors.Wrapf(err, "search user groups by name, bk_biz_id=%d, name=%s", bkMonitorProjectID, name)
 	}
 	for _, group := range groups {
 		if group != nil && group.Name == name {
@@ -111,7 +111,7 @@ func (s *Service) Get(
 	groupID int64,
 	operator string,
 ) (*bkmapi.UserGroupDetail, error) {
-	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve bkmonitor space id")
 	}
@@ -119,20 +119,25 @@ func (s *Service) Get(
 	if err != nil {
 		return nil, errors.Wrap(err, "new bkmonitor client")
 	}
-	return s.getWithClient(ctx, client, groupID, bkBizID)
+	return s.getWithClient(ctx, client, groupID, bkMonitorProjectID)
 }
 
 func (s *Service) getWithClient(
 	ctx context.Context,
 	client bkmapi.MonitorClient,
-	groupID, bkBizID int64,
+	groupID, bkMonitorProjectID int64,
 ) (*bkmapi.UserGroupDetail, error) {
 	detail, err := client.SearchUserGroupDetail(ctx, &bkmapi.SearchUserGroupDetailReq{ID: groupID})
 	if err != nil {
 		return nil, errors.Wrapf(err, "search user group detail, id=%d", groupID)
 	}
-	if detail == nil || detail.BkBizID != bkBizID {
-		return nil, errors.Wrapf(ErrUserGroupNotInWorkspace, "group_id=%d, expected_bk_biz_id=%d", groupID, bkBizID)
+	if detail == nil || detail.BkBizID != bkMonitorProjectID {
+		return nil, errors.Wrapf(
+			ErrUserGroupNotInWorkspace,
+			"group_id=%d, expected_bk_biz_id=%d",
+			groupID,
+			bkMonitorProjectID,
+		)
 	}
 	return detail, nil
 }
@@ -146,7 +151,7 @@ func (s *Service) Save(
 	if err := params.Validate(); err != nil {
 		return nil, err
 	}
-	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve bkmonitor space id")
 	}
@@ -157,15 +162,15 @@ func (s *Service) Save(
 
 	var requestID *int64
 	if params.ID > 0 {
-		if _, err = s.getWithClient(ctx, client, params.ID, bkBizID); err != nil {
+		if _, err = s.getWithClient(ctx, client, params.ID, bkMonitorProjectID); err != nil {
 			return nil, errors.Wrap(err, "validate user group ownership before save")
 		}
 		requestID = &params.ID
 	}
 
-	detail, err := client.SaveUserGroup(ctx, buildSaveUserGroupReq(bkBizID, requestID, params))
+	detail, err := client.SaveUserGroup(ctx, buildSaveUserGroupReq(bkMonitorProjectID, requestID, params))
 	if err != nil {
-		return nil, errors.Wrapf(err, "save user group, bk_biz_id=%d, id=%d", bkBizID, params.ID)
+		return nil, errors.Wrapf(err, "save user group, bk_biz_id=%d, id=%d", bkMonitorProjectID, params.ID)
 	}
 	return detail, nil
 }
@@ -174,13 +179,13 @@ func (s *Service) Save(
 // BKMonitor 虽然暴露了大量轮值相关字段，但当前场景只需要固定组装一个非轮值 duty arrange，
 // 以避免把底层结构细节暴露给前端。
 func buildSaveUserGroupReq(
-	bkBizID int64,
+	bkMonitorProjectID int64,
 	requestID *int64,
 	params *SaveParams,
 ) *bkmapi.SaveUserGroupReq {
 	return &bkmapi.SaveUserGroupReq{
 		ID:           requestID,
-		BkBizID:      bkBizID,
+		BkBizID:      bkMonitorProjectID,
 		Name:         params.Name,
 		Timezone:     saveUserGroupDefaultTimezone,
 		NeedDuty:     false,
@@ -273,7 +278,7 @@ func (s *Service) Delete(
 	groupID int64,
 	operator string,
 ) error {
-	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
 		return errors.Wrap(err, "resolve bkmonitor space id")
 	}
@@ -281,15 +286,15 @@ func (s *Service) Delete(
 	if err != nil {
 		return errors.Wrap(err, "new bkmonitor client")
 	}
-	if _, err = s.getWithClient(ctx, client, groupID, bkBizID); err != nil {
+	if _, err = s.getWithClient(ctx, client, groupID, bkMonitorProjectID); err != nil {
 		return errors.Wrap(err, "validate user group ownership before delete")
 	}
 	if err = client.DeleteUserGroup(ctx, &bkmapi.DeleteUserGroupReq{
 		IDs:      []int64{groupID},
-		BkBizIDs: []int64{bkBizID},
+		BkBizIDs: []int64{bkMonitorProjectID},
 		Operator: operator,
 	}); err != nil {
-		return errors.Wrapf(err, "delete user group, bk_biz_id=%d, id=%d", bkBizID, groupID)
+		return errors.Wrapf(err, "delete user group, bk_biz_id=%d, id=%d", bkMonitorProjectID, groupID)
 	}
 	return nil
 }

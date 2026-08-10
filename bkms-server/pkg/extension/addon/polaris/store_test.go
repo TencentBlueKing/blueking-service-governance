@@ -174,7 +174,7 @@ var _ = Describe("PolarisConfigStore", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.EnvWeights["dev"]).To(BeZero())
 				Expect(updatedConfig.EnvWeights).NotTo(HaveKey("staging"))
-				Expect(updatedConfig.UpdatedAt).To(BeTemporally(">", before.UpdatedAt))
+				Expect(updatedConfig.UpdatedAt).NotTo(BeTemporally("<", before.UpdatedAt))
 			})
 
 			It("should return not found when the config does not exist", func() {

@@ -45,7 +45,16 @@ var _ = Describe("Alert serializer", func() {
 				CreateTime: 1710000000,
 			}, "strategy-1")
 
+			Expect(output.AlertID).To(Equal("alert-1"))
 			Expect(output.Assignee).To(Equal([]string{"alice", "bob"}))
+		})
+
+		It("uses alertID as json field name", func() {
+			typ := reflect.TypeOf(AlertEventOutput{})
+
+			alertIDField, ok := typ.FieldByName("AlertID")
+			Expect(ok).To(BeTrue())
+			Expect(alertIDField.Tag.Get("json")).To(Equal("alertID"))
 		})
 	})
 
@@ -256,12 +265,12 @@ var _ = Describe("Alert serializer", func() {
 			Expect(pageSizeField.Tag.Get("binding")).To(Equal("required,oneof=5 10 20 50 100"))
 		})
 
-		It("binds alert id from id query parameter", func() {
+		It("binds alert id from alertID query parameter", func() {
 			typ := reflect.TypeOf(AlertQueryInput{})
 
 			alertIDField, ok := typ.FieldByName("AlertID")
 			Expect(ok).To(BeTrue())
-			Expect(alertIDField.Tag.Get("form")).To(Equal("id"))
+			Expect(alertIDField.Tag.Get("form")).To(Equal("alertID"))
 		})
 
 		It("keeps explicit paging and ordering unchanged", func() {
@@ -285,6 +294,29 @@ var _ = Describe("Alert serializer", func() {
 			input.Normalize()
 
 			Expect(input.Ordering).To(Equal([]string{"-create_time"}))
+		})
+	})
+
+	Describe("NewGetAlertDetailResp", func() {
+		It("renames top-level id field to alertID", func() {
+			resp := NewGetAlertDetailResp(map[string]any{
+				"id":        "alert-1",
+				"status":    "ABNORMAL",
+				"alertName": "cpu high",
+			})
+
+			Expect(resp.Data["alertID"]).To(Equal("alert-1"))
+			_, ok := resp.Data["id"]
+			Expect(ok).To(BeFalse())
+		})
+
+		It("keeps existing alertID field unchanged", func() {
+			resp := NewGetAlertDetailResp(map[string]any{
+				"alertID": "alert-1",
+				"status":  "ABNORMAL",
+			})
+
+			Expect(resp.Data["alertID"]).To(Equal("alert-1"))
 		})
 	})
 })

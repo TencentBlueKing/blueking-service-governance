@@ -18246,6 +18246,9 @@ const docTemplate = `{
         "serializer.AlertEventOutput": {
             "type": "object",
             "properties": {
+                "alertID": {
+                    "type": "string"
+                },
                 "alertName": {
                     "type": "string"
                 },
@@ -18284,9 +18287,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "eventID": {
-                    "type": "string"
-                },
-                "id": {
                     "type": "string"
                 },
                 "latestTime": {

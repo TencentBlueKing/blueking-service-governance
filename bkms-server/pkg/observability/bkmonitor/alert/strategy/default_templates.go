@@ -18,6 +18,7 @@
 
 package strategy
 
+// builtinStrategyMetrics the map for built-in monitor metric bound to a strategy code.
 var builtinStrategyMetrics = map[string]string{
 	"cpu_request_usage_high":    "container_cpu_usage_seconds_total",
 	"memory_request_usage_high": "container_memory_working_set_bytes",

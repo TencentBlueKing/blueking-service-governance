@@ -34,7 +34,7 @@ type AlertQueryInput struct {
 	EndTime      int64    `form:"endTime"`
 	Page         int      `form:"page" binding:"required,gte=1"`
 	PageSize     int      `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
-	AlertID      string   `form:"id"`
+	AlertID      string   `form:"alertID"`
 	AlertName    string   `form:"alertName"`
 	Description  string   `form:"description"`
 	StrategyName string   `form:"strategyName"`
@@ -78,7 +78,7 @@ type AppScopedAlertQueryInput struct {
 // AlertEventOutput 告警事件输出
 type AlertEventOutput struct {
 	StrategyID          string   `json:"strategyID,omitempty"`
-	ID                  string   `json:"id"`
+	AlertID             string   `json:"alertID"`
 	EventID             string   `json:"eventID,omitempty"`
 	AlertName           string   `json:"alertName"`
 	Assignee            []string `json:"assignee,omitempty"`
@@ -128,7 +128,7 @@ type GetAlertDetailResp struct {
 func NewAlertEventOutput(a bkmapi.AlertEvent, strategyID string) *AlertEventOutput {
 	return &AlertEventOutput{
 		StrategyID:          strategyID,
-		ID:                  a.ID,
+		AlertID:             a.ID,
 		EventID:             a.EventID,
 		AlertName:           a.AlertName,
 		Assignee:            a.Assignee,
@@ -151,6 +151,26 @@ func NewAlertEventOutput(a bkmapi.AlertEvent, strategyID string) *AlertEventOutp
 		LatestTime:          a.LatestTime,
 		CreateTime:          a.CreateTime,
 	}
+}
+
+// NewGetAlertDetailResp 规范化详情接口输出字段，统一对外使用 alertID。
+func NewGetAlertDetailResp(detail map[string]any) *GetAlertDetailResp {
+	if detail == nil {
+		return &GetAlertDetailResp{Data: nil}
+	}
+
+	normalized := make(map[string]any, len(detail))
+	for key, value := range detail {
+		if key == "id" {
+			if _, ok := detail["alertID"]; ok {
+				continue
+			}
+			normalized["alertID"] = value
+			continue
+		}
+		normalized[key] = value
+	}
+	return &GetAlertDetailResp{Data: normalized}
 }
 
 func calcAlertDuration(beginTime, endTime, latestTime int64) string {

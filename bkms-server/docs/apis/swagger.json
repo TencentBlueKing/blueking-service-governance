@@ -18243,6 +18243,9 @@
         "serializer.AlertEventOutput": {
             "type": "object",
             "properties": {
+                "alertID": {
+                    "type": "string"
+                },
                 "alertName": {
                     "type": "string"
                 },
@@ -18281,9 +18284,6 @@
                     "type": "integer"
                 },
                 "eventID": {
-                    "type": "string"
-                },
-                "id": {
                     "type": "string"
                 },
                 "latestTime": {

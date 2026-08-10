@@ -176,7 +176,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 			log.Errorf(bgCtx, "get workspace %s for default alert strategies failed: %v", app.WorkspaceID, wsErr)
 			return
 		}
-		noticeGroupIDs, groupErr := resolveDefaultAlertNoticeGroupIDs(
+		noticeGroupIDs, groupErr := usergroup.ResolveDefaultAlertNoticeGroupIDs(
 			bgCtx,
 			ws,
 			usergroup.New(),

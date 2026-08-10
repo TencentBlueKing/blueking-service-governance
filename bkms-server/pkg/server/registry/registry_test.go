@@ -26,7 +26,7 @@ import (
 
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	alertstrategyenvhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/envhooks"
+	alertstrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/hooks"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	appdefaultshooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/hooks"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
@@ -52,7 +52,7 @@ var _ = Describe("Store registry", func() {
 		storereg.Init(context.Background())
 
 		Expect(
-			bkmsenv.IsUpdateHookRegistered(alertstrategyenvhooks.ReconcileEnvTypeChangeHookName),
+			bkmsenv.IsUpdateHookRegistered(alertstrategyhooks.ReconcileEnvTypeChangeHookName),
 		).To(BeTrue(), "alert strategy env type change hook must be registered by store registry")
 	})
 })

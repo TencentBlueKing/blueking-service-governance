@@ -59,7 +59,7 @@ func (s *EnvService) Create(ctx context.Context, environment *model.Environment)
 	return envID, nil
 }
 
-// Update 更新环境
+// Update 更新指定环境。
 func (s *EnvService) Update(
 	ctx context.Context,
 	envID bson.ObjectID,
@@ -82,7 +82,7 @@ func (s *EnvService) Update(
 		return err
 	}
 
-	updated, err := s.Get(ctx, envID)
+	updatedEnv, err := s.Get(ctx, envID)
 	if err != nil {
 		return errors.Wrap(err, "get updated environment")
 	}
@@ -97,7 +97,7 @@ func (s *EnvService) Update(
 				hookErr,
 			)
 		}
-	}(*environment, *updated)
+	}(*environment, *updatedEnv)
 
 	return nil
 }

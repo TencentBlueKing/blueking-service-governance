@@ -16,8 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package envhooks 注册告警策略依赖的环境领域事件 Hook。
-package envhooks
+// Package hooks 注册告警策略依赖的环境领域事件 Hook。
+package hooks
 
 import (
 	"context"
@@ -35,7 +35,7 @@ import (
 
 const ReconcileEnvTypeChangeHookName = "alert_strategy.reconcile_env_type_change"
 
-// RegisterUpdateHooks registers alert strategy hooks with explicit store dependencies.
+// RegisterUpdateHooks 注册告警策略相关的环境更新 Hook，并显式传入所需的存储依赖。
 func RegisterUpdateHooks(
 	workspaceStore workspace.WorkspaceStore,
 	alertStrategyStore alertstrategy.Store,
@@ -43,13 +43,14 @@ func RegisterUpdateHooks(
 	appStore bkmsapp.ApplicationStore,
 	snapshotStore topology.ResourceSnapshotStore,
 ) {
+	// 注册环境类型变更时协调告警策略的 Hook。
 	bkmsenv.RegisterUpdateHook(
 		ReconcileEnvTypeChangeHookName,
 		NewReconcileEnvTypeChangeHook(workspaceStore, alertStrategyStore, envStore, appStore, snapshotStore),
 	)
 }
 
-// NewReconcileEnvTypeChangeHook creates a hook that reconciles alert strategies after env type changes.
+// NewReconcileEnvTypeChangeHook 创建一个 Hook，用于在环境类型发生变更后 reconcile 告警策略。
 func NewReconcileEnvTypeChangeHook(
 	workspaceStore workspace.WorkspaceStore,
 	alertStrategyStore alertstrategy.Store,
@@ -58,19 +59,23 @@ func NewReconcileEnvTypeChangeHook(
 	snapshotStore topology.ResourceSnapshotStore,
 ) bkmsenv.UpdateHook {
 	return func(ctx context.Context, before, after envmodel.Environment) error {
+		// 环境类型未变化时无需处理，直接跳过。
 		if before.Type == after.Type {
 			return nil
 		}
 
+		// 查询环境所属的工作空间，用于后续的告警策略协调。
 		ws, err := workspaceStore.Get(ctx, after.WorkspaceID)
 		if err != nil {
 			return errors.Wrapf(err, "get workspace %s", after.WorkspaceID)
 		}
+		// 默认以运维用户作为操作人；若上下文中存在真实用户则优先使用真实用户。
 		operatorID := auth.MaintenanceUserID
 		if user, userErr := auth.GetUser(ctx); userErr == nil && user.ID != "" {
 			operatorID = user.ID
 		}
 
+		// 构建告警策略服务，并针对本次环境类型变更协调相关告警策略。
 		svc := alertstrategy.NewService(alertStrategyStore, envStore, appStore, snapshotStore)
 		if err := svc.ReconcileStrategiesForEnvTypeChange(
 			ctx,

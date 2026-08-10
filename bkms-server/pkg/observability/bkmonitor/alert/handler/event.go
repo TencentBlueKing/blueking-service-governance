@@ -52,7 +52,7 @@ import (
 //	@Param		endTime		query		int			false	"结束时间"
 //	@Param		page		query		int			true	"页码，从 1 开始"
 //	@Param		pageSize	query		int			true	"每页数量，仅支持 5/10/20/50/100"
-//	@Param		id			query		string		false	"按告警 ID 过滤"
+//	@Param		alertID		query		string		false	"按告警 ID 过滤"
 //	@Param		alertName	query		string		false	"按告警名称过滤"
 //	@Param		description	query		string		false	"按告警内容过滤（映射到 query_string）"
 //	@Param		strategyName	query		string		false	"按策略名称过滤"
@@ -140,7 +140,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 //	@Param		endTime		query		int			false	"结束时间"
 //	@Param		page		query		int			true	"页码，从 1 开始"
 //	@Param		pageSize	query		int			true	"每页数量，仅支持 5/10/20/50/100"
-//	@Param		id			query		string		false	"按告警 ID 过滤"
+//	@Param		alertID		query		string		false	"按告警 ID 过滤"
 //	@Param		alertName	query		string		false	"按告警名称过滤"
 //	@Param		description	query		string		false	"按告警内容过滤（映射到 query_string）"
 //	@Param		strategyName	query		string		false	"按策略名称过滤"
@@ -244,7 +244,7 @@ func (h *Handler) GetAlertDetail(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, &serializer.GetAlertDetailResp{Data: detail})
+	ginutils.OK(c, serializer.NewGetAlertDetailResp(detail))
 }
 
 // collectRemoteStrategyIDsForAppAlerts 从应用下的本地告警策略中收集远端监控策略 ID。

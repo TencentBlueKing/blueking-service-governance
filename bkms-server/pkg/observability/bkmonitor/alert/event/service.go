@@ -83,7 +83,7 @@ func (s *Service) Search(
 	operator string,
 	input SearchInput,
 ) (*bkmapi.SearchAlertResp, error) {
-	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve bkMonitorProjectID")
 	}
@@ -91,7 +91,7 @@ func (s *Service) Search(
 	if err != nil {
 		return nil, errors.Wrap(err, "new bkmonitor client")
 	}
-	return client.SearchAlert(ctx, s.buildSearchAlertReq(bkBizID, input, nil))
+	return client.SearchAlert(ctx, s.buildSearchAlertReq(bkMonitorProjectID, input, nil))
 }
 
 // SearchByStrategyIDs 按策略 ID 列表查询告警事件
@@ -102,7 +102,7 @@ func (s *Service) SearchByStrategyIDs(
 	strategyIDs []int64,
 	input SearchInput,
 ) (*bkmapi.SearchAlertResp, error) {
-	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve bkMonitorProjectID")
 	}
@@ -110,7 +110,7 @@ func (s *Service) SearchByStrategyIDs(
 	if err != nil {
 		return nil, errors.Wrap(err, "new bkmonitor client")
 	}
-	return client.SearchAlert(ctx, s.buildSearchAlertReq(bkBizID, input, strategyIDs))
+	return client.SearchAlert(ctx, s.buildSearchAlertReq(bkMonitorProjectID, input, strategyIDs))
 }
 
 // GetDetail 查询单条告警详情
@@ -120,7 +120,7 @@ func (s *Service) GetDetail(
 	operator string,
 	alertID string,
 ) (map[string]any, error) {
-	bkBizID, err := ws.ResolveBkMonitorProjectID()
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve bkMonitorProjectID")
 	}
@@ -128,11 +128,11 @@ func (s *Service) GetDetail(
 	if err != nil {
 		return nil, errors.Wrap(err, "new bkmonitor client")
 	}
-	return client.GetAlertDetail(ctx, &bkmapi.AlertDetailReq{BkBizID: bkBizID, ID: alertID})
+	return client.GetAlertDetail(ctx, &bkmapi.AlertDetailReq{BkBizID: bkMonitorProjectID, ID: alertID})
 }
 
 func (s *Service) buildSearchAlertReq(
-	bkBizID int64,
+	bkMonitorProjectID int64,
 	input SearchInput,
 	strategyIDs []int64,
 ) *bkmapi.SearchAlertReq {
@@ -145,7 +145,7 @@ func (s *Service) buildSearchAlertReq(
 		startTime = endTime - int64(defaultSearchAlertLookback/time.Second)
 	}
 	req := &bkmapi.SearchAlertReq{
-		BkBizIDs:    []int64{bkBizID},
+		BkBizIDs:    []int64{bkMonitorProjectID},
 		Status:      input.Status,
 		Severity:    input.Severity,
 		StartTime:   startTime,
@@ -185,6 +185,13 @@ func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]
 	return conditions
 }
 
+// buildSearchQueryString 将查询输入中的告警 ID、告警名称、告警内容拼接为蓝鲸监控 search_alert 接口
+// 使用的 query_string 查询条件。
+//
+//   - 仅当对应字段非空时才参与拼装，为空则忽略；
+//   - 每个字段以 field:"value" 的形式表达（value 经 strconv.Quote 转义，避免特殊字符破坏查询语法）；
+//   - 多个字段短语之间以 AND 连接；
+//   - 当没有任何字段参与时返回空字符串，交由接口侧忽略该查询项。
 func buildSearchQueryString(input SearchInput) string {
 	parts := make([]string, 0, 3)
 	appendPhrase := func(field, value string) {
@@ -194,11 +201,14 @@ func buildSearchQueryString(input SearchInput) string {
 		parts = append(parts, field+":"+strconv.Quote(value))
 	}
 
+	// 分别按告警 ID、告警名称、告警内容拼接过滤短语。
 	appendPhrase("id", input.AlertID)
 	appendPhrase("alert_name", input.AlertName)
 	appendPhrase("description", input.Description)
+	// 没有任何过滤条件时返回空字符串，交由接口侧忽略该查询项。
 	if len(parts) == 0 {
 		return ""
 	}
+	// 多个短语以 AND 连接，构成蓝鲸监控 query_string 查询条件。
 	return strings.Join(parts, " AND ")
 }
