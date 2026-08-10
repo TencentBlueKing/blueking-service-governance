@@ -87,6 +87,17 @@ var _ = Describe("Test taskq retry semantics", func() {
 		Expect(fn(1, err, asynq.NewTask("x", nil))).To(Equal(30 * time.Second))
 	})
 
+	It("uses per-task fixed interval over the global default", func() {
+		_ = NewTaskType[sampleArgs]("test.fixed-interval", func(_ context.Context, _ sampleArgs) error {
+			return nil
+		}).WithFixedRetryInterval(45 * time.Second)
+
+		fn := retryDelayFunc(5 * time.Second)
+		err := fmt.Errorf("still running: %w", ErrFixedRetry)
+		Expect(fn(1, err, asynq.NewTask("test.fixed-interval", nil))).To(Equal(45 * time.Second))
+		Expect(fn(1, err, asynq.NewTask("other", nil))).To(Equal(5 * time.Second))
+	})
+
 	It("uses default backoff for non-fixed errors", func() {
 		interval := 5 * time.Second
 		fn := retryDelayFunc(interval)

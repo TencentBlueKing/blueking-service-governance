@@ -53,28 +53,11 @@ func (p *Provider) CreateInstance(
 	}
 
 	operator := auth.MustGetUser(ctx).ID
-	dbmParams := redisParams.ToCreateRedisParams()
 
 	task := redistask.CreateTask.NewTask(redistask.CreateArgs{
-		InstanceID:             instID,
-		Username:               operator,
-		BkBizID:                dbmParams.BkBizID,
-		TicketType:             dbmParams.TicketType,
-		BkCloudID:              dbmParams.BkCloudID,
-		DBAppAbbr:              dbmParams.DBAppAbbr,
-		ClusterType:            dbmParams.ClusterType,
-		ClusterName:            redisParams.ClusterName, // 回查与 Infos[].cluster_name 共用
-		ClusterAlias:           dbmParams.ClusterAlias,
-		DBVersion:              dbmParams.DBVersion,
-		ProxyPort:              dbmParams.ProxyPort,
-		ClusterShardNum:        dbmParams.ClusterShardNum,
-		IPSource:               dbmParams.IPSource,
-		ResourceSpec:           dbmParams.ResourceSpec,
-		DisasterToleranceLevel: dbmParams.DisasterToleranceLevel,
-		Port:                   dbmParams.Port,
-		Databases:              redisParams.Databases,
-		RedisPwd:               dbmParams.RedisPwd,
-		Infos:                  dbmParams.Infos,
+		InstanceID: instID,
+		Username:   operator,
+		DBMParams:  redisParams.ToCreateRedisParams(),
 	})
 	if err := taskq.Enqueue(ctx, task); err != nil {
 		return nil, errors.Wrap(err, "enqueue redis create task")

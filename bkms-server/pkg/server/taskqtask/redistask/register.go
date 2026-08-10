@@ -20,6 +20,7 @@ package redistask
 
 import (
 	"context"
+	"time"
 
 	"github.com/hibiken/asynq"
 
@@ -36,29 +37,42 @@ var (
 	DestroyTask *taskq.TaskType[DestroyArgs]
 )
 
+const (
+	// redisPollInterval Redis 工单轮询固定间隔
+	redisPollInterval = 30 * time.Second
+	// redisPollMaxRetry 轮询窗口：30s × 5760 ≈ 48h，覆盖 DBM 审批+部署最长等待。
+	redisPollMaxRetry = 5760
+)
+
 // Init 注册 Redis 生命周期相关的任务
 func init() {
 	CreateTask = taskq.NewTaskType[CreateArgs](
 		"depservice.redis.create",
 		createHandler,
-		asynq.MaxRetry(720), // 5s × 720 = 1h 轮询窗口
-	).OnExhausted(func(ctx context.Context, args CreateArgs, lastErr error) {
-		failOnExhausted(ctx, args.InstanceID, model.CreateFailedStatus, lastErr)
-	})
+		asynq.MaxRetry(redisPollMaxRetry),
+	).
+		WithFixedRetryInterval(redisPollInterval).
+		OnExhausted(func(ctx context.Context, args CreateArgs, lastErr error) {
+			failOnExhausted(ctx, args.InstanceID, model.CreateFailedStatus, lastErr)
+		})
 
 	DisableTask = taskq.NewTaskType[DisableArgs](
 		"depservice.redis.disable",
 		disableHandler,
-		asynq.MaxRetry(720),
-	).OnExhausted(func(ctx context.Context, args DisableArgs, lastErr error) {
-		failOnExhausted(ctx, args.InstanceID, model.DeleteFailedStatus, lastErr)
-	})
+		asynq.MaxRetry(redisPollMaxRetry),
+	).
+		WithFixedRetryInterval(redisPollInterval).
+		OnExhausted(func(ctx context.Context, args DisableArgs, lastErr error) {
+			failOnExhausted(ctx, args.InstanceID, model.DeleteFailedStatus, lastErr)
+		})
 
 	DestroyTask = taskq.NewTaskType[DestroyArgs](
 		"depservice.redis.destroy",
 		destroyHandler,
-		asynq.MaxRetry(720),
-	).OnExhausted(func(ctx context.Context, args DestroyArgs, lastErr error) {
-		failOnExhausted(ctx, args.InstanceID, model.DeleteFailedStatus, lastErr)
-	})
+		asynq.MaxRetry(redisPollMaxRetry),
+	).
+		WithFixedRetryInterval(redisPollInterval).
+		OnExhausted(func(ctx context.Context, args DestroyArgs, lastErr error) {
+			failOnExhausted(ctx, args.InstanceID, model.DeleteFailedStatus, lastErr)
+		})
 }

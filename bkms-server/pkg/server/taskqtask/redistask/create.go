@@ -32,65 +32,30 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 )
 
-// CreateArgs 创建 Redis 任务参数
+// CreateArgs 创建 Redis 任务参数。
+// DBM 创建参数由 provider 侧 ToCreateRedisParams 一次性组装，worker 不再二次映射。
 type CreateArgs struct {
 	InstanceID string `json:"instanceID"`
 	Username   string `json:"username"`
 	Handle     string `json:"handle"` // 空=Submit, 非空=Poll（值为 ticketID 字符串）
 
-	// DBM CreateRedis 所需参数（Submit 时使用）
-	BkBizID                int               `json:"bkBizID"`
-	TicketType             dbm.TicketType    `json:"ticketType"`
-	BkCloudID              int               `json:"bkCloudID"`
-	DBAppAbbr              string            `json:"dbAppAbbr"`
-	ClusterType            dbm.ClusterType   `json:"clusterType"`
-	ClusterName            string            `json:"clusterName"` // 集群模式写 details.cluster_name；主从模式写 Infos[].cluster_name，并作回查名
-	ClusterAlias           string            `json:"clusterAlias"`
-	DBVersion              string            `json:"dbVersion"`
-	ProxyPort              int               `json:"proxyPort"`
-	ClusterShardNum        int               `json:"clusterShardNum"`
-	IPSource               string            `json:"ipSource"`
-	ResourceSpec           *dbm.ResourceSpec `json:"resourceSpec"`
-	DisasterToleranceLevel string            `json:"disasterToleranceLevel"`
-	Port                   int               `json:"port"`
-	Databases              int               `json:"databases"`
-	RedisPwd               string            `json:"redisPwd"`
-	// Infos 主从部署（REDIS_INS_APPLY）专用；由 provider 侧按 ClusterName/Databases 预组装
-	Infos []dbm.RedisInsInfo `json:"infos,omitempty"`
+	// DBMParams 组装好的 DBM CreateRedis 参数
+	DBMParams *dbm.CreateRedisParams `json:"dbmParams"`
 }
 
-// toCreateRedisParams 按工单类型组装 DBM 创建参数。
-// REDIS_INS_APPLY 不消费顶层 ClusterName，使用 Infos（缺省时回退 ClusterName+Databases）。
-func (a CreateArgs) toCreateRedisParams() *dbm.CreateRedisParams {
-	params := &dbm.CreateRedisParams{
-		BkBizID:                a.BkBizID,
-		TicketType:             a.TicketType,
-		BkCloudID:              a.BkCloudID,
-		DBAppAbbr:              a.DBAppAbbr,
-		ClusterType:            a.ClusterType,
-		DBVersion:              a.DBVersion,
-		IPSource:               a.IPSource,
-		ResourceSpec:           a.ResourceSpec,
-		DisasterToleranceLevel: a.DisasterToleranceLevel,
+// clusterName 返回创建后回查用的集群名。
+// 集群模式取 DBMParams.ClusterName；主从模式取 Infos[0].ClusterName。
+func (a CreateArgs) clusterName() string {
+	if a.DBMParams == nil {
+		return ""
 	}
-	if a.TicketType == dbm.TicketTypeRedisInsApply {
-		params.Port = a.Port
-		params.RedisPwd = a.RedisPwd
-		// AppendApply 保持零值 false：只支持新建
-		params.Infos = a.Infos
-		if len(params.Infos) == 0 && a.ClusterName != "" {
-			params.Infos = []dbm.RedisInsInfo{{
-				ClusterName: a.ClusterName,
-				Databases:   a.Databases,
-			}}
-		}
-		return params
+	if a.DBMParams.ClusterName != "" {
+		return a.DBMParams.ClusterName
 	}
-	params.ClusterName = a.ClusterName
-	params.ClusterAlias = a.ClusterAlias
-	params.ProxyPort = a.ProxyPort
-	params.ClusterShardNum = a.ClusterShardNum
-	return params
+	if len(a.DBMParams.Infos) > 0 {
+		return a.DBMParams.Infos[0].ClusterName
+	}
+	return ""
 }
 
 func createHandler(ctx context.Context, args CreateArgs) error {
@@ -120,7 +85,16 @@ func createSubmit(ctx context.Context, objID bson.ObjectID, inst *model.ServiceI
 		return taskq.Enqueue(ctx, CreateTask.NewTask(args))
 	}
 
-	ticketID, err := dbmClient.CreateRedis(ctx, args.toCreateRedisParams(), args.Username)
+	if args.DBMParams == nil {
+		return failWithStopErr(
+			ctx,
+			args.InstanceID,
+			model.CreateFailedStatus,
+			errors.New("missing dbmParams in create task"),
+		)
+	}
+
+	ticketID, err := dbmClient.CreateRedis(ctx, args.DBMParams, args.Username)
 	if err != nil {
 		return failWithStopErr(ctx, args.InstanceID, model.CreateFailedStatus, err)
 	}
@@ -157,35 +131,56 @@ func createPoll(ctx context.Context, objID bson.ObjectID, args CreateArgs) error
 		return fmt.Errorf("create ticket %s in progress: %w", args.Handle, taskq.ErrFixedRetry)
 	}
 
-	// ClusterName 在主从模式下对应 Infos[].cluster_name，与提交工单时一致，可用于回查
+	// 工单已 SUCCEEDED：后续收尾失败多为瞬时错误，必须可重试。
+	// 仅在重试耗尽时由 OnExhausted 落 createFailed，并保留 createTicketID 便于人工对账。
+	if args.DBMParams == nil {
+		return failWithStopErr(
+			ctx,
+			args.InstanceID,
+			model.CreateFailedStatus,
+			errors.New("missing dbmParams in create task"),
+		)
+	}
+
+	clusterName := args.clusterName()
+	if clusterName == "" {
+		// 参数缺陷无法靠重试恢复
+		return failWithStopErr(
+			ctx,
+			args.InstanceID,
+			model.CreateFailedStatus,
+			errors.New("empty cluster name for lookup"),
+		)
+	}
+
 	clusterInfo, err := dbmClient.FindClusterByName(
-		ctx, args.BkBizID, args.ClusterName, args.ClusterType, args.Username,
+		ctx, args.DBMParams.BkBizID, clusterName, args.DBMParams.ClusterType, args.Username,
 	)
 	if err != nil {
-		return failWithStopErr(ctx, args.InstanceID, model.CreateFailedStatus, err)
+		return fmt.Errorf("find cluster by name %s: %w: %w", clusterName, err, taskq.ErrFixedRetry)
 	}
 
 	if err = instStore.PatchConfig(ctx, objID, map[string]any{
 		configKeyClusterID:   clusterInfo.ID,
-		configKeyClusterName: args.ClusterName,
-		configKeyClusterType: string(args.ClusterType),
+		configKeyClusterName: clusterName,
+		configKeyClusterType: string(args.DBMParams.ClusterType),
 		configKeyDomain:      clusterInfo.Domain,
 		configKeyPort:        clusterInfo.Port,
-		configKeyBkBizID:     args.BkBizID,
+		configKeyBkBizID:     args.DBMParams.BkBizID,
 	}); err != nil {
-		return failWithStopErr(ctx, args.InstanceID, model.CreateFailedStatus, err)
+		return fmt.Errorf("persist cluster config after create ticket: %w: %w", err, taskq.ErrFixedRetry)
 	}
 
-	if args.RedisPwd != "" {
+	if args.DBMParams.RedisPwd != "" {
 		if err = instStore.PatchCredentials(ctx, objID, map[string]any{
-			"password": args.RedisPwd,
+			"password": args.DBMParams.RedisPwd,
 		}); err != nil {
-			return failWithStopErr(ctx, args.InstanceID, model.CreateFailedStatus, err)
+			return fmt.Errorf("persist credentials after create ticket: %w: %w", err, taskq.ErrFixedRetry)
 		}
 	}
 
 	if err = instStore.UpdateStatus(ctx, objID, model.AvailableStatus, ""); err != nil {
-		return failWithStopErr(ctx, args.InstanceID, model.CreateFailedStatus, err)
+		return fmt.Errorf("mark instance available after create ticket: %w: %w", err, taskq.ErrFixedRetry)
 	}
 
 	return nil

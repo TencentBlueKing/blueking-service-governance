@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/hibiken/asynq"
 
@@ -38,7 +39,7 @@ var (
 	// 业务用法: return fmt.Errorf("invalid arg: %w", taskq.ErrStopRetry)。
 	ErrStopRetry = errors.New("taskq: stop retry")
 	// ErrFixedRetry 标记"任务仍在进行中", 框架以固定间隔重试(而非指数退避)。
-	// 间隔取 config.Asynq.RetryInterval(全局默认)。
+	// 间隔优先取 TaskType.WithFixedRetryInterval 注册值，否则用 config.Asynq.RetryInterval。
 	// 业务用法: return fmt.Errorf("still provisioning: %w", taskq.ErrFixedRetry)。
 	ErrFixedRetry = errors.New("taskq: retry with fixed interval")
 )
@@ -47,25 +48,41 @@ var (
 // payload 为原始 JSON 负载，lastErr 为最后一次执行时的错误。
 type ExhaustedHandlerFunc func(ctx context.Context, payload []byte, lastErr error)
 
-// exhaustedHandlers 全局注册表：task type name → exhausted 回调。
+// taskTypeRegistryMu 保护任务类型级注册表
 var (
+	taskTypeRegistryMu  sync.RWMutex
 	exhaustedHandlers   = make(map[string]ExhaustedHandlerFunc)
-	exhaustedHandlersMu sync.RWMutex
+	fixedRetryIntervals = make(map[string]time.Duration)
 )
 
 // registerExhaustedHandler 注册指定 task type 的 exhausted 回调。
 func registerExhaustedHandler(name string, fn ExhaustedHandlerFunc) {
-	exhaustedHandlersMu.Lock()
-	defer exhaustedHandlersMu.Unlock()
+	taskTypeRegistryMu.Lock()
+	defer taskTypeRegistryMu.Unlock()
 	exhaustedHandlers[name] = fn
 }
 
 // getExhaustedHandler 查找指定 task type 的 exhausted 回调。
 func getExhaustedHandler(name string) (ExhaustedHandlerFunc, bool) {
-	exhaustedHandlersMu.RLock()
-	defer exhaustedHandlersMu.RUnlock()
+	taskTypeRegistryMu.RLock()
+	defer taskTypeRegistryMu.RUnlock()
 	fn, ok := exhaustedHandlers[name]
 	return fn, ok
+}
+
+// registerFixedRetryInterval 注册指定 task type 在 ErrFixedRetry 时的固定间隔。
+func registerFixedRetryInterval(name string, d time.Duration) {
+	taskTypeRegistryMu.Lock()
+	defer taskTypeRegistryMu.Unlock()
+	fixedRetryIntervals[name] = d
+}
+
+// getFixedRetryInterval 查找指定 task type 的固定重试间隔。
+func getFixedRetryInterval(name string) (time.Duration, bool) {
+	taskTypeRegistryMu.RLock()
+	defer taskTypeRegistryMu.RUnlock()
+	d, ok := fixedRetryIntervals[name]
+	return d, ok
 }
 
 // TaskType 是一种强类型异步任务的定义(模板), 由 NewTaskType 构造。
@@ -108,6 +125,15 @@ func (t *TaskType[Args]) OnExhausted(fn func(ctx context.Context, args Args, las
 		}
 		fn(ctx, args, lastErr)
 	})
+	return t
+}
+
+// WithFixedRetryInterval 为该任务类型指定 ErrFixedRetry 的固定重试间隔，覆盖全局默认。
+// 返回 TaskType 自身以支持链式调用。
+func (t *TaskType[Args]) WithFixedRetryInterval(d time.Duration) *TaskType[Args] {
+	if d > 0 {
+		registerFixedRetryInterval(t.name, d)
+	}
 	return t
 }
 
