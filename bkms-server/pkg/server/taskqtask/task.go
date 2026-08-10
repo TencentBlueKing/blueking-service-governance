@@ -32,8 +32,8 @@ import (
 	"github.com/pkg/errors"
 
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/depsvcredis"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/example"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/redistask"
 )
 
 // Setup 初始化各业务任务 handler 所需依赖, 并将 handler 挂载到给定的 mux。
@@ -43,12 +43,12 @@ import (
 // (会与 registry 形成导入环), 因此统一在本聚合包完成注入。
 func Setup(mux *asynq.ServeMux) error {
 	// Redis 生命周期 tasks
-	if err := redistask.Init(storereg.G().DepSvcInstStore); err != nil {
-		return errors.Wrap(err, "init redistask")
+	if err := depsvcredis.Init(storereg.G().DepSvcInstStore); err != nil {
+		return errors.Wrap(err, "init depsvcredis")
 	}
-	mux.Handle(redistask.CreateTask.Name(), redistask.CreateTask.Handler())
-	mux.Handle(redistask.DisableTask.Name(), redistask.DisableTask.Handler())
-	mux.Handle(redistask.DestroyTask.Name(), redistask.DestroyTask.Handler())
+	mux.Handle(depsvcredis.CreateTask.Name(), depsvcredis.CreateTask.Handler())
+	mux.Handle(depsvcredis.DisableTask.Name(), depsvcredis.DisableTask.Handler())
+	mux.Handle(depsvcredis.DestroyTask.Name(), depsvcredis.DestroyTask.Handler())
 
 	mux.Handle(example.ExampleTask.Name(), example.ExampleTask.Handler())
 	return nil

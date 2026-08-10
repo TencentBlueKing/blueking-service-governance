@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package redistask
+package depsvcredis
 
 import (
 	"context"
@@ -27,41 +27,41 @@ import (
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/dbm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 )
 
-// DestroyArgs 销毁 Redis 任务参数
-type DestroyArgs struct {
+// DisableArgs 禁用 Redis 任务参数
+type DisableArgs struct {
 	InstanceID string `json:"instanceID"`
 	Username   string `json:"username"`
-	Handle     string `json:"handle"` // 空=Submit, 非空=Poll
+	// 空=Submit, 非空=Poll（值为 ticketID 字符串）
+	Handle string `json:"handle"`
 }
 
-func destroyHandler(ctx context.Context, args DestroyArgs) error {
+func disableHandler(ctx context.Context, args DisableArgs) error {
 	objID, err := parseObjectID(args.InstanceID)
 	if err != nil {
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 	}
 
 	if args.Handle == "" {
-		return destroySubmit(ctx, objID, args)
+		return disableSubmit(ctx, objID, args)
 	}
-	return destroyPoll(ctx, objID, args)
+	return disablePoll(ctx, args)
 }
 
-func destroySubmit(ctx context.Context, objID bson.ObjectID, args DestroyArgs) error {
+func disableSubmit(ctx context.Context, objID bson.ObjectID, args DisableArgs) error {
 	inst, err := instStore.Get(ctx, objID)
 	if err != nil {
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 	}
 
-	// 恢复已提交但未成功入队 Poll 的工单，避免重复 Destroy
-	if ticketID := cast.ToInt(inst.Config[configKeyDestroyTicketID]); ticketID > 0 {
+	// 恢复已提交但未成功入队 Poll 的工单，避免重复 Disable
+	if ticketID := cast.ToInt(inst.Config[configKeyDisableTicketID]); ticketID > 0 {
 		args.Handle = strconv.Itoa(ticketID)
-		return taskq.Enqueue(ctx, DestroyTask.NewTask(args))
+		return taskq.Enqueue(ctx, DisableTask.NewTask(args))
 	}
 
 	ref, err := clusterRefFromConfig(inst.Config)
@@ -69,28 +69,28 @@ func destroySubmit(ctx context.Context, objID bson.ObjectID, args DestroyArgs) e
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 	}
 
-	ticketID, err := dbmClient.DeleteRedis(ctx, &dbm.DeleteRedisParams{
+	ticketID, err := dbmClient.DisableRedis(ctx, &dbm.DisableRedisParams{
 		BkBizID:    ref.BkBizID,
-		TicketType: dbm.DeleteTicketType(ref.ClusterType),
+		TicketType: dbm.DisableTicketType(ref.ClusterType),
 		ClusterID:  ref.ClusterID,
 	}, args.Username)
 	if err != nil {
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 	}
 
-	if err = instStore.PatchConfig(ctx, objID, map[string]any{configKeyDestroyTicketID: ticketID}); err != nil {
-		persistErr := fmt.Errorf("persist destroyTicketID=%d after DBM submit: %w", ticketID, err)
+	if err = instStore.PatchConfig(ctx, objID, map[string]any{configKeyDisableTicketID: ticketID}); err != nil {
+		persistErr := fmt.Errorf("persist disableTicketID=%d after DBM submit: %w", ticketID, err)
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, persistErr)
 	}
 
 	args.Handle = strconv.Itoa(ticketID)
-	if err = taskq.Enqueue(ctx, DestroyTask.NewTask(args)); err != nil {
-		return fmt.Errorf("enqueue destroy poll task for ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
+	if err = taskq.Enqueue(ctx, DisableTask.NewTask(args)); err != nil {
+		return fmt.Errorf("enqueue disable poll task for ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
 	}
 	return nil
 }
 
-func destroyPoll(ctx context.Context, objID bson.ObjectID, args DestroyArgs) error {
+func disablePoll(ctx context.Context, args DisableArgs) error {
 	ticketID, err := parseTicketID(args.Handle)
 	if err != nil {
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
@@ -101,19 +101,15 @@ func destroyPoll(ctx context.Context, objID bson.ObjectID, args DestroyArgs) err
 		if errors.Is(err, taskq.ErrStopRetry) {
 			return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 		}
-		return fmt.Errorf("poll destroy ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
+		return fmt.Errorf("poll disable ticket %d: %w: %w", ticketID, err, taskq.ErrFixedRetry)
 	}
 	if !done {
-		return fmt.Errorf("destroy ticket %s in progress: %w", args.Handle, taskq.ErrFixedRetry)
+		return fmt.Errorf("disable ticket %s in progress: %w", args.Handle, taskq.ErrFixedRetry)
 	}
 
-	// ─── 完成: 删除实例记录；失败需重试，避免永久卡在 deleting ───
-	if err = instStore.Delete(ctx, objID); err != nil {
-		if model.AsNotFoundError(err) {
-			log.Infof(ctx, "redistask: instance %s already deleted after destroy", args.InstanceID)
-			return nil
-		}
-		return fmt.Errorf("delete instance %s after destroy: %w: %w", args.InstanceID, err, taskq.ErrFixedRetry)
-	}
-	return nil
+	// ─── 完成 → 串联 DestroyTask ───
+	return taskq.Enqueue(ctx, DestroyTask.NewTask(DestroyArgs{
+		InstanceID: args.InstanceID,
+		Username:   args.Username,
+	}))
 }

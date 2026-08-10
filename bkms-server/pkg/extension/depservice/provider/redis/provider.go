@@ -26,7 +26,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/redistask"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/depsvcredis"
 )
 
 // Provider 实现 ServiceProvider 接口，通过投递 asynq task 实现异步 Redis 生命周期管理。
@@ -54,7 +54,7 @@ func (p *Provider) CreateInstance(
 
 	operator := auth.MustGetUser(ctx).ID
 
-	task := redistask.CreateTask.NewTask(redistask.CreateArgs{
+	task := depsvcredis.CreateTask.NewTask(depsvcredis.CreateArgs{
 		InstanceID: instID,
 		Username:   operator,
 		DBMParams:  redisParams.ToCreateRedisParams(),
@@ -78,7 +78,7 @@ func (p *Provider) DeleteInstance(
 ) (*types.DeleteInstanceResult, error) {
 	operator := auth.MustGetUser(ctx).ID
 
-	task := redistask.DisableTask.NewTask(redistask.DisableArgs{
+	task := depsvcredis.DisableTask.NewTask(depsvcredis.DisableArgs{
 		InstanceID: instID,
 		Username:   operator,
 	})

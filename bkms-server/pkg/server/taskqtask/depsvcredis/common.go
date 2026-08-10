@@ -16,14 +16,14 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package redistask 实现 Redis 服务实例生命周期管理的 asynq 异步任务。
+// Package depsvcredis 实现依赖服务（depservice）Redis 实例生命周期的 asynq 异步任务。
 //
 // 包含三个独立的 TaskType：CreateTask（创建）、DisableTask（禁用）、DestroyTask（销毁），
 // 通过 handler 末尾硬编码 Enqueue 实现串联（禁用完成后自动触发销毁）。
 //
 // TaskType 在包加载时完成注册，投递侧（webserver）无需任何初始化；消费侧（worker）
 // 在启动阶段调用一次 Init，准备执行任务所需的 DBM client 与 ServiceInstanceStore。
-package redistask
+package depsvcredis
 
 import (
 	"context"
@@ -56,7 +56,7 @@ var (
 	instStore model.ServiceInstanceStore
 )
 
-// Init 初始化 redistask 包依赖。在 worker 启动阶段（store 初始化之后）调用一次。
+// Init 初始化 depsvcredis 包依赖。在 worker 启动阶段（store 初始化之后）调用一次。
 //
 // DBM client 在此构造而非首次执行任务时惰性构造，让配置缺失等问题在启动阶段就暴露。
 func Init(store model.ServiceInstanceStore) error {
@@ -92,11 +92,11 @@ func pollTicket(ctx context.Context, ticketID int, username string) (bool, error
 func failWithStopErr(ctx context.Context, instID string, status model.InstanceStatus, err error) error {
 	objID, parseErr := bson.ObjectIDFromHex(instID)
 	if parseErr != nil {
-		log.Errorf(ctx, "redistask: invalid instID %q: %v", instID, parseErr)
+		log.Errorf(ctx, "depsvcredis: invalid instID %q: %v", instID, parseErr)
 		return fmt.Errorf("invalid instID: %w", taskq.ErrStopRetry)
 	}
 	if updateErr := instStore.UpdateStatus(ctx, objID, status, err.Error()); updateErr != nil {
-		log.Errorf(ctx, "redistask: update status for %s: %v", instID, updateErr)
+		log.Errorf(ctx, "depsvcredis: update status for %s: %v", instID, updateErr)
 	}
 	return fmt.Errorf("%s: %w", err.Error(), taskq.ErrStopRetry)
 }
@@ -105,12 +105,12 @@ func failWithStopErr(ctx context.Context, instID string, status model.InstanceSt
 func failOnExhausted(ctx context.Context, instID string, status model.InstanceStatus, lastErr error) {
 	objID, parseErr := bson.ObjectIDFromHex(instID)
 	if parseErr != nil {
-		log.Errorf(ctx, "redistask exhausted: invalid instID %q: %v", instID, parseErr)
+		log.Errorf(ctx, "depsvcredis exhausted: invalid instID %q: %v", instID, parseErr)
 		return
 	}
 	msg := fmt.Sprintf("task exhausted: %v", lastErr)
 	if updateErr := instStore.UpdateStatus(ctx, objID, status, msg); updateErr != nil {
-		log.Errorf(ctx, "redistask exhausted: update status for %s: %v", instID, updateErr)
+		log.Errorf(ctx, "depsvcredis exhausted: update status for %s: %v", instID, updateErr)
 	}
 }
 

@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package redistask
+package depsvcredis
 
 import (
 	"context"
@@ -37,7 +37,8 @@ import (
 type CreateArgs struct {
 	InstanceID string `json:"instanceID"`
 	Username   string `json:"username"`
-	Handle     string `json:"handle"` // 空=Submit, 非空=Poll（值为 ticketID 字符串）
+	// 空=Submit, 非空=Poll（值为 ticketID 字符串）
+	Handle string `json:"handle"`
 
 	// DBMParams 组装好的 DBM CreateRedis 参数
 	DBMParams *dbm.CreateRedisParams `json:"dbmParams"`
