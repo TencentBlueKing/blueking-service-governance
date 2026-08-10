@@ -84,10 +84,12 @@
     <!-- 应用环境变量导入侧栏 -->
     <EnvVarsImportSideslider
       v-model:visible="showImportSlider"
+      :download-template-request="handleDownloadTemplateRequest"
       :import-request="handleImportRequest"
       :preview-request="handlePreviewRequest"
       :target-label="$t('应用')"
       :target-name="appName"
+      template-filename="app-env-vars-template.env"
       @success="fetchAppEnvVarList"
     />
   </div>
@@ -109,7 +111,11 @@
 
   import EnvBgVarsSideslider from './env-bg-vars-sideslider.vue';
 
-  import type { AppEnvVarDetailedOutputObj, ExportAppEnvVarsRequest } from '~/@types/v1/envvars';
+  import type {
+    AppEnvVarDetailedOutputObj,
+    DownloadAppEnvVarTemplateRequest,
+    ExportAppEnvVarsRequest,
+  } from '~/@types/v1/envvars';
 
   const appDetailStore = useAppDetail();
   const { t } = useI18n();
@@ -197,6 +203,12 @@
   // 添加变量
   function handleAddVariable() {
     editableTableRef.value?.addVariable();
+  }
+
+  function handleDownloadTemplateRequest() {
+    return EnvvarsService.downloadAppEnvVarTemplate<DownloadAppEnvVarTemplateRequest, Response>(undefined, {
+      originalResponse: true,
+    });
   }
 
   // 导出应用直接定义的环境变量

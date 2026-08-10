@@ -233,10 +233,12 @@
     <!-- 公共环境变量导入侧栏 -->
     <EnvVarsImportSideslider
       v-model:visible="showImportSlider"
+      :download-template-request="handleDownloadTemplateRequest"
       :import-request="handleImportRequest"
       :preview-request="handlePreviewRequest"
       show-effective-scope
       :show-target-info="false"
+      template-filename="scoped-env-vars-template.env"
       :title="$t('导入公共环境变量')"
       @success="fetchList"
     />
@@ -266,7 +268,11 @@
   import EnvVarFormDialog from './env-var-form-dialog.vue';
 
   import type { ISearchItem, ISearchValue } from 'bkui-vue/lib/search-select/utils';
-  import type { ExportPublicScopedEnvVarsRequest, ScopedEnvVarOutputObj } from '~/@types/v1/envvars';
+  import type {
+    DownloadScopedEnvVarTemplateRequest,
+    ExportPublicScopedEnvVarsRequest,
+    ScopedEnvVarOutputObj,
+  } from '~/@types/v1/envvars';
 
   interface Emits {
     (e: 'update:visible', value: boolean): void;
@@ -448,6 +454,12 @@
   function handleDelete(row: ScopedEnvVarOutputObj) {
     deletingVar.value = row;
     isShowDeleteDialog.value = true;
+  }
+
+  function handleDownloadTemplateRequest() {
+    return EnvvarsService.downloadScopedEnvVarTemplate<DownloadScopedEnvVarTemplateRequest, Response>(undefined, {
+      originalResponse: true,
+    });
   }
 
   /** 编辑 */

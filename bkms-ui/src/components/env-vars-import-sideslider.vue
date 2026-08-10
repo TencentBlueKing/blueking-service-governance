@@ -57,7 +57,17 @@
           </span>
         </div>
       </Upload>
-      <div class="mt-[8px] text-[12px]">{{ $t('仅支持 .env 类型文件，文件大小不超过 1 MiB') }}</div>
+      <div class="mt-[8px] text-[12px]">
+        {{ $t('仅支持 .env 类型文件，文件大小不超过 1 MiB') }}，
+        <Button
+          :disabled="isBusy"
+          :loading="isTemplateDownloading"
+          text
+          theme="primary"
+          @click="handleDownloadTemplate"
+          >{{ $t('点击下载模板') }}
+        </Button>
+      </div>
       <div
         v-if="previewLoading"
         class="flex min-h-[360px] flex-col items-center justify-center"
@@ -104,19 +114,28 @@
           <TableColumn
             field="key"
             label="Key"
-            :min-width="260"
+            :min-width="160"
             show-overflow-tooltip
           />
           <TableColumn
             field="value"
             label="Value"
-            :min-width="320"
+            :min-width="200"
             show-overflow-tooltip
           />
           <TableColumn
+            :label="$t('描述')"
+            :min-width="180"
+            show-overflow-tooltip
+          >
+            <template #default="{ row }">
+              {{ row.description || '--' }}
+            </template>
+          </TableColumn>
+          <TableColumn
             v-if="showEffectiveScope"
             :label="$t('生效环境类型')"
-            width="160"
+            width="140"
           >
             <template #default="{ row }">
               <Tag :class="getScopeDisplay(row.effectiveScope?.type || '', row.effectiveScope?.value || '').tagClass">
@@ -163,6 +182,7 @@
   import { Loading, Upload as UploadIcon } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { appendTraceId } from '~/api/trace-id';
+  import { useFileExport } from '~/composables/use-file-export';
   import { getScopeDisplay } from '~/composables/use-scope-display';
 
   import type { UploadRequestOptions } from 'bkui-vue/lib/upload/upload.type';
@@ -171,6 +191,7 @@
   type FilterType = 'all' | 'new' | 'overwrite';
   const props = withDefaults(
     defineProps<{
+      downloadTemplateRequest: () => Promise<Response>;
       importRequest: (file: File) => Promise<EnvVarImportPreviewSummaryOutputObj>;
       previewRequest: (file: File) => Promise<EnvVarImportPreviewOutputObj>;
       showEffectiveScope?: boolean;
@@ -178,6 +199,7 @@
       targetLabel?: string;
       targetName?: string;
       targetTag?: string;
+      templateFilename: string;
       title?: string;
       visible: boolean;
     }>(),
@@ -203,12 +225,13 @@
   const previewData = ref<EnvVarImportPreviewOutputObj>(); // 服务端返回的预览数据
   const previewLoading = ref(false); // 文件解析 loading
   const uploadKey = ref(0); // 用于重置 Upload 组件
+  const { exportFile, isExporting: isTemplateDownloading } = useFileExport();
 
   // 双向绑定 visible，Sideslider 关闭时通过 @hidden 重置状态
   const visible = computed({ get: () => props.visible, set: value => emit('update:visible', value) });
 
   // 是否处于忙碌状态（解析中或导入中），用于禁用操作
-  const isBusy = computed(() => previewLoading.value || importLoading.value);
+  const isBusy = computed(() => previewLoading.value || importLoading.value || isTemplateDownloading.value);
 
   // ── 预览数据派生 ──
   const previewItems = computed(() => previewData.value?.items || []);
@@ -232,6 +255,13 @@
   }
   function handleCancel() {
     if (!isBusy.value) visible.value = false;
+  }
+  // 下载模板
+  function handleDownloadTemplate() {
+    return exportFile({
+      request: props.downloadTemplateRequest,
+      fallbackFilename: props.templateFilename,
+    });
   }
   function handleFileDelete() {
     importFile.value = undefined;

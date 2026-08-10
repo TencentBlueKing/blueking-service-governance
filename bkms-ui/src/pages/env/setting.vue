@@ -96,10 +96,12 @@
       <!-- 环境变量导入侧栏 -->
       <EnvVarsImportSideslider
         v-model:visible="showImportSlider"
+        :download-template-request="handleDownloadTemplateRequest"
         :import-request="handleImportRequest"
         :preview-request="handlePreviewRequest"
         :target-name="envDisplayName || envName"
         :target-tag="envTypeConfig?.name"
+        template-filename="single-env-vars-template.env"
         @success="getEnvConfigList"
       />
     </div>
@@ -124,7 +126,7 @@
 
   import EnvBgVarsSideslider from '../application/detail/base-info/trpc/env-bg-vars-sideslider.vue';
 
-  import type { ExportEnvScopedEnvVarsRequest } from '~/@types/v1/envvars';
+  import type { DownloadSingleEnvVarTemplateRequest, ExportEnvScopedEnvVarsRequest } from '~/@types/v1/envvars';
 
   const props = defineProps<{
     env: string;
@@ -222,6 +224,12 @@
         }),
       t('删除成功'),
     );
+  }
+
+  function handleDownloadTemplateRequest() {
+    return EnvvarsService.downloadSingleEnvVarTemplate<DownloadSingleEnvVarTemplateRequest, Response>(undefined, {
+      originalResponse: true,
+    });
   }
 
   // 编辑 - 当前版本 key 不可修改
