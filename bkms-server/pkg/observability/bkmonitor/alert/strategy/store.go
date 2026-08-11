@@ -45,6 +45,11 @@ type Store interface {
 	Get(ctx context.Context, id bson.ObjectID) (*AlertStrategy, error)
 	ListByWorkspace(ctx context.Context, workspaceID string) ([]AlertStrategy, error)
 	ListByApp(ctx context.Context, workspaceID, appID string) ([]AlertStrategy, error)
+	ExistsByAppAndDisplayName(
+		ctx context.Context,
+		workspaceID, appID, displayName string,
+		excludeID *bson.ObjectID,
+	) (bool, error)
 	ListByAppAndRemoteEnv(
 		ctx context.Context,
 		workspaceID, appID string,
@@ -143,6 +148,29 @@ func (s *StoreMongo) ListByApp(ctx context.Context, workspaceID, appID string) (
 		return nil, err
 	}
 	return rules, nil
+}
+
+// ExistsByAppAndDisplayName 检查同一工作空间、同一应用下是否已存在同名展示名称的策略。
+// 索引（由 golang-migrate 维护）：
+// - 唯一约束：workspaceID + appID + displayName
+func (s *StoreMongo) ExistsByAppAndDisplayName(
+	ctx context.Context,
+	workspaceID, appID, displayName string,
+	excludeID *bson.ObjectID,
+) (bool, error) {
+	filter := bson.M{
+		"workspaceID": workspaceID,
+		"appID":       appID,
+		"displayName": displayName,
+	}
+	if excludeID != nil && !excludeID.IsZero() {
+		filter["_id"] = bson.M{"$ne": *excludeID}
+	}
+	count, err := s.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 // ListByAppAndRemoteEnv 查询指定工作空间下某应用、且关联了某远程环境的告警策略，按创建时间倒序返回。

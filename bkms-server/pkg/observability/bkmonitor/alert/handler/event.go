@@ -53,7 +53,7 @@ import (
 //	@Param		page		query		int			true	"页码，从 1 开始"
 //	@Param		pageSize	query		int			true	"每页数量，仅支持 5/10/20/50/100"
 //	@Param		alertID		query		string		false	"按告警 ID 过滤"
-//	@Param		alertName	query		string		false	"按告警名称过滤"
+//	@Param		alertDisplayName	query		string		false	"按告警展示名称过滤"
 //	@Param		description	query		string		false	"按告警内容过滤（映射到 query_string）"
 //	@Param		strategyName	query		string		false	"按策略名称过滤"
 //	@Param		eventID		query		string		false	"按事件 ID 过滤"
@@ -97,7 +97,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list alert strategies by app"))
 		return
 	}
-	strategyIDs, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(rules, envName)
+	strategyIDs, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(rules, envName, queryInput.AlertDisplayName)
 	if len(strategyIDs) == 0 {
 		ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
 			Count: 0, Results: []*serializer.AlertEventOutput{},
@@ -115,7 +115,8 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 	}
 
 	results := lo.Map(resp.Alerts, func(a bkmapi.AlertEvent, _ int) *serializer.AlertEventOutput {
-		return serializer.NewAlertEventOutput(a, remoteToBKMS[a.StrategyID])
+		meta := remoteToBKMS[a.StrategyID]
+		return serializer.NewAlertEventOutput(a, meta.StrategyID, meta.AlertDisplayName)
 	})
 	ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
 		Count:   resp.Total,
@@ -141,7 +142,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 //	@Param		page		query		int			true	"页码，从 1 开始"
 //	@Param		pageSize	query		int			true	"每页数量，仅支持 5/10/20/50/100"
 //	@Param		alertID		query		string		false	"按告警 ID 过滤"
-//	@Param		alertName	query		string		false	"按告警名称过滤"
+//	@Param		alertDisplayName	query		string		false	"按告警展示名称过滤"
 //	@Param		description	query		string		false	"按告警内容过滤（映射到 query_string）"
 //	@Param		strategyName	query		string		false	"按策略名称过滤"
 //	@Param		eventID		query		string		false	"按事件 ID 过滤"
@@ -192,6 +193,13 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 		}})
 		return
 	}
+	if alertDisplayName := strings.TrimSpace(queryInput.AlertDisplayName); alertDisplayName != "" &&
+		!strings.Contains(rule.DisplayName, alertDisplayName) {
+		ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
+			Count: 0, Results: []*serializer.AlertEventOutput{},
+		}})
+		return
+	}
 
 	operator := auth.MustGetUser(ctx).ID
 	resp, err := alertevent.NewService().SearchByStrategyIDs(
@@ -203,7 +211,7 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 	}
 
 	results := lo.Map(resp.Alerts, func(a bkmapi.AlertEvent, _ int) *serializer.AlertEventOutput {
-		return serializer.NewAlertEventOutput(a, rule.ID.Hex())
+		return serializer.NewAlertEventOutput(a, rule.ID.Hex(), rule.DisplayName)
 	})
 	ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
 		Count:   resp.Total,
@@ -244,20 +252,31 @@ func (h *Handler) GetAlertDetail(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, serializer.NewGetAlertDetailResp(detail))
+	ginutils.OK(c, serializer.NewGetAlertDetailResp(detail, extractAlertDisplayNameFromAlertDetail(detail)))
+}
+
+type alertEventBackfillInfo struct {
+	StrategyID       string
+	AlertDisplayName string
 }
 
 // collectRemoteStrategyIDsForAppAlerts 从应用下的本地告警策略中收集远端监控策略 ID。
+// 若传入 alertDisplayName，则优先按本地展示名预过滤，避免前端依赖远端 alertName 命名规则。
 // 这里默认同一 app 范围内，一个 remoteStrategyID 只应归属一个本地策略。
-// 返回 remoteStrategyID 到 BKMS 本地策略 ID 的映射，供事件列表回填本地策略 ID。
+// 返回 remoteStrategyID 到事件列表回填信息的映射，供结果组装时回填本地策略 ID 与展示名。
 func collectRemoteStrategyIDsForAppAlerts(
 	rules []alertstrategy.AlertStrategy,
 	envName string,
-) ([]int64, map[int64]string) {
+	alertDisplayName string,
+) ([]int64, map[int64]alertEventBackfillInfo) {
+	alertDisplayName = strings.TrimSpace(alertDisplayName)
 	seen := make(map[int64]struct{})
-	remoteToBKMS := make(map[int64]string)
+	remoteToBKMS := make(map[int64]alertEventBackfillInfo)
 	ids := make([]int64, 0)
 	for _, rule := range rules {
+		if alertDisplayName != "" && !strings.Contains(rule.DisplayName, alertDisplayName) {
+			continue
+		}
 		for _, ref := range rule.RemoteRefs {
 			if envName != "" && ref.EnvName != envName {
 				continue
@@ -269,9 +288,47 @@ func collectRemoteStrategyIDsForAppAlerts(
 				continue
 			}
 			seen[ref.RemoteStrategyID] = struct{}{}
-			remoteToBKMS[ref.RemoteStrategyID] = rule.ID.Hex()
+			remoteToBKMS[ref.RemoteStrategyID] = alertEventBackfillInfo{
+				StrategyID:       rule.ID.Hex(),
+				AlertDisplayName: rule.DisplayName,
+			}
 			ids = append(ids, ref.RemoteStrategyID)
 		}
 	}
 	return ids, remoteToBKMS
+}
+
+// extractAlertDisplayNameFromAlertDetail 从监控详情原始名称中提取 BKMS 展示名。
+// 当前远端策略名格式固定为 `策略名【应用名】`
+func extractAlertDisplayNameFromAlertDetail(detail map[string]any) string {
+	if detail == nil {
+		return ""
+	}
+	for _, key := range []string{"alert_name", "alertName", "strategy_name", "strategyName"} {
+		value, ok := detail[key]
+		if !ok {
+			continue
+		}
+		name, ok := value.(string)
+		if !ok {
+			continue
+		}
+		return extractAlertDisplayNameFromRemoteName(name)
+	}
+	return ""
+}
+
+func extractAlertDisplayNameFromRemoteName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if !strings.HasSuffix(name, "】") {
+		return name
+	}
+	idx := strings.LastIndex(name, "【")
+	if idx <= 0 {
+		return name
+	}
+	return name[:idx]
 }

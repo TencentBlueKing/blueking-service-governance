@@ -20,6 +20,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -165,6 +166,13 @@ func (h *Handler) CreateAlertStrategy(c *gin.Context) {
 	}
 	rule, err := svc.CreateAndSync(ctx, ws, createReq)
 	if err != nil {
+		if errors.Is(err, alertstrategy.ErrDisplayNameAlreadyExists) {
+			bkerrs.AbortWithErr(c, bkerrs.Errorf(
+				bkerrs.ErrCodeAlreadyExists,
+				"alert strategy displayName already exists in app",
+			))
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create alert strategy"))
 		return
 	}
@@ -224,6 +232,13 @@ func (h *Handler) UpdateAlertStrategy(c *gin.Context) {
 	svc := h.alertStrategyService()
 	changed, err := svc.UpdateAndSync(ctx, ws, strategyObjID, updateReq)
 	if err != nil {
+		if errors.Is(err, alertstrategy.ErrDisplayNameAlreadyExists) {
+			bkerrs.AbortWithErr(c, bkerrs.Errorf(
+				bkerrs.ErrCodeAlreadyExists,
+				"alert strategy displayName already exists in app",
+			))
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update alert strategy"))
 		return
 	}

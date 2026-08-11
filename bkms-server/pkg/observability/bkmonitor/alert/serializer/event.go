@@ -28,19 +28,21 @@ import (
 
 // AlertQueryInput 告警事件查询参数
 type AlertQueryInput struct {
-	Status       []string `form:"status"`
-	Severity     []int    `form:"severity"`
-	StartTime    int64    `form:"startTime"`
-	EndTime      int64    `form:"endTime"`
-	Page         int      `form:"page" binding:"required,gte=1"`
-	PageSize     int      `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
-	AlertID      string   `form:"alertID"`
-	AlertName    string   `form:"alertName"`
-	Description  string   `form:"description"`
-	StrategyName string   `form:"strategyName"`
-	EventID      string   `form:"eventID"`
-	Target       string   `form:"target"`
-	Ordering     []string `form:"ordering"`
+	Status    []string `form:"status"`
+	Severity  []int    `form:"severity"`
+	StartTime int64    `form:"startTime"`
+	EndTime   int64    `form:"endTime"`
+	Page      int      `form:"page" binding:"required,gte=1"`
+	PageSize  int      `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
+	AlertID   string   `form:"alertID"`
+	// AlertDisplayName 对外只暴露 BKMS 本地展示名，例如 `CPU 使用率过高`。
+	// 与之对应的 BKMonitor 原始名称格式为 `CPU 使用率过高【demo-app】`。
+	AlertDisplayName string   `form:"alertDisplayName"`
+	Description      string   `form:"description"`
+	StrategyName     string   `form:"strategyName"`
+	EventID          string   `form:"eventID"`
+	Target           string   `form:"target"`
+	Ordering         []string `form:"ordering"`
 }
 
 // Normalize 对查询参数做默认排序补充。
@@ -60,7 +62,6 @@ func (q AlertQueryInput) ToSearchInput() alertevent.SearchInput {
 		Page:         q.Page,
 		PageSize:     q.PageSize,
 		AlertID:      q.AlertID,
-		AlertName:    q.AlertName,
 		Description:  q.Description,
 		StrategyName: q.StrategyName,
 		EventID:      q.EventID,
@@ -77,10 +78,12 @@ type AppScopedAlertQueryInput struct {
 
 // AlertEventOutput 告警事件输出
 type AlertEventOutput struct {
-	StrategyID          string   `json:"strategyID,omitempty"`
-	AlertID             string   `json:"alertID"`
-	EventID             string   `json:"eventID,omitempty"`
-	AlertName           string   `json:"alertName"`
+	StrategyID string `json:"strategyID,omitempty"`
+	AlertID    string `json:"alertID"`
+	EventID    string `json:"eventID,omitempty"`
+	// AlertDisplayName 是 BKMS 本地策略展示名，例如 `CPU 使用率过高`；
+	// 对应的监控原始名称格式为 `CPU 使用率过高【demo-app】`。
+	AlertDisplayName    string   `json:"alertDisplayName"`
 	Assignee            []string `json:"assignee,omitempty"`
 	Status              string   `json:"status"`
 	Severity            int      `json:"severity"`
@@ -125,12 +128,13 @@ type GetAlertDetailResp struct {
 }
 
 // NewAlertEventOutput 从云 API 告警事件转换为输出。
-func NewAlertEventOutput(a bkmapi.AlertEvent, strategyID string) *AlertEventOutput {
+// 这里显式改写为本地 displayName，是为了让前端不必理解监控侧 alertName 的拼装规则。
+func NewAlertEventOutput(a bkmapi.AlertEvent, strategyID, alertDisplayName string) *AlertEventOutput {
 	return &AlertEventOutput{
 		StrategyID:          strategyID,
 		AlertID:             a.ID,
 		EventID:             a.EventID,
-		AlertName:           a.AlertName,
+		AlertDisplayName:    alertDisplayName,
 		Assignee:            a.Assignee,
 		Status:              a.Status,
 		Severity:            a.Severity,
@@ -153,8 +157,9 @@ func NewAlertEventOutput(a bkmapi.AlertEvent, strategyID string) *AlertEventOutp
 	}
 }
 
-// NewGetAlertDetailResp 规范化详情接口输出字段，统一对外使用 alertID。
-func NewGetAlertDetailResp(detail map[string]any) *GetAlertDetailResp {
+// NewGetAlertDetailResp 规范化详情接口输出字段，统一对外使用 alertID / alertDisplayName。
+// 对外移除监控原始 alert_name，避免前端感知远端命名格式细节。
+func NewGetAlertDetailResp(detail map[string]any, alertDisplayName string) *GetAlertDetailResp {
 	if detail == nil {
 		return &GetAlertDetailResp{Data: nil}
 	}
@@ -166,6 +171,15 @@ func NewGetAlertDetailResp(detail map[string]any) *GetAlertDetailResp {
 				continue
 			}
 			normalized["alertID"] = value
+			continue
+		}
+		// BKMonitor 详情原始字段仍是 alert_name，这里转换成对外统一的 alertDisplayName。
+		if key == "alert_name" {
+			displayValue := value
+			if alertDisplayName != "" {
+				displayValue = alertDisplayName
+			}
+			normalized["alertDisplayName"] = displayValue
 			continue
 		}
 		normalized[key] = value

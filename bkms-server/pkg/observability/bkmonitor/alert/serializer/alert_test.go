@@ -31,10 +31,10 @@ import (
 
 var _ = Describe("Alert serializer", func() {
 	Describe("NewAlertEventOutput", func() {
-		It("keeps assignees from alert event", func() {
+		It("uses local alert display name and keeps assignees", func() {
 			output := NewAlertEventOutput(bkmapi.AlertEvent{
 				ID:         "alert-1",
-				AlertName:  "cpu high",
+				AlertName:  "CPU 使用率过高【demo-app】",
 				Status:     "ABNORMAL",
 				Severity:   2,
 				StrategyID: 1001,
@@ -43,18 +43,23 @@ var _ = Describe("Alert serializer", func() {
 				EndTime:    1710000300,
 				LatestTime: 1710000300,
 				CreateTime: 1710000000,
-			}, "strategy-1")
+			}, "strategy-1", "CPU 使用率过高")
 
 			Expect(output.AlertID).To(Equal("alert-1"))
+			Expect(output.AlertDisplayName).To(Equal("CPU 使用率过高"))
 			Expect(output.Assignee).To(Equal([]string{"alice", "bob"}))
 		})
 
-		It("uses alertID as json field name", func() {
+		It("uses normalized json field names", func() {
 			typ := reflect.TypeOf(AlertEventOutput{})
 
 			alertIDField, ok := typ.FieldByName("AlertID")
 			Expect(ok).To(BeTrue())
 			Expect(alertIDField.Tag.Get("json")).To(Equal("alertID"))
+
+			alertDisplayNameField, ok := typ.FieldByName("AlertDisplayName")
+			Expect(ok).To(BeTrue())
+			Expect(alertDisplayNameField.Tag.Get("json")).To(Equal("alertDisplayName"))
 		})
 	})
 
@@ -265,20 +270,24 @@ var _ = Describe("Alert serializer", func() {
 			Expect(pageSizeField.Tag.Get("binding")).To(Equal("required,oneof=5 10 20 50 100"))
 		})
 
-		It("binds alert id from alertID query parameter", func() {
+		It("binds alert id and display name from query parameters", func() {
 			typ := reflect.TypeOf(AlertQueryInput{})
 
 			alertIDField, ok := typ.FieldByName("AlertID")
 			Expect(ok).To(BeTrue())
 			Expect(alertIDField.Tag.Get("form")).To(Equal("alertID"))
+
+			alertDisplayNameField, ok := typ.FieldByName("AlertDisplayName")
+			Expect(ok).To(BeTrue())
+			Expect(alertDisplayNameField.Tag.Get("form")).To(Equal("alertDisplayName"))
 		})
 
 		It("keeps explicit paging and ordering unchanged", func() {
 			input := &AlertQueryInput{
-				Page:      2,
-				PageSize:  50,
-				Ordering:  []string{"-latest_time"},
-				AlertName: "cpu high",
+				Page:             2,
+				PageSize:         50,
+				Ordering:         []string{"-latest_time"},
+				AlertDisplayName: "CPU 使用率过高",
 			}
 
 			input.Normalize()
@@ -298,15 +307,26 @@ var _ = Describe("Alert serializer", func() {
 	})
 
 	Describe("NewGetAlertDetailResp", func() {
-		It("renames top-level id field to alertID", func() {
+		It("renames top-level id field to alertID and raw alert name to alertDisplayName", func() {
 			resp := NewGetAlertDetailResp(map[string]any{
-				"id":        "alert-1",
-				"status":    "ABNORMAL",
-				"alertName": "cpu high",
-			})
+				"id":                  "alert-1",
+				"status":              "ABNORMAL",
+				"alert_name":          "CPU 使用率过高【demo-app】",
+				"alertDisplayName":    "CPU 使用率过高",
+				"strategy_id":         1001,
+				"bk_biz_id":           2,
+				"target":              "pod-1",
+				"data_source":         "bk_monitor",
+				"strategy_name":       "CPU 使用率过高【demo-app】",
+				"begin_time":          1710000000,
+				"latest_anomaly_time": 1710000300,
+			}, "CPU 使用率过高")
 
 			Expect(resp.Data["alertID"]).To(Equal("alert-1"))
+			Expect(resp.Data["alertDisplayName"]).To(Equal("CPU 使用率过高"))
 			_, ok := resp.Data["id"]
+			Expect(ok).To(BeFalse())
+			_, ok = resp.Data["alert_name"]
 			Expect(ok).To(BeFalse())
 		})
 
@@ -314,7 +334,7 @@ var _ = Describe("Alert serializer", func() {
 			resp := NewGetAlertDetailResp(map[string]any{
 				"alertID": "alert-1",
 				"status":  "ABNORMAL",
-			})
+			}, "")
 
 			Expect(resp.Data["alertID"]).To(Equal("alert-1"))
 		})

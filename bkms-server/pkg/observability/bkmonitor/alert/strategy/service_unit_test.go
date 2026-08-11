@@ -511,16 +511,17 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 	})
 
 	Describe("buildRemoteStrategyName", func() {
-		It("keeps original naming without sanitize", func() {
+		It("uses display name with app name suffix", func() {
 			strategyID, err := bson.ObjectIDFromHex("64b64c8e5f627c5ef8a1bcde")
 			Expect(err).NotTo(HaveOccurred())
 			name := buildRemoteStrategyName(&AlertStrategy{
 				ID:           strategyID,
 				AppName:      "Order_Svc",
+				DisplayName:  "CPU Limit",
 				StrategyCode: "cpu_limit_usage_high",
 			})
 
-			Expect(name).To(Equal("bkms-Order_Svc-cpu_limit_usage_high-a1bcde"))
+			Expect(name).To(Equal("CPU Limit【Order_Svc】"))
 		})
 
 		It("includes traffic lane in remote strategy item name", func() {
@@ -576,14 +577,14 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 					EnvName:            env.Name,
 					TrafficLaneName:    "",
 					RemoteStrategyID:   101,
-					RemoteStrategyName: "bkms-demo-app-cpu_high-" + strategyID.Hex()[18:],
+					RemoteStrategyName: "CPU High【demo-app】",
 				},
 				RemoteStrategyRef{
 					EnvID:              otherEnv.ID,
 					EnvName:            otherEnv.Name,
 					TrafficLaneName:    "",
 					RemoteStrategyID:   101,
-					RemoteStrategyName: "bkms-demo-app-cpu_high-" + strategyID.Hex()[18:],
+					RemoteStrategyName: "CPU High【demo-app】",
 				},
 			))
 		})
@@ -664,14 +665,14 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 					EnvID:              env.ID,
 					EnvName:            env.Name,
 					TrafficLaneName:    "",
-					RemoteStrategyName: "bkms-demo-app-scope_all-" + strategyID.Hex()[18:],
+					RemoteStrategyName: "scope_all【demo-app】",
 					RemoteStrategyID:   101,
 				},
 				RemoteStrategyRef{
 					EnvID:              env.ID,
 					EnvName:            env.Name,
 					TrafficLaneName:    "feature-a",
-					RemoteStrategyName: "bkms-demo-app-scope_all-" + strategyID.Hex()[18:],
+					RemoteStrategyName: "scope_all【demo-app】",
 					RemoteStrategyID:   101,
 				},
 			))

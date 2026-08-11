@@ -1,0 +1,6 @@
+[
+  {
+    "dropIndexes": "bkmonitor_alert_strategy",
+    "index": "workspaceID_1_appID_1_displayName_1"
+  }
+]

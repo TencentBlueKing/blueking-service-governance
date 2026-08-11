@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -203,6 +204,26 @@ var _ = Describe("AlertStrategyService", func() {
 
 			_, err = svc.Create(ctx, secondReq)
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should reject duplicate displayName in same app", func() {
+			firstReq := newCreateReq()
+			firstReq.AppID = "app-a"
+			firstReq.AppName = "app-a"
+			firstReq.StrategyCode = "code_a"
+			firstReq.DisplayName = "Same Name"
+
+			_, err := svc.Create(ctx, firstReq)
+			Expect(err).NotTo(HaveOccurred())
+
+			secondReq := newCreateReq()
+			secondReq.AppID = "app-a"
+			secondReq.AppName = "app-a"
+			secondReq.StrategyCode = "code_b"
+			secondReq.DisplayName = "Same Name"
+
+			_, err = svc.Create(ctx, secondReq)
+			Expect(err).To(HaveOccurred())
 		})
 	})
 
@@ -689,6 +710,36 @@ var _ = Describe("AlertStrategyService", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.UpdatedAt).To(BeTemporally("==", original.UpdatedAt))
 			Expect(updated.Updater).To(Equal(original.Updater))
+		})
+
+		It("should reject updating to duplicate displayName in same app", func() {
+			firstReq := newCreateReq()
+			firstReq.AppID = "app-a"
+			firstReq.AppName = "app-a"
+			firstReq.StrategyCode = "update_dup_a"
+			firstReq.DisplayName = "First Name"
+			firstRule, err := svc.Create(ctx, firstReq)
+			Expect(err).NotTo(HaveOccurred())
+
+			secondReq := newCreateReq()
+			secondReq.AppID = "app-a"
+			secondReq.AppName = "app-a"
+			secondReq.StrategyCode = "update_dup_b"
+			secondReq.DisplayName = "Second Name"
+			secondRule, err := svc.Create(ctx, secondReq)
+			Expect(err).NotTo(HaveOccurred())
+
+			changed, err := svc.Update(ctx, secondRule.ID, &UpdateReq{
+				DisplayName: lo.ToPtr("First Name"),
+				Operator:    "updater",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(changed).To(BeFalse())
+
+			stored, getErr := store.Get(ctx, secondRule.ID)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(stored.DisplayName).To(Equal("Second Name"))
+			Expect(firstRule.ID).NotTo(Equal(secondRule.ID))
 		})
 	})
 

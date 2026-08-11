@@ -14801,8 +14801,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "按告警名称过滤",
-                        "name": "alertName",
+                        "description": "按告警展示名称过滤",
+                        "name": "alertDisplayName",
                         "in": "query"
                     },
                     {
@@ -15075,8 +15075,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "按告警名称过滤",
-                        "name": "alertName",
+                        "description": "按告警展示名称过滤",
+                        "name": "alertDisplayName",
                         "in": "query"
                     },
                     {
@@ -18246,10 +18246,11 @@ const docTemplate = `{
         "serializer.AlertEventOutput": {
             "type": "object",
             "properties": {
-                "alertID": {
+                "alertDisplayName": {
+                    "description": "AlertDisplayName 是 BKMS 本地策略展示名，供前端直接展示。\n不再对外暴露监控原始 alertName，避免前端感知远端命名格式。",
                     "type": "string"
                 },
-                "alertName": {
+                "alertID": {
                     "type": "string"
                 },
                 "assignee": {

@@ -52,8 +52,6 @@ type SearchInput struct {
 	PageSize int
 	// AlertID 按告警 ID 过滤。
 	AlertID string
-	// AlertName 按告警名称过滤。
-	AlertName string
 	// Description 按告警内容过滤。
 	Description string
 	// StrategyName 按策略名称过滤。
@@ -185,7 +183,7 @@ func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]
 	return conditions
 }
 
-// buildSearchQueryString 将查询输入中的告警 ID、告警名称、告警内容拼接为蓝鲸监控 search_alert 接口
+// buildSearchQueryString 将查询输入中的告警 ID、告警内容拼接为蓝鲸监控 search_alert 接口
 // 使用的 query_string 查询条件。
 //
 //   - 仅当对应字段非空时才参与拼装，为空则忽略；
@@ -193,7 +191,7 @@ func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]
 //   - 多个字段短语之间以 AND 连接；
 //   - 当没有任何字段参与时返回空字符串，交由接口侧忽略该查询项。
 func buildSearchQueryString(input SearchInput) string {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 2)
 	appendPhrase := func(field, value string) {
 		if value == "" {
 			return
@@ -201,9 +199,9 @@ func buildSearchQueryString(input SearchInput) string {
 		parts = append(parts, field+":"+strconv.Quote(value))
 	}
 
-	// 分别按告警 ID、告警名称、告警内容拼接过滤短语。
+	// 告警名称展示与查询统一收敛到 BKMS 本地 displayName 语义，由上层先映射远端 strategyID。
+	// 因此这里不再对监控原始 alert_name 做 query_string 过滤，避免前端依赖远端命名规则。
 	appendPhrase("id", input.AlertID)
-	appendPhrase("alert_name", input.AlertName)
 	appendPhrase("description", input.Description)
 	// 没有任何过滤条件时返回空字符串，交由接口侧忽略该查询项。
 	if len(parts) == 0 {

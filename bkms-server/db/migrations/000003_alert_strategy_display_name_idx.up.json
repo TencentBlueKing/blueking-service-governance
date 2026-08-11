@@ -1,0 +1,16 @@
+[
+  {
+    "createIndexes": "bkmonitor_alert_strategy",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "appID": 1,
+          "displayName": 1
+        },
+        "name": "workspaceID_1_appID_1_displayName_1",
+        "unique": true
+      }
+    ]
+  }
+]

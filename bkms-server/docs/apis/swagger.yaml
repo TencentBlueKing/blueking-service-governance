@@ -887,9 +887,12 @@ definitions:
     type: object
   serializer.AlertEventOutput:
     properties:
-      alertID:
+      alertDisplayName:
+        description: |-
+          AlertDisplayName 是 BKMS 本地策略展示名，供前端直接展示。
+          不再对外暴露监控原始 alertName，避免前端感知远端命名格式。
         type: string
-      alertName:
+      alertID:
         type: string
       assignee:
         items:
@@ -17865,9 +17868,9 @@ paths:
         in: query
         name: alertID
         type: string
-      - description: 按告警名称过滤
+      - description: 按告警展示名称过滤
         in: query
-        name: alertName
+        name: alertDisplayName
         type: string
       - description: 按告警内容过滤（映射到 query_string）
         in: query
@@ -18043,9 +18046,9 @@ paths:
         in: query
         name: alertID
         type: string
-      - description: 按告警名称过滤
+      - description: 按告警展示名称过滤
         in: query
-        name: alertName
+        name: alertDisplayName
         type: string
       - description: 按告警内容过滤（映射到 query_string）
         in: query
