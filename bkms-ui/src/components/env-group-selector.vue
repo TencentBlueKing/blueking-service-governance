@@ -114,16 +114,16 @@
     }
   > = {
     development: {
-      label: t('开发环境'),
+      label: t('开发'),
     },
     test: {
-      label: t('测试环境'),
+      label: t('测试'),
     },
     staging: {
-      label: t('预发布环境'),
+      label: t('预发布'),
     },
     production: {
-      label: t('生产环境'),
+      label: t('生产'),
     },
   };
 
