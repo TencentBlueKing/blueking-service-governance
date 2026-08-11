@@ -27,17 +27,18 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
 
-// HandleBuildTriggerCallback 接收蓝盾触发专用流水线的回调并发起镜像构建。
+// HandleBuildTriggerPolicyCallback 接收蓝盾触发专用流水线的回调并发起镜像构建。
 //
 // 该路由不走用户票据鉴权，而是校验应用独享的回调凭证。三态处理结果均以 HTTP 200 返回，
 // 由响应体的 result 字段区分，便于流水线侧脚本留痕。
 //
-// 空实现只校验凭证请求头是否存在，凭证内容比对、限流、去重与发起构建由
-// 「构建回调凭证鉴权与限流」「构建回调处理与版本号生成」两个子需求落地
+// W1 空实现仅检查凭证请求头是否存在，不比对内容、不限流；真实鉴权、限流、去重与发起构建
+// 由后续子需求「构建回调凭证鉴权与限流」「构建回调处理与版本号生成」落地。
+// 在此之前 stub 固定返回 skipped，避免违反「built 必带 buildID」的契约、误导流水线侧
 //
-//	@ID				HandleBuildTriggerCallback
+//	@ID				HandleBuildTriggerPolicyCallback
 //	@Summary		接收构建触发回调
-//	@Tags			build-triggers
+//	@Tags			build-trigger-policies
 //	@Accept			json
 //	@Produce		json
 //	@Param			appID							path		string									true	"应用 ID"
@@ -48,8 +49,9 @@ import (
 //	@Failure		401								{object}	bkerrs.GinErrorOutput
 //	@Failure		404								{object}	bkerrs.GinErrorOutput
 //	@Failure		429								{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/build-triggers/callback [post]
-func (h *Handler) HandleBuildTriggerCallback(c *gin.Context) {
+//	@Router			/apps/{appID}/build-trigger-policies/callback [post]
+func (h *Handler) HandleBuildTriggerPolicyCallback(c *gin.Context) {
+	// FIXME(后续子需求): 校验应用独享回调凭证内容，并做限流；当前仅要求 header 存在
 	if c.GetHeader(triggerserializer.CallbackCredentialHeader) == "" {
 		bkerrs.AbortWithErr(c, bkerrs.New(
 			bkerrs.ErrCodeUnauthenticated, "build trigger callback credential is required",
@@ -65,6 +67,9 @@ func (h *Handler) HandleBuildTriggerCallback(c *gin.Context) {
 	}
 
 	ginutils.OK(c, triggerserializer.CallbackOutput{
-		Data: &triggerserializer.CallbackResultOutputObj{Result: string(trigger.ResultBuilt)},
+		Data: &triggerserializer.CallbackResultOutputObj{
+			Result: string(trigger.ResultSkipped),
+			Reason: "build trigger callback not implemented yet",
+		},
 	})
 }

@@ -2227,7 +2227,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/apps/{appID}/build-triggers": {
+        "/apps/{appID}/build-trigger-policies": {
             "get": {
                 "security": [
                     {
@@ -2241,10 +2241,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "build-triggers"
+                    "build-trigger-policies"
                 ],
                 "summary": "获取应用的触发策略列表",
-                "operationId": "ListBuildTriggers",
+                "operationId": "ListBuildTriggerPolicies",
                 "parameters": [
                     {
                         "type": "string",
@@ -2291,10 +2291,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "build-triggers"
+                    "build-trigger-policies"
                 ],
                 "summary": "新增触发策略",
-                "operationId": "CreateBuildTrigger",
+                "operationId": "CreateBuildTriggerPolicy",
                 "parameters": [
                     {
                         "type": "string",
@@ -2335,7 +2335,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/apps/{appID}/build-triggers/callback": {
+        "/apps/{appID}/build-trigger-policies/callback": {
             "post": {
                 "consumes": [
                     "application/json"
@@ -2344,10 +2344,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "build-triggers"
+                    "build-trigger-policies"
                 ],
                 "summary": "接收构建触发回调",
-                "operationId": "HandleBuildTriggerCallback",
+                "operationId": "HandleBuildTriggerPolicyCallback",
                 "parameters": [
                     {
                         "type": "string",
@@ -2407,7 +2407,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/apps/{appID}/build-triggers/conflict-check": {
+        "/apps/{appID}/build-trigger-policies/conflict-check": {
             "post": {
                 "security": [
                     {
@@ -2424,10 +2424,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "build-triggers"
+                    "build-trigger-policies"
                 ],
                 "summary": "预检触发策略的重叠冲突",
-                "operationId": "CheckBuildTriggerConflict",
+                "operationId": "CheckBuildTriggerPolicyConflict",
                 "parameters": [
                     {
                         "type": "string",
@@ -2468,7 +2468,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/apps/{appID}/build-triggers/{triggerID}": {
+        "/apps/{appID}/build-trigger-policies/{policyID}": {
             "put": {
                 "security": [
                     {
@@ -2485,10 +2485,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "build-triggers"
+                    "build-trigger-policies"
                 ],
                 "summary": "更新触发策略",
-                "operationId": "UpdateBuildTrigger",
+                "operationId": "UpdateBuildTriggerPolicy",
                 "parameters": [
                     {
                         "type": "string",
@@ -2500,7 +2500,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "触发策略 ID",
-                        "name": "triggerID",
+                        "name": "policyID",
                         "in": "path",
                         "required": true
                     },
@@ -2548,10 +2548,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "build-triggers"
+                    "build-trigger-policies"
                 ],
                 "summary": "删除触发策略",
-                "operationId": "DeleteBuildTrigger",
+                "operationId": "DeleteBuildTriggerPolicy",
                 "parameters": [
                     {
                         "type": "string",
@@ -2563,7 +2563,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "触发策略 ID",
-                        "name": "triggerID",
+                        "name": "policyID",
                         "in": "path",
                         "required": true
                     }
@@ -2587,7 +2587,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/apps/{appID}/build-triggers/{triggerID}/records": {
+        "/apps/{appID}/build-trigger-policies/{policyID}/records": {
             "get": {
                 "security": [
                     {
@@ -2601,10 +2601,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "build-triggers"
+                    "build-trigger-policies"
                 ],
                 "summary": "获取触发策略的触发记录列表",
-                "operationId": "ListBuildTriggerRecords",
+                "operationId": "ListBuildTriggerPolicyRecords",
                 "parameters": [
                     {
                         "type": "string",
@@ -2616,7 +2616,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "触发策略 ID",
-                        "name": "triggerID",
+                        "name": "policyID",
                         "in": "path",
                         "required": true
                     },
@@ -2663,7 +2663,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/apps/{appID}/build-triggers/{triggerID}/status": {
+        "/apps/{appID}/build-trigger-policies/{policyID}/status": {
             "patch": {
                 "security": [
                     {
@@ -2680,10 +2680,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "build-triggers"
+                    "build-trigger-policies"
                 ],
                 "summary": "启用或停用触发策略",
-                "operationId": "PatchBuildTriggerStatus",
+                "operationId": "PatchBuildTriggerPolicyStatus",
                 "parameters": [
                     {
                         "type": "string",
@@ -2695,7 +2695,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "触发策略 ID",
-                        "name": "triggerID",
+                        "name": "policyID",
                         "in": "path",
                         "required": true
                     },
@@ -17553,7 +17553,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "triggerType": {
-                    "description": "触发方式：manual 手动，auto 自动。存量记录无该字段，一律输出 manual",
+                    "description": "触发方式：manual 手动，auto 自动",
                     "type": "string"
                 }
             }

@@ -70,5 +70,5 @@ type PolicyURIInput struct {
 	// 应用 ID
 	AppID string `uri:"appID" binding:"required,max=63,uri_slug"`
 	// 触发策略 ID
-	TriggerID string `uri:"triggerID" binding:"required,min=1,max=63"`
+	PolicyID string `uri:"policyID" binding:"required,min=1,max=63"`
 }

@@ -558,7 +558,7 @@ definitions:
         description: 自动触发时关联的触发策略 ID，手动触发为空
         type: string
       triggerType:
-        description: 触发方式：manual 手动，auto 自动。存量记录无该字段，一律输出 manual
+        description: 触发方式：manual 手动，auto 自动
         type: string
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.CreateBuildOutput:
@@ -9817,9 +9817,9 @@ paths:
       summary: 更新应用构建配置
       tags:
       - builds
-  /apps/{appID}/build-triggers:
+  /apps/{appID}/build-trigger-policies:
     get:
-      operationId: ListBuildTriggers
+      operationId: ListBuildTriggerPolicies
       parameters:
       - description: 应用 ID
         in: path
@@ -9846,11 +9846,11 @@ paths:
       - BkUserCredential: []
       summary: 获取应用的触发策略列表
       tags:
-      - build-triggers
+      - build-trigger-policies
     post:
       consumes:
       - application/json
-      operationId: CreateBuildTrigger
+      operationId: CreateBuildTriggerPolicy
       parameters:
       - description: 应用 ID
         in: path
@@ -9883,10 +9883,10 @@ paths:
       - BkUserCredential: []
       summary: 新增触发策略
       tags:
-      - build-triggers
-  /apps/{appID}/build-triggers/{triggerID}:
+      - build-trigger-policies
+  /apps/{appID}/build-trigger-policies/{policyID}:
     delete:
-      operationId: DeleteBuildTrigger
+      operationId: DeleteBuildTriggerPolicy
       parameters:
       - description: 应用 ID
         in: path
@@ -9895,7 +9895,7 @@ paths:
         type: string
       - description: 触发策略 ID
         in: path
-        name: triggerID
+        name: policyID
         required: true
         type: string
       produces:
@@ -9916,11 +9916,11 @@ paths:
       - BkUserCredential: []
       summary: 删除触发策略
       tags:
-      - build-triggers
+      - build-trigger-policies
     put:
       consumes:
       - application/json
-      operationId: UpdateBuildTrigger
+      operationId: UpdateBuildTriggerPolicy
       parameters:
       - description: 应用 ID
         in: path
@@ -9929,7 +9929,7 @@ paths:
         type: string
       - description: 触发策略 ID
         in: path
-        name: triggerID
+        name: policyID
         required: true
         type: string
       - description: 触发策略表单
@@ -9958,10 +9958,10 @@ paths:
       - BkUserCredential: []
       summary: 更新触发策略
       tags:
-      - build-triggers
-  /apps/{appID}/build-triggers/{triggerID}/records:
+      - build-trigger-policies
+  /apps/{appID}/build-trigger-policies/{policyID}/records:
     get:
-      operationId: ListBuildTriggerRecords
+      operationId: ListBuildTriggerPolicyRecords
       parameters:
       - description: 应用 ID
         in: path
@@ -9970,7 +9970,7 @@ paths:
         type: string
       - description: 触发策略 ID
         in: path
-        name: triggerID
+        name: policyID
         required: true
         type: string
       - description: 结果筛选：built / skipped / failed，留空表示不筛选
@@ -10007,12 +10007,12 @@ paths:
       - BkUserCredential: []
       summary: 获取触发策略的触发记录列表
       tags:
-      - build-triggers
-  /apps/{appID}/build-triggers/{triggerID}/status:
+      - build-trigger-policies
+  /apps/{appID}/build-trigger-policies/{policyID}/status:
     patch:
       consumes:
       - application/json
-      operationId: PatchBuildTriggerStatus
+      operationId: PatchBuildTriggerPolicyStatus
       parameters:
       - description: 应用 ID
         in: path
@@ -10021,7 +10021,7 @@ paths:
         type: string
       - description: 触发策略 ID
         in: path
-        name: triggerID
+        name: policyID
         required: true
         type: string
       - description: 启停参数
@@ -10050,12 +10050,12 @@ paths:
       - BkUserCredential: []
       summary: 启用或停用触发策略
       tags:
-      - build-triggers
-  /apps/{appID}/build-triggers/callback:
+      - build-trigger-policies
+  /apps/{appID}/build-trigger-policies/callback:
     post:
       consumes:
       - application/json
-      operationId: HandleBuildTriggerCallback
+      operationId: HandleBuildTriggerPolicyCallback
       parameters:
       - description: 应用 ID
         in: path
@@ -10098,12 +10098,12 @@ paths:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
       summary: 接收构建触发回调
       tags:
-      - build-triggers
-  /apps/{appID}/build-triggers/conflict-check:
+      - build-trigger-policies
+  /apps/{appID}/build-trigger-policies/conflict-check:
     post:
       consumes:
       - application/json
-      operationId: CheckBuildTriggerConflict
+      operationId: CheckBuildTriggerPolicyConflict
       parameters:
       - description: 应用 ID
         in: path
@@ -10136,7 +10136,7 @@ paths:
       - BkUserCredential: []
       summary: 预检触发策略的重叠冲突
       tags:
-      - build-triggers
+      - build-trigger-policies
   /apps/{appID}/builds:
     get:
       operationId: ListBuildRecords

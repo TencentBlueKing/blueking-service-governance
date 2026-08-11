@@ -81,9 +81,6 @@ W1 已注册全部 8 条路由，但 Handler 均为空实现，返回契约结�
 | `triggerType`     | enum   | `manual` / `auto`    |
 | `triggerPolicyID` | string | 自动触发时关联的策略 ID，手动触发为空 |
 
-**存量兼容口径**：不做数据回填。存量记录这两个字段缺失，反序列化后 `triggerType` 为空串，读取时一律视为 `manual`。该兼容逻辑落在
-`BuildRecordOutputObj.FromModel` 中，即出参永远不会是空串，只会是 `manual` 或 `auto`。业务代码判断触发方式时应统一走该转换，不要直接比较模型字段。
-
 ### 触发专用流水线的存储口径
 
 本需求新增一类**触发专用流水线**，内容仅为「工蜂 Git 事件触发器 + 回调 bkms 的脚本步骤」，自身不执行构建。它与现有共享构建流水线并存，两者唯一性口径不同：
@@ -113,19 +110,19 @@ type 中解析出用于查模板的类型。
 
 | 接口     | 方法与路径                                                   | 鉴权                | 出参             |
 |--------|---------------------------------------------------------|-------------------|----------------|
-| 策略列表   | GET `/apps/{appID}/build-triggers`                      | 用户票据 + 查看权限       | 全部策略 + 总数（不分页，上限 5） |
-| 创建策略   | POST `/apps/{appID}/build-triggers`                     | 用户票据 + 构建权限       | 策略实体           |
-| 更新策略   | PUT `/apps/{appID}/build-triggers/{triggerID}`          | 用户票据 + 构建权限       | 策略实体           |
-| 启停策略   | PATCH `/apps/{appID}/build-triggers/{triggerID}/status` | 用户票据 + 构建权限       | 策略实体           |
-| 删除策略   | DELETE `/apps/{appID}/build-triggers/{triggerID}`       | 用户票据 + 构建权限       | 204 无内容        |
-| 冲突预检   | POST `/apps/{appID}/build-triggers/conflict-check`      | 用户票据 + 查看权限       | 冲突级别 + 冲突策略名列表 |
-| 触发记录查询 | GET `/apps/{appID}/build-triggers/{triggerID}/records`  | 用户票据 + 查看权限       | 记录列表 + 总数      |
-| 构建回调   | POST `/apps/{appID}/build-triggers/callback`            | **应用独享凭证**，不走用户票据 | 三态处理结果         |
+| 策略列表   | GET `/apps/{appID}/build-trigger-policies`                      | 用户票据 + 查看权限       | 全部策略 + 总数（不分页，上限 5） |
+| 创建策略   | POST `/apps/{appID}/build-trigger-policies`                     | 用户票据 + 构建权限       | 策略实体           |
+| 更新策略   | PUT `/apps/{appID}/build-trigger-policies/{policyID}`          | 用户票据 + 构建权限       | 策略实体           |
+| 启停策略   | PATCH `/apps/{appID}/build-trigger-policies/{policyID}/status` | 用户票据 + 构建权限       | 策略实体           |
+| 删除策略   | DELETE `/apps/{appID}/build-trigger-policies/{policyID}`       | 用户票据 + 构建权限       | 204 无内容        |
+| 冲突预检   | POST `/apps/{appID}/build-trigger-policies/conflict-check`      | 用户票据 + 查看权限       | 冲突级别 + 冲突策略名列表 |
+| 触发记录查询 | GET `/apps/{appID}/build-trigger-policies/{policyID}/records`  | 用户票据 + 查看权限       | 记录列表 + 总数      |
+| 构建回调   | POST `/apps/{appID}/build-trigger-policies/callback`            | **应用独享凭证**，不走用户票据 | 三态处理结果         |
 
 回调接口是本项目第一个面向外部系统的路由，它注册在不带 `auth.Required` 的路由组上。除它以外，其余 7 个接口均走现有用户票据鉴权，并在
 handler 内用 `perm.ValidateAppByID` 做应用级权限校验。
 
-`conflict-check` 与 `callback` 这两个静态路径段和同级的 `{triggerID}` 路径参数共存。gin 1.12 支持这种混用，现有
+`conflict-check` 与 `callback` 这两个静态路径段和同级的 `{policyID}` 路径参数共存。gin 1.12 支持这种混用，现有
 `/apps/auto-id-suffix` 与 `/apps/{appID}` 即为先例。
 
 ### 请求与响应结构

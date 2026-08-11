@@ -50,13 +50,13 @@ func emptyPolicyList() *triggerserializer.PolicyListOutputObjs {
 	}
 }
 
-// ListBuildTriggers 获取应用的触发策略列表。
+// ListBuildTriggerPolicies 获取应用的触发策略列表。
 //
 // 单应用策略上限为 MaxPoliciesPerApp，一次返回全部，不支持分页
 //
-//	@ID				ListBuildTriggers
+//	@ID				ListBuildTriggerPolicies
 //	@Summary		获取应用的触发策略列表
-//	@Tags			build-triggers
+//	@Tags			build-trigger-policies
 //	@Produce		json
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
@@ -64,8 +64,8 @@ func emptyPolicyList() *triggerserializer.PolicyListOutputObjs {
 //	@Success		200		{object}	triggerserializer.ListPoliciesOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
 //	@Failure		404		{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/build-triggers [get]
-func (h *Handler) ListBuildTriggers(c *gin.Context) {
+//	@Router			/apps/{appID}/build-trigger-policies [get]
+func (h *Handler) ListBuildTriggerPolicies(c *gin.Context) {
 	var uriInput triggerserializer.AppURIInput
 	if err := ginutils.BindURI(c, &uriInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
@@ -75,11 +75,11 @@ func (h *Handler) ListBuildTriggers(c *gin.Context) {
 	ginutils.OK(c, triggerserializer.ListPoliciesOutput{Data: emptyPolicyList()})
 }
 
-// CreateBuildTrigger 新增触发策略。
+// CreateBuildTriggerPolicy 新增触发策略。
 //
-//	@ID				CreateBuildTrigger
+//	@ID				CreateBuildTriggerPolicy
 //	@Summary		新增触发策略
-//	@Tags			build-triggers
+//	@Tags			build-trigger-policies
 //	@Accept			json
 //	@Produce		json
 //	@Security		BkUserInfo
@@ -89,8 +89,8 @@ func (h *Handler) ListBuildTriggers(c *gin.Context) {
 //	@Success		200		{object}	triggerserializer.PolicyOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
 //	@Failure		404		{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/build-triggers [post]
-func (h *Handler) CreateBuildTrigger(c *gin.Context) {
+//	@Router			/apps/{appID}/build-trigger-policies [post]
+func (h *Handler) CreateBuildTriggerPolicy(c *gin.Context) {
 	var uriInput triggerserializer.AppURIInput
 	var input triggerserializer.PolicyFormInput
 	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
@@ -101,23 +101,23 @@ func (h *Handler) CreateBuildTrigger(c *gin.Context) {
 	ginutils.OK(c, triggerserializer.PolicyOutput{Data: &triggerserializer.PolicyOutputObj{}})
 }
 
-// UpdateBuildTrigger 更新触发策略。
+// UpdateBuildTriggerPolicy 更新触发策略。
 //
-//	@ID				UpdateBuildTrigger
+//	@ID				UpdateBuildTriggerPolicy
 //	@Summary		更新触发策略
-//	@Tags			build-triggers
+//	@Tags			build-trigger-policies
 //	@Accept			json
 //	@Produce		json
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			appID		path		string								true	"应用 ID"
-//	@Param			triggerID	path		string								true	"触发策略 ID"
+//	@Param			policyID	path		string								true	"触发策略 ID"
 //	@Param			body		body		triggerserializer.PolicyFormInput	true	"触发策略表单"
 //	@Success		200			{object}	triggerserializer.PolicyOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Failure		404			{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/build-triggers/{triggerID} [put]
-func (h *Handler) UpdateBuildTrigger(c *gin.Context) {
+//	@Router			/apps/{appID}/build-trigger-policies/{policyID} [put]
+func (h *Handler) UpdateBuildTriggerPolicy(c *gin.Context) {
 	var uriInput triggerserializer.PolicyURIInput
 	var input triggerserializer.PolicyFormInput
 	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
@@ -128,23 +128,23 @@ func (h *Handler) UpdateBuildTrigger(c *gin.Context) {
 	ginutils.OK(c, triggerserializer.PolicyOutput{Data: &triggerserializer.PolicyOutputObj{}})
 }
 
-// PatchBuildTriggerStatus 启用或停用触发策略。
+// PatchBuildTriggerPolicyStatus 启用或停用触发策略。
 //
-//	@ID				PatchBuildTriggerStatus
+//	@ID				PatchBuildTriggerPolicyStatus
 //	@Summary		启用或停用触发策略
-//	@Tags			build-triggers
+//	@Tags			build-trigger-policies
 //	@Accept			json
 //	@Produce		json
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			appID		path		string											true	"应用 ID"
-//	@Param			triggerID	path		string											true	"触发策略 ID"
+//	@Param			policyID	path		string											true	"触发策略 ID"
 //	@Param			body		body		triggerserializer.PatchPolicyStatusInput		true	"启停参数"
 //	@Success		200			{object}	triggerserializer.PolicyOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Failure		404			{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/build-triggers/{triggerID}/status [patch]
-func (h *Handler) PatchBuildTriggerStatus(c *gin.Context) {
+//	@Router			/apps/{appID}/build-trigger-policies/{policyID}/status [patch]
+func (h *Handler) PatchBuildTriggerPolicyStatus(c *gin.Context) {
 	var uriInput triggerserializer.PolicyURIInput
 	var input triggerserializer.PatchPolicyStatusInput
 	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
@@ -155,21 +155,21 @@ func (h *Handler) PatchBuildTriggerStatus(c *gin.Context) {
 	ginutils.OK(c, triggerserializer.PolicyOutput{Data: &triggerserializer.PolicyOutputObj{}})
 }
 
-// DeleteBuildTrigger 删除触发策略。
+// DeleteBuildTriggerPolicy 删除触发策略。
 //
-//	@ID				DeleteBuildTrigger
+//	@ID				DeleteBuildTriggerPolicy
 //	@Summary		删除触发策略
-//	@Tags			build-triggers
+//	@Tags			build-trigger-policies
 //	@Produce		json
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			appID		path	string	true	"应用 ID"
-//	@Param			triggerID	path	string	true	"触发策略 ID"
+//	@Param			policyID	path	string	true	"触发策略 ID"
 //	@Success		204			{object}	nil
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Failure		404			{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/build-triggers/{triggerID} [delete]
-func (h *Handler) DeleteBuildTrigger(c *gin.Context) {
+//	@Router			/apps/{appID}/build-trigger-policies/{policyID} [delete]
+func (h *Handler) DeleteBuildTriggerPolicy(c *gin.Context) {
 	var uriInput triggerserializer.PolicyURIInput
 	if err := ginutils.BindURI(c, &uriInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
@@ -179,11 +179,11 @@ func (h *Handler) DeleteBuildTrigger(c *gin.Context) {
 	ginutils.NoContent(c)
 }
 
-// CheckBuildTriggerConflict 预检触发策略的重叠冲突。
+// CheckBuildTriggerPolicyConflict 预检触发策略的重叠冲突。
 //
-//	@ID				CheckBuildTriggerConflict
+//	@ID				CheckBuildTriggerPolicyConflict
 //	@Summary		预检触发策略的重叠冲突
-//	@Tags			build-triggers
+//	@Tags			build-trigger-policies
 //	@Accept			json
 //	@Produce		json
 //	@Security		BkUserInfo
@@ -193,8 +193,8 @@ func (h *Handler) DeleteBuildTrigger(c *gin.Context) {
 //	@Success		200		{object}	triggerserializer.ConflictCheckOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
 //	@Failure		404		{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/build-triggers/conflict-check [post]
-func (h *Handler) CheckBuildTriggerConflict(c *gin.Context) {
+//	@Router			/apps/{appID}/build-trigger-policies/conflict-check [post]
+func (h *Handler) CheckBuildTriggerPolicyConflict(c *gin.Context) {
 	var uriInput triggerserializer.AppURIInput
 	var input triggerserializer.ConflictCheckInput
 	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
@@ -210,24 +210,24 @@ func (h *Handler) CheckBuildTriggerConflict(c *gin.Context) {
 	})
 }
 
-// ListBuildTriggerRecords 获取触发策略的触发记录列表。
+// ListBuildTriggerPolicyRecords 获取触发策略的触发记录列表。
 //
-//	@ID				ListBuildTriggerRecords
+//	@ID				ListBuildTriggerPolicyRecords
 //	@Summary		获取触发策略的触发记录列表
-//	@Tags			build-triggers
+//	@Tags			build-trigger-policies
 //	@Produce		json
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			appID		path		string	true	"应用 ID"
-//	@Param			triggerID	path		string	true	"触发策略 ID"
+//	@Param			policyID	path		string	true	"触发策略 ID"
 //	@Param			result		query		string	false	"结果筛选：built / skipped / failed，留空表示不筛选"
 //	@Param			page		query		int		true	"分页参数：页码，从 1 开始"
 //	@Param			pageSize	query		int		true	"分页参数：每页数量，支持 5/10/20/50/100"
 //	@Success		200			{object}	triggerserializer.ListTriggerRecordsOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Failure		404			{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/build-triggers/{triggerID}/records [get]
-func (h *Handler) ListBuildTriggerRecords(c *gin.Context) {
+//	@Router			/apps/{appID}/build-trigger-policies/{policyID}/records [get]
+func (h *Handler) ListBuildTriggerPolicyRecords(c *gin.Context) {
 	var uriInput triggerserializer.PolicyURIInput
 	var queryInput triggerserializer.ListTriggerRecordsQueryInput
 	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
