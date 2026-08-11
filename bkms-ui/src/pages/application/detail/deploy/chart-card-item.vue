@@ -115,7 +115,7 @@
   import { ExploreChart } from '@blueking/monitor-vue3-components';
   import { Table, TableColumn } from '@blueking/table';
   import * as echarts from 'echarts/core';
-  import { getCachedMetric, isPercentUnit } from '~/pages/application/detail/deploy/monitor-chart-bridge';
+  import { formatOffsetLabel, getCachedMetric, getColorByOffset, isPercentUnit } from '~/pages/application/detail/deploy/monitor-chart-bridge';
   import { useAppDetail } from '~/stores/app-detail';
 
   // 将所有 ExploreChart 加入同一 echarts group，实现跨图 tooltip 联动
@@ -129,6 +129,8 @@
     area?: boolean;
     /** 图表高度 */
     chartHeight?: number | string;
+    /** 时间对比偏移量列表（秒） */
+    compareOffsets?: number[];
     /** 环境名称（作为接口入参，单环境模式） */
     envName?: string;
     /** 实例 ID → 环境名称映射（多环境模式） */
@@ -200,6 +202,7 @@
         // 这样每条折线名称都能对应到具体实例。
         data: {
           appID: appDetailStore.appID,
+          compareOffsets: props.compareOffsets,
           envName: props.envName,
           instanceEnvMap: props.instanceEnvMap,
           instances: props.instances,
@@ -220,9 +223,15 @@
   const customOptions = {
     options: (opts: EChartOptionLike): EChartOptionLike => {
       if (Array.isArray(opts.series)) {
-        opts.series = opts.series.map((s: Record<string, unknown>) =>
-          props.area ? { ...s, areaStyle: {} } : { ...s, stack: undefined },
-        );
+        opts.series = opts.series.map((s: Record<string, unknown>) => {
+          // 桥接层不再用 __CMP__ 前缀标记 series，对比项通过 isCompare 字段显式识别
+          const isCompare = s.isCompare === true;
+          const base = props.area ? { ...s, areaStyle: {} } : { ...s, stack: undefined };
+          if (isCompare) {
+            return { ...base, lineStyle: { type: 'dashed', opacity: 0.5, width: 1.5 }, itemStyle: { opacity: 0.5 } };
+          }
+          return base;
+        });
       }
       return opts;
     },
@@ -243,6 +252,7 @@
   /** 表格 loading：接口请求期间显示加载状态 */
   const tableLoading = ref(true);
 
+
   function syncLegendRows() {
     if (!props.instances?.length) {
       legendRows.value = [];
@@ -252,10 +262,14 @@
     // 同时引用图表图例中的 color/show 属性保持联动
     const chartLegend = (exploreChartRef.value as unknown as ExploreChartInstance | undefined)?.legendData;
     const metric = getCachedMetric(props.metricKey);
-    const seriesByInstance = new Map<string, TimeSeriesItem>();
+    // 以 displayName（去 __CMP__ 前缀）为 key 反查原 series；
+    // bridge 的 alias/name 都是 displayName，因此图例 item.name / item.alias 可以直接命中
+    const seriesByName = new Map<string, TimeSeriesItem>();
     if (metric?.series) {
       for (const s of metric.series) {
-        if (s.instance) seriesByInstance.set(s.instance, s);
+        const inst = s.instance ?? '';
+        const displayName = inst.startsWith('__CMP__') ? inst.slice('__CMP__'.length) : inst;
+        if (displayName) seriesByName.set(displayName, s);
       }
     }
     const percentScale = isPercentUnit(metric?.unit) ? 100 : 1;
@@ -312,8 +326,11 @@
       if (dot === -1) return `${s}.00`;
       return `${s.slice(0, dot)}.${s.slice(dot + 1, dot + 3)}`;
     }
-    legendRows.value = (chartLegend ?? []).map(item => {
-      const seriesItem = seriesByInstance.get(item.name) ?? seriesByInstance.get(item.alias ?? '');
+    const rows: LegendRow[] = (chartLegend ?? []).map(item => {
+      // 优先读 ExploreChart 透传的 isCompare 字段，否则回退到反查 seriesItem 的原 instance 前缀
+      const seriesItem = seriesByName.get(item.name) ?? seriesByName.get(item.alias ?? '');
+      const isCompare = (item as LegendSourceItem).isCompare === true
+        || (!!seriesItem && (seriesItem.instance ?? '').startsWith('__CMP__'));
       const stat = seriesItem?.stat;
       const fmt = (v: number | undefined) => (v != null ? truncFixed2(v * percentScale * valueScale) + unitSuffix : '');
       return {
@@ -324,8 +341,47 @@
         min: fmt(stat?.min?.[1] as number | undefined),
         max: fmt(stat?.max?.[1] as number | undefined),
         avg: fmt(stat?.avg?.[1] as number | undefined),
+        isCompare,
       } as LegendRow;
     });
+
+    // 时间对比：对缺少数据的 offset 合成占位行
+    if (props.compareOffsets?.length) {
+      // 用 formatOffsetLabel(offset) 做 label 匹配去重，避免 instance 名中 '-' 干扰
+      const existingLabels = new Set<string>();
+      for (const row of rows) {
+        if (!row.isCompare) continue;
+        for (const offset of props.compareOffsets) {
+          const label = formatOffsetLabel(offset);
+          if ((row.alias as string).startsWith(label + '-')) {
+            existingLabels.add(label);
+            break;
+          }
+        }
+      }
+      const synthesized: LegendRow[] = [];
+      props.compareOffsets.forEach(offset => {
+        const label = formatOffsetLabel(offset);
+        if (existingLabels.has(label)) return;
+        const color = getColorByOffset(offset);
+        props.instances!.forEach(instance => {
+          synthesized.push({
+            alias: `${label}-${instance}`,
+            name: `${label}-${instance}`,
+            color,
+            show: true,
+            min: '--',
+            max: '--',
+            avg: '--',
+            isCompare: true,
+            synthesized: true,
+          } as LegendRow);
+        });
+      });
+      legendRows.value = synthesized.length ? [...rows, ...synthesized] : rows;
+    } else {
+      legendRows.value = rows;
+    }
     tableLoading.value = false;
   }
 
@@ -356,10 +412,12 @@
     alias: string;
     avg: string;
     color: string;
+    isCompare?: boolean;
     max: string;
     min: string;
     name: string;
     show: boolean;
+    synthesized?: boolean;
   }
 
   /** ExploreChart 内部 useChartLegend 返回的图例项结构 */
@@ -367,6 +425,8 @@
     alias?: string;
     avg?: number | string;
     color: string;
+    /** 是否为时间对比系列（由桥接层显式标记，UI 不再依赖字符串前缀判断） */
+    isCompare?: boolean;
     max?: number | string;
     min?: number | string;
     name: string;

@@ -130,6 +130,61 @@
           :name="option.name"
         />
       </Select>
+      <!-- 时间对比 -->
+      <div class="flex items-center ml-[16px] flex-shrink-0">
+        <span class="text-[#4D4F56] text-[12px] mr-[8px]">{{ $t('时间对比') }}</span>
+        <Switcher
+          v-model="timeCompareEnabled"
+          :disabled="isMultiEnv"
+          theme="primary"
+          v-bk-tooltips="{ content: $t('多环境不支持时间对比'), disabled: !isMultiEnv, placement: 'top' }"
+          @change="handleTimeCompareToggle"
+        />
+        <template v-if="timeCompareEnabled">
+          <Select
+            v-model="compareOffsetSecondsList"
+            behavior="simplicity"
+            class="w-[180px] ml-[8px]"
+            clearable
+            multiple
+            @clear="handleCompareOffsetClear"
+          >
+            <Select.Option
+              v-for="option in compareOffsetOptions"
+              :id="option.id"
+              :key="String(option.id)"
+              :name="option.name"
+            />
+            <template #extension>
+              <div style="padding: 0 12px 6px">
+                <span
+                  v-if="!showCustomInput"
+                  class="text-[#3A84FF] cursor-pointer text-[12px]"
+                  @click="handleShowCustomInput"
+                >{{ $t('自定义') }}</span>
+                <template v-if="showCustomInput">
+                  <Input
+                    v-model="customOffsetText"
+                    :placeholder="$t('按照提示输入')"
+                    size="small"
+                    @enter="handleCustomOffsetConfirm"
+                  >
+                    <template #suffix>
+                      <i
+                        v-bk-tooltips="{ content: $t('自定义输入格式提示'), placement: 'top', boundary: 'parent' }"
+                        class="bkms-icon bkms-icon-help-document text-[#C4C6CC] flex items-center mr-[4px]"
+                      />
+                    </template>
+                    <template #append>
+                      <span class="text-[#3A84FF] cursor-pointer" @click="handleCustomOffsetConfirm">{{ $t('确定') }}</span>
+                    </template>
+                  </Input>
+                </template>
+              </div>
+            </template>
+          </Select>
+        </template>
+      </div>
     </div>
     <div class="overflow-auto px-[24px] pt-[24px] pb-[24px] bg-[#F5F7FA] h-[calc(100vh-105px)]">
       <div class="mb-[24px] bg-[#fff] h-[48px] px-[16px] py-[8px] shadow-[0_3px_5.5px_0_#00000012]">
@@ -228,6 +283,7 @@
           :key="item.metricKey"
           :ref="setChartCardRef"
           :area="item.area !== false"
+          :compare-offsets="chartParams.compareOffsets"
           :env-name="props.envName"
           :instance-env-map="instanceEnvMap"
           :instances="chartParams.instances"
@@ -263,7 +319,7 @@
 
   import DatePicker from '@blueking/date-picker';
   import { Table, TableColumn } from '@blueking/table';
-  import { Checkbox, Divider, Progress, Radio, Select, Sideslider, Tag, Tree } from 'bkui-vue';
+  import { Checkbox, Divider, Input, Message, Progress, Radio, Select, Sideslider, Switcher, Tag, Tree } from 'bkui-vue';
   import dayjs from 'dayjs';
   import { debounce } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
@@ -287,7 +343,9 @@
 
   const ChartCardItem = defineAsyncComponent(() => import('@/pages/application/detail/deploy/chart-card-item.vue'));
 
-  type ChartParams = Pick<GetInstanceTimeSeriesRequest, 'endTime' | 'instances' | 'interval' | 'startTime'>;
+  type ChartParams = Pick<GetInstanceTimeSeriesRequest, 'endTime' | 'instances' | 'interval' | 'startTime'> & {
+    compareOffsets?: number[];
+  };
 
   interface EnvGroup {
     envName: string;
@@ -348,6 +406,9 @@
   /** 按环境分组的实例列表（多环境模式使用） */
   const envGroups = ref<EnvGroup[]>([]);
 
+  /** 是否为多环境模式 */
+  const isMultiEnv = computed(() => envGroups.value.length > 1);
+
   /** 实例 ID → 环境名称映射（传给 chart-card-item 和 bridge，支持多环境查询） */
   const instanceEnvMap = computed(() => {
     const map: Record<string, string> = {};
@@ -369,6 +430,12 @@
     envGroups.value = [];
     sliderWidth.value = 1200;
     metricFilter.value = 'all';
+    // 重置时间对比状态
+    timeCompareEnabled.value = false;
+    compareOffsetSecondsList.value = [];
+    showCustomInput.value = false;
+    customOffsetText.value = '';
+    compareOffsetOptions.value = compareOffsetOptions.value.filter(opt => typeof opt.id === 'number');
   }
 
   /** Pod 实例名称列表，作为 GetInstanceTimeSeries 的 instances 入参 */
@@ -607,7 +674,79 @@
     instances: selectedInstance.value,
     interval: effectiveInterval.value,
     startTime: startTime.value,
+    compareOffsets: [],
   });
+
+  // ─── 时间对比状态 ────────────────────────────────────────────
+  /** 时间对比开关 */
+  const timeCompareEnabled = ref(false);
+  /** 多选对比偏移列表（number=秒数，string=自定义文本如'1m'） */
+  const compareOffsetSecondsList = ref<(number | string)[]>([]);
+  /** 下拉框内是否显示自定义输入框 */
+  const showCustomInput = ref(false);
+  /** 自定义输入文本 */
+  const customOffsetText = ref('');
+  /** 对比偏移选项：预设项 + 自定义项 */
+  const compareOffsetOptions = ref<Array<{ id: number | string; name: string }>>([
+    { id: 3600, name: t('1 小时前') },
+    { id: 86400, name: t('昨天') },
+    { id: 7 * 86400, name: t('上周') },
+    { id: 30 * 86400, name: t('一月前') },
+  ]);
+
+  /** 自定义时间对比偏移量上限：2 年（秒） */
+  const MAX_COMPARE_OFFSET = 2 * 365 * 86400;
+
+  /** 解析自定义偏移字符串为秒数。格式：/^[1-9]\d*(m|h|d|w|M|y)$/，超过上限返回 0 */
+  function parseOffset(text: string): number {
+    if (!text) return 0;
+    const match = text.trim().match(/^[1-9]\d*(m|h|d|w|M|y)$/);
+    if (!match) return 0;
+    const unitMap: Record<string, number> = {
+      m: 60, h: 3600, d: 86400, w: 7 * 86400, M: 30 * 86400, y: 365 * 86400,
+    };
+    const result = Number.parseInt(text) * unitMap[match[1]];
+    if (result > MAX_COMPARE_OFFSET) return 0;
+    return result;
+  }
+  /** 实际生效的偏移秒数列表 */
+  const effectiveCompareOffsets = computed(() =>
+    compareOffsetSecondsList.value.map(v => (typeof v === 'string' ? parseOffset(v) : v)),
+  );
+
+  function handleTimeCompareToggle(val: boolean) {
+    if (!val) {
+      showCustomInput.value = false;
+      compareOffsetSecondsList.value = [];
+    }
+  }
+  function handleCompareOffsetClear() {
+    compareOffsetSecondsList.value = [];
+  }
+  function handleShowCustomInput() {
+    showCustomInput.value = true;
+    customOffsetText.value = '';
+  }
+  function handleCustomOffsetConfirm() {
+    const text = customOffsetText.value.trim();
+    const seconds = parseOffset(text);
+    if (seconds <= 0) {
+      const isFormatError = !text.match(/^[1-9]\d*(m|h|d|w|M|y)$/);
+      Message({ theme: 'warning', message: isFormatError ? t('按照提示输入') : t('对比时间不能超过 2 年') });
+      return;
+    }
+    const matched = compareOffsetOptions.value.find(item => item.id === seconds);
+    const value = matched ? seconds : text;
+    if (!matched) {
+      const existing = compareOffsetOptions.value.find(item => item.id === text);
+      if (!existing) compareOffsetOptions.value.push({ id: text, name: text });
+    }
+    if (!compareOffsetSecondsList.value.includes(value)) {
+      compareOffsetSecondsList.value = [...compareOffsetSecondsList.value, value];
+    }
+    showCustomInput.value = false;
+  }
+  // ─── 时间对比 end ───────────────────────────────────
 
   /** 实例选择变化时同步到 chartParams，触发子组件重新请求 */
   function handleFiltersChange() {
@@ -616,13 +755,14 @@
       instances: selectedInstance.value,
       interval: effectiveInterval.value,
       startTime: startTime.value,
+      compareOffsets: timeCompareEnabled.value ? effectiveCompareOffsets.value : [],
     };
     // 失焦确认后同步到表格用 ref，防止选择过程中表格抖动
     committedInstances.value = [...selectedInstance.value];
   }
   /** startTime / endTime / instances / 实例选择变化时同步到 chartParams，触发图表重拉 */
   watch(
-    () => [startTime.value, endTime.value, instances.value, interval.value],
+    () => [startTime.value, endTime.value, instances.value, interval.value, JSON.stringify(timeCompareEnabled.value ? effectiveCompareOffsets.value : [])],
     () => {
       handleFiltersChange();
       setChartTimeRange(startTime.value, endTime.value);
