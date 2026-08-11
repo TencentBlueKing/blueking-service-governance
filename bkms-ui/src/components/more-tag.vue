@@ -229,9 +229,14 @@
 
   onMounted(() => {
     nextTick(calcVisibleCount);
+    resizeObserver = new ResizeObserver(debouncedCalcVisibleCount);
     if (containerRef.value) {
-      resizeObserver = new ResizeObserver(debouncedCalcVisibleCount);
       resizeObserver.observe(containerRef.value);
+    }
+    // 观察 measureRef：当 slot 内容依赖异步数据（如名称映射）时，
+    // item 宽度会随后变化，需要重新计算可见数量
+    if (measureRef.value) {
+      resizeObserver.observe(measureRef.value);
     }
   });
 

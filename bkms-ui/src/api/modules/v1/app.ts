@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetAppIDAutoSuffixRequest, GetAppIDAutoSuffixOutput, GetAppRequest, AppDetailOutputObj, DeleteAppRequest, EmptyOutput, GetAppDeployStatusesRequest, AppDeployedEnvOutputObj, UpdateAppDisplayNameRequest, UpdateHelmSpecRequest, UpdateAppTafSpecRequest, UpdateAppTrpcSpecRequest, ListAppsRequest, AppInfoOutputObj, CreateAppRequest, AppOutputObj } from '~/@types/v1/app';
+import type { GetAppIDAutoSuffixRequest, GetAppIDAutoSuffixOutput, GetAppRequest, AppDetailOutputObj, DeleteAppRequest, EmptyOutput, GetAppDeployOverviewRequest, AppDeployOverviewEnvObj, GetAppDeployStatusesRequest, AppDeployedEnvOutputObj, UpdateAppDisplayNameRequest, UpdateHelmSpecRequest, UpdateAppTafSpecRequest, UpdateAppTrpcSpecRequest, ListAppsRequest, AppInfoOutputObj, CreateAppRequest, AppOutputObj } from '~/@types/v1/app';
 
 export const AppService = {
   /**
@@ -49,6 +49,20 @@ export const AppService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.delete<Request, ResponseData>('/apps/{appID}')(params, config),
+  /**
+   * 查询应用在各环境上的部署总览（仅 trpc/taf）
+   *
+   * @method GET
+   * @path /apps/{appID}/deploy-overview
+   * @tag app
+   * @param appID path string required 应用 ID
+   * @response 200 GetAppDeployOverviewOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getAppDeployOverview: async <Request extends GetAppDeployOverviewRequest = GetAppDeployOverviewRequest, ResponseData = AppDeployOverviewEnvObj[]>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/deploy-overview')(params, config),
   /**
    * 查询应用在各环境及各泳道上的部署状态
    *

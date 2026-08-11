@@ -45,6 +45,18 @@ export const BKMS_REGEX = {
   percentOrNonNegativeIntegerRegex: /^(0|[1-9]\d*|([0-9]|[1-9]\d?|100)%)$/,
 };
 
+/**
+ * 阈值为「次数」单位的监控指标集合（如 Pod 重启次数），
+ * 其余监控指标默认使用百分比（%）单位
+ */
+export const COUNT_UNIT_METRICS = new Set(['kube_pod_container_status_restarts_total']);
+
+/**
+ * 阈值为「次数」单位的策略码集合，与 COUNT_UNIT_METRICS 对应，
+ * 用于表单中根据所选 strategyCode 判断阈值单位
+ */
+export const COUNT_UNIT_STRATEGY_CODES = new Set(['pod_restart_frequent']);
+
 // 文档地址常量
 export const DOC_LINKS = {
   // 接入指引

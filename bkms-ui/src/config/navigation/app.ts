@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// import alertLog from '~/pages/application/detail/alert-log.vue';
+import alertRecord from '~/pages/application/detail/alert-record/index.vue';
 import buildManagement from '~/pages/application/detail/app-build/build-management.vue';
 import appConfig from '~/pages/application/detail/app-config/index.vue';
 import artifact from '~/pages/application/detail/artifact/index.vue';
@@ -106,12 +106,15 @@ export const TRPC_NAVIGATION: NavigationItem[] = [
         icon: 'monitor',
         component: observation,
       },
-      // {
-      //   key: 'alert',
-      //   name: i18n.global.t('告警记录'),
-      //   icon: 'alert-records',
-      //   component: alertLog,
-      // },
+      {
+        key: 'alert',
+        name: i18n.global.t('监控告警'),
+        icon: 'alert-records',
+        component: alertRecord,
+        meta: {
+          layout: 'empty',
+        },
+      },
     ],
   },
   {

@@ -17,7 +17,13 @@
  */
 
 export default function useToLink() {
-  function handleToLink(type: string, bKProject = '') {
+  /**
+   * 统一跳转辅助（跨域跳转统一开新标签页；同域跳转请直接使用 vue-router）
+   * @param type 跳转目标类型，支持 'devops' | 'bcs' | 'monitor' | 'monitor-alert'
+   * @param bKProject 业务项目 ID（monitor 类型下为 bkMonitorProjectID）
+   * @param alertID 仅 'monitor-alert' 必填，告警事件 ID
+   */
+  function handleToLink(type: string, bKProject = '', alertID = '') {
     let url = '';
     if (!bKProject) return;
     switch (type) {
@@ -29,6 +35,10 @@ export default function useToLink() {
         break;
       case 'monitor':
         url = `${import.meta.env.BK_MONITOR}/?bizId=${bKProject}#/apm/home`;
+        break;
+      case 'monitor-alert':
+        if (!alertID) return;
+        url = `${import.meta.env.BK_MONITOR}/?bizId=${bKProject}/#/trace/alarm-center/detail/${alertID}`;
         break;
     }
     window.open(url, '_blank');

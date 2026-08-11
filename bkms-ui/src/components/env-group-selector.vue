@@ -31,7 +31,7 @@
           <span class="text-[12px] text-[#4D4F56] mr-[8px]">{{ $t('全选') }}</span>
           <Checkbox
             class="bg-[#fff]"
-            :disabled="getGroupEnvNames(group.envs).length === 0"
+            :disabled="props.disabled || getGroupEnvValues(group.envs).length === 0"
             :indeterminate="isGroupIndeterminate(group.envs)"
             :model-value="isGroupAllSelected(group.envs)"
             @change="handleGroupSelectAll(group.envs, $event)"
@@ -44,9 +44,16 @@
           v-for="env in group.envs"
           :key="env.id || env.name"
           class="h-[32px] flex items-center px-[12px] bg-[#F5F7FA] cursor-pointer"
+          :class="isEnvDisabled(env) && !isEnvSelected(env) ? 'opacity-60 cursor-not-allowed' : ''"
           @click="handleEnvItemClick(env)"
         >
           <div class="flex flex-1 min-w-0 items-center">
+            <ColorIcon
+              v-if="props.showDeployIcon"
+              class="shrink-0 mr-[8px]"
+              :icon="getEnvStatusIcon(env)"
+              :size="14"
+            />
             <span
               class="min-w-0 truncate text-[12px] text-[#4D4F56]"
               :title="env.displayName || env.name"
@@ -67,7 +74,7 @@
           >
             <Checkbox
               class="bg-[#fff]"
-              :disabled="!env.name"
+              :disabled="(!isEnvSelected(env) && isEnvStatusDisabled(env)) || props.disabled || !getEnvValue(env)"
               :model-value="isEnvSelected(env)"
               @change="handleEnvSelect(env, $event)"
             />
@@ -85,23 +92,76 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
 
   import { Checkbox, Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
+  import { AppService } from '~/api/modules/v1/app';
+  import ColorIcon from '~/components/color-icon.vue';
+  import { useDeployStatusMap } from '~/composables/use-deploy-status';
   import { envTypeTagClassMap } from '~/composables/use-env-manager';
+  import { useAppDetail } from '~/stores/app-detail';
 
+  import type { AppDeployedEnvOutputObj } from '~/@types/v1/app';
   import type { EnvOutput } from '~/@types/v1/env';
 
-  const props = defineProps<{
-    envList: EnvOutput[];
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      /** 整体禁用（只读态） */
+      disabled?: boolean;
+      /** 这些状态的环境不可勾选且不计入全选，如 ['NotReady'] */
+      disabledStatuses?: string[];
+      envList: EnvOutput[];
+      /** 是否显示环境部署状态图标（为 true 时才会发起部署状态请求） */
+      showDeployIcon?: boolean;
+      /** v-model 值的来源字段：name（默认，兼容现有调用方）或 id */
+      valueKey?: 'id' | 'name';
+    }>(),
+    {
+      disabled: false,
+      disabledStatuses: () => [],
+      showDeployIcon: false,
+      valueKey: 'name',
+    },
+  );
 
   const modelValue = defineModel<string[]>({ default: () => [] });
   const { t } = useI18n();
+  const { getDeployStatusInfo } = useDeployStatusMap();
+  const appDetailStore = useAppDetail();
   const FEATURE_ENV_KIND = 'feature';
 
-  // 按环境类型分组的可用环境展示顺序
+  /** 环境名称 -> 部署状态 映射（仅 showDeployIcon 时请求） */
+  const appDeployStatusMap = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
+
+  /** 获取当前应用在各环境的部署状态 */
+  async function fetchDeployStatuses(appID: string) {
+    const res = await AppService.getAppDeployStatuses({ appID }).catch(() => []);
+    const list = (res || []) as AppDeployedEnvOutputObj[];
+    appDeployStatusMap.value = new Map(list.filter(item => item.name).map(item => [item.name!, item]));
+  }
+
+  /** 仅当开启图标且存在 appID 时才发起部署状态请求 */
+  watch(
+    () => [props.showDeployIcon, appDetailStore.appID] as const,
+    ([showDeployIcon, appID]) => {
+      if (showDeployIcon && appID) {
+        fetchDeployStatuses(appID);
+      } else {
+        appDeployStatusMap.value = new Map();
+      }
+    },
+    { immediate: true },
+  );
+
+  /** 根据环境获取部署状态对应的 ColorIcon 图标名（与 env-select-panel.vue 保持一致） */
+  function getEnvStatusIcon(env: EnvOutput): string {
+    const deployStatus = env.name ? appDeployStatusMap.value.get(env.name)?.deployStatus : undefined;
+    if (!deployStatus) return 'status-unknown';
+    return getDeployStatusInfo(appDetailStore.appType || null, deployStatus).icon || 'status-unknown';
+  }
+
+  // 组件可用环境分组展示顺序
   const envTypeOrder = ['development', 'test', 'staging', 'production'] as const;
   // 环境分组类型，约束分组配置必须覆盖所有展示类型
   type EnvType = (typeof envTypeOrder)[number];
@@ -136,45 +196,70 @@
     })),
   );
 
-  // 获取分组内可用于提交的环境名称列表
-  function getGroupEnvNames(envs: EnvOutput[]) {
-    return envs.map(env => env.name).filter((name): name is string => !!name);
+  /** 环境对应的 v-model 值 */
+  function getEnvValue(env: EnvOutput): string | undefined {
+    return props.valueKey === 'id' ? env.id : env.name;
+  }
+
+  // 获取分组内可用于提交的环境值列表（排除禁用状态）
+  function getGroupEnvValues(envs: EnvOutput[]) {
+    return envs
+      .filter(env => !isEnvDisabled(env))
+      .map(env => getEnvValue(env))
+      .filter((value): value is string => !!value);
   }
 
   // 点击环境条目时切换勾选状态
   function handleEnvItemClick(env: EnvOutput) {
-    if (!env.name) return;
+    if (props.disabled || !getEnvValue(env)) return;
+    // 状态禁用的环境（如 NotReady）不允许新增，但允许取消已选
+    if (isEnvStatusDisabled(env) && !isEnvSelected(env)) return;
     handleEnvSelect(env, !isEnvSelected(env));
   }
 
   // 切换单个环境勾选状态，并同步到 v-model
   function handleEnvSelect(env: EnvOutput, checked: boolean) {
-    if (!env.name) return;
-    const selectedEnvNames = modelValue.value || [];
+    const envValue = getEnvValue(env);
+    if (!envValue) return;
+    // 选中操作受状态禁用限制；取消操作不受限制（允许移除已选的禁用环境）
+    if (checked && isEnvStatusDisabled(env)) return;
+    const selectedValues = modelValue.value || [];
     if (checked) {
-      modelValue.value = selectedEnvNames.includes(env.name) ? selectedEnvNames : [...selectedEnvNames, env.name];
+      modelValue.value = selectedValues.includes(envValue) ? selectedValues : [...selectedValues, envValue];
       return;
     }
 
-    modelValue.value = selectedEnvNames.filter(name => name !== env.name);
+    modelValue.value = selectedValues.filter(value => value !== envValue);
   }
 
   // 切换分组全选状态，只影响当前分组内的环境
   function handleGroupSelectAll(envs: EnvOutput[], checked: boolean) {
-    const groupEnvNames = getGroupEnvNames(envs);
-    const selectedEnvNames = modelValue.value || [];
+    if (props.disabled) return;
+    const groupEnvValues = getGroupEnvValues(envs);
+    const selectedValues = modelValue.value || [];
     if (checked) {
-      modelValue.value = [...new Set([...selectedEnvNames, ...groupEnvNames])];
+      modelValue.value = [...new Set([...selectedValues, ...groupEnvValues])];
       return;
     }
 
-    const groupEnvNameSet = new Set(groupEnvNames);
-    modelValue.value = selectedEnvNames.filter(name => !groupEnvNameSet.has(name));
+    const groupEnvValueSet = new Set(groupEnvValues);
+    modelValue.value = selectedValues.filter(value => !groupEnvValueSet.has(value));
+  }
+
+  /** 环境是否整体禁用（只读态或状态命中 disabledStatuses） */
+  function isEnvDisabled(env: EnvOutput) {
+    return props.disabled || isEnvStatusDisabled(env);
   }
 
   // 判断单个环境是否已选中
   function isEnvSelected(env: EnvOutput) {
-    return !!env.name && (modelValue.value || []).includes(env.name);
+    const envValue = getEnvValue(env);
+    return !!envValue && (modelValue.value || []).includes(envValue);
+  }
+
+  /** 环境状态是否被禁用（如 NotReady），命中时不可新增但可取消已选 */
+  function isEnvStatusDisabled(env: EnvOutput) {
+    return props.disabledStatuses.includes(env.status || '');
   }
 
   function isFeatureEnv(env: EnvOutput) {
@@ -183,16 +268,16 @@
 
   // 判断分组内可选环境是否已全部选中
   function isGroupAllSelected(envs: EnvOutput[]) {
-    const groupEnvNames = getGroupEnvNames(envs);
-    const selectedEnvNames = modelValue.value || [];
-    return groupEnvNames.length > 0 && groupEnvNames.every(name => selectedEnvNames.includes(name));
+    const groupEnvValues = getGroupEnvValues(envs);
+    const selectedValues = modelValue.value || [];
+    return groupEnvValues.length > 0 && groupEnvValues.every(value => selectedValues.includes(value));
   }
 
   // 判断分组是否处于半选状态
   function isGroupIndeterminate(envs: EnvOutput[]) {
-    const groupEnvNames = getGroupEnvNames(envs);
-    const selectedEnvNames = modelValue.value || [];
-    const selectedCount = groupEnvNames.filter(name => selectedEnvNames.includes(name)).length;
-    return selectedCount > 0 && selectedCount < groupEnvNames.length;
+    const groupEnvValues = getGroupEnvValues(envs);
+    const selectedValues = modelValue.value || [];
+    const selectedCount = groupEnvValues.filter(value => selectedValues.includes(value)).length;
+    return selectedCount > 0 && selectedCount < groupEnvValues.length;
   }
 </script>

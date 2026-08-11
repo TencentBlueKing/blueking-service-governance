@@ -1797,3 +1797,97 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 单个实例权重: Per-instance Weight
 "单个实例权重需为 {0} ~ {1} 的整数": "Per-instance weight must be an integer from {0} to {1}"
 "总权重 = {0}，预计占比 {1}%": "Total weight = {0}, estimated percentage {1}%"
+新建告警组: Create Alert Group
+告警组空间级资源提示: Alert groups are workspace-level resources. Any alert groups added or modified here will be shared and take effect across all applications in the current workspace.
+告警组名称: Alert Group Name
+成员: Members
+关联策略数: Linked Policy Count
+关联策略数提示: Total number of alert policies linked to this alert group across all applications in the current workspace
+确认删除该告警组？: Are you sure you want to delete this alert group?
+存在关联的策略，不可删除: There are associated strategies, cannot delete
+告警名称: Alert Name
+告警 ID: Alert ID
+告警详情链接信息不完整，无法跳转: Alert detail link info incomplete, cannot navigate
+当前空间未配置蓝鲸监控业务，无法跳转: BlueKing Monitor is not configured for the current workspace, cannot navigate
+告警组名称为空，无法跳转: Alert group name is empty, cannot navigate
+已失效: Expired
+新建策略: Create Policy
+策略名称: Policy Name
+监控指标: Monitoring Metric
+告警条件: Alert Condition
+告警级别: Alert Level
+生效环境: Effective Environment
+按环境类型: By Environment Type
+部分环境: Some Environments
+告警组: Alert Group
+启/停用: Enable/Disable
+停用后，所有的业务将会停用该策略，请谨慎操作！: After disabling, all services will stop using this policy. Please proceed with caution!
+确定停用该策略？: Are you sure you want to disable this policy?
+提醒: Reminder
+确认删除该策略: Confirm deleting this policy
+"策略名称: {name}": "Policy Name: {name}"
+启用成功: Enabled successfully
+停用成功: Disabled successfully
+通知对象: Notification Recipients
+处理套餐中使用了电话语音通知，拨打的顺序是按通知对象顺序依次拨打，用户组内无法保证顺序: When voice call notifications are used in the plan, calls are made in order of notification recipients; the order within a user group cannot be guaranteed.
+通知方式: Notification Method
+每个告警级别至少配置一种通知渠道；勾选的通知类型至少在某级别有配置。: Each alert level must have at least one notification channel configured; the selected notification type must be configured for at least one level.
+告警组详情: Alert Group Details
+编辑告警组: Edit Alert Group
+企业微信: WeCom
+邮箱: Email
+短信: SMS
+语音: Voice
+请输入告警组名称: Please enter the alert group name
+请选择通知对象: Please select notification recipients
+每个告警级别至少配置一种通知渠道: Each alert level must have at least one notification channel configured
+获取告警组详情失败: Failed to get alert group details
+更新成功: Updated successfully
+创建成功: Created successfully
+添加告警组: Add Alert Group
+搜索告警组名称、成员、通知渠道配置: Search alert group name, members, notification channel configuration
+级别: Level
+处理状态: Handling Status
+负责人: Owner
+持续时间: Duration
+编辑策略: Edit Policy
+监控数据: Monitoring Data
+请输入 1-32 字符的策略名称: Please enter a policy name of 1-32 characters
+请选择监控指标: Please select a monitoring metric
+检测规则: Detection Rules
+请选择告警级别: Please select an alert level
+"当前值 {0} {1}% 时触发告警": "Alert triggered when current value is {0} {1}%"
+"当前值 {0} {1}次 时触发告警": "Alert triggered when current value is {0} {1} time(s)"
+判断条件: Judgment Condition
+"在 {0} 个周期内累计满足 {1} 次检测条件时，触发告警通知": "When the detection condition is met {1} times within {0} periods, an alert notification is triggered"
+恢复条件: Recovery Condition
+"连续 {0} 个周期内不满足触发条件": "Trigger condition not met for {0} consecutive periods"
+生效时间段: Effective Time Period
+开始时间 - 结束时间: Start Time - End Time
+"( 所有环境都生效，包括新增的环境也会生效 )": "( Takes effect in all environments, including newly added ones )"
+"( 针对环境类型生效，包括新增的环境也会生效 )": "( Takes effect for the environment type, including newly added environments )"
+特定环境: Specific Environments
+"( 针对指定的环境生效，新增同类环境不会自动生效 )": "( Takes effect only for the specified environments; newly added environments of the same type will not take effect automatically )"
+通知设置: Notification Settings
+通知渠道在告警组内配置，选择告警组即关联其通知方式。: Notification channels are configured within the alert group; selecting an alert group links its notification methods.
+CPU Request 利用率: CPU Request Utilization
+CPU Requests 利用率: CPU Requests Utilization
+">=": ">="
+"<": "<"
+"≠": "≠"
+监控告警: Monitoring Alerts
+告警记录: Alert Records
+告警策略: Alert Policies
+内存 Request 利用率: Memory Request Utilization
+内存 Requests 利用率: Memory Requests Utilization
+容器重启次数: Container Restart Count
+CPU Limit 利用率: CPU Limit Utilization
+CPU Limits 利用率: CPU Limits Utilization
+内存 Limit 利用率: Memory Limit Utilization
+内存 Limits 利用率: Memory Limits Utilization
+">": ">"
+"<=": "<="
+"=": "="
+"已选 {n} 个告警组": "Selected {n} alert group(s)"
+请输入阈值: Please enter the threshold
+请选择告警组: Please select an alert group
