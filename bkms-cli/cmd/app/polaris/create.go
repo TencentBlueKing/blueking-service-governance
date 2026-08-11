@@ -69,7 +69,8 @@ YAML spec file fields:
                       Higher weight means more traffic routed to the instance
   serviceLabels:      Labels applied to ALL registered polaris instances (map[string]string).
                       Can be used for polaris routing rules and traffic management
-  operator:           Operator/owner of the polaris service (only effective when createNewService is true)`,
+  operator:           Operator/owner of the polaris service (only effective when createNewService is true).
+                      Multiple owners are comma-separated, e.g. "zhangsan,lisi"`,
 		Example: `  # Create a polaris config from a YAML spec file:
   bkms-cli app polaris create --app my-app -f polaris.yaml
 
@@ -90,7 +91,7 @@ YAML spec file fields:
   # polarisName: my-new-service
   # polarisNamespace: Test
   # servicePort: 9090
-  # operator: zhangsan`,
+  # operator: zhangsan,lisi`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// 读取并解析 YAML 规格文件
 			if _, err := os.Stat(specFile); err != nil {
