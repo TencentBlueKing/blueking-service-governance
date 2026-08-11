@@ -268,6 +268,9 @@ type HTTPServerConfig struct {
 	// Port HTTP Server 监听端口
 	// 端口上限 65535 对应包内常量 MaxPortNumber，struct tag 受语法限制无法引用常量，此处需与该常量保持一致
 	Port uint `validate:"required,gt=0,lte=65535"`
+	// PublicBaseURL 服务对外可访问的 HTTP 基址（不含路径后缀），供蓝盾等外部系统回调拼装完整 URL
+	// 例如 https://bkms.example.com；未配置时不影响现有构建链路，但触发专用流水线下发会失败
+	PublicBaseURL string `validate:"omitempty,url"`
 	// Mode Gin 运行模式，支持 release / debug / test，默认为 "release"
 	Mode string `validate:"omitempty,oneof=release debug test"`
 	// ReadHeaderTimeout HTTP Server 读取请求头超时时间，单位：秒

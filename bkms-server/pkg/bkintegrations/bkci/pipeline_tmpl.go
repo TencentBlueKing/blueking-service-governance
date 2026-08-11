@@ -44,6 +44,10 @@ const (
 
 	pipelineTmplCtxKeyImageCode    = "builderImageCode"
 	pipelineTmplCtxKeyImageVersion = "builderImageVersion"
+	// 实例期字段 key；模板侧用 [[ `[[ .xxx ]]` ]] 自逃逸，Reload 不消费这些 key
+	pipelineTmplCtxKeyAppID        = "appID"
+	pipelineTmplCtxKeyCallbackURL  = "callbackURL"
+	pipelineTmplCtxKeyCredentialID = "credentialID" // #nosec G101
 )
 
 // PipelineTemplatesReloader 负责将本地目录下的流水线模板重新加载到数据库
@@ -89,7 +93,7 @@ func (r *PipelineTemplatesReloader) Reload(ctx context.Context) error {
 	return nil
 }
 
-// buildRenderContext 构造流水线模板的渲染上下文
+// buildRenderContext 构造流水线模板的渲染上下文（仅全局字段；实例期占位由模板自逃逸保留）
 func (r *PipelineTemplatesReloader) buildRenderContext() map[string]any {
 	imageCode := defaultPipelineBuilderImageCode
 	imageVersion := defaultPipelineBuilderImageVersion
@@ -112,7 +116,7 @@ func (r *PipelineTemplatesReloader) reloadOne(
 		return errors.Wrapf(err, "read file %s", filename)
 	}
 
-	renderedData, err := r.renderTemplate(filename, rawData, renderContext)
+	renderedData, err := renderPipelineTemplate(filename, rawData, renderContext)
 	if err != nil {
 		return err
 	}
@@ -144,22 +148,22 @@ func (r *PipelineTemplatesReloader) validateVersion(tmpl *PipelineTemplate) erro
 	return nil
 }
 
-// renderTemplate 渲染流水线模板
-func (r *PipelineTemplatesReloader) renderTemplate(
-	filename string, rawData []byte, renderContext map[string]any,
-) ([]byte, error) {
-	// 使用 [[ ]] Delims 避免与 json 括号冲突
-	tmpl, err := template.New(filename).
+// renderPipelineTemplate 用 [[ ]] 分隔符渲染流水线模板 JSON（包级函数供 Reload 与 Ensure 共用）
+//
+// 实例期字段在资产中写成 [[ `[[ .callbackURL ]]` ]] 等形式自逃逸：Reload 展开为占位文本，
+// TriggerPipelineManager.Ensure 再填真实值；missingkey=error 避免拼错全局字段时静默落空
+func renderPipelineTemplate(name string, rawData []byte, renderContext map[string]any) ([]byte, error) {
+	tmpl, err := template.New(name).
 		Option("missingkey=error").
 		Delims("[[", "]]").
 		Parse(string(rawData))
 	if err != nil {
-		return nil, errors.Wrapf(err, "parse pipeline template %s", filename)
+		return nil, errors.Wrapf(err, "parse pipeline template %s", name)
 	}
 
 	var buf bytes.Buffer
 	if err = tmpl.Execute(&buf, renderContext); err != nil {
-		return nil, errors.Wrapf(err, "render pipeline template %s", filename)
+		return nil, errors.Wrapf(err, "render pipeline template %s", name)
 	}
 	return buf.Bytes(), nil
 }

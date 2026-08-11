@@ -268,7 +268,7 @@ func (c *ApiClient) GetOAuthUrl(ctx context.Context, projectCode string) (string
 
 // ------------------------------------------ 蓝盾凭证管理 API ------------------------------------------
 
-// CreateCredential 创建蓝盾凭证（目前只支持创建 用户名 - 密码类型的）
+// CreateCredential 创建蓝盾凭证（USERNAME_PASSWORD 类型）
 func (c *ApiClient) CreateCredential(
 	ctx context.Context, projectCode, credentialID, credentialDesc, username, password string,
 ) error {
@@ -294,6 +294,55 @@ func (c *ApiClient) CreateCredential(
 	)
 
 	return c.handleOperationWithoutResult(ctx, apiOperation)
+}
+
+// CreateAccessTokenCredential 创建蓝盾 AccessToken 类型凭证（v1 为 token）
+func (c *ApiClient) CreateAccessTokenCredential(
+	ctx context.Context, projectCode, credentialID, credentialDesc, token string,
+) error {
+	body := map[string]string{
+		"credentialType":   "ACCESSTOKEN",
+		"credentialId":     credentialID,
+		"credentialName":   credentialID,
+		"credentialRemark": credentialDesc,
+		"v1":               token,
+	}
+
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_credential_create",
+			Method: "POST",
+			Path:   "v4/apigw-user/projects/{projectId}/credentials/credential",
+		},
+		bkapi.OptSetRequestPathParams(
+			map[string]string{"projectId": projectCode},
+		),
+		bkapi.OptSetRequestBody(body),
+	)
+
+	return c.handleOperationWithoutResult(ctx, apiOperation)
+}
+
+// DeleteCredential 删除蓝盾凭证；凭证不存在时返回 ObjectNotFound
+//
+// 对应网关 API：v4_user_credential_delete
+// DELETE .../v4/.../projects/{projectId}/credentials/credential?credentialId=
+func (c *ApiClient) DeleteCredential(ctx context.Context, projectCode, credentialID string) error {
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_credential_delete",
+			Method: "DELETE",
+			Path:   "v4/apigw-user/projects/{projectId}/credentials/credential",
+		},
+		bkapi.OptSetRequestPathParams(
+			map[string]string{"projectId": projectCode},
+		),
+	).SetQueryParams(map[string]string{"credentialId": credentialID})
+
+	if err := c.handleOperationWithoutResult(ctx, apiOperation); err != nil {
+		return errors.Wrapf(err, "delete bkci credential %s in project %s", credentialID, projectCode)
+	}
+	return nil
 }
 
 // ------------------------------------------ 蓝盾流水线 API ------------------------------------------
@@ -478,6 +527,34 @@ func (c *ApiClient) UpdatePipeline(
 
 	if err := c.handleOperationWithoutResult(ctx, apiOperation); err != nil {
 		return errors.Wrapf(err, "update bkci pipeline %s in project %s", pipelineID, projectCode)
+	}
+	return nil
+}
+
+// DeletePipeline 删除蓝盾流水线；流水线不存在时返回 ObjectNotFound
+func (c *ApiClient) DeletePipeline(ctx context.Context, projectCode, pipelineID string) error {
+	if projectCode == "" {
+		return errors.New("projectCode is required to delete bkci pipeline")
+	}
+	if pipelineID == "" {
+		return errors.New("pipelineID is required to delete bkci pipeline")
+	}
+
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_pipeline_delete",
+			Method: "DELETE",
+			Path:   "/v4/apigw-user/projects/{projectId}/pipelines/pipeline",
+		},
+		bkapi.OptSetRequestPathParams(map[string]string{
+			"projectId": projectCode,
+		}),
+	).SetQueryParams(map[string]string{
+		"pipelineId": pipelineID,
+	})
+
+	if err := c.handleOperationWithoutResult(ctx, apiOperation); err != nil {
+		return errors.Wrapf(err, "delete bkci pipeline %s in project %s", pipelineID, projectCode)
 	}
 	return nil
 }

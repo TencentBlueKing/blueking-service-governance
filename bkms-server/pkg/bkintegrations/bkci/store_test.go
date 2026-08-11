@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package bkci_test
+package bkci
 
 import (
 	"context"
@@ -25,7 +25,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
@@ -33,7 +32,7 @@ import (
 var _ = Describe("ProjectStoreMongo", func() {
 	var (
 		ctx   context.Context
-		store *bkci.ProjectStoreMongo
+		store *ProjectStoreMongo
 	)
 
 	BeforeEach(func() {
@@ -43,14 +42,14 @@ var _ = Describe("ProjectStoreMongo", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// 创建 store 实例
-		store, err = bkci.NewProjectStoreMongo(database.Client(), database.Name())
+		store, err = NewProjectStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(store).NotTo(BeNil())
 	})
 
 	Describe("Create", func() {
 		It("should create a project successfully", func() {
-			project := &bkci.Project{
+			project := &Project{
 				ID:          "test-project-id-001",
 				Code:        "test-project",
 				WorkspaceID: "workspace-001",
@@ -63,7 +62,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 		})
 
 		It("should return error when creating duplicate project ID", func() {
-			project := &bkci.Project{
+			project := &Project{
 				ID:          "test-project-id-001",
 				Code:        "test-project",
 				WorkspaceID: "workspace-001",
@@ -74,7 +73,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 尝试创建相同 ID 的项目
-			duplicateProject := &bkci.Project{
+			duplicateProject := &Project{
 				ID:          "test-project-id-001",
 				Code:        "test-project-2",
 				WorkspaceID: "workspace-002",
@@ -87,7 +86,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 		})
 
 		It("should return error when creating duplicate project code", func() {
-			project := &bkci.Project{
+			project := &Project{
 				ID:          "test-project-id-001",
 				Code:        "test-project",
 				WorkspaceID: "workspace-001",
@@ -98,7 +97,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 尝试创建相同 Code 的项目
-			duplicateProject := &bkci.Project{
+			duplicateProject := &Project{
 				ID:          "test-project-id-002",
 				Code:        "test-project",
 				WorkspaceID: "workspace-002",
@@ -111,7 +110,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 		})
 
 		It("should return error when creating duplicate workspace ID", func() {
-			project := &bkci.Project{
+			project := &Project{
 				ID:          "test-project-id-001",
 				Code:        "test-project",
 				WorkspaceID: "workspace-001",
@@ -122,7 +121,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 尝试创建相同 WorkspaceID 的项目
-			duplicateProject := &bkci.Project{
+			duplicateProject := &Project{
 				ID:          "test-project-id-002",
 				Code:        "test-project-2",
 				WorkspaceID: "workspace-001",
@@ -137,7 +136,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 
 	Describe("GetByWorkspace", func() {
 		BeforeEach(func() {
-			project := &bkci.Project{
+			project := &Project{
 				ID:          "test-project-id-001",
 				Code:        "test-project",
 				WorkspaceID: "workspace-001",
@@ -161,14 +160,14 @@ var _ = Describe("ProjectStoreMongo", func() {
 		It("should return error when workspace not found", func() {
 			project, err := store.GetByWorkspace(ctx, "non-existent-workspace")
 			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, bkci.ErrProjectNotFound)).To(BeTrue())
+			Expect(errors.Is(err, ErrProjectNotFound)).To(BeTrue())
 			Expect(project).To(BeNil())
 		})
 	})
 
 	Describe("Multiple Projects", func() {
 		It("should allow creating multiple projects with different IDs, codes and workspaces", func() {
-			project1 := &bkci.Project{
+			project1 := &Project{
 				ID:          "test-project-id-001",
 				Code:        "test-project-1",
 				WorkspaceID: "workspace-001",
@@ -177,7 +176,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 			err := store.Create(ctx, project1)
 			Expect(err).NotTo(HaveOccurred())
 
-			project2 := &bkci.Project{
+			project2 := &Project{
 				ID:          "test-project-id-002",
 				Code:        "test-project-2",
 				WorkspaceID: "workspace-002",
@@ -201,7 +200,7 @@ var _ = Describe("ProjectStoreMongo", func() {
 var _ = Describe("DBPipelineTemplateStore", func() {
 	var (
 		ctx   context.Context
-		store *bkci.DBPipelineTemplateStore
+		store *DBPipelineTemplateStore
 	)
 
 	BeforeEach(func() {
@@ -211,14 +210,14 @@ var _ = Describe("DBPipelineTemplateStore", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// 创建 store 实例
-		store, err = bkci.NewDBPipelineTemplateStore(database.Client(), database.Name())
+		store, err = NewDBPipelineTemplateStore(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(store).NotTo(BeNil())
 	})
 
 	Describe("Upsert", func() {
 		It("should upsert a pipeline template successfully", func() {
-			template := &bkci.PipelineTemplate{
+			template := &PipelineTemplate{
 				ID:          "0348a1df-44de-29b2-1c94-2d42841c009d",
 				Type:        "build-template",
 				Version:     "1.0.0",
@@ -233,7 +232,7 @@ var _ = Describe("DBPipelineTemplateStore", func() {
 
 	Describe("GetByType", func() {
 		BeforeEach(func() {
-			template := &bkci.PipelineTemplate{
+			template := &PipelineTemplate{
 				ID:          "0348a1df-44de-29b2-1c94-2d42841c009d",
 				Type:        "build-template",
 				Version:     "1.0.0",
@@ -272,7 +271,7 @@ var _ = Describe("DBPipelineTemplateStore", func() {
 		It("should return error when template type not found", func() {
 			template, err := store.GetByType(ctx, "non-existent-template")
 			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, bkci.ErrPipelineTemplateNotFound)).To(BeTrue())
+			Expect(errors.Is(err, ErrPipelineTemplateNotFound)).To(BeTrue())
 			Expect(template).To(BeNil())
 		})
 	})
@@ -281,7 +280,7 @@ var _ = Describe("DBPipelineTemplateStore", func() {
 var _ = Describe("PipelineStoreMongo", func() {
 	var (
 		ctx   context.Context
-		store *bkci.PipelineStoreMongo
+		store *PipelineStoreMongo
 	)
 
 	BeforeEach(func() {
@@ -291,14 +290,14 @@ var _ = Describe("PipelineStoreMongo", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// 创建 store 实例
-		store, err = bkci.NewPipelineStoreMongo(database.Client(), database.Name())
+		store, err = NewPipelineStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(store).NotTo(BeNil())
 	})
 
 	Describe("Create", func() {
 		It("should create a pipeline successfully", func() {
-			pipeline := &bkci.Pipeline{
+			pipeline := &Pipeline{
 				ID:              "p-5df30e9fe868af903dff8d375dd7b463",
 				Type:            "build",
 				WorkspaceID:     "workspace-001",
@@ -314,7 +313,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 		})
 
 		It("should return error when creating duplicate pipeline ID", func() {
-			pipeline := &bkci.Pipeline{
+			pipeline := &Pipeline{
 				ID:          "p-5df30e9fe868af903dff8d375dd7b463",
 				Type:        "build",
 				WorkspaceID: "workspace-001",
@@ -328,7 +327,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 尝试创建相同 ID 的流水线
-			duplicatePipeline := &bkci.Pipeline{
+			duplicatePipeline := &Pipeline{
 				ID:          "p-5df30e9fe868af903dff8d375dd7b463",
 				Type:        "deploy",
 				WorkspaceID: "workspace-002",
@@ -344,7 +343,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 		})
 
 		It("should return error when creating duplicate (workspaceID, type)", func() {
-			pipeline := &bkci.Pipeline{
+			pipeline := &Pipeline{
 				ID:          "p-5df30e9fe868af903dff8d375dd7b463",
 				Type:        "build",
 				WorkspaceID: "workspace-001",
@@ -358,7 +357,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 尝试在同一个 workspace 下创建相同 type 的流水线
-			duplicatePipeline := &bkci.Pipeline{
+			duplicatePipeline := &Pipeline{
 				ID:          "p-f2A2266G-31dF-bbGeDD34g8dg720e82C",
 				Type:        "build",
 				WorkspaceID: "workspace-001",
@@ -374,7 +373,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 		})
 
 		It("should allow creating pipelines with same type in different workspaces", func() {
-			pipeline1 := &bkci.Pipeline{
+			pipeline1 := &Pipeline{
 				ID:          "p-5df30e9fe868af903dff8d375dd7b463",
 				Type:        "build",
 				WorkspaceID: "workspace-001",
@@ -388,7 +387,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 在不同的 workspace 下创建相同 type 的流水线应该成功
-			pipeline2 := &bkci.Pipeline{
+			pipeline2 := &Pipeline{
 				ID:          "p-f2A2266G-31dF-bbGeDD34g8dg720e82C",
 				Type:        "build",
 				WorkspaceID: "workspace-002",
@@ -405,7 +404,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 
 	Describe("GetByWorkspaceAndType", func() {
 		BeforeEach(func() {
-			pipeline := &bkci.Pipeline{
+			pipeline := &Pipeline{
 				ID:              "p-5df30e9fe868af903dff8d375dd7b463",
 				Type:            "build",
 				WorkspaceID:     "workspace-001",
@@ -436,21 +435,21 @@ var _ = Describe("PipelineStoreMongo", func() {
 		It("should return error when pipeline not found", func() {
 			pipeline, err := store.GetByWorkspaceAndType(ctx, "workspace-999", "build")
 			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, bkci.ErrPipelineNotFound)).To(BeTrue())
+			Expect(errors.Is(err, ErrPipelineNotFound)).To(BeTrue())
 			Expect(pipeline).To(BeNil())
 		})
 
 		It("should return error when type not found in workspace", func() {
 			pipeline, err := store.GetByWorkspaceAndType(ctx, "workspace-001", "deploy")
 			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, bkci.ErrPipelineNotFound)).To(BeTrue())
+			Expect(errors.Is(err, ErrPipelineNotFound)).To(BeTrue())
 			Expect(pipeline).To(BeNil())
 		})
 	})
 
 	Describe("UpdateBuiltinTemplateVersion", func() {
 		BeforeEach(func() {
-			pipeline := &bkci.Pipeline{
+			pipeline := &Pipeline{
 				ID:              "p-5df30e9fe868af903dff8d375dd7b463",
 				Type:            "build",
 				WorkspaceID:     "workspace-001",
@@ -465,7 +464,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 		})
 
 		It("should update template version and display fields successfully", func() {
-			pipeline := &bkci.Pipeline{
+			pipeline := &Pipeline{
 				Type:            "build",
 				WorkspaceID:     "workspace-001",
 				Name:            "新版构建流水线",
@@ -485,7 +484,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 		})
 
 		It("should return error when pipeline does not exist", func() {
-			pipeline := &bkci.Pipeline{
+			pipeline := &Pipeline{
 				Type:            "deploy",
 				WorkspaceID:     "workspace-001",
 				Name:            "部署流水线",
@@ -494,7 +493,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 			}
 
 			err := store.UpdateBuiltinTemplateVersion(ctx, pipeline)
-			Expect(errors.Is(err, bkci.ErrPipelineNotFound)).To(BeTrue())
+			Expect(errors.Is(err, ErrPipelineNotFound)).To(BeTrue())
 		})
 	})
 })
@@ -502,7 +501,7 @@ var _ = Describe("PipelineStoreMongo", func() {
 var _ = Describe("RepositoryStoreMongo", func() {
 	var (
 		ctx   context.Context
-		store *bkci.RepositoryStoreMongo
+		store *RepositoryStoreMongo
 	)
 
 	BeforeEach(func() {
@@ -512,14 +511,14 @@ var _ = Describe("RepositoryStoreMongo", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// 创建 store 实例
-		store, err = bkci.NewRepositoryStoreMongo(database.Client(), database.Name())
+		store, err = NewRepositoryStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(store).NotTo(BeNil())
 	})
 
 	Describe("Create", func() {
 		It("should create a repository successfully", func() {
-			repository := &bkci.Repository{
+			repository := &Repository{
 				ID:          "Zr3Dx",
 				Alias:       "bkms",
 				URL:         "https://git.example.com/bkms/bkms.git",
@@ -535,7 +534,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 		})
 
 		It("should return error when creating duplicate repository (id, projectCode)", func() {
-			repository := &bkci.Repository{
+			repository := &Repository{
 				ID:          "Zr3Dx",
 				Alias:       "bkms",
 				URL:         "https://git.example.com/bkms/bkms.git",
@@ -549,7 +548,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 尝试创建相同 (id, projectCode) 的仓库
-			duplicateRepository := &bkci.Repository{
+			duplicateRepository := &Repository{
 				ID:          "Zr3Dx",
 				Alias:       "bkms-2",
 				URL:         "https://git.example.com/bkms/bkms-2.git",
@@ -565,7 +564,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 		})
 
 		It("should return error when creating duplicate (workspaceID, alias)", func() {
-			repository := &bkci.Repository{
+			repository := &Repository{
 				ID:          "Zr3Dx",
 				Alias:       "bkms",
 				URL:         "https://git.example.com/bkms/bkms.git",
@@ -579,7 +578,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 尝试在同一个 workspace 下创建相同 alias 的仓库
-			duplicateRepository := &bkci.Repository{
+			duplicateRepository := &Repository{
 				ID:          "Ab4Ey",
 				Alias:       "bkms",
 				URL:         "https://git.example.com/bkms/bkms-2.git",
@@ -595,7 +594,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 		})
 
 		It("should allow creating repositories with same alias in different workspaces", func() {
-			repository1 := &bkci.Repository{
+			repository1 := &Repository{
 				ID:          "Zr3Dx",
 				Alias:       "bkms",
 				URL:         "https://git.example.com/bkms/bkms.git",
@@ -609,7 +608,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 在不同的 workspace 下创建相同 alias 的仓库应该成功
-			repository2 := &bkci.Repository{
+			repository2 := &Repository{
 				ID:          "Ab4Ey",
 				Alias:       "bkms",
 				URL:         "https://git.example.com/bkms/bkms-2.git",
@@ -624,7 +623,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 		})
 
 		It("should allow creating repositories with same ID in different projects", func() {
-			repository1 := &bkci.Repository{
+			repository1 := &Repository{
 				ID:          "Zr3Dx",
 				Alias:       "bkms-1",
 				URL:         "https://git.example.com/bkms/bkms-1.git",
@@ -638,7 +637,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 在不同的项目下创建相同 ID 的仓库应该成功
-			repository2 := &bkci.Repository{
+			repository2 := &Repository{
 				ID:          "Zr3Dx",
 				Alias:       "bkms-2",
 				URL:         "https://git.example.com/bkms/bkms-2.git",
@@ -655,7 +654,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 
 	Describe("GetByWorkspaceAndAlias", func() {
 		BeforeEach(func() {
-			repository := &bkci.Repository{
+			repository := &Repository{
 				ID:          "Zr3Dx",
 				Alias:       "bkms",
 				URL:         "https://git.example.com/bkms/bkms.git",
@@ -685,7 +684,7 @@ var _ = Describe("RepositoryStoreMongo", func() {
 		It("should return error when repository not found", func() {
 			repository, err := store.GetByWorkspaceAndAlias(ctx, "workspace-999", "bkms")
 			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, bkci.ErrRepositoryNotFound)).To(BeTrue())
+			Expect(errors.Is(err, ErrRepositoryNotFound)).To(BeTrue())
 			Expect(repository).To(BeNil())
 		})
 	})

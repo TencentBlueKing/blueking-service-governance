@@ -1,0 +1,145 @@
+{
+  "id": "33d19ab2-6f62-4ee8-9829-74686a07ea18",
+  "type": "build-trigger",
+  "version": "1.0.0",
+  "name": "[bkms] 自动构建触发（[[ `[[ .appID ]]` ]]）",
+  "description": "[请勿删除或修改] 蓝鲸服务治理（bkms）按应用下发的触发专用流水线，仅监听工蜂 Git 事件并回调 bkms，自身不执行构建",
+  "stages": [
+    {
+      "containers": [
+        {
+          "@type": "trigger",
+          "classType": "trigger",
+          "containerHashId": "c-0bf3f4adc55341089b848959344d45d8",
+          "containerId": "0",
+          "elements": [],
+          "id": "0",
+          "matrixGroupFlag": false,
+          "name": "trigger",
+          "params": []
+        }
+      ],
+      "id": "stage-trigger",
+      "name": "触发",
+      "tag": [
+        "NORMAL"
+      ]
+    },
+    {
+      "checkIn": {
+        "manualTrigger": false,
+        "markdownContent": false,
+        "notifyType": [
+          "RTX"
+        ],
+        "timeout": 24
+      },
+      "checkOut": {
+        "manualTrigger": false,
+        "markdownContent": false,
+        "notifyType": [
+          "RTX"
+        ],
+        "timeout": 24
+      },
+      "containers": [
+        {
+          "@type": "vmBuild",
+          "baseOS": "LINUX",
+          "buildEnv": {},
+          "classType": "vmBuild",
+          "containerHashId": "c-614413ffe6d744acbcef18aafa5af2a2",
+          "containerId": "1",
+          "dispatchType": {
+            "buildType": "PUBLIC_DEVCLOUD",
+            "credentialId": "",
+            "credentialProject": "",
+            "dockerBuildVersion": "[[ .builderImageCode ]]",
+            "imageCode": "[[ .builderImageCode ]]",
+            "imageName": "[[ .builderImageCode ]]",
+            "imagePublicFlag": false,
+            "imageRDType": "",
+            "imageType": "BKSTORE",
+            "imageVersion": "[[ .builderImageVersion ]]",
+            "performanceConfigId": "0",
+            "performanceUid": "",
+            "persistence": false,
+            "recommendFlag": true,
+            "value": "[[ .builderImageCode ]]"
+          },
+          "elements": [
+            {
+              "@type": "linuxScript",
+              "additionalOptions": {
+                "continueWhenFailed": false,
+                "customCondition": "",
+                "customVariables": [
+                  {
+                    "key": "param1",
+                    "value": ""
+                  }
+                ],
+                "enable": true,
+                "enableCustomEnv": true,
+                "manualRetry": false,
+                "manualSkip": false,
+                "otherTask": "",
+                "pauseBeforeExec": false,
+                "retryCount": 1,
+                "retryWhenFailed": false,
+                "runCondition": "PRE_TASK_SUCCESS",
+                "timeout": 300,
+                "timeoutVar": "300"
+              },
+              "archiveFile": "",
+              "atomCode": "linuxScript",
+              "classType": "linuxScript",
+              "continueNoneZero": false,
+              "enableArchiveFile": false,
+              "executeCount": 1,
+              "id": "e-2a7d2ddee10a4022bc81a568ba6943ce",
+              "name": "回调 bkms-server 触发构建",
+              "script" : "set -euo pipefail\n\n# 回调地址与凭证引用由 TriggerPipelineManager.Ensure 二次渲染注入，勿在日志中打印 token\nCALLBACK_URL=\"[[ `[[ .callbackURL ]]` ]]\"\nTOKEN=\"${{settings.[[ `[[ .credentialID ]]` ]].token}}\"\n\nif [ -z \"${CALLBACK_URL}\" ]; then\n  echo \"[ERROR] callback URL is empty\"\n  exit 1\nfi\nif [ -z \"${TOKEN}\" ]; then\n  echo \"[ERROR] callback token is empty\"\n  exit 1\nfi\n\n# policyID / event 来自命中触发器 additionalOptions.customVariables（触发器同步写入）；stepId 不承载业务含义\n# event 缺省为 push，便于后续扩展其它触发事件\nexport POLICY_ID=\"${BKMS_TRIGGER_POLICY_ID:-}\"\nexport EVENT=\"${BKMS_TRIGGER_EVENT:-push}\"\nexport BRANCH=\"${BK_CI_REPO_GIT_WEBHOOK_BRANCH:-}\"\nexport COMMIT_ID=\"${BK_CI_REPO_GIT_WEBHOOK_PUSH_HEAD_COMMIT_ID:-}\"\nexport COMMIT_AUTHOR=\"${BK_CI_REPO_GIT_WEBHOOK_PUSH_USERNAME:-}\"\nexport EVENT_TIME=\"${BK_CI_REPO_GIT_WEBHOOK_EVENT_TIME:-}\"\n\n# 一次编码整段 JSON，避免特殊字符破坏 body；空 eventTime 省略，避免 Go time.Time 解析空串失败\npayload=$(python3 - <<'PY'\nimport json\nimport os\n\nbody = {\n    \"policyID\": os.environ.get(\"POLICY_ID\", \"\"),\n    \"event\": os.environ.get(\"EVENT\", \"push\"),\n    \"branch\": os.environ.get(\"BRANCH\", \"\"),\n    \"commitID\": os.environ.get(\"COMMIT_ID\", \"\"),\n    \"commitAuthor\": os.environ.get(\"COMMIT_AUTHOR\", \"\"),\n}\nevent_time = os.environ.get(\"EVENT_TIME\", \"\").strip()\nif event_time:\n    body[\"eventTime\"] = event_time\nprint(json.dumps(body, ensure_ascii=False))\nPY\n)\n\necho \"posting build-trigger callback (token redacted)\"\necho \"request body:\"\necho \"${payload}\"\nhttp_code=$(curl -sS -o /tmp/bkms_bt_callback_resp.json -w \"%{http_code}\" \\\n  -X POST \"${CALLBACK_URL}\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"X-Bkms-Build-Trigger-Token: ${TOKEN}\" \\\n  -d \"${payload}\")\n\necho \"callback HTTP status: ${http_code}\"\ncat /tmp/bkms_bt_callback_resp.json\necho\n\nif [ \"${http_code}\" -lt 200 ] || [ \"${http_code}\" -ge 300 ]; then\n  echo \"[ERROR] callback failed with HTTP ${http_code}\"\n  exit 1\nfi\n",
+              "scriptType": "SHELL",
+              "stepId": "",
+              "taskAtom": "",
+              "version": "1.*"
+            }
+          ],
+          "id": "1",
+          "jobControlOption": {
+            "continueWhenFailed": false,
+            "customCondition": "",
+            "customVariables": [
+              {
+                "key": "param1",
+                "value": ""
+              }
+            ],
+            "enable": true,
+            "prepareTimeout": 10,
+            "runCondition": "STAGE_RUNNING",
+            "timeout": 30,
+            "timeoutVar": "30"
+          },
+          "jobId": "",
+          "matrixGroupFlag": false,
+          "mutexGroup": {
+            "enable": false,
+            "timeout": 0,
+            "timeoutVar": "0"
+          },
+          "name": "回调",
+          "showBuildResource": true,
+          "thirdPartyWorkspace": ""
+        }
+      ],
+      "finally": false,
+      "id": "stage-callback",
+      "name": "回调 bkms",
+      "tag": [
+        "NORMAL"
+      ]
+    }
+  ]
+}

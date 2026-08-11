@@ -133,6 +133,20 @@ func (s *StubApiClient) CreateCredential(
 	return nil
 }
 
+// CreateAccessTokenCredential 模拟创建 AccessToken 凭证，总是返回成功
+func (s *StubApiClient) CreateAccessTokenCredential(
+	ctx context.Context, projectCode, credentialID, _, _ string,
+) error {
+	log.Infof(ctx, "Stub: CreateAccessTokenCredential request: %s, %s", projectCode, credentialID)
+	return nil
+}
+
+// DeleteCredential 模拟删除凭证，总是返回成功
+func (s *StubApiClient) DeleteCredential(ctx context.Context, projectCode, credentialID string) error {
+	log.Infof(ctx, "Stub: DeleteCredential request: %s, %s", projectCode, credentialID)
+	return nil
+}
+
 // ------------------------------------------ 蓝盾流水线 API ------------------------------------------
 
 func (s *StubApiClient) stubPipelines() []Pipeline {
@@ -269,6 +283,13 @@ func (s *StubApiClient) UpdatePipeline(
 		pipeline.UpdatedAt = time.Now()
 	}
 	stubCreatedPipelines.Store(pipelineID, pipeline)
+	return nil
+}
+
+// DeletePipeline 模拟删除流水线，总是返回成功
+func (s *StubApiClient) DeletePipeline(ctx context.Context, projectCode, pipelineID string) error {
+	log.Infof(ctx, "Stub: DeletePipeline request: %s, %s", projectCode, pipelineID)
+	stubCreatedPipelines.Delete(pipelineID)
 	return nil
 }
 

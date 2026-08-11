@@ -25690,8 +25690,7 @@ const docTemplate = `{
             "required": [
                 "branchMatchMode",
                 "event",
-                "name",
-                "versionRule"
+                "name"
             ],
             "properties": {
                 "branchMatchMode": {
@@ -25725,14 +25724,6 @@ const docTemplate = `{
                     "description": "文件路径条件，留空表示全匹配",
                     "type": "string",
                     "maxLength": 512
-                },
-                "versionRule": {
-                    "description": "镜像版本号规则",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/serializer.VersionRuleInput"
-                        }
-                    ]
                 }
             }
         },
@@ -25818,20 +25809,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "triggerID": {
-                    "description": "关联的蓝盾触发器标识",
+                    "description": "关联的蓝盾触发器元素标识",
                     "type": "string"
                 },
                 "updatedAt": {
                     "description": "更新时间",
                     "type": "string"
-                },
-                "versionRule": {
-                    "description": "镜像版本号规则",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/serializer.VersionRuleOutput"
-                        }
-                    ]
                 }
             }
         },
@@ -28811,48 +28794,6 @@ const docTemplate = `{
                 "value": {
                     "description": "变量值",
                     "type": "string"
-                }
-            }
-        },
-        "serializer.VersionRuleInput": {
-            "type": "object",
-            "required": [
-                "type"
-            ],
-            "properties": {
-                "prefix": {
-                    "description": "自定义前缀，仅 custom 类型使用",
-                    "type": "string",
-                    "maxLength": 16
-                },
-                "type": {
-                    "description": "版本号规则类型：custom 自定义版本，semver 语义化版本",
-                    "type": "string",
-                    "enum": [
-                        "custom",
-                        "semver"
-                    ]
-                },
-                "withBranch": {
-                    "description": "版本号是否拼接分支名，仅 custom 类型使用",
-                    "type": "boolean"
-                }
-            }
-        },
-        "serializer.VersionRuleOutput": {
-            "type": "object",
-            "properties": {
-                "prefix": {
-                    "description": "自定义前缀",
-                    "type": "string"
-                },
-                "type": {
-                    "description": "版本号规则类型",
-                    "type": "string"
-                },
-                "withBranch": {
-                    "description": "版本号是否拼接分支名",
-                    "type": "boolean"
                 }
             }
         },

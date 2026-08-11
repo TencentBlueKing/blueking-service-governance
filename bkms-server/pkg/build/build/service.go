@@ -130,11 +130,12 @@ func (s *Service) Build(ctx context.Context, app *bkmsapp.Application, branch, i
 			params[pipelineparam.ImageName],
 			params[pipelineparam.ImageTag],
 		),
-		Status:    imgbuild.StatusRunning,
-		Operator:  auth.MustGetUser(ctx).ID,
-		StartedAt: lo.Ternary(startTimestamp != 0, time.UnixMilli(startTimestamp), timeNow),
-		CreatedAt: timeNow,
-		UpdatedAt: timeNow,
+		Status:      imgbuild.StatusRunning,
+		Operator:    auth.MustGetUser(ctx).ID,
+		TriggerType: imgbuild.TriggerTypeManual,
+		StartedAt:   lo.Ternary(startTimestamp != 0, time.UnixMilli(startTimestamp), timeNow),
+		CreatedAt:   timeNow,
+		UpdatedAt:   timeNow,
 	}
 	if err = s.buildRecordStore.Create(ctx, buildRecord); err != nil {
 		return nil, errors.Wrapf(err, "create build record for %s", app.ID)

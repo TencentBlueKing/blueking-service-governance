@@ -161,6 +161,9 @@ httpServer:
   address: 127.0.0.1
   # HTTP Server 监听端口
   port: 8080
+  # 服务对外可访问的 HTTP 基址（不含路径），用于拼装蓝盾触发回调等外部可达 URL
+  # 例如 https://bkms.example.com；未配置时不影响手动构建，但无法下发触发专用流水线
+  # publicBaseURL: https://bkms.example.com
   # 以下超时相关字段均在 config 包内提供默认值，
   # 未显式指定时按默认值生效；如需覆盖，取消对应行注释并填入新值
   # 读取请求头超时时间，单位：秒（默认 10）

@@ -20,7 +20,6 @@ package bkci
 
 import (
 	"context"
-	"slices"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
@@ -187,7 +186,20 @@ func NewPipelineManager(workspaceID string) *PipelineManager {
 	return &PipelineManager{workspaceID: workspaceID}
 }
 
-// Initialize 初始化流水线，如果已存在则跳过
+// ErrBuildTriggerPipelineRequireEnsure 触发专用流水线必须通过 TriggerPipelineManager.Ensure 创建
+// Initialize 不会注入回调 URL/凭证，也不能生成带 appID 的显示名，因此禁止走该创建路径
+var ErrBuildTriggerPipelineRequireEnsure = errors.New(
+	"build-trigger pipeline must be created via TriggerPipelineManager.Ensure",
+)
+
+// Initialize 初始化流水线：不存在则创建，已存在的共享内置类型按模板 semver 升级
+//
+// 触发专用流水线（build-trigger-{appID}）与 dockerfile / helm-git-build 刻意分叉，不是循环依赖，
+// 而是资源语义不同，不能复用「整模板覆盖」升级：
+//  1. 创建：必须经 TriggerPipelineManager.Ensure（注入回调地址与应用独享凭证、渲染带 appID 的名称）
+//  2. 已存在：不走 ensureBuiltinPipelineTemplateVersion——该路径用模板 name/stages 全量
+//     UpdatePipeline，会冲掉实例上的显示名、已注入的回调脚本，以及触发器同步子需求写入的
+//     Git 事件条件；模板变更若需滚动，应另做保留上述字段的合并式 Sync，而不是套用本函数
 func (m *PipelineManager) Initialize(ctx context.Context, pipelineType string) (*Pipeline, error) {
 	store, err := NewPipelineStoreMongo(database.Client(), database.Name())
 	if err != nil {
@@ -196,10 +208,16 @@ func (m *PipelineManager) Initialize(ctx context.Context, pipelineType string) (
 	pipeline, err := store.GetByWorkspaceAndType(ctx, m.workspaceID, pipelineType)
 	if err != nil {
 		if errors.Is(err, ErrPipelineNotFound) {
-			// 不存在，需要创建
+			if _, ok := ParseBuildTriggerPipelineType(pipelineType); ok {
+				return nil, ErrBuildTriggerPipelineRequireEnsure
+			}
 			return m.createPipeline(ctx, pipelineType)
 		}
 		return nil, errors.Wrapf(err, "get workspace %s pipeline %s", m.workspaceID, pipelineType)
+	}
+	// 见函数注释：触发专用已存在则原样返回，不做模板版本滚动
+	if _, ok := ParseBuildTriggerPipelineType(pipelineType); ok {
+		return pipeline, nil
 	}
 	if !m.isBuiltinPipelineType(pipelineType) {
 		return pipeline, nil
@@ -208,9 +226,10 @@ func (m *PipelineManager) Initialize(ctx context.Context, pipelineType string) (
 	return m.ensureBuiltinPipelineTemplateVersion(ctx, store, pipeline)
 }
 
-// isBuiltinPipelineType 是否为内置流水线类型
+// isBuiltinPipelineType 是否为内置流水线类型（精确匹配共享类型，或触发专用前缀匹配）
 func (m *PipelineManager) isBuiltinPipelineType(pipelineType string) bool {
-	return slices.Contains(builtinPipelineTypes, PipelineType(pipelineType))
+	_, ok := ResolveBuiltinTemplateType(pipelineType)
+	return ok
 }
 
 // shouldUpdateBuiltinPipelineFromTemplate 判断内置流水线是否需要根据模板更新。
@@ -228,14 +247,15 @@ func shouldUpdateBuiltinPipelineFromTemplate(currentVersion, templateVersion str
 	return current.LessThan(target), nil
 }
 
-// ensureBuiltinPipelineTemplateVersion 确保内置流水线的已应用模板版本与当前模板一致，
-// 如果模板版本更新，则同步更新蓝盾上的流水线及本地存储。
+// ensureBuiltinPipelineTemplateVersion 确保工作空间级共享内置流水线（dockerfile / helm-git-build）
+// 的已应用模板版本与当前模板一致；版本落后则整模板 UpdatePipeline 并回写本地
+// 不适用于触发专用流水线：其实例含 Ensure 注入与触发器同步写入的内容，见 Initialize 注释
 func (m *PipelineManager) ensureBuiltinPipelineTemplateVersion(
 	ctx context.Context,
 	store PipelineStore,
 	pipeline *Pipeline,
 ) (*Pipeline, error) {
-	tmpl, err := m.getPipelineTemplate(ctx, pipeline.Type)
+	tmpl, err := m.getPipelineTemplateByPipelineType(ctx, pipeline.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +285,7 @@ func (m *PipelineManager) createPipeline(ctx context.Context, pipelineType strin
 
 	// 如果需要创建流水线，且是内置的流水线类型，说明蓝盾上不存在，此时需要调用蓝盾 API 创建
 	if m.isBuiltinPipelineType(pipelineType) {
-		tmpl, err = m.getPipelineTemplate(ctx, pipelineType)
+		tmpl, err = m.getPipelineTemplateByPipelineType(ctx, pipelineType)
 		if err != nil {
 			return nil, errors.Wrapf(err, "get pipeline template with type: %s", pipelineType)
 		}
@@ -319,15 +339,27 @@ func (m *PipelineManager) createPipeline(ctx context.Context, pipelineType strin
 	return pipeline, nil
 }
 
-// getPipelineTemplate 根据流水线类型从模板存储中获取对应的流水线模板。
-func (m *PipelineManager) getPipelineTemplate(ctx context.Context, pipelineType string) (*PipelineTemplate, error) {
+// getPipelineTemplateByPipelineType 按流水线实例 type 解析模板类型后加载模板。
+// 触发专用复合 type（build-trigger-{appID}）会解析为模板类型 build-trigger。
+func (m *PipelineManager) getPipelineTemplateByPipelineType(
+	ctx context.Context, pipelineType string,
+) (*PipelineTemplate, error) {
+	templateType, ok := ResolveBuiltinTemplateType(pipelineType)
+	if !ok {
+		return nil, errors.Errorf("pipeline type %s is not a builtin template type", pipelineType)
+	}
+	return m.getPipelineTemplate(ctx, string(templateType))
+}
+
+// getPipelineTemplate 根据模板类型从模板存储中获取对应的流水线模板。
+func (m *PipelineManager) getPipelineTemplate(ctx context.Context, templateType string) (*PipelineTemplate, error) {
 	tmplStore, err := NewDBPipelineTemplateStore(database.Client(), database.Name())
 	if err != nil {
 		return nil, errors.Wrap(err, "create pipeline template store")
 	}
-	tmpl, err := tmplStore.GetByType(ctx, pipelineType)
+	tmpl, err := tmplStore.GetByType(ctx, templateType)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get pipeline template by type %s", pipelineType)
+		return nil, errors.Wrapf(err, "get pipeline template by type %s", templateType)
 	}
 	return tmpl, nil
 }

@@ -29,12 +29,8 @@ import (
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 )
 
-var (
-	// policyNamePattern 策略名称字符集：汉字、大小写字母、数字、- 与 _
-	policyNamePattern = regexp.MustCompile(`^[\p{Han}a-zA-Z0-9_-]+$`)
-	// versionPrefixPattern 自定义版本前缀字符集：字母、数字与 -，需满足容器镜像 tag 规范
-	versionPrefixPattern = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
-)
+// policyNamePattern 策略名称字符集：汉字、大小写字母、数字、- 与 _
+var policyNamePattern = regexp.MustCompile(`^[\p{Han}a-zA-Z0-9_-]+$`)
 
 func init() {
 	v, ok := binding.Validator.Engine().(*validator.Validate)
@@ -44,19 +40,11 @@ func init() {
 	if err := v.RegisterValidation("trigger_policy_name", validatePolicyName); err != nil {
 		panic("failed to register trigger_policy_name validator: " + err.Error())
 	}
-	if err := v.RegisterValidation("trigger_version_prefix", validateVersionPrefix); err != nil {
-		panic("failed to register trigger_version_prefix validator: " + err.Error())
-	}
 }
 
 // validatePolicyName 校验策略名称字符集，长度由 min / max tag 单独约束
 func validatePolicyName(fl validator.FieldLevel) bool {
 	return policyNamePattern.MatchString(fl.Field().String())
-}
-
-// validateVersionPrefix 校验自定义版本前缀字符集，长度由 max tag 单独约束
-func validateVersionPrefix(fl validator.FieldLevel) bool {
-	return versionPrefixPattern.MatchString(fl.Field().String())
 }
 
 // AppURIInput is the path input for APIs scoped by application.

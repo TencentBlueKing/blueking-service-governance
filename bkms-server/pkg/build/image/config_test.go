@@ -23,6 +23,18 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var _ = Describe("TagConfig.IsAutoGenerateEnabled", func() {
+	DescribeTable("detects whether recommended image tag is configured",
+		func(cfg TagConfig, want bool) {
+			Expect(cfg.IsAutoGenerateEnabled()).To(Equal(want))
+		},
+		Entry("empty type", TagConfig{}, false),
+		Entry("semver", TagConfig{Type: VersionTypeSemver}, true),
+		Entry("custom", TagConfig{Type: VersionTypeCustom}, true),
+		Entry("unknown type", TagConfig{Type: VersionType("manual")}, false),
+	)
+})
+
 var _ = Describe("RepositoryConfig image build mode", func() {
 	It("returns repository dockerfile mode for empty config", func() {
 		cfg := &RepositoryConfig{}

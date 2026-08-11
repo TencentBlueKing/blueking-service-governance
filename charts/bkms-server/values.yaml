@@ -304,6 +304,9 @@ svcConf:
     address: 0.0.0.0
     # HTTP Server 监听端口，默认值与历史 HTTP 监听端口保持一致
     port: 8080
+    # 服务对外可访问的 HTTP 基址（不含路径），用于拼装蓝盾触发回调等外部可达 URL
+    # 例如 https://bkms.example.com；未配置时不影响手动构建，但无法下发触发专用流水线
+    publicBaseURL: ""
     # Gin 运行模式，支持 release / debug / test，默认为 release
     mode: release
     # 读取请求头超时时间，单位：秒

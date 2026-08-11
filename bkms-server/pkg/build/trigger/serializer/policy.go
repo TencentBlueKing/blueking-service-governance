@@ -38,26 +38,10 @@ const (
 	TriggerHealthUnauthorized TriggerHealth = "unauthorized"
 )
 
-// VersionRuleInput is the JSON representation of an image version rule.
-type VersionRuleInput struct {
-	// 版本号规则类型：custom 自定义版本，semver 语义化版本
-	Type string `json:"type" binding:"required,oneof=custom semver"`
-	// 自定义前缀，仅 custom 类型使用
-	Prefix string `json:"prefix" binding:"omitempty,max=16,trigger_version_prefix"`
-	// 版本号是否拼接分支名，仅 custom 类型使用
-	WithBranch bool `json:"withBranch"`
-}
-
-// ToModel converts the input to a version rule model.
-func (i VersionRuleInput) ToModel() trigger.VersionRule {
-	return trigger.VersionRule{
-		Type:       trigger.VersionRuleType(i.Type),
-		Prefix:     i.Prefix,
-		WithBranch: i.WithBranch,
-	}
-}
-
 // PolicyFormInput is the JSON body shared by creating, updating and conflict-checking a policy.
+//
+// 镜像 tag 规则不在策略表单中配置，统一使用应用 buildConfig.tagConfig；
+// 创建 / 更新策略时业务层须校验该应用已开启自动生成 tag（TagConfig.IsAutoGenerateEnabled）
 type PolicyFormInput struct {
 	// 策略名称，应用内唯一，由汉字、大小写字母、数字、- 与 _ 组成
 	Name string `json:"name" binding:"required,min=1,max=32,trigger_policy_name"`
@@ -69,8 +53,6 @@ type PolicyFormInput struct {
 	BranchMatchValue string `json:"branchMatchValue" binding:"max=512"`
 	// 文件路径条件，留空表示全匹配
 	PathFilter string `json:"pathFilter" binding:"max=512"`
-	// 镜像版本号规则
-	VersionRule *VersionRuleInput `json:"versionRule" binding:"required"`
 }
 
 // PatchPolicyStatusInput is the JSON body for enabling or disabling a policy.
@@ -85,16 +67,6 @@ func (i PatchPolicyStatusInput) Status() trigger.Status {
 		return trigger.StatusEnabled
 	}
 	return trigger.StatusDisabled
-}
-
-// VersionRuleOutput is the JSON representation of an image version rule.
-type VersionRuleOutput struct {
-	// 版本号规则类型
-	Type string `json:"type"`
-	// 自定义前缀
-	Prefix string `json:"prefix"`
-	// 版本号是否拼接分支名
-	WithBranch bool `json:"withBranch"`
 }
 
 // PolicyOutputObj is the JSON representation of one trigger policy.
@@ -114,13 +86,11 @@ type PolicyOutputObj struct {
 	BranchMatchValue string `json:"branchMatchValue"`
 	// 文件路径条件
 	PathFilter string `json:"pathFilter"`
-	// 镜像版本号规则
-	VersionRule VersionRuleOutput `json:"versionRule"`
 	// 启停状态：enabled 生效中，disabled 已停用
 	Status string `json:"status"`
 	// 关联的蓝盾触发专用流水线 ID
 	PipelineID string `json:"pipelineID"`
-	// 关联的蓝盾触发器标识
+	// 关联的蓝盾触发器元素标识
 	TriggerID string `json:"triggerID"`
 	// 流水线与触发器健康状态：unknown / healthy / unauthorized
 	Health string `json:"health"`
@@ -143,18 +113,13 @@ func (o *PolicyOutputObj) FromModel(p trigger.Policy) *PolicyOutputObj {
 		BranchMatchMode:  string(p.BranchMatchMode),
 		BranchMatchValue: p.BranchMatchValue,
 		PathFilter:       p.PathFilter,
-		VersionRule: VersionRuleOutput{
-			Type:       string(p.VersionRule.Type),
-			Prefix:     p.VersionRule.Prefix,
-			WithBranch: p.VersionRule.WithBranch,
-		},
-		Status:     string(p.Status),
-		PipelineID: p.PipelineID,
-		TriggerID:  p.TriggerID,
-		Health:     string(TriggerHealthUnknown),
-		Creator:    p.Creator,
-		CreatedAt:  p.CreatedAt,
-		UpdatedAt:  p.UpdatedAt,
+		Status:           string(p.Status),
+		PipelineID:       p.PipelineID,
+		TriggerID:        p.TriggerID,
+		Health:           string(TriggerHealthUnknown),
+		Creator:          p.Creator,
+		CreatedAt:        p.CreatedAt,
+		UpdatedAt:        p.UpdatedAt,
 	}
 	return o
 }

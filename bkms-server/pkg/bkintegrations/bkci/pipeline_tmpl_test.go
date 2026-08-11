@@ -45,6 +45,8 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 
 			Expect(renderContext[pipelineTmplCtxKeyImageCode]).To(Equal(testBuilderImageCode))
 			Expect(renderContext[pipelineTmplCtxKeyImageVersion]).To(Equal(testBuilderImageVersion))
+			Expect(renderContext).NotTo(HaveKey(pipelineTmplCtxKeyCallbackURL))
+			Expect(renderContext).NotTo(HaveKey(pipelineTmplCtxKeyCredentialID))
 		})
 
 		It("should build context with default builder image when config is nil", func() {
@@ -62,14 +64,13 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 		})
 	})
 
-	Describe("renderTemplate", func() {
+	Describe("renderPipelineTemplate", func() {
 		It("should render dockerfile template with generator linux script", func() {
 			templatePath := filepath.Join("assets", "pipeline_templates", "dockerfile.json")
 			rawData, err := os.ReadFile(templatePath)
 			Expect(err).NotTo(HaveOccurred())
 
-			reloader := newPipelineTemplatesReloader(nil, nil)
-			renderedData, err := reloader.renderTemplate("dockerfile.json", rawData, map[string]any{
+			renderedData, err := renderPipelineTemplate("dockerfile.json", rawData, map[string]any{
 				pipelineTmplCtxKeyImageCode:    testBuilderImageCode,
 				pipelineTmplCtxKeyImageVersion: testBuilderImageVersion,
 			})
@@ -146,12 +147,37 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 		It("should return error when template key is missing", func() {
 			rawData := []byte(`{"imageCode": "[[ .missingBuilderImageCode ]]"}`)
 
-			reloader := newPipelineTemplatesReloader(nil, nil)
-			_, err := reloader.renderTemplate("test.json", rawData, map[string]any{
+			_, err := renderPipelineTemplate("test.json", rawData, map[string]any{
 				pipelineTmplCtxKeyImageCode: testBuilderImageCode,
 			})
-
 			Expect(err).To(HaveOccurred())
+		})
+
+		It("should keep instance-time placeholders after reload via template self-escape", func() {
+			templatePath := filepath.Join("assets", "pipeline_templates", "build_trigger.json")
+			rawData, err := os.ReadFile(templatePath)
+			Expect(err).NotTo(HaveOccurred())
+			// 资产原文用反引号自逃逸，避免 JSON 字符串内再嵌 \" 导致模板解析失败
+			Expect(string(rawData)).To(ContainSubstring("[[ `[[ .appID ]]` ]]"))
+			Expect(string(rawData)).To(ContainSubstring("[[ `[[ .callbackURL ]]` ]]"))
+			Expect(string(rawData)).To(ContainSubstring("[[ `[[ .credentialID ]]` ]]"))
+
+			reloader := newPipelineTemplatesReloader(nil, nil)
+			renderedData, err := renderPipelineTemplate(
+				"build_trigger.json", rawData, reloader.buildRenderContext(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			var rendered map[string]any
+			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
+			Expect(rendered["version"]).To(Equal("1.0.0"))
+			Expect(rendered["name"]).To(Equal("[bkms] 自动构建触发（[[ .appID ]]）"))
+			// 自逃逸经 Reload 后留下二次渲染占位；全局镜像已落地
+			Expect(string(renderedData)).To(ContainSubstring("[[ .callbackURL ]]"))
+			Expect(string(renderedData)).To(ContainSubstring("[[ .credentialID ]]"))
+			Expect(string(renderedData)).NotTo(ContainSubstring("[[ `[[ .callbackURL ]]` ]]"))
+			Expect(string(renderedData)).To(ContainSubstring(defaultPipelineBuilderImageCode))
+			Expect(string(renderedData)).NotTo(ContainSubstring("[[ .builderImageCode ]]"))
 		})
 	})
 

@@ -66,6 +66,8 @@ type Pipeline struct {
 	Description string `bson:"description"`
 	// TemplateVersion 已应用的内置流水线模板版本，格式为 semver
 	TemplateVersion string `bson:"templateVersion,omitempty"`
+	// CallbackCredentialID 触发专用流水线关联的蓝盾回调凭证 ID；仅 build-trigger-* 类型有值
+	CallbackCredentialID string `bson:"callbackCredentialID,omitempty"`
 	// Creator 流水线创建人
 	Creator string `bson:"creator"`
 	// CreatedAt 流水线创建时间

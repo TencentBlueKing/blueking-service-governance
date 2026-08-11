@@ -42,16 +42,6 @@ const (
 	BranchMatchModeAll BranchMatchMode = "all"
 )
 
-// VersionRuleType 镜像版本号生成规则类型
-type VersionRuleType string
-
-const (
-	// VersionRuleTypeCustom 自定义版本：[前缀-][分支名-]构建时间
-	VersionRuleTypeCustom VersionRuleType = "custom"
-	// VersionRuleTypeSemver 语义化版本：在应用已有最大语义化版本上 patch 位 +1
-	VersionRuleTypeSemver VersionRuleType = "semver"
-)
-
 // Status 策略启停状态
 type Status string
 
@@ -79,24 +69,13 @@ const (
 	PolicyNameMinLen = 1
 	// PolicyNameMaxLen 策略名称最大长度
 	PolicyNameMaxLen = 32
-	// VersionPrefixMaxLen 自定义版本前缀最大长度，需满足容器镜像 tag 规范
-	VersionPrefixMaxLen = 16
 	// MaxPoliciesPerApp 单应用策略数量上限，生效中与已停用合并计数
 	MaxPoliciesPerApp = 5
 )
 
-// VersionRule 镜像版本号生成规则
-type VersionRule struct {
-	// Type 规则类型
-	Type VersionRuleType `bson:"type"`
-	// Prefix 自定义前缀，仅 custom 类型使用，长度不超过 VersionPrefixMaxLen
-	Prefix string `bson:"prefix,omitempty"`
-	// WithBranch 版本号是否拼接分支名，仅 custom 类型使用
-	WithBranch bool `bson:"withBranch,omitempty"`
-}
-
 // Policy 触发策略。
-// 一个应用最多 MaxPoliciesPerApp 条策略，同应用的多条策略映射到同一条触发专用流水线上的多个触发器
+// 一个应用最多 MaxPoliciesPerApp 条策略，同应用的多条策略映射到同一条触发专用流水线上的多个触发器。
+// 自动触发的镜像 tag 规则不落在策略上，统一使用应用 buildConfig.tagConfig
 type Policy struct {
 	// ID 策略 ID，全局唯一
 	ID string `bson:"id"`
@@ -112,13 +91,11 @@ type Policy struct {
 	BranchMatchValue string `bson:"branchMatchValue,omitempty"`
 	// PathFilter 文件路径条件，留空表示全匹配
 	PathFilter string `bson:"pathFilter,omitempty"`
-	// VersionRule 镜像版本号生成规则
-	VersionRule VersionRule `bson:"versionRule"`
 	// Status 启停状态
 	Status Status `bson:"status"`
 	// PipelineID 关联的蓝盾触发专用流水线 ID
 	PipelineID string `bson:"pipelineID,omitempty"`
-	// TriggerID 关联的蓝盾触发器标识
+	// TriggerID 关联的蓝盾触发器元素标识，供触发器同步增删改时定位蓝盾侧节点
 	TriggerID string `bson:"triggerID,omitempty"`
 	// Creator 创建人
 	Creator string `bson:"creator"`

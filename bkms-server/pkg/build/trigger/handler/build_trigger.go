@@ -98,6 +98,9 @@ func (h *Handler) CreateBuildTriggerPolicy(c *gin.Context) {
 		return
 	}
 
+	// FIXME(策略管理子需求): 校验应用 buildConfig.tagConfig.IsAutoGenerateEnabled()，
+	// 未开启自动生成 tag 时返回 INVALID_ARGUMENT，拒绝创建
+
 	ginutils.OK(c, triggerserializer.PolicyOutput{Data: &triggerserializer.PolicyOutputObj{}})
 }
 
@@ -124,6 +127,9 @@ func (h *Handler) UpdateBuildTriggerPolicy(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+
+	// FIXME(策略管理子需求): 校验应用 buildConfig.tagConfig.IsAutoGenerateEnabled()，
+	// 未开启自动生成 tag 时返回 INVALID_ARGUMENT，拒绝更新
 
 	ginutils.OK(c, triggerserializer.PolicyOutput{Data: &triggerserializer.PolicyOutputObj{}})
 }

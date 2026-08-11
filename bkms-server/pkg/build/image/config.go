@@ -75,6 +75,12 @@ type TagConfig struct {
 	CustomOpts *CustomTagOpts `bson:"customOpts,omitempty" json:"customOpts,omitempty"`
 }
 
+// IsAutoGenerateEnabled 是否已配置自动生成镜像 Tag（semver / custom）。
+// Type 为空表示未开启推荐版本号，自动触发构建前须拒绝
+func (c TagConfig) IsAutoGenerateEnabled() bool {
+	return c.Type == VersionTypeSemver || c.Type == VersionTypeCustom
+}
+
 // RepositoryType 代码库类型
 type RepositoryType string
 

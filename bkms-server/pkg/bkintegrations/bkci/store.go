@@ -168,6 +168,8 @@ type PipelineStore interface {
 	// 名称/描述由模板决定）。禁止用于用户自定义流水线，否则会用本地陈旧的 name/description
 	// 覆盖蓝盾侧用户维护的最新值。
 	UpdateBuiltinTemplateVersion(ctx context.Context, pipeline *Pipeline) error
+	// Delete 按 workspaceID + pipelineType 删除本地流水线记录；不存在时静默成功
+	Delete(ctx context.Context, workspaceID, pipelineType string) error
 }
 
 var _ PipelineStore = &PipelineStoreMongo{}
@@ -230,6 +232,13 @@ func (s *PipelineStoreMongo) UpdateBuiltinTemplateVersion(ctx context.Context, p
 		return ErrPipelineNotFound
 	}
 	return nil
+}
+
+// Delete 按 workspaceID + pipelineType 删除本地流水线记录；不存在时静默成功
+func (s *PipelineStoreMongo) Delete(ctx context.Context, workspaceID, pipelineType string) error {
+	filter := bson.M{"workspaceID": workspaceID, "type": pipelineType}
+	_, err := s.collection.DeleteOne(ctx, filter)
+	return err
 }
 
 // RepositoryStore 代码仓库存储接口

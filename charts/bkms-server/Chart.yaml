@@ -2,8 +2,8 @@ apiVersion: v2
 name: bkms-server
 description: A Helm chart for bkms server
 type: application
-version: 1.0.0-alpha.28
-appVersion: v1.0.0-alpha.28
+version: 1.0.0-alpha.29
+appVersion: v1.0.0-alpha.29
 dependencies:
   - name: common
     repository: https://charts.bitnami.com/bitnami

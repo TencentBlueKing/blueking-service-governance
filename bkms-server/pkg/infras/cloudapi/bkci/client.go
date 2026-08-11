@@ -49,8 +49,14 @@ type Client interface {
 
 	// ------------------------------------------ 蓝盾凭证管理 API ------------------------------------------
 
-	// CreateCredential 创建蓝盾凭证（目前只支持创建 用户名 - 密码类型的）
+	// CreateCredential 创建蓝盾凭证（USERNAME_PASSWORD 类型）
 	CreateCredential(ctx context.Context, projectCode, credentialID, credentialDesc, username, password string) error
+	// CreateAccessTokenCredential 创建蓝盾 AccessToken 类型凭证
+	CreateAccessTokenCredential(
+		ctx context.Context, projectCode, credentialID, credentialDesc, token string,
+	) error
+	// DeleteCredential 删除蓝盾凭证；凭证不存在时返回 ObjectNotFound
+	DeleteCredential(ctx context.Context, projectCode, credentialID string) error
 
 	// ------------------------------------------ 蓝盾流水线 API ------------------------------------------
 
@@ -69,6 +75,8 @@ type Client interface {
 		projectCode, pipelineID, name, description string,
 		stages []map[string]any,
 	) error
+	// DeletePipeline 删除蓝盾流水线；流水线不存在时返回 ObjectNotFound
+	DeletePipeline(ctx context.Context, projectCode, pipelineID string) error
 	// CreatePipelineBuild 创建蓝盾流水线构建，返回构建引用信息（包含构建 ID: b-[a-z0-9]{32}）
 	CreatePipelineBuild(
 		ctx context.Context, projectCode, pipelineID string, pipelineParams map[string]string,
