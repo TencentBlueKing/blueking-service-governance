@@ -43,18 +43,14 @@ const (
 	buildTriggerCallbackPathTmpl = "/bkms/v1/bkms-server/apps/%s/build-trigger-policies/callback"
 	// buildTriggerCredentialIDPrefix 回调凭证 ID 前缀
 	buildTriggerCredentialIDPrefix = "bkms_bt_" // #nosec G101
-	// buildTriggerCredentialIDMaxLen 蓝盾凭证 ID 长度上限（仅字母、数字、下划线）
-	buildTriggerCredentialIDMaxLen = 40
+	// buildTriggerCredentialIDMaxLen 蓝盾凭证 ID 长度上限（保守取值）
+	buildTriggerCredentialIDMaxLen = 64
 	// buildTriggerTokenBytes 回调 token 随机字节数
 	buildTriggerTokenBytes = 32
-	// buildTriggerRenderName 触发流水线显示名模板，仅用于 text/template 错误信息
-	buildTriggerRenderName = "build-trigger:name"
-	// buildTriggerRenderStages 触发流水线 stages 模板，仅用于 text/template 错误信息
-	buildTriggerRenderStages = "build-trigger:stages"
 )
 
-// nonCredentialIDCharPattern 蓝盾凭证 ID 非法字符（含连字符）；生成 credentialID 时替换为下划线
-var nonCredentialIDCharPattern = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+// nonCredentialIDCharPattern 蓝盾凭证 ID 非法字符；生成 credentialID 时替换为下划线
+var nonCredentialIDCharPattern = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
 // TriggerPipelineManager 按应用管理触发专用流水线（Ensure / Cleanup）
 //
@@ -125,7 +121,9 @@ func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pip
 	if delErr := client.DeleteCredential(ctx, project.Code, credentialID); delErr != nil &&
 		!errors.Is(delErr, cloudbkci.ObjectNotFound) {
 		log.Warnf(
-			ctx, "pre-clean stale build-trigger credential %s in project %s: %v", credentialID, project.Code, delErr,
+			ctx,
+			"pre-clean build-trigger credential %s in project %s before recreate: %v",
+			credentialID, project.Code, delErr,
 		)
 	}
 
@@ -134,14 +132,13 @@ func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pip
 		return nil, errors.Wrapf(err, "create access token credential %s", credentialID)
 	}
 
-	// create 失败（含蓝盾创建失败、本地落库失败）时回滚刚建的凭证；
-	// 若蓝盾流水线已创建，create 内部会先删远程流水线，避免留下孤儿实例。
-	// 凭证删除失败只告警，错误仍返回 createErr
+	// 流水线创建失败则回滚刚建的凭证；凭证删除失败只告警，错误仍返回 createErr
 	pipeline, createErr := m.create(ctx, client, store, project, appID, pipelineType, credentialID, callbackURL)
 	if createErr != nil {
 		if delErr := client.DeleteCredential(ctx, project.Code, credentialID); delErr != nil {
 			log.Warnf(
-				ctx, "rollback build-trigger credential %s in project %s failed after pipeline create error: %v",
+				ctx,
+				"rollback build-trigger credential %s in project %s failed after pipeline create error: %v",
 				credentialID, project.Code, delErr,
 			)
 		}
@@ -178,7 +175,9 @@ func (m *TriggerPipelineManager) Cleanup(ctx context.Context, appID string) erro
 	// 远程已不存在可继续；其它错误中止，避免本地被清掉后失去对账依据
 	if err = client.DeletePipeline(ctx, pipeline.ProjectCode, pipeline.ID); err != nil {
 		if !errors.Is(err, cloudbkci.ObjectNotFound) {
-			return errors.Wrapf(err, "delete bkci pipeline %s in project %s", pipeline.ID, pipeline.ProjectCode)
+			return errors.Wrapf(
+				err, "delete bkci pipeline %s in project %s", pipeline.ID, pipeline.ProjectCode,
+			)
 		}
 	}
 
@@ -190,7 +189,8 @@ func (m *TriggerPipelineManager) Cleanup(ctx context.Context, appID string) erro
 	if err = client.DeleteCredential(ctx, pipeline.ProjectCode, credentialID); err != nil {
 		if !errors.Is(err, cloudbkci.ObjectNotFound) {
 			log.Warnf(
-				ctx, "delete build-trigger credential %s in project %s failed, continue clearing local record: %v",
+				ctx,
+				"delete build-trigger credential %s in project %s failed, continue clearing local record: %v",
 				credentialID, pipeline.ProjectCode, err,
 			)
 		}
@@ -206,8 +206,6 @@ func (m *TriggerPipelineManager) Cleanup(ctx context.Context, appID string) erro
 // create 渲染模板实例字段、创建蓝盾流水线，并写入本地 bkci_pipelines
 //
 // 调用方须已创建回调凭证；本方法失败时由 Ensure 负责回滚凭证。
-// 若蓝盾 CreatePipeline 已成功但本地落库失败，本方法会尽力 DeletePipeline，
-// 避免蓝盾侧留下无本地记录、Cleanup 也无法回收的孤儿流水线（删失败只告警）。
 // name/stages 经 [[ ]] 注入 appID、callbackURL、credentialID；description 直接用模板文案
 func (m *TriggerPipelineManager) create(
 	ctx context.Context,
@@ -255,14 +253,6 @@ func (m *TriggerPipelineManager) create(
 		Creator:              auth.MustGetUser(ctx).ID,
 	}
 	if err = store.Create(ctx, pipeline); err != nil {
-		// 本地未落库则远程也必须回收，否则下次 Ensure 会再建一条且 Cleanup 对不上账
-		if delErr := client.DeletePipeline(ctx, project.Code, pipelineID); delErr != nil &&
-			!errors.Is(delErr, cloudbkci.ObjectNotFound) {
-			log.Warnf(
-				ctx, "rollback build-trigger pipeline %s in project %s failed after local insert error: %v",
-				pipelineID, project.Code, delErr,
-			)
-		}
 		return nil, errors.Wrap(err, "insert build-trigger pipeline to db")
 	}
 	return pipeline, nil
@@ -271,8 +261,7 @@ func (m *TriggerPipelineManager) create(
 // buildCallbackURL 从 httpServer.publicBaseURL 拼装应用触发回调完整 URL
 //
 // 基址为独立配置，不能从既有 gateway/host 推导；去尾斜杠后与固定 path 拼接，
-// appID 做 PathEscape，避免特殊字符破坏路径；基址必须是仅含 scheme + host(+port) 的
-// http/https URL，拒绝 path / query / fragment，以免拼出错误回调地址
+// appID 做 PathEscape，避免特殊字符破坏路径
 func (m *TriggerPipelineManager) buildCallbackURL(appID string) (string, error) {
 	base := ""
 	if config.G != nil {
@@ -281,45 +270,34 @@ func (m *TriggerPipelineManager) buildCallbackURL(appID string) (string, error) 
 	if base == "" {
 		return "", errors.New("httpServer.publicBaseURL is required to ensure build-trigger pipeline")
 	}
-	parsed, err := url.ParseRequestURI(base)
-	if err != nil {
+	if _, err := url.ParseRequestURI(base); err != nil {
 		return "", errors.Wrap(err, "invalid httpServer.publicBaseURL")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", errors.New("httpServer.publicBaseURL must be http or https")
-	}
-	if parsed.Host == "" {
-		return "", errors.New("httpServer.publicBaseURL must include a host")
-	}
-	if strings.Trim(parsed.Path, "/") != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", errors.New("httpServer.publicBaseURL must not include path, query, or fragment")
 	}
 	return base + fmt.Sprintf(buildTriggerCallbackPathTmpl, url.PathEscape(appID)), nil
 }
 
 // buildCredentialID 生成稳定可回收的蓝盾凭证 ID
 //
-// 规则：前缀 + 净化后的 appID（仅字母、数字、下划线，连字符换成下划线）；
-// 未超长时保留可读形式；超长时用 appID 的 sha256 摘要填满剩余长度，避免同前缀截断冲突。
-// 净化后为空则退回 bkms_bt；同 appID 多次 Ensure/Cleanup 命中同一 ID
+// 规则：前缀 + 净化后的 appID；净化后为空则用 appID 哈希短码；超长则截断并附加哈希后缀，
+// 保证同 appID 多次 Ensure/Cleanup 命中同一凭证 ID
 func (m *TriggerPipelineManager) buildCredentialID(appID string) string {
 	sanitized := nonCredentialIDCharPattern.ReplaceAllString(appID, "_")
 	sanitized = strings.Trim(sanitized, "_")
 	if sanitized == "" {
-		return strings.TrimRight(buildTriggerCredentialIDPrefix, "_")
+		sum := sha256.Sum256([]byte(appID))
+		sanitized = hex.EncodeToString(sum[:8])
 	}
 	id := buildTriggerCredentialIDPrefix + sanitized
 	if len(id) <= buildTriggerCredentialIDMaxLen {
 		return id
 	}
-	return buildTriggerCredentialIDPrefix + credentialIDDigest(appID)
-}
-
-// credentialIDDigest 取 appID 的 sha256 十六进制前缀，长度恰好填满凭证 ID 上限
-func credentialIDDigest(appID string) string {
-	digestLen := buildTriggerCredentialIDMaxLen - len(buildTriggerCredentialIDPrefix)
 	sum := sha256.Sum256([]byte(appID))
-	return hex.EncodeToString(sum[:digestLen/2])
+	suffix := hex.EncodeToString(sum[:8])
+	keep := buildTriggerCredentialIDMaxLen - len(buildTriggerCredentialIDPrefix) - 1 - len(suffix)
+	if keep < 1 {
+		return buildTriggerCredentialIDPrefix + suffix
+	}
+	return buildTriggerCredentialIDPrefix + sanitized[:keep] + "_" + suffix
 }
 
 // generateCallbackToken 生成回调鉴权 token（hex 编码的加密随机数，仅创建凭证时使用一次）
@@ -333,7 +311,8 @@ func (m *TriggerPipelineManager) generateCallbackToken() (string, error) {
 
 // renderBuildTriggerText 渲染触发流水线模板中的文本字段（如带 appID 的显示名）
 func renderBuildTriggerText(text string, renderCtx map[string]any) (string, error) {
-	rendered, err := renderPipelineTemplate(buildTriggerRenderName, []byte(text), renderCtx)
+	// renderPipelineTemplate 的 name 仅用于 text/template 错误信息
+	rendered, err := renderPipelineTemplate("renderBuildTriggerText", []byte(text), renderCtx)
 	if err != nil {
 		return "", err
 	}
@@ -348,7 +327,7 @@ func renderBuildTriggerStages(stages []map[string]any, renderCtx map[string]any)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal pipeline template stages")
 	}
-	renderedRaw, err := renderPipelineTemplate(buildTriggerRenderStages, raw, renderCtx)
+	renderedRaw, err := renderPipelineTemplate("renderBuildTriggerStages", raw, renderCtx)
 	if err != nil {
 		return nil, err
 	}
