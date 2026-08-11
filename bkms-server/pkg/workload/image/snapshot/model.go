@@ -33,7 +33,12 @@ type Image struct {
 	// BuiltAt 镜像构建时间（可为空，由 detail syncer 补全）
 	BuiltAt *time.Time `bson:"builtAt,omitempty"`
 	// DetailSyncPending 标记该标签的详情需要重新拉取（如标签被同名构建覆盖），
-	// 详情同步成功后清除
+	// 详情同步成功后由 UpdateDetail 清除
+	//
+	// TODO: 并发同 tag 构建时存在丢刷新风险——若构建 B 在构建 A 的详情同步完成前
+	// MarkDetailSyncPending，随后 A 的 UpdateDetail 仍会无条件清除该标记，导致 B 的
+	// 新镜像详情可能不会被再次拉取，直到下一次同 tag 构建或手动刷新；彻底方案是将
+	// 标记改为世代号（Mark 递增、UpdateDetail 仅清除等值世代）
 	DetailSyncPending bool `bson:"detailSyncPending,omitempty"`
 	// CreatedAt 创建时间
 	CreatedAt time.Time `bson:"createdAt"`

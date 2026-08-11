@@ -400,6 +400,8 @@ func triggerSnapshotRefreshAfterBuild(ctx context.Context, appID, imageTag strin
 	var forceDetailSyncTags []string
 	if imageTag != "" {
 		forceDetailSyncTags = []string{imageTag}
+	} else {
+		log.Warnf(ctx, "build succeeded for app %s but imageTag is empty, fallback to default snapshot refresh", appID)
 	}
 	if _, err := svc.RefreshAppSnapshots(ctx, appID, forceDetailSyncTags...); err != nil {
 		return errors.Wrapf(err, "refresh snapshots for app %s after build", appID)

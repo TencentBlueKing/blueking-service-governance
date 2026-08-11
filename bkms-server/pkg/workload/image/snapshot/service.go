@@ -172,7 +172,7 @@ func (s *Service) listSnapshotsByRepoInfo(
 // RefreshAppSnapshots 刷新应用镜像快照。
 //
 // forceDetailSyncTags 中的标签会无条件重新拉取详情，即使本地快照已有详情；
-// 不传该参数时，只有新增标签和 latest 会同步详情。
+// 不传该参数时，默认同步详情尚未补全（builtAt 为空）、被标记需重拉，以及 latest 的标签
 func (s *Service) RefreshAppSnapshots(
 	ctx context.Context, appID string, forceDetailSyncTags ...string,
 ) (*RefreshResult, error) {
@@ -198,8 +198,10 @@ func (s *Service) refreshSnapshotsByRepoInfo(
 	ctx context.Context, info *RepoKeyInfo, forceDetailSyncTags ...string,
 ) (*RefreshResult, error) {
 	// 先落库标记，确保即使抢不到刷新权，这些标签也会在后续任意一次刷新中被重新拉取详情
-	if err := s.snapshotStore.MarkDetailSyncPending(ctx, info.RepoKey, forceDetailSyncTags); err != nil {
-		return nil, errors.Wrap(err, "mark detail sync pending")
+	if len(forceDetailSyncTags) > 0 {
+		if err := s.snapshotStore.MarkDetailSyncPending(ctx, info.RepoKey, forceDetailSyncTags); err != nil {
+			return nil, errors.Wrap(err, "mark detail sync pending")
+		}
 	}
 
 	// 幂等性检查

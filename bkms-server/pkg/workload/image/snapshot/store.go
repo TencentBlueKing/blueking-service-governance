@@ -68,7 +68,8 @@ type SnapshotStore interface {
 		ctx context.Context, repoKey string, tags []string, keyword string, page, pageSize int,
 	) ([]Image, int64, error)
 
-	// ListUnsyncedDetailTags 获取指定仓库中需要补全详情的标签列表（未同步详情的标签 + latest）
+	// ListUnsyncedDetailTags 获取指定仓库中需要补全详情的标签列表
+	// （builtAt 为空、detailSyncPending，或 latest）
 	ListUnsyncedDetailTags(ctx context.Context, repoKey string) ([]string, error)
 
 	// ListAllTags 获取指定仓库中所有标签列表（用于 diff 计算）
@@ -199,6 +200,9 @@ func (s *SnapshotStoreMongo) HasTag(ctx context.Context, repoKey, tag string) (b
 }
 
 // UpdateDetail 更新快照详情
+//
+// 会无条件清除 detailSyncPending；并发同 tag 构建下可能误清较新的 pending 标记，
+// 详见 Image.DetailSyncPending 字段注释中的 TODO
 func (s *SnapshotStoreMongo) UpdateDetail(
 	ctx context.Context,
 	repoKey, tag string,
@@ -213,7 +217,7 @@ func (s *SnapshotStoreMongo) UpdateDetail(
 			"builtAt":   detail.BuiltAt,
 			"updatedAt": now,
 		},
-		// 详情已是最新，清除重新拉取标记
+		// 详情已是最新，清除重新拉取标记（无条件清除，见函数注释中的并发限制）
 		"$unset": bson.M{"detailSyncPending": ""},
 	}
 
