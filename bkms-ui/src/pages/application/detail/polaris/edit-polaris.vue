@@ -232,28 +232,6 @@
                 />
               </Form.FormItem>
 
-              <div class="relative">
-                <!-- 权重 -->
-                <Form.FormItem
-                  :label="$t('权重')"
-                  property="weight"
-                  required
-                >
-                  <Input
-                    v-model.trim="formModel.weight"
-                    :min="1"
-                    :precision="0"
-                    type="number"
-                  />
-                </Form.FormItem>
-                <div class="absolute top-0 left-[42px] flex items-center">
-                  <i class="bkms-icon bkms-icon-warning-circle text-[14px] text-[#979BA5]"></i>
-                  <span class="text-[#979BA5] text-[12px] ml-[4px]">
-                    {{ $t('数值越大权重越高') }}
-                  </span>
-                </div>
-              </div>
-
               <Form.FormItem
                 v-if="formModel.createNewService"
                 :label="$t('北极星负责人')"
@@ -416,7 +394,6 @@
     CreateAppPolarisConfigInput,
     CreateAppPolarisConfigRequest,
     PatchAppPolarisConfigRequest,
-    PatchPolarisScopeInput,
     PolarisConfigOutputObj,
   } from '~/@types/v1/polaris-config';
   import { EnvvarsService, PolarisConfigService } from '~/api/modules/v1';
@@ -514,14 +491,12 @@
   const defaultFormValue = ref<FormModelType>({
     instanceKey: '',
     servicePort: undefined,
-    scopeType: 'environment',
     scopeEnvNames: [],
     createNewService: false,
     enableHealthCheck: false,
     polarisToken: '',
     polarisName: '',
     polarisNamespace: '' as CreateAppPolarisConfigInput['polarisNamespace'],
-    weight: 100,
     serviceLabels: {},
     operator: userStore.userInfo.user_id ? [userStore.userInfo.user_id] : [],
   });
@@ -606,13 +581,6 @@
         trigger: 'blur',
       },
     ],
-    weight: [
-      {
-        validator: (value: number | string) => Number(value) >= 1,
-        message: t('权重不能小于1'),
-        trigger: 'blur',
-      },
-    ],
     operator: [
       {
         required: true,
@@ -674,14 +642,12 @@
       formModel.value = {
         instanceKey: props.editData?.instanceKey,
         servicePort: props.editData?.servicePort,
-        scopeType: 'environment',
         scopeEnvNames: props.editData?.scopeEnvNames || [],
         createNewService: Boolean(props.editData?.depSvcInstID),
         enableHealthCheck: props.editData?.enableHealthCheck ?? false,
         polarisToken: props.editData?.polarisToken,
         polarisName: props.editData?.polarisName,
         polarisNamespace: props.editData?.polarisNamespace as CreateAppPolarisConfigInput['polarisNamespace'],
-        weight: props.editData?.weight,
         serviceLabels: props.editData?.serviceLabels,
         operator: props.editData?.operator?.split(',') || [],
       };
@@ -823,21 +789,17 @@
       const servicePort = normalizeServicePort();
       const needsRedeployTip = hasRedeployFieldChanged.value;
       // 构建更新参数，确保必需字段存在
-      const params = {
+      const params: PatchAppPolarisConfigRequest = {
         appID: appDetailStore.appID,
         configName: props.editData?.name || '',
         servicePort,
-        weight: formModel.value.weight,
         enableHealthCheck: formModel.value.enableHealthCheck,
         serviceLabels: formModel.value.serviceLabels,
         instanceKey: formModel.value.instanceKey || '',
         polarisToken: formModel.value.polarisToken,
-        scope: {
-          scopeType: formModel.value.scopeType as PatchPolarisScopeInput['scopeType'],
-          scopeEnvNames: formModel.value.scopeEnvNames as string[],
-        },
+        scopeEnvNames: formModel.value.scopeEnvNames as string[],
       };
-      await PolarisConfigService.patchAppPolarisConfig(params as PatchAppPolarisConfigRequest);
+      await PolarisConfigService.patchAppPolarisConfig(params);
       forceCleanDirtyTag(() => {
         confirmLoading.value = false;
         needsRedeployTipAfterSave.value = needsRedeployTip;

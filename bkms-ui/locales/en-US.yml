@@ -1770,3 +1770,29 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 "构建产物需放到 {0} 下，runner 阶段仅从此路径拷贝进运行镜像。不限定命令形式（{1} 等均可），只要最终产物落到该路径即可，例如：": "Build artifacts must be placed under {0}. The runner stage only copies from this path into the runtime image. There is no restriction on command format (e.g., {1}), as long as the final artifacts are placed in this path, for example:"
 "若 go.mod 有使用工蜂私有仓库依赖包，构建参数中需要添加 {0}，取值见：": "If go.mod uses dependencies from Woa's private repository, you need to add {0} to the build parameters. Refer to:"
 一般可留空: Can generally be left empty
+"请确认以下变量信息（共 {count} 个）": "Please confirm the following variable information (total of {count} items)"
+目标环境: Target Environment
+未部署环境: Undeployed Environments
+单实例权重: Per-instance Weight
+部分实例已覆盖: Some Instances Overridden
+"该环境下有 {count} 个实例在实例列表中单独调整过权重；总权重按各实例实际权重求和": "{count} instances in this environment have individually adjusted weights in the instance list. The total weight is the sum of the actual weights of all instances"
+健康实例数: Healthy Instances
+来自北极星实时数据，约 15 秒延迟: Real-time data from Polaris, with an approximate 15-second delay
+总权重（占比）: Total Weight (Percentage)
+按各健康实例的实际权重逐个求和，不是「单实例权重 × 健康实例数」；数据来自北极星，约 15 秒延迟: The sum of the actual weights of all healthy instances, rather than per-instance weight multiplied by the number of healthy instances. Data comes from Polaris with an approximate 15-second delay
+调整后总权重: Adjusted Total Weight
+预计占比: Estimated Percentage
+权重在该环境首次部署时生效: The weight takes effect when the environment is deployed for the first time
+权重为 0 时，该环境将不再接收流量: When the weight is 0, this environment will no longer receive traffic
+请输入0-10000之间的整数: Enter an integer from 0 to 10000
+设置初始权重: Set Initial Weight
+调整说明: Adjustment Notes
+"数值越大权重越高；保存后按新的单实例权重重算总权重。权重为 {0} 时该环境将不再接收流量。": "A larger value gives a higher weight. After saving, the total weight is recalculated using the new per-instance weight. When the weight is {0}, this environment will no longer receive traffic."
+保存后立即同步到该环境下全部实例的北极星注册权重，无需重新部署应用。: After saving, the Polaris registration weight is immediately synchronized to all instances in this environment without redeploying the application.
+该环境尚未部署，此处设置的是实例首次注册到北极星时的权重。: This environment has not been deployed. This value is used when instances first register with Polaris.
+"数值越大权重越高；填 {0} 则该环境部署后不参与分流。": "A larger value gives a higher weight. Enter {0} to exclude this environment from traffic distribution after deployment."
+"实例数统计的维度为：健康的实例": "Instance count includes healthy instances only"
+总权重（权重占比）: Total Weight (Weight Percentage)
+单个实例权重: Per-instance Weight
+"单个实例权重需为 {0} ~ {1} 的整数": "Per-instance weight must be an integer from {0} to {1}"
+"总权重 = {0}，预计占比 {1}%": "Total weight = {0}, estimated percentage {1}%"

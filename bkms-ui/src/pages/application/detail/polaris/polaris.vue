@@ -216,7 +216,23 @@
           :width="300"
         >
           <template #default="{ row }">
+            <span class="inline-flex items-center">
+              <Button
+                text
+                theme="primary"
+                @click.stop="handleShowAssociatedEnvs(row)"
+              >
+                {{ $t('关联环境') }}
+              </Button>
+              <Tag
+                class="ml-[6px]"
+                :theme="getAssociatedEnvNames(row)?.length ? 'info' : 'default'"
+              >
+                {{ getAssociatedEnvNames(row)?.length }}
+              </Tag>
+            </span>
             <Button
+              class="ml-[16px]"
               text
               theme="primary"
               @click.stop="handleShowCertificate(row)"
@@ -260,6 +276,14 @@
       v-model:is-show="isShowViewCertificate"
       :config-name="configName"
     />
+
+    <!-- 关联环境及按环境权重侧栏 -->
+    <PolarisEnvSideslider
+      v-model:is-show="isShowAssociatedEnvs"
+      :config="associatedEnvConfig"
+      :env-list="envList"
+      @updated="handleAssociatedConfigUpdated"
+    />
   </div>
 </template>
 
@@ -291,6 +315,7 @@
   import EditPolaris from './edit-polaris.vue';
   import PolarisEnvRedeployMoreTip from './polaris-env-redeploy-more-tip.vue';
   import PolarisEnvRedeployTag from './polaris-env-redeploy-tag.vue';
+  import PolarisEnvSideslider from './polaris-env-sideslider.vue';
   import PolarisPendingRedeployAlert from './polaris-pending-redeploy-alert.vue';
   import ViewCertificate from './view-certificate.vue';
 
@@ -362,7 +387,9 @@
   });
   const isShowEditPolaris = ref(false);
   const isShowViewCertificate = ref(false);
+  const isShowAssociatedEnvs = ref(false);
   const editPolarisData = ref<PolarisConfigOutputObj | undefined>(undefined); // 编辑时的数据
+  const associatedEnvConfig = ref<PolarisConfigOutputObj>();
   const configName = ref(''); // 查看凭证时的 configName
   const loading = ref(true);
   const filterLoading = ref(false);
@@ -399,10 +426,7 @@
     await PolarisConfigService.patchAppPolarisConfig({
       appID: appDetailStore.appID,
       configName: row?.name ?? '',
-      scope: {
-        scopeType: 'environment',
-        scopeEnvNames: [],
-      },
+      scopeEnvNames: [],
     });
     Message({
       message: t('操作成功'),
@@ -484,6 +508,17 @@
     return Array.from(new Set((res || []).filter(isDeployingEnv).map(item => item.name)));
   }
 
+  /** 权重可管理环境 = 当前 scope 与已完成首次部署的环境并集。 */
+  function getAssociatedEnvNames(config: PolarisConfigOutputObj) {
+    const envNames = Array.from(new Set(config.scopeEnvNames || []));
+    Object.entries(config.envStates || {}).forEach(([envName, state]) => {
+      if (state?.appliedFields && !envNames.includes(envName)) {
+        envNames.push(envName);
+      }
+    });
+    return envNames;
+  }
+
   /** 根据环境名补齐环境展示名和类型，接口无环境详情时回退展示原环境名。 */
   function getEnvInfo(envName: string): DeployedEnv {
     const env = envList.value.find(item => item.name === envName);
@@ -518,6 +553,14 @@
   /** 过滤出合法环境名，避免搜索筛选项混入非字符串值。 */
   function getValidEnvNames(envNames: unknown[]) {
     return envNames.filter((envName): envName is string => typeof envName === 'string');
+  }
+
+  /** 使用权重接口返回的完整配置同步列表与当前侧栏，避免额外刷新请求。 */
+  function handleAssociatedConfigUpdated(config: PolarisConfigOutputObj) {
+    const replaceConfig = (item: PolarisConfigOutputObj) => (item.name === config.name ? config : item);
+    originalList.value = originalList.value.map(replaceConfig);
+    list.value = list.value.map(replaceConfig);
+    associatedEnvConfig.value = config;
   }
 
   /** 清除筛选条件 */
@@ -740,6 +783,12 @@
     } finally {
       pendingRedeployRefreshing.value = false;
     }
+  }
+
+  /** 打开当前北极星配置的关联环境侧栏。 */
+  function handleShowAssociatedEnvs(row: PolarisConfigOutputObj) {
+    associatedEnvConfig.value = row;
+    isShowAssociatedEnvs.value = true;
   }
 
   function handleShowCertificate(row: PolarisConfigOutputObj) {
