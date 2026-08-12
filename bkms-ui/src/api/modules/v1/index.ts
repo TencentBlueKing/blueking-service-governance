@@ -3,6 +3,7 @@ export * from './app-config-files';
 export * from './app-spec';
 export * from './bscpcfg';
 export * from './builds';
+export * from './build-trigger-policies';
 export * from './helm-charts';
 export * from './app-components';
 export * from './polaris-config';

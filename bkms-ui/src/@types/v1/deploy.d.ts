@@ -472,9 +472,13 @@ export interface LatestDeployStatus {
   branch?: string;
   buildID?: string;
   deployID?: string;
+  deploySource?: string;
   endedAt?: string;
   hasDeployRecord?: boolean;
   imageTag?: string;
+  /**
+   * 兼容字段：供前端迁移期使用，待前端全部改用 deploySource 后删除。
+   */
   isBuildAutoDeploy?: boolean;
   message?: string;
   operator?: string;
@@ -500,10 +504,26 @@ export interface PaginatedAppModelDeployRecordsOutputObjs {
 }
 
 export interface AppModelDeployRecordOutputObj {
+  /**
+   * 代码分支（仅构建+部署记录返回）
+   */
+  branch?: string;
   clusterID?: string;
+  /**
+   * Commit ID（仅构建+部署记录返回）
+   */
+  commitID?: string;
   createdAt?: string;
+  /**
+   * 部署来源
+   */
+  deploySource?: string;
   id?: string;
   imageTag?: string;
+  /**
+   * 兼容字段：供前端迁移期使用，待前端全部改用 deploySource 后删除。
+   */
+  isBuildAutoDeploy?: boolean;
   message?: string;
   namespace?: string;
   operator?: string;

@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetAppEnvVarsRequest, AppDefinedEnvVarOutputObj, CreateAppEnvVarsRequest, ListDetailedAppEnvVarsRequest, AppEnvVarDetailedOutputObj, ExportAppEnvVarsRequest, ImportAppDefinedEnvVarRequest, EnvVarImportPreviewSummaryOutputObj, PreviewAppDefinedEnvVarRequest, EnvVarImportPreviewOutputObj, UpdateAppEnvVarsRequest, DeleteAppEnvVarsRequest, EmptyOutput, ListAppBgEnvVarsRequest, BgEnvVarOutputObj, ListAppEnvVarsRequest, EnvVarOutputObj, ListEnvAvailableEnvVarsRequest, ListEnvBgEnvVarsRequest, ListDetailedEnvScopedEnvVarsRequest, ScopedEnvVarDetailedOutputObj, ExportEnvScopedEnvVarsRequest, ImportEnvScopedEnvVarRequest, PreviewEnvScopedEnvVarRequest, CreateScopedEnvVarRequest, ScopedEnvVarOutputObj, ListPublicScopedEnvVarsRequest, ExportPublicScopedEnvVarsRequest, ImportPublicScopedEnvVarRequest, PreviewPublicScopedEnvVarRequest, UpdateScopedEnvVarRequest, DeleteScopedEnvVarRequest } from '~/@types/v1/envvars';
+import type { GetAppEnvVarsRequest, AppDefinedEnvVarOutputObj, CreateAppEnvVarsRequest, ListDetailedAppEnvVarsRequest, AppEnvVarDetailedOutputObj, ExportAppEnvVarsRequest, ImportAppDefinedEnvVarRequest, EnvVarImportPreviewSummaryOutputObj, PreviewAppDefinedEnvVarRequest, EnvVarImportPreviewOutputObj, UpdateAppEnvVarsRequest, DeleteAppEnvVarsRequest, EmptyOutput, ListAppBgEnvVarsRequest, BgEnvVarOutputObj, ListAppEnvVarsRequest, EnvVarOutputObj, DownloadAppEnvVarTemplateRequest, DownloadSingleEnvVarTemplateRequest, DownloadScopedEnvVarTemplateRequest, ListEnvAvailableEnvVarsRequest, ListEnvBgEnvVarsRequest, ListDetailedEnvScopedEnvVarsRequest, ScopedEnvVarDetailedOutputObj, ExportEnvScopedEnvVarsRequest, ImportEnvScopedEnvVarRequest, PreviewEnvScopedEnvVarRequest, CreateScopedEnvVarRequest, ScopedEnvVarOutputObj, ListPublicScopedEnvVarsRequest, ExportPublicScopedEnvVarsRequest, ImportPublicScopedEnvVarRequest, PreviewPublicScopedEnvVarRequest, UpdateScopedEnvVarRequest, DeleteScopedEnvVarRequest } from '~/@types/v1/envvars';
 
 export const EnvvarsService = {
   /**
@@ -177,6 +177,51 @@ export const EnvvarsService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/env-variables')(params, config),
+  /**
+   * 下载应用环境变量导入模板
+   *
+   * 返回不带 scope 元数据的 `.env` 模板，供应用环境变量导入使用。
+   *
+   * @method GET
+   * @path /env-var-templates/app
+   * @tag envvars
+   * @response 200 string dotenv file
+   * @response 400 GinErrorOutput Bad Request
+   */
+  downloadAppEnvVarTemplate: async <Request extends DownloadAppEnvVarTemplateRequest = DownloadAppEnvVarTemplateRequest, ResponseData = string>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/env-var-templates/app')(params, config),
+  /**
+   * 下载单环境环境变量导入模板
+   *
+   * 返回不带 scope 元数据的 `.env` 模板，供单环境环境变量导入使用。
+   *
+   * @method GET
+   * @path /env-var-templates/env
+   * @tag envvars
+   * @response 200 string dotenv file
+   * @response 400 GinErrorOutput Bad Request
+   */
+  downloadSingleEnvVarTemplate: async <Request extends DownloadSingleEnvVarTemplateRequest = DownloadSingleEnvVarTemplateRequest, ResponseData = string>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/env-var-templates/env')(params, config),
+  /**
+   * 下载 scoped 环境变量导入模板
+   *
+   * 返回带 scope 元数据示例的 `.env` 模板，供 scoped 环境变量导入使用。
+   *
+   * @method GET
+   * @path /env-var-templates/scoped
+   * @tag envvars
+   * @response 200 string dotenv file
+   * @response 400 GinErrorOutput Bad Request
+   */
+  downloadScopedEnvVarTemplate: async <Request extends DownloadScopedEnvVarTemplateRequest = DownloadScopedEnvVarTemplateRequest, ResponseData = string>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/env-var-templates/scoped')(params, config),
   /**
    * 查询指定环境下所有可用的环境变量列表
    *

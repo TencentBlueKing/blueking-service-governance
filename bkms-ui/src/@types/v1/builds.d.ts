@@ -184,6 +184,14 @@ export interface BuildRecordOutputObj {
    * 构建状态
    */
   status?: string;
+  /**
+   * 自动触发时关联的触发策略 ID，手动触发为空
+   */
+  triggerPolicyID?: string;
+  /**
+   * 触发方式：manual 手动，auto 自动
+   */
+  triggerType?: string;
 }
 
 export interface PaginatedBuildRecordOutputObjs {

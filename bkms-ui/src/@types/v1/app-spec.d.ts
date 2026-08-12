@@ -475,6 +475,78 @@ export interface GetEnvEffectiveAppSpecUpdateStrategyRequest {
   envName: string;
 }
 
+export interface ListWorkspaceAppSpecDevModeRulesRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
+export type CreateWorkspaceAppSpecDevModeRuleRequest = DevModeRuleInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+};
+
+export type UpdateWorkspaceAppSpecDevModeRuleRequest = DevModeRuleInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 规则 ID
+   */
+  ruleID: string;
+};
+
+export interface DeleteWorkspaceAppSpecDevModeRuleRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 规则 ID
+   */
+  ruleID: string;
+}
+
+export interface ListWorkspaceAppSpecResourcesRulesRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
+export type CreateWorkspaceAppSpecResourcesRuleRequest = ResourcesRuleInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+};
+
+export type UpdateWorkspaceAppSpecResourcesRuleRequest = ResourcesRuleInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 规则 ID
+   */
+  ruleID: string;
+};
+
+export interface DeleteWorkspaceAppSpecResourcesRuleRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 规则 ID
+   */
+  ruleID: string;
+}
+
 export interface AppSpecAnnotationsSectionOutput {
   data?: AppSpecAnnotationsOutput;
 }
@@ -598,6 +670,90 @@ export interface SetEnvAppSpecUpdateStrategyInput {
    * 待设置的 updateStrategy section 值
    */
   appSpecUpdateStrategy: EnvAppSpecUpdateStrategyInput;
+}
+
+export interface ListDevModeRulesOutput {
+  data?: DevModeRuleOutputObj[];
+}
+
+export interface DevModeRuleInput {
+  envType: string;
+  spec: DevModeSpecInput;
+}
+
+export interface DevModeRuleOutput {
+  data?: DevModeRuleOutputObj;
+}
+
+export interface EmptyOutput {
+}
+
+export interface ListResourcesRulesOutput {
+  data?: ResourcesRuleOutputObj[];
+}
+
+export interface ResourcesRuleInput {
+  envType: string;
+  spec: ResourcesSpecInput;
+}
+
+export interface ResourcesRuleOutput {
+  data?: ResourcesRuleOutputObj;
+}
+
+export interface ResourcesRuleOutputObj {
+  createdAt?: string;
+  envType?: string;
+  id?: string;
+  spec?: AppSpecResourcesOutput;
+  updatedAt?: string;
+}
+
+export interface AppSpecResourcesOutput {
+  /**
+   * CPU limits
+   */
+  cpuLimits?: string;
+  /**
+   * CPU requests
+   */
+  cpuRequests?: string;
+  /**
+   * Memory limits
+   */
+  memoryLimits?: string;
+  /**
+   * Memory requests
+   */
+  memoryRequests?: string;
+  /**
+   * 副本数量
+   */
+  replicas?: number;
+}
+
+export interface ResourcesSpecInput {
+  cpuLimits: string;
+  cpuRequests: string;
+  memoryLimits: string;
+  memoryRequests: string;
+  replicas: number;
+}
+
+export interface DevModeRuleOutputObj {
+  createdAt?: string;
+  envType?: string;
+  id?: string;
+  spec?: DevModeSpecOutput;
+  updatedAt?: string;
+}
+
+export interface DevModeSpecOutput {
+  enabled?: boolean;
+}
+
+export interface DevModeSpecInput {
+  enabled: boolean;
 }
 
 export interface EnvAppSpecUpdateStrategyInput {
@@ -844,29 +1000,6 @@ export interface AppSpecResourcesInput {
   memoryRequests: string;
   /**
    * 副本数量，必须为正整数。
-   */
-  replicas?: number;
-}
-
-export interface AppSpecResourcesOutput {
-  /**
-   * CPU limits
-   */
-  cpuLimits?: string;
-  /**
-   * CPU requests
-   */
-  cpuRequests?: string;
-  /**
-   * Memory limits
-   */
-  memoryLimits?: string;
-  /**
-   * Memory requests
-   */
-  memoryRequests?: string;
-  /**
-   * 副本数量
    */
   replicas?: number;
 }

@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetAppDefaultAppSpecAnnotationsRequest, AppSpecAnnotationsOutput, SetAppDefaultAppSpecAnnotationsRequest, EmptyOutput, GetAppDefaultAppSpecLabelsRequest, AppSpecLabelsOutput, SetAppDefaultAppSpecLabelsRequest, GetAppDefaultAppSpecLifecycleRequest, AppSpecLifecycleOutput, SetAppDefaultAppSpecLifecycleRequest, GetAppDefaultAppSpecProbeRequest, AppSpecProbeOutput, SetAppDefaultAppSpecProbeRequest, GetAppDefaultAppSpecResourcesRequest, AppSpecResourcesOutput, SetAppDefaultAppSpecResourcesRequest, GetAppDefaultAppSpecTkeRouteEniRequest, AppSpecTkeRouteEniOutput, SetAppDefaultAppSpecTkeRouteEniRequest, GetAppDefaultAppSpecUpdateStrategyRequest, AppSpecUpdateStrategyOutput, SetAppDefaultAppSpecUpdateStrategyRequest, GetAppSpecOverviewRequest, AppSpecOverviewOutput, GetEnvAppSpecAnnotationsRequest, SetEnvAppSpecAnnotationsRequest, DeleteEnvAppSpecAnnotationsRequest, GetEnvEffectiveAppSpecAnnotationsRequest, GetEnvAppSpecDevModeRequest, AppSpecDevModeOutput, SetEnvAppSpecDevModeRequest, DeleteEnvAppSpecDevModeRequest, GetEnvEffectiveAppSpecDevModeRequest, GetEnvAppSpecLabelsRequest, SetEnvAppSpecLabelsRequest, DeleteEnvAppSpecLabelsRequest, GetEnvEffectiveAppSpecLabelsRequest, GetEnvAppSpecLifecycleRequest, SetEnvAppSpecLifecycleRequest, DeleteEnvAppSpecLifecycleRequest, GetEnvEffectiveAppSpecLifecycleRequest, GetEnvAppSpecProbeRequest, SetEnvAppSpecProbeRequest, DeleteEnvAppSpecProbeRequest, GetEnvEffectiveAppSpecProbeRequest, DeleteEnvAppSpecProbeByTypeRequest, GetEnvAppSpecResourcesRequest, SetEnvAppSpecResourcesRequest, DeleteEnvAppSpecResourcesRequest, GetEnvEffectiveAppSpecResourcesRequest, GetEnvAppSpecTkeRouteEniRequest, SetEnvAppSpecTkeRouteEniRequest, DeleteEnvAppSpecTkeRouteEniRequest, GetEnvEffectiveAppSpecTkeRouteEniRequest, GetEnvAppSpecUpdateStrategyRequest, SetEnvAppSpecUpdateStrategyRequest, DeleteEnvAppSpecUpdateStrategyRequest, GetEnvEffectiveAppSpecUpdateStrategyRequest } from '~/@types/v1/app-spec';
+import type { GetAppDefaultAppSpecAnnotationsRequest, AppSpecAnnotationsOutput, SetAppDefaultAppSpecAnnotationsRequest, EmptyOutput, GetAppDefaultAppSpecLabelsRequest, AppSpecLabelsOutput, SetAppDefaultAppSpecLabelsRequest, GetAppDefaultAppSpecLifecycleRequest, AppSpecLifecycleOutput, SetAppDefaultAppSpecLifecycleRequest, GetAppDefaultAppSpecProbeRequest, AppSpecProbeOutput, SetAppDefaultAppSpecProbeRequest, GetAppDefaultAppSpecResourcesRequest, AppSpecResourcesOutput, SetAppDefaultAppSpecResourcesRequest, GetAppDefaultAppSpecTkeRouteEniRequest, AppSpecTkeRouteEniOutput, SetAppDefaultAppSpecTkeRouteEniRequest, GetAppDefaultAppSpecUpdateStrategyRequest, AppSpecUpdateStrategyOutput, SetAppDefaultAppSpecUpdateStrategyRequest, GetAppSpecOverviewRequest, AppSpecOverviewOutput, GetEnvAppSpecAnnotationsRequest, SetEnvAppSpecAnnotationsRequest, DeleteEnvAppSpecAnnotationsRequest, GetEnvEffectiveAppSpecAnnotationsRequest, GetEnvAppSpecDevModeRequest, AppSpecDevModeOutput, SetEnvAppSpecDevModeRequest, DeleteEnvAppSpecDevModeRequest, GetEnvEffectiveAppSpecDevModeRequest, GetEnvAppSpecLabelsRequest, SetEnvAppSpecLabelsRequest, DeleteEnvAppSpecLabelsRequest, GetEnvEffectiveAppSpecLabelsRequest, GetEnvAppSpecLifecycleRequest, SetEnvAppSpecLifecycleRequest, DeleteEnvAppSpecLifecycleRequest, GetEnvEffectiveAppSpecLifecycleRequest, GetEnvAppSpecProbeRequest, SetEnvAppSpecProbeRequest, DeleteEnvAppSpecProbeRequest, GetEnvEffectiveAppSpecProbeRequest, DeleteEnvAppSpecProbeByTypeRequest, GetEnvAppSpecResourcesRequest, SetEnvAppSpecResourcesRequest, DeleteEnvAppSpecResourcesRequest, GetEnvEffectiveAppSpecResourcesRequest, GetEnvAppSpecTkeRouteEniRequest, SetEnvAppSpecTkeRouteEniRequest, DeleteEnvAppSpecTkeRouteEniRequest, GetEnvEffectiveAppSpecTkeRouteEniRequest, GetEnvAppSpecUpdateStrategyRequest, SetEnvAppSpecUpdateStrategyRequest, DeleteEnvAppSpecUpdateStrategyRequest, GetEnvEffectiveAppSpecUpdateStrategyRequest, ListWorkspaceAppSpecDevModeRulesRequest, DevModeRuleOutputObj, CreateWorkspaceAppSpecDevModeRuleRequest, UpdateWorkspaceAppSpecDevModeRuleRequest, DeleteWorkspaceAppSpecDevModeRuleRequest, ListWorkspaceAppSpecResourcesRulesRequest, ResourcesRuleOutputObj, CreateWorkspaceAppSpecResourcesRuleRequest, UpdateWorkspaceAppSpecResourcesRuleRequest, DeleteWorkspaceAppSpecResourcesRuleRequest } from '~/@types/v1/app-spec';
 
 export const AppSpecService = {
   /**
@@ -778,4 +778,132 @@ export const AppSpecService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/app-spec/update-strategy/effective')(params, config),
+  /**
+   * 查询工作空间开发模式默认配置规则
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/app-spec/dev-mode
+   * @tag app-spec
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 ListDevModeRulesOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  listWorkspaceAppSpecDevModeRules: async <Request extends ListWorkspaceAppSpecDevModeRulesRequest = ListWorkspaceAppSpecDevModeRulesRequest, ResponseData = DevModeRuleOutputObj[]>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/app-spec/dev-mode')(params, config),
+  /**
+   * 新增工作空间开发模式默认配置规则
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/app-spec/dev-mode
+   * @tag app-spec
+   * @param workspaceID path string required 工作空间 ID
+   * @param body body DevModeRuleInput required 开发模式默认配置规则
+   * @response 200 DevModeRuleOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  createWorkspaceAppSpecDevModeRule: async <Request extends CreateWorkspaceAppSpecDevModeRuleRequest = CreateWorkspaceAppSpecDevModeRuleRequest, ResponseData = DevModeRuleOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/app-spec/dev-mode')(params, config),
+  /**
+   * 编辑工作空间开发模式默认配置规则
+   *
+   * @method PUT
+   * @path /workspaces/{workspaceID}/app-spec/dev-mode/{ruleID}
+   * @tag app-spec
+   * @param workspaceID path string required 工作空间 ID
+   * @param ruleID path string required 规则 ID
+   * @param body body DevModeRuleInput required 开发模式默认配置规则
+   * @response 200 DevModeRuleOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  updateWorkspaceAppSpecDevModeRule: async <Request extends UpdateWorkspaceAppSpecDevModeRuleRequest = UpdateWorkspaceAppSpecDevModeRuleRequest, ResponseData = DevModeRuleOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/workspaces/{workspaceID}/app-spec/dev-mode/{ruleID}')(params, config),
+  /**
+   * 删除工作空间开发模式默认配置规则
+   *
+   * @method DELETE
+   * @path /workspaces/{workspaceID}/app-spec/dev-mode/{ruleID}
+   * @tag app-spec
+   * @param workspaceID path string required 工作空间 ID
+   * @param ruleID path string required 规则 ID
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  deleteWorkspaceAppSpecDevModeRule: async <Request extends DeleteWorkspaceAppSpecDevModeRuleRequest = DeleteWorkspaceAppSpecDevModeRuleRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.delete<Request, ResponseData>('/workspaces/{workspaceID}/app-spec/dev-mode/{ruleID}')(params, config),
+  /**
+   * 查询工作空间资源规格默认配置规则
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/app-spec/resources
+   * @tag app-spec
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 ListResourcesRulesOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  listWorkspaceAppSpecResourcesRules: async <Request extends ListWorkspaceAppSpecResourcesRulesRequest = ListWorkspaceAppSpecResourcesRulesRequest, ResponseData = ResourcesRuleOutputObj[]>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/app-spec/resources')(params, config),
+  /**
+   * 新增工作空间资源规格默认配置规则
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/app-spec/resources
+   * @tag app-spec
+   * @param workspaceID path string required 工作空间 ID
+   * @param body body ResourcesRuleInput required 资源规格默认配置规则
+   * @response 200 ResourcesRuleOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  createWorkspaceAppSpecResourcesRule: async <Request extends CreateWorkspaceAppSpecResourcesRuleRequest = CreateWorkspaceAppSpecResourcesRuleRequest, ResponseData = ResourcesRuleOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/app-spec/resources')(params, config),
+  /**
+   * 编辑工作空间资源规格默认配置规则
+   *
+   * @method PUT
+   * @path /workspaces/{workspaceID}/app-spec/resources/{ruleID}
+   * @tag app-spec
+   * @param workspaceID path string required 工作空间 ID
+   * @param ruleID path string required 规则 ID
+   * @param body body ResourcesRuleInput required 资源规格默认配置规则
+   * @response 200 ResourcesRuleOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  updateWorkspaceAppSpecResourcesRule: async <Request extends UpdateWorkspaceAppSpecResourcesRuleRequest = UpdateWorkspaceAppSpecResourcesRuleRequest, ResponseData = ResourcesRuleOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/workspaces/{workspaceID}/app-spec/resources/{ruleID}')(params, config),
+  /**
+   * 删除工作空间资源规格默认配置规则
+   *
+   * @method DELETE
+   * @path /workspaces/{workspaceID}/app-spec/resources/{ruleID}
+   * @tag app-spec
+   * @param workspaceID path string required 工作空间 ID
+   * @param ruleID path string required 规则 ID
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  deleteWorkspaceAppSpecResourcesRule: async <Request extends DeleteWorkspaceAppSpecResourcesRuleRequest = DeleteWorkspaceAppSpecResourcesRuleRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.delete<Request, ResponseData>('/workspaces/{workspaceID}/app-spec/resources/{ruleID}')(params, config),
 };

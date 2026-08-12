@@ -46,6 +46,32 @@ export type PatchAppPolarisConfigRequest = PatchAppPolarisConfigInput & {
   configName: string;
 };
 
+export interface GetEnvInstanceStatsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 配置名称
+   */
+  configName: string;
+}
+
+export type PutEnvWeightRequest = PutEnvWeightInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 配置名称
+   */
+  configName: string;
+  /**
+   * 环境名称
+   */
+  envName: string;
+};
+
 export interface ListAppPolarisConfigVarsRequest {
   /**
    * 应用 ID
@@ -102,13 +128,9 @@ export interface CreateAppPolarisConfigInput {
    */
   polarisToken?: string;
   /**
-   * 组件生效的环境列表，当 scopeType 为 environment 时有效
+   * 生效的环境列表
    */
   scopeEnvNames?: string[];
-  /**
-   * 组件生效范围类型，可选值只能为 environment
-   */
-  scopeType: "environment";
   /**
    * 服务标签
    */
@@ -117,10 +139,6 @@ export interface CreateAppPolarisConfigInput {
    * 服务端口
    */
   servicePort: number;
-  /**
-   * 服务权重，默认 10
-   */
-  weight?: number;
 }
 
 export interface CreateAppPolarisConfigOutput {
@@ -159,9 +177,9 @@ export interface PatchAppPolarisConfigInput {
    */
   polarisToken?: string;
   /**
-   * 组件生效范围（可选更新）
+   * 生效的环境列表（可选更新；传入时全量替换，空数组表示清空，nil 表示不更新）
    */
-  scope?: PatchPolarisScopeInput;
+  scopeEnvNames?: string[];
   /**
    * 服务标签（可选更新，传入时全量替换）
    */
@@ -170,13 +188,27 @@ export interface PatchAppPolarisConfigInput {
    * 服务端口（可选更新）
    */
   servicePort?: number;
-  /**
-   * 服务权重（可选更新）
-   */
-  weight?: number;
 }
 
 export interface PatchAppPolarisConfigOutput {
+  /**
+   * 更新后的北极星配置
+   */
+  data?: PolarisConfigOutputObj;
+}
+
+export interface GetEnvInstanceStatsOutput {
+  data?: GetEnvInstanceStatsOutputObj;
+}
+
+export interface PutEnvWeightInput {
+  /**
+   * 单实例权重，取值范围 0-10000
+   */
+  weight: number;
+}
+
+export interface PutEnvWeightOutput {
   /**
    * 更新后的北极星配置
    */
@@ -227,6 +259,10 @@ export interface PolarisConfigOutputObj {
    */
   envStates?: Record<string, PolarisEnvStateOutput>;
   /**
+   * 各环境的单实例权重，key 为环境名称
+   */
+  envWeights?: Record<string, number>;
+  /**
    * 组件实例标识，用于环境变量拼接
    */
   instanceKey?: string;
@@ -255,13 +291,9 @@ export interface PolarisConfigOutputObj {
    */
   polarisToken?: string;
   /**
-   * 组件生效的环境列表
+   * 生效的环境列表
    */
   scopeEnvNames?: string[];
-  /**
-   * 组件生效范围类型
-   */
-  scopeType?: string;
   /**
    * 服务标签
    */
@@ -278,10 +310,6 @@ export interface PolarisConfigOutputObj {
    * 校验警告信息
    */
   warnings?: string[];
-  /**
-   * 服务权重
-   */
-  weight?: number;
 }
 
 export interface PolarisEnvStateOutput {
@@ -323,15 +351,42 @@ export interface RedeployRequiredFieldsOutput {
   servicePort?: number;
 }
 
-export interface PatchPolarisScopeInput {
+export interface GetEnvInstanceStatsOutputObj {
   /**
-   * 组件生效的环境列表，当 scopeType 为 environment 时有效
+   * 各环境匹配到的北极星实例统计，key 为环境名
    */
-  scopeEnvNames?: string[];
+  envStats?: Record<string, EnvInstanceStatsOutput>;
   /**
-   * 组件生效范围类型，可选值只能为 environment
+   * 北极星服务下全部健康实例数（含非平台注册，例如迁移业务）
    */
-  scopeType: "environment";
+  totalHealthyInstanceCount?: number;
+  /**
+   * 北极星服务下全部健康实例的权重总和
+   */
+  totalHealthyInstanceWeight?: number;
+}
+
+export interface EnvInstanceStatsOutput {
+  /**
+   * 匹配实例中健康的数量（isHealthy && !isIsolated && weight > 0）
+   */
+  healthyInstanceCount?: number;
+  /**
+   * 匹配健康实例的权重总和
+   */
+  healthyInstanceWeight?: number;
+  /**
+   * 匹配实例中隔离的数量（isIsolated == true）
+   */
+  isolatedInstanceCount?: number;
+  /**
+   * 匹配到本环境 Pod 的实例总数
+   */
+  totalInstanceCount?: number;
+  /**
+   * 本环境被单独设置过权重的实例数，其实际权重可能与配置的单实例权重不一致
+   */
+  weightOverriddenInstanceCount?: number;
 }
 
 export interface PolarisNameOutputObj {

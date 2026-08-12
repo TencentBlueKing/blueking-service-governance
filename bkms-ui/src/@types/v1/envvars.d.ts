@@ -105,6 +105,15 @@ export interface ListAppEnvVarsRequest {
   envName: string;
 }
 
+export interface DownloadAppEnvVarTemplateRequest {
+}
+
+export interface DownloadSingleEnvVarTemplateRequest {
+}
+
+export interface DownloadScopedEnvVarTemplateRequest {
+}
+
 export interface ListEnvAvailableEnvVarsRequest {
   /**
    * 环境 ID

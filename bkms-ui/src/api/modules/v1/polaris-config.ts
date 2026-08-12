@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListAppPolarisConfigsRequest, PolarisConfigOutputObj, CreateAppPolarisConfigRequest, PolarisNameOutputObj, ValidateAppPolarisConfigRequest, ValidateAppPolarisConfigOutput, DeleteAppPolarisConfigRequest, PatchAppPolarisConfigRequest, ListAppPolarisConfigVarsRequest, PolarisConfigVarOutput } from '~/@types/v1/polaris-config';
+import type { ListAppPolarisConfigsRequest, PolarisConfigOutputObj, CreateAppPolarisConfigRequest, PolarisNameOutputObj, ValidateAppPolarisConfigRequest, ValidateAppPolarisConfigOutput, DeleteAppPolarisConfigRequest, PatchAppPolarisConfigRequest, GetEnvInstanceStatsRequest, GetEnvInstanceStatsOutputObj, PutEnvWeightRequest, ListAppPolarisConfigVarsRequest, PolarisConfigVarOutput } from '~/@types/v1/polaris-config';
 
 export const PolarisConfigService = {
   /**
@@ -84,6 +84,41 @@ export const PolarisConfigService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.patch<Request, ResponseData>('/apps/{appID}/deps/polaris-configs/{configName}')(params, config),
+  /**
+   * 获取北极星配置各环境实例统计
+   *
+   * @method GET
+   * @path /apps/{appID}/deps/polaris-configs/{configName}/env-instance-stats
+   * @tag polaris-config
+   * @param appID path string required 应用 ID
+   * @param configName path string required 配置名称
+   * @response 200 GetEnvInstanceStatsOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   * @response 500 GinErrorOutput Internal Server Error
+   */
+  getEnvInstanceStats: async <Request extends GetEnvInstanceStatsRequest = GetEnvInstanceStatsRequest, ResponseData = GetEnvInstanceStatsOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/deps/polaris-configs/{configName}/env-instance-stats')(params, config),
+  /**
+   * 更新指定环境的北极星实例权重
+   *
+   * @method PUT
+   * @path /apps/{appID}/deps/polaris-configs/{configName}/envs/{envName}/weight
+   * @tag polaris-config
+   * @param appID path string required 应用 ID
+   * @param configName path string required 配置名称
+   * @param envName path string required 环境名称
+   * @param body body PutEnvWeightInput required 请求体
+   * @response 200 PutEnvWeightOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 500 GinErrorOutput Internal Server Error
+   */
+  putEnvWeight: async <Request extends PutEnvWeightRequest = PutEnvWeightRequest, ResponseData = PolarisConfigOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/deps/polaris-configs/{configName}/envs/{envName}/weight')(params, config),
   /**
    * 获取北极星配置变量列表
    *
