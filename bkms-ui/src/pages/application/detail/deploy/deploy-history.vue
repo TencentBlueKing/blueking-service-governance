@@ -17,32 +17,30 @@
 -->
 
 <template>
+  <div class="flex items-center justify-between gap-[12px] mb-[16px]">
+    <div :id="DEPLOY_ENV_SELECT_SLOT_ID"></div>
+    <SearchSelect
+      v-model="searchValue"
+      class="min-w-[560px] bg-[#fff] relative z-[100]"
+      :data="searchData"
+      :placeholder="
+        createPlaceholder({
+          type: 'searchSelect',
+          labels: ['镜像 Tag', '操作人'],
+        })
+      "
+      unique-select
+      value-behavior="need-key"
+    />
+  </div>
   <Skeleton
     :full-height="false"
     :loading="isLoading"
   >
     <template #loading>
-      <div class="flex items-center justify-end mb-[12px]">
-        <Layout.shape :width="560" />
-      </div>
       <Layout.table />
     </template>
     <div class="bg-[#FFFFFF]">
-      <div class="flex justify-end mb-[16px]">
-        <SearchSelect
-          v-model="searchValue"
-          class="min-w-[560px] bg-[#fff] relative z-[100]"
-          :data="searchData"
-          :placeholder="
-            createPlaceholder({
-              type: 'searchSelect',
-              labels: ['镜像 Tag', '操作人'],
-            })
-          "
-          unique-select
-          value-behavior="need-key"
-        />
-      </div>
       <!-- 表格 -->
       <Table
         :data="tableData"
@@ -147,6 +145,7 @@
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
+  import { DEPLOY_ENV_SELECT_SLOT_ID } from './constants';
   import ResourceSnapshotSideslider from './resource-snapshot-sideslider.vue';
   import { type DeployableAppType, useDeployAPIs } from './use-deploy';
 

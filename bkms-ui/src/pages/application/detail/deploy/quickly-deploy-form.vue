@@ -80,11 +80,16 @@
         v-model.trim="formModel.imageTag"
       />
       <ImageSelect
-        v-else
+        v-else-if="envName"
         ref="imageSelectRef"
         v-model:value="formModel.imageTag"
         :env-name="envName"
         :env-type="envType"
+      />
+      <!-- 占位 -->
+      <Select
+        v-else
+        disabled
       />
     </Form.FormItem>
   </Form>
@@ -93,7 +98,7 @@
 <script lang="ts" setup>
   import { computed, reactive, ref } from 'vue';
 
-  import { Button, Form, Input } from 'bkui-vue';
+  import { Button, Form, Input, Select } from 'bkui-vue';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
   import { useAppDetail } from '~/stores/app-detail';
@@ -110,6 +115,8 @@
     envName?: string;
     envType?: string;
     isProdEnv?: boolean;
+    /** 总览入口强制使用显式传入的目标环境，防止未选中时误回退到 store 中的旧环境。 */
+    useProvidedEnv?: boolean;
   }>();
 
   const trpcDeployStore = useTrpcDeployStore();
@@ -130,9 +137,13 @@
     branch: '',
   });
 
-  // 环境名称：优先取 props，其次取 store 中当前选中环境
-  const envName = computed(() => props.envName || trpcDeployStore.curEnvItem?.name || '');
-  const envType = computed(() => props.envType || trpcDeployStore.curEnvItem?.type || '');
+  // 实例列表入口沿用 store 当前环境；总览入口只认侧栏选中的目标环境，即使暂时为空也不回退。
+  const envName = computed(() =>
+    props.useProvidedEnv ? (props.envName ?? '') : props.envName || trpcDeployStore.curEnvItem?.name || '',
+  );
+  const envType = computed(() =>
+    props.useProvidedEnv ? (props.envType ?? '') : props.envType || trpcDeployStore.curEnvItem?.type || '',
+  );
   // 是否为生产环境：props 优先，否则按 envType 判断
   const isProdEnv = computed(() => props.isProdEnv ?? envType.value === 'production');
 
@@ -178,7 +189,7 @@
     }
   }
 
-  // 切换镜像来源：源码模式自动填充默认分支并推荐 Tag，镜像模式则清空分支与 Tag
+  /** 切换镜像来源；源码模式补充分支和推荐 Tag，镜像模式清空源码相关字段。 */
   function handleChangeImageSource(source: ImageSourceType) {
     imageSource.value = source;
     if (source === 'code') {

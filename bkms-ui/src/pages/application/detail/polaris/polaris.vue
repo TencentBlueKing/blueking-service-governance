@@ -727,7 +727,11 @@
         menuName: 'deployment',
         type: appDetailStore.appType,
       },
-      query: envName ? { env: envName } : undefined,
+      query: {
+        activeTab: 'instance',
+        // envName 是部署页的一次性环境定位参数，消费后会从 URL 中移除
+        ...(envName ? { envName } : {}),
+      },
     });
     window.open(route.href, '_blank');
   }

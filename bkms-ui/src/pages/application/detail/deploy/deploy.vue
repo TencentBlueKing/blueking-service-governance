@@ -17,43 +17,63 @@
 -->
 
 <template>
-  <div class="flex flex-col h-full">
-    <!-- 自定义 Header -->
-    <div class="h-[52px] flex items-center justify-between px-[24px] bg-[#FFF] shadow-[0_3px_4px_0_#0000000a]">
-      <div class="text-[16px] text-[#313238]">{{ $t('部署管理') }}</div>
-      <Button
-        v-if="canManageFeatureEnvs"
-        class="feature-env-entry"
-        text
-        theme="primary"
-        @click="isShowFeatureEnvSideslider = true"
+  <div class="flex flex-col h-full overflow-hidden">
+    <TabHeader
+      v-model:active-tab="activeTab"
+      :tabs="tabList"
+      :title="$t('部署管理')"
+    >
+      <template #title-extra>
+        <Button
+          v-if="canManageFeatureEnvs"
+          class="feature-env-entry float-right"
+          text
+          theme="primary"
+          @click="isShowFeatureEnvSideslider = true"
+        >
+          <i18n-t keypath="应用关联的特性环境：{0} 个">
+            <span class="font-bold">{{ featureEnvCount || '--' }}&nbsp;</span>
+          </i18n-t>
+        </Button>
+      </template>
+    </TabHeader>
+
+    <!-- 与构建管理一致：内容区透出导航容器灰色底，仅 TabHeader 为白底 -->
+    <div class="flex flex-1 min-h-0 flex-col overflow-hidden">
+      <!-- 部署总览是跨环境视角，事件与部署历史只需要环境选择器，两者都不出现顶部栏；用 v-show 保留环境列表请求 -->
+      <FlexRow
+        v-show="isTopBarVisible"
+        class="mx-[24px] mt-[20px] mb-[16px] shrink-0 bg-[#EAEBF0] shadow-[0_2px_4px_0_#0000001a] px-[12px] py-[8px]"
       >
-        <i18n-t keypath="应用关联的特性环境：{0} 个">
-          <span class="font-bold">{{ featureEnvCount || '--' }}&nbsp;</span>
-        </i18n-t>
-      </Button>
-    </div>
-    <div class="flex-1 min-h-0 px-[24px] py-[20px] flex flex-col">
-      <FlexRow class="bg-[#EAEBF0] shadow-[0_2px_4px_0_#0000001a] px-[12px] py-[8px] mb-[16px]">
         <template #left>
           <div class="flex">
-            <EnvSelectPanel
-              :key="envSelectRefreshKey"
-              ref="envSelectPanelRef"
-              v-model="curEnv"
-              v-model:model-values="curEnvs"
-              class="mr-[16px]"
-              init-first-env-when-empty
-              :mode="envSelectMode"
-              multi-selectable
-              preserve-missing-model-value
-              @update:deploy-status-list="deployStatusList = $event"
-              @update:env-list="envList = $event"
-              @update:item="handleEnvChange"
-              @update:items="handleEnvsChange"
-              @update:loading="envListLoading = $event"
-              @update:mode="isMultiEnvMode = $event === 'multi'"
-            />
+            <!--
+              事件、部署历史把选择器挪进页面筛选行；Teleport 是移动同一个实例，不会重建导致环境列表重复请求。
+              Teleport 只在 to 变化时才重新解析目标节点，投放点又要等对应 Tab 渲染出来才存在，
+              所以停留在顶部栏时把 to 指向 body 占位，靠 to 的变化触发重新解析。
+            -->
+            <Teleport
+              :disabled="!isEnvSelectInline"
+              :to="isEnvSelectInline ? DEPLOY_ENV_SELECT_SLOT_SELECTOR : 'body'"
+            >
+              <EnvSelectPanel
+                :key="envSelectRefreshKey"
+                ref="envSelectPanelRef"
+                v-model="curEnv"
+                v-model:model-values="curEnvs"
+                class="mr-[16px]"
+                init-first-env-when-empty
+                :mode="envSelectMode"
+                :multi-selectable="isEnvMultiSelectable"
+                preserve-missing-model-value
+                @update:deploy-status-list="deployStatusList = $event"
+                @update:env-list="envList = $event"
+                @update:item="handleEnvChange"
+                @update:items="handleEnvsChange"
+                @update:loading="envListLoading = $event"
+                @update:mode="isMultiEnvMode = $event === 'multi'"
+              />
+            </Teleport>
             <!-- 部署状态 -->
             <KeyValueBadge
               v-if="isDeployStatusVisible && !isMultiEnvMode"
@@ -64,17 +84,17 @@
               <ColorIcon
                 class="ml-[8px] mr-[4px]"
                 :icon="curDeployStatus?.icon || ''"
+                :size="12"
               />
               <span class="leading-[20px] text-[#4D4F56]">{{ curDeployStatus?.text }}</span>
               <i
                 v-if="curDeployStatus?.isFailed && curDeployStatus?.message"
                 v-bk-tooltips="{
                   content: curDeployStatus?.message,
-                  theme: 'light',
+                  theme: 'dark',
                 }"
-                class="bkms-icon bkms-icon-circle-info text-[16px] text-[#C4C6CC] ml-[4px] cursor-pointer"
-              >
-              </i>
+                class="bkms-icon bkms-icon-circle-info ml-[4px] cursor-pointer text-[16px] text-[#C4C6CC]"
+              ></i>
             </KeyValueBadge>
           </div>
         </template>
@@ -121,8 +141,8 @@
       </FlexRow>
       <!-- 无可用环境空状态 -->
       <Exception
-        v-if="!hasAvailableEnv && !isEnvListLoading"
-        class="large-exception"
+        v-if="activeTab !== 'overview' && !hasAvailableEnv && !isEnvListLoading"
+        class="large-exception px-[24px] py-[20px]"
         scene="part"
         type="empty"
       >
@@ -144,20 +164,31 @@
           {{ $t('前往配置') }}
         </Button>
       </Exception>
-      <Tab
-        v-else
-        v-model:active="activeTab"
-        class="flex-1 overflow-hidden"
-        :label-height="40"
-        type="unborder-card"
+      <div
+        v-else-if="activeTab === 'topo'"
+        class="flex-1 min-h-0 px-[24px] pb-[20px]"
       >
-        <Tab.TabPanel
-          :name="TAB_NAMES.instance"
-          render-directive="if"
-        >
-          <template #label>
-            {{ $t('实例列表') }}
-          </template>
+        <ResourceTopology :env-name="curEnv" />
+      </div>
+      <div
+        v-else
+        :class="[
+          'flex-1 min-h-0 px-[24px] pb-[20px]',
+          isTopBarVisible ? '' : 'pt-[20px]',
+          // 部署总览：操作栏固定，仅表格区域滚动
+          activeTab === 'overview' ? 'flex flex-col overflow-hidden' : 'overflow-auto',
+        ]"
+      >
+        <DeployOverview
+          v-if="activeTab === 'overview'"
+          ref="deployOverviewRef"
+          :env-list="envList"
+          @deploy="handleOverviewDeploy"
+          @feature-deploy="handleShowFeatureDeploy"
+          @update:deploy-targets="handleOverviewDeployTargetsUpdate"
+          @view-instances="handleViewEnvInstances"
+        />
+        <template v-else-if="activeTab === 'instance'">
           <!-- 构建状态提示 -->
           <Alert
             v-if="isBuildAlertVisible"
@@ -255,50 +286,23 @@
                 class="mt-[8px]"
                 :label="$t('立即部署')"
                 :show-feature-deploy="canFeatureDeploy"
-                @deploy="isShowQuicklyDeploy = true"
+                @deploy="handleShowQuicklyDeploy"
                 @feature-deploy="handleShowFeatureDeploy"
               />
             </Exception>
           </Skeleton>
-        </Tab.TabPanel>
-        <Tab.TabPanel
-          v-if="!isMultiEnvMode"
-          :name="TAB_NAMES.topo"
-          render-directive="if"
-        >
-          <template #label>
-            {{ $t('资源拓扑') }}
-          </template>
-          <ResourceTopology :env-name="curEnv" />
-        </Tab.TabPanel>
-        <Tab.TabPanel
-          v-if="!isMultiEnvMode"
-          :name="TAB_NAMES.event"
-          render-directive="if"
-        >
-          <template #label>
-            {{ $t('事件') }}
-          </template>
-          <DeployEvent />
-        </Tab.TabPanel>
-        <Tab.TabPanel
-          v-if="!isMultiEnvMode"
-          :name="TAB_NAMES.history"
-          render-directive="if"
-        >
-          <template #label>
-            {{ $t('部署历史') }}
-          </template>
-          <DeployHistory />
-        </Tab.TabPanel>
-      </Tab>
+        </template>
+        <DeployEvent v-else-if="activeTab === 'event'" />
+        <DeployHistory v-else-if="activeTab === 'history'" />
+      </div>
     </div>
     <!-- 立即部署 -->
     <QuicklyDeploy
       v-model:is-show="isShowQuicklyDeploy"
       :effective-replicas="effectiveDeploySpec?.replicas"
       :is-prod-env="isProdEnv"
-      @update="handleGetLatestDeployStatus"
+      :target-envs="overviewDeployTargets"
+      @update="handleQuickDeploySuccess"
     />
     <!-- 移除部署 -->
     <RemoveDeploy
@@ -341,7 +345,7 @@
 <script lang="ts" setup>
   import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
-  import { Alert, Button, Exception, Popover, Tab } from 'bkui-vue';
+  import { Alert, Button, Exception, Popover } from 'bkui-vue';
   import { Close, Success, Warn } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -354,6 +358,7 @@
   import ColorIcon from '~/components/color-icon.vue';
   import FlexRow from '~/components/flex-row.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import TabHeader from '~/components/tab-header.vue';
   import { isAppModelAppType, isHelmLikeAppType } from '~/composables/app-type';
   import { useAlertVisibility } from '~/composables/use-alert-visibility';
   import { type DeployStatusInfo, useDeployStatusMap } from '~/composables/use-deploy-status';
@@ -367,6 +372,7 @@
 
   import KeyValueBadge from '../../components/key-value-badge.vue';
   import ResourceTopology from '../../components/topo/index.vue';
+  import { DEPLOY_ENV_SELECT_SLOT_SELECTOR } from './constants';
   import DeployActionButton from './deploy-action-button.vue';
   import DeployEvent from './deploy-event.vue';
   import DeployHistory from './deploy-history.vue';
@@ -376,11 +382,14 @@
   import InstanceList from './instance-list/instance-list.vue';
   import MultiEnvInstanceTable from './instance-list/multi-env-instance-table.vue';
   import ScaleInstance from './instance-list/scale-instance.vue';
+  import DeployOverview from './overview/deploy-overview.vue';
   import QuicklyDeploy from './quickly-deploy.vue';
   import RemoveDeploy from './remove-deploy.vue';
   import { DeployableAppType, useDeployAPIs } from './use-deploy';
 
+  import type { DeployOverviewDeployTarget } from './overview/use-deploy-overview';
   import type { AppDeployedEnvOutputObj } from '~/@types/v1/app';
+  import type { TabItem } from '~/components/tab-header.vue';
   import type {
     BuildAlertTheme,
     BuildInfo,
@@ -414,12 +423,14 @@
     () => envList.value.length > 0 && envList.value.some(env => env.status !== 'NotReady'),
   );
 
-  // 环境生效的部署规格
+  // 该规格只服务实例页的部署/扩缩容操作；总览使用聚合接口中的资源数据，不应触发此请求。
   const effectiveDeploySpec = ref<AppSpecResourcesOutput>();
+  /** 获取当前单环境生效的副本规格，并丢弃环境或 Tab 切换后的过期响应。 */
   async function fetchEffectiveDeploySpec() {
     const appID = appDetailStore.appID;
     const envName = curEnv.value;
     const curEnvItemName = trpcDeployStore.curEnvItem?.name;
+    if (activeTab.value === TAB_NAMES.overview) return;
     if (!appID || !envName || trpcDeployStore.curEnvItem?.status === 'NotReady') return;
     if (envName !== curEnvItemName) return;
     // 非 trpc/taf 类型应用不请求该接口
@@ -432,7 +443,12 @@
       { interceptorErr: false },
     ).catch(() => null);
     // 请求返回前应用/环境可能已切换或被销毁，过期结果不能覆盖新状态。
-    if (appID !== appDetailStore.appID || envName !== curEnv.value || envName !== trpcDeployStore.curEnvItem?.name) {
+    if (
+      activeTab.value === TAB_NAMES.overview ||
+      appID !== appDetailStore.appID ||
+      envName !== curEnv.value ||
+      envName !== trpcDeployStore.curEnvItem?.name
+    ) {
       return;
     }
     if (res) {
@@ -446,7 +462,7 @@
     set: val => envStore.updateCurrentEnv(val),
   });
 
-  // 获取路由参数
+  /** 读取字符串路由参数；数组参数取第一项，缺失时返回空字符串。 */
   function getRouteParam(name: string) {
     const value = route.params[name];
     return Array.isArray(value) ? value[0] : value || '';
@@ -464,10 +480,12 @@
     envSelectionScopeKey.value ? envStore.getAppEnvSelection(envSelectionScopeKey.value) : undefined,
   );
 
-  /**
-   * envName 仅用于跨页面跳转时的首次环境定位。
-   * 定位完成后移除该参数，避免它在后续返回页面时持续覆盖用户的环境选择。
-   */
+  const routeEnvName = computed(() => {
+    const envName = route.query.envName;
+    return Array.isArray(envName) ? envName[0] || '' : envName || '';
+  });
+
+  /** 环境选择恢复完成后移除一次性 envName query，避免它持续覆盖用户后续选择。 */
   function clearRouteEnvName() {
     if (!('envName' in route.query)) return;
     const { envName: _envName, ...query } = route.query;
@@ -500,13 +518,14 @@
   const isShowRemoveDeploy = ref(false);
   const isMultiEnvMode = ref(initialEnvSelection.value?.mode === 'multi');
 
-  // Tab 名称常量（模板与校验同源，多环境模式下仅展示实例列表）
   const TAB_NAMES = {
+    overview: 'overview',
     instance: 'instance',
     topo: 'topo',
     event: 'event',
     history: 'history',
   } as const;
+  const SINGLE_ENV_TABS: string[] = [TAB_NAMES.topo, TAB_NAMES.event, TAB_NAMES.history];
 
   // Tab 与 URL query（activeTab）双向同步锚定；多环境模式下固定为 instance
   // env 参数与当前环境双向同步（环境列表异步加载，不配置 allowed 直接透传；区别于一次性定位参数 envName）
@@ -515,10 +534,10 @@
       queryKey: 'activeTab',
       data: {
         allowed: Object.values(TAB_NAMES),
-        default: TAB_NAMES.instance,
+        default: TAB_NAMES.overview,
         // 多环境模式下固定为 instance；单环境分支的合法性与回退由 composable 的 allowed 校验处理
         override: valueFromQuery =>
-          isMultiEnvMode.value ? TAB_NAMES.instance : (valueFromQuery ?? TAB_NAMES.instance),
+          isMultiEnvMode.value ? TAB_NAMES.instance : (valueFromQuery ?? TAB_NAMES.overview),
       },
     },
     env: {
@@ -529,22 +548,56 @@
   const activeTab = fields.activeTab;
   const targetEnvName = fields.env;
 
+  const tabList = computed<TabItem[]>(() => [
+    { label: t('部署总览'), name: 'overview' },
+    { label: t('实例列表'), name: 'instance' },
+    { label: t('资源拓扑'), name: 'topo' },
+    { label: t('事件'), name: 'event' },
+    { label: t('部署历史'), name: 'history' },
+  ]);
+
+  /** 仅部署总览、实例列表支持多环境；其余 Tab 关闭多选入口 */
+  const isEnvMultiSelectable = computed(() => !SINGLE_ENV_TABS.includes(activeTab.value));
+
+  /** 这些 Tab 只需要环境选择器，选择器下沉到页面自己的筛选行 */
+  const INLINE_ENV_SELECT_TABS = ['event', 'history'];
+  const isTopBarVisible = computed(
+    () => activeTab.value !== 'overview' && !INLINE_ENV_SELECT_TABS.includes(activeTab.value),
+  );
+  const isEnvSelectInline = ref(false);
+
+  // 切 Tab 时投放点会随旧页面一起销毁，先把选择器收回顶部栏，等新页面挂载完再投放过去。
+  watch(
+    [activeTab, hasAvailableEnv, isEnvListLoading],
+    async () => {
+      isEnvSelectInline.value = false;
+      await nextTick();
+      isEnvSelectInline.value =
+        (hasAvailableEnv.value || isEnvListLoading.value) && INLINE_ENV_SELECT_TABS.includes(activeTab.value);
+    },
+    { immediate: true },
+  );
+
   const isRestoringEnvSelection = ref(false);
   const envSelectMode = computed(() => (isMultiEnvMode.value ? 'multi' : 'single'));
 
+  /** 按应用恢复缓存的单/多环境选择，并让 URL 指定环境拥有最高优先级。 */
   function restoreAppEnvSelection() {
-    if (!envSelectionScopeKey.value) return;
+    if (!envSelectionScopeKey.value) {
+      nextTick(clearRouteEnvName);
+      return;
+    }
     isRestoringEnvSelection.value = true;
     const selection = envStore.getAppEnvSelection(envSelectionScopeKey.value);
-    const routeEnvName = targetEnvName.value;
-    const selectedEnvs = routeEnvName ? [routeEnvName] : [...(selection?.selectedEnvs || [])];
+    const targetName = routeEnvName.value || targetEnvName.value;
+    const selectedEnvs = targetName ? [targetName] : [...(selection?.selectedEnvs || [])];
     curEnvs.value = selectedEnvs;
-    isMultiEnvMode.value = routeEnvName ? false : selection?.mode === 'multi';
+    isMultiEnvMode.value = targetName ? false : selection?.mode === 'multi';
     if (!isMultiEnvMode.value) {
       envStore.updateCurrentEnv(selectedEnvs[0] || '');
     }
     envStore.updateSelectedEnvs(curEnvs.value);
-    if (routeEnvName) {
+    if (targetName) {
       // 先将路由指定环境写入缓存，再清理 URL；新标签页首次加载和后续手动选择均可正确恢复。
       envStore.updateAppEnvSelection(envSelectionScopeKey.value, {
         mode: 'single',
@@ -553,18 +606,9 @@
     }
     nextTick(() => {
       isRestoringEnvSelection.value = false;
-      if (routeEnvName) {
-        clearRouteEnvName();
-      }
+      clearRouteEnvName();
     });
   }
-
-  // 多环境模式下仅展示实例列表，URL 通过 activeTab setter 同步重置为 instance
-  watch(isMultiEnvMode, val => {
-    if (val && activeTab.value !== TAB_NAMES.instance) {
-      activeTab.value = TAB_NAMES.instance;
-    }
-  });
 
   // 同步环境列表到 store
   watch(
@@ -577,7 +621,7 @@
 
   // 同步多选环境到 store
   watch(
-    [envSelectionScopeKey, targetEnvName],
+    [envSelectionScopeKey, routeEnvName, targetEnvName],
     () => {
       restoreAppEnvSelection();
     },
@@ -694,9 +738,11 @@
     alwaysShowKeys: [APP_BUILD_STATUS.FAILED, ...BUILD_INTERRUPT_STATUSES],
   });
 
+  /** 获取当前环境最近一次部署状态，供实例页状态提示及轮询刷新使用。 */
   async function handleGetLatestDeployStatus() {
     const appID = appDetailStore.appID;
     const envName = trpcDeployStore.curEnvItem?.name;
+    if (activeTab.value === TAB_NAMES.overview) return;
     if (!appID || !envName) return;
     try {
       const prevDeployStatus = latestDeployStatus.value?.status;
@@ -711,7 +757,13 @@
         { interceptorErr: false },
       );
       // 切换应用/环境期间可能存在未完成请求，过期响应直接丢弃。
-      if (appID !== appDetailStore.appID || envName !== trpcDeployStore.curEnvItem?.name) return;
+      if (
+        activeTab.value === TAB_NAMES.overview ||
+        appID !== appDetailStore.appID ||
+        envName !== trpcDeployStore.curEnvItem?.name
+      ) {
+        return;
+      }
       const nextLatestDeployStatus = res as unknown as LatestDeployStatus;
       latestDeployStatus.value = nextLatestDeployStatus;
       if (prevDeployStatus && prevDeployStatus !== nextLatestDeployStatus.status) {
@@ -728,7 +780,7 @@
       }
     }
   }
-  // 打开构建日志侧滑
+  /** 打开最近一次源码构建对应的日志侧栏。 */
   function handleGotoPipeline() {
     showBuildLog.value = true;
   }
@@ -738,30 +790,83 @@
    */
   const { start, stop, timer } = useInterval(handleGetLatestDeployStatus, 5000); // 轮询
 
-  /** 需要环境select有值后才能获取到数据 */
+  /** 同步单环境选择到页面状态和部署 Store，并触发当前环境数据重新加载。 */
   function handleEnvChange(env?: EnvOutput) {
     curEnvs.value = env?.name ? [env.name] : [];
     trpcDeployStore.updateCurEnvItem(env);
     latestDeployStatus.value = null;
     initLoading.value = true;
-    // 单选模式下同步环境锚定到 URL
     if (!isMultiEnvMode.value && env?.name) {
       targetEnvName.value = env.name;
     }
   }
 
-  /** 多选环境变化 */
+  /** 将多选环境名称同步到共享 Store，供多环境实例表格请求数据。 */
   function handleEnvsChange(items: EnvOutput[]) {
     // 同步多选环境到 store
     envStore.updateSelectedEnvs(items.map(item => item?.name ?? ''));
   }
 
-  // 全量更新
+  const deployOverviewRef = ref<InstanceType<typeof DeployOverview>>();
+  // undefined 表示从实例列表打开；数组（包括空数组）表示从总览打开并启用目标环境选择器。
+  const overviewDeployTargets = ref<DeployOverviewDeployTarget[] | undefined>();
+
+  /** 从总览打开复用的 QuicklyDeploy，并把当前可部署环境作为目标选项传入。 */
+  function handleOverviewDeploy(targets: DeployOverviewDeployTarget[]) {
+    overviewDeployTargets.value = targets;
+    isShowQuicklyDeploy.value = true;
+  }
+
+  /** 环境列表可能在侧栏打开后才返回，仅在总览模式下持续更新侧栏选项。 */
+  function handleOverviewDeployTargetsUpdate(targets: DeployOverviewDeployTarget[]) {
+    if (overviewDeployTargets.value !== undefined) {
+      overviewDeployTargets.value = targets;
+    }
+  }
+
+  /** 部署成功后按入口刷新：总览刷新聚合数据，实例页刷新当前环境部署状态。 */
+  async function handleQuickDeploySuccess() {
+    if (overviewDeployTargets.value !== undefined) {
+      await Promise.all([envSelectPanelRef.value?.refreshDeployStatuses?.(), deployOverviewRef.value?.load()]);
+      fetchFeatureEnvList();
+      return;
+    }
+    await handleGetLatestDeployStatus();
+  }
+
+  /** 从实例列表打开快速部署，并关闭总览入口专用的目标环境选择模式。 */
+  function handleShowQuicklyDeploy() {
+    // 清空总览目标是入口标记，保证实例列表仍读取当前环境，不显示目标环境选择器。
+    overviewDeployTargets.value = undefined;
+    isShowQuicklyDeploy.value = true;
+  }
+
+  /** 总览下钻：切到实例列表并把选中环境切成该环境 */
+  function handleViewEnvInstances(envName: string) {
+    const env = envList.value.find(item => item.name === envName);
+    if (!env) return;
+    isMultiEnvMode.value = false;
+    curEnvs.value = [envName];
+    envStore.updateCurrentEnv(envName);
+    trpcDeployStore.updateCurEnvItem(env);
+    latestDeployStatus.value = null;
+    initLoading.value = true;
+    // activeTab 与 env 必须原子写入；连续修改两个 URL computed 会基于同一份旧 query 相互覆盖。
+    router.replace({
+      query: {
+        ...route.query,
+        activeTab: TAB_NAMES.instance,
+        env: envName,
+      },
+    });
+  }
+
   const showFullUpdateDialog = ref(false);
+  /** 打开当前环境的全量更新侧栏。 */
   function handleShowFullUpdateDialog() {
     showFullUpdateDialog.value = true;
   }
-  // 全量更新成功；源码构建场景需要保留侧滑以继续展示实时日志。
+  /** 全量更新成功后按构建模式决定是否关闭侧栏；源码构建需保留侧栏展示实时日志。 */
   function handleUpdateDeploySuccess(keepOpen: boolean) {
     if (!keepOpen) {
       showFullUpdateDialog.value = false;
@@ -775,7 +880,7 @@
   const featureEnvError = ref(false);
   const featureEnvCount = computed(() => featureEnvList.value.length);
 
-  // 获取特性环境列表
+  /** 获取应用关联的特性环境，并防止应用切换后的迟到响应污染新应用。 */
   async function fetchFeatureEnvList() {
     const appID = appDetailStore.appID;
     const requestCanManageFeatureEnvs = canManageFeatureEnvs.value;
@@ -808,6 +913,7 @@
     }
   }
 
+  /** 特性环境删除后选择回退环境：优先来源环境，其次任一可用标准环境。 */
   function getFeatureEnvDeleteFallbackEnv(payload: DeletedFeatureEnvPayload) {
     // 销毁当前特性环境后优先切回来源环境；来源不可用时再退到其它可用环境。
     const sourceEnv = payload.sourceEnvName
@@ -818,16 +924,19 @@
     return envList.value.find(env => env.name !== payload.envName && env.status !== 'NotReady');
   }
 
+  /** 特性部署成功后切换到新环境的实例列表，并刷新总览及特性环境数量。 */
   function handleFeatureDeploySuccess(env?: EnvOutput) {
     if (env?.name) {
       envSelectRefreshKey.value += 1;
       envStore.updateCurrentEnv(env.name);
       trpcDeployStore.updateCurEnvItem(env);
-      activeTab.value = TAB_NAMES.instance;
+      activeTab.value = 'instance';
     }
+    deployOverviewRef.value?.load();
     fetchFeatureEnvList();
   }
 
+  /** 删除特性环境后修正单/多选环境状态，避免后续继续请求已销毁环境。 */
   function handleFeatureEnvDeleted(payload: DeletedFeatureEnvPayload) {
     const fallbackEnv = getFeatureEnvDeleteFallbackEnv(payload);
     // 多环境选择中移除已销毁环境，并补入兜底环境，避免实例面板继续请求已删除环境。
@@ -847,7 +956,7 @@
       stop();
       latestDeployStatus.value = null;
       effectiveDeploySpec.value = undefined;
-      activeTab.value = TAB_NAMES.instance;
+      activeTab.value = 'instance';
 
       if (fallbackEnv?.name) {
         initLoading.value = true;
@@ -863,18 +972,22 @@
     refreshFeatureEnvData();
   }
 
+  /** 权限与应用类型允许时打开复用的特性部署侧栏。 */
   function handleShowFeatureDeploy() {
     if (!canFeatureDeploy.value) return;
     isShowFeatureDeploy.value = true;
   }
 
+  /** 重新创建环境选择器并刷新总览、特性环境列表，确保三处数据一致。 */
   function refreshFeatureEnvData() {
     envSelectRefreshKey.value += 1;
+    deployOverviewRef.value?.load();
     fetchFeatureEnvList();
   }
 
   // 移除部署
   const morePopoverRef = ref<InstanceType<typeof Popover> | null>(null);
+  /** 打开移除部署确认；表格行入口会先将目标环境同步为当前环境。 */
   function handleRemoveDeploy(env?: EnvOutput) {
     morePopoverRef.value?.hide();
     if (env) {
@@ -882,6 +995,7 @@
     }
     isShowRemoveDeploy.value = true;
   }
+  /** 移除部署成功后更新当前状态，并刷新环境状态、总览和轮询。 */
   async function handleRemoveDeploySuccess() {
     latestDeployStatus.value = {
       ...(latestDeployStatus.value || {}),
@@ -891,12 +1005,14 @@
     };
     initLoading.value = false;
     await envSelectPanelRef.value?.refreshDeployStatuses?.();
+    deployOverviewRef.value?.load();
     fetchFeatureEnvList();
     stop();
     start();
   }
 
   // 切换空间停止轮询并重置状态
+  // 实例相关请求统一由“应用 + 当前环境 + Tab”驱动；总览不依赖单环境数据，进入后立即停止轮询。
   watch(
     () => spaceStore.currentSpace,
     (newSpace, oldSpace) => {
@@ -909,11 +1025,18 @@
   );
 
   watch(
-    [() => appDetailStore.appID, () => trpcDeployStore.curEnvItem?.name],
+    [() => appDetailStore.appID, () => trpcDeployStore.curEnvItem?.name, activeTab],
     async () => {
       latestDeployStatus.value = null;
+      if (activeTab.value === TAB_NAMES.overview) {
+        effectiveDeploySpec.value = undefined;
+        initLoading.value = false;
+        stop();
+        return;
+      }
       await handleGetLatestDeployStatus();
       await fetchEffectiveDeploySpec();
+      if (activeTab.value === TAB_NAMES.overview) return;
       // 当前环境被销毁并清空时，不重新开启一个只会空转的轮询。
       if (appDetailStore.appID && trpcDeployStore.curEnvItem?.name && !timer.value) {
         start();
@@ -936,24 +1059,3 @@
     stop();
   });
 </script>
-
-<style lang="postcss" scoped>
-  :deep(.bk-tab-header) {
-    background-color: #fff;
-    padding: 0 24px;
-  }
-  :deep(.bk-tab-header-nav .bk-tab-header-item) {
-    padding: 0 !important;
-    margin-right: 32px !important;
-    font-size: 14px;
-  }
-  :deep(.bk-tab-content) {
-    background-color: #fff;
-    height: 100%;
-    min-height: 0;
-    overflow: auto;
-    &:has(.custom-resource-topology) {
-      padding: 0 !important;
-    }
-  }
-</style>

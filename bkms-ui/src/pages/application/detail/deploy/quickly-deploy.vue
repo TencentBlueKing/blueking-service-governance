@@ -28,18 +28,49 @@
         <span v-if="appDetailStore.app">
           {{ appDetailStore.app }}
         </span>
-        <span v-if="trpcDeployStore.curEnvItem?.name">
-          {{ `${$t('环境')}: ${trpcDeployStore.curEnvItem.displayName}` }}
+        <span v-if="targetEnv?.name">
+          {{ `${$t('环境')}: ${targetEnv.displayName || targetEnv.name}` }}
         </span>
       </DividerHeader>
     </template>
-    <QuicklyDeployForm
-      ref="deployFormRef"
+    <Form
+      v-if="hasTargetSelector"
+      ref="targetEnvFormRef"
       class="px-[24px] pt-[18px]"
-      :effective-replicas="effectiveReplicas"
-      :env-name="trpcDeployStore.curEnvItem?.name"
-      :env-type="trpcDeployStore.curEnvItem?.type"
-      :is-prod-env="isProdEnv"
+      form-type="vertical"
+      :model="targetFormModel"
+      :rules="targetFormRules"
+    >
+      <!-- 目标环境 -->
+      <Form.FormItem
+        :label="$t('环境')"
+        property="envName"
+        required
+      >
+        <Select
+          v-model="targetFormModel.envName"
+          :clearable="false"
+          filterable
+          :placeholder="$t('请选择')"
+        >
+          <Select.Option
+            v-for="item in targetEnvs"
+            :id="item.env.name || ''"
+            :key="item.env.name"
+            :name="item.env.displayName || item.env.name"
+          />
+        </Select>
+      </Form.FormItem>
+    </Form>
+    <QuicklyDeployForm
+      :key="targetEnv?.name || '__pending__'"
+      ref="deployFormRef"
+      :class="['px-[24px]', hasTargetSelector ? 'pt-0' : 'pt-[18px]']"
+      :effective-replicas="targetEffectiveReplicas"
+      :env-name="targetEnv?.name"
+      :env-type="targetEnv?.type"
+      :is-prod-env="targetIsProdEnv"
+      :use-provided-env="hasTargetSelector"
     />
     <template #footer>
       <Button
@@ -61,20 +92,29 @@
 </template>
 
 <script lang="ts" setup>
-  import { nextTick, ref, watch } from 'vue';
+  import { computed, nextTick, reactive, ref, watch } from 'vue';
 
-  import { Button, Message, Sideslider } from 'bkui-vue';
+  import { Button, Form, Message, Select, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
   import QuicklyDeployForm from './quickly-deploy-form.vue';
 
+  import type { EnvOutput } from '~/@types/v1/env';
+
   const isShow = defineModel<boolean>('isShow');
-  const emits = defineEmits(['update']);
+  const emits = defineEmits<{
+    update: [envName?: string];
+  }>();
   const props = defineProps<{
     effectiveReplicas?: number;
     isProdEnv?: boolean;
+    /** 传入时启用总览入口的目标环境选择；不传则保持实例列表入口的原有行为。 */
+    targetEnvs?: Array<{
+      effectiveReplicas?: number;
+      env: EnvOutput;
+    }>;
   }>();
 
   const { t } = useI18n();
@@ -82,25 +122,59 @@
   const appDetailStore = useAppDetail();
 
   const deployFormRef = ref<InstanceType<typeof QuicklyDeployForm>>();
+  const targetEnvFormRef = ref();
   const confirmLoading = ref(false);
+  const targetFormModel = reactive({ envName: '' });
+  const targetFormRules = {
+    envName: [{ required: true, message: t('请选择目标环境'), trigger: 'change' }],
+  };
+  // 用 undefined 区分入口：空数组仍代表总览模式，只是环境列表尚未返回或当前没有可部署环境。
+  const hasTargetSelector = computed(() => props.targetEnvs !== undefined);
+  const selectedTarget = computed(() => props.targetEnvs?.find(item => item.env.name === targetFormModel.envName));
+  const targetEnv = computed(() => (hasTargetSelector.value ? selectedTarget.value?.env : trpcDeployStore.curEnvItem));
+  const targetEffectiveReplicas = computed(() =>
+    hasTargetSelector.value ? selectedTarget.value?.effectiveReplicas : props.effectiveReplicas,
+  );
+  const targetIsProdEnv = computed(() =>
+    hasTargetSelector.value ? targetEnv.value?.type === 'production' : props.isProdEnv,
+  );
 
+  /** 获取总览入口默认选中的第一个可部署环境；列表尚未返回时为空。 */
+  function getDefaultTargetEnvName() {
+    return props.targetEnvs?.[0]?.env.name || '';
+  }
+
+  /** 规范化目标环境的初始副本数，无有效正整数时统一使用 1。 */
+  function getInitialReplicas(replicas?: number) {
+    return Number.isInteger(replicas) && Number(replicas) > 0 ? Number(replicas) : 1;
+  }
+
+  /** 关闭侧栏前复用部署表单的离开确认，避免丢失用户已填写的内容。 */
   function handleBeforeClose() {
     return deployFormRef.value?.confirmLeave() ?? Promise.resolve(true);
   }
 
+  /** 用户点击取消时先执行离开确认，确认后再关闭侧栏。 */
   async function handleClose() {
     if (await handleBeforeClose()) {
       isShow.value = false;
     }
   }
 
+  /** 侧栏关闭动画结束后清理环境和部署表单，为下次打开恢复初始状态。 */
   function handleClosed() {
     deployFormRef.value?.reset(1);
+    targetFormModel.envName = '';
   }
 
+  /** 校验目标环境与部署表单，提交成功后关闭侧栏并通知父组件刷新对应入口的数据。 */
   async function handleSubmit() {
     try {
-      const envName = trpcDeployStore.curEnvItem?.name;
+      if (hasTargetSelector.value) {
+        const valid = await targetEnvFormRef.value?.validate?.().catch(() => false);
+        if (!valid) return;
+      }
+      const envName = targetEnv.value?.name;
       if (!envName) return;
 
       confirmLoading.value = true;
@@ -113,7 +187,7 @@
       });
       deployFormRef.value?.reset(1);
       isShow.value = false;
-      emits('update');
+      emits('update', envName);
     } catch (err) {
       console.error(err);
     } finally {
@@ -121,12 +195,37 @@
     }
   }
 
-  // 从 props 获取环境生效的部署规格
+  // 每次打开默认选择第一项，并按目标环境的期望实例数初始化同一个部署表单。
   watch(isShow, newVal => {
     if (newVal) {
+      if (hasTargetSelector.value) {
+        targetFormModel.envName = getDefaultTargetEnvName();
+      }
       nextTick(() => {
-        deployFormRef.value?.reset(props.effectiveReplicas || 1);
+        targetEnvFormRef.value?.clearValidate?.();
+        deployFormRef.value?.reset(getInitialReplicas(targetEffectiveReplicas.value));
       });
     }
   });
+
+  // 总览与环境列表是异步请求；侧栏先打开时，列表到达后自动补选第一项。
+  watch(
+    () => props.targetEnvs,
+    targets => {
+      if (!isShow.value || !hasTargetSelector.value) return;
+      const currentTargetExists = targets?.some(item => item.env.name === targetFormModel.envName);
+      if (currentTargetExists) return;
+      targetFormModel.envName = targets?.[0]?.env.name || '';
+      nextTick(() => targetEnvFormRef.value?.clearValidate?.());
+    },
+    { deep: true },
+  );
+
+  // 切换目标环境必须清空镜像、分支等内容，避免把上一环境的配置提交到新环境。
+  watch(
+    () => targetFormModel.envName,
+    () => {
+      nextTick(() => deployFormRef.value?.reset(getInitialReplicas(targetEffectiveReplicas.value)));
+    },
+  );
 </script>

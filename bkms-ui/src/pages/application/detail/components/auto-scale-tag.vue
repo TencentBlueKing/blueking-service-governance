@@ -91,6 +91,8 @@
 
   const isError = computed(() => {
     if (!props.enabled) return false;
+    // CR 尚未下发或本次集群状态查询不可用时没有 phase，不能直接判定为异常。
+    if (!normalizedPhase.value) return false;
     return !normalPhases.has(normalizedPhase.value);
   });
 

@@ -24,7 +24,7 @@
       theme="primary"
       @click="emits('deploy')"
     >
-      {{ label }}
+      <slot name="label">{{ label }}</slot>
     </Button>
     <Dropdown
       v-if="showFeatureDeploy"

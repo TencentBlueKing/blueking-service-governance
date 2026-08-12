@@ -17,17 +17,9 @@
 -->
 
 <template>
-  <Skeleton
-    :full-height="false"
-    :loading="isLoading"
-  >
-    <template #loading>
-      <div class="flex items-center justify-end mb-[12px]">
-        <Layout.shape :width="560" />
-      </div>
-      <Layout.table />
-    </template>
-    <div class="flex justify-end items-center gap-[12px] mb-[16px]">
+  <div class="flex items-center justify-between gap-[12px] mb-[16px]">
+    <div :id="DEPLOY_ENV_SELECT_SLOT_ID"></div>
+    <div class="flex items-center gap-[12px]">
       <DatePicker
         v-model="dateRange"
         class="w-[300px]"
@@ -50,6 +42,14 @@
         value-behavior="need-key"
       />
     </div>
+  </div>
+  <Skeleton
+    :full-height="false"
+    :loading="isLoading"
+  >
+    <template #loading>
+      <Layout.table />
+    </template>
     <Table
       v-bkloading="{ loading: isLoading }"
       :data="tableData"
@@ -144,6 +144,8 @@
   import useTime from '~/composables/use-time';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
+
+  import { DEPLOY_ENV_SELECT_SLOT_ID } from './constants';
 
   const { t } = useI18n();
   const { createPlaceholder } = useSearchPlaceholder();

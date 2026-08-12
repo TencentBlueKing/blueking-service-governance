@@ -1891,3 +1891,15 @@ CPU Limits 利用率: CPU Limits Utilization
 "已选 {n} 个告警组": "Selected {n} alert group(s)"
 请输入阈值: Please enter the threshold
 请选择告警组: Please select an alert group
+"{0} 核 / {1}": "{0} Cores / {1}"
+"CPU：Requests {0} 核 / Limits {1} 核": "CPU: Requests {0} Cores / Limits {1} Cores"
+"内存：Requests {0} / Limits {1}": "Memory: Requests {0} / Limits {1}"
+"{0} {1} 使用率：{2}%": "{0} {1} Utilization: {2}%"
+"实例数区间：{0} ~ {1} 个": "Instance Range: {0} - {1}"
+实例数（运行/期望/异常）: Instances (Running/Desired/Abnormal)
+新增部署: New Deployment
+最近部署: Latest Deployment
+特性: Feature
+自动扩缩容已关闭: Autoscaling Disabled
+请选择目标环境: Please select a target environment
+部署总览: Deployment Overview
