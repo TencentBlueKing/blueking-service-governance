@@ -61,6 +61,9 @@ func New(registry *storereg.Registry) *Handler {
 // 分页时当前页解析失败整次 500（与改造前一致，供 CLI）；count 为 LabelSelector 匹配 Pod 总数
 // 北极星拉取失败不阻塞 Pod 输出，降级为空 polarisInfos，与未注册北极星同形
 //
+// 可选查询参数 all=true 表示一次返回全量实例投影；与 page/pageSize 同时出现时语义上忽略分页
+// 全量拉取业务逻辑由后续需求实现；当前即便传入 all 仍按分页返回
+//
 //	@ID			ListAppInstances
 //	@Summary	获取应用实例列表
 //	@Description	北极星拉取失败不阻塞 Pod 输出：polarisInfos 为空数组，与未注册北极星同形，其余字段照常返回。
