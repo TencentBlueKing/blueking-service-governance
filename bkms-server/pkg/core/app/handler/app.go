@@ -407,6 +407,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+	operator := auth.MustGetUser(ctx).ID
 
 	// 检查是否存在活跃的部署
 	if bkmsapp.IsAppModelType(app.Type) {
@@ -462,6 +463,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete app"))
 		return
 	}
+	h.cleanupAlertStrategiesAsync(ctx, app, operator)
 
 	// 添加操作审计
 	go audit.AddOperationRecordAsync(
@@ -705,6 +707,32 @@ func (h *Handler) cleanupAppResources(ctx context.Context, appID string) error {
 	}
 
 	return nil
+}
+
+// cleanupAlertStrategiesAsync 异步清理已删除应用关联的全部告警策略。
+func (h *Handler) cleanupAlertStrategiesAsync(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	operator string,
+) {
+	go func() {
+		bgCtx := context.WithoutCancel(ctx)
+		ws, err := h.registry.WorkspaceStore.Get(bgCtx, app.WorkspaceID)
+		if err != nil {
+			log.Errorf(bgCtx, "get workspace %s for app %s alert cleanup failed: %v", app.WorkspaceID, app.ID, err)
+			return
+		}
+
+		err = alertstrategy.NewService(
+			h.registry.AlertStrategyStore,
+			h.registry.EnvStore,
+			h.registry.AppStore,
+			h.registry.ResourceSnapshotStore,
+		).DeleteByApp(bgCtx, ws, app.WorkspaceID, app.ID, operator)
+		if err != nil {
+			log.Errorf(bgCtx, "cleanup alert strategies for deleted app %s failed: %v", app.ID, err)
+		}
+	}()
 }
 
 func (h *Handler) convertAppComponentsForOutput(

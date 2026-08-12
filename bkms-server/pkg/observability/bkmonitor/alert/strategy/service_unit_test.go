@@ -523,14 +523,6 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 
 			Expect(name).To(Equal("CPU Limit【Order_Svc】"))
 		})
-
-		It("includes traffic lane in remote strategy item name", func() {
-			name := buildRemoteStrategyItemName(&AlertStrategy{
-				StrategyCode: "cpu_limit_usage_high",
-			}, envmodel.Environment{Name: "Prod Env"}, "feature-a")
-
-			Expect(name).To(Equal("cpu_limit_usage_high-Prod Env-feature-a"))
-		})
 	})
 
 	Describe("CleanupStrategiesForAppInEnv", func() {

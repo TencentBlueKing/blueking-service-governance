@@ -29,7 +29,7 @@ var _ = Describe("Application default resolution", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		bkmsworkspace.ResetLifecycleHooksForTest()
-		bkmsenv.ResetDeleteHooksForTest()
+		bkmsenv.ResetHooksForTest()
 
 		diApp = fxtest.New(
 			GinkgoT(),
@@ -47,7 +47,7 @@ var _ = Describe("Application default resolution", func() {
 		Expect(envStore.DeleteAll(ctx)).To(Succeed())
 		Expect(workspaceStore.Delete(ctx, workspace.ID)).To(Succeed())
 		bkmsworkspace.ResetLifecycleHooksForTest()
-		bkmsenv.ResetDeleteHooksForTest()
+		bkmsenv.ResetHooksForTest()
 		diApp.RequireStop()
 	})
 

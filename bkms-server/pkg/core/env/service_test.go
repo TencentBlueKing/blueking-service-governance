@@ -55,8 +55,7 @@ var _ = Describe("Test EnvService", func() {
 
 	AfterEach(func() {
 		Expect(envStore.DeleteAll(ctx)).NotTo(HaveOccurred())
-		ResetDeleteHooksForTest()
-		ResetUpdateHooksForTest()
+		ResetHooksForTest()
 		diApp.RequireStop()
 	})
 
@@ -136,6 +135,27 @@ var _ = Describe("Test EnvService", func() {
 			})
 			Expect(updateErr).NotTo(HaveOccurred())
 			Eventually(hookCalled).Should(Receive())
+		})
+
+		It("resets delete and update hooks together", func() {
+			Expect(RegisterDeleteHook("test.delete_env", func(context.Context, model.Environment) error {
+				return nil
+			})).To(BeTrue())
+			Expect(RegisterUpdateHook("test.update_env", func(
+				context.Context,
+				model.Environment,
+				model.Environment,
+			) error {
+				return nil
+			})).To(BeTrue())
+
+			Expect(IsDeleteHookRegistered("test.delete_env")).To(BeTrue())
+			Expect(IsUpdateHookRegistered("test.update_env")).To(BeTrue())
+
+			ResetHooksForTest()
+
+			Expect(IsDeleteHookRegistered("test.delete_env")).To(BeFalse())
+			Expect(IsUpdateHookRegistered("test.update_env")).To(BeFalse())
 		})
 	})
 })

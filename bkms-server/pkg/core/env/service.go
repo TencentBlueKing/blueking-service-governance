@@ -87,6 +87,7 @@ func (s *EnvService) Update(
 		return errors.Wrap(err, "get updated environment")
 	}
 
+	// Update hooks 采用异步后置通知语义：环境更新成功后再触发，失败仅记录日志，不回滚主流程。
 	go func(before, after model.Environment) {
 		if hookErr := runUpdateHooks(context.WithoutCancel(ctx), before, after); hookErr != nil {
 			log.Errorf(

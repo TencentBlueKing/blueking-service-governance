@@ -23,15 +23,30 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
+	distlock "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+)
+
+const (
+	// defaultAlertUserGroupLockTimeoutSeconds 控制“确保默认告警组存在”这段临界区的锁 TTL。
+	// 这里只覆盖查组/建组短流程，不包含后续默认策略初始化，因此超时保持较小即可。
+	defaultAlertUserGroupLockTimeoutSeconds = 5
+)
+
+var (
+	// defaultAlertUserGroupLockRetryInterval 是抢锁失败后的重试间隔。
+	defaultAlertUserGroupLockRetryInterval = 100 * time.Millisecond
+	// defaultAlertUserGroupLockWaitTimeout 限制等待 workspace 锁的最长时间，避免在无取消上下文下无限轮询。
+	defaultAlertUserGroupLockWaitTimeout = 10 * time.Second
 )
 
 type defaultAlertRoleManager interface {
@@ -42,6 +57,12 @@ type defaultAlertRoleManager interface {
 // buildDefaultAlertUserGroupName 默认告警组命名
 func buildDefaultAlertUserGroupName(workspaceID string) string {
 	return fmt.Sprintf("【BKMS】%s 默认告警组", workspaceID)
+}
+
+// buildDefaultAlertUserGroupLockKey 返回 workspace 维度的默认告警组分布式锁 key。
+// 同一工作空间下默认告警组的“查名 -> 创建”需要串行化，不同工作空间之间则允许并行。
+func buildDefaultAlertUserGroupLockKey(workspaceID string) string {
+	return fmt.Sprintf("lock:bkmonitor-default-alert-group:%s", workspaceID)
 }
 
 // ResolveDefaultAlertNoticeGroupIDs 解析工作空间默认告警通知用户组 ID。
@@ -55,12 +76,63 @@ func ResolveDefaultAlertNoticeGroupIDs(
 	if ws == nil {
 		return nil, errors.New("workspace is nil")
 	}
-	// 默认告警组命名
 	groupName := buildDefaultAlertUserGroupName(ws.ID)
-	// 优先复用已存在的默认告警组，避免重复创建。
+
+	// 1. 快路径：无锁复用已存在的默认组。
+	//    大多数场景下默认组早已创建完成，这里直接返回，避免为常见读路径引入锁开销。
 	group, err := groupSvc.FindByName(ctx, ws, groupName, operator)
 	if err != nil {
 		return nil, errors.Wrap(err, "find default bkmonitor user group by name")
+	}
+	if group != nil {
+		return []int64{group.ID}, nil
+	}
+
+	// 2. 仅在“确认默认组不存在”时才竞争 workspace 维度分布式锁。
+	//    锁只保护默认组存在性收敛（查组/建组），不覆盖后续默认策略初始化，避免临界区过大。
+	groupLock := distlock.NewRedisLock(
+		buildDefaultAlertUserGroupLockKey(ws.ID),
+		defaultAlertUserGroupLockTimeoutSeconds,
+	)
+	waitCtx, cancel := context.WithTimeout(ctx, defaultAlertUserGroupLockWaitTimeout)
+	defer cancel()
+	for {
+		if groupLock.Acquire(waitCtx) {
+			defer groupLock.Release(waitCtx)
+			// 3. 拿到锁后做二次检查，防止在抢锁期间其他请求已经完成建组。
+			return createDefaultAlertGroupIfMissing(waitCtx, ws, groupSvc, permMgr, operator, groupName)
+		}
+
+		// 4. 未抢到锁时，不直接报错，也不盲目继续创建。
+		//    先等待一个短周期，让持锁方完成建组；若上下文超时/取消，则终止等待。
+		select {
+		case <-waitCtx.Done():
+			return nil, errors.Wrap(waitCtx.Err(), "wait default alert user group lock")
+		case <-time.After(defaultAlertUserGroupLockRetryInterval):
+		}
+
+		// 5. 等待后先复查默认组是否已出现；若仍不存在，则继续下一轮抢锁。
+		//    这样可以在“别的并发请求刚创建完成”时尽快复用，避免重复建组。
+		group, err = groupSvc.FindByName(waitCtx, ws, groupName, operator)
+		if err != nil {
+			return nil, errors.Wrap(err, "find default bkmonitor user group by name after lock contention")
+		}
+		if group != nil {
+			return []int64{group.ID}, nil
+		}
+	}
+}
+
+func createDefaultAlertGroupIfMissing(
+	ctx context.Context,
+	ws *workspace.Workspace,
+	groupSvc *Service,
+	permMgr defaultAlertRoleManager,
+	operator, groupName string,
+) ([]int64, error) {
+	group, err := groupSvc.FindByName(ctx, ws, groupName, operator)
+	if err != nil {
+		return nil, errors.Wrap(err, "find default bkmonitor user group by name under lock")
 	}
 	if group != nil {
 		return []int64{group.ID}, nil

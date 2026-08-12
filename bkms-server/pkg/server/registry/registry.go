@@ -184,8 +184,7 @@ func Reset() {
 
 	GlobalRegistry = nil
 	globalInitOnce = sync.Once{}
-	bkmsenv.ResetDeleteHooksForTest()
-	bkmsenv.ResetUpdateHooksForTest()
+	bkmsenv.ResetHooksForTest()
 	workspace.ResetLifecycleHooksForTest()
 }
 

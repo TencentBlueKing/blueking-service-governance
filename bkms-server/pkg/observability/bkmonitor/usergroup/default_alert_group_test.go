@@ -29,8 +29,10 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 )
 
 var _ = Describe("default alert group resolution", func() {
@@ -43,6 +45,10 @@ var _ = Describe("default alert group resolution", func() {
 	buildPermMgr := func() *perm.StubAllowAnyManager {
 		return &perm.StubAllowAnyManager{}
 	}
+
+	BeforeEach(func() {
+		redis.InitClientForTest()
+	})
 
 	It("reuses existing default alert user group without overwriting members", func() {
 		mockey.PatchConvey("reuse existing group without perm lookup", GinkgoT(), func() {
@@ -175,6 +181,53 @@ var _ = Describe("default alert group resolution", func() {
 		}}))
 	})
 
+	It("reuses the group created by another holder of the workspace lock", func() {
+		bkmapi.ResetStubStateForTest()
+		redis.InitClientForTest()
+		client := bkmapi.NewStub("tester")
+		groupSvc := buildGroupService(client)
+		ws := buildWorkspace()
+		lockKey := buildDefaultAlertUserGroupLockKey(ws.ID)
+		groupLock := lock.NewRedisLock(lockKey, 1)
+		Expect(groupLock.Acquire(context.Background())).To(BeTrue())
+
+		createDone := make(chan error, 1)
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			_, err := client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+				ID:           lo.ToPtr(int64(4001)),
+				BkBizID:      testUserGroupBkBizID,
+				Name:         buildDefaultAlertUserGroupName(ws.ID),
+				Channels:     []string{"user"},
+				AlertNotice:  []bkmapi.AlertNotice{{TimeRange: "00:00--23:59"}},
+				ActionNotice: []bkmapi.ActionNotice{{TimeRange: "00:00--23:59"}},
+				Operator:     "tester",
+			})
+			groupLock.Release(context.Background())
+			createDone <- err
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		ids, err := ResolveDefaultAlertNoticeGroupIDs(
+			ctx,
+			ws,
+			groupSvc,
+			buildPermMgr(),
+			"tester",
+		)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ids).To(Equal([]int64{4001}))
+		Expect(<-createDone).NotTo(HaveOccurred())
+		groups, err := groupSvc.List(context.Background(), ws, "tester")
+		Expect(err).NotTo(HaveOccurred())
+		matchedGroups := lo.Filter(groups, func(group *bkmapi.UserGroup, _ int) bool {
+			return group != nil && group.Name == buildDefaultAlertUserGroupName(ws.ID)
+		})
+		Expect(matchedGroups).To(HaveLen(1))
+	})
+
 	It("skips creating default alert user group when both roles have no members", func() {
 		mockey.PatchConvey("skip create when target roles have no members", GinkgoT(), func() {
 			bkmapi.ResetStubStateForTest()
@@ -266,5 +319,39 @@ var _ = Describe("default alert group resolution", func() {
 			Expect(atomic.LoadInt32(&listRolesCalls)).To(Equal(int32(1)))
 			Expect(members).To(Equal([]string{"developer", "sre"}))
 		})
+	})
+
+	It("times out when the workspace lock stays unavailable", func() {
+		bkmapi.ResetStubStateForTest()
+		redis.InitClientForTest()
+		client := bkmapi.NewStub("tester")
+		groupSvc := buildGroupService(client)
+		ws := buildWorkspace()
+		lockKey := buildDefaultAlertUserGroupLockKey(ws.ID)
+		groupLock := lock.NewRedisLock(lockKey, 1)
+		Expect(groupLock.Acquire(context.Background())).To(BeTrue())
+		defer groupLock.Release(context.Background())
+
+		originalWaitTimeout := defaultAlertUserGroupLockWaitTimeout
+		defaultAlertUserGroupLockWaitTimeout = 150 * time.Millisecond
+		defer func() {
+			defaultAlertUserGroupLockWaitTimeout = originalWaitTimeout
+		}()
+
+		done := make(chan error, 1)
+		go func() {
+			_, err := ResolveDefaultAlertNoticeGroupIDs(
+				context.Background(),
+				ws,
+				groupSvc,
+				buildPermMgr(),
+				"tester",
+			)
+			done <- err
+		}()
+
+		Eventually(done, time.Second).Should(Receive(MatchError(ContainSubstring(
+			"wait default alert user group lock",
+		))))
 	})
 })

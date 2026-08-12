@@ -73,6 +73,26 @@ func (c *failAlertStrategyClient) DeleteAlarmStrategy(
 	return c.deleteErr
 }
 
+type failOnNthDeleteAlertStrategyClient struct {
+	*bkmapi.StubClient
+	failAtCall int
+	deleteReqs []*bkmapi.DeleteAlarmStrategyReq
+	deleteErr  error
+	callCount  int
+}
+
+func (c *failOnNthDeleteAlertStrategyClient) DeleteAlarmStrategy(
+	_ context.Context,
+	req *bkmapi.DeleteAlarmStrategyReq,
+) error {
+	c.callCount++
+	c.deleteReqs = append(c.deleteReqs, req)
+	if c.callCount == c.failAtCall {
+		return c.deleteErr
+	}
+	return nil
+}
+
 type failingCreateStore struct {
 	Store
 	createErr error
@@ -873,6 +893,135 @@ var _ = Describe("AlertStrategyService", func() {
 			stored, getErr := store.Get(ctx, ruleID)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.DisplayName).To(Equal("Delete Fail Test"))
+		})
+	})
+
+	Describe("DeleteByApp", func() {
+		It("should delete all strategies for the app", func() {
+			ws := &workspace.Workspace{ID: "test-ws"}
+			ws.BkSystems.BkMonitorProjectID = "-100"
+
+			firstID, err := store.Create(ctx, &AlertStrategy{
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "demo-app",
+				StrategyCode: "delete_app_first",
+				DisplayName:  "Delete App First",
+				Threshold:    ThresholdConfig{Method: "gte", Value: 80},
+				EffectiveScope: EffectiveScope{
+					Type: EffectiveScopeAll,
+				},
+				RemoteRefs: []RemoteStrategyRef{{
+					EnvID:              bson.NewObjectID(),
+					EnvName:            "prod",
+					RemoteStrategyName: "demo-first",
+					RemoteStrategyID:   1001,
+				}},
+				Creator: "tester",
+				Updater: "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			secondID, err := store.Create(ctx, &AlertStrategy{
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "demo-app",
+				StrategyCode: "delete_app_second",
+				DisplayName:  "Delete App Second",
+				Threshold:    ThresholdConfig{Method: "gte", Value: 90},
+				EffectiveScope: EffectiveScope{
+					Type: EffectiveScopeAll,
+				},
+				RemoteRefs: []RemoteStrategyRef{{
+					EnvID:              bson.NewObjectID(),
+					EnvName:            "stag",
+					RemoteStrategyName: "demo-second",
+					RemoteStrategyID:   1002,
+				}},
+				Creator: "tester",
+				Updater: "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = svc.DeleteByApp(ctx, ws, "test-ws", "app-1", "tester")
+
+			Expect(err).NotTo(HaveOccurred())
+			_, err = store.Get(ctx, firstID)
+			Expect(err).To(Equal(ErrNotFound))
+			_, err = store.Get(ctx, secondID)
+			Expect(err).To(Equal(ErrNotFound))
+		})
+
+		It("should continue deleting later strategies when one delete fails", func() {
+			ws := &workspace.Workspace{ID: "test-ws"}
+			ws.BkSystems.BkMonitorProjectID = "-100"
+			failClient := &failOnNthDeleteAlertStrategyClient{
+				StubClient: bkmapi.NewStub("test-user"),
+				failAtCall: 1,
+				deleteErr:  bkmapi.ErrApmAppNotFound,
+			}
+			failSvc := newServiceWithClientFactory(
+				svc.store,
+				svc.envStore,
+				svc.appStore,
+				svc.snapshotStore,
+				func(_ string) (bkmapi.MonitorClient, error) {
+					return failClient, nil
+				},
+			)
+
+			_, err := store.Create(ctx, &AlertStrategy{
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "demo-app",
+				StrategyCode: "delete_app_keep",
+				DisplayName:  "Delete App Keep",
+				Threshold:    ThresholdConfig{Method: "gte", Value: 80},
+				EffectiveScope: EffectiveScope{
+					Type: EffectiveScopeAll,
+				},
+				RemoteRefs: []RemoteStrategyRef{{
+					EnvID:              bson.NewObjectID(),
+					EnvName:            "prod",
+					RemoteStrategyName: "demo-keep",
+					RemoteStrategyID:   1101,
+				}},
+				Creator: "tester",
+				Updater: "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = store.Create(ctx, &AlertStrategy{
+				WorkspaceID:  "test-ws",
+				AppID:        "app-1",
+				AppName:      "demo-app",
+				StrategyCode: "delete_app_remove",
+				DisplayName:  "Delete App Remove",
+				Threshold:    ThresholdConfig{Method: "gte", Value: 90},
+				EffectiveScope: EffectiveScope{
+					Type: EffectiveScopeAll,
+				},
+				RemoteRefs: []RemoteStrategyRef{{
+					EnvID:              bson.NewObjectID(),
+					EnvName:            "stag",
+					RemoteStrategyName: "demo-remove",
+					RemoteStrategyID:   1102,
+				}},
+				Creator: "tester",
+				Updater: "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			ordered, err := store.ListByApp(ctx, "test-ws", "app-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ordered).To(HaveLen(2))
+
+			err = failSvc.DeleteByApp(ctx, ws, "test-ws", "app-1", "tester")
+
+			Expect(err).To(HaveOccurred())
+			Expect(failClient.deleteReqs).To(HaveLen(2))
+			_, firstErr := store.Get(ctx, ordered[0].ID)
+			Expect(firstErr).NotTo(HaveOccurred())
+			_, secondErr := store.Get(ctx, ordered[1].ID)
+			Expect(secondErr).To(Equal(ErrNotFound))
 		})
 	})
 })

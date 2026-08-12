@@ -28,10 +28,9 @@ import (
 )
 
 var (
-	deleteHooksMu     sync.RWMutex
+	hooksMu           sync.RWMutex
 	deleteHooksByName = map[string]DeleteHook{}
 	deleteHookNames   []string
-	updateHooksMu     sync.RWMutex
 	updateHooksByName = map[string]UpdateHook{}
 	updateHookNames   []string
 )
@@ -45,8 +44,9 @@ type DeleteHook func(ctx context.Context, environment model.Environment) error
 
 // UpdateHook 在环境更新成功后执行，用于感知环境前后状态变化并触发下游收敛。
 //
-// Hook 会同时拿到更新前与更新后的 Environment 快照。Update 属于后置通知语义：
-// 环境更新一旦成功，不会因为 Hook 失败而回滚；调用方应记录错误并视需要重试下游动作。
+// Hook 会同时拿到更新前与更新后的 Environment 快照。Update 属于异步后置通知语义：
+// 环境更新一旦成功，不会因为 Hook 失败而回滚；Hook 错误仅记录日志，不会同步返回给上层调用方。
+// 实现方应保持幂等，并在自身需要时补充重试或补偿机制。
 type UpdateHook func(ctx context.Context, before, after model.Environment) error
 
 // RegisterDeleteHook 注册环境删除 Hook。
@@ -57,8 +57,8 @@ type UpdateHook func(ctx context.Context, before, after model.Environment) error
 //
 // name 用来避免重复注册。相同 name 已存在时，本函数不会覆盖旧 Hook，并返回 false；首次注册成功返回 true。
 func RegisterDeleteHook(name string, hook DeleteHook) bool {
-	deleteHooksMu.Lock()
-	defer deleteHooksMu.Unlock()
+	hooksMu.Lock()
+	defer hooksMu.Unlock()
 
 	if _, ok := deleteHooksByName[name]; ok {
 		return false
@@ -72,29 +72,17 @@ func RegisterDeleteHook(name string, hook DeleteHook) bool {
 //
 // 该方法主要用于测试，以防御性方式确认关键 Hook 已被正确注册。
 func IsDeleteHookRegistered(name string) bool {
-	deleteHooksMu.RLock()
-	defer deleteHooksMu.RUnlock()
+	hooksMu.RLock()
+	defer hooksMu.RUnlock()
 
 	_, ok := deleteHooksByName[name]
 	return ok
 }
 
-// ResetDeleteHooksForTest removes registered delete hooks.
-//
-// It is intended for tests that reset process-wide registries and then rebuild
-// hook closures with fresh store dependencies.
-func ResetDeleteHooksForTest() {
-	deleteHooksMu.Lock()
-	defer deleteHooksMu.Unlock()
-
-	deleteHooksByName = map[string]DeleteHook{}
-	deleteHookNames = nil
-}
-
 // RegisterUpdateHook 注册环境更新 Hook。
 func RegisterUpdateHook(name string, hook UpdateHook) bool {
-	updateHooksMu.Lock()
-	defer updateHooksMu.Unlock()
+	hooksMu.Lock()
+	defer hooksMu.Unlock()
 
 	if _, ok := updateHooksByName[name]; ok {
 		return false
@@ -106,18 +94,20 @@ func RegisterUpdateHook(name string, hook UpdateHook) bool {
 
 // IsUpdateHookRegistered 返回指定名称的更新 Hook 是否已注册。
 func IsUpdateHookRegistered(name string) bool {
-	updateHooksMu.RLock()
-	defer updateHooksMu.RUnlock()
+	hooksMu.RLock()
+	defer hooksMu.RUnlock()
 
 	_, ok := updateHooksByName[name]
 	return ok
 }
 
-// ResetUpdateHooksForTest removes registered update hooks.
-func ResetUpdateHooksForTest() {
-	updateHooksMu.Lock()
-	defer updateHooksMu.Unlock()
+// ResetHooksForTest 清空所有环境 Hook 注册表，主要用于测试场景。
+func ResetHooksForTest() {
+	hooksMu.Lock()
+	defer hooksMu.Unlock()
 
+	deleteHooksByName = map[string]DeleteHook{}
+	deleteHookNames = nil
 	updateHooksByName = map[string]UpdateHook{}
 	updateHookNames = nil
 }
@@ -127,14 +117,14 @@ func ResetUpdateHooksForTest() {
 // 注意：Hook 执行成功后不可回滚（如已清理的作用域变量无法恢复），
 // 若后续环境记录删除失败，调用方需感知此风险并决定是否重试。
 func runDeleteHooks(ctx context.Context, environment model.Environment) error {
-	deleteHooksMu.RLock()
+	hooksMu.RLock()
 	names := make([]string, len(deleteHookNames))
 	copy(names, deleteHookNames)
 	hooks := make([]DeleteHook, len(names))
 	for i, name := range names {
 		hooks[i] = deleteHooksByName[name]
 	}
-	deleteHooksMu.RUnlock()
+	hooksMu.RUnlock()
 
 	for i, name := range names {
 		if err := hooks[i](ctx, environment); err != nil {
@@ -146,14 +136,14 @@ func runDeleteHooks(ctx context.Context, environment model.Environment) error {
 
 // runUpdateHooks 按注册顺序运行所有环境更新 Hook。
 func runUpdateHooks(ctx context.Context, before, after model.Environment) error {
-	updateHooksMu.RLock()
+	hooksMu.RLock()
 	names := make([]string, len(updateHookNames))
 	copy(names, updateHookNames)
 	hooks := make([]UpdateHook, len(names))
 	for i, name := range names {
 		hooks[i] = updateHooksByName[name]
 	}
-	updateHooksMu.RUnlock()
+	hooksMu.RUnlock()
 
 	for i, name := range names {
 		if err := hooks[i](ctx, before, after); err != nil {

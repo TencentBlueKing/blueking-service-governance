@@ -336,13 +336,6 @@ func buildRemoteStrategyName(strategy *AlertStrategy) string {
 	return fmt.Sprintf("%s【%s】", strategy.DisplayName, strategy.AppName)
 }
 
-func buildRemoteStrategyItemName(strategy *AlertStrategy, env envmodel.Environment, trafficLaneName string) string {
-	if trafficLaneName != "" {
-		return fmt.Sprintf("%s-%s-%s", strategy.StrategyCode, env.Name, trafficLaneName)
-	}
-	return fmt.Sprintf("%s-%s", strategy.StrategyCode, env.Name)
-}
-
 func uniqRemoteTargets(targets []remoteTargetContext) []remoteTargetContext {
 	byKey := make(map[string]remoteTargetContext, len(targets))
 	for _, target := range targets {

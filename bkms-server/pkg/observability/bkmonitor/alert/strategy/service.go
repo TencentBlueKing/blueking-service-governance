@@ -21,6 +21,7 @@ package strategy
 
 import (
 	"context"
+	stderrors "errors"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -244,6 +245,39 @@ func (s *Service) Delete(ctx context.Context, ws *workspace.Workspace, id bson.O
 		}
 		return nil
 	})
+}
+
+// DeleteByApp 删除应用下的所有告警策略。
+//
+// 该方法用于应用删除后的异步补偿清理，会尽量删除完全部策略并聚合失败信息返回，
+// 以便调用方记录日志或做后续补偿，而不会因为首条失败就停止后续清理。
+func (s *Service) DeleteByApp(
+	ctx context.Context,
+	ws *workspace.Workspace,
+	workspaceID, appID string,
+	operator string,
+) error {
+	strategies, err := s.store.ListByApp(ctx, workspaceID, appID)
+	if err != nil {
+		return errors.Wrap(err, "list alert strategies by app")
+	}
+
+	var joinedErr error
+	for _, strategy := range strategies {
+		if err := s.Delete(ctx, ws, strategy.ID, operator); err != nil {
+			log.Errorf(
+				ctx,
+				"delete alert strategy during app cleanup failed, workspaceID=%s appID=%s strategyID=%s code=%s err=%v",
+				workspaceID,
+				appID,
+				strategy.ID.Hex(),
+				strategy.StrategyCode,
+				err,
+			)
+			joinedErr = stderrors.Join(joinedErr, errors.Wrapf(err, "delete alert strategy %s", strategy.ID.Hex()))
+		}
+	}
+	return joinedErr
 }
 
 // InitDefaultAlertStrategiesForApp 为应用初始化预置告警策略（仅本地，不自动同步远端）。
