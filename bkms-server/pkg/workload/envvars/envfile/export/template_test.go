@@ -33,6 +33,9 @@ var _ = Describe("TemplateRendering", func() {
 		Expect(content).To(ContainSubstring("# - Optional # desc: applies to the next variable."))
 		Expect(content).To(ContainSubstring("# - Scoped import requires # scopeType: workspace or envType."))
 		Expect(content).To(ContainSubstring("# - # scopeValue is required when scopeType=envType."))
+		Expect(content).To(ContainSubstring(
+			"# - scopeValue for envType can be: development, test, staging, production.",
+		))
 		Expect(content).To(ContainSubstring("# scopeType: workspace"))
 		Expect(content).To(ContainSubstring("# scopeType: envType"))
 		Expect(content).To(ContainSubstring("# scopeValue: production"))

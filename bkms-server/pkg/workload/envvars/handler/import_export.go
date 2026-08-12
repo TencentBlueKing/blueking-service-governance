@@ -19,6 +19,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -267,7 +268,11 @@ func (h *Handler) ExportPublicScopedEnvVars(c *gin.Context) {
 		return
 	}
 
-	writeEnvFileAttachment(c, "public-scoped-env-vars.env", content)
+	writeEnvFileAttachment(
+		c,
+		buildExportFilename(workspaceDisplayName(ws.DisplayName, ws.ID), "public-scoped-env-vars.env"),
+		content,
+	)
 }
 
 // ExportEnvScopedEnvVars 下载单环境环境变量。
@@ -302,7 +307,17 @@ func (h *Handler) ExportEnvScopedEnvVars(c *gin.Context) {
 		return
 	}
 
-	writeEnvFileAttachment(c, buildFilename("env", environment.Name, "scoped-env-vars.env"), content)
+	workspaceName, err := h.getWorkspaceExportName(ctx, environment.WorkspaceID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace for env export"))
+		return
+	}
+
+	writeEnvFileAttachment(
+		c,
+		buildExportFilename(workspaceName, "env", environment.Name, "scoped-env-vars.env"),
+		content,
+	)
 }
 
 // ExportAppEnvVars 下载应用环境变量。
@@ -331,64 +346,95 @@ func (h *Handler) ExportAppEnvVars(c *gin.Context) {
 	ctx := c.Request.Context()
 	switch queryInput.Scope {
 	case exportScopeAppDefined:
-		app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
-		if err != nil {
-			bkerrs.AbortWithErr(c, err)
-			return
-		}
-		if err = ensureAppSupportsDefinedEnvVars(app); err != nil {
-			bkerrs.AbortWithErr(c, err)
-			return
-		}
-
-		content, err := h.newExportService().ExportAppDefined(ctx, app.ID)
-		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "export app defined env vars"))
-			return
-		}
-		writeEnvFileAttachment(c, buildFilename("app", app.Name, "env-vars.env"), content)
+		h.exportAppDefinedEnvVars(ctx, c, uriInput.AppID)
 	case exportScopeEffectiveByEnv:
-		// 最终生效变量的导出必须带环境名，因为结果依赖该环境下
-		// workspace / envType / env / app 的层叠覆盖关系。
-		if strings.TrimSpace(queryInput.EnvName) == "" {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Errorf(
-					bkerrs.ErrCodeInvalidRequest,
-					"envName is required when scope=%s",
-					exportScopeEffectiveByEnv,
-				),
-			)
-			return
-		}
-		app, environment, err := perm.ValidateAppEnvByName(
-			ctx,
-			h.registry,
-			uriInput.AppID,
-			queryInput.EnvName,
-			perm.TypeEdit,
-		)
-		if err != nil {
-			bkerrs.AbortWithErr(c, err)
-			return
-		}
-		if err = ensureAppSupportsDefinedEnvVars(app); err != nil {
-			bkerrs.AbortWithErr(c, err)
-			return
-		}
-
-		content, err := h.newExportService().ExportEffectiveAppEnv(ctx, app, environment)
-		if err != nil {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "export effective app env vars"),
-			)
-			return
-		}
-		writeEnvFileAttachment(c, buildFilename("app", app.Name, environment.Name, "effective-env-vars.env"), content)
+		h.exportEffectiveAppEnvVars(ctx, c, uriInput.AppID, queryInput.EnvName)
 	default:
 		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "unsupported export scope"))
 	}
+}
+
+func (h *Handler) exportAppDefinedEnvVars(ctx context.Context, c *gin.Context, appID string) {
+	app, err := perm.ValidateAppByID(ctx, h.registry, appID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	if err = ensureAppSupportsDefinedEnvVars(app); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	content, err := h.newExportService().ExportAppDefined(ctx, app.ID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "export app defined env vars"))
+		return
+	}
+	workspaceName, err := h.getWorkspaceExportName(ctx, app.WorkspaceID)
+	if err != nil {
+		bkerrs.AbortWithErr(
+			c,
+			bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace for app env vars export"),
+		)
+		return
+	}
+	writeEnvFileAttachment(
+		c,
+		buildExportFilename(workspaceName, "app", app.Name, "env-vars.env"),
+		content,
+	)
+}
+
+func (h *Handler) exportEffectiveAppEnvVars(
+	ctx context.Context,
+	c *gin.Context,
+	appID, envName string,
+) {
+	// 最终生效变量的导出必须带环境名，因为结果依赖该环境下
+	// workspace / envType / env / app 的层叠覆盖关系。
+	if strings.TrimSpace(envName) == "" {
+		bkerrs.AbortWithErr(
+			c,
+			bkerrs.Errorf(
+				bkerrs.ErrCodeInvalidRequest,
+				"envName is required when scope=%s",
+				exportScopeEffectiveByEnv,
+			),
+		)
+		return
+	}
+	app, environment, err := perm.ValidateAppEnvByName(ctx, h.registry, appID, envName, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	if err = ensureAppSupportsDefinedEnvVars(app); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	content, err := h.newExportService().ExportEffectiveAppEnv(ctx, app, environment)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "export effective app env vars"))
+		return
+	}
+	workspaceName, err := h.getWorkspaceExportName(ctx, app.WorkspaceID)
+	if err != nil {
+		bkerrs.AbortWithErr(
+			c,
+			bkerrs.Wrap(
+				err,
+				bkerrs.ErrCodeInternalServerError,
+				"get workspace for effective app env vars export",
+			),
+		)
+		return
+	}
+	writeEnvFileAttachment(
+		c,
+		buildExportFilename(workspaceName, "app", app.Name, environment.Name, "effective-env-vars.env"),
+		content,
+	)
 }
 
 // DownloadScopedEnvVarTemplate 下载 scoped 环境变量导入模板。
@@ -454,6 +500,25 @@ func buildFilename(parts ...string) string {
 		sanitized = append(sanitized, trimmed)
 	}
 	return strings.Join(sanitized, "-")
+}
+
+func buildExportFilename(workspaceName string, parts ...string) string {
+	return buildFilename(append([]string{workspaceName}, parts...)...)
+}
+
+func (h *Handler) getWorkspaceExportName(ctx context.Context, workspaceID string) (string, error) {
+	ws, err := h.registry.WorkspaceStore.Get(ctx, workspaceID)
+	if err != nil {
+		return "", err
+	}
+	return workspaceDisplayName(ws.DisplayName, ws.ID), nil
+}
+
+func workspaceDisplayName(displayName, workspaceID string) string {
+	if trimmed := strings.TrimSpace(displayName); trimmed != "" {
+		return trimmed
+	}
+	return workspaceID
 }
 
 func (h *Handler) newImportService() *importer.Service {

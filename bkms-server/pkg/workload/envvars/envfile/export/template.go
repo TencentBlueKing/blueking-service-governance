@@ -32,6 +32,7 @@ func RenderScopedImportTemplate() string {
 			"# - Optional # desc: applies to the next variable.",
 			"# - Scoped import requires # scopeType: workspace or envType.",
 			"# - # scopeValue is required when scopeType=envType.",
+			"# - scopeValue for envType can be: development, test, staging, production.",
 		},
 		[]envFileRecord{
 			{
