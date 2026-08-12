@@ -34,18 +34,29 @@
       </DividerHeader>
     </template>
 
-    <div
-      v-bkloading="{ loading }"
-      class="min-h-[360px] px-[24px] py-[20px]"
-    >
+    <div class="px-[24px] py-[20px]">
       <section>
         <div class="mb-[12px] flex items-center">
           <strong class="text-[14px] text-[#313238]">{{ $t('已部署环境') }}（{{ deployedRows.length }}）</strong>
           <span class="text-[#979BA5]">
             {{ $t('权重调整后立即同步到该环境全部实例；健康实例数与总权重来自北极星，约有 15 秒延迟') }}
           </span>
+          <Button
+            class="ml-[8px]"
+            :disabled="loading"
+            text
+            theme="primary"
+            @click="loadEnvInstanceStats"
+            @mousedown.stop
+          >
+            <i class="bkms-icon bkms-icon-refresh mr-[2px]"></i>
+            {{ $t('刷新') }}
+          </Button>
         </div>
-        <Table :data="deployedRows">
+        <Table
+          v-bkloading="{ loading }"
+          :data="deployedRows"
+        >
           <template #empty>
             <TableException />
           </template>
