@@ -7680,6 +7680,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "boolean",
+                        "description": "为 true 时一次返回全量实例；与 page/pageSize 同时出现时忽略分页（业务实现见后续需求）",
+                        "name": "all",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "页码，从 1 开始",
                         "name": "page",
@@ -8132,6 +8138,69 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/envs/{envName}/instances/watch": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "事件类型为 ADDED / MODIFIED / DELETED；object 对齐 AppInstanceOutputObj（含 polarisInfos）。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "instance"
+                ],
+                "summary": "订阅应用实例投影变更",
+                "operationId": "WatchAppInstances",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署的泳道名称（空字符串表示不使用泳道）",
+                        "name": "trafficLaneName",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Watch 事件逻辑结构（编码格式随传输形态而定）",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AppInstanceWatchEvent"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -18885,6 +18954,28 @@ const docTemplate = `{
                 "status": {
                     "description": "状态，由 pod.status.phase 等解析获得",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.AppInstanceWatchEvent": {
+            "type": "object",
+            "properties": {
+                "object": {
+                    "description": "实例投影；字段集合对齐 AppInstanceOutputObj（含 polarisInfos）",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.AppInstanceOutputObj"
+                        }
+                    ]
+                },
+                "type": {
+                    "description": "事件类型\nEnums: ADDED, MODIFIED, DELETED",
+                    "type": "string",
+                    "enum": [
+                        "ADDED",
+                        "MODIFIED",
+                        "DELETED"
+                    ]
                 }
             }
         },

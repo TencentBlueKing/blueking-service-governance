@@ -1327,6 +1327,22 @@ definitions:
         description: 状态，由 pod.status.phase 等解析获得
         type: string
     type: object
+  serializer.AppInstanceWatchEvent:
+    properties:
+      object:
+        allOf:
+        - $ref: '#/definitions/serializer.AppInstanceOutputObj'
+        description: 实例投影；字段集合对齐 AppInstanceOutputObj（含 polarisInfos）
+      type:
+        description: |-
+          事件类型
+          Enums: ADDED, MODIFIED, DELETED
+        enum:
+        - ADDED
+        - MODIFIED
+        - DELETED
+        type: string
+    type: object
   serializer.AppModelDeployRecordOutputObj:
     properties:
       branch:
@@ -13361,6 +13377,10 @@ paths:
         in: query
         name: trafficLaneName
         type: string
+      - description: 为 true 时一次返回全量实例；与 page/pageSize 同时出现时忽略分页（业务实现见后续需求）
+        in: query
+        name: all
+        type: boolean
       - description: 页码，从 1 开始
         in: query
         name: page
@@ -13837,6 +13857,47 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 执行 TAF 管理命令
+      tags:
+      - instance
+  /apps/{appID}/envs/{envName}/instances/watch:
+    get:
+      description: 事件类型为 ADDED / MODIFIED / DELETED；object 对齐 AppInstanceOutputObj（含
+        polarisInfos）。
+      operationId: WatchAppInstances
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 部署的泳道名称（空字符串表示不使用泳道）
+        in: query
+        name: trafficLaneName
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Watch 事件逻辑结构（编码格式随传输形态而定）
+          schema:
+            $ref: '#/definitions/serializer.AppInstanceWatchEvent'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 订阅应用实例投影变更
       tags:
       - instance
   /apps/{appID}/envs/{envName}/resource-topology:

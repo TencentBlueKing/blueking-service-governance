@@ -23,6 +23,7 @@ import "github.com/gin-gonic/gin"
 // Handler contains views required by app instance Gin routes.
 type Handler interface {
 	ListAppInstances(c *gin.Context)
+	WatchAppInstances(c *gin.Context)
 	UpdateAppInstances(c *gin.Context)
 	ScaleAppInstances(c *gin.Context)
 	BatchDeleteAppInstances(c *gin.Context)
@@ -40,6 +41,8 @@ type Handler interface {
 func Register(rg *gin.RouterGroup, h Handler) {
 	// 获取应用实例列表
 	rg.GET("/apps/:appID/envs/:envName/instances", h.ListAppInstances)
+	// 订阅应用实例投影变更（须在 :instanceID 路由之前注册，避免被当作实例 ID）
+	rg.GET("/apps/:appID/envs/:envName/instances/watch", h.WatchAppInstances)
 	// 更新应用实例（支持单/多/全量实例更新）
 	rg.PUT("/apps/:appID/envs/:envName/instances", h.UpdateAppInstances)
 	// 扩缩容应用实例数量

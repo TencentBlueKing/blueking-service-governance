@@ -60,6 +60,9 @@ func New(registry *storereg.Registry) *Handler {
 
 // ListAppInstances 获取应用实例列表。
 //
+// 可选查询参数 all=true 表示一次返回全量实例投影；与 page/pageSize 同时出现时语义上忽略分页
+// 全量拉取业务逻辑由后续需求实现；当前即便传入 all 仍按分页返回
+//
 //	@ID			ListAppInstances
 //	@Summary	获取应用实例列表
 //	@Tags		instance
@@ -69,6 +72,10 @@ func New(registry *storereg.Registry) *Handler {
 //	@Param		appID			path		string	true	"应用 ID"
 //	@Param		envName			path		string	true	"部署环境名称"
 //	@Param		trafficLaneName	query		string	false	"部署的泳道名称（空字符串表示不使用泳道）"
+//	@Param		all				query		bool	false	"为 true 时一次返回全量实例；与 page/pageSize
+//
+// 同时出现时忽略分页（业务实现见后续需求）"
+//
 //	@Param		page			query		int		true	"页码，从 1 开始"
 //	@Param		pageSize		query		int		true	"每页数量"
 //	@Success	200				{object}	serializer.ListAppInstancesOutput

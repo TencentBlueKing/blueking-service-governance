@@ -64,10 +64,34 @@ type AppInstanceURIInput struct {
 type ListAppInstancesQueryInput struct {
 	// 部署的泳道名称（空字符串表示不使用泳道）
 	TrafficLaneName string `form:"trafficLaneName"`
+	// 为 true 时一次返回匹配的全部实例投影；与 page/pageSize 同时出现时语义上忽略分页（业务实现见后续需求）
+	All bool `form:"all"`
 	// 页码，从 1 开始
 	Page int64 `form:"page" binding:"required,gte=1"`
 	// 每页数量，仅支持固定枚举值
 	PageSize int64 `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
+}
+
+// -----------------------------------------------------------------------------
+// 实例 Watch 契约（传输形态 SSE/WS 待定；本阶段仅声明 API DTO，不实现推送）
+// 领域事件类型见 instance/watch.EventType
+
+// WatchAppInstancesQueryInput 订阅应用实例投影变更的查询参数。
+
+type WatchAppInstancesQueryInput struct {
+	// 部署的泳道名称（空字符串表示不使用泳道）
+	TrafficLaneName string `form:"trafficLaneName"`
+}
+
+// AppInstanceWatchEvent 实例 Watch 推送的平台投影事件（非原生 Pod JSON）
+// DELETED 时 Object 可仅含定位字段（至少 id）
+// Type 取值对齐 watch.EventType：ADDED / MODIFIED / DELETED
+type AppInstanceWatchEvent struct {
+	// 事件类型
+	// Enums: ADDED, MODIFIED, DELETED
+	Type string `json:"type" enums:"ADDED,MODIFIED,DELETED"`
+	// 实例投影；字段集合对齐 AppInstanceOutputObj（含 polarisInfos）
+	Object *AppInstanceOutputObj `json:"object"`
 }
 
 // PolarisInstanceInfoOutputObj 关联到应用实例的北极星实例状态。
