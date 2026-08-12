@@ -27,7 +27,7 @@ import (
 )
 
 var _ = Describe("collectRemoteStrategyIDsForAppAlerts", func() {
-	It("filters by env name and alert display name while keeping local display name mapping", func() {
+	It("filters by alert display name while keeping local display name mapping", func() {
 		matchedID := bson.NewObjectID()
 		otherID := bson.NewObjectID()
 
@@ -47,14 +47,32 @@ var _ = Describe("collectRemoteStrategyIDsForAppAlerts", func() {
 					{EnvName: "stag", RemoteStrategyID: 1003},
 				},
 			},
-		}, "prod", "CPU")
+		}, "CPU")
 
 		Expect(ids).To(Equal([]int64{1001}))
-		Expect(remoteToBKMS).To(HaveKey(1001))
+		Expect(remoteToBKMS).To(HaveKey(int64(1001)))
 		Expect(remoteToBKMS[1001].StrategyID).To(Equal(matchedID.Hex()))
 		Expect(remoteToBKMS[1001].AlertDisplayName).To(Equal("CPU 过高"))
 		Expect(remoteToBKMS).NotTo(HaveKey(1002))
 		Expect(remoteToBKMS).NotTo(HaveKey(1003))
+	})
+
+	It("deduplicates a shared remote strategy id across multiple environments", func() {
+		ruleID := bson.NewObjectID()
+
+		ids, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts([]alertstrategy.AlertStrategy{{
+			ID:          ruleID,
+			DisplayName: "容器异常重启",
+			RemoteRefs: []alertstrategy.RemoteStrategyRef{
+				{EnvName: "teamdev", RemoteStrategyID: 1001},
+				{EnvName: "pre-release", RemoteStrategyID: 1001},
+			},
+		}}, "")
+
+		Expect(ids).To(Equal([]int64{1001}))
+		Expect(remoteToBKMS).To(HaveKey(int64(1001)))
+		Expect(remoteToBKMS[1001].StrategyID).To(Equal(ruleID.Hex()))
+		Expect(remoteToBKMS[1001].AlertDisplayName).To(Equal("容器异常重启"))
 	})
 })
 

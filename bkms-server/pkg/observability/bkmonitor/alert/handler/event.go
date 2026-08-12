@@ -26,6 +26,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	alertevent "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/event"
@@ -84,8 +85,9 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 	}
 
 	envName := strings.TrimSpace(queryInput.EnvName)
+	var targetEnv *envmodel.Environment
 	if envName != "" {
-		_, _, err = ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, envName, ginperm.TypeView)
+		_, targetEnv, err = ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, envName, ginperm.TypeView)
 		if err != nil {
 			bkerrs.AbortWithErr(c, err)
 			return
@@ -97,7 +99,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list alert strategies by app"))
 		return
 	}
-	strategyIDs, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(rules, envName, queryInput.AlertDisplayName)
+	strategyIDs, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(rules, queryInput.AlertDisplayName)
 	if len(strategyIDs) == 0 {
 		ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
 			Count: 0, Results: []*serializer.AlertEventOutput{},
@@ -106,9 +108,12 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 	}
 
 	operator := auth.MustGetUser(ctx).ID
-	resp, err := alertevent.NewService().SearchByStrategyIDs(
-		ctx, ws, operator, strategyIDs, queryInput.ToSearchInput(),
-	)
+	searchInput := queryInput.ToSearchInput()
+	if targetEnv != nil {
+		searchInput.ClusterID = targetEnv.Cluster.ClusterID
+		searchInput.Namespace = targetEnv.Cluster.Namespace
+	}
+	resp, err := alertevent.NewService().SearchByStrategyIDs(ctx, ws, operator, strategyIDs, searchInput)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "search alerts by app"))
 		return
@@ -194,8 +199,7 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 		return
 	}
 	// 当前接口已通过 strategyID 定位到单条 BKMS 本地策略；若调用方还额外传入 alertDisplayName，
-	// 则可先用本地展示名做一次短路过滤。只要过滤词与当前策略展示名不匹配，就无需再调用远端告警查询接口，
-	// 直接返回空结果即可，避免一次无意义的 BKMonitor 检索。
+	// 则可先用本地展示名做一次短路过滤。
 	if alertDisplayName := strings.TrimSpace(queryInput.AlertDisplayName); alertDisplayName != "" &&
 		!strings.Contains(rule.DisplayName, alertDisplayName) {
 		ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
@@ -269,7 +273,6 @@ type alertEventBackfillInfo struct {
 // 返回 remoteStrategyID 到事件列表回填信息的映射，供结果组装时回填本地策略 ID 与展示名。
 func collectRemoteStrategyIDsForAppAlerts(
 	rules []alertstrategy.AlertStrategy,
-	envName string,
 	alertDisplayName string,
 ) ([]int64, map[int64]alertEventBackfillInfo) {
 	alertDisplayName = strings.TrimSpace(alertDisplayName)
@@ -281,9 +284,6 @@ func collectRemoteStrategyIDsForAppAlerts(
 			continue
 		}
 		for _, ref := range rule.RemoteRefs {
-			if envName != "" && ref.EnvName != envName {
-				continue
-			}
 			if ref.RemoteStrategyID <= 0 {
 				continue
 			}

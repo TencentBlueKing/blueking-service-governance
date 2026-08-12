@@ -60,6 +60,10 @@ type SearchInput struct {
 	EventID string
 	// Target 按目标实例过滤。
 	Target string
+	// ClusterID 按集群 ID 过滤。
+	ClusterID string
+	// Namespace 按命名空间过滤。
+	Namespace string
 	// Ordering 排序字段列表，沿用蓝鲸监控 API 的排序语法。
 	Ordering []string
 }
@@ -163,7 +167,7 @@ func (s *Service) buildSearchAlertReq(
 // buildSearchConditions 将事件查询输入转换为蓝鲸监控 search_alert 接口使用的 conditions 数组。
 // 这里只处理“可选过滤条件”的拼装：策略 ID 走整型数组，其余字符串字段按接口要求包装成单元素字符串数组。
 func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]any {
-	conditions := make([]map[string]any, 0, 6)
+	conditions := make([]map[string]any, 0, 8)
 	appendIf := func(ok bool, key string, value any) {
 		if ok {
 			conditions = append(conditions, map[string]any{"key": key, "value": value})
@@ -177,6 +181,8 @@ func buildSearchConditions(input SearchInput, strategyIDs []int64) []map[string]
 		{key: "strategy_name", val: input.StrategyName},
 		{key: "event_id", val: input.EventID},
 		{key: "target", val: input.Target},
+		{key: "tags.bcs_cluster_id", val: input.ClusterID},
+		{key: "tags.namespace", val: input.Namespace},
 	} {
 		appendIf(item.val != "", item.key, []string{item.val})
 	}
