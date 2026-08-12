@@ -34,18 +34,27 @@ func RenderScopedImportTemplate() string {
 			"# - # scopeValue is required when scopeType=envType.",
 			"# - scopeValue for envType can be: development, test, staging, production.",
 		},
-		[]envFileRecord{
+		[]renderRecord{
 			{
-				Key:         "BKMS_NAMESPACE",
-				Value:       "bk-prod",
+				Key:         "BKMS_SHARED_NAMESPACE",
+				Value:       "bk-shared",
 				Description: "shared across all envs",
 				Scope: &envvartypes.ScopedEnvVarScope{
 					ScopeType: envvartypes.ScopeTypeWorkspace,
 				},
 			},
 			{
-				Key:         "BKMS_ENV_TYPE",
-				Value:       "production",
+				Key:         "FEATURE_FLAG",
+				Value:       "true",
+				Description: "only for development",
+				Scope: &envvartypes.ScopedEnvVarScope{
+					ScopeType:  envvartypes.ScopeTypeEnvType,
+					ScopeValue: "development",
+				},
+			},
+			{
+				Key:         "JAVA_OPTS",
+				Value:       "-Xms1024m -Xmx2048m",
 				Description: "only for production",
 				Scope: &envvartypes.ScopedEnvVarScope{
 					ScopeType:  envvartypes.ScopeTypeEnvType,
@@ -64,17 +73,37 @@ func RenderEnvAppImportTemplate() string {
 			"# - Optional # desc: applies to the next variable.",
 			"# - Do not add # scopeType or # scopeValue in env/app import.",
 		},
-		[]envFileRecord{
+		[]renderRecord{
 			{
-				Key:         "EXAMPLE_KEY",
-				Value:       "example-value",
-				Description: "example description",
+				Key:         "APP_NAME",
+				Value:       "demo-service",
+				Description: "plain string value",
+			},
+			{
+				Key:         "FEATURE_FLAG",
+				Value:       "true",
+				Description: "boolean-style value",
+			},
+			{
+				Key:         "APP_PORT",
+				Value:       "8080",
+				Description: "number-style value",
+			},
+			{
+				Key:         "WELCOME_MESSAGE",
+				Value:       "hello bkms",
+				Description: "value with spaces",
+			},
+			{
+				Key:         "EMPTY_VALUE",
+				Value:       "",
+				Description: "empty string value",
 			},
 		},
 	)
 }
 
-func renderTemplate(headerLines []string, records []envFileRecord) string {
+func renderTemplate(headerLines []string, records []renderRecord) string {
 	var builder strings.Builder
 	for _, line := range headerLines {
 		builder.WriteString(line)

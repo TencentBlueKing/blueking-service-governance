@@ -62,9 +62,9 @@ func (s *Service) ExportPublic(ctx context.Context, workspaceID string) (string,
 
 	// 保留显式 scope 元数据，确保导出的文件再次导入时，不会丢失记录原本
 	// 属于 workspace 还是 envType 作用域的信息。
-	records := make([]envFileRecord, 0, len(vars))
+	records := make([]renderRecord, 0, len(vars))
 	for _, item := range vars {
-		records = append(records, envFileRecord{
+		records = append(records, renderRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
@@ -78,7 +78,7 @@ func (s *Service) ExportPublic(ctx context.Context, workspaceID string) (string,
 }
 
 // ExportEnv exports vars directly defined in the target env scope.
-// 目标环境由页面上下文提供，因此导出的 env file 不再携带 scope 元数据。
+// 目标环境由页面上下文提供，因此导出的 env file 不携带 scope 元数据。
 func (s *Service) ExportEnv(ctx context.Context, environment envmodel.Environment) (string, error) {
 	vars, err := s.scopedEnvVarStore.List(
 		ctx,
@@ -90,9 +90,9 @@ func (s *Service) ExportEnv(ctx context.Context, environment envmodel.Environmen
 	}
 	vars = filterOutSensitiveScopedVars(vars)
 
-	records := make([]envFileRecord, 0, len(vars))
+	records := make([]renderRecord, 0, len(vars))
 	for _, item := range vars {
-		records = append(records, envFileRecord{
+		records = append(records, renderRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
@@ -112,9 +112,9 @@ func (s *Service) ExportAppDefined(ctx context.Context, appID string) (string, e
 	}
 	vars = filterOutSensitiveAppVars(vars)
 
-	records := make([]envFileRecord, 0, len(vars))
+	records := make([]renderRecord, 0, len(vars))
 	for _, item := range vars {
-		records = append(records, envFileRecord{
+		records = append(records, renderRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
@@ -146,9 +146,9 @@ func (s *Service) ExportEffectiveAppEnv(
 	vars = vars.ToDeduplicatedList()
 	vars = filterOutSensitiveEffectiveVars(vars)
 
-	records := make([]envFileRecord, 0, len(vars))
+	records := make([]renderRecord, 0, len(vars))
 	for _, item := range vars {
-		records = append(records, envFileRecord{
+		records = append(records, renderRecord{
 			Key:         item.Key,
 			Value:       item.Value,
 			Description: item.Description,
@@ -157,16 +157,14 @@ func (s *Service) ExportEffectiveAppEnv(
 	return renderRecords(records), nil
 }
 
-// envFileRecord describes a single `.env` record rendered by export/template flows.
-type envFileRecord struct {
+type renderRecord struct {
 	Key         string
 	Value       string
 	Description string
 	Scope       *envvartypes.ScopedEnvVarScope
 }
 
-// renderRecords renders import-compatible dotenv content from records.
-func renderRecords(records []envFileRecord) string {
+func renderRecords(records []renderRecord) string {
 	if len(records) == 0 {
 		return ""
 	}
@@ -174,8 +172,7 @@ func renderRecords(records []envFileRecord) string {
 	var builder strings.Builder
 	for i, item := range records {
 		if i > 0 {
-			// 记录之间保留一个空行，让导出的 .env 文件在多条变量场景下更易读。
-			builder.WriteString("\n\n")
+			builder.WriteString("\n")
 		}
 		// 在 KEY=VALUE 之前输出元数据注释行，既方便人阅读，也能保证再次导入时
 		// 仍然可被识别。

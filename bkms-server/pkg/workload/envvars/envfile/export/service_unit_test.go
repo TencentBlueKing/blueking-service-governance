@@ -19,86 +19,116 @@
 package export
 
 import (
-	"testing"
+	"strings"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	envvarsstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
-func TestFilterOutSensitiveScopedVars(t *testing.T) {
-	vars := []envvarsstore.ScopedEnvVar{
-		{Key: "PUBLIC", Value: "visible", IsSensitive: false},
-		{Key: "SECRET", Value: "hidden", IsSensitive: true},
-	}
+var _ = Describe("ExportUnitHelpers", func() {
+	It("filters out sensitive scoped vars", func() {
+		vars := []envvarsstore.ScopedEnvVar{
+			{Key: "PUBLIC", Value: "visible", IsSensitive: false},
+			{Key: "SECRET", Value: "hidden", IsSensitive: true},
+		}
 
-	filtered := filterOutSensitiveScopedVars(vars)
-	if len(filtered) != 1 {
-		t.Fatalf("expected 1 non-sensitive scoped var, got %d", len(filtered))
-	}
-	if filtered[0].Key != "PUBLIC" {
-		t.Fatalf("expected PUBLIC to remain, got %s", filtered[0].Key)
-	}
-}
-
-func TestFilterOutSensitiveAppVars(t *testing.T) {
-	vars := []appmodel.Variable{
-		{Key: "APP_MODE", Value: "prod", IsSensitive: false},
-		{Key: "APP_SECRET", Value: "hidden", IsSensitive: true},
-	}
-
-	filtered := filterOutSensitiveAppVars(vars)
-	if len(filtered) != 1 {
-		t.Fatalf("expected 1 non-sensitive app var, got %d", len(filtered))
-	}
-	if filtered[0].Key != "APP_MODE" {
-		t.Fatalf("expected APP_MODE to remain, got %s", filtered[0].Key)
-	}
-}
-
-func TestFilterOutSensitiveEffectiveVars(t *testing.T) {
-	vars := envvartypes.EnvVariableList{
-		{Key: "PUBLIC", Value: "visible", IsSensitive: false},
-		{Key: "SECRET", Value: "hidden", IsSensitive: true},
-	}
-
-	filtered := filterOutSensitiveEffectiveVars(vars)
-	if len(filtered) != 1 {
-		t.Fatalf("expected 1 non-sensitive effective var, got %d", len(filtered))
-	}
-	if filtered[0].Key != "PUBLIC" {
-		t.Fatalf("expected PUBLIC to remain, got %s", filtered[0].Key)
-	}
-}
-
-func TestRenderRecordsEscapesMultilineDescription(t *testing.T) {
-	content := renderRecords([]envFileRecord{
-		{
-			Key:         "KEY",
-			Value:       "value",
-			Description: "line1\nline2",
-		},
+		filtered := filterOutSensitiveScopedVars(vars)
+		Expect(filtered).To(HaveLen(1))
+		Expect(filtered[0].Key).To(Equal("PUBLIC"))
 	})
-	if got, want := content, "# desc: \"line1\\nline2\"\nKEY=value\n"; got != want {
-		t.Fatalf("unexpected rendered content:\nwant: %q\ngot:  %q", want, got)
-	}
-}
 
-func TestEnvVariableListToDeduplicatedListKeepsLastOccurrence(t *testing.T) {
-	vars := envvartypes.EnvVariableList{
-		{Key: "SHARED", Value: "workspace"},
-		{Key: "OTHER", Value: "other"},
-		{Key: "SHARED", Value: "app"},
-	}
+	It("filters out sensitive app vars", func() {
+		vars := []appmodel.Variable{
+			{Key: "APP_MODE", Value: "prod", IsSensitive: false},
+			{Key: "APP_SECRET", Value: "hidden", IsSensitive: true},
+		}
 
-	deduped := vars.ToDeduplicatedList()
-	if len(deduped) != 2 {
-		t.Fatalf("expected 2 items after deduplication, got %d", len(deduped))
-	}
-	if deduped[0].Key != "OTHER" || deduped[0].Value != "other" {
-		t.Fatalf("expected OTHER to remain first, got %+v", deduped[0])
-	}
-	if deduped[1].Key != "SHARED" || deduped[1].Value != "app" {
-		t.Fatalf("expected last SHARED value to win, got %+v", deduped[1])
-	}
-}
+		filtered := filterOutSensitiveAppVars(vars)
+		Expect(filtered).To(HaveLen(1))
+		Expect(filtered[0].Key).To(Equal("APP_MODE"))
+	})
+
+	It("filters out sensitive effective vars", func() {
+		vars := envvartypes.EnvVariableList{
+			{Key: "PUBLIC", Value: "visible", IsSensitive: false},
+			{Key: "SECRET", Value: "hidden", IsSensitive: true},
+		}
+
+		filtered := filterOutSensitiveEffectiveVars(vars)
+		Expect(filtered).To(HaveLen(1))
+		Expect(filtered[0].Key).To(Equal("PUBLIC"))
+	})
+
+	It("escapes multiline descriptions in rendered records", func() {
+		content := renderRecords([]renderRecord{
+			{
+				Key:         "KEY",
+				Value:       "value",
+				Description: "line1\nline2",
+			},
+		})
+		Expect(content).To(Equal("# desc: \"line1\\nline2\"\nKEY=value\n"))
+	})
+
+	It("does not insert blank lines between rendered records", func() {
+		content := renderRecords([]renderRecord{
+			{
+				Key:         "FIRST_KEY",
+				Value:       "first",
+				Description: "first desc",
+			},
+			{
+				Key:         "SECOND_KEY",
+				Value:       "second",
+				Description: "second desc",
+			},
+		})
+		Expect(content).To(Equal("# desc: first desc\nFIRST_KEY=first\n# desc: second desc\nSECOND_KEY=second\n"))
+	})
+
+	It("renders scoped import template with multiple examples", func() {
+		content := RenderScopedImportTemplate()
+		expectedLines := []string{
+			"# scopeType: workspace",
+			"BKMS_SHARED_NAMESPACE=bk-shared",
+			"# scopeValue: development",
+			"FEATURE_FLAG=true",
+			"# scopeValue: production",
+			"JAVA_OPTS=\"-Xms1024m -Xmx2048m\"",
+		}
+		for _, line := range expectedLines {
+			Expect(strings.Contains(content, line)).To(BeTrue(), "expected scoped template to contain %q", line)
+		}
+	})
+
+	It("renders env and app import template with multiple examples", func() {
+		content := RenderEnvAppImportTemplate()
+		expectedLines := []string{
+			"APP_NAME=demo-service",
+			"FEATURE_FLAG=true",
+			"APP_PORT=8080",
+			"WELCOME_MESSAGE=\"hello bkms\"",
+			"EMPTY_VALUE=\"\"",
+		}
+		for _, line := range expectedLines {
+			Expect(strings.Contains(content, line)).To(BeTrue(), "expected env/app template to contain %q", line)
+		}
+	})
+
+	It("keeps the last occurrence when env variable keys repeat", func() {
+		vars := envvartypes.EnvVariableList{
+			{Key: "SHARED", Value: "workspace"},
+			{Key: "OTHER", Value: "other"},
+			{Key: "SHARED", Value: "app"},
+		}
+
+		deduped := vars.ToDeduplicatedList()
+		Expect(deduped).To(HaveLen(2))
+		Expect(deduped[0]).To(Equal(envvartypes.EnvVariableObj{Key: "OTHER", Value: "other"}))
+		Expect(deduped[1]).To(Equal(envvartypes.EnvVariableObj{Key: "SHARED", Value: "app"}))
+	})
+})

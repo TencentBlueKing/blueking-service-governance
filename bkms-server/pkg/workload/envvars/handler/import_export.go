@@ -270,7 +270,10 @@ func (h *Handler) ExportPublicScopedEnvVars(c *gin.Context) {
 
 	writeEnvFileAttachment(
 		c,
-		buildExportFilename(workspaceDisplayName(ws.DisplayName, ws.ID), "public-scoped-env-vars.env"),
+		buildExportFilename(
+			resolveWorkspaceDisplayName(ws.DisplayName, ws.ID),
+			"public-scoped-env-vars.env",
+		),
 		content,
 	)
 }
@@ -315,7 +318,12 @@ func (h *Handler) ExportEnvScopedEnvVars(c *gin.Context) {
 
 	writeEnvFileAttachment(
 		c,
-		buildExportFilename(workspaceName, "env", environment.Name, "scoped-env-vars.env"),
+		buildExportFilename(
+			workspaceName,
+			"env",
+			environment.Name,
+			"scoped-env-vars.env",
+		),
 		content,
 	)
 }
@@ -374,7 +382,11 @@ func (h *Handler) exportAppDefinedEnvVars(ctx context.Context, c *gin.Context, a
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace for app env vars export"),
+			bkerrs.Wrap(
+				err,
+				bkerrs.ErrCodeInternalServerError,
+				"get workspace for app env vars export",
+			),
 		)
 		return
 	}
@@ -502,19 +514,25 @@ func buildFilename(parts ...string) string {
 	return strings.Join(sanitized, "-")
 }
 
+// buildExportFilename 基于工作空间名称拼接导出文件名。
+// 会先把 workspaceName 作为前缀，再追加其余 parts，统一交由 buildFilename 做空格过滤与连字符拼接。
 func buildExportFilename(workspaceName string, parts ...string) string {
 	return buildFilename(append([]string{workspaceName}, parts...)...)
 }
 
+// getWorkspaceExportName 查询指定工作空间并返回其导出时使用的显示名称。
+// 若工作空间没有配置展示名称，则回退使用工作空间 ID 作为名称。
 func (h *Handler) getWorkspaceExportName(ctx context.Context, workspaceID string) (string, error) {
 	ws, err := h.registry.WorkspaceStore.Get(ctx, workspaceID)
 	if err != nil {
 		return "", err
 	}
-	return workspaceDisplayName(ws.DisplayName, ws.ID), nil
+	return resolveWorkspaceDisplayName(ws.DisplayName, ws.ID), nil
 }
 
-func workspaceDisplayName(displayName, workspaceID string) string {
+// resolveWorkspaceDisplayName 根据工作空间的展示名称与 ID 计算导出显示名。
+// 当展示名称为空或仅含空白字符时，使用工作空间 ID 作为兜底名称。
+func resolveWorkspaceDisplayName(displayName, workspaceID string) string {
 	if trimmed := strings.TrimSpace(displayName); trimmed != "" {
 		return trimmed
 	}

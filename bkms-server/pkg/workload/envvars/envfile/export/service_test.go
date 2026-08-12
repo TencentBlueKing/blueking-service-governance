@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package export_test
+package export
 
 import (
 	"context"
@@ -35,7 +35,6 @@ import (
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	envvarsstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/envfile/export"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
@@ -51,7 +50,7 @@ var _ = Describe("ExportService", func() {
 		appConfigFileStore    appcfg.AppConfigFileStore
 		appConfigVersionStore appcfg.AppConfigFileVersionStore
 		buildConfigStore      build.ConfigStore
-		service               *export.Service
+		service               *Service
 	)
 
 	BeforeEach(func() {
@@ -87,7 +86,7 @@ var _ = Describe("ExportService", func() {
 				Namespace: "prod-ns",
 			},
 		}
-		service = export.NewService(
+		service = NewService(
 			scopedEnvVarStore,
 			appModelStore,
 			envvarsstore.NewUnifiedEnvVarsReader(scopedEnvVarStore, nil, nil),

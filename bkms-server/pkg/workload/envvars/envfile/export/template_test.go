@@ -16,18 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package export_test
+package export
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	exporter "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/envfile/export"
 )
 
 var _ = Describe("TemplateRendering", func() {
 	It("renders scoped import template", func() {
-		content := exporter.RenderScopedImportTemplate()
+		content := RenderScopedImportTemplate()
 
 		Expect(content).To(ContainSubstring("# - Each variable uses KEY=VALUE format."))
 		Expect(content).To(ContainSubstring("# - Optional # desc: applies to the next variable."))
@@ -37,20 +35,25 @@ var _ = Describe("TemplateRendering", func() {
 			"# - scopeValue for envType can be: development, test, staging, production.",
 		))
 		Expect(content).To(ContainSubstring("# scopeType: workspace"))
+		Expect(content).To(ContainSubstring("BKMS_SHARED_NAMESPACE=bk-shared"))
 		Expect(content).To(ContainSubstring("# scopeType: envType"))
+		Expect(content).To(ContainSubstring("# scopeValue: development"))
+		Expect(content).To(ContainSubstring("FEATURE_FLAG=true"))
 		Expect(content).To(ContainSubstring("# scopeValue: production"))
-		Expect(content).To(ContainSubstring("BKMS_NAMESPACE=bk-prod"))
-		Expect(content).To(ContainSubstring("BKMS_ENV_TYPE=production"))
+		Expect(content).To(ContainSubstring("JAVA_OPTS=\"-Xms1024m -Xmx2048m\""))
 	})
 
 	It("renders shared env and app import template", func() {
-		content := exporter.RenderEnvAppImportTemplate()
+		content := RenderEnvAppImportTemplate()
 
 		Expect(content).To(ContainSubstring("# - Each variable uses KEY=VALUE format."))
 		Expect(content).To(ContainSubstring("# - Optional # desc: applies to the next variable."))
 		Expect(content).To(ContainSubstring("# - Do not add # scopeType or # scopeValue in env/app import."))
-		Expect(content).To(ContainSubstring("# desc: example description"))
-		Expect(content).To(ContainSubstring("EXAMPLE_KEY=example-value"))
+		Expect(content).To(ContainSubstring("APP_NAME=demo-service"))
+		Expect(content).To(ContainSubstring("FEATURE_FLAG=true"))
+		Expect(content).To(ContainSubstring("APP_PORT=8080"))
+		Expect(content).To(ContainSubstring("WELCOME_MESSAGE=\"hello bkms\""))
+		Expect(content).To(ContainSubstring("EMPTY_VALUE=\"\""))
 		Expect(content).NotTo(ContainSubstring("# scopeType:"))
 		Expect(content).NotTo(ContainSubstring("# scopeValue:"))
 		Expect(content).To(HaveSuffix("\n"))
