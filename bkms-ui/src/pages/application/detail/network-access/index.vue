@@ -38,7 +38,7 @@
 
   import { useI18n } from 'vue-i18n';
   import TabHeader from '~/components/tab-header.vue';
-  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
+  import { useUrlQuerySync } from '~/composables/use-url-query-sync';
 
   import Service from './service/service.vue';
 
@@ -58,11 +58,13 @@
   const tabList: TabConfig[] = [{ label: `${t('服务')} (Service)`, name: TAB_NAMES.service, component: Service }];
 
   // Tab 与 URL query（activeTab）双向同步锚定
-  const { fields } = useUrlActiveTab({
+  const { fields } = useUrlQuerySync({
     activeTab: {
       queryKey: 'activeTab',
-      tabValues: Object.values(TAB_NAMES),
-      defaultTab: TAB_NAMES.service,
+      data: {
+        allowed: Object.values(TAB_NAMES),
+        default: TAB_NAMES.service,
+      },
     },
   });
   const activeTab = fields.activeTab;

@@ -48,7 +48,7 @@
 
 <script setup lang="ts">
   import { Tab } from 'bkui-vue';
-  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
+  import { useUrlQuerySync } from '~/composables/use-url-query-sync';
 
   import ComponentInstances from './component-list.vue';
   import SpaceComponent from './space-component.vue';
@@ -60,11 +60,13 @@
   } as const;
 
   // Tab 与 URL query（activeTab）双向同步锚定
-  const { fields } = useUrlActiveTab({
+  const { fields } = useUrlQuerySync({
     activeTab: {
       queryKey: 'activeTab',
-      tabValues: Object.values(TAB_NAMES),
-      defaultTab: TAB_NAMES.instance,
+      data: {
+        allowed: Object.values(TAB_NAMES),
+        default: TAB_NAMES.instance,
+      },
     },
   });
   const activeTab = fields.activeTab;

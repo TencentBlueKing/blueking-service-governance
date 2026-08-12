@@ -107,7 +107,7 @@
   </div>
 </template>
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, nextTick, ref, watch } from 'vue';
 
   import { Button, Exception } from 'bkui-vue';
   import { useRoute, useRouter } from 'vue-router';
@@ -117,6 +117,7 @@
   import { DOC_LINKS } from '~/common/const';
   import FlexRow from '~/components/flex-row.vue';
   import MonitorIframe from '~/components/monitor-iframe.vue';
+  import { useUrlQuerySync } from '~/composables/use-url-query-sync';
   import { useAppDetail } from '~/stores/app-detail';
   import { useDeployEnvStore } from '~/stores/deploy-env';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
@@ -137,10 +138,20 @@
   const curEnv = ref(envStore.currentEnv);
   const trpcDeployStore = useTrpcDeployStore();
 
+  // env 参数与当前环境双向同步（环境列表异步加载，不配置 allowed 直接透传）
+  const { fields } = useUrlQuerySync({
+    env: {
+      queryKey: 'env',
+      data: { default: '' },
+    },
+  });
+  const targetEnvName = fields.env;
+
   const iframeContainerRef = ref<HTMLElement | null>(null);
 
   const serviceName = ref('');
   const apmConfigMissing = ref(false);
+  const isInitializingEnvFromUrl = ref(false);
 
   const currentApm = ref<GetEnvApmOutput | null>(null);
 
@@ -222,6 +233,31 @@
       apmConfigMissing.value = isApmConfigMissingError(err);
     }
   };
+
+  // URL 中的 env → 初始化当前环境（首次进入时生效）；curEnv → 写回 URL（首次默认环境与用户切换环境都写入，便于分享直达）
+  watch(
+    targetEnvName,
+    envName => {
+      if (envName && envName !== curEnv.value && !isInitializingEnvFromUrl.value) {
+        isInitializingEnvFromUrl.value = true;
+        curEnv.value = envName;
+        nextTick(() => {
+          isInitializingEnvFromUrl.value = false;
+        });
+      }
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => curEnv.value,
+    envName => {
+      if (envName && envName !== targetEnvName.value && !isInitializingEnvFromUrl.value) {
+        targetEnvName.value = envName;
+      }
+    },
+    { immediate: true },
+  );
 
   watch(
     [curEnv, () => appDetailStore.appID],

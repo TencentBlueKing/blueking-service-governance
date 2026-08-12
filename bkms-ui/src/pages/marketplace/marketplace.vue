@@ -260,7 +260,7 @@
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
   import useTime from '~/composables/use-time';
-  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
+  import { useUrlQuerySync } from '~/composables/use-url-query-sync';
   import { useSpaceStore } from '~/stores/space';
 
   import ComponentManagement from './component-management.vue';
@@ -287,11 +287,13 @@
   ]);
 
   // Tab 与 URL query（active）双向同步锚定
-  const { fields } = useUrlActiveTab({
+  const { fields } = useUrlQuerySync({
     activeTab: {
       queryKey: 'active',
-      tabValues: Object.values(TAB_NAMES),
-      defaultTab: TAB_NAMES.space,
+      data: {
+        allowed: Object.values(TAB_NAMES),
+        default: TAB_NAMES.space,
+      },
     },
   });
   const activeTab = fields.activeTab;

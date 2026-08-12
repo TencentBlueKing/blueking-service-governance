@@ -168,7 +168,7 @@
   import { EnvOutput } from '~/@types/v1/env';
   import { DeployService } from '~/api/modules/v1';
   import { isHelmLikeAppType } from '~/composables/app-type';
-  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
+  import { useUrlQuerySync } from '~/composables/use-url-query-sync';
   import { useAppDetail } from '~/stores/app-detail';
 
   import ResourceTopology from '../../components/topo/index.vue';
@@ -206,16 +206,18 @@
   } as const;
 
   // Tab 与 URL query（activeTab）双向同步锚定
-  // env 参数与当前环境双向同步（环境列表异步加载，不配置 tabValues 直接透传；区别于一次性定位参数 envName）
-  const { fields } = useUrlActiveTab({
+  // env 参数与当前环境双向同步（环境列表异步加载，不配置 allowed 直接透传；区别于一次性定位参数 envName）
+  const { fields } = useUrlQuerySync({
     activeTab: {
       queryKey: 'activeTab',
-      tabValues: Object.values(TAB_NAMES),
-      defaultTab: TAB_NAMES.topo,
+      data: {
+        allowed: Object.values(TAB_NAMES),
+        default: TAB_NAMES.topo,
+      },
     },
     env: {
       queryKey: 'env',
-      defaultTab: '',
+      data: { default: '' },
     },
   });
   const activeTab = fields.activeTab;

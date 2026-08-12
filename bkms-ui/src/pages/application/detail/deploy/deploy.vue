@@ -358,7 +358,7 @@
   import { useAlertVisibility } from '~/composables/use-alert-visibility';
   import { type DeployStatusInfo, useDeployStatusMap } from '~/composables/use-deploy-status';
   import useInterval from '~/composables/use-interval';
-  import { useUrlActiveTab } from '~/composables/use-url-active-tab';
+  import { useUrlQuerySync } from '~/composables/use-url-query-sync';
   import ViewBuildLog from '~/pages/application/detail/components/view-build-log/index.vue';
   import { useAppDetail } from '~/stores/app-detail';
   import { useDeployEnvStore } from '~/stores/deploy-env';
@@ -509,18 +509,21 @@
   } as const;
 
   // Tab 与 URL query（activeTab）双向同步锚定；多环境模式下固定为 instance
-  // env 参数与当前环境双向同步（环境列表异步加载，不配置 tabValues 直接透传；区别于一次性定位参数 envName）
-  const { fields } = useUrlActiveTab({
+  // env 参数与当前环境双向同步（环境列表异步加载，不配置 allowed 直接透传；区别于一次性定位参数 envName）
+  const { fields } = useUrlQuerySync({
     activeTab: {
       queryKey: 'activeTab',
-      tabValues: Object.values(TAB_NAMES),
-      defaultTab: TAB_NAMES.instance,
-      // 多环境模式下固定为 instance；单环境分支的合法性与回退由 composable 的 tabValues 校验处理
-      getTab: tabFromQuery => (isMultiEnvMode.value ? TAB_NAMES.instance : (tabFromQuery ?? TAB_NAMES.instance)),
+      data: {
+        allowed: Object.values(TAB_NAMES),
+        default: TAB_NAMES.instance,
+        // 多环境模式下固定为 instance；单环境分支的合法性与回退由 composable 的 allowed 校验处理
+        override: valueFromQuery =>
+          isMultiEnvMode.value ? TAB_NAMES.instance : (valueFromQuery ?? TAB_NAMES.instance),
+      },
     },
     env: {
       queryKey: 'env',
-      defaultTab: '',
+      data: { default: '' },
     },
   });
   const activeTab = fields.activeTab;
