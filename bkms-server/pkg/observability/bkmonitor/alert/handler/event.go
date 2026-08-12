@@ -193,6 +193,9 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 		}})
 		return
 	}
+	// 当前接口已通过 strategyID 定位到单条 BKMS 本地策略；若调用方还额外传入 alertDisplayName，
+	// 则可先用本地展示名做一次短路过滤。只要过滤词与当前策略展示名不匹配，就无需再调用远端告警查询接口，
+	// 直接返回空结果即可，避免一次无意义的 BKMonitor 检索。
 	if alertDisplayName := strings.TrimSpace(queryInput.AlertDisplayName); alertDisplayName != "" &&
 		!strings.Contains(rule.DisplayName, alertDisplayName) {
 		ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
@@ -299,7 +302,7 @@ func collectRemoteStrategyIDsForAppAlerts(
 }
 
 // extractAlertDisplayNameFromAlertDetail 从监控详情原始名称中提取 BKMS 展示名。
-// 当前远端策略名格式固定为 `策略名【应用名】`
+// 当前远端监控策略名格式固定为 `策略名【应用名】`，返回前端展示时只返回策略名
 func extractAlertDisplayNameFromAlertDetail(detail map[string]any) string {
 	if detail == nil {
 		return ""

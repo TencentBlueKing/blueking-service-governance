@@ -350,6 +350,10 @@ func (s *Service) CleanupStrategiesForAppInEnv(
 	}
 }
 
+// affectedAppIDsForEnvTypeChange 收集环境类型变更前后可能受影响的全部应用 ID。
+//
+// 除了普通部署应用记录在 AppIDs 中，某些环境级能力的“所属应用”只会写在 OwnerAppID 上；
+// 因此这里需要同时合并 before/after 的 AppIDs 与 OwnerAppID，才能在环境类型变化后完整触发相关策略重收敛。
 func affectedAppIDsForEnvTypeChange(before, after envmodel.Environment) []string {
 	appIDs := append([]string(nil), before.AppIDs...)
 	appIDs = append(appIDs, after.AppIDs...)

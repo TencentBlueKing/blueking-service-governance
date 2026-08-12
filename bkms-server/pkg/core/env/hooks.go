@@ -45,7 +45,7 @@ type DeleteHook func(ctx context.Context, environment model.Environment) error
 // UpdateHook 在环境更新成功后执行，用于感知环境前后状态变化并触发下游收敛。
 //
 // Hook 会同时拿到更新前与更新后的 Environment 快照。Update 属于异步后置通知语义：
-// 环境更新一旦成功，不会因为 Hook 失败而回滚；Hook 错误仅记录日志，不会同步返回给上层调用方。
+// 环境更新一旦成功，不会因为 Hook 失败而回滚；调用方只会记录 Hook 错误日志，不会同步返回给上层调用方。
 // 实现方应保持幂等，并在自身需要时补充重试或补偿机制。
 type UpdateHook func(ctx context.Context, before, after model.Environment) error
 
@@ -134,7 +134,10 @@ func runDeleteHooks(ctx context.Context, environment model.Environment) error {
 	return nil
 }
 
-// runUpdateHooks 按注册顺序运行所有环境更新 Hook。
+// runUpdateHooks 按注册顺序串行运行所有环境更新 Hook。
+//
+// 该函数体现的是内部执行策略：一旦某个 Hook 返回错误，会立刻停止后续 Hook 并把错误返回给调用方。
+// 调用方可自行决定如何处理该错误；当前 EnvService.Update 会异步记录日志，但不会影响已完成的环境更新结果。
 func runUpdateHooks(ctx context.Context, before, after model.Environment) error {
 	hooksMu.RLock()
 	names := make([]string, len(updateHookNames))

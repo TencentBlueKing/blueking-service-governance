@@ -400,7 +400,6 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-
 	ctx := c.Request.Context()
 	app, err := ginperm.ValidateAppByID(ctx, h.registry, uriInput.AppID, ginperm.TypeDelete)
 	if err != nil {
@@ -441,7 +440,6 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "cleanup app resources"))
 		return
 	}
-
 	// 根据应用类型删除特定资源
 	if bkmsapp.IsAppModelType(app.Type) {
 		if err = h.deleteAppModelApp(ctx, app); err != nil {

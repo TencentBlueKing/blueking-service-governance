@@ -221,7 +221,7 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 			second := newStoreRule("ws-list", "app-a", "app-a", "rule_b")
 			second.DisplayName = "Same Name"
 			_, err = store.Create(ctx, second)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(err).To(HaveOccurred())
 
 			exists, err := store.ExistsByAppAndDisplayName(ctx, "ws-list", "app-a", "Same Name", nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -229,7 +229,7 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 
 			exists, err = store.ExistsByAppAndDisplayName(ctx, "ws-list", "app-a", "Same Name", &firstID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeTrue())
+			Expect(exists).To(BeFalse())
 		})
 	})
 
@@ -314,7 +314,9 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 			_, err := store.Create(ctx, newStoreRule("ws-a", "app-a", "app-a", "same_code"))
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, newStoreRule("ws-a", "app-a", "app-a", "same_code"))
+			second := newStoreRule("ws-a", "app-a", "app-a", "same_code")
+			second.DisplayName = "same_code-display-2"
+			_, err = store.Create(ctx, second)
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})

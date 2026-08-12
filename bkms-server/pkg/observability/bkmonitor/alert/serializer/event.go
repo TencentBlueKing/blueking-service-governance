@@ -158,7 +158,7 @@ func NewAlertEventOutput(a bkmapi.AlertEvent, strategyID, alertDisplayName strin
 }
 
 // NewGetAlertDetailResp 规范化详情接口输出字段，统一对外使用 alertID / alertDisplayName。
-// 对外移除监控原始 alert_name，避免前端感知远端命名格式细节。
+// alert_name为 策略名【应用名】，alertDisplayName为策略名
 func NewGetAlertDetailResp(detail map[string]any, alertDisplayName string) *GetAlertDetailResp {
 	if detail == nil {
 		return &GetAlertDetailResp{Data: nil}

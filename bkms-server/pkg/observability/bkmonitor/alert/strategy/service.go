@@ -134,42 +134,6 @@ func (s *Service) ListByApp(ctx context.Context, workspaceID, appID string) ([]A
 	return s.store.ListByApp(ctx, workspaceID, appID)
 }
 
-// Update 更新告警策略；若请求未产生变更则返回 false。
-func (s *Service) Update(ctx context.Context, id bson.ObjectID, req *UpdateReq) (bool, error) {
-	updateData, changed, err := req.ToBSON()
-	if err != nil {
-		return false, err
-	}
-	if !changed {
-		return false, nil
-	}
-	if req.DisplayName != nil {
-		current, getErr := s.store.Get(ctx, id)
-		if getErr != nil {
-			return false, errors.Wrap(getErr, "get alert strategy before update")
-		}
-		if *req.DisplayName != current.DisplayName {
-			if uniqueErr := s.ensureDisplayNameUnique(
-				ctx,
-				current.WorkspaceID,
-				current.AppID,
-				*req.DisplayName,
-				&id,
-			); uniqueErr != nil {
-				return false, uniqueErr
-			}
-		}
-	}
-	updateData["updater"] = req.Operator
-	if err = s.store.Update(ctx, id, updateData); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return false, ErrDisplayNameAlreadyExists
-		}
-		return false, err
-	}
-	return true, nil
-}
-
 // UpdateAndSync 更新告警策略；若有变更，则先同步远端，再持久化本地记录。
 func (s *Service) UpdateAndSync(
 	ctx context.Context,

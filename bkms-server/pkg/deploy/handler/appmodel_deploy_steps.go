@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
@@ -231,10 +232,21 @@ func (h *Handler) deleteAppModelDeploy(c *gin.Context) {
 		return
 	}
 
-	// 记录应用从环境卸载
-	deploypkg.TrackEnvRemoveApp(
-		ctx, h.registry.EnvStore, app.WorkspaceID, uriInput.EnvName, input.TrafficLaneName, app.ID,
+	h.handleAppModelDeployUninstalled(
+		ctx, app, env, uriInput.EnvName, input.TrafficLaneName, auth.MustGetUser(ctx).ID,
 	)
+	ginutils.OK(c, serializer.EmptyOutput{})
+}
+
+func (h *Handler) handleAppModelDeployUninstalled(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	env *bkmsenv.Environment,
+	envName, trafficLaneName, operator string,
+) {
+	// 记录应用从环境卸载
+	deploypkg.TrackEnvRemoveApp(ctx, h.registry.EnvStore, app.WorkspaceID, envName, trafficLaneName, app.ID)
+
 	// 应用已从环境卸载，需同步清理该应用在该环境下关联的告警策略，避免残留的无效告警。
 	// 先查询 workspace 信息（清理时需要其标识），查询失败仅记录日志，不影响卸载主流程。
 	if ws, wsErr := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID); wsErr != nil {
@@ -248,8 +260,8 @@ func (h *Handler) deleteAppModelDeploy(c *gin.Context) {
 			app.ID,
 			env.Name,
 			env.ID.Hex(),
-			input.TrafficLaneName,
-			auth.MustGetUser(ctx).ID,
+			trafficLaneName,
+			operator,
 		)
 		// TODO(alertstrategy): 用 go 裸起 goroutine 无法保证跨 Pod 串行，
 		// 后续迁移到 asynq 任务队列以解决多 Pod 并发风险。
@@ -263,18 +275,16 @@ func (h *Handler) deleteAppModelDeploy(c *gin.Context) {
 			ws,
 			app.ID,
 			env.ID,
-			input.TrafficLaneName,
-			auth.MustGetUser(ctx).ID,
+			trafficLaneName,
+			operator,
 		)
 	}
 
 	// 清理资源拓扑快照（失败不阻塞主流程）
-	if err = h.registry.ResourceSnapshotStore.Delete(
-		ctx, app.ID, uriInput.EnvName, input.TrafficLaneName,
-	); err != nil {
+	if err := h.registry.ResourceSnapshotStore.Delete(ctx, app.ID, envName, trafficLaneName); err != nil {
 		log.Errorf(
 			ctx, "delete resource snapshot for app %s env %s lane %s failed: %v",
-			app.ID, uriInput.EnvName, input.TrafficLaneName, err,
+			app.ID, envName, trafficLaneName, err,
 		)
 	}
 
@@ -286,10 +296,9 @@ func (h *Handler) deleteAppModelDeploy(c *gin.Context) {
 		app.ID,
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
-		audit.WithEnvName(uriInput.EnvName),
-		audit.WithExtras(map[string]string{"trafficLaneName": input.TrafficLaneName}),
+		audit.WithEnvName(envName),
+		audit.WithExtras(map[string]string{"trafficLaneName": trafficLaneName}),
 	)
-	ginutils.OK(c, serializer.EmptyOutput{})
 }
 
 // listAppModelResourceSnapshots 列出 AppModel 应用某次部署下发的资源清单快照元数据
