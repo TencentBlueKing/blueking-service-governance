@@ -38,6 +38,8 @@
 操作: Action
 工蜂Git: Woa Git
 操作成功: Success
+已保存，将应用于后续创建/部署: Saved and will apply to subsequent creations/deployments
+已无可新增的适用范围: No more applicable scopes can be added
 配置: Configuration
 来源: Source
 仓库地址: Repository Address
@@ -124,6 +126,7 @@ SRE 成员: SRE Members
 应用类型: Application type
 关联环境: Associated environment
 最新版本: Latest version
+基础: Basic
 基本信息: Base Info
 构建配置: Build Config
 部署配置: Deploy Config
@@ -390,6 +393,27 @@ Chart 版本: Chart Version
 创建中: Creating in progress
 异常: abnormal
 应用配置: Application Configuration
+应用默认配置: Application Default Config
+新增规则: Add Rule
+编辑规则: Edit Rule
+适用范围: Applicable Scope
+同一适用范围在本配置项中只能有一条规则；越具体的范围优先级越高。: Each applicable scope can have only one rule in this configuration; more specific scopes take higher priority.
+请选择环境类型: Please select environment type
+确认删除该规则吗？: Are you sure to delete this rule?
+新增配置项: Add Configuration
+暂无配置可添加: No configuration available to add
+请选择要配置的项: Select configuration items
+实例数、CPU、内存等配置: CPU / Memory and replicas
+退出前命令与优雅退出: Pre-stop command and graceful shutdown
+存活 / 就绪探测: Liveness / Readiness probes
+VPC网络 (underlay): VPC network (underlay)
+元数据(标签/注解): Metadata (Labels / Annotations)
+追加注入到应用 Pod: Appended and injected into the application Pod
+开启: On
+默认开启开发模式: Enable development mode by default
+支持通过 bkms-cli 上传二进制的方式热更新服务: Support hot updating services through bkms-cli
+生产环境不支持使用开发模式: Production environments do not support development mode
+为空间下 tRPC / TAF 应用设置默认配置。: Set default configuration for tRPC / TAF applications in the space
 启动命令: Start Command
 环境变量: Environment Variables
 策略配置: Policy Configuration
@@ -1108,6 +1132,7 @@ Pod 中的管理脚本将在重新部署后移除: Management scripts in the Pod
 请先选择流水线: Please select the pipeline first
 框架配置: Framework Configuration
 TAF 应用: TAF Application
+TAEF 应用: TAEF Application
 查看指引: View Guide
 时间: Time
 资源名称: Resource Name
@@ -1172,6 +1197,8 @@ APM 实例: APM Instance
 请输入环境名称以确认: Please enter the environment name to confirm
 请输入正确的环境名称: Please enter the correct environment name
 切换 APM 实例成功: APM instance switched successfully
+内存限制: Memory Limits
+内存预留: Memory Requests
 启动配置: Startup Configuration
 文件信息: File Information
 文件内容: File Content
@@ -1908,3 +1935,4 @@ CPU Limits 利用率: CPU Limits Utilization
 异常实例: Abnormal Instances
 "运行实例 {0} / {1}": "Running Instances {0} / {1}"
 "涉及 {0} 个环境": "Across {0} Environment(s)"
+本页配置只会影响本空间之后新建的应用，已有应用不受影响。仅适用于平台托管部署的应用（如 tRPC、TAF），Helm / Agones 等自定义编排应用不适用。: This page's configuration will only affect newly created applications in the current workspace. Existing applications are not affected. Only applicable to platform-managed applications (e.g., tRPC, TAF), not applicable to custom编排 applications (e.g., Helm / Agones).

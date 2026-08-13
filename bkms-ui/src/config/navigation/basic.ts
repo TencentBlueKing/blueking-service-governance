@@ -16,6 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import appDefaultConfig from '~/pages/basic/app-default-config/index.vue';
 import basic from '~/pages/basic/base-info/basic.vue';
 import operationHistory from '~/pages/basic/operation-history/index.vue';
 
@@ -24,19 +25,41 @@ import { i18n } from '../../modules/i18n';
 import type { NavigationItem } from './types';
 
 /**
- * 基本信息导航配置
+ * 空间设置导航配置
+ * - 基础：基本信息、操作记录
+ * - 默认配置：应用默认配置
  */
 export const BASIC_NAVIGATION: NavigationItem[] = [
   {
-    key: 'info',
-    name: i18n.global.t('基本信息'),
-    icon: 'basic-info',
-    component: basic,
+    key: 'basicGroup',
+    name: i18n.global.t('基础'),
+    foldName: i18n.global.t('基础'),
+    children: [
+      {
+        key: 'info',
+        name: i18n.global.t('基本信息'),
+        icon: 'basic-info',
+        component: basic,
+      },
+      {
+        key: 'history',
+        name: i18n.global.t('操作记录'),
+        icon: 'historical-tasks',
+        component: operationHistory,
+      },
+    ],
   },
   {
-    key: 'history',
-    name: i18n.global.t('操作记录'),
-    icon: 'historical-tasks',
-    component: operationHistory,
+    key: 'defaultConfigGroup',
+    name: i18n.global.t('默认配置'),
+    foldName: i18n.global.t('默认配置'),
+    children: [
+      {
+        key: 'appDefaultConfig',
+        name: i18n.global.t('应用默认配置'),
+        icon: 'setting-fill',
+        component: appDefaultConfig,
+      },
+    ],
   },
 ];

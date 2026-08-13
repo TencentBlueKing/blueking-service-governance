@@ -22,6 +22,15 @@
     :list="menuList"
     :need-title="false"
   >
+    <!-- 与「基本信息」等 tab 共用 container-header，子页面可通过 Teleport 注入 TabHeader -->
+    <template #header>
+      <div
+        id="space-page-header"
+        class="w-full"
+      >
+        <span class="text-[16px] space-page-header-title">{{ headerTitle }}</span>
+      </div>
+    </template>
     <RouterView :key="routerViewKey"></RouterView>
   </CustomNavigation>
 </template>
@@ -47,6 +56,13 @@
     return `${menuName}-${name}-${space}`;
   });
 
+  /** 当前菜单标题，默认展示在 container-header 中 */
+  const headerTitle = computed(() => {
+    const items = menuList.value.flatMap(item => ('children' in item ? item.children : [item]));
+    const current = items.find(item => item.key === activeKey.value);
+    return current && 'name' in current ? current.name : '';
+  });
+
   watch(activeKey, key => {
     router.push({
       name: 'basicItem',
@@ -60,3 +76,21 @@
     menuList.value = getBasicMenuList();
   });
 </script>
+
+<style lang="postcss" scoped>
+  /* 子页面将 TabHeader 放入 header 后，隐藏默认标题并撑开高度 */
+  :deep(.container-header:has(.tab-header-container)) {
+    height: auto !important;
+    padding: 0 !important;
+    align-items: stretch !important;
+  }
+
+  :deep(.container-header:has(.tab-header-container) .space-page-header-title) {
+    display: none;
+  }
+
+  :deep(.container-header .tab-header-container) {
+    box-shadow: none;
+    width: 100%;
+  }
+</style>

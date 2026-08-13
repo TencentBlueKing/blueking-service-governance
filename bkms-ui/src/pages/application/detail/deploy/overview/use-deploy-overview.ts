@@ -24,6 +24,7 @@ import { AppService } from '~/api/modules/v1';
 import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES } from '~/common/enums/deploy';
 import { useDeployStatusMap } from '~/composables/use-deploy-status';
 import { envTypeMap } from '~/composables/use-env-manager';
+import { useResourceSpecDisplay } from '~/composables/use-resource-spec-display';
 import { type ISearchValue, type ISelectKey, useTableSearchSelect } from '~/composables/use-search';
 import useSearchFilter from '~/composables/use-search-filter';
 import { useAppDetail } from '~/stores/app-detail';
@@ -120,6 +121,7 @@ type DeployOverviewAutoscaling = Pick<
  */
 export function useDeployOverview(envList: Ref<EnvOutput[]>) {
   const { t } = useI18n();
+  const { getResourceText, getResourceTips } = useResourceSpecDisplay();
   const appDetailStore = useAppDetail();
   const { getDeployStatusInfo, getDeployStatusMaps } = useDeployStatusMap();
 
@@ -323,20 +325,6 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
   /** 获取部署状态对应的文案、颜色和图标配置，供状态列统一渲染。 */
   function getStatusInfo(status: string) {
     return getDeployStatusInfo(appDetailStore.appType || null, status);
-  }
-
-  /** 生成资源规格列的简要文案；CPU 和内存均缺失时返回空字符串以展示“--”。 */
-  function getResourceText(row: DeployOverviewRow) {
-    if (!row.cpuLimits && !row.memoryLimits) return '';
-    return t('{0} 核 / {1}', [row.cpuLimits || '--', row.memoryLimits || '--']);
-  }
-
-  /** 生成资源规格悬浮提示，完整展示 Requests 与 Limits。 */
-  function getResourceTips(row: DeployOverviewRow) {
-    return [
-      t('CPU：Requests {0} 核 / Limits {1} 核', [row.cpuRequests || '--', row.cpuLimits || '--']),
-      t('内存：Requests {0} / Limits {1}', [row.memoryRequests || '--', row.memoryLimits || '--']),
-    ];
   }
 
   /** 清空指标卡、搜索及表头筛选，并将分页恢复到第一页。 */

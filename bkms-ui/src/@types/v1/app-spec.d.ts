@@ -559,8 +559,7 @@ export interface AppSpecAnnotationsInput {
   annotations?: Record<string, string>;
 }
 
-export interface EmptyOutput {
-}
+export type EmptyOutput = Record<string, never>;
 
 export interface AppSpecLabelsSectionOutput {
   data?: AppSpecLabelsOutput;
@@ -677,7 +676,7 @@ export interface ListDevModeRulesOutput {
 }
 
 export interface DevModeRuleInput {
-  envType: string;
+  envTypes: string[];
   spec: DevModeSpecInput;
 }
 
@@ -685,15 +684,12 @@ export interface DevModeRuleOutput {
   data?: DevModeRuleOutputObj;
 }
 
-export interface EmptyOutput {
-}
-
 export interface ListResourcesRulesOutput {
   data?: ResourcesRuleOutputObj[];
 }
 
 export interface ResourcesRuleInput {
-  envType: string;
+  envTypes: string[];
   spec: ResourcesSpecInput;
 }
 
@@ -703,7 +699,7 @@ export interface ResourcesRuleOutput {
 
 export interface ResourcesRuleOutputObj {
   createdAt?: string;
-  envType?: string;
+  envTypes?: string[];
   id?: string;
   spec?: AppSpecResourcesOutput;
   updatedAt?: string;
@@ -742,7 +738,7 @@ export interface ResourcesSpecInput {
 
 export interface DevModeRuleOutputObj {
   createdAt?: string;
-  envType?: string;
+  envTypes?: string[];
   id?: string;
   spec?: DevModeSpecOutput;
   updatedAt?: string;

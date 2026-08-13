@@ -41,10 +41,18 @@ interface EnvTypeConfig {
 }
 
 export const envTypeMap: Record<string, EnvTypeConfig> = {
-  development: { name: i18n.global.t('开发') },
-  test: { name: i18n.global.t('测试') },
-  staging: { name: i18n.global.t('预发布') },
-  production: { name: i18n.global.t('生产') },
+  development: {
+    name: i18n.global.t('开发'),
+  },
+  test: {
+    name: i18n.global.t('测试'),
+  },
+  staging: {
+    name: i18n.global.t('预发布'),
+  },
+  production: {
+    name: i18n.global.t('生产'),
+  },
 };
 
 /** 环境分类无边框 Tag 颜色，统一供列表及选择器使用。 */
