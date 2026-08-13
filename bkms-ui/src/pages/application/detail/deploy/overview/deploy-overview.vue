@@ -70,21 +70,31 @@
             </div>
           </Radio.Button>
         </Radio.Group>
-        <DeployActionButton
-          v-if="canAddDeploy"
-          :label="$t('新增部署')"
-          show-feature-deploy
-          @deploy="emit('deploy', deployTargets)"
-          @feature-deploy="emit('feature-deploy')"
-        >
-          <template #label>
-            <Plus
-              :height="24"
-              :width="24"
-            />
-            {{ $t('新增部署') }}
-          </template>
-        </DeployActionButton>
+        <div class="flex items-center gap-[8px]">
+          <Button
+            v-bk-tooltips="$t('刷新')"
+            class="!min-w-[32px] !px-0 bg-[#fff]"
+            @click="handleRefresh"
+          >
+            <i
+              :class="[
+                'bkms-icon bkms-icon-refresh text-[16px]',
+                isLoading ? 'animate-spin [animation-duration:1.5s]' : '',
+              ]"
+            ></i>
+          </Button>
+          <DeployActionButton
+            v-if="canAddDeploy"
+            :label="$t('新增部署')"
+            show-feature-deploy
+            @deploy="emit('deploy', deployTargets)"
+            @feature-deploy="emit('feature-deploy')"
+          >
+            <template #label>
+              {{ $t('部署') }}
+            </template>
+          </DeployActionButton>
+        </div>
       </div>
 
       <!-- 指标卡统计当前环境类型的数据；所有卡片始终可点击，数量为 0 时也能查看对应空结果。 -->
@@ -143,10 +153,12 @@
         >
           <Table
             ref="tableRef"
+            v-bkloading="{ loading: isLoading }"
             :data="visibleRows"
             :filter-config="{ remote: true }"
             :max-height="tableHeight"
             :pagination="pagination"
+            row-class-name="cursor-pointer"
             :row-config="{ isHover: true }"
             :row-height="48"
             :show-overflow="false"
@@ -154,6 +166,7 @@
             @filter-change="handleFilterChange"
             @page-limit-change="handlePageLimitChange"
             @page-value-change="handlePageValueChange"
+            @row-click="handleRowClick"
           >
             <!-- 区分接口异常、筛选无结果和接口成功但无数据三种空态。 -->
             <template #empty>
@@ -167,14 +180,11 @@
               field="displayName"
               fixed="left"
               :label="$t('环境')"
-              :width="200"
+              :min-width="220"
             >
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <div class="flex items-center gap-[4px]">
-                  <span
-                    class="cursor-pointer truncate text-[#3A84FF] hover:text-[#699DF4]"
-                    @click="emit('view-instances', row.name)"
-                  >
+                  <span class="truncate text-[#3A84FF] hover:text-[#699DF4]">
                     {{ row.displayName }}
                   </span>
                   <Tag
@@ -213,8 +223,7 @@
               </template>
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <div class="flex w-fit items-center">
-                  <ColorIcon
-                    class="mr-[4px]"
+                  <DeployStatusIcon
                     :icon="getStatusInfo(row.deployStatus).icon"
                     :size="12"
                   />
@@ -224,7 +233,7 @@
             </TableColumn>
             <TableColumn
               :label="$t('实例数（运行/期望/异常）')"
-              min-width="240"
+              min-width="200"
             >
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <div class="flex items-center">
@@ -240,6 +249,7 @@
                     <Popover
                       v-if="row.autoScale.tips.length && !row.autoScale.abnormal"
                       placement="top"
+                      :popover-delay="[100, 0]"
                     >
                       <AutoScaleTag
                         class="ml-[8px]"
@@ -265,19 +275,12 @@
                       :status="row.autoScale.status"
                     />
                   </template>
-                  <Tag
-                    v-else-if="row.autoScale.configured"
-                    class="ml-[8px] !border-[#DCDEE5] !bg-[#F5F7FA] !text-[#979BA5]"
-                    size="small"
-                  >
-                    {{ $t('自动扩缩容已关闭') }}
-                  </Tag>
                 </div>
               </template>
             </TableColumn>
             <TableColumn
               :label="$t('资源规格')"
-              min-width="140"
+              min-width="120"
             >
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <Popover
@@ -326,9 +329,7 @@
   import { computed, ref, toRef, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
-  import { Popover, Radio, SearchSelect, Tag } from 'bkui-vue';
-  import { Plus } from 'bkui-vue/lib/icon';
-  import ColorIcon from '~/components/color-icon.vue';
+  import { Button, Popover, Radio, SearchSelect, Tag } from 'bkui-vue';
   import CustomFilter from '~/components/custom-filter.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
@@ -342,6 +343,7 @@
   import { useAppDetail } from '~/stores/app-detail';
 
   import DeployActionButton from '../deploy-action-button.vue';
+  import DeployStatusIcon from './deploy-status-icon.vue';
   import StatIcon from './stat-icon.vue';
   import { type DeployOverviewDeployTarget, type DeployOverviewRow, useDeployOverview } from './use-deploy-overview';
 
@@ -392,7 +394,18 @@
 
   /** 将最近部署时间转换为相对时间，并保留完整时间作为 tooltip。 */
   function formatDeployedAt(deployedAt: string) {
-    return formatRelativeTimeWithTooltip(deployedAt);
+    return formatRelativeTimeWithTooltip(deployedAt, { alwaysRelative: true });
+  }
+
+  /** 刷新过程中忽略重复点击，避免并发请求总览接口。 */
+  function handleRefresh() {
+    if (isLoading.value) return;
+    load();
+  }
+
+  /** 点击总览表格任意数据单元格时进入对应环境的实例列表。 */
+  function handleRowClick(_event: Event, row: DeployOverviewRow) {
+    emit('view-instances', row.name);
   }
 
   // 部署、移除部署等父级操作完成后，通过暴露的 load 主动刷新总览。

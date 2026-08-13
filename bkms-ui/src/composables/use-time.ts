@@ -36,10 +36,13 @@ dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
 
 /**
- * 格式化时间：半个月内显示相对时间，超出显示绝对时间
+ * 格式化时间：默认半个月内显示相对时间，超出显示绝对时间；alwaysRelative 可强制显示相对时间
  * @returns { text, tooltip } text 为展示文本，tooltip 为 hover 绝对时间（仅相对时间时有值）
  */
-export function formatRelativeTimeWithTooltip(date: Date | null | string | undefined): {
+export function formatRelativeTimeWithTooltip(
+  date: Date | null | string | undefined,
+  options: { alwaysRelative?: boolean } = {},
+): {
   text: string;
   tooltip: string;
 } {
@@ -52,7 +55,7 @@ export function formatRelativeTimeWithTooltip(date: Date | null | string | undef
   const absText = target.format('YYYY-MM-DD HH:mm:ss');
   const diffDays = now.diff(target, 'day');
   // 超过 15 天直接显示绝对时间
-  if (diffDays >= 15) return { text: absText, tooltip: '' };
+  if (!options.alwaysRelative && diffDays >= 15) return { text: absText, tooltip: '' };
   // 相对时间
   const relText = target.from(now);
 

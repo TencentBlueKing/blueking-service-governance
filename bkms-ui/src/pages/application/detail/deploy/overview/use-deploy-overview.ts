@@ -307,13 +307,15 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
 
   // Table 使用远程筛选模式，但数据均已由总览接口一次返回，因此排序仍在前端完成。
   const sortConfig = {
+    // 最近优先对应设计稿中的上三角高亮，因此页面排序方向与组件 order 做反向映射。
+    defaultSort: { field: 'deployedAt', order: 'asc' },
     multiple: false,
     trigger: 'cell',
     /** 根据表格传入的首个排序条件返回新数组，避免直接修改原始总览数据。 */
     sortMethod({ data, sortList }: { data: DeployOverviewRow[]; sortList: VxeTableDefines.SortCheckedParams[] }) {
       const sort = sortList[0];
       if (!sort) return data;
-      const factor = sort.order === 'asc' ? 1 : -1;
+      const factor = sort.order === 'asc' ? -1 : 1;
       return [...data].sort((a, b) => compareByField(a, b, String(sort.field)) * factor);
     },
   };

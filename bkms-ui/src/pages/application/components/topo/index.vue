@@ -24,7 +24,7 @@
     <div class="flex flex-col h-full custom-resource-topology">
       <FlexRow
         v-if="nodes.length > 0"
-        class="h-[48px] py-[8px] px-[16px] shrink-0 shadow-[0_2px_4px_0_#0000001a]"
+        class="h-[48px] py-[8px] px-[16px] shrink-0 bg-[#fff] shadow-[0_2px_4px_0_#0000001a]"
       >
         <template #left>
           <!-- <Tab
@@ -65,7 +65,7 @@
       <ResizeLayout
         v-else
         :border="false"
-        class="flex-1 mt-[2px] min-h-0 custom-resize-layout"
+        class="flex-1 mt-[1px] min-h-0 custom-resize-layout"
         collapsible
         :initial-divide="260"
       >

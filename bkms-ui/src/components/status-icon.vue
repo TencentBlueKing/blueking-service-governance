@@ -20,13 +20,15 @@
   <div class="flex items-center">
     <svg
       v-if="pending"
-      class="size-[16px] mr-[4px]"
+      class="mr-[4px] shrink-0"
+      :style="iconSize"
     >
       <use :xlink:href="`#bkms-icon-loading`"></use>
     </svg>
     <svg
       v-else
-      class="size-[16px] mr-[4px]"
+      class="mr-[4px] shrink-0"
+      :style="iconSize"
     >
       <use :xlink:href="`#bkms-icon-${statusClass}`"></use>
     </svg>
@@ -83,9 +85,17 @@
       type: String,
       default: '',
     },
+    size: {
+      type: Number,
+      default: 16,
+    },
   });
 
-  const { statusColorMap, statusTextMap, status, type, hideText } = toRefs(props);
+  const { statusColorMap, statusTextMap, status, type, hideText, size } = toRefs(props);
+  const iconSize = computed(() => ({
+    height: `${size.value}px`,
+    width: `${size.value}px`,
+  }));
   const svgEnums: { [key in string]: string } = {
     green: 'normal',
     red: 'abnormal',

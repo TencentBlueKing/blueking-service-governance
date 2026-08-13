@@ -159,11 +159,12 @@
   </div>
 </template>
 <script setup lang="ts">
-  import { computed, h, nextTick, ref, watch } from 'vue';
+  import { computed, h, ref, watch } from 'vue';
 
   import { Button, Exception, InfoBox, Message, Popover, Tab } from 'bkui-vue';
   import { Ellipsis } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
+  import { useRoute, useRouter } from 'vue-router';
   import { DeleteHelmDeployRequest } from '~/@types/v1/deploy';
   import { EnvOutput } from '~/@types/v1/env';
   import { DeployService } from '~/api/modules/v1';
@@ -178,6 +179,8 @@
   import { useHelmDeploy } from './use-helm-deploy';
 
   const { t } = useI18n();
+  const route = useRoute();
+  const router = useRouter();
   const appDetailStore = useAppDetail();
   // 部署应用
   const {
@@ -205,8 +208,7 @@
     history: 'history',
   } as const;
 
-  // Tab 与 URL query（activeTab）双向同步锚定
-  // env 参数与当前环境双向同步（环境列表异步加载，不配置 allowed 直接透传；区别于一次性定位参数 envName）
+  // Tab 与 URL query（activeTab）双向同步锚定，环境选择仅保留在页面状态中。
   const { fields } = useUrlQuerySync({
     activeTab: {
       queryKey: 'activeTab',
@@ -215,17 +217,19 @@
         default: TAB_NAMES.topo,
       },
     },
-    env: {
-      queryKey: 'env',
-      data: { default: '' },
-    },
   });
   const activeTab = fields.activeTab;
-  const targetEnvName = fields.env;
 
-  // URL 中的 envName → 初始化当前环境（首次进入时生效）
-  // curEnv → 写回 URL（首次默认环境与用户切换环境都写入，便于分享直达）
-  const isInitializingEnvFromUrl = ref(false);
+  // 兼容旧链接：部署环境属于页面状态，不在 URL 中保留。
+  watch(
+    () => route.query.env,
+    env => {
+      if (env === undefined) return;
+      const { env: _env, ...query } = route.query;
+      router.replace({ query });
+    },
+    { immediate: true },
+  );
 
   // 泳道
   const curLaneName = ref('');
@@ -354,30 +358,6 @@
     () => appDetailStore.app,
     async () => {
       await appDetailStore.fetchAppDetail();
-    },
-    { immediate: true },
-  );
-
-  watch(
-    targetEnvName,
-    envName => {
-      if (envName && envName !== curEnv.value && !isInitializingEnvFromUrl.value) {
-        isInitializingEnvFromUrl.value = true;
-        curEnv.value = envName;
-        nextTick(() => {
-          isInitializingEnvFromUrl.value = false;
-        });
-      }
-    },
-    { immediate: true },
-  );
-
-  watch(
-    () => curEnv.value,
-    envName => {
-      if (envName && envName !== targetEnvName.value && !isInitializingEnvFromUrl.value) {
-        targetEnvName.value = envName;
-      }
     },
     { immediate: true },
   );

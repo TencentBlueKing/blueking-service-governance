@@ -80,6 +80,7 @@
               class="line-height-[22px]"
               :message="row.status !== APP_DEPLOY_STATUS.DEPLOYED ? row.message : ''"
               :pending="row.status === APP_DEPLOY_STATUS.DEPLOYING || row.status === APP_DEPLOY_STATUS.UNINSTALLING"
+              :size="12"
               :status="row.status"
               :status-color-map="deployStatusColorMap"
               :status-text-map="deployStatusTextMap"

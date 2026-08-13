@@ -260,6 +260,7 @@
           <template #default="{ row }: { row: AppInstanceOutputObj }">
             <StatusIcon
               :message="row.status !== 'Running' ? row.message : ''"
+              :size="12"
               :status="row.status"
             />
           </template>
@@ -286,6 +287,7 @@
             <ColorIcon
               class="inline-block"
               :icon="row.isHealthy ? 'normal' : 'abnormal'"
+              :size="12"
             />
             {{ row.isHealthy ? 'Healthy' : 'UnHealthy' }}
           </template>
@@ -323,6 +325,7 @@
                 <ColorIcon
                   class="mr-[4px]"
                   :icon="isPolarisHealthy(row) ? 'normal' : 'abnormal'"
+                  :size="12"
                 />
                 <span class="!border-b-[1px] !border-[#AFAFAF] !border-dashed">
                   {{ isPolarisHealthy(row) ? 'Healthy' : 'UnHealthy' }}
@@ -355,6 +358,7 @@
                         <ColorIcon
                           class="inline-block"
                           :icon="polarisRow.isHealthy ? 'normal' : 'abnormal'"
+                          :size="12"
                         />
                         {{ polarisRow.isHealthy ? 'Healthy' : 'UnHealthy' }}
                       </template>

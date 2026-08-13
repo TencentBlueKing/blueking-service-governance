@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div class="h-full py-[12px] px-[16px] flex flex-col">
+  <div class="h-full py-[12px] px-[16px] flex flex-col bg-[#fff]">
     <div class="leading-[40px] flex items-center justify-between px-[10px]">
       <span class="text-[#313238] font-bold">{{ $t('状态') }}</span>
       <Button

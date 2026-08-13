@@ -48,7 +48,7 @@
       />
       <SearchSelect
         v-model="searchValue"
-        class="min-w-[348px] bg-[#fff] relative z-[100]"
+        class="min-w-[560px] bg-[#fff] relative z-[100]"
         :data="searchData"
         :placeholder="
           createPlaceholder({
