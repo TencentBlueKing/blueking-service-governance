@@ -23,20 +23,18 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("buildFilename", func() {
-	It("keeps original parts without replacing characters", func() {
-		filename := buildFilename("app", "foo/bar", "with space", "effective-env-vars.env")
-		Expect(filename).To(Equal("app-foo/bar-with space-effective-env-vars.env"))
-	})
-})
-
 var _ = Describe("buildExportFilename", func() {
-	It("prefixes workspace name for business exports", func() {
+	It("keeps original parts without replacing characters", func() {
+		filename := buildExportFilename("workspace-a", "app", "foo/bar", "with space", "effective-env-vars.env")
+		Expect(filename).To(Equal("workspace-a-app-foo/bar-with space-effective-env-vars.env"))
+	})
+
+	It("prefixes workspace ID for business exports", func() {
 		filename := buildExportFilename("workspace-a", "app", "foo/bar", "effective-env-vars.env")
 		Expect(filename).To(Equal("workspace-a-app-foo/bar-effective-env-vars.env"))
 	})
 
-	It("skips empty workspace name after trimming", func() {
+	It("skips empty workspace ID after trimming", func() {
 		filename := buildExportFilename("  ", "env", "test", "scoped-env-vars.env")
 		Expect(filename).To(Equal("env-test-scoped-env-vars.env"))
 	})

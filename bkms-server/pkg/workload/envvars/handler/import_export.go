@@ -271,7 +271,7 @@ func (h *Handler) ExportPublicScopedEnvVars(c *gin.Context) {
 	writeEnvFileAttachment(
 		c,
 		buildExportFilename(
-			resolveWorkspaceDisplayName(ws.DisplayName, ws.ID),
+			ws.ID,
 			"public-scoped-env-vars.env",
 		),
 		content,
@@ -310,16 +310,10 @@ func (h *Handler) ExportEnvScopedEnvVars(c *gin.Context) {
 		return
 	}
 
-	workspaceName, err := h.getWorkspaceExportName(ctx, environment.WorkspaceID)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace for env export"))
-		return
-	}
-
 	writeEnvFileAttachment(
 		c,
 		buildExportFilename(
-			workspaceName,
+			environment.WorkspaceID,
 			"env",
 			environment.Name,
 			"scoped-env-vars.env",
@@ -378,21 +372,9 @@ func (h *Handler) exportAppDefinedEnvVars(ctx context.Context, c *gin.Context, a
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "export app defined env vars"))
 		return
 	}
-	workspaceName, err := h.getWorkspaceExportName(ctx, app.WorkspaceID)
-	if err != nil {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Wrap(
-				err,
-				bkerrs.ErrCodeInternalServerError,
-				"get workspace for app env vars export",
-			),
-		)
-		return
-	}
 	writeEnvFileAttachment(
 		c,
-		buildExportFilename(workspaceName, "app", app.Name, "env-vars.env"),
+		buildExportFilename(app.WorkspaceID, "app", app.Name, "env-vars.env"),
 		content,
 	)
 }
@@ -430,21 +412,9 @@ func (h *Handler) exportEffectiveAppEnvVars(
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "export effective app env vars"))
 		return
 	}
-	workspaceName, err := h.getWorkspaceExportName(ctx, app.WorkspaceID)
-	if err != nil {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Wrap(
-				err,
-				bkerrs.ErrCodeInternalServerError,
-				"get workspace for effective app env vars export",
-			),
-		)
-		return
-	}
 	writeEnvFileAttachment(
 		c,
-		buildExportFilename(workspaceName, "app", app.Name, environment.Name, "effective-env-vars.env"),
+		buildExportFilename(app.WorkspaceID, "app", app.Name, environment.Name, "effective-env-vars.env"),
 		content,
 	)
 }
@@ -502,9 +472,11 @@ func writeEnvFileAttachment(c *gin.Context, filename, content string) {
 	c.Data(http.StatusOK, httpresp.AttachmentContentType, []byte(content))
 }
 
-func buildFilename(parts ...string) string {
-	sanitized := make([]string, 0, len(parts))
-	for _, part := range parts {
+// buildExportFilename 基于工作空间 ID 拼接导出文件名。
+// 会先把 workspaceID 作为前缀，再追加其余 parts，并在拼接前过滤空白项。
+func buildExportFilename(workspaceID string, parts ...string) string {
+	sanitized := make([]string, 0, len(parts)+1)
+	for _, part := range append([]string{workspaceID}, parts...) {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {
 			continue
@@ -512,31 +484,6 @@ func buildFilename(parts ...string) string {
 		sanitized = append(sanitized, trimmed)
 	}
 	return strings.Join(sanitized, "-")
-}
-
-// buildExportFilename 基于工作空间名称拼接导出文件名。
-// 会先把 workspaceName 作为前缀，再追加其余 parts，统一交由 buildFilename 做空格过滤与连字符拼接。
-func buildExportFilename(workspaceName string, parts ...string) string {
-	return buildFilename(append([]string{workspaceName}, parts...)...)
-}
-
-// getWorkspaceExportName 查询指定工作空间并返回其导出时使用的显示名称。
-// 若工作空间没有配置展示名称，则回退使用工作空间 ID 作为名称。
-func (h *Handler) getWorkspaceExportName(ctx context.Context, workspaceID string) (string, error) {
-	ws, err := h.registry.WorkspaceStore.Get(ctx, workspaceID)
-	if err != nil {
-		return "", err
-	}
-	return resolveWorkspaceDisplayName(ws.DisplayName, ws.ID), nil
-}
-
-// resolveWorkspaceDisplayName 根据工作空间的展示名称与 ID 计算导出显示名。
-// 当展示名称为空或仅含空白字符时，使用工作空间 ID 作为兜底名称。
-func resolveWorkspaceDisplayName(displayName, workspaceID string) string {
-	if trimmed := strings.TrimSpace(displayName); trimmed != "" {
-		return trimmed
-	}
-	return workspaceID
 }
 
 func (h *Handler) newImportService() *importer.Service {
