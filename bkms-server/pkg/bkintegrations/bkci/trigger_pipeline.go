@@ -29,6 +29,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -62,11 +63,25 @@ var nonCredentialIDCharPattern = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 // 以便注入回调地址、应用独享凭证，并渲染带 appID 的显示名
 type TriggerPipelineManager struct {
 	workspaceID string
+	// Client 可选的蓝盾客户端；为空时按请求用户现场创建。测试可注入 Stub
+	Client cloudbkci.Client
 }
 
 // NewTriggerPipelineManager 按工作空间创建触发流水线管理器
 func NewTriggerPipelineManager(workspaceID string) *TriggerPipelineManager {
 	return &TriggerPipelineManager{workspaceID: workspaceID}
+}
+
+// getClient 优先返回注入的 Client，未注入时按当前用户新建
+func (m *TriggerPipelineManager) getClient(ctx context.Context) (cloudbkci.Client, error) {
+	if m.Client != nil {
+		return m.Client, nil
+	}
+	client, err := cloudbkci.New(auth.MustGetUser(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "create bkci client")
+	}
+	return client, nil
 }
 
 // Ensure 确保指定应用的触发专用流水线存在（幂等 create-if-missing）
@@ -75,9 +90,8 @@ func NewTriggerPipelineManager(workspaceID string) *TriggerPipelineManager {
 //
 // 本地已存在时直接返回，不做模板 semver 升级：共享流水线的
 // ensureBuiltinPipelineTemplateVersion 会用模板 name/stages 全量覆盖蓝盾侧，
-// 会冲掉本方法注入的显示名与回调脚本，以及触发器同步子需求写入的 Git 条件
-// （不是循环依赖，而是多写入方共存下不能整模板覆盖；若需滚动模板应另做合并式 Sync）
-// 与 PipelineManager.Initialize 对 build-trigger-* 的分叉理由一致，详见该函数注释
+// 会冲掉本方法注入的显示名与回调脚本，以及触发器同步子需求写入的 Git 条件。
+// 若需滚动模板，应另做保留上述字段的合并式 Sync，不要套用 PipelineManager.Initialize
 func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pipeline, error) {
 	// 本地以 workspaceID + build-trigger-{appID} 唯一索引幂等判定
 	pipelineType := string(BuildTriggerPipelineType(appID))
@@ -109,9 +123,9 @@ func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pip
 		return nil, errors.Wrapf(err, "get project by workspace %s", m.workspaceID)
 	}
 
-	client, err := cloudbkci.New(auth.MustGetUser(ctx))
+	client, err := m.getClient(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "create bkci client")
+		return nil, errors.Wrap(err, "get bkci client")
 	}
 
 	// 凭证 ID 对 appID 稳定可推导，便于 Cleanup / 失败重试时回收同名资源
@@ -170,9 +184,9 @@ func (m *TriggerPipelineManager) Cleanup(ctx context.Context, appID string) erro
 		return errors.Wrapf(err, "get workspace %s pipeline %s", m.workspaceID, pipelineType)
 	}
 
-	client, err := cloudbkci.New(auth.MustGetUser(ctx))
+	client, err := m.getClient(ctx)
 	if err != nil {
-		return errors.Wrap(err, "create bkci client")
+		return errors.Wrap(err, "get bkci client")
 	}
 
 	// 远程已不存在可继续；其它错误中止，避免本地被清掉后失去对账依据
@@ -342,9 +356,14 @@ func renderBuildTriggerText(text string, renderCtx map[string]any) (string, erro
 
 // renderBuildTriggerStages 深拷贝模板 stages，并用 [[ ]] 注入实例期字段
 //
-// 经 JSON round-trip 避免修改入参；占位符在资产中自逃逸，Reload 后仍为 [[ .callbackURL ]] 等形式
+// 先 copier 深拷贝避免改入参；再把拷贝序列化成 JSON 文本做模板渲染。
+// 占位符在资产中自逃逸，Reload 后仍为 [[ .callbackURL ]] 等形式
 func renderBuildTriggerStages(stages []map[string]any, renderCtx map[string]any) ([]map[string]any, error) {
-	raw, err := json.Marshal(stages)
+	cloned := make([]map[string]any, 0, len(stages))
+	if err := copier.CopyWithOption(&cloned, stages, copier.Option{DeepCopy: true}); err != nil {
+		return nil, errors.Wrap(err, "copy pipeline template stages")
+	}
+	raw, err := json.Marshal(cloned)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal pipeline template stages")
 	}
