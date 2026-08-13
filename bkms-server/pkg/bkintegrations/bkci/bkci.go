@@ -38,7 +38,7 @@ const (
 
 // builtinPipelineTypes 工作空间级共享的内置流水线类型（精确匹配）
 // 用户自定义的流水线，类型即 pipelineID：p-[a-z0-9]{32}
-// 触发专用流水线通过前缀匹配判定，见 isBuiltinPipelineType / ParseBuildTriggerPipelineType
+// 触发专用流水线 type 为 build-trigger-{appID}，由 TriggerPipelineManager 管理，不算本列表
 var builtinPipelineTypes = []PipelineType{
 	PipelineTypeDockerfile,
 	PipelineTypeHelmGitBuild,
@@ -69,13 +69,10 @@ func ParseBuildTriggerPipelineType(pipelineType string) (string, bool) {
 }
 
 // ResolveBuiltinTemplateType 将流水线 type 解析为查模板用的基础类型。
-// 共享内置类型原样返回；触发专用复合 type 解析为 PipelineTypeBuildTrigger；其余返回空与 false
+// 仅精确匹配工作空间级共享内置类型；触发专用与自定义流水线返回空与 false
 func ResolveBuiltinTemplateType(pipelineType string) (PipelineType, bool) {
 	if slices.Contains(builtinPipelineTypes, PipelineType(pipelineType)) {
 		return PipelineType(pipelineType), true
-	}
-	if _, ok := ParseBuildTriggerPipelineType(pipelineType); ok {
-		return PipelineTypeBuildTrigger, true
 	}
 	return "", false
 }

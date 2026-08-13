@@ -98,7 +98,7 @@ W1 已注册全部 8 条路由，但 Handler 均为空实现，返回契约结�
 
 **W2 已落地**：
 
-- `isBuiltinPipelineType` / `ResolveBuiltinTemplateType`：共享类型精确匹配，触发专用复合 type 前缀匹配后解析模板类型 `build-trigger`
+- `ResolveBuiltinTemplateType`：仅精确匹配共享内置类型 `dockerfile` / `helm-git-build`；触发专用不走 `PipelineManager.Initialize`
 - 模板资产：`assets/pipeline_templates/build_trigger.json`（trigger stage 的 `elements: []` + 回调脚本；Git 触发器由同步下发填充）
 - 模板渲染：与构建镜像相同走 `[[ ]]` / `renderPipelineTemplate`；Reload 落地 `builderImageCode`；
   实例期字段（`appID` / `callbackURL` / `credentialID`）在资产中自逃逸，Reload 后保留占位，
@@ -108,9 +108,8 @@ W1 已注册全部 8 条路由，但 Handler 均为空实现，返回契约结�
 - 蓝盾侧显示名 / 描述：来自模板 `name` / `description`（name 含 `[[ .appID ]]`）
 - 回调地址：`{httpServer.publicBaseURL}/bkms/v1/bkms-server/apps/{appID}/build-trigger-policies/callback`
 - 回调凭证：蓝盾 `ACCESSTOKEN` 类型，每应用一条；本地 `bkci_pipelines.callbackCredentialID` 记录凭证 ID；凭证明文不回显
-- `Initialize(build-trigger-*)`：已存在则返回；不存在则拒绝创建（必须走 Ensure，避免无凭证注入）
-- **不做模板 semver 自动升级**：`Ensure` / `Initialize` 对已存在实例均 create-if-missing / 原样返回。共享流水线的整模板
-  `UpdatePipeline` 会冲掉带 appID 的显示名、已注入的回调脚本，以及触发器同步写入的 Git 条件；这不是循环依赖，而是多写入方共存下不能复用该升级路径。若需滚动模板，应另做保留上述字段的合并式 Sync
+- **不做模板 semver 自动升级**：`Ensure` 对已存在实例 create-if-missing / 原样返回。共享流水线的整模板
+  `UpdatePipeline` 会冲掉带 appID 的显示名、已注入的回调脚本，以及触发器同步写入的 Git 条件；若需滚动模板，应另做保留上述字段的合并式 Sync
 
 ## 接口契约
 
