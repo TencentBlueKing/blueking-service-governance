@@ -81,6 +81,7 @@ declare module 'vue' {
     SkeletonTable: typeof import('./components/skeleton/skeleton-table.vue')['default']
     SlideDetail: typeof import('./components/slide-detail.vue')['default']
     SpaceComponentItem: typeof import('./components/modules/space-component-item.vue')['default']
+    StatusDotIcon: typeof import('./components/status-dot-icon.vue')['default']
     StatusIcon: typeof import('./components/status-icon.vue')['default']
     SvgIcon: typeof import('./components/svg-icon.vue')['default']
     Tab: typeof import('./components/tab.vue')['default']

@@ -223,7 +223,7 @@
               </template>
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <div class="flex w-fit items-center">
-                  <DeployStatusIcon
+                  <StatusDotIcon
                     :icon="getStatusInfo(row.deployStatus).icon"
                     :size="12"
                   />
@@ -333,6 +333,7 @@
   import CustomFilter from '~/components/custom-filter.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
+  import StatusDotIcon from '~/components/status-dot-icon.vue';
   import TableException from '~/components/table-exception.vue';
   import { isAppModelAppType } from '~/composables/app-type';
   import { useElementHeight } from '~/composables/use-element-height';
@@ -343,7 +344,6 @@
   import { useAppDetail } from '~/stores/app-detail';
 
   import DeployActionButton from '../deploy-action-button.vue';
-  import DeployStatusIcon from './deploy-status-icon.vue';
   import StatIcon from './stat-icon.vue';
   import { type DeployOverviewDeployTarget, type DeployOverviewRow, useDeployOverview } from './use-deploy-overview';
 

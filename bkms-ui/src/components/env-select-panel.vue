@@ -231,11 +231,12 @@
                   class="feature-env-branch"
                 ></span>
                 <div class="flex items-center flex-1 min-w-0">
-                  <ColorIcon
-                    class="shrink-0 mr-[8px]"
-                    :icon="getEnvDeployIcon(env)"
-                    :size="12"
-                  />
+                  <span class="mr-[4px] flex shrink-0">
+                    <StatusDotIcon
+                      :icon="getEnvDeployIcon(env)"
+                      :size="12"
+                    />
+                  </span>
                   <span class="truncate">{{ env.displayName }}</span>
                   <Tag
                     v-if="isFeatureEnv(env)"
@@ -274,8 +275,8 @@
   import { isEqual } from 'lodash-es';
   import { AppService } from '~/api/modules/v1/app';
   import { EnvService } from '~/api/modules/v1/env';
-  import ColorIcon from '~/components/color-icon.vue';
   import OverflowTags from '~/components/overflow-tags.vue';
+  import StatusDotIcon from '~/components/status-dot-icon.vue';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
   import {
     buildStandardEnvMap,
@@ -544,7 +545,7 @@
     emits('update:deployStatusList', list);
   }
 
-  /** 根据环境获取部署状态对应的 ColorIcon 图标名 */
+  /** 根据环境获取部署状态对应的状态图标名 */
   function getEnvDeployIcon(env: EnvOutput): string {
     const deployStatus = env.name ? appDeployStatusMap.value.get(env.name)?.deployStatus : undefined;
     if (!deployStatus) return 'status-unknown';

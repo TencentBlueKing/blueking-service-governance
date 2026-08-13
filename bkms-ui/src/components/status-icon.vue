@@ -25,6 +25,11 @@
     >
       <use :xlink:href="`#bkms-icon-loading`"></use>
     </svg>
+    <StatusDotIcon
+      v-else-if="emphasized"
+      :icon="statusClass"
+      :size="size"
+    />
     <svg
       v-else
       class="mr-[4px] shrink-0"
@@ -45,6 +50,8 @@
 <script setup lang="ts">
   import type { PropType } from 'vue';
   import { computed, toRefs } from 'vue';
+
+  import StatusDotIcon from '~/components/status-dot-icon.vue';
 
   const props = defineProps({
     pending: {
@@ -81,6 +88,10 @@
       type: Boolean,
       default: false,
     },
+    emphasized: {
+      type: Boolean,
+      default: false,
+    },
     message: {
       type: String,
       default: '',
@@ -91,7 +102,7 @@
     },
   });
 
-  const { statusColorMap, statusTextMap, status, type, hideText, size } = toRefs(props);
+  const { statusColorMap, statusTextMap, status, type, hideText, emphasized, size } = toRefs(props);
   const iconSize = computed(() => ({
     height: `${size.value}px`,
     width: `${size.value}px`,
