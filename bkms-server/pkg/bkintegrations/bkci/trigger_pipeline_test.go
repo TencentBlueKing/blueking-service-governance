@@ -21,6 +21,7 @@ package bkci
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
@@ -70,6 +71,28 @@ var _ = Describe("build-trigger type helpers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rendered[0]["script"]).To(Equal("url=https://bkms.example.com/cb cred=bkms_bt_demo"))
 		Expect(stages[0]["script"]).To(Equal("url=[[ .callbackURL ]] cred=[[ .credentialID ]]"))
+	})
+
+	DescribeTable("buildCredentialID",
+		func(appID, want string) {
+			got := NewTriggerPipelineManager("ws").buildCredentialID(appID)
+			Expect(got).To(Equal(want))
+			Expect(len(got)).To(BeNumerically("<=", buildTriggerCredentialIDMaxLen))
+		},
+		Entry("short appID stays readable", "demo-app", "bkms_bt_demo_app"),
+		Entry("empty after sanitize falls back to prefix", "---", "bkms_bt"),
+	)
+
+	It("should not collide when truncating appIDs that share a long prefix", func() {
+		manager := NewTriggerPipelineManager("ws")
+		prefix := strings.Repeat("a", buildTriggerCredentialIDMaxLen)
+		first := manager.buildCredentialID(prefix + "-one")
+		second := manager.buildCredentialID(prefix + "-two")
+		Expect(first).NotTo(Equal(second))
+		Expect(len(first)).To(Equal(buildTriggerCredentialIDMaxLen))
+		Expect(len(second)).To(Equal(buildTriggerCredentialIDMaxLen))
+		Expect(first).To(HavePrefix(buildTriggerCredentialIDPrefix))
+		Expect(second).To(HavePrefix(buildTriggerCredentialIDPrefix))
 	})
 })
 
@@ -159,6 +182,9 @@ var _ = Describe("TriggerPipelineManager", func() {
 		config.G.HTTPServer.PublicBaseURL = ""
 		_, err := manager.Ensure(ctx, testAppID)
 		Expect(err).To(MatchError(ContainSubstring("publicBaseURL")))
+		config.G.HTTPServer.PublicBaseURL = "https://bkms.example.com/foo"
+		_, err = manager.Ensure(ctx, testAppID)
+		Expect(err).To(MatchError(ContainSubstring("must not include path")))
 		config.G.HTTPServer.PublicBaseURL = "https://bkms.example.com"
 
 		mockey.PatchConvey("ensure", GinkgoT(), func() {
@@ -168,7 +194,7 @@ var _ = Describe("TriggerPipelineManager", func() {
 
 			first, err := manager.Ensure(ctx, testAppID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(first.CallbackCredentialID).To(Equal("bkms_bt_demo-app"))
+			Expect(first.CallbackCredentialID).To(Equal("bkms_bt_demo_app"))
 			second, err := manager.Ensure(ctx, testAppID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(second.ID).To(Equal(first.ID))
@@ -177,6 +203,32 @@ var _ = Describe("TriggerPipelineManager", func() {
 			mockey.Mock((*cloudbkci.StubApiClient).CreatePipeline).Return("", errors.New("create failed")).Build()
 			_, err = manager.Ensure(ctx, testAppID)
 			Expect(err).To(MatchError(ContainSubstring("create failed")))
+			expectNoLocal()
+		})
+	})
+
+	It("Ensure: rollback remote pipeline when local insert fails after CreatePipeline", func() {
+		mockey.PatchConvey("rollback remote pipeline", GinkgoT(), func() {
+			user := mockUser()
+			const remotePipelineID = "p-bt-rollback-after-db-fail"
+			var deletedPipelineID string
+
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(cloudbkci.New).Return(cloudbkci.NewStub(user), nil).Build()
+			mockey.Mock((*cloudbkci.StubApiClient).CreatePipeline).
+				Return(remotePipelineID, nil).
+				Build()
+			mockey.Mock((*PipelineStoreMongo).Create).Return(errors.New("mongo insert failed")).Build()
+			mockey.Mock((*cloudbkci.StubApiClient).DeletePipeline).To(
+				func(_ context.Context, _, pipelineID string) error {
+					deletedPipelineID = pipelineID
+					return nil
+				},
+			).Build()
+
+			_, err := manager.Ensure(ctx, testAppID)
+			Expect(err).To(MatchError(ContainSubstring("mongo insert failed")))
+			Expect(deletedPipelineID).To(Equal(remotePipelineID))
 			expectNoLocal()
 		})
 	})
@@ -200,7 +252,7 @@ var _ = Describe("TriggerPipelineManager", func() {
 				Type:                 string(BuildTriggerPipelineType(testAppID)),
 				WorkspaceID:          managerTestWorkspaceID,
 				ProjectCode:          managerTestProjectCode,
-				CallbackCredentialID: "bkms_bt_demo-app",
+				CallbackCredentialID: "bkms_bt_demo_app",
 				Creator:              "test-user",
 			})).To(Succeed())
 			mockey.Mock((*cloudbkci.StubApiClient).DeletePipeline).Return(cloudbkci.ObjectNotFound).Build()
