@@ -34,6 +34,12 @@ import (
 // ErrProjectCodeAlreadyUsed 项目 Code 已存在但不属于指定工作空间（项目与工作空间是一对一绑定的关系）
 var ErrProjectCodeAlreadyUsed = errors.New("project code already used")
 
+// ErrBuildTriggerPipelineRequireEnsure 触发专用流水线必须通过 TriggerPipelineManager.Ensure 创建
+// Initialize 不会注入回调 URL/凭证，也不能生成带 appID 的显示名，因此禁止走该创建路径
+var ErrBuildTriggerPipelineRequireEnsure = errors.New(
+	"build-trigger pipeline must be created via TriggerPipelineManager.Ensure",
+)
+
 // ProjectManager 蓝盾项目管理
 type ProjectManager struct {
 	workspaceID string
@@ -185,12 +191,6 @@ type PipelineManager struct {
 func NewPipelineManager(workspaceID string) *PipelineManager {
 	return &PipelineManager{workspaceID: workspaceID}
 }
-
-// ErrBuildTriggerPipelineRequireEnsure 触发专用流水线必须通过 TriggerPipelineManager.Ensure 创建
-// Initialize 不会注入回调 URL/凭证，也不能生成带 appID 的显示名，因此禁止走该创建路径
-var ErrBuildTriggerPipelineRequireEnsure = errors.New(
-	"build-trigger pipeline must be created via TriggerPipelineManager.Ensure",
-)
 
 // Initialize 初始化流水线：不存在则创建，已存在的共享内置类型按模板 semver 升级
 //
