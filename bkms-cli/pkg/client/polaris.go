@@ -21,34 +21,30 @@ package client
 // PolarisConfig 北极星配置
 type PolarisConfig struct {
 	// 所属应用 ID
-	AppID string `json:"appID" yaml:"appID"`
-	// 组件名称
+	AppID string `json:"appID" yaml:"appID" table:"-"`
+	// 配置名称（应用内唯一）
 	Name string `json:"name" yaml:"name"`
-	// 关联的依赖服务实例 ID
-	DepSvcInstID string `json:"depSvcInstID" yaml:"depSvcInstID"`
+	// 关联的依赖服务实例 ID（平台创建时有值）
+	DepSvcInstID string `json:"depSvcInstID" yaml:"depSvcInstID" table:"-"`
 	// 组件实例标识，用于环境变量拼接
 	InstanceKey string `json:"instanceKey" yaml:"instanceKey"`
-	// 北极星实例名称
+	// 北极星服务名称
 	PolarisName string `json:"polarisName" yaml:"polarisName"`
-	// 北极星环境（命名空间）
+	// 北极星命名空间
 	PolarisNamespace string `json:"polarisNamespace" yaml:"polarisNamespace"`
-	// 北极星 Token
+	// 北极星 Token（返回时脱敏）
 	PolarisToken string `json:"polarisToken" yaml:"polarisToken"`
 	// 服务端口
 	ServicePort int32 `json:"servicePort" yaml:"servicePort"`
-	// 是否为直连模式
+	// 是否为直连模式（注册 Pod IP 到北极星）
 	Direct bool `json:"direct" yaml:"direct"`
 	// 是否保留未就绪的 Pod 在北极星
 	KeepNotReadyPod bool `json:"keepNotReadyPod" yaml:"keepNotReadyPod"`
 	// 是否启用健康检查
 	EnableHealthCheck bool `json:"enableHealthCheck" yaml:"enableHealthCheck"`
-	// 服务权重
-	Weight int32 `json:"weight" yaml:"weight"`
 	// 服务标签
-	ServiceLabels map[string]string `json:"serviceLabels" yaml:"serviceLabels"`
-	// 组件生效范围类型
-	ScopeType string `json:"scopeType" yaml:"scopeType"`
-	// 组件生效的环境列表
+	ServiceLabels map[string]string `json:"serviceLabels" yaml:"serviceLabels" table:"-"`
+	// 生效的环境列表
 	ScopeEnvNames []string `json:"scopeEnvNames" yaml:"scopeEnvNames"`
 	// 负责人
 	Operator string `json:"operator" yaml:"operator"`
@@ -56,6 +52,33 @@ type PolarisConfig struct {
 	CreatedAt string `json:"createdAt" yaml:"createdAt"`
 	// 更新时间
 	UpdatedAt string `json:"updatedAt" yaml:"updatedAt"`
+	// 校验警告信息
+	Warnings []string `json:"warnings" yaml:"warnings" table:"-"`
+	// 各环境中已经生效的关键字段、下发错误和部署状态
+	EnvStates map[string]PolarisEnvState `json:"envStates" yaml:"envStates" table:"-"`
+	// 各环境的单实例权重，key 为环境名称；未设置时后端默认 100
+	EnvWeights map[string]int32 `json:"envWeights" yaml:"envWeights" table:"-"`
+}
+
+// PolarisEnvState 单个环境的部署快照和最近一次动态下发错误
+type PolarisEnvState struct {
+	// 集群中已经生效的关键字段；nil 表示尚未完成首次应用部署
+	AppliedFields *PolarisRedeployRequiredFields `json:"appliedFields" yaml:"appliedFields"`
+	// 最近一次记录的动态下发错误
+	LastError string `json:"lastError" yaml:"lastError"`
+	// 环境信息最后更新时间
+	UpdatedAt string `json:"updatedAt" yaml:"updatedAt"`
+	// 当前配置期望 Token 是否不同于该环境最近一次部署快照
+	PolarisTokenChanged bool `json:"polarisTokenChanged" yaml:"polarisTokenChanged"`
+	// 部署状态: deployed / pendingCreate / pendingModify / pendingDelete
+	Status string `json:"status" yaml:"status"`
+}
+
+// PolarisRedeployRequiredFields 需要重新部署才能生效的字段
+type PolarisRedeployRequiredFields struct {
+	InstanceKey  string `json:"instanceKey" yaml:"instanceKey"`
+	PolarisToken string `json:"polarisToken" yaml:"polarisToken"`
+	ServicePort  int32  `json:"servicePort" yaml:"servicePort"`
 }
 
 // ListPolarisConfigsRespData 获取北极星配置列表返回数据

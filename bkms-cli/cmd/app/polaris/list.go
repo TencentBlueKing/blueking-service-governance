@@ -20,13 +20,12 @@
 package polaris
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
@@ -39,9 +38,10 @@ func NewListCmd() *cobra.Command {
 		Short: "List polaris configs for an application",
 		Long: `List all polaris configs for the specified application.
 
-Polaris configs define how the application registers services with the Polaris
-service mesh. Each config specifies the polaris service name, namespace, port,
-and environment scope.`,
+Polaris configs define how the application registers services with Polaris.
+Each config specifies the polaris service name, namespace, port, and environment scope.
+
+Use -o yaml or -o json to see envWeights, envStates, warnings, and serviceLabels.`,
 		Example: `  # List polaris configs for an application
   bkms-cli app polaris list --app my-app
 
@@ -60,7 +60,7 @@ and environment scope.`,
 			if err != nil {
 				return errors.Wrap(err, "format output")
 			}
-			fmt.Println(formatted)
+			console.Info("%s", formatted)
 			return nil
 		},
 	}

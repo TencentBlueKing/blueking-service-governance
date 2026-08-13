@@ -20,7 +20,6 @@
 package polaris
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/pkg/errors"
@@ -28,6 +27,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewCreateCmd returns a Command instance for 'app polaris create' sub command
@@ -42,35 +42,34 @@ func NewCreateCmd() *cobra.Command {
 The YAML spec file structure is consistent with the backend API request body.
 
 Note: After creating a polaris config, you need to trigger a deployment for the
-config to take effect in the cluster.
+config to take effect in the cluster. polarisName and polarisNamespace cannot
+be changed after create.
 
 YAML spec file fields:
 
   [Required]
-  scopeEnvNames:      List of environment names where this config takes effect ([]string)
-  instanceKey:        Instance key used as env var prefix, e.g. "my_polaris" generates
-                      env vars like my_polaris_polarisToken (letters/digits/underscore, must start with letter)
+  instanceKey:        Instance key used as env var prefix. e.g. "my_polaris" generates
+                      my_polaris_polarisToken and my_polaris_serviceport
+                      (letters/digits/underscore, must start with letter)
   polarisName:        Polaris service name to register with
   polarisNamespace:   Polaris namespace: Test | Production | Development | Pre-release
   polarisToken:       Polaris access token (required when createNewService is false;
                       when createNewService is true, the platform creates the service and fills this automatically)
   servicePort:        The port your application listens on, will be registered to polaris (1-65535)
+  operator:           Owner of the polaris service (required when createNewService is true).
+                      Multiple owners are comma-separated, e.g. "zhangsan,lisi"
 
   [Optional]
+  scopeEnvNames:      List of environment names where this config takes effect ([]string).
+                      Omitted or empty means the config applies to no environments
   createNewService:   If true, the platform will create a new polaris service and fill in the token
                       automatically; if false (default), you must provide an existing polarisToken
-  direct:             Register Pod IP directly to polaris service instead of ClusterIP (bool, default false).
-                      When enabled, each pod's IP:port is registered as an individual polaris instance
-  keepNotReadyPod:    Keep not-ready pods in polaris service instance list with 0 weight (bool, default true).
+  keepNotReadyPod:    Keep not-ready pods in polaris instance list with 0 weight (bool, default true).
                       If false, not-ready pods will be deregistered from polaris immediately
   enableHealthCheck:  Enable polaris health check for registered instances (bool, default false).
                       When enabled, polaris will actively probe instance health
-  weight:             Default weight applied to ALL registered instances of this service (int, default 10).
-                      Higher weight means more traffic routed to the instance
   serviceLabels:      Labels applied to ALL registered polaris instances (map[string]string).
-                      Can be used for polaris routing rules and traffic management
-  operator:           Operator/owner of the polaris service (only effective when createNewService is true).
-                      Multiple owners are comma-separated, e.g. "zhangsan,lisi"`,
+                      Can be used for polaris routing rules and traffic management`,
 		Example: `  # Create a polaris config from a YAML spec file:
   bkms-cli app polaris create --app my-app -f polaris.yaml
 
@@ -107,8 +106,8 @@ YAML spec file fields:
 			if err = yaml.Unmarshal(fileContent, &body); err != nil {
 				return errors.Wrapf(err, "parse polaris spec file %s failed, please check YAML syntax", specFile)
 			}
-			// scopeType 固定为 "environment"，用户无需填写
-			body["scopeType"] = "environment"
+			// CLI 固定直连模式，不接受 YAML 中的 direct 字段
+			body["direct"] = true
 
 			// 调用后端 API 创建北极星配置
 			name, err := client.New().CreateAppPolarisConfig(cmd.Context(), appID, body)
@@ -116,8 +115,8 @@ YAML spec file fields:
 				return errors.Wrap(err, "create app polaris config")
 			}
 
-			fmt.Printf("✓ Polaris config created successfully\n")
-			fmt.Printf("  Name: %s\n", name)
+			console.Info("✓ Polaris config created successfully")
+			console.Info("  Name: %s", name)
 			return nil
 		},
 	}

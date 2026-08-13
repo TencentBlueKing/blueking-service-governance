@@ -20,7 +20,6 @@
 package polaris
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/pkg/errors"
@@ -28,6 +27,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewUpdateCmd returns a Command instance for 'app polaris update' sub command
@@ -42,45 +42,42 @@ func NewUpdateCmd() *cobra.Command {
 Only fields present in the YAML file will be updated; omitted fields remain unchanged.
 This allows you to modify specific aspects of the config without affecting others.
 
+polarisName, polarisNamespace and direct cannot be updated after create.
+Per-environment instance weight defaults to 100 and cannot be set via this command.
+
 Effect timing:
-  - servicePort and polarisToken: require a redeployment to take effect
-  - All other fields (direct, keepNotReadyPod, enableHealthCheck, weight,
-    serviceLabels, instanceKey, scope): take effect immediately without redeployment
+  - instanceKey, servicePort and polarisToken: require a redeployment to take effect
+  - All other fields (keepNotReadyPod, enableHealthCheck, serviceLabels,
+    scopeEnvNames): take effect immediately without redeployment when the environment
+    is already deployed and the redeploy-required fields are unchanged
 
 Updatable YAML spec file fields:
 
   [Require redeployment]
-  servicePort:        The port your application listens on (1-65535).
-                      Changing this requires a redeployment to take effect in the cluster
-  polarisToken:       Polaris access token.
-                      Changing this requires a redeployment to take effect in the cluster
+  instanceKey:        Instance key used as env var prefix
+                      (letters/digits/underscore, must start with letter)
+  servicePort:        The port your application listens on (1-65535)
+  polarisToken:       Polaris access token
 
   [Take effect immediately]
-  direct:             Register Pod IP directly to polaris service instead of ClusterIP (bool).
-                      When enabled, each pod's IP:port is registered as an individual polaris instance
-  keepNotReadyPod:    Keep not-ready pods in polaris service instance list with 0 weight (bool).
+  keepNotReadyPod:    Keep not-ready pods in polaris instance list with 0 weight (bool).
                       If false, not-ready pods will be deregistered from polaris immediately
   enableHealthCheck:  Enable polaris health check for registered instances (bool).
                       When enabled, polaris will actively probe instance health
-  weight:             Default weight applied to ALL registered instances of this service (int).
-                      Higher weight means more traffic routed to the instance
   serviceLabels:      Labels applied to ALL registered polaris instances (map[string]string).
                       When provided, fully replaces existing labels (not merged)
-  instanceKey:        Instance key used as env var prefix (letters/digits/underscore, starts with letter)
-  scope:              Update the environments where this config takes effect.
-                      Provide scopeEnvNames list; scopeType is auto-set to "environment"`,
+  scopeEnvNames:      Replace the environments where this config takes effect ([]string).
+                      An empty list clears the scope`,
 		Example: `  # Update service port
-  bkms-cli app polaris update --app my-app --name polaris-cfg-abc -f update.yaml
+  bkms-cli app polaris update --app my-app --name polaris-xxxxx -f update.yaml
 
-  # Example update.yaml (change port and weight):
+  # Example update.yaml (change port):
   # servicePort: 9090
-  # weight: 20
 
   # Example update.yaml (change scope environments):
-  # scope:
-  #   scopeEnvNames:
-  #     - prod
-  #     - staging
+  # scopeEnvNames:
+  #   - prod
+  #   - staging
 
   # Example update.yaml (update labels):
   # serviceLabels:
@@ -101,13 +98,8 @@ Updatable YAML spec file fields:
 			if err = yaml.Unmarshal(fileContent, &body); err != nil {
 				return errors.Wrapf(err, "parse polaris spec file %s failed, please check YAML syntax", specFile)
 			}
-
-			// 若 scope 字段存在且为 map 类型，自动注入 scopeType = "environment"
-			if scope, ok := body["scope"]; ok {
-				if scopeMap, isMap := scope.(map[string]any); isMap {
-					scopeMap["scopeType"] = "environment"
-				}
-			}
+			// CLI 不支持修改直连模式，忽略 YAML 中的 direct 以免误改
+			delete(body, "direct")
 
 			// 调用后端 API 更新北极星配置
 			err = client.New().PatchAppPolarisConfig(cmd.Context(), appID, configName, body)
@@ -115,14 +107,15 @@ Updatable YAML spec file fields:
 				return errors.Wrap(err, "update app polaris config")
 			}
 
-			fmt.Printf("✓ Polaris config updated successfully\n")
-			fmt.Printf("  Name: %s\n", configName)
+			console.Info("✓ Polaris config updated successfully")
+			console.Info("  Name: %s", configName)
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&appID, "app", "", "application ID")
-	cmd.Flags().StringVar(&configName, "name", "", "polaris config name to update")
+	cmd.Flags().
+		StringVar(&configName, "name", "", "polaris config name from list (e.g. polaris-xxxxx), not polarisName")
 	cmd.Flags().StringVarP(&specFile, "file", "f", "", "polaris update spec file path (YAML)")
 
 	_ = cmd.MarkFlagRequired("app")
