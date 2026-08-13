@@ -263,6 +263,12 @@
       : previewItems.value.filter(item => item.action === activeFilter.value),
   );
 
+  // 错误提示
+  function getErrorMessage(error: unknown, fallback: string, showTraceId = true) {
+    const apiError = error as { error?: { message?: string; traceId?: string }; message?: string; traceId?: string };
+    const message = apiError.error?.message || apiError.message || fallback;
+    return showTraceId ? appendTraceId(message, apiError.error?.traceId || apiError.traceId) : message;
+  }
   // 忙时禁止关闭面板
   function handleBeforeClose() {
     return !isBusy.value;
@@ -306,9 +312,17 @@
     const error = validateFile(file);
     if (error) return Promise.reject(new Error(error));
     previewLoading.value = true;
-    return props.previewRequest(file).finally(() => {
-      previewLoading.value = false;
-    });
+    return props
+      .previewRequest(file)
+      .catch(error => {
+        const apiError = error as { error?: { traceId?: string }; traceId?: string };
+        const uploadError = new Error(`${t('上传失败')}: ${getErrorMessage(error, t('文件解析失败'), false)}`);
+        Object.assign(uploadError, { traceId: apiError.error?.traceId || apiError.traceId });
+        throw uploadError;
+      })
+      .finally(() => {
+        previewLoading.value = false;
+      });
   }
   function handlePreviewSuccess(response: EnvVarImportPreviewOutputObj) {
     previewData.value = response;
@@ -327,16 +341,8 @@
     importLoading.value = false;
     uploadKey.value += 1;
   }
-  // 错误提示：自动拼接 traceId
   function showError(error: unknown, fallback: string) {
-    const apiError = error as { error?: { message?: string; traceId?: string }; message?: string; traceId?: string };
-    Message({
-      theme: 'error',
-      message: appendTraceId(
-        apiError.error?.message || apiError.message || fallback,
-        apiError.error?.traceId || apiError.traceId,
-      ),
-    });
+    Message({ theme: 'error', message: getErrorMessage(error, fallback) });
   }
   // 校验 .env 文件格式与大小
   function validateFile(file: File) {
@@ -348,6 +354,14 @@
 </script>
 
 <style scoped>
+  /* stylelint-disable-next-line selector-class-pattern */
+  :deep(.bk-upload-list__item--fail .bk-upload-list__item-message) {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .env-var-action-icon {
     box-sizing: border-box;
     display: inline-block;
