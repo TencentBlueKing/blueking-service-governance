@@ -21,7 +21,7 @@ import type { Ref } from 'vue';
 
 import { useI18n } from 'vue-i18n';
 import { AppService } from '~/api/modules/v1';
-import { APP_DEPLOY_STATUS } from '~/common/enums/deploy';
+import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES } from '~/common/enums/deploy';
 import { useDeployStatusMap } from '~/composables/use-deploy-status';
 import { envTypeMap } from '~/composables/use-env-manager';
 import { type ISearchValue, type ISelectKey, useTableSearchSelect } from '~/composables/use-search';
@@ -88,6 +88,19 @@ export interface DeployOverviewRow {
   type: string;
 }
 
+export interface DeployOverviewStat {
+  color: string;
+  /** 数字后的补充说明，为空时不渲染。 */
+  desc: string;
+  iconBg: string;
+  iconColor: string;
+  key: DeployOverviewStatKey;
+  label: string;
+  value: number;
+}
+
+export type DeployOverviewStatKey = 'abnormalInstance' | 'deploying' | 'failed' | 'total';
+
 /** 补充接口字段的 null 语义，并复用现有 GPA 类型描述完整 autoscaling 数据。 */
 type DeployOverviewApiRow = Omit<AppDeployOverviewEnvObj, 'autoscalingEnabled' | 'instances'> & {
   autoscaling?: DeployOverviewAutoscaling | null;
@@ -114,6 +127,8 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
   const isLoading = ref(false);
   const isError = ref(false);
   const globalTypeFilter = ref(TYPE_FILTER_ALL);
+  // 指标卡是独立的一级筛选；默认展示当前环境类型下的全部部署环境。
+  const activeStat = ref<DeployOverviewStatKey>('total');
   const filterKeys = ['deployStatus'] as const;
   // 每次请求递增；应用快速切换时，仅最后一次请求可以更新页面状态。
   let loadToken = 0;
@@ -141,6 +156,59 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
       ? rows.value
       : rows.value.filter(row => row.type === globalTypeFilter.value),
   );
+
+  /**
+   * 指标卡只统计当前环境类型范围，不受搜索框、表头筛选和卡片自身筛选影响。
+   * 实例汇总仅累加接口已返回的数字，instances=null 的行仍在表格中保持“--”语义。
+   */
+  const stats = computed<DeployOverviewStat[]>(() => {
+    const scoped = typeScopedRows.value;
+    const deployingCount = scoped.filter(row => row.deployStatus === APP_DEPLOY_STATUS.DEPLOYING).length;
+    const failedCount = scoped.filter(row => isFailedStatus(row.deployStatus)).length;
+    const abnormalEnvCount = scoped.filter(row => (row.abnormalCount ?? 0) > 0).length;
+    const runningCount = scoped.reduce((total, row) => total + (row.runningCount ?? 0), 0);
+    const desiredCount = scoped.reduce((total, row) => total + (row.desiredCount ?? 0), 0);
+    const abnormalCount = scoped.reduce((total, row) => total + (row.abnormalCount ?? 0), 0);
+
+    return [
+      {
+        key: 'total',
+        label: t('部署环境'),
+        value: scoped.length,
+        desc: t('运行实例 {0} / {1}', [runningCount, desiredCount]),
+        color: '#313238',
+        iconColor: '#63656E',
+        iconBg: '#F0F1F5',
+      },
+      {
+        key: 'deploying',
+        label: t('部署中环境'),
+        value: deployingCount,
+        desc: '',
+        color: deployingCount > 0 ? '#3A84FF' : '#313238',
+        iconColor: '#3A84FF',
+        iconBg: '#E1ECFF',
+      },
+      {
+        key: 'failed',
+        label: t('部署失败环境'),
+        value: failedCount,
+        desc: '',
+        color: failedCount > 0 ? '#EA3636' : '#313238',
+        iconColor: '#EA3636',
+        iconBg: '#FFEEEE',
+      },
+      {
+        key: 'abnormalInstance',
+        label: t('异常实例'),
+        value: abnormalCount,
+        desc: abnormalEnvCount > 0 ? t('涉及 {0} 个环境', [abnormalEnvCount]) : '',
+        color: abnormalCount > 0 ? '#EA3636' : '#313238',
+        iconColor: '#FF9C01',
+        iconBg: '#FFF3E1',
+      },
+    ];
+  });
 
   /**
    * 新增部署不能直接使用总览行：总览接口不保证返回部署表单所需的完整环境信息。
@@ -212,13 +280,13 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     { immediate: true },
   );
 
-  const hasFilter = computed(() => searchValue.value.length > 0);
+  const hasFilter = computed(() => activeStat.value !== 'total' || searchValue.value.length > 0);
 
   // 未主动点击排序时，默认按最近部署时间倒序；时间相同时按环境类型排序。
   const visibleRows = computed(() =>
-    searchFilteredRows.value.sort(
-      (a, b) => toTimestamp(b.deployedAt) - toTimestamp(a.deployedAt) || compareByEnvType(a, b),
-    ),
+    searchFilteredRows.value
+      .filter(row => matchStat(row, activeStat.value))
+      .sort((a, b) => toTimestamp(b.deployedAt) - toTimestamp(a.deployedAt) || compareByEnvType(a, b)),
   );
 
   const pagination = ref({ count: 0, limit: 10, current: 1 });
@@ -233,7 +301,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     { immediate: true },
   );
 
-  watch([globalTypeFilter, searchValue], () => {
+  watch([globalTypeFilter, activeStat, searchValue], () => {
     pagination.value.current = 1;
   });
 
@@ -269,10 +337,35 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     ];
   }
 
-  /** 清空搜索及表头筛选，并将分页恢复到第一页。 */
+  /** 清空指标卡、搜索及表头筛选，并将分页恢复到第一页。 */
   function clearFilters() {
+    activeStat.value = 'total';
     searchValue.value = [];
     pagination.value.current = 1;
+  }
+
+  /**
+   * 应用指标卡筛选：点击当前卡片或“部署环境”恢复全部，其余卡片进入对应筛选。
+   * 所有卡片始终可点击，数量为 0 时仍保留选中态并让表格展示筛选空态。
+   */
+  function handleStatClick(key: DeployOverviewStatKey) {
+    const shouldReset = key === 'total' || activeStat.value === key;
+    searchValue.value = [];
+    activeStat.value = shouldReset ? 'total' : key;
+    pagination.value.current = 1;
+  }
+
+  /** 判断部署状态是否属于失败、轮询超时或轮询中断。 */
+  function isFailedStatus(status: string) {
+    return (DEPLOY_FAILED_STATUSES as readonly string[]).includes(status);
+  }
+
+  /** 根据当前指标卡判断环境行是否应进入表格结果。 */
+  function matchStat(row: DeployOverviewRow, stat: DeployOverviewStatKey) {
+    if (stat === 'deploying') return row.deployStatus === APP_DEPLOY_STATUS.DEPLOYING;
+    if (stat === 'failed') return isFailedStatus(row.deployStatus);
+    if (stat === 'abnormalInstance') return row.abnormalCount !== null && row.abnormalCount > 0;
+    return true;
   }
 
   /** 对 SearchSelect 输入执行不区分大小写的模糊匹配，任一关键词命中即保留该行。 */
@@ -399,6 +492,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
   }
 
   return {
+    activeStat,
     clearFilters,
     deployTargets,
     envTypeOptions,
@@ -410,6 +504,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     handleFilterChange,
     handlePageLimitChange,
     handlePageValueChange,
+    handleStatClick,
     hasFilter,
     isError,
     isLoading,
@@ -418,6 +513,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     searchData,
     searchValue,
     sortConfig,
+    stats,
     visibleRows,
   };
 }

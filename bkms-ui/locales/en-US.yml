@@ -1903,3 +1903,9 @@ CPU Limits 利用率: CPU Limits Utilization
 自动扩缩容已关闭: Autoscaling Disabled
 请选择目标环境: Please select a target environment
 部署总览: Deployment Overview
+部署环境: Deployment Environments
+部署中环境: Deploying Environments
+部署失败环境: Failed Environments
+异常实例: Abnormal Instances
+"运行实例 {0} / {1}": "Running Instances {0} / {1}"
+"涉及 {0} 个环境": "Across {0} Environment(s)"

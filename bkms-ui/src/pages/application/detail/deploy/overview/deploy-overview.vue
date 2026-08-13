@@ -29,6 +29,14 @@
           <Layout.shape :width="360" />
           <Layout.shape :width="110" />
         </div>
+        <div class="mb-[16px] grid grid-cols-4 gap-[16px]">
+          <Layout.shape
+            v-for="index in 4"
+            :key="index"
+            :height="72"
+            width="100%"
+          />
+        </div>
         <div class="rounded-[2px] bg-white p-[16px]">
           <div class="mb-[16px] flex justify-end"><Layout.shape :width="560" /></div>
           <Layout.table />
@@ -77,6 +85,44 @@
             {{ $t('新增部署') }}
           </template>
         </DeployActionButton>
+      </div>
+
+      <!-- 指标卡统计当前环境类型的数据；所有卡片始终可点击，数量为 0 时也能查看对应空结果。 -->
+      <div class="mb-[16px] grid shrink-0 grid-cols-4 gap-[16px]">
+        <button
+          v-for="stat in stats"
+          :key="stat.key"
+          :class="[
+            'flex min-w-0 cursor-pointer items-center justify-between gap-[12px] rounded-[2px] bg-white px-[16px] py-[12px] text-left shadow-[0_2px_4px_0_#1919290d] hover:shadow-[0_2px_8px_0_#1919291f]',
+            activeStat === stat.key ? '!bg-[#E1ECFF] outline outline-[1px] outline-[#3A84FF]' : '',
+          ]"
+          type="button"
+          @click="handleStatClick(stat.key)"
+        >
+          <div class="flex min-w-0 flex-col gap-[4px]">
+            <span class="text-[12px] text-[#979BA5]">{{ stat.label }}</span>
+            <div class="flex items-baseline gap-[8px]">
+              <span
+                class="text-[24px] font-bold leading-[28px]"
+                :style="{ color: stat.color }"
+              >
+                {{ stat.value }}
+              </span>
+              <span
+                v-if="stat.desc"
+                class="truncate text-[12px] text-[#979BA5]"
+              >
+                {{ stat.desc }}
+              </span>
+            </div>
+          </div>
+          <span
+            class="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full"
+            :style="{ backgroundColor: stat.iconBg, color: stat.iconColor }"
+          >
+            <StatIcon :name="stat.key" />
+          </span>
+        </button>
       </div>
 
       <!-- 表格容器占满剩余高度，仅表格内容滚动，顶部筛选与分页保持可见。 -->
@@ -296,6 +342,7 @@
   import { useAppDetail } from '~/stores/app-detail';
 
   import DeployActionButton from '../deploy-action-button.vue';
+  import StatIcon from './stat-icon.vue';
   import { type DeployOverviewDeployTarget, type DeployOverviewRow, useDeployOverview } from './use-deploy-overview';
 
   import type { EnvOutput } from '~/@types/v1/env';
@@ -316,6 +363,7 @@
 
   // 接口适配和表格状态集中在 composable，当前组件只维护 DOM 引用与页面事件。
   const {
+    activeStat,
     clearFilters,
     deployTargets,
     envTypeOptions,
@@ -327,6 +375,7 @@
     handleFilterChange,
     handlePageLimitChange,
     handlePageValueChange,
+    handleStatClick,
     hasFilter,
     isError,
     isLoading,
@@ -335,6 +384,7 @@
     searchData,
     searchValue,
     sortConfig,
+    stats,
     visibleRows,
   } = useDeployOverview(toRef(props, 'envList'));
 
