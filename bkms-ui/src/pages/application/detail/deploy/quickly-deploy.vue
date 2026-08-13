@@ -54,11 +54,22 @@
           :placeholder="$t('请选择')"
         >
           <Select.Option
-            v-for="item in targetEnvs"
+            v-for="item in sortedTargetEnvs"
             :id="item.env.name || ''"
             :key="item.env.name"
             :name="item.env.displayName || item.env.name"
-          />
+          >
+            <span class="inline-flex items-center gap-[8px]">
+              <span>{{ item.env.displayName || item.env.name }}</span>
+              <Tag
+                v-if="item.env.type && envTypeMap[item.env.type]"
+                :class="envTypeTagClassMap[item.env.type]"
+                size="small"
+              >
+                {{ envTypeMap[item.env.type]?.name || item.env.type }}
+              </Tag>
+            </span>
+          </Select.Option>
         </Select>
       </Form.FormItem>
     </Form>
@@ -94,8 +105,9 @@
 <script lang="ts" setup>
   import { computed, nextTick, reactive, ref, watch } from 'vue';
 
-  import { Button, Form, Message, Select, Sideslider } from 'bkui-vue';
+  import { Button, Form, Message, Select, Sideslider, Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
+  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
@@ -126,10 +138,20 @@
   const confirmLoading = ref(false);
   const targetFormModel = reactive({ envName: '' });
   const targetFormRules = {
-    envName: [{ required: true, message: t('请选择目标环境'), trigger: 'change' }],
+    envName: [{ required: true, message: t('请选择环境'), trigger: 'change' }],
   };
   // 用 undefined 区分入口：空数组仍代表总览模式，只是环境列表尚未返回或当前没有可部署环境。
   const hasTargetSelector = computed(() => props.targetEnvs !== undefined);
+  const envTypeOrder = ['development', 'test', 'staging', 'production'];
+  const sortedTargetEnvs = computed(() =>
+    [...(props.targetEnvs || [])].sort((a, b) => {
+      const aIndex = envTypeOrder.indexOf(a.env.type || '');
+      const bIndex = envTypeOrder.indexOf(b.env.type || '');
+      const aWeight = aIndex === -1 ? envTypeOrder.length : aIndex;
+      const bWeight = bIndex === -1 ? envTypeOrder.length : bIndex;
+      return aWeight - bWeight;
+    }),
+  );
   const selectedTarget = computed(() => props.targetEnvs?.find(item => item.env.name === targetFormModel.envName));
   const targetEnv = computed(() => (hasTargetSelector.value ? selectedTarget.value?.env : trpcDeployStore.curEnvItem));
   const targetEffectiveReplicas = computed(() =>
@@ -138,11 +160,6 @@
   const targetIsProdEnv = computed(() =>
     hasTargetSelector.value ? targetEnv.value?.type === 'production' : props.isProdEnv,
   );
-
-  /** 获取总览入口默认选中的第一个可部署环境；列表尚未返回时为空。 */
-  function getDefaultTargetEnvName() {
-    return props.targetEnvs?.[0]?.env.name || '';
-  }
 
   /** 规范化目标环境的初始副本数，无有效正整数时统一使用 1。 */
   function getInitialReplicas(replicas?: number) {
@@ -195,11 +212,11 @@
     }
   }
 
-  // 每次打开默认选择第一项，并按目标环境的期望实例数初始化同一个部署表单。
+  // 每次从总览打开时保持目标环境未选择，由用户明确指定部署环境。
   watch(isShow, newVal => {
     if (newVal) {
       if (hasTargetSelector.value) {
-        targetFormModel.envName = getDefaultTargetEnvName();
+        targetFormModel.envName = '';
       }
       nextTick(() => {
         targetEnvFormRef.value?.clearValidate?.();
@@ -208,14 +225,15 @@
     }
   });
 
-  // 总览与环境列表是异步请求；侧栏先打开时，列表到达后自动补选第一项。
+  // 总览与环境列表是异步请求；列表变化时清理已经失效的环境。
   watch(
     () => props.targetEnvs,
     targets => {
       if (!isShow.value || !hasTargetSelector.value) return;
+      if (!targetFormModel.envName) return;
       const currentTargetExists = targets?.some(item => item.env.name === targetFormModel.envName);
       if (currentTargetExists) return;
-      targetFormModel.envName = targets?.[0]?.env.name || '';
+      targetFormModel.envName = '';
       nextTick(() => targetEnvFormRef.value?.clearValidate?.());
     },
     { deep: true },

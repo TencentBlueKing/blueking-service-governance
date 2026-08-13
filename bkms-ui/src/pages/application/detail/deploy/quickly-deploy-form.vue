@@ -89,6 +89,7 @@
       <!-- 占位 -->
       <Select
         v-else
+        v-bk-tooltips="$t('请选择环境')"
         disabled
       />
     </Form.FormItem>
