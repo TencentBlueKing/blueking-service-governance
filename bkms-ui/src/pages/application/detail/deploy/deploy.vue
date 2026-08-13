@@ -527,17 +527,15 @@
   } as const;
   const SINGLE_ENV_TABS: string[] = [TAB_NAMES.topo, TAB_NAMES.event, TAB_NAMES.history];
 
-  // Tab 与 URL query（activeTab）双向同步锚定；多环境模式下固定为 instance。
+  // Tab 与 URL query（activeTab）双向同步锚定；多环境模式不限制 Tab 切换。
   // 环境选择只保留在页面状态中，避免旧 env query 持续覆盖用户后续选择。
   const { fields } = useUrlQuerySync({
     activeTab: {
       queryKey: 'activeTab',
       data: {
         allowed: Object.values(TAB_NAMES),
-        default: TAB_NAMES.overview,
-        // 多环境模式下固定为 instance；单环境分支的合法性与回退由 composable 的 allowed 校验处理
-        override: valueFromQuery =>
-          isMultiEnvMode.value ? TAB_NAMES.instance : (valueFromQuery ?? TAB_NAMES.overview),
+        // 缓存为多环境时首次仍进入实例列表，但不覆盖 URL 或用户后续点击的 Tab。
+        default: initialEnvSelection.value?.mode === 'multi' ? TAB_NAMES.instance : TAB_NAMES.overview,
       },
     },
   });

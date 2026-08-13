@@ -737,8 +737,8 @@
   watch(
     () => props.multiSelectable,
     val => {
-      if (!val) {
-        mode.value = 'single';
+      if (!val && mode.value !== 'single') {
+        handleModeChange('single');
       }
     },
     { immediate: true },
