@@ -415,8 +415,7 @@ export interface RollbackHelmDeployInput {
   trafficLaneName?: string;
 }
 
-export interface EmptyOutput {
-}
+export interface EmptyOutput {}
 
 export interface ListAppModelDeployRecordsOutput {
   data?: PaginatedAppModelDeployRecordsOutputObjs;
@@ -472,6 +471,7 @@ export interface LatestDeployStatus {
   branch?: string;
   buildID?: string;
   deployID?: string;
+  /** 部署来源：directDeploy / buildAutoDeploy */
   deploySource?: string;
   endedAt?: string;
   hasDeployRecord?: boolean;
@@ -504,19 +504,13 @@ export interface PaginatedAppModelDeployRecordsOutputObjs {
 }
 
 export interface AppModelDeployRecordOutputObj {
-  /**
-   * 代码分支（仅构建+部署记录返回）
-   */
+  /** 代码分支（仅 buildAutoDeploy 场景有值） */
   branch?: string;
   clusterID?: string;
-  /**
-   * Commit ID（仅构建+部署记录返回）
-   */
+  /** Commit ID（仅 buildAutoDeploy 场景有值） */
   commitID?: string;
   createdAt?: string;
-  /**
-   * 部署来源
-   */
+  /** 部署来源：directDeploy / buildAutoDeploy */
   deploySource?: string;
   id?: string;
   imageTag?: string;

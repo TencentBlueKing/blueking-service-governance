@@ -64,6 +64,42 @@
           </template>
         </TableColumn>
         <TableColumn
+          :label="$t('镜像来源')"
+          min-width="140"
+          show-overflow="tooltip"
+        >
+          <template #default="{ row }">
+            <span
+              class="rounded-[2px] px-[8px] py-[2px] text-[12px]"
+              :class="isSourceBuild(row) ? 'bg-[#E1ECFF] text-[#1768EF]' : 'bg-[#F0F1F5] text-[#4D4F56]'"
+            >
+              {{ isSourceBuild(row) ? $t('源码构建') : $t('已构建镜像') }}
+            </span>
+          </template>
+        </TableColumn>
+        <TableColumn
+          :label="$t('代码分支')"
+          min-width="140"
+          show-overflow="tooltip"
+        >
+          <template #default="{ row }">
+            {{ row.branch || '--' }}
+          </template>
+        </TableColumn>
+        <TableColumn
+          :label="$t('Commit ID')"
+          min-width="140"
+        >
+          <template #default="{ row }">
+            <!-- 展示前 8 位，hover 看完整 ID 并可复制 -->
+            <HoverCopy
+              :copy-value="row.commitID"
+              :text="row.commitID ? row.commitID.slice(0, 8) : ''"
+              :tooltip="row.commitID"
+            />
+          </template>
+        </TableColumn>
+        <TableColumn
           :label="$t('实例数')"
           :width="100"
         >
@@ -134,7 +170,7 @@
   import { Button, SearchSelect } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { AppModelDeployRecordOutputObj, PaginatedAppModelDeployRecordsOutputObjs } from '~/@types/v1/deploy';
-  import { APP_DEPLOY_STATUS } from '~/common/enums/deploy';
+  import { APP_DEPLOY_STATUS, DEPLOY_SOURCE } from '~/common/enums/deploy';
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
   import StatusIcon from '~/components/status-icon.vue';
@@ -163,6 +199,11 @@
   const count = ref(0);
   const showResourceSnapshots = ref(false);
   const selectedDeployID = ref('');
+
+  /** 是否为源码构建：优先 deploySource，兼容旧字段 isBuildAutoDeploy */
+  function isSourceBuild(row: AppModelDeployRecordOutputObj) {
+    return row.deploySource === DEPLOY_SOURCE.BUILD_AUTO_DEPLOY || !!row.isBuildAutoDeploy;
+  }
 
   // 搜索配置
   const searchData = [

@@ -16,6 +16,14 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+/** AppModel 部署来源（与后端 deploySource 枚举对齐） */
+export const DEPLOY_SOURCE = {
+  /** 直接部署 */
+  DIRECT_DEPLOY: 'directDeploy',
+  /** 构建完成后自动部署 */
+  BUILD_AUTO_DEPLOY: 'buildAutoDeploy',
+} as const;
+
 /** AppModel 类型应用部署状态 */
 export const APP_DEPLOY_STATUS = {
   /** 未知状态 */

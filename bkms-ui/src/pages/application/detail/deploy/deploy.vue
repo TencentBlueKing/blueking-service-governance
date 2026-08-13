@@ -365,7 +365,7 @@
   import { EnvOutput, FeatureEnvOutput } from '~/@types/v1/env';
   import { AppSpecService, EnvService } from '~/api/modules/v1';
   import { APP_BUILD_STATUS, BUILD_INTERRUPT_STATUSES } from '~/common/enums/build';
-  import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES } from '~/common/enums/deploy';
+  import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES, DEPLOY_SOURCE } from '~/common/enums/deploy';
   import ColorIcon from '~/components/color-icon.vue';
   import FlexRow from '~/components/flex-row.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
@@ -713,9 +713,19 @@
     theme: BuildAlertTheme;
   }
 
+  /** 是否为构建完成后自动部署（源码构建） */
+  const isLatestBuildAutoDeploy = computed(() => {
+    const latest = latestDeployStatus.value;
+    if (!latest) return false;
+    if (latest.deploySource) {
+      return latest.deploySource === DEPLOY_SOURCE.BUILD_AUTO_DEPLOY;
+    }
+    return !!latest.isBuildAutoDeploy;
+  });
+
   const buildAlertInfo = computed<BuildAlertInfo | null>(() => {
     const latest = latestDeployStatus.value;
-    if (!latest?.isBuildAutoDeploy) return null;
+    if (!latest || !isLatestBuildAutoDeploy.value) return null;
 
     if (latest.stage === 'build') {
       const status = latest.status!;
@@ -731,7 +741,7 @@
       // FAILED / POLLING_TIMEOUT / POLLING_BROKEN
       return { status: 'failed', theme: 'error', closable: true, statusText: t('构建失败') };
     }
-    // stage !== 'build' 且 isBuildAutoDeploy 为 true，构建已完成进入部署阶段
+    // stage !== 'build' 且为构建自动部署时，构建已完成进入部署阶段
     return { status: 'success', theme: 'success', closable: true, statusText: t('构建成功') };
   });
 
@@ -748,7 +758,7 @@
   /** 构建状态 key：用于 useAlertVisibility 判断是否展示 */
   const buildStatusKey = computed(() => {
     const latest = latestDeployStatus.value;
-    if (!latest?.isBuildAutoDeploy) return undefined;
+    if (!latest || !isLatestBuildAutoDeploy.value) return undefined;
     if (latest.stage === 'build') return latest.status;
     return APP_BUILD_STATUS.SUCCESS;
   });

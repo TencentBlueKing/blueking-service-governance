@@ -1449,6 +1449,7 @@ CLB 区域: CLB Region
 已构建镜像: Built Image
 从源码构建: Build from Source
 代码分支: Code Branch
+源码构建: Build from Source
 生产类型环境只能部署已经晋级的镜像 Tag: Production-type environments can only deploy images that have been promoted
 构建中...: Building...
 构建成功: Build Successful
