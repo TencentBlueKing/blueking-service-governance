@@ -1,0 +1,51 @@
+meta {
+  name: 13-list-app-instances-all-no-deploy-record
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{serviceURL}}/apps/{{instancesAppID}}/envs/{{instancesEnvName}}/instances?all=true
+  body: none
+  auth: inherit
+}
+
+params:query {
+  all: true
+}
+
+assert {
+  res.status: eq 404
+  res.body: isJson
+}
+
+script:pre-request {
+  const common = require("./common")
+
+  if (!bru.getVar("instancesAppID")) {
+    const suffix = bru.getVar("randomSuffix");
+    const ws = await common.createWorkspace({ id: `instances-ws-${suffix}` });
+    const app = await common.createTrpcApp({ id: `instances-app-${suffix}`, workspaceID: ws.id });
+    const env = await common.createEnvironment({
+      workspaceID: ws.id,
+      name: `instances-env-${suffix}`,
+      cluster: { clusterID: `cluster-${suffix}`, namespace: `ns-${suffix}` },
+    });
+
+    bru.setVar("instancesAppID", app.id);
+    bru.setVar("instancesEnvName", env.name);
+  }
+}
+
+tests {
+  test("should accept all=true and return not found when no deploy record exists", () => {
+    expect(res.body.error.code).to.equal("NOT_FOUND");
+    expect(res.body.error.system).to.equal("bkms");
+    expect(res.body.error.module).to.equal("bkms-server");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

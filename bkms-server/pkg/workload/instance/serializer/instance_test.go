@@ -19,17 +19,45 @@
 package serializer_test
 
 import (
+	"errors"
+
 	"github.com/go-playground/validator/v10"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 	instancelogsvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/instancelog"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
 var _ = Describe("Instance serializer", func() {
+	Describe("ListAppInstancesQueryInput.Validate", func() {
+		It("accepts all=true without pagination", func() {
+			err := (&serializer.ListAppInstancesQueryInput{All: true}).Validate()
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("rejects all=true together with page", func() {
+			err := (&serializer.ListAppInstancesQueryInput{All: true, Page: int64Ptr(1)}).Validate()
+			Expect(err).To(HaveOccurred())
+			var bkErr *bkerrs.Error
+			Expect(errors.As(err, &bkErr)).To(BeTrue())
+			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
+			Expect(err.Error()).To(ContainSubstring("cannot be used together with page or pageSize"))
+		})
+
+		It("accepts pagination mode with a legal pageSize", func() {
+			err := (&serializer.ListAppInstancesQueryInput{Page: int64Ptr(1), PageSize: int64Ptr(5)}).Validate()
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Describe("FromPodManifest", func() {
 		It("converts a pod manifest into an app instance output", func() {
 			manifest := map[string]any{

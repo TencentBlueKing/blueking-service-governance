@@ -7681,23 +7681,21 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "为 true 时一次返回全量实例；与 page/pageSize 同时出现时忽略分页（业务实现见后续需求）",
+                        "description": "为 true 时一次返回全量实例；禁止同时带 page 或 pageSize",
                         "name": "all",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "页码，从 1 开始",
+                        "description": "页码，从 1 开始；分页模式必填，all=true 时禁止出现",
                         "name": "page",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "每页数量",
+                        "description": "每页数量；分页模式必填，all=true 时禁止出现",
                         "name": "pageSize",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -25421,16 +25419,28 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "count": {
-                    "description": "结果数量",
+                    "description": "结果数量；全量为成功投影条数，分页为 LabelSelector 匹配的 Pod 总数",
                     "type": "string",
                     "example": "0"
                 },
                 "results": {
-                    "description": "查询结果",
+                    "description": "查询结果，只含成功投影",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/serializer.AppInstanceOutputObj"
                     }
+                },
+                "skipped": {
+                    "description": "无法投影的实例列表；分页模式为空数组，无跳过项时亦为空数组",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.SkippedAppInstanceObj"
+                    }
+                },
+                "skippedCount": {
+                    "description": "本次响应中跳过的实例数（仅全量模式可能非 0）",
+                    "type": "string",
+                    "example": "0"
                 }
             }
         },
@@ -27816,6 +27826,19 @@ const docTemplate = `{
                         "Ready",
                         "Disabled"
                     ]
+                }
+            }
+        },
+        "serializer.SkippedAppInstanceObj": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "实例 ID（即 k8s pod 的 name）；解析前无 name 时为空字符串",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "跳过原因",
+                    "type": "string"
                 }
             }
         },

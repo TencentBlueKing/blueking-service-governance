@@ -1,0 +1,34 @@
+meta {
+  name: 12-list-app-instances-all-with-page
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{serviceURL}}/apps/invalid-app/envs/test/instances?all=true&page=1
+  body: none
+  auth: inherit
+}
+
+params:query {
+  all: true
+  page: 1
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject all=true together with page before looking up deploy record", () => {
+    expect(res.body.error.code).to.equal("INVALID_ARGUMENT");
+    expect(res.body.error.system).to.equal("bkms");
+    expect(res.body.error.module).to.equal("bkms-server");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

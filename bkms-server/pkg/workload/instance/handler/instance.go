@@ -23,17 +23,12 @@ import (
 	"context"
 	"strings"
 
-	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/gin-gonic/gin"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
-	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
@@ -58,10 +53,13 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
-// ListAppInstances 获取应用实例列表。
+// ListAppInstances 按最新部署记录的 LabelSelector 列出匹配 Pod 并投影为实例
+// 本函数只做编排：绑定参数、鉴权取部署记录、拉 Pod、投影、合并北极星
 //
-// 可选查询参数 all=true 表示一次返回全量实例投影；与 page/pageSize 同时出现时语义上忽略分页
-// 全量拉取业务逻辑由后续需求实现；当前即便传入 all 仍按分页返回
+// 查询模式互斥：all=true 且不带 page/pageSize 为全量；未传 all 时 page/pageSize 必填走分页
+// 全量时单个 Pod 投影失败则跳过并写入 skipped，count 为成功投影数（不含跳过项）
+// 分页时当前页解析失败整次 500（与改造前一致，供 CLI）；count 为 LabelSelector 匹配 Pod 总数
+// 北极星拉取失败时分页与全量都整次失败，不降级
 //
 //	@ID			ListAppInstances
 //	@Summary	获取应用实例列表
@@ -72,100 +70,50 @@ func New(registry *storereg.Registry) *Handler {
 //	@Param		appID			path		string	true	"应用 ID"
 //	@Param		envName			path		string	true	"部署环境名称"
 //	@Param		trafficLaneName	query		string	false	"部署的泳道名称（空字符串表示不使用泳道）"
-//	@Param		all				query		bool	false	"为 true 时一次返回全量实例；与 page/pageSize
-//
-// 同时出现时忽略分页（业务实现见后续需求）"
-//
-//	@Param		page			query		int		true	"页码，从 1 开始"
-//	@Param		pageSize		query		int		true	"每页数量"
+//	@Param		all				query		bool	false	"为 true 时一次返回全量实例；禁止同时带 page 或 pageSize"
+//	@Param		page			query		int		false	"页码，从 1 开始；分页模式必填，all=true 时禁止出现"
+//	@Param		pageSize		query		int		false	"每页数量；分页模式必填，all=true 时禁止出现"
 //	@Success	200				{object}	serializer.ListAppInstancesOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/envs/{envName}/instances [get]
 func (h *Handler) ListAppInstances(c *gin.Context) {
-	var uriInput serializer.AppEnvURIInput
-	var queryInput serializer.ListAppInstancesQueryInput
-	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
-		bkerrs.AbortWithErr(c, err)
+	// 绑定路径与查询参数；全量与分页互斥，分页时 page/pageSize 必填
+	uriInput, queryInput, ok := h.bindListAppInstancesQuery(c)
+	if !ok {
 		return
 	}
 
 	ctx := c.Request.Context()
-	// 校验 App 查看权限
-	app, err := ginperm.ValidateAppByID(ctx, h.registry, uriInput.AppID, ginperm.TypeView)
+	// 校验 App 查看权限与 AppModel 类型，并取该环境/泳道最新部署记录
+	app, record, ok := h.getAppAndLatestDeployRecord(c, ctx, uriInput, queryInput)
+	if !ok {
+		return
+	}
+
+	// 按部署记录的命名空间 + LabelSelector 拉取匹配 Pod
+	items, ok := h.listMatchingAppInstancePods(c, ctx, record)
+	if !ok {
+		return
+	}
+
+	// 将窗口内 Pod 投影为实例；全量跳过失败项，分页解析失败则整次 500
+	results, skipped, count, err := h.projectListedAppInstances(queryInput, items, record.ID.Hex())
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	// 目前只支持查看 AppModel 类型应用实例
-	if !bkmsapp.IsAppModelType(app.Type) {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type))
+
+	// 合并该应用环境的北极星实例；拉取失败则整次 List 失败，不降级
+	if !h.attachPolarisToListedAppInstances(c, ctx, app.ID, uriInput.EnvName, results) {
 		return
 	}
-
-	// 获取应用部署记录
-	record, err := h.registry.AppModelDeployRecordStore.GetLatest(
-		ctx, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
-	)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found"))
-		return
-	}
-
-	// 获取应用实例（Pod）列表
-	client := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
-	// 根据命名空间 + 标签选择器获取 Pod 列表
-	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
-	pods, err := client.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError,
-			"list namespace %s labelsSelector [%s] pods", record.Namespace, labelSelector,
-		))
-		return
-	}
-
-	// 计算总数
-	total := int64(len(pods.Items))
-
-	// 计算分页参数（使用 max 确保最小值）
-	page := max(queryInput.Page, int64(1))
-	pageSize := max(queryInput.PageSize, int64(1))
-
-	// 计算起始和结束索引（使用 min 确保不越界）
-	startIdx := min((page-1)*pageSize, total)
-	endIdx := min(startIdx+pageSize, total)
-
-	// 只解析当前页的数据
-	// TODO 未来支持按状态 / IP 等过滤，应该还是需要全量数据处理？
-	appInstances := make([]*serializer.AppInstanceOutputObj, 0, endIdx-startIdx)
-	for i := startIdx; i < endIdx; i++ {
-		p := pods.Items[i]
-		instance, pErr := new(serializer.AppInstanceOutputObj).FromPodManifest(p.Object, record.ID.Hex())
-		if pErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-				pErr, bkerrs.ErrCodeInternalServerError, "parse pod %s", mapx.GetStr(p.Object, "metadata.name"),
-			))
-			return
-		}
-		appInstances = append(appInstances, instance)
-	}
-
-	mgr := polaris.NewPolarisPlatformManager(
-		h.registry.DepSvcStore,
-		h.registry.DepSvcInstStore,
-		h.registry.PolarisConfigStore,
-	)
-	svcInstances, err := mgr.ListPolarisServiceInstances(ctx, app.ID, uriInput.EnvName)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list polaris service instances"))
-		return
-	}
-	serializer.MergePolarisInfoToAppInstances(appInstances, svcInstances)
 
 	ginutils.OK(c, serializer.ListAppInstancesOutput{
 		Data: &serializer.PaginatedAppInstancesOutputObj{
-			Count:   total,
-			Results: appInstances,
+			Count:        count,
+			Results:      results,
+			SkippedCount: int64(len(skipped)),
+			Skipped:      skipped,
 		},
 	})
 }
