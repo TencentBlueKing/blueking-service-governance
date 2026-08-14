@@ -130,7 +130,6 @@ func (q *ListAppInstancesQueryInput) ProjectionRange(total int64) (start, end in
 // 领域事件类型见 instance/watch.EventType
 
 // WatchAppInstancesQueryInput 订阅应用实例投影变更的查询参数。
-
 type WatchAppInstancesQueryInput struct {
 	// 部署的泳道名称（空字符串表示不使用泳道）
 	TrafficLaneName string `form:"trafficLaneName"`
