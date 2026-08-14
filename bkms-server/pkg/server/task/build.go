@@ -180,6 +180,15 @@ func syncBuildStatus(
 	appID, buildID string,
 	record *build.Record,
 ) error {
+	currentRecord, err := operator.GetByBuildID(ctx, appID, buildID)
+	if err != nil {
+		return err
+	}
+	// 重复投递的构建轮询可能晚于部署状态推进到达；一旦记录已经关联部署链路，
+	// 就不再允许 build 维度状态回写覆盖 deploy 维度状态。
+	if currentRecord.Stage == autodeploy.StageDeploy || currentRecord.DeployID != "" {
+		return nil
+	}
 	patch := autodeploy.StatusPatch{
 		Stage:   autodeploy.StageBuild,
 		Status:  string(record.Status),
