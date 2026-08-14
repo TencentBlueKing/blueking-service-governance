@@ -664,9 +664,6 @@ definitions:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.AppInfoOutputObj:
     properties:
-      createdAt:
-        description: 创建时间
-        type: string
       creator:
         description: 创建人
         type: string
@@ -685,7 +682,7 @@ definitions:
         description: 应用使用的编程语言
         type: string
       lastOperatedAt:
-        description: 应用最近操作时间（当前调用者视角）
+        description: 应用最近操作时间
         type: string
       name:
         description: 应用名称
@@ -865,8 +862,6 @@ definitions:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_component_serializer.EmptyOutput:
     type: object
-  github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput:
-    type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_observability_bkmonitor_usergroup_serializer.EmptyOutput:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput:
@@ -894,8 +889,8 @@ definitions:
     properties:
       alertDisplayName:
         description: |-
-          AlertDisplayName 是 BKMS 本地策略展示名，例如 `CPU 使用率过高`；
-          对应的监控原始名称格式为 `CPU 使用率过高【demo-app】`。
+          AlertDisplayName 是 BKMS 本地策略展示名，供前端直接展示。
+          不再对外暴露监控原始 alertName，避免前端感知远端命名格式。
         type: string
       alertID:
         type: string
@@ -1169,10 +1164,6 @@ definitions:
         allOf:
         - $ref: '#/definitions/serializer.DeployOverviewAutoscalingObj'
         description: 自动扩缩容配置摘要，可选：无 GPA 配置时为 null
-      cluster:
-        allOf:
-        - $ref: '#/definitions/serializer.DeployOverviewClusterObj'
-        description: 环境绑定的业务集群信息
       deployStatus:
         description: 部署状态（原始枚举）
         type: string
@@ -1191,9 +1182,6 @@ definitions:
       envType:
         description: 环境类型（development / test / staging / production）
         type: string
-      imageTag:
-        description: 部署的镜像 Tag；无部署记录时为空字符串
-        type: string
       instances:
         allOf:
         - $ref: '#/definitions/serializer.DeployOverviewInstancesObj'
@@ -1204,7 +1192,7 @@ definitions:
       resources:
         allOf:
         - $ref: '#/definitions/serializer.DeployOverviewResourcesObj'
-        description: 资源规格（集群 GameDeployment 主容器实际值）
+        description: 资源规格（app-spec 生效值）
     type: object
   serializer.AppDetailOutputObj:
     properties:
@@ -1331,31 +1319,12 @@ definitions:
         items:
           $ref: '#/definitions/serializer.PolarisInstanceInfoOutputObj'
         type: array
-      resources:
-        allOf:
-        - $ref: '#/definitions/serializer.AppInstanceResourcesObj'
-        description: 主容器资源规格（集群 Pod 实际值）
       restartCount:
         description: 重启次数
         example: "0"
         type: string
       status:
         description: 状态，由 pod.status.phase 等解析获得
-        type: string
-    type: object
-  serializer.AppInstanceResourcesObj:
-    properties:
-      cpuLimits:
-        description: CPU limits（Kubernetes quantity 字符串），可选：未配置时不返回该字段
-        type: string
-      cpuRequests:
-        description: CPU requests，可选：未配置时不返回该字段
-        type: string
-      memoryLimits:
-        description: Memory limits，可选：未配置时不返回该字段
-        type: string
-      memoryRequests:
-        description: Memory requests，可选：未配置时不返回该字段
         type: string
     type: object
   serializer.AppInstanceWatchEvent:
@@ -1946,38 +1915,6 @@ definitions:
         description: 环境变量值
         type: string
     type: object
-  serializer.BindingOutput:
-    properties:
-      data:
-        $ref: '#/definitions/serializer.BindingOutputObj'
-    type: object
-  serializer.BindingOutputObj:
-    properties:
-      appID:
-        type: string
-      createdAt:
-        type: string
-      description:
-        type: string
-      envInstanceMap:
-        additionalProperties:
-          type: string
-        type: object
-      envVars:
-        additionalProperties:
-          type: string
-        type: object
-      id:
-        type: string
-      name:
-        type: string
-      serviceName:
-        type: string
-      updatedAt:
-        type: string
-      workspaceID:
-        type: string
-    type: object
   serializer.BkCIOAuthGitProjectOutput:
     properties:
       alias:
@@ -2033,6 +1970,36 @@ definitions:
         example: "0"
         type: string
     type: object
+  serializer.BkCIPipelineRepoRefOptionsInput:
+    properties:
+      propertyID:
+        type: string
+      search:
+        type: string
+    required:
+    - propertyID
+    type: object
+  serializer.BkCIPipelineRepoRefOutput:
+    properties:
+      constant:
+        type: boolean
+      defaultValue:
+        type: string
+      id:
+        type: string
+      label:
+        type: string
+      name:
+        type: string
+      readOnly:
+        type: boolean
+      required:
+        type: boolean
+      type:
+        type: string
+      value:
+        type: string
+    type: object
   serializer.BkCIPipelineVariableOptionOutput:
     properties:
       key:
@@ -2061,17 +2028,6 @@ definitions:
       required:
         type: boolean
       type:
-        type: string
-    type: object
-  serializer.BkCIRepositoryRefOutput:
-    properties:
-      linkUrl:
-        type: string
-      name:
-        type: string
-      path:
-        type: string
-      sha:
         type: string
     type: object
   serializer.BkHCMCreateLoadBalancerInput:
@@ -2857,15 +2813,6 @@ definitions:
       polarisToken:
         description: 北极星 Token（当 createNewService 为 false 时必填，为 true 时由平台创建后回填）
         type: string
-      registerMode:
-        description: |-
-          注册模式，默认 on_deploy（等部署后注册）。
-          immediate 表示绑定环境后立即下发 PolarisConfig CR 与配套 Service 完成注册，
-          该配置不再注入环境变量和 tRPC 框架配置。创建后不可修改
-        enum:
-        - immediate
-        - on_deploy
-        type: string
       scopeEnvNames:
         description: 生效的环境列表
         items:
@@ -2910,27 +2857,6 @@ definitions:
         type: object
       trafficLaneEnabled:
         type: boolean
-    required:
-    - name
-    type: object
-  serializer.CreateBindingInput:
-    properties:
-      description:
-        description: 描述
-        type: string
-      envInstanceMap:
-        additionalProperties:
-          type: string
-        description: 环境名 → 实例 ID；允许为空
-        type: object
-      envVars:
-        additionalProperties:
-          type: string
-        description: 环境变量模板；允许为空
-        type: object
-      name:
-        description: 绑定名称（应用内同服务下唯一）
-        type: string
     required:
     - name
     type: object
@@ -3149,95 +3075,6 @@ definitions:
     - name
     - poolItems
     type: object
-  serializer.CreateRedisInstanceInput:
-    properties:
-      bkBizID:
-        description: |-
-          --- Redis / DBM 创建参数 ---
-          业务 ID
-        type: integer
-      bkCloudID:
-        description: 云区域 ID
-        type: integer
-      clusterAlias:
-        description: 集群别名（集群模式）
-        type: string
-      clusterName:
-        description: 集群名称（小写字母开头，仅小写字母/数字/连字符）
-        type: string
-      clusterShardNum:
-        description: 集群分片数
-        type: integer
-      clusterType:
-        description: 集群类型
-        type: string
-      databases:
-        description: DB 数量
-        type: integer
-      dbAppAbbr:
-        description: 业务英文缩写
-        type: string
-      dbVersion:
-        description: 版本号（如 Redis-6）
-        type: string
-      description:
-        description: 描述
-        type: string
-      disasterToleranceLevel:
-        description: 容灾级别
-        type: string
-      ipSource:
-        description: 主机来源
-        type: string
-      name:
-        description: 实例名称（同 workspace 下唯一）
-        type: string
-      port:
-        description: 主从起始端口
-        type: integer
-      proxyPort:
-        description: 集群接入层端口
-        type: integer
-      redisPwd:
-        description: Redis 访问密码
-        type: string
-      resourceSpec:
-        allOf:
-        - $ref: '#/definitions/serializer.ResourceSpecInput'
-        description: 资源池申请规格
-      scopeType:
-        description: '作用域类型: workspace / envType / env'
-        enum:
-        - workspace
-        - envType
-        - env
-        type: string
-      scopeValue:
-        description: 作用域值；workspace 时为空，envType 为环境类型，env 为环境名
-        type: string
-    required:
-    - bkBizID
-    - clusterName
-    - clusterType
-    - dbAppAbbr
-    - dbVersion
-    - name
-    - scopeType
-    type: object
-  serializer.CreateRedisInstanceOutput:
-    properties:
-      data:
-        $ref: '#/definitions/serializer.CreateRedisInstanceOutputObj'
-    type: object
-  serializer.CreateRedisInstanceOutputObj:
-    properties:
-      id:
-        description: 实例 ID
-        type: string
-      status:
-        description: 实例状态
-        type: string
-    type: object
   serializer.CreateScopedEnvVarInput:
     properties:
       description:
@@ -3352,47 +3189,6 @@ definitions:
       data:
         $ref: '#/definitions/serializer.WorkspaceDetailOutputObj'
     type: object
-  serializer.CustomRuntimeImageOutputObj:
-    properties:
-      createdAt:
-        description: 创建时间
-        type: string
-      id:
-        description: 记录 ID
-        type: string
-      name:
-        description: 镜像仓库名称，含仓库前缀，不包含 tag
-        type: string
-      type:
-        description: 镜像类型
-        type: string
-      updatedAt:
-        description: 更新时间
-        type: string
-    type: object
-  serializer.CustomRuntimeImageTagOutputObj:
-    properties:
-      builtAt:
-        description: 镜像构建时间
-        type: string
-      digest:
-        description: 摘要
-        type: string
-      size:
-        description: 镜像大小
-        example: "0"
-        type: string
-      tag:
-        description: 镜像标签名
-        type: string
-    type: object
-  serializer.CustomRuntimeImagesOutputObjs:
-    properties:
-      results:
-        items:
-          $ref: '#/definitions/serializer.CustomRuntimeImageOutputObj'
-        type: array
-    type: object
   serializer.CustomTagOptsInput:
     properties:
       prefix:
@@ -3490,24 +3286,6 @@ definitions:
         description: 非 True condition 的汇总消息，可选：一切正常时为空字符串
         type: string
     type: object
-  serializer.DeployOverviewClusterObj:
-    properties:
-      clusterID:
-        description: 集群 ID
-        type: string
-      clusterName:
-        description: 集群展示名（来自 BCS）；拉取失败时为空字符串
-        type: string
-      clusterType:
-        description: 集群类型
-        type: string
-      namespace:
-        description: 集群命名空间
-        type: string
-      projectCode:
-        description: 项目 code
-        type: string
-    type: object
   serializer.DeployOverviewInstancesObj:
     properties:
       abnormal:
@@ -3585,15 +3363,12 @@ definitions:
     type: object
   serializer.DevModeRuleInput:
     properties:
-      envTypes:
-        items:
-          type: string
-        minItems: 1
-        type: array
+      envType:
+        type: string
       spec:
         $ref: '#/definitions/serializer.DevModeSpecInput'
     required:
-    - envTypes
+    - envType
     - spec
     type: object
   serializer.DevModeRuleOutput:
@@ -3605,10 +3380,8 @@ definitions:
     properties:
       createdAt:
         type: string
-      envTypes:
-        items:
-          type: string
-        type: array
+      envType:
+        type: string
       id:
         type: string
       spec:
@@ -4460,11 +4233,6 @@ definitions:
       data:
         $ref: '#/definitions/serializer.BCSProjectOutput'
     type: object
-  serializer.GetBCSUserTokenOutput:
-    properties:
-      data:
-        type: string
-    type: object
   serializer.GetBSCPConfigOutput:
     properties:
       data:
@@ -4586,11 +4354,6 @@ definitions:
       data:
         description: 推荐的镜像 Tag
         type: string
-    type: object
-  serializer.GetRedisInstanceOutput:
-    properties:
-      data:
-        $ref: '#/definitions/serializer.RedisInstanceOutputObj'
     type: object
   serializer.GetResourceTopologyOutput:
     properties:
@@ -5348,13 +5111,6 @@ definitions:
           $ref: '#/definitions/serializer.BSCPServiceOutput'
         type: array
     type: object
-  serializer.ListBindingsOutput:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/serializer.BindingOutputObj'
-        type: array
-    type: object
   serializer.ListBkCIOAuthGitProjectsOutput:
     properties:
       data:
@@ -5362,24 +5118,24 @@ definitions:
           $ref: '#/definitions/serializer.BkCIOAuthGitProjectOutput'
         type: array
     type: object
+  serializer.ListBkCIPipelineRepoRefOptionsOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.BkCIPipelineVariableOptionOutput'
+        type: array
+    type: object
+  serializer.ListBkCIPipelineRepoRefsOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.BkCIPipelineRepoRefOutput'
+        type: array
+    type: object
   serializer.ListBkCIPipelinesOutput:
     properties:
       data:
         $ref: '#/definitions/serializer.PaginatedBkCIPipelineOutput'
-    type: object
-  serializer.ListBkCIRepositoryBranchesOutput:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/serializer.BkCIRepositoryRefOutput'
-        type: array
-    type: object
-  serializer.ListBkCIRepositoryTagsOutput:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/serializer.BkCIRepositoryRefOutput'
-        type: array
     type: object
   serializer.ListBkHCMRegionsOutput:
     properties:
@@ -5452,16 +5208,6 @@ definitions:
         items:
           $ref: '#/definitions/serializer.ComponentDefOutputObj'
         type: array
-    type: object
-  serializer.ListCustomRuntimeImageTagsOutput:
-    properties:
-      data:
-        $ref: '#/definitions/serializer.PaginatedCustomRuntimeImageTagOutputObjs'
-    type: object
-  serializer.ListCustomRuntimeImagesOutput:
-    properties:
-      data:
-        $ref: '#/definitions/serializer.CustomRuntimeImagesOutputObjs'
     type: object
   serializer.ListDeployableImageTagsOutput:
     properties:
@@ -5601,14 +5347,6 @@ definitions:
           $ref: '#/definitions/serializer.ScopedEnvVarOutputObj'
         type: array
     type: object
-  serializer.ListRedisInstancesOutput:
-    properties:
-      data:
-        description: 实例列表
-        items:
-          $ref: '#/definitions/serializer.RedisInstanceOutputObj'
-        type: array
-    type: object
   serializer.ListResourcesRulesOutput:
     properties:
       data:
@@ -5725,15 +5463,6 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/serializer.PaginatedWorkspaceOutput'
-    type: object
-  serializer.LocationSpecInput:
-    properties:
-      city:
-        type: string
-      subZoneIDs:
-        items:
-          type: integer
-        type: array
     type: object
   serializer.LogEntryOutputObj:
     properties:
@@ -5943,14 +5672,23 @@ definitions:
   serializer.PaginatedAppInstancesOutputObj:
     properties:
       count:
-        description: 结果数量
+        description: 结果数量；全量为成功投影条数，分页为 LabelSelector 匹配的 Pod 总数
         example: "0"
         type: string
       results:
-        description: 查询结果
+        description: 查询结果，只含成功投影
         items:
           $ref: '#/definitions/serializer.AppInstanceOutputObj'
         type: array
+      skipped:
+        description: 无法投影的实例列表；分页模式为空数组，无跳过项时亦为空数组
+        items:
+          $ref: '#/definitions/serializer.SkippedAppInstanceObj'
+        type: array
+      skippedCount:
+        description: 本次响应中跳过的实例数（仅全量模式可能非 0）
+        example: "0"
+        type: string
     type: object
   serializer.PaginatedAppModelDeployRecordsOutputObjs:
     properties:
@@ -5993,22 +5731,6 @@ definitions:
         items:
           $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj'
         type: array
-    type: object
-  serializer.PaginatedCustomRuntimeImageTagOutputObjs:
-    properties:
-      count:
-        description: 满足条件的总记录数
-        example: "0"
-        type: string
-      results:
-        description: 当前页的镜像 TAG 列表
-        items:
-          $ref: '#/definitions/serializer.CustomRuntimeImageTagOutputObj'
-        type: array
-      snapshotStatus:
-        allOf:
-        - $ref: '#/definitions/serializer.SnapshotStatusInfoOutputObj'
-        description: 快照状态信息，手动输入且尚无快照记录时 refreshStatus 为 idle
     type: object
   serializer.PaginatedDeployableImageTagOutputObjs:
     properties:
@@ -6167,9 +5889,6 @@ definitions:
       keepNotReadyPod:
         description: 是否保留未就绪的 Pod 在北极星（可选更新）
         type: boolean
-      operator:
-        description: 操作人/负责人（可选更新；未出现表示不改；空字符串非法）
-        type: string
       polarisToken:
         description: 北极星 Token（可选更新）
         type: string
@@ -6354,9 +6073,6 @@ definitions:
         type: string
       polarisToken:
         description: 北极星 Token（敏感信息，返回时脱敏）
-        type: string
-      registerMode:
-        description: 注册模式：immediate（绑定后立即注册）| on_deploy（等部署后注册）
         type: string
       scopeEnvNames:
         description: 生效的环境列表
@@ -6950,86 +6666,7 @@ definitions:
         description: ServicePort 北极星服务端口
         type: integer
     type: object
-  serializer.RedisInstanceConfigOutput:
-    properties:
-      bkBizID:
-        type: integer
-      clusterID:
-        type: integer
-      clusterName:
-        type: string
-      clusterType:
-        type: string
-      domain:
-        type: string
-      port:
-        type: integer
-    type: object
-  serializer.RedisInstanceOutputObj:
-    properties:
-      config:
-        allOf:
-        - $ref: '#/definitions/serializer.RedisInstanceConfigOutput'
-        description: 非敏感配置
-      createdAt:
-        description: 创建时间
-        type: string
-      description:
-        description: 描述
-        type: string
-      id:
-        description: 实例 ID
-        type: string
-      message:
-        description: 状态详情
-        type: string
-      name:
-        description: 实例名称
-        type: string
-      operator:
-        description: 操作人
-        type: string
-      providerType:
-        description: Provider 类型
-        type: string
-      scopeType:
-        description: 作用域类型
-        type: string
-      scopeValue:
-        description: 作用域值
-        type: string
-      serviceName:
-        description: 服务名
-        type: string
-      status:
-        description: 实例状态
-        type: string
-      updatedAt:
-        description: 更新时间
-        type: string
-      usedAppIDs:
-        description: 引用该实例的应用 ID 列表（由绑定反查）
-        items:
-          type: string
-        type: array
-      workspaceID:
-        description: 工作空间 ID
-        type: string
-    type: object
   serializer.RefreshAppImagesOutput:
-    properties:
-      data:
-        $ref: '#/definitions/serializer.RefreshResultInfoOutputObj'
-    type: object
-  serializer.RefreshCustomRuntimeImageTagsInput:
-    properties:
-      name:
-        description: 镜像完整仓库名称，含仓库前缀且不包含 tag 或 digest
-        type: string
-    required:
-    - name
-    type: object
-  serializer.RefreshCustomRuntimeImageTagsOutput:
     properties:
       data:
         $ref: '#/definitions/serializer.RefreshResultInfoOutputObj'
@@ -7254,22 +6891,6 @@ definitions:
         description: 代码仓库类型
         type: string
     type: object
-  serializer.ResourceSpecInput:
-    properties:
-      backendGroup:
-        $ref: '#/definitions/serializer.ResourceSpecItemInput'
-      proxy:
-        $ref: '#/definitions/serializer.ResourceSpecItemInput'
-    type: object
-  serializer.ResourceSpecItemInput:
-    properties:
-      count:
-        type: integer
-      locationSpec:
-        $ref: '#/definitions/serializer.LocationSpecInput'
-      specID:
-        type: integer
-    type: object
   serializer.ResourceTopologyDataOutputObj:
     properties:
       dataVersion:
@@ -7306,15 +6927,12 @@ definitions:
     type: object
   serializer.ResourcesRuleInput:
     properties:
-      envTypes:
-        items:
-          type: string
-        minItems: 1
-        type: array
+      envType:
+        type: string
       spec:
         $ref: '#/definitions/serializer.ResourcesSpecInput'
     required:
-    - envTypes
+    - envType
     - spec
     type: object
   serializer.ResourcesRuleOutput:
@@ -7326,10 +6944,8 @@ definitions:
     properties:
       createdAt:
         type: string
-      envTypes:
-        items:
-          type: string
-        type: array
+      envType:
+        type: string
       id:
         type: string
       spec:
@@ -7728,6 +7344,15 @@ definitions:
         type: string
     required:
     - state
+    type: object
+  serializer.SkippedAppInstanceObj:
+    properties:
+      id:
+        description: 实例 ID（即 k8s pod 的 name）；解析前无 name 时为空字符串
+        type: string
+      reason:
+        description: 跳过原因
+        type: string
     type: object
   serializer.SnapshotStatusInfoOutputObj:
     properties:
@@ -8403,22 +8028,6 @@ definitions:
         type: object
       trafficLaneEnabled:
         type: boolean
-    type: object
-  serializer.UpdateBindingInput:
-    properties:
-      description:
-        description: 描述
-        type: string
-      envInstanceMap:
-        additionalProperties:
-          type: string
-        description: 环境名 → 实例 ID；省略或空表示清空映射
-        type: object
-      envVars:
-        additionalProperties:
-          type: string
-        description: 环境变量模板；省略或空表示清空
-        type: object
     type: object
   serializer.UpdateBuildConfigInput:
     properties:
@@ -11296,199 +10905,6 @@ paths:
       summary: 查询应用在各环境及各泳道上的部署状态
       tags:
       - app
-  /apps/{appID}/deps/{serviceName}/bindings:
-    get:
-      operationId: ListServiceBindings
-      parameters:
-      - description: 应用 ID
-        in: path
-        name: appID
-        required: true
-        type: string
-      - description: 依赖服务名，目前仅支持 redis
-        enum:
-        - redis
-        in: path
-        name: serviceName
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListBindingsOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 查询依赖服务绑定列表
-      tags:
-      - depservice-binding
-    post:
-      consumes:
-      - application/json
-      operationId: CreateServiceBinding
-      parameters:
-      - description: 应用 ID
-        in: path
-        name: appID
-        required: true
-        type: string
-      - description: 依赖服务名，目前仅支持 redis
-        enum:
-        - redis
-        in: path
-        name: serviceName
-        required: true
-        type: string
-      - description: 请求体
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/serializer.CreateBindingInput'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/serializer.BindingOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 创建依赖服务绑定
-      tags:
-      - depservice-binding
-  /apps/{appID}/deps/{serviceName}/bindings/{name}:
-    delete:
-      operationId: DeleteServiceBinding
-      parameters:
-      - description: 应用 ID
-        in: path
-        name: appID
-        required: true
-        type: string
-      - description: 依赖服务名，目前仅支持 redis
-        enum:
-        - redis
-        in: path
-        name: serviceName
-        required: true
-        type: string
-      - description: 绑定名称
-        in: path
-        name: name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 删除依赖服务绑定
-      tags:
-      - depservice-binding
-    get:
-      operationId: GetServiceBinding
-      parameters:
-      - description: 应用 ID
-        in: path
-        name: appID
-        required: true
-        type: string
-      - description: 依赖服务名，目前仅支持 redis
-        enum:
-        - redis
-        in: path
-        name: serviceName
-        required: true
-        type: string
-      - description: 绑定名称
-        in: path
-        name: name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.BindingOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 查询依赖服务绑定详情
-      tags:
-      - depservice-binding
-    put:
-      consumes:
-      - application/json
-      operationId: UpdateServiceBinding
-      parameters:
-      - description: 应用 ID
-        in: path
-        name: appID
-        required: true
-        type: string
-      - description: 依赖服务名，目前仅支持 redis
-        enum:
-        - redis
-        in: path
-        name: serviceName
-        required: true
-        type: string
-      - description: 绑定名称
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: 请求体
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/serializer.UpdateBindingInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.BindingOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 更新依赖服务绑定
-      tags:
-      - depservice-binding
   /apps/{appID}/deps/polaris-configs:
     get:
       operationId: ListAppPolarisConfigs
@@ -13979,19 +13395,17 @@ paths:
         in: query
         name: trafficLaneName
         type: string
-      - description: 为 true 时一次返回全量实例；与 page/pageSize
+      - description: 为 true 时一次返回全量实例；禁止同时带 page 或 pageSize
         in: query
         name: all
         type: boolean
-      - description: 页码，从 1 开始
+      - description: 页码，从 1 开始；分页模式必填，all=true 时禁止出现
         in: query
         name: page
-        required: true
         type: integer
-      - description: 每页数量
+      - description: 每页数量；分页模式必填，all=true 时禁止出现
         in: query
         name: pageSize
-        required: true
         type: integer
       produces:
       - application/json
@@ -16050,26 +15464,6 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 获取有权限的 BCS 项目列表
-      tags:
-      - bkintegrations-bcs
-  /bcs/token:
-    get:
-      operationId: GetBCSUserToken
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.GetBCSUserTokenOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 获取 BCS Auth Info
       tags:
       - bkintegrations-bcs
   /bkcc/businesses/authorized:
@@ -18861,6 +18255,76 @@ paths:
       summary: 获取蓝盾流水线详情
       tags:
       - bkintegrations-bkci
+  /workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs:
+    get:
+      operationId: ListBkCIPipelineRepoRefs
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 流水线 ID
+        in: path
+        name: pipelineID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListBkCIPipelineRepoRefsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取蓝盾流水线分支/Tag字段列表
+      tags:
+      - bkintegrations-bkci
+  /workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs/options:
+    post:
+      consumes:
+      - application/json
+      operationId: ListBkCIPipelineRepoRefOptions
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 流水线 ID
+        in: path
+        name: pipelineID
+        required: true
+        type: string
+      - description: 查询参数
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.BkCIPipelineRepoRefOptionsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListBkCIPipelineRepoRefOptionsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取蓝盾流水线分支/Tag字段的可选项
+      tags:
+      - bkintegrations-bkci
   /workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/variables:
     get:
       operationId: GetBkCIPipelineVariables
@@ -18890,106 +18354,6 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 获取蓝盾流水线变量列表
-      tags:
-      - bkintegrations-bkci
-  /workspaces/{workspaceID}/bkci-repositories/branches:
-    get:
-      operationId: ListBkCIRepositoryBranches
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 代码仓库 ID 或名称
-        in: query
-        name: repositoryID
-        required: true
-        type: string
-      - description: '代码仓库标识类型，可选值: ID, NAME'
-        in: query
-        name: repositoryType
-        required: true
-        type: string
-      - description: 搜索关键词
-        in: query
-        name: search
-        type: string
-      - description: 页码，最小为 1
-        in: query
-        name: page
-        required: true
-        type: integer
-      - description: '每页数量，可选值: 5, 10, 20, 50, 100'
-        in: query
-        name: pageSize
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListBkCIRepositoryBranchesOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 获取代码仓库分支列表
-      tags:
-      - bkintegrations-bkci
-  /workspaces/{workspaceID}/bkci-repositories/tags:
-    get:
-      operationId: ListBkCIRepositoryTags
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 代码仓库 ID 或名称
-        in: query
-        name: repositoryID
-        required: true
-        type: string
-      - description: '代码仓库标识类型，可选值: ID, NAME'
-        in: query
-        name: repositoryType
-        required: true
-        type: string
-      - description: 搜索关键词
-        in: query
-        name: search
-        type: string
-      - description: 页码，最小为 1
-        in: query
-        name: page
-        required: true
-        type: integer
-      - description: '每页数量，可选值: 5, 10, 20, 50, 100'
-        in: query
-        name: pageSize
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListBkCIRepositoryTagsOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 获取代码仓库标签列表
       tags:
       - bkintegrations-bkci
   /workspaces/{workspaceID}/bkmonitor/alerts/{alertID}:
@@ -19335,255 +18699,6 @@ paths:
       summary: 更新工作空间组件
       tags:
       - workspace-components
-  /workspaces/{workspaceID}/custom-build-images:
-    get:
-      description: 候选仅以工作空间已落库的自定义镜像记录为准，不过滤快照同步状态，也不校验镜像在仓库中是否仍然存在；候选数量预期在百条以内，因此不分页
-      operationId: ListCustomBuildImages
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 镜像类型：builder / runner
-        in: query
-        name: type
-        required: true
-        type: string
-      - description: 搜索关键字
-        in: query
-        name: keyword
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListCustomRuntimeImagesOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 获取工作空间自定义构建镜像候选列表
-      tags:
-      - images
-  /workspaces/{workspaceID}/custom-build-images/tags:
-    get:
-      description: |-
-        镜像以完整名称传入而非记录 ID，因为用户手动输入、尚未落库的镜像没有记录 ID。
-        已落库镜像读本地快照、手动输入镜像用工作空间凭证实时拉取，两条来源的出入参、
-        分页与总数口径完全一致，调用方无需按来源分支处理，也不传递来源标识
-      operationId: ListCustomBuildImageTags
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 镜像完整仓库名称，含仓库前缀且不带 tag
-        in: query
-        name: name
-        required: true
-        type: string
-      - description: 搜索关键字
-        in: query
-        name: keyword
-        type: string
-      - description: 分页参数：页码，从 1 开始
-        in: query
-        name: page
-        required: true
-        type: integer
-      - description: 分页参数：每页数量，支持 5/10/20/50/100
-        in: query
-        name: pageSize
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListCustomRuntimeImageTagsOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 获取工作空间自定义构建镜像可用 TAG 列表
-      tags:
-      - images
-  /workspaces/{workspaceID}/custom-build-images/tags/refresh:
-    post:
-      consumes:
-      - application/json
-      description: 同步等待上限为 10 秒。刷新中与刷新失败均为正常响应，通过 data.status 的 refreshing / failed
-        表达，不作为错误抛出
-      operationId: RefreshCustomBuildImageTags
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 刷新参数
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/serializer.RefreshCustomRuntimeImageTagsInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.RefreshCustomRuntimeImageTagsOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 手动刷新工作空间自定义构建镜像的 TAG 快照
-      tags:
-      - images
-  /workspaces/{workspaceID}/deps/redis:
-    get:
-      operationId: ListRedisInstances
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 实例状态
-        in: query
-        name: status
-        type: string
-      - description: 作用域类型
-        in: query
-        name: scopeType
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListRedisInstancesOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 查询 Redis 依赖服务实例列表
-      tags:
-      - depservice-redis
-    post:
-      consumes:
-      - application/json
-      operationId: CreateRedisInstance
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 请求体
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/serializer.CreateRedisInstanceInput'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/serializer.CreateRedisInstanceOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 创建 Redis 依赖服务实例
-      tags:
-      - depservice-redis
-  /workspaces/{workspaceID}/deps/redis/{instanceID}:
-    delete:
-      operationId: DeleteRedisInstance
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 实例 ID
-        in: path
-        name: instanceID
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 删除 Redis 依赖服务实例
-      tags:
-      - depservice-redis
-    get:
-      operationId: GetRedisInstance
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 实例 ID
-        in: path
-        name: instanceID
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.GetRedisInstanceOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 查询 Redis 依赖服务实例详情
-      tags:
-      - depservice-redis
   /workspaces/{workspaceID}/envs:
     get:
       description: '[bkms-cli 使用] 避免破坏性修改'

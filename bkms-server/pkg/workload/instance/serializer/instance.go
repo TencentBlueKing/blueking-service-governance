@@ -21,11 +21,13 @@ package serializer
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/timex"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	podstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/pod"
@@ -62,16 +64,65 @@ type AppInstanceURIInput struct {
 // -----------------------------------------------------------------------------
 // 实例管理
 
+// 分页页码从 1 开始；校验走 Validate 而非 binding:"gte=1"，因为该约束只在分页模式生效
+const minListAppInstancesPage int64 = 1
+
+// 分页 pageSize 仅允许这些固定值；取值约束只在分页模式生效，所以不写 binding:"oneof=..."
+var allowedListAppInstancesPageSizes = []int64{5, 10, 20, 50, 100}
+
 // ListAppInstancesQueryInput 查询应用实例列表的请求参数。
+// page/pageSize 不用 gin binding 做 required/gte/oneof：
+// 全量（all=true）禁止带分页参数，分页模式才必填且 pageSize 受限；
+// binding 标签无法按 all 切换必填，也无法表达 all=true 与 page/pageSize 互斥。
 type ListAppInstancesQueryInput struct {
 	// 部署的泳道名称（空字符串表示不使用泳道）
 	TrafficLaneName string `form:"trafficLaneName"`
-	// 为 true 时一次返回匹配的全部实例投影；与 page/pageSize 同时出现时语义上忽略分页（业务实现见后续需求）
+	// 为 true 时一次返回匹配的全部实例投影；禁止同时带 page 或 pageSize
 	All bool `form:"all"`
-	// 页码，从 1 开始
-	Page int64 `form:"page" binding:"required,gte=1"`
-	// 每页数量，仅支持固定枚举值
-	PageSize int64 `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
+	// 页码，从 1 开始；分页模式必填，all=true 时禁止出现
+	Page *int64 `form:"page"`
+	// 每页数量，仅支持固定枚举值；分页模式必填，all=true 时禁止出现
+	PageSize *int64 `form:"pageSize"`
+}
+
+// Validate 校验全量与分页参数互斥，以及分页模式下的必填与取值
+// 必须在 Bind 之后单独调用：Bind 只做解析，条件校验放这里才能让 all=true 不带分页通过
+func (q *ListAppInstancesQueryInput) Validate() error {
+	if q.All {
+		if q.Page != nil || q.PageSize != nil {
+			return bkerrs.New(
+				bkerrs.ErrCodeInvalidArgument,
+				"all=true cannot be used together with page or pageSize",
+			)
+		}
+		return nil
+	}
+	if q.Page == nil {
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "page is required")
+	}
+	if q.PageSize == nil {
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "pageSize is required")
+	}
+	if *q.Page < minListAppInstancesPage {
+		return bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "page must be >= %d", minListAppInstancesPage)
+	}
+	if !slices.Contains(allowedListAppInstancesPageSizes, *q.PageSize) {
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "pageSize must be one of 5, 10, 20, 50, 100")
+	}
+	return nil
+}
+
+// ProjectionRange 返回需要投影的 [start, end) 下标
+// 全量模式投影全部匹配 Pod；分页模式只投影当前页
+func (q *ListAppInstancesQueryInput) ProjectionRange(total int64) (start, end int64) {
+	if q.All {
+		return 0, total
+	}
+	page := *q.Page
+	pageSize := *q.PageSize
+	start = min((page-1)*pageSize, total)
+	end = min(start+pageSize, total)
+	return start, end
 }
 
 // -----------------------------------------------------------------------------
@@ -275,12 +326,24 @@ func MergePolarisInfoToAppInstances(
 	}
 }
 
-// PaginatedAppInstancesOutputObj 分页查询应用实例列表的输出载荷。
+// SkippedAppInstanceObj 无法投影为 AppInstanceOutputObj 而被跳过的实例。
+type SkippedAppInstanceObj struct {
+	// 实例 ID（即 k8s pod 的 name）；解析前无 name 时为空字符串
+	ID string `json:"id"`
+	// 跳过原因
+	Reason string `json:"reason"`
+}
+
+// PaginatedAppInstancesOutputObj 分页或全量查询应用实例列表的输出载荷。
 type PaginatedAppInstancesOutputObj struct {
-	// 结果数量
+	// 结果数量；全量为成功投影条数，分页为 LabelSelector 匹配的 Pod 总数
 	Count int64 `json:"count,string"`
-	// 查询结果
+	// 查询结果，只含成功投影
 	Results []*AppInstanceOutputObj `json:"results"`
+	// 本次响应中跳过的实例数（仅全量模式可能非 0）
+	SkippedCount int64 `json:"skippedCount,string"`
+	// 无法投影的实例列表；分页模式为空数组，无跳过项时亦为空数组
+	Skipped []*SkippedAppInstanceObj `json:"skipped"`
 }
 
 // ListAppInstancesOutput 查询应用实例列表的响应。
