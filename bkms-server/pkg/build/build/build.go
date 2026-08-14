@@ -21,28 +21,28 @@ package build
 
 import (
 	"context"
+	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/task"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
 )
 
 // StartOptions describes optional build follow-up workflow.
 type StartOptions struct {
-	AutoDeploy            *task.AutoDeployArgs
+	AutoDeploy            *buildpoll.AutoDeployArgs
 	EnvStore              envmodel.EnvironmentStore
 	AutoDeployRecordStore autodeploy.RecordStore
 }
 
-// StartAndScheduleBuild executes a build through the build service and then
-// submits the polling task that tracks build status asynchronously.
+// StartAndScheduleBuild 同步触发蓝盾构建后，投递镜像构建状态轮询任务
 func StartAndScheduleBuild(
 	ctx context.Context,
 	buildService *Service,
@@ -55,7 +55,7 @@ func StartAndScheduleBuild(
 		return nil, errors.Wrapf(err, "start build for %s", app.ID)
 	}
 
-	taskArgs := task.PollingBuildStatusArgs{
+	taskArgs := buildpoll.Args{
 		WorkspaceID:  app.WorkspaceID,
 		PipelineType: result.PipelineType,
 		AppID:        app.ID,
@@ -89,12 +89,10 @@ func StartAndScheduleBuild(
 		deploypkg.TrackEnvAddApp(ctx, opts.EnvStore, app.WorkspaceID, opts.AutoDeploy.EnvName, app.ID)
 	}
 
-	_, err = worker.ApplyTask(
+	err = taskq.Enqueue(
 		ctx,
-		config.G.RabbitMQ.GetURI(),
-		config.G.RabbitMQ.Queue,
-		task.PollingBuildStatus,
-		taskArgs,
+		buildpoll.Task.NewTask(taskArgs),
+		asynq.ProcessIn(buildpoll.PollingInterval(time.Since(result.Record.StartedAt))),
 	)
 	if err != nil {
 		if opts.AutoDeploy != nil {
@@ -108,7 +106,7 @@ func StartAndScheduleBuild(
 				}
 			}
 		}
-		return nil, errors.Wrap(err, "apply polling build status task")
+		return nil, errors.Wrap(err, "enqueue polling build status task")
 	}
 	return result.Record, nil
 }

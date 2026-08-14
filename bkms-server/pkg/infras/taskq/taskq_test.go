@@ -29,6 +29,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 )
 
 type sampleArgs struct {
@@ -153,8 +155,73 @@ var _ = Describe("Test taskq NewTask and Enqueue", func() {
 		task := tt.NewTask(sampleArgs{ID: "x"})
 		Expect(task).NotTo(BeNil())
 
-		err := Enqueue(context.Background(), task)
+		ctx := auth.WithUser(context.Background(), auth.User{ID: "tester"})
+		err := Enqueue(ctx, task)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("client not initialized"))
+	})
+
+	It("Enqueue returns error when auth user is missing", func() {
+		tt := NewTaskType[sampleArgs]("test.nouser", func(_ context.Context, _ sampleArgs) error {
+			return nil
+		})
+		task := tt.NewTask(sampleArgs{ID: "x"})
+		Expect(task).NotTo(BeNil())
+
+		err := Enqueue(context.Background(), task)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("auth user not found"))
+	})
+})
+
+var _ = Describe("Test taskq auth envelope", func() {
+	It("wraps and restores auth user without mixing into business args", func() {
+		argsPayload := lo.Must(json.Marshal(sampleArgs{ID: "build-1", Step: 2}))
+		user := auth.User{ID: "alice", Cred: auth.UserCredential{AccessToken: "tok"}}
+		wrapped := lo.Must(wrapEnvelope(user, argsPayload))
+		Expect(string(wrapped)).To(ContainSubstring(`"_authUser"`))
+		Expect(string(wrapped)).To(ContainSubstring(`"_args"`))
+
+		ctx, rawArgs := restoreEnvelope(context.Background(), wrapped)
+		gotUser, err := auth.GetUser(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gotUser.ID).To(Equal("alice"))
+		Expect(gotUser.Cred.AccessToken).To(Equal("tok"))
+
+		var args sampleArgs
+		Expect(json.Unmarshal(rawArgs, &args)).To(Succeed())
+		Expect(args.ID).To(Equal("build-1"))
+		Expect(args.Step).To(Equal(2))
+	})
+
+	It("Handler restores envelope user into context", func() {
+		var gotUser auth.User
+		var got sampleArgs
+		task := NewTaskType[sampleArgs]("with-auth", func(ctx context.Context, a sampleArgs) error {
+			var err error
+			gotUser, err = auth.GetUser(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			got = a
+			return nil
+		})
+		argsPayload := lo.Must(json.Marshal(sampleArgs{ID: "x", Step: 3}))
+		wrapped := lo.Must(wrapEnvelope(auth.User{ID: "bob"}, argsPayload))
+		err := task.Handler()(context.Background(), asynq.NewTask("with-auth", wrapped))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gotUser.ID).To(Equal("bob"))
+		Expect(got.ID).To(Equal("x"))
+		Expect(got.Step).To(Equal(3))
+	})
+
+	It("Handler still decodes raw args payload without envelope", func() {
+		var got sampleArgs
+		task := NewTaskType[sampleArgs]("raw", func(_ context.Context, a sampleArgs) error {
+			got = a
+			return nil
+		})
+		payload, _ := json.Marshal(sampleArgs{ID: "legacy", Step: 1})
+		err := task.Handler()(context.Background(), asynq.NewTask("raw", payload))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.ID).To(Equal("legacy"))
 	})
 })

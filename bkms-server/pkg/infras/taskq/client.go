@@ -99,11 +99,23 @@ type Task struct {
 //  2. Task 自带默认(来自 TaskType 定义时传入的 asynq.Option);
 //  3. 本次调用 opts —— 最后, 覆盖以上。
 //
+// ctx 必须带已认证用户；身份写入 payload envelope，不进入业务 Args。
 // 去重冲突(同名 + 同负载在途)视为正常, 返回 nil。
 func Enqueue(ctx context.Context, t *Task, opts ...asynq.Option) error {
 	if t == nil {
 		return errors.New("taskq: task is nil (likely due to args serialization failure)")
 	}
+
+	user, err := userFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	payload, err := wrapEnvelope(user, t.payload)
+	if err != nil {
+		return err
+	}
+
 	if client == nil {
 		return errors.New("taskq client not initialized")
 	}
@@ -116,8 +128,8 @@ func Enqueue(ctx context.Context, t *Task, opts ...asynq.Option) error {
 	enqOpts = append(enqOpts, t.defaultOpts...)
 	enqOpts = append(enqOpts, opts...)
 
-	task := asynq.NewTask(t.name, t.payload)
-	_, err := client.EnqueueContext(ctx, task, enqOpts...)
+	task := asynq.NewTask(t.name, payload)
+	_, err = client.EnqueueContext(ctx, task, enqOpts...)
 	if errors.Is(err, asynq.ErrDuplicateTask) {
 		logging.Infof(ctx, "taskq enqueue skipped, duplicate in-flight task: %s", t.name)
 		return nil

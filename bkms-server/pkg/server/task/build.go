@@ -16,6 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+// FIXME: 镜像构建状态轮询已迁至 asynq（pkg/server/taskqtask/buildpoll）
+// 本文件仅保留 RabbitMQ 存量消费路径，存量队列耗尽后移除此文件
+
 package task
 
 import (

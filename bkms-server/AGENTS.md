@@ -32,6 +32,7 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
   - Collection helpers: `lo.Map`, `lo.Filter`, `lo.FilterMap`, `lo.Find`, `lo.MapEntries`, `lo.Keys`, `lo.Values`, `lo.Uniq`, `lo.Contains`
   - Other useful helpers: `lo.Coalesce`, `lo.Ternary`, `lo.Must`, `lo.If` / `lo.Else`
 * For logging conventions, refer to [`README.md#日志使用`](README.md#日志使用): use `pkg/common/logging`, prefer passing a real `context.Context`, use `NoContext` APIs only when no real context is available, and use `*Attrs` APIs for `slog.Attr` structured fields.
+* Wrap errors with [`github.com/pkg/errors`](https://github.com/pkg/errors) (`errors.Wrap` / `errors.Wrapf`). Do not use `fmt.Errorf` to wrap errors; `fmt.Errorf("%w: %w", err, sentinel)` is also disallowed. For taskq unrecoverable failures, wrap the sentinel: `errors.Wrap(taskq.ErrStopRetry, "reason")` or `errors.Wrapf(taskq.ErrStopRetry, "reason: %v", err)`.
 * We use golangci-lint to lint and format our files.
 * Be consistent with existing nearby code style unless asked to do otherwise.
 * NEVER leave trailing whitespace on any line.

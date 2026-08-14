@@ -32,7 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/task"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 )
 
@@ -152,7 +152,7 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		input.Branch,
 		input.ImageTag,
 		build.StartOptions{
-			AutoDeploy: &task.AutoDeployArgs{
+			AutoDeploy: &buildpoll.AutoDeployArgs{
 				EnvName:         uriInput.EnvName,
 				TrafficLaneName: input.TrafficLaneName,
 				Replicas:        input.Replicas,
