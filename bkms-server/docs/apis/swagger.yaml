@@ -5672,14 +5672,23 @@ definitions:
   serializer.PaginatedAppInstancesOutputObj:
     properties:
       count:
-        description: 结果数量
+        description: 结果数量；全量为成功投影条数，分页为 LabelSelector 匹配的 Pod 总数
         example: "0"
         type: string
       results:
-        description: 查询结果
+        description: 查询结果，只含成功投影
         items:
           $ref: '#/definitions/serializer.AppInstanceOutputObj'
         type: array
+      skipped:
+        description: 无法投影的实例列表；分页模式为空数组，无跳过项时亦为空数组
+        items:
+          $ref: '#/definitions/serializer.SkippedAppInstanceObj'
+        type: array
+      skippedCount:
+        description: 本次响应中跳过的实例数（仅全量模式可能非 0）
+        example: "0"
+        type: string
     type: object
   serializer.PaginatedAppModelDeployRecordsOutputObjs:
     properties:
@@ -7335,6 +7344,15 @@ definitions:
         type: string
     required:
     - state
+    type: object
+  serializer.SkippedAppInstanceObj:
+    properties:
+      id:
+        description: 实例 ID（即 k8s pod 的 name）；解析前无 name 时为空字符串
+        type: string
+      reason:
+        description: 跳过原因
+        type: string
     type: object
   serializer.SnapshotStatusInfoOutputObj:
     properties:
@@ -13377,19 +13395,17 @@ paths:
         in: query
         name: trafficLaneName
         type: string
-      - description: 为 true 时一次返回全量实例；与 page/pageSize 同时出现时忽略分页（业务实现见后续需求）
+      - description: 为 true 时一次返回全量实例；禁止同时带 page 或 pageSize
         in: query
         name: all
         type: boolean
-      - description: 页码，从 1 开始
+      - description: 页码，从 1 开始；分页模式必填，all=true 时禁止出现
         in: query
         name: page
-        required: true
         type: integer
-      - description: 每页数量
+      - description: 每页数量；分页模式必填，all=true 时禁止出现
         in: query
         name: pageSize
-        required: true
         type: integer
       produces:
       - application/json
