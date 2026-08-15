@@ -636,136 +636,6 @@ func (c *ApiClient) GetPipelineBuildState(
 	}, nil
 }
 
-// ListPipelineRepoRefProperties 获取流水线启动表单中的代码分支/Tag字段列表
-func (c *ApiClient) ListPipelineRepoRefProperties(
-	ctx context.Context, projectCode, pipelineID string,
-) ([]RepoRefProperty, error) {
-	startInfo, err := c.getPipelineStartupInfo(ctx, projectCode, pipelineID)
-	if err != nil {
-		return nil, err
-	}
-
-	return parseRepoRefProperties(startInfo)
-}
-
-// ListPipelineRepoRefOptions 获取某个代码分支/Tag字段的可选项
-//
-// BKCI 的 build_manual_startup_options 接口不能仅凭 propertyID 查询选项，
-// 它要求请求体中携带 startup_info 里对应字段的原始 property 定义。
-// 因此这里需要先查询一次 build_manual_startup_info，再将匹配到的 property
-// 原文透传给 options 接口。
-//
-// 当前没有采用“由前端回传 property 再直接查 options”的方案，是为了避免将
-// BKCI 上游字段结构直接暴露到本服务 API 契约中，减少前后端对上游细节的耦合。
-func (c *ApiClient) ListPipelineRepoRefOptions(
-	ctx context.Context, projectCode, pipelineID, propertyID, search string,
-) ([]PipelineVariableOption, error) {
-	property, err := c.getPipelineRepoRefProperty(ctx, projectCode, pipelineID, propertyID)
-	if err != nil {
-		return nil, err
-	}
-
-	return c.listPipelineRepoRefOptionsByProperty(ctx, projectCode, pipelineID, property, search)
-}
-
-// getPipelineStartupInfo 获取 BKCI 流水线启动表单原始数据。
-// 返回原始 data map，供上层继续解析 RepoRef 字段或透传 property 给 options 接口。
-func (c *ApiClient) getPipelineStartupInfo(
-	ctx context.Context, projectCode, pipelineID string,
-) (map[string]any, error) {
-	apiOperation := c.NewOperation(
-		bkapi.OperationConfig{
-			Name:   "v4_user_build_startInfo",
-			Method: "GET",
-			Path:   "/v4/apigw-user/projects/{projectId}/build_manual_startup_info",
-		},
-		bkapi.OptSetRequestPathParams(map[string]string{
-			"projectId": projectCode,
-		}),
-	).SetQueryParams(map[string]string{
-		"pipelineId": pipelineID,
-	})
-
-	result, err := c.handleOperation(ctx, apiOperation)
-	if err != nil {
-		return nil, err
-	}
-
-	return mapx.GetMap(result, "data"), nil
-}
-
-// getPipelineRepoRefProperty 从 BKCI 流水线启动表单中获取指定 ID 的 RepoRef 属性定义。
-func (c *ApiClient) getPipelineRepoRefProperty(
-	ctx context.Context, projectCode, pipelineID, propertyID string,
-) (map[string]any, error) {
-	startInfo, err := c.getPipelineStartupInfo(ctx, projectCode, pipelineID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 仅筛选 type 为 git_ref、svn_tag 或 repo_ref 的属性，返回上游原始 property 定义，
-	// 供后续查询分支/Tag 动态可选项时透传给 BKCI 的 startup_options 接口。
-	for _, item := range mapx.GetList(startInfo, "properties") {
-		property, ok := item.(map[string]any)
-		if !ok {
-			return nil, errors.Errorf("invalid repo ref property (not map[string]any type): %v", item)
-		}
-		propertyType := mapx.GetStr(property, "type")
-		if !isRepoRefPropertyType(propertyType) {
-			continue
-		}
-		if mapx.GetStr(property, "id") == propertyID {
-			return property, nil
-		}
-	}
-
-	return nil, errors.Errorf("repo ref property %s not found", propertyID)
-}
-
-// listPipelineRepoRefOptionsByProperty 使用 startup_info 中的原始 property 定义查询动态选项。
-// BKCI 的 startup_options 接口依赖完整 property 请求体，因此这里直接透传上游原文。
-func (c *ApiClient) listPipelineRepoRefOptionsByProperty(
-	ctx context.Context, projectCode, pipelineID string, property map[string]any, search string,
-) ([]PipelineVariableOption, error) {
-	queryParams := map[string]string{
-		"pipelineId": pipelineID,
-	}
-	if search != "" {
-		queryParams["search"] = search
-	}
-	optionsOperation := c.NewOperation(
-		bkapi.OperationConfig{
-			Name:   "v4_user_build_startOptions",
-			Method: "POST",
-			Path:   "/v4/apigw-user/projects/{projectId}/build_manual_startup_options",
-		},
-		bkapi.OptSetRequestPathParams(map[string]string{
-			"projectId": projectCode,
-		}),
-		bkapi.OptSetRequestQueryParams(queryParams),
-		bkapi.OptSetRequestBody(property),
-	)
-
-	optionsResult, err := c.handleOperation(ctx, optionsOperation)
-	if err != nil {
-		return nil, err
-	}
-
-	options := make([]PipelineVariableOption, 0, len(mapx.GetList(optionsResult, "data")))
-	for _, item := range mapx.GetList(optionsResult, "data") {
-		option, ok := item.(map[string]any)
-		if !ok {
-			return nil, errors.Errorf("invalid repo ref option (not map[string]any type): %v", item)
-		}
-		options = append(options, PipelineVariableOption{
-			Key:   mapx.GetStr(option, "key"),
-			Value: mapx.GetStr(option, "value"),
-		})
-	}
-
-	return options, nil
-}
-
 // ------------------------------------------ 蓝盾代码库管理 API ------------------------------------------
 
 // ListRepository 获取蓝盾仓库列表
@@ -885,6 +755,72 @@ func (c *ApiClient) CreateRepository(
 	// 从响应中提取代码库 ID
 	repoID := mapx.GetStr(result, "data.hashId")
 	return repoID, nil
+}
+
+// ListRepositoryBranches 获取代码库分支列表
+func (c *ApiClient) ListRepositoryBranches(
+	ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
+) ([]RepositoryRef, error) {
+	params := map[string]string{
+		"repositoryId":   repositoryID,
+		"repositoryType": repositoryType,
+		"page":           cast.ToString(page),
+		"pageSize":       cast.ToString(pageSize),
+	}
+	if search != "" {
+		params["search"] = search
+	}
+
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_repository_branches",
+			Method: "GET",
+			Path:   "/v4/apigw-user/repositories/projects/{projectId}/repository/branches",
+		},
+		bkapi.OptSetRequestPathParams(map[string]string{
+			"projectId": projectCode,
+		}),
+	).SetQueryParams(params)
+
+	result, err := c.handleOperation(ctx, apiOperation)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseRepositoryRefs(mapx.GetList(result, "data"))
+}
+
+// ListRepositoryTags 获取代码库标签列表
+func (c *ApiClient) ListRepositoryTags(
+	ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
+) ([]RepositoryRef, error) {
+	params := map[string]string{
+		"repositoryId":   repositoryID,
+		"repositoryType": repositoryType,
+		"page":           cast.ToString(page),
+		"pageSize":       cast.ToString(pageSize),
+	}
+	if search != "" {
+		params["search"] = search
+	}
+
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_repository_tags",
+			Method: "GET",
+			Path:   "/v4/apigw-user/repositories/projects/{projectId}/repository/tags",
+		},
+		bkapi.OptSetRequestPathParams(map[string]string{
+			"projectId": projectCode,
+		}),
+	).SetQueryParams(params)
+
+	result, err := c.handleOperation(ctx, apiOperation)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseRepositoryRefs(mapx.GetList(result, "data"))
 }
 
 // ------------------------------------------ 蓝盾构建日志 API ------------------------------------------

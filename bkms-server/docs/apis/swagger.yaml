@@ -1954,36 +1954,6 @@ definitions:
         example: "0"
         type: string
     type: object
-  serializer.BkCIPipelineRepoRefOptionsInput:
-    properties:
-      propertyID:
-        type: string
-      search:
-        type: string
-    required:
-    - propertyID
-    type: object
-  serializer.BkCIPipelineRepoRefOutput:
-    properties:
-      constant:
-        type: boolean
-      defaultValue:
-        type: string
-      id:
-        type: string
-      label:
-        type: string
-      name:
-        type: string
-      readOnly:
-        type: boolean
-      required:
-        type: boolean
-      type:
-        type: string
-      value:
-        type: string
-    type: object
   serializer.BkCIPipelineVariableOptionOutput:
     properties:
       key:
@@ -2012,6 +1982,17 @@ definitions:
       required:
         type: boolean
       type:
+        type: string
+    type: object
+  serializer.BkCIRepositoryRefOutput:
+    properties:
+      linkUrl:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+      sha:
         type: string
     type: object
   serializer.BkHCMCreateLoadBalancerInput:
@@ -5102,24 +5083,24 @@ definitions:
           $ref: '#/definitions/serializer.BkCIOAuthGitProjectOutput'
         type: array
     type: object
-  serializer.ListBkCIPipelineRepoRefOptionsOutput:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/serializer.BkCIPipelineVariableOptionOutput'
-        type: array
-    type: object
-  serializer.ListBkCIPipelineRepoRefsOutput:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/serializer.BkCIPipelineRepoRefOutput'
-        type: array
-    type: object
   serializer.ListBkCIPipelinesOutput:
     properties:
       data:
         $ref: '#/definitions/serializer.PaginatedBkCIPipelineOutput'
+    type: object
+  serializer.ListBkCIRepositoryBranchesOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.BkCIRepositoryRefOutput'
+        type: array
+    type: object
+  serializer.ListBkCIRepositoryTagsOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.BkCIRepositoryRefOutput'
+        type: array
     type: object
   serializer.ListBkHCMRegionsOutput:
     properties:
@@ -18178,76 +18159,6 @@ paths:
       summary: 获取蓝盾流水线详情
       tags:
       - bkintegrations-bkci
-  /workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs:
-    get:
-      operationId: ListBkCIPipelineRepoRefs
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 流水线 ID
-        in: path
-        name: pipelineID
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListBkCIPipelineRepoRefsOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 获取蓝盾流水线分支/Tag字段列表
-      tags:
-      - bkintegrations-bkci
-  /workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs/options:
-    post:
-      consumes:
-      - application/json
-      operationId: ListBkCIPipelineRepoRefOptions
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      - description: 流水线 ID
-        in: path
-        name: pipelineID
-        required: true
-        type: string
-      - description: 查询参数
-        in: body
-        name: input
-        required: true
-        schema:
-          $ref: '#/definitions/serializer.BkCIPipelineRepoRefOptionsInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListBkCIPipelineRepoRefOptionsOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 获取蓝盾流水线分支/Tag字段的可选项
-      tags:
-      - bkintegrations-bkci
   /workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/variables:
     get:
       operationId: GetBkCIPipelineVariables
@@ -18277,6 +18188,106 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 获取蓝盾流水线变量列表
+      tags:
+      - bkintegrations-bkci
+  /workspaces/{workspaceID}/bkci-repositories/branches:
+    get:
+      operationId: ListBkCIRepositoryBranches
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 代码仓库 ID 或名称
+        in: query
+        name: repositoryID
+        required: true
+        type: string
+      - description: '代码仓库标识类型，可选值: ID, NAME'
+        in: query
+        name: repositoryType
+        required: true
+        type: string
+      - description: 搜索关键词
+        in: query
+        name: search
+        type: string
+      - description: 页码，最小为 1
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: '每页数量，可选值: 5, 10, 20, 50, 100'
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListBkCIRepositoryBranchesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取代码仓库分支列表
+      tags:
+      - bkintegrations-bkci
+  /workspaces/{workspaceID}/bkci-repositories/tags:
+    get:
+      operationId: ListBkCIRepositoryTags
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 代码仓库 ID 或名称
+        in: query
+        name: repositoryID
+        required: true
+        type: string
+      - description: '代码仓库标识类型，可选值: ID, NAME'
+        in: query
+        name: repositoryType
+        required: true
+        type: string
+      - description: 搜索关键词
+        in: query
+        name: search
+        type: string
+      - description: 页码，最小为 1
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: '每页数量，可选值: 5, 10, 20, 50, 100'
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListBkCIRepositoryTagsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取代码仓库标签列表
       tags:
       - bkintegrations-bkci
   /workspaces/{workspaceID}/bkmonitor/alerts/{alertID}:

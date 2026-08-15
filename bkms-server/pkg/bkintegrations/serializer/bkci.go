@@ -39,12 +39,6 @@ type BkCIPipelineURIInput struct {
 	PipelineID  string `uri:"pipelineID" binding:"required,min=1"`
 }
 
-// BkCIPipelineRepoRefOptionsInput 获取分支/Tag选项的请求体
-type BkCIPipelineRepoRefOptionsInput struct {
-	PropertyID string `json:"propertyID" binding:"required"`
-	Search     string `json:"search"`
-}
-
 // --- BkCI Query 参数 ---
 
 // BkCIGitProjectsQueryInput 获取 Git 项目列表的查询参数
@@ -57,6 +51,15 @@ type BkCIPipelinesQueryInput struct {
 	Keyword  string `form:"keyword"`
 	Page     int64  `form:"page" binding:"required,min=1"`
 	PageSize int64  `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
+}
+
+// BkCIRepositoryRefsQueryInput 获取代码仓库分支/Tag列表的查询参数
+type BkCIRepositoryRefsQueryInput struct {
+	RepositoryID   string `form:"repositoryID" binding:"required"`
+	RepositoryType string `form:"repositoryType" binding:"required,oneof=ID NAME"`
+	Search         string `form:"search"`
+	Page           int64  `form:"page" binding:"required,min=1"`
+	PageSize       int64  `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
 }
 
 // --- BkCI Output ---
@@ -218,44 +221,34 @@ type GetBkCIPipelineVariablesOutput struct {
 	Data []*BkCIPipelineVariableOutput `json:"data"`
 }
 
-// BkCIPipelineRepoRefOutput 蓝盾流水线分支/Tag字段输出
-type BkCIPipelineRepoRefOutput struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Label        string `json:"label"`
-	Type         string `json:"type"`
-	Required     bool   `json:"required"`
-	ReadOnly     bool   `json:"readOnly"`
-	Constant     bool   `json:"constant"`
-	DefaultValue string `json:"defaultValue"`
-	Value        string `json:"value"`
+// BkCIRepositoryRefOutput 蓝盾代码仓库分支/Tag输出
+type BkCIRepositoryRefOutput struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	SHA     string `json:"sha"`
+	LinkURL string `json:"linkUrl"`
 }
 
 // FromModel 从领域模型填充输出字段
-func (o *BkCIPipelineRepoRefOutput) FromModel(p bkci.RepoRefProperty) *BkCIPipelineRepoRefOutput {
+func (o *BkCIRepositoryRefOutput) FromModel(ref bkci.RepositoryRef) *BkCIRepositoryRefOutput {
 	if o == nil {
 		return nil
 	}
-	*o = BkCIPipelineRepoRefOutput{
-		ID:           p.ID,
-		Name:         p.Name,
-		Label:        p.Label,
-		Type:         p.Type,
-		Required:     p.Required,
-		ReadOnly:     p.ReadOnly,
-		Constant:     p.Constant,
-		DefaultValue: p.DefaultValue,
-		Value:        p.Value,
+	*o = BkCIRepositoryRefOutput{
+		Name:    ref.Name,
+		Path:    ref.Path,
+		SHA:     ref.SHA,
+		LinkURL: ref.LinkURL,
 	}
 	return o
 }
 
-// ListBkCIPipelineRepoRefsOutput 获取流水线分支/Tag字段列表的响应
-type ListBkCIPipelineRepoRefsOutput struct {
-	Data []*BkCIPipelineRepoRefOutput `json:"data"`
+// ListBkCIRepositoryBranchesOutput 获取代码仓库分支列表的响应
+type ListBkCIRepositoryBranchesOutput struct {
+	Data []*BkCIRepositoryRefOutput `json:"data"`
 }
 
-// ListBkCIPipelineRepoRefOptionsOutput 获取流水线分支/Tag选项列表的响应
-type ListBkCIPipelineRepoRefOptionsOutput struct {
-	Data []*BkCIPipelineVariableOptionOutput `json:"data"`
+// ListBkCIRepositoryTagsOutput 获取代码仓库 Tag 列表的响应
+type ListBkCIRepositoryTagsOutput struct {
+	Data []*BkCIRepositoryRefOutput `json:"data"`
 }

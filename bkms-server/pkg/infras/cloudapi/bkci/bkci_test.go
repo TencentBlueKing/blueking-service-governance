@@ -105,117 +105,66 @@ var _ = Describe("newBusinessError", func() {
 	})
 })
 
-var _ = Describe("isRepoRefPropertyType", func() {
-	It("should return true only for supported repo ref property types", func() {
-		Expect(isRepoRefPropertyType(RepoRefPropertyTypeGitRef)).To(BeTrue())
-		Expect(isRepoRefPropertyType(RepoRefPropertyTypeSvnTag)).To(BeTrue())
-		Expect(isRepoRefPropertyType(RepoRefPropertyTypeRepoRef)).To(BeTrue())
-		Expect(isRepoRefPropertyType("enum")).To(BeFalse())
-		Expect(isRepoRefPropertyType("")).To(BeFalse())
-	})
-})
-
-var _ = Describe("parseRepoRefProperties", func() {
-	It("should keep only git_ref svn_tag and repo_ref properties", func() {
-		data := map[string]any{
-			"properties": []any{
-				map[string]any{
-					"id":            "branch",
-					"name":          "branch",
-					"label":         "Code Branch",
-					"type":          RepoRefPropertyTypeGitRef,
-					"valueNotEmpty": true,
-					"defaultValue":  "main",
-					"value":         "release",
-				},
-				map[string]any{
-					"id":    "tag",
-					"name":  "tag",
-					"label": "Code Tag",
-					"type":  RepoRefPropertyTypeSvnTag,
-				},
-				map[string]any{
-					"id":    "repo",
-					"name":  "repo",
-					"label": "Repository Ref",
-					"type":  RepoRefPropertyTypeRepoRef,
-				},
-				map[string]any{
-					"id":    "env",
-					"name":  "env",
-					"label": "Env",
-					"type":  "enum",
-				},
+var _ = Describe("parseRepositoryRefs", func() {
+	It("should parse name path sha and linkUrl fields", func() {
+		refs, err := parseRepositoryRefs([]any{
+			map[string]any{
+				"name":    "main",
+				"path":    "refs/heads/main",
+				"sha":     "abc123",
+				"linkUrl": "https://git.example.com/repo/commits/abc123",
 			},
-		}
-
-		properties, err := parseRepoRefProperties(data)
+			map[string]any{
+				"name":    "v1.0.0",
+				"path":    "refs/tags/v1.0.0",
+				"sha":     "def456",
+				"linkUrl": "https://git.example.com/repo/tags/v1.0.0",
+			},
+		})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(properties).To(HaveLen(3))
-		Expect(properties[0].ID).To(Equal("branch"))
-		Expect(properties[0].Required).To(BeTrue())
-		Expect(properties[0].DefaultValue).To(Equal("main"))
-		Expect(properties[0].Value).To(Equal("release"))
-		Expect(properties[1].Type).To(Equal(RepoRefPropertyTypeSvnTag))
-		Expect(properties[2].Type).To(Equal(RepoRefPropertyTypeRepoRef))
+		Expect(refs).To(Equal([]RepositoryRef{
+			{
+				Name:    "main",
+				Path:    "refs/heads/main",
+				SHA:     "abc123",
+				LinkURL: "https://git.example.com/repo/commits/abc123",
+			},
+			{
+				Name:    "v1.0.0",
+				Path:    "refs/tags/v1.0.0",
+				SHA:     "def456",
+				LinkURL: "https://git.example.com/repo/tags/v1.0.0",
+			},
+		}))
 	})
 
-	It("should ignore properties with unsupported types", func() {
-		data := map[string]any{
-			"properties": []any{
-				map[string]any{
-					"id":    "env",
-					"name":  "env",
-					"label": "Env",
-					"type":  "enum",
-				},
-				map[string]any{
-					"id":    "branch",
-					"name":  "branch",
-					"label": "Code Branch",
-					"type":  RepoRefPropertyTypeGitRef,
-				},
-			},
-		}
-
-		properties, err := parseRepoRefProperties(data)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(properties).To(HaveLen(1))
-		Expect(properties[0].ID).To(Equal("branch"))
-		Expect(properties[0].Type).To(Equal(RepoRefPropertyTypeGitRef))
-	})
-
-	It("should return error when a property item is not a map", func() {
-		data := map[string]any{
-			"properties": []any{
-				"not-a-map",
-			},
-		}
-
-		properties, err := parseRepoRefProperties(data)
+	It("should return error when an item is not a map", func() {
+		refs, err := parseRepositoryRefs([]any{"not-a-map"})
 		Expect(err).To(HaveOccurred())
-		Expect(properties).To(BeNil())
-		Expect(err.Error()).To(ContainSubstring("invalid repo ref property"))
+		Expect(refs).To(BeNil())
+		Expect(err.Error()).To(ContainSubstring("invalid repository ref"))
 	})
 })
 
-var _ = Describe("StubApiClient repo refs", func() {
-	It("should return repo ref properties from startup info", func() {
+var _ = Describe("StubApiClient repository refs", func() {
+	It("should return branch refs", func() {
 		client := NewStub(auth.User{ID: "tester"})
 
-		properties, err := client.ListPipelineRepoRefProperties(context.Background(), "demo", "pipe-1")
+		refs, err := client.ListRepositoryBranches(
+			context.Background(), "demo", "repo-1", "NAME", "release", 1, 20,
+		)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(properties).NotTo(BeEmpty())
-		Expect(properties[0].Type).To(Equal(RepoRefPropertyTypeGitRef))
+		Expect(refs).NotTo(BeEmpty())
+		Expect(refs[0].Path).To(HavePrefix("refs/heads/"))
 	})
 
-	It("should return repo ref options for a property", func() {
+	It("should return tag refs", func() {
 		client := NewStub(auth.User{ID: "tester"})
 
-		options, err := client.ListPipelineRepoRefOptions(context.Background(), "demo", "pipe-1", "branch", "release")
+		refs, err := client.ListRepositoryTags(context.Background(), "demo", "repo-1", "ID", "v1", 1, 20)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(options).NotTo(BeEmpty())
-		Expect(options[0].Key).To(ContainSubstring("release"))
+		Expect(refs).NotTo(BeEmpty())
+		Expect(refs[0].Path).To(HavePrefix("refs/tags/"))
 	})
 })
 

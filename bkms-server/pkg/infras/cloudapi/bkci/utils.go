@@ -20,20 +20,9 @@ package bkci
 
 import (
 	"github.com/TencentBlueKing/gopkg/mapx"
-	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 )
-
-// isRepoRefPropertyType 判断 BKCI property 是否属于代码分支/Tag/仓库引用相关字段。
-func isRepoRefPropertyType(propertyType string) bool {
-	switch propertyType {
-	case RepoRefPropertyTypeGitRef, RepoRefPropertyTypeSvnTag, RepoRefPropertyTypeRepoRef:
-		return true
-	default:
-		return false
-	}
-}
 
 // parsePipelineVariables 解析流水线变量
 func parsePipelineVariables(data map[string]any) ([]PipelineVariable, error) {
@@ -103,50 +92,22 @@ func parsePipelineVariables(data map[string]any) ([]PipelineVariable, error) {
 	return variables, nil
 }
 
-// parseRepoRefProperties 解析流水线启动表单中的分支/Tag相关字段
-func parseRepoRefProperties(data map[string]any) ([]RepoRefProperty, error) {
-	properties := mapx.GetList(data, "properties")
-	result := make([]RepoRefProperty, 0, len(properties))
-	for _, item := range properties {
-		property, ok := item.(map[string]any)
+// parseRepositoryRefs 解析 BKCI 代码库分支/Tag响应
+func parseRepositoryRefs(items []any) ([]RepositoryRef, error) {
+	refs := make([]RepositoryRef, 0, len(items))
+	for _, item := range items {
+		ref, ok := item.(map[string]any)
 		if !ok {
-			return nil, errors.Errorf("invalid repo ref property (not map[string]any type): %v", item)
+			return nil, errors.Errorf("invalid repository ref (not map[string]any type): %v", item)
 		}
-		propertyType := mapx.GetStr(property, "type")
-		// repo-refs 接口只暴露 BKCI 中表示代码分支/Tag/仓库引用的字段类型。
-		if !isRepoRefPropertyType(propertyType) {
-			continue
-		}
-
-		var raw struct {
-			ID            string `mapstructure:"id"`
-			Name          string `mapstructure:"name"`
-			Label         string `mapstructure:"label"`
-			Type          string `mapstructure:"type"`
-			ValueNotEmpty bool   `mapstructure:"valueNotEmpty"`
-			ReadOnly      bool   `mapstructure:"readOnly"`
-			Constant      bool   `mapstructure:"constant"`
-			DefaultValue  string `mapstructure:"defaultValue"`
-			Value         string `mapstructure:"value"`
-		}
-		if err := mapstructure.Decode(property, &raw); err != nil {
-			return nil, errors.Wrap(err, "decode repo ref property")
-		}
-
-		result = append(result, RepoRefProperty{
-			ID:           raw.ID,
-			Name:         raw.Name,
-			Label:        raw.Label,
-			Type:         raw.Type,
-			Required:     raw.ValueNotEmpty,
-			ReadOnly:     raw.ReadOnly,
-			Constant:     raw.Constant,
-			DefaultValue: raw.DefaultValue,
-			Value:        raw.Value,
+		refs = append(refs, RepositoryRef{
+			Name:    mapx.GetStr(ref, "name"),
+			Path:    mapx.GetStr(ref, "path"),
+			SHA:     mapx.GetStr(ref, "sha"),
+			LinkURL: mapx.GetStr(ref, "linkUrl"),
 		})
 	}
-
-	return result, nil
+	return refs, nil
 }
 
 // extractErrorMessage 从蓝盾/网关响应结果中提取错误消息

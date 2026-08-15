@@ -15335,118 +15335,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs": {
-            "get": {
-                "security": [
-                    {
-                        "BkUserInfo": []
-                    },
-                    {
-                        "BkUserCredential": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "bkintegrations-bkci"
-                ],
-                "summary": "获取蓝盾流水线分支/Tag字段列表",
-                "operationId": "ListBkCIPipelineRepoRefs",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "工作空间 ID",
-                        "name": "workspaceID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "流水线 ID",
-                        "name": "pipelineID",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/serializer.ListBkCIPipelineRepoRefsOutput"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs/options": {
-            "post": {
-                "security": [
-                    {
-                        "BkUserInfo": []
-                    },
-                    {
-                        "BkUserCredential": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "bkintegrations-bkci"
-                ],
-                "summary": "获取蓝盾流水线分支/Tag字段的可选项",
-                "operationId": "ListBkCIPipelineRepoRefOptions",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "工作空间 ID",
-                        "name": "workspaceID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "流水线 ID",
-                        "name": "pipelineID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "查询参数",
-                        "name": "input",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/serializer.BkCIPipelineRepoRefOptionsInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/serializer.ListBkCIPipelineRepoRefOptionsOutput"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    }
-                }
-            }
-        },
         "/workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/variables": {
             "get": {
                 "security": [
@@ -15486,6 +15374,160 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.GetBkCIPipelineVariablesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/bkci-repositories/branches": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "获取代码仓库分支列表",
+                "operationId": "ListBkCIRepositoryBranches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "代码仓库 ID 或名称",
+                        "name": "repositoryID",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "代码仓库标识类型，可选值: ID, NAME",
+                        "name": "repositoryType",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "搜索关键词",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，最小为 1",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，可选值: 5, 10, 20, 50, 100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListBkCIRepositoryBranchesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/bkci-repositories/tags": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "获取代码仓库标签列表",
+                "operationId": "ListBkCIRepositoryTags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "代码仓库 ID 或名称",
+                        "name": "repositoryID",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "代码仓库标识类型，可选值: ID, NAME",
+                        "name": "repositoryType",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "搜索关键词",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，最小为 1",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，可选值: 5, 10, 20, 50, 100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListBkCIRepositoryTagsOutput"
                         }
                     },
                     "400": {
@@ -19835,52 +19877,6 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.BkCIPipelineRepoRefOptionsInput": {
-            "type": "object",
-            "required": [
-                "propertyID"
-            ],
-            "properties": {
-                "propertyID": {
-                    "type": "string"
-                },
-                "search": {
-                    "type": "string"
-                }
-            }
-        },
-        "serializer.BkCIPipelineRepoRefOutput": {
-            "type": "object",
-            "properties": {
-                "constant": {
-                    "type": "boolean"
-                },
-                "defaultValue": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "label": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "readOnly": {
-                    "type": "boolean"
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "string"
-                }
-            }
-        },
         "serializer.BkCIPipelineVariableOptionOutput": {
             "type": "object",
             "properties": {
@@ -19923,6 +19919,23 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.BkCIRepositoryRefOutput": {
+            "type": "object",
+            "properties": {
+                "linkUrl": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "sha": {
                     "type": "string"
                 }
             }
@@ -24468,33 +24481,33 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.ListBkCIPipelineRepoRefOptionsOutput": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.BkCIPipelineVariableOptionOutput"
-                    }
-                }
-            }
-        },
-        "serializer.ListBkCIPipelineRepoRefsOutput": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.BkCIPipelineRepoRefOutput"
-                    }
-                }
-            }
-        },
         "serializer.ListBkCIPipelinesOutput": {
             "type": "object",
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.PaginatedBkCIPipelineOutput"
+                }
+            }
+        },
+        "serializer.ListBkCIRepositoryBranchesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BkCIRepositoryRefOutput"
+                    }
+                }
+            }
+        },
+        "serializer.ListBkCIRepositoryTagsOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BkCIRepositoryRefOutput"
+                    }
                 }
             }
         },

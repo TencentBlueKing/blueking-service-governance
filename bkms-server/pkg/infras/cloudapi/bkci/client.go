@@ -83,13 +83,6 @@ type Client interface {
 	) (*PipelineBuildReference, error)
 	// GetPipelineBuildState 获取蓝盾流水线构建状态
 	GetPipelineBuildState(ctx context.Context, projectCode, pipelineID, buildID string) (*PipelineBuildState, error)
-	// ListPipelineRepoRefProperties 获取流水线启动表单中的代码分支/Tag字段列表
-	ListPipelineRepoRefProperties(ctx context.Context, projectCode, pipelineID string) ([]RepoRefProperty, error)
-	// ListPipelineRepoRefOptions 获取某个代码分支/Tag字段的可选项
-	ListPipelineRepoRefOptions(
-		ctx context.Context, projectCode, pipelineID, propertyID, search string,
-	) ([]PipelineVariableOption, error)
-
 	// ------------------------------------------ 蓝盾代码库管理 API ------------------------------------------
 
 	// ListRepository 获取蓝盾仓库列表
@@ -101,6 +94,14 @@ type Client interface {
 	GetRepository(ctx context.Context, projectCode, repoHashID string) (*Repository, error)
 	// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID（目前只支持 codeGit + OAuth）
 	CreateRepository(ctx context.Context, projectCode, repoURL, repoAlias string) (string, error)
+	// ListRepositoryBranches 获取代码库分支列表
+	ListRepositoryBranches(
+		ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
+	) ([]RepositoryRef, error)
+	// ListRepositoryTags 获取代码库标签列表
+	ListRepositoryTags(
+		ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
+	) ([]RepositoryRef, error)
 
 	// ------------------------------------------ 蓝盾构建日志 API ------------------------------------------
 

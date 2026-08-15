@@ -322,67 +322,6 @@ func (s *StubApiClient) GetPipelineBuildState(
 	}, nil
 }
 
-// ListPipelineRepoRefProperties 返回模拟的代码分支/Tag字段列表
-func (s *StubApiClient) ListPipelineRepoRefProperties(
-	ctx context.Context, projectCode, pipelineID string,
-) ([]RepoRefProperty, error) {
-	log.Infof(ctx, "Stub: ListPipelineRepoRefProperties request: %s, %s", projectCode, pipelineID)
-	return []RepoRefProperty{
-		{
-			ID:           "branch",
-			Name:         "branch",
-			Label:        "Code Branch",
-			Type:         RepoRefPropertyTypeGitRef,
-			Required:     true,
-			ReadOnly:     false,
-			Constant:     false,
-			DefaultValue: "main",
-			Value:        "main",
-		},
-		{
-			ID:           "tag",
-			Name:         "tag",
-			Label:        "Code Tag",
-			Type:         RepoRefPropertyTypeSvnTag,
-			Required:     false,
-			ReadOnly:     false,
-			Constant:     false,
-			DefaultValue: "",
-			Value:        "",
-		},
-	}, nil
-}
-
-// ListPipelineRepoRefOptions 返回模拟的代码分支/Tag选项列表
-func (s *StubApiClient) ListPipelineRepoRefOptions(
-	ctx context.Context, projectCode, pipelineID, propertyID, search string,
-) ([]PipelineVariableOption, error) {
-	log.Infof(
-		ctx,
-		"Stub: ListPipelineRepoRefOptions request: %s, %s, %s, search=%s",
-		projectCode,
-		pipelineID,
-		propertyID,
-		search,
-	)
-	if propertyID == "tag" {
-		return []PipelineVariableOption{
-			{Key: "refs/tags/v1.0.0", Value: "v1.0.0"},
-			{Key: "refs/tags/v1.1.0", Value: "v1.1.0"},
-		}, nil
-	}
-	if search != "" {
-		return []PipelineVariableOption{
-			{Key: "refs/heads/" + search + "-1.0", Value: search + "-1.0"},
-			{Key: "refs/heads/" + search + "-2.0", Value: search + "-2.0"},
-		}, nil
-	}
-	return []PipelineVariableOption{
-		{Key: "refs/heads/main", Value: "main"},
-		{Key: "refs/heads/release-1.0", Value: "release-1.0"},
-	}, nil
-}
-
 // ------------------------------------------ 蓝盾构建日志 API ------------------------------------------
 
 // GetInitBuildLog 返回模拟的构建日志初始内容
@@ -482,4 +421,60 @@ func (s *StubApiClient) GetRepository(ctx context.Context, projectCode, repoHash
 func (s *StubApiClient) CreateRepository(ctx context.Context, projectCode, repoUrl, repoAlias string) (string, error) {
 	log.Infof(ctx, "Stub: CreateRepository request: %s, %s, %s", projectCode, repoUrl, repoAlias)
 	return "stub-repo-hash-id-32chars-long", nil
+}
+
+// ListRepositoryBranches 返回模拟的代码库分支列表
+func (s *StubApiClient) ListRepositoryBranches(
+	ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
+) ([]RepositoryRef, error) {
+	log.Infof(
+		ctx,
+		"Stub: ListRepositoryBranches request: %s, %s, type=%s, search=%s, page=%d, pageSize=%d",
+		projectCode,
+		repositoryID,
+		repositoryType,
+		search,
+		page,
+		pageSize,
+	)
+	name := "main"
+	if search != "" {
+		name = search
+	}
+	return []RepositoryRef{
+		{
+			Name:    name,
+			Path:    "refs/heads/" + name,
+			SHA:     "stub-branch-sha",
+			LinkURL: "https://git.example.com/stub-group/stub-repo/tree/" + name,
+		},
+	}, nil
+}
+
+// ListRepositoryTags 返回模拟的代码库标签列表
+func (s *StubApiClient) ListRepositoryTags(
+	ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
+) ([]RepositoryRef, error) {
+	log.Infof(
+		ctx,
+		"Stub: ListRepositoryTags request: %s, %s, type=%s, search=%s, page=%d, pageSize=%d",
+		projectCode,
+		repositoryID,
+		repositoryType,
+		search,
+		page,
+		pageSize,
+	)
+	name := "v1.0.0"
+	if search != "" {
+		name = search
+	}
+	return []RepositoryRef{
+		{
+			Name:    name,
+			Path:    "refs/tags/" + name,
+			SHA:     "stub-tag-sha",
+			LinkURL: "https://git.example.com/stub-group/stub-repo/releases/tag/" + name,
+		},
+	}, nil
 }

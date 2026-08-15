@@ -37,15 +37,6 @@ const (
 	PageSizeForAllItems = 1000
 )
 
-const (
-	// RepoRefPropertyTypeGitRef BKCI 启动表单中的 Git 分支字段类型
-	RepoRefPropertyTypeGitRef = "git_ref"
-	// RepoRefPropertyTypeSvnTag BKCI 启动表单中的 Tag 字段类型
-	RepoRefPropertyTypeSvnTag = "svn_tag"
-	// RepoRefPropertyTypeRepoRef BKCI 启动表单中的仓库引用字段类型
-	RepoRefPropertyTypeRepoRef = "repo_ref"
-)
-
 // Project 蓝盾项目
 type Project struct {
 	ID            string
@@ -63,27 +54,12 @@ type GitProject struct {
 	Url   string
 }
 
-// RepoRefProperty 流水线启动表单中的代码分支/Tag相关字段
-type RepoRefProperty struct {
-	// ID 字段唯一标识（对应 BKCI property 的 id）
-	ID string
-	// Name 字段名（对应 BKCI property 的 name）
-	Name string
-	// Label 字段展示名称
-	Label string
-	// Type 字段类型，仅 RepoRefPropertyTypeGitRef、RepoRefPropertyTypeSvnTag、
-	// RepoRefPropertyTypeRepoRef 为代码分支/Tag 相关类型
-	Type string
-	// Required 是否必填
-	Required bool
-	// ReadOnly 是否只读
-	ReadOnly bool
-	// Constant 是否为常量（不可修改）
-	Constant bool
-	// DefaultValue 默认值
-	DefaultValue string
-	// Value 当前值
-	Value string
+// RepositoryRef 蓝盾代码仓库分支/Tag引用
+type RepositoryRef struct {
+	Name    string
+	Path    string
+	SHA     string
+	LinkURL string
 }
 
 // PipelineVariableOption 流水线变量选项

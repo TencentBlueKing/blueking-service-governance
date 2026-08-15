@@ -231,65 +231,68 @@ var _ = Describe("BkCI Serializer", func() {
 		})
 	})
 
-	Describe("ListBkCIPipelineRepoRefsOutput", func() {
-		It("should parse repo ref properties", func() {
+	Describe("ListBkCIRepositoryBranchesOutput", func() {
+		It("should parse repository branches", func() {
 			rawJSON := `{
 				"data": [
 					{
-						"id": "branch",
-						"name": "branch",
-						"label": "Code Branch",
-						"type": "git_ref",
-						"required": true,
-						"readOnly": false,
-						"defaultValue": "main",
-						"value": "release"
+						"name": "release",
+						"path": "refs/heads/release",
+						"sha": "abc123",
+						"linkUrl": "https://git.example.com/project/commit/abc123"
 					}
 				]
 			}`
 
-			var resp serializer.ListBkCIPipelineRepoRefsOutput
+			var resp serializer.ListBkCIRepositoryBranchesOutput
 			err := json.Unmarshal([]byte(rawJSON), &resp)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.Data).To(HaveLen(1))
-			Expect(resp.Data[0].Type).To(Equal("git_ref"))
-			Expect(resp.Data[0].Label).To(Equal("Code Branch"))
-			Expect(resp.Data[0].Value).To(Equal("release"))
-		})
-
-		It("should keep constant field when converting from model", func() {
-			output := new(serializer.BkCIPipelineRepoRefOutput).FromModel(bkci.RepoRefProperty{
-				ID:           "branch",
-				Name:         "branch",
-				Label:        "Code Branch",
-				Type:         bkci.RepoRefPropertyTypeGitRef,
-				Required:     true,
-				ReadOnly:     false,
-				Constant:     true,
-				DefaultValue: "main",
-				Value:        "release",
-			})
-
-			Expect(output).NotTo(BeNil())
-			Expect(output.Constant).To(BeTrue())
+			Expect(resp.Data[0].Name).To(Equal("release"))
+			Expect(resp.Data[0].Path).To(Equal("refs/heads/release"))
+			Expect(resp.Data[0].SHA).To(Equal("abc123"))
+			Expect(resp.Data[0].LinkURL).To(Equal("https://git.example.com/project/commit/abc123"))
 		})
 	})
 
-	Describe("ListBkCIPipelineRepoRefOptionsOutput", func() {
-		It("should parse repo ref options", func() {
+	Describe("ListBkCIRepositoryTagsOutput", func() {
+		It("should parse repository tags", func() {
 			rawJSON := `{
 				"data": [
-					{"key": "refs/heads/release-1.0", "value": "release-1.0"},
-					{"key": "refs/tags/v1.0.0", "value": "v1.0.0"}
+					{
+						"name": "v1.0.0",
+						"path": "refs/tags/v1.0.0",
+						"sha": "def456",
+						"linkUrl": "https://git.example.com/project/commit/def456"
+					}
 				]
 			}`
 
-			var resp serializer.ListBkCIPipelineRepoRefOptionsOutput
+			var resp serializer.ListBkCIRepositoryTagsOutput
 			err := json.Unmarshal([]byte(rawJSON), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Data).To(HaveLen(2))
-			Expect(resp.Data[0].Key).To(Equal("refs/heads/release-1.0"))
-			Expect(resp.Data[1].Value).To(Equal("v1.0.0"))
+			Expect(resp.Data).To(HaveLen(1))
+			Expect(resp.Data[0].Name).To(Equal("v1.0.0"))
+			Expect(resp.Data[0].Path).To(Equal("refs/tags/v1.0.0"))
+			Expect(resp.Data[0].SHA).To(Equal("def456"))
+			Expect(resp.Data[0].LinkURL).To(Equal("https://git.example.com/project/commit/def456"))
+		})
+	})
+
+	Describe("BkCIRepositoryRefOutput", func() {
+		It("should map fields from repository ref model", func() {
+			output := new(serializer.BkCIRepositoryRefOutput).FromModel(bkci.RepositoryRef{
+				Name:    "release",
+				Path:    "refs/heads/release",
+				SHA:     "abc123",
+				LinkURL: "https://git.example.com/project/commit/abc123",
+			})
+
+			Expect(output).NotTo(BeNil())
+			Expect(output.Name).To(Equal("release"))
+			Expect(output.Path).To(Equal("refs/heads/release"))
+			Expect(output.SHA).To(Equal("abc123"))
+			Expect(output.LinkURL).To(Equal("https://git.example.com/project/commit/abc123"))
 		})
 	})
 })

@@ -264,22 +264,27 @@ func (h *Handler) GetBkCIPipelineVariables(c *gin.Context) {
 	)
 }
 
-// ListBkCIPipelineRepoRefs 获取蓝盾流水线分支/Tag字段列表
+// ListBkCIRepositoryBranches 获取代码仓库分支列表
 //
-//	@ID			ListBkCIPipelineRepoRefs
-//	@Summary	获取蓝盾流水线分支/Tag字段列表
+//	@ID			ListBkCIRepositoryBranches
+//	@Summary	获取代码仓库分支列表
 //	@Tags		bkintegrations-bkci
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
 //	@Param		workspaceID	path		string	true	"工作空间 ID"
-//	@Param		pipelineID	path		string	true	"流水线 ID"
-//	@Success	200			{object}	serializer.ListBkCIPipelineRepoRefsOutput
+//	@Param		repositoryID	query		string	true	"代码仓库 ID 或名称"
+//	@Param		repositoryType	query		string	true	"代码仓库标识类型，可选值: ID, NAME"
+//	@Param		search		query		string	false	"搜索关键词"
+//	@Param		page		query		int		true	"页码，最小为 1"
+//	@Param		pageSize	query		int		true	"每页数量，可选值: 5, 10, 20, 50, 100"
+//	@Success	200			{object}	serializer.ListBkCIRepositoryBranchesOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs [get]
-func (h *Handler) ListBkCIPipelineRepoRefs(c *gin.Context) {
-	var uriInput slz.BkCIPipelineURIInput
-	if err := ginutils.BindURI(c, &uriInput); err != nil {
+//	@Router		/workspaces/{workspaceID}/bkci-repositories/branches [get]
+func (h *Handler) ListBkCIRepositoryBranches(c *gin.Context) {
+	var uriInput slz.BkCIWorkspaceURIInput
+	var queryInput slz.BkCIRepositoryRefsQueryInput
+	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -297,41 +302,44 @@ func (h *Handler) ListBkCIPipelineRepoRefs(c *gin.Context) {
 		return
 	}
 
-	properties, err := client.ListPipelineRepoRefProperties(ctx, project.Code, uriInput.PipelineID)
+	refs, err := client.ListRepositoryBranches(
+		ctx,
+		project.Code,
+		queryInput.RepositoryID,
+		queryInput.RepositoryType,
+		queryInput.Search,
+		queryInput.Page,
+		queryInput.PageSize,
+	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci pipeline repo refs"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci repository branches"))
 		return
 	}
 
-	ginutils.OK(
-		c,
-		&slz.ListBkCIPipelineRepoRefsOutput{
-			Data: lo.Map(properties, func(p bkci.RepoRefProperty, _ int) *slz.BkCIPipelineRepoRefOutput {
-				return new(slz.BkCIPipelineRepoRefOutput).FromModel(p)
-			}),
-		},
-	)
+	ginutils.OK(c, &slz.ListBkCIRepositoryBranchesOutput{Data: newBkCIRepositoryRefsOutput(refs)})
 }
 
-// ListBkCIPipelineRepoRefOptions 获取蓝盾流水线分支/Tag字段的可选项
+// ListBkCIRepositoryTags 获取代码仓库标签列表
 //
-//	@ID			ListBkCIPipelineRepoRefOptions
-//	@Summary	获取蓝盾流水线分支/Tag字段的可选项
+//	@ID			ListBkCIRepositoryTags
+//	@Summary	获取代码仓库标签列表
 //	@Tags		bkintegrations-bkci
-//	@Accept		json
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
-//	@Param		workspaceID	path		string										true	"工作空间 ID"
-//	@Param		pipelineID	path		string										true	"流水线 ID"
-//	@Param		input		body		serializer.BkCIPipelineRepoRefOptionsInput	true	"查询参数"
-//	@Success	200			{object}	serializer.ListBkCIPipelineRepoRefOptionsOutput
+//	@Param		workspaceID	path		string	true	"工作空间 ID"
+//	@Param		repositoryID	query		string	true	"代码仓库 ID 或名称"
+//	@Param		repositoryType	query		string	true	"代码仓库标识类型，可选值: ID, NAME"
+//	@Param		search		query		string	false	"搜索关键词"
+//	@Param		page		query		int		true	"页码，最小为 1"
+//	@Param		pageSize	query		int		true	"每页数量，可选值: 5, 10, 20, 50, 100"
+//	@Success	200			{object}	serializer.ListBkCIRepositoryTagsOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs/options [post]
-func (h *Handler) ListBkCIPipelineRepoRefOptions(c *gin.Context) {
-	var uriInput slz.BkCIPipelineURIInput
-	var jsonInput slz.BkCIPipelineRepoRefOptionsInput
-	if err := ginutils.BindURIJSON(c, &uriInput, &jsonInput); err != nil {
+//	@Router		/workspaces/{workspaceID}/bkci-repositories/tags [get]
+func (h *Handler) ListBkCIRepositoryTags(c *gin.Context) {
+	var uriInput slz.BkCIWorkspaceURIInput
+	var queryInput slz.BkCIRepositoryRefsQueryInput
+	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -349,27 +357,25 @@ func (h *Handler) ListBkCIPipelineRepoRefOptions(c *gin.Context) {
 		return
 	}
 
-	options, err := client.ListPipelineRepoRefOptions(
+	refs, err := client.ListRepositoryTags(
 		ctx,
 		project.Code,
-		uriInput.PipelineID,
-		jsonInput.PropertyID,
-		jsonInput.Search,
+		queryInput.RepositoryID,
+		queryInput.RepositoryType,
+		queryInput.Search,
+		queryInput.Page,
+		queryInput.PageSize,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci pipeline repo ref options"),
-		)
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci repository tags"))
 		return
 	}
 
-	ginutils.OK(
-		c,
-		&slz.ListBkCIPipelineRepoRefOptionsOutput{
-			Data: lo.Map(options, func(opt bkci.PipelineVariableOption, _ int) *slz.BkCIPipelineVariableOptionOutput {
-				return &slz.BkCIPipelineVariableOptionOutput{Key: opt.Key, Value: opt.Value}
-			}),
-		},
-	)
+	ginutils.OK(c, &slz.ListBkCIRepositoryTagsOutput{Data: newBkCIRepositoryRefsOutput(refs)})
+}
+
+func newBkCIRepositoryRefsOutput(refs []bkci.RepositoryRef) []*slz.BkCIRepositoryRefOutput {
+	return lo.Map(refs, func(ref bkci.RepositoryRef, _ int) *slz.BkCIRepositoryRefOutput {
+		return new(slz.BkCIRepositoryRefOutput).FromModel(ref)
+	})
 }

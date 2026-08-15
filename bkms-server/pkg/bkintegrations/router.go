@@ -52,10 +52,10 @@ type Handler interface {
 	GetBkCIPipelineVariables(c *gin.Context)
 	// GetBkCIPipeline 获取蓝盾流水线详情
 	GetBkCIPipeline(c *gin.Context)
-	// ListBkCIPipelineRepoRefs 获取蓝盾流水线分支/Tag字段列表
-	ListBkCIPipelineRepoRefs(c *gin.Context)
-	// ListBkCIPipelineRepoRefOptions 获取蓝盾流水线分支/Tag字段的可选项
-	ListBkCIPipelineRepoRefOptions(c *gin.Context)
+	// ListBkCIRepositoryBranches 获取代码仓库分支列表
+	ListBkCIRepositoryBranches(c *gin.Context)
+	// ListBkCIRepositoryTags 获取代码仓库标签列表
+	ListBkCIRepositoryTags(c *gin.Context)
 
 	// --- BCS（蓝鲸容器服务）相关 API ---
 
@@ -119,10 +119,8 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.GET("/workspaces/:workspaceID/bkci-pipelines", h.ListBkCIPipelines)
 	rg.GET("/workspaces/:workspaceID/bkci-pipelines/:pipelineID/variables", h.GetBkCIPipelineVariables)
 	rg.GET("/workspaces/:workspaceID/bkci-pipelines/:pipelineID", h.GetBkCIPipeline)
-	// 获取蓝盾流水线分支/Tag字段列表
-	rg.GET("/workspaces/:workspaceID/bkci-pipelines/:pipelineID/repo-refs", h.ListBkCIPipelineRepoRefs)
-	// 获取蓝盾流水线分支/Tag字段的可选项
-	rg.POST("/workspaces/:workspaceID/bkci-pipelines/:pipelineID/repo-refs/options", h.ListBkCIPipelineRepoRefOptions)
+	rg.GET("/workspaces/:workspaceID/bkci-repositories/branches", h.ListBkCIRepositoryBranches)
+	rg.GET("/workspaces/:workspaceID/bkci-repositories/tags", h.ListBkCIRepositoryTags)
 
 	// --- BCS 相关路由 ---
 	rg.GET("/bcs/projects/authorized", h.ListBCSAuthorizedProjects)
