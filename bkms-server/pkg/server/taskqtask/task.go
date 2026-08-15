@@ -32,6 +32,7 @@ import (
 	"github.com/pkg/errors"
 
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/depsvcredis"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/example"
@@ -55,5 +56,6 @@ func Setup(mux *asynq.ServeMux) error {
 
 	mux.Handle(example.ExampleTask.Name(), example.ExampleTask.Handler())
 	mux.Handle(buildpoll.Task.Name(), buildpoll.Task.Handler())
+	mux.Handle(appmodeldeploypoll.Task.Name(), appmodeldeploypoll.Task.Handler())
 	return nil
 }

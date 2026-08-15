@@ -16,6 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+// FIXME: AppModel 部署状态轮询已迁至 asynq（pkg/server/taskqtask/appmodeldeploypoll）
+// 本文件仅保留 RabbitMQ 存量消费路径，存量队列耗尽后移除此文件
+
 package task
 
 import (

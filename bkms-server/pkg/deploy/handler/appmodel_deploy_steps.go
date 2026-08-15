@@ -29,7 +29,6 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -39,13 +38,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/task"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -178,21 +177,17 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 	}
 	// 轮询部署状态 & 更新部署记录
 	// 注：部署成功/失败的操作记录在异步任务中记录
-	_, err = worker.ApplyTask(
-		ctx,
-		config.G.RabbitMQ.GetURI(),
-		config.G.RabbitMQ.Queue,
-		task.PollingTrpcDeployStatus,
-		task.PollingTrpcDeployStatusArgs{
-			WorkspaceID:     app.WorkspaceID,
-			AppID:           app.ID,
-			EnvName:         uriInput.EnvName,
-			TrafficLaneName: input.TrafficLaneName,
-			DeployID:        deployID,
-		},
-	)
+	err = taskq.Enqueue(ctx, appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
+		WorkspaceID:     app.WorkspaceID,
+		AppID:           app.ID,
+		EnvName:         uriInput.EnvName,
+		TrafficLaneName: input.TrafficLaneName,
+		DeployID:        deployID,
+	}))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "apply polling deploy status task"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(
+			err, bkerrs.ErrCodeInternalServerError, "enqueue polling deploy status task",
+		))
 		return
 	}
 
