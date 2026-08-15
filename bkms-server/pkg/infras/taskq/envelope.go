@@ -33,6 +33,7 @@ type payloadEnvelope struct {
 	Args     json.RawMessage `json:"_args"`
 }
 
+// userFromContext 从 ctx 取已认证用户；ID 为空视为未认证，禁止投递匿名任务
 func userFromContext(ctx context.Context) (auth.User, error) {
 	user, err := auth.GetUser(ctx)
 	if err != nil || user.ID == "" {
@@ -41,6 +42,7 @@ func userFromContext(ctx context.Context) (auth.User, error) {
 	return user, nil
 }
 
+// wrapEnvelope 把用户身份与业务 Args JSON 打成 envelope，身份不进入业务 Args
 func wrapEnvelope(user auth.User, argsPayload []byte) ([]byte, error) {
 	return json.Marshal(payloadEnvelope{AuthUser: user, Args: argsPayload})
 }
