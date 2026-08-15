@@ -50,11 +50,16 @@ import (
 )
 
 const (
-	name                   = "taskq.pollingBuildStatus"
-	tickMaxRetry           = 10
+	// name asynq 任务类型名
+	name = "taskq.pollingBuildStatus"
+	// tickMaxRetry 单次 tick 意外失败的 asynq 重试上限，不含轮询续跑
+	tickMaxRetry = 10
+	// totalFailureRetryCount 查蓝盾连续失败次数上限，耗尽后标 StatusPollingBroken
 	totalFailureRetryCount = 10
-	saveStatusTimeout      = 10 * time.Second
-	pollingTimeout         = 24 * time.Hour
+	// saveStatusTimeout 状态落库的独立超时，避免 handler ctx 取消导致写不进去
+	saveStatusTimeout = 10 * time.Second
+	// pollingTimeout 从 record.StartedAt 起算的轮询窗口，超时标 StatusPollingTimeout
+	pollingTimeout = 24 * time.Hour
 )
 
 // PollingInterval 按已运行时长返回下一次 tick 延迟
@@ -90,10 +95,15 @@ type Args struct {
 	FailureRetryRemain int             `json:"failureRetryRemain,omitempty"`
 }
 
+// String 输出轮询身份、自动部署目标与剩余失败次数，便于日志对齐同一构建的连续 tick
 func (args Args) String() string {
+	autoDeploy := "off"
+	if args.AutoDeploy != nil {
+		autoDeploy = fmt.Sprintf("%s/%s", args.AutoDeploy.EnvName, args.AutoDeploy.TrafficLaneName)
+	}
 	return fmt.Sprintf(
-		"<workspace: %s, pipelineType: %s, appID: %s, buildID: %s>",
-		args.WorkspaceID, args.PipelineType, args.AppID, args.BuildID,
+		"<workspace: %s, pipelineType: %s, appID: %s, buildID: %s, autoDeploy: %s, remain: %d>",
+		args.WorkspaceID, args.PipelineType, args.AppID, args.BuildID, autoDeploy, args.FailureRetryRemain,
 	)
 }
 
@@ -106,8 +116,8 @@ func init() {
 
 func handle(ctx context.Context, args Args) error {
 	reg := storereg.G()
-	if reg == nil || reg.BuildRecordStore == nil || reg.BkCIPipelineStore == nil {
-		return errors.Wrap(taskq.ErrStopRetry, "build poll stores not initialized")
+	if reg == nil {
+		return NewManager(nil, nil, nil).Handle(ctx, args)
 	}
 	return NewManager(reg.BuildRecordStore, reg.BkCIPipelineStore, reg.BuildAutoDeployRecordStore).
 		Handle(ctx, args)
@@ -133,8 +143,13 @@ func NewManager(
 	}
 }
 
-// Handle 查一次蓝盾：已终态直接跳过；未结束则 ProcessIn 投下一次，不占用 asynq MaxRetry
+// Handle 执行一次构建状态轮询 tick：读本地记录，必要时查蓝盾并落库。
+// 记录已终态则直接返回；仍在跑则 ProcessIn 投递下一 tick（新任务，retry 从 0 计）。
+// asynq MaxRetry(tickMaxRetry) 只约束本 tick 的意外失败（如 enqueue 失败），不约束轮询次数；
+// 轮询窗口由 pollingTimeout 截断，查蓝盾失败次数由 FailureRetryRemain 截断。
+// 不可恢复错误 wrap taskq.ErrStopRetry，避免 asynq 空转重试。
 func (m *Manager) Handle(ctx context.Context, args Args) error {
+	// store / 记录缺失无法自行恢复，停掉 asynq 重试
 	if m.recordStore == nil || m.pipelineStore == nil {
 		return errors.Wrap(taskq.ErrStopRetry, "build poll stores not initialized")
 	}
@@ -143,10 +158,12 @@ func (m *Manager) Handle(ctx context.Context, args Args) error {
 	if err != nil {
 		return errors.Wrapf(taskq.ErrStopRetry, "get build record: %v", err)
 	}
+	// 迟到或重复 tick：记录已终态则不再查蓝盾
 	if record.Status.IsTerminated() {
 		log.Infof(ctx, "build %s already terminated as %s, skip tick", args, record.Status)
 		return nil
 	}
+	// 轮询窗口到点，与查蓝盾失败无关，直接标超时停掉
 	if time.Since(record.StartedAt) >= pollingTimeout {
 		log.Warnf(ctx, "build %s polling window exceeded, mark pollingTimeout", args)
 		return m.terminate(ctx, record, args, build.StatusPollingTimeout)
@@ -168,6 +185,7 @@ func (m *Manager) Handle(ctx context.Context, args Args) error {
 		)
 	}
 
+	// 查蓝盾失败次数走业务计数，不走 asynq MaxRetry；首 tick 未带 remain 时补满
 	remain := args.FailureRetryRemain
 	if remain <= 0 {
 		remain = totalFailureRetryCount
@@ -180,10 +198,12 @@ func (m *Manager) Handle(ctx context.Context, args Args) error {
 			log.Errorf(ctx, "stop polling pipeline build %s after %d retries", args, totalFailureRetryCount)
 			return m.terminate(ctx, record, args, build.StatusPollingBroken)
 		}
+		// 查询失败但额度未用尽：投下一 tick，本 tick 返回 nil，不扣 asynq 重试
 		log.Errorf(ctx, "fetch build %s status failed, remain=%d: %v", args, remain, err)
 		return m.enqueueNext(ctx, args, remain, record.StartedAt)
 	}
 
+	// 落库失败只打日志，不让本 tick 失败，避免 asynq 重试把状态写乱
 	if record.Status != curStatus {
 		log.Infof(ctx, "build %s status changed from %s to %s", args, curStatus, record.Status)
 		if err = m.save(ctx, record, args); err != nil {
@@ -193,9 +213,11 @@ func (m *Manager) Handle(ctx context.Context, args Args) error {
 	if record.Status.IsTerminated() {
 		return m.onTerminated(ctx, record, args)
 	}
+	// 仍在跑：ProcessIn 投新任务续跑，retry 从 0 计
 	return m.enqueueNext(ctx, args, remain, record.StartedAt)
 }
 
+// enqueueNext 按已运行时长计算间隔，ProcessIn 投递下一 tick；新任务 retry 从 0 计
 func (m *Manager) enqueueNext(ctx context.Context, args Args, remain int, startedAt time.Time) error {
 	args.FailureRetryRemain = remain
 	interval := PollingInterval(time.Since(startedAt))
@@ -206,6 +228,7 @@ func (m *Manager) enqueueNext(ctx context.Context, args Args, remain int, starte
 	return nil
 }
 
+// terminate 把记录标为指定终态并落库，再走 onTerminated 副作用
 func (m *Manager) terminate(ctx context.Context, record *build.Record, args Args, status build.Status) error {
 	record.Status = status
 	if record.EndedAt.IsZero() {
@@ -217,6 +240,7 @@ func (m *Manager) terminate(ctx context.Context, record *build.Record, args Args
 	return m.onTerminated(ctx, record, args)
 }
 
+// save 落构建记录；启用自动部署时同步 auto deploy 记录
 func (m *Manager) save(ctx context.Context, record *build.Record, args Args) error {
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveStatusTimeout)
 	defer cancel()
@@ -224,7 +248,12 @@ func (m *Manager) save(ctx context.Context, record *build.Record, args Args) err
 	if err := m.recordStore.Update(saveCtx, record); err != nil {
 		return err
 	}
-	if args.AutoDeploy == nil || m.autoDeployStore == nil {
+	if args.AutoDeploy == nil {
+		return nil
+	}
+	// 生产路径 store 必注入；缺失只打日志，不让本 tick 失败
+	if m.autoDeployStore == nil {
+		log.Errorf(saveCtx, "build %s auto deploy enabled but store is nil, skip sync", args)
 		return nil
 	}
 	operator, err := autodeploy.NewOperator(m.autoDeployStore)
@@ -267,6 +296,7 @@ func (m *Manager) onTerminated(ctx context.Context, record *build.Record, args A
 	return nil
 }
 
+// triggerDeploy 构建成功后触发自动部署；store 未初始化返回 error，由 onTerminated 吞掉
 func (m *Manager) triggerDeploy(ctx context.Context, record *build.Record, args Args) error {
 	if m.autoDeployStore == nil {
 		return errors.New("build auto deploy record store is not initialized")
