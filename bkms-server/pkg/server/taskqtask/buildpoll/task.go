@@ -62,7 +62,7 @@ const (
 	pollingTimeout = 24 * time.Hour
 )
 
-// PollingInterval 按已运行时长返回下一次 tick 延迟
+// PollingInterval 按已运行时长返回下一 tick 延迟：10s → 15s → 30s → 1min → 5min
 func PollingInterval(elapsed time.Duration) time.Duration {
 	switch {
 	case elapsed >= 3*time.Hour:
@@ -114,13 +114,21 @@ func init() {
 	Task = taskq.NewTaskType[Args](name, handle, asynq.MaxRetry(tickMaxRetry))
 }
 
+// handle asynq 入口：registry / 必要 store 缺失则打日志并 ErrStopRetry，否则交给 Manager
 func handle(ctx context.Context, args Args) error {
 	reg := storereg.G()
-	if reg == nil {
-		return NewManager(nil, nil, nil).Handle(ctx, args)
+	if reg == nil ||
+		reg.BuildRecordStore == nil ||
+		reg.BkCIPipelineStore == nil ||
+		reg.BuildAutoDeployRecordStore == nil {
+		log.Errorf(ctx, "build poll stores not initialized, stop task: %s", args)
+		return errors.Wrap(taskq.ErrStopRetry, "build poll stores not initialized")
 	}
-	return NewManager(reg.BuildRecordStore, reg.BkCIPipelineStore, reg.BuildAutoDeployRecordStore).
-		Handle(ctx, args)
+	return NewManager(
+		reg.BuildRecordStore,
+		reg.BkCIPipelineStore,
+		reg.BuildAutoDeployRecordStore,
+	).Handle(ctx, args)
 }
 
 // Manager 执行一次构建状态轮询 tick
@@ -308,6 +316,9 @@ func (m *Manager) triggerDeploy(ctx context.Context, record *build.Record, args 
 	return triggerDeployAfterBuild(ctx, operator, record, args)
 }
 
+// fetchAndUpdateBuildRecord 查一次蓝盾并把状态写回 record。
+// 仅状态变化时更新 Extras；结束时间优先用蓝盾 BuildEndTime，缺失则用 now。
+// 变量缺失时 extras 填空串，保证 RequiredVariables 字段都在。
 func fetchAndUpdateBuildRecord(
 	ctx context.Context,
 	client bkciapi.Client,
@@ -354,6 +365,8 @@ func fetchAndUpdateBuildRecord(
 	return nil
 }
 
+// syncBuildStatus 把构建状态同步到 auto deploy 记录。
+// 已进入部署阶段或已有 DeployID 则跳过，避免覆盖后续部署结果。
 func syncBuildStatus(
 	ctx context.Context,
 	operator *autodeploy.Operator,
@@ -379,6 +392,8 @@ func syncBuildStatus(
 	return operator.UpdateStatus(ctx, autodeploy.Locator{AppID: appID, BuildID: buildID}, patch)
 }
 
+// triggerDeployAfterBuild 构建成功后启动自动部署，并回写 auto deploy 记录。
+// 已进入部署阶段则跳过；触发失败也会把记录标为部署失败。
 func triggerDeployAfterBuild(
 	ctx context.Context,
 	operator *autodeploy.Operator,
@@ -416,6 +431,8 @@ func triggerDeployAfterBuild(
 	})
 }
 
+// startDeployAfterBuild 调 AppModel 部署，并投递现网部署状态轮询（仍走 machinery）。
+// 部署已创建但轮询投递失败时仍返回 deployID，由调用方把记录标失败。
 func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args) (string, error) {
 	if args.AutoDeploy == nil {
 		return "", nil
@@ -458,6 +475,8 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args)
 	return deployID, nil
 }
 
+// refreshSnapshots 构建成功后刷新镜像快照。
+// imageTag 非空则强制同步该 tag，避免同 tag 重建后详情不更新；空则走默认刷新。
 func refreshSnapshots(ctx context.Context, appID, imageTag string) error {
 	reg := storereg.G()
 	svc := snapshot.NewService(reg.SnapshotStore, reg.BuildConfigStore, reg.AppStore)
@@ -473,6 +492,7 @@ func refreshSnapshots(ctx context.Context, appID, imageTag string) error {
 	return nil
 }
 
+// newAppModelDeployService 从 registry 组装 AppModel 部署服务，供构建成功后自动部署使用
 func newAppModelDeployService(reg *storereg.Registry) (*appmodeldeploysvc.Service, error) {
 	return appmodeldeploysvc.NewService(appmodeldeploysvc.ServiceDeps{
 		AppStore:       reg.AppStore,
