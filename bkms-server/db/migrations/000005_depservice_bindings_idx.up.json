@@ -1,0 +1,22 @@
+[
+  {
+    "createIndexes": "depservice_bindings",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "serviceName": 1,
+          "name": 1
+        },
+        "name": "appID_1_serviceName_1_name_1",
+        "unique": true
+      },
+      {
+        "key": {
+          "instanceIDs": 1
+        },
+        "name": "instanceIDs_1"
+      }
+    ]
+  }
+]

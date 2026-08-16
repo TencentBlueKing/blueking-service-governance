@@ -20,6 +20,7 @@ package depservice
 
 import (
 	"context"
+	"fmt"
 	"slices"
 
 	"github.com/go-playground/validator/v10"
@@ -27,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
@@ -37,13 +39,26 @@ var validate = validator.New(validator.WithRequiredStructEnabled())
 
 // ServiceManager is the manager for app dependency services
 type ServiceManager struct {
-	svcStore  model.ServiceStore
-	instStore model.ServiceInstanceStore
+	svcStore     model.ServiceStore
+	instStore    model.ServiceInstanceStore
+	bindingStore model.ServiceBindingStore
+	envStore     envmodel.EnvironmentStore
 }
 
-// New creates a new app dependency services manager
-func New(svcStore model.ServiceStore, instStore model.ServiceInstanceStore) *ServiceManager {
-	return &ServiceManager{svcStore: svcStore, instStore: instStore}
+// New creates a new app dependency services manager.
+// bindingStore / envStore 在北极星等不走绑定的路径上可以为 nil。
+func New(
+	svcStore model.ServiceStore,
+	instStore model.ServiceInstanceStore,
+	bindingStore model.ServiceBindingStore,
+	envStore envmodel.EnvironmentStore,
+) *ServiceManager {
+	return &ServiceManager{
+		svcStore:     svcStore,
+		instStore:    instStore,
+		bindingStore: bindingStore,
+		envStore:     envStore,
+	}
 }
 
 // CreateServiceInstance 创建服务实例
@@ -61,26 +76,19 @@ func (m *ServiceManager) CreateServiceInstance(
 		return bson.NilObjectID, err
 	}
 
-	// 初始化服务实例数据到 db 中（异步 CreateInstance 需要先拿到 instID）
-	attachedApps := params.AttachedApps
-	if attachedApps == nil {
-		attachedApps = make([]string, 0)
-	}
 	instID, err := m.instStore.Create(
 		ctx,
 		&model.ServiceInstance{
-			Name:          params.Name,
-			ServiceName:   params.ServiceName,
-			PlanName:      params.PlanName,
-			ProviderType:  plan.ProviderType,
-			ScopeType:     params.ScopeType,
-			ScopeValue:    params.ScopeValue,
-			WorkspaceID:   params.WorkspaceID,
-			AttachedApps:  attachedApps,
-			CustomEnvVars: params.CustomEnvVars,
-			Operator:      params.Operator,
-			Description:   params.Description,
-			Status:        model.ProvisioningStatus,
+			Name:         params.Name,
+			ServiceName:  params.ServiceName,
+			PlanName:     params.PlanName,
+			ProviderType: plan.ProviderType,
+			ScopeType:    params.ScopeType,
+			ScopeValue:   params.ScopeValue,
+			WorkspaceID:  params.WorkspaceID,
+			Operator:     params.Operator,
+			Description:  params.Description,
+			Status:       model.ProvisioningStatus,
 		},
 	)
 	if err != nil {
@@ -95,7 +103,7 @@ func (m *ServiceManager) CreateServiceInstance(
 		return instID, m.updateInstanceStatus(ctx, instID, model.CreateFailedStatus, createErr)
 	}
 
-	// 异步 provider 已投递 task，实例保持 provisioning 状态
+	// 异步 provider 已投递 task，实例保持 provisioning，Config 由后续 task 回写
 	if createResult.Async {
 		return instID, nil
 	}
@@ -145,19 +153,52 @@ func (m *ServiceManager) GetServiceInstance(
 	return m.instStore.Get(ctx, instID)
 }
 
+// ListServiceInstances 按条件列出服务实例。
+func (m *ServiceManager) ListServiceInstances(
+	ctx context.Context,
+	params *ListServiceInstancesParams,
+) ([]*model.ServiceInstance, error) {
+	if params == nil {
+		params = &ListServiceInstancesParams{}
+	}
+
+	insts, err := m.instStore.List(ctx, &model.SvcInstQueryOptions{
+		WorkspaceID: params.WorkspaceID,
+		ServiceName: params.ServiceName,
+		Status:      params.Status,
+		ScopeType:   params.ScopeType,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "list service instances")
+	}
+	return insts, nil
+}
+
 // DeleteServiceInstance 删除服务实例. 用于需要销毁实例的场景.
-// NOTE: 如果实例被某个应用使用, 则无法删除
+// NOTE: 如果实例被绑定引用, 则无法删除
 func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.ObjectID) error {
 	inst, err := m.instStore.Get(ctx, instID)
 	if err != nil {
 		return errors.Wrap(err, "get service instance")
 	}
-	if len(inst.AttachedApps) != 0 {
-		return errors.Errorf("service instance is used by apps(%v), cannot delete", inst.AttachedApps)
+
+	bindings, err := m.listBindingsByInstance(ctx, instID)
+	if err != nil {
+		return errors.Wrap(err, "list bindings by instance")
+	}
+	if len(bindings) != 0 {
+		names := make([]string, 0, len(bindings))
+		for _, b := range bindings {
+			names = append(names, fmt.Sprintf("%s/%s", b.AppID, b.Name))
+		}
+		return errors.Wrapf(ErrInvalidArgument, "service instance is used by bindings(%v), cannot delete", names)
 	}
 
+	if inst.Status == model.ProvisioningStatus {
+		return errors.Wrap(ErrInvalidArgument, "实例正在创建中，不允许删除")
+	}
 	if inst.Status == model.DeletingStatus {
-		return nil
+		return errors.Wrap(ErrInvalidArgument, "实例正在删除中，不允许删除")
 	}
 
 	if inst.Status == model.CreateFailedStatus {
@@ -165,7 +206,8 @@ func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.
 	}
 
 	if !isDeletableStatus(inst.Status) {
-		return errors.Errorf(
+		return errors.Wrapf(
+			ErrInvalidArgument,
 			"service instance status %q does not allow delete, wait until it becomes available/unavailable/createFailed/deleteFailed",
 			inst.Status,
 		)
@@ -204,16 +246,6 @@ func isDeletableStatus(status model.InstanceStatus) bool {
 	}, status)
 }
 
-// AttachInstanceToApp 将服务实例附加到应用，建立应用对服务实例的使用关系
-func (m *ServiceManager) AttachInstanceToApp(ctx context.Context, instID bson.ObjectID, appID string) error {
-	return m.instStore.AttachApp(ctx, instID, appID)
-}
-
-// DetachInstanceFromApp 将服务实例从应用分离，解除应用对服务实例的使用关系
-func (m *ServiceManager) DetachInstanceFromApp(ctx context.Context, instID bson.ObjectID, appID string) error {
-	return m.instStore.DetachApp(ctx, instID, appID)
-}
-
 func (m *ServiceManager) updateInstanceStatus(
 	ctx context.Context,
 	instID bson.ObjectID,
@@ -237,5 +269,3 @@ func (m *ServiceManager) updateInstanceStatus(
 
 	return statusError
 }
-
-// TODO 后续补齐依赖服务相关的其他方法(如 ListServiceInstances 等), 目前方法供北极星使用即可

@@ -87,18 +87,17 @@ func (m *PolarisPlatformManager) CreateService(
 	}
 
 	// 按需创建 ServiceManager
-	svcMgr := depservice.New(m.svcStore, m.instStore)
+	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
 
 	// 调用 depservice 创建北极星服务
 	instID, err := svcMgr.CreateServiceInstance(ctx, &depservice.CreateServiceInstanceParams{
 		// NOTE: 依赖服务名称存在唯一索引。这里增加随机字符串，避免首次创建失败后，影响后续创建
-		Name:         fmt.Sprintf("%s-%s-%s", params.PolarisNamespace, params.PolarisName, stringx.Random(5)),
-		ServiceName:  "polaris",
-		PlanName:     "default",
-		ScopeType:    depsvcmodel.ScopeTypeWorkspace,
-		WorkspaceID:  params.WorkspaceID,
-		AttachedApps: []string{params.AppID},
-		Operator:     auth.MustGetUser(ctx).ID,
+		Name:        fmt.Sprintf("%s-%s-%s", params.PolarisNamespace, params.PolarisName, stringx.Random(5)),
+		ServiceName: "polaris",
+		PlanName:    "default",
+		ScopeType:   depsvcmodel.ScopeTypeWorkspace,
+		WorkspaceID: params.WorkspaceID,
+		Operator:    auth.MustGetUser(ctx).ID,
 		Params: &polarisprovider.CreateParams{
 			PolarisName:      params.PolarisName,
 			PolarisNamespace: params.PolarisNamespace,
@@ -194,13 +193,8 @@ func (m *PolarisPlatformManager) DeleteService(
 	}
 
 	// 按需创建 ServiceManager
-	svcMgr := depservice.New(m.svcStore, m.instStore)
+	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
 
-	if err := svcMgr.DetachInstanceFromApp(ctx, params.ServiceInstanceID, params.AppID); err != nil {
-		return errors.Wrap(err, "detach polaris service instance from app")
-	}
-
-	// 删除服务实例
 	if err := svcMgr.DeleteServiceInstance(ctx, params.ServiceInstanceID); err != nil {
 		return errors.Wrap(err, "delete polaris service instance")
 	}

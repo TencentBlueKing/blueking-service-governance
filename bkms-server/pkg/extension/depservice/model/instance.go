@@ -78,19 +78,10 @@ type ServiceInstance struct {
 	ScopeValue  string `bson:"scopeValue"`
 	WorkspaceID string `bson:"workspaceID" validate:"required"`
 
-	// AttachedApps 记录当前实例分配给了哪些应用. 实际记录的是 appID 值
-	AttachedApps []string `bson:"attachedApps"`
-
 	// Config 服务实例的配置(如实例规格大小, 区域, 集群名等非敏感数据)
 	Config map[string]any `bson:"config"`
 	// Credentials 服务实例的敏感凭证(如数据库的账号密码等), 保存时会加密存储
 	Credentials map[string]any `bson:"credentials"`
-
-	// CustomEnvVars 用户自定义衍生环境变量模板.
-	// 模板内可使用 ${{env.KEY}} 引用本实例 Credentials 中的键, 例如:
-	//   "MySQL_DSN": "mysql://${{env.MYSQL_PASSWORD}}@${{env.MYSQL_HOST}}:${{env.MYSQL_PORT}}"
-	// 不允许跨实例引用, 也不允许引用 builtin/scoped 变量.
-	CustomEnvVars map[string]string `bson:"customEnvVars"`
 
 	Status InstanceStatus `bson:"status"`
 	// Message 辅助记录实例的状态详情

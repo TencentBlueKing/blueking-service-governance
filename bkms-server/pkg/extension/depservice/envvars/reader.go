@@ -20,8 +20,12 @@ package envvars
 
 import (
 	"context"
+	"sort"
+	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -30,29 +34,21 @@ import (
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
-// Reader 基于 ServiceInstance 列出某个应用在某个环境下生效的环境变量。
-//
-// 它产出的富列表 (envvartypes.EnvVariableRichList) 会被注入到
-// envvars.UnifiedEnvVarsReader 中以接入统一的 envvars 链路。
+// Reader 列出某个应用在某个环境下由依赖服务绑定产出的环境变量。
 type Reader struct {
-	instStore model.ServiceInstanceStore
+	instStore    model.ServiceInstanceStore
+	bindingStore model.ServiceBindingStore
 }
 
-// NewReader 创建一个依赖服务实例的环境变量读取器。
-func NewReader(instStore model.ServiceInstanceStore) *Reader {
-	return &Reader{instStore: instStore}
+// NewReader 创建一个依赖服务环境变量读取器。
+func NewReader(instStore model.ServiceInstanceStore, bindingStore model.ServiceBindingStore) *Reader {
+	return &Reader{instStore: instStore, bindingStore: bindingStore}
 }
 
-// ListEnvVarsForApp 返回 attach 到给定 app 且对该 environment 可见的全部实例所产出的环境变量。
-//
-// 过滤规则 (全部由 store 层执行):
-//   - inst.WorkspaceID == environment.WorkspaceID
-//   - 通过 store List 的 EnvName/EnvType 过滤命中三种 scope 之一
-//   - 通过 store List 的 AttachedAppID 过滤已 attach 给该 app 的实例
-//   - inst.Status == model.AvailableStatus
-//
-// 实例之间按 store 返回顺序扁平拼接, 同一实例内部, 先内置变量后衍生变量。
-// 单个实例处理失败仅记日志后跳过, 不影响其它实例。
+// ListEnvVarsForApp 返回该应用在指定环境下生效的依赖服务环境变量。
+// 只渲当前环境映射的实例，其它环境的同名 key 不会出现。
+// 同一环境多份绑定声明了相同 key 时全部保留、此处不去重，注入时由上游按后写覆盖。
+// TODO: 确认如何覆盖「多绑定同 key」的冲突检查。
 func (r *Reader) ListEnvVarsForApp(
 	ctx context.Context,
 	environment envmodel.Environment,
@@ -61,72 +57,161 @@ func (r *Reader) ListEnvVarsForApp(
 	if app == nil {
 		return envvartypes.EnvVariableRichList{}, nil
 	}
-
-	insts, err := r.instStore.List(ctx, &model.SvcInstQueryOptions{
-		WorkspaceID:   environment.WorkspaceID,
-		AttachedAppID: app.ID,
-		EnvName:       environment.Name,
-		EnvType:       environment.Type,
-		Status:        model.AvailableStatus,
-	})
-	if err != nil {
-		return envvartypes.EnvVariableRichList{}, errors.Wrap(err, "list service instances for app")
-	}
-
-	return r.collect(ctx, insts)
+	return r.collectFromBindings(ctx, app.ID, environment.Name)
 }
 
-// ListAppVarsForConflicts 返回 workspace 内 attach 到该 app 的全部实例
-// (不限定具体 environment) 所产出的环境变量, 用于 app 级别冲突检测。
+// ListAppVarsForConflicts 返回应用下全部绑定声明的环境变量 key，用于应用级冲突检测。
+// 每份绑定的每个 key 只出一条；value 为各已映射环境中能渲出的去重结果。
 func (r *Reader) ListAppVarsForConflicts(
 	ctx context.Context,
-	workspaceID string,
+	_ string,
 	app *bkmsapp.Application,
 ) (envvartypes.EnvVariableRichList, error) {
 	if app == nil {
 		return envvartypes.EnvVariableRichList{}, nil
 	}
-
-	insts, err := r.instStore.List(ctx, &model.SvcInstQueryOptions{
-		WorkspaceID:   workspaceID,
-		AttachedAppID: app.ID,
-		Status:        model.AvailableStatus,
-	})
-	if err != nil {
-		return envvartypes.EnvVariableRichList{}, errors.Wrap(err, "list service instances for app in workspace")
-	}
-
-	return r.collect(ctx, insts)
+	return r.collectBindingKeysForConflicts(ctx, app.ID)
 }
 
-// collect 公共流程: 对 insts 中的实例, 调用 BuildInstanceEnvVars,
-// 包装 source 信息后扁平拼接。
-// AttachedApps 和 Status 过滤已由 store 层完成, 此处不再重复判断。
-func (r *Reader) collect(
+func (r *Reader) listAppBindings(ctx context.Context, appID string) ([]*model.ServiceBinding, error) {
+	if r.bindingStore == nil {
+		return nil, nil
+	}
+	bindings, err := r.bindingStore.List(ctx, &model.BindingQueryOptions{AppID: appID})
+	if err != nil {
+		return nil, errors.Wrap(err, "list service bindings for app")
+	}
+	return bindings, nil
+}
+
+// collectFromBindings 按指定环境从绑定产出实际注入的变量。
+func (r *Reader) collectFromBindings(
 	ctx context.Context,
-	insts []*model.ServiceInstance,
+	appID, envName string,
 ) (envvartypes.EnvVariableRichList, error) {
 	result := envvartypes.EnvVariableRichList{Vars: make([]envvartypes.EnvVariableRichItem, 0)}
 
-	for _, inst := range insts {
-		vars, err := BuildInstanceEnvVars(ctx, inst)
+	// 拉取该应用下全部绑定
+	bindings, err := r.listAppBindings(ctx, appID)
+	if err != nil {
+		return result, err
+	}
+
+	for _, binding := range bindings {
+		// 只处理当前环境已映射的实例
+		instID, ok := binding.EnvInstanceMap[envName]
+		if !ok || instID.IsZero() {
+			continue
+		}
+		// 实例不存在或未就绪则跳过
+		inst, err := r.instStore.Get(ctx, instID)
 		if err != nil {
-			// 单实例失败不阻塞整体
-			log.Warnf(ctx, "build instance env vars for instance %s: %v", inst.Name, err)
+			log.Warnf(ctx, "get instance %s for binding %s: %v", instID.Hex(), binding.Name, err)
+			continue
+		}
+		if inst.Status != model.AvailableStatus {
 			continue
 		}
 
+		// 用实例凭证渲染绑定上的 EnvVars 模板
+		vars, err := BuildBindingEnvVars(ctx, binding.EnvVars, inst.Credentials)
+		if err != nil {
+			log.Warnf(ctx, "build binding env vars for %s: %v", binding.Name, err)
+			continue
+		}
+		result.Vars = append(result.Vars, wrapBindingVars(binding.Name, vars)...)
+	}
+	return result, nil
+}
+
+// collectBindingKeysForConflicts 按绑定聚合 key，不按环境拆成多条源。
+func (r *Reader) collectBindingKeysForConflicts(
+	ctx context.Context,
+	appID string,
+) (envvartypes.EnvVariableRichList, error) {
+	result := envvartypes.EnvVariableRichList{Vars: make([]envvartypes.EnvVariableRichItem, 0)}
+
+	bindings, err := r.listAppBindings(ctx, appID)
+	if err != nil {
+		return result, err
+	}
+
+	for _, binding := range bindings {
+		if len(binding.EnvVars) == 0 {
+			continue
+		}
+		// 各已映射实例各渲一次，按 key 去重后拼接
+		valuesByKey := r.renderBindingValuesAcrossInstances(ctx, binding)
+		keys := lo.Keys(binding.EnvVars)
+		sort.Strings(keys)
 		source := envvartypes.ConflictedSource{
 			Source:      envvartypes.EnvVarSourceAppDeps,
-			SourceValue: inst.Name,
+			SourceValue: binding.Name,
 		}
-		for _, v := range vars {
+		for _, key := range keys {
+			vals := lo.Uniq(lo.Filter(valuesByKey[key], func(v string, _ int) bool {
+				return v != ""
+			}))
+			sort.Strings(vals)
 			result.Vars = append(result.Vars, envvartypes.EnvVariableRichItem{
-				Obj:    v,
+				Obj: envvartypes.EnvVariableObj{
+					Key:   key,
+					Value: strings.Join(vals, ", "),
+				},
 				Source: source,
 			})
 		}
 	}
-
 	return result, nil
+}
+
+// renderBindingValuesAcrossInstances 用每台已映射且可用的实例各渲一次 EnvVars。
+// 同一实例只渲一次；不可用或渲染失败则跳过。返回 key → 各次渲出的值（此处不去重）。
+func (r *Reader) renderBindingValuesAcrossInstances(
+	ctx context.Context,
+	binding *model.ServiceBinding,
+) map[string][]string {
+	valuesByKey := make(map[string][]string, len(binding.EnvVars))
+	seenInst := make(map[bson.ObjectID]struct{}, len(binding.EnvInstanceMap))
+
+	for _, instID := range binding.EnvInstanceMap {
+		if instID.IsZero() {
+			continue
+		}
+		if _, seen := seenInst[instID]; seen {
+			continue
+		}
+		seenInst[instID] = struct{}{}
+
+		inst, err := r.instStore.Get(ctx, instID)
+		if err != nil {
+			log.Warnf(ctx, "get instance %s for binding %s: %v", instID.Hex(), binding.Name, err)
+			continue
+		}
+		if inst.Status != model.AvailableStatus {
+			continue
+		}
+
+		vars, err := BuildBindingEnvVars(ctx, binding.EnvVars, inst.Credentials)
+		if err != nil {
+			log.Warnf(ctx, "build binding env vars for %s: %v", binding.Name, err)
+			continue
+		}
+		for _, v := range vars {
+			valuesByKey[v.Key] = append(valuesByKey[v.Key], v.Value)
+		}
+	}
+	return valuesByKey
+}
+
+func wrapBindingVars(bindingName string, vars envvartypes.EnvVariableList) []envvartypes.EnvVariableRichItem {
+	source := envvartypes.ConflictedSource{
+		Source:      envvartypes.EnvVarSourceAppDeps,
+		SourceValue: bindingName,
+	}
+	items := make([]envvartypes.EnvVariableRichItem, 0, len(vars))
+	for _, v := range vars {
+		items = append(items, envvartypes.EnvVariableRichItem{Obj: v, Source: source})
+	}
+	return items
 }

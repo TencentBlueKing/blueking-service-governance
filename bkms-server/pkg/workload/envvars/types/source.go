@@ -33,10 +33,9 @@ const (
 	// EnvVarSourceScopedEnv is for scoped env vars defined at env scope.
 	EnvVarSourceScopedEnv EnvVarSource = "scopedEnv"
 
-	// EnvVarSourceAppDeps is for env vars produced by depservice service instances
-	// (provider builtin + user-defined CustomEnvVars). They are scoped between ScopedEnv
-	// (40) and App (50) so that they cannot be overridden by any scoped env var, but can
-	// still be overridden by AppModel-level env vars.
+	// EnvVarSourceAppDeps is for env vars produced by depservice bindings.
+	// They are scoped between ScopedEnv (40) and App (50) so that they cannot be
+	// overridden by any scoped env var, but can still be overridden by AppModel-level env vars.
 	EnvVarSourceAppDeps EnvVarSource = "appDeps"
 
 	// EnvVarSourcePolaris is for env vars produced by polaris configs (polarisToken /

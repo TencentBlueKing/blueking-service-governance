@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	corev1 "k8s.io/api/core/v1"
@@ -106,6 +107,7 @@ type SharedTestStores struct {
 	BuildConfigStore          build.ConfigStore
 	SvcStore                  depmodel.ServiceStore
 	SvcInstStore              depmodel.ServiceInstanceStore
+	BindingStore              depmodel.ServiceBindingStore
 }
 
 // createApplication 根据测试用例创建应用
@@ -195,6 +197,7 @@ var _ = Describe("Builder Shared Tests", func() {
 				&stores.ScopedEnvVarStore,
 				&stores.SvcStore,
 				&stores.SvcInstStore,
+				&stores.BindingStore,
 				&envSvc,
 				&builderSvc,
 			),
@@ -1212,18 +1215,15 @@ spec:
 			app, appModel := createApplication(ctx, tc, stores, nil, nil)
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			// Create a fake service instance attached to the app.
-			// fake service definition 已通过 initdata.Do 加载。
-			// Credentials 中的键值对会作为环境变量输出（全部标记 IsSensitive=true）。
+			// Create a fake service instance and bind it to the app for this env.
+			// Binding EnvVars 把 Credentials 按 ${{env.KEY}} 直出，并附带 MYSQL_DSN 衍生变量。
 			inst := &depmodel.ServiceInstance{
 				Name:         "fake-mysql-inst",
 				ServiceName:  "fake",
 				PlanName:     "default",
 				ProviderType: depmodel.ProviderTypeUserDefined,
 				ScopeType:    depmodel.ScopeTypeWorkspace,
-				ScopeValue:   "",
 				WorkspaceID:  app.WorkspaceID,
-				AttachedApps: []string{app.ID},
 				Config:       map[string]any{},
 				Credentials: map[string]any{
 					"MYSQL_HOST":     "127.0.0.1",
@@ -1232,15 +1232,29 @@ spec:
 					"MYSQL_DATABASE": "mydb",
 					"MYSQL_PASSWORD": "blueking",
 				},
-				// CustomEnvVars 使用 ${{env.KEY}} 语法引用本实例的 Credentials 中的键，
-				// 渲染后作为衍生变量一并注入 workload。
-				CustomEnvVars: map[string]string{
-					"MYSQL_DSN": "mysql://${{env.MYSQL_USER}}:${{env.MYSQL_PASSWORD}}@${{env.MYSQL_HOST}}:${{env.MYSQL_PORT}}/${{env.MYSQL_DATABASE}}",
-				},
 				Status:   depmodel.AvailableStatus,
 				Operator: "test-operator",
 			}
-			_, err := stores.SvcInstStore.Create(ctx, inst)
+			instID, err := stores.SvcInstStore.Create(ctx, inst)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = stores.BindingStore.Create(ctx, &depmodel.ServiceBinding{
+				Name:        "mysql",
+				AppID:       app.ID,
+				WorkspaceID: app.WorkspaceID,
+				ServiceName: "fake",
+				EnvInstanceMap: map[string]bson.ObjectID{
+					testEnv.Name: instID,
+				},
+				EnvVars: map[string]string{
+					"MYSQL_HOST":     "${{env.MYSQL_HOST}}",
+					"MYSQL_PORT":     "${{env.MYSQL_PORT}}",
+					"MYSQL_USER":     "${{env.MYSQL_USER}}",
+					"MYSQL_DATABASE": "${{env.MYSQL_DATABASE}}",
+					"MYSQL_PASSWORD": "${{env.MYSQL_PASSWORD}}",
+					"MYSQL_DSN":      "mysql://${{env.MYSQL_USER}}:${{env.MYSQL_PASSWORD}}@${{env.MYSQL_HOST}}:${{env.MYSQL_PORT}}/${{env.MYSQL_DATABASE}}",
+				},
+			})
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -1261,7 +1275,7 @@ spec:
 			Expect(envMap).To(HaveKeyWithValue("MYSQL_DATABASE", "mydb"))
 			Expect(envMap).To(HaveKeyWithValue("MYSQL_PASSWORD", "blueking"))
 
-			// Verify CustomEnvVars rendered via ${{KEY}} template syntax
+			// Verify binding EnvVars rendered via ${{env.KEY}} template syntax
 			Expect(envMap).To(HaveKeyWithValue(
 				"MYSQL_DSN",
 				"mysql://root:blueking@127.0.0.1:3306/mydb",

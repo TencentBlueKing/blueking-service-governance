@@ -16,10 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package envvars 提供基于 ServiceInstance 的环境变量产出能力：
-//   - 将 Credentials 中的键值对作为环境变量输出（IsSensitive=true）
-//   - 以 Credentials 为上下文渲染用户自定义的 CustomEnvVars 模板
-//   - 输出 envvartypes.EnvVariableObj 列表，供上游 envvars 链路接入
+// Package envvars 提供依赖服务绑定的环境变量产出能力：
+// 用实例 Credentials 渲染绑定上的 EnvVars 模板，供上游 envvars 链路接入。
 //
 // 该包仅依赖 envvars/types 中的基础类型，不依赖 envvars 主包，从而避免
 // envvars 主包与 depservice 之间形成循环依赖。
@@ -29,60 +27,40 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
-// skipCredentialsServices 中的 service 不从 Credentials 生成环境变量。
-// 这些服务通过其他链路（如 component）注入变量，避免重复输出。
-var skipCredentialsServices = map[string]struct{}{
-	"polaris": {},
-}
-
-// BuildInstanceEnvVars 为单个 ServiceInstance 产出环境变量列表：
-//  1. 若该实例的 ServiceName 不在跳过名单中，将 Credentials 中的键值对作为内置变量输出（IsSensitive=true）。
-//  2. 把内置变量作为唯一上下文，渲染 inst.CustomEnvVars 中的 ${{env.KEY}} 模板。
-//  3. 内置变量与衍生变量一并输出。
-func BuildInstanceEnvVars(
+// BuildBindingEnvVars 用实例 Credentials 作为上下文，渲染绑定上的 EnvVars 模板。
+// EnvVars 为空时不注入任何变量（凭证不再自动直出）。
+func BuildBindingEnvVars(
 	ctx context.Context,
-	inst *model.ServiceInstance,
+	envVars map[string]string,
+	credentials map[string]any,
 ) (envvartypes.EnvVariableList, error) {
-	result := make(envvartypes.EnvVariableList, 0, len(inst.Credentials)+len(inst.CustomEnvVars))
-
-	// 1. 输出 Credentials 作为内置变量，并构建渲染上下文
-	renderCtx := make(map[string]string, len(inst.Credentials))
-	_, skip := skipCredentialsServices[inst.ServiceName]
-	if !skip {
-		for k, v := range inst.Credentials {
-			val := fmt.Sprintf("%v", v)
-			renderCtx[k] = val
-			result = append(result, envvartypes.EnvVariableObj{
-				Key:         k,
-				Value:       val,
-				IsSensitive: true,
-			})
-		}
+	if len(envVars) == 0 {
+		return envvartypes.EnvVariableList{}, nil
 	}
 
-	// 2. 渲染 CustomEnvVars 模板
-	for k, tmpl := range inst.CustomEnvVars {
+	renderCtx := make(map[string]string, len(credentials))
+	for k, v := range credentials {
+		renderCtx[k] = fmt.Sprintf("%v", v)
+	}
+
+	result := make(envvartypes.EnvVariableList, 0, len(envVars))
+	for k, tmpl := range envVars {
 		rendered, rerr := render.New(render.SetEnvContext(renderCtx)).Render(tmpl)
 		if rerr != nil {
-			// 不打印实际 value，避免暴露敏感数据
-			log.Errorf(
-				ctx, "render custom env var of dep service instance %s failed, key=%s, template=%q: %s",
-				inst.Name, k, tmpl, rerr,
-			)
-			return nil, rerr
+			log.Errorf(ctx, "render binding env var failed, key=%s, template=%q: %s", k, tmpl, rerr)
+			return nil, errors.Wrapf(rerr, "render binding env var %s", k)
 		}
-		// NOTE: 这里没有继承 IsSensitive 标记
 		result = append(result, envvartypes.EnvVariableObj{
 			Key:   k,
 			Value: rendered,
 		})
 	}
-
 	return result, nil
 }

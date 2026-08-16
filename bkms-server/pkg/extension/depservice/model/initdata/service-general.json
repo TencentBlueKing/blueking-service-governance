@@ -19,5 +19,12 @@
     "displayName": "Fake 服务（仅测试）",
     "description": "仅用于测试的 fake 服务，不应在生产流量中使用",
     "plans": [{"name": "default", "providerType": "user-defined", "config": {}}]
+  },
+  {
+    "name": "redis",
+    "category": "Storage",
+    "displayName": "Redis",
+    "description": "Redis",
+    "plans": [{"name": "default", "providerType": "system-allocated", "config": {}}]
   }
 ]

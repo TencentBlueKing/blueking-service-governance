@@ -862,6 +862,8 @@ definitions:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_component_serializer.EmptyOutput:
     type: object
+  github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput:
+    type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_observability_bkmonitor_usergroup_serializer.EmptyOutput:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appdefaults_serializer.EmptyOutput:
@@ -1899,6 +1901,38 @@ definitions:
         description: 环境变量值
         type: string
     type: object
+  serializer.BindingOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.BindingOutputObj'
+    type: object
+  serializer.BindingOutputObj:
+    properties:
+      appID:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      envInstanceMap:
+        additionalProperties:
+          type: string
+        type: object
+      envVars:
+        additionalProperties:
+          type: string
+        type: object
+      id:
+        type: string
+      name:
+        type: string
+      serviceName:
+        type: string
+      updatedAt:
+        type: string
+      workspaceID:
+        type: string
+    type: object
   serializer.BkCIOAuthGitProjectOutput:
     properties:
       alias:
@@ -2844,6 +2878,27 @@ definitions:
     required:
     - name
     type: object
+  serializer.CreateBindingInput:
+    properties:
+      description:
+        description: 描述
+        type: string
+      envInstanceMap:
+        additionalProperties:
+          type: string
+        description: 环境名 → 实例 ID；允许为空
+        type: object
+      envVars:
+        additionalProperties:
+          type: string
+        description: 环境变量模板；允许为空
+        type: object
+      name:
+        description: 绑定名称（应用内同服务下唯一）
+        type: string
+    required:
+    - name
+    type: object
   serializer.CreateBkHCMLoadBalancerData:
     properties:
       id:
@@ -3058,6 +3113,95 @@ definitions:
     required:
     - name
     - poolItems
+    type: object
+  serializer.CreateRedisInstanceInput:
+    properties:
+      bkBizID:
+        description: |-
+          --- Redis / DBM 创建参数 ---
+          业务 ID
+        type: integer
+      bkCloudID:
+        description: 云区域 ID
+        type: integer
+      clusterAlias:
+        description: 集群别名（集群模式）
+        type: string
+      clusterName:
+        description: 集群名称（小写字母开头，仅小写字母/数字/连字符）
+        type: string
+      clusterShardNum:
+        description: 集群分片数
+        type: integer
+      clusterType:
+        description: 集群类型
+        type: string
+      databases:
+        description: DB 数量
+        type: integer
+      dbAppAbbr:
+        description: 业务英文缩写
+        type: string
+      dbVersion:
+        description: 版本号（如 Redis-6）
+        type: string
+      description:
+        description: 描述
+        type: string
+      disasterToleranceLevel:
+        description: 容灾级别
+        type: string
+      ipSource:
+        description: 主机来源
+        type: string
+      name:
+        description: 实例名称（同 workspace 下唯一）
+        type: string
+      port:
+        description: 主从起始端口
+        type: integer
+      proxyPort:
+        description: 集群接入层端口
+        type: integer
+      redisPwd:
+        description: Redis 访问密码
+        type: string
+      resourceSpec:
+        allOf:
+        - $ref: '#/definitions/serializer.ResourceSpecInput'
+        description: 资源池申请规格
+      scopeType:
+        description: '作用域类型: workspace / envType / env'
+        enum:
+        - workspace
+        - envType
+        - env
+        type: string
+      scopeValue:
+        description: 作用域值；workspace 时为空，envType 为环境类型，env 为环境名
+        type: string
+    required:
+    - bkBizID
+    - clusterName
+    - clusterType
+    - dbAppAbbr
+    - dbVersion
+    - name
+    - scopeType
+    type: object
+  serializer.CreateRedisInstanceOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.CreateRedisInstanceOutputObj'
+    type: object
+  serializer.CreateRedisInstanceOutputObj:
+    properties:
+      id:
+        description: 实例 ID
+        type: string
+      status:
+        description: 实例状态
+        type: string
     type: object
   serializer.CreateScopedEnvVarInput:
     properties:
@@ -4339,6 +4483,11 @@ definitions:
         description: 推荐的镜像 Tag
         type: string
     type: object
+  serializer.GetRedisInstanceOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.RedisInstanceOutputObj'
+    type: object
   serializer.GetResourceTopologyOutput:
     properties:
       data:
@@ -5095,6 +5244,13 @@ definitions:
           $ref: '#/definitions/serializer.BSCPServiceOutput'
         type: array
     type: object
+  serializer.ListBindingsOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.BindingOutputObj'
+        type: array
+    type: object
   serializer.ListBkCIOAuthGitProjectsOutput:
     properties:
       data:
@@ -5331,6 +5487,14 @@ definitions:
           $ref: '#/definitions/serializer.ScopedEnvVarOutputObj'
         type: array
     type: object
+  serializer.ListRedisInstancesOutput:
+    properties:
+      data:
+        description: 实例列表
+        items:
+          $ref: '#/definitions/serializer.RedisInstanceOutputObj'
+        type: array
+    type: object
   serializer.ListResourcesRulesOutput:
     properties:
       data:
@@ -5447,6 +5611,15 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/serializer.PaginatedWorkspaceOutput'
+    type: object
+  serializer.LocationSpecInput:
+    properties:
+      city:
+        type: string
+      subZoneIDs:
+        items:
+          type: integer
+        type: array
     type: object
   serializer.LogEntryOutputObj:
     properties:
@@ -6641,6 +6814,72 @@ definitions:
         description: ServicePort 北极星服务端口
         type: integer
     type: object
+  serializer.RedisInstanceConfigOutput:
+    properties:
+      bkBizID:
+        type: integer
+      clusterID:
+        type: integer
+      clusterName:
+        type: string
+      clusterType:
+        type: string
+      domain:
+        type: string
+      port:
+        type: integer
+    type: object
+  serializer.RedisInstanceOutputObj:
+    properties:
+      config:
+        allOf:
+        - $ref: '#/definitions/serializer.RedisInstanceConfigOutput'
+        description: 非敏感配置
+      createdAt:
+        description: 创建时间
+        type: string
+      description:
+        description: 描述
+        type: string
+      id:
+        description: 实例 ID
+        type: string
+      message:
+        description: 状态详情
+        type: string
+      name:
+        description: 实例名称
+        type: string
+      operator:
+        description: 操作人
+        type: string
+      providerType:
+        description: Provider 类型
+        type: string
+      scopeType:
+        description: 作用域类型
+        type: string
+      scopeValue:
+        description: 作用域值
+        type: string
+      serviceName:
+        description: 服务名
+        type: string
+      status:
+        description: 实例状态
+        type: string
+      updatedAt:
+        description: 更新时间
+        type: string
+      usedAppIDs:
+        description: 引用该实例的应用 ID 列表（由绑定反查）
+        items:
+          type: string
+        type: array
+      workspaceID:
+        description: 工作空间 ID
+        type: string
+    type: object
   serializer.RefreshAppImagesOutput:
     properties:
       data:
@@ -6865,6 +7104,22 @@ definitions:
       type:
         description: 代码仓库类型
         type: string
+    type: object
+  serializer.ResourceSpecInput:
+    properties:
+      backendGroup:
+        $ref: '#/definitions/serializer.ResourceSpecItemInput'
+      proxy:
+        $ref: '#/definitions/serializer.ResourceSpecItemInput'
+    type: object
+  serializer.ResourceSpecItemInput:
+    properties:
+      count:
+        type: integer
+      locationSpec:
+        $ref: '#/definitions/serializer.LocationSpecInput'
+      specID:
+        type: integer
     type: object
   serializer.ResourceTopologyDataOutputObj:
     properties:
@@ -7994,6 +8249,22 @@ definitions:
         type: object
       trafficLaneEnabled:
         type: boolean
+    type: object
+  serializer.UpdateBindingInput:
+    properties:
+      description:
+        description: 描述
+        type: string
+      envInstanceMap:
+        additionalProperties:
+          type: string
+        description: 环境名 → 实例 ID；省略或空表示清空映射
+        type: object
+      envVars:
+        additionalProperties:
+          type: string
+        description: 环境变量模板；省略或空表示清空
+        type: object
     type: object
   serializer.UpdateBuildConfigInput:
     properties:
@@ -10871,6 +11142,219 @@ paths:
       summary: 查询应用在各环境及各泳道上的部署状态
       tags:
       - app
+  /apps/{appID}/deps/{serviceName}/bindings:
+    get:
+      operationId: ListServiceBindings
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 依赖服务名，目前仅支持 redis
+        enum:
+        - redis
+        in: path
+        name: serviceName
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListBindingsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询依赖服务绑定列表
+      tags:
+      - depservice-binding
+    post:
+      consumes:
+      - application/json
+      operationId: CreateServiceBinding
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 依赖服务名，目前仅支持 redis
+        enum:
+        - redis
+        in: path
+        name: serviceName
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CreateBindingInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/serializer.BindingOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 创建依赖服务绑定
+      tags:
+      - depservice-binding
+  /apps/{appID}/deps/{serviceName}/bindings/{name}:
+    delete:
+      operationId: DeleteServiceBinding
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 依赖服务名，目前仅支持 redis
+        enum:
+        - redis
+        in: path
+        name: serviceName
+        required: true
+        type: string
+      - description: 绑定名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除依赖服务绑定
+      tags:
+      - depservice-binding
+    get:
+      operationId: GetServiceBinding
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 依赖服务名，目前仅支持 redis
+        enum:
+        - redis
+        in: path
+        name: serviceName
+        required: true
+        type: string
+      - description: 绑定名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.BindingOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询依赖服务绑定详情
+      tags:
+      - depservice-binding
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateServiceBinding
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 依赖服务名，目前仅支持 redis
+        enum:
+        - redis
+        in: path
+        name: serviceName
+        required: true
+        type: string
+      - description: 绑定名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateBindingInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.BindingOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新依赖服务绑定
+      tags:
+      - depservice-binding
   /apps/{appID}/deps/polaris-configs:
     get:
       operationId: ListAppPolarisConfigs
@@ -18622,6 +19106,150 @@ paths:
       summary: 更新工作空间组件
       tags:
       - workspace-components
+  /workspaces/{workspaceID}/deps/redis:
+    get:
+      operationId: ListRedisInstances
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 实例状态
+        in: query
+        name: status
+        type: string
+      - description: 作用域类型
+        in: query
+        name: scopeType
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListRedisInstancesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询 Redis 依赖服务实例列表
+      tags:
+      - depservice-redis
+    post:
+      consumes:
+      - application/json
+      operationId: CreateRedisInstance
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CreateRedisInstanceInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/serializer.CreateRedisInstanceOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 创建 Redis 依赖服务实例
+      tags:
+      - depservice-redis
+  /workspaces/{workspaceID}/deps/redis/{instanceID}:
+    delete:
+      operationId: DeleteRedisInstance
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 实例 ID
+        in: path
+        name: instanceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除 Redis 依赖服务实例
+      tags:
+      - depservice-redis
+    get:
+      operationId: GetRedisInstance
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 实例 ID
+        in: path
+        name: instanceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.GetRedisInstanceOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询 Redis 依赖服务实例详情
+      tags:
+      - depservice-redis
   /workspaces/{workspaceID}/envs:
     get:
       description: '[bkms-cli 使用] 避免破坏性修改'

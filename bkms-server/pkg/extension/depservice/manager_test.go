@@ -42,11 +42,12 @@ func (fakeProvisionParams) Validate() error { return nil }
 
 var _ = Describe("ServiceManager", func() {
 	var (
-		ctx       context.Context
-		diApp     *fxtest.App
-		svcStore  model.ServiceStore
-		instStore model.ServiceInstanceStore
-		mgr       *depservice.ServiceManager
+		ctx          context.Context
+		diApp        *fxtest.App
+		svcStore     model.ServiceStore
+		instStore    model.ServiceInstanceStore
+		bindingStore model.ServiceBindingStore
+		mgr          *depservice.ServiceManager
 
 		planName string
 	)
@@ -58,10 +59,10 @@ var _ = Describe("ServiceManager", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			model.FxModule,
-			fx.Provide(depservice.New),
-			fx.Populate(&svcStore, &instStore, &mgr),
+			fx.Populate(&svcStore, &instStore, &bindingStore),
 		)
 		diApp.RequireStart()
+		mgr = depservice.New(svcStore, instStore, bindingStore, nil)
 
 		// serviceName 使用 "fake"，provider.New 会走注册表返回 fake.Provider，无需 Mock
 		planName = "default"
@@ -79,14 +80,12 @@ var _ = Describe("ServiceManager", func() {
 	AfterEach(func() {
 		fake.Reset()
 		Expect(instStore.DeleteAll(ctx)).To(Succeed())
+		Expect(bindingStore.DeleteAll(ctx)).To(Succeed())
 		Expect(svcStore.DeleteAll(ctx)).To(Succeed())
 		diApp.RequireStop()
 	})
 
-	createInstance := func(status model.InstanceStatus, attachedApps []string) bson.ObjectID {
-		if attachedApps == nil {
-			attachedApps = []string{}
-		}
+	createInstance := func(status model.InstanceStatus) bson.ObjectID {
 		id, err := instStore.Create(ctx, &model.ServiceInstance{
 			Name:         "inst-" + stringx.Random(6),
 			ServiceName:  "fake",
@@ -94,7 +93,6 @@ var _ = Describe("ServiceManager", func() {
 			ProviderType: model.ProviderTypeSystemAllocated,
 			ScopeType:    model.ScopeTypeWorkspace,
 			WorkspaceID:  "ws-" + stringx.Random(6),
-			AttachedApps: attachedApps,
 			Status:       status,
 			Operator:     "tester",
 		})
@@ -104,7 +102,7 @@ var _ = Describe("ServiceManager", func() {
 
 	Context("GetServiceInstance", func() {
 		It("returns the instance from mongodb", func() {
-			instID := createInstance(model.AvailableStatus, nil)
+			instID := createInstance(model.AvailableStatus)
 
 			inst, err := mgr.GetServiceInstance(ctx, instID)
 			Expect(err).NotTo(HaveOccurred())
@@ -120,31 +118,20 @@ var _ = Describe("ServiceManager", func() {
 
 	Context("DeleteServiceInstance", func() {
 		It("deletes an available instance through a sync provider", func() {
-			instID := createInstance(model.AvailableStatus, nil)
+			instID := createInstance(model.AvailableStatus)
 
 			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
 			_, err := instStore.Get(ctx, instID)
 			Expect(model.AsNotFoundError(err)).To(BeTrue())
 		})
 
-		It("rejects delete when the instance is attached to apps", func() {
-			instID := createInstance(model.AvailableStatus, []string{"app-1"})
-
-			err := mgr.DeleteServiceInstance(ctx, instID)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("is used by apps"))
-
-			inst, getErr := instStore.Get(ctx, instID)
-			Expect(getErr).NotTo(HaveOccurred())
-			Expect(inst.Status).To(Equal(model.AvailableStatus))
-		})
-
 		It("rejects delete while provisioning", func() {
-			instID := createInstance(model.ProvisioningStatus, nil)
+			instID := createInstance(model.ProvisioningStatus)
 
 			err := mgr.DeleteServiceInstance(ctx, instID)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("does not allow delete"))
+			Expect(errors.Is(err, depservice.ErrInvalidArgument)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("实例正在创建中，不允许删除"))
 
 			inst, getErr := instStore.Get(ctx, instID)
 			Expect(getErr).NotTo(HaveOccurred())
@@ -153,7 +140,7 @@ var _ = Describe("ServiceManager", func() {
 
 		It("keeps deleting status for an async provider", func() {
 			fake.Use(&fake.Provider{DeleteAsync: true})
-			instID := createInstance(model.AvailableStatus, nil)
+			instID := createInstance(model.AvailableStatus)
 
 			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
 
@@ -163,7 +150,7 @@ var _ = Describe("ServiceManager", func() {
 		})
 
 		It("directly deletes a createFailed instance", func() {
-			instID := createInstance(model.CreateFailedStatus, nil)
+			instID := createInstance(model.CreateFailedStatus)
 
 			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
 			_, err := instStore.Get(ctx, instID)
@@ -172,7 +159,7 @@ var _ = Describe("ServiceManager", func() {
 
 		It("marks deleteFailed when the provider fails", func() {
 			fake.Use(&fake.Provider{DeleteErr: errors.New("delete failed")})
-			instID := createInstance(model.AvailableStatus, nil)
+			instID := createInstance(model.AvailableStatus)
 
 			err := mgr.DeleteServiceInstance(ctx, instID)
 			Expect(err).To(HaveOccurred())
@@ -281,6 +268,82 @@ var _ = Describe("ServiceManager", func() {
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(inst.Status).To(Equal(model.CreateFailedStatus))
 			Expect(inst.Message).To(ContainSubstring("provider create failed"))
+		})
+	})
+
+	Context("ListServiceInstances", func() {
+		It("filters by workspace", func() {
+			wsID := "ws-" + stringx.Random(6)
+			for i := 0; i < 3; i++ {
+				_, err := instStore.Create(ctx, &model.ServiceInstance{
+					Name:         "inst-" + stringx.Random(6),
+					ServiceName:  "fake",
+					PlanName:     planName,
+					ProviderType: model.ProviderTypeSystemAllocated,
+					ScopeType:    model.ScopeTypeWorkspace,
+					WorkspaceID:  wsID,
+					Status:       model.AvailableStatus,
+					Operator:     "tester",
+				})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			// other workspace
+			_ = createInstance(model.AvailableStatus)
+
+			insts, err := mgr.ListServiceInstances(ctx, &depservice.ListServiceInstancesParams{
+				WorkspaceID: wsID,
+				ServiceName: "fake",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(insts).To(HaveLen(3))
+		})
+	})
+
+	Context("ServiceBinding", func() {
+		It("creates an empty binding and lists it", func() {
+			binding, err := mgr.CreateServiceBinding(ctx, &depservice.CreateServiceBindingParams{
+				Name:        "session",
+				AppID:       "app-1",
+				WorkspaceID: "ws-" + stringx.Random(6),
+				ServiceName: "redis",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(binding.EnvInstanceMap).To(BeEmpty())
+			Expect(binding.EnvVars).To(BeEmpty())
+
+			list, err := mgr.ListServiceBindings(ctx, "app-1", "redis")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list).To(HaveLen(1))
+		})
+
+		It("maps an instance per env and rejects delete while referenced", func() {
+			wsID := "ws-" + stringx.Random(6)
+			instID, err := instStore.Create(ctx, &model.ServiceInstance{
+				Name:         "redis-" + stringx.Random(6),
+				ServiceName:  "redis",
+				PlanName:     planName,
+				ProviderType: model.ProviderTypeSystemAllocated,
+				ScopeType:    model.ScopeTypeWorkspace,
+				WorkspaceID:  wsID,
+				Status:       model.AvailableStatus,
+				Operator:     "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = mgr.CreateServiceBinding(ctx, &depservice.CreateServiceBindingParams{
+				Name:           "cache",
+				AppID:          "app-1",
+				WorkspaceID:    wsID,
+				ServiceName:    "redis",
+				EnvInstanceMap: map[string]bson.ObjectID{"prod": instID},
+				EnvVars:        map[string]string{"REDIS_HOST": "${{env.REDIS_HOST}}"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = mgr.DeleteServiceInstance(ctx, instID)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, depservice.ErrInvalidArgument)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("bindings"))
 		})
 	})
 })

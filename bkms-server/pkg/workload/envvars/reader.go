@@ -243,9 +243,9 @@ func (r *UnifiedEnvVarsReader) ListAppBgVarsForConflicts(
 	}
 	bgVars.Vars = append(bgVars.Vars, scopedItems...)
 
-	// Include depservice instance env vars in the conflict pool. As the conflict
-	// scope is the whole workspace (not a single env), we ask the dep service
-	// reader to enumerate all instances attached to the app within the workspace.
+	// Include depservice binding keys in the conflict pool. App-level vars have
+	// no env dimension, so the reader returns each binding key once, with values
+	// aggregated across mapped environments.
 	if app != nil && r.appDepsVarReader != nil {
 		instVars, err := r.appDepsVarReader.ListAppVarsForConflicts(ctx, workspaceID, app)
 		if err != nil {

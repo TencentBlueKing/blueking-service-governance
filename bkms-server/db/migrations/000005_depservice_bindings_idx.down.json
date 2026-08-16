@@ -1,0 +1,9 @@
+[
+  {
+    "dropIndexes": "depservice_bindings",
+    "index": [
+      "appID_1_serviceName_1_name_1",
+      "instanceIDs_1"
+    ]
+  }
+]

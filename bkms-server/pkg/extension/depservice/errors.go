@@ -16,19 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package model
+package depservice
 
-import (
-	"go.uber.org/fx"
+import "github.com/pkg/errors"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
-)
-
-var FxModule = fx.Module("depservice",
-	database.PrivateFxModule,
-	fx.Provide(
-		fx.Annotate(NewServiceStoreMongo, fx.As(new(ServiceStore))),
-		NewServiceInstanceStoreMongo,
-		NewServiceBindingStoreMongo,
-	),
-)
+// ErrInvalidArgument 参数/业务校验失败
+var ErrInvalidArgument = errors.New("invalid argument")

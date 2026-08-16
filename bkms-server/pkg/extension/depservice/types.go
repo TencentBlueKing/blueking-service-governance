@@ -19,6 +19,8 @@
 package depservice
 
 import (
+	"go.mongodb.org/mongo-driver/v2/bson"
+
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
 )
@@ -42,12 +44,6 @@ type CreateServiceInstanceParams struct {
 	ScopeValue  string
 	Description string
 
-	// AttachedApps 记录当前实例分配给哪些应用
-	AttachedApps []string
-
-	// CustomEnvVars 用户自定义衍生环境变量模板, 详见 model.ServiceInstance.CustomEnvVars
-	CustomEnvVars map[string]string
-
 	Operator string `validate:"required"`
 
 	// Params 是创建服务实例所需的业务参数，需实现 types.ProvisionParams 接口。
@@ -55,4 +51,30 @@ type CreateServiceInstanceParams struct {
 	//   - Polaris: 传入 *polaris.CreateParams
 	//   - 其他 Provider: 传入对应的强类型参数
 	Params types.ProvisionParams `validate:"required"`
+}
+
+// ListServiceInstancesParams 列表查询参数
+type ListServiceInstancesParams struct {
+	WorkspaceID string
+	ServiceName string
+	Status      model.InstanceStatus
+	ScopeType   model.ScopeType
+}
+
+// CreateServiceBindingParams 创建应用侧绑定的参数。
+type CreateServiceBindingParams struct {
+	Name           string `validate:"required"`
+	AppID          string `validate:"required"`
+	WorkspaceID    string `validate:"required"`
+	ServiceName    string `validate:"required"`
+	EnvInstanceMap map[string]bson.ObjectID
+	EnvVars        map[string]string
+	Description    string
+}
+
+// UpdateServiceBindingParams 更新绑定的参数。EnvInstanceMap / EnvVars 为全量替换。
+type UpdateServiceBindingParams struct {
+	EnvInstanceMap map[string]bson.ObjectID
+	EnvVars        map[string]string
+	Description    string
 }

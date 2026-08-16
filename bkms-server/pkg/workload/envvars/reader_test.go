@@ -482,14 +482,15 @@ func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, wor
 
 var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader + fake.Provider)", func() {
 	var (
-		diApp       *fxtest.App
-		store       envvars.ScopedEnvVarStore
-		svcStore    depmodel.ServiceStore
-		instStore   depmodel.ServiceInstanceStore
-		ctx         context.Context
-		workspaceID string
-		environment envmodel.Environment
-		reader      *envvars.UnifiedEnvVarsReader
+		diApp        *fxtest.App
+		store        envvars.ScopedEnvVarStore
+		svcStore     depmodel.ServiceStore
+		instStore    depmodel.ServiceInstanceStore
+		bindingStore depmodel.ServiceBindingStore
+		ctx          context.Context
+		workspaceID  string
+		environment  envmodel.Environment
+		reader       *envvars.UnifiedEnvVarsReader
 	)
 
 	BeforeEach(func() {
@@ -501,7 +502,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
-			fx.Populate(&store, &svcStore, &instStore, &reader),
+			fx.Populate(&store, &svcStore, &instStore, &bindingStore, &reader),
 		)
 		diApp.RequireStart()
 
@@ -524,51 +525,63 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	AfterEach(func() {
 		Expect(store.DeleteAll(ctx)).NotTo(HaveOccurred())
 		Expect(instStore.DeleteAll(ctx)).NotTo(HaveOccurred())
+		Expect(bindingStore.DeleteAll(ctx)).NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
-	// seedDepSvcInstance 创建一个 fake 服务实例并 attach 给指定 app, 返回实例 ID。
-	// credentials 中的键值对会作为环境变量输出（全部标记 IsSensitive）。
-	seedDepSvcInstance := func(
+	// seedDepSvcBinding 创建实例并建立绑定：EnvVars 默认把 Credentials 键按 ${{env.KEY}} 直出。
+	seedDepSvcBinding := func(
 		appID string,
-		instConfig map[string]any,
+		envNames []string,
 		credentials map[string]any,
-		customEnvVars map[string]string,
-		scopeType depmodel.ScopeType,
-		scopeValue string,
-	) bson.ObjectID {
+		extraEnvVars map[string]string,
+	) {
 		instName := "fake-inst-" + stringx.Random(6)
 		inst := &depmodel.ServiceInstance{
-			Name:          instName,
-			WorkspaceID:   workspaceID,
-			ServiceName:   "fake",
-			PlanName:      "default",
-			ProviderType:  "user-defined",
-			ScopeType:     scopeType,
-			ScopeValue:    scopeValue,
-			AttachedApps:  []string{appID},
-			Config:        instConfig,
-			Credentials:   credentials,
-			CustomEnvVars: customEnvVars,
-			Status:        depmodel.AvailableStatus,
-			Operator:      "test-operator",
+			Name:         instName,
+			WorkspaceID:  workspaceID,
+			ServiceName:  "fake",
+			PlanName:     "default",
+			ProviderType: "user-defined",
+			ScopeType:    depmodel.ScopeTypeWorkspace,
+			Credentials:  credentials,
+			Status:       depmodel.AvailableStatus,
+			Operator:     "test-operator",
 		}
 		id, err := instStore.Create(ctx, inst)
 		Expect(err).NotTo(HaveOccurred())
-		return id
+
+		envVars := make(map[string]string, len(credentials)+len(extraEnvVars))
+		for k := range credentials {
+			envVars[k] = "${{env." + k + "}}"
+		}
+		for k, v := range extraEnvVars {
+			envVars[k] = v
+		}
+		envMap := make(map[string]bson.ObjectID, len(envNames))
+		for _, name := range envNames {
+			envMap[name] = id
+		}
+		_, err = bindingStore.Create(ctx, &depmodel.ServiceBinding{
+			Name:           "binding-" + stringx.Random(6),
+			AppID:          appID,
+			WorkspaceID:    workspaceID,
+			ServiceName:    "fake",
+			EnvInstanceMap: envMap,
+			EnvVars:        envVars,
+		})
+		Expect(err).NotTo(HaveOccurred())
 	}
 
 	It("should include depInstance vars in ListAppBgVars sorted by priority", func() {
 		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
 
 		// Credentials 中的键值对会作为环境变量输出
-		seedDepSvcInstance(
+		seedDepSvcBinding(
 			testApp.ID,
-			map[string]any{},
+			[]string{environment.Name},
 			map[string]any{"DB_HOST": "mysql.internal", "DB_PORT": 3306, "DB_PWD": "secret"},
 			nil,
-			depmodel.ScopeTypeWorkspace,
-			"",
 		)
 
 		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp)
@@ -604,13 +617,11 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	})
 
 	It("should not return depInstance vars when app is nil in ListAppBgVars", func() {
-		seedDepSvcInstance(
+		seedDepSvcBinding(
 			"app-1",
-			map[string]any{},
+			[]string{environment.Name},
 			map[string]any{"DB_HOST": "mysql.internal"},
 			nil,
-			depmodel.ScopeTypeWorkspace,
-			"",
 		)
 
 		bgVars, err := reader.ListAppBgVars(ctx, environment, nil)
@@ -622,23 +633,21 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 		}
 	})
 
-	It("should only return depInstance vars for instances attached to the app", func() {
+	It("should only return binding vars for the given app", func() {
 		app1 := &bkmsapp.Application{ID: "app-1", Name: "test-app-1", Type: bkmsapp.AppTypeTRPC}
 		app2 := &bkmsapp.Application{ID: "app-2", Name: "test-app-2", Type: bkmsapp.AppTypeTRPC}
 
-		seedDepSvcInstance(
+		seedDepSvcBinding(
 			app1.ID,
-			map[string]any{},
+			[]string{environment.Name},
 			map[string]any{"APP1_VAR": "value-for-app1"},
 			nil,
-			depmodel.ScopeTypeWorkspace, "",
 		)
-		seedDepSvcInstance(
+		seedDepSvcBinding(
 			app2.ID,
-			map[string]any{},
+			[]string{environment.Name},
 			map[string]any{"APP2_VAR": "value-for-app2"},
 			nil,
-			depmodel.ScopeTypeWorkspace, "",
 		)
 
 		bgVars, err := reader.ListAppBgVars(ctx, environment, app1)
@@ -656,12 +665,11 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	It("should include depInstance vars in ListVars and they can be overridden by appModel vars", func() {
 		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
 
-		seedDepSvcInstance(
+		seedDepSvcBinding(
 			testApp.ID,
-			map[string]any{},
+			[]string{environment.Name},
 			map[string]any{"DB_HOST": "dep-value", "OVERRIDE_ME": "dep-original"},
 			nil,
-			depmodel.ScopeTypeWorkspace, "",
 		)
 
 		am := &appmodel.AppModel{
@@ -682,12 +690,11 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	It("should include depInstance vars in BuildAppConflictedInfoByKeys", func() {
 		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
 
-		seedDepSvcInstance(
+		seedDepSvcBinding(
 			testApp.ID,
-			map[string]any{},
+			[]string{environment.Name},
 			map[string]any{"SHARED_KEY": "dep-instance-value"},
 			nil,
-			depmodel.ScopeTypeWorkspace, "",
 		)
 
 		conflicts, err := reader.BuildAppConflictedInfoByKeys(ctx, []string{"SHARED_KEY"}, workspaceID, testApp)
@@ -701,23 +708,22 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 		Expect(info.OverrideConflicted).To(BeTrue())
 	})
 
-	It("should scope depInstance vars by environment (envType scope)", func() {
+	It("should only inject vars for envs mapped on the binding", func() {
 		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
 
-		seedDepSvcInstance(
+		seedDepSvcBinding(
 			testApp.ID,
-			map[string]any{},
+			[]string{"test-env"},
 			map[string]any{"TEST_ONLY_VAR": "test-env-value"},
 			nil,
-			depmodel.ScopeTypeEnvType, "test",
 		)
 
-		// production 环境不应命中 envType=test 的实例
+		// production 环境未出现在 EnvInstanceMap 中，不应注入
 		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(envVarSourceKeyValues(bgVars)).NotTo(ContainElement(envVarSourceKeyValue{Key: "TEST_ONLY_VAR"}))
 
-		// test 环境应命中
+		// test 环境已映射，应注入
 		testEnv := envmodel.Environment{WorkspaceID: workspaceID, Name: "test-env", Type: "test"}
 		bgVars, err = reader.ListAppBgVars(ctx, testEnv, testApp)
 		Expect(err).NotTo(HaveOccurred())

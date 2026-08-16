@@ -41,18 +41,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 )
 
-const (
-	configKeyCreateTicketID  = "createTicketID"
-	configKeyDisableTicketID = "disableTicketID"
-	configKeyDestroyTicketID = "destroyTicketID"
-	configKeyClusterID       = "clusterID"
-	configKeyClusterName     = "clusterName"
-	configKeyClusterType     = "clusterType"
-	configKeyDomain          = "domain"
-	configKeyPort            = "port"
-	configKeyBkBizID         = "bkBizID"
-)
-
 var (
 	dbmClient dbm.Client
 	instStore model.ServiceInstanceStore

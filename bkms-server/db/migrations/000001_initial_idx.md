@@ -72,6 +72,7 @@
   - workspaceID_1_serviceName_1_name_1: ServiceInstanceStoreMongo：同一 workspace / serviceName 下实例名唯一；
 - depservice_services 新建索引：
   - name_1: ServiceStoreMongo：服务 name 唯一；
+- depservice_bindings 见 `000005_depservice_bindings_idx.md`。
 - operation_records 新建索引：
   - username_1_group.workspaceID_1_createdAt_-1: OperationRecordStoreMongo：覆盖按用户 + workspace 维度的聚合查询及列表查询；
   - username_1_group.workspaceID_1_group.appID_1_createdAt_-1: OperationRecordStoreMongo：覆盖按用户 + workspace + app 维度的聚合查询；

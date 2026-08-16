@@ -119,8 +119,9 @@ type Registry struct {
 	// 集群插件
 	ClusterAddonDefStore clusteraddon.ClusterAddonDefStore
 	// 服务类
-	DepSvcStore     depsvcmodel.ServiceStore
-	DepSvcInstStore depsvcmodel.ServiceInstanceStore
+	DepSvcStore        depsvcmodel.ServiceStore
+	DepSvcInstStore    depsvcmodel.ServiceInstanceStore
+	DepSvcBindingStore depsvcmodel.ServiceBindingStore
 	// AppDepsVarReader 基于 ServiceInstance 产出环境变量的读取器,
 	// 用于注入到 envvars.UnifiedEnvVarsReader, 接入依赖服务实例变量。
 	AppDepsVarReader *depenvvars.Reader
@@ -231,7 +232,8 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	// 服务类
 	r.DepSvcStore = mustInit(depsvcmodel.NewServiceStoreMongo(mongoClient, dbName))
 	r.DepSvcInstStore = mustInit(depsvcmodel.NewServiceInstanceStoreMongo(mongoClient, dbName))
-	r.AppDepsVarReader = depenvvars.NewReader(r.DepSvcInstStore)
+	r.DepSvcBindingStore = mustInit(depsvcmodel.NewServiceBindingStoreMongo(mongoClient, dbName))
+	r.AppDepsVarReader = depenvvars.NewReader(r.DepSvcInstStore, r.DepSvcBindingStore)
 	r.PolarisVarReader = polarisenvvars.NewReader(r.PolarisConfigStore)
 	// 蓝鲸监控类
 	r.ApmInstConfigStore = mustInit(bkmmodel.NewApmInstConfigStoreMongo(mongoClient, dbName))

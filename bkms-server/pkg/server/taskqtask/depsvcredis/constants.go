@@ -16,19 +16,23 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package model
+package depsvcredis
 
-import (
-	"go.uber.org/fx"
-
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+const (
+	configKeyCreateTicketID  = "createTicketID"
+	configKeyDisableTicketID = "disableTicketID"
+	configKeyDestroyTicketID = "destroyTicketID"
+	configKeyClusterID       = "clusterID"
+	configKeyClusterName     = "clusterName"
+	configKeyClusterType     = "clusterType"
+	configKeyDomain          = "domain"
+	configKeyPort            = "port"
+	configKeyBkBizID         = "bkBizID"
 )
 
-var FxModule = fx.Module("depservice",
-	database.PrivateFxModule,
-	fx.Provide(
-		fx.Annotate(NewServiceStoreMongo, fx.As(new(ServiceStore))),
-		NewServiceInstanceStoreMongo,
-		NewServiceBindingStoreMongo,
-	),
+// Redis 实例 Credentials 落库键，绑定 EnvVars 可通过 ${{env.KEY}} 引用。
+const (
+	CredHost = "REDIS_HOST"
+	CredPort = "REDIS_PORT"
+	CredPwd  = "REDIS_PWD"
 )

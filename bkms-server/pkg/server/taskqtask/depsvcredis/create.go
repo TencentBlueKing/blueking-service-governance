@@ -171,12 +171,18 @@ func createPoll(ctx context.Context, objID bson.ObjectID, args CreateArgs) error
 		return errors.Wrapf(taskq.ErrFixedRetry, "persist cluster config after create ticket: %v", err)
 	}
 
+	// 绑定 EnvVars 用 ${{env.KEY}} 引用这些 Credentials 键
+	credentials := map[string]any{
+		CredHost: clusterInfo.Domain,
+		CredPort: strconv.Itoa(clusterInfo.Port),
+	}
+	// 密码为空时由 DBM 随机生成（集群模式还走 proxy_pwd），此处无从得知实际值，
+	// 写入空串反而会向应用注入错误的 REDIS_PWD
 	if args.DBMParams.RedisPwd != "" {
-		if err = instStore.PatchCredentials(ctx, objID, map[string]any{
-			"password": args.DBMParams.RedisPwd,
-		}); err != nil {
-			return errors.Wrapf(taskq.ErrFixedRetry, "persist credentials after create ticket: %v", err)
-		}
+		credentials[CredPwd] = args.DBMParams.RedisPwd
+	}
+	if err = instStore.PatchCredentials(ctx, objID, credentials); err != nil {
+		return errors.Wrapf(taskq.ErrFixedRetry, "persist credentials after create ticket: %v", err)
 	}
 
 	if err = instStore.UpdateStatus(ctx, objID, model.AvailableStatus, ""); err != nil {
