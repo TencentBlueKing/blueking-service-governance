@@ -96,6 +96,14 @@ type AppConfigFileVersionOutputObj struct {
 	Type string `json:"type"`
 	// 内容来源
 	ContentSourceType string `json:"contentSourceType"`
+	// 配置文件语义类型
+	ConfigKind string `json:"configKind"`
+	// plain 配置文件的容器内完整挂载路径
+	MountPath string `json:"mountPath,omitempty"`
+	// 是否统一配置
+	IsUnifiedConfig bool `json:"isUnifiedConfig"`
+	// 挂载环境范围
+	MountedEnvNames []string `json:"mountedEnvNames,omitempty"`
 	// 文件格式
 	FileFormat string `json:"fileFormat"`
 	// 普通内容
@@ -136,6 +144,10 @@ func (o *AppConfigFileVersionOutputObj) FromModel(obj appcfg.AppConfigFileVersio
 		Description:         obj.Description,
 		Type:                string(obj.Type),
 		ContentSourceType:   string(obj.ContentSourceType),
+		ConfigKind:          string(obj.GetConfigKind()),
+		MountPath:           obj.MountPath,
+		IsUnifiedConfig:     obj.IsUnifiedConfig,
+		MountedEnvNames:     obj.MountedEnvNames,
 		FileFormat:          string(obj.Format),
 		Content:             obj.Content,
 		OverlayContent:      obj.OverlayContent,

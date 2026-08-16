@@ -26,6 +26,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/serializer"
@@ -120,7 +121,6 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "create env %s", input.Name))
 		return
 	}
-
 	// 目前存在两条路径往环境中写入 apm 相关环境变量:
 	// - 在环境创建时，如果对应监控项目已经就绪, 则同步创建 ApmApp 并添加 apm 相关环境变量
 	// - 在工作空间创建时的异步任务中，会定时检查监控项目状态。待其就绪时，会为空间下的所有环境创建 ApmApp 并添加 apm 相关环境变量
@@ -230,7 +230,6 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "create feature environment"))
 		return
 	}
-
 	go audit.AddOperationRecordAsync(
 		ctx,
 		audit.OperationTypeCreate,
@@ -565,7 +564,13 @@ func (h *Handler) DeleteEnv(c *gin.Context) {
 		log.Warnf(ctx, "remove env %s from all APMs failed: %v", envID.Hex(), err)
 	}
 
-	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
+	svc := bkmsenv.NewEnvService(h.registry.EnvStore).WithDeleteCleaner(
+		appcfg.NewPlainEnvInstanceCleaner(
+			h.registry.AppStore,
+			h.registry.AppConfigFileStore,
+			h.registry.AppConfigFileVersionStore,
+		).CleanupBeforeDelete,
+	)
 	if err = svc.Delete(ctx, envID); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete environment"))
 		return

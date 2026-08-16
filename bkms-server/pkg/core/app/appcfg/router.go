@@ -24,6 +24,7 @@ import "github.com/gin-gonic/gin"
 type Handler interface {
 	CreateAppConfigFile(c *gin.Context)
 	UpdateAppConfigFile(c *gin.Context)
+	UpdateAppConfigFileEnvConfig(c *gin.Context)
 	ListAppConfigFiles(c *gin.Context)
 	DeleteAppConfigFile(c *gin.Context)
 	GetAppConfigFileDetails(c *gin.Context)
@@ -41,17 +42,19 @@ type Handler interface {
 func Register(rg *gin.RouterGroup, h Handler) {
 	apps := rg.Group("/apps/:appID")
 
-	// App config file resource routes.
+	// 应用配置文件资源路由。
 	files := apps.Group("/app-config-files")
-	// Create a new app config file.
+	// 创建应用配置文件。
 	files.POST("", h.CreateAppConfigFile)
-	// Update app config file metadata such as name/base reference.
+	// 更新应用配置文件元数据，例如名称、base 引用等。
 	files.PUT("/:id", h.UpdateAppConfigFile)
-	// List app config files under the current application.
+	// 切换统一配置/按环境配置模式及挂载环境范围。
+	files.PUT("/:id/env-config-policy", h.UpdateAppConfigFileEnvConfig)
+	// 列出当前应用下的应用配置文件。
 	files.GET("", h.ListAppConfigFiles)
-	// Delete an app config file by ID.
+	// 按 ID 删除应用配置文件。
 	files.DELETE("/:id", h.DeleteAppConfigFile)
-	// Query details, editable field info, and current content.
+	// 查询详情、可编辑字段信息与当前内容。
 	files.GET("/:id/details", h.GetAppConfigFileDetails)
 	// Update the content field for a normal app config file.
 	files.PUT("/:id/content", h.UpdateAppConfigFileContent)

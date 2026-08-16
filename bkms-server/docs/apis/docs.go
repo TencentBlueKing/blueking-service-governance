@@ -765,6 +765,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/app-config-files/{id}/env-config-policy": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-files"
+                ],
+                "summary": "修改一个应用配置文件的环境配置模式",
+                "operationId": "UpdateAppConfigFileEnvConfig",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用配置文件 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "修改环境配置模式请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateAppConfigFileEnvConfigInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateAppConfigFileOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/app-config-files/{id}/overlay-content": {
             "put": {
                 "security": [
@@ -19132,6 +19194,10 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "configKind": {
+                    "description": "配置文件语义类型",
+                    "type": "string"
+                },
                 "contentSourceType": {
                     "description": "文件内容来源",
                     "type": "string"
@@ -19151,6 +19217,21 @@ const docTemplate = `{
                 "id": {
                     "description": "应用配置文件 ID",
                     "type": "string"
+                },
+                "envConfigMode": {
+                    "description": "当前按环境配置模式，可选值：disabled、all、selected",
+                    "type": "string"
+                },
+                "mountPath": {
+                    "description": "plain 配置文件的容器内完整挂载路径",
+                    "type": "string"
+                },
+                "mountedEnvNames": {
+                    "description": "当前部分挂载模式下的环境列表",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "name": {
                     "description": "文件名称",
@@ -19197,6 +19278,10 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "configKind": {
+                    "description": "配置文件语义类型",
+                    "type": "string"
+                },
                 "content": {
                     "description": "普通内容",
                     "type": "string"
@@ -19240,6 +19325,21 @@ const docTemplate = `{
                 "isDeleted": {
                     "description": "是否软删除",
                     "type": "boolean"
+                },
+                "envConfigMode": {
+                    "description": "当前按环境配置模式，可选值：disabled、all、selected",
+                    "type": "string"
+                },
+                "mountPath": {
+                    "description": "plain 配置文件的容器内完整挂载路径",
+                    "type": "string"
+                },
+                "mountedEnvNames": {
+                    "description": "当前部分挂载模式下的环境列表",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "name": {
                     "description": "文件名",
@@ -21524,6 +21624,14 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "configKind": {
+                    "description": "配置文件语义类型，不传时默认按 framework 处理",
+                    "type": "string",
+                    "enum": [
+                        "framework",
+                        "plain"
+                    ]
+                },
                 "contentSourceType": {
                     "description": "内容来源，可选本地（local）或 bscp",
                     "type": "string",
@@ -21541,12 +21649,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fileFormat": {
-                    "description": "文件格式，可选 yaml 或 taf",
+                    "description": "文件格式标识，framework 兼容历史语义，plain 仅做弱校验",
                     "type": "string",
-                    "enum": [
-                        "yaml",
-                        "taf"
-                    ]
+                    "maxLength": 32,
+                    "minLength": 1
+                },
+                "mountPath": {
+                    "description": "plain 配置文件的容器内完整挂载路径",
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
                 },
                 "name": {
                     "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间",
@@ -29581,6 +29693,34 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.UpdateAppConfigFileEnvConfigInput": {
+            "type": "object",
+            "properties": {
+                "currentVersion": {
+                    "description": "编辑开始时的当前版本号，用于乐观锁冲突检测",
+                    "type": "integer"
+                },
+                "description": {
+                    "description": "版本描述",
+                    "type": "string"
+                },
+                "envConfigMode": {
+                    "description": "按环境配置模式。framework 仅支持 disabled、all；plain 支持 disabled、all、selected",
+                    "type": "string"
+                },
+                "mountedEnvNames": {
+                    "description": "当 plain 文件且 envConfigMode=selected 时生效，表示选中的环境列表",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sourceEnvName": {
+                    "description": "plain 从按环境配置切回统一配置时，作为默认内容来源的环境名",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.UpdateAppConfigFileInput": {
             "type": "object",
             "required": [
@@ -29606,6 +29746,18 @@ const docTemplate = `{
                 "description": {
                     "description": "版本描述",
                     "type": "string"
+                },
+                "fileFormat": {
+                    "description": "文件格式标识，plain 仅做弱校验",
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 1
+                },
+                "mountPath": {
+                    "description": "plain 配置文件的容器内完整挂载路径",
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
                 },
                 "name": {
                     "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间",

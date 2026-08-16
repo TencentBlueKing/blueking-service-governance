@@ -49,6 +49,22 @@ var _ = Describe("App config file serializers", func() {
 			ContentSourceType: "local",
 			FileFormat:        "yaml",
 		}, nil),
+		Entry("plain input accepts custom fileFormat", serializer.CreateAppConfigFileInput{
+			Name:              "custom-env",
+			Type:              "normal",
+			ContentSourceType: "local",
+			ConfigKind:        "plain",
+			MountPath:         "/data/app/conf/custom.env",
+			FileFormat:        "env",
+		}, nil),
+		Entry("plain input with mount path", serializer.CreateAppConfigFileInput{
+			Name:              "feature-flags",
+			Type:              "normal",
+			ContentSourceType: "local",
+			ConfigKind:        "plain",
+			MountPath:         "/data/app/conf/feature-flags.env",
+			FileFormat:        "env",
+		}, nil),
 		Entry("invalid name", serializer.CreateAppConfigFileInput{
 			Name:              "bad name",
 			Type:              "normal",
@@ -69,13 +85,17 @@ var _ = Describe("App config file serializers", func() {
 		Expect(*input.CurrentVersion).To(Equal(int64(42)))
 	})
 
-	It("marshals file output currentVersion as JSON number", func() {
+	It("marshals file output with isUnifiedConfig as JSON", func() {
 		payload, err := json.Marshal(serializer.AppConfigFileOutputObj{
-			ID:             "abc",
-			Name:           "demo",
-			Type:           "normal",
-			FileFormat:     "yaml",
-			CurrentVersion: 12,
+			ID:              "abc",
+			Name:            "demo",
+			Type:            "normal",
+			ConfigKind:      "plain",
+			MountPath:       "/data/app/conf/custom.env",
+			IsUnifiedConfig: false,
+			MountedEnvNames: []string{"test1", "test2"},
+			FileFormat:      "env",
+			CurrentVersion:  12,
 		})
 
 		Expect(err).NotTo(HaveOccurred())
@@ -84,8 +104,12 @@ var _ = Describe("App config file serializers", func() {
 			"name": "demo",
 			"type": "normal",
 			"contentSourceType": "",
+			"configKind": "plain",
+			"mountPath": "/data/app/conf/custom.env",
+			"isUnifiedConfig": false,
+			"mountedEnvNames": ["test1", "test2"],
 			"envName": "",
-			"fileFormat": "yaml",
+			"fileFormat": "env",
 			"currentVersion": 12,
 			"updater": "",
 			"updatedAt": ""
@@ -102,6 +126,7 @@ var _ = Describe("App config file serializers", func() {
 					{
 						ID:                  "v1",
 						Version:             7,
+						IsUnifiedConfig:     true,
 						BaseVersion:         &baseVersion,
 						RollbackFromVersion: &rollbackFromVersion,
 					},
@@ -124,6 +149,8 @@ var _ = Describe("App config file serializers", func() {
 						"description": "",
 						"type": "",
 						"contentSourceType": "",
+						"configKind": "",
+						"isUnifiedConfig": true,
 						"fileFormat": "",
 						"baseVersion": 2,
 						"operationType": "",

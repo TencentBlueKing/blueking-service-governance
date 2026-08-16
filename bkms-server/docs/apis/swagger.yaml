@@ -1044,6 +1044,9 @@ definitions:
         allOf:
         - $ref: '#/definitions/serializer.BSCPAppConfigFileConfig'
         description: 仅当 contentSourceType 为 bscp 时，bscpConfig 才有值
+      configKind:
+        description: 配置文件语义类型
+        type: string
       contentSourceType:
         description: 文件内容来源
         type: string
@@ -1059,6 +1062,17 @@ definitions:
       id:
         description: 应用配置文件 ID
         type: string
+      envConfigMode:
+        description: 当前按环境配置模式，可选值：disabled、all、selected
+        type: string
+      mountPath:
+        description: plain 配置文件的容器内完整挂载路径
+        type: string
+      mountedEnvNames:
+        description: 当前部分挂载模式下的环境列表
+        items:
+          type: string
+        type: array
       name:
         description: 文件名称
         type: string
@@ -1090,6 +1104,9 @@ definitions:
         allOf:
         - $ref: '#/definitions/serializer.BSCPAppConfigFileConfig'
         description: BSCP 配置引用
+      configKind:
+        description: 配置文件语义类型
+        type: string
       content:
         description: 普通内容
         type: string
@@ -1123,6 +1140,17 @@ definitions:
       isDeleted:
         description: 是否软删除
         type: boolean
+      envConfigMode:
+        description: 当前按环境配置模式，可选值：disabled、all、selected
+        type: string
+      mountPath:
+        description: plain 配置文件的容器内完整挂载路径
+        type: string
+      mountedEnvNames:
+        description: 当前部分挂载模式下的环境列表
+        items:
+          type: string
+        type: array
       name:
         description: 文件名
         type: string
@@ -2642,6 +2670,12 @@ definitions:
         allOf:
         - $ref: '#/definitions/serializer.BSCPAppConfigFileConfig'
         description: 当 contentSourceType 为 bscp 时，bscpConfig 为必填
+      configKind:
+        description: 配置文件语义类型，不传时默认按 framework 处理
+        enum:
+        - framework
+        - plain
+        type: string
       contentSourceType:
         description: 内容来源，可选本地（local）或 bscp
         enum:
@@ -2655,10 +2689,14 @@ definitions:
         description: 环境名称，可选。为空表示应用级别配置，非空表示特定环境的配置
         type: string
       fileFormat:
-        description: 文件格式，可选 yaml 或 taf
-        enum:
-        - yaml
-        - taf
+        description: 文件格式标识，framework 兼容历史语义，plain 仅做弱校验
+        maxLength: 32
+        minLength: 1
+        type: string
+      mountPath:
+        description: plain 配置文件的容器内完整挂载路径
+        maxLength: 255
+        minLength: 1
         type: string
       name:
         description: 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间
@@ -8157,6 +8195,26 @@ definitions:
         description: 完整 values 内容
         type: string
     type: object
+  serializer.UpdateAppConfigFileEnvConfigInput:
+    properties:
+      currentVersion:
+        description: 编辑开始时的当前版本号，用于乐观锁冲突检测
+        type: integer
+      description:
+        description: 版本描述
+        type: string
+      envConfigMode:
+        description: 按环境配置模式。framework 仅支持 disabled、all；plain 支持 disabled、all、selected
+        type: string
+      mountedEnvNames:
+        description: 当 plain 文件且 envConfigMode=selected 时生效，表示选中的环境列表
+        items:
+          type: string
+        type: array
+      sourceEnvName:
+        description: plain 从按环境配置切回统一配置时，作为默认内容来源的环境名
+        type: string
+    type: object
   serializer.UpdateAppConfigFileInput:
     properties:
       baseAppConfigFileID:
@@ -8171,6 +8229,16 @@ definitions:
         type: integer
       description:
         description: 版本描述
+        type: string
+      fileFormat:
+        description: 文件格式标识，plain 仅做弱校验
+        maxLength: 32
+        minLength: 1
+        type: string
+      mountPath:
+        description: plain 配置文件的容器内完整挂载路径
+        maxLength: 255
+        minLength: 1
         type: string
       name:
         description: 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间
@@ -9344,6 +9412,45 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 查看一个应用配置文件详情
+      tags:
+      - app-config-files
+  /apps/{appID}/app-config-files/{id}/env-config-policy:
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateAppConfigFileEnvConfig
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 应用配置文件 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 修改环境配置模式请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateAppConfigFileEnvConfigInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.UpdateAppConfigFileOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 修改一个应用配置文件的环境配置模式
       tags:
       - app-config-files
   /apps/{appID}/app-config-files/{id}/overlay-content:

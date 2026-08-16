@@ -20,6 +20,7 @@ package appcfg_test
 
 import (
 	"context"
+	"errors"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -108,6 +109,85 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(items[0].Description).To(Equal("initial values"))
 			Expect(items[0].Version).To(Equal(int64(1)))
 		})
+
+		It("should persist new semantic fields for plain config files", func() {
+			content := "KEY=VALUE"
+
+			acf, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "custom-env",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormat("env"),
+				ConfigKind:        appcfg.ConfigKindPlain,
+				MountPath:         "/data/app/conf/custom.env",
+				IsUnifiedConfig:   true,
+				Content:           &content,
+				Creator:           "tester",
+				Description:       "initial env file",
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(acf.GetConfigKind()).To(Equal(appcfg.ConfigKindPlain))
+			Expect(acf.MountPath).To(Equal("/data/app/conf/custom.env"))
+
+			gotFile, err := fileStore.GetByID(ctx, acf.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(gotFile.GetConfigKind()).To(Equal(appcfg.ConfigKindPlain))
+			Expect(gotFile.MountPath).To(Equal("/data/app/conf/custom.env"))
+		})
+
+		It("should reject plain config with bscp source", func() {
+			_, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "custom-env",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeBSCP,
+				Format:            appcfg.FileFormat("env"),
+				ConfigKind:        appcfg.ConfigKindPlain,
+				MountPath:         "/data/app/conf/custom.env",
+				Creator:           "tester",
+			})
+
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("plain config only supports local content source")))
+		})
+
+		It("should reject plain config mountPath conflicts within one app", func() {
+			content := "KEY=VALUE"
+			_, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "custom-env",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormat("env"),
+				ConfigKind:        appcfg.ConfigKindPlain,
+				MountPath:         "/data/app/conf/custom.env",
+				IsUnifiedConfig:   true,
+				Content:           &content,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "another-file",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormat("json"),
+				ConfigKind:        appcfg.ConfigKindPlain,
+				MountPath:         "/data/app/conf/custom.env",
+				IsUnifiedConfig:   true,
+				Content:           &content,
+				Creator:           "tester",
+			})
+
+			Expect(err).To(MatchError(appcfg.ErrPlainConfigMountPathConflict))
+		})
 	})
 
 	Context("UpdateFile", func() {
@@ -162,6 +242,47 @@ var _ = Describe("AppConfigFileService", func() {
 			}
 			Expect(latestVersion.Version).To(Equal(int64(2)))
 			Expect(latestVersion.Description).To(Equal("update values"))
+		})
+
+		It("should reject updating a plain config to a conflicting mountPath", func() {
+			content := "KEY=VALUE"
+			first, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "custom-env",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormat("env"),
+				ConfigKind:        appcfg.ConfigKindPlain,
+				MountPath:         "/data/app/conf/custom.env",
+				IsUnifiedConfig:   true,
+				Content:           &content,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			second, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "feature-flags",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormat("json"),
+				ConfigKind:        appcfg.ConfigKindPlain,
+				MountPath:         "/data/app/conf/feature-flags.json",
+				IsUnifiedConfig:   true,
+				Content:           &content,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			second.MountPath = first.MountPath
+			err = service.UpdateFile(ctx, second, "new-user", appcfg.UpdateCfgFileOptions{
+				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
+				Description:   "conflict mount path",
+			})
+
+			Expect(err).To(MatchError(appcfg.ErrPlainConfigMountPathConflict))
 		})
 	})
 

@@ -173,7 +173,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 
 			// Verify ConfigMap contains default content
 			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["trpc_go.yaml"].(string)
+			configContent := configMapData[runtimeRenderedAlias(0, "trpc_go.yaml")].(string)
 			Expect(configContent).To(Equal("server:\n  address: 0.0.0.0:8080\n  timeout: 3000\n"))
 
 			// Verify volume mount exists
@@ -203,13 +203,114 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 
 			// Verify ConfigMap contains prod-specific content (not default)
 			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["trpc_go.yaml"].(string)
+			configContent := configMapData[runtimeRenderedAlias(0, "trpc_go.yaml")].(string)
 			Expect(configContent).To(Equal("server:\n  address: 0.0.0.0:9090\n  timeout: 3000\n"))
 
 			// Verify volume mount exists
 			Expect(gd.Spec.Template.Spec.Containers).To(HaveLen(1))
 			container := gd.Spec.Template.Spec.Containers[0]
 			Expect(container.VolumeMounts).To(HaveLen(1))
+		})
+	})
+
+	// tRPC 配置变量渲染测试
+	Context("Test Build with plain app config files", func() {
+		var app *bkmsapp.Application
+		var appEnv *envmodel.Environment
+		var appModel *appmodel.AppModel
+
+		AfterEach(func() {
+			if app != nil {
+				_, _ = appConfigFileStore.DeleteByApp(ctx, app.ID)
+			}
+		})
+
+		It("should render and mount plain config files together with framework config", func() {
+			app, appModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
+				AppStore:                  appStore,
+				AppModelStore:             appModelStore,
+				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileVersionStore: appConfigFileVersionStore,
+				BuildConfigStore:          buildConfigStore,
+			}, &dbfactory.TrpcApplicationOpts{
+				TrpcConfig: &appmodel.TrpcConfig{
+					FileName:    "trpc_go.yaml",
+					FilePath:    "/etc/trpc",
+					Language:    "go",
+					FileContent: "server:\n  region: ${{env.REGION}}\n",
+				},
+				EnvVars: []appmodel.Variable{
+					{Key: "REGION", Value: "ap-guangzhou"},
+				},
+			})
+			appEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+
+			plainContent := "REGION=${{env.REGION}}\nPOD_IP=${{env.BKMS_POD_IP}}\n"
+			dbfactory.AppConfigFile(ctx, appConfigFileStore, &dbfactory.AppConfigFileOpts{
+				AppID:      app.ID,
+				EnvName:    appcfg.EnvNameDefault,
+				Name:       "plain-env",
+				ConfigKind: appcfg.ConfigKindPlain,
+				MountPath:  "/data/app/conf/plain.env",
+				Format:     appcfg.FileFormat("env"),
+				Content:    &plainContent,
+			})
+
+			builder := workload.NewBuilder(builderSvc, app, appModel)
+			result, err := builder.Build(ctx, appEnv)
+			Expect(err).NotTo(HaveOccurred())
+
+			extraObjs := result.ExtraObjects
+			Expect(extraObjs).To(HaveLen(1))
+			configMapData := extraObjs[0].Object["data"].(map[string]any)
+			Expect(configMapData).To(HaveKeyWithValue("00-trpc_go.yaml", "server:\n  region: ap-guangzhou"))
+			Expect(configMapData).To(HaveKeyWithValue(
+				"01-plain.env",
+				"REGION=ap-guangzhou\nPOD_IP=__#VAR_PLACEHOLDER#__BKMS_POD_IP__",
+			))
+
+			container := result.GameDeployment.Spec.Template.Spec.Containers[0]
+			Expect(container.VolumeMounts).To(HaveLen(2))
+			Expect(container.VolumeMounts[0].MountPath).To(Equal("/etc/trpc/trpc_go.yaml"))
+			Expect(container.VolumeMounts[1].MountPath).To(Equal("/data/app/conf/plain.env"))
+
+			initContainer := result.GameDeployment.Spec.Template.Spec.InitContainers[0]
+			Expect(initContainer.Command[2]).To(ContainSubstring(
+				"cp '/trpc-config-template/01-plain.env' '/trpc-config-rendered/01-plain.env'",
+			))
+		})
+
+		It("should fail when a plain config file reuses the framework mount path", func() {
+			app, appModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
+				AppStore:                  appStore,
+				AppModelStore:             appModelStore,
+				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileVersionStore: appConfigFileVersionStore,
+				BuildConfigStore:          buildConfigStore,
+			}, &dbfactory.TrpcApplicationOpts{
+				TrpcConfig: &appmodel.TrpcConfig{
+					FileName:    "trpc_go.yaml",
+					FilePath:    "/etc/trpc",
+					Language:    "go",
+					FileContent: "server:\n  region: ap-guangzhou\n",
+				},
+			})
+			appEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+
+			plainContent := "REGION=ap-guangzhou\n"
+			dbfactory.AppConfigFile(ctx, appConfigFileStore, &dbfactory.AppConfigFileOpts{
+				AppID:      app.ID,
+				EnvName:    appcfg.EnvNameDefault,
+				Name:       "plain-env",
+				ConfigKind: appcfg.ConfigKindPlain,
+				MountPath:  "/etc/trpc/trpc_go.yaml",
+				Format:     appcfg.FileFormat("env"),
+				Content:    &plainContent,
+			})
+
+			builder := workload.NewBuilder(builderSvc, app, appModel)
+			_, err := builder.Build(ctx, appEnv)
+			Expect(err).To(MatchError(ContainSubstring("duplicate config mount path")))
 		})
 	})
 
@@ -257,7 +358,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			Expect(extraObjs).To(HaveLen(1))
 
 			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["trpc_go.yaml"].(string)
+			configContent := configMapData[runtimeRenderedAlias(0, "trpc_go.yaml")].(string)
 			expectYAMLValue := func(expected any, path ...any) {
 				actual, err := testutil.YAMLValueAt(configContent, path...)
 				Expect(err).NotTo(HaveOccurred())
@@ -420,7 +521,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			for _, obj := range extraObjs {
 				if obj.GetKind() == "ConfigMap" {
 					data := obj.Object["data"].(map[string]any)
-					if v, ok := data["trpc_go.yaml"]; ok {
+					if v, ok := data[runtimeRenderedAlias(0, "trpc_go.yaml")]; ok {
 						configContent = v.(string)
 					}
 				}
@@ -473,7 +574,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			for _, obj := range extraObjs {
 				if obj.GetKind() == "ConfigMap" {
 					data := obj.Object["data"].(map[string]any)
-					if v, ok := data["trpc_go.yaml"]; ok {
+					if v, ok := data[runtimeRenderedAlias(0, "trpc_go.yaml")]; ok {
 						configContent = v.(string)
 					}
 				}

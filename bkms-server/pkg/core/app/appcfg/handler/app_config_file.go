@@ -36,7 +36,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/arrangement"
 )
 
 var _ appcfg.Handler = (*Handler)(nil)
@@ -80,7 +79,8 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 		return
 	}
 
-	baseID, err := h.validateBaseAppConfigFileID(ctx, app.ID, input.Type, input.BaseAppConfigFileID)
+	configKind := normalizeConfigKind(input.ConfigKind)
+	baseID, err := h.validateBaseAppConfigFileID(ctx, app.ID, configKind, input.Type, input.BaseAppConfigFileID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validate baseAppConfigFileID"))
 		return
@@ -88,7 +88,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 
 	fileFormat := appcfg.FileFormat(input.FileFormat)
 	sourceType := appcfg.ContentSourceType(input.ContentSourceType)
-	bscpCfg, err := h.validateBSCPConfig(ctx, sourceType, input.BscpConfig, fileFormat)
+	bscpCfg, err := h.validateBSCPConfig(ctx, configKind, sourceType, input.BscpConfig, fileFormat)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validate BSCP config"))
 		return
@@ -113,6 +113,10 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 			Type:                appcfg.AppConfigFileType(input.Type),
 			ContentSourceType:   sourceType,
 			Format:              fileFormat,
+			ConfigKind:          configKind,
+			MountPath:           input.MountPath,
+			IsUnifiedConfig:     true, // 新建文件始终为统一配置，独立配置需后续通过 env-config-policy 接口开启
+			MountedEnvNames:     input.MountedEnvNames,
 			BaseAppConfigFileID: baseID,
 			BSCPConfig:          bscpCfg,
 			Creator:             creator,
@@ -120,6 +124,11 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 		},
 	)
 	if err != nil {
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) ||
+			errors.Is(err, appcfg.ErrPlainConfigMountPathConflict) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "creating app config file"))
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating app config file"))
 		return
 	}
@@ -161,25 +170,11 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	}
 	oldAcf := *acf
 
-	if input.BaseAppConfigFileID != "" {
-		baseID, vErr := h.validateBaseAppConfigFileID(ctx, app.ID, string(acf.Type), input.BaseAppConfigFileID)
-		if vErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(vErr, bkerrs.ErrCodeInvalidArgument, "validate baseAppConfigFileID"))
-			return
-		}
-		acf.BaseAppConfigFileID = baseID
+	if err = h.applyUpdateInputToConfigFile(ctx, app.ID, acf, input); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "apply update input"))
+		return
 	}
 
-	if input.BscpConfig != nil {
-		bscpCfg, vErr := h.validateBSCPConfig(ctx, acf.ContentSourceType, input.BscpConfig, acf.GetConfigFormat())
-		if vErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(vErr, bkerrs.ErrCodeInvalidArgument, "validate BSCP config"))
-			return
-		}
-		acf.BSCPConfig = bscpCfg
-	}
-
-	acf.Name = input.Name
 	operator := auth.MustGetUser(ctx).ID
 	cfgService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
@@ -199,7 +194,118 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex()))
 			return
 		}
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) ||
+			errors.Is(err, appcfg.ErrPlainConfigMountPathConflict) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "create app config file version"))
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create app config file version"))
+		return
+	}
+
+	h.addAppConfigFileAudit(
+		ctx,
+		app,
+		acf.EnvName,
+		audit.OperationTypeUpdate,
+		buildAppConfigFileAuditData(&oldAcf),
+		buildAppConfigFileAuditData(acf),
+	)
+	ginutils.OK(c, slz.UpdateAppConfigFileOutput{
+		Item: new(slz.AppConfigFileOutputObj).FromModel(*acf),
+	})
+}
+
+func (h *Handler) applyUpdateInputToConfigFile(
+	ctx context.Context,
+	appID string,
+	acf *appcfg.AppConfigFile,
+	input slz.UpdateAppConfigFileInput,
+) error {
+	if input.BaseAppConfigFileID != "" {
+		baseID, err := h.validateBaseAppConfigFileID(
+			ctx, appID, acf.GetConfigKind(), string(acf.Type), input.BaseAppConfigFileID,
+		)
+		if err != nil {
+			return err
+		}
+		acf.BaseAppConfigFileID = baseID
+	}
+	if input.BscpConfig != nil {
+		bscpCfg, err := h.validateBSCPConfig(
+			ctx, acf.GetConfigKind(), acf.ContentSourceType, input.BscpConfig, acf.GetConfigFormat(),
+		)
+		if err != nil {
+			return err
+		}
+		acf.BSCPConfig = bscpCfg
+	}
+	acf.Name = input.Name
+	if input.MountPath != "" {
+		acf.MountPath = input.MountPath
+	}
+	if input.FileFormat != "" {
+		acf.Format = appcfg.FileFormat(input.FileFormat)
+	}
+	return nil
+}
+
+// UpdateAppConfigFileEnvConfig 修改一个应用配置文件的环境配置模式。
+//
+//	@ID				UpdateAppConfigFileEnvConfig
+//	@Summary		修改一个应用配置文件的环境配置模式
+//	@Tags			app-config-files
+//	@Accept			json
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			appID	path		string										true	"应用 ID"
+//	@Param			id		path		string										true	"默认配置文件 ID（envName=__default__ 的记录）"
+//	@Param			body	body		slz.UpdateAppConfigFileEnvConfigInput	true	"修改环境配置模式请求"
+//	@Success		200		{object}	slz.UpdateAppConfigFileOutput
+//	@Failure		400		{object}	bkerrs.GinErrorOutput
+//	@Router			/apps/{appID}/app-config-files/{id}/env-config-policy [put]
+func (h *Handler) UpdateAppConfigFileEnvConfig(c *gin.Context) {
+	var uriInput slz.AppConfigFileURIInput
+	var input slz.UpdateAppConfigFileEnvConfigInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	app, acf, err := h.validateAndGetAppConfigFile(ctx, uriInput.AppID, uriInput.ID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	oldAcf := *acf
+
+	cfgService := appcfg.NewAppConfigFileService(
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileVersionStore,
+	)
+	err = cfgService.UpdateEnvConfig(ctx, acf, appcfg.UpdateEnvConfigParams{
+		IsUnifiedConfig:        input.IsUnifiedConfig,
+		MountedEnvNames:        input.MountedEnvNames,
+		FallbackConfigEnv:      input.FallbackConfigEnv,
+		Operator:               auth.MustGetUser(ctx).ID,
+		Description:            input.Description,
+		ExpectedCurrentVersion: input.CurrentVersion,
+	})
+	if err != nil {
+		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
+			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex()))
+			return
+		}
+		if errors.Is(err, appcfg.ErrEnvConfigRequiresDefaultFile) ||
+			errors.Is(err, appcfg.ErrInvalidConfigSpec) ||
+			errors.Is(err, appcfg.ErrPlainConfigMountPathConflict) ||
+			errors.Is(err, appcfg.ErrFallbackRequiresIndependentConfig) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "update env config"))
+			return
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update env config"))
 		return
 	}
 
@@ -304,6 +410,10 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 	)
 	oldAcf, err := cfgService.DeleteFile(ctx, app.ID, id)
 	if err != nil {
+		if errors.Is(err, appcfg.ErrPlainEnvInstanceDeleteNotAllowed) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "deleting app config file"))
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "deleting app config file"))
 		return
 	}
@@ -395,7 +505,7 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			appID	path		string										true	"应用 ID"
-//	@Param			id		path		string										true	"应用配置文件 ID"
+//	@Param			id		path		string										true	"默认配置文件或环境实例文件 ID"
 //	@Param			body	body		slz.UpdateAppConfigFileContentInput	true	"修改应用配置文件 Content 请求"
 //	@Success		200		{object}	slz.UpdateAppConfigFileContentOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
@@ -416,6 +526,7 @@ func (h *Handler) UpdateAppConfigFileContent(c *gin.Context) {
 		appcfg.AppConfigFileTypeNormal,
 		input.Description,
 		input.CurrentVersion,
+		input.EnvName,
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
@@ -434,7 +545,7 @@ func (h *Handler) UpdateAppConfigFileContent(c *gin.Context) {
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			appID	path		string												true	"应用 ID"
-//	@Param			id		path		string												true	"应用配置文件 ID"
+//	@Param			id		path		string												true	"overlay 类型配置文件 ID"
 //	@Param			body	body		slz.UpdateAppConfigFileOverlayContentInput	true	"overlayContent 请求"
 //	@Success		200		{object}	slz.UpdateAppConfigFileContentOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
@@ -455,6 +566,7 @@ func (h *Handler) UpdateAppConfigFileOverlayContent(c *gin.Context) {
 		appcfg.AppConfigFileTypeOverlay,
 		input.Description,
 		input.CurrentVersion,
+		"",
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
@@ -502,6 +614,14 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get base app config file"))
 		return
 	}
+	if baseFile.GetConfigKind() == appcfg.ConfigKindPlain {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(
+			pkgerrors.Wrap(appcfg.ErrInvalidConfigSpec, "plain config does not support overlay content"),
+			bkerrs.ErrCodeInvalidArgument,
+			"preview overlay merge",
+		))
+		return
+	}
 
 	virtualConfig := &appcfg.AppConfigFile{
 		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
@@ -509,10 +629,11 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 			ContentSourceType:   appcfg.ContentSourceTypeLocal,
 			BaseAppConfigFileID: &baseID,
 			OverlayContent:      &input.OverlayContent,
+			ConfigKind:          baseFile.GetConfigKind(),
 			Format:              baseFile.GetConfigFormat(),
 		},
 	}
-	if validateErr := validateFileContent(input.OverlayContent, baseFile.GetConfigFormat()); validateErr != nil {
+	if validateErr := validateFrameworkFileContent(input.OverlayContent); validateErr != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate overlayContent"))
 		return
 	}
@@ -537,13 +658,8 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 // - fileType: selects whether the incoming payload should update `content` or `overlayContent`.
 // - description/expectedCurrentVersion: participate in version creation when persisting changes.
 func (h *Handler) updateContentOrOverlay(
-	ctx context.Context,
-	appID string,
-	id string,
-	content string,
-	fileType appcfg.AppConfigFileType,
-	description string,
-	expectedCurrentVersion *int64,
+	ctx context.Context, appID, id, content string, fileType appcfg.AppConfigFileType,
+	description string, expectedCurrentVersion *int64, envName string,
 ) (*slz.UpdateAppConfigFileContentOutput, error) {
 	if fileType != appcfg.AppConfigFileTypeNormal && fileType != appcfg.AppConfigFileTypeOverlay {
 		return nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid values file type: %s", fileType)
@@ -552,17 +668,36 @@ func (h *Handler) updateContentOrOverlay(
 	if err != nil {
 		return nil, err
 	}
-	oldAcf := *acf
-
-	if validateErr := validateFileContent(content, acf.GetConfigFormat()); validateErr != nil {
-		return nil, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate file content")
+	if acf.GetConfigKind() == appcfg.ConfigKindPlain && fileType == appcfg.AppConfigFileTypeOverlay {
+		return nil, bkerrs.Wrap(
+			pkgerrors.Wrap(appcfg.ErrInvalidConfigSpec, "plain config does not support overlay content"),
+			bkerrs.ErrCodeInvalidArgument, "setting content")
 	}
-
+	cfgService := appcfg.NewAppConfigFileService(h.registry.AppConfigFileStore, h.registry.AppConfigFileVersionStore)
+	operator := auth.MustGetUser(ctx).ID
+	// plain 独立配置模式下，若指定了 envName 且该环境尚无独立实例记录，
+	// 则以当前请求内容为初始值新建一条环境级实例，使该环境脱离对默认配置的引用。
+	if envName != "" && acf.GetConfigKind() == appcfg.ConfigKindPlain &&
+		acf.EnvName == appcfg.EnvNameDefault && acf.HasIndependentEnvConfig() {
+		envAcf, lazyErr := h.lazyCreatePlainEnvInstance(
+			ctx, cfgService, acf, envName, content, operator, description)
+		if lazyErr != nil {
+			return nil, lazyErr
+		}
+		if envAcf != nil {
+			return &slz.UpdateAppConfigFileContentOutput{CompiledContent: content}, nil
+		}
+	}
+	oldAcf := *acf
+	if acf.GetConfigKind() == appcfg.ConfigKindFramework {
+		if validateErr := validateFrameworkFileContent(content); validateErr != nil {
+			return nil, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate file content")
+		}
+	}
 	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, acf)
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "creating values file editor")
 	}
-
 	if fileType == appcfg.AppConfigFileTypeNormal {
 		err = editor.SetContent(content)
 	} else {
@@ -571,58 +706,66 @@ func (h *Handler) updateContentOrOverlay(
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "setting content")
 	}
-
 	compiledContent, err := editor.GetCompiledContent(ctx)
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "compiling new content")
 	}
-
-	arranger := arrangement.NewAppArranger(h.registry.AppStore)
-	validatedRet, err := arranger.ValidateFileContent(ctx, app, []byte(compiledContent), acf.GetConfigFormat())
-	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating file content")
+	validatedRet, vErr := h.validateFrameworkArrangement(ctx, app, acf, compiledContent)
+	if vErr != nil {
+		return nil, vErr
 	}
-
-	operator := auth.MustGetUser(ctx).ID
-	cfgService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileVersionStore,
-	)
-	if err = cfgService.UpdateFile(
-		ctx,
-		acf,
-		operator,
-		appcfg.UpdateCfgFileOptions{
-			OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
-			Description:            description,
-			ExpectedCurrentVersion: expectedCurrentVersion,
-		},
-	); err != nil {
+	if err = cfgService.UpdateFile(ctx, acf, operator, appcfg.UpdateCfgFileOptions{
+		OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
+		Description:            description,
+		ExpectedCurrentVersion: expectedCurrentVersion,
+	}); err != nil {
 		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
 			return nil, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex())
 		}
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) ||
+			errors.Is(err, appcfg.ErrPlainConfigMountPathConflict) {
+			return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "create app config file version")
+		}
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create app config file version")
 	}
-	h.addAppConfigFileAudit(
-		ctx,
-		app,
-		acf.EnvName,
-		audit.OperationTypeUpdate,
-		buildAppConfigFileAuditData(&oldAcf),
-		buildAppConfigFileAuditData(acf),
-	)
+	h.addAppConfigFileAudit(ctx, app, acf.EnvName, audit.OperationTypeUpdate,
+		buildAppConfigFileAuditData(&oldAcf), buildAppConfigFileAuditData(acf))
+	return &slz.UpdateAppConfigFileContentOutput{CompiledContent: compiledContent, ArrgData: validatedRet}, nil
+}
 
-	return &slz.UpdateAppConfigFileContentOutput{
-		CompiledContent: compiledContent,
-		ArrgData: &slz.ValidateArrgValuesYAMLOutputObj{
-			WorkloadImage: &slz.ArrgResultItemOutputObj{
-				Status:        string(validatedRet.WorkloadImage.Status),
-				SkippedReason: validatedRet.WorkloadImage.SkippedReason,
-			},
-			IngressDomain: &slz.ArrgResultItemOutputObj{
-				Status:        string(validatedRet.IngressDomain.Status),
-				SkippedReason: validatedRet.IngressDomain.SkippedReason,
-			},
-		},
-	}, nil
+// lazyCreatePlainEnvInstance 在 plain 独立配置模式下，当目标环境没有独立实例时，
+// 以请求内容为初始值新建一条环境级实例记录，使该环境脱离对默认配置的引用。
+// 返回 nil 表示该环境已有独立实例，调用方应走普通更新逻辑。
+func (h *Handler) lazyCreatePlainEnvInstance(
+	ctx context.Context,
+	cfgService *appcfg.AppConfigFileService,
+	defaultFile *appcfg.AppConfigFile,
+	envName string,
+	content string,
+	operator string,
+	description string,
+) (*appcfg.AppConfigFile, error) {
+	// 查找该环境是否已有属于同一逻辑文件的独立实例。
+	allFiles, err := h.registry.AppConfigFileStore.List(ctx, defaultFile.AppID)
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list files for lazy create")
+	}
+	for _, item := range allFiles {
+		if item.EnvName != envName {
+			continue
+		}
+		rootID, ok := item.GetLogicalRootID(item.ID)
+		if ok && rootID == defaultFile.ID {
+			// 已有独立实例，返回 nil 让调用方走普通更新逻辑。
+			return nil, nil
+		}
+	}
+	// 该环境尚无独立实例，以请求内容为初始值创建一条新记录。
+	envAcf, err := cfgService.CreatePlainEnvInstance(
+		ctx, *defaultFile, envName, &content, operator, description,
+	)
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "lazy create plain env instance")
+	}
+	return envAcf, nil
 }

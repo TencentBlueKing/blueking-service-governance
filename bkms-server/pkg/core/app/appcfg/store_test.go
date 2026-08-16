@@ -181,6 +181,32 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		})
 	})
 
+	Context("GetByAppAndMountPath", func() {
+		It("should return the plain config file matched by mountPath", func() {
+			content := "KEY=VALUE"
+			plainFile := appcfg.AppConfigFile{
+				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+					AppID:             appID,
+					Name:              "custom-env",
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+					ConfigKind:        appcfg.ConfigKindPlain,
+					MountPath:         "/data/app/conf/custom.env",
+					Format:            appcfg.FileFormat("env"),
+				},
+			}
+			_, err := store.Add(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := store.GetByAppAndMountPath(ctx, appID, "/data/app/conf/custom.env")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Name).To(Equal("custom-env"))
+			Expect(got.GetConfigKind()).To(Equal(appcfg.ConfigKindPlain))
+			Expect(got.MountPath).To(Equal("/data/app/conf/custom.env"))
+		})
+	})
+
 	Context("Update", func() {
 		It("should updateFieldsWithVersionCheck an existing app config file", func() {
 			// Add an initial app config file
