@@ -20,6 +20,7 @@ package workload_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -65,6 +66,10 @@ type WorkloadTestCase struct {
 	ConfigVolumeName string // 配置模板 volume 名称，如 "trpc-config-template" 或 "taf-config-template"
 	ExtraVolumeCount int    // plugin 产生的额外 volume 数量（如 TAF 有 emptyDir 用于渲染）
 	FileFormat       appcfg.FileFormat
+}
+
+func runtimeRenderedAlias(index int, fileName string) string {
+	return fmt.Sprintf("%02d-%s", index, fileName)
 }
 
 // 定义测试用例
@@ -550,7 +555,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			var configMap corev1.ConfigMap
 			err = runtime.DefaultUnstructuredConverter.FromUnstructured(extraObjs[0].Object, &configMap)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(configMap.Data[tc.ConfigFileName]).To(Equal(tc.ConfigContent))
+			Expect(configMap.Data[runtimeRenderedAlias(0, tc.ConfigFileName)]).To(Equal(tc.ConfigContent))
 		},
 		Entry("TRPC workload", workloadTestCases[0]),
 		Entry("TAF workload", workloadTestCases[1]),

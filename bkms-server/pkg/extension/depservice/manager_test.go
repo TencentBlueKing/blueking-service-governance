@@ -29,6 +29,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/fake"
@@ -55,6 +56,9 @@ var _ = Describe("ServiceManager", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		fake.Reset()
+		Expect(testutil.CleanupCollection("depservice_services")).To(Succeed())
+		Expect(testutil.CleanupCollection("depservice_instances")).To(Succeed())
+		Expect(testutil.CleanupCollection("depservice_bindings")).To(Succeed())
 
 		diApp = fxtest.New(
 			GinkgoT(),

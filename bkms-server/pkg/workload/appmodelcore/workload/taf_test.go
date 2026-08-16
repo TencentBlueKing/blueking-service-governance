@@ -160,7 +160,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 
 			// Verify ConfigMap contains default content
 			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["taf_config.conf"].(string)
+			configContent := configMapData[runtimeRenderedAlias(0, "taf_config.conf")].(string)
 			expectedDefaultContent := "<taf>\n  <application>\n    <server>\n" +
 				"      logpath=/data/log\n      timeout=3000\n    </server>\n  </application>\n</taf>\n"
 			Expect(configContent).To(Equal(expectedDefaultContent))
@@ -192,7 +192,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 
 			// Verify ConfigMap contains prod-specific content (merged with default)
 			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["taf_config.conf"].(string)
+			configContent := configMapData[runtimeRenderedAlias(0, "taf_config.conf")].(string)
 			// TAF merge should have prod-specific logpath but keep default timeout
 			Expect(configContent).To(ContainSubstring("logpath=/data/prod/log"))
 			Expect(configContent).To(ContainSubstring("timeout=3000"))
@@ -201,6 +201,87 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			Expect(gd.Spec.Template.Spec.Containers).To(HaveLen(1))
 			container := gd.Spec.Template.Spec.Containers[0]
 			Expect(container.VolumeMounts).To(HaveLen(1))
+		})
+	})
+
+	// TAF 配置变量渲染测试
+	Context("Test Build with plain app config files", func() {
+		var app *bkmsapp.Application
+		var prodEnv *envmodel.Environment
+		var testEnv *envmodel.Environment
+		var appModel *appmodel.AppModel
+
+		AfterEach(func() {
+			if app != nil {
+				_, _ = appConfigFileStore.DeleteByApp(ctx, app.ID)
+			}
+		})
+
+		It("should skip plain config files for environments outside the mount scope", func() {
+			app, appModel = dbfactory.TafApplication(ctx, &dbfactory.TafApplicationStores{
+				AppStore:                  appStore,
+				AppModelStore:             appModelStore,
+				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileVersionStore: appConfigFileVersionStore,
+				BuildConfigStore:          buildConfigStore,
+			}, &dbfactory.TafApplicationOpts{
+				TafConfig: &appmodel.TafConfig{
+					FileName:    "taf_config.conf",
+					FilePath:    "/etc/taf",
+					FileContent: "<taf>\n  region=${{env.REGION}}\n</taf>\n",
+				},
+				EnvVars: []appmodel.Variable{
+					{Key: "REGION", Value: "ap-guangzhou"},
+				},
+			})
+			prodEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+			testEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+
+			defaultContent := "REGION=${{env.REGION}}\n"
+			root := dbfactory.AppConfigFile(ctx, appConfigFileStore, &dbfactory.AppConfigFileOpts{
+				AppID:           app.ID,
+				EnvName:         appcfg.EnvNameDefault,
+				Name:            "plain-env",
+				ConfigKind:      appcfg.ConfigKindPlain,
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{prodEnv.Name},
+				MountPath:       "/data/app/conf/plain.env",
+				Format:          appcfg.FileFormat("env"),
+				Content:         &defaultContent,
+			})
+			prodContent := "REGION=${{env.REGION}}\nPOD_NAME=${{env.BKMS_POD_NAME}}\n"
+			dbfactory.AppConfigFile(ctx, appConfigFileStore, &dbfactory.AppConfigFileOpts{
+				AppID:                  app.ID,
+				EnvName:                prodEnv.Name,
+				Name:                   "plain-env--prod",
+				ConfigKind:             appcfg.ConfigKindPlain,
+				DefaultAppConfigFileID: &root.ID,
+				MountPath:              "/data/app/conf/plain.env",
+				Format:                 appcfg.FileFormat("env"),
+				Content:                &prodContent,
+			})
+
+			builder := workload.NewBuilder(builderSvc, app, appModel)
+
+			prodResult, err := builder.Build(ctx, prodEnv)
+			Expect(err).NotTo(HaveOccurred())
+			prodConfigMapData := prodResult.ExtraObjects[0].Object["data"].(map[string]any)
+			Expect(prodConfigMapData).To(HaveKeyWithValue(
+				"01-plain.env",
+				"REGION=ap-guangzhou\nPOD_NAME=__#VAR_PLACEHOLDER#__BKMS_POD_NAME__",
+			))
+			prodContainer := prodResult.GameDeployment.Spec.Template.Spec.Containers[0]
+			Expect(prodContainer.VolumeMounts).To(HaveLen(2))
+			Expect(prodContainer.VolumeMounts[1].MountPath).To(Equal("/data/app/conf/plain.env"))
+
+			testResult, err := builder.Build(ctx, testEnv)
+			Expect(err).NotTo(HaveOccurred())
+			testConfigMapData := testResult.ExtraObjects[0].Object["data"].(map[string]any)
+			Expect(testConfigMapData).To(HaveKey("00-taf_config.conf"))
+			Expect(testConfigMapData).NotTo(HaveKey("01-plain.env"))
+			testContainer := testResult.GameDeployment.Spec.Template.Spec.Containers[0]
+			Expect(testContainer.VolumeMounts).To(HaveLen(1))
+			Expect(testContainer.VolumeMounts[0].MountPath).To(Equal("/etc/taf/taf_config.conf"))
 		})
 	})
 
@@ -246,7 +327,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			Expect(extraObjs).To(HaveLen(1))
 
 			configMapData := extraObjs[0].Object["data"].(map[string]interface{})
-			configContent := configMapData["taf_config.conf"].(string)
+			configContent := configMapData[runtimeRenderedAlias(0, "taf_config.conf")].(string)
 
 			// 内置变量应被渲染为实际值
 			Expect(configContent).To(ContainSubstring("app=" + app.Name))

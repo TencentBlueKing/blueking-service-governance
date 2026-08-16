@@ -21,6 +21,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"strings"
 
 	pkgerrors "github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -33,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/arrangement"
 )
 
 func (h *Handler) validateAndGetAppConfigFile(
@@ -60,9 +62,13 @@ func (h *Handler) validateAndGetAppConfigFile(
 func (h *Handler) validateBaseAppConfigFileID(
 	ctx context.Context,
 	appID string,
+	configKind appcfg.ConfigKind,
 	fileType string,
 	baseID string,
 ) (*bson.ObjectID, error) {
+	if configKind == appcfg.ConfigKindPlain {
+		return nil, nil
+	}
 	if appcfg.AppConfigFileType(fileType) != appcfg.AppConfigFileTypeOverlay {
 		return nil, nil
 	}
@@ -89,10 +95,17 @@ func (h *Handler) validateBaseAppConfigFileID(
 
 func (h *Handler) validateBSCPConfig(
 	ctx context.Context,
+	configKind appcfg.ConfigKind,
 	sourceType appcfg.ContentSourceType,
 	cfg *slz.BSCPAppConfigFileConfig,
 	fileFormat appcfg.FileFormat,
 ) (*appcfg.BSCPConfig, error) {
+	if configKind == appcfg.ConfigKindPlain {
+		if sourceType == appcfg.ContentSourceTypeBSCP {
+			return nil, pkgerrors.Wrap(appcfg.ErrInvalidConfigSpec, "plain config only supports local content source")
+		}
+		return nil, nil
+	}
 	if sourceType != appcfg.ContentSourceTypeBSCP {
 		return nil, nil
 	}
@@ -120,7 +133,7 @@ func (h *Handler) validateBSCPConfig(
 	if err != nil {
 		return nil, pkgerrors.Wrap(err, "get bscp service config content")
 	}
-	if err = validateFileContent(content, fileFormat); err != nil {
+	if err = validateFrameworkFileContent(content); err != nil {
 		return nil, pkgerrors.Wrap(err, "validate values file content")
 	}
 
@@ -132,7 +145,17 @@ func (h *Handler) validateBSCPConfig(
 	}, nil
 }
 
-func validateFileContent(content string, format appcfg.FileFormat) error {
+// normalizeConfigKind normalizes the incoming configKind and applies the framework default.
+func normalizeConfigKind(raw string) appcfg.ConfigKind {
+	kind := appcfg.ConfigKind(strings.ToLower(strings.TrimSpace(raw)))
+	if kind == "" {
+		return appcfg.ConfigKindFramework
+	}
+	return kind
+}
+
+// validateFrameworkFileContent validates framework file content syntax.
+func validateFrameworkFileContent(content string) error {
 	if content == "" {
 		return nil
 	}
@@ -142,4 +165,32 @@ func validateFileContent(content string, format appcfg.FileFormat) error {
 		return pkgerrors.Wrap(err, "values file content is not valid yaml")
 	}
 	return nil
+}
+
+// validateFrameworkArrangement 对 framework 类型配置文件执行编排校验，返回校验结果。
+// 非 framework 类型直接返回 nil。
+func (h *Handler) validateFrameworkArrangement(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	acf *appcfg.AppConfigFile,
+	compiledContent string,
+) (*slz.ValidateArrgValuesYAMLOutputObj, error) {
+	if acf.GetConfigKind() != appcfg.ConfigKindFramework {
+		return nil, nil
+	}
+	arranger := arrangement.NewAppArranger(h.registry.AppStore)
+	ret, err := arranger.ValidateFileContent(ctx, app, []byte(compiledContent), acf.GetConfigFormat())
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating file content")
+	}
+	return &slz.ValidateArrgValuesYAMLOutputObj{
+		WorkloadImage: &slz.ArrgResultItemOutputObj{
+			Status:        string(ret.WorkloadImage.Status),
+			SkippedReason: ret.WorkloadImage.SkippedReason,
+		},
+		IngressDomain: &slz.ArrgResultItemOutputObj{
+			Status:        string(ret.IngressDomain.Status),
+			SkippedReason: ret.IngressDomain.SkippedReason,
+		},
+	}, nil
 }

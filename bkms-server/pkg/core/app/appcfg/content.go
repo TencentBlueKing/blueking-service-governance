@@ -27,9 +27,15 @@ import (
 // ErrNoConfigFileFound is returned when no config file is found for the given criteria.
 var ErrNoConfigFileFound = errors.New("no config file found")
 
-// GetEnvContent retrieves the selected config file and its compiled content with priority:
-// 1. Environment-specific config (envName = current environment name)
-// 2. Application-level default config (envName = "")
+// PlainConfigFileContent describes one plain config file selected for the current environment.
+type PlainConfigFileContent struct {
+	File    AppConfigFile
+	Content string
+}
+
+// GetEnvContent retrieves the framework config file selected for an app environment with priority:
+// 1. Environment-specific framework config (envName = current environment name)
+// 2. Application-level default framework config (envName = "")
 //
 // Returns:
 // - The selected logical config file
@@ -41,8 +47,11 @@ func GetEnvContent(
 	store AppConfigFileStore,
 	appID, envName string,
 ) (*AppConfigFile, string, error) {
+	defaultAcf, defaultContent, defaultErr := getFrameworkConfigFileAndCompiledContent(
+		ctx, store, appID, EnvNameDefault,
+	)
 	// 1. Try environment-specific config
-	acf, content, err := getConfigFileAndCompiledContent(ctx, store, appID, envName)
+	acf, content, err := getFrameworkConfigFileAndCompiledContent(ctx, store, appID, envName)
 	if err == nil {
 		return acf, content, nil
 	}
@@ -51,15 +60,18 @@ func GetEnvContent(
 	}
 
 	// 2. Fall back to app-level default config
-	acf, content, err = getConfigFileAndCompiledContent(ctx, store, appID, EnvNameDefault)
-	if err != nil {
-		return nil, "", errors.Wrapf(err, "getting app-level config for app %s", appID)
+	if defaultErr == nil {
+		return defaultAcf, defaultContent, nil
 	}
-	return acf, content, nil
+	if !errors.Is(defaultErr, ErrNoConfigFileFound) {
+		return nil, "", errors.Wrapf(defaultErr, "getting app-level config for app %s", appID)
+	}
+	return nil, "", errors.Wrapf(ErrNoConfigFileFound, "getting app-level config for app %s", appID)
 }
 
-// getConfigFileAndCompiledContent retrieves the config file for an app environment and compiles its content.
-func getConfigFileAndCompiledContent(
+// getFrameworkConfigFileAndCompiledContent retrieves the framework config file
+// for an app environment and compiles its content.
+func getFrameworkConfigFileAndCompiledContent(
 	ctx context.Context,
 	store AppConfigFileStore,
 	appID, envName string,
@@ -68,14 +80,20 @@ func getConfigFileAndCompiledContent(
 	if err != nil {
 		return nil, "", errors.Wrapf(err, "list config files for app %s env %s", appID, envName)
 	}
-	if len(configFiles) == 0 {
+	frameworkFiles := make([]AppConfigFile, 0, len(configFiles))
+	for _, item := range configFiles {
+		if item.GetConfigKind() == ConfigKindFramework {
+			frameworkFiles = append(frameworkFiles, item)
+		}
+	}
+	if len(frameworkFiles) == 0 {
 		return nil, "", ErrNoConfigFileFound
 	}
-	if len(configFiles) > 1 {
+	if len(frameworkFiles) > 1 {
 		return nil, "", errors.Errorf("multiple config files found for app %s env %s", appID, envName)
 	}
 
-	acf := &configFiles[0]
+	acf := &frameworkFiles[0]
 	editor, err := NewAppConfigFileEditor(store, acf)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "creating app config file editor")
@@ -85,4 +103,76 @@ func getConfigFileAndCompiledContent(
 		return nil, "", errors.Wrap(err, "compiling app config file content")
 	}
 	return acf, content, nil
+}
+
+// ListEnvPlainContents 列出指定应用在目标环境下实际生效的 plain 配置文件内容。
+// 整体流程分 3 步：
+// 1. 先从应用全部配置文件里筛出 plain root 与各环境实例；
+// 2. 再根据当前 envName 判断每个 plain root 最终应选用哪条记录生效；
+// 3. 最后编译出这些生效记录的最终内容并返回。
+func ListEnvPlainContents(
+	ctx context.Context,
+	store AppConfigFileStore,
+	appID, envName string,
+) ([]PlainConfigFileContent, error) {
+	configFiles, err := store.List(ctx, appID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list config files for app %s", appID)
+	}
+
+	// 1. 先把 plain 默认记录和环境实例分开整理，方便后面按 root + envName 选中真正生效的记录。
+	plainRoots := make([]AppConfigFile, 0)
+	envFilesByRoot := make(map[string]map[string]AppConfigFile)
+	for _, item := range configFiles {
+		// 这里只关心 plain 文件；framework 文件由其他读取逻辑处理。
+		if item.GetConfigKind() != ConfigKindPlain {
+			continue
+		}
+		// 默认环境名为空的记录代表 plain 逻辑根文件。
+		if item.EnvName == EnvNameDefault {
+			plainRoots = append(plainRoots, item)
+			continue
+		}
+		// 其余 plain 记录视为环境实例，按所属根文件分组，便于后续按环境查找。
+		if item.DefaultAppConfigFileID == nil {
+			continue
+		}
+		rootID := item.DefaultAppConfigFileID.Hex()
+		if envFilesByRoot[rootID] == nil {
+			envFilesByRoot[rootID] = make(map[string]AppConfigFile)
+		}
+		envFilesByRoot[rootID][item.EnvName] = item
+	}
+
+	// 2. 逐个 root 判断当前环境下应该使用 root 自身，还是某条环境实例记录。
+	result := make([]PlainConfigFileContent, 0)
+	for _, root := range plainRoots {
+		target := root
+		if root.HasIndependentEnvConfig() {
+			if !root.IsMountedToEnv(envName) {
+				continue
+			}
+			// 引用模型：有独立 env instance 则使用，否则回退到默认记录内容（引用状态）。
+			envFiles := envFilesByRoot[root.ID.Hex()]
+			if envFile, ok := envFiles[envName]; ok {
+				target = envFile
+			}
+		}
+
+		// 3. 对选中的生效记录统一走编译流程，得到最终应返回给调用方的 plain 文件内容。
+		// 当前 plain 文件只支持本地内容来源，这里主要是复用编译流程与内容读取入口。
+		editor, editorErr := NewAppConfigFileEditor(store, &target)
+		if editorErr != nil {
+			return nil, errors.Wrap(editorErr, "creating app config file editor")
+		}
+		content, compileErr := editor.GetCompiledContent(ctx)
+		if compileErr != nil {
+			return nil, errors.Wrap(compileErr, "compiling app config file content")
+		}
+		result = append(result, PlainConfigFileContent{
+			File:    target,
+			Content: content,
+		})
+	}
+	return result, nil
 }

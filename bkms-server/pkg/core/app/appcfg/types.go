@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -73,6 +74,16 @@ const (
 
 // AllowedAppConfigFileTypes is the list of allowed app config file types.
 var AllowedAppConfigFileTypes = []AppConfigFileType{AppConfigFileTypeNormal, AppConfigFileTypeOverlay}
+
+// ConfigKind indicates the semantic kind of an app config file.
+type ConfigKind string
+
+const (
+	// ConfigKindFramework represents the existing framework-managed config file semantics.
+	ConfigKindFramework ConfigKind = "framework"
+	// ConfigKindPlain represents a plain text-like config file mounted as-is.
+	ConfigKindPlain ConfigKind = "plain"
+)
 
 // FileFormat indicates the format of the config file content.
 type FileFormat string
@@ -156,27 +167,43 @@ func (c *BSCPConfig) FetchContent(ctx context.Context) (string, error) {
 	return content, nil
 }
 
-// AppConfigFileContentSpec contains the shared content-related fields
-// between AppConfigFile and AppConfigFileVersion.
+// AppConfigFileContentSpec 包含 AppConfigFile 与 AppConfigFileVersion 共享的内容相关字段。
 type AppConfigFileContentSpec struct {
-	// AppID is the ID of the application which the app config file belongs to.
+	// AppID 是该应用配置文件所属应用的 ID。
 	AppID string `bson:"appID"`
-	// EnvName is the name of the environment which the app config file belongs to.
-	// Usage varies by application type:
-	// - For Helm apps: always empty
-	// - For tRPC apps: empty means app-level default, non-empty means env-specific config
+	// EnvName 是该应用配置文件所属环境的名称。
+	// 其使用方式会随应用类型不同而变化：
+	// - Helm 应用：始终为空
+	// - tRPC 应用：为空表示应用级默认配置，非空表示环境级配置
 	EnvName string `bson:"envName"`
 
-	// Name is the name of the app config file.
+	// Name 是应用配置文件名称。
 	Name string `bson:"name"`
-	// Type is the type of the app config file (normal or overlay).
+	// Type 表示应用配置文件类型（normal 或 overlay）。
 	Type AppConfigFileType `bson:"type"`
-	// ContentSourceType indicates where the content of the app config file comes from,
-	// can be either from the local storage or external system like BSCP.
+	// ContentSourceType 表示应用配置文件内容来源，
+	// 可以来自本地存储，也可以来自 BSCP 等外部系统。
 	ContentSourceType ContentSourceType `bson:"contentSourceType"`
-	// Format indicates the format of the config file (yaml, taf).
-	// Default is yaml if not specified.
+	// Format 表示配置文件格式（如 yaml、taf）。
+	// 未指定时默认按 yaml 处理。
 	Format FileFormat `bson:"format,omitempty"`
+	// ConfigKind 表示配置文件遵循 framework 语义还是 plain-file 语义。
+	// 历史记录如果没有该字段，则按 framework 文件处理。
+	ConfigKind ConfigKind `bson:"configKind,omitempty"`
+	// MountPath 是 plain 配置文件在容器内的完整挂载路径。
+	// Framework 文件仍然沿用 workload 层的 FilePath + FileName，而不使用该字段。
+	MountPath string `bson:"mountPath,omitempty"`
+	// DefaultAppConfigFileID 在当前记录是环境级 plain 实例时，指向其所属的默认逻辑文件。
+	// 默认逻辑文件自身不设置该字段，并使用自己的 ID 作为逻辑根。
+	DefaultAppConfigFileID *bson.ObjectID `bson:"rootAppConfigFileID,omitempty"`
+	// IsUnifiedConfig 表示当前逻辑文件是否为统一配置模式。
+	// true（或零值）= 所有挂载环境共用同一份内容；
+	// false = 按环境独立配置，每个环境各自维护一份内容副本。
+	// 该字段主要存储在默认逻辑文件记录上。
+	IsUnifiedConfig bool `bson:"isUnifiedConfig,omitempty"`
+	// MountedEnvNames 表示当前文件的挂载环境范围。
+	// nil = 对所有环境生效；非 nil 空切片 = 不挂载到任何环境；非空 = 仅对列出的环境生效。
+	MountedEnvNames []string `bson:"mountedEnvNames,omitempty"`
 
 	// BSCPConfig is BSCP resource config reference.
 	// This field is only set when ContentSourceType is bscp.
@@ -269,6 +296,50 @@ func (s *AppConfigFileContentSpec) GetConfigFormat() FileFormat {
 	return s.Format
 }
 
+// GetConfigKind returns the semantic kind of the app config file.
+// Historical records without configKind are treated as framework files.
+func (s *AppConfigFileContentSpec) GetConfigKind() ConfigKind {
+	// TODO: Remove this fallback after the configKind backfill migration is complete.
+	// Keep old records readable without requiring a data migration first.
+	if s.ConfigKind == "" {
+		return ConfigKindFramework
+	}
+	return s.ConfigKind
+}
+
+// HasIndependentEnvConfig 判断当前逻辑文件是否处于按环境独立配置模式。
+// 对于旧数据（IsUnifiedConfig 零值 false、无 env instance），进入独立分支后
+// 查不到 env instance 会回退到默认内容，行为与统一配置一致，无副作用。
+func (s *AppConfigFileContentSpec) HasIndependentEnvConfig() bool {
+	if s == nil {
+		return false
+	}
+	return !s.IsUnifiedConfig
+}
+
+// IsMountedToEnv 判断该逻辑文件是否应挂载到指定环境。
+// nil 表示对所有环境生效；非 nil 空切片表示不挂载到任何环境。
+func (s *AppConfigFileContentSpec) IsMountedToEnv(envName string) bool {
+	if s == nil {
+		return false
+	}
+	if s.MountedEnvNames == nil {
+		return true
+	}
+	return lo.Contains(s.MountedEnvNames, envName)
+}
+
+// GetLogicalRootID returns the logical-root config file ID when it is known.
+func (s *AppConfigFileContentSpec) GetLogicalRootID(selfID bson.ObjectID) (bson.ObjectID, bool) {
+	if s.DefaultAppConfigFileID != nil {
+		return *s.DefaultAppConfigFileID, true
+	}
+	if selfID != bson.NilObjectID {
+		return selfID, true
+	}
+	return bson.NilObjectID, false
+}
+
 // initializeContentFields init Content and OverlayContent
 // fields based on file type and content source type
 // refs: design_notes/multiple_values.md
@@ -310,18 +381,23 @@ type AppValuesConfig struct {
 
 // CreateCfgFileParams defines how to create an app config file.
 type CreateCfgFileParams struct {
-	AppID               string
-	EnvName             string
-	Name                string
-	Type                AppConfigFileType
-	ContentSourceType   ContentSourceType
-	Format              FileFormat
-	BaseAppConfigFileID *bson.ObjectID
-	BSCPConfig          *BSCPConfig
-	Content             *string
-	OverlayContent      *string
-	Creator             string
-	Description         string
+	AppID                  string
+	EnvName                string
+	Name                   string
+	Type                   AppConfigFileType
+	ContentSourceType      ContentSourceType
+	Format                 FileFormat
+	ConfigKind             ConfigKind
+	MountPath              string
+	DefaultAppConfigFileID *bson.ObjectID
+	IsUnifiedConfig        bool
+	MountedEnvNames        []string
+	BaseAppConfigFileID    *bson.ObjectID
+	BSCPConfig             *BSCPConfig
+	Content                *string
+	OverlayContent         *string
+	Creator                string
+	Description            string
 }
 
 // UpdateCfgFileOptions describes how to persist a file change.
@@ -333,5 +409,22 @@ type UpdateCfgFileOptions struct {
 	// 传入时后端会校验该版本号是否与数据库中当前版本号一致，不一致则返回冲突错误。
 	// 为 nil 时使用从数据库读取的当前版本号（兼容helm逻辑）。
 	// todo 待helm前端适配版本管理后移除兼容，改为必填内容
+	ExpectedCurrentVersion *int64
+}
+
+// UpdateEnvConfigParams 描述更新默认逻辑文件按环境配置策略时所需的参数。
+type UpdateEnvConfigParams struct {
+	// IsUnifiedConfig 目标配置模式，true = 统一配置，false = 按环境独立配置。
+	IsUnifiedConfig bool
+	// MountedEnvNames 挂载环境范围。nil = 全部环境；非 nil 空切片 = 不挂载到任何环境；非空 = 仅指定环境。
+	MountedEnvNames []string
+	// FallbackConfigEnv 回退为共用配置的环境名称。仅在 IsUnifiedConfig=false 时有效。
+	// 该环境的独立实例（若存在）将被删除，恢复为引用默认记录内容的状态。
+	FallbackConfigEnv string
+	// Operator 当前操作人，用于记录版本与审计信息。
+	Operator string
+	// Description 本次变更说明。
+	Description string
+	// ExpectedCurrentVersion 默认逻辑文件期望的当前版本号，用于乐观锁校验。
 	ExpectedCurrentVersion *int64
 }

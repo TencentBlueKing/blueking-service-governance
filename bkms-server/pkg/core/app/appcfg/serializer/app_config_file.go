@@ -37,6 +37,9 @@ func init() {
 		if err := v.RegisterValidation("app_config_file_name", validateAppConfigFileName); err != nil {
 			panic("failed to register app_config_file_name validator: " + err.Error())
 		}
+		if err := v.RegisterValidation("app_config_file_format", validateAppConfigFileFormat); err != nil {
+			panic("failed to register app_config_file_format validator: " + err.Error())
+		}
 	}
 }
 
@@ -44,7 +47,14 @@ func validateAppConfigFileName(fl validator.FieldLevel) bool {
 	return appConfigFileNamePattern.MatchString(fl.Field().String())
 }
 
-var appConfigFileNamePattern = regexp.MustCompile("^[a-zA-Z0-9-_]+$")
+func validateAppConfigFileFormat(fl validator.FieldLevel) bool {
+	return appConfigFileFormatPattern.MatchString(fl.Field().String())
+}
+
+var (
+	appConfigFileNamePattern   = regexp.MustCompile("^[a-zA-Z0-9-_]+$")
+	appConfigFileFormatPattern = regexp.MustCompile("^[a-z0-9._-]+$")
+)
 
 // AppURIInput is the path input for APIs scoped by application.
 type AppURIInput struct {
@@ -108,10 +118,17 @@ type CreateAppConfigFileInput struct {
 	ContentSourceType string `json:"contentSourceType" binding:"required,oneof=local bscp"`
 	// 当 contentSourceType 为 bscp 时，bscpConfig 为必填
 	BscpConfig *BSCPAppConfigFileConfig `json:"bscpConfig,omitempty"`
+	// 配置文件语义类型，不传时默认按 framework 处理
+	ConfigKind string `json:"configKind,omitempty" binding:"omitempty,oneof=framework plain"`
+	// plain 配置文件的容器内完整挂载路径
+	MountPath string `json:"mountPath,omitempty" binding:"omitempty,min=1,max=255"`
+	// 挂载环境范围。不传/nil = 对所有环境生效；传空数组 = 不挂载到任何环境；
+	// 非空 = 仅对列出的环境生效。创建时始终按统一配置处理，此字段仅控制挂载范围。
+	MountedEnvNames []string `json:"mountedEnvNames,omitempty" binding:"omitempty,dive,min=1,max=64"`
 	// 环境名称，可选。为空表示应用级别配置，非空表示特定环境的配置
 	EnvName *string `json:"envName,omitempty"`
-	// 文件格式，可选 yaml 或 taf
-	FileFormat string `json:"fileFormat" binding:"required,oneof=yaml taf"`
+	// 文件格式标识，framework 兼容历史语义，plain 仅做弱校验
+	FileFormat string `json:"fileFormat" binding:"required,min=1,max=32,app_config_file_format"`
 	// 版本描述
 	Description string `json:"description"`
 }
@@ -124,6 +141,26 @@ type UpdateAppConfigFileInput struct {
 	BaseAppConfigFileID string `json:"baseAppConfigFileID"`
 	// 当 contentSourceType 为 bscp 时，bscpConfig 为必填
 	BscpConfig *BSCPAppConfigFileConfig `json:"bscpConfig,omitempty"`
+	// plain 配置文件的容器内完整挂载路径
+	MountPath string `json:"mountPath,omitempty" binding:"omitempty,min=1,max=255"`
+	// 文件格式标识，plain 仅做弱校验
+	FileFormat string `json:"fileFormat,omitempty" binding:"omitempty,min=1,max=32,app_config_file_format"`
+	// 版本描述
+	Description string `json:"description"`
+	// 编辑开始时的当前版本号，用于乐观锁冲突检测
+	CurrentVersion *int64 `json:"currentVersion,omitempty"`
+}
+
+// UpdateAppConfigFileEnvConfigInput 是切换按环境配置模式时使用的 JSON 请求体。
+type UpdateAppConfigFileEnvConfigInput struct {
+	// 是否统一配置。true = 统一配置；false = 按环境独立配置。
+	IsUnifiedConfig bool `json:"isUnifiedConfig"`
+	// 挂载环境范围。不传/nil = 对所有环境生效；传空数组 = 不挂载到任何环境；
+	// 非空 = 仅对列出的环境生效。
+	MountedEnvNames []string `json:"mountedEnvNames,omitempty" binding:"omitempty,dive,min=1,max=64"`
+	// 回退为共用配置的环境名称。仅在按环境独立配置模式下有效，
+	// 该环境的独立实例将被删除，恢复为引用默认记录内容的状态。
+	FallbackConfigEnv string `json:"fallbackConfigEnv,omitempty" binding:"omitempty,min=1,max=64"`
 	// 版本描述
 	Description string `json:"description"`
 	// 编辑开始时的当前版本号，用于乐观锁冲突检测
@@ -142,6 +179,9 @@ type ListAppConfigFilesQueryInput struct {
 type UpdateAppConfigFileContentInput struct {
 	// 应用配置文件 content
 	Content string `json:"content"`
+	// 目标环境名（仅 plain 独立配置模式下使用）。当指定的环境处于引用状态（无独立实例）时，
+	// 以当前请求内容为初始值创建独立实例，使该环境脱离对默认配置的引用。不传时直接更新 id 对应的文件。
+	EnvName string `json:"envName,omitempty"`
 	// 版本描述
 	Description string `json:"description"`
 	// 编辑开始时的当前版本号，用于乐观锁冲突检测
@@ -177,6 +217,14 @@ type AppConfigFileOutputObj struct {
 	Type string `json:"type"`
 	// 文件内容来源
 	ContentSourceType string `json:"contentSourceType"`
+	// 配置文件语义类型
+	ConfigKind string `json:"configKind"`
+	// plain 配置文件的容器内完整挂载路径
+	MountPath string `json:"mountPath,omitempty"`
+	// 是否统一配置
+	IsUnifiedConfig bool `json:"isUnifiedConfig"`
+	// 挂载环境范围
+	MountedEnvNames []string `json:"mountedEnvNames,omitempty"`
 	// 基础应用配置文件 ID，可能为空
 	BaseAppConfigFileID string `json:"baseAppConfigFileID,omitempty"`
 	// 仅当 contentSourceType 为 bscp 时，bscpConfig 才有值
@@ -200,6 +248,10 @@ func (o *AppConfigFileOutputObj) FromModel(obj appcfg.AppConfigFile) *AppConfigF
 		Name:              obj.Name,
 		Type:              string(obj.Type),
 		ContentSourceType: string(obj.ContentSourceType),
+		ConfigKind:        string(obj.GetConfigKind()),
+		MountPath:         obj.MountPath,
+		IsUnifiedConfig:   obj.IsUnifiedConfig,
+		MountedEnvNames:   obj.MountedEnvNames,
 		EnvName:           obj.EnvName,
 		FileFormat:        string(obj.GetConfigFormat()),
 		CurrentVersion:    obj.CurrentVersion,

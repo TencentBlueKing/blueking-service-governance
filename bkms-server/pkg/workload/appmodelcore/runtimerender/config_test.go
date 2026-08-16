@@ -40,19 +40,25 @@ var _ = Describe("BuildSedCommand", func() {
 
 var _ = Describe("BuildConfig", func() {
 	It("should build shared config rendering resources", func() {
-		result := runtimerender.BuildConfig(runtimerender.ConfigParams{
+		result, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
 			WorkloadType:  "trpc",
 			ConfigMapName: "demo-app",
-			FileName:      "app.yaml",
-			FilePath:      "/etc/app",
-			FileContent:   "server:\n  app: demo\n",
+			Files: []runtimerender.ConfigFileParams{
+				{
+					FileName:    "app.yaml",
+					FilePath:    "/etc/app",
+					FileContent: "server:\n  app: demo\n",
+				},
+			},
 		})
+		Expect(err).NotTo(HaveOccurred())
 
 		Expect(result.ConfigMap.Name).To(Equal("demo-app"))
-		Expect(result.ConfigMap.Data).To(HaveKeyWithValue("app.yaml", "server:\n  app: demo\n"))
+		Expect(result.ConfigMap.Data).To(HaveKeyWithValue("00-app.yaml", "server:\n  app: demo\n"))
 		Expect(result.MainContainerMounts).To(HaveLen(1))
 		Expect(result.MainContainerMounts[0].Name).To(Equal("trpc-config-rendered"))
 		Expect(result.MainContainerMounts[0].MountPath).To(Equal("/etc/app/app.yaml"))
+		Expect(result.MainContainerMounts[0].SubPath).To(Equal("00-app.yaml"))
 		Expect(result.Volumes).To(HaveLen(2))
 		Expect(result.Volumes[0].Name).To(Equal("trpc-config-template"))
 		Expect(result.Volumes[1].Name).To(Equal("trpc-config-rendered"))
@@ -60,9 +66,61 @@ var _ = Describe("BuildConfig", func() {
 		Expect(result.InitContainerSpecs[0].Name).To(Equal("trpc-init"))
 		Expect(result.InitContainerSpecs[0].Image).To(Equal("busybox:1.36"))
 		Expect(result.InitContainerSpecs[0].VolumeMounts).To(HaveLen(2))
+		Expect(result.InitContainerSpecs[0].VolumeMounts[0].MountPath).To(Equal("/trpc-config-template"))
+		Expect(result.InitContainerSpecs[0].VolumeMounts[0].SubPath).To(BeEmpty())
 		Expect(result.InitContainerSpecs[0].Command).To(HaveLen(3))
 		Expect(result.InitContainerSpecs[0].Command[2]).To(ContainSubstring(
-			"cp '/trpc-config-template/app.yaml' '/trpc-config-rendered/app.yaml'",
+			"cp '/trpc-config-template/00-app.yaml' '/trpc-config-rendered/00-app.yaml'",
 		))
+	})
+
+	It("should build additional rendered files in the same workload", func() {
+		result, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
+			WorkloadType:  "trpc",
+			ConfigMapName: "demo-app",
+			Files: []runtimerender.ConfigFileParams{
+				{
+					FileName:    "app.yaml",
+					FilePath:    "/etc/app",
+					FileContent: "server:\n  app: demo\n",
+				},
+				{
+					FileName:    "feature.env",
+					FilePath:    "/data/app/conf",
+					FileContent: "ENABLED=true\n",
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(result.ConfigMap.Data).To(HaveKeyWithValue("00-app.yaml", "server:\n  app: demo\n"))
+		Expect(result.ConfigMap.Data).To(HaveKeyWithValue("01-feature.env", "ENABLED=true\n"))
+		Expect(result.MainContainerMounts).To(HaveLen(2))
+		Expect(result.MainContainerMounts[1].MountPath).To(Equal("/data/app/conf/feature.env"))
+		Expect(result.MainContainerMounts[1].SubPath).To(Equal("01-feature.env"))
+		Expect(result.InitContainerSpecs).To(HaveLen(1))
+		Expect(result.InitContainerSpecs[0].Command[2]).To(ContainSubstring(
+			"cp '/trpc-config-template/01-feature.env' '/trpc-config-rendered/01-feature.env'",
+		))
+	})
+
+	It("should return error when two files target the same mount path", func() {
+		_, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
+			WorkloadType:  "trpc",
+			ConfigMapName: "demo-app",
+			Files: []runtimerender.ConfigFileParams{
+				{
+					FileName:    "app.yaml",
+					FilePath:    "/etc/app",
+					FileContent: "server:\n  app: demo\n",
+				},
+				{
+					FileName:    "app.yaml",
+					FilePath:    "/etc/app",
+					FileContent: "other=true\n",
+				},
+			},
+		})
+		Expect(err).To(MatchError(ContainSubstring("duplicate config mount path")))
 	})
 })

@@ -56,6 +56,13 @@ type ConfigParams struct {
 	WorkloadType string
 	// ConfigMapName is the ConfigMap resource name that holds the config template.
 	ConfigMapName string
+	// Files contains all config files rendered into the workload, including the main file
+	// and any extra plain files.
+	Files []ConfigFileParams
+}
+
+// ConfigFileParams describes one rendered config file.
+type ConfigFileParams struct {
 	// FileName is the config file name.
 	FileName string
 	// FilePath is the config file directory in the workload container.
@@ -124,24 +131,24 @@ func (c *Config) InitContainers(
 // Runtime variables (BKMS_POD_IP, BKMS_POD_NAME, BKMS_NODE_IP) are rendered as special
 // placeholders (e.g., __#VAR_PLACEHOLDER#__BKMS_POD_IP__) at compile time. The init container then replaces
 // these placeholders with actual values from the Kubernetes Downward API at pod startup.
-func BuildConfig(params ConfigParams) *Config {
+func BuildConfig(params ConfigParams) (*Config, error) {
 	names := runtimeRenderNames(params.WorkloadType)
+	files := slices.Clone(params.Files)
+	if len(files) == 0 {
+		return &Config{}, nil
+	}
+	if err := validateConfigFiles(files); err != nil {
+		return nil, err
+	}
 
-	// ConfigMap volume: holds the config template.
 	configMapVolume := corev1.Volume{
 		Name: names.templateVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{Name: params.ConfigMapName},
-				Items: []corev1.KeyToPath{{
-					Key:  params.FileName,
-					Path: params.FileName,
-				}},
 			},
 		},
 	}
-
-	// EmptyDir volume: holds the rendered config output (shared between init container and main container).
 	renderedVolume := corev1.Volume{
 		Name: names.renderedVolumeName,
 		VolumeSource: corev1.VolumeSource{
@@ -149,32 +156,63 @@ func BuildConfig(params ConfigParams) *Config {
 		},
 	}
 
-	// Main container mount: reads the rendered config from emptyDir.
-	mainMount := corev1.VolumeMount{
-		Name:      names.renderedVolumeName,
-		MountPath: filepath.Join(params.FilePath, params.FileName),
-		SubPath:   params.FileName,
-	}
-
-	// ConfigMap resource.
 	configMap := corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
 		ObjectMeta: metav1.ObjectMeta{Name: params.ConfigMapName},
-		Data: map[string]string{
-			params.FileName: params.FileContent,
-		},
+		Data:       make(map[string]string, len(files)),
 	}
 
-	templateFilePath := filepath.Join(names.templateMountPath, params.FileName)
-	renderedFilePath := filepath.Join(names.renderedMountPath, params.FileName)
-	// Init container: reads template from ConfigMap, uses sed to replace __VAR__ placeholders
-	// with actual runtime values, writes result to emptyDir.
-	initContainer := corev1.Container{
+	mainMounts, configMapItems, commandParts := buildFileMapping(names, files, &configMap)
+	configMapVolume.ConfigMap.Items = configMapItems
+
+	initContainer := buildInitContainer(names, commandParts)
+
+	return &Config{
+		MainContainerMounts: mainMounts,
+		Volumes:             []corev1.Volume{configMapVolume, renderedVolume},
+		ConfigMap:           configMap,
+		InitContainerSpecs:  []corev1.Container{initContainer},
+	}, nil
+}
+
+// buildFileMapping 遍历文件列表，生成 ConfigMap 数据、主容器挂载和 init container sed 命令。
+func buildFileMapping(
+	names runtimeNames,
+	files []ConfigFileParams,
+	configMap *corev1.ConfigMap,
+) ([]corev1.VolumeMount, []corev1.KeyToPath, []string) {
+	mainMounts := make([]corev1.VolumeMount, 0, len(files))
+	configMapItems := make([]corev1.KeyToPath, 0, len(files))
+	commandParts := make([]string, 0, len(files))
+	for i, file := range files {
+		fileAlias := runtimeRenderFileAlias(i, file)
+
+		configMap.Data[fileAlias] = file.FileContent
+		configMapItems = append(configMapItems, corev1.KeyToPath{
+			Key:  fileAlias,
+			Path: fileAlias,
+		})
+		mainMounts = append(mainMounts, corev1.VolumeMount{
+			Name:      names.renderedVolumeName,
+			MountPath: filepath.Join(file.FilePath, file.FileName),
+			SubPath:   fileAlias,
+		})
+
+		templateFilePath := filepath.Join(names.templateMountPath, fileAlias)
+		renderedFilePath := filepath.Join(names.renderedMountPath, fileAlias)
+		commandParts = append(commandParts, BuildSedCommand(templateFilePath, renderedFilePath))
+	}
+	return mainMounts, configMapItems, commandParts
+}
+
+// buildInitContainer 构建执行运行时变量替换的 init container。
+func buildInitContainer(names runtimeNames, commandParts []string) corev1.Container {
+	return corev1.Container{
 		Name:  names.initContainerName,
 		Image: initContainerImage,
 		Command: []string{
 			"sh", "-c",
-			BuildSedCommand(templateFilePath, renderedFilePath),
+			strings.Join(commandParts, " && "),
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
@@ -189,8 +227,7 @@ func BuildConfig(params ConfigParams) *Config {
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      names.templateVolumeName,
-				MountPath: filepath.Join(names.templateMountPath, params.FileName),
-				SubPath:   params.FileName,
+				MountPath: names.templateMountPath,
 			},
 			{
 				Name:      names.renderedVolumeName,
@@ -198,13 +235,29 @@ func BuildConfig(params ConfigParams) *Config {
 			},
 		},
 	}
+}
 
-	return &Config{
-		MainContainerMounts: []corev1.VolumeMount{mainMount},
-		Volumes:             []corev1.Volume{configMapVolume, renderedVolume},
-		ConfigMap:           configMap,
-		InitContainerSpecs:  []corev1.Container{initContainer},
+// runtimeRenderFileAlias 为运行时渲染链路生成内部文件名。
+// 这里不直接使用最终挂载路径，而是使用扁平 alias：
+// 1. 中间模板目录和渲染目录只需要稳定唯一的文件标识；
+// 2. 避免把容器内真实目录结构复制到临时目录中；
+// 3. 最终挂载位置仍由 main container 的 MountPath + SubPath 决定。
+func runtimeRenderFileAlias(index int, file ConfigFileParams) string {
+	return fmt.Sprintf("%02d-%s", index, file.FileName)
+}
+
+// validateConfigFiles 校验一组待渲染文件的最终挂载目标是否冲突。
+func validateConfigFiles(files []ConfigFileParams) error {
+	targetPaths := make(map[string]struct{}, len(files))
+	for _, file := range files {
+		// 冲突判断基于主容器内的最终落点，而不是中间 alias。
+		targetPath := filepath.Join(file.FilePath, file.FileName)
+		if _, exists := targetPaths[targetPath]; exists {
+			return errors.Errorf("duplicate config mount path %q", targetPath)
+		}
+		targetPaths[targetPath] = struct{}{}
 	}
+	return nil
 }
 
 type runtimeNames struct {

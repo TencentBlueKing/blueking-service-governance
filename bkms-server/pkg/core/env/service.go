@@ -31,13 +31,28 @@ import (
 // EnvService 环境基础配置服务
 type EnvService struct {
 	model.EnvironmentStore
+	deleteCleaner EnvDeleteCleanupFunc
 }
+
+// EnvDeleteCleanupFunc 在环境物理删除前执行同步清理。
+// 返回错误时，删除流程应立即中止并保留环境记录。
+type EnvDeleteCleanupFunc func(ctx context.Context, environment model.Environment) error
 
 // NewEnvService 创建环境基础配置服务
 func NewEnvService(environmentStore model.EnvironmentStore) *EnvService {
 	return &EnvService{
 		EnvironmentStore: environmentStore,
 	}
+}
+
+// WithDeleteCleaner 返回一个携带删除前清理函数的服务副本。
+func (s *EnvService) WithDeleteCleaner(cleaner EnvDeleteCleanupFunc) *EnvService {
+	if s == nil {
+		return nil
+	}
+	cloned := *s
+	cloned.deleteCleaner = cleaner
+	return &cloned
 }
 
 // ImageRegistryInfoInput 镜像仓库信息
@@ -115,9 +130,15 @@ func (s *EnvService) Delete(ctx context.Context, envID bson.ObjectID) error {
 		return errors.Errorf("environment has %d apps, cannot delete", appCount)
 	}
 
-	// 删除环境往往意味着下游模块中的环境级资源也必须一起清理。这里在物理删除环境记录前执行 Hook：
-	// - Hook 失败时保留环境，调用方可以修复下游数据后重试；
-	// - Hook 成功后再删环境，避免留下“环境已不存在但下游清理无法再定位环境”的孤儿数据。
+	// 删除环境前，先同步清理依赖该环境存在的下游资源。
+	// 清理失败时保留环境，调用方修复后可重试删除。
+	if s.deleteCleaner != nil {
+		if err = s.deleteCleaner(ctx, *environment); err != nil {
+			return errors.Wrap(err, "cleanup environment dependencies")
+		}
+	}
+
+	// 其余通用删除 Hook 仍在环境物理删除前同步执行。
 	if err = runDeleteHooks(ctx, *environment); err != nil {
 		return err
 	}

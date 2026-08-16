@@ -116,6 +116,59 @@ var _ = Describe("GetEnvContent", func() {
 		})
 	})
 
+	Context("when framework and plain env-specific config coexist", func() {
+		BeforeEach(func() {
+			defaultContent := "server:\n  address: 0.0.0.0:8080\n"
+			dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+				AppID:      app.ID,
+				EnvName:    appcfg.EnvNameDefault,
+				Name:       appcfg.DefaultAppConfigFileName,
+				ConfigKind: appcfg.ConfigKindFramework,
+				Content:    &defaultContent,
+			})
+
+			frameworkProdContent := "server:\n  address: 0.0.0.0:9090\n"
+			dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+				AppID:      app.ID,
+				EnvName:    "prod",
+				Name:       "prod-framework",
+				ConfigKind: appcfg.ConfigKindFramework,
+				Content:    &frameworkProdContent,
+			})
+
+			plainDefaultContent := "benchmark.enabled=true\n"
+			plainRoot := dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+				AppID:           app.ID,
+				EnvName:         appcfg.EnvNameDefault,
+				Name:            "custom-env",
+				ConfigKind:      appcfg.ConfigKindPlain,
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod"},
+				MountPath:       "/data/app/conf/custom.env",
+				Format:          appcfg.FileFormat("properties"),
+				Content:         &plainDefaultContent,
+			})
+			plainProdContent := "benchmark.enabled=false\n"
+			dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+				AppID:                  app.ID,
+				EnvName:                "prod",
+				Name:                   "custom-env--prod",
+				ConfigKind:             appcfg.ConfigKindPlain,
+				MountPath:              "/data/app/conf/custom.env",
+				DefaultAppConfigFileID: &plainRoot.ID,
+				Format:                 appcfg.FileFormat("properties"),
+				Content:                &plainProdContent,
+			})
+		})
+
+		It("should still return the framework env-specific config", func() {
+			acf, content, err := appcfg.GetEnvContent(ctx, store, app.ID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(acf.Name).To(Equal("prod-framework"))
+			Expect(content).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
+		})
+	})
+
 	Context("when the env-specific config is an overlay", func() {
 		It("should return the overlay logical file and compiled content", func() {
 			baseContent := "database:\n  host: ${{ env.BASE_HOST }}\n  port: 3306\n"
@@ -142,5 +195,152 @@ var _ = Describe("GetEnvContent", func() {
 			Expect(acf.Name).To(Equal("prod-overlay"))
 			Expect(content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
 		})
+	})
+})
+
+var _ = Describe("ListEnvPlainContents", func() {
+	var diApp *fxtest.App
+	var ctx context.Context
+	var appStore bkmsapp.ApplicationStore
+	var store appcfg.AppConfigFileStore
+	var app *bkmsapp.Application
+
+	BeforeEach(func() {
+		var err error
+
+		ctx = context.Background()
+		err = testutil.CleanupCollection("app_config_files")
+		Expect(err).NotTo(HaveOccurred())
+		err = testutil.CleanupCollection("applications")
+		Expect(err).NotTo(HaveOccurred())
+
+		diApp = fxtest.New(
+			GinkgoT(),
+			bkmsapp.FxModule,
+			appcfg.FxModule,
+			fx.Populate(&appStore, &store),
+		)
+		diApp.RequireStart()
+
+		app = dbfactory.Application(ctx, appStore)
+	})
+
+	AfterEach(func() {
+		diApp.RequireStop()
+	})
+
+	It("should return default plain content when env mode is disabled", func() {
+		defaultContent := "feature.enabled=true\n"
+		dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+			AppID:           app.ID,
+			EnvName:         appcfg.EnvNameDefault,
+			Name:            "feature-flags",
+			ConfigKind:      appcfg.ConfigKindPlain,
+			MountPath:       "/data/app/conf/feature-flags.properties",
+			Format:          appcfg.FileFormat("properties"),
+			IsUnifiedConfig: true,
+			Content:         &defaultContent,
+		})
+
+		files, err := appcfg.ListEnvPlainContents(ctx, store, app.ID, "stag")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(files).To(HaveLen(1))
+		Expect(files[0].File.EnvName).To(Equal(appcfg.EnvNameDefault))
+		Expect(files[0].File.Name).To(Equal("feature-flags"))
+		Expect(files[0].File.MountPath).To(Equal("/data/app/conf/feature-flags.properties"))
+		Expect(files[0].Content).To(Equal("feature.enabled=true\n"))
+	})
+
+	It("should return env-specific plain content when env mode is enabled", func() {
+		defaultContent := "feature.enabled=true\n"
+		root := dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+			AppID:           app.ID,
+			EnvName:         appcfg.EnvNameDefault,
+			Name:            "feature-flags",
+			ConfigKind:      appcfg.ConfigKindPlain,
+			IsUnifiedConfig: false,
+			MountedEnvNames: []string{"prod"},
+			MountPath:       "/data/app/conf/feature-flags.properties",
+			Format:          appcfg.FileFormat("properties"),
+			Content:         &defaultContent,
+		})
+		prodContent := "feature.enabled=false\n"
+		dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+			AppID:                  app.ID,
+			EnvName:                "prod",
+			Name:                   "feature-flags--prod",
+			ConfigKind:             appcfg.ConfigKindPlain,
+			DefaultAppConfigFileID: &root.ID,
+			MountPath:              "/data/app/conf/feature-flags.properties",
+			Format:                 appcfg.FileFormat("properties"),
+			Content:                &prodContent,
+		})
+
+		files, err := appcfg.ListEnvPlainContents(ctx, store, app.ID, "prod")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(files).To(HaveLen(1))
+		Expect(files[0].File.EnvName).To(Equal("prod"))
+		Expect(files[0].File.Name).To(Equal("feature-flags--prod"))
+		Expect(files[0].Content).To(Equal("feature.enabled=false\n"))
+	})
+
+	It("should skip plain files that are not mounted to the target env", func() {
+		defaultContent := "feature.enabled=true\n"
+		dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+			AppID:           app.ID,
+			EnvName:         appcfg.EnvNameDefault,
+			Name:            "feature-flags",
+			ConfigKind:      appcfg.ConfigKindPlain,
+			IsUnifiedConfig: false,
+			MountedEnvNames: []string{"prod"},
+			MountPath:       "/data/app/conf/feature-flags.properties",
+			Format:          appcfg.FileFormat("properties"),
+			Content:         &defaultContent,
+		})
+
+		files, err := appcfg.ListEnvPlainContents(ctx, store, app.ID, "stag")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(files).To(BeEmpty())
+	})
+
+	It("should fallback to default content for referenced env (no independent instance)", func() {
+		defaultContent := "feature.enabled=true\n"
+		dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+			AppID:           app.ID,
+			EnvName:         appcfg.EnvNameDefault,
+			Name:            "feature-flags",
+			ConfigKind:      appcfg.ConfigKindPlain,
+			IsUnifiedConfig: false,
+			MountedEnvNames: []string{"prod", "stag"},
+			MountPath:       "/data/app/conf/feature-flags.properties",
+			Format:          appcfg.FileFormat("properties"),
+			Content:         &defaultContent,
+		})
+
+		files, err := appcfg.ListEnvPlainContents(ctx, store, app.ID, "prod")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(files).To(HaveLen(1))
+		Expect(files[0].File.EnvName).To(Equal(appcfg.EnvNameDefault))
+		Expect(files[0].Content).To(Equal("feature.enabled=true\n"))
+	})
+
+	It("should fallback to default content for all-env mode without instance", func() {
+		defaultContent := "feature.enabled=true\n"
+		dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+			AppID:           app.ID,
+			EnvName:         appcfg.EnvNameDefault,
+			Name:            "feature-flags",
+			ConfigKind:      appcfg.ConfigKindPlain,
+			IsUnifiedConfig: false,
+			MountPath:       "/data/app/conf/feature-flags.properties",
+			Format:          appcfg.FileFormat("properties"),
+			Content:         &defaultContent,
+		})
+
+		files, err := appcfg.ListEnvPlainContents(ctx, store, app.ID, "any-env")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(files).To(HaveLen(1))
+		Expect(files[0].File.EnvName).To(Equal(appcfg.EnvNameDefault))
+		Expect(files[0].Content).To(Equal("feature.enabled=true\n"))
 	})
 })

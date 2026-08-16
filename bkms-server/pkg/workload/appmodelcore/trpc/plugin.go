@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/plainfiles"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/trpc/patcher"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/plugin"
@@ -89,11 +90,23 @@ func (p *Plugin) Start(
 	}
 	appModel.Workload.TrpcConfig.FileContent = content
 
+	plainFiles, err := plainfiles.BuildRuntimePlainConfigFiles(
+		ctx,
+		p.appConfigFileStore,
+		app.ID,
+		env.Name,
+		renderCtx.EnvVars,
+		renderCtx.Collector,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "building runtime plain config files")
+	}
+
 	if appModel.Workload.TrpcConfig.FileName == "" {
 		return &runtimerender.Config{}, nil
 	}
 
-	return buildTrpcConfig(appModel), nil
+	return buildTrpcConfig(appModel, plainFiles)
 }
 
 // computeTrpcConfig computes the tRPC configuration content based on environment.
@@ -145,13 +158,21 @@ func (p *Plugin) computeTrpcConfig(
 // Runtime variables (BKMS_POD_IP, BKMS_POD_NAME, BKMS_NODE_IP) are rendered as special
 // placeholders (e.g., __#VAR_PLACEHOLDER#__BKMS_POD_IP__) at compile time. The init container then replaces
 // these placeholders with actual values from the Kubernetes Downward API at pod startup.
-func buildTrpcConfig(appModel *appmodel.AppModel) *runtimerender.Config {
+func buildTrpcConfig(
+	appModel *appmodel.AppModel,
+	plainFiles []runtimerender.ConfigFileParams,
+) (*runtimerender.Config, error) {
 	config := appModel.Workload.TrpcConfig
+	files := make([]runtimerender.ConfigFileParams, 0, 1+len(plainFiles))
+	files = append(files, runtimerender.ConfigFileParams{
+		FileName:    config.FileName,
+		FilePath:    config.FilePath,
+		FileContent: config.FileContent,
+	})
+	files = append(files, plainFiles...)
 	return runtimerender.BuildConfig(runtimerender.ConfigParams{
 		WorkloadType:  appmodel.WorkloadTypeTrpc,
 		ConfigMapName: appModel.Workload.Name,
-		FileName:      config.FileName,
-		FilePath:      config.FilePath,
-		FileContent:   config.FileContent,
+		Files:         files,
 	})
 }
