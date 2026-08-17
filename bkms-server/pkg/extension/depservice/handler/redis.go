@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -37,10 +38,7 @@ import (
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
-const (
-	redisServiceName = "redis"
-	redisPlanName    = "default"
-)
+const redisPlanName = "default"
 
 // Handler handles Gin dependency service API requests.
 type Handler struct {
@@ -74,7 +72,6 @@ func (h *Handler) serviceManager() *depservice.ServiceManager {
 //	@Param		body		body		serializer.CreateRedisInstanceInput	true	"请求体"
 //	@Success	201			{object}	serializer.CreateRedisInstanceOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/deps/redis [post]
 func (h *Handler) CreateRedisInstance(c *gin.Context) {
 	var uriInput serializer.WorkspaceURIInput
@@ -98,7 +95,7 @@ func (h *Handler) CreateRedisInstance(c *gin.Context) {
 
 	instID, err := h.serviceManager().CreateServiceInstance(ctx, &depservice.CreateServiceInstanceParams{
 		Name:        jsonInput.Name,
-		ServiceName: redisServiceName,
+		ServiceName: provider.ServiceNameRedis,
 		PlanName:    redisPlanName,
 		ScopeType:   model.ScopeType(jsonInput.ScopeType),
 		ScopeValue:  jsonInput.ScopeValue,
@@ -133,7 +130,6 @@ func (h *Handler) CreateRedisInstance(c *gin.Context) {
 //	@Param		scopeType	query		string	false	"作用域类型"
 //	@Success	200			{object}	serializer.ListRedisInstancesOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/deps/redis [get]
 func (h *Handler) ListRedisInstances(c *gin.Context) {
 	var uriInput serializer.WorkspaceURIInput
@@ -152,7 +148,7 @@ func (h *Handler) ListRedisInstances(c *gin.Context) {
 	mgr := h.serviceManager()
 	insts, err := mgr.ListServiceInstances(ctx, &depservice.ListServiceInstancesParams{
 		WorkspaceID: uriInput.WorkspaceID,
-		ServiceName: redisServiceName,
+		ServiceName: provider.ServiceNameRedis,
 		Status:      model.InstanceStatus(queryInput.Status),
 		ScopeType:   model.ScopeType(queryInput.ScopeType),
 	})
@@ -161,7 +157,10 @@ func (h *Handler) ListRedisInstances(c *gin.Context) {
 		return
 	}
 
-	usedApps, err := h.usedAppIDsByInstance(ctx, uriInput.WorkspaceID)
+	usedApps, err := h.usedAppIDsByInstance(ctx, &model.BindingQueryOptions{
+		WorkspaceID: uriInput.WorkspaceID,
+		ServiceName: provider.ServiceNameRedis,
+	})
 	if err != nil {
 		bkerrs.AbortWithErr(c, mapManagerErr(err, "list redis bindings"))
 		return
@@ -186,7 +185,6 @@ func (h *Handler) ListRedisInstances(c *gin.Context) {
 //	@Param		instanceID	path		string	true	"实例 ID"
 //	@Success	200			{object}	serializer.GetRedisInstanceOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/deps/redis/{instanceID} [get]
 func (h *Handler) GetRedisInstance(c *gin.Context) {
 	var uriInput serializer.WorkspaceInstanceURIInput
@@ -207,7 +205,7 @@ func (h *Handler) GetRedisInstance(c *gin.Context) {
 		return
 	}
 
-	usedApps, err := h.usedAppIDsByInstance(ctx, uriInput.WorkspaceID)
+	usedApps, err := h.usedAppIDsByInstance(ctx, &model.BindingQueryOptions{InstanceID: inst.ID})
 	if err != nil {
 		bkerrs.AbortWithErr(c, mapManagerErr(err, "list redis bindings"))
 		return
@@ -230,7 +228,6 @@ func (h *Handler) GetRedisInstance(c *gin.Context) {
 //	@Param		instanceID	path		string	true	"实例 ID"
 //	@Success	200			{object}	serializer.EmptyOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/deps/redis/{instanceID} [delete]
 func (h *Handler) DeleteRedisInstance(c *gin.Context) {
 	var uriInput serializer.WorkspaceInstanceURIInput
@@ -272,7 +269,7 @@ func (h *Handler) loadRedisInstance(
 	if err != nil {
 		return nil, mapManagerErr(err, "get redis instance")
 	}
-	if inst.WorkspaceID != workspaceID || inst.ServiceName != redisServiceName {
+	if inst.WorkspaceID != workspaceID || inst.ServiceName != provider.ServiceNameRedis {
 		return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "redis instance %s not found", instanceID)
 	}
 	return inst, nil
@@ -280,12 +277,9 @@ func (h *Handler) loadRedisInstance(
 
 func (h *Handler) usedAppIDsByInstance(
 	ctx context.Context,
-	workspaceID string,
+	opts *model.BindingQueryOptions,
 ) (map[bson.ObjectID][]string, error) {
-	bindings, err := h.registry.DepSvcBindingStore.List(ctx, &model.BindingQueryOptions{
-		WorkspaceID: workspaceID,
-		ServiceName: redisServiceName,
-	})
+	bindings, err := h.registry.DepSvcBindingStore.List(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +302,7 @@ func mapManagerErr(err error, message string) error {
 	if model.AsNotFoundError(err) {
 		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, message)
 	}
-	if errors.Is(err, model.ErrBindingNameExists) {
+	if errors.Is(err, model.ErrBindingNameExists) || errors.Is(err, model.ErrInstanceNameExists) {
 		return bkerrs.New(bkerrs.ErrCodeAlreadyExists, err.Error())
 	}
 	if errors.Is(err, depservice.ErrInvalidArgument) {

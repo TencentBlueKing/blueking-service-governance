@@ -84,6 +84,22 @@ func (r *Reader) listAppBindings(ctx context.Context, appID string) ([]*model.Se
 	return bindings, nil
 }
 
+func (r *Reader) instancesByID(
+	ctx context.Context,
+	ids []bson.ObjectID,
+) (map[bson.ObjectID]*model.ServiceInstance, error) {
+	if r.instStore == nil || len(ids) == 0 {
+		return map[bson.ObjectID]*model.ServiceInstance{}, nil
+	}
+	insts, err := r.instStore.ListByIDs(ctx, ids)
+	if err != nil {
+		return nil, errors.Wrap(err, "list service instances by ids")
+	}
+	return lo.SliceToMap(insts, func(inst *model.ServiceInstance) (bson.ObjectID, *model.ServiceInstance) {
+		return inst.ID, inst
+	}), nil
+}
+
 // collectFromBindings 按指定环境从绑定产出实际注入的变量。
 func (r *Reader) collectFromBindings(
 	ctx context.Context,
@@ -91,29 +107,34 @@ func (r *Reader) collectFromBindings(
 ) (envvartypes.EnvVariableRichList, error) {
 	result := envvartypes.EnvVariableRichList{Vars: make([]envvartypes.EnvVariableRichItem, 0)}
 
-	// 拉取该应用下全部绑定
 	bindings, err := r.listAppBindings(ctx, appID)
 	if err != nil {
 		return result, err
 	}
 
+	instIDs := lo.FilterMap(bindings, func(b *model.ServiceBinding, _ int) (bson.ObjectID, bool) {
+		instID, ok := b.EnvInstanceMap[envName]
+		return instID, ok && !instID.IsZero()
+	})
+	insts, err := r.instancesByID(ctx, instIDs)
+	if err != nil {
+		return result, err
+	}
+
 	for _, binding := range bindings {
-		// 只处理当前环境已映射的实例
 		instID, ok := binding.EnvInstanceMap[envName]
 		if !ok || instID.IsZero() {
 			continue
 		}
-		// 实例不存在或未就绪则跳过
-		inst, err := r.instStore.Get(ctx, instID)
-		if err != nil {
-			log.Warnf(ctx, "get instance %s for binding %s: %v", instID.Hex(), binding.Name, err)
+		inst, ok := insts[instID]
+		if !ok {
+			log.Warnf(ctx, "instance %s for binding %s not found", instID.Hex(), binding.Name)
 			continue
 		}
 		if inst.Status != model.AvailableStatus {
 			continue
 		}
 
-		// 用实例凭证渲染绑定上的 EnvVars 模板
 		vars, err := BuildBindingEnvVars(ctx, binding.EnvVars, inst.Credentials)
 		if err != nil {
 			log.Warnf(ctx, "build binding env vars for %s: %v", binding.Name, err)
@@ -136,12 +157,21 @@ func (r *Reader) collectBindingKeysForConflicts(
 		return result, err
 	}
 
+	instIDs := lo.Filter(lo.FlatMap(bindings, func(b *model.ServiceBinding, _ int) []bson.ObjectID {
+		return lo.Values(b.EnvInstanceMap)
+	}), func(id bson.ObjectID, _ int) bool {
+		return !id.IsZero()
+	})
+	insts, err := r.instancesByID(ctx, instIDs)
+	if err != nil {
+		return result, err
+	}
+
 	for _, binding := range bindings {
 		if len(binding.EnvVars) == 0 {
 			continue
 		}
-		// 各已映射实例各渲一次，按 key 去重后拼接
-		valuesByKey := r.renderBindingValuesAcrossInstances(ctx, binding)
+		valuesByKey := r.renderBindingValuesAcrossInstances(ctx, binding, insts)
 		keys := lo.Keys(binding.EnvVars)
 		sort.Strings(keys)
 		source := envvartypes.ConflictedSource{
@@ -170,6 +200,7 @@ func (r *Reader) collectBindingKeysForConflicts(
 func (r *Reader) renderBindingValuesAcrossInstances(
 	ctx context.Context,
 	binding *model.ServiceBinding,
+	insts map[bson.ObjectID]*model.ServiceInstance,
 ) map[string][]string {
 	valuesByKey := make(map[string][]string, len(binding.EnvVars))
 	seenInst := make(map[bson.ObjectID]struct{}, len(binding.EnvInstanceMap))
@@ -183,9 +214,9 @@ func (r *Reader) renderBindingValuesAcrossInstances(
 		}
 		seenInst[instID] = struct{}{}
 
-		inst, err := r.instStore.Get(ctx, instID)
-		if err != nil {
-			log.Warnf(ctx, "get instance %s for binding %s: %v", instID.Hex(), binding.Name, err)
+		inst, ok := insts[instID]
+		if !ok {
+			log.Warnf(ctx, "instance %s for binding %s not found", instID.Hex(), binding.Name)
 			continue
 		}
 		if inst.Status != model.AvailableStatus {

@@ -11169,10 +11169,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -11213,10 +11209,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -11255,10 +11247,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -11294,10 +11282,6 @@ paths:
             $ref: '#/definitions/serializer.BindingOutput'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
@@ -11343,10 +11327,6 @@ paths:
             $ref: '#/definitions/serializer.BindingOutput'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
@@ -19134,10 +19114,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -19171,10 +19147,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -19206,10 +19178,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -19238,10 +19206,6 @@ paths:
             $ref: '#/definitions/serializer.GetRedisInstanceOutput'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:

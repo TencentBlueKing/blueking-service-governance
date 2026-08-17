@@ -30,23 +30,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 )
 
-// bindingServiceNames 当前支持通过通用绑定 API 消费的空间级依赖服务。
-var bindingServiceNames = map[string]struct{}{
-	redisServiceName: {},
-}
-
-func rejectUnsupportedBindingService(c *gin.Context, serviceName string) bool {
-	if _, ok := bindingServiceNames[serviceName]; ok {
-		return false
-	}
-	bkerrs.AbortWithErr(c, bkerrs.Errorf(
-		bkerrs.ErrCodeInvalidRequest,
-		"service %q does not support bindings",
-		serviceName,
-	))
-	return true
-}
-
 // CreateBinding 创建应用侧依赖服务绑定。
 //
 //	@ID			CreateServiceBinding
@@ -61,16 +44,12 @@ func rejectUnsupportedBindingService(c *gin.Context, serviceName string) bool {
 //	@Param		body		body		serializer.CreateBindingInput	true	"请求体"
 //	@Success	201			{object}	serializer.BindingOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/deps/{serviceName}/bindings [post]
 func (h *Handler) CreateBinding(c *gin.Context) {
 	var uriInput serializer.AppURIInput
 	var jsonInput serializer.CreateBindingInput
 	if err := ginutils.BindURIJSON(c, &uriInput, &jsonInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	if rejectUnsupportedBindingService(c, uriInput.ServiceName) {
 		return
 	}
 
@@ -84,6 +63,10 @@ func (h *Handler) CreateBinding(c *gin.Context) {
 	envMap, err := serializer.ParseEnvInstanceMap(jsonInput.EnvInstanceMap)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse envInstanceMap"))
+		return
+	}
+	if err = serializer.ValidateEnvVars(jsonInput.EnvVars); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate envVars"))
 		return
 	}
 
@@ -118,15 +101,11 @@ func (h *Handler) CreateBinding(c *gin.Context) {
 //	@Param		serviceName	path		string	true	"依赖服务名，目前仅支持 redis"	Enums(redis)
 //	@Success	200			{object}	serializer.ListBindingsOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/deps/{serviceName}/bindings [get]
 func (h *Handler) ListBindings(c *gin.Context) {
 	var uriInput serializer.AppURIInput
 	if err := ginutils.BindURI(c, &uriInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	if rejectUnsupportedBindingService(c, uriInput.ServiceName) {
 		return
 	}
 
@@ -163,15 +142,11 @@ func (h *Handler) ListBindings(c *gin.Context) {
 //	@Param		name		path		string	true	"绑定名称"
 //	@Success	200			{object}	serializer.BindingOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/deps/{serviceName}/bindings/{name} [get]
 func (h *Handler) GetBinding(c *gin.Context) {
 	var uriInput serializer.AppBindingNameURIInput
 	if err := ginutils.BindURI(c, &uriInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	if rejectUnsupportedBindingService(c, uriInput.ServiceName) {
 		return
 	}
 
@@ -208,16 +183,12 @@ func (h *Handler) GetBinding(c *gin.Context) {
 //	@Param		body		body		serializer.UpdateBindingInput	true	"请求体"
 //	@Success	200			{object}	serializer.BindingOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/deps/{serviceName}/bindings/{name} [put]
 func (h *Handler) UpdateBinding(c *gin.Context) {
 	var uriInput serializer.AppBindingNameURIInput
 	var jsonInput serializer.UpdateBindingInput
 	if err := ginutils.BindURIJSON(c, &uriInput, &jsonInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	if rejectUnsupportedBindingService(c, uriInput.ServiceName) {
 		return
 	}
 
@@ -231,6 +202,10 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 	envMap, err := serializer.ParseEnvInstanceMap(jsonInput.EnvInstanceMap)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse envInstanceMap"))
+		return
+	}
+	if err = serializer.ValidateEnvVars(jsonInput.EnvVars); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate envVars"))
 		return
 	}
 
@@ -264,15 +239,11 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 //	@Param		name		path		string	true	"绑定名称"
 //	@Success	200			{object}	serializer.EmptyOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/deps/{serviceName}/bindings/{name} [delete]
 func (h *Handler) DeleteBinding(c *gin.Context) {
 	var uriInput serializer.AppBindingNameURIInput
 	if err := ginutils.BindURI(c, &uriInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	if rejectUnsupportedBindingService(c, uriInput.ServiceName) {
 		return
 	}
 

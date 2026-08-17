@@ -53,6 +53,24 @@ func (s *memoryInstStore) Get(_ context.Context, id bson.ObjectID) (*model.Servi
 	return inst, nil
 }
 
+func (s *memoryInstStore) ListByIDs(_ context.Context, ids []bson.ObjectID) ([]*model.ServiceInstance, error) {
+	result := make([]*model.ServiceInstance, 0, len(ids))
+	seen := map[bson.ObjectID]struct{}{}
+	for _, id := range ids {
+		if id.IsZero() {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		if inst, ok := s.byID[id]; ok {
+			result = append(result, inst)
+		}
+	}
+	return result, nil
+}
+
 func (s *memoryInstStore) List(context.Context, *model.SvcInstQueryOptions) ([]*model.ServiceInstance, error) {
 	panic("unexpected")
 }

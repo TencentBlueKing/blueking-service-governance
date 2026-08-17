@@ -31,6 +31,15 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
 )
 
+const (
+	// ServiceNamePolaris 北极星
+	ServiceNamePolaris = "polaris"
+	// ServiceNameRedis Redis
+	ServiceNameRedis = "redis"
+	// ServiceNameFake 仅测试用
+	ServiceNameFake = "fake"
+)
+
 // ServiceProvider 定义了服务实例提供者的接口。
 //
 // 服务实例提供者负责在底层服务平台（如 Polaris、DBM）上创建、删除服务实例。
@@ -68,17 +77,17 @@ type ServiceProvider interface {
 // New creates a new service provider
 func New(serviceName string, plan *model.ServicePlan) (ServiceProvider, error) {
 	switch serviceName {
-	case "polaris":
+	case ServiceNamePolaris:
 		switch plan.ProviderType {
 		case model.ProviderTypeSystemAllocated:
 			return polaris.NewProvider(plan.Config)
 		default:
 			return nil, errors.Errorf("unknown providerType: %s for service(name:%s)", plan.ProviderType, serviceName)
 		}
-	case "redis":
+	case ServiceNameRedis:
 		return redis.NewProvider(), nil
 	// fake 仅用于测试，不应在生产流量中使用。
-	case "fake":
+	case ServiceNameFake:
 		return fake.NewProvider(), nil
 	default:
 		return nil, errors.Errorf("provider not found for service(name:%s)", serviceName)

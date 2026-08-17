@@ -92,6 +92,13 @@ func (m *ServiceManager) CreateServiceInstance(
 		},
 	)
 	if err != nil {
+		if errors.Is(err, model.ErrInstanceNameExists) {
+			return instID, errors.Wrapf(
+				err,
+				"service instance %q already exists for service %s in workspace %s",
+				params.Name, params.ServiceName, params.WorkspaceID,
+			)
+		}
 		return instID, errors.Wrap(err, "init service instance to db")
 	}
 
@@ -195,10 +202,10 @@ func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.
 	}
 
 	if inst.Status == model.ProvisioningStatus {
-		return errors.Wrap(ErrInvalidArgument, "实例正在创建中，不允许删除")
+		return errors.Wrap(ErrInvalidArgument, "service instance is provisioning, cannot delete")
 	}
 	if inst.Status == model.DeletingStatus {
-		return errors.Wrap(ErrInvalidArgument, "实例正在删除中，不允许删除")
+		return errors.Wrap(ErrInvalidArgument, "service instance is deleting, cannot delete")
 	}
 
 	if inst.Status == model.CreateFailedStatus {

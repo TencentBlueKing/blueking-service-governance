@@ -25,6 +25,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
 // AppURIInput is the path input for app-scoped binding APIs.
@@ -132,4 +133,14 @@ func ParseEnvInstanceMap(raw map[string]string) (map[string]bson.ObjectID, error
 		result[envName] = objID
 	}
 	return result, nil
+}
+
+// ValidateEnvVars 校验绑定 EnvVars 的 key 命名。value 是渲染模板，写入时无法预知最终结果，此处不校验。
+func ValidateEnvVars(envVars map[string]string) error {
+	for key := range envVars {
+		if err := envvartypes.ValidateEnvVarKey(key); err != nil {
+			return err
+		}
+	}
+	return nil
 }

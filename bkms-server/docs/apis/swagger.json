@@ -4208,12 +4208,6 @@
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
                     }
                 }
             },
@@ -4277,12 +4271,6 @@
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
                     }
                 }
             }
@@ -4340,12 +4328,6 @@
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -4419,12 +4401,6 @@
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
                     }
                 }
             },
@@ -4480,12 +4456,6 @@
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -16432,12 +16402,6 @@
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
                     }
                 }
             },
@@ -16491,12 +16455,6 @@
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
                     }
                 }
             }
@@ -16547,12 +16505,6 @@
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
                     }
                 }
             },
@@ -16598,12 +16550,6 @@
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }

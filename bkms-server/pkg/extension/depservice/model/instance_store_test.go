@@ -104,6 +104,13 @@ var _ = Describe("Test ServiceInstanceStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("rejects duplicate names in the same workspace and service", func() {
+			dup := *initInst
+			dup.ID = bson.NilObjectID
+			_, err := store.Create(ctx, &dup)
+			Expect(err).To(MatchError(ErrInstanceNameExists))
+		})
+
 		It("test create rejects workspace scope with non-empty scopeValue", func() {
 			inst := &ServiceInstance{
 				Name:         "test-name" + stringx.Random(6),
@@ -157,6 +164,19 @@ var _ = Describe("Test ServiceInstanceStoreMongo", func() {
 			Expect(inst.ServiceName).To(Equal(initInst.ServiceName))
 			Expect(inst.Config).To(Equal(initInst.Config))
 			Expect(inst.Credentials).To(Equal(initInst.Credentials))
+		})
+
+		It("lists instances by ids and omits missing ones", func() {
+			instList, err := store.ListByIDs(ctx, []bson.ObjectID{initInstID, bson.NewObjectID()})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(instList).To(HaveLen(1))
+			Expect(instList[0].ID).To(Equal(initInstID))
+		})
+
+		It("returns empty when listing by empty ids", func() {
+			instList, err := store.ListByIDs(ctx, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(instList).To(BeEmpty())
 		})
 
 		It("test update config", func() {

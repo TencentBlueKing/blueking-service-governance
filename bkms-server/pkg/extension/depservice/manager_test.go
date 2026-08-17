@@ -131,7 +131,7 @@ var _ = Describe("ServiceManager", func() {
 			err := mgr.DeleteServiceInstance(ctx, instID)
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, depservice.ErrInvalidArgument)).To(BeTrue())
-			Expect(err.Error()).To(ContainSubstring("实例正在创建中，不允许删除"))
+			Expect(err.Error()).To(ContainSubstring("service instance is provisioning, cannot delete"))
 
 			inst, getErr := instStore.Get(ctx, instID)
 			Expect(getErr).NotTo(HaveOccurred())

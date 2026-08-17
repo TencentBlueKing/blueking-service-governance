@@ -41,6 +41,9 @@ const serviceInstanceCollName = "depservice_instances"
 
 const configValueKey = "value"
 
+// ErrInstanceNameExists 同一 workspace / serviceName 下实例名已存在
+var ErrInstanceNameExists = errors.New("service instance name already exists")
+
 // use a single instance of Validate, it caches struct info
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
@@ -113,6 +116,8 @@ type ServiceInstanceStore interface {
 	//
 	// Return the service instance and an error if the operation fails.
 	Get(ctx context.Context, id bson.ObjectID) (*ServiceInstance, error)
+	// ListByIDs 按 ID 批量查询服务实例；找不到的 ID 不会出现在结果中。
+	ListByIDs(ctx context.Context, ids []bson.ObjectID) ([]*ServiceInstance, error)
 	// List lists service instances
 	//
 	// - ctx: The context object for cancellation and timeout
@@ -210,7 +215,7 @@ func (s *ServiceInstanceStoreMongo) Create(ctx context.Context, inst *ServiceIns
 	result, err := s.collection.InsertOne(ctx, dbValue)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
-			return bson.NilObjectID, errors.Errorf("service instance with name %s already exists", inst.Name)
+			return bson.NilObjectID, ErrInstanceNameExists
 		}
 		return bson.NilObjectID, err
 	}
@@ -240,6 +245,40 @@ func (s *ServiceInstanceStoreMongo) Get(ctx context.Context, id bson.ObjectID) (
 	}
 
 	return dbValue, nil
+}
+
+// ListByIDs 按 ID 批量查询服务实例
+func (s *ServiceInstanceStoreMongo) ListByIDs(
+	ctx context.Context,
+	ids []bson.ObjectID,
+) ([]*ServiceInstance, error) {
+	ids = lo.Uniq(lo.Filter(ids, func(id bson.ObjectID, _ int) bool {
+		return !id.IsZero()
+	}))
+	if len(ids) == 0 {
+		return []*ServiceInstance{}, nil
+	}
+
+	cursor, err := s.collection.Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx) // nolint
+
+	insts := make([]*ServiceInstance, 0)
+	if err = cursor.All(ctx, &insts); err != nil {
+		return nil, err
+	}
+
+	result := make([]*ServiceInstance, 0, len(insts))
+	for _, inst := range insts {
+		dbValue, err := serviceInstanceFromDBValue(inst)
+		if err != nil {
+			return nil, errors.Wrap(err, "from db value")
+		}
+		result = append(result, dbValue)
+	}
+	return result, nil
 }
 
 // List lists service instances
