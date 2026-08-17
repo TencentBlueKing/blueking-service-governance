@@ -217,7 +217,7 @@ var _ = Describe("Client", func() {
 	})
 })
 
-var _ = Describe("Test upsert method (SSA)", func() {
+var _ = Describe("Test upsert method", func() {
 	var (
 		cli *Client
 		ctx context.Context

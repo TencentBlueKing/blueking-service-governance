@@ -33,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/utils/ptr"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
@@ -43,7 +42,7 @@ const (
 	// listApiLimit 列表查询单次条数限制
 	listApiLimit = 1000
 
-	// defaultFieldManager SSA 模式下的默认 FieldManager 标识
+	// defaultFieldManager 写入资源时的默认 FieldManager 标识
 	defaultFieldManager = "bkms-server"
 )
 
@@ -234,39 +233,54 @@ func (c *Client) Update(
 	return ret, nil
 }
 
-// Upsert 创建或更新资源（如果资源存在则更新，否则创建）
-// 基于 Server-Side Apply (SSA) 实现，具备原生 upsert 语义，
-// 服务端自动处理字段合并和不可变字段保留，无需关心 resourceVersion、clusterIP 等字段
+// Upsert 创建或更新资源（不存在则创建，存在则合并更新）。
+//
+// 不使用 Server-Side Apply：BCS 集群网关不支持 application/apply-patch+yaml。
+// client-go 也没有现成的 Upsert，这里用官方 Merge Patch（RFC 7396）：
+// 未出现在 manifest 中的字段（如 Service clusterIP、status）由 apiserver 保留；
+// 资源不存在时 Patch 返回 404，再走 Create。
 func (c *Client) Upsert(
 	ctx context.Context, namespace string, manifest map[string]any, opts metav1.PatchOptions,
 ) (*unstructured.Unstructured, error) {
-	// 检查 manifest 的合法性
 	if err := c.validateManifest(manifest); err != nil {
 		return nil, errors.Wrap(err, "validate manifest")
 	}
 
-	// 清理 manifest 中嵌套 metadata 的零值 creationTimestamp，
-	// 避免 SSA 严格校验时因 CRD schema 未声明该字段而报错
-	// （例如 spec.template.metadata.creationTimestamp 由 typed struct 零值序列化产生）
-	sanitizeManifestForSSA(manifest)
-
-	// 将 manifest 序列化为 JSON，作为 SSA Patch 的数据
 	data, err := json.Marshal(manifest)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal manifest to JSON")
+		return nil, errors.Wrap(err, "marshal manifest")
 	}
+	var desired map[string]any
+	if err = json.Unmarshal(data, &desired); err != nil {
+		return nil, errors.Wrap(err, "unmarshal manifest")
+	}
+	// typed struct 转 unstructured 时，嵌套 metadata 可能带上零值 creationTimestamp
+	sanitizeManifestForSSA(desired)
 
-	// 设置默认 FieldManager
 	if opts.FieldManager == "" {
 		opts.FieldManager = defaultFieldManager
 	}
-	// 强制接管字段所有权，避免与其他管理器冲突
-	if opts.Force == nil {
-		opts.Force = ptr.To(true)
+	resName := mapx.GetStr(manifest, "metadata.name")
+	patchData, err := json.Marshal(desired)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal merge patch")
 	}
 
-	resName := mapx.GetStr(manifest, "metadata.name")
-	return c.Patch(ctx, namespace, resName, types.ApplyPatchType, data, opts)
+	ret, err := c.cli.Resource(c.gvr).Namespace(namespace).Patch(
+		ctx, resName, types.MergePatchType, patchData, opts,
+	)
+	if err == nil {
+		return ret, nil
+	}
+	if !k8serrors.IsNotFound(err) {
+		return nil, errors.Wrap(err, c.genResActionDesc("patch", c.gvr, namespace, resName))
+	}
+
+	created, createErr := c.Create(ctx, namespace, desired, metav1.CreateOptions{FieldManager: opts.FieldManager})
+	if errors.Is(createErr, ErrResourceAlreadyExists) {
+		return c.Patch(ctx, namespace, resName, types.MergePatchType, patchData, opts)
+	}
+	return created, createErr
 }
 
 // Patch 更新资源
@@ -309,12 +323,8 @@ func (c *Client) validateManifest(manifest map[string]any) error {
 	return nil
 }
 
-// sanitizeManifestForSSA 清理 manifest 中不应出现在 SSA Patch 中的字段
-//
-// 当 typed struct（如 GameDeployment）通过 runtime.DefaultUnstructuredConverter.ToUnstructured 转换后，
-// 嵌套的 ObjectMeta（如 spec.template.metadata）中的零值 creationTimestamp 会被序列化出来，
-// 但某些 CRD 的 OpenAPI schema 并未声明该字段，导致 SSA 严格校验失败。
-// 此函数递归清理所有嵌套 metadata 中的 creationTimestamp 字段，使 SSA Patch 只包含有效字段。
+// sanitizeManifestForSSA 递归清理嵌套 metadata 中的 creationTimestamp。
+// typed struct（如 GameDeployment）转 unstructured 后，spec.template.metadata 可能带上零值时间戳。
 func sanitizeManifestForSSA(obj map[string]any) {
 	for key, val := range obj {
 		child, ok := val.(map[string]any)
