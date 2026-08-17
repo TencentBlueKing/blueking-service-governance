@@ -94,6 +94,13 @@
       />
     </Form.FormItem>
   </Form>
+
+  <!-- 环境变量预检查弹窗 -->
+  <EnvVarPrecheckDialog
+    v-model:is-show="isShowPrecheckDialog"
+    :env-name="precheckEnvName"
+    :undefined-vars="undefinedVars"
+  />
 </template>
 
 <script lang="ts" setup>
@@ -106,7 +113,9 @@
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
   import ImageSelect from '../../components/image-select.vue';
+  import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from './use-deploy';
+  import { useEnvVarPrecheck } from './use-env-var-precheck';
 
   // 镜像来源类型：从源码构建 / 已构建镜像
   type ImageSourceType = 'code' | 'image';
@@ -122,6 +131,7 @@
 
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
+  const { isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } = useEnvVarPrecheck();
 
   // 当前选择的镜像来源
   const imageSource = ref<ImageSourceType>('image');
@@ -221,6 +231,9 @@
   async function submit(targetEnvName: string) {
     const valid = await validate();
     if (!valid) return false;
+
+    const precheckPassed = await precheck(targetEnvName);
+    if (!precheckPassed) return false;
 
     await deploy(targetEnvName);
     forceCleanDirtyTag();

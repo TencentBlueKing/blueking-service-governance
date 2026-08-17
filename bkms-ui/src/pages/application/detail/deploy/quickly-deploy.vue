@@ -73,16 +73,18 @@
         </Select>
       </Form.FormItem>
     </Form>
-    <QuicklyDeployForm
-      :key="targetEnv?.name || '__pending__'"
-      ref="deployFormRef"
-      :class="['px-[24px]', hasTargetSelector ? 'pt-0' : 'pt-[18px]']"
-      :effective-replicas="targetEffectiveReplicas"
-      :env-name="targetEnv?.name"
-      :env-type="targetEnv?.type"
-      :is-prod-env="targetIsProdEnv"
-      :use-provided-env="hasTargetSelector"
-    />
+    <!-- 部署表单 -->
+    <div :class="['px-[24px]', hasTargetSelector ? 'pt-0' : 'pt-[18px]']">
+      <QuicklyDeployForm
+        :key="targetEnv?.name || '__pending__'"
+        ref="deployFormRef"
+        :effective-replicas="targetEffectiveReplicas"
+        :env-name="targetEnv?.name"
+        :env-type="targetEnv?.type"
+        :is-prod-env="targetIsProdEnv"
+        :use-provided-env="hasTargetSelector"
+      />
+    </div>
     <template #footer>
       <Button
         class="mr-[10px]"

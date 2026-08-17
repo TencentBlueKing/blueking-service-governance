@@ -174,6 +174,13 @@
         {{ $t('取消') }}
       </Button>
     </div>
+
+    <!-- 环境变量预检查 -->
+    <EnvVarPrecheckDialog
+      v-model:is-show="isShowPrecheckDialog"
+      :env-name="precheckEnvName"
+      :undefined-vars="undefinedVars"
+    />
   </Sideslider>
 </template>
 
@@ -190,7 +197,9 @@
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
+  import EnvVarPrecheckDialog from '../env-var-precheck-dialog.vue';
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from '../use-deploy';
+  import { useEnvVarPrecheck } from '../use-env-var-precheck';
 
   import type { AppModelDeployRecordOutputObj } from '~/@types/v1/deploy';
   import type { BuildInfo, BuildStatus } from '~/pages/application/detail/components/view-build-log/type';
@@ -211,6 +220,7 @@
   const { t } = useI18n();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
+  const { isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } = useEnvVarPrecheck();
 
   const imageSource = ref<ImageSourceType>('image');
   const formRef = ref();
@@ -301,7 +311,6 @@
    * 配置+镜像、仅配置
    */
   async function handleConfigAndImage() {
-    loading.value = true;
     try {
       // 根据应用类型获取对应的部署 API
       const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
@@ -337,8 +346,6 @@
     } catch (error) {
       console.warn(error);
       return false;
-    } finally {
-      loading.value = false;
     }
   }
 
@@ -347,34 +354,44 @@
     const valid = await formRef.value?.validate().catch(() => false);
     if (!valid) return;
 
-    let result = false;
-    if (formModel.updateContent !== 'image') {
-      result = await handleConfigAndImage();
-    } else {
-      result = await handleImage();
-    }
+    loading.value = true;
+    try {
+      const envName = trpcDeployStore.curEnvItem?.name ?? '';
+      const precheckPassed = await precheck(envName);
+      if (!precheckPassed) return;
 
-    if (!result) return;
+      let result = false;
+      if (formModel.updateContent !== 'image') {
+        result = await handleConfigAndImage();
+      } else {
+        result = await handleImage();
+      }
 
-    if (shouldBuildFromSource.value) {
-      showBuildLog.value = true;
-    }
+      if (!result) return;
 
-    forceCleanDirtyTag(() => {
-      // 源码构建后保留当前侧滑，以便持续展示流式日志；其他部署方式沿用成功后关闭侧滑的交互。
-      emit('update', shouldBuildFromSource.value);
-      Message({
-        theme: 'success',
-        message: t('操作成功'),
+      if (shouldBuildFromSource.value) {
+        showBuildLog.value = true;
+      }
+
+      forceCleanDirtyTag(() => {
+        // 源码构建后保留当前侧滑，以便持续展示流式日志；其他部署方式沿用成功后关闭侧滑的交互。
+        emit('update', shouldBuildFromSource.value);
+        Message({
+          theme: 'success',
+          message: t('操作成功'),
+        });
       });
-    });
+    } catch (error) {
+      console.warn(error);
+    } finally {
+      loading.value = false;
+    }
   }
 
   /**
    * 仅镜像
    */
   async function handleImage() {
-    loading.value = true;
     try {
       await InstanceService.updateAppInstances({
         appID: appDetailStore.appID,
@@ -387,8 +404,6 @@
     } catch (error) {
       console.warn(error);
       return false;
-    } finally {
-      loading.value = false;
     }
   }
 

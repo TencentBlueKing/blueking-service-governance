@@ -27,6 +27,7 @@ import {
   type DeleteHelmDeployRequest,
   type DeleteTafDeployRequest,
   type DeleteTrpcDeployRequest,
+  type EnvVarPreCheckOutput,
   type GetLatestAppModelDeployStatusOutput,
   type GetLatestTafDeployStatusRequest,
   type GetLatestTrpcDeployStatusRequest,
@@ -34,6 +35,8 @@ import {
   type ListHelmDeployRecordsRequest,
   type ListTafDeployRecordsRequest,
   type ListTrpcDeployRecordsRequest,
+  type PreCheckTafDeployEnvVarsRequest,
+  type PreCheckTrpcDeployEnvVarsRequest,
 } from '~/@types/v1/deploy';
 import {
   type ExecuteTafAdminCmdOutput,
@@ -121,6 +124,14 @@ interface DeployAPIs {
     params?: GetLatestTafDeployStatusRequest | GetLatestTrpcDeployStatusRequest,
     config?: Config,
   ) => Promise<ExtractData<GetLatestAppModelDeployStatusOutput>>;
+
+  /**
+   * 部署前检查目标环境是否存在未定义的环境变量
+   */
+  preCheckDeployEnvVars?: (
+    params?: PreCheckTafDeployEnvVarsRequest | PreCheckTrpcDeployEnvVarsRequest,
+    config?: Config,
+  ) => Promise<EnvVarPreCheckOutput>;
 }
 
 /**
@@ -167,6 +178,7 @@ export async function downloadInstanceLog(params: {
 export function useDeployAPIs(appType: DeployableAppType): DeployAPIs {
   const apiMapping: Record<DeployableAppType, DeployAPIs> = {
     trpc: {
+      preCheckDeployEnvVars: DeployService.preCheckTrpcDeployEnvVars,
       listDeployRecords: DeployService.listTrpcDeployRecords,
       listLatestDeployRecords: DeployService.getLatestTrpcDeployStatus,
       createDeployDirectly: DeployService.createTrpcDeploy,
@@ -175,6 +187,7 @@ export function useDeployAPIs(appType: DeployableAppType): DeployAPIs {
       executeAdminCmd: InstanceService.executeTrpcAdminCmd as DeployAPIs['executeAdminCmd'],
     },
     taf: {
+      preCheckDeployEnvVars: DeployService.preCheckTafDeployEnvVars,
       listDeployRecords: DeployService.listTafDeployRecords,
       listLatestDeployRecords: DeployService.getLatestTafDeployStatus,
       createDeployDirectly: DeployService.createTafDeploy,
