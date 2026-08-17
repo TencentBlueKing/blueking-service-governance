@@ -204,6 +204,7 @@
                             <template #default="{ item: env }">
                               <Popover
                                 :disabled="!getGroupedEnvNames(env).length"
+                                :popover-delay="[100, 0]"
                                 theme="popover-dark-translucent"
                                 trigger="hover"
                               >
