@@ -42,6 +42,41 @@ var _ = Describe("PolarisConfig", func() {
 		})
 	})
 
+	Describe("EnvNamesOutsideScope", func() {
+		It("should return recorded environments that are no longer in scope", func() {
+			config := &polaris.PolarisConfig{
+				ScopeEnvNames: []string{"dev"},
+				EnvStates: map[string]polaris.PolarisEnvState{
+					"dev":  {},
+					"prod": {},
+					"stag": {},
+				},
+			}
+			Expect(config.EnvNamesOutsideScope()).To(Equal([]string{"prod", "stag"}))
+		})
+
+		It("should return empty when every recorded environment is still in scope", func() {
+			config := &polaris.PolarisConfig{
+				ScopeEnvNames: []string{"dev"},
+				EnvStates:     map[string]polaris.PolarisEnvState{"dev": {}},
+			}
+			Expect(config.EnvNamesOutsideScope()).To(BeEmpty())
+		})
+	})
+
+	Describe("TrackedEnvNames", func() {
+		It("should union scoped environments with recorded environments", func() {
+			config := &polaris.PolarisConfig{
+				ScopeEnvNames: []string{"dev", "stag"},
+				EnvStates: map[string]polaris.PolarisEnvState{
+					"dev":  {},
+					"prod": {},
+				},
+			}
+			Expect(config.TrackedEnvNames()).To(Equal([]string{"dev", "prod", "stag"}))
+		})
+	})
+
 	Describe("GetEnvWeight", func() {
 		It("should use the fixed default when the environment has no explicit value", func() {
 			config := &polaris.PolarisConfig{}

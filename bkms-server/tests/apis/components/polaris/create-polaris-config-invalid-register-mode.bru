@@ -1,0 +1,40 @@
+meta {
+  name: create-polaris-config-invalid-register-mode
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{serviceURL}}/apps/{{componentsTrpcAppID}}/deps/polaris-configs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "createNewService": false,
+    "scopeEnvNames": ["env-1"],
+    "instanceKey": "testPolarisBadMode",
+    "polarisName": "test-polaris-bad-mode-service",
+    "polarisNamespace": "Test",
+    "polarisToken": "test-polaris-bad-mode-token-xxx",
+    "servicePort": 8080,
+    "registerMode": "whenever"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject an unknown register mode", () => {
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

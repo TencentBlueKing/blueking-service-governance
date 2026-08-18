@@ -21703,6 +21703,14 @@ const docTemplate = `{
                     "description": "北极星 Token（当 createNewService 为 false 时必填，为 true 时由平台创建后回填）",
                     "type": "string"
                 },
+                "registerMode": {
+                    "description": "注册模式，默认 on_deploy（等部署后注册）。\nimmediate 表示绑定环境后立即下发 PolarisConfig CR 与配套 Service 完成注册，\n该配置不再注入环境变量、容器端口和 tRPC 框架配置。创建后不可修改",
+                    "type": "string",
+                    "enum": [
+                        "immediate",
+                        "on_deploy"
+                    ]
+                },
                 "scopeEnvNames": {
                     "description": "生效的环境列表",
                     "type": "array",
@@ -26719,6 +26727,10 @@ const docTemplate = `{
                 },
                 "polarisToken": {
                     "description": "北极星 Token（敏感信息，返回时脱敏）",
+                    "type": "string"
+                },
+                "registerMode": {
+                    "description": "注册模式：immediate（绑定后立即注册）| on_deploy（等部署后注册）",
                     "type": "string"
                 },
                 "scopeEnvNames": {

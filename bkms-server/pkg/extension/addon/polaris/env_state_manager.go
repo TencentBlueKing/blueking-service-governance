@@ -113,12 +113,15 @@ func (m *PolarisEnvStateManager) removeUnappliedEnvStatesOutsideScope(
 
 // reconcileEnvWeightsForScope 根据 scope 变化调整环境权重，与 EnvState 生命周期对齐：
 // - 保留 scope 内的权重，并为 scope 内缺失的环境补充默认值；
-// - 已部署且离开 scope 的环境权重暂时保留，直至下次部署/卸载清理；
 // - 未部署且不在 scope 的权重立即丢弃。
+//
+// on_deploy（含空值）还会暂时保留已部署且离开 scope 的权重，直到下次部署/卸载清理。
+// immediate 离域时会同步删除集群资源，没有"等下次部署清理"的阶段，因此不保留离域权重。
 func (*PolarisEnvStateManager) reconcileEnvWeightsForScope(
 	scopeEnvNames []string,
 	envWeights map[string]int32,
 	envStates map[string]PolarisEnvState,
+	registerMode string,
 ) map[string]int32 {
 	weights := make(map[string]int32, len(scopeEnvNames)+len(envWeights))
 	for envName, w := range envWeights {
@@ -126,7 +129,7 @@ func (*PolarisEnvStateManager) reconcileEnvWeightsForScope(
 			weights[envName] = w
 			continue
 		}
-		if envStates[envName].IsDeployed() {
+		if registerMode != RegisterModeImmediate && envStates[envName].IsDeployed() {
 			weights[envName] = w
 		}
 	}
@@ -157,6 +160,43 @@ func (*PolarisEnvStateManager) IsEnvReadyForDynamicApply(config *PolarisConfig, 
 	state := config.GetEnvState(envName)
 	desiredFields := NewRedeployRequiredFields(config)
 	return state.IsDeployed() && *state.AppliedFields == *desiredFields
+}
+
+// RecordImmediateApplyResult 记录一次即时下发结果。
+//
+// 与 RecordDynamicApplyResult 的区别在于成功时会一并刷新部署快照：immediate 配置不参与
+// Workload 渲染，Pod 侧没有任何待生效内容，CR 与 Service 下发成功就代表配置已完全生效。
+func (m *PolarisEnvStateManager) RecordImmediateApplyResult(
+	ctx context.Context,
+	config *PolarisConfig,
+	envName string,
+	applyErr error,
+) error {
+	update := PolarisEnvStateUpdate{LastError: lo.ToPtr("")}
+	if applyErr != nil {
+		update.LastError = lo.ToPtr(applyErr.Error())
+	} else {
+		update.AppliedFields = NewRedeployRequiredFields(config)
+	}
+	if err := m.store.UpsertEnvState(ctx, config.AppID, config.Name, envName, update); err != nil {
+		return errors.Wrapf(err, "record immediate apply result for env %s", envName)
+	}
+	return nil
+}
+
+// ReleaseEnv 在 immediate 配置的集群资源删除成功后，移除该环境的记录与权重。
+func (m *PolarisEnvStateManager) ReleaseEnv(
+	ctx context.Context,
+	appID, configName, envName string,
+) error {
+	envNames := []string{envName}
+	if err := m.store.RemoveEnvStates(ctx, appID, configName, envNames); err != nil {
+		return errors.Wrapf(err, "remove env state for env %s after release", envName)
+	}
+	if err := m.store.RemoveEnvWeights(ctx, appID, configName, envNames); err != nil {
+		return errors.Wrapf(err, "remove env weight for env %s after release", envName)
+	}
+	return nil
 }
 
 // RecordDynamicApplyResult 仅在配置顶层 UpdatedAt 仍为 expectedUpdatedAt 时记录结果。

@@ -20,10 +20,12 @@ package polaris_test
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/bytedance/mockey"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 )
@@ -31,6 +33,21 @@ import (
 func mockPolarisDiscoveryFailure() {
 	mockey.Mock(cluster.NewConfig).Return(&cluster.Config{ClusterID: "test-cluster"}).Build()
 	mockey.Mock(discovery.GetGroupVersionResource).Return(nil, errors.New("test discovery error")).Build()
+}
+
+// k8sServiceClient 返回访问 core/v1 Service 的客户端
+func k8sServiceClient(clusterCfg *cluster.Config) (*k8sclient.Client, error) {
+	gvr, err := discovery.GetGroupVersionResource(clusterCfg, "Service", "v1")
+	if err != nil {
+		return nil, err
+	}
+	return k8sclient.NewWithGVR(clusterCfg, *gvr), nil
+}
+
+// polarisResourceNamesFor 复刻 polaris 包内部的资源命名规则，供测试直接定位集群资源。
+func polarisResourceNamesFor(appName, configName string) (crName, serviceName string) {
+	baseName := strings.ToLower(appName + "-" + configName)
+	return baseName + "-polaris", baseName + "-polaris-service"
 }
 
 func newTestConfig(

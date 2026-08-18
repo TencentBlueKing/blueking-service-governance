@@ -122,7 +122,7 @@ func (s *DynamicApplyService) Apply(
 	}
 	// 先下发、后校验版本，才能覆盖从读取配置到下发完成的并发更新窗口；
 	// 若版本已变化，当前结果作废并重试最新配置，因此这是最终收敛而非原子一致。
-	if err = s.applier.Apply(ctx, app, env, config, vars.ToMap()); err != nil {
+	if err = s.applier.Apply(ctx, app, env, config, vars.ToMap(), polarisConfigCRKind); err != nil {
 		return configUpdatedAt, err
 	}
 

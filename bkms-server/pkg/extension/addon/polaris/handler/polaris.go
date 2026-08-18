@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/polarisapply"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
 // Handler handles Gin polaris-config API requests.
@@ -57,6 +58,12 @@ func (h *Handler) polarisConfigService() *polaris.PolarisConfigService {
 		),
 		polaris.NewPolarisEnvStateManager(h.registry.PolarisConfigStore),
 		h.registry.EnvStore,
+		h.registry.AppModelStore,
+		envvars.NewUnifiedEnvVarsReader(
+			h.registry.ScopedEnvVarStore,
+			h.registry.AppDepsVarReader,
+			h.registry.PolarisVarReader,
+		),
 		polarisapply.Enqueue,
 	)
 }
@@ -160,12 +167,15 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 			EnableHealthCheck: lo.FromPtrOr(jsonInput.EnableHealthCheck, false),
 			ServiceLabels:     jsonInput.ServiceLabels,
 			Operator:          lo.FromPtrOr(jsonInput.Operator, ""),
+			RegisterMode:      lo.FromPtrOr(jsonInput.RegisterMode, polaris.RegisterModeOnDeploy),
 		},
 		ScopeEnvNames: jsonInput.ScopeEnvNames,
 	}
 
-	if err := h.polarisConfigService().Create(ctx, app, config, jsonInput.CreateNewService); err != nil {
-		if errors.Is(err, polaris.ErrConfigNameExists) {
+	createErr := h.polarisConfigService().Create(ctx, app, config, jsonInput.CreateNewService)
+	// 集群同步失败时配置已经落库，仍需记录审计并把失败原因返回给调用方
+	if createErr != nil && !errors.Is(createErr, polaris.ErrClusterSyncFailed) {
+		if errors.Is(createErr, polaris.ErrConfigNameExists) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
 				bkerrs.ErrCodeInvalidRequest,
 				"polaris config name already exists in app(%s)",
@@ -173,7 +183,7 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 			))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create polaris config"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(createErr, bkerrs.ErrCodeInternalServerError, "create polaris config"))
 		return
 	}
 
@@ -187,6 +197,16 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
 	)
+
+	if createErr != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+			createErr,
+			bkerrs.ErrCodeInternalServerError,
+			"polaris config(%s) saved but registering to polaris failed",
+			config.Name,
+		))
+		return
+	}
 
 	ginutils.OK(c, serializer.CreateAppPolarisConfigOutput{
 		Data: serializer.PolarisNameOutputObj{Name: config.Name},
@@ -252,7 +272,8 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 	}
 
 	updatedConfig, updateErr := service.Update(ctx, app, existingConfig, updateData)
-	if updateErr != nil {
+	// 集群同步失败时配置已经落库，仍需记录审计并把失败原因返回给调用方
+	if updateErr != nil && !errors.Is(updateErr, polaris.ErrClusterSyncFailed) {
 		if errors.Is(updateErr, polaris.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
 				bkerrs.ErrCodeNotFound,
@@ -281,6 +302,16 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
 	)
+
+	if updateErr != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+			updateErr,
+			bkerrs.ErrCodeInternalServerError,
+			"polaris config(%s) saved but syncing to polaris failed",
+			uriInput.ConfigName,
+		))
+		return
+	}
 
 	ginutils.OK(c, new(serializer.PatchAppPolarisConfigOutput).FromModel(updatedConfig))
 }

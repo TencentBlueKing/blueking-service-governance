@@ -29,6 +29,7 @@
 package polaris
 
 import (
+	"sort"
 	"strconv"
 	"time"
 
@@ -41,6 +42,16 @@ import (
 
 // DefaultEnvWeight 环境未单独设置权重时使用的默认值。
 const DefaultEnvWeight int32 = 100
+
+// 注册模式，决定配置何时在北极星侧注册，以及是否参与 Workload 渲染。
+const (
+	// RegisterModeOnDeploy 等部署后注册：配置参与 Workload 渲染（环境变量、tRPC 框架配置），
+	// CR 随应用部署下发，是历史行为，也是缺省值。
+	RegisterModeOnDeploy = "on_deploy"
+	// RegisterModeImmediate 绑定后立即注册：配置不参与 Workload 渲染，绑定环境时直接下发
+	// PolarisConfig CR 与配套 Service 完成注册，无需业务部署。
+	RegisterModeImmediate = "immediate"
+)
 
 // PolarisServiceInstances 存储单个北极星服务的配置和实例信息
 type PolarisServiceInstances struct {
@@ -76,6 +87,9 @@ type Properties struct {
 	ServiceLabels map[string]string `bson:"serviceLabels"`
 	// Operator 操作人
 	Operator string `bson:"operator"`
+	// RegisterMode 注册模式，取值见 RegisterModeOnDeploy / RegisterModeImmediate；
+	// 空值按 RegisterModeOnDeploy 解释，创建后不可修改
+	RegisterMode string `bson:"registerMode"`
 }
 
 // PolarisConfig 北极星配置实体，存储在独立的数据表中
@@ -116,6 +130,32 @@ func (c *PolarisConfig) GenerateName() string {
 // IsAvailableInEnv 检查配置是否在指定环境中可用
 func (c *PolarisConfig) IsAvailableInEnv(envName string) bool {
 	return lo.Contains(c.ScopeEnvNames, envName)
+}
+
+// IsImmediateRegister 判断配置是否为绑定后立即注册模式。
+// 空值按 RegisterModeOnDeploy 解释，保证存量数据与滚动发布窗口内的行为不变。
+func (c *PolarisConfig) IsImmediateRegister() bool {
+	return c.RegisterMode == RegisterModeImmediate
+}
+
+// EnvNamesOutsideScope 返回仍留有环境记录、但已经不在 scope 内的环境名称。
+func (c *PolarisConfig) EnvNamesOutsideScope() []string {
+	envNames := make([]string, 0)
+	for envName := range c.EnvStates {
+		if c.IsAvailableInEnv(envName) {
+			continue
+		}
+		envNames = append(envNames, envName)
+	}
+	sort.Strings(envNames)
+	return envNames
+}
+
+// TrackedEnvNames 返回配置仍在跟踪的全部环境：scope ∪ 仍有 EnvState 记录的环境。
+func (c *PolarisConfig) TrackedEnvNames() []string {
+	envNames := lo.Uniq(append(append([]string{}, c.ScopeEnvNames...), lo.Keys(c.EnvStates)...))
+	sort.Strings(envNames)
+	return envNames
 }
 
 // ConfigVar 配置变量
@@ -190,10 +230,13 @@ func (c *PolarisConfig) GenerateRegistryConfig() RegistryServiceEntry {
 
 // CollectRegistryServiceEntries 从给定的 PolarisConfig 列表中收集所有启用健康检查的配置的
 // registry service 条目。
+//
+// immediate 模式的配置不参与 Workload 渲染，不往框架配置文件注入 registry 配置；
+// 这类业务若确实需要框架侧上报，自行在配置文件中书写即可，Patcher 不会覆盖已有内容。
 func CollectRegistryServiceEntries(configs []*PolarisConfig) []RegistryServiceEntry {
 	var entries []RegistryServiceEntry
 	for _, config := range configs {
-		if config.EnableHealthCheck {
+		if config.EnableHealthCheck && !config.IsImmediateRegister() {
 			entries = append(entries, config.GenerateRegistryConfig())
 		}
 	}

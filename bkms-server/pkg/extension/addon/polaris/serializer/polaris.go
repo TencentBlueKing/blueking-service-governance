@@ -118,6 +118,8 @@ type PolarisConfigOutputObj struct {
 	EnableHealthCheck bool `json:"enableHealthCheck"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
+	// 注册模式：immediate（绑定后立即注册）| on_deploy（等部署后注册）
+	RegisterMode string `json:"registerMode"`
 
 	// 生效的环境列表
 	ScopeEnvNames []string `json:"scopeEnvNames"`
@@ -179,6 +181,7 @@ func (o *PolarisConfigOutputObj) FromModel(config polaris.PolarisConfig, warning
 		KeepNotReadyPod:   config.KeepNotReadyPod,
 		EnableHealthCheck: config.EnableHealthCheck,
 		ServiceLabels:     config.ServiceLabels,
+		RegisterMode:      registerModeOutput(config.RegisterMode),
 		ScopeEnvNames:     config.ScopeEnvNames,
 		Operator:          config.Operator,
 		CreatedAt:         config.CreatedAt.Format(time.RFC3339),
@@ -217,6 +220,14 @@ func newPolarisEnvStateOutput(
 		PolarisTokenChanged: polaris.PolarisTokenChanged(config, envName, state),
 		Status:              polaris.PolarisEnvStatus(config, envName, state),
 	}
+}
+
+// registerModeOutput 把存量数据里缺失的注册模式补成缺省值，避免响应中出现空字符串。
+func registerModeOutput(mode string) string {
+	if mode == "" {
+		return polaris.RegisterModeOnDeploy
+	}
+	return mode
 }
 
 func toRedeployRequiredFieldsOutput(fields *polaris.RedeployRequiredFields) *RedeployRequiredFieldsOutput {
@@ -260,6 +271,10 @@ type CreateAppPolarisConfigInput struct {
 	ServiceLabels map[string]string `json:"serviceLabels"`
 	// 操作人(即北极星负责人, 仅 createNewService 为 true 时有效)
 	Operator *string `json:"operator"`
+	// 注册模式，默认 on_deploy（等部署后注册）。
+	// immediate 表示绑定环境后立即下发 PolarisConfig CR 与配套 Service 完成注册，
+	// 该配置不再注入环境变量和 tRPC 框架配置。创建后不可修改
+	RegisterMode *string `json:"registerMode" binding:"omitempty,oneof=immediate on_deploy"`
 }
 
 // CreateAppPolarisConfigOutput is the JSON response for creating a polaris config.

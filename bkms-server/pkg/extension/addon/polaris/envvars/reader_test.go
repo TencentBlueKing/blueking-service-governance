@@ -124,4 +124,40 @@ var _ = Describe("Reader", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(list.Vars).To(BeEmpty())
 	})
+
+	Context("with an immediate-register config in the same environment", func() {
+		BeforeEach(func() {
+			immediate := &polaris.PolarisConfig{
+				AppID: app.ID,
+				Name:  "cfg-immediate",
+				Properties: polaris.Properties{
+					InstanceKey:      "immediatepolaris",
+					PolarisName:      "immediate-service",
+					PolarisNamespace: "Test",
+					PolarisToken:     "immediate-token",
+					ServicePort:      9090,
+					RegisterMode:     polaris.RegisterModeImmediate,
+				},
+				ScopeEnvNames: []string{environment.Name},
+			}
+			Expect(store.Create(ctx, immediate)).To(Succeed())
+		})
+
+		It("produces no environment variables of its own", func() {
+			list, err := reader.ListEnvVarsForApp(ctx, *environment, app)
+			Expect(err).NotTo(HaveOccurred())
+
+			keys := make([]string, 0, len(list.Vars))
+			for _, item := range list.Vars {
+				keys = append(keys, item.Obj.Key)
+			}
+			Expect(keys).To(ConsistOf("mypolaris_polarisToken", "mypolaris_serviceport"))
+		})
+
+		It("stays out of conflict detection", func() {
+			list, err := reader.ListAppVarsForConflicts(ctx, app.WorkspaceID, app)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list.Vars).To(HaveLen(2))
+		})
+	})
 })

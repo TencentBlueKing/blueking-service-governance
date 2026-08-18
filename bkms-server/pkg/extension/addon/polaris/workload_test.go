@@ -89,7 +89,7 @@ var _ = Describe("WorkloadBuilder", func() {
 		return config
 	}
 
-	It("builds Polaris resources and injects the matching service port", func() {
+	It("builds Polaris resources without touching the pod spec", func() {
 		config := createConfig("primary", []string{environment.Name}, 8080, map[string]string{
 			"environment": "${{env.ENV_NAME}}",
 			"team":        "platform",
@@ -102,18 +102,11 @@ var _ = Describe("WorkloadBuilder", func() {
 		result, err := builder.Build(ctx, app, environment,
 			map[string]string{"ENV_NAME": environment.Name, "POLARIS_NAME": "rendered-name"},
 			podSpec,
-			"main",
 			nil,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.ExtraObjects).To(HaveLen(2))
-		Expect(podSpec.Containers[1].Ports).To(BeEmpty())
-		Expect(result.PodSpec.Containers[0].Ports).To(BeEmpty())
-		Expect(result.PodSpec.Containers[1].Ports).To(ConsistOf(corev1.ContainerPort{
-			Name:          "polaris-8080",
-			ContainerPort: 8080,
-			Protocol:      corev1.ProtocolTCP,
-		}))
+		Expect(result.PodSpec).To(Equal(podSpec))
 
 		objectsByKind := make(map[string]unstructured.Unstructured, len(result.ExtraObjects))
 		for _, object := range result.ExtraObjects {
@@ -169,7 +162,6 @@ var _ = Describe("WorkloadBuilder", func() {
 			environment,
 			nil,
 			corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}},
-			"main",
 			nil,
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -188,29 +180,42 @@ var _ = Describe("WorkloadBuilder", func() {
 		Expect(services[0].(map[string]any)["weight"]).To(BeEquivalentTo(int32(35)))
 	})
 
-	It("filters configs by environment and replaces a conflicting container port", func() {
+	It("filters configs by environment and leaves existing container ports unchanged", func() {
 		createConfig("matching", []string{environment.Name}, 8080, nil)
 		createConfig("other", []string{"another-env"}, 9090, nil)
-		result, err := builder.Build(ctx, app, environment,
-			map[string]string{},
-			corev1.PodSpec{Containers: []corev1.Container{{
-				Name: "main",
-				Ports: []corev1.ContainerPort{{
-					Name:          "existing",
-					ContainerPort: 8080,
-					Protocol:      corev1.ProtocolUDP,
-				}},
-			}}},
-			"main",
-			nil,
-		)
+		podSpec := corev1.PodSpec{Containers: []corev1.Container{{
+			Name: "main",
+			Ports: []corev1.ContainerPort{{
+				Name:          "existing",
+				ContainerPort: 8080,
+				Protocol:      corev1.ProtocolUDP,
+			}},
+		}}}
+		result, err := builder.Build(ctx, app, environment, map[string]string{}, podSpec, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.ExtraObjects).To(HaveLen(2))
-		Expect(result.PodSpec.Containers[0].Ports).To(Equal([]corev1.ContainerPort{{
-			Name:          "polaris-8080",
-			ContainerPort: 8080,
-			Protocol:      corev1.ProtocolTCP,
-		}}))
+		Expect(result.PodSpec).To(Equal(podSpec))
+	})
+
+	It("keeps an immediate-register config out of the pod spec while still building its resources", func() {
+		Expect(store.Create(ctx, &polaris.PolarisConfig{
+			Name:  "immediate",
+			AppID: app.ID,
+			Properties: polaris.Properties{
+				InstanceKey:  "immediate",
+				PolarisName:  "immediate-service",
+				ServicePort:  8080,
+				RegisterMode: polaris.RegisterModeImmediate,
+			},
+			ScopeEnvNames: []string{environment.Name},
+		})).To(Succeed())
+
+		podSpec := corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}}
+		result, err := builder.Build(ctx, app, environment, map[string]string{}, podSpec, nil)
+		Expect(err).NotTo(HaveOccurred())
+		// 部署流程仍然下发 CR 与 Service，保证与平台侧主动下发的结果收敛
+		Expect(result.ExtraObjects).To(HaveLen(2))
+		Expect(result.PodSpec).To(Equal(podSpec))
 	})
 
 	It("returns the workload unchanged when no config matches the environment", func() {
@@ -220,7 +225,7 @@ var _ = Describe("WorkloadBuilder", func() {
 			Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 80}},
 		}}}
 
-		result, err := builder.Build(ctx, app, environment, nil, podSpec, "main", nil)
+		result, err := builder.Build(ctx, app, environment, nil, podSpec, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.ExtraObjects).To(BeEmpty())
 		Expect(result.PodSpec).To(Equal(podSpec))
@@ -234,7 +239,6 @@ var _ = Describe("WorkloadBuilder", func() {
 		_, err := builder.Build(
 			ctx, app, environment, nil,
 			corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}},
-			"main",
 			nil,
 		)
 		Expect(err).To(MatchError(ContainSubstring("render service label invalid")))

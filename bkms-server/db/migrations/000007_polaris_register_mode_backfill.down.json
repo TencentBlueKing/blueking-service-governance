@@ -1,0 +1,18 @@
+[
+  {
+    "update": "polaris_configs",
+    "updates": [
+      {
+        "q": {
+          "registerMode": "on_deploy"
+        },
+        "u": {
+          "$unset": {
+            "registerMode": ""
+          }
+        },
+        "multi": true
+      }
+    ]
+  }
+]

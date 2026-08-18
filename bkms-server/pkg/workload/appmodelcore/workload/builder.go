@@ -316,12 +316,10 @@ func (b *Builder) Build(
 	}
 	extraObjs = append(extraObjs, extraCompObjs...)
 
-	// Polaris: construct PolarisConfig/Service CRs into extra objects and inject service
-	// ports into the main container.
+	// Polaris: construct PolarisConfig/Service CRs into extra objects.
 	polarisResult, err := b.polarisWorkloadBuilder.Build(
 		ctx, b.app, env, varsMap,
 		gd.Spec.Template.Spec,
-		defaults.WorkloadMainContainerName,
 		collector,
 	)
 	if err != nil {

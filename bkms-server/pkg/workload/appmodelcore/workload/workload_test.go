@@ -1027,14 +1027,6 @@ spec:
 				Expect(envMap).To(HaveKeyWithValue(varObj.Key, varObj.Value))
 			}
 
-			// Verify container port is added
-			ports := gd.Spec.Template.Spec.Containers[0].Ports
-			polarisPort, found := lo.Find(ports, func(port corev1.ContainerPort) bool {
-				return port.ContainerPort == 8080 && port.Protocol == corev1.ProtocolTCP
-			})
-			Expect(found).To(BeTrue(), "polaris port should be added to container")
-			Expect(polarisPort.Name).To(Equal("polaris-8080"))
-
 			// Verify extra objects are generated (PolarisConfig and Service)
 			// Plus config component generates a ConfigMap
 			Expect(len(extraObjs)).To(BeNumerically(">=", 3))

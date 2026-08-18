@@ -109,6 +109,12 @@ var _ = Describe("Polaris dynamic apply task", func() {
 			polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
 			envStateManager,
 			envStore,
+			appModelStore,
+			envvars.NewUnifiedEnvVarsReader(
+				scopedEnvVarStore,
+				depenvvars.NewReader(depSvcInstStore, depSvcBindStore),
+				polarisenvvars.NewReader(store),
+			),
 			Enqueue,
 		)
 		app = dbfactory.Application(ctx, appStore)

@@ -1,0 +1,29 @@
+meta {
+  name: list-polaris-register-mode
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{serviceURL}}/apps/{{componentsTrpcAppID}}/deps/polaris-configs
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should default the register mode to on_deploy", () => {
+    const config = res.body.data.find(c => c.name === bru.getVar('testPolarisEnvConfigName'));
+    expect(config).to.not.be.undefined;
+    expect(config.registerMode).to.equal("on_deploy");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

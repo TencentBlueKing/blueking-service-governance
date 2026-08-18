@@ -87,10 +87,15 @@ func (r *Reader) ListAppVarsForConflicts(
 }
 
 // collect 对 configs 中的每条配置产出环境变量，并以 EnvVarSourcePolaris 包装 source 后扁平拼接。
+//
+// immediate 模式的配置不参与 Workload 渲染，不产出任何环境变量，因此也不参与冲突检测。
 func (r *Reader) collect(configs []*polaris.PolarisConfig) envvartypes.EnvVariableRichList {
 	result := envvartypes.EnvVariableRichList{Vars: make([]envvartypes.EnvVariableRichItem, 0, len(configs)*2)}
 
 	for _, cfg := range configs {
+		if cfg.IsImmediateRegister() {
+			continue
+		}
 		source := envvartypes.ConflictedSource{
 			Source:      envvartypes.EnvVarSourcePolaris,
 			SourceValue: cfg.Name,

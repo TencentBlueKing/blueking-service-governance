@@ -106,6 +106,31 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 		})
 	})
 
+	Context("when an immediate-register config has health check enabled", func() {
+		BeforeEach(func() {
+			config := &polaris.PolarisConfig{
+				AppID: app.ID,
+				Properties: polaris.Properties{
+					InstanceKey:       "inst-immediate",
+					PolarisName:       "svc-immediate",
+					PolarisNamespace:  "ns-immediate",
+					PolarisToken:      "token-immediate",
+					ServicePort:       8080,
+					EnableHealthCheck: true,
+					RegisterMode:      polaris.RegisterModeImmediate,
+				},
+				ScopeEnvNames: []string{environment.Name},
+			}
+			Expect(store.Create(ctx, config)).To(Succeed())
+		})
+
+		It("should return content as-is", func() {
+			result, err := p.Patch(ctx, app.ID, environment.Name, "server:\n  app: test")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal("server:\n  app: test"))
+		})
+	})
+
 	Context("when there are configs with health check enabled", func() {
 		BeforeEach(func() {
 			config := &polaris.PolarisConfig{

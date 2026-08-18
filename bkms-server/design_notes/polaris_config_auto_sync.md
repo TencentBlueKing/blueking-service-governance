@@ -4,7 +4,7 @@
 
 一份 PolarisConfig 会在两个地方产生影响：
 
-- **工作负载**：部分字段要写进容器环境变量、容器端口和 Service；
+- **工作负载**：部分字段要写进容器环境变量和 Service；
 - **集群里的 PolarisConfig CR**：北极星侧的注册行为由这个 CR 决定。
 
 用户改配置时，这两类影响的处理方式完全不同。只碰 CR 的字段可以立刻推到集群生效；碰工作负载的字段必须等应用重新部署，由部署流程整体下发。
@@ -12,6 +12,25 @@
 所以每次配置变更都要回答一个问题：**这次改动能直接推 CR 吗？**
 
 判断依据是"这个环境上次部署时用的是什么配置"。系统不额外维护流程状态机，而是在每次变更后，拿当前配置和环境的部署快照现场比一次。
+
+### 1.1 两种注册模式
+
+上面这套快照机制的前提是"配置会影响工作负载"。但有一类业务并不消费北极星 token 相关的环境变量，只是想把实例注册到北极星上，让它们等一次部署纯属多余。
+
+于是配置上有一个创建后不可修改的 `registerMode`：
+
+| 模式 | 含义 |
+| --- | --- |
+| `on_deploy` | 配置参与工作负载渲染，CR 随应用部署下发。缺省值，也是本节其余部分描述的行为 |
+| `immediate` | 配置**完全不参与**工作负载渲染，绑定环境时由平台直接下发 CR 与配套 Service 完成注册 |
+
+`immediate` 的关键在于"完全不参与"：不注入 `{instanceKey}_polarisToken` / `{instanceKey}_serviceport` 环境变量，也不往 tRPC 框架配置注入 `plugins.registry.polaris.service`。这样一来这份配置对 Pod 再无任何诉求，CR 下发成功即代表配置已完全生效，不需要引入"已注册但 Pod 还没拿到 token"这种中间状态，四种环境状态和部署快照的语义都能原样复用。
+
+`enableHealthCheck` 在两种模式下都原样透传给 CR。跳过框架配置注入不影响心跳上报——那段配置并非上报的必要条件，确有需要的业务自行在配置文件里书写即可，Patcher 检测到已有该路径就不会覆盖。
+
+存量数据没有 `registerMode` 字段，代码里一律按 `on_deploy` 解释（`PolarisConfig.IsImmediateRegister()`），因此老配置和滚动发布窗口内新建的配置行为都不变。
+
+模式不可修改是刻意的：从 `immediate` 切到 `on_deploy` 会让下一次部署突然多出环境变量，反向切换则会让正在被业务读取的环境变量凭空消失，两个方向都能打挂线上业务。
 
 ## 2. 字段分成两类
 
@@ -23,7 +42,7 @@
 | --- | --- |
 | `instanceKey` | 决定 Polaris 环境变量的名字 |
 | `polarisToken` | 既写进容器环境变量，也写进 CR |
-| `servicePort` | 既写进容器端口和 Service，也写进 CR |
+| `servicePort` | 既写进环境变量和 Service，也写进 CR |
 
 它们组成部署快照：
 
@@ -66,6 +85,8 @@ AND AppliedFields == DesiredFields  // 部署关联字段没变
 ```
 
 其余情况一律等应用部署。
+
+这一节只适用于 `on_deploy` 配置。`immediate` 配置不影响工作负载，没有"等部署"这回事，scope 内的环境一律在请求内同步下发，见 §6.1。
 
 这条规则带来几个不需要额外代码维护的好性质：
 
@@ -117,7 +138,10 @@ flowchart LR
     PutWeight["PUT 环境权重"] --> Service
     Service --> ConfigStore["PolarisConfigStore"]
     Service --> StateManager["PolarisEnvStateManager"]
-    Service --> Applier["polarisCRApplier"]
+    Service --> Queue["asynq polaris.dynamic_apply"]
+    Service --> Applier["CRApplier"]
+    Queue --> DynamicApply["DynamicApplyService"]
+    DynamicApply --> Applier
     Applier --> Cluster["目标集群 PolarisConfig CR"]
 
     Deploy["应用部署完成"] --> StateManager
@@ -131,9 +155,9 @@ flowchart LR
 
 - 创建配置，按需让平台创建托管的北极星服务；
 - 创建时为 scope 环境补齐默认权重；PATCH 修改 scope 时规范化 `envWeights`，落库后再算出哪些环境可以动态下发；
-- 为这些环境准备 AppModel、Environment 和环境变量，异步调用下发器；
+- 按 `registerMode` 分叉：`immediate` 走 §6.1 的同步收敛，`on_deploy` 为每个可下发环境投递一条 `polaris.dynamic_apply` asynq 任务；
 - PUT 权重时，待部署环境直接持久化；已部署环境先同步调用权重专用 Patch，成功后再持久化，失败时记录日志并返回错误；
-- 把普通配置 PATCH 的每个环境下发结果交回 Manager 记录；
+- asynq 任务执行时由 `DynamicApplyService` 现读最新配置并下发，按配置 `UpdatedAt` 记录结果，避免旧任务覆盖新状态；
 - 删除配置，并处理托管北极星服务的生命周期。
 
 Service 不含资源构建算法，也不含环境状态算法。托管服务的增删查由 `PolarisPlatformManager` 封装。
@@ -142,9 +166,12 @@ Service 不含资源构建算法，也不含环境状态算法。托管服务的
 
 管环境快照、权重生命周期和下发结果：
 
-- `reconcileEnvWeightsForScope`：规范化 `envWeights`（补默认值、清理离域项）；
+- `reconcileEnvWeightsForScope`：规范化 `envWeights`（补默认值、清理离域项）；`immediate` 配置离域即删权重，因为它没有"等下次部署清理"这个阶段；
 - `PrepareDynamicApply`：清掉没有部署事实的离域 `EnvState`，返回可动态下发的环境名；
-- `RecordDynamicApplyResult`：记录每个环境最近一次下发结果；
+- `PolarisConfig.EnvNamesOutsideScope` / `TrackedEnvNames`：离域环境、以及 scope ∪ 仍有记录的环境；
+- `RecordDynamicApplyResult`：仅在配置顶层 `UpdatedAt` 仍匹配时记录该环境下发结果，版本已变则跳过；
+- `RecordImmediateApplyResult`：记录 `immediate` 下发结果，成功时一并写 `AppliedFields`；
+- `ReleaseEnv`：`immediate` 配置的集群资源删干净后，移除该环境的 `EnvState` 与 `envWeights`；
 - `ReconcileAfterDeploy`：部署完成后写 `AppliedFields`，或清理离域数据；
 - `ReconcileAfterUninstall`：卸载完成后删 `EnvState`，离域时连 `envWeights` 一起删。
 
@@ -152,17 +179,22 @@ Service 不含资源构建算法，也不含环境状态算法。托管服务的
 
 Manager 不持有请求级状态，可以同时注入给 API Service 和 AppModel Deployer。它不读 AppModel、Environment、环境变量，也不碰 Kubernetes。
 
-### polarisCRApplier
+### CRApplier
 
 只管单次下发：
 
-- 普通配置 PATCH 调用和应用部署相同的资源构建函数，从结果里挑出 PolarisConfig CR 并 Upsert；
+- `Apply` 复用和应用部署相同的资源构建函数，再按调用方声明的 kind 过滤后 Upsert：on_deploy 动态下发只推 PolarisConfig CR，immediate 还要推配套 Service；
 - 权重 PUT 生成只包含 service-name `test` 和 weight `add` 的 JSON Patch；
-- 两条路径都解析目标集群的 GVR，但权重路径使用 `types.JSONPatchType`，不会替换 `services` 数组。
+- `immediate` 配置删除或离域时 `DeleteResources` 按资源名删掉 CR 与 Service；
+- 所有路径都解析目标集群的 GVR，但权重路径使用 `types.JSONPatchType`，不会替换 `services` 数组。
 
-输入由 Service 准备好（Application、Environment、PolarisConfig、完整环境变量）。Applier 不持有 Store，不读写 `EnvStates`，只把资源构建或集群操作的错误返回上去。
+immediate 要连 Service 一起推，是因为绑定的新环境从未走过部署流程，集群里根本没有那个 Service，只推 CR 完不成实例注册。`DeleteResources` 复用 `Client.Delete` 对 NotFound 返回成功的语义，所以重复删除是安全的。
 
-**Applier 不更新部署快照**。CR Upsert 成功不代表工作负载已经用上新的部署关联字段，只有完整的应用部署才能刷新快照。
+输入由调用方准备好（Application、Environment、PolarisConfig、完整环境变量）。Applier 不持有 Store，不读写 `EnvStates`，只把资源构建或集群操作的错误返回上去。
+
+**`on_deploy` 路径下 Applier 不更新部署快照**。CR Upsert 成功不代表工作负载已经用上新的部署关联字段，只有完整的应用部署才能刷新快照。
+
+`immediate` 路径下这条不变式不成立，且是有意为之：这类配置对工作负载没有任何诉求，"下发成功"和"完全生效"是同一件事，所以 Service 会在 `Apply`（CR + Service）成功后立即写 `AppliedFields`（`RecordImmediateApplyResult`），环境状态直接落到 `deployed`。写快照的动作仍然在 Service / Manager 里，Applier 本身依旧不碰 Store。
 
 ## 6. PATCH 走一遍
 
@@ -172,7 +204,9 @@ sequenceDiagram
     participant Service as PolarisConfigService
     participant Store as PolarisConfigStore
     participant Manager as PolarisEnvStateManager
-    participant Applier as polarisCRApplier
+    participant Queue as asynq
+    participant Worker as DynamicApplyService
+    participant Applier as CRApplier
     participant K8s as Kubernetes
 
     API->>Service: Update(app, config, patch)
@@ -183,31 +217,67 @@ sequenceDiagram
     Manager->>Store: 清理离域且未部署的环境记录
     Manager->>Manager: 逐环境比对快照与当前部署关联字段
     Manager-->>Service: 返回可下发的环境名
+    Service->>Queue: 每个环境一条 polaris.dynamic_apply
     Service-->>API: 返回更新后的配置
-    Service->>Applier: apply(app, env, config, envVars)（异步）
+    Queue->>Worker: handle(appID, configName, envName)
+    Worker->>Store: 现读最新配置
+    Worker->>Applier: Apply(app, env, config, envVars)
     Applier->>K8s: Upsert PolarisConfig CR
-    Applier-->>Service: 返回 error
-    Service->>Manager: RecordDynamicApplyResult(error)
-    Manager->>Store: 写入该环境 LastError
+    Worker->>Manager: RecordDynamicApplyResult(updatedAt, error)
+    Manager->>Store: 版本仍匹配时写入该环境 LastError
 ```
 
-接口只等配置保存和条件计算，不等集群操作。所以响应里的 `envStates.lastError` 可能还是上一次的值，要拿最新结果得重新请求列表接口。
+接口只等配置保存、条件计算和任务入队，不等集群操作。所以响应里的 `envStates.lastError` 可能还是上一次的值，要拿最新结果得重新请求列表接口。
 
-异步阶段 Service 先按应用读一次 AppModel，然后逐环境执行：
-
-1. 读 Environment；
-2. 构建该环境的完整变量上下文；
-3. 构建 PolarisConfig CR 和 Service；
-4. 从结果里取出 PolarisConfig CR；
-5. 拿到目标集群的 PolarisConfig GVR；
-6. Upsert CR；
-7. 把成功或错误交给 Manager 记录。
-
-单个环境失败不影响其他环境。AppModel 读取失败时，这一批环境都记同一个错误。
+asynq 任务只带业务主键。执行时 `DynamicApplyService` 现读最新数据，下发后再核对配置 `UpdatedAt`：版本变了就重试最新配置，避免旧渲染结果覆盖新状态。单个环境失败不影响其他环境。
 
 下发成功清空 `LastError`，失败写入错误，**两种情况都不动 `AppliedFields`**。
 
-### 6.1 环境权重 PUT
+### 6.1 immediate 配置的同步收敛
+
+`immediate` 配置的 Create / PATCH 落库后，在**请求内**同步收敛集群资源，不走上面的异步路径：
+
+```mermaid
+sequenceDiagram
+    participant API as Handler
+    participant Service as PolarisConfigService
+    participant Store as PolarisConfigStore
+    participant Manager as PolarisEnvStateManager
+    participant Applier as polarisCRApplier
+    participant K8s as Kubernetes
+
+    API->>Service: Create / Update
+    Service->>Store: 写入配置
+    Service->>Store: 读回最新配置
+    loop 本次离开 scope 的环境
+        Service->>Applier: deleteResources
+        Applier->>K8s: 删除 PolarisConfig CR + Service
+        alt 成功
+            Service->>Manager: ReleaseEnv（删 EnvState 与 envWeights）
+        else 失败
+            Service->>Manager: RecordImmediateApplyResult(error)
+        end
+    end
+    loop scope 内全部环境
+        Service->>Applier: applyAll
+        Applier->>K8s: Upsert PolarisConfig CR + Service
+        Service->>Manager: RecordImmediateApplyResult(error 或 nil)
+    end
+    Service->>Store: 读回收敛后的配置
+    Service-->>API: 配置 + 汇总错误
+```
+
+几个刻意的选择：
+
+**下发覆盖 scope 内全部环境，而不只是新增环境。** `applyAll` 是幂等的 Upsert，一次保存就能同时覆盖"新绑定环境"、"上次失败重试"和"普通字段变更"三种情况，用户不需要额外的重试入口。
+
+**单个环境失败不中断其余环境。** 每个环境的结果各自写进自己的 `EnvState`，全部处理完后把失败环境和原因汇总成一个 `ErrClusterSyncFailed` 返回。
+
+**失败既写库又返回 HTTP 500。** 配置本身已经保存成功，Handler 据 `ErrClusterSyncFailed` 区分这一点：照常记录配置变更审计，然后返回 500，错误消息里带上每个失败环境的名字和原因。CLI 这类调用方天然报错退出，不需要再查一次接口；`EnvState.LastError` 里的记录供事后排查。
+
+**离域和删除配置都要同步删集群资源。** `immediate` 配置不参与工作负载渲染，也就不会在下一次部署时被资源差异清理带走。若沿用 `on_deploy` 那套"等下次部署清理"，业务长期不部署就会造成北极星注册泄漏。删除配置时集群资源删不掉就不继续删配置记录，用户重试即可收敛；离域时删不掉则保留 `EnvState`，下次保存配置会重新进入清理列表。
+
+### 6.2 环境权重 PUT
 
 ```mermaid
 sequenceDiagram
@@ -292,9 +362,13 @@ Manager 从该应用所有 PolarisConfig 里删掉这个环境的 `EnvState`。`
 
 保留是为了环境再次加入 scope 时不丢快照和自定义权重。
 
+`immediate` 配置不适用这张表：它在保存请求内就同步删掉了集群资源，删成功即连 `EnvState` 和 `envWeights` 一起清掉，没有 `pendingDelete` 这个停留期。删失败才保留 `EnvState`（带 `LastError`），等下次保存重试。
+
 ### 8.3 删除整条配置
 
-直接删 PolarisConfig 记录。集群里由它生成的资源，交给应用下一次部署按资源差异清理，不保留配置级的删除状态。
+`on_deploy` 配置直接删 PolarisConfig 记录。集群里由它生成的资源，交给应用下一次部署按资源差异清理，不保留配置级的删除状态。
+
+`immediate` 配置先同步删掉所有相关环境（scope 内的加上仍有记录的）的 CR 与 Service，全部删干净后才删配置记录。任一环境删除失败就中止，配置保留，用户重试即可——否则配置记录没了，集群里的注册就再没人能清理。
 
 ## 9. Store 的更新语义
 
@@ -322,6 +396,7 @@ RemoveEnvWeights(ctx, appID, configName, envNames)
 
 ```json
 {
+  "registerMode": "on_deploy",
   "scopeEnvNames": ["stag"],
   "envWeights": {
     "stag": 35
@@ -354,6 +429,8 @@ RemoveEnvWeights(ctx, appID, configName, envNames)
 几个细节：
 
 - scope 内还没有环境记录时，响应会补一条 `appliedFields: null` 的 `pendingCreate`；
+- `immediate` 配置只有下发失败的环境会停在 `pendingCreate`，成功下发即 `deployed`；
+- 存量数据缺 `registerMode` 时，响应固定补成 `on_deploy`，不会出现空串；
 - 没有任何相关环境时 `envStates` 是 `{}`，不是 `null`；
 - 模型中的 `EnvWeights` 即使为 `nil`，响应里的 `envWeights` 也固定序列化为 `{}`；
 - `lastError` 不参与 `status` 计算；
@@ -364,7 +441,9 @@ RemoveEnvWeights(ctx, appID, configName, envNames)
 | 操作 | 字段 / 路径 | 约束 |
 | --- | --- | --- |
 | Create | `scopeEnvNames` | 环境维度生效范围；所有 scope 环境自动初始化权重 `100` |
+| Create | `registerMode` | 可选，`immediate` 或 `on_deploy`，缺省 `on_deploy`；显式传空串会被拒绝 |
 | PATCH | `scopeEnvNames` | 传了就全量替换，`[]` 清空，不传（`nil`）表示不更新 |
+| PATCH | `registerMode` | 不暴露，创建后不可修改 |
 | PUT | `/envs/{envName}/weight` | 允许 scope 内环境或任何已部署环境；待部署只持久化，已部署同步 Patch 集群 |
 
 PUT 的 `weight` 取值范围是 `0 - 10000`，`0` 是合法值（表示不接流量）。没有显式环境值时固定使用 `DefaultEnvWeight = 100`。
@@ -381,6 +460,8 @@ Create/PATCH serializer 不声明 `weight` 或 `envWeights`；旧客户端继续
 
 ## 11. 行为速查
 
+下表描述 `on_deploy` 配置。`immediate` 配置的行为集中在最后一组。
+
 | 场景 | 是否动态下发 | 后续处理 |
 | --- | --- | --- |
 | 首次部署前改配置 | 否 | 等应用部署 |
@@ -396,8 +477,22 @@ Create/PATCH serializer 不声明 `weight` 或 `envWeights`；旧客户端继续
 | 环境卸载（仍在 scope） | 不适用 | 删 `EnvState`，保留 `envWeights` |
 | 环境卸载（已离域） | 不适用 | `EnvState` 和 `envWeights` 都删 |
 | 删除整条配置 | 不适用 | 下次部署按资源差异清理集群资源 |
+| **以下为 immediate 配置** | | |
+| 创建配置 / 新环境加入 scope | 是（同步） | Upsert CR + Service，成功写快照落到 `deployed`，失败写 `LastError` 并返回 500 |
+| 改任意 CR 字段 | 是（同步） | 对 scope 内全部环境重新 Upsert，幂等 |
+| 环境离开 scope | 不适用 | 同步删 CR + Service，成功后删 `EnvState` 与 `envWeights`，失败保留记录待重试 |
+| 删除整条配置 | 不适用 | 先同步删所有相关环境的集群资源，全部成功才删配置记录 |
+| 应用部署 | 不适用 | 部署仍会下发同样的 CR + Service，结果与平台主动下发一致 |
 
 ## 12. 存量数据迁移与发布顺序
+
+### 12.1 registerMode 回填
+
+`000007_polaris_register_mode_backfill` 给缺少该字段的文档写入 `registerMode: "on_deploy"`。
+
+这次迁移不影响行为，只是让数据形状统一：`IsImmediateRegister()` 只在字段等于 `immediate` 时返回 `true`，缺字段的文档本来就按 `on_deploy` 处理。回填之后可以直接按 `registerMode` 查询和统计。`down` 只 `$unset` 值为 `on_deploy` 的字段，`immediate` 是用户显式选择的业务数据，回滚时必须保留。
+
+### 12.2 envWeights 回填
 
 迁移由 golang-migrate 的 `000003_polaris_env_weights_backfill` 完成，语句逐段说明见同目录的 `.md`。
 

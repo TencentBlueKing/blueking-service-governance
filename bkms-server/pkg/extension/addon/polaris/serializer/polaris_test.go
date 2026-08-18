@@ -25,6 +25,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -61,6 +62,19 @@ var _ = Describe("PolarisConfigOutputObj", func() {
 			Expect(out.ServicePort).To(Equal(int32(8080)))
 			Expect(out.PolarisToken).To(Equal("token-1"))
 			Expect(out.ServiceLabels).To(Equal(map[string]string{"env": "test"}))
+		})
+
+		It("should report the immediate register mode", func() {
+			out := new(serializer.PolarisConfigOutputObj).FromModel(polaris.PolarisConfig{
+				Name:       "cfg-immediate",
+				Properties: polaris.Properties{RegisterMode: polaris.RegisterModeImmediate},
+			}, nil)
+			Expect(out.RegisterMode).To(Equal(polaris.RegisterModeImmediate))
+		})
+
+		It("should fall back to on_deploy for configs stored before the mode was introduced", func() {
+			out := new(serializer.PolarisConfigOutputObj).FromModel(polaris.PolarisConfig{Name: "cfg-legacy"}, nil)
+			Expect(out.RegisterMode).To(Equal(polaris.RegisterModeOnDeploy))
 		})
 
 		It("should render an empty envStates object when no environments are relevant", func() {
@@ -267,6 +281,35 @@ var _ = Describe("PutEnvWeightInput", func() {
 
 		Expect(validate.Struct(input)).NotTo(Succeed())
 	})
+})
+
+var _ = Describe("CreateAppPolarisConfigInput", func() {
+	inputWithMode := func(mode *string) serializer.CreateAppPolarisConfigInput {
+		return serializer.CreateAppPolarisConfigInput{
+			InstanceKey:      "k1",
+			PolarisName:      "polaris-1",
+			PolarisNamespace: "Test",
+			ServicePort:      8080,
+			RegisterMode:     mode,
+		}
+	}
+
+	DescribeTable(
+		"registerMode validation",
+		func(mode *string, wantErr bool) {
+			err := binding.Validator.ValidateStruct(inputWithMode(mode))
+			if wantErr {
+				Expect(err).To(HaveOccurred())
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+		},
+		Entry("accepts an omitted mode", nil, false),
+		Entry("accepts immediate", lo.ToPtr(polaris.RegisterModeImmediate), false),
+		Entry("accepts on_deploy", lo.ToPtr(polaris.RegisterModeOnDeploy), false),
+		Entry("rejects an unknown mode", lo.ToPtr("whenever"), true),
+		Entry("rejects an explicit empty mode", lo.ToPtr(""), true),
+	)
 })
 
 var _ = Describe("AppConfigEnvNameURIInput", func() {

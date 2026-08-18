@@ -35,24 +35,32 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
+	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
 var _ = Describe("PolarisConfigService", func() {
 	var (
-		ctx              context.Context
-		diApp            *fxtest.App
-		appStore         bkmsapp.ApplicationStore
-		envStore         bkmsenv.EnvironmentStore
-		envService       *env.EnvService
-		store            polaris.PolarisConfigStore
-		depSvcStore      depsvcmodel.ServiceStore
-		depSvcInstStore  depsvcmodel.ServiceInstanceStore
-		envStateManager  *polaris.PolarisEnvStateManager
-		service          *polaris.PolarisConfigService
-		app              *bkmsapp.Application
-		environment      *bkmsenv.Environment
-		otherEnvironment *bkmsenv.Environment
+		ctx               context.Context
+		diApp             *fxtest.App
+		appStore          bkmsapp.ApplicationStore
+		envStore          bkmsenv.EnvironmentStore
+		envService        *env.EnvService
+		store             polaris.PolarisConfigStore
+		appModelStore     appmodel.AppModelStore
+		scopedEnvVarStore envvars.ScopedEnvVarStore
+		appDepsVarReader  *depenvvars.Reader
+		polarisVarReader  *polarisenvvars.Reader
+		depSvcStore       depsvcmodel.ServiceStore
+		depSvcInstStore   depsvcmodel.ServiceInstanceStore
+		envStateManager   *polaris.PolarisEnvStateManager
+		service           *polaris.PolarisConfigService
+		app               *bkmsapp.Application
+		environment       *bkmsenv.Environment
+		otherEnvironment  *bkmsenv.Environment
 	)
 
 	BeforeEach(func() {
@@ -61,13 +69,21 @@ var _ = Describe("PolarisConfigService", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			env.FxModule,
+			appmodel.FxModule,
+			envvars.FxModule,
 			depsvcmodel.FxModule,
+			depenvvars.FxModule,
 			polaris.FxModule,
+			polarisenvvars.FxModule,
 			fx.Populate(
 				&appStore,
 				&envStore,
 				&envService,
 				&store,
+				&appModelStore,
+				&scopedEnvVarStore,
+				&appDepsVarReader,
+				&polarisVarReader,
 				&depSvcStore,
 				&depSvcInstStore,
 				&envStateManager,
@@ -80,6 +96,8 @@ var _ = Describe("PolarisConfigService", func() {
 			polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
 			envStateManager,
 			envStore,
+			appModelStore,
+			envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
 			nil,
 		)
 		app = dbfactory.Application(ctx, appStore)
@@ -433,6 +451,107 @@ var _ = Describe("PolarisConfigService", func() {
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.EnvWeights[environment.Name]).To(Equal(int32(20)))
 				Expect(stored.GetEnvState(environment.Name).LastError).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("Immediate register mode", func() {
+		BeforeEach(func() {
+			// 即时下发要读取应用模型来渲染环境变量
+			Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
+			DeferCleanup(func() { _ = appModelStore.DeleteAppModel(ctx, app.ID) })
+		})
+
+		newImmediateConfig := func(name string, scopeEnvNames []string) *polaris.PolarisConfig {
+			config := newTestConfig(app.ID, name, scopeEnvNames, nil)
+			config.RegisterMode = polaris.RegisterModeImmediate
+			return config
+		}
+
+		It("should keep the config and record the failure on every scoped environment", func() {
+			config := newImmediateConfig("cfg-immediate-create", []string{environment.Name, otherEnvironment.Name})
+
+			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
+				mockPolarisDiscoveryFailure()
+
+				err := service.Create(ctx, app, config, false)
+				Expect(err).To(MatchError(polaris.ErrClusterSyncFailed))
+				Expect(err).To(MatchError(ContainSubstring(environment.Name)))
+				Expect(err).To(MatchError(ContainSubstring(otherEnvironment.Name)))
+
+				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				Expect(getErr).NotTo(HaveOccurred())
+				for _, envName := range []string{environment.Name, otherEnvironment.Name} {
+					state := stored.GetEnvState(envName)
+					Expect(state.LastError).To(ContainSubstring("test discovery error"))
+					Expect(state.AppliedFields).To(BeNil())
+					Expect(polaris.PolarisEnvStatus(stored, envName, state)).
+						To(Equal(polaris.PolarisEnvStatusPendingCreate))
+				}
+			})
+		})
+
+		It("should not touch the cluster when the scope is empty", func() {
+			config := newImmediateConfig("cfg-immediate-empty-scope", nil)
+
+			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
+				mockPolarisDiscoveryFailure()
+
+				Expect(service.Create(ctx, app, config, false)).To(Succeed())
+				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(stored.EnvStates).To(BeEmpty())
+			})
+		})
+
+		It("should drop the weight of an environment leaving scope even when it was applied", func() {
+			config := newImmediateConfig("cfg-immediate-release-weight", []string{environment.Name})
+			config.EnvWeights = map[string]int32{environment.Name: 35}
+			config.EnvStates = map[string]polaris.PolarisEnvState{
+				environment.Name: envState(redeployFields("k1", "t1", 8080)),
+			}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
+				mockPolarisDiscoveryFailure()
+
+				updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+					ScopeEnvNames: []string{},
+				})
+				// 删除集群资源失败，环境记录保留下来供下次保存时重试
+				Expect(err).To(MatchError(polaris.ErrClusterSyncFailed))
+				Expect(updated.EnvWeights).NotTo(HaveKey(environment.Name))
+				Expect(updated.GetEnvState(environment.Name).LastError).
+					To(ContainSubstring("test discovery error"))
+			})
+		})
+
+		It("should refuse to delete the config while its cluster resources remain", func() {
+			config := newImmediateConfig("cfg-immediate-delete-blocked", []string{environment.Name})
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
+				mockPolarisDiscoveryFailure()
+
+				Expect(service.Delete(ctx, app, config)).To(MatchError(polaris.ErrClusterSyncFailed))
+				_, err := store.Get(ctx, app.ID, config.Name)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		It("should leave on_deploy configs on the asynchronous path", func() {
+			config := newTestConfig(app.ID, "cfg-on-deploy-create", []string{environment.Name}, nil)
+
+			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
+				mockPolarisDiscoveryFailure()
+
+				// on_deploy 配置在部署前无需下发，创建不会触碰集群，也就不会失败
+				Expect(service.Create(ctx, app, config, false)).To(Succeed())
+				Consistently(func(g Gomega) {
+					stored, getErr := store.Get(ctx, app.ID, config.Name)
+					g.Expect(getErr).NotTo(HaveOccurred())
+					g.Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
+				}).WithTimeout(200 * time.Millisecond).Should(Succeed())
 			})
 		})
 	})
