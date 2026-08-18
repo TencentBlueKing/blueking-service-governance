@@ -51,14 +51,14 @@ func stubFetch(status appmodeldeploy.Status) {
 	).Build()
 }
 
-var _ = Describe("Manager Handle", func() {
+var _ = Describe("Poller RunTick", func() {
 	var (
 		ctx      context.Context
 		args     Args
 		rec      *appmodeldeploy.Record
 		latest   *appmodeldeploy.Record
 		enqCount int
-		mgr      *Manager
+		plr      *poller
 	)
 
 	BeforeEach(func() {
@@ -67,7 +67,7 @@ var _ = Describe("Manager Handle", func() {
 		rec = newDeployingRecord()
 		latest = rec
 		enqCount = 0
-		mgr = NewManager(&appmodeldeploy.RecordStoreMongo{}, nil)
+		plr = newPoller(&appmodeldeploy.RecordStoreMongo{}, nil)
 
 		mockey.Mock((*appmodeldeploy.RecordStoreMongo).Get).To(
 			func(context.Context, string, string) (*appmodeldeploy.Record, error) { return rec, nil },
@@ -92,7 +92,7 @@ var _ = Describe("Manager Handle", func() {
 
 	It("enqueues the next tick when deploy is still running", func() {
 		stubFetch(appmodeldeploy.StatusDeploying)
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(enqCount).To(Equal(1))
 		Expect(rec.Status).To(Equal(appmodeldeploy.StatusDeploying))
@@ -100,14 +100,14 @@ var _ = Describe("Manager Handle", func() {
 
 	It("skips already stable records without polling", func() {
 		rec.Status = appmodeldeploy.StatusDeployed
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(enqCount).To(Equal(0))
 	})
 
 	It("skips uninstalling records without overwriting", func() {
 		rec.Status = appmodeldeploy.StatusUninstalling
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(enqCount).To(Equal(0))
 		Expect(rec.Status).To(Equal(appmodeldeploy.StatusUninstalling))
@@ -115,7 +115,7 @@ var _ = Describe("Manager Handle", func() {
 
 	It("marks pollingTimeout when StartedAt exceeds configured window", func() {
 		rec.StartedAt = time.Now().Add(-pollingTimeout() - time.Minute)
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(appmodeldeploy.StatusPollingTimeout))
 		Expect(enqCount).To(Equal(0))
@@ -124,7 +124,7 @@ var _ = Describe("Manager Handle", func() {
 	It("marks pollingBroken after remaining retries are exhausted", func() {
 		args.FailureRetryRemain = 1
 		mockey.Mock((*appmodeldeploy.DeployStateGetter).Get).Return(nil, errors.New("cluster down")).Build()
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(appmodeldeploy.StatusPollingBroken))
 		Expect(enqCount).To(Equal(0))
@@ -133,7 +133,7 @@ var _ = Describe("Manager Handle", func() {
 	It("reschedules when query fails but retries remain", func() {
 		args.FailureRetryRemain = 3
 		mockey.Mock((*appmodeldeploy.DeployStateGetter).Get).Return(nil, errors.New("cluster down")).Build()
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(appmodeldeploy.StatusDeploying))
 		Expect(enqCount).To(Equal(1))
@@ -142,7 +142,7 @@ var _ = Describe("Manager Handle", func() {
 	It("marks canceled when a newer deploy exists", func() {
 		stubFetch(appmodeldeploy.StatusDeploying)
 		latest = newDeployingRecord()
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(appmodeldeploy.StatusCanceled))
 		Expect(rec.Message).To(ContainSubstring("superseded"))
@@ -152,7 +152,7 @@ var _ = Describe("Manager Handle", func() {
 	DescribeTable("maps terminal status from fetch helper",
 		func(want appmodeldeploy.Status) {
 			stubFetch(want)
-			err := mgr.Handle(ctx, args)
+			err := plr.runTick(ctx, args)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rec.Status).To(Equal(want))
 			Expect(enqCount).To(Equal(0))

@@ -32,14 +32,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/task"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
@@ -158,7 +157,7 @@ func triggerDeployAfterBuild(
 	})
 }
 
-// startDeployAfterBuild 调 AppModel 部署，并投递现网部署状态轮询（仍走 machinery）。
+// startDeployAfterBuild 调 AppModel 部署，并投递部署状态轮询（asynq）。
 // 部署已创建但轮询投递失败时仍返回 deployID，由调用方把记录标失败。
 func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args) (string, error) {
 	if args.AutoDeploy == nil {
@@ -183,21 +182,15 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args)
 		return "", errors.Wrap(err, "start appmodel deploy after build")
 	}
 
-	_, err = worker.ApplyTask(
-		ctx,
-		config.G.RabbitMQ.GetURI(),
-		config.G.RabbitMQ.Queue,
-		task.PollingTrpcDeployStatus,
-		task.PollingTrpcDeployStatusArgs{
-			WorkspaceID:     args.WorkspaceID,
-			AppID:           args.AppID,
-			EnvName:         args.AutoDeploy.EnvName,
-			TrafficLaneName: args.AutoDeploy.TrafficLaneName,
-			DeployID:        deployID,
-		},
-	)
+	err = taskq.Enqueue(ctx, appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
+		WorkspaceID:     args.WorkspaceID,
+		AppID:           args.AppID,
+		EnvName:         args.AutoDeploy.EnvName,
+		TrafficLaneName: args.AutoDeploy.TrafficLaneName,
+		DeployID:        deployID,
+	}))
 	if err != nil {
-		return deployID, errors.Wrap(err, "apply polling deploy status task")
+		return deployID, errors.Wrap(err, "enqueue polling deploy status task")
 	}
 	return deployID, nil
 }
