@@ -1,16 +1,53 @@
-## Purpose
+# AGENTS.md
 
-* These brief instructions apply to the whole repository. Module-specific guidance lives in the nested `AGENTS.md` files, e.g. `bkms-server/AGENTS.md` and `bkms-cli/AGENTS.md`.
-* **Humans** are always responsible for changes being proposed and must pre-review all agentic work before turning it into a PR.
+> Agent 认知本项目的第一站——快速了解项目全貌、找到代码和规范、知道规矩。
 
-## Repository layout
+## 项目概述
 
-* `bkms-server/` — Gin REST API service (Go)
-* `bkms-cli/` — Cobra-based CLI (Go)
-* `bkms-dockerfile-generator/` — Dockerfile generation tool (Go)
-* `libs/bkms-adapter/` — shared adapter library (Go)
-* `bkms-ui/` — Vue 3 + TypeScript frontend
-* `charts/` — Helm charts
+- **项目名称**：蓝鲸服务治理平台（blueking-service-governance）
+- **仓库地址**：https://github.com/TencentBlueKing/blueking-service-governance
+- **定位**：面向游戏开发者、SRE 提供一站式应用全生命周期管理服务
+- **目标**：围绕应用托管、制品交付、开发联调、应用观测、管理策略和持续部署等场景，帮助业务团队以更低成本完成微服务应用的构建、运行、发布和治理
+
+## 目录结构
+
+- `bkms-server/` — Gin REST API 服务端（Go），提供空间、环境、应用、组件、部署等领域能力
+- `bkms-cli/` — Cobra 命令行工具（Go）
+- `bkms-dockerfile-generator/` — 镜像构建流程中的 Dockerfile 生成工具（Go）
+- `libs/bkms-adapter/` — 公共适配层模块（Go）
+- `bkms-ui/` — Vue 3 + TypeScript 前端工程
+- `charts/` — Helm Chart 部署清单
+
+## 关键规范
+
+- Harness 规范（工具能力、Skill 清单、架构约束等）→ `docs/harness/README.md`
+- 技术开发规范 → `docs/standards/README.md`
+- 开发地图（graphify 知识图谱，查询代码结构与概念关联）→ [`docs/dev-map/README.md`](docs/dev-map/README.md)
+
+## 局部入口（工作单元 AGENTS）
+
+修改某路径前，阅读该路径向上最近的 `AGENTS.md`；**局部约定优先于根**。根不替代工作单元入口。
+
+| 路径 | 角色 |
+|------|------|
+| [`bkms-server/AGENTS.md`](bkms-server/AGENTS.md) | Gin REST API 服务端开发约定（router/handler/serializer 分层、日志、测试） |
+| [`bkms-cli/AGENTS.md`](bkms-cli/AGENTS.md) | Cobra CLI 工具开发约定（子命令结构、Ginkgo 测试） |
+| [`bkms-server/db/AGENTS.md`](bkms-server/db/AGENTS.md) | 数据库迁移文件（migrations）编写规范 |
+| [`bkms-server/scripts/AGENTS.md`](bkms-server/scripts/AGENTS.md) | 脚本编写约定 |
+
+## 编码前必读（门闩）
+
+写或改**业务代码**前（非纯文档/纯问答）：
+1. 打开 `docs/standards/README.md`，确认「当前项目选用的规范」与「加载预算」。
+2. 按预算表与「章节快速索引」**只 Read 本任务相关章节**（可用行号/偏移；**禁止**无差别灌入整份长规范）。
+3. 未选用的端：不得假装存在规范；按 README「未覆盖的技术栈」处理或向用户确认。
+4. 提交/宣称完成前：按相关节的检查清单自检，并运行**当前工作单元 / 仓库已有**的 `lint`/`test`/`build` 脚本（无脚本不得声称已通过）。
+
+---
+
+## 协作与人工把关
+
+* **人类**始终对所提议的变更负责，必须在将 agentic 工作转化为 PR 之前进行预审。
 
 ## License headers
 
