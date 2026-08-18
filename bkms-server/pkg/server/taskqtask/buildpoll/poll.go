@@ -24,6 +24,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
@@ -166,10 +167,7 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 	}
 
 	// 查蓝盾失败次数走业务计数，不走 asynq MaxRetry；首 tick 未带 remain 时补满
-	remain := args.FailureRetryRemain
-	if remain <= 0 {
-		remain = totalFailureRetryCount
-	}
+	remain := lo.Ternary(args.FailureRetryRemain > 0, args.FailureRetryRemain, totalFailureRetryCount)
 
 	curStatus := record.Status
 	if err = fetchAndUpdateBuildRecord(ctx, apiClient, pipeline, record, args.BuildID); err != nil {

@@ -134,10 +134,7 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 	}
 
 	// 查状态失败次数走业务计数，不走 asynq MaxRetry；首 tick 未带 remain 时补满
-	remain := args.FailureRetryRemain
-	if remain <= 0 {
-		remain = totalFailureRetryCount
-	}
+	remain := lo.Ternary(args.FailureRetryRemain > 0, args.FailureRetryRemain, totalFailureRetryCount)
 
 	curStatus := record.Status
 	state, err := appmodeldeploy.NewDeployStateGetter(record).Get(ctx)
@@ -162,15 +159,7 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 		}
 	}
 
-	// 同环境出现更新的部署，当前记录标取消，避免两路轮询互相覆盖
-	if latest, gErr := p.recordStore.GetLatest(ctx, args.AppID, args.EnvName, args.TrafficLaneName); gErr != nil {
-		log.Errorf(ctx, "failed to get latest deploy record: %v", gErr)
-	} else if latest != nil && latest.ID != record.ID {
-		log.Warnf(ctx, "deploy %s status polling stopped by newer deployment %s", args, latest.ID.Hex())
-		record.Status = appmodeldeploy.StatusCanceled
-		record.Message = "deployment canceled: superseded by newer deployment"
-		record.EndedAt = time.Now()
-	}
+	p.markCanceledIfSuperseded(ctx, record, args)
 
 	if record.Status != curStatus {
 		if err = p.save(ctx, record, args); err != nil {
@@ -190,6 +179,23 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 	}
 	// 仍在跑：ProcessIn 投新任务续跑，retry 从 0 计
 	return p.enqueueNext(ctx, args, remain)
+}
+
+// markCanceledIfSuperseded 同环境出现更新的部署时把当前记录标取消，避免两路轮询互相覆盖
+// 查最新记录失败不影响本 tick 的状态推进，只打日志
+func (p *poller) markCanceledIfSuperseded(ctx context.Context, record *appmodeldeploy.Record, args Args) {
+	latest, err := p.recordStore.GetLatest(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
+	if err != nil {
+		log.Errorf(ctx, "failed to get latest deploy record: %v", err)
+		return
+	}
+	if latest == nil || latest.ID == record.ID {
+		return
+	}
+	log.Warnf(ctx, "deploy %s status polling stopped by newer deployment %s", args, latest.ID.Hex())
+	record.Status = appmodeldeploy.StatusCanceled
+	record.Message = "deployment canceled: superseded by newer deployment"
+	record.EndedAt = time.Now()
 }
 
 // enqueueNext 按配置间隔 ProcessIn 投递下一 tick；新任务 retry 从 0 计
