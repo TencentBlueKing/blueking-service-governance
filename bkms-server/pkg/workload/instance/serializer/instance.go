@@ -67,6 +67,12 @@ type AppInstanceURIInput struct {
 // 分页页码从 1 开始；校验走 Validate 而非 binding:"gte=1"，因为该约束只在分页模式生效
 const minListAppInstancesPage int64 = 1
 
+// 分页页码上限；能翻到多少条取决于 pageSize，按最小的 5 算保底也有 5 万条，按最大的 100 算到百万
+// 单个应用环境不会有这个量级的实例，超出只可能是脏参数
+// 除了给出明确的 400 而不是静默的空列表，这个上界也是 ProjectionRange 里
+// (page-1)*pageSize 不溢出 int64 的前提，放宽时要一并复核
+const maxListAppInstancesPage int64 = 10000
+
 // 分页 pageSize 仅允许这些固定值；取值约束只在分页模式生效，所以不写 binding:"oneof=..."
 var allowedListAppInstancesPageSizes = []int64{5, 10, 20, 50, 100}
 
@@ -103,8 +109,11 @@ func (q *ListAppInstancesQueryInput) Validate() error {
 	if q.PageSize == nil {
 		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "pageSize is required")
 	}
-	if *q.Page < minListAppInstancesPage {
-		return bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "page must be >= %d", minListAppInstancesPage)
+	if *q.Page < minListAppInstancesPage || *q.Page > maxListAppInstancesPage {
+		return bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidArgument,
+			"page must be between %d and %d", minListAppInstancesPage, maxListAppInstancesPage,
+		)
 	}
 	if !slices.Contains(allowedListAppInstancesPageSizes, *q.PageSize) {
 		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "pageSize must be one of 5, 10, 20, 50, 100")
@@ -113,15 +122,19 @@ func (q *ListAppInstancesQueryInput) Validate() error {
 }
 
 // ProjectionRange 返回需要投影的 [start, end) 下标
-// 全量模式投影全部匹配 Pod；分页模式只投影当前页
+// 全量模式投影全部匹配 Pod；分页模式只投影当前页，整页越过尾部时被 min 收敛成空区间
+// 分页模式必须已通过 Validate：除了 Page/PageSize 非空，page 上界还保证下面的乘法不会溢出 int64
 func (q *ListAppInstancesQueryInput) ProjectionRange(total int64) (start, end int64) {
 	if q.All {
 		return 0, total
 	}
+
 	page := *q.Page
 	pageSize := *q.PageSize
+
 	start = min((page-1)*pageSize, total)
 	end = min(start+pageSize, total)
+
 	return start, end
 }
 

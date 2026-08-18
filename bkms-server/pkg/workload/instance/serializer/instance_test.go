@@ -20,6 +20,7 @@ package serializer_test
 
 import (
 	"errors"
+	"math"
 
 	"github.com/go-playground/validator/v10"
 	. "github.com/onsi/ginkgo/v2"
@@ -56,7 +57,43 @@ var _ = Describe("Instance serializer", func() {
 			err := (&serializer.ListAppInstancesQueryInput{Page: int64Ptr(1), PageSize: int64Ptr(5)}).Validate()
 			Expect(err).NotTo(HaveOccurred())
 		})
+
+		// page 上界拦的是脏参数：放进去只会算出一个越过尾部的空窗口，不如直接报错
+		It("rejects a page beyond the upper bound", func() {
+			err := (&serializer.ListAppInstancesQueryInput{
+				Page: int64Ptr(math.MaxInt64), PageSize: int64Ptr(100),
+			}).Validate()
+			Expect(err).To(HaveOccurred())
+			var bkErr *bkerrs.Error
+			Expect(errors.As(err, &bkErr)).To(BeTrue())
+			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
+			Expect(err.Error()).To(ContainSubstring("page must be between"))
+		})
 	})
+
+	// 返回值直接被当作下标切片，越尾必须收敛成空区间
+	DescribeTable("ListAppInstancesQueryInput.ProjectionRange",
+		func(query serializer.ListAppInstancesQueryInput, total, wantStart, wantEnd int64) {
+			start, end := query.ProjectionRange(total)
+
+			Expect(start).To(Equal(wantStart))
+			Expect(end).To(Equal(wantEnd))
+		},
+		Entry("all mode covers everything",
+			serializer.ListAppInstancesQueryInput{All: true}, int64(3), int64(0), int64(3)),
+		Entry("middle page takes a full window",
+			serializer.ListAppInstancesQueryInput{Page: int64Ptr(2), PageSize: int64Ptr(5)},
+			int64(12), int64(5), int64(10)),
+		Entry("last page is partially filled",
+			serializer.ListAppInstancesQueryInput{Page: int64Ptr(3), PageSize: int64Ptr(5)},
+			int64(12), int64(10), int64(12)),
+		Entry("page fully past the tail yields an empty range",
+			serializer.ListAppInstancesQueryInput{Page: int64Ptr(4), PageSize: int64Ptr(5)},
+			int64(12), int64(12), int64(12)),
+		Entry("pagination on an empty list",
+			serializer.ListAppInstancesQueryInput{Page: int64Ptr(1), PageSize: int64Ptr(5)},
+			int64(0), int64(0), int64(0)),
+	)
 
 	Describe("FromPodManifest", func() {
 		It("converts a pod manifest into an app instance output", func() {

@@ -7684,7 +7684,7 @@
                     },
                     {
                         "type": "integer",
-                        "description": "页码，从 1 开始；分页模式必填，all=true 时禁止出现",
+                        "description": "页码，取值 1-10000；分页模式必填，all=true 时禁止出现",
                         "name": "page",
                         "in": "query"
                     },
@@ -18311,7 +18311,7 @@
             "type": "object",
             "properties": {
                 "alertDisplayName": {
-                    "description": "AlertDisplayName 是 BKMS 本地策略展示名，供前端直接展示。\n不再对外暴露监控原始 alertName，避免前端感知远端命名格式。",
+                    "description": "AlertDisplayName 是 BKMS 本地策略展示名，例如 `CPU 使用率过高`；\n对应的监控原始名称格式为 `CPU 使用率过高【demo-app】`。",
                     "type": "string"
                 },
                 "alertID": {

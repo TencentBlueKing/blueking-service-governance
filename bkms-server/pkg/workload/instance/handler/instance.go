@@ -71,7 +71,7 @@ func New(registry *storereg.Registry) *Handler {
 //	@Param		envName			path		string	true	"部署环境名称"
 //	@Param		trafficLaneName	query		string	false	"部署的泳道名称（空字符串表示不使用泳道）"
 //	@Param		all				query		bool	false	"为 true 时一次返回全量实例；禁止同时带 page 或 pageSize"
-//	@Param		page			query		int		false	"页码，从 1 开始；分页模式必填，all=true 时禁止出现"
+//	@Param		page			query		int		false	"页码，取值 1-10000；分页模式必填，all=true 时禁止出现"
 //	@Param		pageSize		query		int		false	"每页数量；分页模式必填，all=true 时禁止出现"
 //	@Success	200				{object}	serializer.ListAppInstancesOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
