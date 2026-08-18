@@ -226,9 +226,11 @@
     imageTag: '',
     updateContent: 'both',
   });
+  // 切换为“仅配置”时会保留之前的镜像来源，因此只有“镜像+配置”选择源码时才触发构建。
+  const shouldBuildFromSource = computed(() => formModel.updateContent === 'both' && imageSource.value === 'code');
   const { getDefaultBranch, fetchRecommendTag } = useRecommendTag(() => formModel.branch, {
     onRecommend: tag => {
-      if (imageSource.value === 'code') {
+      if (shouldBuildFromSource.value) {
         formModel.imageTag = tag;
       }
     },
@@ -310,9 +312,7 @@
         imageTag: formModel.imageTag,
         replicas: props.effectiveReplicas ?? trpcDeployStore.deploySpec?.replicas ?? 0,
       };
-      if (imageSource.value === 'image') {
-        await deployAPIs.createDeployDirectly!(params);
-      } else {
+      if (shouldBuildFromSource.value) {
         params.branch = formModel.branch;
         const buildRes = await deployAPIs.buildAndCreateDeploy!(params);
         // 后端状态类型为 string，这里收窄为 BuildTips 支持的状态。
@@ -329,6 +329,9 @@
           revision: buildRes.revision || formModel.branch,
           status,
         });
+      } else {
+        // 已构建镜像 和 “仅配置”均直接部署；“仅配置”的镜像 Tag 已回填为当前部署版本。
+        await deployAPIs.createDeployDirectly!(params);
       }
       return true;
     } catch (error) {
@@ -353,13 +356,13 @@
 
     if (!result) return;
 
-    if (imageSource.value === 'code') {
+    if (shouldBuildFromSource.value) {
       showBuildLog.value = true;
     }
 
     forceCleanDirtyTag(() => {
       // 源码构建后保留当前侧滑，以便持续展示流式日志；其他部署方式沿用成功后关闭侧滑的交互。
-      emit('update', imageSource.value === 'code');
+      emit('update', shouldBuildFromSource.value);
       Message({
         theme: 'success',
         message: t('操作成功'),
