@@ -116,9 +116,23 @@ func errorHandler() asynq.ErrorHandler {
 
 		// 调用业务注册的 exhausted 回调
 		if fn, ok := getExhaustedHandler(t.Type()); ok {
-			fn(ctx, t.Payload(), err)
+			safeCallExhaustedHandler(ctx, fn, t.Type(), t.Payload(), err)
 		}
 	})
+}
+
+// safeCallExhaustedHandler 调用业务 exhausted 回调并兜底 panic。
+// asynq 只在执行 handler 时 recover，ErrorHandler 的调用点不在保护范围内，
+// 回调 panic 会直接打挂 worker goroutine 并终止进程，故必须在此拦住。
+func safeCallExhaustedHandler(
+	ctx context.Context, fn ExhaustedHandlerFunc, taskType string, payload []byte, lastErr error,
+) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf(ctx, "taskq: exhausted handler for task %s panicked: %v", taskType, r)
+		}
+	}()
+	fn(ctx, payload, lastErr)
 }
 
 // wrapStopRetry 包装一个错误使底层停止重试, 同时保留原始错误信息。

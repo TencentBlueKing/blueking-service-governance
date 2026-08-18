@@ -71,6 +71,31 @@ func handle(ctx context.Context, args Args) error {
 	).runTick(ctx, args)
 }
 
+// onExhausted tick 重试耗尽（如 Redis 抖动导致连续投递失败）意味着轮询链已断，后续不会再有 tick
+// 来推进状态，兜底把记录标为 StatusPollingBroken，避免构建记录永久停在 running
+func onExhausted(ctx context.Context, args Args, lastErr error) {
+	log.Errorf(ctx, "build poll %s exhausted, try mark pollingBroken: %v", args, lastErr)
+
+	reg := storereg.G()
+	if reg == nil || reg.BuildRecordStore == nil {
+		log.Errorf(ctx, "build poll stores not initialized, skip mark pollingBroken: %s", args)
+		return
+	}
+	p := newPoller(reg.BuildRecordStore, reg.BkCIPipelineStore, reg.BuildAutoDeployRecordStore)
+	record, err := p.recordStore.Get(ctx, args.AppID, args.BuildID)
+	if err != nil {
+		log.Errorf(ctx, "get build record %s failed, skip mark pollingBroken: %v", args, err)
+		return
+	}
+	// 已终态说明状态已由其他路径推进到位，无需兜底
+	if record.Status.IsTerminated() {
+		return
+	}
+	if err = p.terminate(ctx, record, args, build.StatusPollingBroken); err != nil {
+		log.Errorf(ctx, "mark build %s pollingBroken failed: %v", args, err)
+	}
+}
+
 // poller 执行一次构建状态轮询 tick
 type poller struct {
 	recordStore     build.RecordStore
@@ -95,7 +120,8 @@ func newPoller(
 // 记录已终态则直接返回；仍在跑则 ProcessIn 投递下一 tick（新任务，retry 从 0 计）。
 // asynq MaxRetry(tickMaxRetry) 只约束本 tick 的意外失败（如 enqueue 失败），不约束轮询次数；
 // 轮询窗口由 pollingTimeout 截断，查蓝盾失败次数由 FailureRetryRemain 截断。
-// 不可恢复错误 wrap taskq.ErrStopRetry，避免 asynq 空转重试。
+// 仅记录 / 流水线不存在等不可恢复错误 wrap taskq.ErrStopRetry；瞬时错误交回 asynq 退避重试，
+// 否则一次 DB 抖动就会断掉轮询链，让构建记录永久停在 running。
 func (p *poller) runTick(ctx context.Context, args Args) error {
 	// store / 记录缺失无法自行恢复，停掉 asynq 重试
 	if p.recordStore == nil || p.pipelineStore == nil {
@@ -104,7 +130,10 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 
 	record, err := p.recordStore.Get(ctx, args.AppID, args.BuildID)
 	if err != nil {
-		return errors.Wrapf(taskq.ErrStopRetry, "get build record: %v", err)
+		if errors.Is(err, build.ErrRecordNotFound) {
+			return errors.Wrapf(taskq.ErrStopRetry, "get build record: %v", err)
+		}
+		return errors.Wrap(err, "get build record")
 	}
 	// 迟到或重复 tick：记录已终态则不再查蓝盾
 	if record.Status.IsTerminated() {
@@ -127,10 +156,13 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 	}
 	pipeline, err := p.pipelineStore.GetByWorkspaceAndType(ctx, args.WorkspaceID, args.PipelineType)
 	if err != nil {
-		return errors.Wrapf(
-			taskq.ErrStopRetry, "get workspace %s type %s pipeline: %v",
-			args.WorkspaceID, args.PipelineType, err,
-		)
+		if errors.Is(err, bkci.ErrPipelineNotFound) {
+			return errors.Wrapf(
+				taskq.ErrStopRetry, "get workspace %s type %s pipeline: %v",
+				args.WorkspaceID, args.PipelineType, err,
+			)
+		}
+		return errors.Wrapf(err, "get workspace %s type %s pipeline", args.WorkspaceID, args.PipelineType)
 	}
 
 	// 查蓝盾失败次数走业务计数，不走 asynq MaxRetry；首 tick 未带 remain 时补满
@@ -150,11 +182,17 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 		log.Errorf(ctx, "fetch build %s status failed, remain=%d: %v", args, remain, err)
 		return p.enqueueNext(ctx, args, remain, record.StartedAt)
 	}
+	// 查到状态即视为蓝盾侧可达，失败额度复位，保证额度约束的是连续失败而非整轮累计
+	remain = totalFailureRetryCount
 
-	// 落库失败只打日志，不让本 tick 失败，避免 asynq 重试把状态写乱
 	if record.Status != curStatus {
 		log.Infof(ctx, "build %s status changed from %s to %s", args, curStatus, record.Status)
 		if err = p.save(ctx, record, args); err != nil {
+			// 终态未落库就触发自动部署 / 发指标会造成 DB 与副作用不一致，交回 asynq 重试本 tick；
+			// 中间态落库失败不阻断轮询，下一 tick 会重新写
+			if record.Status.IsTerminated() {
+				return errors.Wrap(err, "update build record to terminated status")
+			}
 			log.Errorf(ctx, "failed to update build record: %v", err)
 		}
 	}
@@ -177,18 +215,21 @@ func (p *poller) enqueueNext(ctx context.Context, args Args, remain int, started
 }
 
 // terminate 把记录标为指定终态并落库，再走 onTerminated 副作用
+// 落库失败返回 error 交回 asynq 重试，避免自动部署 / 指标已触发而 DB 仍是中间态
 func (p *poller) terminate(ctx context.Context, record *build.Record, args Args, status build.Status) error {
 	record.Status = status
 	if record.EndedAt.IsZero() {
 		record.EndedAt = time.Now()
 	}
 	if err := p.save(ctx, record, args); err != nil {
-		log.Errorf(ctx, "failed to update build record: %v", err)
+		return errors.Wrapf(err, "update build record to %s", status)
 	}
 	return p.onTerminated(ctx, record, args)
 }
 
 // save 落构建记录；启用自动部署时同步 auto deploy 记录
+// 只有构建记录本身写失败才返回 error（调用方据此决定是否重试本 tick），
+// auto deploy 记录属于附带同步，失败只打日志，避免重试时被终态早退分支跳过副作用
 func (p *poller) save(ctx context.Context, record *build.Record, args Args) error {
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveStatusTimeout)
 	defer cancel()
@@ -206,9 +247,13 @@ func (p *poller) save(ctx context.Context, record *build.Record, args Args) erro
 	}
 	operator, err := autodeploy.NewOperator(p.autoDeployStore)
 	if err != nil {
-		return err
+		log.Errorf(saveCtx, "failed to init build auto deploy operator: %v", err)
+		return nil
 	}
-	return syncBuildStatus(saveCtx, operator, args.AppID, args.BuildID, record)
+	if err = syncBuildStatus(saveCtx, operator, args.AppID, args.BuildID, record); err != nil {
+		log.Errorf(saveCtx, "failed to sync build %s status to auto deploy record: %v", args, err)
+	}
+	return nil
 }
 
 // onTerminated 终态副作用失败只打日志，不改构建结果，也不让本 tick 失败

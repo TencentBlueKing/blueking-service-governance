@@ -32,6 +32,9 @@ type Args struct {
 	TrafficLaneName    string `json:"trafficLaneName"`
 	DeployID           string `json:"deployID"`
 	FailureRetryRemain int    `json:"failureRetryRemain,omitempty"`
+	// TopologyRefreshed 标记本轮部署已触发过拓扑资源范围刷新，由 enqueueNext 置真后随下一 tick 透传。
+	// 刷新是重操作（集群资源全量扫描 + 快照乐观锁更新），整轮部署只在首个 tick 触发一次
+	TopologyRefreshed bool `json:"topologyRefreshed,omitempty"`
 }
 
 // String 输出轮询身份与剩余失败次数，便于日志对齐同一部署的连续 tick

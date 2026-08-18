@@ -41,6 +41,9 @@ const buildRecordCollName = "build_records"
 // buildCounterCollName 构建计数器表名
 const buildCounterCollName = "build_counters"
 
+// ErrRecordNotFound 构建记录未找到。调用方据此区分「记录不存在」与 DB 瞬时故障
+var ErrRecordNotFound = errors.New("build record not found")
+
 // ConfigStore 构建配置存储接口
 type ConfigStore interface {
 	// Create 创建应用构建配置
@@ -253,7 +256,7 @@ func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
 		return errors.Wrapf(err, "update app %s build record %s failed", record.AppID, record.BuildID)
 	}
 	if ret.MatchedCount == 0 {
-		return errors.Errorf("app %s build record %s not found", record.AppID, record.BuildID)
+		return errors.Wrapf(ErrRecordNotFound, "app %s build record %s", record.AppID, record.BuildID)
 	}
 	return nil
 }
@@ -307,7 +310,7 @@ func (s *RecordStoreMongo) Get(ctx context.Context, appID, buildID string) (*Rec
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			// 应用构建记录不存在则返回错误
-			return nil, errors.Errorf("app %s build record %s not found", appID, buildID)
+			return nil, errors.Wrapf(ErrRecordNotFound, "app %s build record %s", appID, buildID)
 		}
 		return nil, err
 	}

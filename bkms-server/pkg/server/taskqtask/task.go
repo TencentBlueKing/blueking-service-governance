@@ -45,6 +45,10 @@ import (
 // 投递进程只需构造 task, 无需调用。各任务子包无法自行从 store registry 取依赖
 // (会与 registry 形成导入环), 因此统一在本聚合包完成注入。
 func Setup(mux *asynq.ServeMux) error {
+	// 构建状态轮询
+	mux.Handle(buildpoll.Task.Name(), buildpoll.Task.Handler())
+	// AppModel 部署状态轮询
+	mux.Handle(appmodeldeploypoll.Task.Name(), appmodeldeploypoll.Task.Handler())
 	// Redis 生命周期 tasks
 	if err := depsvcredis.Init(storereg.G().DepSvcInstStore); err != nil {
 		return errors.Wrap(err, "init depsvcredis")
@@ -53,9 +57,7 @@ func Setup(mux *asynq.ServeMux) error {
 	mux.Handle(depsvcredis.CreateTask.Name(), depsvcredis.CreateTask.Handler())
 	mux.Handle(depsvcredis.DisableTask.Name(), depsvcredis.DisableTask.Handler())
 	mux.Handle(depsvcredis.DestroyTask.Name(), depsvcredis.DestroyTask.Handler())
-
+	// 示例任务
 	mux.Handle(example.ExampleTask.Name(), example.ExampleTask.Handler())
-	mux.Handle(buildpoll.Task.Name(), buildpoll.Task.Handler())
-	mux.Handle(appmodeldeploypoll.Task.Name(), appmodeldeploypoll.Task.Handler())
 	return nil
 }

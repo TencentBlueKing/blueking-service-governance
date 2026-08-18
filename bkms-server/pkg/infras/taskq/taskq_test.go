@@ -115,6 +115,46 @@ var _ = Describe("Test taskq retry semantics", func() {
 	})
 })
 
+var _ = Describe("Test taskq exhausted handler", func() {
+	It("decodes payload and passes the last error to the registered callback", func() {
+		var (
+			gotArgs sampleArgs
+			gotErr  error
+		)
+		tt := NewTaskType[sampleArgs]("test.exhausted", func(_ context.Context, _ sampleArgs) error {
+			return nil
+		}).OnExhausted(func(_ context.Context, args sampleArgs, lastErr error) {
+			gotArgs, gotErr = args, lastErr
+		})
+
+		fn, ok := getExhaustedHandler(tt.Name())
+		Expect(ok).To(BeTrue())
+		payload := lo.Must(wrapEnvelope(
+			auth.User{ID: "tester"}, lo.Must(json.Marshal(sampleArgs{ID: "abc", Step: 7})),
+		))
+		safeCallExhaustedHandler(context.Background(), fn, tt.Name(), payload, stderrors.New("boom"))
+
+		Expect(gotArgs.ID).To(Equal("abc"))
+		Expect(gotArgs.Step).To(Equal(7))
+		Expect(gotErr).To(MatchError("boom"))
+	})
+
+	It("recovers panic from the callback to keep the worker alive", func() {
+		tt := NewTaskType[sampleArgs]("test.exhausted-panic", func(_ context.Context, _ sampleArgs) error {
+			return nil
+		}).OnExhausted(func(_ context.Context, _ sampleArgs, _ error) {
+			panic("callback exploded")
+		})
+
+		fn, ok := getExhaustedHandler(tt.Name())
+		Expect(ok).To(BeTrue())
+		payload := lo.Must(json.Marshal(sampleArgs{ID: "abc"}))
+		Expect(func() {
+			safeCallExhaustedHandler(context.Background(), fn, tt.Name(), payload, stderrors.New("boom"))
+		}).NotTo(Panic())
+	})
+})
+
 var _ = Describe("Test taskq NewTask and Enqueue", func() {
 	It("NewTask produces a Task with correct name and serialized payload", func() {
 		tt := NewTaskType[sampleArgs]("test.newtask", func(_ context.Context, _ sampleArgs) error {

@@ -21,6 +21,7 @@ package appmodeldeploypoll
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	"github.com/bytedance/mockey"
@@ -53,12 +54,14 @@ func stubFetch(status appmodeldeploy.Status) {
 
 var _ = Describe("Poller RunTick", func() {
 	var (
-		ctx      context.Context
-		args     Args
-		rec      *appmodeldeploy.Record
-		latest   *appmodeldeploy.Record
-		enqCount int
-		plr      *poller
+		ctx       context.Context
+		args      Args
+		rec       *appmodeldeploy.Record
+		latest    *appmodeldeploy.Record
+		enqCount  int
+		topoCount atomic.Int32
+		updateErr error
+		plr       *poller
 	)
 
 	BeforeEach(func() {
@@ -67,6 +70,8 @@ var _ = Describe("Poller RunTick", func() {
 		rec = newDeployingRecord()
 		latest = rec
 		enqCount = 0
+		topoCount.Store(0)
+		updateErr = nil
 		plr = newPoller(&appmodeldeploy.RecordStoreMongo{}, nil)
 
 		mockey.Mock((*appmodeldeploy.RecordStoreMongo).Get).To(
@@ -75,13 +80,17 @@ var _ = Describe("Poller RunTick", func() {
 		mockey.Mock((*appmodeldeploy.RecordStoreMongo).GetLatest).To(
 			func(context.Context, string, string, string) (*appmodeldeploy.Record, error) { return latest, nil },
 		).Build()
-		mockey.Mock((*appmodeldeploy.RecordStoreMongo).Update).Return(nil).Build()
+		mockey.Mock((*appmodeldeploy.RecordStoreMongo).Update).To(
+			func(context.Context, *appmodeldeploy.Record) error { return updateErr },
+		).Build()
 		mockey.Mock(taskq.Enqueue).To(func(context.Context, *taskq.Task, ...asynq.Option) error {
 			enqCount++
 			return nil
 		}).Build()
 		mockey.Mock(audit.AddOperationRecordAsync).Return().Build()
-		mockey.Mock(triggerTopologyRefresh).Return().Build()
+		mockey.Mock(triggerTopologyRefresh).To(func(context.Context, Args, *appmodeldeploy.Record) {
+			topoCount.Add(1)
+		}).Build()
 		mockey.Mock(handleDeploySucceeded).Return().Build()
 	})
 
@@ -137,6 +146,26 @@ var _ = Describe("Poller RunTick", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(appmodeldeploy.StatusDeploying))
 		Expect(enqCount).To(Equal(1))
+	})
+
+	It("triggers topology refresh on the first tick only", func() {
+		stubFetch(appmodeldeploy.StatusDeploying)
+		Expect(plr.runTick(ctx, args)).To(Succeed())
+		Eventually(topoCount.Load).Should(Equal(int32(1)))
+
+		// 后续 tick 携带 enqueueNext 置真的标记，不应再次触发刷新
+		args.TopologyRefreshed = true
+		Expect(plr.runTick(ctx, args)).To(Succeed())
+		Consistently(topoCount.Load).Should(Equal(int32(1)))
+	})
+
+	It("returns a retryable error when saving a stable status fails", func() {
+		stubFetch(appmodeldeploy.StatusDeployed)
+		updateErr = errors.New("db down")
+		err := plr.runTick(ctx, args)
+		Expect(err).To(HaveOccurred())
+		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeFalse())
+		Expect(enqCount).To(Equal(0))
 	})
 
 	It("marks canceled when a newer deploy exists", func() {

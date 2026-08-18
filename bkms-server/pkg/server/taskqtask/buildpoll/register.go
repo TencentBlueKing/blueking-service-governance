@@ -31,7 +31,8 @@ const (
 	name = "taskq.pollingBuildStatus"
 	// tickMaxRetry 单次 tick 意外失败的 asynq 重试上限，不含轮询续跑
 	tickMaxRetry = 10
-	// totalFailureRetryCount 查蓝盾连续失败次数上限，耗尽后标 StatusPollingBroken
+	// totalFailureRetryCount 查蓝盾连续失败次数上限，耗尽后标 StatusPollingBroken；
+	// 查到状态即复位（见 runTick），故约束的是连续失败而非整轮累计失败
 	totalFailureRetryCount = 10
 	// saveStatusTimeout 状态落库的独立超时，避免 handler ctx 取消导致写不进去
 	saveStatusTimeout = 10 * time.Second
@@ -43,5 +44,5 @@ const (
 var Task *taskq.TaskType[Args]
 
 func init() {
-	Task = taskq.NewTaskType[Args](name, handle, asynq.MaxRetry(tickMaxRetry))
+	Task = taskq.NewTaskType[Args](name, handle, asynq.MaxRetry(tickMaxRetry)).OnExhausted(onExhausted)
 }
