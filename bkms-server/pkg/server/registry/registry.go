@@ -31,6 +31,7 @@ import (
 	helmchartbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/semver"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	buildtrigger "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -111,6 +112,7 @@ type Registry struct {
 	// 构建 & 部署类
 	BuildConfigStore                    build.ConfigStore
 	BuildRecordStore                    build.RecordStore
+	BuildTriggerPolicyStore             buildtrigger.PolicyStore
 	BuildAutoDeployRecordStore          autodeploy.RecordStore
 	HelmDeployRecordStore               helmdeploy.RecordStore
 	AppModelDeployRecordStore           appmodeldeploy.RecordStore
@@ -225,6 +227,7 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	// 构建 & 部署类
 	r.BuildConfigStore = mustInit(build.NewConfigStoreMongo(mongoClient, dbName))
 	r.BuildRecordStore = mustInit(build.NewRecordStoreMongo(mongoClient, dbName))
+	r.BuildTriggerPolicyStore = mustInit(buildtrigger.NewPolicyStoreMongo(mongoClient, dbName))
 	r.BuildAutoDeployRecordStore = mustInit(autodeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.AppModelDeployRecordStore = mustInit(appmodeldeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.AppModelDeployResourceSnapshotStore = mustInit(appmodeldeploy.NewResourceSnapshotStoreMongo(mongoClient, dbName))
