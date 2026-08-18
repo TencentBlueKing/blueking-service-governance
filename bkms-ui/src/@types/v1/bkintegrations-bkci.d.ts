@@ -57,9 +57,25 @@ export interface GetBkCIPipelineVariablesRequest {
    */
   workspaceID: string;
   /**
-   * 流水线 ID
+   * 代码仓库 ID 或名称
    */
-  pipelineID: string;
+  repositoryID: string;
+  /**
+   * 代码仓库标识类型，可选值: ID, NAME
+   */
+  repositoryType: string;
+  /**
+   * 搜索关键词
+   */
+  search?: string;
+  /**
+   * 页码，最小为 1
+   */
+  page: number;
+  /**
+   * 每页数量，可选值: 5, 10, 20, 50, 100
+   */
+  pageSize: number;
 }
 
 export interface ListBkCIRepositoryBranchesRequest {

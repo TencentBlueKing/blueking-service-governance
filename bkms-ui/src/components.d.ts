@@ -66,6 +66,7 @@ declare module 'vue' {
     README: typeof import('./components/README.md')['default']
     RepeatableInput: typeof import('./components/repeatable-input.vue')['default']
     RepeatableTagInput: typeof import('./components/repeatable-tag-input.vue')['default']
+    RepoRefSelect: typeof import('./components/repo-ref-select/repo-ref-select.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScrollLayout: typeof import('./components/scroll-layout.vue')['default']

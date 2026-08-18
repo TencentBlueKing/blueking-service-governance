@@ -33,9 +33,11 @@
         property="branch"
         required
       >
-        <Input
-          v-model.trim="formData.branch"
-          :placeholder="t('请输入分支名')"
+        <RepoRefSelect
+          ref="branchSelectRef"
+          v-model="formData.branch"
+          :repository-id="repoAlias"
+          :workspace-id="workspaceId"
         />
       </Form.FormItem>
       <Form.FormItem
@@ -97,6 +99,7 @@
   import { Button, Dialog, Form, Input, Message, Radio } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { HelmChartsService } from '~/api/modules/v1';
+  import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import { useAppDetail } from '~/stores/app-detail';
 
   /** semver 递增段类型 */
@@ -115,6 +118,10 @@
   const emit = defineEmits<Emits>();
   const { t } = useI18n();
   const appDetailStore = useAppDetail();
+
+  const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount, resetBranchSelect } = useAppRepoRefSelect(
+    () => appDetailStore.appDetail?.helmSpec?.helmSource?.gitRepoConfig?.repoAlias || '',
+  );
 
   const isShow = defineModel<boolean>({ required: true });
 
@@ -195,14 +202,16 @@
   /** 监听 Dialog 打开，重置表单并获取下一个版本号 */
   watch(isShow, val => {
     if (!val) {
+      resetBranchSelect();
       resetForm();
     } else {
-      nextTick(() => {
+      nextTick(async () => {
         formRef.value?.clearValidate?.();
+        // resetForm 将 bumpType 重置为 'patch'，若之前已是 'patch' 则 watcher 不会触发，需手动调用
+        fetchNextVersion(formData.value.bumpType);
+        const defaultBranch = appDetailStore?.appDetail?.helmSpec?.helmSource?.gitRepoConfig?.revision || '';
+        await prepareBranchAfterMount(defaultBranch);
       });
-      // resetForm 将 bumpType 重置为 'patch'，若之前已是 'patch' 则 watcher 不会触发，需手动调用
-      fetchNextVersion(formData.value.bumpType);
-      formData.value.branch = appDetailStore?.appDetail?.helmSpec?.helmSource?.gitRepoConfig?.revision || '';
     }
   });
 </script>

@@ -658,10 +658,11 @@
     tagConfig.value = existingTagConfig || null;
   };
 
-  /** 切换代码库 */
+  /** 切换代码库：同步别名并清空旧默认分支，避免新仓库仍显示无效分支 */
   const handleProjectChange = (data: BkCIOAuthGitProjectOutput) => {
     if (!builderData.value?.repoBuildConfig) return;
     builderData.value.repoBuildConfig.repoAlias = data?.alias || '';
+    builderData.value.repoBuildConfig.defaultBranch = '';
   };
   /** 流水线动态表单字段 */
   const params = ref<BkCIPipelineVariableOutput[]>([]);

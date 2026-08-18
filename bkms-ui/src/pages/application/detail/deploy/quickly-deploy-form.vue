@@ -67,7 +67,13 @@
         property="branch"
         required
       >
-        <Input v-model.trim="formModel.branch" />
+        <RepoRefSelect
+          ref="branchSelectRef"
+          v-model="formModel.branch"
+          :repository-id="repoAlias"
+          :workspace-id="workspaceId"
+          @update:model-value="handleBranchSelect"
+        />
       </Form.FormItem>
     </template>
     <Form.FormItem
@@ -111,6 +117,7 @@
   import { computed, reactive, ref } from 'vue';
 
   import { Button, Form, Input, Select } from 'bkui-vue';
+  import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
   import { useAppDetail } from '~/stores/app-detail';
@@ -144,6 +151,10 @@
   const appDetailStore = useAppDetail();
   const { cancelDeploy, continueDeploy, isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } =
     useEnvVarPrecheck();
+
+  const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
+    () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
+  );
 
   // 当前选择的镜像来源
   const imageSource = ref<ImageSourceType>('image');
@@ -212,13 +223,18 @@
     }
   }
 
-  /** 切换镜像来源；源码模式补充分支和推荐 Tag，镜像模式清空源码相关字段。 */
-  function handleChangeImageSource(source: ImageSourceType) {
+  /** 分支变化立即拉取推荐镜像 Tag */
+  function handleBranchSelect(value: string) {
+    if (value) {
+      fetchRecommendTag(value);
+    }
+  }
+
+  /** 切换镜像来源；源码模式 prepare 默认分支并预拉列表，镜像模式清空源码相关字段。 */
+  async function handleChangeImageSource(source: ImageSourceType) {
     imageSource.value = source;
     if (source === 'code') {
-      const branch = getDefaultBranch();
-      formModel.branch = branch;
-      fetchRecommendTag(branch);
+      await prepareBranchAfterMount(getDefaultBranch());
     } else {
       formModel.branch = '';
       formModel.imageTag = '';

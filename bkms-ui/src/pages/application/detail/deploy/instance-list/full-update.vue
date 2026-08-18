@@ -90,7 +90,13 @@
             property="branch"
             required
           >
-            <Input v-model.trim="formModel.branch" />
+            <RepoRefSelect
+              ref="branchSelectRef"
+              v-model="formModel.branch"
+              :repository-id="repoAlias"
+              :workspace-id="workspaceId"
+              @update:model-value="handleBranchSelect"
+            />
           </Form.FormItem>
           <Form.FormItem
             :label="$t('镜像 Tag')"
@@ -183,6 +189,7 @@
   import { Alert, Button, Form, Input, Message, Radio, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { InstanceService } from '~/api/modules/v1';
+  import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
   import ImageSelect from '~/pages/application/components/image-select.vue';
@@ -211,6 +218,11 @@
   const { t } = useI18n();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
+
+  const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
+    () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
+  );
+
   const imageSource = ref<ImageSourceType>('image');
   const formRef = ref();
   const imageSelectRef = ref();
@@ -275,12 +287,19 @@
     return confirmBox();
   }
 
-  function handleChangeImageSource(source: ImageSourceType) {
+  /** 分支变化立即拉取推荐镜像 Tag */
+  function handleBranchSelect(value: string) {
+    if (value) {
+      fetchRecommendTag(value);
+    }
+  }
+
+  /** 切换镜像来源；源码模式 prepare 默认分支并预拉列表 */
+  async function handleChangeImageSource(source: ImageSourceType) {
     imageSource.value = source;
     if (source === 'code') {
-      const branch = getDefaultBranch();
-      formModel.branch = branch;
-      fetchRecommendTag(branch);
+      // 推荐 Tag 由 useRecommendTag 监听 formModel.branch 变化自动触发
+      await prepareBranchAfterMount(getDefaultBranch());
     } else {
       formModel.branch = '';
       formModel.imageTag = '';
