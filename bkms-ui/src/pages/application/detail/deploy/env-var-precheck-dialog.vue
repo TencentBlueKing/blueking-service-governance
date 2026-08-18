@@ -112,13 +112,25 @@
     </div>
 
     <template #footer>
-      <div class="flex w-full items-center justify-between">
-        <span class="text-[12px] text-[#EA3636]">{{ $t('存在阻断问题，请先解决后再部署') }}</span>
+      <div class="flex justify-end">
         <Button
-          class="bg-[#fff] !min-w-[60px]"
-          @click="isShow = false"
+          class="mr-[8px]"
+          theme="primary"
+          @click="handleGoModify"
         >
-          {{ $t('关闭') }}
+          {{ $t('前往修改') }}
+        </Button>
+        <Button
+          class="mr-[8px] bg-[#fff] text-[#4D4F56]"
+          @click="handleStillDeploy"
+        >
+          {{ $t('仍然部署') }}
+        </Button>
+        <Button
+          class="bg-[#fff] text-[#4D4F56] !min-w-[60px]"
+          @click="handleCancel"
+        >
+          {{ $t('取消') }}
         </Button>
       </div>
     </template>
@@ -155,6 +167,11 @@
     envName: string;
     /** 未定义的环境变量列表 */
     undefinedVars: UndefinedEnvVarOutput[];
+  }>();
+  const emit = defineEmits<{
+    cancel: [];
+    goModify: [];
+    stillDeploy: [];
   }>();
 
   /** 弹窗显示状态（双向绑定） */
@@ -229,6 +246,12 @@
     limitList: [10, 20, 50],
   }));
 
+  /** 取消本次部署。 */
+  function handleCancel() {
+    emit('cancel');
+    isShow.value = false;
+  }
+
   /**
    * 跳转到环境管理页面
    * 新窗口打开并定位到当前环境的环境变量配置
@@ -242,8 +265,9 @@
         activeTab: 'setting',
       },
     });
-    isShow.value = false;
     window.open(resolved.href, '_blank');
+    emit('goModify');
+    isShow.value = false;
   }
 
   /** 分页页码切换 */
@@ -255,6 +279,12 @@
   function handlePageLimitChange(limitValue: number) {
     limit.value = limitValue;
     current.value = 1;
+  }
+
+  /** 忽略本次环境变量警告，继续原部署流程。 */
+  function handleStillDeploy() {
+    emit('stillDeploy');
+    isShow.value = false;
   }
 
   /** 弹窗打开时重置折叠状态和分页 */

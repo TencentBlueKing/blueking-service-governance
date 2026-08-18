@@ -180,6 +180,9 @@
       v-model:is-show="isShowPrecheckDialog"
       :env-name="precheckEnvName"
       :undefined-vars="undefinedVars"
+      @cancel="cancelDeploy"
+      @go-modify="cancelDeploy"
+      @still-deploy="continueDeploy"
     />
   </Sideslider>
 </template>
@@ -220,7 +223,8 @@
   const { t } = useI18n();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
-  const { isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } = useEnvVarPrecheck();
+  const { cancelDeploy, continueDeploy, isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } =
+    useEnvVarPrecheck();
 
   const imageSource = ref<ImageSourceType>('image');
   const formRef = ref();
