@@ -118,8 +118,8 @@ func (t *TaskType[Args]) Name() string { return t.name }
 // 返回 TaskType 自身以支持链式调用。
 func (t *TaskType[Args]) OnExhausted(fn func(ctx context.Context, args Args, lastErr error)) *TaskType[Args] {
 	registerExhaustedHandler(t.name, func(ctx context.Context, payload []byte, lastErr error) {
-		ctx, argsPayload := restoreEnvelope(ctx, payload)
 		var args Args
+		ctx, argsPayload := restoreEnvelope(ctx, payload)
 		if err := json.Unmarshal(argsPayload, &args); err != nil {
 			logging.ErrorNoContextf("taskq: unmarshal args in exhausted handler for %q: %v", t.name, err)
 			return
@@ -144,8 +144,8 @@ func (t *TaskType[Args]) WithFixedRetryInterval(d time.Duration) *TaskType[Args]
 // 把 ErrStopRetry / 反序列化失败翻译为停止重试(其余错误交由重试策略)。
 func (t *TaskType[Args]) Handler() asynq.HandlerFunc {
 	return func(ctx context.Context, task *asynq.Task) error {
-		ctx, argsPayload := restoreEnvelope(ctx, task.Payload())
 		var args Args
+		ctx, argsPayload := restoreEnvelope(ctx, task.Payload())
 		if err := json.Unmarshal(argsPayload, &args); err != nil {
 			// 负载无法解析属不可恢复, 停止重试。
 			return wrapStopRetry(errors.Wrapf(err, "unmarshal args for task %q", t.name))

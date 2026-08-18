@@ -59,14 +59,14 @@ func stubFetch(status build.Status) {
 	).Build()
 }
 
-var _ = Describe("Manager Handle", func() {
+var _ = Describe("Poller RunTick", func() {
 	var (
 		ctx          context.Context
 		args         Args
 		rec          *build.Record
 		enqCount     int
 		enqDelay     time.Duration
-		mgr          *Manager
+		plr          *poller
 		deployHook   func() error
 		snapshotHook func(context.Context, string, string) error
 	)
@@ -77,7 +77,7 @@ var _ = Describe("Manager Handle", func() {
 		rec = newRunningRecord()
 		enqCount = 0
 		enqDelay = 0
-		mgr = NewManager(&build.RecordStoreMongo{}, &bkci.PipelineStoreMongo{}, nil)
+		plr = newPoller(&build.RecordStoreMongo{}, &bkci.PipelineStoreMongo{}, nil)
 		deployHook = nil
 		snapshotHook = nil
 
@@ -135,7 +135,7 @@ var _ = Describe("Manager Handle", func() {
 
 	It("enqueues the next tick with ProcessIn when build is still running", func() {
 		stubFetch(build.StatusRunning)
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(enqCount).To(Equal(1))
 		Expect(enqDelay).To(Equal(10 * time.Second))
@@ -144,14 +144,14 @@ var _ = Describe("Manager Handle", func() {
 
 	It("skips already terminated records without polling", func() {
 		rec.Status = build.StatusSuccess
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(enqCount).To(Equal(0))
 	})
 
 	It("marks pollingTimeout when StartedAt exceeds 24h", func() {
 		rec.StartedAt = time.Now().Add(-25 * time.Hour)
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(build.StatusPollingTimeout))
 		Expect(enqCount).To(Equal(0))
@@ -160,7 +160,7 @@ var _ = Describe("Manager Handle", func() {
 	It("marks pollingBroken after remaining retries are exhausted", func() {
 		args.FailureRetryRemain = 1
 		mockey.Mock(fetchAndUpdateBuildRecord).Return(errors.New("bkci down")).Build()
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(build.StatusPollingBroken))
 		Expect(enqCount).To(Equal(0))
@@ -169,7 +169,7 @@ var _ = Describe("Manager Handle", func() {
 	It("reschedules when bkci fails but retries remain", func() {
 		args.FailureRetryRemain = 3
 		mockey.Mock(fetchAndUpdateBuildRecord).Return(errors.New("bkci down")).Build()
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(build.StatusRunning))
 		Expect(enqCount).To(Equal(1))
@@ -178,7 +178,7 @@ var _ = Describe("Manager Handle", func() {
 	DescribeTable("maps terminal status from fetch helper",
 		func(want build.Status) {
 			stubFetch(want)
-			err := mgr.Handle(ctx, args)
+			err := plr.runTick(ctx, args)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rec.Status).To(Equal(want))
 			Expect(enqCount).To(Equal(0))
@@ -191,14 +191,14 @@ var _ = Describe("Manager Handle", func() {
 	It("triggers auto deploy on success and still succeeds if deploy fails", func() {
 		stubFetch(build.StatusSuccess)
 		args.AutoDeploy = &AutoDeployArgs{EnvName: "dev", Replicas: 1}
-		mgr.autoDeployStore = &autodeploy.RecordStoreMongo{}
+		plr.autoDeployStore = &autodeploy.RecordStoreMongo{}
 		deployCalled := false
 		deployHook = func() error {
 			deployCalled = true
 			return errors.New("deploy unavailable")
 		}
 
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(build.StatusSuccess))
 		Expect(deployCalled).To(BeTrue())
@@ -213,7 +213,7 @@ var _ = Describe("Manager Handle", func() {
 			return errors.New("refresh failed")
 		}
 
-		err := mgr.Handle(ctx, args)
+		err := plr.runTick(ctx, args)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rec.Status).To(Equal(build.StatusSuccess))
 		Eventually(done).Should(BeClosed())
