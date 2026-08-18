@@ -82,6 +82,7 @@
         :env-name="targetEnv?.name"
         :env-type="targetEnv?.type"
         :is-prod-env="targetIsProdEnv"
+        :precheck-before-submit="hasTargetSelector"
         :use-provided-env="hasTargetSelector"
       />
     </div>

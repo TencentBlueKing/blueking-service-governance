@@ -174,16 +174,6 @@
         {{ $t('取消') }}
       </Button>
     </div>
-
-    <!-- 环境变量预检查 -->
-    <EnvVarPrecheckDialog
-      v-model:is-show="isShowPrecheckDialog"
-      :env-name="precheckEnvName"
-      :undefined-vars="undefinedVars"
-      @cancel="cancelDeploy"
-      @go-modify="cancelDeploy"
-      @still-deploy="continueDeploy"
-    />
   </Sideslider>
 </template>
 
@@ -200,9 +190,7 @@
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
-  import EnvVarPrecheckDialog from '../env-var-precheck-dialog.vue';
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from '../use-deploy';
-  import { useEnvVarPrecheck } from '../use-env-var-precheck';
 
   import type { AppModelDeployRecordOutputObj } from '~/@types/v1/deploy';
   import type { BuildInfo, BuildStatus } from '~/pages/application/detail/components/view-build-log/type';
@@ -223,9 +211,6 @@
   const { t } = useI18n();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
-  const { cancelDeploy, continueDeploy, isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } =
-    useEnvVarPrecheck();
-
   const imageSource = ref<ImageSourceType>('image');
   const formRef = ref();
   const imageSelectRef = ref();
@@ -360,10 +345,6 @@
 
     loading.value = true;
     try {
-      const envName = trpcDeployStore.curEnvItem?.name ?? '';
-      const precheckPassed = await precheck(envName);
-      if (!precheckPassed) return;
-
       let result = false;
       if (formModel.updateContent !== 'image') {
         result = await handleConfigAndImage();

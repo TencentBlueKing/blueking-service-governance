@@ -106,6 +106,7 @@
           <!-- 部署/特性部署 -->
           <DeployActionButton
             :label="$t('部署')"
+            :loading="precheckLoading"
             :show-feature-deploy="canFeatureDeploy"
             @deploy="handleShowFullUpdateDialog"
             @feature-deploy="handleShowFeatureDeploy"
@@ -285,6 +286,7 @@
               <DeployActionButton
                 class="mt-[8px]"
                 :label="$t('立即部署')"
+                :loading="precheckLoading"
                 :show-feature-deploy="canFeatureDeploy"
                 @deploy="handleShowQuicklyDeploy"
                 @feature-deploy="handleShowFeatureDeploy"
@@ -324,6 +326,15 @@
       :effective-replicas="effectiveDeploySpec?.replicas"
       @env-created="refreshFeatureEnvData"
       @update="handleFeatureDeploySuccess"
+    />
+    <!-- 普通部署在打开侧栏前执行环境变量预检查 -->
+    <EnvVarPrecheckDialog
+      v-model:is-show="isShowPrecheckDialog"
+      :env-name="precheckEnvName"
+      :undefined-vars="undefinedVars"
+      @cancel="cancelDeploy"
+      @go-modify="cancelDeploy"
+      @still-deploy="continueDeploy"
     />
     <!-- 构建日志 -->
     <ViewBuildLog
@@ -376,6 +387,7 @@
   import DeployActionButton from './deploy-action-button.vue';
   import DeployEvent from './deploy-event.vue';
   import DeployHistory from './deploy-history.vue';
+  import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
   import FeatureDeploy from './feature-deploy.vue';
   import FeatureEnvSideslider from './feature-env-sideslider.vue';
   import FullUpdate from './instance-list/full-update.vue';
@@ -386,6 +398,7 @@
   import QuicklyDeploy from './quickly-deploy.vue';
   import RemoveDeploy from './remove-deploy.vue';
   import { DeployableAppType, useDeployAPIs } from './use-deploy';
+  import { useEnvVarPrecheck } from './use-env-var-precheck';
 
   import type { DeployOverviewDeployTarget } from './overview/use-deploy-overview';
   import type { AppDeployedEnvOutputObj } from '~/@types/v1/app';
@@ -406,6 +419,8 @@
   const appDetailStore = useAppDetail();
   const { getAppDeployStatusInfo } = useDeployStatusMap();
   const { t } = useI18n();
+  const { cancelDeploy, continueDeploy, isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } =
+    useEnvVarPrecheck();
 
   // 环境列表（从 EnvSelect 组件 emit 获取）
   const envSelectPanelRef = ref<null | { refreshDeployStatuses?: () => Promise<void> }>(null);
@@ -513,6 +528,7 @@
   const canManageFeatureEnvs = computed(() => isAppModelAppType(appDetailStore.appType));
 
   const initLoading = ref(true);
+  const precheckLoading = ref(false);
   const isShowQuicklyDeploy = ref(false);
   const isShowFeatureEnvSideslider = ref(false);
   const isShowRemoveDeploy = ref(false);
@@ -836,10 +852,23 @@
   }
 
   /** 从实例列表打开快速部署，并关闭总览入口专用的目标环境选择模式。 */
-  function handleShowQuicklyDeploy() {
-    // 清空总览目标是入口标记，保证实例列表仍读取当前环境，不显示目标环境选择器。
-    overviewDeployTargets.value = undefined;
-    isShowQuicklyDeploy.value = true;
+  async function handleShowQuicklyDeploy() {
+    const envName = trpcDeployStore.curEnvItem?.name;
+    if (!envName || precheckLoading.value) return;
+
+    precheckLoading.value = true;
+    try {
+      const precheckPassed = await precheck(envName);
+      if (!precheckPassed) return;
+
+      // 清空总览目标是入口标记，保证实例列表仍读取当前环境，不显示目标环境选择器。
+      overviewDeployTargets.value = undefined;
+      isShowQuicklyDeploy.value = true;
+    } catch (error) {
+      console.warn(error);
+    } finally {
+      precheckLoading.value = false;
+    }
   }
 
   /** 总览下钻：切到实例列表并把选中环境切成该环境 */
@@ -864,8 +893,21 @@
 
   const showFullUpdateDialog = ref(false);
   /** 打开当前环境的全量更新侧栏。 */
-  function handleShowFullUpdateDialog() {
-    showFullUpdateDialog.value = true;
+  async function handleShowFullUpdateDialog() {
+    const envName = trpcDeployStore.curEnvItem?.name;
+    if (!envName || precheckLoading.value) return;
+
+    precheckLoading.value = true;
+    try {
+      const precheckPassed = await precheck(envName);
+      if (precheckPassed) {
+        showFullUpdateDialog.value = true;
+      }
+    } catch (error) {
+      console.warn(error);
+    } finally {
+      precheckLoading.value = false;
+    }
   }
   /** 全量更新成功后按构建模式决定是否关闭侧栏；源码构建需保留侧栏展示实时日志。 */
   function handleUpdateDeploySuccess(keepOpen: boolean) {

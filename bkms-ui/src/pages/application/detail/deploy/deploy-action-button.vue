@@ -20,6 +20,7 @@
   <div class="inline-flex items-center">
     <Button
       :class="{ 'mr-[1px]': showFeatureDeploy }"
+      :loading="loading"
       :style="{ borderRadius: showFeatureDeploy ? '2px 0 0 2px' : '2px' }"
       theme="primary"
       @click="emits('deploy')"
@@ -35,6 +36,7 @@
       <template #default="{ popoverShow }">
         <Button
           class="!min-w-[32px] !px-0"
+          :disabled="loading"
           style="border-radius: 0 2px 2px 0"
           theme="primary"
         >
@@ -62,9 +64,11 @@
   withDefaults(
     defineProps<{
       label: string;
+      loading?: boolean;
       showFeatureDeploy?: boolean;
     }>(),
     {
+      loading: false,
       showFeatureDeploy: false,
     },
   );
