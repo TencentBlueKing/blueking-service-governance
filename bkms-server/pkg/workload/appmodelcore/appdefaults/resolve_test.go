@@ -155,7 +155,7 @@ func resourcesRule(workspaceID string, envTypes ...string) *appdefaults.Rule {
 	}
 }
 
-func devModeRule(workspaceID string, envType string, enabled bool) *appdefaults.Rule {
+func devModeRule(workspaceID, envType string, enabled bool) *appdefaults.Rule {
 	return &appdefaults.Rule{
 		WorkspaceID: workspaceID,
 		ConfigType:  appspec.AppSpecSectionDevMode,

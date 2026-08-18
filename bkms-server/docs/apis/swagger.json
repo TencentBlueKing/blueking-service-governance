@@ -21242,7 +21242,7 @@
             ],
             "properties": {
                 "excludeTriggerID": {
-                    "description": "排除的策略 ID，编辑场景下用于排除自身；新建场景留空",
+                    "description": "编辑时排除自身的策略 ID，新建留空；JSON 字段名为 excludeTriggerID，值不是蓝盾 triggerID",
                     "type": "string"
                 },
                 "policy": {
@@ -21278,8 +21278,32 @@
                         "type": "string"
                     }
                 },
+                "conflictReasons": {
+                    "description": "每条冲突的策略名、重叠类型与原因，无冲突时为空数组",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.ConflictReasonObj"
+                    }
+                },
                 "level": {
-                    "description": "冲突级别：none 无冲突，warn 软冲突（可保存），error 硬冲突（禁止保存）",
+                    "description": "冲突级别：none 无冲突，error 硬冲突（禁止保存）；本期不返回 warn",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ConflictReasonObj": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "description": "人类可读冲突原因",
+                    "type": "string"
+                },
+                "overlapType": {
+                    "description": "重叠类型：all / eq_eq / prefix_prefix / eq_hits_prefix",
+                    "type": "string"
+                },
+                "policyName": {
+                    "description": "冲突的已有策略名",
                     "type": "string"
                 }
             }
