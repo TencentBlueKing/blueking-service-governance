@@ -140,12 +140,18 @@ export function getDurationTime(startTime: Date | string, endTime: Date | string
  * @param data 待排序的数据列表（原地排序）
  * @param getDate 获取每项日期值的方法
  * @param order 排序方向，asc 为正序，desc 为逆序，默认为 desc
+ * @param compareEqual 日期同为空值或时间相同时的二次比较方法
  * @returns 按指定日期顺序排序后的原数据列表
  * @example
  * sortByDate(list, item => item.createdAt)
  * sortByDate(list, item => item.createdAt, 'asc')
  */
-export function sortByDate<T>(data: T[], getDate: (item: T) => DateValue, order: DateSortOrder = 'desc'): T[] {
+export function sortByDate<T>(
+  data: T[],
+  getDate: (item: T) => DateValue,
+  order: DateSortOrder = 'desc',
+  compareEqual?: (a: T, b: T) => number,
+): T[] {
   const getTimestamp = (value: DateValue): null | number => {
     if (value === null || value === undefined || value === '') return null;
 
@@ -164,9 +170,10 @@ export function sortByDate<T>(data: T[], getDate: (item: T) => DateValue, order:
   return data.sort((a, b) => {
     const timeA = getTimestamp(getDate(a));
     const timeB = getTimestamp(getDate(b));
-    if (timeA === null) return timeB === null ? 0 : 1;
+    if (timeA === null) return timeB === null ? (compareEqual?.(a, b) ?? 0) : 1;
     if (timeB === null) return -1;
-    return order === 'asc' ? timeA - timeB : timeB - timeA;
+    const result = order === 'asc' ? timeA - timeB : timeB - timeA;
+    return result === 0 ? (compareEqual?.(a, b) ?? 0) : result;
   });
 }
 

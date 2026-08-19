@@ -68,6 +68,27 @@
               value-behavior="need-key"
             >
             </SearchSelect>
+            <!-- 排序 -->
+            <div class="flex items-center">
+              <Select
+                v-model="curSortOption"
+                class="w-[136px] bg-[#fff]"
+                :clearable="false"
+              >
+                <Select.Option
+                  v-for="(item, index) in sortOptions"
+                  :id="item.value"
+                  :key="index"
+                  :name="item.label"
+                />
+              </Select>
+              <Button
+                class="!min-w-[32px] !px-[8px] !ml-[-1px] text-[#3A84FF]"
+                @click="toggleSortOrder"
+              >
+                <i :class="['bkms-icon', sortOrder === 'asc' ? 'bkms-icon-shengxu' : 'bkms-icon-jiangxu']" />
+              </Button>
+            </div>
             <Radio.Group
               v-model="appTableMode"
               type="capsule"
@@ -92,7 +113,7 @@
       >
         <Table
           ref="tableRef"
-          :data="tableDataMatchSearch"
+          :data="sortedTableData"
           :filter-config="{ remote: true }"
           :max-height="appTableHeight"
           :pagination="tablePagination"
@@ -260,7 +281,7 @@
       <!-- 全局视图 -->
       <GlobalView
         v-else
-        :apps="tableDataMatchSearch"
+        :apps="sortedTableData"
         :search-value="searchValue"
         :space="space"
         @clear="handleClearFilters"
@@ -272,11 +293,12 @@
   import { computed, onBeforeMount, ref, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
-  import { Button, Popover, Radio, SearchSelect, Tag } from 'bkui-vue';
+  import { Button, Popover, Radio, SearchSelect, Select, Tag } from 'bkui-vue';
   import { Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { ApiServerService } from '~/api/modules/bkmsserver';
+  import { sortByDate } from '~/common/util';
   import ColorIcon from '~/components/color-icon.vue';
   import CustomFilter from '~/components/custom-filter.vue';
   import MoreTag from '~/components/more-tag.vue';
@@ -297,6 +319,8 @@
   import type { AppDeployedEnvOutputObj, AppInfoOutputObj } from '~/@types/v1/app';
   import type { AppType } from '~/composables/app-type';
 
+  type AppSortField = 'createdAt' | 'lastOperatedAt' | 'name';
+
   interface IProps {
     active?: string; // 当前详情行的名称
     envName?: string; // 从环境管理页面跳转时传入的环境名称（用于自动筛选）
@@ -313,6 +337,17 @@
 
   const isLoading = ref(false);
   const appList = ref<AppInfoOutputObj[]>([]);
+
+  const curSortOption = ref<AppSortField>('lastOperatedAt');
+  const sortOrder = ref<'asc' | 'desc'>('asc');
+  const sortOptions: { label: string; value: AppSortField }[] = [
+    { label: t('应用名称'), value: 'name' },
+    { label: t('操作时间'), value: 'lastOperatedAt' },
+    { label: t('创建时间'), value: 'createdAt' },
+  ];
+  const appNameCollator = new Intl.Collator('zh-CN', { sensitivity: 'base' });
+  const compareAppID = (left: AppInfoOutputObj, right: AppInfoOutputObj) =>
+    appNameCollator.compare(left.id || '', right.id || '');
 
   // 使用持久化分页hooks - 自动使用当前路由路径作为存储key
   const { usePagination } = usePersistentStorage();
@@ -419,6 +454,31 @@
     return filteredList;
   });
 
+  /** 按用户选择的字段排序；空值始终置底，并以应用 ID 作为稳定的二次排序键 */
+  const sortedTableData = computed(() => {
+    const field = curSortOption.value;
+    const data = [...tableDataMatchSearch.value];
+
+    if (field !== 'name') {
+      // 时间字段的升序交互表示最近时间优先，与时间戳的自然排序方向相反
+      const dateSortOrder = sortOrder.value === 'asc' ? 'desc' : 'asc';
+      return sortByDate(data, item => item[field], dateSortOrder, compareAppID);
+    }
+
+    const direction = sortOrder.value === 'asc' ? 1 : -1;
+    return data.sort((left, right) => {
+      if (!left.name || !right.name) {
+        if (!left.name && right.name) return 1;
+        if (left.name && !right.name) return -1;
+      } else {
+        const result = appNameCollator.compare(left.name, right.name);
+        if (result !== 0) return result * direction;
+      }
+
+      return compareAppID(left, right);
+    });
+  });
+
   const { setTypeToError, clearErrorType, curExceptionType } = useTableEmpty({
     filters: searchValue,
   });
@@ -426,6 +486,7 @@
   function getRowActiveClass({ row }: { row: AppInfoOutputObj }) {
     return router.currentRoute.value.query?.active === row.name ? 'row--current' : '';
   }
+
   // 创建应用
   function goCreateApplication() {
     router.push({
@@ -556,7 +617,15 @@
     });
   }
 
+  function toggleSortOrder() {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  }
+
   watch(searchValue, () => {
+    resetToFirstPage();
+  });
+
+  watch([curSortOption, sortOrder], () => {
     resetToFirstPage();
   });
 
