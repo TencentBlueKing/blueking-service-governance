@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListBCSAuthorizedProjectsRequest, BCSProjectOutput, GetBCSProjectRequest, ListClustersByProjectRequest, ClusterOutput, ListNamespacesByClusterRequest, NamespaceOutput } from '~/@types/v1/bkintegrations-bcs';
+import type { ListBCSAuthorizedProjectsRequest, BCSProjectOutput, GetBCSProjectRequest, ListClustersByProjectRequest, ClusterOutput, ListNamespacesByClusterRequest, NamespaceOutput, GetBCSUserTokenRequest } from '~/@types/v1/bkintegrations-bcs';
 
 export const BkintegrationsBcsService = {
   /**
@@ -65,4 +65,17 @@ export const BkintegrationsBcsService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/bcs/projects/{projectID}/clusters/{clusterID}/namespaces')(params, config),
+  /**
+   * 获取 BCS Auth Info
+   *
+   * @method GET
+   * @path /bcs/token
+   * @tag bkintegrations-bcs
+   * @response 200 GetBCSUserTokenOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getBCSUserToken: async <Request extends GetBCSUserTokenRequest = GetBCSUserTokenRequest, ResponseData = string>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/bcs/token')(params, config),
 };

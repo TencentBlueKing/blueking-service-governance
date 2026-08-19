@@ -119,10 +119,6 @@ export interface PolicyFormInput {
    * 文件路径条件，留空表示全匹配
    */
   pathFilter?: string;
-  /**
-   * 镜像版本号规则
-   */
-  versionRule: VersionRuleInput;
 }
 
 export interface PolicyOutput {
@@ -328,47 +324,13 @@ export interface PolicyOutputObj {
    */
   status?: string;
   /**
-   * 关联的蓝盾触发器标识
+   * 关联的蓝盾触发器元素标识
    */
   triggerID?: string;
   /**
    * 更新时间
    */
   updatedAt?: string;
-  /**
-   * 镜像版本号规则
-   */
-  versionRule?: VersionRuleOutput;
-}
-
-export interface VersionRuleOutput {
-  /**
-   * 自定义前缀
-   */
-  prefix?: string;
-  /**
-   * 版本号规则类型
-   */
-  type?: string;
-  /**
-   * 版本号是否拼接分支名
-   */
-  withBranch?: boolean;
-}
-
-export interface VersionRuleInput {
-  /**
-   * 自定义前缀，仅 custom 类型使用
-   */
-  prefix?: string;
-  /**
-   * 版本号规则类型：custom 自定义版本，semver 语义化版本
-   */
-  type: "custom" | "semver";
-  /**
-   * 版本号是否拼接分支名，仅 custom 类型使用
-   */
-  withBranch?: boolean;
 }
 
 export interface PolicyListOutputObjs {

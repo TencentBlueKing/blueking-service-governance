@@ -31,6 +31,9 @@ export interface ListNamespacesByClusterRequest {
   clusterID: string;
 }
 
+export interface GetBCSUserTokenRequest {
+}
+
 export interface ListBCSAuthorizedProjectsOutput {
   data?: BCSProjectOutput[];
 }
@@ -45,6 +48,10 @@ export interface ListClustersByProjectOutput {
 
 export interface ListNamespacesByClusterOutput {
   data?: NamespaceOutput[];
+}
+
+export interface GetBCSUserTokenOutput {
+  data?: string;
 }
 
 export interface NamespaceOutput {

@@ -471,6 +471,10 @@ export interface TrpcSpecInput {
 
 export interface AppInfoOutputObj {
   /**
+   * 创建时间
+   */
+  createdAt?: string;
+  /**
    * 创建人
    */
   creator?: string;
@@ -491,7 +495,7 @@ export interface AppInfoOutputObj {
    */
   language?: string;
   /**
-   * 应用最近操作时间
+   * 应用最近操作时间（当前调用者视角）
    */
   lastOperatedAt?: string;
   /**
@@ -581,7 +585,7 @@ export interface AppDeployOverviewEnvObj {
    */
   lastDeployStartedAt?: string;
   /**
-   * 资源规格（app-spec 生效值）
+   * 资源规格（集群 GameDeployment 主容器实际值）
    */
   resources?: DeployOverviewResourcesObj;
 }

@@ -187,7 +187,7 @@ export const BkintegrationsBkmonitorService = {
    * @param page query number required 页码，从 1 开始
    * @param pageSize query number required 每页数量，仅支持 5/10/20/50/100
    * @param alertID query string 按告警 ID 过滤
-   * @param alertName query string 按告警名称过滤
+   * @param alertDisplayName query string 按告警展示名称过滤
    * @param description query string 按告警内容过滤（映射到 query_string）
    * @param strategyName query string 按策略名称过滤
    * @param eventID query string 按事件 ID 过滤
@@ -249,7 +249,7 @@ export const BkintegrationsBkmonitorService = {
    * @param page query number required 页码，从 1 开始
    * @param pageSize query number required 每页数量，仅支持 5/10/20/50/100
    * @param alertID query string 按告警 ID 过滤
-   * @param alertName query string 按告警名称过滤
+   * @param alertDisplayName query string 按告警展示名称过滤
    * @param description query string 按告警内容过滤（映射到 query_string）
    * @param strategyName query string 按策略名称过滤
    * @param eventID query string 按事件 ID 过滤

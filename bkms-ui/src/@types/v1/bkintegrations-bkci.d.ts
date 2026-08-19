@@ -51,7 +51,7 @@ export interface GetBkCIPipelineRequest {
   pipelineID: string;
 }
 
-export interface ListBkCIPipelineRepoRefsRequest {
+export interface GetBkCIPipelineVariablesRequest {
   /**
    * 工作空间 ID
    */
@@ -62,26 +62,58 @@ export interface ListBkCIPipelineRepoRefsRequest {
   pipelineID: string;
 }
 
-export type ListBkCIPipelineRepoRefOptionsRequest = BkCIPipelineRepoRefOptionsInput & {
+export interface ListBkCIRepositoryBranchesRequest {
   /**
    * 工作空间 ID
    */
   workspaceID: string;
   /**
-   * 流水线 ID
+   * 代码仓库 ID 或名称
    */
-  pipelineID: string;
-};
+  repositoryID: string;
+  /**
+   * 代码仓库标识类型，可选值: ID, NAME
+   */
+  repositoryType: string;
+  /**
+   * 搜索关键词
+   */
+  search?: string;
+  /**
+   * 页码，最小为 1
+   */
+  page: number;
+  /**
+   * 每页数量，可选值: 5, 10, 20, 50, 100
+   */
+  pageSize: number;
+}
 
-export interface GetBkCIPipelineVariablesRequest {
+export interface ListBkCIRepositoryTagsRequest {
   /**
    * 工作空间 ID
    */
   workspaceID: string;
   /**
-   * 流水线 ID
+   * 代码仓库 ID 或名称
    */
-  pipelineID: string;
+  repositoryID: string;
+  /**
+   * 代码仓库标识类型，可选值: ID, NAME
+   */
+  repositoryType: string;
+  /**
+   * 搜索关键词
+   */
+  search?: string;
+  /**
+   * 页码，最小为 1
+   */
+  page: number;
+  /**
+   * 每页数量，可选值: 5, 10, 20, 50, 100
+   */
+  pageSize: number;
 }
 
 export interface ListBkCIOAuthGitProjectsOutput {
@@ -100,21 +132,23 @@ export interface GetBkCIPipelineOutput {
   data?: BkCIPipelineDetailOutput;
 }
 
-export interface ListBkCIPipelineRepoRefsOutput {
-  data?: BkCIPipelineRepoRefOutput[];
-}
-
-export interface BkCIPipelineRepoRefOptionsInput {
-  propertyID: string;
-  search?: string;
-}
-
-export interface ListBkCIPipelineRepoRefOptionsOutput {
-  data?: BkCIPipelineVariableOptionOutput[];
-}
-
 export interface GetBkCIPipelineVariablesOutput {
   data?: BkCIPipelineVariableOutput[];
+}
+
+export interface ListBkCIRepositoryBranchesOutput {
+  data?: BkCIRepositoryRefOutput[];
+}
+
+export interface ListBkCIRepositoryTagsOutput {
+  data?: BkCIRepositoryRefOutput[];
+}
+
+export interface BkCIRepositoryRefOutput {
+  linkUrl?: string;
+  name?: string;
+  path?: string;
+  sha?: string;
 }
 
 export interface BkCIPipelineVariableOutput {
@@ -131,18 +165,6 @@ export interface BkCIPipelineVariableOutput {
 
 export interface BkCIPipelineVariableOptionOutput {
   key?: string;
-  value?: string;
-}
-
-export interface BkCIPipelineRepoRefOutput {
-  constant?: boolean;
-  defaultValue?: string;
-  id?: string;
-  label?: string;
-  name?: string;
-  readOnly?: boolean;
-  required?: boolean;
-  type?: string;
   value?: string;
 }
 

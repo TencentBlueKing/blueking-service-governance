@@ -179,9 +179,9 @@ export interface ListAlertEventsByStrategyRequest {
    */
   alertID?: string;
   /**
-   * 按告警名称过滤
+   * 按告警展示名称过滤
    */
-  alertName?: string;
+  alertDisplayName?: string;
   /**
    * 按告警内容过滤（映射到 query_string）
    */
@@ -276,9 +276,9 @@ export interface ListAlertEventsRequest {
    */
   alertID?: string;
   /**
-   * 按告警名称过滤
+   * 按告警展示名称过滤
    */
-  alertName?: string;
+  alertDisplayName?: string;
   /**
    * 按告警内容过滤（映射到 query_string）
    */
@@ -397,7 +397,6 @@ export interface CreateAlertStrategyBody {
   effectiveScope: EffectiveScopeInput;
   effectiveTimeRange?: EffectiveTimeRangeInput;
   enabled?: boolean;
-  monitorMetric: string;
   noticeGroupIDs?: number[];
   recoverCondition?: RecoverConditionInput;
   severity: 1 | 2 | 3;
@@ -454,15 +453,8 @@ export interface SaveUserGroupBody {
   alertNotice: AlertNotice[];
   channels: string[];
   desc?: string;
-  dutyArranges?: DutyArrange[];
-  dutyNotice?: DutyNotice;
-  dutyRules?: number[];
-  mentionList?: UserGroupUser[];
-  mentionType?: number;
   name: string;
-  needDuty?: boolean;
-  path?: string;
-  timezone?: string;
+  users: UserGroupUser[];
 }
 
 export interface SaveUserGroupResp {
@@ -817,7 +809,12 @@ export interface ListAlertEventsOutput {
 }
 
 export interface AlertEventOutput {
-  alertName?: string;
+  /**
+   * AlertDisplayName 是 BKMS 本地策略展示名，例如 `CPU 使用率过高`；
+   * 对应的监控原始名称格式为 `CPU 使用率过高【demo-app】`。
+   */
+  alertDisplayName?: string;
+  alertID?: string;
   assignee?: string[];
   beginTime?: number;
   bkMonitorStrategyID?: string;
@@ -831,7 +828,6 @@ export interface AlertEventOutput {
   duration?: string;
   endTime?: number;
   eventID?: string;
-  id?: string;
   latestTime?: number;
   relatedInfo?: unknown;
   severity?: number;
