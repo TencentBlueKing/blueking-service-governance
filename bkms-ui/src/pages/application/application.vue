@@ -83,6 +83,8 @@
                 />
               </Select>
               <Button
+                :key="`${curSortOption}-${sortOrder}`"
+                v-bk-tooltips="sortTip"
                 class="!min-w-[32px] !px-[8px] !ml-[-1px] text-[#3A84FF]"
                 @click="toggleSortOrder"
               >
@@ -348,6 +350,10 @@
   const appNameCollator = new Intl.Collator('zh-CN', { sensitivity: 'base' });
   const compareAppID = (left: AppInfoOutputObj, right: AppInfoOutputObj) =>
     appNameCollator.compare(left.id || '', right.id || '');
+  const sortTip = computed(() => {
+    if (curSortOption.value === 'name') return sortOrder.value === 'asc' ? 'A-Z' : 'Z-A';
+    return sortOrder.value === 'asc' ? t('最新') : t('最早');
+  });
 
   // 使用持久化分页hooks - 自动使用当前路由路径作为存储key
   const { usePagination } = usePersistentStorage();
