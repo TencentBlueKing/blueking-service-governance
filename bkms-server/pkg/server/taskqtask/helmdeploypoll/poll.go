@@ -108,8 +108,9 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 		}
 		return errors.Wrap(err, "get deploy record")
 	}
-	// 迟到或重复 tick：已稳定则不再查 Release；仍走 finishIfStable，
-	// 覆盖「终态已落库但客户端报错 / 进程崩溃，onStable 尚未执行」的重试路径
+	// 迟到或重复 tick：已稳定则不再查 Release；仍走 finishIfStable
+	// asynq 至少一次投递下，save 成功但客户端报错 / 进程崩溃时要补齐 onStable
+	// 副作用按至少一次设计，重复 tick 可能重复审计 / 指标；漏做比重复更糟
 	if helm.IsStable(record.Status) {
 		log.Infof(ctx, "deploy %s already %s, skip polling", args, record.Status)
 		return p.finishIfStable(ctx, record, args)
@@ -133,7 +134,10 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 	if err != nil {
 		remain--
 		if remain <= 0 {
-			log.Errorf(ctx, "stop polling release %s after %d retries", args, totalFailureRetryCount)
+			log.Errorf(
+				ctx, "stop polling release %s: consecutive fetch failures exhausted budget=%d",
+				args, totalFailureRetryCount,
+			)
 			return p.terminate(ctx, record, args, helm.StatusPollingBroken, err.Error())
 		}
 		log.Errorf(ctx, "fetch deploy %s status failed, remain=%d: %v", args, remain, err)
@@ -211,7 +215,9 @@ func (p *Poller) finishIfStable(ctx context.Context, record *helmdeploy.Record, 
 	return p.onStable(ctx, record, args)
 }
 
-// save 落部署记录；库中已是已卸载则不再覆盖
+// save 落部署记录
+// 库中已是 StatusUninstalled 视为卸载抢占：把内存里的 record.Status 改回 Uninstalled 并返回 nil，不写库
+// 调用方随后走 finishIfStable 时按卸载态收尾（只放锁、不发审计 / 指标）
 func (p *Poller) save(ctx context.Context, record *helmdeploy.Record, args Args) error {
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveStatusTimeout)
 	defer cancel()

@@ -28,33 +28,33 @@ import (
 )
 
 // SyncAlertStrategiesAfterDeploy 在部署成功后异步同步应用关联的告警策略
-// Workspace 或 Environment 获取失败时仅记录日志并提前返回，不影响已经完成的部署结果
+// 缺 store、Workspace / Environment 获取失败时只打日志并返回，不影响已经完成的部署结果
 func SyncAlertStrategiesAfterDeploy(
 	ctx context.Context,
 	workspaceID, appID, envName, trafficLaneName, operator string,
 ) {
 	reg := storereg.G()
-	if reg == nil {
-		log.Errorf(ctx, "skip alert strategy sync: registry is not initialized")
-		return
-	}
-
 	warnLogPrefix := fmt.Sprintf(
 		"skip alert strategy sync: workspace=%s app=%s envName=%s, ",
 		workspaceID, appID, envName,
 	)
+	if reg == nil {
+		log.Errorf(ctx, "skip alert strategy sync: registry is not initialized")
+		return
+	}
+	// 同步依赖的 store 任一缺失都做不下去，提前跳过，避免后续解引用 panic
+	if reg.WorkspaceStore == nil || reg.EnvStore == nil ||
+		reg.AlertStrategyStore == nil || reg.AppStore == nil || reg.ResourceSnapshotStore == nil {
+		log.Error(ctx, warnLogPrefix+"required store is not initialized")
+		return
+	}
+
 	ws, err := reg.WorkspaceStore.Get(ctx, workspaceID)
 	if err != nil {
 		log.Errorf(ctx, "get workspace %s for alert sync failed: %v", workspaceID, err)
 	}
 	if ws == nil {
 		log.Warn(ctx, warnLogPrefix+"workspace is nil")
-		return
-	}
-
-	if reg.EnvStore == nil {
-		log.Errorf(ctx, "env store is not initialized for alert sync")
-		log.Warn(ctx, warnLogPrefix+"env is nil")
 		return
 	}
 	env, err := reg.EnvStore.GetByName(ctx, workspaceID, appID, envName)

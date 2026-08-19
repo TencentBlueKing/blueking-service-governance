@@ -110,8 +110,9 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 		}
 		return errors.Wrap(err, "get deploy record")
 	}
-	// 迟到或重复 tick：已稳定 / 已卸载则不再查状态；仍走 finishIfStable，
-	// 覆盖「终态已落库但客户端报错 / 进程崩溃，onStable 尚未执行」的重试路径
+	// 迟到或重复 tick：已稳定 / 已卸载则不再查状态；仍走 finishIfStable
+	// asynq 至少一次投递下，save 成功但客户端报错 / 进程崩溃时要补齐 onStable
+	// 副作用按至少一次设计，重复 tick 可能重复审计 / 指标；漏做比重复更糟
 	if record.Status.IsStable() || record.Status.IsUninstall() {
 		log.Infof(ctx, "deploy %s already %s, skip polling", args, record.Status)
 		return p.finishIfStable(ctx, record, args)
@@ -136,7 +137,10 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 	if err != nil {
 		remain--
 		if remain <= 0 {
-			log.Errorf(ctx, "stop polling deploy state %s after %d retries", args, totalFailureRetryCount)
+			log.Errorf(
+				ctx, "stop polling deploy state %s: consecutive fetch failures exhausted budget=%d",
+				args, totalFailureRetryCount,
+			)
 			return p.terminate(ctx, record, args, appmodeldeploy.StatusPollingBroken, err.Error())
 		}
 		// 查询失败但额度未用尽：投下一 tick，本 tick 返回 nil，不扣 asynq 重试
@@ -232,7 +236,9 @@ func (p *Poller) finishIfStable(ctx context.Context, record *appmodeldeploy.Reco
 	return p.onStable(ctx, record, args)
 }
 
-// save 落部署记录；库中已是卸载态则不再覆盖。有 auto deploy store 时同步其状态
+// save 落部署记录。有 auto deploy store 时同步其状态
+// 库中已是卸载态视为卸载抢占：把内存里的 record.Status 改回库中卸载态并返回 nil，不写库
+// 调用方随后走 finishIfStable 时按卸载态收尾（不发审计 / 指标）
 // 只有部署记录本身写失败才返回 error（调用方据此决定是否重试本 tick），
 // auto deploy 记录属于附带同步，失败只打日志，避免重试时被终态早退分支跳过副作用
 func (p *Poller) save(ctx context.Context, record *appmodeldeploy.Record, args Args) error {
