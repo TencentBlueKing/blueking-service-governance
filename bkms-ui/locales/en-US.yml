@@ -1073,7 +1073,13 @@ Pod 中的管理脚本将在重新部署后移除: Management scripts in the Pod
 确认开启: Confirm Enable
 确认关闭: Confirm Disable
 开启后，仍需执行以下流程，才能使用开发模式: After enabling, you still need to complete the following steps to use dev mode
-使用 bkms-cli: Use bkms-cli
+执行部署: Deploy
+登录 bkms-cli: Log in to bkms-cli
+使用 bkms-cli 发布二进制: Publish binary with bkms-cli
+查看 Token: View Token
+请点击【查看 Token】自行获取 access_token，复制后填入下方命令: Click View Token to obtain the access_token, then copy and enter it in the command below
+设置为当前空间，后续命令无需再带 --workspace: Set it as the current workspace so later commands can omit --workspace
+发布二进制到当前环境的所有运行中实例: Publish the binary to all running instances of the current environment
 开启按环境配置: Enable Environment Configuration
 开启后，暂不支持关闭: Once enabled, it cannot be disabled
 编辑 Yaml: Edit Yaml

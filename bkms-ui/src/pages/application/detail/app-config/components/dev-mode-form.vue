@@ -46,8 +46,8 @@
         </div>
       </div>
       <DevModeSteps
-        v-show="isDevMode"
-        class="mt-[24px] w-[416px]"
+        v-if="isDevMode"
+        class="mt-[24px] max-w-[960px]"
         :env-name="currentEnv?.name"
       />
     </div>
