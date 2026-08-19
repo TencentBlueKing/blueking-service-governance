@@ -25,21 +25,21 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/task"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/helmdeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -226,22 +226,22 @@ func (h *Handler) CreateHelmDeploy(c *gin.Context) {
 	}
 
 	// 轮询部署状态 & 更新部署记录
-	_, err = worker.ApplyTask(
+	err = taskq.Enqueue(
 		ctx,
-		config.G.RabbitMQ.GetURI(),
-		config.G.RabbitMQ.Queue,
-		task.PollingHelmDeployStatus,
-		task.PollingDeployStatusArgs{
+		helmdeploypoll.Task.NewTask(helmdeploypoll.Args{
 			WorkspaceID:     app.WorkspaceID,
 			AppID:           app.ID,
 			EnvName:         uriInput.EnvName,
 			TrafficLaneName: input.TrafficLaneName,
 			DeployID:        deployID,
-		},
+		}),
+		asynq.ProcessIn(helmdeploypoll.PollingInterval()),
 	)
 	if err != nil {
 		deployLock.Release(ctx)
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "apply polling deploy status task"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(
+			err, bkerrs.ErrCodeInternalServerError, "enqueue polling deploy status task",
+		))
 		return
 	}
 
@@ -356,22 +356,22 @@ func (h *Handler) RollbackHelmDeploy(c *gin.Context) {
 	}
 
 	// 轮询部署状态 & 更新部署记录
-	_, err = worker.ApplyTask(
+	err = taskq.Enqueue(
 		ctx,
-		config.G.RabbitMQ.GetURI(),
-		config.G.RabbitMQ.Queue,
-		task.PollingHelmDeployStatus,
-		task.PollingDeployStatusArgs{
+		helmdeploypoll.Task.NewTask(helmdeploypoll.Args{
 			WorkspaceID:     app.WorkspaceID,
 			AppID:           app.ID,
 			EnvName:         uriInput.EnvName,
 			TrafficLaneName: input.TrafficLaneName,
 			DeployID:        deployID,
-		},
+		}),
+		asynq.ProcessIn(helmdeploypoll.PollingInterval()),
 	)
 	if err != nil {
 		deployLock.Release(ctx)
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "apply polling deploy status task"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(
+			err, bkerrs.ErrCodeInternalServerError, "enqueue polling deploy status task",
+		))
 		return
 	}
 

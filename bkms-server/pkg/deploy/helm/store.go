@@ -36,6 +36,9 @@ import (
 // collectionName Helm 应用部署记录表名
 const collectionName = "helm_deploy_records"
 
+// ErrRecordNotFound 部署记录未找到。调用方据此区分「记录不存在」与 DB 瞬时故障
+var ErrRecordNotFound = errors.New("helm deploy record not found")
+
 // ErrLatestDeployRecordNotFound 最新部署记录不存在
 var ErrLatestDeployRecordNotFound = errors.New("latest deploy record not found")
 
@@ -123,8 +126,8 @@ func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
 		return errors.Wrapf(err, "update helm app deploy record %s failed", record.ID.Hex())
 	}
 	if ret.MatchedCount == 0 {
-		return errors.Errorf(
-			"workspace %s app %s deploy record %s not found",
+		return errors.Wrapf(
+			ErrRecordNotFound, "workspace %s app %s deploy record %s",
 			record.WorkspaceID, record.AppID, record.ID.Hex(),
 		)
 	}
@@ -226,15 +229,14 @@ func (s *RecordStoreMongo) list(
 func (s *RecordStoreMongo) Get(ctx context.Context, appID, recordID string) (*Record, error) {
 	objID, err := bson.ObjectIDFromHex(recordID)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(ErrRecordNotFound, "invalid record id %s", recordID)
 	}
 
 	var record Record
 	err = s.collection.FindOne(ctx, bson.M{"_id": objID, "appID": appID}).Decode(&record)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			// When no record can be found, return a new error
-			return nil, errors.Errorf("app %s deploy record %s not found", appID, recordID)
+			return nil, errors.Wrapf(ErrRecordNotFound, "app %s deploy record %s", appID, recordID)
 		}
 		return nil, err
 	}

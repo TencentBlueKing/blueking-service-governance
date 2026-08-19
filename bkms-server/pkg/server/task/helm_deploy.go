@@ -16,6 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+// FIXME: Helm 部署状态轮询已迁至 asynq（pkg/server/taskqtask/helmdeploypoll）
+// 本文件仅保留 RabbitMQ 存量消费路径，存量队列耗尽后移除此实现
+
 package task
 
 import (
@@ -187,5 +190,7 @@ func handleHelmDeploySucceeded(ctx context.Context, args PollingDeployStatusArgs
 	}
 
 	// 2. 异步将应用关联的告警策略同步到当前环境（失败仅记录日志，不影响部署结果）
-	syncAlertStrategiesAfterDeploy(ctx, reg, args, record.Operator)
+	deploy.SyncAlertStrategiesAfterDeploy(
+		ctx, args.WorkspaceID, args.AppID, args.EnvName, args.TrafficLaneName, record.Operator,
+	)
 }

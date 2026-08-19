@@ -37,6 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/depsvcredis"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/example"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/polarisapply"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/helmdeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/workspace"
 )
 
@@ -50,6 +51,8 @@ func Setup(mux *asynq.ServeMux) error {
 	mux.Handle(buildpoll.Task.Name(), buildpoll.Task.Handler())
 	// AppModel 部署状态轮询
 	mux.Handle(appmodeldeploypoll.Task.Name(), appmodeldeploypoll.Task.Handler())
+	// Helm 部署状态轮询
+	mux.Handle(helmdeploypoll.Task.Name(), helmdeploypoll.Task.Handler())
 	// Workspace 初始化
 	mux.Handle(workspace.Initialization.Name(), workspace.Initialization.Handler())
 	// Redis 生命周期 tasks

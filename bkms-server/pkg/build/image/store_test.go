@@ -252,6 +252,14 @@ var _ = Describe("RecordStore", func() {
 			Expect(r.Status).To(Equal(StatusRunning))
 		})
 
+		It("should return ErrRecordNotFound when build record does not exist", func() {
+			_, err := store.Get(ctx, appID, "missing-build")
+			Expect(err).To(MatchError(ErrRecordNotFound))
+
+			err = store.Update(ctx, &Record{AppID: appID, BuildID: "missing-build"})
+			Expect(err).To(MatchError(ErrRecordNotFound))
+		})
+
 		It("should return error when build record with same index already exists", func() {
 			// First call should succeed
 			err := store.Create(ctx, &buildRecordB)
