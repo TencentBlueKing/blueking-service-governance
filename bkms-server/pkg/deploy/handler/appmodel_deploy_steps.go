@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -177,13 +178,17 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 	}
 	// 轮询部署状态 & 更新部署记录
 	// 注：部署成功/失败的操作记录在异步任务中记录
-	err = taskq.Enqueue(ctx, appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
-		WorkspaceID:     app.WorkspaceID,
-		AppID:           app.ID,
-		EnvName:         uriInput.EnvName,
-		TrafficLaneName: input.TrafficLaneName,
-		DeployID:        deployID,
-	}))
+	err = taskq.Enqueue(
+		ctx,
+		appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
+			WorkspaceID:     app.WorkspaceID,
+			AppID:           app.ID,
+			EnvName:         uriInput.EnvName,
+			TrafficLaneName: input.TrafficLaneName,
+			DeployID:        deployID,
+		}),
+		asynq.ProcessIn(appmodeldeploypoll.PollingInterval()),
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(
 			err, bkerrs.ErrCodeInternalServerError, "enqueue polling deploy status task",

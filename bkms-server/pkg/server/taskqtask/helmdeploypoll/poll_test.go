@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	"github.com/hibiken/asynq"
 	. "github.com/onsi/ginkgo/v2"
@@ -32,17 +33,21 @@ import (
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 )
 
-func newPendingRecord() *helmdeploy.Record {
+func newPendingRecord(appID string) *helmdeploy.Record {
 	return &helmdeploy.Record{
 		ID:          bson.NewObjectID(),
-		AppID:       "app-1",
+		WorkspaceID: "ws-1",
+		AppID:       appID,
 		EnvName:     "dev",
-		ReleaseName: "dev-app-1",
+		ReleaseName: "dev-" + appID,
+		ClusterID:   "BCS-K8S-1",
+		Namespace:   "default",
 		Status:      helm.StatusPendingUpgrade,
 		StartedAt:   time.Now(),
 		Operator:    "alice",
@@ -62,39 +67,46 @@ func stubFetch(status helmrelease.Status, revision string) {
 	).Build()
 }
 
-var _ = Describe("Manager Handle", func() {
+var _ = Describe("Poller Handle", func() {
 	var (
 		ctx        context.Context
 		args       Args
 		rec        *helmdeploy.Record
-		latest     *helmdeploy.Record
+		store      helmdeploy.RecordStore
 		enqCount   int
 		releaseCnt int
 		topoCount  atomic.Int32
 		hookCount  atomic.Int32
-		updateErr  error
-		mgr        *Manager
+		plr        *Poller
 	)
 
+	insert := func() {
+		id, err := store.Create(ctx, rec)
+		Expect(err).NotTo(HaveOccurred())
+		args.DeployID = id
+	}
+
+	reload := func() *helmdeploy.Record {
+		got, err := store.Get(ctx, rec.AppID, args.DeployID)
+		Expect(err).NotTo(HaveOccurred())
+		return got
+	}
+
 	BeforeEach(func() {
+		var err error
 		ctx = context.Background()
-		rec = newPendingRecord()
-		latest = rec
-		args = Args{WorkspaceID: "ws-1", AppID: "app-1", EnvName: "dev", DeployID: rec.ID.Hex()}
+		store, err = helmdeploy.NewRecordStoreMongo(database.Client(), database.Name())
+		Expect(err).NotTo(HaveOccurred())
+
+		appID := "app-" + stringx.Random(8)
+		rec = newPendingRecord(appID)
+		args = Args{WorkspaceID: rec.WorkspaceID, AppID: rec.AppID, EnvName: rec.EnvName, DeployID: rec.ID.Hex()}
 		enqCount = 0
 		releaseCnt = 0
 		topoCount.Store(0)
 		hookCount.Store(0)
-		updateErr = nil
-		mgr = NewManager(&helmdeploy.RecordStoreMongo{})
+		plr = NewPoller(store)
 
-		mockey.Mock((*helmdeploy.RecordStoreMongo).Get).Return(rec, nil).Build()
-		mockey.Mock((*helmdeploy.RecordStoreMongo).GetLatest).To(
-			func(context.Context, string, string, string) (*helmdeploy.Record, error) { return latest, nil },
-		).Build()
-		mockey.Mock((*helmdeploy.RecordStoreMongo).Update).To(
-			func(context.Context, *helmdeploy.Record) error { return updateErr },
-		).Build()
 		mockey.Mock(taskq.Enqueue).To(func(context.Context, *taskq.Task, ...asynq.Option) error {
 			enqCount++
 			return nil
@@ -115,15 +127,16 @@ var _ = Describe("Manager Handle", func() {
 	})
 
 	It("enqueues the next tick and refreshes topology only on the first tick", func() {
+		insert()
 		stubFetch(helm.StatusPendingUpgrade, "2")
-		Expect(mgr.Handle(ctx, args)).To(Succeed())
+		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Expect(enqCount).To(Equal(1))
 		Expect(releaseCnt).To(Equal(0))
-		Expect(rec.Status).To(Equal(helm.StatusPendingUpgrade))
+		Expect(reload().Status).To(Equal(helm.StatusPendingUpgrade))
 		Eventually(topoCount.Load).Should(Equal(int32(1)))
 
 		args.TopologyRefreshed = true
-		Expect(mgr.Handle(ctx, args)).To(Succeed())
+		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Expect(enqCount).To(Equal(2))
 		Consistently(topoCount.Load).Should(Equal(int32(1)))
 	})
@@ -131,10 +144,13 @@ var _ = Describe("Manager Handle", func() {
 	DescribeTable("already stable records skip polling",
 		func(newerLatest bool, wantRelease int) {
 			rec.Status = helm.StatusDeployed
+			insert()
 			if newerLatest {
-				latest = newPendingRecord()
+				time.Sleep(5 * time.Millisecond)
+				_, err := store.Create(ctx, newPendingRecord(rec.AppID))
+				Expect(err).NotTo(HaveOccurred())
 			}
-			Expect(mgr.Handle(ctx, args)).To(Succeed())
+			Expect(plr.Handle(ctx, args)).To(Succeed())
 			Expect(enqCount).To(Equal(0))
 			Expect(releaseCnt).To(Equal(wantRelease))
 			Expect(hookCount.Load()).To(Equal(int32(1)))
@@ -145,18 +161,20 @@ var _ = Describe("Manager Handle", func() {
 
 	It("marks pollingTimeout when StartedAt exceeds configured window", func() {
 		rec.StartedAt = time.Now().Add(-pollingTimeout() - time.Minute)
-		Expect(mgr.Handle(ctx, args)).To(Succeed())
-		Expect(rec.Status).To(Equal(helm.StatusPollingTimeout))
+		insert()
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		Expect(reload().Status).To(Equal(helm.StatusPollingTimeout))
 		Expect(enqCount).To(Equal(0))
 		Expect(releaseCnt).To(Equal(1))
 	})
 
 	DescribeTable("query failure uses remaining retry budget",
 		func(remain int, wantStatus helmrelease.Status, wantEnq, wantRelease int) {
+			insert()
 			args.FailureRetryRemain = remain
 			mockey.Mock(fetchReleaseStatus).Return(nil, errors.New("cluster down")).Build()
-			Expect(mgr.Handle(ctx, args)).To(Succeed())
-			Expect(rec.Status).To(Equal(wantStatus))
+			Expect(plr.Handle(ctx, args)).To(Succeed())
+			Expect(reload().Status).To(Equal(wantStatus))
 			Expect(enqCount).To(Equal(wantEnq))
 			Expect(releaseCnt).To(Equal(wantRelease))
 		},
@@ -164,25 +182,30 @@ var _ = Describe("Manager Handle", func() {
 		Entry("marks pollingBroken when retries are exhausted", 1, helm.StatusPollingBroken, 0, 1),
 	)
 
-	DescribeTable("reaches deployed from fetch",
-		func(saveErr error, wantRetryableErr bool, wantRelease, wantHook int) {
-			stubFetch(helm.StatusDeployed, "5")
-			updateErr = saveErr
-			err := mgr.Handle(ctx, args)
-			if wantRetryableErr {
-				Expect(err).To(HaveOccurred())
-				Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeFalse())
-			} else {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(rec.Status).To(Equal(helm.StatusDeployed))
-				Expect(rec.Revision).To(Equal("5"))
-				Expect(rec.Message).To(Equal(string(helm.StatusDeployed)))
-			}
-			Expect(enqCount).To(Equal(0))
-			Expect(releaseCnt).To(Equal(wantRelease))
-			Expect(hookCount.Load()).To(Equal(int32(wantHook)))
-		},
-		Entry("writes revision and stops", nil, false, 1, 1),
-		Entry("returns a retryable error when save fails", errors.New("db down"), true, 0, 0),
-	)
+	It("writes revision and stops when status becomes deployed", func() {
+		insert()
+		stubFetch(helm.StatusDeployed, "5")
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		got := reload()
+		Expect(got.Status).To(Equal(helm.StatusDeployed))
+		Expect(got.Revision).To(Equal("5"))
+		Expect(got.Message).To(Equal(string(helm.StatusDeployed)))
+		Expect(enqCount).To(Equal(0))
+		Expect(releaseCnt).To(Equal(1))
+		Expect(hookCount.Load()).To(Equal(int32(1)))
+	})
+
+	It("returns a retryable error when saving a stable status fails", func() {
+		insert()
+		stubFetch(helm.StatusDeployed, "5")
+		// 只在本例模拟落库失败，其余用例走真实 Mongo Update
+		mockey.Mock((*helmdeploy.RecordStoreMongo).Update).Return(errors.New("db down")).Build()
+		err := plr.Handle(ctx, args)
+		Expect(err).To(HaveOccurred())
+		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeFalse())
+		Expect(enqCount).To(Equal(0))
+		Expect(releaseCnt).To(Equal(0))
+		Expect(hookCount.Load()).To(Equal(int32(0)))
+		Expect(reload().Status).To(Equal(helm.StatusPendingUpgrade))
+	})
 })

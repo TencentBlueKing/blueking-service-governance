@@ -23,6 +23,7 @@ import (
 	"time"
 
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
+	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
@@ -182,13 +183,17 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args)
 		return "", errors.Wrap(err, "start appmodel deploy after build")
 	}
 
-	err = taskq.Enqueue(ctx, appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
-		WorkspaceID:     args.WorkspaceID,
-		AppID:           args.AppID,
-		EnvName:         args.AutoDeploy.EnvName,
-		TrafficLaneName: args.AutoDeploy.TrafficLaneName,
-		DeployID:        deployID,
-	}))
+	err = taskq.Enqueue(
+		ctx,
+		appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
+			WorkspaceID:     args.WorkspaceID,
+			AppID:           args.AppID,
+			EnvName:         args.AutoDeploy.EnvName,
+			TrafficLaneName: args.AutoDeploy.TrafficLaneName,
+			DeployID:        deployID,
+		}),
+		asynq.ProcessIn(appmodeldeploypoll.PollingInterval()),
+	)
 	if err != nil {
 		return deployID, errors.Wrap(err, "enqueue polling deploy status task")
 	}

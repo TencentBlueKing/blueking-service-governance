@@ -72,6 +72,7 @@ func handleDeploySucceeded(ctx context.Context, args Args, record *helmdeploy.Re
 		deploy.TrackEnvAddApp(ctx, reg.EnvStore, args.WorkspaceID, args.EnvName, args.AppID)
 	}
 
+	// 异步把应用关联的告警策略同步到当前环境，失败只打日志，不改部署结果、不让本 tick 失败
 	deploy.SyncAlertStrategiesAfterDeploy(
 		ctx, args.WorkspaceID, args.AppID, args.EnvName, args.TrafficLaneName, record.Operator,
 	)

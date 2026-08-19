@@ -36,14 +36,14 @@ import (
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
-// handle asynq 入口：registry / 部署记录 store 缺失则打日志并 ErrStopRetry，否则交给 Manager
+// handle asynq 入口：registry / 部署记录 store 缺失则打日志并 ErrStopRetry，否则交给 Poller
 func handle(ctx context.Context, args Args) error {
 	reg := storereg.G()
 	if reg == nil || reg.HelmDeployRecordStore == nil {
 		log.Errorf(ctx, "helm deploy poll stores not initialized, stop task: %s", args)
 		return errors.Wrap(taskq.ErrStopRetry, "helm deploy poll stores not initialized")
 	}
-	return NewManager(reg.HelmDeployRecordStore).Handle(ctx, args)
+	return NewPoller(reg.HelmDeployRecordStore).Handle(ctx, args)
 }
 
 // onExhausted tick 重试耗尽（如 Redis 抖动导致连续投递失败）意味着轮询链已断，后续不会再有 tick
@@ -58,15 +58,15 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 		log.Errorf(ctx, "helm deploy poll stores not initialized, skip mark pollingBroken: %s", args)
 		return
 	}
-	m := NewManager(reg.HelmDeployRecordStore)
-	record, err := m.recordStore.Get(ctx, args.AppID, args.DeployID)
+	p := NewPoller(reg.HelmDeployRecordStore)
+	record, err := p.recordStore.Get(ctx, args.AppID, args.DeployID)
 	if err != nil {
 		log.Errorf(ctx, "get deploy record %s failed, skip mark pollingBroken: %v", args, err)
 		return
 	}
 	// 已是稳定态：终态可能已由本 tick 写入但副作用未跑完（save 成功、客户端报错后重试），补跑 onStable / 放锁
 	if helm.IsStable(record.Status) {
-		if err = m.finishIfStable(ctx, record, args); err != nil {
+		if err = p.finishIfStable(ctx, record, args); err != nil {
 			log.Errorf(ctx, "helm deploy poll %s exhausted but finish stable failed: %v", args, err)
 		}
 		return
@@ -75,19 +75,19 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 	if lastErr != nil {
 		message = lastErr.Error()
 	}
-	if err = m.terminate(ctx, record, args, helm.StatusPollingBroken, message); err != nil {
+	if err = p.terminate(ctx, record, args, helm.StatusPollingBroken, message); err != nil {
 		log.Errorf(ctx, "mark deploy %s pollingBroken failed: %v", args, err)
 	}
 }
 
-// Manager 执行一次 Helm 部署状态轮询 tick
-type Manager struct {
+// Poller 执行一次 Helm 部署状态轮询 tick
+type Poller struct {
 	recordStore helmdeploy.RecordStore
 }
 
-// NewManager 注入部署轮询所需 store，供 asynq handler 与单测共用
-func NewManager(recordStore helmdeploy.RecordStore) *Manager {
-	return &Manager{recordStore: recordStore}
+// NewPoller 注入部署轮询所需 store，供 asynq handler 与单测共用
+func NewPoller(recordStore helmdeploy.RecordStore) *Poller {
+	return &Poller{recordStore: recordStore}
 }
 
 // Handle 执行一次部署状态轮询 tick：读本地记录，必要时查 Release 并落库
@@ -96,12 +96,12 @@ func NewManager(recordStore helmdeploy.RecordStore) *Manager {
 // 轮询窗口由 pollingTimeout 截断，查状态失败次数由 FailureRetryRemain 截断
 // 仅记录不存在等不可恢复错误 wrap taskq.ErrStopRetry；瞬时错误交回 asynq 退避重试，
 // 否则一次 DB 抖动就会断掉轮询链，让部署记录永久停在 pending 且锁泄漏
-func (m *Manager) Handle(ctx context.Context, args Args) error {
-	if m.recordStore == nil {
+func (p *Poller) Handle(ctx context.Context, args Args) error {
+	if p.recordStore == nil {
 		return errors.Wrap(taskq.ErrStopRetry, "helm deploy poll stores not initialized")
 	}
 
-	record, err := m.recordStore.Get(ctx, args.AppID, args.DeployID)
+	record, err := p.recordStore.Get(ctx, args.AppID, args.DeployID)
 	if err != nil {
 		if errors.Is(err, helmdeploy.ErrRecordNotFound) {
 			return errors.Wrapf(taskq.ErrStopRetry, "get deploy record: %v", err)
@@ -112,11 +112,11 @@ func (m *Manager) Handle(ctx context.Context, args Args) error {
 	// 覆盖「终态已落库但客户端报错 / 进程崩溃，onStable 尚未执行」的重试路径
 	if helm.IsStable(record.Status) {
 		log.Infof(ctx, "deploy %s already %s, skip polling", args, record.Status)
-		return m.finishIfStable(ctx, record, args)
+		return p.finishIfStable(ctx, record, args)
 	}
 	if time.Since(record.StartedAt) >= pollingTimeout() {
 		log.Warnf(ctx, "deploy %s polling window exceeded, mark pollingTimeout", args)
-		return m.terminate(ctx, record, args, helm.StatusPollingTimeout, "")
+		return p.terminate(ctx, record, args, helm.StatusPollingTimeout, "")
 	}
 
 	// 拓扑刷新是重操作，整轮部署只在首个 tick 触发；标记随 enqueueNext 透传给后续 tick
@@ -134,10 +134,10 @@ func (m *Manager) Handle(ctx context.Context, args Args) error {
 		remain--
 		if remain <= 0 {
 			log.Errorf(ctx, "stop polling release %s after %d retries", args, totalFailureRetryCount)
-			return m.terminate(ctx, record, args, helm.StatusPollingBroken, err.Error())
+			return p.terminate(ctx, record, args, helm.StatusPollingBroken, err.Error())
 		}
 		log.Errorf(ctx, "fetch deploy %s status failed, remain=%d: %v", args, remain, err)
-		return m.enqueueNext(ctx, args, remain)
+		return p.enqueueNext(ctx, args, remain)
 	}
 	// 查到状态即视为集群侧可达，失败额度复位，保证额度约束的是连续失败而非整轮累计
 	remain = totalFailureRetryCount
@@ -153,7 +153,7 @@ func (m *Manager) Handle(ctx context.Context, args Args) error {
 	}
 
 	if record.Status != curStatus {
-		if err = m.save(ctx, record, args); err != nil {
+		if err = p.save(ctx, record, args); err != nil {
 			// 终态未落库就发指标 / 审计 / 放锁会造成 DB 与副作用不一致，交回 asynq 重试本 tick；
 			// 中间态落库失败不阻断轮询，下一 tick 会重新写
 			if helm.IsStable(record.Status) {
@@ -163,13 +163,13 @@ func (m *Manager) Handle(ctx context.Context, args Args) error {
 		}
 	}
 	if helm.IsStable(record.Status) {
-		return m.finishIfStable(ctx, record, args)
+		return p.finishIfStable(ctx, record, args)
 	}
-	return m.enqueueNext(ctx, args, remain)
+	return p.enqueueNext(ctx, args, remain)
 }
 
 // enqueueNext 按配置间隔 ProcessIn 投递下一 tick；新任务 retry 从 0 计
-func (m *Manager) enqueueNext(ctx context.Context, args Args, remain int) error {
+func (p *Poller) enqueueNext(ctx context.Context, args Args, remain int) error {
 	args.FailureRetryRemain = remain
 	interval := PollingInterval()
 	log.Infof(ctx, "schedule next poll for deploy %s in %s remain=%d", args, interval, remain)
@@ -181,7 +181,7 @@ func (m *Manager) enqueueNext(ctx context.Context, args Args, remain int) error 
 
 // terminate 把记录标为指定终态并落库；卸载态只放锁，其余走 onStable
 // 落库失败返回 error 交回 asynq 重试，避免指标 / 审计 / 放锁已触发而 DB 仍是中间态
-func (m *Manager) terminate(
+func (p *Poller) terminate(
 	ctx context.Context,
 	record *helmdeploy.Record,
 	args Args,
@@ -195,30 +195,30 @@ func (m *Manager) terminate(
 	if record.EndedAt.IsZero() {
 		record.EndedAt = time.Now()
 	}
-	if err := m.save(ctx, record, args); err != nil {
+	if err := p.save(ctx, record, args); err != nil {
 		return errors.Wrapf(err, "update helm deploy record to %s", status)
 	}
-	return m.finishIfStable(ctx, record, args)
+	return p.finishIfStable(ctx, record, args)
 }
 
 // finishIfStable 稳定态收尾：卸载只放锁，其余走 onStable（指标 / 审计 / 成功后置 / 放锁）
 // 已稳定早退与 terminate 共用，保证「终态已在 DB、副作用未跑完」的重试仍能补齐
-func (m *Manager) finishIfStable(ctx context.Context, record *helmdeploy.Record, args Args) error {
+func (p *Poller) finishIfStable(ctx context.Context, record *helmdeploy.Record, args Args) error {
 	if record.Status == helm.StatusUninstalled {
-		m.releaseLockIfLatest(ctx, args)
+		p.releaseLockIfLatest(ctx, args)
 		return nil
 	}
-	return m.onStable(ctx, record, args)
+	return p.onStable(ctx, record, args)
 }
 
 // save 落部署记录；库中已是已卸载则不再覆盖
-func (m *Manager) save(ctx context.Context, record *helmdeploy.Record, args Args) error {
+func (p *Poller) save(ctx context.Context, record *helmdeploy.Record, args Args) error {
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveStatusTimeout)
 	defer cancel()
 
 	// 库中状态即本次变更的起点，取来既用于卸载抢占检查，也用于补全日志的 from 字段
 	fromStatus := helm.StatusUnknown
-	dbRecord, err := m.recordStore.Get(saveCtx, args.AppID, args.DeployID)
+	dbRecord, err := p.recordStore.Get(saveCtx, args.AppID, args.DeployID)
 	if err != nil {
 		log.Errorf(saveCtx, "failed to get helm deploy record: %v", err)
 	} else if dbRecord.Status == helm.StatusUninstalled {
@@ -236,11 +236,11 @@ func (m *Manager) save(ctx context.Context, record *helmdeploy.Record, args Args
 		saveCtx, "helm deploy %s status changed from %s to %s, message: %s",
 		args, fromStatus, record.Status, record.Message,
 	)
-	return m.recordStore.Update(saveCtx, record)
+	return p.recordStore.Update(saveCtx, record)
 }
 
 // onStable 终态副作用失败只打日志，不改部署结果，也不让本 tick 失败
-func (m *Manager) onStable(ctx context.Context, record *helmdeploy.Record, args Args) error {
+func (p *Poller) onStable(ctx context.Context, record *helmdeploy.Record, args Args) error {
 	metrics.DeployFinished(metrics.DeployKindHelm, string(record.Status), record.StartedAt, time.Now())
 	log.Infof(ctx, "helm deploy %s status is %s (Stable), stop polling and release lock", args, record.Status)
 
@@ -259,22 +259,22 @@ func (m *Manager) onStable(ctx context.Context, record *helmdeploy.Record, args 
 		audit.WithResult(opResult), audit.WithWorkspaceID(args.WorkspaceID),
 		audit.WithAppID(args.AppID), audit.WithEnvName(args.EnvName),
 	)
-	m.releaseLockIfLatest(ctx, args)
+	p.releaseLockIfLatest(ctx, args)
 	return nil
 }
 
 // releaseLockIfLatest 仅当 latest 仍是本 deployID 时释放锁，避免 Del 误放更新部署的锁
-func (m *Manager) releaseLockIfLatest(ctx context.Context, args Args) {
-	latest, err := m.recordStore.GetLatest(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
+func (p *Poller) releaseLockIfLatest(ctx context.Context, args Args) {
+	latest, err := p.recordStore.GetLatest(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
 	if err != nil {
 		log.Errorf(ctx, "skip release helm deploy lock for %s: get latest: %v", args, err)
 		return
 	}
-	if latest == nil || latest.ID.Hex() != args.DeployID {
-		log.Infof(ctx, "skip release helm deploy lock for %s: latest is no longer this record", args)
+	if latest != nil && latest.ID.Hex() == args.DeployID {
+		releaseDeployLock(ctx, args)
 		return
 	}
-	releaseDeployLock(ctx, args)
+	log.Infof(ctx, "skip release helm deploy lock for %s: latest is no longer this record", args)
 }
 
 // releaseDeployLock 释放同应用+环境+泳道的部署锁；抽成函数便于单测 mock

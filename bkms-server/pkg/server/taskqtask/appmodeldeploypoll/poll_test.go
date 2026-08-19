@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	"github.com/hibiken/asynq"
 	. "github.com/onsi/ginkgo/v2"
@@ -31,18 +32,22 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 )
 
-func newDeployingRecord() *appmodeldeploy.Record {
+func newDeployingRecord(appID string) *appmodeldeploy.Record {
 	return &appmodeldeploy.Record{
-		ID:        bson.NewObjectID(),
-		AppID:     "app-1",
-		EnvName:   "dev",
-		Status:    appmodeldeploy.StatusDeploying,
-		StartedAt: time.Now(),
-		Creator:   "alice",
+		ID:          bson.NewObjectID(),
+		WorkspaceID: "ws-1",
+		AppID:       appID,
+		EnvName:     "dev",
+		ClusterID:   "BCS-K8S-1",
+		Namespace:   "default",
+		Status:      appmodeldeploy.StatusDeploying,
+		StartedAt:   time.Now(),
+		Creator:     "alice",
 	}
 }
 
@@ -52,37 +57,44 @@ func stubFetch(status appmodeldeploy.Status) {
 	).Build()
 }
 
-var _ = Describe("Poller RunTick", func() {
+var _ = Describe("Poller Handle", func() {
 	var (
 		ctx       context.Context
 		args      Args
 		rec       *appmodeldeploy.Record
-		latest    *appmodeldeploy.Record
+		store     appmodeldeploy.RecordStore
 		enqCount  int
 		topoCount atomic.Int32
-		updateErr error
-		plr       *poller
+		hookCount atomic.Int32
+		plr       *Poller
 	)
 
+	insert := func() {
+		id, err := store.Create(ctx, rec)
+		Expect(err).NotTo(HaveOccurred())
+		args.DeployID = id
+	}
+
+	reload := func() *appmodeldeploy.Record {
+		got, err := store.Get(ctx, rec.AppID, args.DeployID)
+		Expect(err).NotTo(HaveOccurred())
+		return got
+	}
+
 	BeforeEach(func() {
+		var err error
 		ctx = context.Background()
-		args = Args{WorkspaceID: "ws-1", AppID: "app-1", EnvName: "dev", DeployID: "dep-1"}
-		rec = newDeployingRecord()
-		latest = rec
+		store, err = appmodeldeploy.NewRecordStoreMongo(database.Client(), database.Name())
+		Expect(err).NotTo(HaveOccurred())
+
+		appID := "app-" + stringx.Random(8)
+		rec = newDeployingRecord(appID)
+		args = Args{WorkspaceID: rec.WorkspaceID, AppID: rec.AppID, EnvName: rec.EnvName, DeployID: rec.ID.Hex()}
 		enqCount = 0
 		topoCount.Store(0)
-		updateErr = nil
-		plr = newPoller(&appmodeldeploy.RecordStoreMongo{}, nil)
+		hookCount.Store(0)
+		plr = NewPoller(store, nil)
 
-		mockey.Mock((*appmodeldeploy.RecordStoreMongo).Get).To(
-			func(context.Context, string, string) (*appmodeldeploy.Record, error) { return rec, nil },
-		).Build()
-		mockey.Mock((*appmodeldeploy.RecordStoreMongo).GetLatest).To(
-			func(context.Context, string, string, string) (*appmodeldeploy.Record, error) { return latest, nil },
-		).Build()
-		mockey.Mock((*appmodeldeploy.RecordStoreMongo).Update).To(
-			func(context.Context, *appmodeldeploy.Record) error { return updateErr },
-		).Build()
 		mockey.Mock(taskq.Enqueue).To(func(context.Context, *taskq.Task, ...asynq.Option) error {
 			enqCount++
 			return nil
@@ -91,7 +103,9 @@ var _ = Describe("Poller RunTick", func() {
 		mockey.Mock(triggerTopologyRefresh).To(func(context.Context, Args, *appmodeldeploy.Record) {
 			topoCount.Add(1)
 		}).Build()
-		mockey.Mock(handleDeploySucceeded).Return().Build()
+		mockey.Mock(handleDeploySucceeded).To(func(context.Context, Args, *appmodeldeploy.Record) {
+			hookCount.Add(1)
+		}).Build()
 	})
 
 	AfterEach(func() {
@@ -100,94 +114,103 @@ var _ = Describe("Poller RunTick", func() {
 	})
 
 	It("enqueues the next tick when deploy is still running", func() {
+		insert()
 		stubFetch(appmodeldeploy.StatusDeploying)
-		err := plr.runTick(ctx, args)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Expect(enqCount).To(Equal(1))
-		Expect(rec.Status).To(Equal(appmodeldeploy.StatusDeploying))
+		Expect(reload().Status).To(Equal(appmodeldeploy.StatusDeploying))
 	})
 
-	It("skips already stable records without polling", func() {
+	It("finishes already stable records without polling", func() {
 		rec.Status = appmodeldeploy.StatusDeployed
-		err := plr.runTick(ctx, args)
-		Expect(err).NotTo(HaveOccurred())
+		insert()
+		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Expect(enqCount).To(Equal(0))
+		Expect(hookCount.Load()).To(Equal(int32(1)))
 	})
 
 	It("skips uninstalling records without overwriting", func() {
 		rec.Status = appmodeldeploy.StatusUninstalling
-		err := plr.runTick(ctx, args)
-		Expect(err).NotTo(HaveOccurred())
+		insert()
+		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Expect(enqCount).To(Equal(0))
-		Expect(rec.Status).To(Equal(appmodeldeploy.StatusUninstalling))
+		Expect(reload().Status).To(Equal(appmodeldeploy.StatusUninstalling))
 	})
 
 	It("marks pollingTimeout when StartedAt exceeds configured window", func() {
 		rec.StartedAt = time.Now().Add(-pollingTimeout() - time.Minute)
-		err := plr.runTick(ctx, args)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(rec.Status).To(Equal(appmodeldeploy.StatusPollingTimeout))
+		insert()
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		Expect(reload().Status).To(Equal(appmodeldeploy.StatusPollingTimeout))
 		Expect(enqCount).To(Equal(0))
 	})
 
 	It("marks pollingBroken after remaining retries are exhausted", func() {
+		insert()
 		args.FailureRetryRemain = 1
 		mockey.Mock((*appmodeldeploy.DeployStateGetter).Get).Return(nil, errors.New("cluster down")).Build()
-		err := plr.runTick(ctx, args)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(rec.Status).To(Equal(appmodeldeploy.StatusPollingBroken))
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		Expect(reload().Status).To(Equal(appmodeldeploy.StatusPollingBroken))
 		Expect(enqCount).To(Equal(0))
 	})
 
 	It("reschedules when query fails but retries remain", func() {
+		insert()
 		args.FailureRetryRemain = 3
 		mockey.Mock((*appmodeldeploy.DeployStateGetter).Get).Return(nil, errors.New("cluster down")).Build()
-		err := plr.runTick(ctx, args)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(rec.Status).To(Equal(appmodeldeploy.StatusDeploying))
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		Expect(reload().Status).To(Equal(appmodeldeploy.StatusDeploying))
 		Expect(enqCount).To(Equal(1))
 	})
 
 	It("triggers topology refresh on the first tick only", func() {
+		insert()
 		stubFetch(appmodeldeploy.StatusDeploying)
-		Expect(plr.runTick(ctx, args)).To(Succeed())
+		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Eventually(topoCount.Load).Should(Equal(int32(1)))
 
-		// 后续 tick 携带 enqueueNext 置真的标记，不应再次触发刷新
 		args.TopologyRefreshed = true
-		Expect(plr.runTick(ctx, args)).To(Succeed())
+		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Consistently(topoCount.Load).Should(Equal(int32(1)))
 	})
 
 	It("returns a retryable error when saving a stable status fails", func() {
+		insert()
 		stubFetch(appmodeldeploy.StatusDeployed)
-		updateErr = errors.New("db down")
-		err := plr.runTick(ctx, args)
+		// 只在本例模拟落库失败，其余用例走真实 Mongo Update
+		mockey.Mock((*appmodeldeploy.RecordStoreMongo).Update).Return(errors.New("db down")).Build()
+		err := plr.Handle(ctx, args)
 		Expect(err).To(HaveOccurred())
 		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeFalse())
 		Expect(enqCount).To(Equal(0))
+		Expect(hookCount.Load()).To(Equal(int32(0)))
+		Expect(reload().Status).To(Equal(appmodeldeploy.StatusDeploying))
 	})
 
 	It("marks canceled when a newer deploy exists", func() {
+		insert()
 		stubFetch(appmodeldeploy.StatusDeploying)
-		latest = newDeployingRecord()
-		err := plr.runTick(ctx, args)
+		time.Sleep(5 * time.Millisecond)
+		_, err := store.Create(ctx, newDeployingRecord(rec.AppID))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(rec.Status).To(Equal(appmodeldeploy.StatusCanceled))
-		Expect(rec.Message).To(ContainSubstring("superseded"))
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		got := reload()
+		Expect(got.Status).To(Equal(appmodeldeploy.StatusCanceled))
+		Expect(got.Message).To(ContainSubstring("superseded"))
 		Expect(enqCount).To(Equal(0))
 	})
 
 	DescribeTable("maps terminal status from fetch helper",
-		func(want appmodeldeploy.Status) {
+		func(want appmodeldeploy.Status, wantHook int32) {
+			insert()
 			stubFetch(want)
-			err := plr.runTick(ctx, args)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(rec.Status).To(Equal(want))
+			Expect(plr.Handle(ctx, args)).To(Succeed())
+			Expect(reload().Status).To(Equal(want))
 			Expect(enqCount).To(Equal(0))
+			Expect(hookCount.Load()).To(Equal(wantHook))
 		},
-		Entry("deployed", appmodeldeploy.StatusDeployed),
-		Entry("failed", appmodeldeploy.StatusFailed),
-		Entry("canceled", appmodeldeploy.StatusCanceled),
+		Entry("deployed", appmodeldeploy.StatusDeployed, int32(1)),
+		Entry("failed", appmodeldeploy.StatusFailed, int32(0)),
+		Entry("canceled", appmodeldeploy.StatusCanceled, int32(0)),
 	)
 })
