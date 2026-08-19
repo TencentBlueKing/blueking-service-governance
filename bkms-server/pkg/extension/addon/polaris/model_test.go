@@ -77,6 +77,34 @@ var _ = Describe("PolarisConfig", func() {
 		})
 	})
 
+	Describe("GetVars", func() {
+		It("should return token and service port for on_deploy configs", func() {
+			config := &polaris.PolarisConfig{
+				Properties: polaris.Properties{
+					InstanceKey:  "svc",
+					PolarisToken: "token",
+					ServicePort:  8080,
+				},
+			}
+			Expect(config.GetVars()).To(Equal([]polaris.ConfigVar{
+				{Key: "svc_polarisToken", Value: "token"},
+				{Key: "svc_serviceport", Value: "8080"},
+			}))
+		})
+
+		It("should return no vars for immediate-register configs", func() {
+			config := &polaris.PolarisConfig{
+				Properties: polaris.Properties{
+					InstanceKey:  "svc",
+					PolarisToken: "token",
+					ServicePort:  8080,
+					RegisterMode: polaris.RegisterModeImmediate,
+				},
+			}
+			Expect(config.GetVars()).To(BeEmpty())
+		})
+	})
+
 	Describe("GetEnvWeight", func() {
 		It("should use the fixed default when the environment has no explicit value", func() {
 			config := &polaris.PolarisConfig{}

@@ -189,6 +189,20 @@ var _ = Describe("CollectConfigWarnings", func() {
 				Expect(warnings[0]).To(ContainSubstring("trpc.app.server.service"))
 				Expect(warnings[0]).To(ContainSubstring("trpc.app.server.other"))
 			})
+
+			It("should skip the warning for immediate-register configs", func() {
+				config := &polaris.PolarisConfig{
+					Name:  "my-polaris",
+					AppID: testAppID,
+					Properties: polaris.Properties{
+						PolarisName:  "trpc.app.server.service",
+						RegisterMode: polaris.RegisterModeImmediate,
+					},
+					ScopeEnvNames: []string{"dev"},
+				}
+				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				Expect(warnings).To(BeEmpty())
+			})
 		})
 
 		Context("when config file has multiple services and one matches", func() {

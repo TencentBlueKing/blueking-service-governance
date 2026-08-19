@@ -164,9 +164,13 @@ type ConfigVar struct {
 	Value string
 }
 
-// GetVars 获取北极星配置的变量列表
-// 返回变量: {instanceKey}_polarisToken, {instanceKey}_servicePort
+// GetVars 返回该配置会注入到 Workload 的环境变量：
+// {instanceKey}_polarisToken、{instanceKey}_serviceport。
+// immediate 模式不参与 Workload 渲染，返回空列表。
 func (c *PolarisConfig) GetVars() []ConfigVar {
+	if c.IsImmediateRegister() {
+		return []ConfigVar{}
+	}
 	return []ConfigVar{
 		{
 			Key:   c.InstanceKey + "_polarisToken",

@@ -20,7 +20,6 @@ package polaris_test
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/bytedance/mockey"
 
@@ -42,12 +41,6 @@ func k8sServiceClient(clusterCfg *cluster.Config) (*k8sclient.Client, error) {
 		return nil, err
 	}
 	return k8sclient.NewWithGVR(clusterCfg, *gvr), nil
-}
-
-// polarisResourceNamesFor 复刻 polaris 包内部的资源命名规则，供测试直接定位集群资源。
-func polarisResourceNamesFor(appName, configName string) (crName, serviceName string) {
-	baseName := strings.ToLower(appName + "-" + configName)
-	return baseName + "-polaris", baseName + "-polaris-service"
 }
 
 func newTestConfig(

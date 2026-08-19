@@ -31,16 +31,21 @@ import (
 
 // CollectConfigWarnings 为单个 PolarisConfig 收集校验 warnings。
 // 校验逻辑：
-// 1. 检查应用是否为 tRPC 类型，不是则跳过
-// 2. 对 ScopeEnvNames 中每个环境分别校验
-// 3. 对每个环境调用 appcfg.GetTrpcServiceNames 获取服务名列表
-// 4. 检查 PolarisName 是否在服务名列表中，不在则生成 warning
+// 1. immediate 模式不注入 tRPC registry 配置，跳过
+// 2. 检查应用是否为 tRPC 类型，不是则跳过
+// 3. 对 ScopeEnvNames 中每个环境分别校验
+// 4. 对每个环境调用 appcfg.GetTrpcServiceNames 获取服务名列表
+// 5. 检查 PolarisName 是否在服务名列表中，不在则生成 warning
 func CollectConfigWarnings(
 	ctx context.Context,
 	appModelStore appmodel.AppModelStore,
 	appConfigFileStore appcfg.AppConfigFileStore,
 	config *PolarisConfig,
 ) (warnings []string) {
+	if config.IsImmediateRegister() {
+		return nil
+	}
+
 	// 获取应用模型
 	model, err := appModelStore.GetAppModel(ctx, config.AppID)
 	if err != nil {

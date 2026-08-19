@@ -468,6 +468,19 @@ var _ = Describe("PolarisConfigService", func() {
 			return config
 		}
 
+		It("should not write per-env lastError when reading the app model fails", func() {
+			Expect(appModelStore.DeleteAppModel(ctx, app.ID)).To(Succeed())
+			config := newImmediateConfig("cfg-immediate-no-model", []string{environment.Name, otherEnvironment.Name})
+
+			err := service.Create(ctx, app, config, false)
+			Expect(err).To(MatchError(polaris.ErrClusterSyncFailed))
+			Expect(err).To(MatchError(ContainSubstring("get app model")))
+
+			stored, getErr := store.Get(ctx, app.ID, config.Name)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(stored.EnvStates).To(BeEmpty())
+		})
+
 		It("should keep the config and record the failure on every scoped environment", func() {
 			config := newImmediateConfig("cfg-immediate-create", []string{environment.Name, otherEnvironment.Name})
 

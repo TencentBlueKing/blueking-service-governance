@@ -131,14 +131,12 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 	var uriInput serializer.AppURIInput
 	var jsonInput serializer.CreateAppPolarisConfigInput
-
 	if err := ginutils.BindURIJSON(c, &uriInput, &jsonInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
-
 	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
@@ -178,8 +176,7 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 		if errors.Is(createErr, polaris.ErrConfigNameExists) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
 				bkerrs.ErrCodeInvalidRequest,
-				"polaris config name already exists in app(%s)",
-				uriInput.AppID,
+				"polaris config name already exists in app(%s)", uriInput.AppID,
 			))
 			return
 		}
@@ -200,10 +197,8 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 
 	if createErr != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			createErr,
-			bkerrs.ErrCodeInternalServerError,
-			"polaris config(%s) saved but registering to polaris failed",
-			config.Name,
+			createErr, bkerrs.ErrCodeInternalServerError,
+			"polaris config(%s) saved but registering to polaris failed", config.Name,
 		))
 		return
 	}
@@ -393,7 +388,7 @@ func (h *Handler) DeleteAppPolarisConfig(c *gin.Context) {
 	ginutils.OK(c, serializer.EmptyOutput{})
 }
 
-// ListAppPolarisConfigVars 获取北极星配置变量列表。
+// ListAppPolarisConfigVars 获取北极星配置会注入的环境变量列表。
 //
 //	@ID			ListAppPolarisConfigVars
 //	@Summary	获取北极星配置变量列表
@@ -477,6 +472,7 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 		Properties: polaris.Properties{
 			PolarisName:      jsonInput.PolarisName,
 			PolarisNamespace: jsonInput.PolarisNamespace,
+			RegisterMode:     lo.FromPtrOr(jsonInput.RegisterMode, polaris.RegisterModeOnDeploy),
 		},
 		ScopeEnvNames: jsonInput.ScopeEnvNames,
 	}

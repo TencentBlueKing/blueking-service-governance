@@ -165,7 +165,9 @@ func (s *PolarisConfigService) Update(
 		// 同步下发会改写环境记录，重新读取以便调用方拿到本次下发后的状态
 		syncedConfig, getErr := s.polarisConfigStore.Get(ctx, app.ID, oldConfig.Name)
 		if getErr != nil {
-			return newConfig, errors.Wrap(getErr, "get polaris config after immediate apply")
+			return newConfig, stderrors.Join(
+				reconcileErr, errors.Wrap(getErr, "get polaris config after immediate apply"),
+			)
 		}
 		return syncedConfig, reconcileErr
 	}
@@ -240,9 +242,6 @@ func (s *PolarisConfigService) applyImmediately(
 	appModel, err := s.appModelStore.GetAppModel(ctx, app.ID)
 	if err != nil {
 		applyErr := errors.Wrap(err, "get app model for polaris resources apply")
-		for _, envName := range envNames {
-			s.recordImmediateApplyResult(ctx, config, envName, applyErr)
-		}
 		log.Errorf(ctx, "get app model for polaris resources apply failed, app=%s: %v", app.ID, applyErr)
 		return errors.Wrap(ErrClusterSyncFailed, applyErr.Error())
 	}

@@ -21704,7 +21704,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "registerMode": {
-                    "description": "注册模式，默认 on_deploy（等部署后注册）。\nimmediate 表示绑定环境后立即下发 PolarisConfig CR 与配套 Service 完成注册，\n该配置不再注入环境变量、容器端口和 tRPC 框架配置。创建后不可修改",
+                    "description": "注册模式，默认 on_deploy（等部署后注册）。\nimmediate 表示绑定环境后立即下发 PolarisConfig CR 与配套 Service 完成注册，\n该配置不再注入环境变量和 tRPC 框架配置。创建后不可修改",
                     "type": "string",
                     "enum": [
                         "immediate",

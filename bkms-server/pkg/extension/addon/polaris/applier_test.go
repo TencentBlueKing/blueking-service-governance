@@ -295,7 +295,7 @@ var _ = Describe("Polaris CR applier", func() {
 				},
 				ScopeEnvNames: []string{clusterEnv.Name},
 			}
-			immediateCRName, immediateServiceName := polarisResourceNamesFor(app.Name, immediate.Name)
+			immediateCRName, immediateServiceName := polaris.PolarisResourceNames(app.Name, immediate.Name)
 			DeferCleanup(func() {
 				_ = client.Delete(ctx, "default", immediateCRName, metav1.DeleteOptions{})
 				_ = serviceClient.Delete(ctx, "default", immediateServiceName, metav1.DeleteOptions{})

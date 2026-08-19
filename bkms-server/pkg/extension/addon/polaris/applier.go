@@ -98,7 +98,7 @@ func (a *CRApplier) DeleteResources(
 	env *bkmsenv.Environment,
 	config *PolarisConfig,
 ) error {
-	crName, serviceName := polarisResourceNames(app.Name, config.Name)
+	crName, serviceName := PolarisResourceNames(app.Name, config.Name)
 	targets := []struct {
 		apiVersion string
 		kind       string
@@ -144,7 +144,7 @@ func (a *CRApplier) PatchWeight(
 	config *PolarisConfig,
 	weight int32,
 ) error {
-	crName, serviceName := polarisResourceNames(app.Name, config.Name)
+	crName, serviceName := PolarisResourceNames(app.Name, config.Name)
 	patch, err := buildWeightPatch(serviceName, weight)
 	if err != nil {
 		return errors.Wrap(err, "build polaris CR weight patch")

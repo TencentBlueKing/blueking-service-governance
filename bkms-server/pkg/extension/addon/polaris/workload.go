@@ -102,7 +102,7 @@ func buildExtraResources(
 	vars map[string]string,
 	collector *envvarrefs.Collector,
 ) ([]unstructured.Unstructured, error) {
-	crName, serviceName := polarisResourceNames(app.Name, cfg.Name)
+	crName, serviceName := PolarisResourceNames(app.Name, cfg.Name)
 
 	serviceSpec := map[string]any{
 		"name":              serviceName,
@@ -167,7 +167,8 @@ func buildExtraResources(
 	}, nil
 }
 
-func polarisResourceNames(appName, configName string) (crName, serviceName string) {
+// PolarisResourceNames 返回该配置在集群中的 PolarisConfig CR 名与配套 Service 名。
+func PolarisResourceNames(appName, configName string) (crName, serviceName string) {
 	baseName := strings.ToLower(fmt.Sprintf("%s-%s", appName, configName))
 	return baseName + "-polaris", baseName + "-polaris-service"
 }
