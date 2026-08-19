@@ -37,7 +37,7 @@ import (
 const collectionName = "helm_deploy_records"
 
 // ErrRecordNotFound 部署记录未找到。调用方据此区分「记录不可寻回」与 DB 瞬时故障
-// 记录不存在、以及非法 ObjectID（同样不可能查到记录）都 wrap 本哨兵
+// 记录不存在、以及非法 ObjectID（同样不可能查到记录）都 wrap 本哨兵错误
 var ErrRecordNotFound = errors.New("helm deploy record not found")
 
 // ErrLatestDeployRecordNotFound 最新部署记录不存在

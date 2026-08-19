@@ -52,6 +52,7 @@ func SyncAlertStrategiesAfterDeploy(
 	ws, err := reg.WorkspaceStore.Get(ctx, workspaceID)
 	if err != nil {
 		log.Errorf(ctx, "get workspace %s for alert sync failed: %v", workspaceID, err)
+		return
 	}
 	if ws == nil {
 		log.Warn(ctx, warnLogPrefix+"workspace is nil")
@@ -60,6 +61,7 @@ func SyncAlertStrategiesAfterDeploy(
 	env, err := reg.EnvStore.GetByName(ctx, workspaceID, appID, envName)
 	if err != nil {
 		log.Errorf(ctx, "get env %s for alert sync failed: %v", envName, err)
+		return
 	}
 	if env == nil {
 		log.Warn(ctx, warnLogPrefix+"env is nil")

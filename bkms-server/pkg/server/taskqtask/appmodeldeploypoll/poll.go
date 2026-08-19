@@ -35,8 +35,8 @@ import (
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
-// handle asynq 入口：registry / 部署记录 store 缺失则打日志并 ErrStopRetry，否则交给 Poller
-// BuildAutoDeployRecordStore 允许为 nil：普通部署没有自动部署记录，save 内部会降级跳过同步
+// handle asynq 入口：store 未初始化则 ErrStopRetry
+// auto deploy store 允许为 nil，普通部署 save 时跳过同步
 func handle(ctx context.Context, args Args) error {
 	reg := storereg.G()
 	if reg == nil || reg.AppModelDeployRecordStore == nil {
@@ -46,9 +46,8 @@ func handle(ctx context.Context, args Args) error {
 	return NewPoller(reg.AppModelDeployRecordStore, reg.BuildAutoDeployRecordStore).Handle(ctx, args)
 }
 
-// onExhausted tick 重试耗尽（如 Redis 抖动导致连续投递失败）意味着轮询链已断，后续不会再有 tick
-// 来推进状态，兜底把记录标为 StatusPollingBroken，避免部署记录永久停在 deploying
-// asynq 在 lease 过期 / 任务超时时会先 cancel ctx 再调 ErrorHandler，故这里用 WithoutCancel 保证能读库落终态
+// onExhausted tick 重试耗尽后兜底标 StatusPollingBroken，避免记录永久停在 deploying
+// asynq 超时会先 cancel ctx，这里用 WithoutCancel 保证能读库落终态
 func onExhausted(ctx context.Context, args Args, lastErr error) {
 	ctx = context.WithoutCancel(ctx)
 	log.Errorf(ctx, "appmodel deploy poll %s exhausted, try mark pollingBroken: %v", args, lastErr)
@@ -64,7 +63,7 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 		log.Errorf(ctx, "get deploy record %s failed, skip mark pollingBroken: %v", args, err)
 		return
 	}
-	// 已是稳定态 / 卸载态：终态可能已由本 tick 写入但副作用未跑完（save 成功、客户端报错后重试），补跑 onStable
+	// 已稳定 / 已卸载：终态可能已落库但副作用未跑完，补跑 onStable
 	if record.Status.IsStable() || record.Status.IsUninstall() {
 		if err = p.finishIfStable(ctx, record, args); err != nil {
 			log.Errorf(ctx, "appmodel deploy poll %s exhausted but finish stable failed: %v", args, err)
@@ -91,12 +90,10 @@ func NewPoller(recordStore appmodeldeploy.RecordStore, autoDeployStore autodeplo
 	return &Poller{recordStore: recordStore, autoDeployStore: autoDeployStore}
 }
 
-// Handle 执行一次部署状态轮询 tick：读本地记录，必要时查集群状态并落库。
-// 已稳定或已卸载则走 finishIfStable（补副作用）后返回；仍在跑则 ProcessIn 投递下一 tick（新任务，retry 从 0 计）。
-// asynq MaxRetry(tickMaxRetry) 只约束本 tick 的意外失败（如 enqueue 失败），不约束轮询次数；
-// 轮询窗口由 pollingTimeout 截断，查状态失败次数由 FailureRetryRemain 截断。
-// 仅记录不存在等不可恢复错误 wrap taskq.ErrStopRetry；瞬时错误交回 asynq 退避重试，
-// 否则一次 DB 抖动就会断掉轮询链，让部署记录永久停在 deploying。
+// Handle 执行一次部署状态轮询 tick
+// 已稳定 / 已卸载则 finishIfStable 后返回；仍在跑则 ProcessIn 投下一 tick
+// asynq MaxRetry 只约束本 tick 意外失败；轮询窗口与连续查状态失败分别由 pollingTimeout、FailureRetryRemain 截断
+// 记录不存在 wrap ErrStopRetry，瞬时错误交回 asynq 重试
 func (p *Poller) Handle(ctx context.Context, args Args) error {
 	// store / 记录缺失无法自行恢复，停掉 asynq 重试
 	if p.recordStore == nil {
@@ -110,26 +107,23 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 		}
 		return errors.Wrap(err, "get deploy record")
 	}
-	// 迟到或重复 tick：已稳定 / 已卸载则不再查状态；仍走 finishIfStable
-	// asynq 至少一次投递下，save 成功但客户端报错 / 进程崩溃时要补齐 onStable
-	// 副作用按至少一次设计，重复 tick 可能重复审计 / 指标；漏做比重复更糟
+	// 已稳定 / 已卸载：不再查状态，仍走 finishIfStable 补齐副作用
 	if record.Status.IsStable() || record.Status.IsUninstall() {
 		log.Infof(ctx, "deploy %s already %s, skip polling", args, record.Status)
 		return p.finishIfStable(ctx, record, args)
 	}
-	// 轮询窗口到点，与查状态失败无关，直接标超时停掉
 	if time.Since(record.StartedAt) >= pollingTimeout() {
 		log.Warnf(ctx, "deploy %s polling window exceeded, mark pollingTimeout", args)
 		return p.terminate(ctx, record, args, appmodeldeploy.StatusPollingTimeout, "")
 	}
 
-	// 拓扑刷新是重操作，整轮部署只在首个 tick 触发；标记随 enqueueNext 透传给后续 tick
+	// 拓扑刷新整轮只做一次，标记随 enqueueNext 透传
 	if !args.TopologyRefreshed {
 		go triggerTopologyRefresh(context.WithoutCancel(ctx), args, record)
 		args.TopologyRefreshed = true
 	}
 
-	// 查状态失败次数走业务计数，不走 asynq MaxRetry；首 tick 未带 remain 时补满
+	// 查状态失败走业务计数；首 tick 未带 remain 时补满
 	remain := lo.Ternary(args.FailureRetryRemain > 0, args.FailureRetryRemain, totalFailureRetryCount)
 
 	curStatus := record.Status
@@ -143,11 +137,10 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 			)
 			return p.terminate(ctx, record, args, appmodeldeploy.StatusPollingBroken, err.Error())
 		}
-		// 查询失败但额度未用尽：投下一 tick，本 tick 返回 nil，不扣 asynq 重试
 		log.Errorf(ctx, "fetch deploy %s status failed, remain=%d: %v", args, remain, err)
 		return p.enqueueNext(ctx, args, remain)
 	}
-	// 查到状态即视为集群侧可达，失败额度复位，保证额度约束的是连续失败而非整轮累计
+	// 查到状态即复位失败额度，额度约束的是连续失败
 	remain = totalFailureRetryCount
 
 	if state.Status != record.Status {
@@ -162,8 +155,7 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 
 	if record.Status != curStatus {
 		if err = p.save(ctx, record, args); err != nil {
-			// 终态未落库就发指标 / 审计会造成 DB 与审计不一致，交回 asynq 重试本 tick；
-			// 中间态落库失败不阻断轮询，下一 tick 会重新写
+			// 终态落库失败交回 asynq 重试；中间态失败只打日志，下一 tick 会重写
 			if record.Status.IsStable() {
 				return errors.Wrap(err, "update appmodel deploy record to stable status")
 			}
@@ -173,12 +165,11 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 	if record.Status.IsStable() || record.Status.IsUninstall() {
 		return p.finishIfStable(ctx, record, args)
 	}
-	// 仍在跑：ProcessIn 投新任务续跑，retry 从 0 计
 	return p.enqueueNext(ctx, args, remain)
 }
 
-// markCanceledIfSuperseded 同环境出现更新的部署时把当前记录标取消，避免两路轮询互相覆盖
-// 查最新记录失败不影响本 tick 的状态推进，只打日志
+// markCanceledIfSuperseded 同环境出现更新部署时把当前记录标取消
+// 查最新记录失败只打日志，不影响本 tick 状态推进
 func (p *Poller) markCanceledIfSuperseded(ctx context.Context, record *appmodeldeploy.Record, args Args) {
 	latest, err := p.recordStore.GetLatest(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
 	if err != nil {
@@ -194,7 +185,7 @@ func (p *Poller) markCanceledIfSuperseded(ctx context.Context, record *appmodeld
 	record.EndedAt = time.Now()
 }
 
-// enqueueNext 按配置间隔 ProcessIn 投递下一 tick；新任务 retry 从 0 计
+// enqueueNext 按配置间隔 ProcessIn 投递下一 tick
 func (p *Poller) enqueueNext(ctx context.Context, args Args, remain int) error {
 	args.FailureRetryRemain = remain
 	interval := PollingInterval()
@@ -205,8 +196,8 @@ func (p *Poller) enqueueNext(ctx context.Context, args Args, remain int) error {
 	return nil
 }
 
-// terminate 把记录标为指定终态并落库；卸载态直接返回，其余走 onStable 副作用
-// 落库失败返回 error 交回 asynq 重试，避免指标 / 审计已记终态而 DB 仍是中间态
+// terminate 把记录标为指定终态并落库；卸载直接返回，其余走 onStable
+// 落库失败返回 error，避免副作用已触发而 DB 仍是中间态
 func (p *Poller) terminate(
 	ctx context.Context,
 	record *appmodeldeploy.Record,
@@ -228,7 +219,6 @@ func (p *Poller) terminate(
 }
 
 // finishIfStable 稳定态收尾：卸载不发审计 / 指标，其余走 onStable
-// 已稳定早退与 terminate 共用，保证「终态已在 DB、副作用未跑完」的重试仍能补齐
 func (p *Poller) finishIfStable(ctx context.Context, record *appmodeldeploy.Record, args Args) error {
 	if record.Status.IsUninstall() {
 		return nil
@@ -236,16 +226,13 @@ func (p *Poller) finishIfStable(ctx context.Context, record *appmodeldeploy.Reco
 	return p.onStable(ctx, record, args)
 }
 
-// save 落部署记录。有 auto deploy store 时同步其状态
-// 库中已是卸载态视为卸载抢占：把内存里的 record.Status 改回库中卸载态并返回 nil，不写库
-// 调用方随后走 finishIfStable 时按卸载态收尾（不发审计 / 指标）
-// 只有部署记录本身写失败才返回 error（调用方据此决定是否重试本 tick），
-// auto deploy 记录属于附带同步，失败只打日志，避免重试时被终态早退分支跳过副作用
+// save 落部署记录，有 auto deploy store 时同步其状态
+// 库中已卸载则改回内存 status 并返回，不写库；随后 finishIfStable 按卸载收尾
+// 部署记录写失败才返回 error；auto deploy 同步失败只打日志
 func (p *Poller) save(ctx context.Context, record *appmodeldeploy.Record, args Args) error {
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveStatusTimeout)
 	defer cancel()
 
-	// 库中状态即本次变更的起点，取来既用于卸载抢占检查，也用于补全日志的 from 字段
 	fromStatus := appmodeldeploy.Status("unknown")
 	dbRecord, err := p.recordStore.Get(saveCtx, args.AppID, args.DeployID)
 	if err != nil {
@@ -268,7 +255,6 @@ func (p *Poller) save(ctx context.Context, record *appmodeldeploy.Record, args A
 	if err = p.recordStore.Update(saveCtx, record); err != nil {
 		return err
 	}
-	// 普通部署没有 auto deploy 记录；store 未注入时只打日志，不让本 tick 失败
 	if p.autoDeployStore == nil {
 		log.Warnf(saveCtx, "deploy %s auto deploy store is nil, skip sync", args)
 		return nil
@@ -297,7 +283,7 @@ func (p *Poller) save(ctx context.Context, record *appmodeldeploy.Record, args A
 	return nil
 }
 
-// onStable 终态副作用失败只打日志，不改部署结果，也不让本 tick 失败
+// onStable 终态副作用失败只打日志，不改部署结果
 func (p *Poller) onStable(ctx context.Context, record *appmodeldeploy.Record, args Args) error {
 	metrics.DeployFinished(metrics.DeployKindAppModel, string(record.Status), record.StartedAt, time.Now())
 	log.Infof(ctx, "appmodel deploy %s status is %s (Stable), stop polling", args, record.Status)
