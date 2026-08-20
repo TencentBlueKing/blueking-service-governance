@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
@@ -30,14 +31,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/semver"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/task"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/chartbuildpoll"
 	helmrepo "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/source"
 )
 
@@ -94,19 +94,18 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 		return
 	}
 
-	if _, err = worker.ApplyTask(
+	err = taskq.Enqueue(
 		ctx,
-		config.G.RabbitMQ.GetURI(),
-		config.G.RabbitMQ.Queue,
-		task.PollingHelmChartBuildStatus,
-		task.PollingHelmChartBuildStatusArgs{
+		chartbuildpoll.Task.NewTask(chartbuildpoll.Args{
 			WorkspaceID: app.WorkspaceID,
 			AppID:       app.ID,
 			BuildID:     result.BuildID,
-		},
-	); err != nil {
+		}),
+		asynq.ProcessIn(chartbuildpoll.PollingInterval()),
+	)
+	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(
-			err, bkerrs.ErrCodeInternalServerError, "apply polling helm chart build status task",
+			err, bkerrs.ErrCodeInternalServerError, "enqueue polling helm chart build status task",
 		))
 		return
 	}

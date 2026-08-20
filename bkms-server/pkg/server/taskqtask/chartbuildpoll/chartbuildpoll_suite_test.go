@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package buildpoll
+package chartbuildpoll
 
 import (
 	"testing"
@@ -27,9 +27,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
-func TestBuildpoll(t *testing.T) {
+func TestChartbuildpoll(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Buildpoll Suite")
+	RunSpecs(t, "Chartbuildpoll Suite")
 }
 
 var _ = BeforeSuite(func() {

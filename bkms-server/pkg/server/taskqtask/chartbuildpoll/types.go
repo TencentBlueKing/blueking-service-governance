@@ -16,30 +16,22 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package buildpoll
+package chartbuildpoll
 
-import (
-	"testing"
+import "fmt"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
-)
-
-func TestBuildpoll(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Buildpoll Suite")
+// Args Helm Chart 构建状态轮询的业务参数，不含用户身份
+type Args struct {
+	WorkspaceID        string `json:"workspaceID"`
+	AppID              string `json:"appID"`
+	BuildID            string `json:"buildID"`
+	FailureRetryRemain int    `json:"failureRetryRemain,omitempty"`
 }
 
-var _ = BeforeSuite(func() {
-	if err := testutil.SetUpGlobalDatabase(); err != nil {
-		panic("failed to set up global database: " + err.Error())
-	}
-})
-
-var _ = AfterSuite(func() {
-	if err := testutil.TeardownGlobalDatabase(); err != nil {
-		panic("failed to teardown global database: " + err.Error())
-	}
-})
+// String 输出轮询身份与剩余失败次数，便于日志对齐同一构建的连续 tick
+func (args Args) String() string {
+	return fmt.Sprintf(
+		"<workspace: %s, appID: %s, buildID: %s, remain: %d>",
+		args.WorkspaceID, args.AppID, args.BuildID, args.FailureRetryRemain,
+	)
+}

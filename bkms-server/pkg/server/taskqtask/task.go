@@ -34,6 +34,7 @@ import (
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/chartbuildpoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/depsvcredis"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/example"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/helmdeploypoll"
@@ -49,6 +50,8 @@ import (
 func Setup(mux *asynq.ServeMux) error {
 	// 构建状态轮询
 	mux.Handle(buildpoll.Task.Name(), buildpoll.Task.Handler())
+	// Helm Chart 构建状态轮询
+	mux.Handle(chartbuildpoll.Task.Name(), chartbuildpoll.Task.Handler())
 	// AppModel 部署状态轮询
 	mux.Handle(appmodeldeploypoll.Task.Name(), appmodeldeploypoll.Task.Handler())
 	// Helm 部署状态轮询
