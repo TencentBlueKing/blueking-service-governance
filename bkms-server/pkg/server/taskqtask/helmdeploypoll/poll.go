@@ -127,19 +127,7 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 	release, err := fetchReleaseStatus(ctx, record)
 	if err != nil {
 		remain--
-		switch {
-		case windowExceeded:
-			log.Warnf(ctx, "deploy %s polling window exceeded and fetch failed, mark pollingTimeout", args)
-			return p.terminate(ctx, record, args, helm.StatusPollingTimeout, err.Error())
-		case remain <= 0:
-			log.Errorf(
-				ctx, "stop polling release %s: consecutive fetch failures exhausted budget=%d",
-				args, totalFailureRetryCount,
-			)
-			return p.terminate(ctx, record, args, helm.StatusPollingBroken, err.Error())
-		}
-		log.Errorf(ctx, "fetch deploy %s status failed, remain=%d: %v", args, remain, err)
-		return p.enqueueNext(ctx, args, remain)
+		return p.onFetchFailed(ctx, record, args, remain, windowExceeded, err)
 	}
 	// 查到状态即复位失败额度，额度约束的是连续失败
 	remain = totalFailureRetryCount
@@ -173,6 +161,31 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 	if helm.IsStable(record.Status) {
 		return p.finishIfStable(ctx, record, args)
 	}
+	return p.enqueueNext(ctx, args, remain)
+}
+
+// onFetchFailed 查状态失败后决定去向：窗口已过落超时终态，失败额度耗尽落中断终态，
+// 否则按剩余额度投下一 tick。两种终态都带上本次错误，便于回溯中断原因
+func (p *Poller) onFetchFailed(
+	ctx context.Context,
+	record *helmdeploy.Record,
+	args Args,
+	remain int,
+	windowExceeded bool,
+	fetchErr error,
+) error {
+	switch {
+	case windowExceeded:
+		log.Warnf(ctx, "deploy %s polling window exceeded and fetch failed, mark pollingTimeout", args)
+		return p.terminate(ctx, record, args, helm.StatusPollingTimeout, fetchErr.Error())
+	case remain <= 0:
+		log.Errorf(
+			ctx, "stop polling release %s: consecutive fetch failures exhausted budget=%d",
+			args, totalFailureRetryCount,
+		)
+		return p.terminate(ctx, record, args, helm.StatusPollingBroken, fetchErr.Error())
+	}
+	log.Errorf(ctx, "fetch deploy %s status failed, remain=%d: %v", args, remain, fetchErr)
 	return p.enqueueNext(ctx, args, remain)
 }
 
