@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -155,6 +156,14 @@ func (h *Handler) CreateApp(c *gin.Context) {
 	)
 	if err = build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, buildConfig); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
+		return
+	}
+	if err = bkci.EnsureWorkspaceRepositories(
+		ctx,
+		uriInput.WorkspaceID,
+		collectBKCIRepositoriesForCreateApp(input.Type, app.HelmSpec, buildConfig),
+	); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"))
 		return
 	}
 	if err = h.registry.BuildConfigStore.Create(ctx, buildConfig); err != nil {

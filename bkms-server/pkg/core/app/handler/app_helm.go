@@ -25,6 +25,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -85,6 +86,10 @@ func (h *Handler) UpdateHelmSpec(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "set user pass"))
 			return
 		}
+	}
+	if err = bkci.EnsureWorkspaceRepositories(ctx, app.WorkspaceID, helmSourceRepositoriesToBind(helmSource)); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"))
+		return
 	}
 
 	if err = h.registry.AppStore.UpdateHelmSource(ctx, app, helmSource); err != nil {

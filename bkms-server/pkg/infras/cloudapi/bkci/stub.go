@@ -20,6 +20,8 @@ package bkci
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -40,7 +42,10 @@ type StubApiClient struct {
 
 var _ Client = &StubApiClient{}
 
-var stubCreatedPipelines sync.Map
+var (
+	stubCreatedPipelines    sync.Map
+	stubCreatedRepositories sync.Map
+)
 
 // NewStub 创建 StubApiClient
 func NewStub(user auth.User) *StubApiClient {
@@ -408,6 +413,11 @@ func (s *StubApiClient) ListRepository(
 // GetRepository 返回模拟的代码库详情
 func (s *StubApiClient) GetRepository(ctx context.Context, projectCode, repoHashID string) (*Repository, error) {
 	log.Infof(ctx, "Stub: GetRepository request: %s, %s", projectCode, repoHashID)
+	if repository, ok := stubCreatedRepositories.Load(repoHashID); ok {
+		repo := repository.(Repository)
+		repo.UpdatedAt = time.Now()
+		return &repo, nil
+	}
 	return &Repository{
 		ID:        repoHashID,
 		Alias:     "stub-repo",
@@ -420,7 +430,20 @@ func (s *StubApiClient) GetRepository(ctx context.Context, projectCode, repoHash
 // CreateRepository 模拟创建代码库，返回模拟的代码库 Hash ID
 func (s *StubApiClient) CreateRepository(ctx context.Context, projectCode, repoUrl, repoAlias string) (string, error) {
 	log.Infof(ctx, "Stub: CreateRepository request: %s, %s, %s", projectCode, repoUrl, repoAlias)
-	return "stub-repo-hash-id-32chars-long", nil
+	repoID := stubRepositoryID(projectCode, repoUrl, repoAlias)
+	stubCreatedRepositories.Store(repoID, Repository{
+		ID:        repoID,
+		Alias:     repoAlias,
+		Url:       repoUrl,
+		Type:      "CODE_GIT",
+		UpdatedAt: time.Now(),
+	})
+	return repoID, nil
+}
+
+func stubRepositoryID(projectCode, repoURL, repoAlias string) string {
+	sum := sha256.Sum256([]byte(projectCode + "\x00" + repoURL + "\x00" + repoAlias))
+	return "stub-repo-" + hex.EncodeToString(sum[:12])
 }
 
 // ListRepositoryBranches 返回模拟的代码库分支列表

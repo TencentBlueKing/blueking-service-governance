@@ -21,6 +21,10 @@ package handler
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
+	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 )
 
 var _ = Describe("newAppIDSuffix", func() {
@@ -28,5 +32,49 @@ var _ = Describe("newAppIDSuffix", func() {
 		suffix := newAppIDSuffix()
 		Expect(suffix[0]).To(Equal(byte('-')))
 		Expect(len(suffix) <= 7).To(BeTrue())
+	})
+})
+
+var _ = Describe("collectBKCIRepositoriesForCreateApp", func() {
+	It("collects both build and helm git repositories for helm-based apps", func() {
+		buildConfig := &build.Config{
+			SourceType: build.SourceTypeCodeRepository,
+			CodeRepo: &build.RepositoryConfig{
+				RepoURL:   "https://git.example.com/build.git",
+				RepoAlias: "build-repo",
+			},
+		}
+		helmSpec := &bkmsapp.HelmSpec{
+			HelmSource: &bkmsapp.HelmSource{
+				RepoType: bkmsapp.HelmSourceRepoTypeGit,
+				GitRepoConfig: &bkmsapp.GitRepoConfig{
+					RepoURL:   "https://git.example.com/chart.git",
+					RepoAlias: "chart-repo",
+				},
+			},
+		}
+
+		repos := collectBKCIRepositoriesForCreateApp(bkmsapp.AppTypeAgones, helmSpec, buildConfig)
+
+		Expect(repos).To(Equal([]bkci.RepositoryInitSpec{
+			{URL: "https://git.example.com/build.git", Alias: "build-repo"},
+			{URL: "https://git.example.com/chart.git", Alias: "chart-repo"},
+		}))
+	})
+
+	It("ignores helm repositories for non-helm apps", func() {
+		helmSpec := &bkmsapp.HelmSpec{
+			HelmSource: &bkmsapp.HelmSource{
+				RepoType: bkmsapp.HelmSourceRepoTypeGit,
+				GitRepoConfig: &bkmsapp.GitRepoConfig{
+					RepoURL:   "https://git.example.com/chart.git",
+					RepoAlias: "chart-repo",
+				},
+			},
+		}
+
+		repos := collectBKCIRepositoriesForCreateApp(bkmsapp.AppTypeTRPC, helmSpec, nil)
+
+		Expect(repos).To(BeNil())
 	})
 })

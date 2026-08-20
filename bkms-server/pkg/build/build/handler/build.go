@@ -26,6 +26,7 @@ import (
 	"github.com/gin-gonic/gin"
 	pkgerrors "github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
 	buildserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build/serializer"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
@@ -112,6 +113,18 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 	if err = build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, cfg); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
 		return
+	}
+	if cfg != nil && cfg.SourceType == imagebuild.SourceTypeCodeRepository && cfg.CodeRepo != nil {
+		if err = bkci.EnsureWorkspaceRepositories(ctx, app.WorkspaceID, []bkci.RepositoryInitSpec{{
+			URL:   cfg.CodeRepo.RepoURL,
+			Alias: cfg.CodeRepo.RepoAlias,
+		}}); err != nil {
+			bkerrs.AbortWithErr(
+				c,
+				bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"),
+			)
+			return
+		}
 	}
 
 	if err = h.registry.BuildConfigStore.Update(ctx, cfg); err != nil {

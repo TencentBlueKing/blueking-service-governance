@@ -166,6 +166,33 @@ var _ = Describe("StubApiClient repository refs", func() {
 		Expect(refs).NotTo(BeEmpty())
 		Expect(refs[0].Path).To(HavePrefix("refs/tags/"))
 	})
+
+	It("should return stable unique repository ids for different repositories", func() {
+		client := NewStub(auth.User{ID: "tester"})
+
+		repoID1, err := client.CreateRepository(
+			context.Background(), "demo", "https://example.com/team/repo-1.git", "repo-1",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		repoID2, err := client.CreateRepository(
+			context.Background(), "demo", "https://example.com/team/repo-2.git", "repo-2",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		repoID1Again, err := client.CreateRepository(
+			context.Background(), "demo", "https://example.com/team/repo-1.git", "repo-1",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(repoID1).NotTo(Equal(repoID2))
+		Expect(repoID1Again).To(Equal(repoID1))
+
+		repo1, err := client.GetRepository(context.Background(), "demo", repoID1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(repo1.Alias).To(Equal("repo-1"))
+		Expect(repo1.Url).To(Equal("https://example.com/team/repo-1.git"))
+	})
 })
 
 var _ = Describe("parseBuildLog", func() {
