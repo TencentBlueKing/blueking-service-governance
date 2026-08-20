@@ -23,6 +23,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/pkg/errors"
@@ -205,7 +206,8 @@ func (c *Client) Create(
 	if err := c.validateManifest(manifest); err != nil {
 		return nil, errors.Wrap(err, "validate manifest")
 	}
-	obj := &unstructured.Unstructured{Object: manifest}
+	// 联邦环境网关要求对象体中有 namespace 字段
+	obj := &unstructured.Unstructured{Object: withMeta(manifest, namespace)}
 	ret, err := c.cli.Resource(c.gvr).Namespace(namespace).Create(ctx, obj, opts)
 	if err != nil {
 		// 资源已经存在时，抛出指定异常
@@ -362,7 +364,7 @@ func (c *Client) Delete(
 
 // validateManifest 校验传入的 manifest 的合法性
 func (c *Client) validateManifest(manifest map[string]any) error {
-	// namespace 不能在 manifest 中指定，必须在 func 参数中指定
+	// namespace 不能在调用方的 manifest 中指定，必须在 func 参数中指定；Create 会再写入对象体。
 	if mapx.GetStr(manifest, "metadata.namespace") != "" {
 		return errors.Errorf("namespace must provided as func parameter")
 	}
@@ -372,6 +374,28 @@ func (c *Client) validateManifest(manifest map[string]any) error {
 		return errors.Errorf("metadata.name not found")
 	}
 	return nil
+}
+
+// withMeta 返回写入 namespace 后的 manifest，namespace 为空时原样返回。
+//
+// 只浅拷贝顶层与 metadata 两层，既不修改调用方传入的 map，也不像 unstructured.DeepCopy
+// 那样要求 manifest 里全是 JSON 兼容类型（调用方常直接写 int 等 Go 字面量）。
+func withMeta(manifest map[string]any, namespace string) map[string]any {
+	if namespace == "" {
+		return manifest
+	}
+	obj := maps.Clone(manifest)
+	if obj == nil {
+		obj = map[string]any{}
+	}
+	metadata, _ := obj["metadata"].(map[string]any)
+	metadata = maps.Clone(metadata)
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	metadata["namespace"] = namespace
+	obj["metadata"] = metadata
+	return obj
 }
 
 // sanitizeManifestForSSA 递归清理嵌套 metadata 中的 creationTimestamp。

@@ -314,7 +314,7 @@ func (d *Deployer) UpdateInstances(
 	if record.Status != StatusDeployed {
 		return errors.Errorf("deploy record status is %s, cannot update", record.Status)
 	}
-	if kind, _ := mainWorkloadFromRecord(record); kind == k8skind.Deploy {
+	if kind, _ := record.MainWorkload(); kind == k8skind.Deploy {
 		return errors.New("native Deployment does not support inplace or grayscale instance update")
 	}
 
@@ -390,28 +390,18 @@ func (d *Deployer) Scale(ctx context.Context, envName, trafficLaneName string, r
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
-	kind, name := mainWorkloadFromRecord(record)
+	kind, name := record.MainWorkload()
 	if name == "" {
 		return errors.Errorf("main workload not found in deploy record %s", record.ID.Hex())
 	}
 
 	patches := []map[string]any{replicasJSONPatch(replicas)}
-	if kind == k8skind.Deploy {
-		if err = d.patchWorkload(ctx, record.ClusterID, record.Namespace, name, gvr.Deploy, patches); err != nil {
-			log.Errorf(
-				ctx, "patch record %s deployment %s with patches %+v failed, err: %v",
-				record.ID.Hex(), name, patches, err,
-			)
-			return errors.Wrap(err, "patch deployment")
-		}
-	} else {
-		if err = d.patchWorkload(ctx, record.ClusterID, record.Namespace, name, gvr.GameDeploy, patches); err != nil {
-			log.Errorf(
-				ctx, "patch record %s game deployment %s with patches %+v failed, err: %v",
-				record.ID.Hex(), name, patches, err,
-			)
-			return errors.Wrap(err, "patch game deployment")
-		}
+	if err = d.patchWorkload(ctx, record.ClusterID, record.Namespace, name, mainWorkloadGVR(kind), patches); err != nil {
+		log.Errorf(
+			ctx, "patch record %s %s %s with patches %+v failed, err: %v",
+			record.ID.Hex(), kind, name, patches, err,
+		)
+		return errors.Wrapf(err, "patch %s", kind)
 	}
 
 	// 更新部署记录
@@ -469,7 +459,7 @@ func (d *Deployer) BatchDeleteInstances(
 		log.Infof(ctx, "no running pods to delete, all pods selected are terminated")
 		return nil
 	}
-	if kind, _ := mainWorkloadFromRecord(record); kind == k8skind.Deploy {
+	if kind, _ := record.MainWorkload(); kind == k8skind.Deploy {
 		return errors.New("native Deployment does not support deleting selected running pods")
 	}
 
@@ -496,7 +486,14 @@ func (d *Deployer) deleteRunningPodsByGameDeployment(
 		patchBuilder.BuildReplicasPatch(newReplicas),
 		patchBuilder.BuildPodsToDeletePatch(podNames),
 	}
-	if err = d.patchWorkload(ctx, record.ClusterID, record.Namespace, gameDeploy.Name, gvr.GameDeploy, patches); err != nil {
+	if err = d.patchWorkload(
+		ctx,
+		record.ClusterID,
+		record.Namespace,
+		gameDeploy.Name,
+		gvr.GameDeploy,
+		patches,
+	); err != nil {
 		log.Errorf(
 			ctx, "patch record %s game deployment %s with patches %+v failed, err: %v",
 			record.ID.Hex(), gameDeploy.Name, patches, err,
@@ -815,6 +812,9 @@ func replicasJSONPatch(replicas int32) map[string]any {
 	}
 }
 
-func mainWorkloadFromRecord(record *Record) (kind, name string) {
-	return record.MainWorkload()
+func mainWorkloadGVR(kind string) schema.GroupVersionResource {
+	if kind == k8skind.Deploy {
+		return gvr.Deploy
+	}
+	return gvr.GameDeploy
 }
