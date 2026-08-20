@@ -167,13 +167,15 @@ type AppModelDeployRecordOutputObj struct {
 	// 代码分支（仅构建+部署记录返回）
 	Branch string `json:"branch"`
 	// Commit ID（仅构建+部署记录返回）
-	CommitID  string    `json:"commitID"`
-	Replicas  int32     `json:"replicas"`
-	Message   string    `json:"message"`
-	Status    string    `json:"status"`
-	Operator  string    `json:"operator"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	CommitID string `json:"commitID"`
+	Replicas int32  `json:"replicas"`
+	// 本次部署的主工作负载类型（GameDeployment 或 Deployment）；存量记录可能为空
+	WorkloadKind string    `json:"workloadKind"`
+	Message      string    `json:"message"`
+	Status       string    `json:"status"`
+	Operator     string    `json:"operator"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // FromModel converts an AppModel deploy record to output.
@@ -193,6 +195,7 @@ func (o *AppModelDeployRecordOutputObj) FromModel(record appmodeldeploy.Record) 
 		o.CommitID = record.Extras[appmodeldeploy.ExtraKeyBuildCommitID]
 	}
 	o.Replicas = record.Replicas
+	o.WorkloadKind = record.WorkloadKind
 	o.Message = record.Message
 	o.Status = string(record.Status)
 	o.Operator = record.Updater

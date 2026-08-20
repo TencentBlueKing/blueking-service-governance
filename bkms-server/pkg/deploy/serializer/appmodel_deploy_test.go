@@ -119,14 +119,15 @@ var _ = Describe("AppModel deploy serializers", func() {
 	Describe("AppModelDeployRecordOutputObj", func() {
 		It("reads build info directly from deploy record extras", func() {
 			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
-				ID:        bson.NewObjectID(),
-				ClusterID: "cls-1",
-				Namespace: "default",
-				ImageTag:  "v1.0.0",
-				Replicas:  3,
-				Message:   "deploying",
-				Status:    appmodeldeploy.StatusDeploying,
-				Updater:   "tester",
+				ID:           bson.NewObjectID(),
+				ClusterID:    "cls-1",
+				Namespace:    "default",
+				ImageTag:     "v1.0.0",
+				Replicas:     3,
+				WorkloadKind: "Deployment",
+				Message:      "deploying",
+				Status:       appmodeldeploy.StatusDeploying,
+				Updater:      "tester",
 				Extras: map[string]string{
 					appmodeldeploy.ExtraKeyDeploySource:  appmodeldeploy.DeploySourceBuildAutoDeploy,
 					appmodeldeploy.ExtraKeyBuildBranch:   "release",
@@ -137,6 +138,8 @@ var _ = Describe("AppModel deploy serializers", func() {
 			Expect(output.IsBuildAutoDeploy).To(BeTrue())
 			Expect(output.DeploySource).To(Equal(appmodeldeploy.DeploySourceBuildAutoDeploy))
 			Expect(output.Branch).To(Equal("release"))
+			Expect(output.Replicas).To(Equal(int32(3)))
+			Expect(output.WorkloadKind).To(Equal("Deployment"))
 			Expect(output.CommitID).To(Equal("commit-123"))
 		})
 	})

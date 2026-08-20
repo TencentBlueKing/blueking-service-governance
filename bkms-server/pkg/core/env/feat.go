@@ -199,10 +199,11 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 		OwnerAppID:  input.App.ID,
 		SourceEnvID: input.SourceEnv.ID,
 		Cluster: model.BizCluster{
-			ProjectCode: input.SourceEnv.Cluster.ProjectCode,
-			ClusterID:   input.SourceEnv.Cluster.ClusterID,
-			ClusterType: input.SourceEnv.Cluster.ClusterType,
-			Namespace:   name,
+			ProjectCode:  input.SourceEnv.Cluster.ProjectCode,
+			ClusterID:    input.SourceEnv.Cluster.ClusterID,
+			ClusterType:  input.SourceEnv.Cluster.ClusterType,
+			Namespace:    name,
+			IsFederation: input.SourceEnv.Cluster.IsFederation,
 		},
 		Creator: input.Creator,
 	}

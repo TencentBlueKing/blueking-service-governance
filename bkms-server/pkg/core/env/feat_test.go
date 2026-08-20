@@ -100,6 +100,7 @@ var _ = Describe("FeatureEnvService", func() {
 	It("creates feature environments from a standard source environment", func() {
 		app := dbfactory.Application(ctx, appStore)
 		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+		sourceEnv.Cluster.IsFederation = true
 		firstNamespace := fmt.Sprintf("feat-%s-1", app.ID)
 		nsInitializer.EXPECT().Initialize(
 			ctx, sourceEnv.Cluster.ClusterID, firstNamespace, expectedOwnerLabels(app, firstNamespace),

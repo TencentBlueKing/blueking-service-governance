@@ -94,6 +94,9 @@ type BkIAMSystemIDsConfig struct {
 type BCSConfig struct {
 	BaseUrl string
 	Token   string
+	// FederationClusterIDs 联邦 Host 集群 ID 列表。
+	// 创建/更新环境时，用户提交的 clusterID 命中此列表则视为联邦集群。
+	FederationClusterIDs []string
 }
 
 // BKCIProjInitConfig 蓝盾项目初始化默认配置

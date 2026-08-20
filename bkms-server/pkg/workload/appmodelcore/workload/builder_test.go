@@ -37,6 +37,7 @@ import (
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -131,7 +132,8 @@ var _ = Describe("Builder", func() {
 		It("should build basic workload without extra resources", func() {
 			result, err := builder.Build(ctx, envObj)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			Expect(result.WorkloadKind).To(Equal(kind.GameDeploy))
+			gd := asGameDeployment(result)
 			extraObjs := result.ExtraObjects
 
 			Expect(extraObjs).To(BeEmpty())
@@ -140,6 +142,21 @@ var _ = Describe("Builder", func() {
 			Expect(gd.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(gd.Spec.Template.Spec.Containers[0].Image).To(Equal(appModel.Workload.Image))
 			Expect(gd.Spec.Template.Spec.Containers[0].VolumeMounts).To(BeEmpty())
+		})
+
+		It("should build native Deployment when the env is a federation host", func() {
+			fedEnv := *envObj
+			fedEnv.Cluster.IsFederation = true
+
+			result, err := builder.Build(ctx, &fedEnv)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.WorkloadKind).To(Equal(kind.Deploy))
+			Expect(asGameDeployment(result)).To(BeNil())
+			Expect(asDeployment(result)).NotTo(BeNil())
+			Expect(asDeployment(result).Kind).To(Equal("Deployment"))
+			Expect(asDeployment(result).APIVersion).To(Equal("apps/v1"))
+			Expect(asDeployment(result).Name).To(Equal(appModel.Workload.Name))
+			Expect(asDeployment(result).Spec.Template.Spec.Containers).To(HaveLen(1))
 		})
 
 		It("should not modify the source app model when applying environment overrides", func() {
@@ -172,7 +189,7 @@ var _ = Describe("Builder", func() {
 		It("should append app image pull secret when build config has custom credential", func() {
 			result, err := builder.Build(ctx, envObj)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			Expect(gd.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{
 				Name: secret.ResolveImagePullSecretName(app.WorkspaceID, app.ID, &build.Config{
@@ -190,7 +207,7 @@ var _ = Describe("Builder", func() {
 		It("should keep only system labels when no custom labels/annotations are set", func() {
 			result, err := builder.Build(ctx, envObj)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			// System-managed deletion-allow label stays at its default value.
 			Expect(gd.ObjectMeta.Labels).To(HaveKeyWithValue("io.tencent.bcs.dev/deletion-allow", "Always"))
@@ -205,7 +222,7 @@ var _ = Describe("Builder", func() {
 
 			result, err := builder.Build(ctx, envObj)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			By("pod template metadata contains user labels/annotations")
 			Expect(gd.Spec.Template.ObjectMeta.Labels).To(HaveKeyWithValue("team", "sre"))
@@ -227,7 +244,7 @@ var _ = Describe("Builder", func() {
 		It("should not inject tkeRouteEni annotation when section is not configured", func() {
 			result, err := builder.Build(ctx, envObj)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			Expect(gd.Spec.Template.ObjectMeta.Annotations).NotTo(HaveKey("tke.cloud.tencent.com/networks"))
 		})
@@ -241,7 +258,7 @@ var _ = Describe("Builder", func() {
 
 			result, err := builder.Build(ctx, envObj)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			Expect(gd.Spec.Template.ObjectMeta.Annotations).To(
 				HaveKeyWithValue("tke.cloud.tencent.com/networks", "tke-route-eni"),
@@ -257,7 +274,7 @@ var _ = Describe("Builder", func() {
 
 			result, err := builder.Build(ctx, envObj)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			Expect(gd.Spec.Template.ObjectMeta.Annotations).NotTo(HaveKey("tke.cloud.tencent.com/networks"))
 		})

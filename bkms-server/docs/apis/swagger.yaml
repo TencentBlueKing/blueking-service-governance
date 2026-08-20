@@ -1366,6 +1366,9 @@ definitions:
         type: string
       updatedAt:
         type: string
+      workloadKind:
+        description: 本次部署的主工作负载类型（GameDeployment 或 Deployment）；存量记录可能为空
+        type: string
     type: object
   serializer.AppModelResourceSnapshot:
     properties:
@@ -3475,12 +3478,15 @@ definitions:
     type: object
   serializer.DevModeRuleInput:
     properties:
-      envType:
-        type: string
+      envTypes:
+        items:
+          type: string
+        minItems: 1
+        type: array
       spec:
         $ref: '#/definitions/serializer.DevModeSpecInput'
     required:
-    - envType
+    - envTypes
     - spec
     type: object
   serializer.DevModeRuleOutput:
@@ -3492,8 +3498,10 @@ definitions:
     properties:
       createdAt:
         type: string
-      envType:
-        type: string
+      envTypes:
+        items:
+          type: string
+        type: array
       id:
         type: string
       spec:
@@ -3690,6 +3698,9 @@ definitions:
       clusterType:
         description: 集群类型
         type: string
+      isFederation:
+        description: 是否为 BCS 联邦 Host 集群
+        type: boolean
       namespace:
         description: 集群命名空间
         type: string
@@ -7141,12 +7152,15 @@ definitions:
     type: object
   serializer.ResourcesRuleInput:
     properties:
-      envType:
-        type: string
+      envTypes:
+        items:
+          type: string
+        minItems: 1
+        type: array
       spec:
         $ref: '#/definitions/serializer.ResourcesSpecInput'
     required:
-    - envType
+    - envTypes
     - spec
     type: object
   serializer.ResourcesRuleOutput:
@@ -7158,8 +7172,10 @@ definitions:
     properties:
       createdAt:
         type: string
-      envType:
-        type: string
+      envTypes:
+        items:
+          type: string
+        type: array
       id:
         type: string
       spec:
