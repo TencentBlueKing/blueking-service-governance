@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -86,4 +87,12 @@ func BuildLocalKubeConfig(clusterID, configPath string) (*Config, error) {
 		return nil, errors.Wrapf(err, "build config from %s", configPath)
 	}
 	return &Config{Rest: restConf, ClusterID: clusterID}, nil
+}
+
+// IsFederation 判断当前集群是否为配置中的联邦 Host。
+func (c *Config) IsFederation() bool {
+	if c == nil || c.ClusterID == "" || config.G == nil {
+		return false
+	}
+	return lo.Contains(config.G.BCS.FederationClusterIDs, c.ClusterID)
 }

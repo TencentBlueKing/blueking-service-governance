@@ -34,6 +34,9 @@ const (
 
 	// lastAppliedConfigAnnotation kubectl last-applied-configuration 注解 key
 	lastAppliedConfigAnnotation = "kubectl.kubernetes.io/last-applied-configuration"
+
+	// bkmsLastAppliedAnnotation 联邦 Merge Patch 使用的 last-applied 注解，体积大且对用户无意义
+	bkmsLastAppliedAnnotation = "bkms.tencent.com/last-applied-configuration"
 )
 
 // BuildNodeManifest 从非结构化对象构建节点 Manifest
@@ -77,9 +80,10 @@ func sanitizeMetadata(obj *unstructured.Unstructured) {
 	// 删除 managedFields
 	delete(metadata, "managedFields")
 
-	// 删除 last-applied-configuration 注解
+	// 删除 last-applied-configuration 注解（kubectl / bkms 联邦 upsert）
 	if annotations, ok := metadata["annotations"].(map[string]any); ok {
 		delete(annotations, lastAppliedConfigAnnotation)
+		delete(annotations, bkmsLastAppliedAnnotation)
 		if len(annotations) == 0 {
 			delete(metadata, "annotations")
 		}

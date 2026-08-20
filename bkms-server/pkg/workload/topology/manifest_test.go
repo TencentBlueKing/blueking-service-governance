@@ -113,7 +113,8 @@ var _ = Describe("BuildNodeManifest", func() {
 				"namespace": "default",
 				"annotations": map[string]any{
 					"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"v1","kind":"ConfigMap"}`,
-					"custom-annotation": "keep-me",
+					"bkms.tencent.com/last-applied-configuration":      `{"apiVersion":"v1","kind":"ConfigMap"}`,
+					"custom-annotation":                                "keep-me",
 				},
 			},
 		}}
