@@ -154,7 +154,8 @@ func (g *DeployStateGetter) getWorkloadHealth(ctx context.Context) (*k8sstatus.R
 		resGVR = gvr.Deploy
 	}
 
-	client := k8sclient.NewWithGVR(cluster.NewConfig(g.clusterID), resGVR)
+	clusterCfg := cluster.NewConfig(g.clusterID)
+	client := k8sclient.NewWithGVR(clusterCfg, resGVR)
 	res, err := client.Get(ctx, g.namespace, resName, metav1.GetOptions{})
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
@@ -166,7 +167,11 @@ func (g *DeployStateGetter) getWorkloadHealth(ctx context.Context) (*k8sstatus.R
 		return nil, errors.Wrapf(err, "get %s %s", kind, resName)
 	}
 
+	// NOTE 目前只有联邦环境会使用 deployment 作为 workload 下发
 	if kind == k8skind.Deploy {
+		if clusterCfg.IsFederation() {
+			return deploystatus.ParseForFederation(res.Object), nil
+		}
 		return deploystatus.Parse(res.Object), nil
 	}
 	return gamedeploystatus.Parse(res.Object)
