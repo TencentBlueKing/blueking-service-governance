@@ -165,8 +165,12 @@ func activateWorkspace(
 		// 监控侧 APM 创建是一个很消耗资源的操作，等待 500ms，避免频繁调用
 		time.Sleep(500 * time.Millisecond)
 
-		// APM 创建成功后，同步将 workspace 下 admin/sre 人员同步到新告警组
-		userGroupService.SyncMembersForEnvWithRetry(context.TODO(), ws, env.Name, ws.Creator)
+		// APM 创建成功后，异步将 workspace 下 admin/sre 人员同步到新告警组
+		// 告警组同步自带最长 10s 的 NotFound 退避重试，同步执行会让本任务按环境数
+		// 累计占住 worker 并发槽位，批量建空间时足以把部署状态轮询等短任务饿死
+		go userGroupService.SyncMembersForEnvWithRetry(
+			context.WithoutCancel(ctx), ws, env.Name, ws.Creator,
+		)
 	}
 	return nil
 }

@@ -159,13 +159,27 @@ var _ = Describe("Poller Handle", func() {
 		Entry("keeps lock when a newer deploy is latest", true, 0),
 	)
 
-	It("marks pollingTimeout when StartedAt exceeds configured window", func() {
+	It("marks pollingTimeout when the window is exceeded and the release is still pending", func() {
 		rec.StartedAt = time.Now().Add(-pollingTimeout() - time.Minute)
 		insert()
+		stubFetch(helm.StatusPendingUpgrade, "2")
 		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Expect(reload().Status).To(Equal(helm.StatusPollingTimeout))
 		Expect(enqCount).To(Equal(0))
 		Expect(releaseCnt).To(Equal(1))
+	})
+
+	// worker 积压时首个 tick 就可能落在窗口外，此时仍应采信集群里的真实终态
+	It("honors an observed stable status even when the window is exceeded", func() {
+		rec.StartedAt = time.Now().Add(-pollingTimeout() - time.Minute)
+		insert()
+		stubFetch(helm.StatusDeployed, "1")
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		got := reload()
+		Expect(got.Status).To(Equal(helm.StatusDeployed))
+		Expect(got.Revision).To(Equal("1"))
+		Expect(enqCount).To(Equal(0))
+		Expect(hookCount.Load()).To(Equal(int32(1)))
 	})
 
 	DescribeTable("query failure uses remaining retry budget",

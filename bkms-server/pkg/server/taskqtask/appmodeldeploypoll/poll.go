@@ -112,10 +112,6 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 		log.Infof(ctx, "deploy %s already %s, skip polling", args, record.Status)
 		return p.finishIfStable(ctx, record, args)
 	}
-	if time.Since(record.StartedAt) >= pollingTimeout() {
-		log.Warnf(ctx, "deploy %s polling window exceeded, mark pollingTimeout", args)
-		return p.terminate(ctx, record, args, appmodeldeploy.StatusPollingTimeout, "")
-	}
 
 	// 拓扑刷新整轮只做一次，标记随 enqueueNext 透传
 	if !args.TopologyRefreshed {
@@ -125,12 +121,19 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 
 	// 查状态失败走业务计数；首 tick 未带 remain 时补满
 	remain := lo.Ternary(args.FailureRetryRemain > 0, args.FailureRetryRemain, totalFailureRetryCount)
+	// 窗口按 StartedAt 计算，worker 积压时本 tick 可能一上来就在窗口外，
+	// 故先查一次真实状态再据此收尾，避免把已经成功的部署误判为超时
+	windowExceeded := time.Since(record.StartedAt) >= pollingTimeout()
 
 	curStatus := record.Status
 	state, err := appmodeldeploy.NewDeployStateGetter(record).Get(ctx)
 	if err != nil {
 		remain--
-		if remain <= 0 {
+		switch {
+		case windowExceeded:
+			log.Warnf(ctx, "deploy %s polling window exceeded and fetch failed, mark pollingTimeout", args)
+			return p.terminate(ctx, record, args, appmodeldeploy.StatusPollingTimeout, err.Error())
+		case remain <= 0:
 			log.Errorf(
 				ctx, "stop polling deploy state %s: consecutive fetch failures exhausted budget=%d",
 				args, totalFailureRetryCount,
@@ -152,6 +155,13 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 	}
 
 	p.markCanceledIfSuperseded(ctx, record, args)
+
+	// 窗口已过且仍未达终态：直接落超时终态，中间态不必再写一次库
+	// 被更新部署取代的记录已在上一步标 canceled，属终态，不受此分支影响
+	if windowExceeded && !record.Status.IsStable() && !record.Status.IsUninstall() {
+		log.Warnf(ctx, "deploy %s polling window exceeded at status %s, mark pollingTimeout", args, record.Status)
+		return p.terminate(ctx, record, args, appmodeldeploy.StatusPollingTimeout, "")
+	}
 
 	if record.Status != curStatus {
 		if err = p.save(ctx, record, args); err != nil {

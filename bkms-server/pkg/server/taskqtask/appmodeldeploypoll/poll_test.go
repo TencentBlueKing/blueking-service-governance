@@ -137,12 +137,24 @@ var _ = Describe("Poller Handle", func() {
 		Expect(reload().Status).To(Equal(appmodeldeploy.StatusUninstalling))
 	})
 
-	It("marks pollingTimeout when StartedAt exceeds configured window", func() {
+	It("marks pollingTimeout when the window is exceeded and deploy is still running", func() {
 		rec.StartedAt = time.Now().Add(-pollingTimeout() - time.Minute)
 		insert()
+		stubFetch(appmodeldeploy.StatusDeploying)
 		Expect(plr.Handle(ctx, args)).To(Succeed())
 		Expect(reload().Status).To(Equal(appmodeldeploy.StatusPollingTimeout))
 		Expect(enqCount).To(Equal(0))
+	})
+
+	// worker 积压时首个 tick 就可能落在窗口外，此时仍应采信集群里的真实终态
+	It("honors an observed stable status even when the window is exceeded", func() {
+		rec.StartedAt = time.Now().Add(-pollingTimeout() - time.Minute)
+		insert()
+		stubFetch(appmodeldeploy.StatusDeployed)
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		Expect(reload().Status).To(Equal(appmodeldeploy.StatusDeployed))
+		Expect(enqCount).To(Equal(0))
+		Expect(hookCount.Load()).To(Equal(int32(1)))
 	})
 
 	It("marks pollingBroken after remaining retries are exhausted", func() {
