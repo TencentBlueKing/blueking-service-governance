@@ -66,7 +66,7 @@ var _ = Describe("Builder", func() {
 			}
 			clusterResources := map[string]*unstructured.Unstructured{}
 
-			nodes, nodeIDSet := builder.buildNodes(entries, clusterResources)
+			nodes, nodeIDSet := builder.buildNodes(entries, clusterResources, false)
 
 			Expect(nodes).To(HaveLen(2))
 			Expect(nodeIDSet).To(HaveLen(2))
@@ -94,7 +94,7 @@ var _ = Describe("Builder", func() {
 			}
 			clusterResources := map[string]*unstructured.Unstructured{}
 
-			nodes, _ := builder.buildNodes(entries, clusterResources)
+			nodes, _ := builder.buildNodes(entries, clusterResources, false)
 
 			Expect(nodes).To(HaveLen(1))
 			Expect(nodes[0].Status).To(Equal(k8sstatus.NotFound))
@@ -119,7 +119,7 @@ var _ = Describe("Builder", func() {
 			}
 			clusterResources := map[string]*unstructured.Unstructured{}
 
-			nodes, nodeIDSet := builder.buildNodes(entries, clusterResources)
+			nodes, nodeIDSet := builder.buildNodes(entries, clusterResources, false)
 
 			Expect(nodes).To(HaveLen(1))
 			Expect(nodeIDSet).To(HaveLen(1))

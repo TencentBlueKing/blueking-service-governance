@@ -76,15 +76,26 @@ type gpaStatusRaw struct {
 }
 
 // buildGPAManifest 将 GPAConfig 转换为 GeneralPodAutoscaler CR 的 k8s manifest。
-// scaleTargetName 为该应用在对应环境部署生成的工作负载名（固定 kind=GameDeployment）。
-// 指标模式（spec.metric）与定时模式（spec.time）按是否配置分别输出。
-func buildGPAManifest(config *GPAConfig, workspaceID, envName, scaleTargetName string) map[string]any {
+// scaleTargetName 为该应用在对应环境部署生成的工作负载名。
+// isFederation 为 true 时 scaleTargetRef 指向原生 Deployment，否则指向 GameDeployment。
+func buildGPAManifest(
+	config *GPAConfig,
+	workspaceID, envName, scaleTargetName string,
+	isFederation bool,
+) map[string]any {
+	scaleAPIVersion := gvr.GameDeploy.GroupVersion().String()
+	scaleKind := k8skind.GameDeploy
+	if isFederation {
+		scaleAPIVersion = gvr.Deploy.GroupVersion().String()
+		scaleKind = k8skind.Deploy
+	}
+
 	spec := map[string]any{
 		"minReplicas": config.MinReplicas,
 		"maxReplicas": config.MaxReplicas,
 		"scaleTargetRef": map[string]any{
-			"apiVersion": gvr.GameDeploy.GroupVersion().String(),
-			"kind":       k8skind.GameDeploy,
+			"apiVersion": scaleAPIVersion,
+			"kind":       scaleKind,
 			"name":       scaleTargetName,
 		},
 	}

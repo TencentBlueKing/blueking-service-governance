@@ -69,7 +69,7 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 		return errors.Wrap(err, "create k8s client for gpa")
 	}
 
-	manifest := buildGPAManifest(config, env.WorkspaceID, env.Name, scaleTargetName)
+	manifest := buildGPAManifest(config, env.WorkspaceID, env.Name, scaleTargetName, env.Cluster.IsFederation)
 	if _, err = k8sClient.Upsert(ctx, env.Cluster.Namespace, manifest, metav1.PatchOptions{}); err != nil {
 		// discovery 缓存可能过期：缓存中仍有 GPA 的 GVR 信息，但 CRD 实际已被卸载，
 		// apiserver 会返回 404 "the server could not find the requested resource"。
@@ -167,8 +167,7 @@ func (c *ClusterClient) GetStatus(ctx context.Context, namespace, name string) (
 	return parseGPAStatusFromUnstructured(obj)
 }
 
-// resolveScaleTargetName 解析 scaleTargetRef 指向的工作负载名。
-// 工作负载固定为 GameDeployment，name 与应用工作负载名一致（见 workload builder）。
+// resolveScaleTargetName 解析 scaleTargetRef 指向的工作负载名（与应用工作负载名一致，见 workload builder）。
 func (s *GPAService) resolveScaleTargetName(ctx context.Context, appID string) (string, error) {
 	appModel, err := s.appModelStore.GetAppModel(ctx, appID)
 	if err != nil {

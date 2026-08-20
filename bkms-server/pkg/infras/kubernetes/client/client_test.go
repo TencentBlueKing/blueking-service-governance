@@ -218,6 +218,37 @@ var _ = Describe("Client", func() {
 	})
 })
 
+var _ = Describe("withNamespace", func() {
+	It("should inject namespace without mutating the input manifest", func() {
+		metadata := map[string]any{"name": "nginx"}
+		manifest := map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata":   metadata,
+			// 调用方常写 Go 字面量 int，这类值无法通过 unstructured.DeepCopy
+			"spec": map[string]any{"replicas": 3},
+		}
+
+		obj := withMeta(manifest, "default")
+		Expect(mapx.GetStr(obj, "metadata.namespace")).To(Equal("default"))
+		Expect(mapx.GetStr(obj, "metadata.name")).To(Equal("nginx"))
+
+		Expect(manifest["metadata"]).To(Equal(map[string]any{"name": "nginx"}))
+		Expect(metadata).NotTo(HaveKey("namespace"))
+	})
+
+	It("should not inject namespace when it is empty", func() {
+		manifest := map[string]any{"metadata": map[string]any{"name": "nginx"}}
+		Expect(withMeta(manifest, "")).To(Equal(manifest))
+		Expect(mapx.GetStr(manifest, "metadata.namespace")).To(BeEmpty())
+	})
+
+	It("should create metadata when it is missing", func() {
+		obj := withMeta(map[string]any{"kind": "Deployment"}, "default")
+		Expect(mapx.GetStr(obj, "metadata.namespace")).To(Equal("default"))
+	})
+})
+
 var _ = Describe("Test upsert method", func() {
 	var (
 		cli       *Client
