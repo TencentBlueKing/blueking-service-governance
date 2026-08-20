@@ -21,7 +21,7 @@ package taskq
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -37,11 +37,11 @@ import (
 var (
 	// ErrStopRetry 标记不可恢复的失败, 框架停止重试(置为终态失败)。
 	// 业务用法: return errors.Wrap(taskq.ErrStopRetry, "invalid arg")。
-	ErrStopRetry = stderrors.New("taskq: stop retry")
+	ErrStopRetry = errors.New("taskq: stop retry")
 	// ErrFixedRetry 标记"任务仍在进行中", 框架以固定间隔重试(而非指数退避)。
 	// 间隔优先取 TaskType.WithFixedRetryInterval 注册值，否则用 config.Asynq.RetryInterval。
 	// 业务用法: return errors.Wrap(taskq.ErrFixedRetry, "still provisioning")。
-	ErrFixedRetry = stderrors.New("taskq: retry with fixed interval")
+	ErrFixedRetry = errors.New("taskq: retry with fixed interval")
 )
 
 // ExhaustedHandlerFunc 是重试耗尽时的回调函数签名。
@@ -142,24 +142,82 @@ func (t *TaskType[Args]) WithFixedRetryInterval(d time.Duration) *TaskType[Args]
 //
 // 它负责: 拆 envelope 恢复用户身份 -> 反序列化 Args -> 调用业务 handler ->
 // 把 ErrStopRetry / 反序列化失败翻译为停止重试(其余错误交由重试策略)。
+// 每次执行在入口 / 出口打 INFO（type、retry、task id、耗时、成败）
+// Args 仅在实现了 fmt.Stringer 时输出，避免 %+v 打出加密凭据
 func (t *TaskType[Args]) Handler() asynq.HandlerFunc {
 	return func(ctx context.Context, task *asynq.Task) error {
+		startedAt := time.Now()
+		taskID, retried, maxRetry := handlerMeta(ctx)
+
 		var args Args
 		ctx, argsPayload := restoreEnvelope(ctx, task.Payload())
-		if err := json.Unmarshal(argsPayload, &args); err != nil {
-			// 负载无法解析属不可恢复, 停止重试。
-			return wrapStopRetry(errors.Wrapf(err, "unmarshal args for task %q", t.name))
-		}
-		err := t.handler(ctx, args)
+		err := json.Unmarshal(argsPayload, &args)
+		// 反序列化失败时 args 为零值，不拼进日志
+		argsPart := ""
 		if err == nil {
-			return nil
+			argsPart = formatHandlerArgs(args)
 		}
-		// 业务显式要求停止重试。
-		if stderrors.Is(err, ErrStopRetry) {
-			return wrapStopRetry(err)
+		logging.Infof(
+			ctx, "taskq start type=%s id=%s retry=%d/%d%s",
+			t.name, taskID, retried, maxRetry, argsPart,
+		)
+		if err != nil {
+			// 负载无法解析属不可恢复, 停止重试。
+			err = wrapStopRetry(errors.Wrapf(err, "unmarshal args for task %q", t.name))
+			logHandlerDone(ctx, t.name, taskID, retried, maxRetry, startedAt, err)
+			return err
 		}
-		// 其余错误直接抛给上层，由上层决定重试策略
+
+		err = t.handler(ctx, args)
+		if err != nil && errors.Is(err, ErrStopRetry) {
+			err = wrapStopRetry(err)
+		}
+		logHandlerDone(ctx, t.name, taskID, retried, maxRetry, startedAt, err)
 		return err
+	}
+}
+
+// handlerMeta 从 asynq ctx 取出本次执行的 task id 与重试进度，非 server 调用时可能为空
+func handlerMeta(ctx context.Context) (taskID string, retried, maxRetry int) {
+	taskID, _ = asynq.GetTaskID(ctx)
+	retried, _ = asynq.GetRetryCount(ctx)
+	maxRetry, _ = asynq.GetMaxRetry(ctx)
+	return
+}
+
+// formatHandlerArgs 把已反序列化的 Args 拼进 start 日志：实现了 fmt.Stringer 才输出，否则为空
+func formatHandlerArgs[Args any](args Args) string {
+	s, ok := any(args).(fmt.Stringer)
+	if !ok {
+		return ""
+	}
+	return " args=" + s.String()
+}
+
+// logHandlerDone 记录一次任务执行结束：耗时，以及成功 / 进行中 / 失败
+func logHandlerDone(
+	ctx context.Context,
+	name, taskID string,
+	retried, maxRetry int,
+	startedAt time.Time,
+	err error,
+) {
+	logging.Infof(
+		ctx, "taskq done type=%s id=%s retry=%d/%d elapsed=%s%s",
+		name, taskID, retried, maxRetry, time.Since(startedAt), formatHandlerResult(err),
+	)
+}
+
+// formatHandlerResult 把执行结果拼进 done 日志，成功时为空
+// ErrFixedRetry 表示任务仍在进行中而非失败，单独标记，避免长轮询任务刷出大量 err 日志
+func formatHandlerResult(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrFixedRetry):
+		return " in_progress=" + err.Error()
+	default:
+		return " err=" + err.Error()
 	}
 }
 
