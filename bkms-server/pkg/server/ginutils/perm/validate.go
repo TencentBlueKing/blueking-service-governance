@@ -64,16 +64,9 @@ func ValidateWorkspaceByID(
 	workspaceID string,
 	permType Type,
 ) (*workspace.Workspace, error) {
-	if workspaceID == "" {
-		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "workspaceID is required")
-	}
-
-	ws, err := registry.WorkspaceStore.Get(ctx, workspaceID)
+	ws, err := getWorkspaceByID(ctx, registry, workspaceID)
 	if err != nil {
-		if errors.Is(err, workspace.ErrWorkspaceNotFound) {
-			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "workspace %s not found", workspaceID)
-		}
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
+		return nil, err
 	}
 
 	permMgr := perm.NewManager()
@@ -89,6 +82,49 @@ func ValidateWorkspaceByID(
 	}
 	if err != nil {
 		return nil, bkerrs.WrapIAMNoPermission(err, ws.ID, "check workspace perm")
+	}
+	return ws, nil
+}
+
+// ValidateWorkspaceForAppCreate validates the workspace referenced by a
+// `workspaceID` path parameter, then checks create-app permission within that
+// workspace. It's used by APIs that create apps under
+// "/workspaces/{workspaceID}/...".
+//
+// The error returned from this function is an instance of bkerrs and can be
+// returned directly to the client without any wrapping.
+func ValidateWorkspaceForAppCreate(
+	ctx context.Context,
+	registry *storereg.Registry,
+	workspaceID string,
+) (*workspace.Workspace, error) {
+	ws, err := getWorkspaceByID(ctx, registry, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	err = perm.NewManager().HasCreateAppPerm(ctx, ws.ID)
+	if err != nil {
+		return nil, bkerrs.WrapIAMNoPermission(err, ws.ID, "check app perm")
+	}
+	return ws, nil
+}
+
+func getWorkspaceByID(
+	ctx context.Context,
+	registry *storereg.Registry,
+	workspaceID string,
+) (*workspace.Workspace, error) {
+	if workspaceID == "" {
+		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "workspaceID is required")
+	}
+
+	ws, err := registry.WorkspaceStore.Get(ctx, workspaceID)
+	if err != nil {
+		if errors.Is(err, workspace.ErrWorkspaceNotFound) {
+			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "workspace %s not found", workspaceID)
+		}
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
 	}
 	return ws, nil
 }

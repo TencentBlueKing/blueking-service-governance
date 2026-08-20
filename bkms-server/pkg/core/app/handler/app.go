@@ -87,9 +87,9 @@ func (h *Handler) CreateApp(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// 权限校验
-	if err := perm.NewManager().HasCreateAppPerm(ctx, uriInput.WorkspaceID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, uriInput.WorkspaceID, "check app perm"))
+	// 先校验 workspace 存在，再校验创建应用权限，保证错误语义与其他 workspace 级接口一致。
+	if _, err := ginperm.ValidateWorkspaceForAppCreate(ctx, h.registry, uriInput.WorkspaceID); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
