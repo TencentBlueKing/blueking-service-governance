@@ -20,7 +20,6 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -35,11 +34,11 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
-	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/helmdeploypoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/alertstrategysync"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -473,21 +472,14 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 				queryInput.TrafficLaneName,
 				auth.MustGetUser(ctx).ID,
 			)
-			// TODO(alertstrategy): 用 go 裸起 goroutine 无法保证跨 Pod 串行，
-			// 后续迁移到 asynq 任务队列以解决多 Pod 并发风险。
-			go alertstrategy.NewService(
-				h.registry.AlertStrategyStore,
-				h.registry.EnvStore,
-				h.registry.AppStore,
-				h.registry.ResourceSnapshotStore,
-			).CleanupStrategiesForAppInEnv(
-				context.WithoutCancel(ctx),
-				ws,
-				app.ID,
-				env.ID,
-				queryInput.TrafficLaneName,
-				auth.MustGetUser(ctx).ID,
-			)
+			if enqErr := taskq.Enqueue(ctx, alertstrategysync.CleanupTask.NewTask(alertstrategysync.Args{
+				WorkspaceID:     app.WorkspaceID,
+				AppID:           app.ID,
+				EnvName:         env.Name,
+				TrafficLaneName: queryInput.TrafficLaneName,
+			})); enqErr != nil {
+				log.Errorf(ctx, "enqueue alert strategy cleanup task failed: %v", enqErr)
+			}
 		}
 	}
 

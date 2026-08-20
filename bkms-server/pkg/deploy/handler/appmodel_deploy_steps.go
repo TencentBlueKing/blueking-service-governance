@@ -41,10 +41,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
-	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/alertstrategysync"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
@@ -263,21 +263,14 @@ func (h *Handler) handleAppModelDeployUninstalled(
 			trafficLaneName,
 			operator,
 		)
-		// TODO(alertstrategy): 用 go 裸起 goroutine 无法保证跨 Pod 串行，
-		// 后续迁移到 asynq 任务队列以解决多 Pod 并发风险。
-		go alertstrategy.NewService(
-			h.registry.AlertStrategyStore,
-			h.registry.EnvStore,
-			h.registry.AppStore,
-			h.registry.ResourceSnapshotStore,
-		).CleanupStrategiesForAppInEnv(
-			context.WithoutCancel(ctx),
-			ws,
-			app.ID,
-			env.ID,
-			trafficLaneName,
-			operator,
-		)
+		if err := taskq.Enqueue(ctx, alertstrategysync.CleanupTask.NewTask(alertstrategysync.Args{
+			WorkspaceID:     app.WorkspaceID,
+			AppID:           app.ID,
+			EnvName:         env.Name,
+			TrafficLaneName: trafficLaneName,
+		})); err != nil {
+			log.Errorf(ctx, "enqueue alert strategy cleanup task failed: %v", err)
+		}
 	}
 
 	// 清理资源拓扑快照（失败不阻塞主流程）

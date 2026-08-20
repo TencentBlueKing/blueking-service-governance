@@ -32,6 +32,7 @@ import (
 	"github.com/pkg/errors"
 
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/alertstrategysync"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/chartbuildpoll"
@@ -70,6 +71,9 @@ func Setup(mux *asynq.ServeMux) error {
 	mux.Handle(polarisapply.DynamicApplyTask.Name(), polarisapply.DynamicApplyTask.Handler())
 	// 镜像详情同步
 	mux.Handle(snapshot.DetailSyncTask.Name(), snapshot.DetailSyncTask.Handler())
+	// 告警策略同步/清理 tasks
+	mux.Handle(alertstrategysync.SyncTask.Name(), alertstrategysync.SyncTask.Handler())
+	mux.Handle(alertstrategysync.CleanupTask.Name(), alertstrategysync.CleanupTask.Handler())
 	// 示例任务
 	mux.Handle(example.ExampleTask.Name(), example.ExampleTask.Handler())
 	return nil
