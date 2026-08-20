@@ -233,7 +233,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			extraObjs := result.ExtraObjects
 
 			// Check basic properties
@@ -283,7 +283,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			Expect(*gd.Spec.Replicas).To(Equal(int32(4)))
 			Expect(gd.Spec.UpdateStrategy.MaxUnavailable.String()).To(Equal("25%"), "should keep default value")
@@ -300,7 +300,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			result2, err := builder.Build(ctx, env2)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd2 := result2.GameDeployment
+			gd2 := asGameDeployment(result2)
 			Expect(*gd2.Spec.Replicas).To(Equal(int32(1)))
 
 			container2 := gd2.Spec.Template.Spec.Containers[0]
@@ -335,7 +335,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			Expect(*gd.Spec.Replicas).To(Equal(int32(1)))
 			Expect(gd.Spec.UpdateStrategy.MaxUnavailable.String()).To(Equal("0"))
 			Expect(gd.Spec.UpdateStrategy.MaxSurge.String()).To(Equal("1"))
@@ -363,7 +363,7 @@ var _ = Describe("Builder Shared Tests", func() {
 
 		result, err := builder.Build(ctx, testEnv)
 		Expect(err).NotTo(HaveOccurred())
-		gd := result.GameDeployment
+		gd := asGameDeployment(result)
 		extraObjs := result.ExtraObjects
 		Expect(extraObjs).To(HaveLen(2))
 		Expect(lo.Map(extraObjs, func(obj unstructured.Unstructured, _ int) string {
@@ -394,7 +394,7 @@ var _ = Describe("Builder Shared Tests", func() {
 
 		result, err := builder.Build(ctx, testEnv)
 		Expect(err).NotTo(HaveOccurred())
-		gd := result.GameDeployment
+		gd := asGameDeployment(result)
 		extraObjs := result.ExtraObjects
 		Expect(extraObjs).To(HaveLen(1))
 		Expect(gd.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"./server"}))
@@ -420,7 +420,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			extraObjs := result.ExtraObjects
 
 			Expect(extraObjs).To(HaveLen(1))
@@ -450,7 +450,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			Expect(gd.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{
 				Name: secret.ResolveImagePullSecretName(testEnv.WorkspaceID, "", nil),
@@ -532,7 +532,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			extraObjs := result.ExtraObjects
 
 			By("Check components got applied")
@@ -648,7 +648,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			By("Check the referenced workspace component got applied")
 			Expect(gd.Spec.Replicas).To(Equal(lo.ToPtr(int32(12))))
 		},
@@ -717,7 +717,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			By("Check the referenced workspace component got applied")
 			Expect(gd.Spec.Replicas).To(Equal(lo.ToPtr(int32(12))))
 		},
@@ -736,7 +736,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			c := gd.Spec.Template.Spec.Containers[0]
 			Expect(c.Resources.Requests).To(BeNil())
@@ -763,7 +763,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			c := gd.Spec.Template.Spec.Containers[0]
 			Expect(c.Resources.Requests).NotTo(BeNil())
@@ -788,7 +788,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			c := gd.Spec.Template.Spec.Containers[0]
 			Expect(c.LivenessProbe).To(BeNil())
@@ -819,7 +819,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			c := gd.Spec.Template.Spec.Containers[0]
 			Expect(c.LivenessProbe).NotTo(BeNil())
@@ -858,7 +858,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			// Assert misc settings got applied
 			Expect(gd.Spec.Replicas).To(Equal(lo.ToPtr(int32(2))))
@@ -895,7 +895,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			Expect(gd.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(lo.ToPtr(int64(60))))
 		},
@@ -929,7 +929,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			c := gd.Spec.Template.Spec.Containers[0]
 			// The last volume ...[2] should be the one set by config component
@@ -967,7 +967,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			strategy := gd.Spec.UpdateStrategy
 			Expect(string(strategy.Type)).To(Equal("InplaceUpdate"))
@@ -1015,7 +1015,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			extraObjs := result.ExtraObjects
 
 			// Verify environment variables are added
@@ -1089,7 +1089,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			// Verify the polaris config env vars are NOT added (since it's not available in this env)
 			envMap := make(map[string]string)
@@ -1131,7 +1131,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			// Verify the polaris config env vars ARE added
 			envMap := make(map[string]string)
@@ -1185,7 +1185,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			// Verify both polaris configs' env vars are added
 			envMap := make(map[string]string)
@@ -1254,7 +1254,7 @@ spec:
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 
 			// Verify fake provider builtin env vars are included in the workload
 			envMap := make(map[string]string)

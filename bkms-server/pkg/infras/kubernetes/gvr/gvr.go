@@ -50,6 +50,13 @@ var GameDeploy = schema.GroupVersionResource{
 	Resource: "gamedeployments",
 }
 
+// Deploy represents Kubernetes Deployment resource.
+var Deploy = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "deployments",
+}
+
 // --- Network ---
 
 // SVC represents Kubernetes Service resource.

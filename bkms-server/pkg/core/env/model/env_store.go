@@ -44,6 +44,8 @@ type EnvironmentUpdateData struct {
 	ClusterID   *string
 	ClusterType *string
 	Namespace   *string
+	// IsFederation 是否为联邦集群
+	IsFederation *bool
 }
 
 // ToBSON converts EnvironmentUpdateData to bson.M for update
@@ -65,6 +67,10 @@ func (d *EnvironmentUpdateData) ToBSON() (bson.M, bool) {
 	setIfNotNil(d.ClusterID, "cluster.clusterID")
 	setIfNotNil(d.ClusterType, "cluster.clusterType")
 	setIfNotNil(d.Namespace, "cluster.namespace")
+	if d.IsFederation != nil {
+		data["cluster.isFederation"] = *d.IsFederation
+		isEmpty = false
+	}
 
 	return data, isEmpty
 }

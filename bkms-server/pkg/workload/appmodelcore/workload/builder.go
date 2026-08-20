@@ -328,12 +328,19 @@ func (b *Builder) Build(
 	gd.Spec.Template.Spec = polarisResult.PodSpec
 	extraObjs = append(extraObjs, polarisResult.ExtraObjects...)
 
-	return &BuildResult{
-		GameDeployment:        &gd,
+	result := &BuildResult{
 		ExtraObjects:          extraObjs,
 		SensitiveEnvVarValues: sensitiveEnvVarValues,
 		UndefinedEnvVars:      collector.UndefinedEnvVars(),
-	}, nil
+	}
+	if env.Cluster.IsFederation {
+		result.WorkloadKind = kind.Deploy
+		result.MainWorkload = gameDeploymentToDeployment(gd)
+	} else {
+		result.WorkloadKind = kind.GameDeploy
+		result.MainWorkload = &gd
+	}
+	return result, nil
 }
 
 func buildSensitiveEnvVarValues(appEnvVars envvartypes.EnvVariableList) map[string]string {

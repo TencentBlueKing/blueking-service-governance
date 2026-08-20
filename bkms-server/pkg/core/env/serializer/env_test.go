@@ -86,6 +86,7 @@ var _ = Describe("Env output serializers", func() {
 			Expect(output.Cluster.ClusterType).To(Equal("single"))
 			Expect(output.Cluster.Namespace).To(Equal("default"))
 			Expect(output.Cluster.ProjectCode).To(Equal("proj-code"))
+			Expect(output.Cluster.IsFederation).To(BeFalse())
 			Expect(output.Status).To(Equal("Ready"))
 			Expect(output.AppIDs).To(Equal([]string{"app-1", "app-2"}))
 			Expect(output.Kind).To(Equal("feature"))
@@ -125,7 +126,8 @@ var _ = Describe("Env output serializers", func() {
 					"clusterID": "cls-1",
 					"clusterType": "single",
 					"namespace": "default",
-					"projectCode": "proj-code"
+					"projectCode": "proj-code",
+					"isFederation": false
 				},
 				"status": "NotReady",
 				"appIDs": [],

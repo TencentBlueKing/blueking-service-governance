@@ -160,6 +160,8 @@ type EnvClusterOutput struct {
 	Namespace string `json:"namespace"`
 	// 项目 code
 	ProjectCode string `json:"projectCode"`
+	// 是否为 BCS 联邦 Host 集群
+	IsFederation bool `json:"isFederation"`
 }
 
 // EnvOutput is the JSON representation of an environment.
@@ -204,10 +206,11 @@ func (o *EnvOutput) FromModel(env envmodel.Environment) *EnvOutput {
 		CreatedAt:   env.CreatedAt,
 		UpdatedAt:   env.UpdatedAt,
 		Cluster: &EnvClusterOutput{
-			ClusterID:   env.Cluster.ClusterID,
-			ClusterType: env.Cluster.ClusterType,
-			Namespace:   env.Cluster.Namespace,
-			ProjectCode: env.Cluster.ProjectCode,
+			ClusterID:    env.Cluster.ClusterID,
+			ClusterType:  env.Cluster.ClusterType,
+			Namespace:    env.Cluster.Namespace,
+			ProjectCode:  env.Cluster.ProjectCode,
+			IsFederation: env.Cluster.IsFederation,
 		},
 		Status: string(env.Status),
 		AppIDs: env.AppIDs,
@@ -423,10 +426,11 @@ func (o *EnvDetailOutput) FromModel(
 		CreatedAt:   env.CreatedAt,
 		UpdatedAt:   env.UpdatedAt,
 		Cluster: &EnvClusterOutput{
-			ClusterID:   env.Cluster.ClusterID,
-			ClusterType: env.Cluster.ClusterType,
-			Namespace:   env.Cluster.Namespace,
-			ProjectCode: env.Cluster.ProjectCode,
+			ClusterID:    env.Cluster.ClusterID,
+			ClusterType:  env.Cluster.ClusterType,
+			Namespace:    env.Cluster.Namespace,
+			ProjectCode:  env.Cluster.ProjectCode,
+			IsFederation: env.Cluster.IsFederation,
 		},
 		Status:      string(env.Status),
 		Description: env.Description,

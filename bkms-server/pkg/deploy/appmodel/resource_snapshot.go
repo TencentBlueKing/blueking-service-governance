@@ -23,7 +23,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -50,7 +49,7 @@ func saveResourceSnapshots(
 	store ResourceSnapshotStore,
 	appID string,
 	deployID string,
-	gameDeploy *tkex.GameDeployment,
+	mainWorkload any,
 	extraObjs []unstructured.Unstructured,
 	sensitiveEnvVarValues map[string]string,
 ) {
@@ -63,13 +62,13 @@ func saveResourceSnapshots(
 
 	deployOID, _ := bson.ObjectIDFromHex(deployID)
 
-	gdUnstructured, err := runtime.DefaultUnstructuredConverter.ToUnstructured(gameDeploy)
+	wlUnstructured, err := runtime.DefaultUnstructuredConverter.ToUnstructured(mainWorkload)
 	if err != nil {
-		log.Errorf(ctx, "convert game deployment to unstructured for app %s deploy %s: %v", appID, deployID, err)
+		log.Errorf(ctx, "convert main workload to unstructured for app %s deploy %s: %v", appID, deployID, err)
 	}
 
 	// 将主工作负载和额外资源合并
-	allObjs := append(extraObjs, unstructured.Unstructured{Object: gdUnstructured})
+	allObjs := append(extraObjs, unstructured.Unstructured{Object: wlUnstructured})
 
 	timeNow := time.Now()
 

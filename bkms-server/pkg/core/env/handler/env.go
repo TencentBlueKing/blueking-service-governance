@@ -108,10 +108,11 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 		DisplayName: input.DisplayName,
 		Description: input.Description,
 		Cluster: envmodel.BizCluster{
-			ProjectCode: ws.BkSystems.BkBCSProjectCode,
-			ClusterID:   input.Cluster.ClusterID,
-			ClusterType: input.Cluster.ClusterType,
-			Namespace:   input.Cluster.Namespace,
+			ProjectCode:  ws.BkSystems.BkBCSProjectCode,
+			ClusterID:    input.Cluster.ClusterID,
+			ClusterType:  input.Cluster.ClusterType,
+			Namespace:    input.Cluster.Namespace,
+			IsFederation: bkmsenv.IsFederationCluster(input.Cluster.ClusterID),
 		},
 		Creator: creator,
 	})
@@ -507,8 +508,10 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 
 	updateData := &envmodel.EnvironmentUpdateData{}
 	if input.ClusterID != "" {
+		isFederation := bkmsenv.IsFederationCluster(input.ClusterID)
 		updateData.ClusterID = &input.ClusterID
 		updateData.ClusterType = &input.ClusterType
+		updateData.IsFederation = &isFederation
 	}
 	if input.Namespace != "" {
 		updateData.Namespace = &input.Namespace

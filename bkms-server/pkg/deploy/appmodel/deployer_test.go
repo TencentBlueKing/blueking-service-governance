@@ -31,6 +31,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 )
 
 // newGameDeploy 创建用于测试的 GameDeployment，支持预设两个层级的 Annotations
@@ -89,6 +90,11 @@ func (f *fakeBuildAutoDeployStore) GetByDeployID(_ context.Context, _, deployID 
 var _ = Describe("injectDeployID", func() {
 	deployer := &Deployer{}
 
+	newResult := func(objAnnotations, tplAnnotations map[string]string) (*workload.BuildResult, *tkex.GameDeployment) {
+		gd := newGameDeploy(objAnnotations, tplAnnotations)
+		return &workload.BuildResult{MainWorkload: gd}, gd
+	}
+
 	// expectBothLevels 断言两个层级的 Annotations 都包含预期的 deployID
 	expectBothLevels := func(gd *tkex.GameDeployment, deployID string) {
 		Expect(gd.Annotations[AnnotationKeyDeployID]).To(Equal(deployID))
@@ -96,26 +102,26 @@ var _ = Describe("injectDeployID", func() {
 	}
 
 	It("should initialize nil Annotations and inject deployID at both levels", func() {
-		gd := newGameDeploy(nil, nil)
-		deployer.injectDeployID(gd, "deploy-001")
+		result, gd := newResult(nil, nil)
+		deployer.injectDeployID(result, "deploy-001")
 		expectBothLevels(gd, "deploy-001")
 	})
 
 	It("should append deployID without overwriting existing Annotations", func() {
-		gd := newGameDeploy(
+		result, gd := newResult(
 			map[string]string{"existing-key": "existing-value"},
 			map[string]string{"pod-existing-key": "pod-existing-value"},
 		)
-		deployer.injectDeployID(gd, "deploy-002")
+		deployer.injectDeployID(result, "deploy-002")
 		expectBothLevels(gd, "deploy-002")
 		Expect(gd.Annotations).To(HaveKeyWithValue("existing-key", "existing-value"))
 		Expect(gd.Spec.Template.Annotations).To(HaveKeyWithValue("pod-existing-key", "pod-existing-value"))
 	})
 
 	It("should overwrite the previous deployID with the new one", func() {
-		gd := newGameDeploy(nil, nil)
-		deployer.injectDeployID(gd, "deploy-first")
-		deployer.injectDeployID(gd, "deploy-second")
+		result, gd := newResult(nil, nil)
+		deployer.injectDeployID(result, "deploy-first")
+		deployer.injectDeployID(result, "deploy-second")
 		expectBothLevels(gd, "deploy-second")
 	})
 })

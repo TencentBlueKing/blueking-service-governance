@@ -21,8 +21,10 @@ package workload_test
 import (
 	"testing"
 
+	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -51,4 +53,20 @@ var _ = AfterSuite(func() {
 func initWorkloadPlugin() {
 	appConfigFileStore, polarisConfigStore := newWorkloadPluginDependencies()
 	workload.InitPlugin(appConfigFileStore, polarisConfigStore)
+}
+
+func asGameDeployment(result *workload.BuildResult) *tkex.GameDeployment {
+	if result == nil {
+		return nil
+	}
+	gd, _ := result.MainWorkload.(*tkex.GameDeployment)
+	return gd
+}
+
+func asDeployment(result *workload.BuildResult) *appsv1.Deployment {
+	if result == nil {
+		return nil
+	}
+	d, _ := result.MainWorkload.(*appsv1.Deployment)
+	return d
 }

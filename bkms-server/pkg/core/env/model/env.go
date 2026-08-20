@@ -108,4 +108,7 @@ type BizCluster struct {
 	ClusterType string `bson:"clusterType"`
 	// Namespace 蓝鲸 BCS 命名空间
 	Namespace string `bson:"namespace"`
+	// IsFederation 是否为 BCS 联邦 Host 集群。
+	// 由后端在绑定集群时对照配置 bcs.federationClusterIDs 写入，前端不传。
+	IsFederation bool `bson:"isFederation"`
 }
