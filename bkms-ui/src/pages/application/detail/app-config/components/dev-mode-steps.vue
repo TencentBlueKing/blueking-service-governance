@@ -50,12 +50,11 @@
       <div class="mb-[12px] text-[#979BA5]">
         {{ $t('请点击【查看 Token】自行获取 access_token，复制后填入下方命令') }}
       </div>
-      <div
-        class="relative overflow-x-auto border border-[#DCDEE5] rounded-[2px] bg-[#FFF] p-[16px] pr-[72px] font-['Consolas','Courier_New',monospace] leading-[22px] text-[#4D4F56]"
-      >
-        <span>bkms-cli login&nbsp;</span>
-        <span class="text-[#3A84FF]">--access-token</span>
-        <span>&nbsp;{{ ACCESS_TOKEN_PLACEHOLDER }}</span>
+      <div class="relative overflow-x-auto border border-[#DCDEE5] rounded-[2px] bg-[#FFF] p-[16px] pr-[72px]">
+        <pre
+          v-bk-xss-html="highlightedLoginCommand"
+          class="m-0 whitespace-pre-wrap break-all bg-transparent! leading-[22px] text-[#4D4F56]"
+        ></pre>
         <span
           class="absolute right-[10px] top-[10px] h-[24px] w-[24px] flex cursor-pointer items-center justify-center rounded-[2px] hover:bg-[#F0F1F5]"
           role="button"
@@ -79,12 +78,10 @@
     </div>
 
     <div class="ml-[28px]">
-      <div
-        class="relative overflow-x-auto border border-[#DCDEE5] rounded-[2px] bg-[#FFF] p-[16px] pr-[72px] font-['Consolas','Courier_New',monospace] leading-[22px] text-[#4D4F56]"
-      >
+      <div class="relative overflow-x-auto border border-[#DCDEE5] rounded-[2px] bg-[#FFF] p-[16px] pr-[72px]">
         <pre
           v-bk-xss-html="highlightedCommand"
-          class="m-0 whitespace-pre-wrap break-all bg-transparent!"
+          class="m-0 whitespace-pre-wrap break-all bg-transparent! leading-[22px] text-[#4D4F56]"
         ></pre>
         <span
           class="absolute right-[10px] top-[10px] h-[24px] w-[24px] flex cursor-pointer items-center justify-center rounded-[2px] hover:bg-[#F0F1F5]"
@@ -137,6 +134,7 @@
   const currentWorkspace = computed(() => spaceStore.currentSpace || '<workspace-id>');
   const currentAppID = computed(() => appDetailStore.appID || '<app-id>');
   const currentEnvName = computed(() => props.envName || '<env-name>');
+  const highlightedLoginCommand = highlightCommand(LOGIN_COMMAND);
 
   // 保留无样式的原始命令用于复制，保证复制结果可直接在终端中编辑执行。
   const publishCommand = computed(() =>
@@ -155,19 +153,10 @@
     ].join('\n'),
   );
 
-  // 展示时仅高亮注释和命令参数，不改变 publishCommand 的实际内容。
-  const highlightedCommand = computed(() =>
-    escapeHtml(publishCommand.value)
-      .split('\n')
-      .map(line =>
-        line.startsWith('#')
-          ? `<span class="text-[#979BA5]">${line}</span>`
-          : line.replace(/(^|\s)(--?[a-z][a-z-]*)/g, '$1<span class="text-[#3A84FF]">$2</span>'),
-      )
-      .join('\n'),
-  );
+  // 展示时仅高亮注释和命令参数，不改变用于复制的原始命令。
+  const highlightedCommand = computed(() => highlightCommand(publishCommand.value));
 
-  // highlightedCommand 通过 v-bk-xss-html 渲染，拼接高亮标签前先转义所有动态文本。
+  // 命令通过 v-bk-xss-html 渲染，拼接高亮标签前先转义所有动态文本。
   function escapeHtml(text: string) {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
@@ -190,5 +179,16 @@
         ...(props.envName ? { envName: props.envName } : {}),
       },
     });
+  }
+
+  function highlightCommand(command: string) {
+    return escapeHtml(command)
+      .split('\n')
+      .map(line =>
+        line.startsWith('#')
+          ? `<span class="text-[#979BA5]">${line}</span>`
+          : line.replace(/(^|\s)(--?[a-z][a-z-]*)/g, '$1<span class="text-[#3A84FF]">$2</span>'),
+      )
+      .join('\n');
   }
 </script>
