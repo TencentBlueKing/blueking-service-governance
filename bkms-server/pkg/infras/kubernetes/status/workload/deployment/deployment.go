@@ -68,3 +68,17 @@ func Parse(manifest map[string]any) *k8sstatus.Result {
 	// Available 不为 True，视为仍在滚动更新中
 	return &k8sstatus.Result{Code: k8sstatus.Progressing}
 }
+
+// ParseForFederation 解析联邦集群上的 Deployment 状态。
+//
+// BCS 联邦网关通常只返回 replicas / readyReplicas / updatedReplicas / availableReplicas，
+// 没有 observedGeneration 和 conditions。就绪只看 spec.replicas 与上述 status 字段是否一致。
+func ParseForFederation(manifest map[string]any) *k8sstatus.Result {
+	if manifest == nil {
+		return &k8sstatus.Result{Code: k8sstatus.Unknown}
+	}
+	if consistent, reason := workload.AreReplicasConsistent(manifest, "status.availableReplicas"); !consistent {
+		return &k8sstatus.Result{Code: k8sstatus.Progressing, Message: "replicas are not consistent: " + reason}
+	}
+	return &k8sstatus.Result{Code: k8sstatus.Available}
+}
