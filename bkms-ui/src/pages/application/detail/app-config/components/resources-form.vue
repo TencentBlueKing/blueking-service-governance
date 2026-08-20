@@ -208,7 +208,7 @@
             >
               <Select v-model="formModel.cpuRequests">
                 <Select.Option
-                  v-for="option in CPU_OPTIONS"
+                  v-for="option in getCpuOptions(formModel.cpuRequests)"
                   :key="option"
                   :label="$t('{0} 核', [getCoreCount(option)])"
                   :value="option"
@@ -227,7 +227,7 @@
             >
               <Select v-model="formModel.cpuLimits">
                 <Select.Option
-                  v-for="option in CPU_OPTIONS"
+                  v-for="option in getCpuOptions(formModel.cpuLimits)"
                   :key="option"
                   :label="$t('{0} 核', [getCoreCount(option)])"
                   :value="option"
@@ -470,8 +470,19 @@
     return match[2] === 'Gi' ? num * 1024 : num;
   };
 
-  /** CPU 值转核数（用于展示） */
-  const getCoreCount = (value: string): number => parseFloat(value);
+  /** CPU 值转核数；兼容 Kubernetes 毫核格式（如 200m = 0.2 核）。 */
+  const getCoreCount = (value: string): number => {
+    const milliCoreMatch = value.match(/^(\d+(?:\.\d+)?)m$/);
+    return milliCoreMatch ? Number(milliCoreMatch[1]) / 1000 : Number(value);
+  };
+
+  /** 将 CLI 写入的自定义 CPU 值加入下拉框，并过滤与其等量的预设项。 */
+  const getCpuOptions = (currentValue: string): string[] => {
+    if (!currentValue || CPU_OPTIONS.includes(currentValue)) return CPU_OPTIONS;
+
+    const currentCoreCount = getCoreCount(currentValue);
+    return [currentValue, ...CPU_OPTIONS.filter(option => getCoreCount(option) !== currentCoreCount)];
+  };
 
   const rules = {
     replicas: [
@@ -495,7 +506,7 @@
         trigger: 'change',
       },
       {
-        validator: () => parseFloat(formModel.value.cpuLimits) >= parseFloat(formModel.value.cpuRequests),
+        validator: () => getCoreCount(formModel.value.cpuLimits) >= getCoreCount(formModel.value.cpuRequests),
         message: t('{0} Limits 不能小于 Requests', [t('CPU')]),
         trigger: 'change',
       },
