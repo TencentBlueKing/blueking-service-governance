@@ -32,6 +32,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
+	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 )
 
@@ -143,7 +144,10 @@ func buildExtraResources(
 	}
 
 	service := corev1.Service{
-		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Service"},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: corev1.SchemeGroupVersion.String(),
+			Kind:       k8skind.SVC,
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: serviceName,
 		},

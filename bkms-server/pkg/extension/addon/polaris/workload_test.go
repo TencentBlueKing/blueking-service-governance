@@ -34,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 )
 
 var _ = Describe("WorkloadBuilder", func() {
@@ -113,7 +114,7 @@ var _ = Describe("WorkloadBuilder", func() {
 			objectsByKind[object.GetKind()] = object
 		}
 		Expect(objectsByKind).To(HaveKey("PolarisConfig"))
-		Expect(objectsByKind).To(HaveKey("Service"))
+		Expect(objectsByKind).To(HaveKey(k8skind.SVC))
 
 		expectedBaseName := strings.ToLower(app.Name + "-" + config.Name)
 		cr := objectsByKind["PolarisConfig"]
@@ -142,7 +143,7 @@ var _ = Describe("WorkloadBuilder", func() {
 			"team":        "platform",
 		}))
 
-		service := objectsByKind["Service"]
+		service := objectsByKind[k8skind.SVC]
 		Expect(service.GetName()).To(Equal(expectedBaseName + "-polaris-service"))
 		Expect(nestedString(service.Object, "spec", "selector", "app.kubernetes.io/name")).To(Equal(app.Name))
 		ports, found, err := unstructured.NestedSlice(service.Object, "spec", "ports")

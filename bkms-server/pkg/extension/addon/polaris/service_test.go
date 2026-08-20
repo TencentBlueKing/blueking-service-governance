@@ -260,6 +260,8 @@ var _ = Describe("PolarisConfigService", func() {
 					polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
 					envStateManager,
 					envStore,
+					appModelStore,
+					envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
 					func(_ context.Context, _, _, _ string) error {
 						enqueued++
 						return nil

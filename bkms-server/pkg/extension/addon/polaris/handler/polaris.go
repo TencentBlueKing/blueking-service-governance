@@ -232,21 +232,18 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-
 	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
-	service := h.polarisConfigService()
 	existingConfig, err := h.registry.PolarisConfigStore.Get(ctx, app.ID, uriInput.ConfigName)
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
 				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)",
-				uriInput.ConfigName, uriInput.AppID,
+				"polaris config(%s) not found in app(%s)", uriInput.ConfigName, uriInput.AppID,
 			))
 			return
 		}
@@ -266,14 +263,13 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		Operator:          jsonInput.Operator,
 	}
 
-	updatedConfig, updateErr := service.Update(ctx, app, existingConfig, updateData)
+	updatedConfig, updateErr := h.polarisConfigService().Update(ctx, app, existingConfig, updateData)
 	// 集群同步失败时配置已经落库，仍需记录审计并把失败原因返回给调用方
 	if updateErr != nil && !errors.Is(updateErr, polaris.ErrClusterSyncFailed) {
 		if errors.Is(updateErr, polaris.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
 				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)",
-				uriInput.ConfigName, uriInput.AppID,
+				"polaris config(%s) not found in app(%s)", uriInput.ConfigName, uriInput.AppID,
 			))
 			return
 		}
@@ -300,10 +296,8 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 
 	if updateErr != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			updateErr,
-			bkerrs.ErrCodeInternalServerError,
-			"polaris config(%s) saved but syncing to polaris failed",
-			uriInput.ConfigName,
+			updateErr, bkerrs.ErrCodeInternalServerError,
+			"polaris config(%s) saved but syncing to polaris failed", uriInput.ConfigName,
 		))
 		return
 	}

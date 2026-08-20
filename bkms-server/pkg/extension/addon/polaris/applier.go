@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -33,6 +34,7 @@ import (
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
+	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 )
 
 // CRApplier 负责构建并向单个目标环境下发或更新 Polaris 资源。
@@ -47,30 +49,22 @@ func NewCRApplier() *CRApplier {
 	return &CRApplier{}
 }
 
-// Apply 向指定环境下发 Polaris 资源。kinds 声明本次要 upsert 的资源类型
-// （on_deploy 动态下发只推 PolarisConfig CR；immediate 还需推配套 Service）。
+// Apply 向指定环境下发 Polaris 资源。
+// on_deploy 只 upsert PolarisConfig CR（配套 Service 由部署流程管理）；
+// immediate 同时 upsert 配套 Service，因为该模式不走部署流程。
 func (a *CRApplier) Apply(
 	ctx context.Context,
 	app *bkmsapp.Application,
 	env *bkmsenv.Environment,
 	config *PolarisConfig,
 	envVars map[string]string,
-	kinds ...string,
 ) error {
-	if len(kinds) == 0 {
-		return errors.New("no polaris resource kinds to apply")
-	}
-
-	wanted := make(map[string]struct{}, len(kinds))
-	for _, kind := range kinds {
-		wanted[kind] = struct{}{}
-	}
-
 	resources, err := buildExtraResources(app, env, config, envVars, nil)
 	if err != nil {
 		return errors.Wrap(err, "build polaris resources")
 	}
 
+	wanted := applyKinds(config)
 	clusterCfg := cluster.NewConfig(env.Cluster.ClusterID)
 	for idx := range resources {
 		obj := resources[idx]
@@ -90,6 +84,18 @@ func (a *CRApplier) Apply(
 	return nil
 }
 
+// applyKinds 返回本次应 upsert 的资源类型。
+//
+//   - on_deploy：只下发 PolarisConfig CR， 对应的 Service 会在部署流程中下发
+//   - immediate：同时下发 PolarisConfig CR 与配套 Service，因为该模式不走部署流程。
+func applyKinds(config *PolarisConfig) map[string]struct{} {
+	wanted := map[string]struct{}{polarisConfigCRKind: {}}
+	if config.IsImmediateRegister() {
+		wanted[k8skind.SVC] = struct{}{}
+	}
+	return wanted
+}
+
 // DeleteResources 从指定环境删除该配置的 PolarisConfig CR 与配套 Service。
 // 资源不存在时视为成功，因此重复删除是安全的。
 func (a *CRApplier) DeleteResources(
@@ -105,7 +111,7 @@ func (a *CRApplier) DeleteResources(
 		name       string
 	}{
 		{polarisConfigCRAPIVersion, polarisConfigCRKind, crName},
-		{"v1", "Service", serviceName},
+		{corev1.SchemeGroupVersion.String(), k8skind.SVC, serviceName},
 	}
 
 	clusterCfg := cluster.NewConfig(env.Cluster.ClusterID)

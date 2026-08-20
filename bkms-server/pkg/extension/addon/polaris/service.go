@@ -21,10 +21,7 @@ package polaris
 import (
 	"context"
 	stderrors "errors"
-<<<<<<< HEAD
-=======
 	"fmt"
->>>>>>> b71b247 (feat: 北极星绑定逻辑优化 --story=137217565)
 	"strings"
 
 	"github.com/pkg/errors"
@@ -279,7 +276,7 @@ func (s *PolarisConfigService) applyResourcesToEnv(
 	if err != nil {
 		return errors.Wrapf(err, "build env vars for %s", envName)
 	}
-	return s.applier.Apply(ctx, app, env, config, envVars.ToMap(), polarisConfigCRKind, "Service")
+	return s.applier.Apply(ctx, app, env, config, envVars.ToMap())
 }
 
 // releaseFromEnvs 逐环境删除集群资源，成功后清理该环境的记录与权重。
