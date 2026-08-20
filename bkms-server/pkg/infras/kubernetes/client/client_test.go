@@ -31,6 +31,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -219,8 +220,10 @@ var _ = Describe("Client", func() {
 
 var _ = Describe("Test upsert method", func() {
 	var (
-		cli *Client
-		ctx context.Context
+		cli       *Client
+		deployCli *Client
+		clientSet *kubernetes.Clientset
+		ctx       context.Context
 	)
 
 	BeforeEach(func() {
@@ -231,6 +234,9 @@ var _ = Describe("Test upsert method", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		cli = NewWithGVR(cfg, gvr.SVC)
+		deployCli = NewWithGVR(cfg, gvr.Deploy)
+		clientSet, err = kubernetes.NewForConfig(cfg.Rest)
+		Expect(err).NotTo(HaveOccurred())
 		ctx = context.Background()
 	})
 
@@ -444,6 +450,138 @@ var _ = Describe("Test upsert method", func() {
 
 		// cleanup
 		err = cli.Delete(ctx, namespace, svcName, metav1.DeleteOptions{GracePeriodSeconds: lo.ToPtr(int64(0))})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should preserve clusterIP when using merge patch for federation clusters", func() {
+		namespace := "default"
+		svcName := fmt.Sprintf("svc-%s", stringx.Random(8))
+
+		svcManifest := map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Service",
+			"metadata": map[string]any{
+				"name": svcName,
+			},
+			"spec": map[string]any{
+				"ports": []any{
+					map[string]any{
+						"name":       "api",
+						"port":       80,
+						"targetPort": 80,
+						"protocol":   "TCP",
+					},
+				},
+			},
+		}
+
+		_, err := cli.upsertMergePatch(ctx, namespace, svcManifest, metav1.PatchOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		created, err := cli.Get(ctx, namespace, svcName, metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		originalClusterIP := mapx.GetStr(created.Object, "spec.clusterIP")
+		Expect(originalClusterIP).NotTo(BeEmpty())
+
+		updatedManifest := map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Service",
+			"metadata": map[string]any{
+				"name": svcName,
+			},
+			"spec": map[string]any{
+				"ports": []any{
+					map[string]any{
+						"name":       "new-api",
+						"port":       9090,
+						"targetPort": 9090,
+						"protocol":   "TCP",
+					},
+				},
+			},
+		}
+		_, err = cli.upsertMergePatch(ctx, namespace, updatedManifest, metav1.PatchOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		updated, err := cli.Get(ctx, namespace, svcName, metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mapx.GetStr(updated.Object, "spec.clusterIP")).To(Equal(originalClusterIP))
+
+		err = cli.Delete(ctx, namespace, svcName, metav1.DeleteOptions{GracePeriodSeconds: lo.ToPtr(int64(0))})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should drop omitted initContainers and labels while keeping injected labels", func() {
+		namespace := "default"
+		deployName := fmt.Sprintf("fed-upsert-%s", stringx.Random(8))
+		podLabels := map[string]any{"app": "fed-upsert"}
+		mkDeploy := func(labels map[string]any, withInit bool) map[string]any {
+			podSpec := map[string]any{
+				"containers": []any{
+					map[string]any{"name": "nginx", "image": "nginx:latest"},
+				},
+			}
+			if withInit {
+				podSpec["initContainers"] = []any{
+					map[string]any{
+						"name":    "init",
+						"image":   "busybox:latest",
+						"command": []any{"sh", "-c", "true"},
+					},
+				}
+			}
+			return map[string]any{
+				"apiVersion": "apps/v1",
+				"kind":       "Deployment",
+				"metadata": map[string]any{
+					"name":   deployName,
+					"labels": labels,
+				},
+				"spec": map[string]any{
+					"replicas": 1,
+					"selector": map[string]any{"matchLabels": podLabels},
+					"template": map[string]any{
+						"metadata": map[string]any{"labels": podLabels},
+						"spec":     podSpec,
+					},
+				},
+			}
+		}
+
+		_, err := deployCli.upsertMergePatch(
+			ctx, namespace,
+			mkDeploy(map[string]any{"app": "fed-upsert", "component": "sidecar"}, true),
+			metav1.PatchOptions{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = clientSet.AppsV1().Deployments(namespace).Patch(
+			ctx, deployName, types.MergePatchType,
+			[]byte(`{"metadata":{"labels":{"injected":"keep"}}}`),
+			metav1.PatchOptions{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = deployCli.upsertMergePatch(
+			ctx, namespace,
+			mkDeploy(map[string]any{"app": "fed-upsert"}, false),
+			metav1.PatchOptions{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		got, err := deployCli.Get(ctx, namespace, deployName, metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.GetLabels()).To(HaveKeyWithValue("app", "fed-upsert"))
+		Expect(got.GetLabels()).To(HaveKeyWithValue("injected", "keep"))
+		Expect(got.GetLabels()).NotTo(HaveKey("component"))
+		Expect(mapx.GetList(got.Object, "spec.template.spec.initContainers")).To(BeEmpty())
+
+		err = deployCli.Delete(
+			ctx,
+			namespace,
+			deployName,
+			metav1.DeleteOptions{GracePeriodSeconds: lo.ToPtr(int64(0))},
+		)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

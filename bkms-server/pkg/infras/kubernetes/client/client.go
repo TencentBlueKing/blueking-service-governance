@@ -31,7 +31,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/jsonmergepatch"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/ptr"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
@@ -41,7 +43,7 @@ const (
 	// listApiLimit 列表查询单次条数限制
 	listApiLimit = 1000
 
-	// defaultFieldManager 写入资源时的默认 FieldManager 标识
+	// defaultFieldManager SSA / Merge Patch 写入资源时的默认 FieldManager 标识
 	defaultFieldManager = "bkms-server"
 )
 
@@ -204,54 +206,103 @@ func (c *Client) Update(
 	return ret, nil
 }
 
-// Upsert 创建或更新资源（不存在则创建，存在则合并更新）。
+// Upsert 创建或更新资源。
 //
-// 不使用 Server-Side Apply：BCS 集群网关不支持 application/apply-patch+yaml。
-// client-go 也没有现成的 Upsert，这里用官方 Merge Patch（RFC 7396）：
-// 未出现在 manifest 中的字段（如 Service clusterIP、status）由 apiserver 保留；
-// 资源不存在时 Patch 返回 404，再走 Create。
+// 非联邦集群使用 Server-Side Apply：字段由 FieldManager 管理，省略字段会被清掉。
+// 联邦集群的 BCS 网关不支持 application/apply-patch+yaml，改走 JSON Merge Patch。
+// 为贴近 SSA「省略即删除」，联邦路径用 last-applied 注解做三路合并：上次写过、本次省略的字段会置 null；
+// 从未写入的字段（如 Service clusterIP、status）仍由 apiserver 保留。
 func (c *Client) Upsert(
+	ctx context.Context, namespace string, manifest map[string]any, opts metav1.PatchOptions,
+) (*unstructured.Unstructured, error) {
+	if c.cfg.IsFederation() {
+		return c.upsertMergePatch(ctx, namespace, manifest, opts)
+	}
+	return c.upsertSSA(ctx, namespace, manifest, opts)
+}
+
+// upsertSSA 使用 Server-Side Apply 创建或更新资源。
+func (c *Client) upsertSSA(
 	ctx context.Context, namespace string, manifest map[string]any, opts metav1.PatchOptions,
 ) (*unstructured.Unstructured, error) {
 	if err := c.validateManifest(manifest); err != nil {
 		return nil, errors.Wrap(err, "validate manifest")
 	}
 
+	// 清理 nested metadata 的零值 creationTimestamp，避免 SSA 严格校验失败
+	sanitizeManifestForSSA(manifest)
+
 	data, err := json.Marshal(manifest)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal manifest")
+		return nil, errors.Wrap(err, "marshal manifest to JSON")
 	}
-	var desired map[string]any
-	if err = json.Unmarshal(data, &desired); err != nil {
-		return nil, errors.Wrap(err, "unmarshal manifest")
+
+	if opts.FieldManager == "" {
+		opts.FieldManager = defaultFieldManager
 	}
-	// typed struct 转 unstructured 时，嵌套 metadata 可能带上零值 creationTimestamp
-	sanitizeManifestForSSA(desired)
+	if opts.Force == nil {
+		opts.Force = ptr.To(true)
+	}
+
+	resName := mapx.GetStr(manifest, "metadata.name")
+	return c.Patch(ctx, namespace, resName, types.ApplyPatchType, data, opts)
+}
+
+// upsertMergePatch 使用三路 JSON Merge Patch 创建或更新资源，供联邦集群使用。
+//
+// 与 upsertSSA 的不一致（无法用 Merge Patch 完全复现 SSA）：
+//   - 删除依据是 last-applied 注解，不是 FieldManager：只清「上次本路径写过、本次省略」的字段；
+//     SSA 清的是本 FieldManager 拥有且本次未再 apply 的字段。opts.Force 在此无效，不会抢其他 manager 的字段。
+//   - 资源上还没有 last-applied 时（非本路径创建的存量对象），第一次 upsert 不会删除实况里的多余字段。
+//   - JSON Merge Patch 把数组当成整体替换；SSA 按 schema 可能按 name 合并列表项。
+//   - 会在对象上写入 bkms.tencent.com/last-applied-configuration，SSA 不会。
+func (c *Client) upsertMergePatch(
+	ctx context.Context, namespace string, manifest map[string]any, opts metav1.PatchOptions,
+) (*unstructured.Unstructured, error) {
+	if err := c.validateManifest(manifest); err != nil {
+		return nil, errors.Wrap(err, "validate manifest")
+	}
+
+	desired, err := prepareFederationDesired(manifest)
+	if err != nil {
+		return nil, err
+	}
 
 	if opts.FieldManager == "" {
 		opts.FieldManager = defaultFieldManager
 	}
 	resName := mapx.GetStr(manifest, "metadata.name")
-	patchData, err := json.Marshal(desired)
+
+	live, err := c.Get(ctx, namespace, resName, metav1.GetOptions{})
+	if errors.Is(err, ErrResourceNotFound) {
+		return c.Create(ctx, namespace, desired, metav1.CreateOptions{FieldManager: opts.FieldManager})
+	}
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal merge patch")
+		return nil, err
 	}
+	return c.applyFederationThreeWay(ctx, namespace, resName, desired, live, opts)
+}
 
-	ret, err := c.cli.Resource(c.gvr).Namespace(namespace).Patch(
-		ctx, resName, types.MergePatchType, patchData, opts,
-	)
-	if err == nil {
-		return ret, nil
+func (c *Client) applyFederationThreeWay(
+	ctx context.Context,
+	namespace, name string,
+	desired map[string]any,
+	live *unstructured.Unstructured,
+	opts metav1.PatchOptions,
+) (*unstructured.Unstructured, error) {
+	current, err := json.Marshal(live.Object)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal live object")
 	}
-	if !k8serrors.IsNotFound(err) {
-		return nil, errors.Wrap(err, c.genResActionDesc("patch", c.gvr, namespace, resName))
+	modified, err := json.Marshal(desired)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal desired object")
 	}
-
-	created, createErr := c.Create(ctx, namespace, desired, metav1.CreateOptions{FieldManager: opts.FieldManager})
-	if errors.Is(createErr, ErrResourceAlreadyExists) {
-		return c.Patch(ctx, namespace, resName, types.MergePatchType, patchData, opts)
+	patch, err := jsonmergepatch.CreateThreeWayJSONMergePatch(lastAppliedFromLive(live), modified, current)
+	if err != nil {
+		return nil, errors.Wrap(err, "create three-way merge patch")
 	}
-	return created, createErr
+	return c.Patch(ctx, namespace, name, types.MergePatchType, patch, opts)
 }
 
 // Patch 更新资源

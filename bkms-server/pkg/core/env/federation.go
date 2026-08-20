@@ -19,15 +19,10 @@
 package env
 
 import (
-	"github.com/samber/lo"
-
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
 
 // IsFederationCluster 判断 clusterID 是否在配置的联邦 Host 集群 ID 列表中。
 func IsFederationCluster(clusterID string) bool {
-	if clusterID == "" || config.G == nil {
-		return false
-	}
-	return lo.Contains(config.G.BCS.FederationClusterIDs, clusterID)
+	return (&cluster.Config{ClusterID: clusterID}).IsFederation()
 }
