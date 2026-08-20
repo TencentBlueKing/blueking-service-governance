@@ -28,11 +28,10 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 )
 
 // Service 镜像快照服务
@@ -305,11 +304,9 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		if encryptErr != nil {
 			log.Errorf(ctx, "encrypt credentials for detail sync task %s failed: %v", info.RepoKey, encryptErr)
 			resultMsg = "Snapshot refresh completed, but the detail sync task was not submitted"
-		} else if _, applyErr := worker.ApplyTask(
-			ctx, config.G.RabbitMQ.GetURI(), config.G.RabbitMQ.Queue, TaskImageDetailSync, *detailSyncArgs,
-		); applyErr != nil {
-			log.Errorf(ctx, "apply image detail sync task for %s failed: %v", info.RepoKey, applyErr)
-			return nil, errors.Wrap(applyErr, "apply image detail sync task")
+		} else if enqueueErr := taskq.Enqueue(ctx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
+			log.Errorf(ctx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
+			return nil, errors.Wrap(enqueueErr, "enqueue image detail sync task")
 		} else {
 			resultMsg = "Snapshot refresh completed, and the detail sync task has started asynchronously"
 		}

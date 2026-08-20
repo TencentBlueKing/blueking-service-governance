@@ -16,6 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+// FIXME: 镜像详情同步已迁至 asynq（pkg/workload/image/snapshot.DetailSyncTask）
+// 本文件仅保留 RabbitMQ 存量消费路径，存量队列耗尽后移除此实现
+
 package task
 
 import (

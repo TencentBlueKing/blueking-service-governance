@@ -37,7 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -195,7 +195,7 @@ var _ = Describe("Service", func() {
 						return preparedArgs, nil
 					}).
 					Build()
-				mockey.Mock(worker.ApplyTask).Return("task-id-1", nil).Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
 
 				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
 				Expect(err).NotTo(HaveOccurred())
@@ -293,7 +293,7 @@ var _ = Describe("Service", func() {
 
 				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"core-test-01"}, nil).Build()
-				mockey.Mock(worker.ApplyTask).Return("task-id-1", nil).Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
 
 				result, err := service.RefreshAppSnapshots(ctx, testAppID1, "core-test-01")
 				Expect(err).NotTo(HaveOccurred())
@@ -340,7 +340,7 @@ var _ = Describe("Service", func() {
 						return preparedArgs, nil
 					}).
 					Build()
-				mockey.Mock(worker.ApplyTask).Return("task-id-1", nil).Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
 
 				result, err := service.RefreshRepositorySnapshots(auth.WithMaintenanceUser(ctx), repoName)
 				Expect(err).NotTo(HaveOccurred())
@@ -378,13 +378,13 @@ var _ = Describe("Service", func() {
 				mockey.Mock(NewImageDetailSyncArgs).
 					Return(&ImageDetailSyncArgs{RepoKey: GenerateRepoKey(repoName, "", ""), RepoName: repoName}, nil).
 					Build()
-				mockey.Mock(worker.ApplyTask).Return("", errors.New("rabbitmq unavailable")).Build()
+				mockey.Mock(taskq.Enqueue).Return(errors.New("asynq unavailable")).Build()
 
 				_, err := service.RefreshRepositorySnapshots(auth.WithMaintenanceUser(ctx), repoName)
 
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("apply image detail sync task"))
-				Expect(err.Error()).To(ContainSubstring("rabbitmq unavailable"))
+				Expect(err.Error()).To(ContainSubstring("enqueue image detail sync task"))
+				Expect(err.Error()).To(ContainSubstring("asynq unavailable"))
 			})
 		})
 	})

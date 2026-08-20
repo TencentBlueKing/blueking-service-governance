@@ -40,6 +40,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/helmdeploypoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/polarisapply"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 // Setup 初始化各业务任务 handler 所需依赖, 并将 handler 挂载到给定的 mux。
@@ -67,6 +68,8 @@ func Setup(mux *asynq.ServeMux) error {
 	mux.Handle(depsvcredis.DestroyTask.Name(), depsvcredis.DestroyTask.Handler())
 	// Polaris 动态下发 tasks
 	mux.Handle(polarisapply.DynamicApplyTask.Name(), polarisapply.DynamicApplyTask.Handler())
+	// 镜像详情同步
+	mux.Handle(snapshot.DetailSyncTask.Name(), snapshot.DetailSyncTask.Handler())
 	// 示例任务
 	mux.Handle(example.ExampleTask.Name(), example.ExampleTask.Handler())
 	return nil
