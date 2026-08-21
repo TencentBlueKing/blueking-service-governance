@@ -23,7 +23,7 @@ graph TD
 
 ### 1. 组件定义 (ComponentDef)
 
-**位置**: `apps/bkms-server/pkg/extension/component/entities.go`
+**位置**: `bkms-server/pkg/extension/component/entities.go`
 
 组件定义是组件系统的**模板**，存储在组件市场中，定义了组件的输入输出规范。
 
@@ -53,7 +53,7 @@ type ComponentDef struct {
 
 ### 2. 空间组件 (workspace.Component)
 
-**位置**: `apps/bkms-server/pkg/core/workspace/comp.go`
+**位置**: `bkms-server/pkg/core/workspace/comp.go`
 
 空间组件是**工作空间级别**的组件实例，作为可被多个应用共享的预设配置。
 
@@ -83,7 +83,7 @@ type Component struct {
 
 ### 3. 应用组件 (component.Component)
 
-**位置**: `apps/bkms-server/pkg/extension/component/entities.go`
+**位置**: `bkms-server/pkg/extension/component/entities.go`
 
 应用组件是**应用级别**的组件配置，直接影响应用的部署行为。
 

@@ -63,7 +63,7 @@ Helm / Trpc / TAF 部署生命周期测试都需要拉取工作负载镜像。�
 
 基于 docker-compose 实现的 E2E 测试，可以在安装了 docker 的环境中一键运行所有 API 测试，无需手动启动任何服务。
 
-E2E 栈完全自包含：bkms-server / worker、db-migrate、migration、bruno runner、mongo / redis / rabbitmq、chartmuseum 全部跑在独立的 compose project `bkms-apitest` 与独立网络 `bkms-apitest-net` 中，bkms-server API 宿主端口为 `32402`，与单元测试依赖栈（`tests/utdeps/`、`tests/utdeps_db/`）完全隔离。
+E2E 栈完全自包含：bkms-server / worker、db-migrate、migration、bruno runner、mongo / redis、chartmuseum 全部跑在独立的 compose project `bkms-apitest` 与独立网络 `bkms-apitest-net` 中，bkms-server API 宿主端口为 `32402`，与单元测试依赖栈（`tests/utdeps/`、`tests/utdeps_db/`）完全隔离。
 
 #### 前置条件
 
@@ -138,9 +138,7 @@ just up-podman
 just down-podman
 ```
 
-`just up-podman` / `just up-podman-locbin` 会使用 `podman compose`，并额外叠加 `docker-compose.podman.yaml`。
-
-Podman 模式下会将 `kubernetes.default` 映射为 `host.containers.internal`，同时为 RabbitMQ 添加 rootless Podman 所需的 `userns_mode: "keep-id:uid=999,gid=999"`，避免首次启动 named volume 后 `.erlang.cookie` 属主映射异常导致 broker 启动失败。
+`just up-podman` / `just up-podman-locbin` 会使用 `podman compose`，并将 `kubernetes.default` 映射为 `host.containers.internal` 以触达宿主机上的 K8s apiserver。
 
 #### CI 流水线脚本（参考）
 

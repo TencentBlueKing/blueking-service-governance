@@ -21,7 +21,9 @@ package taskq
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,11 +39,11 @@ import (
 var (
 	// ErrStopRetry 标记不可恢复的失败, 框架停止重试(置为终态失败)。
 	// 业务用法: return errors.Wrap(taskq.ErrStopRetry, "invalid arg")。
-	ErrStopRetry = errors.New("taskq: stop retry")
+	ErrStopRetry = stderrors.New("taskq: stop retry")
 	// ErrFixedRetry 标记"任务仍在进行中", 框架以固定间隔重试(而非指数退避)。
 	// 间隔优先取 TaskType.WithFixedRetryInterval 注册值，否则用 config.Asynq.RetryInterval。
 	// 业务用法: return errors.Wrap(taskq.ErrFixedRetry, "still provisioning")。
-	ErrFixedRetry = errors.New("taskq: retry with fixed interval")
+	ErrFixedRetry = stderrors.New("taskq: retry with fixed interval")
 )
 
 // ExhaustedHandlerFunc 是重试耗尽时的回调函数签名。
@@ -163,16 +165,17 @@ func (t *TaskType[Args]) Handler() asynq.HandlerFunc {
 		)
 		if err != nil {
 			// 负载无法解析属不可恢复, 停止重试。
-			err = wrapStopRetry(errors.Wrapf(err, "unmarshal args for task %q", t.name))
+			err = errors.Wrapf(err, "unmarshal args for task %q", t.name)
 			logHandlerDone(ctx, t.name, taskID, retried, maxRetry, startedAt, err)
-			return err
+			return wrapStopRetry(err)
 		}
 
 		err = t.handler(ctx, args)
-		if err != nil && errors.Is(err, ErrStopRetry) {
-			err = wrapStopRetry(err)
-		}
+		// 先记录业务原始错误, 再叠加框架控制信号, 避免 SkipRetry 哨兵文案混进业务日志
 		logHandlerDone(ctx, t.name, taskID, retried, maxRetry, startedAt, err)
+		if err != nil && errors.Is(err, ErrStopRetry) {
+			return wrapStopRetry(err)
+		}
 		return err
 	}
 }
@@ -182,12 +185,12 @@ func handlerMeta(ctx context.Context) (taskID string, retried, maxRetry int) {
 	taskID, _ = asynq.GetTaskID(ctx)
 	retried, _ = asynq.GetRetryCount(ctx)
 	maxRetry, _ = asynq.GetMaxRetry(ctx)
-	return
+	return taskID, retried, maxRetry
 }
 
 // formatHandlerArgs 把已反序列化的 Args 拼进 start 日志：实现了 fmt.Stringer 才输出，否则为空
-func formatHandlerArgs[Args any](args Args) string {
-	s, ok := any(args).(fmt.Stringer)
+func formatHandlerArgs(args any) string {
+	s, ok := args.(fmt.Stringer)
 	if !ok {
 		return ""
 	}
@@ -211,14 +214,15 @@ func logHandlerDone(
 // formatHandlerResult 把执行结果拼进 done 日志，成功时为空
 // ErrFixedRetry 表示任务仍在进行中而非失败，单独标记，避免长轮询任务刷出大量 err 日志
 func formatHandlerResult(err error) string {
-	switch {
-	case err == nil:
+	if err == nil {
 		return ""
-	case errors.Is(err, ErrFixedRetry):
-		return " in_progress=" + err.Error()
-	default:
-		return " err=" + err.Error()
 	}
+	// 错误信息可能多行(如 errors.Join 以 \n 拼接)，压成单行，否则日志采集侧会把一条日志切成多条
+	msg := strings.ReplaceAll(err.Error(), "\n", "; ")
+	if errors.Is(err, ErrFixedRetry) {
+		return " in_progress=" + msg
+	}
+	return " err=" + msg
 }
 
 // NewTask 产出一个可投递的任务实例。

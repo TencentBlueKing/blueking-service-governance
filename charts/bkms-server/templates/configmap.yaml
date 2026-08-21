@@ -1,6 +1,5 @@
 {{- $db := fromYaml (include "bkms-server.database.default" .) -}}
 {{- $redis := fromYaml (include "bkms-server.redis.default" .) -}}
-{{- $mq := fromYaml (include "bkms-server.rabbitmq.default" .) -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -36,14 +35,5 @@ data:
       queue: {{ .Values.svcConf.asynq.queue }}
       maxRetry: {{ .Values.svcConf.asynq.maxRetry }}
       retryInterval: {{ .Values.svcConf.asynq.retryInterval }}
-    # rabbitmq 相关配置
-    rabbitmq:
-      host: {{ $mq.host }}
-      port: {{ $mq.port }}
-      username: {{ $mq.username }}
-      password: {{ $mq.password }}
-      vhost: {{ $mq.vhost }}
-      queue: {{ $mq.queue }}
-      prefetch: {{ $mq.prefetch }}
     # 业务相关配置
     {{- toYaml (omit .Values.svcConf "asynq") | nindent 4 }}

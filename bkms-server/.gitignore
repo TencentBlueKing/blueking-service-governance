@@ -2,7 +2,6 @@ tests/utdeps/gitea
 tests/utdeps/charts/repo/*.tgz
 tests/.env
 /tests/utdeps_db/mongo8/*
-/tests/utdeps_db/rabbitmq/*
 specs
 docs/reqs
 

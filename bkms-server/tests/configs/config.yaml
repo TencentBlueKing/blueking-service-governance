@@ -106,15 +106,6 @@ redis:
   port: 6379
   db: 0
   password: bkms_svr_e2e
-# RabbitMQ 相关配置
-rabbitmq:
-  host: rabbitmq
-  port: 5672
-  username: admin
-  password: bkms_svr_e2e
-  vhost: /
-  queue: bkms-server.worker.async-task
-  prefetch: 25
 # Asynq 通用异步任务框架配置
 asynq:
   redis:

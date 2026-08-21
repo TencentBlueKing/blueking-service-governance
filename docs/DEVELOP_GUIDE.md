@@ -10,7 +10,7 @@
 
 - 一台 Linux 系统服务器（建议使用 DevCloud 机器）
 - docker & docker-compose（或其他类似服务）
-	- 用于启动 MongoDB、RabbitMQ 等数据库依赖
+	- 用于启动 MongoDB、Redis 等数据库依赖
 - Go 语言运行环境（推荐使用 [gvm](https://github.com/moovweb/gvm) 管理多版本）
 - Node.js 运行环境（推荐 18 以上，建议使用 [nvm](https://github.com/nvm-sh/nvm) 管理版本）
 
@@ -33,10 +33,8 @@
 
 - `MongoDB`：数据库，大多数服务依赖
 	- *本文档使用端口：`27117`*
-- `Redis`：缓存服务，部分服务依赖
+- `Redis`：缓存服务，同时作为异步任务框架（asynq）的后端，部分服务依赖
     - *本文档使用端口：`26379`*
-- `RabbitMQ`：队列服务，部分服务依赖
-	- *本文档使用端口：`25672`*
 - `etcd`：trpc-go 服务注册与发现插件依赖
 	- *本文档使用端口：`29379`*
 
@@ -60,16 +58,6 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD}
     ports:
       - "26379:6379"
-  rabbitmq:
-    image: "rabbitmq:3.13.7"
-    volumes:
-      - /home/bkmsusr/sysapps_store/rabbitmq:/var/lib/rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-    ports:
-      - "25672:5672" # AMQP port
-      - "15672:15672" # Management UI port
   etcd:
     image: 'bitnami/etcd:3.5.15'
     environment:
@@ -91,7 +79,6 @@ services:
 ```
 MONGO_ROOT_PASSWORD={某个随机生成的密码}
 REDIS_PASSWORD={某个随机生成的密码}
-RABBITMQ_PASSWORD={某个随机生成的密码}
 ```
 
 准备好配置文件后，执行 `docker-compose up -d` 来启动所有依赖服务。
@@ -111,7 +98,6 @@ xx.xx.xx.xx   local-dev.bkms.example.com
 
 - MongoDB：27117
 - Redis：26379 
-- RabbitMQ：25672
 - etcd：29379
 - bkms-server: 31302
 - ui: 5173
@@ -120,7 +106,7 @@ xx.xx.xx.xx   local-dev.bkms.example.com
 
 #### bkms-server
 
-进入项目的 `apps/bkms-server` 目录，设置以下环境变量：
+进入项目的 `bkms-server` 目录，设置以下环境变量：
 
 ```bash
 # 服务发现 etcd 地址
@@ -177,16 +163,23 @@ redis:
   # dialTimeout: 5
   # readTimeout: 2
   # writeTimeout: 2
-# RabbitMQ 相关配置，主要用于消息队列
-rabbitmq:
-  host: 127.0.0.1
-  port: 25672
-  username: admin
-  password: {PASS}
-  # 推荐使用具体的 vhost 如：bkms-server
-  # 需要手动登录 rabbitmq 管理界面创建
-  # 本地开发也可以直接使用 / 这个 vhost
-  vhost: /
+# Asynq 通用异步任务框架配置，worker 消费异步任务所必需
+asynq:
+  # 独立 Redis 连接配置，建议与缓存用的 redis 分库，避免 key 相互干扰
+  redis:
+    host: 127.0.0.1
+    port: 26379
+    db: 1
+    password: {PASS}
+  # asynq server 并发 worker 数
+  concurrency: 10
+  # 默认队列名（任务未在代码中指定队列时的兜底）
+  # 多套本地/测试环境共用同一 Redis 时，各环境应配置不同队列名以避免互相抢任务
+  queue: default
+  # 默认最大重试次数（任务未在代码中指定 maxRetry 时的兜底）
+  maxRetry: 10
+  # "进行中"固定重试的默认间隔（秒）
+  retryInterval: 5
 # 轮询相关配置
 taskPoller:
   # 部署状态

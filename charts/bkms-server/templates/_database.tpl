@@ -39,25 +39,3 @@ writeTimeout: {{ $redis.writeTimeout | default $redisDefault.writeTimeout | requ
 {{- define "bkms-server.redis.default" -}}
 {{ include "bkms-server.redis" (list . "default") }}
 {{- end -}}
-
-{{/*
-Default basic rabbitmq configuration, handling external rabbitmq scenarios
-*/}}
-{{- define "bkms-server.rabbitmq" -}}
-{{- $root := first . -}}
-{{- $name := last . -}}
-{{- $values := $root.Values -}}
-{{- $mq := index $values.externalRabbitMQ $name -}}
-{{- $mqDefault := $values.externalRabbitMQ.default -}}
-host: {{ $mq.host | default $mqDefault.host | required (printf "externalRabbitMQ.%s.host is required" $name) }}
-port: {{ $mq.port | default $mqDefault.port | required (printf "externalRabbitMQ.%s.port is required" $name) }}
-username: {{ $mq.username | default $mqDefault.username | required (printf "externalRabbitMQ.%s.username is required" $name) }}
-password: {{ $mq.password | default $mqDefault.password | required (printf "externalRabbitMQ.%s.password is required" $name) }}
-vhost: {{ $mq.vhost | default $mqDefault.vhost | required (printf "externalRabbitMQ.%s.vhost is required" $name) }}
-queue: {{ $mq.queue | default $mqDefault.queue | required (printf "externalRabbitMQ.%s.queue is required" $name) }}
-prefetch: {{ $mq.prefetch | default $mqDefault.prefetch | required (printf "externalRabbitMQ.%s.prefetch is required" $name) }}
-{{- end -}}
-
-{{- define "bkms-server.rabbitmq.default" -}}
-{{ include "bkms-server.rabbitmq" (list . "default") }}
-{{- end -}}

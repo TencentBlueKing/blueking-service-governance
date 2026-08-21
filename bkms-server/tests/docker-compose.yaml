@@ -71,8 +71,6 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_started
-      rabbitmq:
-        condition: service_healthy
       chartmuseum-init:
         condition: service_completed_successfully
       migration:
@@ -100,8 +98,6 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_started
-      rabbitmq:
-        condition: service_healthy
       migration:
         condition: service_completed_successfully
       chartmuseum:
@@ -219,29 +215,6 @@ services:
   redis:
     image: "redis:7.4.5"
     command: redis-server --requirepass bkms_svr_e2e
-    networks:
-      - bkms-apitest-net
-
-  rabbitmq:
-    image: "rabbitmq:3.13.7"
-    environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: bkms_svr_e2e
-    healthcheck:
-      # 探针不走 entrypoint，默认以镜像用户 root 执行，而 broker 已被 entrypoint 用 gosu 降权到
-      # rabbitmq(999)。rabbitmq-diagnostics 会在 .erlang.cookie 缺失时自行创建（属主 root、权限 400），
-      # 若它抢在 broker 的 prelaunch 之前跑完，broker 读 cookie 就会 eacces 并 BOOT FAILED。
-      # entrypoint 的 chown 只在容器启动瞬间执行一次，无法修正之后新建的 cookie，
-      # start_period 也只影响失败计数、不阻止探测，因此必须让探针与 broker 同为 999。
-      test:
-        [
-          "CMD-SHELL",
-          "gosu rabbitmq rabbitmq-diagnostics -q listeners | grep -q 'port: 5672'",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
     networks:
       - bkms-apitest-net
 

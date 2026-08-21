@@ -3,7 +3,7 @@ help:
     @echo ""
     @echo "  just up                Start the API test stack (compose up -d)"
     @echo "  just up-locbin         Start the stack with a locally built bkms-server binary"
-    @echo "  just up-podman         Start the API test stack with Podman overrides"
+    @echo "  just up-podman         Start the API test stack with Podman"
     @echo "  just up-podman-locbin  Start the Podman stack with a locally built bkms-server binary"
     @echo "  just down              Stop the stack (compose down -v --remove-orphans)"
     @echo "  just down-podman       Stop the Podman stack (compose down -v --remove-orphans)"
@@ -14,7 +14,7 @@ help:
     @echo "  just e2e-logs          Show bruno e2e logs"
     @echo "  just e2e-logs-tail [N] Show last N lines of bruno e2e logs (default 100)"
     @echo "  just e2e-logs-failures Show failed bruno e2e requests with assertion reasons"
-    @echo "  just dump-logs [N]     Dump tail logs of bkms-server/worker/db-migrate/migration/chartmuseum/rabbitmq (default 200)"
+    @echo "  just dump-logs [N]     Dump tail logs of bkms-server/worker/db-migrate/migration/chartmuseum (default 200)"
 
 COMPOSE := "docker-compose -p bkms-apitest"
 PODMAN_COMPOSE := "podman compose -p bkms-apitest"
@@ -62,13 +62,14 @@ up:
 up-locbin:
     @just _up locbin "{{COMPOSE}}" "-f docker-compose.yaml" ""
 
-# Bring up the API test stack with Podman-specific compatibility overrides.
+# Bring up the API test stack with Podman: podman compose + 宿主 apiserver 走
+# host.containers.internal，不再需要额外的 compose 覆盖文件。
 up-podman:
-    @just _up normal "{{PODMAN_COMPOSE}}" "-f docker-compose.yaml -f docker-compose.podman.yaml" "host.containers.internal"
+    @just _up normal "{{PODMAN_COMPOSE}}" "-f docker-compose.yaml" "host.containers.internal"
 
 # Bring up the Podman API test stack with a locally built bkms-server binary.
 up-podman-locbin:
-    @just _up locbin "{{PODMAN_COMPOSE}}" "-f docker-compose.yaml -f docker-compose.podman.yaml" "host.containers.internal"
+    @just _up locbin "{{PODMAN_COMPOSE}}" "-f docker-compose.yaml" "host.containers.internal"
 
 _up mode compose_cmd compose_files kubernetes_host:
     #!/usr/bin/env bash
@@ -134,7 +135,7 @@ down:
 
 # Tear down the Podman API test stack (containers + volumes + orphans).
 down-podman:
-    {{PODMAN_COMPOSE}} -f docker-compose.yaml -f docker-compose.podman.yaml down -v --remove-orphans
+    {{PODMAN_COMPOSE}} -f docker-compose.yaml down -v --remove-orphans
 
 # Stop services without removing containers (logs preserved).
 stop:
@@ -259,7 +260,7 @@ e2e-logs-failures:
 dump-logs lines="200":
     #!/usr/bin/env bash
     set -u
-    for svc in bkms-server bkms-worker db-migrate migration chartmuseum chartmuseum-init rabbitmq; do
+    for svc in bkms-server bkms-worker db-migrate migration chartmuseum chartmuseum-init; do
         echo "=========================================="
         echo "=== docker-compose logs ${svc} (tail {{lines}}) ==="
         echo "=========================================="

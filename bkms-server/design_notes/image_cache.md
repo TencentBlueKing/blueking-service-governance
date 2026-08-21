@@ -48,11 +48,11 @@
    - 将获取到的 Tag 批量 Upsert 到 MongoDB（此时详情字段为空）。
    - 删除本地存在但远程已消失的 Tag 记录。
 4. 状态流转：更新状态为 `idle`，记录 `LastRefreshedAt`。
-5. 派发详情同步任务：将详情同步任务（`ImageDetailSync`）发送到 RabbitMQ 消息队列，交由后台 Worker 异步处理。
+5. 派发详情同步任务：将详情同步任务（`taskq.imageDetailSync`）投递到 asynq 队列，交由后台 Worker 异步处理。
 
 ### 3.3 详情同步 (Detail Sync)
 
-该阶段由后台 Worker 消费 RabbitMQ 消息执行，负责拉取镜像的 Digest、Size 等元数据。
+该阶段由后台 Worker 消费 asynq 任务执行，负责拉取镜像的 Digest、Size 等元数据。
 
 1. 并发控制：利用 MongoDB 的原子操作（与标签刷新阶段类似）尝试将状态置为 `detail_syncing`，确保同一仓库同一时间只有一个详情同步任务在运行。
 2. 增量获取：从 MongoDB 查询出需要同步详情的 Tag（如详情字段为空的 Tag，或 `latest` 等可变 Tag）。

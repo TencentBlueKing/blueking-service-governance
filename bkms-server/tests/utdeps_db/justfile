@@ -1,9 +1,7 @@
 up:
     mkdir -p mongo8
-    mkdir -p rabbitmq
     docker-compose up -d
 
 clean:
     docker-compose down -v
     rm -rf mongo8
-    rm -rf rabbitmq

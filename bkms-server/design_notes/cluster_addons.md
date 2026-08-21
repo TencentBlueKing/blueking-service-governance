@@ -13,7 +13,7 @@
 
 ## 数据结构
 
-默认提供的集群插件定义存储于 `apps/bkms-server/pkg/deploy/cluster_addon/assets/addons`
+默认提供的集群插件定义存储于 `bkms-server/pkg/core/env/clusteraddon/assets/addons`
 
 ### MongoDB 集合：cluster_addon_defs
 

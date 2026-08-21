@@ -22,7 +22,6 @@ import (
 	"context"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
@@ -34,7 +33,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
@@ -42,16 +40,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 )
 
-// workerShutdownTimeout 限制进程退出时等待 worker 优雅关闭的最长时间
-const workerShutdownTimeout = 30 * time.Second
-
 // NewWorkerCmd ...
 func NewWorkerCmd() *cobra.Command {
 	var srvCfg string
 
 	workerCmd := cobra.Command{
 		Use:   "worker",
-		Short: "Start the async task worker to process tasks in rabbitmq.",
+		Short: "Start the async task worker to process tasks in asynq.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// 提前监听信号，避免初始化期间信号丢失
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
@@ -99,23 +94,6 @@ func NewWorkerCmd() *cobra.Command {
 				storereg.G().PolarisConfigStore,
 			)
 
-			// 初始化任务管理器
-			wk, err := worker.New(
-				cfg.RabbitMQ.GetURI(),
-				cfg.RabbitMQ.Queue,
-				cfg.RabbitMQ.Prefetch,
-				nil,
-			)
-			if err != nil {
-				return errors.Wrap(err, "new task worker")
-			}
-			defer wk.Close()
-
-			// 启动消费者，开始监听队列
-			if err = wk.Run(ctx); err != nil {
-				return errors.Wrap(err, "start task consumer")
-			}
-
 			// 启动通用任务框架 server: 初始化任务依赖并挂载所有业务任务 handler
 			mux := asynq.NewServeMux()
 			if err = taskqtask.Setup(mux); err != nil {
@@ -133,7 +111,7 @@ func NewWorkerCmd() *cobra.Command {
 			log.Info(ctx, "worker received shutdown signal, starting graceful shutdown...")
 
 			// 优雅退出 worker
-			gracefulShutdown(ctx, wk, taskSrv)
+			gracefulShutdown(ctx, taskSrv)
 			return nil
 		},
 	}
@@ -146,32 +124,11 @@ func NewWorkerCmd() *cobra.Command {
 
 // gracefulShutdown 优雅停止 worker
 //
-// 使用独立超时的 Background context，避免复用已 Done 的 ctx 导致 Stop 立即返回
-func gracefulShutdown(ctx context.Context, wk *worker.Worker, taskSrv taskq.Server) {
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), workerShutdownTimeout)
-	defer cancel()
-
-	// 停止通用任务框架 server(阻塞直至在途任务处理完或内部超时)
+// Shutdown 阻塞直至在途任务处理完或 asynq 内部超时，之后才关闭投递端 client，
+// 避免在途任务链式投递后继任务时 client 已关闭
+func gracefulShutdown(ctx context.Context, taskSrv taskq.Server) {
 	taskSrv.Shutdown()
 	taskq.CloseClient(ctx)
-	log.Info(ctx, "taskq server stopped")
-
-	done := make(chan error, 1)
-	go func() {
-		done <- wk.Stop(shutdownCtx)
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			log.Errorf(ctx, "error stopping task worker: %v", err)
-		} else {
-			log.Info(ctx, "task worker stopped successfully")
-		}
-	case <-shutdownCtx.Done():
-		log.Warn(ctx, "graceful shutdown timeout, forcing exit")
-	}
-
 	log.Info(ctx, "worker shutdown complete")
 }
 

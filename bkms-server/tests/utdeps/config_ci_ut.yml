@@ -97,17 +97,6 @@ redis:
   port: 6379
   db: 8
   password: utdepspass
-# RabbitMQ 相关配置，用于异步任务
-rabbitmq:
-  host: rabbitmq
-  port: 5672
-  username: admin
-  password: utdepspass
-  vhost: bkms-server
-  # 消息队列名称
-  queue: bkms-server.worker.async-task
-  # 消费者预取数量，控制并发处理数
-  prefetch: 25
 # Asynq 通用异步任务框架配置
 asynq:
   redis:

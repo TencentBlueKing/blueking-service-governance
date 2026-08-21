@@ -30,7 +30,7 @@ import (
 // Component 表示工作空间级别的组件实例，仅 tRPC 应用使用。
 //
 // 工作空间组件是一种可被多个环境下的不同应用共享的预设配置（模板）。应用可以：
-//   - 根据组件市场（apps/bkms-server/pkg/extension/component/entities.go/ComponentDef）中的组件定义，实例化出一个组件实例并使用
+//   - 根据组件市场（bkms-server/pkg/extension/component/entities.go/ComponentDef）中的组件定义，实例化出一个组件实例并使用
 //   - 通过 Component.Name 字段引用工作空间组件
 //
 // 引用生效条件：ScopeGlobal=true 或当前环境在 ScopeEnvNames 列表中

@@ -2,8 +2,7 @@
 
 > **当前状态**：PR1 / PR2 / PR3 / PR4 / PR5 均已落地。本文档以「**当前仓库状态**」为视角描述权限相关代码的分层与职责，不是
 > changelog。
-> **历史背景**：authmanager 微服务已以「蚂蚁搬家」方式完整合并进 bkms-server，`apps/bkms-server` 中对原 authmanager PB
-> 模块的引用已经归零。
+> **历史背景**：authmanager 微服务已以「蚂蚁搬家」方式完整合并进 bkms-server，仓库内对原 authmanager PB 模块的引用已经归零。
 
 ---
 
@@ -17,13 +16,13 @@ v2 gin 风格调用模式（无 trpc handler、无 PB 类型外泄）。
 ### 1.2 三层架构（当前形态）
 
 ```
-apps/bkms-server/pkg/
+bkms-server/pkg/
 ├── infras/cloudapi/iam/        # L1: 蓝鲸 IAM 网关 HTTP 客户端（最底层）
-├── bkintegrations/iam/         # L2: IAM 领域服务（角色 / 范围 / 编排）
+├── bkintegrations/bkiam/         # L2: IAM 领域服务（角色 / 范围 / 编排）
 │   ├── role/                    #   └─ 角色领域类型 + Mongo 存储
 │   ├── scope/                   #   └─ 可授权范围生成器 + JSON 模板
 │   ├── actions/                 #   └─ 资源操作枚举
-│   ├── dto.go                   #   └─ 纯 Go DTO（替代原 PB 类型）
+│   ├── dto.go                   #   └─ 纯 Go DTO
 │   ├── service.go               #   └─ IAMService 编排层
 │   └── migrate/                 #   └─ IAM 模型迁移库（由 cmd 子命令调用）
 └── infras/perm/                # L3: 业务侧权限管理器入口
@@ -41,11 +40,11 @@ pkg/infras/perm.NewManager() -> perm.Manager
 pkg/infras/perm.LocalManager
     │
     ▼
-pkg/bkintegrations/iam.IAMService
+pkg/bkintegrations/bkiam.IAMService
     │
-    ├──▶ pkg/bkintegrations/iam/role.RoleStoreMongo (复用全局 mongo client)
-    ├──▶ pkg/bkintegrations/iam/scope
-    └──▶ pkg/bkintegrations/iam/actions
+    ├──▶ pkg/bkintegrations/bkiam/role.RoleStoreMongo (复用全局 mongo client)
+    ├──▶ pkg/bkintegrations/bkiam/scope
+    └──▶ pkg/bkintegrations/bkiam/actions
                 │
                 ▼
         pkg/infras/cloudapi/iam.IAMClient
@@ -125,18 +124,17 @@ L1 层只负责 **协议交互**，不包含任何业务领域语义：
 
 - 仅依赖 `pkg/common/config`、蓝鲸 SDK（`bk-apigateway-sdks` / `iam-go-sdk`）、通用工具（`pkg/errors`、`mapstructure`）
 - **不引入** bkms-server 其他业务包，避免循环依赖
-- **不引用** 原 authmanager PB 模块（已通过 `grep -rn "proto/authmanager" pkg/infras/cloudapi/iam` 验证为零）
 
 ---
 
-## 3. 当前已落地的层：`pkg/bkintegrations/iam/{role,scope,actions}`
+## 3. 当前已落地的层：`pkg/bkintegrations/bkiam/{role,scope,actions}`
 
 L2 层中下半段三个领域子包，负责角色持久化、可授权范围生成、资源操作枚举等领域能力，供 L2 层 `IAMService` 与 migrate 库复用。
 
 ### 3.1 目录结构
 
 ```
-pkg/bkintegrations/iam/
+pkg/bkintegrations/bkiam/
 ├── role/
 │   ├── types.go            # 领域类型：ResourceType / WorkspaceResourceType / PermissionScope / Role / WorkspaceGradeManager / RoleQueryParams
 │   ├── builtin.go          # BuiltinRoleCode（admin/developer/sre/operator） + WorkspaceScopeBuiltinRoles
@@ -160,12 +158,12 @@ pkg/bkintegrations/iam/
 
 ### 3.2 子包职责
 
-| 子包                | 职责                                | 外部依赖                                                                                  |
-|-------------------|-----------------------------------|---------------------------------------------------------------------------------------|
-| `role/`           | 角色 / 分级管理员领域模型 + Mongo 存储         | 标准库 + `mongo-driver/v2` + `pkg/errors`                                                |
-| `scope/`          | 可授权范围生成（1 接口 + 7 个业务系统 generator） | `cloudapi/iam/types` + `bkintegrations/iam/role` + `common/config` + `scope/template` |
-| `scope/template/` | 模板资源与路径 helper                    | `bkintegrations/iam/role`（仅取 `BuiltinRoleCode`）+ 标准库                                  |
-| `actions/`        | 资源操作 ID 常量枚举                      | 标准库（零依赖）                                                                              |
+| 子包                | 职责                                | 外部依赖                                                                                    |
+|-------------------|-----------------------------------|-----------------------------------------------------------------------------------------|
+| `role/`           | 角色 / 分级管理员领域模型 + Mongo 存储         | 标准库 + `mongo-driver/v2` + `pkg/errors`                                                  |
+| `scope/`          | 可授权范围生成（1 接口 + 7 个业务系统 generator） | `cloudapi/iam/types` + `bkintegrations/bkiam/role` + `common/config` + `scope/template` |
+| `scope/template/` | 模板资源与路径 helper                    | `bkintegrations/bkiam/role`（仅取 `BuiltinRoleCode`）+ 标准库                                  |
+| `actions/`        | 资源操作 ID 常量枚举                      | 标准库（零依赖）                                                                                |
 
 依赖边界为**单向**：`scope` 只能引用 `role` 与 `scope/template`；`role` 不引用 `scope`/`actions`/`cloudapi/iam`；`actions`
 不引用任何其他项目包。
@@ -174,11 +172,11 @@ pkg/bkintegrations/iam/
 
 为了与线上数据兼容，**集合名与原 authmanager 完全一致**：
 
-| 集合                  | 索引                                    | 类型    | 用途                                                          |
-|---------------------|---------------------------------------|-------|-------------------------------------------------------------|
-| `iam_grade_manager` | `{workspaceID: 1}`                  | 唯一    | 保证每个 workspace 仅一个分级管理员；Get/Delete WorkspaceGradeManager 加速 |
-| `iam_role`          | `{id: 1}`                             | 唯一    | 角色 ID 业务唯一；GetRoleByID 加速                                   |
-| `iam_role`          | `{workspaceID: 1, userGroupID: 1}`    | 复合非唯一 | DeleteRolesByUserGroupIDs 与 ListRoles 按 workspace 过滤加速      |
+| 集合                  | 索引                                 | 类型    | 用途                                                          |
+|---------------------|------------------------------------|-------|-------------------------------------------------------------|
+| `iam_grade_manager` | `{workspaceID: 1}`                 | 唯一    | 保证每个 workspace 仅一个分级管理员；Get/Delete WorkspaceGradeManager 加速 |
+| `iam_role`          | `{id: 1}`                          | 唯一    | 角色 ID 业务唯一；GetRoleByID 加速                                   |
+| `iam_role`          | `{workspaceID: 1, userGroupID: 1}` | 复合非唯一 | DeleteRolesByUserGroupIDs 与 ListRoles 按 workspace 过滤加速      |
 
 索引在 `NewRoleStoreMongo` 里通过 `Indexes().CreateMany` 创建，已存在则由 mongo driver 自动跳过，对已上线数据库无破坏性。
 
@@ -193,15 +191,15 @@ pkg/bkintegrations/iam/
 
 ---
 
-## 4. 当前已落地的层：`pkg/bkintegrations/iam`（编排 + DTO + migrate）
+## 4. 当前已落地的层：`pkg/bkintegrations/bkiam`（编排 + DTO + migrate）
 
-在 L2 三个领域子包之上，`pkg/bkintegrations/iam` 提供 `IAMService` 编排层、纯 Go DTO 与 `migrate` 库子包。业务侧
+在 L2 三个领域子包之上，`pkg/bkintegrations/bkiam` 提供 `IAMService` 编排层、纯 Go DTO 与 `migrate` 库子包。业务侧
 `pkg/infras/perm` 入口包直接调用 `IAMService` 完成鉴权与角色生命周期管理。
 
 ### 4.1 目录结构
 
 ```
-pkg/bkintegrations/iam/
+pkg/bkintegrations/bkiam/
 ├── dto.go                 # 纯 Go DTO（WorkspaceData / 各业务系统 Options / BSCPService）
 │                          # Role / PermissionScope 通过 type alias 复用 role 子包，避免重复
 ├── service.go             # IAMService 编排：构造函数 NewIAMService(client, store)
@@ -239,53 +237,19 @@ pkg/bkintegrations/iam/
 func NewIAMService(client cloudapiiam.IAMClient, store role.RoleStore) *IAMService
 ```
 
-### 4.3 纯 Go DTO ↔ 原 authmanager PB 字段映射
+### 4.3 纯 Go DTO
 
-本包不再依赖原 authmanager PB 模块，取而代之的是 `dto.go` 中定义的纯 Go 结构体。下表给出与 PR4 桥接适配器对接时所需的字段对应关系。
+本包对外暴露的请求 / 响应类型全部是 `dto.go` 中定义的纯 Go 结构体，不依赖任何 PB 模块。字段定义以代码为准，此处只记录结构约定。
 
-#### `WorkspaceData`
+- `WorkspaceData`：创建 / 更新 workspace 分级管理员与内置角色所需的全部信息。除 `WorkspaceID` / `WorkspaceName` 外，
+  `BKCI` / `BCS` / `BKMonitor` / `BKLog` / `BKRepo` / `BSCP` 六个业务系统字段均为可选指针，为 nil 时跳过对应的可授权范围生成器
+- 各业务系统 Options 结构对称：BKCI / BCS / BKRepo 为 `{ProjectID, ProjectName}`，BKMonitor / BKLog 为
+  `{SpaceID, SpaceName}`，BSCP 为 `{BizID, BizName, Services}`，其中 `Services` 是 `[]BSCPService{ID, Name}`
 
-| 纯 Go DTO 字段     | PB 字段                         | 类型                  |
-|-----------------|-------------------------------|---------------------|
-| `WorkspaceID`   | `WorkspaceId` / `WorkspaceID` | `string`            |
-| `WorkspaceName` | `WorkspaceName`               | `string`            |
-| `BKCI`          | `Bkci`                        | `*BKCIOptions`      |
-| `BCS`           | `Bcs`                         | `*BCSOptions`       |
-| `BKMonitor`     | `Bkmonitor`                   | `*BKMonitorOptions` |
-| `BKLog`         | `Bklog`                       | `*BKLogOptions`     |
-| `BKRepo`        | `Bkrepo`                      | `*BKRepoOptions`    |
-| `BSCP`          | `Bscp`                        | `*BSCPOptions`      |
-
-#### `Role`（type alias `= role.Role`）
-
-| 纯 Go DTO 字段      | PB 字段            | 类型                              |
-|------------------|------------------|---------------------------------|
-| `ID`             | `Id`             | `string`                        |
-| `Name`           | `Name`           | `string`                        |
-| `RoleCode`       | `RoleCode`       | `string`                        |
-| `Description`    | `Description`    | `string`                        |
-| `WorkspaceID`    | `WorkspaceID`    | `string`                        |
-| `IsGradeManager` | `IsGradeManager` | `bool`                          |
-| `Scope`          | `Scope`          | `PermissionScope`（值类型，而非指针）     |
-| `UserGroupID`    | `UserGroupID`    | `int`（PB 中为 `int32`，转换由桥接适配器负责） |
-
-#### `PermissionScope`（type alias `= role.PermissionScope`）
-
-| 纯 Go DTO 字段    | PB 字段          | 类型                                    |
-|----------------|----------------|---------------------------------------|
-| `ResourceType` | `ResourceType` | `role.ResourceType`（在 PB 中为 `string`） |
-| `ResourceID`   | `ResourceID`   | `string`                              |
-
-#### 各业务系统 Options（结构对称）
-
-- `BKCIOptions{ProjectID, ProjectName}`、`BCSOptions{ProjectID, ProjectName}`、`BKRepoOptions{ProjectID, ProjectName}`
-- `BKMonitorOptions{SpaceID, SpaceName}`、`BKLogOptions{SpaceID, SpaceName}`
-- `BSCPOptions{BizID, BizName, Services}`，其中 `Services` 是 `[]BSCPService{ID, Name}`（PB 中字段名 `Id` 在 DTO 中规范化为
-  `ID`）
-
-**字段范围验证依据**：DTO 字段集在设计阶段对照过 bkms-server 仅有的 2 个 PB 构造点：
-`pkg/extension/bscpcfg/service/permission.go` 与 `pkg/server/task/workspace.go`。两个调用点已改为直接构造 DTO 后调用
-`perm.Manager`。
+**构造点**：`WorkspaceData` 当前有 5 处构造，新增字段时以这几处为对照——`pkg/infras/perm/local.go` 的
+`CreateWorkspaceAdmin` / `CreateWorkspaceScopeBuiltinRoles`（由标量入参组装，只填 BKCI / BCS / BKRepo）、
+`pkg/server/taskqtask/workspace/handler.go`、`pkg/extension/bscpcfg/service/permission.go`，以及迁移命令
+`cmd/migration/refresh_workspace_bkmonitor_perms.go`。
 
 ### 4.4 migrate 子包
 
@@ -309,8 +273,8 @@ migrate 子包负责把 IAM 系统模型（resource_type / instance_selection / 
 - **常量化魔数**：IAM 资源类型字符串（`workspace` / `app` / `env`）、subject 类型（`user`）、`_bk_iam_path_` 属性键、
   `/workspace,%s/` 父路径模板均提取为 const
 - **空接口**：统一使用 `any`（如 `_bk_iam_path_` 的属性值 map）
-- **零循环依赖**：本包仅依赖 `pkg/infras/cloudapi/iam{,/types}`、`pkg/bkintegrations/iam/{role,scope,actions}`、
-  `pkg/common/config` 与第三方库；**不**依赖 `pkg/server/*`、`pkg/core/*`、`pkg/infras/authmanager`、`pkg/infras/perm`
+- **零循环依赖**：本包仅依赖 `pkg/infras/cloudapi/iam{,/types}`、`pkg/bkintegrations/bkiam/{role,scope,actions}`、
+  `pkg/common/config` 与第三方库；**不**依赖 `pkg/server/*`、`pkg/core/*`、`pkg/infras/perm`
 
 ### 4.6 单测组织
 
@@ -336,7 +300,7 @@ migrate 子包负责把 IAM 系统模型（resource_type / instance_selection / 
 ```
 pkg/infras/perm/
 ├── perm.go              # Manager 接口（共 23 个方法）+ NewManager() 工厂（仅 UseStubPerm 一段分支 + 单例缓存）
-├── local.go             # LocalManager：通过 iamServicer 接口转发到 iam.IAMService
+├── local.go             # LocalManager：通过 iamServicer 接口转发到 bkiam.IAMService
 ├── stub.go              # StubAllowAnyManager：本地开发桩，全部放行 + 4 个固定 UUID 角色
 ├── action.go            # WorkspaceAction / AppAction / EnvAction 常量
 ├── roles.go             # RoleCodeAdmin / Sre / Developer / Operator + IsValidRoleCode / RoleCodes
@@ -348,12 +312,12 @@ pkg/infras/perm/
 
 ### 5.2 包职责
 
-| 类型                    | 职责                                                                                                                  |
-|-----------------------|---------------------------------------------------------------------------------------------------------------------|
-| `Manager` 接口          | 业务侧权限管理器入口（v2 风格），所有方法签名完全使用 `pkg/bkintegrations/iam` 的纯 Go DTO（`*role.Role` / `iam.WorkspaceData`），**不**引用任何 PB 模块 |
-| `LocalManager`        | `Manager` 的进程内本地实现：内部从 ctx 通过 `auth.GetUser` 取 user，再调用 `iam.IAMService.*IsAllowed` / `*ActionIsAllowed` 等          |
-| `StubAllowAnyManager` | 本地开发与测试桩；全部 `Has*Perm` 返回 `nil`、`FilterViewable*` 返回入参全集、`ListRoles` 返回 4 个固定 UUID 角色                               |
-| `iamServicer`（包内私有接口） | 收敛 `LocalManager` 真正用到的 `iam.IAMService` 方法集合，便于阅读与单测替换；编译期校验 `var _ iamServicer = (*iam.IAMService)(nil)`          |
+| 类型                    | 职责                                                                                                                                                                                                  |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Manager` 接口          | 业务侧权限管理器入口（v2 风格），返回值与 DTO 型入参均取自 `pkg/bkintegrations/bkiam`（`*role.Role` / `bkiam.WorkspaceData`）；`Update*` 系列直接收 DTO，`Create*` 系列仍收标量入参（workspaceID / bkCIProjectID 等），由 `LocalManager` 内部组装成 DTO |
+| `LocalManager`        | `Manager` 的进程内本地实现：内部从 ctx 通过 `auth.GetUser` 取 user，再调用 `bkiam.IAMService.*IsAllowed` / `*ActionIsAllowed` 等                                                                                        |
+| `StubAllowAnyManager` | 本地开发与测试桩；全部 `Has*Perm` 返回 `nil`、`FilterViewable*` 返回入参全集、`ListRoles` 返回 4 个固定 UUID 角色                                                                                                               |
+| `iamServicer`（包内私有接口） | 收敛 `LocalManager` 真正用到的 `bkiam.IAMService` 方法集合，便于阅读与单测替换；编译期校验 `var _ iamServicer = (*bkiam.IAMService)(nil)`                                                                                      |
 
 ### 5.3 NewManager() 实现
 
@@ -371,7 +335,7 @@ buildManager()
   └── else:
           cli   <- cloudapi/iam.NewIAMClient()     # 蓝鲸 IAM 网关 client
           store <- role.NewRoleStoreMongo(database.Client(), database.Name())  # Mongo 角色存储
-          svc   <- iam.NewIAMService(cli, store)   # IAMService 编排
+          svc   <- bkiam.NewIAMService(cli, store) # IAMService 编排
           return &LocalManager{svc: svc}
 ```
 
@@ -406,7 +370,7 @@ LocalManager.FilterViewableWorkspaces(ctx, ids)
              └── map[wsID]map[action]bool -> 聚合为 *set.StringSet
 
 LocalManager.CreateWorkspaceAdmin(ctx, wsID, displayName, users, bkCIID, bcsID, bkRepoID)
-   └── 拆分参数包装为 iam.WorkspaceData
+   └── 拆分参数包装为 bkiam.WorkspaceData
         └── IAMService.CreateWorkspaceAdmin(ctx, data, users) -> *role.Role（结果丢弃，仅返回 error）
 
 LocalManager.GetRole(ctx, wsID, roleCode)
@@ -440,14 +404,14 @@ LocalManager.GetRole(ctx, wsID, roleCode)
 
 ### 5.8 内部约定
 
-- **零 PB 依赖**：`pkg/infras/perm/` 不 import 任何 PB 模块；所有结构体字段使用 `pkg/bkintegrations/iam` 的纯 Go DTO（
-  `*role.Role` / `iam.WorkspaceData` / `role.PermissionScope`）
+- **纯 Go DTO**：所有结构体字段使用 `pkg/bkintegrations/bkiam` 的纯 Go DTO（`*role.Role` / `bkiam.WorkspaceData` /
+  `role.PermissionScope`）
 - **零反向依赖**：`pkg/infras/perm/` 不 import `pkg/server/*`、`pkg/core/*`
 - **错误处理**：全部使用 `pkg/errors.Wrap` / `Wrapf`，禁用 `fmt.Errorf` 包错
 - **常量化**：错误信息模板、stub 角色 UUID、stub user-group ID 全部提取为 `const`
 - **空接口**：统一使用 `any`
 - **接口编译期检查**：`var _ Manager = (*LocalManager)(nil)`、`var _ Manager = (*StubAllowAnyManager)(nil)`、
-  `var _ iamServicer = (*iam.IAMService)(nil)`
+  `var _ iamServicer = (*bkiam.IAMService)(nil)`
 
 ---
 
@@ -467,7 +431,7 @@ bkms-server migrate_iam_system_model \
 
 - `--srvCfg`（必填）：bkms-server 配置文件路径
 - `--bkms-host`（必填）：IAM 回调 bkms-server 的外部可达 URL，会渲染到系统模型的 `provider_config.host`
-- 实现：基于 `pkg/bkintegrations/iam/migrate.Migrate(mongoCfg, iamCfg)`，迁移历史记录在 `iam_schema_migrations` 集合（与
+- 实现：基于 `pkg/bkintegrations/bkiam/migrate.Migrate(mongoCfg, iamCfg)`，迁移历史记录在 `iam_schema_migrations` 集合（与
   bkms 业务集合无关）
 
 ### 6.2 `migrate_iam_data`
@@ -505,11 +469,11 @@ pkg/infras/perm.NewManager()
    ▼
 pkg/infras/perm.LocalManager
    ▼
-pkg/bkintegrations/iam.IAMService
+pkg/bkintegrations/bkiam.IAMService
    │
-   ├──▶ pkg/bkintegrations/iam/role.RoleStoreMongo (复用全局 mongo client)
-   ├──▶ pkg/bkintegrations/iam/scope
-   └──▶ pkg/bkintegrations/iam/actions
+   ├──▶ pkg/bkintegrations/bkiam/role.RoleStoreMongo (复用全局 mongo client)
+   ├──▶ pkg/bkintegrations/bkiam/scope
+   └──▶ pkg/bkintegrations/bkiam/actions
             │
             ▼
    pkg/infras/cloudapi/iam.IAMClient
@@ -524,10 +488,10 @@ pkg/bkintegrations/iam.IAMService
 
 ## 8. PR 进度总览
 
-| #   | 分支                 | 主题                                                                 | 状态    |
-|-----|--------------------|--------------------------------------------------------------------|-------|
-| PR1 | `merge-auth-mgr-1` | 底层 IAM 蓝鲸网关 Client → `pkg/infras/cloudapi/iam`                     | ✅ 已完成 |
-| PR2 | `merge-auth-mgr-2` | IAM 角色 / 范围 / 操作动作 → `pkg/bkintegrations/iam/{role,scope,actions}` | ✅ 已完成 |
-| PR3 | `merge-auth-mgr-3` | IAMService 编排 + 纯 Go DTO → `pkg/bkintegrations/iam`                | ✅ 已完成 |
-| PR4 | `merge-auth-mgr-4` | 业务侧入口 `pkg/infras/perm` + 灰度开关 + PB ↔ DTO 桥接                       | ✅ 已完成 |
-| PR5 | `merge-auth-mgr-5` | 业务侧改名 + 删除老 `pkg/infras/authmanager/` + 接入 migrate 子命令             | ✅ 已完成 |
+| #   | 分支                 | 主题                                                                   | 状态    |
+|-----|--------------------|----------------------------------------------------------------------|-------|
+| PR1 | `merge-auth-mgr-1` | 底层 IAM 蓝鲸网关 Client → `pkg/infras/cloudapi/iam`                       | ✅ 已完成 |
+| PR2 | `merge-auth-mgr-2` | IAM 角色 / 范围 / 操作动作 → `pkg/bkintegrations/bkiam/{role,scope,actions}` | ✅ 已完成 |
+| PR3 | `merge-auth-mgr-3` | IAMService 编排 + 纯 Go DTO → `pkg/bkintegrations/bkiam`                | ✅ 已完成 |
+| PR4 | `merge-auth-mgr-4` | 业务侧入口 `pkg/infras/perm` + 灰度开关 + PB ↔ DTO 桥接                         | ✅ 已完成 |
+| PR5 | `merge-auth-mgr-5` | 业务侧改名 + 删除老 `pkg/infras/authmanager/` + 接入 migrate 子命令               | ✅ 已完成 |

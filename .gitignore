@@ -58,7 +58,6 @@ bkms-server/tests/.env
 bkms-server/tests/utdeps/gitea
 bkms-server/tests/utdeps/charts/repo/*.tgz
 bkms-server/tests/utdeps_db/mongo8/*
-bkms-server/tests/utdeps_db/rabbitmq/*
 .playwright-cli/
 /charts/bkms-server/charts/
 /charts/bkms-ui/charts/

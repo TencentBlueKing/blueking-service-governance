@@ -222,7 +222,7 @@ func (c *ComponentRef) GenerateName() string {
 // 如果是引用了某个环境组件，则通过 RefWorkspaceCompName 引用某个环境组件，
 // 此时依赖环境组件的 Properties 渲染出最终的 payload。
 // 最终这些 payload 被应用到实际的资源定义上，完成自定义。
-// 校验逻辑见： apps/bkms-server/pkg/workload/appmodelcore/appmodel/validate.go
+// 校验逻辑见： bkms-server/pkg/workload/appmodelcore/appmodel/validate.go
 type Component struct {
 	// Name 是组件被使用后的自定义名称，用于环境中定义的组件引用
 	// 该字段可能影响到最后渲染出的实例名称，因此不能重复

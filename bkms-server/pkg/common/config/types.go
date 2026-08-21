@@ -227,22 +227,6 @@ type RedisConfig struct {
 	ConnMaxIdleTime int
 }
 
-// RabbitMQConfig RabbitMQ 配置
-type RabbitMQConfig struct {
-	Host     string
-	Port     string
-	Username string
-	Password string
-	Vhost    string
-	Queue    string
-	Prefetch int
-}
-
-// GetURI 返回 RabbitMQ URI
-func (c RabbitMQConfig) GetURI() string {
-	return fmt.Sprintf("amqp://%s:%s@%s:%s/%s", c.Username, url.QueryEscape(c.Password), c.Host, c.Port, c.Vhost)
-}
-
 // AsynqConfig 通用异步任务框架(taskq)的完整配置
 // 各任务可在代码中用 asynq 原生 Option(asynq.MaxRetry/asynq.Timeout 等)覆盖部分默认值。
 // 注意: 当前 server 仅消费 Queue 字段指定的单一队列, 不支持任务级队列覆盖。
@@ -450,8 +434,6 @@ type Config struct {
 	Mongo MongoConfig
 	// Redis 配置
 	Redis RedisConfig
-	// RabbitMQ 配置
-	RabbitMQ RabbitMQConfig
 	// Asynq 通用异步任务框架（taskq）配置
 	Asynq AsynqConfig
 

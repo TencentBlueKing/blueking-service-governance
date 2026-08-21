@@ -36,12 +36,11 @@ import (
 
 // Manager 权限管理器接口
 //
-// Manager 是 bkms-server 业务侧的权限管理器入口（v2 风格）。所有方法签名
-// 完全使用 pkg/bkintegrations/bkiam 中的纯 Go DTO，**不**引用任何生成的
-// PB 模块。
+// Manager 是 bkms-server 业务侧的权限管理器入口（v2 风格）。方法签名中的
+// 领域类型均取自 pkg/bkintegrations/bkiam 的纯 Go DTO。
 //
 // 当前两种实现：
-//   - LocalManager：进程内本地实现，转发到 iam.IAMService -> cloudapi/iam
+//   - LocalManager：进程内本地实现，转发到 bkiam.IAMService -> cloudapi/iam
 //     -> 蓝鲸 IAM 网关
 //   - StubAllowAnyManager：本地开发桩，全部放行
 type Manager interface {

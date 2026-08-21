@@ -25,12 +25,14 @@
 //
 // The DTOs defined in this file are pure-Go request/response types used by
 // the in-process IAM orchestration layer. All public APIs of this package use
-// these DTOs only, so this package does not depend on generated PB modules.
+// these DTOs only.
 //
-// Field coverage of these DTOs is verified against:
-//   - apps/bkms-server/pkg/extension/bscpcfg/service/permission.go
-//   - apps/bkms-server/pkg/server/task/workspace.go
-//   - apps/bkms-server/pkg/infras/perm/{local.go,stub.go}
+// Field coverage of these DTOs is verified against every caller that builds or
+// consumes WorkspaceData:
+//   - pkg/infras/perm/{local.go,stub.go}
+//   - pkg/extension/bscpcfg/service/permission.go
+//   - pkg/server/taskqtask/workspace/handler.go
+//   - cmd/migration/refresh_workspace_bkmonitor_perms.go
 package bkiam
 
 import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"

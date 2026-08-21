@@ -65,12 +65,6 @@ type RefreshResult struct {
 	RemovedTagCnt int64
 }
 
-// 任务名称常量
-const (
-	// TaskImageDetailSync 镜像快照详情同步任务
-	TaskImageDetailSync = "ImageDetailSync"
-)
-
 // ImageDetailSyncArgs 镜像快照详情同步任务参数
 // 凭据字段在构造时即完成加密，对外仅通过 Username() / Password() 方法按需解密
 type ImageDetailSyncArgs struct {

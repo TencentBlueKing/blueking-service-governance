@@ -35,18 +35,6 @@ externalRedis:
     readTimeout: 2
     writeTimeout: 2
 
-## RabbitMQ 相关配置，主要用于消息队列
-externalRabbitMQ:
-  ## 主 RabbitMQ
-  default:
-    host: localhost
-    port: 5672
-    username: guest
-    password: masked
-    vhost: bkms-server
-    queue: bkms-server.worker.async-task
-    prefetch: 25
-
 ## ------------------------------ 部署配置 ------------------------------
 
 ## Web 服务

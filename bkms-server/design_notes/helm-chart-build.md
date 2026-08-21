@@ -17,7 +17,7 @@
 
 依次完成 semver 递增 → 流水线/代码库/凭证初始化 → 触发蓝盾构建 → 构建记录落库 → 启动异步轮询。
 
-### 异步轮询 (PollingHelmChartBuildStatus)
+### 异步轮询 (taskq.pollingHelmChartBuildStatus)
 
 每 5s 轮询蓝盾构建状态，状态变更时持久化到 DB；终态时退出轮询并记录审计。
 
