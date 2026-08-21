@@ -95,6 +95,17 @@ var _ = Describe("Instance serializer", func() {
 			int64(0), int64(0), int64(0)),
 	)
 
+	Describe("WatchAppInstancesQueryInput.Validate", func() {
+		It("rejects empty resourceVersion", func() {
+			err := (&serializer.WatchAppInstancesQueryInput{}).Validate()
+			Expect(err).To(HaveOccurred())
+			var bkErr *bkerrs.Error
+			Expect(errors.As(err, &bkErr)).To(BeTrue())
+			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
+			Expect(err.Error()).To(ContainSubstring("resourceVersion is required"))
+		})
+	})
+
 	Describe("FromPodManifest", func() {
 		It("converts a pod manifest into an app instance output", func() {
 			manifest := map[string]any{
@@ -250,6 +261,43 @@ var _ = Describe("Instance serializer", func() {
 			Expect(appInstances[0].PolarisInfos[0].Port).To(Equal(uint32(8080)))
 			Expect(appInstances[0].PolarisInfos[0].Weight).To(Equal(int64(100)))
 			Expect(appInstances[0].PolarisInfos[0].Metadata).To(Equal(map[string]string{"k": "v"}))
+		})
+
+		// 北极星侧返回顺序不保证稳定，Watch 补拉要靠前后两次结果比对差异
+		// 顺序漂移会被误判成变化，每轮重复推一遍 MODIFIED
+		It("orders matched instances by service coordinates regardless of input order", func() {
+			appInstances := []*serializer.AppInstanceOutputObj{{ID: "pod-1", IP: "127.0.0.1"}}
+			svcInstances := []*polaris.PolarisServiceInstances{
+				{
+					ServiceNamespace: "Production",
+					ServiceName:      "svc-b",
+					ServicePort:      8080,
+					Instances:        []*polarisInfra.Instance{{IP: "127.0.0.1", Port: 8080}},
+				},
+				{
+					ServiceNamespace: "Development",
+					ServiceName:      "svc-a",
+					ServicePort:      9090,
+					Instances:        []*polarisInfra.Instance{{IP: "127.0.0.1", Port: 9090}},
+				},
+				{
+					ServiceNamespace: "Production",
+					ServiceName:      "svc-a",
+					ServicePort:      8080,
+					Instances:        []*polarisInfra.Instance{{IP: "127.0.0.1", Port: 8080}},
+				},
+			}
+
+			serializer.MergePolarisInfoToAppInstances(appInstances, svcInstances)
+
+			infos := appInstances[0].PolarisInfos
+			Expect(infos).To(HaveLen(3))
+			Expect(infos[0].ServiceNamespace).To(Equal("Development"))
+			Expect(infos[0].ServiceName).To(Equal("svc-a"))
+			Expect(infos[1].ServiceNamespace).To(Equal("Production"))
+			Expect(infos[1].ServiceName).To(Equal("svc-a"))
+			Expect(infos[2].ServiceNamespace).To(Equal("Production"))
+			Expect(infos[2].ServiceName).To(Equal("svc-b"))
 		})
 	})
 

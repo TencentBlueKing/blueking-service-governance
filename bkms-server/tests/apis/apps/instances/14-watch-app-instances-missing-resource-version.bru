@@ -1,0 +1,29 @@
+meta {
+  name: 14-watch-app-instances-missing-resource-version
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{serviceURL}}/apps/invalid-app/envs/test/instances/watch
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject watch without resourceVersion before looking up deploy record", () => {
+    expect(res.body.error.code).to.equal("INVALID_ARGUMENT");
+    expect(res.body.error.system).to.equal("bkms");
+    expect(res.body.error.module).to.equal("bkms-server");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
