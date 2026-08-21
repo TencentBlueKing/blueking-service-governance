@@ -140,4 +140,44 @@ var _ = Describe("Image serializers", func() {
 		Expect(err.Error()).To(ContainSubstring("ListDeployableImageTagsQueryInput.PageSize"))
 		Expect(err.Error()).To(ContainSubstring(strings.TrimSpace("failed on the 'oneof' tag")))
 	})
+
+	DescribeTable(
+		"ListCustomRuntimeImageTagsQueryInput name validation",
+		func(name string, expectValid bool) {
+			input := serializer.ListCustomRuntimeImageTagsQueryInput{
+				Name:     name,
+				Page:     1,
+				PageSize: 10,
+			}
+			err := binding.Validator.ValidateStruct(input)
+			if expectValid {
+				Expect(err).NotTo(HaveOccurred())
+				return
+			}
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("ListCustomRuntimeImageTagsQueryInput.Name"))
+			Expect(err.Error()).To(ContainSubstring("failed on the 'custom_image_repo' tag"))
+		},
+		Entry("accepts registry host and path", "docker.bkrepo.example.com/demo/repo/my-golang", true),
+		Entry("rejects short docker hub name", "nginx", false),
+		Entry("rejects name without registry host", "library/nginx", false),
+		Entry("rejects tagged name", "registry.example.com/team/runtime:latest", false),
+	)
+
+	DescribeTable(
+		"RefreshCustomRuntimeImageTagsInput name validation",
+		func(name string, expectValid bool) {
+			input := serializer.RefreshCustomRuntimeImageTagsInput{Name: name}
+			err := binding.Validator.ValidateStruct(input)
+			if expectValid {
+				Expect(err).NotTo(HaveOccurred())
+				return
+			}
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("RefreshCustomRuntimeImageTagsInput.Name"))
+			Expect(err.Error()).To(ContainSubstring("failed on the 'custom_image_repo' tag"))
+		},
+		Entry("accepts registry host and path", "registry.example.com:5000/team/runtime/base", true),
+		Entry("rejects short docker hub name", "nginx", false),
+	)
 })

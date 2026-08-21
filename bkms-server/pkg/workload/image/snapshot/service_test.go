@@ -162,6 +162,52 @@ var _ = Describe("Service", func() {
 		})
 	})
 
+	Describe("ResolveRepoKeyForWorkspace", func() {
+		const imageName = "docker.bkrepo.example.com/demo/repo/my-golang"
+
+		It("should reject blank workspaceID or image name", func() {
+			_, err := service.ResolveRepoKeyForWorkspace(ctx, "  ", imageName)
+			Expect(err).To(MatchError("workspaceID is required"))
+
+			_, err = service.ResolveRepoKeyForWorkspace(ctx, testWorkspaceID1, "  ")
+			Expect(err).To(MatchError("image name is required"))
+		})
+
+		It("should resolve workspace registry credentials with the given image name", func() {
+			mockey.PatchConvey("mock workspace image registry", GinkgoT(), func() {
+				mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
+					func(_ context.Context, wsID string) (*bkmsreg.ImageRegistry, error) {
+						Expect(wsID).To(Equal(testWorkspaceID1))
+						return &bkmsreg.ImageRegistry{
+							Registry: "docker.bkrepo.example.com/demo",
+							Username: "ws-user",
+							Password: "ws-pass",
+						}, nil
+					},
+				).Build()
+
+				info, err := service.ResolveRepoKeyForWorkspace(ctx, " "+testWorkspaceID1+" ", " "+imageName+" ")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(info.RepoName).To(Equal(imageName))
+				Expect(info.Username).To(Equal("ws-user"))
+				Expect(info.Password).To(Equal("ws-pass"))
+				Expect(info.RepoKey).To(Equal(GenerateRepoKey(imageName, "ws-user", "ws-pass")))
+			})
+		})
+
+		It("should wrap workspace registry lookup errors", func() {
+			mockey.PatchConvey("mock workspace image registry failure", GinkgoT(), func() {
+				mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(
+					nil, errors.New("registry missing"),
+				).Build()
+
+				_, err := service.ResolveRepoKeyForWorkspace(ctx, testWorkspaceID1, imageName)
+				Expect(err).To(MatchError(ContainSubstring("get workspace image registry")))
+				Expect(err).To(MatchError(ContainSubstring("registry missing")))
+			})
+		})
+	})
+
 	Describe("RefreshSnapshots", func() {
 		It("should refresh snapshots and enqueue detail sync", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {

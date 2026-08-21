@@ -31,12 +31,22 @@ type Handler interface {
 	ListDeployableImageTags(c *gin.Context)
 	ListPlatformBuildImages(c *gin.Context)
 	ListPlatformBuildImageTags(c *gin.Context)
+	ListCustomBuildImages(c *gin.Context)
+	ListCustomBuildImageTags(c *gin.Context)
+	RefreshCustomBuildImageTags(c *gin.Context)
 }
 
 // Register registers Gin image routes.
 func Register(rg *gin.RouterGroup, h Handler) {
 	rg.GET("/platform-build-images", h.ListPlatformBuildImages)
 	rg.GET("/platform-build-images/:imageID/tags", h.ListPlatformBuildImageTags)
+
+	// 自定义构建镜像归属工作空间而非应用，故挂在 workspace 维度；
+	// TAG 查询与刷新以完整镜像名称作为参数，不使用记录 ID 作为路径参数
+	customImages := rg.Group("/workspaces/:workspaceID/custom-build-images")
+	customImages.GET("", h.ListCustomBuildImages)
+	customImages.GET("/tags", h.ListCustomBuildImageTags)
+	customImages.POST("/tags/refresh", h.RefreshCustomBuildImageTags)
 
 	apps := rg.Group("/apps/:appID")
 	apps.GET("/images", h.ListAppImages)

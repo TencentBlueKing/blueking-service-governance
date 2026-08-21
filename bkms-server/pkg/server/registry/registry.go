@@ -64,6 +64,7 @@ import (
 	scopedenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
@@ -134,9 +135,10 @@ type Registry struct {
 	// 操作审计类
 	OperationRecordStore audit.OperationRecordStore
 	// 镜像快照类
-	RuntimeImageStore workloadruntime.Store
-	SnapshotStore     snapshot.SnapshotStore
-	PromotionStore    promotion.PromotionStore
+	RuntimeImageStore       workloadruntime.Store
+	CustomRuntimeImageStore customruntime.Store
+	SnapshotStore           snapshot.SnapshotStore
+	PromotionStore          promotion.PromotionStore
 	// 拓扑类
 	ResourceSnapshotStore topology.ResourceSnapshotStore
 	// 平台管理员类
@@ -242,6 +244,7 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	r.OperationRecordStore = mustInit(audit.NewOperationRecordStoreMongo(mongoClient, dbName))
 	// 镜像快照类
 	r.RuntimeImageStore = mustInit(workloadruntime.NewStoreMongo(mongoClient, dbName))
+	r.CustomRuntimeImageStore = mustInit(customruntime.NewStoreMongo(mongoClient, dbName))
 	r.SnapshotStore = mustInit(snapshot.NewSnapshotStoreMongo(mongoClient, dbName))
 	r.PromotionStore = mustInit(promotion.NewPromotionStoreMongo(mongoClient, dbName))
 	// 拓扑类

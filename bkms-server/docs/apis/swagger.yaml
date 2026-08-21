@@ -3301,6 +3301,47 @@ definitions:
       data:
         $ref: '#/definitions/serializer.WorkspaceDetailOutputObj'
     type: object
+  serializer.CustomRuntimeImageOutputObj:
+    properties:
+      createdAt:
+        description: 创建时间
+        type: string
+      id:
+        description: 记录 ID
+        type: string
+      name:
+        description: 镜像仓库名称，含仓库前缀，不包含 tag
+        type: string
+      type:
+        description: 镜像类型
+        type: string
+      updatedAt:
+        description: 更新时间
+        type: string
+    type: object
+  serializer.CustomRuntimeImageTagOutputObj:
+    properties:
+      builtAt:
+        description: 镜像构建时间
+        type: string
+      digest:
+        description: 摘要
+        type: string
+      size:
+        description: 镜像大小
+        example: "0"
+        type: string
+      tag:
+        description: 镜像标签名
+        type: string
+    type: object
+  serializer.CustomRuntimeImagesOutputObjs:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/serializer.CustomRuntimeImageOutputObj'
+        type: array
+    type: object
   serializer.CustomTagOptsInput:
     properties:
       prefix:
@@ -3475,12 +3516,15 @@ definitions:
     type: object
   serializer.DevModeRuleInput:
     properties:
-      envType:
-        type: string
+      envTypes:
+        items:
+          type: string
+        minItems: 1
+        type: array
       spec:
         $ref: '#/definitions/serializer.DevModeSpecInput'
     required:
-    - envType
+    - envTypes
     - spec
     type: object
   serializer.DevModeRuleOutput:
@@ -3492,8 +3536,10 @@ definitions:
     properties:
       createdAt:
         type: string
-      envType:
-        type: string
+      envTypes:
+        items:
+          type: string
+        type: array
       id:
         type: string
       spec:
@@ -5333,6 +5379,16 @@ definitions:
           $ref: '#/definitions/serializer.ComponentDefOutputObj'
         type: array
     type: object
+  serializer.ListCustomRuntimeImageTagsOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.PaginatedCustomRuntimeImageTagOutputObjs'
+    type: object
+  serializer.ListCustomRuntimeImagesOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.CustomRuntimeImagesOutputObjs'
+    type: object
   serializer.ListDeployableImageTagsOutput:
     properties:
       data:
@@ -5863,6 +5919,22 @@ definitions:
         items:
           $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj'
         type: array
+    type: object
+  serializer.PaginatedCustomRuntimeImageTagOutputObjs:
+    properties:
+      count:
+        description: 满足条件的总记录数
+        example: "0"
+        type: string
+      results:
+        description: 当前页的镜像 TAG 列表
+        items:
+          $ref: '#/definitions/serializer.CustomRuntimeImageTagOutputObj'
+        type: array
+      snapshotStatus:
+        allOf:
+        - $ref: '#/definitions/serializer.SnapshotStatusInfoOutputObj'
+        description: 快照状态信息，手动输入且尚无快照记录时 refreshStatus 为 idle
     type: object
   serializer.PaginatedDeployableImageTagOutputObjs:
     properties:
@@ -6869,6 +6941,19 @@ definitions:
       data:
         $ref: '#/definitions/serializer.RefreshResultInfoOutputObj'
     type: object
+  serializer.RefreshCustomRuntimeImageTagsInput:
+    properties:
+      name:
+        description: 镜像完整仓库名称，含仓库前缀且不包含 tag 或 digest
+        type: string
+    required:
+    - name
+    type: object
+  serializer.RefreshCustomRuntimeImageTagsOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.RefreshResultInfoOutputObj'
+    type: object
   serializer.RefreshResultInfoOutputObj:
     properties:
       addedTagCnt:
@@ -7141,12 +7226,15 @@ definitions:
     type: object
   serializer.ResourcesRuleInput:
     properties:
-      envType:
-        type: string
+      envTypes:
+        items:
+          type: string
+        minItems: 1
+        type: array
       spec:
         $ref: '#/definitions/serializer.ResourcesSpecInput'
     required:
-    - envType
+    - envTypes
     - spec
     type: object
   serializer.ResourcesRuleOutput:
@@ -7158,8 +7246,10 @@ definitions:
     properties:
       createdAt:
         type: string
-      envType:
-        type: string
+      envTypes:
+        items:
+          type: string
+        type: array
       id:
         type: string
       spec:
@@ -19100,6 +19190,127 @@ paths:
       summary: 更新工作空间组件
       tags:
       - workspace-components
+  /workspaces/{workspaceID}/custom-build-images:
+    get:
+      description: 候选仅以工作空间已落库的自定义镜像记录为准，不过滤快照同步状态，也不校验镜像在仓库中是否仍然存在；候选数量预期在百条以内，因此不分页
+      operationId: ListCustomBuildImages
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 镜像类型：builder / runner
+        in: query
+        name: type
+        required: true
+        type: string
+      - description: 搜索关键字
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListCustomRuntimeImagesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取工作空间自定义构建镜像候选列表
+      tags:
+      - images
+  /workspaces/{workspaceID}/custom-build-images/tags:
+    get:
+      description: |-
+        镜像以完整名称传入而非记录 ID，因为用户手动输入、尚未落库的镜像没有记录 ID。
+        已落库镜像读本地快照、手动输入镜像用工作空间凭证实时拉取，两条来源的出入参、
+        分页与总数口径完全一致，调用方无需按来源分支处理，也不传递来源标识
+      operationId: ListCustomBuildImageTags
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 镜像完整仓库名称，含仓库前缀且不带 tag
+        in: query
+        name: name
+        required: true
+        type: string
+      - description: 搜索关键字
+        in: query
+        name: keyword
+        type: string
+      - description: 分页参数：页码，从 1 开始
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: 分页参数：每页数量，支持 5/10/20/50/100
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListCustomRuntimeImageTagsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取工作空间自定义构建镜像可用 TAG 列表
+      tags:
+      - images
+  /workspaces/{workspaceID}/custom-build-images/tags/refresh:
+    post:
+      consumes:
+      - application/json
+      description: 同步等待上限为 10 秒。刷新中与刷新失败均为正常响应，通过 data.status 的 refreshing / failed
+        表达，不作为错误抛出
+      operationId: RefreshCustomBuildImageTags
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 刷新参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.RefreshCustomRuntimeImageTagsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.RefreshCustomRuntimeImageTagsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 手动刷新工作空间自定义构建镜像的 TAG 快照
+      tags:
+      - images
   /workspaces/{workspaceID}/deps/redis:
     get:
       operationId: ListRedisInstances

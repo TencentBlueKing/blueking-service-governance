@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/worker"
 )
@@ -102,6 +103,39 @@ func (s *Service) ResolveRepoKeyForApp(
 		RepoName: info.RepoName,
 		Username: info.Username,
 		Password: info.Password,
+	}, nil
+}
+
+// ResolveRepoKeyForWorkspace 解析工作空间自定义镜像的仓库信息，返回 repoKey、repoName 和认证信息。
+//
+// 自定义镜像既不像运行时镜像那样无凭据（ResolveRepoKeyForRepository），也不像应用镜像
+// 那样能从构建配置里取到凭据（ResolveRepoKeyForApp），它必须按 workspaceID 反查
+// image_registries 拿到工作空间当前生效镜像源的账密，再按「镜像名 + 账密」生成 repoKey。
+//
+// 契约约束：涉及自定义镜像的下游实现一律通过本方法取 repoKey，不得各自直接调用
+// GenerateRepoKey，否则同一镜像会算出不同的 repoKey 导致快照对不上。
+func (s *Service) ResolveRepoKeyForWorkspace(
+	ctx context.Context, workspaceID, imageName string,
+) (*RepoKeyInfo, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	imageName = strings.TrimSpace(imageName)
+	if workspaceID == "" {
+		return nil, errors.New("workspaceID is required")
+	}
+	if imageName == "" {
+		return nil, errors.New("image name is required")
+	}
+
+	reg, err := workspace.GetWorkspaceImageRegistry(ctx, workspaceID)
+	if err != nil {
+		return nil, errors.Wrap(err, "get workspace image registry")
+	}
+
+	return &RepoKeyInfo{
+		RepoKey:  GenerateRepoKey(imageName, reg.Username, reg.Password),
+		RepoName: imageName,
+		Username: reg.Username,
+		Password: reg.Password,
 	}, nil
 }
 
