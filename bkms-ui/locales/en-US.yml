@@ -670,6 +670,10 @@ yaml 文件路径已更改: yaml FilePath has been changed
 "{0} 内容（只读，不可修改）": "{0} content (read-only, cannot be modified)"
 （来源于 BSCP 的文件仅能查看，不能编辑）: (Files sourced from BSCP can only be viewed, not edited)
 '服务"{0}"未上线全量版本，请先将服务上线到全部实例。': Service "{0}" has no fully released version. Please complete the release to all instances first.
+'您没有服务 “{0}” 的权限，请重新选择': You do not have permission for service "{0}". Please select another service.
+您没有当前 BSCP 服务的权限，请重新选择: You do not have permission for the current BSCP service. Please select another service.
+当前 BSCP 服务未上线全量版本，无法保存: The current BSCP service has no fully released version and cannot be saved.
+BSCP 配置内容非合法 YAML 格式，无法保存: The BSCP configuration content is not valid YAML and cannot be saved.
 请选择业务: Please select a business
 请选择服务: Please select a service
 请选择配置项: Please select a configuration item

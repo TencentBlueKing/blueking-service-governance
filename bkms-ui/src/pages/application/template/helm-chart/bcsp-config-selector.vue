@@ -67,7 +67,7 @@
           </Select>
         </Form.FormItem>
         <Form.FormItem
-          v-if="!isServiceNotFullyReleased"
+          v-if="!isServiceUnavailable"
           :label="$t('配置项')"
           property="id"
           required
@@ -87,9 +87,16 @@
             />
           </Select>
         </Form.FormItem>
+        <!-- BSCP 服务无权限时展示页面内警告，引导用户重新选择 -->
+        <Alert
+          v-if="isServiceNoPermission"
+          theme="warning"
+        >
+          {{ $t('您没有服务 “{0}” 的权限，请重新选择', [currentServiceName]) }}
+        </Alert>
         <!-- 服务未全量上线提示 使用Tag会阻止a标签的默认行为 -->
         <Alert
-          v-if="isServiceNotFullyReleased"
+          v-else-if="isServiceNotFullyReleased"
           theme="warning"
         >
           {{ $t('服务"{0}"未上线全量版本，请先将服务上线到全部实例。', [currentServiceName]) }}
@@ -103,7 +110,7 @@
         </Alert>
       </Form>
       <MsEditor
-        v-if="!isServiceNotFullyReleased"
+        v-if="!isServiceUnavailable"
         v-model="configContent"
         class="!h-[360px]"
         :readonly="true"
@@ -120,6 +127,7 @@
   import yaml from 'js-yaml';
   import { useI18n } from 'vue-i18n';
   import { ApiServerService } from '~/api/modules/bkmsserver';
+  import { hasErrorCode } from '~/common/util';
 
   import type { AppConfigFileOutputObj, BSCPAppConfigFileConfig } from '~/@types/v1/app-config-files';
   import type { BSCPBizOutput, BSCPConfigOutput, BSCPServiceOutput } from '~/@types/v1/bkintegrations-bscp';
@@ -130,6 +138,7 @@
     (e: 'validate', isValid: boolean): void;
     (e: 'yaml-validate', isValid: boolean): void;
     (e: 'service-not-fully-released', isNotFullyReleased: boolean): void;
+    (e: 'service-no-permission', hasNoPermission: boolean): void;
   }
 
   interface Props {
@@ -213,6 +222,12 @@
   // 服务未全量上线状态
   const isServiceNotFullyReleased = ref(false);
 
+  // 服务无权限状态
+  const isServiceNoPermission = ref(false);
+
+  // 服务不可用时隐藏配置项及内容预览
+  const isServiceUnavailable = computed(() => isServiceNotFullyReleased.value || isServiceNoPermission.value);
+
   // 当前服务名称
   const currentServiceName = computed(() => {
     const service = serviceOptions.value.find(s => s.id === props.modelValue.serviceID);
@@ -242,6 +257,7 @@
     };
     internalValue.value = newValue;
     isServiceNotFullyReleased.value = false;
+    isServiceNoPermission.value = false;
 
     // 清空下级数据
     if (!bizID) {
@@ -270,6 +286,7 @@
     };
     internalValue.value = newValue;
     isServiceNotFullyReleased.value = false;
+    isServiceNoPermission.value = false;
 
     if (!serviceID) {
       configOptions.value = [];
@@ -323,6 +340,7 @@
   async function loadConfigOptions() {
     configLoading.value = true;
     isServiceNotFullyReleased.value = false;
+    isServiceNoPermission.value = false;
     try {
       // interceptorErr: false 拦截错误弹窗
       const res = await ApiServerService.ListBSCPConfigs(
@@ -339,6 +357,11 @@
       if (isBscpNotFullyReleasedError(err)) {
         isServiceNotFullyReleased.value = true;
         // BSCP_NOT_FULLY_RELEASED 不需要弹窗提示，其他异常需要弹窗提示
+        return;
+      }
+      // BSCP_NO_PERMISSION 由页面内 Alert 承载，避免同时触发通用错误弹窗
+      if (hasErrorCode(err, 'BSCP_NO_PERMISSION')) {
+        isServiceNoPermission.value = true;
         return;
       }
       // 兼容其他弹窗提示
@@ -399,6 +422,11 @@
   // 监听"服务未全量上线"状态变化，通知父组件
   watch(isServiceNotFullyReleased, val => {
     emit('service-not-fully-released', val);
+  });
+
+  // 监听服务无权限状态变化，通知父组件
+  watch(isServiceNoPermission, val => {
+    emit('service-no-permission', val);
   });
 
   // 清除验证

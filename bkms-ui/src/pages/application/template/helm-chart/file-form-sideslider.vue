@@ -128,6 +128,7 @@
             :current-file="currentFile"
             :is-edit="isEdit"
             @change="handleBscpConfigChange"
+            @service-no-permission="handleBscpServiceNoPermission"
             @service-not-fully-released="handleBscpServiceNotFullyReleased"
             @yaml-validate="handleBscpYamlValidate"
           />
@@ -137,7 +138,7 @@
 
     <template #footer>
       <div class="flex items-center">
-        <span v-bk-tooltips="{ content: $t('BSCP 配置内容非合法 YAML 格式，无法保存'), disabled: !isSaveDisabled }">
+        <span v-bk-tooltips="{ content: saveDisabledTip, disabled: !saveDisabledTip }">
           <Button
             class="mr-[8px]"
             :disabled="loading || isSaveDisabled"
@@ -263,10 +264,23 @@
   // BSCP 服务未全量上线状态
   const isBscpServiceNotFullyReleased = ref(false);
 
-  // BSCP 配置项内容非合法 YAML 或服务未全量上线时禁用保存
+  // BSCP 服务无权限状态
+  const isBscpServiceNoPermission = ref(false);
+
+  // 根据确定/保存按钮的实际禁用原因展示对应 Tooltip
+  const saveDisabledTip = computed(() => {
+    if (formData.contentSourceType !== 'bscp') return '';
+    if (isBscpServiceNoPermission.value) return t('您没有当前 BSCP 服务的权限，请重新选择');
+    if (isBscpServiceNotFullyReleased.value) return t('当前 BSCP 服务未上线全量版本，无法保存');
+    if (!isBscpYamlValid.value) return t('BSCP 配置内容非合法 YAML 格式，无法保存');
+    return '';
+  });
+
+  // BSCP 配置项内容非合法 YAML、服务未全量上线或无权限时禁用保存
   const isSaveDisabled = computed(() => {
     if (formData.contentSourceType !== 'bscp') return false;
     if (isBscpServiceNotFullyReleased.value) return true;
+    if (isBscpServiceNoPermission.value) return true;
     return !isBscpYamlValid.value;
   });
 
@@ -316,6 +330,11 @@
   // BSCP 配置变化
   function handleBscpConfigChange(config: NonNullable<typeof formData.bscpConfig>) {
     formData.bscpConfig = { ...config };
+  }
+
+  // BSCP 服务无权限状态变化
+  function handleBscpServiceNoPermission(hasNoPermission: boolean) {
+    isBscpServiceNoPermission.value = hasNoPermission;
   }
 
   // BSCP 服务未全量上线状态变化
@@ -402,5 +421,6 @@
     bcspSelectorRef.value?.clearValidate();
     isBscpYamlValid.value = true;
     isBscpServiceNotFullyReleased.value = false;
+    isBscpServiceNoPermission.value = false;
   }
 </script>
