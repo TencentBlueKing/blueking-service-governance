@@ -58,6 +58,19 @@ type AppConfigFileStore interface {
 	// List lists the app config files for the given app.
 	List(ctx context.Context, appID string, listOpts ...AcfListOption) ([]AppConfigFile, error)
 
+	// GetByAppAndMountPath gets one app config file by app ID and mount path.
+	GetByAppAndMountPath(
+		ctx context.Context,
+		appID string,
+		mountPath string,
+	) (*AppConfigFile, error)
+	// ListByAppAndMountPath lists app config files sharing the same mount path.
+	ListByAppAndMountPath(
+		ctx context.Context,
+		appID string,
+		mountPath string,
+	) ([]AppConfigFile, error)
+
 	// Update updates an existed AppConfigFile object, returns the number of modified documents and an error if any.
 	Update(ctx context.Context, acf AppConfigFile) (int64, error)
 
@@ -250,6 +263,48 @@ func (s *AppConfigFileStoreMongo) List(
 	}
 
 	cursor, err := s.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var result []AppConfigFile
+	if err = cursor.All(ctx, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetByAppAndMountPath gets one app config file by app ID and mount path.
+func (s *AppConfigFileStoreMongo) GetByAppAndMountPath(
+	ctx context.Context,
+	appID string,
+	mountPath string,
+) (*AppConfigFile, error) {
+	var obj AppConfigFile
+
+	filter := bson.M{"appID": appID, "mountPath": mountPath, "configKind": ConfigKindPlain}
+	err := s.collection.FindOne(ctx, filter).Decode(&obj)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &obj, nil
+}
+
+// ListByAppAndMountPath lists app config files by app ID and mount path.
+func (s *AppConfigFileStoreMongo) ListByAppAndMountPath(
+	ctx context.Context,
+	appID string,
+	mountPath string,
+) ([]AppConfigFile, error) {
+	cursor, err := s.collection.Find(
+		ctx,
+		bson.M{"appID": appID, "mountPath": mountPath, "configKind": ConfigKindPlain},
+		options.Find().SetSort(bson.D{{Key: "envName", Value: 1}, {Key: "_id", Value: 1}}),
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -181,6 +181,32 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		})
 	})
 
+	Context("GetByAppAndMountPath", func() {
+		It("should return the plain config file matched by mountPath", func() {
+			content := "KEY=VALUE"
+			plainFile := appcfg.AppConfigFile{
+				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+					AppID:             appID,
+					Name:              "custom-env",
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+					ConfigKind:        appcfg.ConfigKindPlain,
+					MountPath:         "/data/app/conf/custom.env",
+					Format:            appcfg.FileFormat("env"),
+				},
+			}
+			_, err := store.Add(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := store.GetByAppAndMountPath(ctx, appID, "/data/app/conf/custom.env")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Name).To(Equal("custom-env"))
+			Expect(got.GetConfigKind()).To(Equal(appcfg.ConfigKindPlain))
+			Expect(got.MountPath).To(Equal("/data/app/conf/custom.env"))
+		})
+	})
+
 	Context("Update", func() {
 		It("should updateFieldsWithVersionCheck an existing app config file", func() {
 			// Add an initial app config file
@@ -200,6 +226,89 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			dbObj, err := store.GetByID(ctx, oid)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*dbObj.Content).To(Equal(newContent))
+		})
+
+		It("should persist empty mountedEnvNames as empty slice not nil", func() {
+			content := "KEY=VALUE"
+			plainFile := appcfg.AppConfigFile{
+				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+					AppID:             appID,
+					Name:              "scoped-env",
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+					ConfigKind:        appcfg.ConfigKindPlain,
+					MountPath:         "/data/app/conf/scoped.env",
+					Format:            appcfg.FileFormat("env"),
+					IsUnifiedConfig:   true,
+					MountedEnvNames:   []string{},
+				},
+			}
+			oid, err := store.Add(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := store.GetByID(ctx, oid)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.MountedEnvNames).NotTo(BeNil())
+			Expect(got.MountedEnvNames).To(Equal([]string{}))
+		})
+
+		It("should persist isUnifiedConfig false on update", func() {
+			content := "KEY=VALUE"
+			plainFile := appcfg.AppConfigFile{
+				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+					AppID:             appID,
+					Name:              "unified-flag-update",
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+					ConfigKind:        appcfg.ConfigKindPlain,
+					MountPath:         "/data/app/conf/unified-flag.env",
+					Format:            appcfg.FileFormat("env"),
+					IsUnifiedConfig:   true,
+				},
+			}
+			oid, err := store.Add(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+			plainFile.ID = oid
+			plainFile.IsUnifiedConfig = false
+
+			_, err = store.Update(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := store.GetByID(ctx, oid)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsUnifiedConfig).To(BeFalse())
+		})
+
+		It("should persist clearing mountedEnvNames to empty slice on update", func() {
+			content := "KEY=VALUE"
+			plainFile := appcfg.AppConfigFile{
+				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+					AppID:             appID,
+					Name:              "scoped-env-update",
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+					ConfigKind:        appcfg.ConfigKindPlain,
+					MountPath:         "/data/app/conf/scoped-update.env",
+					Format:            appcfg.FileFormat("env"),
+					IsUnifiedConfig:   true,
+					MountedEnvNames:   []string{"prod"},
+				},
+			}
+			oid, err := store.Add(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+			plainFile.ID = oid
+			plainFile.MountedEnvNames = []string{}
+
+			_, err = store.Update(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := store.GetByID(ctx, oid)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.MountedEnvNames).NotTo(BeNil())
+			Expect(got.MountedEnvNames).To(Equal([]string{}))
 		})
 
 		It("should reject stale updates when expected version mismatches", func() {

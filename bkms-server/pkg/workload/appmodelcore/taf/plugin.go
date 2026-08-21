@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/plainfiles"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/plugin"
 )
@@ -77,11 +78,23 @@ func (p *Plugin) Start(
 	}
 	appModel.Workload.TafConfig.FileContent = content
 
+	plainFiles, err := plainfiles.BuildRuntimePlainConfigFiles(
+		ctx,
+		p.appConfigFileStore,
+		app.ID,
+		env.Name,
+		renderCtx.EnvVars,
+		renderCtx.Collector,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "building runtime plain config files")
+	}
+
 	if appModel.Workload.TafConfig.FileName == "" {
 		return &runtimerender.Config{}, nil
 	}
 
-	return buildTafConfig(appModel), nil
+	return buildTafConfig(appModel, plainFiles)
 }
 
 // computeTafConfig computes the TAF configuration content based on environment.
@@ -116,13 +129,21 @@ func (p *Plugin) computeTafConfig(
 // Runtime variables (BKMS_POD_IP, BKMS_POD_NAME, BKMS_NODE_IP) are rendered as special
 // placeholders (e.g., __#VAR_PLACEHOLDER#__BKMS_POD_IP__) at compile time. The init container then replaces
 // these placeholders with actual values from the Kubernetes Downward API at pod startup.
-func buildTafConfig(appModel *appmodel.AppModel) *runtimerender.Config {
+func buildTafConfig(
+	appModel *appmodel.AppModel,
+	plainFiles []runtimerender.ConfigFileParams,
+) (*runtimerender.Config, error) {
 	config := appModel.Workload.TafConfig
+	files := make([]runtimerender.ConfigFileParams, 0, 1+len(plainFiles))
+	files = append(files, runtimerender.ConfigFileParams{
+		FileName:    config.FileName,
+		FilePath:    config.FilePath,
+		FileContent: config.FileContent,
+	})
+	files = append(files, plainFiles...)
 	return runtimerender.BuildConfig(runtimerender.ConfigParams{
 		WorkloadType:  appmodel.WorkloadTypeTaf,
 		ConfigMapName: appModel.Workload.Name,
-		FileName:      config.FileName,
-		FilePath:      config.FilePath,
-		FileContent:   config.FileContent,
+		Files:         files,
 	})
 }

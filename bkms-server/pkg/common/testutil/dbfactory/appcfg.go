@@ -31,11 +31,21 @@ import (
 
 // AppConfigFileOpts defines options for creating a test AppConfigFile.
 type AppConfigFileOpts struct {
-	AppID               string `validate:"required"`
-	EnvName             string
-	Name                string
-	Type                appcfg.AppConfigFileType
-	Format              appcfg.FileFormat
+	AppID   string `validate:"required"`
+	EnvName string
+	Name    string
+	Type    appcfg.AppConfigFileType
+	Format  appcfg.FileFormat
+	// ConfigKind 用于区分 framework 主配置和 plain 附加挂载文件。
+	ConfigKind appcfg.ConfigKind
+	// MountPath 是 plain 配置文件最终挂载到容器内的目标路径。
+	MountPath string
+	// DefaultAppConfigFileID 用于将环境级 plain 实例关联回默认逻辑文件。
+	DefaultAppConfigFileID *bson.ObjectID
+	// IsUnifiedConfig 表示当前逻辑文件是否为统一配置模式。
+	IsUnifiedConfig bool
+	// MountedEnvNames 表示挂载环境范围。
+	MountedEnvNames     []string
 	Content             *string
 	OverlayContent      *string
 	BaseAppConfigFileID *bson.ObjectID
@@ -61,15 +71,20 @@ func AppConfigFile(
 
 	acf := &appcfg.AppConfigFile{
 		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-			AppID:               opts.AppID,
-			EnvName:             opts.EnvName,
-			Name:                opts.Name,
-			Type:                opts.Type,
-			ContentSourceType:   appcfg.ContentSourceTypeLocal,
-			Format:              opts.Format,
-			Content:             opts.Content,
-			OverlayContent:      opts.OverlayContent,
-			BaseAppConfigFileID: opts.BaseAppConfigFileID,
+			AppID:                  opts.AppID,
+			EnvName:                opts.EnvName,
+			Name:                   opts.Name,
+			Type:                   opts.Type,
+			ContentSourceType:      appcfg.ContentSourceTypeLocal,
+			Format:                 opts.Format,
+			ConfigKind:             opts.ConfigKind,
+			MountPath:              opts.MountPath,
+			DefaultAppConfigFileID: opts.DefaultAppConfigFileID,
+			IsUnifiedConfig:        opts.IsUnifiedConfig,
+			MountedEnvNames:        opts.MountedEnvNames,
+			Content:                opts.Content,
+			OverlayContent:         opts.OverlayContent,
+			BaseAppConfigFileID:    opts.BaseAppConfigFileID,
 		},
 	}
 	id, err := store.Add(ctx, *acf)
