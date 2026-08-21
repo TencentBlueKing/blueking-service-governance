@@ -411,6 +411,17 @@ var _ = Describe("Test EnvironmentStoreMongo", func() {
 				Expect(env.Cluster.ClusterType).To(Equal(newClusterType))
 				Expect(env.Cluster.Namespace).To(Equal(newNamespace))
 			})
+
+			It("update cluster isFederation", func() {
+				isFederation := true
+				_ = store.Update(
+					ctx,
+					envID1,
+					&envmodel.EnvironmentUpdateData{IsFederation: &isFederation},
+				)
+				env, _ := store.Get(ctx, envID1)
+				Expect(env.Cluster.IsFederation).To(BeTrue())
+			})
 		})
 
 		It("test add and remove app", func() {

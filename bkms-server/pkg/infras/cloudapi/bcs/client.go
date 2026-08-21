@@ -311,6 +311,9 @@ func (c *ApiClient) handleOperation(
 
 	if !httpresp.IsSuccess(resp) {
 		errMsg, _ := io.ReadAll(resp.Body)
+		if len(errMsg) == 0 {
+			errMsg, _ = json.Marshal(result)
+		}
 		return nil, errors.Errorf("call bcs api %s failed, http code: %d, err: %s",
 			apiOperation.FullName(), resp.StatusCode, errMsg)
 	}

@@ -104,6 +104,32 @@ var _ = Describe("GPAService K8s interactions", func() {
 			})
 		})
 
+		It("should target Deployment when applying to a federation env", func() {
+			mockey.PatchConvey("apply-federation-deployment-target", GinkgoT(), func() {
+				env.Cluster.IsFederation = true
+				mockey.Mock((*GPAService).resolveScaleTargetName).Return("web", nil).Build()
+				mockK8sClientChain()
+
+				var capturedManifest map[string]any
+				mockey.Mock((*k8sclient.Client).Upsert).To(func(
+					_ *k8sclient.Client, _ context.Context, _ string,
+					manifest map[string]any, _ metav1.PatchOptions,
+				) (*unstructured.Unstructured, error) {
+					capturedManifest = manifest
+					return &unstructured.Unstructured{Object: manifest}, nil
+				}).Build()
+
+				config := &GPAConfig{
+					Name: "web-autoscale", AppID: "app-1", MinReplicas: 2, MaxReplicas: 10,
+					Metrics: []GPAMetric{{Resource: ResourceCPU, AverageUtilization: 60}},
+				}
+				Expect(svc.Apply(ctx, env, config)).To(Succeed())
+				scaleTargetRef := capturedManifest["spec"].(map[string]any)["scaleTargetRef"].(map[string]any)
+				Expect(scaleTargetRef["kind"]).To(Equal("Deployment"))
+				Expect(scaleTargetRef["apiVersion"]).To(Equal("apps/v1"))
+			})
+		})
+
 		It("should not call k8s when the scale target cannot be resolved", func() {
 			mockey.PatchConvey("apply-resolve-target-fail", GinkgoT(), func() {
 				resolveErr := errors.New("resolve target failed")

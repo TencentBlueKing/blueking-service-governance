@@ -86,6 +86,47 @@ var _ = Describe("ResourceKeys", func() {
 	})
 })
 
+var _ = Describe("Record", func() {
+	Describe("MainWorkload", func() {
+		It("returns WorkloadKind and the matching resource name", func() {
+			record := &appmodel.Record{
+				WorkloadKind: "Deployment",
+				ResourceKeys: appmodel.ResourceKeys{
+					{Kind: "Deployment", Name: "demo"},
+					{Kind: "Service", Name: "demo"},
+				},
+			}
+			kind, name := record.MainWorkload()
+			Expect(kind).To(Equal("Deployment"))
+			Expect(name).To(Equal("demo"))
+		})
+
+		It("infers Deployment from ResourceKeys when WorkloadKind is empty", func() {
+			record := &appmodel.Record{
+				ResourceKeys: appmodel.ResourceKeys{
+					{Kind: "Service", Name: "demo"},
+					{Kind: "Deployment", Name: "demo"},
+				},
+			}
+			kind, name := record.MainWorkload()
+			Expect(kind).To(Equal("Deployment"))
+			Expect(name).To(Equal("demo"))
+		})
+
+		It("falls back to GameDeployment for legacy records", func() {
+			record := &appmodel.Record{
+				ResourceKeys: appmodel.ResourceKeys{
+					{Kind: "GameDeployment", Name: "demo"},
+					{Kind: "Service", Name: "demo"},
+				},
+			}
+			kind, name := record.MainWorkload()
+			Expect(kind).To(Equal("GameDeployment"))
+			Expect(name).To(Equal("demo"))
+		})
+	})
+})
+
 var _ = Describe("BuildAutoDeployExtras", func() {
 	Describe("NewBuildAutoDeployExtras", func() {
 		It("should encode build auto deploy info into deploy record extras", func() {

@@ -164,7 +164,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			extraObjs := result.ExtraObjects
 
 			// Should have one extra ConfigMap
@@ -194,7 +194,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 
 			result, err := builder.Build(ctx, prodEnv)
 			Expect(err).NotTo(HaveOccurred())
-			gd := result.GameDeployment
+			gd := asGameDeployment(result)
 			extraObjs := result.ExtraObjects
 
 			// Should have one extra ConfigMap

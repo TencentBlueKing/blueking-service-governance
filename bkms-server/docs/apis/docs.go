@@ -19619,6 +19619,10 @@ const docTemplate = `{
                 },
                 "updatedAt": {
                     "type": "string"
+                },
+                "workloadKind": {
+                    "description": "本次部署的主工作负载类型（GameDeployment 或 Deployment）；存量记录可能为空",
+                    "type": "string"
                 }
             }
         },
@@ -23047,6 +23051,10 @@ const docTemplate = `{
                 "clusterType": {
                     "description": "集群类型",
                     "type": "string"
+                },
+                "isFederation": {
+                    "description": "是否为 BCS 联邦 Host 集群",
+                    "type": "boolean"
                 },
                 "namespace": {
                     "description": "集群命名空间",

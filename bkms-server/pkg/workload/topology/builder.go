@@ -80,7 +80,7 @@ func (b *Builder) Build(ctx context.Context, snapshot *ResourceSnapshot) (*Graph
 	mergedRelations := mergeExtensionRelations(snapshot.Relations, realtimeRelations, snapshot.Resources)
 
 	// 4. 构建节点列表
-	nodes, nodeIDSet := b.buildNodes(allEntries, clusterResources)
+	nodes, nodeIDSet := b.buildNodes(allEntries, clusterResources, clusterCfg.IsFederation())
 
 	// 5. 构建主边（ownerRef + helm_manifest）
 	edges := b.buildPrimaryEdges(clusterResources, nodeIDSet, allEntries)
@@ -400,6 +400,7 @@ func (b *Builder) fetchClusterResources(
 func (b *Builder) buildNodes(
 	entries []ResourceEntry,
 	clusterResources map[string]*unstructured.Unstructured,
+	isFederation bool,
 ) ([]Node, map[string]bool) {
 	nodes := make([]Node, 0, len(entries))
 	nodeIDSet := make(map[string]bool, len(entries))
@@ -426,7 +427,7 @@ func (b *Builder) buildNodes(
 
 		if obj != nil {
 			// 从集群实时 manifest 中提取状态信息
-			b.enrichNodeFromManifest(&node, obj)
+			b.enrichNodeFromManifest(&node, obj, isFederation)
 		} else {
 			// 集群中未找到 — 标记为 NotFound
 			node.Status = k8sstatus.NotFound
@@ -439,11 +440,11 @@ func (b *Builder) buildNodes(
 }
 
 // enrichNodeFromManifest 从集群资源对象中提取状态和类型专属 extras 字段
-func (b *Builder) enrichNodeFromManifest(node *Node, obj *unstructured.Unstructured) {
+func (b *Builder) enrichNodeFromManifest(node *Node, obj *unstructured.Unstructured, isFederation bool) {
 	kind := node.Kind
 
 	// 通过专属 parser 计算综合状态评估结果
-	result := getResourceStatus(kind, obj)
+	result := getResourceStatus(kind, obj, isFederation)
 	node.Status = result.Code
 	node.Reason = result.Message
 

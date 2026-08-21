@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	k8sstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status"
+	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/deployment"
 	gamedeploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/gamedeployment"
 )
 
@@ -50,14 +51,18 @@ type DeployStateGetter struct {
 	namespace string
 	// resourceKeys 管理的资源信息
 	resourceKeys ResourceKeys
+	// workloadKind 主工作负载类型
+	workloadKind string
 }
 
 // NewDeployStateGetter 创建部署状态获取器
 func NewDeployStateGetter(record *Record) *DeployStateGetter {
+	kind, _ := record.MainWorkload()
 	return &DeployStateGetter{
 		clusterID:    record.ClusterID,
 		namespace:    record.Namespace,
 		resourceKeys: record.ResourceKeys,
+		workloadKind: kind,
 	}
 }
 
@@ -78,7 +83,7 @@ func (g *DeployStateGetter) Get(ctx context.Context) (*DeployState, error) {
 	healthResult, err := g.getWorkloadHealth(ctx)
 	if err != nil {
 		// 网络波动或临时错误，返回错误让上层重试
-		return nil, errors.Wrapf(err, "get game deployment health")
+		return nil, errors.Wrapf(err, "get workload health")
 	}
 
 	// 3. 根据健康状态判断部署状态
@@ -111,8 +116,8 @@ func (g *DeployStateGetter) checkDependentResources(ctx context.Context) (Status
 
 	// 逐个检查依赖的资源是否存在
 	for _, key := range g.resourceKeys {
-		// GameDeployment 后续单独检查
-		if key.Kind == k8skind.GameDeploy {
+		// 主工作负载后续单独检查
+		if key.Kind == k8skind.GameDeploy || key.Kind == k8skind.Deploy {
 			continue
 		}
 
@@ -139,34 +144,52 @@ func (g *DeployStateGetter) checkDependentResources(ctx context.Context) (Status
 
 // getWorkloadHealth 获取主要工作负载健康状态
 func (g *DeployStateGetter) getWorkloadHealth(ctx context.Context) (*k8sstatus.Result, error) {
-	resName := g.getGameDeployName()
+	kind, resName := g.getMainWorkload()
 	if resName == "" {
-		return nil, errors.New("GameDeployment resources are not managed by this deploy")
+		return nil, errors.New("main workload is not managed by this deploy")
 	}
 
-	client := k8sclient.NewWithGVR(cluster.NewConfig(g.clusterID), gvr.GameDeploy)
+	resGVR := gvr.GameDeploy
+	if kind == k8skind.Deploy {
+		resGVR = gvr.Deploy
+	}
+
+	clusterCfg := cluster.NewConfig(g.clusterID)
+	client := k8sclient.NewWithGVR(clusterCfg, resGVR)
 	res, err := client.Get(ctx, g.namespace, resName, metav1.GetOptions{})
 	if err != nil {
-		// 资源不存在，返回 Missing 状态（这是确定的失败状态）
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
 			return &k8sstatus.Result{
 				Code:    k8sstatus.Missing,
-				Message: fmt.Sprintf("GameDeployment %s is missing", resName),
+				Message: fmt.Sprintf("%s %s is missing", kind, resName),
 			}, nil
 		}
-		// 其他错误（网络超时、权限问题等）可能是临时的，返回 error 让上层重试
-		return nil, errors.Wrapf(err, "get game deployment %s", resName)
+		return nil, errors.Wrapf(err, "get %s %s", kind, resName)
 	}
 
+	// NOTE 目前只有联邦环境会使用 deployment 作为 workload 下发
+	if kind == k8skind.Deploy {
+		if clusterCfg.IsFederation() {
+			return deploystatus.ParseForFederation(res.Object), nil
+		}
+		return deploystatus.Parse(res.Object), nil
+	}
 	return gamedeploystatus.Parse(res.Object)
+}
+
+// getMainWorkload 获取主工作负载 Kind 与名称
+func (g *DeployStateGetter) getMainWorkload() (kind, name string) {
+	if g.workloadKind == "" {
+		return "", ""
+	}
+	return g.workloadKind, g.resourceKeys.NameByKind(g.workloadKind)
 }
 
 // getGameDeployName 获取 GameDeployment 名称
 func (g *DeployStateGetter) getGameDeployName() string {
-	for _, key := range g.resourceKeys {
-		if key.Kind == k8skind.GameDeploy {
-			return key.Name
-		}
+	kind, name := g.getMainWorkload()
+	if kind == k8skind.GameDeploy {
+		return name
 	}
 	return ""
 }

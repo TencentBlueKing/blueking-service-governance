@@ -38,7 +38,7 @@ import (
 
 // getResourceStatus 计算资源的综合状态评估结果
 // 根据 kind 调度到对应的 status parser 进行解析，返回包含 Code 和 Message 的 k8sstatus.Result
-func getResourceStatus(kind string, obj *unstructured.Unstructured) *k8sstatus.Result {
+func getResourceStatus(kind string, obj *unstructured.Unstructured, isFederation bool) *k8sstatus.Result {
 	if obj == nil {
 		return &k8sstatus.Result{Code: k8sstatus.Unknown}
 	}
@@ -48,6 +48,9 @@ func getResourceStatus(kind string, obj *unstructured.Unstructured) *k8sstatus.R
 	switch kind {
 	// 工作负载类资源：调用专属 parser
 	case k8skind.Deploy:
+		if isFederation {
+			return deploystatus.ParseForFederation(manifest)
+		}
 		return deploystatus.Parse(manifest)
 	case k8skind.STS:
 		return stsstatus.Parse(manifest)

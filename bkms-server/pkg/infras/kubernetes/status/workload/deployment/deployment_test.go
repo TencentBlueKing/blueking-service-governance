@@ -143,3 +143,48 @@ var _ = Describe("Deployment Parse", func() {
 		})
 	})
 })
+
+var _ = Describe("Deployment ParseForFederation", func() {
+	federationManifest := func(replicas int64, status map[string]any) map[string]any {
+		return map[string]any{
+			"spec":   map[string]any{"replicas": replicas},
+			"status": status,
+		}
+	}
+
+	It("returns Unknown when manifest is nil", func() {
+		Expect(ParseForFederation(nil).Code).To(Equal(k8sstatus.Unknown))
+	})
+
+	It("returns Available when replica fields are consistent without generation or conditions", func() {
+		result := ParseForFederation(federationManifest(1, map[string]any{
+			"replicas":          int64(1),
+			"readyReplicas":     int64(1),
+			"updatedReplicas":   int64(1),
+			"availableReplicas": int64(1),
+		}))
+		Expect(result.Code).To(Equal(k8sstatus.Available))
+	})
+
+	It("returns Progressing when replica fields are not consistent", func() {
+		result := ParseForFederation(federationManifest(2, map[string]any{
+			"replicas":          int64(2),
+			"readyReplicas":     int64(1),
+			"updatedReplicas":   int64(2),
+			"availableReplicas": int64(1),
+		}))
+		Expect(result.Code).To(Equal(k8sstatus.Progressing))
+		Expect(result.Message).To(ContainSubstring("replicas are not consistent"))
+	})
+
+	It("does not require Available condition unlike Parse", func() {
+		manifest := federationManifest(1, map[string]any{
+			"replicas":          int64(1),
+			"readyReplicas":     int64(1),
+			"updatedReplicas":   int64(1),
+			"availableReplicas": int64(1),
+		})
+		Expect(Parse(manifest).Code).To(Equal(k8sstatus.Progressing))
+		Expect(ParseForFederation(manifest).Code).To(Equal(k8sstatus.Available))
+	})
+})

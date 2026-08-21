@@ -20,7 +20,11 @@ package workload
 
 import (
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -30,6 +34,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
@@ -63,15 +69,91 @@ type Builder struct {
 }
 
 // BuildResult 包含了一次工作负载构建产生的主工作负载、附加资源和脱敏所需元数据。
+// 该结构只在内存中传递，不落库。
 type BuildResult struct {
-	// GameDeployment 是构建结果的主工作负载对象。
-	GameDeployment *tkex.GameDeployment
-	// ExtraObjects 是所有除了 GameDeployment 以外需要一并下发的资源对象。
+	// WorkloadKind 是主工作负载类型：GameDeployment 或 Deployment。
+	WorkloadKind string
+	// MainWorkload 是本次构建的主工作负载。
+	MainWorkload runtime.Object
+	// ExtraObjects 是所有除了主工作负载以外需要一并下发的资源对象。
 	ExtraObjects []unstructured.Unstructured
 	// SensitiveEnvVarValues 是构建过程中收集到的敏感环境变量值，供调用方后续做脱敏处理。
 	SensitiveEnvVarValues map[string]string
 	// UndefinedEnvVars 是渲染过程中引用但未定义的环境变量；仅报告，不阻断部署。
 	UndefinedEnvVars []envvarrefs.UndefinedEnvVar
+}
+
+// mainInfo 从 MainWorkload 抽出 GameDeployment / Deployment 的公共字段。
+// 这两种对象没有统一接口，部署侧需要名称、selector、对象级和 PodTemplate 级 metadata；
+// 用这一层避免调用方对 runtime.Object 做类型分支。
+type mainInfo struct {
+	name         string
+	selector     map[string]string
+	objectMeta   *metav1.ObjectMeta
+	templateMeta *metav1.ObjectMeta
+}
+
+// Name 返回主工作负载的名称。
+func (r *BuildResult) Name() string {
+	info, _ := r.mainInfo()
+	return info.name
+}
+
+// GVR 返回主工作负载对应的 GroupVersionResource；未知类型时为空值。
+func (r *BuildResult) GVR() schema.GroupVersionResource {
+	if r == nil {
+		return schema.GroupVersionResource{}
+	}
+	switch r.WorkloadKind {
+	case kind.Deploy:
+		return gvr.Deploy
+	case kind.GameDeploy:
+		return gvr.GameDeploy
+	default:
+		return schema.GroupVersionResource{}
+	}
+}
+
+// Selector 返回主工作负载的 matchLabels。
+func (r *BuildResult) Selector() map[string]string {
+	info, _ := r.mainInfo()
+	return info.selector
+}
+
+// ObjectMeta 返回主工作负载对象级 metadata，可原地修改。
+func (r *BuildResult) ObjectMeta() *metav1.ObjectMeta {
+	info, _ := r.mainInfo()
+	return info.objectMeta
+}
+
+// TemplateMeta 返回主工作负载 PodTemplate 级 metadata，可原地修改。
+func (r *BuildResult) TemplateMeta() *metav1.ObjectMeta {
+	info, _ := r.mainInfo()
+	return info.templateMeta
+}
+
+func (r *BuildResult) mainInfo() (mainInfo, bool) {
+	if r == nil || r.MainWorkload == nil {
+		return mainInfo{}, false
+	}
+	switch obj := r.MainWorkload.(type) {
+	case *appsv1.Deployment:
+		return mainInfo{
+			name:         obj.Name,
+			selector:     labelSelectorMatchLabels(obj.Spec.Selector),
+			objectMeta:   &obj.ObjectMeta,
+			templateMeta: &obj.Spec.Template.ObjectMeta,
+		}, true
+	case *tkex.GameDeployment:
+		return mainInfo{
+			name:         obj.Name,
+			selector:     labelSelectorMatchLabels(obj.Spec.Selector),
+			objectMeta:   &obj.ObjectMeta,
+			templateMeta: &obj.Spec.Template.ObjectMeta,
+		}, true
+	default:
+		return mainInfo{}, false
+	}
 }
 
 // NewBuilderService creates a BuilderService from the dependencies that can be injected by fx.

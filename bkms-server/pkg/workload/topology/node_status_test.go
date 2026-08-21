@@ -30,7 +30,7 @@ import (
 var _ = Describe("BuilderStatus", func() {
 	Describe("getResourceStatus", func() {
 		It("should return Unknown when obj is nil", func() {
-			result := getResourceStatus(k8skind.Deploy, nil)
+			result := getResourceStatus(k8skind.Deploy, nil, false)
 			Expect(result.Code).To(Equal(k8sstatus.Unknown))
 			Expect(result.Message).To(BeEmpty())
 		})
@@ -55,7 +55,7 @@ var _ = Describe("BuilderStatus", func() {
 						},
 					},
 				}}
-				result := getResourceStatus(k8skind.Deploy, obj)
+				result := getResourceStatus(k8skind.Deploy, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Available))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -73,7 +73,7 @@ var _ = Describe("BuilderStatus", func() {
 						},
 					},
 				}}
-				result := getResourceStatus(k8skind.Deploy, obj)
+				result := getResourceStatus(k8skind.Deploy, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Degraded))
 				Expect(result.Message).To(Equal("ProgressDeadlineExceeded: deadline exceeded"))
 			})
@@ -87,7 +87,7 @@ var _ = Describe("BuilderStatus", func() {
 						"observedGeneration": int64(1),
 					},
 				}}
-				result := getResourceStatus(k8skind.Deploy, obj)
+				result := getResourceStatus(k8skind.Deploy, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Progressing))
 				Expect(result.Message).To(Equal("observedGeneration has not caught up with metadata.generation"))
 			})
@@ -108,9 +108,25 @@ var _ = Describe("BuilderStatus", func() {
 						"availableReplicas":  int64(0),
 					},
 				}}
-				result := getResourceStatus(k8skind.Deploy, obj)
+				result := getResourceStatus(k8skind.Deploy, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Progressing))
 				Expect(result.Message).To(BeEmpty())
+			})
+
+			It("should use ParseForFederation when isFederation is true", func() {
+				obj := &unstructured.Unstructured{Object: map[string]any{
+					"spec": map[string]any{
+						"replicas": int64(1),
+					},
+					"status": map[string]any{
+						"replicas":          int64(1),
+						"readyReplicas":     int64(1),
+						"updatedReplicas":   int64(1),
+						"availableReplicas": int64(1),
+					},
+				}}
+				Expect(getResourceStatus(k8skind.Deploy, obj, false).Code).To(Equal(k8sstatus.Progressing))
+				Expect(getResourceStatus(k8skind.Deploy, obj, true).Code).To(Equal(k8sstatus.Available))
 			})
 		})
 
@@ -130,7 +146,7 @@ var _ = Describe("BuilderStatus", func() {
 						"updatedReplicas":    int64(3),
 					},
 				}}
-				result := getResourceStatus(k8skind.STS, obj)
+				result := getResourceStatus(k8skind.STS, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Available))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -150,7 +166,7 @@ var _ = Describe("BuilderStatus", func() {
 						"updatedReplicas":    int64(3),
 					},
 				}}
-				result := getResourceStatus(k8skind.STS, obj)
+				result := getResourceStatus(k8skind.STS, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Progressing))
 				Expect(result.Message).To(Equal("replicas are not consistent: spec.replicas != status.readyReplicas"))
 			})
@@ -170,7 +186,7 @@ var _ = Describe("BuilderStatus", func() {
 						"updatedReplicas":    int64(0),
 					},
 				}}
-				result := getResourceStatus(k8skind.STS, obj)
+				result := getResourceStatus(k8skind.STS, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Available))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -191,7 +207,7 @@ var _ = Describe("BuilderStatus", func() {
 						"numberUnavailable":      int64(0),
 					},
 				}}
-				result := getResourceStatus(k8skind.DS, obj)
+				result := getResourceStatus(k8skind.DS, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Available))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -210,7 +226,7 @@ var _ = Describe("BuilderStatus", func() {
 						"numberUnavailable":      int64(0),
 					},
 				}}
-				result := getResourceStatus(k8skind.DS, obj)
+				result := getResourceStatus(k8skind.DS, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Progressing))
 				Expect(
 					result.Message,
@@ -231,7 +247,7 @@ var _ = Describe("BuilderStatus", func() {
 						"numberUnavailable":      int64(1),
 					},
 				}}
-				result := getResourceStatus(k8skind.DS, obj)
+				result := getResourceStatus(k8skind.DS, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Progressing))
 				Expect(result.Message).To(Equal("some pods are unavailable"))
 			})
@@ -240,7 +256,7 @@ var _ = Describe("BuilderStatus", func() {
 		DescribeTable("always-healthy kinds",
 			func(kind string) {
 				obj := &unstructured.Unstructured{Object: map[string]any{}}
-				result := getResourceStatus(kind, obj)
+				result := getResourceStatus(kind, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Healthy))
 				Expect(result.Message).To(BeEmpty())
 			},
@@ -254,7 +270,7 @@ var _ = Describe("BuilderStatus", func() {
 		Context("unknown kind", func() {
 			It("should return Unknown", func() {
 				obj := &unstructured.Unstructured{Object: map[string]any{}}
-				result := getResourceStatus("CronJob", obj)
+				result := getResourceStatus("CronJob", obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Unknown))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -270,7 +286,7 @@ var _ = Describe("BuilderStatus", func() {
 						"readyReplicas": int64(3),
 					},
 				}}
-				result := getResourceStatus(k8skind.RS, obj)
+				result := getResourceStatus(k8skind.RS, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Available))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -284,7 +300,7 @@ var _ = Describe("BuilderStatus", func() {
 						"readyReplicas": int64(1),
 					},
 				}}
-				result := getResourceStatus(k8skind.RS, obj)
+				result := getResourceStatus(k8skind.RS, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Progressing))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -300,7 +316,7 @@ var _ = Describe("BuilderStatus", func() {
 						},
 					},
 				}}
-				result := getResourceStatus(k8skind.HPA, obj)
+				result := getResourceStatus(k8skind.HPA, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Healthy))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -314,7 +330,7 @@ var _ = Describe("BuilderStatus", func() {
 						},
 					},
 				}}
-				result := getResourceStatus(k8skind.HPA, obj)
+				result := getResourceStatus(k8skind.HPA, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Degraded))
 				Expect(result.Message).To(BeEmpty())
 			})
@@ -330,14 +346,14 @@ var _ = Describe("BuilderStatus", func() {
 						},
 					},
 				}}
-				result := getResourceStatus(k8skind.GPA, obj)
+				result := getResourceStatus(k8skind.GPA, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Healthy))
 				Expect(result.Message).To(BeEmpty())
 			})
 
 			It("should return Unknown when key conditions are missing", func() {
 				obj := &unstructured.Unstructured{Object: map[string]any{}}
-				result := getResourceStatus(k8skind.GPA, obj)
+				result := getResourceStatus(k8skind.GPA, obj, false)
 				Expect(result.Code).To(Equal(k8sstatus.Unknown))
 				Expect(result.Message).To(BeEmpty())
 			})

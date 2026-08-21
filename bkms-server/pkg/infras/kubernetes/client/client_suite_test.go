@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package client_test
+package client
 
 import (
 	"testing"

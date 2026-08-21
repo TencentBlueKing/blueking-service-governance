@@ -16,34 +16,13 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package workload
+package env
 
 import (
-	"github.com/pkg/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
 
-// AppendAsUnstructured appends any kubernetes resources to the given unstructured objects slice.
-func AppendAsUnstructured(
-	items []unstructured.Unstructured,
-	inputObjs ...client.Object,
-) ([]unstructured.Unstructured, error) {
-	for _, input := range inputObjs {
-		obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(input)
-		if err != nil {
-			return nil, errors.Wrapf(err, "converting %s to unstructured", input.GetName())
-		}
-		items = append(items, unstructured.Unstructured{Object: obj})
-	}
-	return items, nil
-}
-
-func labelSelectorMatchLabels(sel *metav1.LabelSelector) map[string]string {
-	if sel == nil {
-		return nil
-	}
-	return sel.MatchLabels
+// IsFederationCluster 判断 clusterID 是否在配置的联邦 Host 集群 ID 列表中。
+func IsFederationCluster(clusterID string) bool {
+	return (&cluster.Config{ClusterID: clusterID}).IsFederation()
 }

@@ -133,6 +133,35 @@ var _ = Describe("instance helpers", func() {
 		It("returns an empty name when no GameDeployment was recorded", func() {
 			Expect(extractGameDeployName(&appmodel.Record{})).To(BeEmpty())
 		})
+
+		It("does not treat Deployment as GameDeployment", func() {
+			Expect(extractGameDeployName(&appmodel.Record{ResourceKeys: appmodel.ResourceKeys{
+				{Kind: k8skind.Deploy, Name: "app"},
+			}})).To(BeEmpty())
+		})
+	})
+
+	Describe("extractMainWorkload", func() {
+		It("picks Deployment from the recorded resources", func() {
+			kind, name := extractMainWorkload(&appmodel.Record{ResourceKeys: appmodel.ResourceKeys{
+				{Kind: k8skind.SVC, Name: "svc-app"},
+				{Kind: k8skind.Deploy, Name: "app"},
+			}})
+			Expect(kind).To(Equal(k8skind.Deploy))
+			Expect(name).To(Equal("app"))
+		})
+
+		It("uses WorkloadKind when the record has it", func() {
+			kind, name := extractMainWorkload(&appmodel.Record{
+				WorkloadKind: k8skind.Deploy,
+				ResourceKeys: appmodel.ResourceKeys{
+					{Kind: k8skind.Deploy, Name: "app"},
+					{Kind: k8skind.SVC, Name: "svc-app"},
+				},
+			})
+			Expect(kind).To(Equal(k8skind.Deploy))
+			Expect(name).To(Equal("app"))
+		})
 	})
 
 	Describe("groupDeployRecordsByCluster", func() {
