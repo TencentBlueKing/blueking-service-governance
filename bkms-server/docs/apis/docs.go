@@ -7650,6 +7650,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "北极星拉取失败不阻塞 Pod 输出：polarisInfos 为空数组，与未注册北极星同形，其余字段照常返回。",
                 "produces": [
                     "application/json"
                 ],

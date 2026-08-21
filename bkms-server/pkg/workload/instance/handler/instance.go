@@ -59,10 +59,11 @@ func New(registry *storereg.Registry) *Handler {
 // 查询模式互斥：all=true 且不带 page/pageSize 为全量；未传 all 时 page/pageSize 必填走分页
 // 全量时单个 Pod 投影失败则跳过并写入 skipped，count 为成功投影数（不含跳过项）
 // 分页时当前页解析失败整次 500（与改造前一致，供 CLI）；count 为 LabelSelector 匹配 Pod 总数
-// 北极星拉取失败时分页与全量都整次失败，不降级
+// 北极星拉取失败不阻塞 Pod 输出，降级为空 polarisInfos，与未注册北极星同形
 //
 //	@ID			ListAppInstances
 //	@Summary	获取应用实例列表
+//	@Description	北极星拉取失败不阻塞 Pod 输出：polarisInfos 为空数组，与未注册北极星同形，其余字段照常返回。
 //	@Tags		instance
 //	@Produce	json
 //	@Security	BkUserInfo
@@ -78,21 +79,25 @@ func New(registry *storereg.Registry) *Handler {
 //	@Router		/apps/{appID}/envs/{envName}/instances [get]
 func (h *Handler) ListAppInstances(c *gin.Context) {
 	// 绑定路径与查询参数；全量与分页互斥，分页时 page/pageSize 必填
-	uriInput, queryInput, ok := h.bindListAppInstancesQuery(c)
-	if !ok {
+	uriInput, queryInput, err := h.bindListAppInstancesQuery(c)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
+
 	// 校验 App 查看权限与 AppModel 类型，并取该环境/泳道最新部署记录
-	app, record, ok := h.getAppAndLatestDeployRecord(c, ctx, uriInput, queryInput)
-	if !ok {
+	app, record, err := h.validateAppAndGetDeployRecord(ctx, uriInput, queryInput.TrafficLaneName)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	// 按部署记录的命名空间 + LabelSelector 拉取匹配 Pod
-	items, ok := h.listMatchingAppInstancePods(c, ctx, record)
-	if !ok {
+	items, err := h.listMatchingAppInstancePods(ctx, record)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -103,10 +108,8 @@ func (h *Handler) ListAppInstances(c *gin.Context) {
 		return
 	}
 
-	// 合并该应用环境的北极星实例；拉取失败则整次 List 失败，不降级
-	if !h.attachPolarisToListedAppInstances(c, ctx, app.ID, uriInput.EnvName, results) {
-		return
-	}
+	// 合并该应用环境的北极星实例；拉取失败只降级这一列，不影响 Pod 列表返回
+	h.attachPolarisToListedAppInstances(ctx, app.ID, uriInput.EnvName, results)
 
 	ginutils.OK(c, serializer.ListAppInstancesOutput{
 		Data: &serializer.PaginatedAppInstancesOutputObj{
