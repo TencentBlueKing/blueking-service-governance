@@ -197,10 +197,9 @@ type AppConfigFileContentSpec struct {
 	// 默认逻辑文件自身不设置该字段，并使用自己的 ID 作为逻辑根。
 	DefaultAppConfigFileID *bson.ObjectID `bson:"rootAppConfigFileID,omitempty"`
 	// IsUnifiedConfig 表示当前逻辑文件是否为统一配置模式。
-	// true（或零值）= 所有挂载环境共用同一份内容；
-	// false = 按环境独立配置，每个环境各自维护一份内容副本。
-	// 该字段主要存储在默认逻辑文件记录上。
-	IsUnifiedConfig bool `bson:"isUnifiedConfig,omitempty"`
+	// true = 所有挂载环境共用同一份内容；false = 按环境独立配置。
+	// 不能使用 omitempty：Update 走 $set，false 被省略后数据库会留下旧的 true。
+	IsUnifiedConfig bool `bson:"isUnifiedConfig"`
 	// MountedEnvNames 表示当前文件的挂载环境范围。
 	// nil = 对所有环境生效；非 nil 空切片 = 不挂载到任何环境；非空 = 仅对列出的环境生效。
 	MountedEnvNames []string `bson:"mountedEnvNames"`

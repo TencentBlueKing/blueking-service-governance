@@ -690,6 +690,8 @@ func (h *Handler) updateContentOrOverlay(
 			return nil, lazyErr
 		}
 		if created {
+			h.addAppConfigFileAudit(ctx, app, envAcf.EnvName, audit.OperationTypeCreate,
+				nil, buildAppConfigFileAuditData(envAcf))
 			return &slz.UpdateAppConfigFileContentOutput{CompiledContent: content}, nil
 		}
 		if envAcf != nil {
@@ -753,6 +755,13 @@ func (h *Handler) lazyCreatePlainEnvInstance(
 	operator string,
 	description string,
 ) (*appcfg.AppConfigFile, bool, error) {
+	if !defaultFile.IsMountedToEnv(envName) {
+		return nil, false, bkerrs.Wrap(
+			pkgerrors.Wrap(appcfg.ErrInvalidConfigSpec, "plain env instance envName is not in mountedEnvNames"),
+			bkerrs.ErrCodeInvalidArgument,
+			"lazy create plain env instance",
+		)
+	}
 	existing, err := cfgService.FindPlainEnvInstance(ctx, *defaultFile, envName)
 	if err != nil {
 		return nil, false, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "find plain env instance")
@@ -764,6 +773,9 @@ func (h *Handler) lazyCreatePlainEnvInstance(
 		ctx, *defaultFile, envName, &content, operator, description,
 	)
 	if err != nil {
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+			return nil, false, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "lazy create plain env instance")
+		}
 		return nil, false, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "lazy create plain env instance")
 	}
 	return envAcf, true, nil

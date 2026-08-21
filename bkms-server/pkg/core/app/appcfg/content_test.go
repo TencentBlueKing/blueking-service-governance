@@ -368,3 +368,15 @@ var _ = Describe("ListEnvPlainContents", func() {
 		Expect(files[0].Content).To(Equal("feature.enabled=true\n"))
 	})
 })
+
+var _ = Describe("AppConfigFileContentSpec", func() {
+	It("treats zero-value spec as independent env config", func() {
+		spec := appcfg.AppConfigFileContentSpec{}
+		Expect(spec.HasIndependentEnvConfig()).To(BeTrue())
+	})
+
+	It("does not treat explicitly unified spec as independent", func() {
+		spec := appcfg.AppConfigFileContentSpec{IsUnifiedConfig: true}
+		Expect(spec.HasIndependentEnvConfig()).To(BeFalse())
+	})
+})
