@@ -973,7 +973,6 @@
             {
               appID: appDetailStore.appID,
               id: configId,
-              previewOnly: false,
               content: submitContent,
               description,
               currentVersion: findConfigFileByEnvName('')?.currentVersion,
@@ -997,7 +996,6 @@
           await updateOverlayContent(
             configId,
             submitContent,
-            false,
             description,
             findConfigFileByEnvName(currentEnv.value?.name ?? '')?.currentVersion,
           );
@@ -1023,7 +1021,6 @@
           await updateOverlayContent(
             createResult.item.id,
             submitContent,
-            false,
             description,
             findConfigFileByEnvName(currentEnv.value?.name ?? '')?.currentVersion,
           );
@@ -1092,7 +1089,6 @@
   async function updateOverlayContent(
     configFileId: string,
     overlayContent: string,
-    previewOnly = false,
     description = '',
     currentVersion = 0,
   ) {
@@ -1101,7 +1097,6 @@
         appID: appDetailStore.appID,
         id: configFileId,
         overlayContent,
-        previewOnly,
         description,
         currentVersion,
       },

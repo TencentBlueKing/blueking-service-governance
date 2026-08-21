@@ -88,12 +88,12 @@
     const value = editorRef.value?.getValue() || '';
     // 本地编辑覆盖层
     if (curFileInfo.value?.type === 'overlay') {
-      await updateValuesFileOverlayContent(curFileInfo.value?.id ?? '', value, false, description);
+      await updateValuesFileOverlayContent(curFileInfo.value?.id ?? '', value, description);
     } else if (curFileInfo.value?.contentSourceType === 'bscp' && curFileInfo.value?.type === 'normal') {
       // BSCP 覆盖层
-      await updateValuesFileOverlayContent(curFileInfo.value?.id ?? '', value, false, description);
+      await updateValuesFileOverlayContent(curFileInfo.value?.id ?? '', value, description);
     } else {
-      await updateValuesFileContent(curFileInfo.value!.id ?? '', value, false, description);
+      await updateValuesFileContent(curFileInfo.value!.id ?? '', value, description);
     }
   }
 
@@ -117,7 +117,6 @@
   async function updateValuesFile(
     fileId: string,
     updateData: { content?: string; overlayContent?: string },
-    previewOnly = false,
     description = '',
   ) {
     const isOverlayUpdate = 'overlayContent' in updateData;
@@ -130,7 +129,6 @@
     const requestParams = {
       appID: appDetailStore.appID,
       id: fileId,
-      previewOnly,
       currentVersion: curFileInfoRef?.currentVersion ?? 0,
       description,
       ...updateData,
@@ -153,18 +151,13 @@
   }
 
   // 修改文件 values 的 Content
-  async function updateValuesFileContent(fileId: string, content: string, previewOnly = false, description = '') {
-    return updateValuesFile(fileId, { content }, previewOnly, description);
+  async function updateValuesFileContent(fileId: string, content: string, description = '') {
+    return updateValuesFile(fileId, { content }, description);
   }
 
   // 修改文件 values 的 overlayContent
-  async function updateValuesFileOverlayContent(
-    fileId: string,
-    overlayContent: string,
-    previewOnly = false,
-    description = '',
-  ) {
-    return updateValuesFile(fileId, { overlayContent }, previewOnly, description);
+  async function updateValuesFileOverlayContent(fileId: string, overlayContent: string, description = '') {
+    return updateValuesFile(fileId, { overlayContent }, description);
   }
 
   // 校验
