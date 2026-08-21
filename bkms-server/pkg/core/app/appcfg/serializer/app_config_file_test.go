@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/serializer"
 )
 
@@ -143,6 +144,16 @@ var _ = Describe("App config file serializers", func() {
 			"updater": "",
 			"updatedAt": ""
 		}`))
+	})
+
+	It("fills version fileFormat via GetConfigFormat when format is empty", func() {
+		output := new(serializer.AppConfigFileVersionOutputObj).FromModel(appcfg.AppConfigFileVersion{
+			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+				Name: "demo",
+			},
+		})
+
+		Expect(output.FileFormat).To(Equal(string(appcfg.FileFormatYAML)))
 	})
 
 	It("marshals version list numeric fields as JSON numbers", func() {

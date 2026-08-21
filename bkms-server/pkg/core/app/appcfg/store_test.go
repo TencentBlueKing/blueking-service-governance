@@ -253,6 +253,34 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			Expect(got.MountedEnvNames).To(Equal([]string{}))
 		})
 
+		It("should persist isUnifiedConfig false on update", func() {
+			content := "KEY=VALUE"
+			plainFile := appcfg.AppConfigFile{
+				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+					AppID:             appID,
+					Name:              "unified-flag-update",
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+					ConfigKind:        appcfg.ConfigKindPlain,
+					MountPath:         "/data/app/conf/unified-flag.env",
+					Format:            appcfg.FileFormat("env"),
+					IsUnifiedConfig:   true,
+				},
+			}
+			oid, err := store.Add(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+			plainFile.ID = oid
+			plainFile.IsUnifiedConfig = false
+
+			_, err = store.Update(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := store.GetByID(ctx, oid)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsUnifiedConfig).To(BeFalse())
+		})
+
 		It("should persist clearing mountedEnvNames to empty slice on update", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{

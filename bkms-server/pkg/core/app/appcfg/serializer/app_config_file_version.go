@@ -148,7 +148,7 @@ func (o *AppConfigFileVersionOutputObj) FromModel(obj appcfg.AppConfigFileVersio
 		MountPath:           obj.MountPath,
 		IsUnifiedConfig:     obj.IsUnifiedConfig,
 		MountedEnvNames:     obj.MountedEnvNames,
-		FileFormat:          string(obj.Format),
+		FileFormat:          string(obj.GetConfigFormat()),
 		Content:             obj.Content,
 		OverlayContent:      obj.OverlayContent,
 		BaseVersion:         obj.BaseVersion,

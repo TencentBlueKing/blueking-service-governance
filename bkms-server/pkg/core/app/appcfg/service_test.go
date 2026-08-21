@@ -131,6 +131,7 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(acf.GetConfigKind()).To(Equal(appcfg.ConfigKindPlain))
 			Expect(acf.MountPath).To(Equal("/data/app/conf/custom.env"))
+			Expect(acf.IsUnifiedConfig).To(BeTrue())
 
 			gotFile, err := fileStore.GetByID(ctx, acf.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -475,6 +476,539 @@ var _ = Describe("AppConfigFileService", func() {
 			_, _, err = service.DeleteVersion(ctx, appID, currentVersionID, "tester")
 
 			Expect(err).To(MatchError(appcfg.ErrUsingVersionCannotBeDeleted))
+		})
+	})
+
+	Context("UpdateEnvConfig", func() {
+		var defaultFile *appcfg.AppConfigFile
+
+		createPlainDefault := func() *appcfg.AppConfigFile {
+			content := "feature.enabled=true"
+			acf, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "custom-env",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormat("env"),
+				ConfigKind:        appcfg.ConfigKindPlain,
+				MountPath:         "/data/app/conf/custom.env",
+				IsUnifiedConfig:   true,
+				Content:           &content,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			return acf
+		}
+
+		createPlainEnv := func(root *appcfg.AppConfigFile, envName, content string) *appcfg.AppConfigFile {
+			envFile, err := service.CreatePlainEnvInstance(
+				ctx, *root, envName, &content, "tester", "create env instance",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			return envFile
+		}
+
+		expectNotFound := func(id bson.ObjectID) {
+			_, err := fileStore.GetByID(ctx, id)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		}
+
+		BeforeEach(func() {
+			defaultFile = createPlainDefault()
+		})
+
+		It("should enable independent env config without creating env instances", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod", "stag"},
+				Operator:        "tester",
+				Description:     "enable independent env config",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := fileStore.GetByID(ctx, defaultFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsUnifiedConfig).To(BeFalse())
+			Expect(got.MountedEnvNames).To(Equal([]string{"prod", "stag"}))
+			Expect(got.CurrentVersion).To(Equal(int64(2)))
+
+			files, err := fileStore.List(ctx, appID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(files).To(HaveLen(1))
+		})
+
+		It("should enable independent env config for all envs", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				Operator:        "tester",
+				Description:     "enable independent env config for all envs",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := fileStore.GetByID(ctx, defaultFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsUnifiedConfig).To(BeFalse())
+			Expect(got.MountedEnvNames).To(BeNil())
+		})
+
+		It("should switch back to unified config and delete all env instances", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod", "stag"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			prodFile := createPlainEnv(defaultFile, "prod", "feature.enabled=false")
+			stagFile := createPlainEnv(defaultFile, "stag", "feature.enabled=gray")
+
+			err = service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: true,
+				Operator:        "tester",
+				Description:     "switch to unified config",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaultFile.IsUnifiedConfig).To(BeTrue())
+			Expect(defaultFile.MountedEnvNames).To(BeNil())
+
+			expectNotFound(prodFile.ID)
+			expectNotFound(stagFile.ID)
+			items, total, err := versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
+				AppID:           appID,
+				AppConfigFileID: &prodFile.ID,
+				Page:            1,
+				PageSize:        10,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(total).To(Equal(int64(0)))
+			Expect(items).To(BeEmpty())
+		})
+
+		It("should restore specified env instances to reference state", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod", "stag"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			prodFile := createPlainEnv(defaultFile, "prod", "feature.enabled=false")
+			stagFile := createPlainEnv(defaultFile, "stag", "feature.enabled=gray")
+
+			err = service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig:   false,
+				MountedEnvNames:   []string{"prod", "stag"},
+				FallbackConfigEnv: "prod",
+				Operator:          "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			expectNotFound(prodFile.ID)
+			_, err = fileStore.GetByID(ctx, stagFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should reject fallback on unified config", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig:   false,
+				FallbackConfigEnv: "prod",
+				Operator:          "tester",
+			})
+			Expect(errors.Is(err, appcfg.ErrFallbackRequiresIndependentConfig)).To(BeTrue())
+		})
+
+		It("should keep IsUnifiedConfig unchanged on generic update", func() {
+			content := "feature.enabled=true"
+			defaultFile.Content = &content
+			err := service.UpdateFile(ctx, defaultFile, "tester", appcfg.UpdateCfgFileOptions{
+				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
+				Description:   "keep unified config unchanged",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := fileStore.GetByID(ctx, defaultFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsUnifiedConfig).To(BeTrue())
+		})
+
+		It("should clean up stale env instances when narrowing mount scope", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod", "stag"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			prodFile := createPlainEnv(defaultFile, "prod", "feature.enabled=false")
+			stagFile := createPlainEnv(defaultFile, "stag", "feature.enabled=gray")
+
+			err = service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaultFile.MountedEnvNames).To(Equal([]string{"prod"}))
+
+			_, err = fileStore.GetByID(ctx, prodFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+			expectNotFound(stagFile.ID)
+		})
+
+		It("should keep mountedEnvNames when switching back to unified config", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod", "stag"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: true,
+				MountedEnvNames: []string{"prod"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaultFile.IsUnifiedConfig).To(BeTrue())
+			Expect(defaultFile.MountedEnvNames).To(Equal([]string{"prod"}))
+		})
+
+		It("should update mountedEnvNames while already in unified config", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: true,
+				MountedEnvNames: []string{"prod"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := fileStore.GetByID(ctx, defaultFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsUnifiedConfig).To(BeTrue())
+			Expect(got.MountedEnvNames).To(Equal([]string{"prod"}))
+		})
+
+		It("should reject creating a plain env record without defaultAppConfigFileID", func() {
+			content := "feature.enabled=true"
+			_, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           "prod",
+				Name:              "orphan-plain",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormat("env"),
+				ConfigKind:        appcfg.ConfigKindPlain,
+				MountPath:         "/data/app/conf/orphan.env",
+				IsUnifiedConfig:   true,
+				Content:           &content,
+				Creator:           "tester",
+			})
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("plain env instance requires defaultAppConfigFileID")))
+		})
+
+		It("should reject overlay whose base is a plain config file", func() {
+			overlayContent := "patches:\n- foo: 1\n"
+			_, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:               appID,
+				EnvName:             appcfg.EnvNameDefault,
+				Name:                "plain-overlay",
+				Type:                appcfg.AppConfigFileTypeOverlay,
+				ContentSourceType:   appcfg.ContentSourceTypeLocal,
+				Format:              appcfg.FileFormatYAML,
+				ConfigKind:          appcfg.ConfigKindFramework,
+				BaseAppConfigFileID: &defaultFile.ID,
+				OverlayContent:      &overlayContent,
+				Creator:             "tester",
+			})
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("overlay base must be a framework config file")))
+		})
+
+		It("should create independent env instance on first modification", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod", "stag"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			prodContent := "feature.enabled=false"
+			envFile, err := service.CreatePlainEnvInstance(
+				ctx, *defaultFile, "prod", &prodContent, "tester", "create independent env instance",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envFile.EnvName).To(Equal("prod"))
+			Expect(envFile.DefaultAppConfigFileID).NotTo(BeNil())
+			Expect(*envFile.DefaultAppConfigFileID).To(Equal(defaultFile.ID))
+			Expect(*envFile.Content).To(Equal("feature.enabled=false"))
+
+			got, err := fileStore.GetByID(ctx, envFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*got.Content).To(Equal("feature.enabled=false"))
+		})
+
+		It("should reject creating a plain env instance for an unmounted env", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			content := "feature.enabled=false"
+			_, err = service.CreatePlainEnvInstance(ctx, *defaultFile, "stag", &content, "tester", "lazy create")
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("not in mountedEnvNames")))
+		})
+
+		It("should reject mountPath change on plain env instance", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			prodFile := createPlainEnv(defaultFile, "prod", "feature.enabled=false")
+			prodFile.MountPath = "/data/app/conf/other.env"
+
+			err = service.UpdateFile(ctx, prodFile, "tester", appcfg.UpdateCfgFileOptions{
+				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
+			})
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("plain env instance cannot change mountPath")))
+		})
+
+		It("should find existing plain env instance for content update", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			prodFile := createPlainEnv(defaultFile, "prod", "feature.enabled=false")
+
+			found, err := service.FindPlainEnvInstance(ctx, *defaultFile, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(found.ID).To(Equal(prodFile.ID))
+			Expect(*found.Content).To(Equal("feature.enabled=false"))
+		})
+
+		It("should clean mountedEnvNames for roots without env instances when env is deleted", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: false,
+				MountedEnvNames: []string{"prod", "stag"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = service.CleanupPlainEnvInstancesByEnv(ctx, appID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := fileStore.GetByID(ctx, defaultFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.MountedEnvNames).To(Equal([]string{"stag"}))
+		})
+
+		It("should clear mountedEnvNames to empty slice when the last scoped env is deleted", func() {
+			err := service.UpdateEnvConfig(ctx, defaultFile, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: true,
+				MountedEnvNames: []string{"prod"},
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = service.CleanupPlainEnvInstancesByEnv(ctx, appID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := fileStore.GetByID(ctx, defaultFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.MountedEnvNames).NotTo(BeNil())
+			Expect(got.MountedEnvNames).To(Equal([]string{}))
+		})
+
+		It("should reject creating a framework file with mountedEnvNames", func() {
+			content := "global:\n  namespace: Production\n"
+			_, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				ConfigKind:        appcfg.ConfigKindFramework,
+				MountedEnvNames:   []string{"prod"},
+				Content:           &content,
+				Creator:           "tester",
+			})
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("framework config does not support mountedEnvNames")))
+		})
+
+		DescribeTable("should reject invalid plain mountPath",
+			func(mountPath string) {
+				content := "feature.enabled=true"
+				_, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+					AppID:             appID,
+					EnvName:           appcfg.EnvNameDefault,
+					Name:              "invalid-mount",
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Format:            appcfg.FileFormat("env"),
+					ConfigKind:        appcfg.ConfigKindPlain,
+					MountPath:         mountPath,
+					Content:           &content,
+					Creator:           "tester",
+				})
+				Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+				Expect(err).To(MatchError(ContainSubstring("absolute file path")))
+			},
+			Entry("relative path", "data/config/custom.env"),
+			Entry("root path", "/"),
+			Entry("trailing slash", "/data/config/"),
+		)
+
+		It("should delete framework env files without BaseAppConfigFileID when switching to unified", func() {
+			fwContent := "global:\n  namespace: Production\n"
+			fwDefault, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				ConfigKind:        appcfg.ConfigKindFramework,
+				IsUnifiedConfig:   false,
+				Content:           &fwContent,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			envContent := "global:\n  namespace: ProdEnv\n"
+			envFile, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           "prod",
+				Name:              "trpc_go.yaml--prod",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				ConfigKind:        appcfg.ConfigKindFramework,
+				Content:           &envContent,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = service.UpdateEnvConfig(ctx, fwDefault, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: true,
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fwDefault.IsUnifiedConfig).To(BeTrue())
+			expectNotFound(envFile.ID)
+		})
+
+		It("should delete framework env overlays derived from the default file when switching to unified", func() {
+			fwContent := "global:\n  namespace: Production\n"
+			fwDefault, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				ConfigKind:        appcfg.ConfigKindFramework,
+				IsUnifiedConfig:   false,
+				Content:           &fwContent,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			overlayContent := "patches:\n- path: /global/namespace\n"
+			overlayFile, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:               appID,
+				EnvName:             "prod",
+				Name:                "trpc_go.yaml-prod-overlay",
+				Type:                appcfg.AppConfigFileTypeOverlay,
+				ContentSourceType:   appcfg.ContentSourceTypeLocal,
+				Format:              appcfg.FileFormatYAML,
+				ConfigKind:          appcfg.ConfigKindFramework,
+				BaseAppConfigFileID: &fwDefault.ID,
+				OverlayContent:      &overlayContent,
+				Creator:             "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = service.UpdateEnvConfig(ctx, fwDefault, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: true,
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			expectNotFound(overlayFile.ID)
+		})
+
+		It("should not delete helm overlay with empty envName when switching framework to unified", func() {
+			fwContent := "global:\n  namespace: Production\n"
+			fwDefault, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				ConfigKind:        appcfg.ConfigKindFramework,
+				IsUnifiedConfig:   false,
+				Content:           &fwContent,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			overlayContent := "image:\n  tag: v1\n"
+			helmOverlay, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:               appID,
+				EnvName:             appcfg.EnvNameDefault,
+				Name:                "values-prod.yaml",
+				Type:                appcfg.AppConfigFileTypeOverlay,
+				ContentSourceType:   appcfg.ContentSourceTypeLocal,
+				Format:              appcfg.FileFormatYAML,
+				ConfigKind:          appcfg.ConfigKindFramework,
+				BaseAppConfigFileID: &fwDefault.ID,
+				OverlayContent:      &overlayContent,
+				Creator:             "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = service.UpdateEnvConfig(ctx, fwDefault, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: true,
+				Operator:        "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := fileStore.GetByID(ctx, helmOverlay.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Name).To(Equal("values-prod.yaml"))
+		})
+
+		It("should reject updating framework env config with mountedEnvNames", func() {
+			fwContent := "global:\n  namespace: Production\n"
+			fwDefault, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				ConfigKind:        appcfg.ConfigKindFramework,
+				IsUnifiedConfig:   false,
+				Content:           &fwContent,
+				Creator:           "tester",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = service.UpdateEnvConfig(ctx, fwDefault, appcfg.UpdateEnvConfigParams{
+				IsUnifiedConfig: true,
+				MountedEnvNames: []string{"prod"},
+				Operator:        "tester",
+			})
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("framework config does not support mountedEnvNames")))
 		})
 	})
 })
