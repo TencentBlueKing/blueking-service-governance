@@ -1,0 +1,16 @@
+[
+  {
+    "createIndexes": "custom_runtime_images",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "type": 1,
+          "name": 1
+        },
+        "name": "workspaceID_1_type_1_name_1",
+        "unique": true
+      }
+    ]
+  }
+]
