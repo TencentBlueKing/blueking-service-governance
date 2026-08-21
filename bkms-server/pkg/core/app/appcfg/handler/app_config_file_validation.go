@@ -87,6 +87,9 @@ func (h *Handler) validateBaseAppConfigFileID(
 	if obj.Type != appcfg.AppConfigFileTypeNormal {
 		return nil, errors.New("base app config file must be of type 'normal'")
 	}
+	if obj.GetConfigKind() != appcfg.ConfigKindFramework {
+		return nil, errors.New("base app config file must be of kind 'framework'")
+	}
 	if obj.AppID != appID {
 		return nil, errors.New("base app config file does not belong to the app")
 	}

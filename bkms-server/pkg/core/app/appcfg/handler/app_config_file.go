@@ -242,6 +242,11 @@ func (h *Handler) applyUpdateInputToConfigFile(
 	}
 	acf.Name = input.Name
 	if input.MountPath != "" {
+		if acf.GetConfigKind() == appcfg.ConfigKindPlain &&
+			acf.DefaultAppConfigFileID != nil &&
+			input.MountPath != acf.MountPath {
+			return pkgerrors.Wrap(appcfg.ErrInvalidConfigSpec, "plain env instance cannot change mountPath")
+		}
 		acf.MountPath = input.MountPath
 	}
 	if input.FileFormat != "" {
@@ -675,17 +680,20 @@ func (h *Handler) updateContentOrOverlay(
 	}
 	cfgService := appcfg.NewAppConfigFileService(h.registry.AppConfigFileStore, h.registry.AppConfigFileVersionStore)
 	operator := auth.MustGetUser(ctx).ID
-	// plain 独立配置模式下，若指定了 envName 且该环境尚无独立实例记录，
-	// 则以当前请求内容为初始值新建一条环境级实例，使该环境脱离对默认配置的引用。
+	// plain 独立配置模式下，指定 envName 时：无独立实例则 copy-on-write 创建；
+	// 已有独立实例则改写该实例，避免把内容写到默认记录上。
 	if envName != "" && acf.GetConfigKind() == appcfg.ConfigKindPlain &&
 		acf.EnvName == appcfg.EnvNameDefault && acf.HasIndependentEnvConfig() {
-		envAcf, lazyErr := h.lazyCreatePlainEnvInstance(
+		envAcf, created, lazyErr := h.lazyCreatePlainEnvInstance(
 			ctx, cfgService, acf, envName, content, operator, description)
 		if lazyErr != nil {
 			return nil, lazyErr
 		}
-		if envAcf != nil {
+		if created {
 			return &slz.UpdateAppConfigFileContentOutput{CompiledContent: content}, nil
+		}
+		if envAcf != nil {
+			acf = envAcf
 		}
 	}
 	oldAcf := *acf
@@ -733,9 +741,9 @@ func (h *Handler) updateContentOrOverlay(
 	return &slz.UpdateAppConfigFileContentOutput{CompiledContent: compiledContent, ArrgData: validatedRet}, nil
 }
 
-// lazyCreatePlainEnvInstance 在 plain 独立配置模式下，当目标环境没有独立实例时，
-// 以请求内容为初始值新建一条环境级实例记录，使该环境脱离对默认配置的引用。
-// 返回 nil 表示该环境已有独立实例，调用方应走普通更新逻辑。
+// lazyCreatePlainEnvInstance 在 plain 独立配置模式下解析目标环境的写入对象。
+// 已有独立实例时返回该实例且 created=false，调用方应继续走更新流程；
+// 尚无实例时以请求内容创建新记录并返回 created=true。
 func (h *Handler) lazyCreatePlainEnvInstance(
 	ctx context.Context,
 	cfgService *appcfg.AppConfigFileService,
@@ -744,28 +752,19 @@ func (h *Handler) lazyCreatePlainEnvInstance(
 	content string,
 	operator string,
 	description string,
-) (*appcfg.AppConfigFile, error) {
-	// 查找该环境是否已有属于同一逻辑文件的独立实例。
-	allFiles, err := h.registry.AppConfigFileStore.List(ctx, defaultFile.AppID)
+) (*appcfg.AppConfigFile, bool, error) {
+	existing, err := cfgService.FindPlainEnvInstance(ctx, *defaultFile, envName)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list files for lazy create")
+		return nil, false, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "find plain env instance")
 	}
-	for _, item := range allFiles {
-		if item.EnvName != envName {
-			continue
-		}
-		rootID, ok := item.GetLogicalRootID(item.ID)
-		if ok && rootID == defaultFile.ID {
-			// 已有独立实例，返回 nil 让调用方走普通更新逻辑。
-			return nil, nil
-		}
+	if existing != nil {
+		return existing, false, nil
 	}
-	// 该环境尚无独立实例，以请求内容为初始值创建一条新记录。
 	envAcf, err := cfgService.CreatePlainEnvInstance(
 		ctx, *defaultFile, envName, &content, operator, description,
 	)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "lazy create plain env instance")
+		return nil, false, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "lazy create plain env instance")
 	}
-	return envAcf, nil
+	return envAcf, true, nil
 }

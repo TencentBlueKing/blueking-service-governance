@@ -224,7 +224,7 @@ type AppConfigFileOutputObj struct {
 	// 是否统一配置
 	IsUnifiedConfig bool `json:"isUnifiedConfig"`
 	// 挂载环境范围
-	MountedEnvNames []string `json:"mountedEnvNames,omitempty"`
+	MountedEnvNames []string `json:"mountedEnvNames"`
 	// 基础应用配置文件 ID，可能为空
 	BaseAppConfigFileID string `json:"baseAppConfigFileID,omitempty"`
 	// 仅当 contentSourceType 为 bscp 时，bscpConfig 才有值

@@ -203,7 +203,7 @@ type AppConfigFileContentSpec struct {
 	IsUnifiedConfig bool `bson:"isUnifiedConfig,omitempty"`
 	// MountedEnvNames 表示当前文件的挂载环境范围。
 	// nil = 对所有环境生效；非 nil 空切片 = 不挂载到任何环境；非空 = 仅对列出的环境生效。
-	MountedEnvNames []string `bson:"mountedEnvNames,omitempty"`
+	MountedEnvNames []string `bson:"mountedEnvNames"`
 
 	// BSCPConfig is BSCP resource config reference.
 	// This field is only set when ContentSourceType is bscp.

@@ -117,6 +117,9 @@ func (s *AppConfigFileService) Create(
 	if err := s.validatePlainConfigFile(ctx, &acf); err != nil {
 		return nil, err
 	}
+	if err := s.validateOverlayBase(ctx, &acf); err != nil {
+		return nil, err
+	}
 
 	fileID, err := s.createFileWithInitialVersion(ctx, acf, params.Description)
 	if err != nil {
@@ -165,6 +168,9 @@ func (s *AppConfigFileService) UpdateFile(
 	opts UpdateCfgFileOptions,
 ) error {
 	if err := s.validatePlainConfigFile(ctx, acf); err != nil {
+		return err
+	}
+	if err := s.validateOverlayBase(ctx, acf); err != nil {
 		return err
 	}
 
@@ -228,35 +234,43 @@ func (s *AppConfigFileService) CleanupPlainEnvInstancesByEnv(
 	appID string,
 	envName string,
 ) error {
-	// 第一步：遍历所有配置文件，找到属于被删除环境的 plain 独立实例并删除，
-	// 同时记录其所属根文件 ID，后续需要同步更新根文件的挂载范围。
 	allFiles, err := s.fileStore.List(ctx, appID)
 	if err != nil {
 		return err
 	}
-	rootIDs := make(map[bson.ObjectID]struct{})
+	// 第一步：删除该环境对应的 plain 独立实例。
 	for _, item := range allFiles {
 		if item.GetConfigKind() != ConfigKindPlain || item.EnvName != envName || item.DefaultAppConfigFileID == nil {
 			continue
 		}
-		rootIDs[*item.DefaultAppConfigFileID] = struct{}{}
 		if _, err = s.deleteFileRecordAndVersions(ctx, appID, item.ID); err != nil {
 			return err
 		}
 	}
 
-	// 第二步：对受影响的根文件，从 MountedEnvNames 中移除已删除的环境名。
-	for rootID := range rootIDs {
-		rootFile, getErr := s.fileStore.GetByID(ctx, rootID)
-		if getErr != nil || rootFile == nil {
+	// 第二步：扫描全部 plain root，从指定环境挂载范围中移除已删除的环境名。
+	// 引用状态下没有独立实例，也必须同步回收 MountedEnvNames。
+	for _, item := range allFiles {
+		if item.GetConfigKind() != ConfigKindPlain || item.EnvName != EnvNameDefault {
 			continue
 		}
 		// nil 表示"全部环境"模式，删除某个环境不影响语义，无需更新。
-		if rootFile.MountedEnvNames == nil {
+		if item.MountedEnvNames == nil {
+			continue
+		}
+		if !lo.Contains(item.MountedEnvNames, envName) {
+			continue
+		}
+		rootFile, getErr := s.fileStore.GetByID(ctx, item.ID)
+		if getErr != nil || rootFile == nil {
+			continue
+		}
+		updated := lo.Without(rootFile.MountedEnvNames, envName)
+		if slices.Equal(updated, rootFile.MountedEnvNames) {
 			continue
 		}
 		// lo.Without 返回空切片（而非 nil），保持"指定环境"语义，不会意外切换为"全部环境"模式。
-		rootFile.MountedEnvNames = lo.Without(rootFile.MountedEnvNames, envName)
+		rootFile.MountedEnvNames = updated
 		if err = s.UpdateFile(ctx, rootFile, CfgSystemUser, UpdateCfgFileOptions{
 			OperationType: AppConfigFileVersionOperationTypeUpdate,
 			Description:   "环境删除时回收配置实例",
@@ -369,21 +383,26 @@ func (s *AppConfigFileService) enablePlainEnvConfig(
 }
 
 // disablePlainEnvConfig 切回统一配置：直接使用默认记录内容，删除所有环境实例。
+// 已经是统一模式时，仍允许单独更新挂载范围。
 func (s *AppConfigFileService) disablePlainEnvConfig(
 	ctx context.Context,
 	defaultFile *AppConfigFile,
 	params UpdateEnvConfigParams,
 ) error {
-	if defaultFile.IsUnifiedConfig {
+	if defaultFile.IsUnifiedConfig && slices.Equal(defaultFile.MountedEnvNames, params.MountedEnvNames) {
 		return nil
 	}
-	envFiles, err := s.listEnvInstanceFiles(ctx, *defaultFile)
-	if err != nil {
-		return err
+	envFiles := []AppConfigFile{}
+	if !defaultFile.IsUnifiedConfig {
+		var listErr error
+		envFiles, listErr = s.listEnvInstanceFiles(ctx, *defaultFile)
+		if listErr != nil {
+			return listErr
+		}
 	}
 	defaultFile.IsUnifiedConfig = true
-	defaultFile.MountedEnvNames = nil
-	if err = s.UpdateFile(ctx, defaultFile, params.Operator, UpdateCfgFileOptions{
+	defaultFile.MountedEnvNames = cloneStringSlice(params.MountedEnvNames)
+	if err := s.UpdateFile(ctx, defaultFile, params.Operator, UpdateCfgFileOptions{
 		OperationType:          AppConfigFileVersionOperationTypeUpdate,
 		Description:            params.Description,
 		ExpectedCurrentVersion: params.ExpectedCurrentVersion,
@@ -391,7 +410,7 @@ func (s *AppConfigFileService) disablePlainEnvConfig(
 		return err
 	}
 	for _, envFile := range envFiles {
-		if _, err = s.deleteFileRecordAndVersions(ctx, defaultFile.AppID, envFile.ID); err != nil {
+		if _, err := s.deleteFileRecordAndVersions(ctx, defaultFile.AppID, envFile.ID); err != nil {
 			return err
 		}
 	}
@@ -455,6 +474,9 @@ func validatePlainCreateParams(params CreateCfgFileParams) error {
 	if params.MountPath == "" {
 		return errors.Wrap(ErrInvalidConfigSpec, "mountPath is required for plain config")
 	}
+	if params.EnvName != EnvNameDefault && params.DefaultAppConfigFileID == nil {
+		return errors.Wrap(ErrInvalidConfigSpec, "plain env instance requires defaultAppConfigFileID")
+	}
 	return nil
 }
 
@@ -486,6 +508,15 @@ func (s *AppConfigFileService) validatePlainConfigFile(ctx context.Context, acf 
 	if acf.MountPath == "" {
 		return errors.Wrap(ErrInvalidConfigSpec, "mountPath is required for plain config")
 	}
+	if acf.DefaultAppConfigFileID != nil {
+		root, err := s.fileStore.GetByID(ctx, *acf.DefaultAppConfigFileID)
+		if err != nil {
+			return err
+		}
+		if root != nil && root.MountPath != acf.MountPath {
+			return errors.Wrap(ErrInvalidConfigSpec, "plain env instance cannot change mountPath")
+		}
+	}
 
 	existingFiles, err := s.fileStore.ListByAppAndMountPath(ctx, acf.AppID, acf.MountPath)
 	if err != nil {
@@ -499,6 +530,24 @@ func (s *AppConfigFileService) validatePlainConfigFile(ctx context.Context, acf 
 			continue
 		}
 		return ErrPlainConfigMountPathConflict
+	}
+	return nil
+}
+
+// validateOverlayBase 要求 overlay 的 base 必须是同一应用下的 framework 文件。
+func (s *AppConfigFileService) validateOverlayBase(ctx context.Context, acf *AppConfigFile) error {
+	if acf == nil || acf.Type != AppConfigFileTypeOverlay || acf.BaseAppConfigFileID == nil {
+		return nil
+	}
+	base, err := s.fileStore.GetByID(ctx, *acf.BaseAppConfigFileID)
+	if err != nil {
+		return err
+	}
+	if base == nil {
+		return errors.Wrap(ErrInvalidConfigSpec, "overlay base app config file not found")
+	}
+	if base.GetConfigKind() != ConfigKindFramework {
+		return errors.Wrap(ErrInvalidConfigSpec, "overlay base must be a framework config file")
 	}
 	return nil
 }
@@ -546,6 +595,27 @@ func (s *AppConfigFileService) listEnvInstanceFiles(
 		}
 	}
 	return result, nil
+}
+
+// FindPlainEnvInstance 查找默认逻辑文件下指定环境的独立实例。
+// 找不到时返回 (nil, nil)。
+func (s *AppConfigFileService) FindPlainEnvInstance(
+	ctx context.Context,
+	defaultFile AppConfigFile,
+	envName string,
+) (*AppConfigFile, error) {
+	envFiles, err := s.listEnvInstanceFiles(ctx, defaultFile)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range envFiles {
+		if item.EnvName != envName {
+			continue
+		}
+		found := item
+		return &found, nil
+	}
+	return nil, nil
 }
 
 // CreatePlainEnvInstance 基于默认逻辑文件创建一条 plain 环境级配置实例记录。

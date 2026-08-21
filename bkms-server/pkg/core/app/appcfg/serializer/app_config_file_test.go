@@ -85,6 +85,35 @@ var _ = Describe("App config file serializers", func() {
 		Expect(*input.CurrentVersion).To(Equal(int64(42)))
 	})
 
+	It("marshals empty mountedEnvNames as an empty JSON array", func() {
+		payload, err := json.Marshal(serializer.AppConfigFileOutputObj{
+			ID:              "abc",
+			Name:            "demo",
+			Type:            "normal",
+			ConfigKind:      "plain",
+			IsUnifiedConfig: true,
+			MountedEnvNames: []string{},
+			FileFormat:      "env",
+			CurrentVersion:  1,
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(payload).To(MatchJSON(`{
+			"id": "abc",
+			"name": "demo",
+			"type": "normal",
+			"contentSourceType": "",
+			"configKind": "plain",
+			"isUnifiedConfig": true,
+			"mountedEnvNames": [],
+			"envName": "",
+			"fileFormat": "env",
+			"currentVersion": 1,
+			"updater": "",
+			"updatedAt": ""
+		}`))
+	})
+
 	It("marshals file output with isUnifiedConfig as JSON", func() {
 		payload, err := json.Marshal(serializer.AppConfigFileOutputObj{
 			ID:              "abc",
@@ -151,6 +180,7 @@ var _ = Describe("App config file serializers", func() {
 						"contentSourceType": "",
 						"configKind": "",
 						"isUnifiedConfig": true,
+						"mountedEnvNames": null,
 						"fileFormat": "",
 						"baseVersion": 2,
 						"operationType": "",
