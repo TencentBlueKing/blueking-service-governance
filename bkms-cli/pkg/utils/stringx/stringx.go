@@ -22,7 +22,73 @@ package stringx
 import (
 	"reflect"
 	"strings"
+	"unicode"
 )
+
+// ToWords 将标识符拆分成以单个空格分隔的小写单词，用于生成人类可读的展示文本。
+// 支持驼峰、下划线、连字符等常见命名风格，例如：
+//
+//	appName        -> "app name"
+//	appID          -> "app id"
+//	HTTPServer     -> "http server"
+//	scope_env_name -> "scope env name"
+func ToWords(s string) string {
+	var (
+		words []string
+		cur   []rune
+	)
+	// ToLower 会复制内容，因此可以安全地复用 cur 的底层数组
+	flush := func() {
+		if len(cur) > 0 {
+			words = append(words, strings.ToLower(string(cur)))
+			cur = cur[:0]
+		}
+	}
+
+	runes := []rune(s)
+	for i, r := range runes {
+		if isWordSeparator(r) {
+			flush()
+			continue
+		}
+		if i > 0 && startsNewWord(runes, i) {
+			flush()
+		}
+		cur = append(cur, r)
+	}
+	flush()
+
+	return strings.Join(words, " ")
+}
+
+// isWordSeparator 判断字符是否为单词分隔符，这类字符只用于断词，不进入结果
+func isWordSeparator(r rune) bool {
+	return r == '_' || r == '-' || r == '.' || unicode.IsSpace(r)
+}
+
+// startsNewWord 判断 runes[i] 是否为一个新单词的起始位置，只处理驼峰边界
+func startsNewWord(runes []rune, i int) bool {
+	if !unicode.IsUpper(runes[i]) {
+		return false
+	}
+	// 小写字母或数字后紧跟大写字母，如 appName 中的 N、v1Alpha 中的 A
+	if !unicode.IsUpper(runes[i-1]) {
+		return true
+	}
+	// 连续大写视为缩写词，仅当其后跟着一个完整的小写单词时才断开，
+	// 如 HTTPServer 断为 http + server；而 appIDs 结尾的 s 只是复数后缀，
+	// 不应断开成 app + i + ds
+	return countLowerFrom(runes, i+1) > 1
+}
+
+// countLowerFrom 统计从下标 i 开始连续出现的小写字母数量
+func countLowerFrom(runes []rune, i int) int {
+	count := 0
+	for ; i < len(runes) && unicode.IsLower(runes[i]); i++ {
+		count++
+	}
+	return count
+}
 
 // TrimSpaceRecursive 递归对结构体中所有 string 字段执行 TrimSpace
 func TrimSpaceRecursive(v reflect.Value) {

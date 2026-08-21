@@ -27,6 +27,31 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/stringx"
 )
 
+var _ = Describe("ToWords", func() {
+	DescribeTable("should split identifiers into lowercase words",
+		func(input, expected string) {
+			Expect(stringx.ToWords(input)).To(Equal(expected))
+		},
+		Entry("camel case", "appName", "app name"),
+		Entry("pascal case", "AppName", "app name"),
+		Entry("single word", "id", "id"),
+		Entry("multiple words", "keepNotReadyPod", "keep not ready pod"),
+		Entry("trailing acronym", "appID", "app id"),
+		Entry("acronym in the middle", "appConfigFileIDValue", "app config file id value"),
+		Entry("leading acronym", "HTTPServer", "http server"),
+		Entry("plural acronym", "refAppIDs", "ref app ids"),
+		Entry("all upper case", "APP", "app"),
+		Entry("snake case", "scope_env_names", "scope env names"),
+		Entry("kebab case", "scope-env-names", "scope env names"),
+		Entry("dotted", "app.name", "app name"),
+		Entry("digits attached to the previous word", "v1Alpha", "v1 alpha"),
+		Entry("already spaced", "app name", "app name"),
+		Entry("redundant separators", "  app__name  ", "app name"),
+		Entry("empty string", "", ""),
+		Entry("separators only", "__", ""),
+	)
+})
+
 var _ = Describe("TrimSpaceRecursive", func() {
 	// 应去除简单结构体中字符串字段的前后空格
 	It("should trim spaces from string fields in a simple struct", func() {
