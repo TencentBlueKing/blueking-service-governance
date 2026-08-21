@@ -20,6 +20,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -38,64 +40,59 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
+// 以下 helper 一律只返回 error，abort 由入口 ListAppInstances 统一做
+// 这样 gin 上下文不下沉到每个步骤，Watch 等其他入口才能复用同一批步骤
+
 // bindListAppInstancesQuery 绑定路径与查询参数，并校验全量/分页互斥
 func (h *Handler) bindListAppInstancesQuery(
 	c *gin.Context,
-) (serializer.AppEnvURIInput, serializer.ListAppInstancesQueryInput, bool) {
+) (serializer.AppEnvURIInput, serializer.ListAppInstancesQueryInput, error) {
 	var uriInput serializer.AppEnvURIInput
 	var queryInput serializer.ListAppInstancesQueryInput
 
 	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return uriInput, queryInput, false
+		return uriInput, queryInput, err
 	}
 
 	if err := queryInput.Validate(); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return uriInput, queryInput, false
+		return uriInput, queryInput, err
 	}
 
-	return uriInput, queryInput, true
+	return uriInput, queryInput, nil
 }
 
-// getAppAndLatestDeployRecord 校验 App 查看权限、AppModel 类型，并取最新部署记录
-func (h *Handler) getAppAndLatestDeployRecord(
-	c *gin.Context,
+// validateAppAndGetDeployRecord 依次校验 App 查看权限与 AppModel 类型，再取该环境/泳道的最新部署记录
+// 三步中任一步不通过都直接返回错误，不返回半成品；泳道单独传入，不依赖 List 专属的查询参数类型
+func (h *Handler) validateAppAndGetDeployRecord(
 	ctx context.Context,
 	uriInput serializer.AppEnvURIInput,
-	queryInput serializer.ListAppInstancesQueryInput,
-) (*bkmsapp.Application, *appmodeldeploy.Record, bool) {
+	trafficLaneName string,
+) (*bkmsapp.Application, *appmodeldeploy.Record, error) {
 	// 校验 App 查看权限
 	app, err := ginperm.ValidateAppByID(ctx, h.registry, uriInput.AppID, ginperm.TypeView)
 	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return nil, nil, false
+		return nil, nil, err
 	}
 
 	// 目前只支持查看 AppModel 类型应用实例
 	if !bkmsapp.IsAppModelType(app.Type) {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type))
-		return nil, nil, false
+		return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type)
 	}
 
 	// 获取应用部署记录
-	record, err := h.registry.AppModelDeployRecordStore.GetLatest(
-		ctx, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
-	)
+	record, err := h.registry.AppModelDeployRecordStore.GetLatest(ctx, app.ID, uriInput.EnvName, trafficLaneName)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found"))
-		return nil, nil, false
+		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
 	}
 
-	return app, record, true
+	return app, record, nil
 }
 
 // listMatchingAppInstancePods 按部署记录的命名空间 + LabelSelector 拉取匹配 Pod
 func (h *Handler) listMatchingAppInstancePods(
-	c *gin.Context,
 	ctx context.Context,
 	record *appmodeldeploy.Record,
-) ([]unstructured.Unstructured, bool) {
+) ([]unstructured.Unstructured, error) {
 	// 集群与命名空间以部署记录为准，不从请求参数推断
 	client := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
 
@@ -104,14 +101,13 @@ func (h *Handler) listMatchingAppInstancePods(
 	pods, err := client.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		// 拉 Pod 失败则整次 List 失败，不分页/全量都不会降级为空列表
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+		return nil, bkerrs.Wrapf(
 			err, bkerrs.ErrCodeInternalServerError,
 			"list namespace %s labelsSelector [%s] pods", record.Namespace, labelSelector,
-		))
-		return nil, false
+		)
 	}
 
-	return pods.Items, true
+	return pods.Items, nil
 }
 
 // projectListedAppInstances 将窗口内 Pod 投影为 AppInstanceOutputObj
@@ -164,13 +160,19 @@ func (h *Handler) projectListedAppInstances(
 	return results, skipped, count, nil
 }
 
-// attachPolarisToListedAppInstances 合并该应用环境北极星实例；拉取失败则整次 List 失败
+// attachPolarisToListedAppInstances 合并该应用环境北极星实例
+// 北极星不可用不阻塞 Pod 输出：降级为空 polarisInfos，与「未注册北极星」同形，由前端统一展示为未知
+// 没有会导致整次 List 失败的分支，因此不返回 error
 func (h *Handler) attachPolarisToListedAppInstances(
-	c *gin.Context,
 	ctx context.Context,
 	appID, envName string,
 	appInstances []*serializer.AppInstanceOutputObj,
-) bool {
+) {
+	// 先统一写成空数组，避免 JSON 出现 polarisInfos: null；未命中北极星的实例也保持这个形态
+	for _, instance := range appInstances {
+		instance.PolarisInfos = []*serializer.PolarisInstanceInfoOutputObj{}
+	}
+
 	// 按应用 + 环境拉北极星实例，分页与全量共用同一条失败口径
 	mgr := polaris.NewPolarisPlatformManager(
 		h.registry.DepSvcStore,
@@ -180,12 +182,16 @@ func (h *Handler) attachPolarisToListedAppInstances(
 
 	svcInstances, err := mgr.ListPolarisServiceInstances(ctx, appID, envName)
 	if err != nil {
-		// 北极星失败不降级为空 polarisInfos，整次 List 失败
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list polaris service instances"))
-		return false
+		// 北极星是旁路信息，拉不到只降级这一列，不牵连整份 Pod 列表；仅告警供排查
+		log.WarnAttrs(ctx, "list polaris service instances failed, fallback to unknown polaris state",
+			slog.String("app_id", appID),
+			slog.String("env_name", envName),
+			slog.String("err", err.Error()),
+		)
+
+		return
 	}
 
 	// 按实例标识把北极星信息挂到已投影结果上，不改变 results 顺序与条数
 	serializer.MergePolarisInfoToAppInstances(appInstances, svcInstances)
-	return true
 }
