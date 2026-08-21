@@ -284,6 +284,30 @@ var _ = Describe("ListEnvPlainContents", func() {
 		Expect(files[0].Content).To(Equal("feature.enabled=false\n"))
 	})
 
+	It("should skip unified plain files that are not mounted to the target env", func() {
+		defaultContent := "feature.enabled=true\n"
+		dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
+			AppID:           app.ID,
+			EnvName:         appcfg.EnvNameDefault,
+			Name:            "feature-flags-unified",
+			ConfigKind:      appcfg.ConfigKindPlain,
+			IsUnifiedConfig: true,
+			MountedEnvNames: []string{"prod"},
+			MountPath:       "/data/app/conf/feature-flags-unified.properties",
+			Format:          appcfg.FileFormat("properties"),
+			Content:         &defaultContent,
+		})
+
+		stagFiles, err := appcfg.ListEnvPlainContents(ctx, store, app.ID, "stag")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(stagFiles).To(BeEmpty())
+
+		prodFiles, err := appcfg.ListEnvPlainContents(ctx, store, app.ID, "prod")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(prodFiles).To(HaveLen(1))
+		Expect(prodFiles[0].File.Name).To(Equal("feature-flags-unified"))
+	})
+
 	It("should skip plain files that are not mounted to the target env", func() {
 		defaultContent := "feature.enabled=true\n"
 		dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{

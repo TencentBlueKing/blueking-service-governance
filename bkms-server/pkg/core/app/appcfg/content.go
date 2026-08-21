@@ -147,11 +147,11 @@ func ListEnvPlainContents(
 	// 2. 逐个 root 判断当前环境下应该使用 root 自身，还是某条环境实例记录。
 	result := make([]PlainConfigFileContent, 0)
 	for _, root := range plainRoots {
+		if !root.IsMountedToEnv(envName) {
+			continue
+		}
 		target := root
 		if root.HasIndependentEnvConfig() {
-			if !root.IsMountedToEnv(envName) {
-				continue
-			}
 			// 引用模型：有独立 env instance 则使用，否则回退到默认记录内容（引用状态）。
 			envFiles := envFilesByRoot[root.ID.Hex()]
 			if envFile, ok := envFiles[envName]; ok {

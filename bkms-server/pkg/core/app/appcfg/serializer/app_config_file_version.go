@@ -103,7 +103,7 @@ type AppConfigFileVersionOutputObj struct {
 	// 是否统一配置
 	IsUnifiedConfig bool `json:"isUnifiedConfig"`
 	// 挂载环境范围
-	MountedEnvNames []string `json:"mountedEnvNames,omitempty"`
+	MountedEnvNames []string `json:"mountedEnvNames"`
 	// 文件格式
 	FileFormat string `json:"fileFormat"`
 	// 普通内容

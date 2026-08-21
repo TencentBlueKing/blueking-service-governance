@@ -568,4 +568,156 @@ var _ = Describe("AppConfigFileService env config", func() {
 		_, stagExists := fileStore.files[stagFile.ID]
 		Expect(stagExists).To(BeFalse())
 	})
+
+	It("rejects creating a plain env record without defaultAppConfigFileID", func() {
+		content := "feature.enabled=true"
+		_, err := service.Create(ctx, CreateCfgFileParams{
+			AppID:             defaultFile.AppID,
+			EnvName:           "prod",
+			Name:              "orphan-plain",
+			Type:              AppConfigFileTypeNormal,
+			ContentSourceType: ContentSourceTypeLocal,
+			Format:            FileFormat("env"),
+			ConfigKind:        ConfigKindPlain,
+			MountPath:         "/data/app/conf/orphan.env",
+			IsUnifiedConfig:   true,
+			Content:           &content,
+			Creator:           "tester",
+		})
+
+		Expect(errors.Is(err, ErrInvalidConfigSpec)).To(BeTrue())
+		Expect(err).To(MatchError(ContainSubstring("plain env instance requires defaultAppConfigFileID")))
+	})
+
+	It("keeps mountedEnvNames when switching back to unified config", func() {
+		defaultFile.IsUnifiedConfig = false
+		defaultFile.MountedEnvNames = []string{"prod", "stag"}
+		fileStore.files[defaultFile.ID] = defaultFile
+
+		err := service.UpdateEnvConfig(ctx, &defaultFile, UpdateEnvConfigParams{
+			IsUnifiedConfig: true,
+			MountedEnvNames: []string{"prod"},
+			Operator:        "tester",
+			Description:     "switch to unified with scoped envs",
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defaultFile.IsUnifiedConfig).To(BeTrue())
+		Expect(defaultFile.MountedEnvNames).To(Equal([]string{"prod"}))
+	})
+
+	It("updates mountedEnvNames while already in unified config", func() {
+		err := service.UpdateEnvConfig(ctx, &defaultFile, UpdateEnvConfigParams{
+			IsUnifiedConfig: true,
+			MountedEnvNames: []string{"prod"},
+			Operator:        "tester",
+			Description:     "scope unified config to prod",
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defaultFile.IsUnifiedConfig).To(BeTrue())
+		Expect(defaultFile.MountedEnvNames).To(Equal([]string{"prod"}))
+		Expect(fileStore.files[defaultFile.ID].MountedEnvNames).To(Equal([]string{"prod"}))
+	})
+
+	It("rejects mountPath change on plain env instance", func() {
+		prodContent := "feature.enabled=false"
+		prodFile := AppConfigFile{
+			ID: bson.NewObjectID(),
+			AppConfigFileContentSpec: AppConfigFileContentSpec{
+				AppID:                  defaultFile.AppID,
+				EnvName:                "prod",
+				Name:                   "custom-env--prod",
+				Type:                   AppConfigFileTypeNormal,
+				ContentSourceType:      ContentSourceTypeLocal,
+				Format:                 FileFormat("env"),
+				ConfigKind:             ConfigKindPlain,
+				MountPath:              defaultFile.MountPath,
+				DefaultAppConfigFileID: &defaultFile.ID,
+				Content:                &prodContent,
+			},
+			CurrentVersion: 1,
+		}
+		fileStore.files[prodFile.ID] = prodFile
+		prodFile.MountPath = "/data/app/conf/other.env"
+
+		err := service.UpdateFile(ctx, &prodFile, "tester", UpdateCfgFileOptions{
+			OperationType: AppConfigFileVersionOperationTypeUpdate,
+			Description:   "change env instance mountPath",
+		})
+
+		Expect(errors.Is(err, ErrInvalidConfigSpec)).To(BeTrue())
+		Expect(err).To(MatchError(ContainSubstring("plain env instance cannot change mountPath")))
+	})
+
+	It("finds existing plain env instance for content update", func() {
+		prodContent := "feature.enabled=false"
+		prodFile := AppConfigFile{
+			ID: bson.NewObjectID(),
+			AppConfigFileContentSpec: AppConfigFileContentSpec{
+				AppID:                  defaultFile.AppID,
+				EnvName:                "prod",
+				Name:                   "custom-env--prod",
+				Type:                   AppConfigFileTypeNormal,
+				ContentSourceType:      ContentSourceTypeLocal,
+				Format:                 FileFormat("env"),
+				ConfigKind:             ConfigKindPlain,
+				MountPath:              defaultFile.MountPath,
+				DefaultAppConfigFileID: &defaultFile.ID,
+				Content:                &prodContent,
+			},
+			CurrentVersion: 1,
+		}
+		fileStore.files[prodFile.ID] = prodFile
+
+		found, err := service.FindPlainEnvInstance(ctx, defaultFile, "prod")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).NotTo(BeNil())
+		Expect(found.ID).To(Equal(prodFile.ID))
+		Expect(*found.Content).To(Equal("feature.enabled=false"))
+	})
+
+	It("cleans mountedEnvNames for roots without env instances when env is deleted", func() {
+		defaultFile.IsUnifiedConfig = false
+		defaultFile.MountedEnvNames = []string{"prod", "stag"}
+		fileStore.files[defaultFile.ID] = defaultFile
+
+		err := service.CleanupPlainEnvInstancesByEnv(ctx, defaultFile.AppID, "prod")
+		Expect(err).NotTo(HaveOccurred())
+
+		stored := fileStore.files[defaultFile.ID]
+		Expect(stored.MountedEnvNames).To(Equal([]string{"stag"}))
+	})
+
+	It("clears mountedEnvNames to empty slice when the last scoped env is deleted", func() {
+		defaultFile.IsUnifiedConfig = true
+		defaultFile.MountedEnvNames = []string{"prod"}
+		fileStore.files[defaultFile.ID] = defaultFile
+
+		err := service.CleanupPlainEnvInstancesByEnv(ctx, defaultFile.AppID, "prod")
+		Expect(err).NotTo(HaveOccurred())
+
+		stored := fileStore.files[defaultFile.ID]
+		Expect(stored.MountedEnvNames).NotTo(BeNil())
+		Expect(stored.MountedEnvNames).To(Equal([]string{}))
+	})
+
+	It("rejects overlay whose base is a plain config file", func() {
+		overlayContent := "patches:\n- foo: 1\n"
+		_, err := service.Create(ctx, CreateCfgFileParams{
+			AppID:               defaultFile.AppID,
+			EnvName:             EnvNameDefault,
+			Name:                "plain-overlay",
+			Type:                AppConfigFileTypeOverlay,
+			ContentSourceType:   ContentSourceTypeLocal,
+			Format:              FileFormatYAML,
+			ConfigKind:          ConfigKindFramework,
+			BaseAppConfigFileID: &defaultFile.ID,
+			OverlayContent:      &overlayContent,
+			Creator:             "tester",
+		})
+
+		Expect(errors.Is(err, ErrInvalidConfigSpec)).To(BeTrue())
+		Expect(err).To(MatchError(ContainSubstring("overlay base must be a framework config file")))
+	})
 })
