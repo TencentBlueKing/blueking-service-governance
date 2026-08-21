@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/mapx"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/timex"
@@ -33,6 +34,7 @@ import (
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 	instancelogsvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/instancelog"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
 )
 
 // -----------------------------------------------------------------------------
@@ -179,6 +181,18 @@ type PolarisInstanceInfoOutputObj struct {
 	Metadata map[string]string `json:"metadata"`
 }
 
+// AppInstanceResourcesObj is the main-container CPU/memory quantities from the live Pod.
+type AppInstanceResourcesObj struct {
+	// CPU limits（Kubernetes quantity 字符串），可选：未配置时不返回该字段
+	CPULimits string `json:"cpuLimits,omitempty"`
+	// CPU requests，可选：未配置时不返回该字段
+	CPURequests string `json:"cpuRequests,omitempty"`
+	// Memory limits，可选：未配置时不返回该字段
+	MemoryLimits string `json:"memoryLimits,omitempty"`
+	// Memory requests，可选：未配置时不返回该字段
+	MemoryRequests string `json:"memoryRequests,omitempty"`
+}
+
 // AppInstanceOutputObj 单个应用实例（即一个 Pod）。
 type AppInstanceOutputObj struct {
 	// 实例 ID（即 k8s pod 的 name）
@@ -201,6 +215,8 @@ type AppInstanceOutputObj struct {
 	Age string `json:"age"`
 	// 节点 IP，Pod 所在节点的 IP 地址
 	NodeIP string `json:"nodeIP"`
+	// 主容器资源规格（集群 Pod 实际值）
+	Resources AppInstanceResourcesObj `json:"resources"`
 	// 北极星实例状态列表（一个 Pod 可能注册到多个北极星服务）
 	PolarisInfos []*PolarisInstanceInfoOutputObj `json:"polarisInfos"`
 }
@@ -224,6 +240,8 @@ func (o *AppInstanceOutputObj) FromPodManifest(
 	if cMap, ok := containers[0].(map[string]any); ok {
 		image = mapx.GetStr(cMap, "image")
 	}
+
+	resources := extractMainContainerResources(containers)
 
 	var restartCount int64
 	for _, cs := range mapx.GetList(manifest, "status.containerStatuses") {
@@ -252,8 +270,32 @@ func (o *AppInstanceOutputObj) FromPodManifest(
 		Message:      message,
 		IsHealthy:    isHealthy,
 		Age:          timex.CalcAge(mapx.GetStr(manifest, "metadata.creationTimestamp")),
+		Resources:    resources,
 	}
 	return o, nil
+}
+
+// extractMainContainerResources 从 Pod containers 中读取名为 main 的容器的 CPU/内存。
+// 找不到 main 容器时返回零值，不阻断实例列表。
+func extractMainContainerResources(containers []any) AppInstanceResourcesObj {
+	for _, c := range containers {
+		cMap, ok := c.(map[string]any)
+		if !ok {
+			continue
+		}
+		if mapx.GetStr(cMap, "name") != defaults.WorkloadMainContainerName {
+			continue
+		}
+		limits := mapx.GetMap(cMap, "resources.limits")
+		requests := mapx.GetMap(cMap, "resources.requests")
+		return AppInstanceResourcesObj{
+			CPULimits:      mapx.GetStr(limits, string(corev1.ResourceCPU)),
+			CPURequests:    mapx.GetStr(requests, string(corev1.ResourceCPU)),
+			MemoryLimits:   mapx.GetStr(limits, string(corev1.ResourceMemory)),
+			MemoryRequests: mapx.GetStr(requests, string(corev1.ResourceMemory)),
+		}
+	}
+	return AppInstanceResourcesObj{}
 }
 
 // MergePolarisInfoToAppInstances 将北极星实例信息合并到应用实例输出对象中。

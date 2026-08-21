@@ -133,6 +133,84 @@ var _ = Describe("Instance serializer", func() {
 			Expect(output.Status).To(Equal("Running"))
 			Expect(output.IsHealthy).To(BeTrue())
 			Expect(output.Age).NotTo(BeEmpty())
+			Expect(output.Resources).To(Equal(serializer.AppInstanceResourcesObj{}))
+		})
+
+		It("extracts main-container cpu and memory resources", func() {
+			manifest := map[string]any{
+				"metadata": map[string]any{
+					"name":              "pod-res",
+					"creationTimestamp": "2026-05-29T00:00:00Z",
+				},
+				"spec": map[string]any{
+					"containers": []any{
+						map[string]any{
+							"name":  "sidecar",
+							"image": "sidecar:v1",
+							"resources": map[string]any{
+								"limits": map[string]any{"cpu": "100m", "memory": "128Mi"},
+							},
+						},
+						map[string]any{
+							"name":  "main",
+							"image": "example:v1",
+							"resources": map[string]any{
+								"limits": map[string]any{
+									"cpu":    "2",
+									"memory": "4Gi",
+								},
+								"requests": map[string]any{
+									"cpu":    "1",
+									"memory": "2Gi",
+								},
+							},
+						},
+					},
+				},
+				"status": map[string]any{
+					"phase": "Running",
+					"conditions": []any{
+						map[string]any{"type": "Ready", "status": "True"},
+					},
+				},
+			}
+
+			output, err := new(serializer.AppInstanceOutputObj).FromPodManifest(manifest, "deploy-id")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output.Image).To(Equal("sidecar:v1"))
+			Expect(output.Resources).To(Equal(serializer.AppInstanceResourcesObj{
+				CPULimits:      "2",
+				CPURequests:    "1",
+				MemoryLimits:   "4Gi",
+				MemoryRequests: "2Gi",
+			}))
+		})
+
+		It("leaves resources empty when the main container is missing", func() {
+			manifest := map[string]any{
+				"metadata": map[string]any{
+					"name":              "pod-no-main",
+					"creationTimestamp": "2026-05-29T00:00:00Z",
+				},
+				"spec": map[string]any{
+					"containers": []any{
+						map[string]any{
+							"name":  "sidecar",
+							"image": "sidecar:v1",
+							"resources": map[string]any{
+								"limits": map[string]any{"cpu": "100m"},
+							},
+						},
+					},
+				},
+				"status": map[string]any{"phase": "Running"},
+			}
+
+			output, err := new(serializer.AppInstanceOutputObj).FromPodManifest(manifest, "deploy-id")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output.Resources).To(Equal(serializer.AppInstanceResourcesObj{}))
 		})
 
 		It("returns an error when pod name is missing", func() {

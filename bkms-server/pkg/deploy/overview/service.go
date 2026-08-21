@@ -113,13 +113,14 @@ func (s *Service) GetOverview(ctx context.Context, application *bkmsapp.Applicat
 
 	rows, recordsForInstances := assembleEnvRows(sources)
 
-	// 实例数/资源规格 与 GPA 状态互不依赖，并行回查集群；任一侧失败只降级对应字段。
-	// 两侧只读 rows、各自产出 map，待 Wait 后再单线程合并，避免并发写同一批行。
-	// 两侧共用一个闸门，使在途 K8s 请求总数受 maxConcurrentK8sRequests 约束。
+	// 实例数/资源规格、GPA 状态、BCS 集群名互不依赖，并行回查；任一侧失败只降级对应字段。
+	// 各侧只读 rows、各自产出 map，待 Wait 后再单线程合并，避免并发写同一批行。
+	// K8s 两侧共用一个闸门，使在途 K8s 请求总数受 maxConcurrentK8sRequests 约束。
 	sem := semaphore.NewWeighted(maxConcurrentK8sRequests)
 	var (
 		clusterData         envClusterDataByEnv
 		autoscalingStatuses autoscalingStatusByEnv
+		clusterNames        clusterNameByID
 		wg                  sync.WaitGroup
 	)
 	wg.Go(func() {
@@ -127,6 +128,9 @@ func (s *Service) GetOverview(ctx context.Context, application *bkmsapp.Applicat
 	})
 	wg.Go(func() {
 		autoscalingStatuses = s.queryAutoscalingStatuses(ctx, sem, sources.trackedEnvs, rows)
+	})
+	wg.Go(func() {
+		clusterNames = queryClusterNames(ctx, rows)
 	})
 	wg.Wait()
 
@@ -137,6 +141,9 @@ func (s *Service) GetOverview(ctx context.Context, application *bkmsapp.Applicat
 		}
 		if status, ok := autoscalingStatuses[rows[i].EnvName]; ok && rows[i].Autoscaling != nil {
 			rows[i].Autoscaling.Status = status
+		}
+		if name, ok := clusterNames[rows[i].Cluster.ClusterID]; ok {
+			rows[i].Cluster.Name = name
 		}
 	}
 
@@ -223,10 +230,17 @@ func assembleEnvRows(sources *envRowSources) ([]EnvRow, []deployRecordForEnv) {
 			EnvType:        env.Type,
 			EnvKind:        string(env.GetKind()),
 			DeployStatus:   deploystatus.StatusUnknown,
-			Autoscaling:    sources.autoscalingByEnv[env.Name],
+			Cluster: ClusterInfo{
+				ProjectCode: env.Cluster.ProjectCode,
+				ClusterID:   env.Cluster.ClusterID,
+				ClusterType: env.Cluster.ClusterType,
+				Namespace:   env.Cluster.Namespace,
+			},
+			Autoscaling: sources.autoscalingByEnv[env.Name],
 		}
 		if latest := sources.statusesByEnv[env.Name]; latest != nil {
 			row.DeployStatus = latest.Status
+			row.ImageTag = latest.ImageTag
 			if !latest.StartedAt.IsZero() {
 				row.LastDeployStartedAt = lo.ToPtr(latest.StartedAt)
 			}

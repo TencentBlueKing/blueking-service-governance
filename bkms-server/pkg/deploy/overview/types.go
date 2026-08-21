@@ -84,6 +84,20 @@ type AutoscalingInfo struct {
 	Status *AutoscalingStatus
 }
 
+// ClusterInfo 环境绑定的业务集群信息（与 env.BizCluster 字段对齐，并补充 BCS 拉取的展示名）。
+type ClusterInfo struct {
+	// ProjectCode 蓝鲸 BCS 项目 Code
+	ProjectCode string
+	// ClusterID 蓝鲸 BCS 集群 ID
+	ClusterID string
+	// ClusterType 蓝鲸 BCS 集群类型
+	ClusterType string
+	// Namespace 蓝鲸 BCS 命名空间
+	Namespace string
+	// Name BCS 集群展示名；拉取失败时为空字符串
+	Name string
+}
+
 // EnvRow 部署总览表格的一行。
 type EnvRow struct {
 	// EnvID 环境 ID
@@ -98,6 +112,10 @@ type EnvRow struct {
 	EnvKind string
 	// DeployStatus 部署状态原始枚举；无部署记录时为 deploystatus.StatusUnknown 即 "Unknown"
 	DeployStatus string
+	// ImageTag 最近一次部署的镜像 Tag；无部署记录时为空字符串
+	ImageTag string
+	// Cluster 环境绑定的集群信息
+	Cluster ClusterInfo
 	// LastDeployStartedAt 最近一次部署开始时间；无部署记录时为 nil
 	LastDeployStartedAt *time.Time
 	// Autoscaling GPA 配置摘要；该环境无 GPA 配置时为 nil
