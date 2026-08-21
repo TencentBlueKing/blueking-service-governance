@@ -66,18 +66,28 @@ interceptors.response.use(
 
     // 无权限
     if (response.status === 403) {
-      // TODO: 权限弹窗
-      Message({
-        theme: 'error',
-        message: traceId
+      config.interceptorErr &&
+        Message({
+          theme: 'error',
+          message: traceId
+            ? {
+                overview: appendTraceId('无权限', traceId),
+                details: appendTraceIdToDetails({}, traceId),
+                type: 'json',
+              }
+            : '无权限',
+        });
+      // 保留后端错误体，供关闭默认提示的页面识别具体权限错误
+      attachTraceId(res, traceId);
+      return Promise.reject(
+        config?.needStatus
           ? {
-              overview: appendTraceId('无权限', traceId),
-              details: appendTraceIdToDetails({}, traceId),
-              type: 'json',
+              ...res,
+              status: response.status,
+              statusText: response.statusText,
             }
-          : '无权限',
-      });
-      return Promise.reject(attachTraceId(new Error('Forbidden'), traceId));
+          : res,
+      );
     }
 
     // 默认使用 Message 弹窗，特殊错误使用 UI 展示异常
