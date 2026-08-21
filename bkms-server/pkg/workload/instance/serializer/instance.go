@@ -20,6 +20,7 @@
 package serializer
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"time"
@@ -137,23 +138,35 @@ func (q *ListAppInstancesQueryInput) ProjectionRange(total int64) (start, end in
 }
 
 // -----------------------------------------------------------------------------
-// 实例 Watch 契约（传输形态 SSE/WS 待定；本阶段仅声明 API DTO，不实现推送）
-// 领域事件类型见 instance/watch.EventType
+// 实例 Watch（SSE）；领域事件类型见 instance/watch.EventType
 
 // WatchAppInstancesQueryInput 订阅应用实例投影变更的查询参数。
-
+// resourceVersion 不用 binding:"required"：与 List 续传字段对齐，缺省时由 Validate 给出明确错误
 type WatchAppInstancesQueryInput struct {
 	// 部署的泳道名称（空字符串表示不使用泳道）
 	TrafficLaneName string `form:"trafficLaneName"`
+	// List 成功响应带回的续传位点；缺则建不成 Watch
+	ResourceVersion string `form:"resourceVersion"`
+}
+
+// Validate 校验 Watch 续传位点必填；缺省时建不成连接，不用 binding 以免错误信息不明确
+func (q *WatchAppInstancesQueryInput) Validate() error {
+	if q.ResourceVersion == "" {
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "resourceVersion is required")
+	}
+
+	return nil
 }
 
 // AppInstanceWatchEvent 实例 Watch 推送的平台投影事件（非原生 Pod JSON）
-// DELETED 时 Object 可仅含定位字段（至少 id）
-// Type 取值对齐 watch.EventType：ADDED / MODIFIED / DELETED
+// DELETED 时 Object 只保证 id；ENDED 时 Object 为空、Reason 说明流结束原因
+// Type 取值对齐 watch.EventType：ADDED / MODIFIED / DELETED / ENDED
 type AppInstanceWatchEvent struct {
 	// 事件类型
-	// Enums: ADDED, MODIFIED, DELETED
-	Type string `json:"type" enums:"ADDED,MODIFIED,DELETED"`
+	// Enums: ADDED, MODIFIED, DELETED, ENDED
+	Type string `json:"type" enums:"ADDED,MODIFIED,DELETED,ENDED"`
+	// 流结束原因；仅 ENDED 使用
+	Reason string `json:"reason,omitempty"`
 	// 实例投影；字段集合对齐 AppInstanceOutputObj（含 polarisInfos）
 	Object *AppInstanceOutputObj `json:"object"`
 }
@@ -258,6 +271,7 @@ func (o *AppInstanceOutputObj) FromPodManifest(
 }
 
 // MergePolarisInfoToAppInstances 将北极星实例信息合并到应用实例输出对象中。
+// 按 Pod IP + 服务端口匹配；命中多个北极星服务时按服务坐标排序，保证同样的输入得到同样的顺序
 func MergePolarisInfoToAppInstances(
 	appInstances []*AppInstanceOutputObj,
 	svcInstances []*polaris.PolarisServiceInstances,
@@ -294,6 +308,16 @@ func MergePolarisInfoToAppInstances(
 				Metadata:          m.inst.Metadata,
 			})
 		}
+
+		// 北极星侧返回顺序不保证稳定，按服务坐标定序后再输出
+		// Watch 的周期补拉靠前后两次结果比对差异，顺序漂移会被误判成变化并重复推送
+		slices.SortFunc(instance.PolarisInfos, func(a, b *PolarisInstanceInfoOutputObj) int {
+			return cmp.Or(
+				cmp.Compare(a.ServiceNamespace, b.ServiceNamespace),
+				cmp.Compare(a.ServiceName, b.ServiceName),
+				cmp.Compare(a.Port, b.Port),
+			)
+		})
 	}
 }
 
@@ -315,6 +339,8 @@ type PaginatedAppInstancesOutputObj struct {
 	SkippedCount int64 `json:"skippedCount,string"`
 	// 无法投影的实例列表；分页模式为空数组，无跳过项时亦为空数组
 	Skipped []*SkippedAppInstanceObj `json:"skipped"`
+	// 集群 List 首次响应的 resourceVersion，供 Watch 续传；空列表时也可能有值
+	ResourceVersion string `json:"resourceVersion"`
 }
 
 // ListAppInstancesOutput 查询应用实例列表的响应。
