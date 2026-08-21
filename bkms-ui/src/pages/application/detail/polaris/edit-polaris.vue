@@ -242,7 +242,6 @@
                   v-model="formModel.operator"
                   class="w-[552px]"
                   :clearable="!isEditMode"
-                  :disabled="isEditMode"
                   multiple
                 />
                 <template v-if="!isEditMode">
@@ -788,6 +787,7 @@
       }
       const servicePort = normalizeServicePort();
       const needsRedeployTip = hasRedeployFieldChanged.value;
+      const operator = formModel.value.operator?.join(',');
       // 构建更新参数，确保必需字段存在
       const params: PatchAppPolarisConfigRequest = {
         appID: appDetailStore.appID,
@@ -798,6 +798,7 @@
         instanceKey: formModel.value.instanceKey || '',
         polarisToken: formModel.value.polarisToken,
         scopeEnvNames: formModel.value.scopeEnvNames as string[],
+        ...(formModel.value.createNewService && operator !== props.editData?.operator ? { operator } : {}),
       };
       await PolarisConfigService.patchAppPolarisConfig(params);
       forceCleanDirtyTag(() => {
