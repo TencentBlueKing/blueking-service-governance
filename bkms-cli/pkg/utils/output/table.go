@@ -22,6 +22,7 @@ package output
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -35,6 +36,13 @@ import (
 
 // 列间距。表格不绘制任何边框，仅靠列右侧的空白区分列，与 kubectl 的输出保持一致
 const columnGap = 3
+
+const (
+	// 单元格中结构体元素的最大展示数量
+	maxStructListElems = 1
+	// 单元格中其他（标量）元素的最大展示数量
+	maxScalarListElems = 10
+)
 
 // 单元格样式。Lip Gloss 默认不带任何 padding，列间距需要显式设置
 var cellStyle = lipgloss.NewStyle().PaddingRight(columnGap)
@@ -146,16 +154,57 @@ func (f tableFormatter) formatFieldValue(v reflect.Value) string {
 
 	// 对 slice/array 类型的字段，将每个元素用逗号分隔，使单元格内容保持在一行
 	if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
-		if v.Len() == 0 {
-			return ""
-		}
-		elems := make([]string, v.Len())
-		for i := 0; i < v.Len(); i++ {
-			elems[i] = fmt.Sprintf("%v", v.Index(i).Interface())
-		}
-		return strings.Join(elems, ", ")
+		return f.formatListValue(v)
 	}
 
+	return fmt.Sprintf("%v", v.Interface())
+}
+
+// formatListValue 将 slice/array 字段渲染为单行文本。元素数量超过上限时，
+// 剩余部分折叠成 "... (+N more)"，避免个别单元格过宽把整张表撑变形；
+// 想看完整内容可以改用 -o json/yaml。
+func (f tableFormatter) formatListValue(v reflect.Value) string {
+	if v.Len() == 0 {
+		return ""
+	}
+
+	shown := min(v.Len(), maxListElems(v.Type().Elem()))
+
+	elems := make([]string, 0, shown+1)
+	for i := 0; i < shown; i++ {
+		elems = append(elems, formatListElem(v.Index(i)))
+	}
+	if omitted := v.Len() - shown; omitted > 0 {
+		elems = append(elems, fmt.Sprintf("... (+%d more)", omitted))
+	}
+	return strings.Join(elems, ", ")
+}
+
+// maxListElems 返回某种元素类型在单元格中最多展示几个。结构体元素序列化后往往很长，
+// 只展示一个就够占满列宽，其余标量类型则可以多放一些。
+func maxListElems(t reflect.Type) int {
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() == reflect.Struct {
+		return maxStructListElems
+	}
+	return maxScalarListElems
+}
+
+// formatListElem 序列化单个列表元素。结构体走 JSON，因为 fmt 的 {a b c} 形式丢掉了字段名，
+// 而单元格里往往只放得下一个元素，带字段名才有辨识度。
+func formatListElem(v reflect.Value) string {
+	t := v.Type()
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() == reflect.Struct {
+		// 含 channel、func 等无法编码的字段时 Marshal 会失败，此时退回 fmt 输出
+		if data, err := json.Marshal(v.Interface()); err == nil {
+			return string(data)
+		}
+	}
 	return fmt.Sprintf("%v", v.Interface())
 }
 
