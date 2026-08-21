@@ -4162,6 +4162,310 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/deps/{serviceName}/bindings": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-binding"
+                ],
+                "summary": "查询依赖服务绑定列表",
+                "operationId": "ListServiceBindings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "redis"
+                        ],
+                        "type": "string",
+                        "description": "依赖服务名，目前仅支持 redis",
+                        "name": "serviceName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListBindingsOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-binding"
+                ],
+                "summary": "创建依赖服务绑定",
+                "operationId": "CreateServiceBinding",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "redis"
+                        ],
+                        "type": "string",
+                        "description": "依赖服务名，目前仅支持 redis",
+                        "name": "serviceName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateBindingInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.BindingOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/deps/{serviceName}/bindings/{name}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-binding"
+                ],
+                "summary": "查询依赖服务绑定详情",
+                "operationId": "GetServiceBinding",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "redis"
+                        ],
+                        "type": "string",
+                        "description": "依赖服务名，目前仅支持 redis",
+                        "name": "serviceName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "绑定名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.BindingOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-binding"
+                ],
+                "summary": "更新依赖服务绑定",
+                "operationId": "UpdateServiceBinding",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "redis"
+                        ],
+                        "type": "string",
+                        "description": "依赖服务名，目前仅支持 redis",
+                        "name": "serviceName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "绑定名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateBindingInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.BindingOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-binding"
+                ],
+                "summary": "删除依赖服务绑定",
+                "operationId": "DeleteServiceBinding",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "redis"
+                        ],
+                        "type": "string",
+                        "description": "依赖服务名，目前仅支持 redis",
+                        "name": "serviceName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "绑定名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/display-name": {
             "put": {
                 "security": [
@@ -10931,6 +11235,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/bcs/token": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bcs"
+                ],
+                "summary": "获取 BCS Auth Info",
+                "operationId": "GetBCSUserToken",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetBCSUserTokenOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/bkcc/businesses/authorized": {
             "get": {
                 "security": [
@@ -15416,118 +15754,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs": {
-            "get": {
-                "security": [
-                    {
-                        "BkUserInfo": []
-                    },
-                    {
-                        "BkUserCredential": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "bkintegrations-bkci"
-                ],
-                "summary": "获取蓝盾流水线分支/Tag字段列表",
-                "operationId": "ListBkCIPipelineRepoRefs",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "工作空间 ID",
-                        "name": "workspaceID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "流水线 ID",
-                        "name": "pipelineID",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/serializer.ListBkCIPipelineRepoRefsOutput"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    }
-                }
-            }
-        },
-        "/workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/repo-refs/options": {
-            "post": {
-                "security": [
-                    {
-                        "BkUserInfo": []
-                    },
-                    {
-                        "BkUserCredential": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "bkintegrations-bkci"
-                ],
-                "summary": "获取蓝盾流水线分支/Tag字段的可选项",
-                "operationId": "ListBkCIPipelineRepoRefOptions",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "工作空间 ID",
-                        "name": "workspaceID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "流水线 ID",
-                        "name": "pipelineID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "查询参数",
-                        "name": "input",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/serializer.BkCIPipelineRepoRefOptionsInput"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/serializer.ListBkCIPipelineRepoRefOptionsOutput"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    }
-                }
-            }
-        },
         "/workspaces/{workspaceID}/bkci-pipelines/{pipelineID}/variables": {
             "get": {
                 "security": [
@@ -15567,6 +15793,160 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.GetBkCIPipelineVariablesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/bkci-repositories/branches": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "获取代码仓库分支列表",
+                "operationId": "ListBkCIRepositoryBranches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "代码仓库 ID 或名称",
+                        "name": "repositoryID",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "代码仓库标识类型，可选值: ID, NAME",
+                        "name": "repositoryType",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "搜索关键词",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，最小为 1",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，可选值: 5, 10, 20, 50, 100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListBkCIRepositoryBranchesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/bkci-repositories/tags": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "获取代码仓库标签列表",
+                "operationId": "ListBkCIRepositoryTags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "代码仓库 ID 或名称",
+                        "name": "repositoryID",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "代码仓库标识类型，可选值: ID, NAME",
+                        "name": "repositoryType",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "搜索关键词",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，最小为 1",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，可选值: 5, 10, 20, 50, 100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListBkCIRepositoryTagsOutput"
                         }
                     },
                     "400": {
@@ -16120,6 +16500,212 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/deps/redis": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-redis"
+                ],
+                "summary": "查询 Redis 依赖服务实例列表",
+                "operationId": "ListRedisInstances",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "实例状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "作用域类型",
+                        "name": "scopeType",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListRedisInstancesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-redis"
+                ],
+                "summary": "创建 Redis 依赖服务实例",
+                "operationId": "CreateRedisInstance",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateRedisInstanceInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateRedisInstanceOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/deps/redis/{instanceID}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-redis"
+                ],
+                "summary": "查询 Redis 依赖服务实例详情",
+                "operationId": "GetRedisInstance",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "实例 ID",
+                        "name": "instanceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetRedisInstanceOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depservice-redis"
+                ],
+                "summary": "删除 Redis 依赖服务实例",
+                "operationId": "DeleteRedisInstance",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "实例 ID",
+                        "name": "instanceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -18001,6 +18587,10 @@ const docTemplate = `{
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.AppInfoOutputObj": {
             "type": "object",
             "properties": {
+                "createdAt": {
+                    "description": "创建时间",
+                    "type": "string"
+                },
                 "creator": {
                     "description": "创建人",
                     "type": "string"
@@ -18025,7 +18615,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "lastOperatedAt": {
-                    "description": "应用最近操作时间",
+                    "description": "应用最近操作时间（当前调用者视角）",
                     "type": "string"
                 },
                 "name": {
@@ -18288,6 +18878,9 @@ const docTemplate = `{
             "type": "object"
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_component_serializer.EmptyOutput": {
+            "type": "object"
+        },
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_depservice_serializer.EmptyOutput": {
             "type": "object"
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_observability_bkmonitor_usergroup_serializer.EmptyOutput": {
@@ -18764,7 +19357,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "resources": {
-                    "description": "资源规格（app-spec 生效值）",
+                    "description": "资源规格（集群 GameDeployment 主容器实际值）",
                     "allOf": [
                         {
                             "$ref": "#/definitions/serializer.DeployOverviewResourcesObj"
@@ -19833,6 +20426,55 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.BindingOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.BindingOutputObj"
+                }
+            }
+        },
+        "serializer.BindingOutputObj": {
+            "type": "object",
+            "properties": {
+                "appID": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "envInstanceMap": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "envVars": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "serviceName": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "workspaceID": {
+                    "type": "string"
+                }
+            }
+        },
         "serializer.BkCIOAuthGitProjectOutput": {
             "type": "object",
             "properties": {
@@ -19916,52 +20558,6 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.BkCIPipelineRepoRefOptionsInput": {
-            "type": "object",
-            "required": [
-                "propertyID"
-            ],
-            "properties": {
-                "propertyID": {
-                    "type": "string"
-                },
-                "search": {
-                    "type": "string"
-                }
-            }
-        },
-        "serializer.BkCIPipelineRepoRefOutput": {
-            "type": "object",
-            "properties": {
-                "constant": {
-                    "type": "boolean"
-                },
-                "defaultValue": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "label": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "readOnly": {
-                    "type": "boolean"
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "string"
-                }
-            }
-        },
         "serializer.BkCIPipelineVariableOptionOutput": {
             "type": "object",
             "properties": {
@@ -20004,6 +20600,23 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.BkCIRepositoryRefOutput": {
+            "type": "object",
+            "properties": {
+                "linkUrl": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "sha": {
                     "type": "string"
                 }
             }
@@ -21171,6 +21784,14 @@ const docTemplate = `{
                     "description": "北极星 Token（当 createNewService 为 false 时必填，为 true 时由平台创建后回填）",
                     "type": "string"
                 },
+                "registerMode": {
+                    "description": "注册模式，默认 on_deploy（等部署后注册）。\nimmediate 表示绑定环境后立即下发 PolarisConfig CR 与配套 Service 完成注册，\n该配置不再注入环境变量和 tRPC 框架配置。创建后不可修改",
+                    "type": "string",
+                    "enum": [
+                        "immediate",
+                        "on_deploy"
+                    ]
+                },
                 "scopeEnvNames": {
                     "description": "生效的环境列表",
                     "type": "array",
@@ -21231,6 +21852,36 @@ const docTemplate = `{
                 },
                 "trafficLaneEnabled": {
                     "type": "boolean"
+                }
+            }
+        },
+        "serializer.CreateBindingInput": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "description": {
+                    "description": "描述",
+                    "type": "string"
+                },
+                "envInstanceMap": {
+                    "description": "环境名 → 实例 ID；允许为空",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "envVars": {
+                    "description": "环境变量模板；允许为空",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "description": "绑定名称（应用内同服务下唯一）",
+                    "type": "string"
                 }
             }
         },
@@ -21533,6 +22184,126 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/serializer.PortPoolItemInput"
                     }
+                }
+            }
+        },
+        "serializer.CreateRedisInstanceInput": {
+            "type": "object",
+            "required": [
+                "bkBizID",
+                "clusterName",
+                "clusterType",
+                "dbAppAbbr",
+                "dbVersion",
+                "name",
+                "scopeType"
+            ],
+            "properties": {
+                "bkBizID": {
+                    "description": "--- Redis / DBM 创建参数 ---\n业务 ID",
+                    "type": "integer"
+                },
+                "bkCloudID": {
+                    "description": "云区域 ID",
+                    "type": "integer"
+                },
+                "clusterAlias": {
+                    "description": "集群别名（集群模式）",
+                    "type": "string"
+                },
+                "clusterName": {
+                    "description": "集群名称（小写字母开头，仅小写字母/数字/连字符）",
+                    "type": "string"
+                },
+                "clusterShardNum": {
+                    "description": "集群分片数",
+                    "type": "integer"
+                },
+                "clusterType": {
+                    "description": "集群类型",
+                    "type": "string"
+                },
+                "databases": {
+                    "description": "DB 数量",
+                    "type": "integer"
+                },
+                "dbAppAbbr": {
+                    "description": "业务英文缩写",
+                    "type": "string"
+                },
+                "dbVersion": {
+                    "description": "版本号（如 Redis-6）",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "描述",
+                    "type": "string"
+                },
+                "disasterToleranceLevel": {
+                    "description": "容灾级别",
+                    "type": "string"
+                },
+                "ipSource": {
+                    "description": "主机来源",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "实例名称（同 workspace 下唯一）",
+                    "type": "string"
+                },
+                "port": {
+                    "description": "主从起始端口",
+                    "type": "integer"
+                },
+                "proxyPort": {
+                    "description": "集群接入层端口",
+                    "type": "integer"
+                },
+                "redisPwd": {
+                    "description": "Redis 访问密码",
+                    "type": "string"
+                },
+                "resourceSpec": {
+                    "description": "资源池申请规格",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.ResourceSpecInput"
+                        }
+                    ]
+                },
+                "scopeType": {
+                    "description": "作用域类型: workspace / envType / env",
+                    "type": "string",
+                    "enum": [
+                        "workspace",
+                        "envType",
+                        "env"
+                    ]
+                },
+                "scopeValue": {
+                    "description": "作用域值；workspace 时为空，envType 为环境类型，env 为环境名",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.CreateRedisInstanceOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.CreateRedisInstanceOutputObj"
+                }
+            }
+        },
+        "serializer.CreateRedisInstanceOutputObj": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "实例 ID",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "实例状态",
+                    "type": "string"
                 }
             }
         },
@@ -21939,12 +22710,16 @@ const docTemplate = `{
         "serializer.DevModeRuleInput": {
             "type": "object",
             "required": [
-                "envType",
+                "envTypes",
                 "spec"
             ],
             "properties": {
-                "envType": {
-                    "type": "string"
+                "envTypes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "spec": {
                     "$ref": "#/definitions/serializer.DevModeSpecInput"
@@ -21965,8 +22740,11 @@ const docTemplate = `{
                 "createdAt": {
                     "type": "string"
                 },
-                "envType": {
-                    "type": "string"
+                "envTypes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "id": {
                     "type": "string"
@@ -23200,6 +23978,14 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.GetBCSUserTokenOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "string"
+                }
+            }
+        },
         "serializer.GetBSCPConfigOutput": {
             "type": "object",
             "properties": {
@@ -23397,6 +24183,14 @@ const docTemplate = `{
                 "data": {
                     "description": "推荐的镜像 Tag",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.GetRedisInstanceOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.RedisInstanceOutputObj"
                 }
             }
         },
@@ -24538,6 +25332,17 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListBindingsOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BindingOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListBkCIOAuthGitProjectsOutput": {
             "type": "object",
             "properties": {
@@ -24549,33 +25354,33 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.ListBkCIPipelineRepoRefOptionsOutput": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.BkCIPipelineVariableOptionOutput"
-                    }
-                }
-            }
-        },
-        "serializer.ListBkCIPipelineRepoRefsOutput": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.BkCIPipelineRepoRefOutput"
-                    }
-                }
-            }
-        },
         "serializer.ListBkCIPipelinesOutput": {
             "type": "object",
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.PaginatedBkCIPipelineOutput"
+                }
+            }
+        },
+        "serializer.ListBkCIRepositoryBranchesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BkCIRepositoryRefOutput"
+                    }
+                }
+            }
+        },
+        "serializer.ListBkCIRepositoryTagsOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BkCIRepositoryRefOutput"
+                    }
                 }
             }
         },
@@ -24915,6 +25720,18 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListRedisInstancesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "实例列表",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RedisInstanceOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListResourcesRulesOutput": {
             "type": "object",
             "properties": {
@@ -25098,6 +25915,20 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.PaginatedWorkspaceOutput"
+                }
+            }
+        },
+        "serializer.LocationSpecInput": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string"
+                },
+                "subZoneIDs": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -25728,6 +26559,10 @@ const docTemplate = `{
                     "description": "是否保留未就绪的 Pod 在北极星（可选更新）",
                     "type": "boolean"
                 },
+                "operator": {
+                    "description": "操作人/负责人（可选更新；未出现表示不改；空字符串非法）",
+                    "type": "string"
+                },
                 "polarisToken": {
                     "description": "北极星 Token（可选更新）",
                     "type": "string"
@@ -25989,6 +26824,10 @@ const docTemplate = `{
                 },
                 "polarisToken": {
                     "description": "北极星 Token（敏感信息，返回时脱敏）",
+                    "type": "string"
+                },
+                "registerMode": {
+                    "description": "注册模式：immediate（绑定后立即注册）| on_deploy（等部署后注册）",
                     "type": "string"
                 },
                 "scopeEnvNames": {
@@ -26833,6 +27672,101 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.RedisInstanceConfigOutput": {
+            "type": "object",
+            "properties": {
+                "bkBizID": {
+                    "type": "integer"
+                },
+                "clusterID": {
+                    "type": "integer"
+                },
+                "clusterName": {
+                    "type": "string"
+                },
+                "clusterType": {
+                    "type": "string"
+                },
+                "domain": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                }
+            }
+        },
+        "serializer.RedisInstanceOutputObj": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "非敏感配置",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.RedisInstanceConfigOutput"
+                        }
+                    ]
+                },
+                "createdAt": {
+                    "description": "创建时间",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "描述",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "实例 ID",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "状态详情",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "实例名称",
+                    "type": "string"
+                },
+                "operator": {
+                    "description": "操作人",
+                    "type": "string"
+                },
+                "providerType": {
+                    "description": "Provider 类型",
+                    "type": "string"
+                },
+                "scopeType": {
+                    "description": "作用域类型",
+                    "type": "string"
+                },
+                "scopeValue": {
+                    "description": "作用域值",
+                    "type": "string"
+                },
+                "serviceName": {
+                    "description": "服务名",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "实例状态",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "更新时间",
+                    "type": "string"
+                },
+                "usedAppIDs": {
+                    "description": "引用该实例的应用 ID 列表（由绑定反查）",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "workspaceID": {
+                    "description": "工作空间 ID",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.RefreshAppImagesOutput": {
             "type": "object",
             "properties": {
@@ -27141,6 +28075,31 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ResourceSpecInput": {
+            "type": "object",
+            "properties": {
+                "backendGroup": {
+                    "$ref": "#/definitions/serializer.ResourceSpecItemInput"
+                },
+                "proxy": {
+                    "$ref": "#/definitions/serializer.ResourceSpecItemInput"
+                }
+            }
+        },
+        "serializer.ResourceSpecItemInput": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "locationSpec": {
+                    "$ref": "#/definitions/serializer.LocationSpecInput"
+                },
+                "specID": {
+                    "type": "integer"
+                }
+            }
+        },
         "serializer.ResourceTopologyDataOutputObj": {
             "type": "object",
             "properties": {
@@ -27194,12 +28153,16 @@ const docTemplate = `{
         "serializer.ResourcesRuleInput": {
             "type": "object",
             "required": [
-                "envType",
+                "envTypes",
                 "spec"
             ],
             "properties": {
-                "envType": {
-                    "type": "string"
+                "envTypes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "spec": {
                     "$ref": "#/definitions/serializer.ResourcesSpecInput"
@@ -27220,8 +28183,11 @@ const docTemplate = `{
                 "createdAt": {
                     "type": "string"
                 },
-                "envType": {
-                    "type": "string"
+                "envTypes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "id": {
                     "type": "string"
@@ -28818,6 +29784,29 @@ const docTemplate = `{
                 },
                 "trafficLaneEnabled": {
                     "type": "boolean"
+                }
+            }
+        },
+        "serializer.UpdateBindingInput": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "描述",
+                    "type": "string"
+                },
+                "envInstanceMap": {
+                    "description": "环境名 → 实例 ID；省略或空表示清空映射",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "envVars": {
+                    "description": "环境变量模板；省略或空表示清空",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },
