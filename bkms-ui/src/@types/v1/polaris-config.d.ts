@@ -173,6 +173,10 @@ export interface PatchAppPolarisConfigInput {
    */
   keepNotReadyPod?: boolean;
   /**
+   * 操作人/负责人（可选更新；未出现表示不改；空字符串非法）
+   */
+  operator?: string;
+  /**
    * 北极星 Token（可选更新）
    */
   polarisToken?: string;

@@ -559,7 +559,8 @@ export interface AppSpecAnnotationsInput {
   annotations?: Record<string, string>;
 }
 
-export type EmptyOutput = Record<string, never>;
+export interface EmptyOutput {
+}
 
 export interface AppSpecLabelsSectionOutput {
   data?: AppSpecLabelsOutput;
@@ -682,6 +683,9 @@ export interface DevModeRuleInput {
 
 export interface DevModeRuleOutput {
   data?: DevModeRuleOutputObj;
+}
+
+export interface EmptyOutput {
 }
 
 export interface ListResourcesRulesOutput {
