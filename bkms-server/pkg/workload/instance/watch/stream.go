@@ -1,0 +1,238 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
+package watch
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/TencentBlueKing/gopkg/mapx"
+	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8swatch "k8s.io/apimachinery/pkg/watch"
+
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
+)
+
+const (
+	// streamTickInterval 一次 tick 同时驱动 SSE 心跳与北极星补拉
+	// 15s 取自北极星 SDK 的缓存量级，补得更密只会空转
+	streamTickInterval = 15 * time.Second
+	// ENDED 事件的 reason，前端据此识别集群中断并重连
+	clusterWatchEndedReason = "cluster watch interrupted"
+)
+
+// errClusterInterrupted 已成流后集群 Watch 断开；内部信号，对外表现为推 ENDED 后收流
+var errClusterInterrupted = errors.New("cluster watch interrupted")
+
+// errSkipEvent 该事件不投影给前端，但流继续
+var errSkipEvent = errors.New("skip watch event")
+
+// Manager 将集群 Pod Watch 投影为 SSE 事件
+// 连接级对象：每条 Watch 请求新建一个，字段只在 consume 的单 goroutine 内读写，故不加锁
+type Manager struct {
+	podWatcher  PodWatcher
+	listPolaris PolarisLister
+	// tickInterval 心跳与北极星补拉共用的周期；单测调小以免真实等待
+	tickInterval time.Duration
+	// polarisCache 最近一轮北极星拉取结果，供密集的 Pod 事件复用，见 attachPolaris
+	polarisCache []*polaris.PolarisServiceInstances
+	// polarisCachedAt polarisCache 的取回时刻；零值即从未拉过，首个 Pod 事件必然真拉
+	polarisCachedAt time.Time
+}
+
+// NewManager 创建 Watch 投影流 Manager
+func NewManager(podWatcher PodWatcher, listPolaris PolarisLister) *Manager {
+	return &Manager{
+		podWatcher:   podWatcher,
+		listPolaris:  listPolaris,
+		tickInterval: streamTickInterval,
+	}
+}
+
+// Run 从续传位点起把集群 Pod 变更投影为 SSE，直到客户端断开或集群中断
+// 返回 error 只代表流未建立，调用方按普通 HTTP 错误返回；已成流后的中断先推 ENDED 再收流
+func (m *Manager) Run(ctx context.Context, w http.ResponseWriter, p RunParams) error {
+	stream, err := newSSEStream(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	// 先建立集群 Watch；此时尚未写响应头，失败仍可返回普通 HTTP 错误
+	// 位点过期（410 Gone）是这里最常见的失败，带上 resourceVersion 才能与其他集群故障区分
+	watcher, err := m.podWatcher.Watch(ctx, p.Namespace, metav1.ListOptions{
+		LabelSelector:   p.LabelSelector,
+		ResourceVersion: p.ResourceVersion,
+	})
+	if err != nil {
+		return errors.Wrapf(err, "watch pods from resourceVersion %s", p.ResourceVersion)
+	}
+	defer watcher.Stop()
+
+	// Watch 建立成功才写 SSE 头，避免失败响应被当成 200 事件流
+	stream.writeHeaders()
+
+	err = m.consume(ctx, stream, watcher, p.DeployID)
+
+	// 已成流后集群中断：补一条 ENDED 供前端识别并重连，之后以这次写入的结果为准
+	if errors.Is(err, errClusterInterrupted) {
+		err = stream.writeEvent(serializer.AppInstanceWatchEvent{
+			Type:   string(EventEnded),
+			Reason: clusterWatchEndedReason,
+		})
+	}
+
+	// 响应头已写出，改不了 HTTP 状态码，流内错误只能落日志，否则写失败会彻底无声
+	if err != nil {
+		log.WarnAttrs(ctx, "instance watch stream ended with error",
+			slog.String("namespace", p.Namespace),
+			slog.String("label_selector", p.LabelSelector),
+			slog.String("deploy_id", p.DeployID),
+			slog.String("err", err.Error()),
+		)
+	}
+
+	return nil
+}
+
+// consume 消费集群事件并写 SSE；ctx 取消安静退出，通道关闭视为集群中断
+func (m *Manager) consume(
+	ctx context.Context,
+	stream *sseStream,
+	watcher k8swatch.Interface,
+	deployID string,
+) error {
+	ticker := time.NewTicker(m.tickInterval)
+	defer ticker.Stop()
+
+	// 连接级记录，存已推送出去的投影；随本次 consume 结束一起释放
+	pushed := newPushedInstances()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// 客户端断开不必再写 ENDED，由前端 onerror/onclose 重连
+			return nil
+
+		case <-ticker.C:
+			// 先补拉北极星，只对有变化的实例补推 MODIFIED；拉取失败只跳过本轮
+			if err := m.resyncPolaris(ctx, stream, pushed); err != nil {
+				return err
+			}
+
+			// 再写一次 SSE 注释心跳，避免空闲连接被代理断开
+			if err := stream.writeHeartbeat(); err != nil {
+				return err
+			}
+
+		case ev, ok := <-watcher.ResultChan():
+			if !ok {
+				return errClusterInterrupted
+			}
+
+			// 投影失败或 BOOKMARK 用 errSkipEvent 吞掉，不拆流
+			err := m.handleEvent(ctx, stream, pushed, ev, deployID)
+			if err != nil && !errors.Is(err, errSkipEvent) {
+				return err
+			}
+		}
+	}
+}
+
+// handleEvent 把单条集群事件投影为 SSE；BOOKMARK 跳过，Error 视为集群中断
+func (m *Manager) handleEvent(
+	ctx context.Context,
+	stream *sseStream,
+	pushed *pushedInstances,
+	ev k8swatch.Event,
+	deployID string,
+) error {
+	// BOOKMARK 只推进位点，不向页面推实例事件
+	if ev.Type == k8swatch.Bookmark {
+		return errSkipEvent
+	}
+
+	// 集群侧 Error 事件与通道关闭同样按中断处理
+	if ev.Type == k8swatch.Error {
+		return errClusterInterrupted
+	}
+
+	// 投影失败返回 errSkipEvent，调用方继续消费后续事件
+	event, err := m.projectEvent(ctx, ev, deployID)
+	if err != nil {
+		return err
+	}
+
+	if err = stream.writeEvent(event); err != nil {
+		return err
+	}
+
+	// 推送成功后才记录：没推出去的实例不参与后续北极星补拉比对
+	pushed.track(event)
+
+	return nil
+}
+
+// projectEvent 把集群对象投影为平台事件；无法识别或投影失败则跳过，不推 skipped
+func (m *Manager) projectEvent(
+	ctx context.Context,
+	ev k8swatch.Event,
+	deployID string,
+) (serializer.AppInstanceWatchEvent, error) {
+	// dynamic client Watch 只应给出 Unstructured，其他类型不投影
+	obj, ok := ev.Object.(*unstructured.Unstructured)
+	if !ok {
+		return serializer.AppInstanceWatchEvent{}, errSkipEvent
+	}
+
+	podName := mapx.GetStr(obj.Object, "metadata.name")
+	if podName == "" {
+		// 没有 name 无法定位实例，跳过
+		return serializer.AppInstanceWatchEvent{}, errSkipEvent
+	}
+
+	// DELETED 只保证 object.id，不投影其余字段、不拉北极星
+	if ev.Type == k8swatch.Deleted {
+		return serializer.AppInstanceWatchEvent{
+			Type:   string(EventDeleted),
+			Object: &serializer.AppInstanceOutputObj{ID: podName},
+		}, nil
+	}
+
+	// ADDED/MODIFIED 对齐 List 的 AppInstanceOutputObj；单个坏 Pod 跳过本事件
+	instance, err := new(serializer.AppInstanceOutputObj).FromPodManifest(obj.Object, deployID)
+	if err != nil {
+		return serializer.AppInstanceWatchEvent{}, errSkipEvent
+	}
+
+	// 北极星失败不拆流，K8s 字段照常推
+	m.attachPolaris(ctx, instance)
+
+	eventType := EventModified
+	if ev.Type == k8swatch.Added {
+		eventType = EventAdded
+	}
+
+	return serializer.AppInstanceWatchEvent{Type: string(eventType), Object: instance}, nil
+}

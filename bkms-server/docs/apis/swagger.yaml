@@ -1332,22 +1332,6 @@ definitions:
         description: 状态，由 pod.status.phase 等解析获得
         type: string
     type: object
-  serializer.AppInstanceWatchEvent:
-    properties:
-      object:
-        allOf:
-        - $ref: '#/definitions/serializer.AppInstanceOutputObj'
-        description: 实例投影；字段集合对齐 AppInstanceOutputObj（含 polarisInfos）
-      type:
-        description: |-
-          事件类型
-          Enums: ADDED, MODIFIED, DELETED
-        enum:
-        - ADDED
-        - MODIFIED
-        - DELETED
-        type: string
-    type: object
   serializer.AppModelDeployRecordOutputObj:
     properties:
       branch:
@@ -5901,6 +5885,9 @@ definitions:
       count:
         description: 结果数量；全量为成功投影条数，分页为 LabelSelector 匹配的 Pod 总数
         example: "0"
+        type: string
+      resourceVersion:
+        description: 集群 List 首次响应的 resourceVersion，供 Watch 续传；空列表时也可能有值
         type: string
       results:
         description: 查询结果，只含成功投影
@@ -14436,8 +14423,10 @@ paths:
       - instance
   /apps/{appID}/envs/{envName}/instances/watch:
     get:
-      description: 事件类型为 ADDED / MODIFIED / DELETED；object 对齐 AppInstanceOutputObj（含
-        polarisInfos）。
+      description: |-
+        SSE 推送 ADDED/MODIFIED/DELETED/ENDED；DELETED 只保证 id，ENDED 时 object 为 null。
+        MODIFIED 有两个来源：集群 Pod 变更，以及北极星周期补拉（约 15s 一轮，仅 polarisInfos 变化时推），二者形态一致。
+        北极星拉取失败不阻塞推送：polarisInfos 为空数组，与未注册北极星同形，K8s 字段照常推。
       operationId: WatchAppInstances
       parameters:
       - description: 应用 ID
@@ -14454,19 +14443,28 @@ paths:
         in: query
         name: trafficLaneName
         type: string
+      - description: List 成功响应带回的续传位点
+        in: query
+        name: resourceVersion
+        required: true
+        type: string
       produces:
-      - application/json
+      - text/event-stream
       responses:
         "200":
-          description: Watch 事件逻辑结构（编码格式随传输形态而定）
+          description: SSE event stream
           schema:
-            $ref: '#/definitions/serializer.AppInstanceWatchEvent'
+            type: string
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "501":
-          description: Not Implemented
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "500":
+          description: Internal Server Error
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:

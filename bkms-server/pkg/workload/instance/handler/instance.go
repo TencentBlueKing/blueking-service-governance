@@ -60,6 +60,7 @@ func New(registry *storereg.Registry) *Handler {
 // 全量时单个 Pod 投影失败则跳过并写入 skipped，count 为成功投影数（不含跳过项）
 // 分页时当前页解析失败整次 500（与改造前一致，供 CLI）；count 为 LabelSelector 匹配 Pod 总数
 // 北极星拉取失败不阻塞 Pod 输出，降级为空 polarisInfos，与未注册北极星同形
+// 成功响应带 resourceVersion，供 Watch 从该位点续传
 //
 //	@ID			ListAppInstances
 //	@Summary	获取应用实例列表
@@ -95,7 +96,7 @@ func (h *Handler) ListAppInstances(c *gin.Context) {
 	}
 
 	// 按部署记录的命名空间 + LabelSelector 拉取匹配 Pod
-	items, err := h.listMatchingAppInstancePods(ctx, record)
+	items, resourceVersion, err := h.listMatchingAppInstancePods(ctx, record)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -111,12 +112,14 @@ func (h *Handler) ListAppInstances(c *gin.Context) {
 	// 合并该应用环境的北极星实例；拉取失败只降级这一列，不影响 Pod 列表返回
 	h.attachPolarisToListedAppInstances(ctx, app.ID, uriInput.EnvName, results)
 
+	// 成功响应带上首次 List 的 resourceVersion，Watch 必须原样带回
 	ginutils.OK(c, serializer.ListAppInstancesOutput{
 		Data: &serializer.PaginatedAppInstancesOutputObj{
-			Count:        count,
-			Results:      results,
-			SkippedCount: int64(len(skipped)),
-			Skipped:      skipped,
+			Count:           count,
+			Results:         results,
+			SkippedCount:    int64(len(skipped)),
+			Skipped:         skipped,
+			ResourceVersion: resourceVersion,
 		},
 	})
 }
@@ -295,7 +298,8 @@ func (h *Handler) BatchDeleteAppInstances(c *gin.Context) {
 
 	// 获取应用部署器，执行删除实例操作
 	deployer := h.newDeployer(app)
-	if err = deployer.BatchDeleteInstances(ctx, uriInput.EnvName, input.TrafficLaneName, input.InstanceIDs); err != nil {
+	err = deployer.BatchDeleteInstances(ctx, uriInput.EnvName, input.TrafficLaneName, input.InstanceIDs)
+	if err != nil {
 		bkerrs.AbortWithErr(
 			c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "batch delete app %s instances", app.ID),
 		)

@@ -8455,9 +8455,9 @@
                         "BkUserCredential": []
                     }
                 ],
-                "description": "事件类型为 ADDED / MODIFIED / DELETED；object 对齐 AppInstanceOutputObj（含 polarisInfos）。",
+                "description": "SSE 推送 ADDED/MODIFIED/DELETED/ENDED；DELETED 只保证 id，ENDED 时 object 为 null。\nMODIFIED 有两个来源：集群 Pod 变更，以及北极星周期补拉（约 15s 一轮，仅 polarisInfos 变化时推），二者形态一致。\n北极星拉取失败不阻塞推送：polarisInfos 为空数组，与未注册北极星同形，K8s 字段照常推。",
                 "produces": [
-                    "application/json"
+                    "text/event-stream"
                 ],
                 "tags": [
                     "instance"
@@ -8484,13 +8484,20 @@
                         "description": "部署的泳道名称（空字符串表示不使用泳道）",
                         "name": "trafficLaneName",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "List 成功响应带回的续传位点",
+                        "name": "resourceVersion",
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Watch 事件逻辑结构（编码格式随传输形态而定）",
+                        "description": "SSE event stream",
                         "schema": {
-                            "$ref": "#/definitions/serializer.AppInstanceWatchEvent"
+                            "type": "string"
                         }
                     },
                     "400": {
@@ -8499,8 +8506,14 @@
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
                     },
-                    "501": {
-                        "description": "Not Implemented",
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -19730,28 +19743,6 @@
                 }
             }
         },
-        "serializer.AppInstanceWatchEvent": {
-            "type": "object",
-            "properties": {
-                "object": {
-                    "description": "实例投影；字段集合对齐 AppInstanceOutputObj（含 polarisInfos）",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/serializer.AppInstanceOutputObj"
-                        }
-                    ]
-                },
-                "type": {
-                    "description": "事件类型\nEnums: ADDED, MODIFIED, DELETED",
-                    "type": "string",
-                    "enum": [
-                        "ADDED",
-                        "MODIFIED",
-                        "DELETED"
-                    ]
-                }
-            }
-        },
         "serializer.AppModelDeployRecordOutputObj": {
             "type": "object",
             "properties": {
@@ -26509,6 +26500,10 @@
                     "description": "结果数量；全量为成功投影条数，分页为 LabelSelector 匹配的 Pod 总数",
                     "type": "string",
                     "example": "0"
+                },
+                "resourceVersion": {
+                    "description": "集群 List 首次响应的 resourceVersion，供 Watch 续传；空列表时也可能有值",
+                    "type": "string"
                 },
                 "results": {
                     "description": "查询结果，只含成功投影",

@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
@@ -132,6 +133,7 @@ func (c *Client) List(
 ) (*unstructured.UnstructuredList, error) {
 	var obj map[string]any
 	var items []unstructured.Unstructured
+	var resourceVersion string
 
 	opts.Limit = listApiLimit
 	opts.Continue = ""
@@ -141,6 +143,12 @@ func (c *Client) List(
 		if err != nil {
 			return nil, errors.Wrap(err, c.genResActionDesc("list", c.gvr, namespace, ""))
 		}
+
+		// 续传 Watch 必须用首次 List 的 resourceVersion，避免 continue 翻页覆盖后丢空窗事件
+		if resourceVersion == "" {
+			resourceVersion = ret.GetResourceVersion()
+		}
+
 		obj = ret.Object
 		items = append(items, ret.Items...)
 		if ret.GetContinue() == "" {
@@ -149,7 +157,27 @@ func (c *Client) List(
 		opts.Continue = ret.GetContinue()
 	}
 
-	return &unstructured.UnstructuredList{Object: obj, Items: items}, nil
+	list := &unstructured.UnstructuredList{Object: obj, Items: items}
+	if resourceVersion != "" {
+		list.SetResourceVersion(resourceVersion)
+	}
+
+	return list, nil
+}
+
+// Watch 从 opts.ResourceVersion 起订阅资源变更；调用方负责 Stop
+// 这里不校验 ResourceVersion：留空是 apiserver 允许的用法（从当前状态起推），
+// 是否必须带续传位点属于业务语义，由调用方在上层校验
+// BOOKMARK 原样返回，是否转发由调用方过滤
+func (c *Client) Watch(
+	ctx context.Context, namespace string, opts metav1.ListOptions,
+) (watch.Interface, error) {
+	w, err := c.cli.Resource(c.gvr).Namespace(namespace).Watch(ctx, opts)
+	if err != nil {
+		return nil, errors.Wrap(err, c.genResActionDesc("watch", c.gvr, namespace, ""))
+	}
+
+	return w, nil
 }
 
 // Get 获取资源

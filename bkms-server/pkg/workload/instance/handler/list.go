@@ -50,10 +50,12 @@ func (h *Handler) bindListAppInstancesQuery(
 	var uriInput serializer.AppEnvURIInput
 	var queryInput serializer.ListAppInstancesQueryInput
 
+	// Bind 只做解析；全量/分页互斥与 pageSize 枚举放在 Validate，binding 无法按 all 切换
 	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
 		return uriInput, queryInput, err
 	}
 
+	// 全量禁止带 page/pageSize；分页时二者必填且 pageSize 仅允许 5/10/20/50/100
 	if err := queryInput.Validate(); err != nil {
 		return uriInput, queryInput, err
 	}
@@ -79,7 +81,7 @@ func (h *Handler) validateAppAndGetDeployRecord(
 		return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type)
 	}
 
-	// 获取应用部署记录
+	// 按环境 + 泳道取最新部署记录；未命中与 List 一样 404，Watch 也建不成连接
 	record, err := h.registry.AppModelDeployRecordStore.GetLatest(ctx, app.ID, uriInput.EnvName, trafficLaneName)
 	if err != nil {
 		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
@@ -89,10 +91,11 @@ func (h *Handler) validateAppAndGetDeployRecord(
 }
 
 // listMatchingAppInstancePods 按部署记录的命名空间 + LabelSelector 拉取匹配 Pod
+// 第二个返回值是集群 List 的 resourceVersion，随成功响应带给调用方，供 Watch 从该位点续传
 func (h *Handler) listMatchingAppInstancePods(
 	ctx context.Context,
 	record *appmodeldeploy.Record,
-) ([]unstructured.Unstructured, error) {
+) ([]unstructured.Unstructured, string, error) {
 	// 集群与命名空间以部署记录为准，不从请求参数推断
 	client := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
 
@@ -101,13 +104,14 @@ func (h *Handler) listMatchingAppInstancePods(
 	pods, err := client.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		// 拉 Pod 失败则整次 List 失败，不分页/全量都不会降级为空列表
-		return nil, bkerrs.Wrapf(
+		return nil, "", bkerrs.Wrapf(
 			err, bkerrs.ErrCodeInternalServerError,
 			"list namespace %s labelsSelector [%s] pods", record.Namespace, labelSelector,
 		)
 	}
 
-	return pods.Items, nil
+	// resourceVersion 取 Client.List 保留的首次位点，供 Watch 续传；空列表时也可能有值
+	return pods.Items, pods.GetResourceVersion(), nil
 }
 
 // projectListedAppInstances 将窗口内 Pod 投影为 AppInstanceOutputObj
