@@ -20,6 +20,7 @@ package output_test
 
 import (
 	"context"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,6 +33,33 @@ type TestUser struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Age  int    `json:"age"`
+}
+
+// splitTable 按空白切分表格的表头与数据列。列对齐产生的多余空格会被折叠，
+// 因此断言不受终端宽度 / OS 渲染差异影响，同时能精确核对列顺序与单元格取值。
+func splitTable(rendered string) (headers []string, rows [][]string) {
+	lines := strings.Split(strings.TrimSpace(rendered), "\n")
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	headers = strings.Fields(lines[0])
+	for _, line := range lines[1:] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		rows = append(rows, strings.Fields(line))
+	}
+	return headers, rows
+}
+
+// tableRows 返回表格除表头外的数据行原文。渲染时行尾空白已被去除，
+// 因此单列表格的数据行就是该单元格的完整内容，可用于断言含空格的单元格。
+func tableRows(rendered string) []string {
+	lines := strings.Split(strings.TrimSpace(rendered), "\n")
+	if len(lines) <= 1 {
+		return nil
+	}
+	return lines[1:]
 }
 
 var _ = Describe("Output Package", func() {
@@ -75,16 +103,12 @@ var _ = Describe("Output Package", func() {
 				result, err := output.FormatData(context.Background(), users, "")
 
 				Expect(err).NotTo(HaveOccurred())
-				// 使用内容断言而非精确匹配，避免不同 OS 下表格渲染差异导致测试失败
-				Expect(result).To(ContainSubstring("ID"))
-				Expect(result).To(ContainSubstring("NAME"))
-				Expect(result).To(ContainSubstring("AGE"))
-				Expect(result).To(ContainSubstring("user1"))
-				Expect(result).To(ContainSubstring("Alice"))
-				Expect(result).To(ContainSubstring("25"))
-				Expect(result).To(ContainSubstring("user2"))
-				Expect(result).To(ContainSubstring("Bob"))
-				Expect(result).To(ContainSubstring("30"))
+				headers, rows := splitTable(result)
+				Expect(headers).To(Equal([]string{"ID", "NAME", "AGE"}))
+				Expect(rows).To(Equal([][]string{
+					{"user1", "Alice", "25"},
+					{"user2", "Bob", "30"},
+				}))
 			})
 		})
 
@@ -123,10 +147,11 @@ var _ = Describe("Output Package", func() {
 				result, err := output.FormatData(context.Background(), users, "table")
 
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result).To(ContainSubstring("ID"))
-				Expect(result).To(ContainSubstring("NAME"))
-				Expect(result).To(ContainSubstring("user1"))
-				Expect(result).To(ContainSubstring("Alice"))
+				headers, rows := splitTable(result)
+				Expect(headers).To(Equal([]string{"ID", "NAME", "AGE"}))
+				Expect(rows).To(Equal([][]string{
+					{"user1", "Alice", "25"},
+				}))
 			})
 		})
 
@@ -354,18 +379,12 @@ var _ = Describe("Output Package", func() {
 				result, err := output.FormatData(context.Background(), items, "")
 
 				Expect(err).NotTo(HaveOccurred())
-				// 表格应包含 ID 和 Name 列
-				Expect(result).To(ContainSubstring("ID"))
-				Expect(result).To(ContainSubstring("NAME"))
-				Expect(result).To(ContainSubstring("inst-1"))
-				Expect(result).To(ContainSubstring("pod-a"))
-				Expect(result).To(ContainSubstring("inst-2"))
-				Expect(result).To(ContainSubstring("pod-b"))
-
-				// 表格不应包含 Hidden 列头和数据
-				Expect(result).NotTo(ContainSubstring("HIDDEN"))
-				Expect(result).NotTo(ContainSubstring("secret-data"))
-				Expect(result).NotTo(ContainSubstring("more-secret"))
+				headers, rows := splitTable(result)
+				Expect(headers).To(Equal([]string{"ID", "NAME"}))
+				Expect(rows).To(Equal([][]string{
+					{"inst-1", "pod-a"},
+					{"inst-2", "pod-b"},
+				}))
 			})
 
 			It("should still show hidden field in json output", func() {
@@ -418,15 +437,11 @@ var _ = Describe("Output Package", func() {
 				result, err := output.FormatData(context.Background(), items, "")
 
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result).To(ContainSubstring("ID"))
-				Expect(result).To(ContainSubstring("STATUS"))
-				Expect(result).To(ContainSubstring("pod-1"))
-				Expect(result).To(ContainSubstring("Running"))
-
-				// 不应展示 PolarisInfos 列
-				Expect(result).NotTo(ContainSubstring("POLARISINFOS"))
-				Expect(result).NotTo(ContainSubstring("ns1"))
-				Expect(result).NotTo(ContainSubstring("svc1"))
+				headers, rows := splitTable(result)
+				Expect(headers).To(Equal([]string{"ID", "STATUS"}))
+				Expect(rows).To(Equal([][]string{
+					{"pod-1", "Running"},
+				}))
 			})
 
 			It("should show polarisInfos in json output", func() {
@@ -468,6 +483,101 @@ var _ = Describe("Output Package", func() {
 				Expect(result).To(ContainSubstring("serviceName: svc1"))
 				Expect(result).To(ContainSubstring("isHealthy: true"))
 				Expect(result).To(ContainSubstring("enableHealthCheck: false"))
+			})
+		})
+	})
+
+	Describe("list field truncation in table cells", func() {
+		type Endpoint struct {
+			Host string `json:"host"`
+			Port int    `json:"port"`
+		}
+		// 单列结构体：行尾空白会被去除，因此数据行即单元格的完整内容，便于精确断言
+		type StructList struct {
+			Endpoints []Endpoint `json:"endpoints"`
+		}
+		type PtrStructList struct {
+			Endpoints []*Endpoint `json:"endpoints"`
+		}
+		type ScalarList struct {
+			Tags []string `json:"tags"`
+		}
+
+		Context("when list elements are structs", func() {
+			It("should render the element as JSON", func() {
+				items := []StructList{
+					{Endpoints: []Endpoint{{Host: "h1", Port: 8080}}},
+				}
+
+				result, err := output.FormatData(context.Background(), items, "")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tableRows(result)).To(Equal([]string{`{"host":"h1","port":8080}`}))
+			})
+
+			It("should only show the first element and fold the rest", func() {
+				items := []StructList{
+					{Endpoints: []Endpoint{
+						{Host: "h1", Port: 8080},
+						{Host: "h2", Port: 8081},
+						{Host: "h3", Port: 8082},
+					}},
+				}
+
+				result, err := output.FormatData(context.Background(), items, "")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tableRows(result)).To(Equal([]string{`{"host":"h1","port":8080}, ... (+2 more)`}))
+			})
+
+			It("should treat pointer elements as structs", func() {
+				items := []PtrStructList{
+					{Endpoints: []*Endpoint{{Host: "h1", Port: 8080}, {Host: "h2", Port: 8081}}},
+				}
+
+				result, err := output.FormatData(context.Background(), items, "")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tableRows(result)).To(Equal([]string{`{"host":"h1","port":8080}, ... (+1 more)`}))
+			})
+		})
+
+		Context("when list elements are scalars", func() {
+			It("should show all elements when not exceeding the limit", func() {
+				items := []ScalarList{
+					{Tags: []string{"t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10"}},
+				}
+
+				result, err := output.FormatData(context.Background(), items, "")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tableRows(result)).To(Equal([]string{"t1, t2, t3, t4, t5, t6, t7, t8, t9, t10"}))
+			})
+
+			It("should fold elements beyond the limit", func() {
+				items := []ScalarList{
+					{Tags: []string{
+						"t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12",
+					}},
+				}
+
+				result, err := output.FormatData(context.Background(), items, "")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tableRows(result)).To(
+					Equal([]string{"t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, ... (+2 more)"}),
+				)
+			})
+		})
+
+		Context("when list is empty", func() {
+			It("should render an empty cell", func() {
+				items := []ScalarList{{Tags: nil}}
+
+				result, err := output.FormatData(context.Background(), items, "")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tableRows(result)).To(BeEmpty())
 			})
 		})
 	})
@@ -535,8 +645,15 @@ var _ = Describe("Output Package", func() {
 			GinkgoWriter.Println(result)
 			GinkgoWriter.Println("===== End =====")
 
-			Expect(result).To(ContainSubstring("xxxxxx-pdkgn"))
-			Expect(result).To(ContainSubstring("xxxxxx-xyzab"))
+			headers, rows := splitTable(result)
+			// 含空格的表头（IS HEALTHY、POLARIS INFOS）会被 Fields 按词切开，
+			// 因此这里只精确核对无空格的前几列；数组单元格本身含空格，不能整行按列对齐。
+			Expect(headers[:3]).To(Equal([]string{"ID", "IP", "STATUS"}))
+			Expect(rows).To(HaveLen(2))
+			Expect(len(rows[0])).To(BeNumerically(">=", 5))
+			Expect(len(rows[1])).To(BeNumerically(">=", 5))
+			Expect(rows[0][:5]).To(Equal([]string{"xxxxxx-pdkgn", "127.0.0.8", "Running", "true", "2d5h"}))
+			Expect(rows[1][:5]).To(Equal([]string{"xxxxxx-xyzab", "127.0.0.9", "Running", "true", "1d3h"}))
 		})
 	})
 })
