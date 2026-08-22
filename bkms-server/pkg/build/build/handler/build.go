@@ -21,6 +21,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
 	buildserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build/serializer"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	buildtrigger "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -106,6 +108,11 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		return
 	}
 
+	if err = h.guardTriggerPolicyLock(ctx, app.ID, dataBefore, cfg); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
 		h.registry.RuntimeImageStore,
 		h.registry.SnapshotStore,
@@ -157,6 +164,26 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 	ginutils.OK(c, buildserializer.UpdateBuildConfigOutput{
 		Data: new(buildserializer.BuildConfigOutputObj).FromModel(cfg),
 	})
+}
+
+// guardTriggerPolicyLock 在应用存在自动触发策略时，拦截对 repoAlias、sourceType 与自动生成 tag 的改动。
+// 已按 ErrCode 包装好，调用方直接 AbortWithErr 即可
+func (h *Handler) guardTriggerPolicyLock(
+	ctx context.Context,
+	appID string,
+	oldCfg, newCfg *imagebuild.Config,
+) error {
+	err := buildtrigger.NewPolicyManager(
+		h.registry.BuildTriggerPolicyStore, h.registry.BuildConfigStore, nil,
+	).GuardBuildConfigUpdate(ctx, appID, oldCfg, newCfg)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, buildtrigger.ErrBuildConfigLocked):
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error())
+	default:
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "guard build config update of app %s", appID)
+	}
 }
 
 // ListBuildRecords 获取应用构建记录列表。

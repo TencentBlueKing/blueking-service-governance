@@ -143,8 +143,8 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 
 	// 构建触发回调由蓝盾触发专用流水线调用，携带应用独享凭证而非用户票据，
 	// 因此单独挂在不带 auth.Required 的路由组上。
-	// FIXME W1 仅做 header 存在性检查；凭证内容比对与限流由后续子需求实现，合入生产前勿依赖本路由做真实鉴权
-	buildTriggerHandler := buildtriggerhandler.New()
+	// FIXME: 当前仅做 header 存在性检查；凭证内容比对与限流尚未实现，合入生产前勿依赖本路由做真实鉴权
+	buildTriggerHandler := buildtriggerhandler.New(storereg.G())
 	callbackGroup := r.Group("/bkms/v1/bkms-server")
 	callbackGroup.Use(bkerrs.ErrorHandler())
 	buildtrigger.RegisterCallback(callbackGroup, buildTriggerHandler)
