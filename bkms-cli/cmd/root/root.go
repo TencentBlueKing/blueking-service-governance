@@ -50,6 +50,15 @@ func NewRootCmd() *cobra.Command {
 		Short: "bkms cli",
 		Long:  "Work seamlessly with bkms from the command line.",
 		Run: func(cmd *cobra.Command, args []string) {
+			if !config.G.HasBkmsBaseURL() {
+				console.Info(
+					"Welcome to bkms-cli!\n\n" +
+						"API endpoints are not configured yet. Run:\n" +
+						"  bkms-cli config set --bkms-base-url <url> [--bcs-api-host <url>]\n\n" +
+						"Then run `bkms-cli login` to get started.",
+				)
+				return
+			}
 			if !config.G.UserIsInitialized() {
 				console.Info(
 					"Welcome to bkms-cli!\n\n" +
@@ -66,6 +75,12 @@ func NewRootCmd() *cobra.Command {
 			}
 			if err := logx.SetLevel(logLevel); err != nil {
 				return errors.Wrap(err, "set log level")
+			}
+			// login / 需鉴权命令都依赖 bkmsBaseUrl
+			if cmd.Name() == "login" || cmdutil.IsAuthRequired(cmd) {
+				if err := config.G.RequireBkmsBaseURL(); err != nil {
+					return err
+				}
 			}
 			// 如果某命令不需要用户认证，直接返回
 			if !cmdutil.IsAuthRequired(cmd) {

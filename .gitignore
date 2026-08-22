@@ -10,6 +10,7 @@
 *exvim*
 *vendor*
 build/
+dist/
 
 # Local AI coding agent config directories
 .codebuddy/
@@ -19,6 +20,10 @@ build/
 .gemini/
 .windsurf/
 .qwen/
+
+# Local AI temporary documents
+docs/reqs
+docs/superpowers
 
 !bkms-server/pkg/build/
 !bkms-server/pkg/build/build/

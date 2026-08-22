@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+project_name: bkms-cli
+
+dist: bkms-cli/dist
+
+before:
+  hooks:
+    - sh -c '[ -n "${VERSION}" ] || { echo "VERSION is required" >&2; exit 1; }'
+
+builds:
+  - id: bkms-cli
+    dir: bkms-cli
+    main: .
+    binary: bkms-cli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.Version={{ .Env.VERSION }}
+      - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.GitHash={{ .FullCommit }}
+      - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime={{ .CommitDate }}
+      - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.updateSource={{ .Env.UPDATE_SOURCE }}
+
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: bkms-cli_{{ .Env.VERSION }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: github-native
+
+release:
+  make_latest: true

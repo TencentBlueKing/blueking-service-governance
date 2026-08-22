@@ -30,23 +30,35 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
-// updateCheckTimeout bounds metadata-only checks; an installation continues to
-// use the command context because downloading and replacing may take longer.
-const updateCheckTimeout = 15 * time.Second
+const (
+	updateCheckTimeout = 15 * time.Second
+	npmUpgradeCommand  = "npm i -g @blueking/bkms-cli@latest"
+)
 
 // NewCmd creates the self-update command.
 func NewCmd() *cobra.Command {
 	var checkOnly bool
+	var force bool
 
 	cmd := &cobra.Command{
-		Use:     "update",
-		Short:   "Check for and install bkms-cli updates.",
-		Example: "  bkms-cli update --check\n  bkms-cli update",
-		Args:    cobra.NoArgs,
+		Use:   "update",
+		Short: "Check for and install bkms-cli updates.",
+		Example: "  bkms-cli update --check\n" +
+			"  bkms-cli update\n" +
+			"  bkms-cli update --force",
+		Args: cobra.NoArgs,
 		Annotations: map[string]string{
 			cmdutil.SkipAuthAnnotationKey: "true",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			viaNPM := updater.InstalledViaNPM()
+			if viaNPM && !checkOnly && !force {
+				console.Info("This bkms-cli was installed via npm. Upgrade with:")
+				console.Info("  %s", npmUpgradeCommand)
+				console.Info("Or use --force to replace the binary from GitHub Releases.")
+				return nil
+			}
+
 			var (
 				info updater.Info
 				err  error
@@ -62,18 +74,25 @@ func NewCmd() *cobra.Command {
 				return err
 			}
 
-			// Print the result of the update check or installation.
 			switch {
 			case !info.Available:
-				console.Info("bkms-cli v%s is up to date", info.CurrentVersion)
+				console.Info("bkms-cli %s is up to date", info.CurrentVersion)
+			case checkOnly && viaNPM && !force:
+				console.Info(
+					"bkms-cli %s is available (current: %s); upgrade with: %s",
+					info.LatestVersion,
+					info.CurrentVersion,
+					npmUpgradeCommand,
+				)
 			case checkOnly:
-				console.Info("bkms-cli v%s is available (current: v%s)", info.LatestVersion, info.CurrentVersion)
+				console.Info("bkms-cli %s is available (current: %s)", info.LatestVersion, info.CurrentVersion)
 			default:
-				console.Info("bkms-cli updated from v%s to v%s", info.CurrentVersion, info.LatestVersion)
+				console.Info("bkms-cli updated from %s to %s", info.CurrentVersion, info.LatestVersion)
 			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&checkOnly, "check", false, "check for updates without installing")
+	cmd.Flags().BoolVar(&force, "force", false, "force self-update even when installed via npm")
 	return cmd
 }

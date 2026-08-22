@@ -42,12 +42,10 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/config"
 	instancehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/instance"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
-
-// bcsAPIHost BCS API 网关地址，通过 go build -ldflags 注入
-var bcsAPIHost = ""
 
 // 常量定义
 const (
@@ -334,11 +332,19 @@ func buildKubeClient(clusterID, token string) error {
 		return errors.New("BCS Auth Info is empty")
 	}
 
+	if config.G == nil || config.G.BcsAPIHost == "" {
+		return errors.New(
+			"bcsApiHost is not configured\n\n" +
+				"Set it with:\n" +
+				"  bkms-cli config set --bcs-api-host <url>",
+		)
+	}
+
 	console.Info("Using BCS API to connect cluster %s...", clusterID)
 	restConfig = &rest.Config{
 		BearerToken:     token,
 		TLSClientConfig: rest.TLSClientConfig{Insecure: true},
-		Host:            fmt.Sprintf("%s/clusters/%s/", bcsAPIHost, clusterID),
+		Host:            fmt.Sprintf("%s/clusters/%s/", config.G.BcsAPIHost, clusterID),
 	}
 
 	clientset, err = kubernetes.NewForConfig(restConfig)

@@ -1,4 +1,4 @@
-name: Build and release bkms-cli
+name: Release bkms-cli
 
 on:
   push:
@@ -6,10 +6,10 @@ on:
       - "bkms-cli/v*.*.*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,52 +23,21 @@ jobs:
           go-version-file: bkms-cli/go.mod
           cache-dependency-path: bkms-cli/go.sum
 
-      - name: Install UPX
-        uses: crazy-max/ghaction-upx@v4
-        with:
-          install-only: true
-
       - name: Test bkms-cli packages
         working-directory: bkms-cli
         run: make test
 
-      - name: Build and compress binaries
-        working-directory: bkms-cli
+      - name: Derive version
+        run: |
+          ver="${GITHUB_REF_NAME##*/}"
+          echo "VERSION=${ver#v}" >> "$GITHUB_ENV"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "v2.17.1"
+          args: release --clean --skip=validate --config bkms-cli/.goreleaser.yaml
         env:
-          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.0-dev' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATE_SOURCE: ${{ github.repository }}
-        run: make build-all compress
-
-      - name: Generate checksums
-        working-directory: bkms-cli/build
-        run: sha256sum bkms-cli-* > checksums.txt
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: bkms-cli
-          path: bkms-cli/build/
-          if-no-files-found: error
-
-  release:
-    if: github.ref_type == 'tag'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: bkms-cli
-          path: bkms-cli/build
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v3
-        with:
-          working_directory: bkms-cli/build
-          files: |
-            bkms-cli-*
-            checksums.txt
-          fail_on_unmatched_files: true
-          generate_release_notes: true

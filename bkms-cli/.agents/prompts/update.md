@@ -16,9 +16,11 @@ bkms-cli update --check
 bkms-cli update
 ```
 
-只有远端 SemVer 严格高于当前版本时，命令才会下载并替换二进制。校验失败、无写入权限或替换失败时，命令返回错误。
+只有远端 SemVer 严格高于当前版本时，命令才会从 GitHub Releases 下载并替换二进制。校验失败、无写入权限或替换失败时，命令返回错误。
 
-GitHub 发布 tag 和 repo 的 `version` 文件使用 `bkms-cli/vX.Y.Z` 格式。发布资产名使用 `bkms-cli-{os}-{arch}-{version}` 格式。
+GitHub 发布 tag 使用 `bkms-cli/vX.Y.Z`；注入的业务版本与发布资产名为不带 `v` 的 SemVer（如 `1.2.3`）。发布资产形如 `bkms-cli_1.2.3_darwin_amd64.tar.gz`（Windows 为 `.zip`）。
+
+若当前二进制位于 npm 的 `node_modules` 下，默认不会原地替换，请使用 `npm i -g @blueking/bkms-cli@latest`；需要强制从 GitHub Releases 替换时可用 `bkms-cli update --force`。
 
 ## 错误语义
 
@@ -26,4 +28,3 @@ GitHub 发布 tag 和 repo 的 `version` 文件使用 `bkms-cli/vX.Y.Z` 格式�
 - `ErrInvalidVersion`：当前或远端版本不是有效的 SemVer。
 - `ErrNoRelease`：GitHub Release 中没有当前平台可用的资产。
 - `ErrBinaryTooLarge`：下载的更新资产超过大小限制。
-- `ErrChecksumMissing`、`ErrChecksumInvalid`：repo 更新资产缺少有效的 SHA256 校验值。

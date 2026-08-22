@@ -1,0 +1,48 @@
+{
+  "name": "@blueking/bkms-cli",
+  "version": "1.0.0",
+  "description": "BlueKing Service Governance CLI (downloads platform binary from GitHub Releases)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TencentBlueKing/blueking-service-governance.git",
+    "directory": "bkms-cli/npm"
+  },
+  "homepage": "https://github.com/TencentBlueKing/blueking-service-governance/tree/master/bkms-cli/npm",
+  "bugs": {
+    "url": "https://github.com/TencentBlueKing/blueking-service-governance/issues"
+  },
+  "bin": {
+    "bkms-cli": "scripts/bkms-cli.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "bkmsCli": {
+    "bkmsBaseUrl": "",
+    "bcsApiHost": "",
+    "releaseUrl": "https://github.com/TencentBlueKing/blueking-service-governance/releases/download/bkms-cli%2Fv{version}/{archive}"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "keywords": [
+    "bkms",
+    "blueking",
+    "cli"
+  ]
+}

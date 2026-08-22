@@ -8,6 +8,8 @@ bkms-cli 是蓝鲸服务治理平台提供的命令行工具，支持查看应�
 bkms-cli/
 ├── main.go                  # 程序入口
 ├── Makefile                 # 构建 & 开发命令
+├── .goreleaser.yaml         # 多架构发布构建（goreleaser）
+├── npm/                     # @blueking/bkms-cli（postinstall 下载二进制）
 ├── cmd/                     # 子命令定义（按功能分目录，每个目录对应一个子命令）
 │   ├── root/                # 根命令
 │   ├── version/             # version 子命令
@@ -27,7 +29,7 @@ bkms-cli/
 │   ├── account/             # 用户账号管理
 │   ├── handler/             # 业务处理器
 │   │   ├── deploy/          # 部署相关逻辑
-│   │   └── publish/         # BCS 发布逻辑（bcsAPIHost 在此注入）
+│   │   └── publish/         # BCS 发布逻辑
 │   ├── version/             # 版本信息（通过 ldflags 注入）
 │   └── utils/               # 工具函数（命令行、控制台、环境变量、输出格式化、路径）
 └── test/
@@ -56,9 +58,8 @@ bkms-cli/
 |------|------|
 | `make build` | 构建当前平台二进制（产物在 `./build/`） |
 | `make build GOOS=linux GOARCH=amd64` | 构建指定平台 |
-| `make build-all` | 构建所有平台（linux/darwin/windows × amd64/arm64） |
-| `make build-all compress` | 构建所有平台 + UPX 压缩 |
-| `make clean` | 清理构建产物 |
+| `make build-all` | 用 goreleaser 构建所有平台（产物在 `./dist/`） |
+| `make clean` | 清理 `build/` 与 `dist/` |
 | `make tidy` | 执行 `go mod tidy` |
 | `make vet` | 执行 `go vet` |
 | `make fmt` | 代码格式化（golangci-lint） |
@@ -69,31 +70,31 @@ bkms-cli/
 ### 构建
 
 ```shell
-# 日常开发构建（BCS_API_HOST 已内置默认值，无需手动指定）
+# 日常开发构建
 make build
 
-# 出包（所有平台 + UPX 压缩）
-make build-all compress
+# 多架构出包（goreleaser snapshot，产物在 dist/）
+make build-all
 ```
 
-> `BCS_API_HOST` 默认为 `https://bcs-api.example.com`，实际使用时候需要可通过 `make build BCS_API_HOST=https://your-host` 指定。
+> 正式发版：推送 `bkms-cli/v*` tag 后由 GitHub Actions 执行 `goreleaser release`。
+>
+> API 地址不在编译期注入：由安装侧（npm 的 `bkmsCli` / `config set`，或安装脚本）写入 `~/.bkms/config.yaml`。
 
-构建产物位于 `./build/` 目录，命名规则：
-- 当前平台：`bkms-cli`（或 `bkms-cli.exe`）
-- 指定平台：`bkms-cli-{os}-{arch}`
-- 平台发布构建：`bkms-cli-{os}-{arch}-{version}`
+构建产物：
+- `make build`：`./build/`
+- `make build-all`：`./dist/`（`bkms-cli_{version}_{os}_{arch}.tar.gz`，Windows 为 `.zip`）
 
 ### 编译期注入参数
 
-以下参数通过 `go build -ldflags -X` 在编译期注入：
+以下参数通过 `go build -ldflags -X` / goreleaser `ldflags` 在编译期注入：
 
 | 参数 | 说明 |
 |------|------|
-| `pkg/version.Version` | 版本号（`git describe --always`） |
+| `pkg/version.Version` | 版本号（不带 `v`，如 `1.2.3`） |
 | `pkg/version.GitHash` | Git commit hash |
 | `pkg/version.BuildTime` | 构建时间 |
-| `pkg/updater.updateSource` | 更新源；`owner/repository` 使用 GitHub Releases，HTTP(S) URL 使用制品仓库目录 |
-| `pkg/handler/publish.bcsAPIHost` | BCS API 网关地址 |
+| `pkg/updater.updateSource` | GitHub Releases 更新源（`owner/repository`） |
 
 ### 代码检查 & 格式化
 

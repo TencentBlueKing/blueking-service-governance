@@ -1,0 +1,4 @@
+# Downloaded CLI binaries (kept out of git; recreated by postinstall)
+/bin/bkms-cli
+/bin/bkms-cli.exe
+/bin/*.old

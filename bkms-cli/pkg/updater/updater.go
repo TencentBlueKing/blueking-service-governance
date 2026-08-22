@@ -16,28 +16,33 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package updater checks for and applies bkms-cli updates.
+// Package updater checks for and applies bkms-cli updates from GitHub Releases.
 package updater
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	selfupdate "github.com/creativeprojects/go-selfupdate"
 	"github.com/pkg/errors"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
 
 const (
-	// cliTagPrefix identifies bkms-cli releases in the monorepo.
-	cliTagPrefix = "bkms-cli/"
-	// maxBinarySize bounds memory use while go-selfupdate verifies a release.
-	maxBinarySize = 512 * 1024 * 1024
+	cliTagPrefix     = "bkms-cli/"
+	checksumFilename = "checksums.txt"
+	maxBinarySize    = 512 * 1024 * 1024
 )
 
-// Build pipelines inject either an owner/repository slug or an HTTP(S) latest
-// directory URL, so the binary needs no runtime update configuration file.
+// updateSource is injected at build time as owner/repository.
 var updateSource = ""
 
 var (
@@ -58,83 +63,148 @@ type Info struct {
 	Available      bool
 }
 
-// provider checks for and applies updates from one release source.
-type provider interface {
-	Check(ctx context.Context) (Info, error)
-	Update(ctx context.Context) (Info, error)
+// InstalledViaNPM reports whether the running binary lives under an npm package tree.
+func InstalledViaNPM() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		resolved = exe
+	}
+	return pathLooksLikeNPMInstall(resolved)
 }
 
-// Check reports whether this binary has a newer release.
+func pathLooksLikeNPMInstall(p string) bool {
+	normalized := strings.ReplaceAll(filepath.ToSlash(p), `\`, "/")
+	return strings.Contains(normalized, "/node_modules/")
+}
+
+// Check reports whether this binary has a newer GitHub release.
 func Check(ctx context.Context) (Info, error) {
-	instance, err := newProvider()
+	c, err := newClient()
 	if err != nil {
 		return Info{}, err
 	}
-	return instance.Check(ctx)
+	info, _, err := c.detect(ctx)
+	return info, err
 }
 
-// Update installs a newer release when one is available.
+// Update installs a newer GitHub release when one is available.
 func Update(ctx context.Context) (Info, error) {
-	instance, err := newProvider()
+	c, err := newClient()
 	if err != nil {
 		return Info{}, err
 	}
-	return instance.Update(ctx)
+	info, release, err := c.detect(ctx)
+	if err != nil || !info.Available {
+		return info, err
+	}
+	if err = validateBinarySize(int64(release.AssetByteSize)); err != nil {
+		return info, err
+	}
+
+	executable, err := selfupdate.ExecutablePath()
+	if err != nil {
+		return info, errors.Wrap(err, "locate executable")
+	}
+	if err := c.updater.UpdateTo(ctx, release, executable); err != nil {
+		return info, errors.Wrap(normalizeBinarySizeError(err), "apply update")
+	}
+	return info, nil
 }
 
-// newProvider creates the provider configured for this binary's update source.
-func newProvider() (provider, error) {
+type client struct {
+	updater    *selfupdate.Updater
+	repository selfupdate.Repository
+}
+
+func newClient() (*client, error) {
 	source := strings.TrimSpace(updateSource)
 	if source == "" {
 		return nil, errors.Wrap(ErrUpdateNotConfigured, "update source is empty")
 	}
-
-	lowerSource := strings.ToLower(source)
-	if strings.HasPrefix(lowerSource, "http://") || strings.HasPrefix(lowerSource, "https://") {
-		return newRepoProvider(source)
+	slug := selfupdate.ParseSlug(source)
+	if _, _, err := slug.GetSlug(); err != nil {
+		return nil, errors.Wrapf(ErrUpdateNotConfigured, "invalid GitHub repository %q", source)
 	}
-	return newGitHubProvider(source)
+
+	ghSource, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
+	if err != nil {
+		return nil, errors.Wrap(err, "create GitHub source")
+	}
+	instance, err := selfupdate.NewUpdater(selfupdate.Config{
+		Source:    maxBytesSource{Source: ghSource, limit: maxBinarySize},
+		Validator: &selfupdate.ChecksumValidator{UniqueFilename: checksumFilename},
+		Filters:   []string{assetFilter()},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "create updater")
+	}
+	return &client{updater: instance, repository: slug}, nil
 }
 
-// platformAssetName returns the complete release asset name for a platform.
-func platformAssetName(goos, goarch, version string) (string, error) {
-	if goos != "linux" && goos != "darwin" && goos != "windows" {
-		return "", errors.Errorf("unsupported update platform %s/%s", goos, goarch)
+func assetFilter() string {
+	ext := `tar\.gz`
+	if runtime.GOOS == "windows" {
+		ext = "zip"
 	}
-	if goarch != "amd64" && goarch != "arm64" {
-		return "", errors.Errorf("unsupported update platform %s/%s", goos, goarch)
-	}
-
-	name := fmt.Sprintf("bkms-cli-%s-%s-v%s", goos, goarch, version)
-	if goos == "windows" {
-		name += ".exe"
-	}
-	return name, nil
+	return fmt.Sprintf(`^bkms-cli_.+_%s_%s\.%s$`, runtime.GOOS, runtime.GOARCH, ext)
 }
 
-// parseVersion accepts the optional bkms-cli tag and "v" prefixes but otherwise
-// requires strict SemVer so comparison behavior stays deterministic.
+func (c *client) detect(ctx context.Context) (Info, *selfupdate.Release, error) {
+	current, err := parseVersion(version.Version)
+	if err != nil {
+		return Info{}, nil, errors.Wrap(err, "parse current version")
+	}
+	release, found, err := c.updater.DetectLatest(ctx, c.repository)
+	if err != nil {
+		return Info{}, nil, errors.Wrap(err, "detect latest release")
+	}
+	if !found {
+		return Info{}, nil, ErrNoRelease
+	}
+	latest, err := parseVersion(release.Version())
+	if err != nil {
+		return Info{}, nil, errors.Wrap(err, "parse latest version")
+	}
+	return Info{
+		CurrentVersion: current.String(),
+		LatestVersion:  latest.String(),
+		Available:      latest.GreaterThan(current),
+	}, release, nil
+}
+
+// maxBytesSource limits downloaded release assets before go-selfupdate buffers them.
+type maxBytesSource struct {
+	selfupdate.Source
+	limit int64
+}
+
+func (s maxBytesSource) DownloadReleaseAsset(
+	ctx context.Context,
+	release *selfupdate.Release,
+	assetID int64,
+) (io.ReadCloser, error) {
+	body, err := s.Source.DownloadReleaseAsset(ctx, release, assetID)
+	if err != nil {
+		return nil, err
+	}
+	return http.MaxBytesReader(nil, body, s.limit), nil
+}
+
 func parseVersion(value string) (*semver.Version, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil, errors.Wrap(ErrInvalidVersion, "version is empty")
 	}
-
 	normalized := strings.TrimPrefix(value, cliTagPrefix)
 	parsed, err := semver.StrictNewVersion(strings.TrimPrefix(normalized, "v"))
 	if err != nil {
 		return nil, errors.Wrapf(ErrInvalidVersion, "version %q: %v", value, err)
 	}
 	return parsed, nil
-}
-
-// buildInfo reports an update only when the source version is strictly newer.
-func buildInfo(current, latest *semver.Version) Info {
-	return Info{
-		CurrentVersion: current.String(),
-		LatestVersion:  latest.String(),
-		Available:      latest.GreaterThan(current),
-	}
 }
 
 func validateBinarySize(size int64) error {

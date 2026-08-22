@@ -6,7 +6,7 @@
 ## Repository layout
 
 * `bkms-server/` — Gin REST API service (Go)
-* `bkms-cli/` — Cobra-based CLI (Go)
+* `bkms-cli/` — Cobra-based CLI (Go); npm package `@blueking/bkms-cli` lives in `bkms-cli/npm/`
 * `bkms-dockerfile-generator/` — Dockerfile generation tool (Go)
 * `libs/bkms-adapter/` — shared adapter library (Go)
 * `bkms-ui/` — Vue 3 + TypeScript frontend

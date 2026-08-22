@@ -26,7 +26,7 @@ import (
 )
 
 var configLongDesc = `
-Display bkms-cli config files using subcommands like "bkms-cli config view"
+Manage bkms-cli config using subcommands like "bkms-cli config view" and "bkms-cli config set".
 
 The loading order follows these rules:
 	
@@ -48,5 +48,7 @@ func NewCmd() *cobra.Command {
 
 	// 配置信息查看
 	cmd.AddCommand(NewCmdView())
+	// 配置信息设置
+	cmd.AddCommand(NewCmdSet())
 	return cmd
 }
