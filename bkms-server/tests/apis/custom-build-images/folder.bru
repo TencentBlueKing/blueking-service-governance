@@ -1,0 +1,18 @@
+meta {
+  name: custom-build-images
+  seq: 13
+}
+
+auth {
+  mode: inherit
+}
+
+script:pre-request {
+  const common = require("./common")
+
+  if (!bru.getVar("customBuildImagesWorkspaceID")) {
+    const suffix = bru.getVar("randomSuffix");
+    const ws = await common.createWorkspace({id: `custom-build-images-ws-${suffix}`})
+    bru.setVar("customBuildImagesWorkspaceID", ws.id);
+  }
+}

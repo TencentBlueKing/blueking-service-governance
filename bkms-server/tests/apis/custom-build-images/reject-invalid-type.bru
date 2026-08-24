@@ -1,0 +1,32 @@
+meta {
+  name: reject-invalid-type
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{customBuildImagesWorkspaceID}}/custom-build-images?type=invalid
+  body: none
+  auth: inherit
+}
+
+params:query {
+  type: invalid
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  // type 只接受 builder / runner，非法枚举不能落到 store 里当查询条件
+  test("should reject an unsupported image type", () => {
+    expect(res.status).to.equal(400);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
