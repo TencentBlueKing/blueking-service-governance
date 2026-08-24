@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 )
 
@@ -83,7 +84,7 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			calls := []platformBuildImageValidateCall{}
 			mockValidateTaggedReference(&calls, nil)
 
-			err := ValidatePlatformBuildImages(context.Background(), validator, platformConfig(nil))
+			err := ValidatePlatformBuildImages(context.Background(), validator, nil, platformConfig(nil), "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(calls).To(Equal([]platformBuildImageValidateCall{
@@ -99,9 +100,9 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			calls := []platformBuildImageValidateCall{}
 			mockValidateTaggedReference(&calls, nil)
 
-			err := ValidatePlatformBuildImages(context.Background(), validator, &imagebuild.Config{
+			err := ValidatePlatformBuildImages(context.Background(), validator, nil, &imagebuild.Config{
 				SourceType: imagebuild.SourceTypePipeline,
-			})
+			}, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(calls).To(BeEmpty())
@@ -117,10 +118,12 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			err := ValidatePlatformBuildImages(
 				context.Background(),
 				validator,
+				nil,
 				platformConfig(func(cfg *imagebuild.Config) {
 					cfg.CodeRepo.ImageBuildMode = imagebuild.ImageBuildModeRepositoryDockerfile
 					cfg.CodeRepo.PlatformBuildConfig = nil
 				}),
+				"",
 			)
 
 			Expect(err).NotTo(HaveOccurred())
@@ -136,7 +139,7 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 				"golang:1.24": workloadruntime.ErrRuntimeImageNotFound,
 			})
 
-			err := ValidatePlatformBuildImages(context.Background(), validator, platformConfig(nil))
+			err := ValidatePlatformBuildImages(context.Background(), validator, nil, platformConfig(nil), "")
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage runtime image golang does not exist",
@@ -152,7 +155,7 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 				"debian:12": workloadruntime.ErrRuntimeImageTagNotFound,
 			})
 
-			err := ValidatePlatformBuildImages(context.Background(), validator, platformConfig(nil))
+			err := ValidatePlatformBuildImages(context.Background(), validator, nil, platformConfig(nil), "")
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"buildConfig.repoBuildConfig.platformBuildConfig.runnerImage tag 12 does not exist in runtime image debian snapshot",
@@ -168,7 +171,7 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 				"golang:1.24": errors.New("store unavailable"),
 			})
 
-			err := ValidatePlatformBuildImages(context.Background(), validator, platformConfig(nil))
+			err := ValidatePlatformBuildImages(context.Background(), validator, nil, platformConfig(nil), "")
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"validate buildConfig.repoBuildConfig.platformBuildConfig.builderImage: store unavailable",
@@ -185,9 +188,11 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			err := ValidatePlatformBuildImages(
 				context.Background(),
 				validator,
+				nil,
 				platformConfig(func(cfg *imagebuild.Config) {
 					cfg.CodeRepo.PlatformBuildConfig.BuilderImage = "golang"
 				}),
+				"",
 			)
 
 			Expect(err).To(MatchError(ContainSubstring(
@@ -196,4 +201,166 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			Expect(calls).To(BeEmpty())
 		})
 	})
+
+	It("validates a custom image without calling official validator", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			validator := &workloadruntime.ImageReferenceValidator{}
+			calls := []platformBuildImageValidateCall{}
+			mockValidateTaggedReference(&calls, nil)
+
+			customImage := "docker.bkrepo.example.com/demo/repo/my-golang:1.0"
+			cfg := platformConfig(func(c *imagebuild.Config) {
+				c.CodeRepo.PlatformBuildConfig.BuilderImage = customImage
+				c.CodeRepo.PlatformBuildConfig.RunnerImage = customImage
+			})
+			checker := &stubCustomChecker{matches: map[string]bool{
+				"docker.bkrepo.example.com/demo/repo/my-golang": true,
+			}}
+
+			err := ValidatePlatformBuildImages(context.Background(), validator, checker, cfg, "ws-demo")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(calls).To(BeEmpty())
+			Expect(checker.validateCalls).To(Equal([]string{customImage, customImage}))
+		})
+	})
+
+	It("rejects a custom image whose tag does not exist", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			validator := &workloadruntime.ImageReferenceValidator{}
+			customImage := "docker.bkrepo.example.com/demo/repo/my-golang:missing"
+			cfg := platformConfig(func(c *imagebuild.Config) {
+				c.CodeRepo.PlatformBuildConfig.BuilderImage = customImage
+			})
+			checker := &stubCustomChecker{
+				matches: map[string]bool{
+					"docker.bkrepo.example.com/demo/repo/my-golang": true,
+				},
+				validateErrs: map[string]error{
+					customImage: customruntime.ErrImageTagNotFound,
+				},
+			}
+
+			err := ValidatePlatformBuildImages(context.Background(), validator, checker, cfg, "ws-demo")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage tag missing does not exist in custom image docker.bkrepo.example.com/demo/repo/my-golang",
+			)))
+		})
+	})
+
+	It("rejects a custom image whose name does not exist", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			validator := &workloadruntime.ImageReferenceValidator{}
+			customImage := "docker.bkrepo.example.com/demo/repo/missing:1.0"
+			cfg := platformConfig(func(c *imagebuild.Config) {
+				c.CodeRepo.PlatformBuildConfig.BuilderImage = customImage
+			})
+			checker := &stubCustomChecker{
+				matches: map[string]bool{
+					"docker.bkrepo.example.com/demo/repo/missing": true,
+				},
+				validateErrs: map[string]error{
+					customImage: customruntime.ErrImageNameNotFound,
+				},
+			}
+
+			err := ValidatePlatformBuildImages(context.Background(), validator, checker, cfg, "ws-demo")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage custom image docker.bkrepo.example.com/demo/repo/missing does not exist in workspace registry",
+			)))
+		})
+	})
+
+	It("rejects a custom image when workspace registry access fails", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			validator := &workloadruntime.ImageReferenceValidator{}
+			customImage := "docker.bkrepo.example.com/demo/repo/my-golang:1.0"
+			cfg := platformConfig(func(c *imagebuild.Config) {
+				c.CodeRepo.PlatformBuildConfig.BuilderImage = customImage
+			})
+			checker := &stubCustomChecker{
+				matches: map[string]bool{
+					"docker.bkrepo.example.com/demo/repo/my-golang": true,
+				},
+				validateErrs: map[string]error{
+					customImage: customruntime.ErrRegistryAccessFailed,
+				},
+			}
+
+			err := ValidatePlatformBuildImages(context.Background(), validator, checker, cfg, "ws-demo")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage workspace registry access failed",
+			)))
+		})
+	})
+
+	It("validates mixed official and custom images independently", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			validator := &workloadruntime.ImageReferenceValidator{}
+			calls := []platformBuildImageValidateCall{}
+			mockValidateTaggedReference(&calls, nil)
+
+			customImage := "docker.bkrepo.example.com/demo/repo/my-golang:1.0"
+			cfg := platformConfig(func(c *imagebuild.Config) {
+				c.CodeRepo.PlatformBuildConfig.BuilderImage = customImage
+			})
+			checker := &stubCustomChecker{matches: map[string]bool{
+				"docker.bkrepo.example.com/demo/repo/my-golang": true,
+			}}
+
+			err := ValidatePlatformBuildImages(context.Background(), validator, checker, cfg, "ws-demo")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(checker.validateCalls).To(Equal([]string{customImage}))
+			Expect(calls).To(Equal([]platformBuildImageValidateCall{
+				{imageType: workloadruntime.ImageTypeRunner, image: "debian:12"},
+			}))
+		})
+	})
+
+	It("falls back to official validation when workspace has no image registry", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			validator := &workloadruntime.ImageReferenceValidator{}
+			calls := []platformBuildImageValidateCall{}
+			mockValidateTaggedReference(&calls, map[string]error{
+				"golang:1.24": workloadruntime.ErrRuntimeImageNotFound,
+			})
+			checker := &stubCustomChecker{}
+
+			err := ValidatePlatformBuildImages(
+				context.Background(), validator, checker, platformConfig(nil), "ws-demo",
+			)
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage runtime image golang does not exist",
+			)))
+			Expect(checker.validateCalls).To(BeEmpty())
+		})
+	})
 })
+
+type stubCustomChecker struct {
+	matches       map[string]bool
+	validateErrs  map[string]error
+	validateCalls []string
+}
+
+func (s *stubCustomChecker) MatchesWorkspaceRegistry(
+	_ context.Context, _, imageName string,
+) (bool, error) {
+	if s.matches == nil {
+		return false, nil
+	}
+	return s.matches[imageName], nil
+}
+
+func (s *stubCustomChecker) ValidateTaggedReference(_ context.Context, _, image string) error {
+	s.validateCalls = append(s.validateCalls, image)
+	if s.validateErrs == nil {
+		return nil
+	}
+	return s.validateErrs[image]
+}

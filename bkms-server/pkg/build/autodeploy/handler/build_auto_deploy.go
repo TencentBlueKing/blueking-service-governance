@@ -33,19 +33,30 @@ import (
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 var _ autodeploy.Handler = (*Handler)(nil)
 
 // Handler handles Gin build auto deploy requests.
 type Handler struct {
-	registry *storereg.Registry
+	registry           *storereg.Registry
+	customImageChecker *customruntime.ExistenceChecker
 }
 
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
-	return &Handler{registry: registry}
+	snapshotService := snapshot.NewService(
+		registry.SnapshotStore,
+		registry.BuildConfigStore,
+		registry.AppStore,
+	)
+	return &Handler{
+		registry:           registry,
+		customImageChecker: customruntime.NewExistenceChecker(snapshotService),
+	}
 }
 
 // newBuildService 装配构建服务，并注入平台构建镜像引用校验器
@@ -54,7 +65,12 @@ func (h *Handler) newBuildService() (*build.Service, error) {
 		h.registry.RuntimeImageStore,
 		h.registry.SnapshotStore,
 	)
-	return build.NewService(h.registry.BuildConfigStore, h.registry.BuildRecordStore, imageReferenceValidator)
+	return build.NewService(
+		h.registry.BuildConfigStore,
+		h.registry.BuildRecordStore,
+		imageReferenceValidator,
+		h.customImageChecker,
+	)
 }
 
 // CreateTrpcBuildDeploy 触发 TRPC 应用构建，并在构建成功后自动部署到指定环境。

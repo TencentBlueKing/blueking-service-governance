@@ -38,6 +38,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -46,12 +47,24 @@ var _ build.Handler = (*Handler)(nil)
 
 // Handler handles Gin build API requests.
 type Handler struct {
-	registry *storereg.Registry
+	registry   *storereg.Registry
+	persistMgr *customruntime.PersistManager
 }
 
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
-	return &Handler{registry: registry}
+	snapshotService := snapshot.NewService(
+		registry.SnapshotStore,
+		registry.BuildConfigStore,
+		registry.AppStore,
+	)
+	return &Handler{
+		registry: registry,
+		persistMgr: customruntime.NewPersistManager(
+			registry.CustomRuntimeImageStore,
+			snapshotService,
+		),
+	}
 }
 
 // newBuildService 装配构建服务，并注入平台构建镜像引用校验器
@@ -60,7 +73,12 @@ func (h *Handler) newBuildService() (*build.Service, error) {
 		h.registry.RuntimeImageStore,
 		h.registry.SnapshotStore,
 	)
-	return build.NewService(h.registry.BuildConfigStore, h.registry.BuildRecordStore, imageReferenceValidator)
+	return build.NewService(
+		h.registry.BuildConfigStore,
+		h.registry.BuildRecordStore,
+		imageReferenceValidator,
+		h.persistMgr,
+	)
 }
 
 // UpdateBuildConfig 更新应用构建配置。
@@ -110,7 +128,9 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		h.registry.RuntimeImageStore,
 		h.registry.SnapshotStore,
 	)
-	if err = build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, cfg); err != nil {
+	if err = build.ValidatePlatformBuildImages(
+		ctx, imageReferenceValidator, h.persistMgr, cfg, app.WorkspaceID,
+	); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
 		return
 	}
@@ -139,6 +159,15 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		refreshErr := h.triggerSnapshotRefreshOnConfigChange(rCtx, app.ID, dataBefore, cfg)
 		if refreshErr != nil {
 			log.Errorf(rCtx, "trigger snapshot refresh on config change for app %s failed: %v", app.ID, refreshErr)
+		}
+	}()
+
+	// 构建配置已落库后再异步 get_or_create 自定义镜像记录；仅新建时触发快照
+	// 失败只打日志，不回滚本次已保存的构建配置；WithoutCancel 避免请求结束后 persist 被取消
+	go func() {
+		rCtx := context.WithoutCancel(ctx)
+		if persistErr := h.persistMgr.PersistAfterSave(rCtx, app.WorkspaceID, cfg); persistErr != nil {
+			log.Errorf(rCtx, "persist custom runtime images for workspace %s failed: %v", app.WorkspaceID, persistErr)
 		}
 	}()
 

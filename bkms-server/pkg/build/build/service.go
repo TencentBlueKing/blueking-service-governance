@@ -48,6 +48,7 @@ type Service struct {
 	buildConfigStore        imgbuild.ConfigStore
 	buildRecordStore        imgbuild.RecordStore
 	imageReferenceValidator ImageReferenceValidator
+	customImageChecker      CustomImageChecker
 }
 
 // NewService 创建构建服务。
@@ -57,6 +58,7 @@ func NewService(
 	buildConfigStore imgbuild.ConfigStore,
 	buildRecordStore imgbuild.RecordStore,
 	imageReferenceValidator ImageReferenceValidator,
+	customImageChecker CustomImageChecker,
 ) (*Service, error) {
 	if buildConfigStore == nil || buildRecordStore == nil {
 		return nil, errors.New("build service dependencies not initialized")
@@ -68,6 +70,7 @@ func NewService(
 		buildConfigStore:        buildConfigStore,
 		buildRecordStore:        buildRecordStore,
 		imageReferenceValidator: imageReferenceValidator,
+		customImageChecker:      customImageChecker,
 	}, nil
 }
 
@@ -94,7 +97,9 @@ func (s *Service) validateBeforeBuild(ctx context.Context, app *bkmsapp.Applicat
 		return errors.New("platform generated Dockerfile build only supports Go language for now")
 	}
 	// 确保平台构建选择的 builder & runner 镜像都来自平台维护的运行时镜像清单
-	if err := ValidatePlatformBuildImages(ctx, s.imageReferenceValidator, cfg); err != nil {
+	if err := ValidatePlatformBuildImages(
+		ctx, s.imageReferenceValidator, s.customImageChecker, cfg, app.WorkspaceID,
+	); err != nil {
 		return errors.Wrap(err, "validate platform generated Dockerfile build images")
 	}
 	return nil

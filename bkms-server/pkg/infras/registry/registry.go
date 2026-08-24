@@ -30,6 +30,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/pkg/errors"
@@ -232,29 +233,29 @@ func (c *Client) GetTagDetail(repoName, tagName string) (ImageDetail, error) {
 	return detail, nil
 }
 
+// HeadManifest 用 HEAD 确认远端仓库中指定 tag 的 manifest 是否存在，不拉取层数据
+func (c *Client) HeadManifest(repoName, tagName string) error {
+	_, err := c.headDescriptor(repoName, tagName)
+	return err
+}
+
 // DeleteTag 删除远端仓库中的指定镜像标签
 // 利用开源库 go-containerregistry 删除镜像，只能删除底层镜像，无法删除对应仓库如 bkrepo、mirrors 仓库自己额外的元数据
 // 删除后在仓库相应页面还有可能看到镜像，但使用命令拉取/同步仓库无法拉到对应镜像，在 bkms 侧不受影响
 func (c *Client) DeleteTag(repoName, tagName string) error {
-	// 1. 构建 tag 引用：repoName:tagName
-	tagRef, err := name.ParseReference(fmt.Sprintf("%s:%s", repoName, tagName), c.nameOpts...)
+	// 获取镜像 desc 信息
+	desc, err := c.headDescriptor(repoName, tagName)
 	if err != nil {
-		return errors.Wrap(err, "parse tag reference")
+		return err
 	}
 
-	// 2. 通过 HEAD 请求获取该 tag 对应的 digest
-	desc, err := remote.Head(tagRef, c.remoteOpts...)
-	if err != nil {
-		return errors.Wrap(err, "head manifest")
-	}
-
-	// 3. 构建 digest 引用：repoName@sha256:xxxxx
+	// 构建 digest 引用：repoName@sha256:xxxxx
 	digestRef, err := name.ParseReference(fmt.Sprintf("%s@%s", repoName, desc.Digest.String()), c.nameOpts...)
 	if err != nil {
 		return errors.Wrap(err, "parse digest reference")
 	}
 
-	// 4. 按 digest 删除
+	// 按 digest 删除
 	if err = remote.Delete(digestRef, c.remoteOpts...); err != nil {
 		return errors.Wrap(err, "delete tag")
 	}
@@ -310,4 +311,17 @@ func (c *Client) ListTagsWithDetail(repoName, keyword string, page, pageSize int
 		return strings.Compare(b.Tag, a.Tag)
 	})
 	return details, total, nil
+}
+
+// headDescriptor 按 repoName:tag 做 HEAD，返回 digest 描述符供删除等后续步骤使用
+func (c *Client) headDescriptor(repoName, tagName string) (*v1.Descriptor, error) {
+	tagRef, err := name.ParseReference(fmt.Sprintf("%s:%s", repoName, tagName), c.nameOpts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse tag reference")
+	}
+	desc, err := remote.Head(tagRef, c.remoteOpts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "head manifest")
+	}
+	return desc, nil
 }

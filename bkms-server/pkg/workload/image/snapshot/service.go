@@ -138,6 +138,17 @@ func (s *Service) ResolveRepoKeyForWorkspace(
 	}, nil
 }
 
+// RefreshWorkspaceSnapshots 按工作空间凭证刷新自定义镜像快照
+func (s *Service) RefreshWorkspaceSnapshots(
+	ctx context.Context, workspaceID, imageName string,
+) (*RefreshResult, error) {
+	info, err := s.ResolveRepoKeyForWorkspace(ctx, workspaceID, imageName)
+	if err != nil {
+		return nil, err
+	}
+	return s.refreshSnapshotsByRepoInfo(ctx, info)
+}
+
 // ListRepositorySnapshots 从本地快照查询指定镜像仓库的标签列表。
 //
 // 如果本地还没有该仓库的快照记录，会复用刷新流程异步触发一次初始化同步；

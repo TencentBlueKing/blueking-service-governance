@@ -24,12 +24,11 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
 )
 
-// FIXME: 三个 handler 目前只做参数绑定与权限校验，候选查询、TAG 列表与快照刷新尚未实现
-//
-// 权限校验刻意放在返回 NOT_IMPLEMENTED 之前，保证未实现阶段也不存在越权读取工作空间的路径
+// FIXME: Tag 列表与显式刷新尚未实现，这两个 handler 继续返回 NOT_IMPLEMENTED
 
 // ListCustomBuildImages 获取工作空间自定义构建镜像候选列表
 //
@@ -54,14 +53,35 @@ func (h *Handler) ListCustomBuildImages(c *gin.Context) {
 		return
 	}
 
-	// 先校验工作空间查看权限，再返回占位错误，避免契约阶段出现未鉴权的 501
 	ctx := c.Request.Context()
 	if _, err := perm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, perm.TypeView); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
-	bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotImplemented, "list custom build images is not implemented yet"))
+	// 只查落库记录：不校验镜像源是否绑定，也不读快照
+	images, err := h.registry.CustomRuntimeImageStore.List(
+		ctx,
+		uriInput.WorkspaceID,
+		customruntime.ListOptions{
+			Type:    customruntime.ImageType(queryInput.Type),
+			Keyword: queryInput.Keyword,
+		},
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+			err, bkerrs.ErrCodeInternalServerError, "list workspace %s custom build images", uriInput.WorkspaceID,
+		))
+		return
+	}
+
+	results := make([]*serializer.CustomRuntimeImageOutputObj, 0, len(images))
+	for _, img := range images {
+		results = append(results, new(serializer.CustomRuntimeImageOutputObj).FromModel(img))
+	}
+	ginutils.OK(c, serializer.ListCustomRuntimeImagesOutput{
+		Data: &serializer.CustomRuntimeImagesOutputObjs{Results: results},
+	})
 }
 
 // ListCustomBuildImageTags 获取工作空间自定义构建镜像可用 TAG 列表

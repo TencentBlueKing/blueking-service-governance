@@ -22,6 +22,7 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * When writing tests, always refer to `pkg/extension/component/evaluate_test.go` for guidance on code structure and the usage of common utils and db factories.
 * Test context descriptions (`Describe`, `Context`, `It`, etc.) MUST be written in English. Comments inside test bodies may use Chinese.
 * When a unit test needs a store, service, or other FX-provided dependency, construct and inject it via the fx framework: use the package's `FxModule` with `fxtest.New` + `fx.Populate`. Do **not** call constructors like `NewStoreMongo(...)` / `NewService(...)` directly in tests. See `pkg/extension/bscpcfg/model/store_test.go` for the pattern.
+* Do **not** mock store implementations (no stub/fake Store, no `mockey.Mock` on `*StoreMongo` methods). Operate against the test database and assert persisted data. Only mock store methods after confirming with the user, and only when hitting the real DB is prohibitively expensive.
 * Prefer using `dbfactory` helpers (e.g., `dbfactory.TrpcApplication`, `dbfactory.Env`) to create test resources, rather than manually inserting records into the database.
 
 ## Coding style

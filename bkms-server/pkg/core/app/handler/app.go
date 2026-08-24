@@ -50,17 +50,27 @@ import (
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 // Handler handles Gin app API requests.
 type Handler struct {
-	registry *storereg.Registry
+	registry   *storereg.Registry
+	persistMgr *customruntime.PersistManager
 }
 
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
-	return &Handler{registry: registry}
+	snapshotService := snapshot.NewService(registry.SnapshotStore, registry.BuildConfigStore, registry.AppStore)
+	return &Handler{
+		registry: registry,
+		persistMgr: customruntime.NewPersistManager(
+			registry.CustomRuntimeImageStore,
+			snapshotService,
+		),
+	}
 }
 
 // CreateApp 创建应用。
@@ -154,7 +164,9 @@ func (h *Handler) CreateApp(c *gin.Context) {
 		h.registry.RuntimeImageStore,
 		h.registry.SnapshotStore,
 	)
-	if err = build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, buildConfig); err != nil {
+	if err = build.ValidatePlatformBuildImages(
+		ctx, imageReferenceValidator, h.persistMgr, buildConfig, app.WorkspaceID,
+	); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
 		return
 	}
@@ -170,6 +182,15 @@ func (h *Handler) CreateApp(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create build config"))
 		return
 	}
+
+	// 构建配置已落库后再异步 get_or_create 自定义镜像记录；仅新建时触发快照
+	// 失败只打日志，不回滚本次已保存的构建配置；WithoutCancel 避免请求结束后 persist 被取消
+	go func() {
+		rCtx := context.WithoutCancel(ctx)
+		if persistErr := h.persistMgr.PersistAfterSave(rCtx, app.WorkspaceID, buildConfig); persistErr != nil {
+			log.Errorf(rCtx, "persist custom runtime images for workspace %s failed: %v", app.WorkspaceID, persistErr)
+		}
+	}()
 
 	// 根据应用类型创建特定资源（复用现有逻辑）
 	if err = h.createAppByType(ctx, app, &input); err != nil {

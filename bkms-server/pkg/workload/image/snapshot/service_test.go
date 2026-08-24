@@ -208,6 +208,32 @@ var _ = Describe("Service", func() {
 		})
 	})
 
+	Describe("RefreshWorkspaceSnapshots", func() {
+		const imageName = "docker.bkrepo.example.com/demo/repo/my-golang"
+
+		It("resolves workspace credentials and refreshes by repo info", func() {
+			mockey.PatchConvey("mock resolve and refresh", GinkgoT(), func() {
+				info := &RepoKeyInfo{
+					RepoKey:  "repo-key",
+					RepoName: imageName,
+					Username: "ws-user",
+					Password: "ws-pass",
+				}
+				mockey.Mock((*Service).ResolveRepoKeyForWorkspace).Return(info, nil).Build()
+				mockey.Mock((*Service).refreshSnapshotsByRepoInfo).To(
+					func(_ *Service, _ context.Context, got *RepoKeyInfo, _ ...string) (*RefreshResult, error) {
+						Expect(got).To(Equal(info))
+						return &RefreshResult{Status: "success"}, nil
+					},
+				).Build()
+
+				result, err := service.RefreshWorkspaceSnapshots(ctx, testWorkspaceID1, imageName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal("success"))
+			})
+		})
+	})
+
 	Describe("RefreshSnapshots", func() {
 		It("should refresh snapshots and enqueue detail sync", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {

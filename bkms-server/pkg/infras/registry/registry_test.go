@@ -131,6 +131,58 @@ var _ = Describe("Registry Client", func() {
 		})
 	})
 
+	Describe("HeadManifest", func() {
+		It("should succeed when the tag manifest exists", func() {
+			const (
+				repoName = "fixture/sample"
+				tagName  = "latest"
+				digest   = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+			)
+			parsedDigest, err := v1.NewHash(digest)
+			Expect(err).NotTo(HaveOccurred())
+
+			mockey.Mock(remote.Head).To(func(ref name.Reference, _ ...remote.Option) (*v1.Descriptor, error) {
+				Expect(ref.String()).To(Equal("registry.example.com/" + repoName + ":" + tagName))
+				return &v1.Descriptor{Digest: parsedDigest}, nil
+			}).Build()
+
+			client := New("", "", true)
+			Expect(client.HeadManifest("registry.example.com/"+repoName, tagName)).To(Succeed())
+		})
+
+		It("should classify tag not found when head returns 404", func() {
+			const (
+				repoName = "fixture/sample"
+				tagName  = "missing-tag"
+			)
+			mockey.Mock(remote.Head).To(func(ref name.Reference, _ ...remote.Option) (*v1.Descriptor, error) {
+				return nil, fmt.Errorf("lookup %s: %w", tagName, &transport.Error{StatusCode: http.StatusNotFound})
+			}).Build()
+
+			client := New("", "", true)
+			err := client.HeadManifest("registry.example.com/"+repoName, tagName)
+			Expect(err).To(HaveOccurred())
+			Expect(IsTagNotFound(err)).To(BeTrue())
+			Expect(IsAuthRequired(err)).To(BeFalse())
+		})
+
+		It("should classify auth required when head returns 401", func() {
+			const (
+				repoName = "fixture/sample"
+				tagName  = "latest"
+			)
+			mockey.Mock(remote.Head).To(func(ref name.Reference, _ ...remote.Option) (*v1.Descriptor, error) {
+				return nil, fmt.Errorf("lookup %s: %w", tagName, &transport.Error{StatusCode: http.StatusUnauthorized})
+			}).Build()
+
+			client := New("", "", true)
+			err := client.HeadManifest("registry.example.com/"+repoName, tagName)
+			Expect(err).To(HaveOccurred())
+			Expect(IsAuthRequired(err)).To(BeTrue())
+			Expect(IsTagNotFound(err)).To(BeFalse())
+		})
+	})
+
 	Describe("DeleteTag", func() {
 		It("should delete manifest by digest resolved from tag", func() {
 			const (

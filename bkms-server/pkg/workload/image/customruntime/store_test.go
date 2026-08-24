@@ -172,6 +172,12 @@ var _ = Describe("Custom runtime image store", func() {
 			_, err := store.List(ctx, "  ", ListOptions{})
 			Expect(err).To(MatchError(ContainSubstring("workspaceID is required")))
 		})
+
+		It("returns an empty list when the workspace has no records", func() {
+			images, err := store.List(ctx, "ws-empty", ListOptions{Type: ImageTypeBuilder})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(images).To(BeEmpty())
+		})
 	})
 })
 
