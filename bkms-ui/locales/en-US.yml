@@ -1244,6 +1244,11 @@ APM 实例: APM Instance
 创建后不可修改: Cannot be modified after creation
 "部署后才将实例注册到北极星，同时注入北极星 Token、服务端口等内容到应用环境变量中": "Instances are registered to Polaris only after deployment, and the Polaris token, service port, and related values are injected into the application's environment variables"
 立即生效时，服务端口不会写入环境变量: In immediate mode, the service port is not written to environment variables
+平台会自动在框架配置文件追加服务注册信息，由 tRPC 框架自动完成心跳上报:
+  The platform will append the service registration to the framework config file,
+  and the tRPC framework will report heartbeats automatically
+"需要业务主动完成心跳上报 {0}": The application must report heartbeats itself {0}
+参考文档: See documentation
 需要在框架配置文件的 server.service 中包含该北极星服务名，健康检查才会生效：:
   "The Polaris service name must
   be included in server.service of the framework configuration file for health

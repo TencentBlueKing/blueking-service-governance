@@ -304,34 +304,36 @@
                 property="enableHealthCheck"
                 required
               >
-                <div class="flex items-center">
+                <div class="flex items-center gap-[10px]">
                   <Switcher
                     v-model="formModel.enableHealthCheck"
+                    class="shrink-0"
                     theme="primary"
                   />
-                  <span class="ml-[10px] text-[12px] text-[#63656E]">
-                    {{ $t('开启后将自动上报 tRPC 服务的健康状态到北极星') }}
-                  </span>
-                </div>
-                <Alert
-                  v-if="showHealthCheckWarning"
-                  class="mt-[12px]"
-                  theme="warning"
-                >
-                  <template #title>
-                    <span class="text-[#4D4F56] text-[12px]">
-                      {{ $t('需要在框架配置文件的 server.service 中包含该北极星服务名，健康检查才会生效：') }}
-                    </span>
-                  </template>
-                  <MsHighlightjs
-                    class="mt-[8px]"
-                    :code="healthCheckExample.code"
-                    :highlights="healthCheckExample.highlights"
-                    :show-tools="false"
-                    :title="currentFileSpec?.fileName"
+                  <div
+                    v-if="showHealthCheckTip"
+                    class="text-[12px] leading-[20px] text-[#979BA5]"
                   >
-                  </MsHighlightjs>
-                </Alert>
+                    <i18n-t
+                      v-if="isImmediateRegister(formModel)"
+                      keypath="需要业务主动完成心跳上报 {0}"
+                      tag="span"
+                    >
+                      <a
+                        class="text-[#3A84FF]"
+                        :href="heartbeatDocUrl"
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        {{ $t('参考文档') }}
+                        <Share class="ml-[2px] align-[-2px]" />
+                      </a>
+                    </i18n-t>
+                    <span v-else>
+                      {{ $t('平台会自动在框架配置文件追加服务注册信息，由 tRPC 框架自动完成心跳上报') }}
+                    </span>
+                  </div>
+                </div>
               </Form.FormItem>
 
               <!-- 服务标签 -->
@@ -445,7 +447,7 @@
   import { computed, ref, watch } from 'vue';
 
   import { Alert, Button, Form, Input, Message, Radio, Sideslider, Switcher } from 'bkui-vue';
-  import { Copy } from 'bkui-vue/lib/icon';
+  import { Copy, Share } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { EnvOutput } from '~/@types/v1/env';
   import {
@@ -456,13 +458,12 @@
   } from '~/@types/v1/polaris-config';
   import { EnvvarsService, PolarisConfigService } from '~/api/modules/v1';
   import { WorkspaceService } from '~/api/modules/v1/workspace';
-  import { BKMS_REGEX } from '~/common/const';
+  import { BKMS_REGEX, DOC_LINKS } from '~/common/const';
   import { copyText } from '~/common/util';
   import EnvGroupSelector from '~/components/env-group-selector.vue';
   import KeyValue from '~/components/key-value.vue';
   import { useFocusOnErrorField } from '~/composables/use-focus-on-error-field';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
-  import useSpecField from '~/composables/use-spec-field';
   import { useAppDetail } from '~/stores/app-detail';
   import { useUserStore } from '~/stores/user';
 
@@ -527,10 +528,6 @@
     }
     formModel.value.operator = [...members];
   }
-  const { specFieldName } = useSpecField();
-
-  const currentFileSpec = computed(() => appDetailStore.appDetail?.appModelSpec?.[specFieldName.value]);
-
   const formRef = ref();
   const confirmLoading = ref(false);
   const isEditMode = computed(() => !!props.editData);
@@ -543,6 +540,7 @@
   );
   // 侧栏宽度
   const sliderWidth = computed(() => (showRedeployTip.value || isCollaspeAside.value ? 960 : 1400));
+  const heartbeatDocUrl = `${window.BK_DOC_URL || 'https://iwiki.woa.com'}${DOC_LINKS.POLARIS_HEARTBEAT}`;
 
   // 北极星环境类型选项
   const polarisEnvTypes = ['Development', 'Test', 'Pre-release', 'Production'];
@@ -562,16 +560,9 @@
   });
   const formModel = ref<FormModelType>({ ...defaultFormValue.value });
 
-  // 检测配置文件中是否包含北极星服务名
-  const hasPolarisNameInConfig = computed(() => {
-    const fileContent = currentFileSpec.value?.fileContent || '';
-    const polarisName = formModel.value.polarisName;
-    if (!polarisName || !fileContent) return false;
-    return fileContent.includes(polarisName);
-  });
-
-  // 是否显示健康检查的配置文件提示（开启健康检查且配置文件中未包含北极星服务名时显示）
-  const showHealthCheckWarning = computed(() => formModel.value.enableHealthCheck && !hasPolarisNameInConfig.value);
+  const showHealthCheckTip = computed(
+    () => formModel.value.registerMode !== undefined && !!formModel.value.enableHealthCheck,
+  );
 
   const servicePortHint = computed(() =>
     isImmediateRegister(formModel.value)
@@ -594,18 +585,6 @@
   });
 
   const hasRedeployFieldChanged = computed(() => showServicePortChangeAlert.value || showPolarisTokenChangeAlert.value);
-
-  // 健康检查示例代码及高亮标记（服务名为空时，占位文本用醒目颜色提示）
-  const healthCheckExample = computed(() => {
-    const placeholder = t('北极星服务名需与此处一致');
-    const name = formModel.value.polarisName || placeholder;
-    return {
-      code: `server:
-    service:
-        - name: ${name}`,
-      highlights: formModel.value.polarisName ? [] : [{ text: placeholder, color: '#F59500' }],
-    };
-  });
 
   // 使用 useLeaveConfirm hook 管理表单变化检测
   const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formModel);

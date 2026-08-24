@@ -195,15 +195,6 @@
           </template>
         </TableColumn>
         <TableColumn
-          field="registerMode"
-          :label="$t('生效方式')"
-          width="140"
-        >
-          <template #default="{ row }">
-            {{ row.registerMode === 'immediate' ? $t('立即生效') : $t('下次部署生效') }}
-          </template>
-        </TableColumn>
-        <TableColumn
           field="enableHealthCheck"
           :label="$t('健康检查')"
           width="200"
