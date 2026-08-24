@@ -28,11 +28,9 @@ import (
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	k8sstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status"
-	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/deployment"
-	gamedeploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/gamedeployment"
+	k8sworkload "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/workload"
 )
 
 // DeployState 部署状态
@@ -117,7 +115,7 @@ func (g *DeployStateGetter) checkDependentResources(ctx context.Context) (Status
 	// 逐个检查依赖的资源是否存在
 	for _, key := range g.resourceKeys {
 		// 主工作负载后续单独检查
-		if key.Kind == k8skind.GameDeploy || key.Kind == k8skind.Deploy {
+		if k8sworkload.IsMainKind(key.Kind) {
 			continue
 		}
 
@@ -149,13 +147,13 @@ func (g *DeployStateGetter) getWorkloadHealth(ctx context.Context) (*k8sstatus.R
 		return nil, errors.New("main workload is not managed by this deploy")
 	}
 
-	resGVR := gvr.GameDeploy
-	if kind == k8skind.Deploy {
-		resGVR = gvr.Deploy
+	driver, err := k8sworkload.Get(kind)
+	if err != nil {
+		return nil, errors.Wrap(err, "get workload driver")
 	}
 
 	clusterCfg := cluster.NewConfig(g.clusterID)
-	client := k8sclient.NewWithGVR(clusterCfg, resGVR)
+	client := k8sclient.NewWithGVR(clusterCfg, driver.GVR())
 	res, err := client.Get(ctx, g.namespace, resName, metav1.GetOptions{})
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
@@ -167,14 +165,7 @@ func (g *DeployStateGetter) getWorkloadHealth(ctx context.Context) (*k8sstatus.R
 		return nil, errors.Wrapf(err, "get %s %s", kind, resName)
 	}
 
-	// NOTE 目前只有联邦环境会使用 deployment 作为 workload 下发
-	if kind == k8skind.Deploy {
-		if clusterCfg.IsFederation() {
-			return deploystatus.ParseForFederation(res.Object), nil
-		}
-		return deploystatus.Parse(res.Object), nil
-	}
-	return gamedeploystatus.Parse(res.Object)
+	return driver.ParseStatus(res.Object, k8sworkload.ParseOptions{Federation: clusterCfg.IsFederation()})
 }
 
 // getMainWorkload 获取主工作负载 Kind 与名称

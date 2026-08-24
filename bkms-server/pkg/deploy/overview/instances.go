@@ -28,20 +28,18 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"golang.org/x/sync/semaphore"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	podstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/pod"
+	k8sworkload "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
 )
 
@@ -71,19 +69,22 @@ type deployRecordsByCluster map[string][]deployRecordForEnv
 type clusterQuerier struct {
 	clusterID string
 	pods      *k8sclient.PodClient
-	gd        *k8sclient.Client
-	deploy    *k8sclient.Client
+	// workloads 主工作负载 Kind -> 客户端
+	workloads map[string]*k8sclient.Client
 	sem       *semaphore.Weighted
 }
 
-// newClusterQuerier 创建单集群查询器；集群配置只解析一次，Pod 与工作负载客户端共用。
+// newClusterQuerier 创建单集群查询器；集群配置只解析一次，Pod 与各类主工作负载客户端共用。
 func newClusterQuerier(clusterID string, sem *semaphore.Weighted) *clusterQuerier {
 	clusterCfg := cluster.NewConfig(clusterID)
+	workloads := make(map[string]*k8sclient.Client)
+	for _, driver := range k8sworkload.MainDrivers() {
+		workloads[driver.Kind()] = k8sclient.NewWithGVR(clusterCfg, driver.GVR())
+	}
 	return &clusterQuerier{
 		clusterID: clusterID,
 		pods:      k8sclient.NewPodClient(clusterCfg),
-		gd:        k8sclient.NewWithGVR(clusterCfg, gvr.GameDeploy),
-		deploy:    k8sclient.NewWithGVR(clusterCfg, gvr.Deploy),
+		workloads: workloads,
 		sem:       sem,
 	}
 }
@@ -210,7 +211,7 @@ func queryEnvClusterDataForEnv(
 
 	var (
 		pods    []unstructured.Unstructured
-		wl      *mainWorkloadView
+		wl      *k8sworkload.View
 		podsErr error
 		wlErr   error
 	)
@@ -236,48 +237,38 @@ func queryEnvClusterDataForEnv(
 		return nil, wlErr
 	}
 	return &envClusterData{
-		Resources: extractMainContainerResourcesFromContainers(ctx, wl.Namespace, wl.Name, wl.Containers),
+		Resources: extractMainContainerResourcesFromContainers(ctx, item.Record.Namespace, name, wl.Containers),
 		Instances: instanceCountsFromReplicas(wl.Replicas, pods, podsErr == nil),
 	}, nil
 }
 
-// mainWorkloadView 主工作负载视图，包含名称、命名空间、副本数与容器规格。
-type mainWorkloadView struct {
-	Name       string
-	Namespace  string
-	Replicas   *int32
-	Containers []corev1.Container
-}
-
+// getMainWorkload 按 ns/name Get 主工作负载，并解析出副本数与容器规格。
 func getMainWorkload(
 	ctx context.Context,
 	querier *clusterQuerier,
 	item deployRecordForEnv,
 	kind, name string,
-) (*mainWorkloadView, error) {
-	if kind == k8skind.Deploy {
-		deploy, err := getDeployment(ctx, querier, item, name)
-		if err != nil {
-			return nil, err
-		}
-		return &mainWorkloadView{
-			Name:       deploy.Name,
-			Namespace:  deploy.Namespace,
-			Replicas:   deploy.Spec.Replicas,
-			Containers: deploy.Spec.Template.Spec.Containers,
-		}, nil
+) (*k8sworkload.View, error) {
+	driver, err := k8sworkload.Get(kind)
+	if err != nil {
+		return nil, errors.Wrap(err, "get workload driver")
+	}
+	client, ok := querier.workloads[kind]
+	if !ok {
+		return nil, errors.Errorf("no k8s client for workload kind %s", kind)
 	}
 
-	gd, err := getGameDeploy(ctx, querier, item, name)
-	if err != nil {
-		return nil, err
+	if err = querier.sem.Acquire(ctx, 1); err != nil {
+		return nil, errors.Wrap(err, "acquire k8s request slot")
 	}
-	return &mainWorkloadView{
-		Name:       gd.Name,
-		Namespace:  gd.Namespace,
-		Replicas:   gd.Spec.Replicas,
-		Containers: gd.Spec.Template.Spec.Containers,
-	}, nil
+	defer querier.sem.Release(1)
+
+	ns := item.Record.Namespace
+	res, err := client.Get(ctx, ns, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, errors.Wrapf(err, "get %s %s/%s", kind, ns, name)
+	}
+	return driver.View(res.Object)
 }
 
 // instanceCounts 仅在 Pod List 成功且 GD 带有 replicas 时返回实例数，否则为 nil。
@@ -358,55 +349,6 @@ func listPods(
 		return nil, errors.Wrapf(err, "list pods in namespace %s", ns)
 	}
 	return list.Items, nil
-}
-
-// getGameDeploy 按 ns/name Get GameDeployment 并转为结构体。
-func getGameDeploy(
-	ctx context.Context,
-	querier *clusterQuerier,
-	item deployRecordForEnv,
-	gdName string,
-) (*tkex.GameDeployment, error) {
-	if err := querier.sem.Acquire(ctx, 1); err != nil {
-		return nil, errors.Wrap(err, "acquire k8s request slot")
-	}
-	defer querier.sem.Release(1)
-
-	res, err := querier.gd.Get(ctx, item.Record.Namespace, gdName, metav1.GetOptions{})
-	if err != nil {
-		return nil, errors.Wrapf(
-			err, "get game deployment %s/%s", item.Record.Namespace, gdName,
-		)
-	}
-
-	var gd tkex.GameDeployment
-	if err = runtime.DefaultUnstructuredConverter.FromUnstructured(res.Object, &gd); err != nil {
-		return nil, errors.Wrap(err, "convert game deployment from unstructured")
-	}
-	return &gd, nil
-}
-
-func getDeployment(
-	ctx context.Context,
-	querier *clusterQuerier,
-	item deployRecordForEnv,
-	name string,
-) (*appsv1.Deployment, error) {
-	if err := querier.sem.Acquire(ctx, 1); err != nil {
-		return nil, errors.Wrap(err, "acquire k8s request slot")
-	}
-	defer querier.sem.Release(1)
-
-	res, err := querier.deploy.Get(ctx, item.Record.Namespace, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, errors.Wrapf(err, "get deployment %s/%s", item.Record.Namespace, name)
-	}
-
-	var deploy appsv1.Deployment
-	if err = runtime.DefaultUnstructuredConverter.FromUnstructured(res.Object, &deploy); err != nil {
-		return nil, errors.Wrap(err, "convert deployment from unstructured")
-	}
-	return &deploy, nil
 }
 
 // extractGameDeployReplicas 读取 GameDeployment.spec.replicas。

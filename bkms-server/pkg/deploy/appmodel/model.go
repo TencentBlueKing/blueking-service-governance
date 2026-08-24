@@ -26,7 +26,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	k8sworkload "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/workload"
 )
 
 // ResourceKey 资源信息
@@ -215,18 +215,17 @@ type Record struct {
 }
 
 // MainWorkload 返回本次部署的主工作负载 Kind 与名称。
-// 优先使用 WorkloadKind；为空时从 ResourceKeys 推断（Deployment 优先于 GameDeployment）。
+// 优先使用 WorkloadKind；为空时按 k8sworkload.MainDrivers 的优先级从 ResourceKeys 推断。
 func (r *Record) MainWorkload() (kind, name string) {
 	if r == nil {
 		return "", ""
 	}
 	kind = r.WorkloadKind
 	if kind == "" {
-		if name = r.ResourceKeys.NameByKind(k8skind.Deploy); name != "" {
-			return k8skind.Deploy, name
-		}
-		if name = r.ResourceKeys.NameByKind(k8skind.GameDeploy); name != "" {
-			return k8skind.GameDeploy, name
+		for _, driver := range k8sworkload.MainDrivers() {
+			if name = r.ResourceKeys.NameByKind(driver.Kind()); name != "" {
+				return driver.Kind(), name
+			}
 		}
 		return "", ""
 	}

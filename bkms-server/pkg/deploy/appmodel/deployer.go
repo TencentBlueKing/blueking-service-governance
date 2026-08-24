@@ -48,6 +48,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	k8sworkload "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -314,8 +315,13 @@ func (d *Deployer) UpdateInstances(
 	if record.Status != StatusDeployed {
 		return errors.Errorf("deploy record status is %s, cannot update", record.Status)
 	}
-	if kind, _ := record.MainWorkload(); kind == k8skind.Deploy {
-		return errors.New("native Deployment does not support inplace or grayscale instance update")
+	kind, _ := record.MainWorkload()
+	driver, err := k8sworkload.GetMain(kind)
+	if err != nil {
+		return errors.Wrap(err, "get main workload driver")
+	}
+	if !driver.Capabilities().InplaceUpdate {
+		return errors.Errorf("workload %s does not support inplace or grayscale instance update", kind)
 	}
 
 	// 获取最新的 GameDeployment
@@ -394,9 +400,13 @@ func (d *Deployer) Scale(ctx context.Context, envName, trafficLaneName string, r
 	if name == "" {
 		return errors.Errorf("main workload not found in deploy record %s", record.ID.Hex())
 	}
+	driver, err := k8sworkload.Get(kind)
+	if err != nil {
+		return errors.Wrap(err, "get workload driver")
+	}
 
 	patches := []map[string]any{replicasJSONPatch(replicas)}
-	if err = d.patchWorkload(ctx, record.ClusterID, record.Namespace, name, mainWorkloadGVR(kind), patches); err != nil {
+	if err = d.patchWorkload(ctx, record.ClusterID, record.Namespace, name, driver.GVR(), patches); err != nil {
 		log.Errorf(
 			ctx, "patch record %s %s %s with patches %+v failed, err: %v",
 			record.ID.Hex(), kind, name, patches, err,
@@ -459,8 +469,13 @@ func (d *Deployer) BatchDeleteInstances(
 		log.Infof(ctx, "no running pods to delete, all pods selected are terminated")
 		return nil
 	}
-	if kind, _ := record.MainWorkload(); kind == k8skind.Deploy {
-		return errors.New("native Deployment does not support deleting selected running pods")
+	kind, _ := record.MainWorkload()
+	driver, err := k8sworkload.GetMain(kind)
+	if err != nil {
+		return errors.Wrap(err, "get main workload driver")
+	}
+	if !driver.Capabilities().SelectedPodDeletion {
+		return errors.Errorf("workload %s does not support deleting selected running pods", kind)
 	}
 
 	// 通过 GameDeployment 删除运行态的 Pod
@@ -801,11 +816,4 @@ func replicasJSONPatch(replicas int32) map[string]any {
 		"path":  "/spec/replicas",
 		"value": replicas,
 	}
-}
-
-func mainWorkloadGVR(kind string) schema.GroupVersionResource {
-	if kind == k8skind.Deploy {
-		return gvr.Deploy
-	}
-	return gvr.GameDeploy
 }
