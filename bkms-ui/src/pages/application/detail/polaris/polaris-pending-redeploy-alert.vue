@@ -151,7 +151,7 @@
   import { PolarisConfigOutputObj } from '~/@types/v1/polaris-config';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
 
-  import { formatPolarisRedeployValue, getPolarisRedeployChanges } from './redeploy-utils';
+  import { formatPolarisRedeployValue, getPolarisRedeployChanges, isImmediateRegister } from './redeploy-utils';
 
   import type { PolarisRedeployChange } from './redeploy-utils';
   import type { EnvOutput } from '~/@types/v1/env';
@@ -193,6 +193,8 @@
   const pendingRedeployGroups = computed<PendingRedeployGroup[]>(() => {
     const groups = new Map<string, PendingRedeployGroup>();
     props.configs.forEach((config, configIndex) => {
+      if (isImmediateRegister(config)) return;
+
       Object.entries(config.envStates || {}).forEach(([envName, state]) => {
         const status = getPolarisEnvStatus((state as PolarisEnvStateWithStatus).status);
         if (!isPendingRedeployStatus(status)) return;

@@ -24,12 +24,16 @@
     @closed="handleClose"
   >
     <div class="p-[24px]">
-      <!-- 蓝色提示 -->
+      <!-- 凭证是否注入环境变量取决于配置的生效方式 -->
       <Alert
         class="mb-[16px]"
-        theme="info"
+        :theme="registerMode === 'immediate' ? 'warning' : 'info'"
       >
-        {{ $t('凭证信息会写入到应用环境变量中') }}
+        {{
+          registerMode === 'immediate'
+            ? $t('该配置为立即生效，凭证信息不会写入到应用环境变量中，如需在应用内使用请自行配置')
+            : $t('凭证信息会写入到应用环境变量中')
+        }}
       </Alert>
 
       <!-- 凭证变量表格 -->
@@ -77,12 +81,13 @@
 
   import { Table, TableColumn } from '@blueking/table';
   import { Alert, Sideslider } from 'bkui-vue';
-  import { PolarisConfigVarOutput } from '~/@types/v1/polaris-config';
+  import { PolarisConfigOutputObj, PolarisConfigVarOutput } from '~/@types/v1/polaris-config';
   import { PolarisConfigService } from '~/api/modules/v1';
   import { useAppDetail } from '~/stores/app-detail';
 
   interface Props {
     configName: string;
+    registerMode?: PolarisConfigOutputObj['registerMode'];
   }
 
   const isShow = defineModel<boolean>('isShow');

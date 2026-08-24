@@ -1031,6 +1031,10 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 凭证信息会写入到应用环境变量中:
   The credential information will be written into the application
   environment variable
+"该配置为立即生效，凭证信息不会写入到应用环境变量中，如需在应用内使用请自行配置":
+  This config takes effect immediately, so the credential information is not written
+  into the application environment variables; configure it yourself if the
+  application needs it
 敏感字段，仅支持在应用环境变量中获取: Sensitive field, only available in application environment variables
 请输入数字、英文字母、.、-、_，长度不超过128个字符:
   Please enter numbers, English letters , -, _, with
@@ -1233,6 +1237,13 @@ APM 实例: APM Instance
 开启后将自动上报 tRPC 服务的健康状态到北极星:
   After enabling, the health status of the tRPC service
   will be automatically reported to Polaris
+生效方式: Effective Mode
+请选择生效方式: Please select the effective mode
+立即生效: Effective Immediately
+下次部署生效: Effective on Next Deployment
+创建后不可修改: Cannot be modified after creation
+"部署后才将实例注册到北极星，同时注入北极星 Token、服务端口等内容到应用环境变量中": "Instances are registered to Polaris only after deployment, and the Polaris token, service port, and related values are injected into the application's environment variables"
+立即生效时，服务端口不会写入环境变量: In immediate mode, the service port is not written to environment variables
 需要在框架配置文件的 server.service 中包含该北极星服务名，健康检查才会生效：:
   "The Polaris service name must
   be included in server.service of the framework configuration file for health
@@ -1952,3 +1963,5 @@ CPU Limits 利用率: CPU Limits Utilization
 "运行实例 {0} / {1}": "Running Instances {0} / {1}"
 "涉及 {0} 个环境": "Across {0} Environment(s)"
 本页配置只会影响本空间之后新建的应用，已有应用不受影响。仅适用于平台托管部署的应用（如 tRPC、TAF），Helm / Agones 等自定义编排应用不适用。: This page's configuration will only affect newly created applications in the current workspace. Existing applications are not affected. Only applicable to platform-managed applications (e.g., tRPC, TAF), not applicable to custom编排 applications (e.g., Helm / Agones).
+"该配置为立即生效，删除后将同步从已关联环境中摘除北极星实例并移除配置。":
+  This configuration takes effect immediately. Deleting it will synchronously deregister Polaris instances from associated environments and remove the configuration.

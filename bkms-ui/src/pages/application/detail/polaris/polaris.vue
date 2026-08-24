@@ -124,7 +124,7 @@
         <TableColumn
           field="polarisNamespace"
           :filters="polarisNamespaceFilterOptions"
-          width="260"
+          width="200"
         >
           <template #header>
             <CustomFilter
@@ -192,6 +192,15 @@
               </MoreTag>
             </template>
             <span v-else> -- </span>
+          </template>
+        </TableColumn>
+        <TableColumn
+          field="registerMode"
+          :label="$t('生效方式')"
+          width="140"
+        >
+          <template #default="{ row }">
+            {{ row.registerMode === 'immediate' ? $t('立即生效') : $t('下次部署生效') }}
           </template>
         </TableColumn>
         <TableColumn
@@ -274,7 +283,8 @@
     <!-- 查看凭证侧栏 -->
     <ViewCertificate
       v-model:is-show="isShowViewCertificate"
-      :config-name="configName"
+      :config-name="certificateConfig?.name || ''"
+      :register-mode="certificateConfig?.registerMode"
     />
 
     <!-- 关联环境及按环境权重侧栏 -->
@@ -317,6 +327,7 @@
   import PolarisEnvRedeployTag from './polaris-env-redeploy-tag.vue';
   import PolarisEnvSideslider from './polaris-env-sideslider.vue';
   import PolarisPendingRedeployAlert from './polaris-pending-redeploy-alert.vue';
+  import { isImmediateRegister } from './redeploy-utils';
   import ViewCertificate from './view-certificate.vue';
 
   import type { ISearchItem, ISearchValue } from 'bkui-vue/lib/search-select/utils';
@@ -390,7 +401,7 @@
   const isShowAssociatedEnvs = ref(false);
   const editPolarisData = ref<PolarisConfigOutputObj | undefined>(undefined); // 编辑时的数据
   const associatedEnvConfig = ref<PolarisConfigOutputObj>();
-  const configName = ref(''); // 查看凭证时的 configName
+  const certificateConfig = ref<PolarisConfigOutputObj>(); // 查看凭证时的配置
   const loading = ref(true);
   const filterLoading = ref(false);
   const pendingRedeployRefreshing = ref(false);
@@ -606,8 +617,13 @@
     isShowEditPolaris.value = true;
   }
 
-  /** 删除入口：按 scope 非空、阻塞环境、直接删除三种弹窗格式顺序分流。 */
+  /** 删除入口：立即生效配置由后端同步清理，其余配置沿用部署态前置检查。 */
   function handleDelete(row: PolarisConfigOutputObj) {
+    if (isImmediateRegister(row)) {
+      showDeleteConfirm(row);
+      return;
+    }
+
     const scopeEnvs = getScopeEnvs(row);
     if (scopeEnvs.length > 0) {
       showClearScopeInfoBox(row, scopeEnvs);
@@ -620,18 +636,7 @@
       return;
     }
 
-    // 删除配置提示
-    InfoBox({
-      title: t('确认删除该北极星配置？'),
-      content: renderDeleteInfoBoxContent(row),
-      headerAlign: 'center',
-      footerAlign: 'center',
-      contentAlign: 'left',
-      confirmButtonTheme: 'danger',
-      confirmText: t('删除'),
-      cancelText: t('取消'),
-      onConfirm: () => deletePolarisConfig(row),
-    });
+    showDeleteConfirm(row);
   }
 
   function handleEdit(row: PolarisConfigOutputObj) {
@@ -796,7 +801,7 @@
   }
 
   function handleShowCertificate(row: PolarisConfigOutputObj) {
-    configName.value = row?.name || '';
+    certificateConfig.value = row;
     isShowViewCertificate.value = true;
   }
 
@@ -841,17 +846,19 @@
     ]);
   }
 
-  /** 删除分支 3 弹窗内容：scope 为空且没有阻塞环境时，展示原删除确认说明。 */
+  /** 删除确认说明：立即生效配置由后端同步摘除，其他配置沿用未部署场景说明。 */
   function renderDeleteInfoBoxContent(row: PolarisConfigOutputObj) {
     const serviceName = h('div', { class: 'mb-[16px] text-[14px] text-[#313238]' }, [
       `${t('北极星服务名')}：${row.polarisName || '--'}`,
     ]);
 
+    const description = isImmediateRegister(row)
+      ? t('该配置为立即生效，删除后将同步从已关联环境中摘除北极星实例并移除配置。')
+      : t('该配置对应环境尚未部署，北极星侧无已注册实例，删除后将直接移除。');
+
     return h('div', [
       serviceName,
-      h('div', { class: 'bg-[#F5F7FA] px-[16px] py-[12px] text-[14px] leading-[22px]' }, [
-        t('该配置对应环境尚未部署，北极星侧无已注册实例，删除后将直接移除。'),
-      ]),
+      h('div', { class: 'bg-[#F5F7FA] px-[16px] py-[12px] text-[14px] leading-[22px]' }, [description]),
     ]);
   }
 
@@ -937,6 +944,21 @@
       confirmText: t('置空可用环境'),
       cancelText: t('取消'),
       onConfirm: () => clearPolarisScope(row),
+    });
+  }
+
+  // 确认删除北极星配置。
+  function showDeleteConfirm(row: PolarisConfigOutputObj) {
+    InfoBox({
+      title: t('确认删除该北极星配置？'),
+      content: renderDeleteInfoBoxContent(row),
+      headerAlign: 'center',
+      footerAlign: 'center',
+      contentAlign: 'left',
+      confirmButtonTheme: 'danger',
+      confirmText: t('删除'),
+      cancelText: t('取消'),
+      onConfirm: () => deletePolarisConfig(row),
     });
   }
 

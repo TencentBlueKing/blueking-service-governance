@@ -46,6 +46,8 @@ export function formatPolarisRedeployValue(value?: number | string) {
  * @returns 变更项数组；环境不在作用域内时返回空数组
  */
 export function getPolarisRedeployChanges(config: PolarisConfigOutputObj, envName: string): PolarisRedeployChange[] {
+  if (isImmediateRegister(config)) return [];
+
   const state = config.envStates?.[envName];
   const appliedFields = state?.appliedFields ?? null;
   const scopeEnvNames = config.scopeEnvNames || [];
@@ -79,6 +81,11 @@ export function getPolarisRedeployChanges(config: PolarisConfigOutputObj, envNam
     });
   }
   return changes;
+}
+
+/** 立即生效配置由平台同步下发，不依赖应用部署。 */
+export function isImmediateRegister(config?: null | Pick<PolarisConfigOutputObj, 'registerMode'>) {
+  return config?.registerMode === 'immediate';
 }
 
 /** 当环境尚未部署时，构建仅包含新值的变更列表（无旧值可对比） */
