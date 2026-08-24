@@ -207,7 +207,7 @@
                   multiple
                 />
                 <template v-if="!isEditMode">
-                  <span class="text-[#979BA5]">{{ $t('创建后不可修改，请认真填写；可快捷填入') }}: </span>
+                  <span class="text-[#979BA5]">{{ $t('可快捷填入') }}: </span>
                   <Button
                     text
                     theme="primary"

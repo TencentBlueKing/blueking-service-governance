@@ -1023,7 +1023,7 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 北极星Token不能为空: Polaris Token cannot be empty
 权重不能小于1: Weight cannot be less than 1
 北极星负责人不能为空: Polaris owner cannot be empty
-创建后不可修改，请认真填写；可快捷填入: This field cannot be changed after creation. Please fill it in carefully, or use Quick Fill
+可快捷填入: Can be filled in quickly
 所有管理员: All Administrators
 所有SRE: All SREs
 所有开发者: All Developers
