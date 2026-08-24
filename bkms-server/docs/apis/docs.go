@@ -8509,12 +8509,6 @@ const docTemplate = `{
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -16511,6 +16505,190 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/custom-build-images": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "候选仅以工作空间已落库的自定义镜像记录为准，不过滤快照同步状态，也不校验镜像在仓库中是否仍然存在；候选数量预期在百条以内，因此不分页",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "获取工作空间自定义构建镜像候选列表",
+                "operationId": "ListCustomBuildImages",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "镜像类型：builder / runner",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "搜索关键字",
+                        "name": "keyword",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListCustomRuntimeImagesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/custom-build-images/tags": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "镜像以完整名称传入而非记录 ID，因为用户手动输入、尚未落库的镜像没有记录 ID。\n已落库镜像读本地快照、手动输入镜像用工作空间凭证实时拉取，两条来源的出入参、\n分页与总数口径完全一致，调用方无需按来源分支处理，也不传递来源标识",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "获取工作空间自定义构建镜像可用 TAG 列表",
+                "operationId": "ListCustomBuildImageTags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "镜像完整仓库名称，含仓库前缀且不带 tag",
+                        "name": "name",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "搜索关键字",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分页参数：页码，从 1 开始",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分页参数：每页数量，支持 5/10/20/50/100",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListCustomRuntimeImageTagsOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/custom-build-images/tags/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "同步等待上限为 10 秒。刷新中与刷新失败均为正常响应，通过 data.status 的 refreshing / failed 表达，不作为错误抛出",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "手动刷新工作空间自定义构建镜像的 TAG 快照",
+                "operationId": "RefreshCustomBuildImageTags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "刷新参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RefreshCustomRuntimeImageTagsInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RefreshCustomRuntimeImageTagsOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/deps/redis": {
             "get": {
                 "security": [
@@ -19320,6 +19498,14 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "cluster": {
+                    "description": "环境绑定的业务集群信息",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.DeployOverviewClusterObj"
+                        }
+                    ]
+                },
                 "deployStatus": {
                     "description": "部署状态（原始枚举）",
                     "type": "string"
@@ -19342,6 +19528,10 @@ const docTemplate = `{
                 },
                 "envType": {
                     "description": "环境类型（development / test / staging / production）",
+                    "type": "string"
+                },
+                "imageTag": {
+                    "description": "部署的镜像 Tag；无部署记录时为空字符串",
                     "type": "string"
                 },
                 "instances": {
@@ -19551,6 +19741,14 @@ const docTemplate = `{
                         "$ref": "#/definitions/serializer.PolarisInstanceInfoOutputObj"
                     }
                 },
+                "resources": {
+                    "description": "主容器资源规格（集群 Pod 实际值）",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.AppInstanceResourcesObj"
+                        }
+                    ]
+                },
                 "restartCount": {
                     "description": "重启次数",
                     "type": "string",
@@ -19558,6 +19756,27 @@ const docTemplate = `{
                 },
                 "status": {
                     "description": "状态，由 pod.status.phase 等解析获得",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.AppInstanceResourcesObj": {
+            "type": "object",
+            "properties": {
+                "cpuLimits": {
+                    "description": "CPU limits（Kubernetes quantity 字符串），可选：未配置时不返回该字段",
+                    "type": "string"
+                },
+                "cpuRequests": {
+                    "description": "CPU requests，可选：未配置时不返回该字段",
+                    "type": "string"
+                },
+                "memoryLimits": {
+                    "description": "Memory limits，可选：未配置时不返回该字段",
+                    "type": "string"
+                },
+                "memoryRequests": {
+                    "description": "Memory requests，可选：未配置时不返回该字段",
                     "type": "string"
                 }
             }
@@ -22462,6 +22681,64 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.CustomRuntimeImageOutputObj": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "description": "创建时间",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "记录 ID",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "镜像仓库名称，含仓库前缀，不包含 tag",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "镜像类型",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "更新时间",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.CustomRuntimeImageTagOutputObj": {
+            "type": "object",
+            "properties": {
+                "builtAt": {
+                    "description": "镜像构建时间",
+                    "type": "string"
+                },
+                "digest": {
+                    "description": "摘要",
+                    "type": "string"
+                },
+                "size": {
+                    "description": "镜像大小",
+                    "type": "string",
+                    "example": "0"
+                },
+                "tag": {
+                    "description": "镜像标签名",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.CustomRuntimeImagesOutputObjs": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.CustomRuntimeImageOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.CustomTagOptsInput": {
             "type": "object",
             "properties": {
@@ -22597,6 +22874,31 @@ const docTemplate = `{
                 },
                 "statusMessage": {
                     "description": "非 True condition 的汇总消息，可选：一切正常时为空字符串",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.DeployOverviewClusterObj": {
+            "type": "object",
+            "properties": {
+                "clusterID": {
+                    "description": "集群 ID",
+                    "type": "string"
+                },
+                "clusterName": {
+                    "description": "集群展示名（来自 BCS）；拉取失败时为空字符串",
+                    "type": "string"
+                },
+                "clusterType": {
+                    "description": "集群类型",
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "集群命名空间",
+                    "type": "string"
+                },
+                "projectCode": {
+                    "description": "项目 code",
                     "type": "string"
                 }
             }
@@ -25498,6 +25800,22 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListCustomRuntimeImageTagsOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PaginatedCustomRuntimeImageTagOutputObjs"
+                }
+            }
+        },
+        "serializer.ListCustomRuntimeImagesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.CustomRuntimeImagesOutputObjs"
+                }
+            }
+        },
         "serializer.ListDeployableImageTagsOutput": {
             "type": "object",
             "properties": {
@@ -26330,6 +26648,31 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildRecordOutputObj"
                     }
+                }
+            }
+        },
+        "serializer.PaginatedCustomRuntimeImageTagOutputObjs": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "description": "满足条件的总记录数",
+                    "type": "string",
+                    "example": "0"
+                },
+                "results": {
+                    "description": "当前页的镜像 TAG 列表",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.CustomRuntimeImageTagOutputObj"
+                    }
+                },
+                "snapshotStatus": {
+                    "description": "快照状态信息，手动输入且尚无快照记录时 refreshStatus 为 idle",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.SnapshotStatusInfoOutputObj"
+                        }
+                    ]
                 }
             }
         },
@@ -27768,6 +28111,26 @@ const docTemplate = `{
             }
         },
         "serializer.RefreshAppImagesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.RefreshResultInfoOutputObj"
+                }
+            }
+        },
+        "serializer.RefreshCustomRuntimeImageTagsInput": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "description": "镜像完整仓库名称，含仓库前缀且不包含 tag 或 digest",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.RefreshCustomRuntimeImageTagsOutput": {
             "type": "object",
             "properties": {
                 "data": {
