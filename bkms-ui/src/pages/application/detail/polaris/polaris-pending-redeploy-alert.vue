@@ -74,12 +74,13 @@
         class="pending-redeploy-grid items-center border-b border-[#F5F7FA] py-[10px] last:border-b-0"
       >
         <div class="flex min-w-0 items-center">
-          <span
-            v-bk-tooltips="row.envDisplayName"
-            class="truncate text-[12px] text-[#313238]"
-          >
-            {{ row.envDisplayName }}
-          </span>
+          <OverflowTitle
+            class="min-w-0 text-[12px] text-[#313238]"
+            :content="row.envDisplayName"
+            placement="top-start"
+            resizeable
+            type="tips"
+          />
           <Tag
             v-if="row.envType && envTypeMap[row.envType]"
             :class="['ml-[6px] shrink-0', envTypeTagClassMap[row.envType]]"
@@ -88,12 +89,16 @@
             {{ envTypeMap[row.envType].name }}
           </Tag>
         </div>
-        <span
-          v-bk-tooltips="row.polarisName || '--'"
-          class="truncate text-[12px] text-[#313238]"
-        >
-          {{ row.polarisName || '--' }}
-        </span>
+        <div class="w-full min-w-0 overflow-hidden">
+          <OverflowTitle
+            :key="row.polarisName || '--'"
+            class="w-full min-w-0 text-[12px] text-[#313238]"
+            :content="row.polarisName || '--'"
+            placement="top-start"
+            resizeable
+            type="tips"
+          />
+        </div>
         <div class="min-w-0 text-[12px] leading-[20px] text-[#979BA5]">
           <template v-if="row.changes.length">
             <div
@@ -133,7 +138,7 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
 
-  import { Button, Tag } from 'bkui-vue';
+  import { Button, OverflowTitle, Tag } from 'bkui-vue';
   import { AngleDown } from 'bkui-vue/lib/icon';
   import { PolarisConfigOutputObj } from '~/@types/v1/polaris-config';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
@@ -179,7 +184,7 @@
   /** 顶部待部署提示数据：基于完整配置列表按环境分组，避免被搜索筛选隐藏。 */
   const pendingRedeployGroups = computed<PendingRedeployGroup[]>(() => {
     const groups = new Map<string, PendingRedeployGroup>();
-    props.configs.forEach(config => {
+    props.configs.forEach((config, configIndex) => {
       Object.entries(config.envStates || {}).forEach(([envName, state]) => {
         const status = getPolarisEnvStatus((state as PolarisEnvStateWithStatus).status);
         if (!isPendingRedeployStatus(status)) return;
@@ -193,7 +198,7 @@
         };
         group.items.push({
           changes: getPolarisRedeployChanges(config, envName),
-          configName: config.name,
+          configName: config.name || String(configIndex),
           polarisName: config.polarisName,
           status,
         });
