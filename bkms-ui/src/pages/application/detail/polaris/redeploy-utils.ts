@@ -20,6 +20,8 @@ import { i18n } from '~/modules/i18n';
 
 import type { PolarisConfigOutputObj } from '~/@types/v1/polaris-config';
 
+const POLARIS_TOKEN_MASK = '****';
+
 /** 北极星配置重新部署时的变更项，用于展示新旧值对比 */
 export interface PolarisRedeployChange {
   /** 字段标识，如 'servicePort' / 'polarisToken' */
@@ -72,8 +74,8 @@ export function getPolarisRedeployChanges(config: PolarisConfigOutputObj, envNam
     changes.push({
       key: 'polarisToken',
       label: i18n.global.t('北极星Token'),
-      oldValue: appliedFields?.polarisToken || '--',
-      newValue: config.polarisToken || '--',
+      oldValue: POLARIS_TOKEN_MASK,
+      newValue: POLARIS_TOKEN_MASK,
     });
   }
   return changes;
@@ -90,7 +92,7 @@ function buildNotDeployedChanges(config: PolarisConfigOutputObj): PolarisRedeplo
     {
       key: 'polarisToken',
       label: i18n.global.t('北极星Token'),
-      newValue: config.polarisToken ?? '--',
+      newValue: POLARIS_TOKEN_MASK,
     },
   ];
 }

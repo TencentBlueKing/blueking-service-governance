@@ -116,21 +116,16 @@
 
   import { Button, Loading, Tag } from 'bkui-vue';
   import { Share, Success } from 'bkui-vue/lib/icon';
-  import { useI18n } from 'vue-i18n';
   import { PolarisConfigOutputObj } from '~/@types/v1/polaris-config';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
 
+  import { formatPolarisRedeployValue, getPolarisRedeployChanges } from './redeploy-utils';
+
+  import type { PolarisRedeployChange } from './redeploy-utils';
   import type { EnvOutput } from '~/@types/v1/env';
 
-  interface RedeployChange {
-    key: string;
-    label: string;
-    newValue?: number | string;
-    oldValue?: number | string;
-  }
-
   interface RedeployRequiredEnv {
-    changes: RedeployChange[];
+    changes: PolarisRedeployChange[];
     displayName: string;
     envType?: string;
     name: string;
@@ -153,7 +148,6 @@
     (e: 'no-redeploy'): void;
   }>();
 
-  const { t } = useI18n();
   const notifiedNoRedeployConfigName = ref('');
 
   const envInfoMap = computed(() => {
@@ -171,7 +165,7 @@
     if (!props.config) return [];
 
     return (props.config.scopeEnvNames || []).reduce<RedeployRequiredEnv[]>((result, envName) => {
-      const changes = getRedeployChanges(props.config!, envName);
+      const changes = getPolarisRedeployChanges(props.config!, envName);
       if (changes.length === 0) return result;
 
       const envInfo = envInfoMap.value.get(envName);
@@ -185,66 +179,8 @@
     }, []);
   });
 
-  function buildNotDeployedChanges(config: PolarisConfigOutputObj): RedeployChange[] {
-    return [
-      {
-        key: 'servicePort',
-        label: t('服务端口'),
-        newValue: config.servicePort ?? '--',
-      },
-      {
-        key: 'polarisToken',
-        label: t('北极星Token'),
-        newValue: config.polarisToken ?? '--',
-      },
-    ];
-  }
-
   function formatRedeployValue(value?: number | string) {
-    return value === undefined || value === '' ? '--' : String(value);
-  }
-
-  function getRedeployChanges(config: PolarisConfigOutputObj, envName: string): RedeployChange[] {
-    const scopeEnvNames = config.scopeEnvNames || [];
-    const envStates = config.envStates || {};
-    const state = envStates[envName];
-    const appliedFields = state?.appliedFields ?? null;
-    const inScope = scopeEnvNames.includes(envName);
-
-    if (!inScope) return [];
-
-    // 当前作用域内但尚未完成首次部署，需要提示关键字段待生效。
-    if (!hasAppliedFields(appliedFields)) {
-      return buildNotDeployedChanges(config);
-    }
-
-    const changes: RedeployChange[] = [];
-    if (String(appliedFields?.servicePort ?? '') !== String(config.servicePort ?? '')) {
-      changes.push({
-        key: 'servicePort',
-        label: t('服务端口'),
-        oldValue: appliedFields?.servicePort ?? '--',
-        newValue: config.servicePort ?? '--',
-      });
-    }
-    if (
-      state?.polarisTokenChanged === true &&
-      String(appliedFields?.polarisToken ?? '') !== String(config.polarisToken ?? '')
-    ) {
-      changes.push({
-        key: 'polarisToken',
-        label: t('北极星Token'),
-        oldValue: appliedFields?.polarisToken || '--',
-        newValue: config.polarisToken || '--',
-      });
-    }
-    return changes;
-  }
-
-  function hasAppliedFields(
-    fields: NonNullable<PolarisConfigOutputObj['envStates']>[string]['appliedFields'] | null | undefined,
-  ) {
-    return !!fields && Object.keys(fields).length > 0;
+    return formatPolarisRedeployValue(value);
   }
 
   watch(
