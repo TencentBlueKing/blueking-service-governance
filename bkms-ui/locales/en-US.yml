@@ -1776,15 +1776,17 @@ runner 阶段: Runner Stage
 查看日志: View Logs
 构建日志: Build Logs
 "应用关联的特性环境：{0} 个": "Feature environments associated with the application: {0}"
-特性部署: Feature Deployment
-特性环境展示名称: Feature Environment Display Name
+来源环境: Source Environment
+请选择来源环境: Please select a source environment
+无法获取环境标识: Unable to get the environment identifier
 环境展示名称: Environment Display Name
-基于来源环境快速创建一个隔离的特性环境，适合灰度测试等场景。特性环境仅对当前应用可见。: Quickly create an isolated feature environment based on the source environment, suitable for grayscale testing and other scenarios. The feature environment is only visible to the current application.
-"特性环境会继承来源环境的配置，后续也可以在“应用配置”页面修改特性环境配置。": "The feature environment will inherit the configuration of the source environment, and the feature environment configuration can also be modified later on the 'Application Configuration' page."
+"这里创建的是当前应用的特性环境：只属于本应用，其他应用无法使用，适合灰度验证、联调等场景，用完可以销毁。": "This creates a feature environment for the current application: it belongs to this application only and cannot be used by other applications. It suits scenarios such as grayscale verification and joint debugging, and can be destroyed when no longer needed."
+沿用来源环境的集群和环境分类。应用配置不会复制，新环境使用应用的默认配置。: The cluster and environment category are taken from the source environment. Application configuration is not copied; the new environment uses the application's default configuration.
+环境创建成功: Environment Created
+环境尚未部署实例，应用配置为默认值。如需调整配置，请先去配置再部署。: The environment has no running instances yet and uses the default application configuration. To adjust the configuration, configure it before deploying.
 "该操作不可恢复，请输入特性环境命名空间：{0} 进行确认": "This operation is irreversible. Please enter the feature environment namespace: {0} to confirm"
-仅对本应用可见。来源环境仅为创建时快照，之后互不影响。: Only visible to this application. The source environment is only a snapshot at the time of creation, and they do not affect each other afterwards.
-"如需销毁，请先移除部署；": "To destroy, please remove the deployment first;"
-"如需新建，部署时选择“特性部署”（部署 → 特性部署）；": "To create a new one, select 'Feature Deployment' when deploying (Deploy → Feature Deployment);"
+特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。: A feature environment belongs to the current application only and cannot be used by other applications. The source environment is just a snapshot taken at creation time; the two are independent afterwards.
+"环境创建后不会自动部署，需要单独执行部署；销毁前需先移除部署。": "Creating an environment does not deploy it; deployment is a separate action. Remove the deployment before destroying the environment."
 无法销毁特性环境: Cannot Destroy Feature Environment
 该特性环境有部署实例，请先移除部署后再销毁环境: This feature environment has deployment instances. Please remove the deployment before destroying the environment.
 立即移除部署: Remove Deployment Immediately

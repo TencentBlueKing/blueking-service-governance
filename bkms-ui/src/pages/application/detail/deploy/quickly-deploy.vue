@@ -47,30 +47,16 @@
         property="envName"
         required
       >
-        <Select
+        <!-- 目标环境选择器 -->
+        <EnvSelectPanel
           v-model="targetFormModel.envName"
-          :clearable="false"
-          filterable
-          :placeholder="$t('请选择')"
-        >
-          <Select.Option
-            v-for="item in sortedTargetEnvs"
-            :id="item.env.name || ''"
-            :key="item.env.name"
-            :name="item.env.displayName || item.env.name"
-          >
-            <span class="inline-flex items-center gap-[8px]">
-              <span>{{ item.env.displayName || item.env.name }}</span>
-              <Tag
-                v-if="item.env.type && envTypeMap[item.env.type]"
-                :class="envTypeTagClassMap[item.env.type]"
-                size="small"
-              >
-                {{ envTypeMap[item.env.type]?.name || item.env.type }}
-              </Tag>
-            </span>
-          </Select.Option>
-        </Select>
+          class="w-full"
+          :columns="2"
+          :show-env-prefix="false"
+          :show-only-deployed-filter="false"
+          :sync-env-store="false"
+          @update:item="handleTargetEnvItemChange"
+        />
       </Form.FormItem>
     </Form>
     <!-- 部署表单 -->
@@ -108,15 +94,20 @@
 <script lang="ts" setup>
   import { computed, nextTick, reactive, ref, watch } from 'vue';
 
-  import { Button, Form, Message, Select, Sideslider, Tag } from 'bkui-vue';
+  import { Button, Form, Message, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
-  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
+  import EnvSelectPanel from '~/components/env-select-panel.vue';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
   import QuicklyDeployForm from './quickly-deploy-form.vue';
 
   import type { EnvOutput } from '~/@types/v1/env';
+
+  type OverviewDeployTarget = {
+    effectiveReplicas?: number;
+    env: EnvOutput;
+  };
 
   const isShow = defineModel<boolean>('isShow');
   const emits = defineEmits<{
@@ -126,10 +117,7 @@
     effectiveReplicas?: number;
     isProdEnv?: boolean;
     /** 传入时启用总览入口的目标环境选择；不传则保持实例列表入口的原有行为。 */
-    targetEnvs?: Array<{
-      effectiveReplicas?: number;
-      env: EnvOutput;
-    }>;
+    targetEnvs?: OverviewDeployTarget[];
   }>();
 
   const { t } = useI18n();
@@ -145,18 +133,11 @@
   };
   // 用 undefined 区分入口：空数组仍代表总览模式，只是环境列表尚未返回或当前没有可部署环境。
   const hasTargetSelector = computed(() => props.targetEnvs !== undefined);
-  const envTypeOrder = ['development', 'test', 'staging', 'production'];
-  const sortedTargetEnvs = computed(() =>
-    [...(props.targetEnvs || [])].sort((a, b) => {
-      const aIndex = envTypeOrder.indexOf(a.env.type || '');
-      const bIndex = envTypeOrder.indexOf(b.env.type || '');
-      const aWeight = aIndex === -1 ? envTypeOrder.length : aIndex;
-      const bWeight = bIndex === -1 ? envTypeOrder.length : bIndex;
-      return aWeight - bWeight;
-    }),
-  );
+  const selectedEnvItem = ref<EnvOutput>();
   const selectedTarget = computed(() => props.targetEnvs?.find(item => item.env.name === targetFormModel.envName));
-  const targetEnv = computed(() => (hasTargetSelector.value ? selectedTarget.value?.env : trpcDeployStore.curEnvItem));
+  const targetEnv = computed(() =>
+    hasTargetSelector.value ? selectedEnvItem.value || selectedTarget.value?.env : trpcDeployStore.curEnvItem,
+  );
   const targetEffectiveReplicas = computed(() =>
     hasTargetSelector.value ? selectedTarget.value?.effectiveReplicas : props.effectiveReplicas,
   );
@@ -185,6 +166,7 @@
   function handleClosed() {
     deployFormRef.value?.reset(1);
     targetFormModel.envName = '';
+    selectedEnvItem.value = undefined;
   }
 
   /** 校验目标环境与部署表单，提交成功后关闭侧栏并通知父组件刷新对应入口的数据。 */
@@ -215,11 +197,19 @@
     }
   }
 
+  function handleTargetEnvItemChange(env?: EnvOutput) {
+    selectedEnvItem.value = env;
+    if (env?.name) {
+      nextTick(() => targetEnvFormRef.value?.clearValidate?.());
+    }
+  }
+
   // 每次从总览打开时保持目标环境未选择，由用户明确指定部署环境。
   watch(isShow, newVal => {
     if (newVal) {
       if (hasTargetSelector.value) {
         targetFormModel.envName = '';
+        selectedEnvItem.value = undefined;
       }
       nextTick(() => {
         targetEnvFormRef.value?.clearValidate?.();
@@ -237,6 +227,7 @@
       const currentTargetExists = targets?.some(item => item.env.name === targetFormModel.envName);
       if (currentTargetExists) return;
       targetFormModel.envName = '';
+      selectedEnvItem.value = undefined;
       nextTick(() => targetEnvFormRef.value?.clearValidate?.());
     },
     { deep: true },

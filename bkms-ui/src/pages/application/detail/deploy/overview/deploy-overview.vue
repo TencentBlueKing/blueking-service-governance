@@ -83,17 +83,21 @@
               ]"
             ></i>
           </Button>
-          <DeployActionButton
+          <Button
             v-if="canAddDeploy"
-            :label="$t('新增部署')"
-            show-feature-deploy
-            @deploy="emit('deploy', deployTargets)"
-            @feature-deploy="emit('feature-deploy')"
+            class="bg-[#fff]"
+            @click="emit('create-feature-env')"
           >
-            <template #label>
-              {{ $t('部署') }}
-            </template>
-          </DeployActionButton>
+            <Plus class="text-[18px]" />
+            {{ $t('新建环境') }}
+          </Button>
+          <Button
+            v-if="canAddDeploy"
+            theme="primary"
+            @click="emit('deploy', deployTargets)"
+          >
+            {{ $t('部署') }}
+          </Button>
         </div>
       </div>
 
@@ -330,6 +334,7 @@
 
   import { Table, TableColumn } from '@blueking/table';
   import { Button, Popover, Radio, SearchSelect, Tag } from 'bkui-vue';
+  import { Plus } from 'bkui-vue/lib/icon';
   import CustomFilter from '~/components/custom-filter.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
@@ -343,7 +348,6 @@
   import AutoScaleTag from '~/pages/application/detail/components/auto-scale-tag.vue';
   import { useAppDetail } from '~/stores/app-detail';
 
-  import DeployActionButton from '../deploy-action-button.vue';
   import StatIcon from './stat-icon.vue';
   import { type DeployOverviewDeployTarget, type DeployOverviewRow, useDeployOverview } from './use-deploy-overview';
 
@@ -351,8 +355,8 @@
 
   const props = defineProps<{ envList: EnvOutput[] }>();
   const emit = defineEmits<{
+    'create-feature-env': [];
     deploy: [targets: DeployOverviewDeployTarget[]];
-    'feature-deploy': [];
     'update:deploy-targets': [targets: DeployOverviewDeployTarget[]];
     'view-instances': [envName: string];
   }>();

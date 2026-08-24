@@ -36,23 +36,30 @@
     <div class="h-full p-[24px] flex flex-col gap-[16px]">
       <Alert theme="info">
         <div class="text-[12px] leading-[20px]">
-          <div>{{ $t('仅对本应用可见。来源环境仅为创建时快照，之后互不影响。') }}</div>
-          <ul class="pl-[6px] list-disc">
-            <li>•&nbsp;{{ $t('如需销毁，请先移除部署；') }}</li>
-            <li>•&nbsp;{{ $t('如需新建，部署时选择“特性部署”（部署 → 特性部署）；') }}</li>
-          </ul>
+          <div>{{ $t('特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。') }}</div>
+          <div>{{ $t('环境创建后不会自动部署，需要单独执行部署；销毁前需先移除部署。') }}</div>
         </div>
       </Alert>
 
-      <Input
-        v-model.trim="searchKeyword"
-        clearable
-        :placeholder="$t('搜索环境展示名称')"
-      >
-        <template #suffix>
-          <Search class="text-[16px] text-[#979BA5] mr-[6px] mt-[2px] hover:text-[#3A84FF]" />
-        </template>
-      </Input>
+      <div class="flex items-center gap-[12px]">
+        <Button
+          theme="primary"
+          @click="emit('create')"
+        >
+          <Plus class="text-[18px]" />
+          {{ $t('新建') }}
+        </Button>
+        <Input
+          v-model.trim="searchKeyword"
+          class="ml-auto w-[320px]"
+          clearable
+          :placeholder="$t('搜索环境展示名称')"
+        >
+          <template #suffix>
+            <Search class="text-[16px] text-[#979BA5] mr-[6px] mt-[2px] hover:text-[#3A84FF]" />
+          </template>
+        </Input>
+      </div>
 
       <Table
         ref="tableRef"
@@ -145,10 +152,18 @@
         <TableColumn
           fixed="right"
           :label="$t('操作')"
-          min-width="120"
+          min-width="160"
         >
           <template #default="{ row }: { row: FeatureEnvRow }">
             <div class="flex items-center gap-[12px]">
+              <Button
+                v-if="row.canDeploy"
+                text
+                theme="primary"
+                @click="handleDeploy(row)"
+              >
+                {{ $t('部署') }}
+              </Button>
               <Button
                 text
                 theme="primary"
@@ -334,7 +349,7 @@
 
   import { Table, TableColumn } from '@blueking/table';
   import { Alert, Button, Dialog, Form, Input, Message, Popover, Sideslider, Tag } from 'bkui-vue';
-  import { Search } from 'bkui-vue/lib/icon';
+  import { Plus, Search } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { FeatureEnvDeployStatusOutput, FeatureEnvOutput } from '~/@types/v1/env';
@@ -361,6 +376,7 @@
   type DestroyDisabledReason = '' | 'deployed';
 
   interface FeatureEnvRow {
+    canDeploy: boolean;
     createdAtText: string;
     deployStatus: string;
     deployStatusIcon: string;
@@ -404,7 +420,9 @@
   );
 
   const emit = defineEmits<{
+    create: [];
     deleted: [payload: { envName: string; sourceEnvName?: string }];
+    deploy: [env: FeatureEnvOutput];
     'deploy-removed': [];
     refresh: [];
   }>();
@@ -462,8 +480,11 @@
       const envType = env.type || '';
       const envTypeInfo = envTypeMap[envType];
       const destroyDisabledReason = getDestroyDisabledReason(deployStatuses);
+      // 未配置集群资源的环境无法部署；仅就绪且没有部署记录的环境展示首次部署入口。
+      const canDeploy = !!env.name && env.status !== 'NotReady' && deployStatuses.length === 0;
 
       return {
+        canDeploy,
         id: env.id || '',
         name: env.name || '',
         displayName: env.displayName || env.name || '--',
@@ -560,6 +581,11 @@
   function handleCloseDestroyDialog() {
     isShowDestroyDialog.value = false;
     resetDestroyDialog();
+  }
+
+  function handleDeploy(row: FeatureEnvRow) {
+    const env = props.list.find(item => item.name === row.name);
+    if (env) emit('deploy', env);
   }
 
   async function handleDestroyFeatureEnv() {

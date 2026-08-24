@@ -214,12 +214,12 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
 
   /**
    * 新增部署不能直接使用总览行：总览接口不保证返回部署表单所需的完整环境信息。
-   * 因此以 EnvSelect 的标准环境列表为准，再用总览行补充默认副本数。
+   * 因此以 EnvSelect 的可用环境列表为准，再用总览行补充默认副本数。
    */
   const deployTargets = computed<DeployOverviewDeployTarget[]>(() => {
     const expectedByEnv = new Map(rows.value.map(row => [row.name, row.desiredCount ?? undefined]));
     return envList.value
-      .filter(env => !!env.name && env.status !== 'NotReady' && (env.kind || 'standard') === 'standard')
+      .filter(env => !!env.name && env.status !== 'NotReady')
       .map(env => ({ env, effectiveReplicas: expectedByEnv.get(env.name || '') }));
   });
 

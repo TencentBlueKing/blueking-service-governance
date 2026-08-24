@@ -103,14 +103,13 @@
           v-if="isDeployStatusVisible && !isMultiEnvMode"
           #right
         >
-          <!-- 部署/特性部署 -->
-          <DeployActionButton
-            :label="$t('部署')"
+          <Button
             :loading="precheckLoading"
-            :show-feature-deploy="canFeatureDeploy"
-            @deploy="handleShowFullUpdateDialog"
-            @feature-deploy="handleShowFeatureDeploy"
-          />
+            theme="primary"
+            @click="handleShowFullUpdateDialog"
+          >
+            {{ $t('部署') }}
+          </Button>
           <!-- 扩缩容 -->
           <ScaleInstance
             :effective-replicas="effectiveDeploySpec?.replicas"
@@ -184,8 +183,8 @@
           v-if="activeTab === 'overview'"
           ref="deployOverviewRef"
           :env-list="envList"
+          @create-feature-env="handleShowCreateFeatureEnv"
           @deploy="handleOverviewDeploy"
-          @feature-deploy="handleShowFeatureDeploy"
           @update:deploy-targets="handleOverviewDeployTargetsUpdate"
           @view-instances="handleViewEnvInstances"
         />
@@ -282,15 +281,14 @@
               <template #description>
                 <div class="text-[#4D4F56] text-[14px] leading-[22px]">{{ $t('该环境尚未部署应用') }}</div>
               </template>
-              <!-- 部署/特性部署 -->
-              <DeployActionButton
+              <Button
                 class="mt-[8px]"
-                :label="$t('立即部署')"
                 :loading="precheckLoading"
-                :show-feature-deploy="canFeatureDeploy"
-                @deploy="handleShowQuicklyDeploy"
-                @feature-deploy="handleShowFeatureDeploy"
-              />
+                theme="primary"
+                @click="handleShowQuicklyDeploy"
+              >
+                {{ $t('立即部署') }}
+              </Button>
             </Exception>
           </Skeleton>
         </template>
@@ -320,13 +318,6 @@
       :latest-build-status="buildLogInfo.status"
       @update="handleUpdateDeploySuccess"
     />
-    <!-- 特性部署 -->
-    <FeatureDeploy
-      v-model:is-show="isShowFeatureDeploy"
-      :effective-replicas="effectiveDeploySpec?.replicas"
-      @env-created="refreshFeatureEnvData"
-      @update="handleFeatureDeploySuccess"
-    />
     <!-- 普通部署在打开侧栏前执行环境变量预检查 -->
     <EnvVarPrecheckDialog
       v-model:is-show="isShowPrecheckDialog"
@@ -347,9 +338,18 @@
       :error="featureEnvError"
       :list="featureEnvList"
       :loading="featureEnvLoading"
+      @create="handleShowCreateFeatureEnv"
       @deleted="handleFeatureEnvDeleted"
+      @deploy="handleDeployFeatureEnvFromList"
       @deploy-removed="refreshFeatureEnvData"
       @refresh="fetchFeatureEnvList"
+    />
+
+    <!-- 从特性环境列表打开时保留底层列表侧栏 -->
+    <CreateFeatureEnv
+      v-model:is-show="isShowCreateFeatureEnv"
+      @created="refreshFeatureEnvData"
+      @deploy="handleDeployFeatureEnv"
     />
   </div>
 </template>
@@ -384,11 +384,10 @@
   import KeyValueBadge from '../../components/key-value-badge.vue';
   import ResourceTopology from '../../components/topo/index.vue';
   import { DEPLOY_ENV_SELECT_SLOT_SELECTOR } from './constants';
-  import DeployActionButton from './deploy-action-button.vue';
+  import CreateFeatureEnv from './create-feature-env.vue';
   import DeployEvent from './deploy-event.vue';
   import DeployHistory from './deploy-history.vue';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
-  import FeatureDeploy from './feature-deploy.vue';
   import FeatureEnvSideslider from './feature-env-sideslider.vue';
   import FullUpdate from './instance-list/full-update.vue';
   import InstanceList from './instance-list/instance-list.vue';
@@ -524,7 +523,6 @@
     return status !== APP_DEPLOY_STATUS.UNINSTALLED;
   });
   const isProdEnv = computed(() => trpcDeployStore.curEnvItem?.type === 'production');
-  const canFeatureDeploy = computed(() => isAppModelAppType(appDetailStore.appType));
   const canManageFeatureEnvs = computed(() => isAppModelAppType(appDetailStore.appType));
 
   const initLoading = ref(true);
@@ -851,14 +849,16 @@
     }
   }
 
-  /** 部署成功后按入口刷新：总览刷新聚合数据，实例页刷新当前环境部署状态。 */
+  /** 部署成功后按入口刷新：总览刷新聚合数据，实例页刷新当前环境及环境选择器的部署状态。 */
   async function handleQuickDeploySuccess() {
     if (overviewDeployTargets.value !== undefined) {
       await Promise.all([envSelectPanelRef.value?.refreshDeployStatuses?.(), deployOverviewRef.value?.load()]);
       fetchFeatureEnvList();
       return;
     }
-    await handleGetLatestDeployStatus();
+    // 首次部署从实例页发起，成功后需同步更新顶部环境选择器的部署状态图标和“仅显示已部署环境”筛选结果。
+    await Promise.all([handleGetLatestDeployStatus(), envSelectPanelRef.value?.refreshDeployStatuses?.()]);
+    fetchFeatureEnvList();
   }
 
   /** 从实例列表打开快速部署，并关闭总览入口专用的目标环境选择模式。 */
@@ -926,8 +926,8 @@
     }
   }
 
-  // 特性部署
-  const isShowFeatureDeploy = ref(false);
+  // 特性环境
+  const isShowCreateFeatureEnv = ref(false);
   const featureEnvList = ref<FeatureEnvOutput[]>([]);
   const featureEnvLoading = ref(false);
   const featureEnvError = ref(false);
@@ -977,16 +977,46 @@
     return envList.value.find(env => env.name !== payload.envName && env.status !== 'NotReady');
   }
 
-  /** 特性部署成功后切换到新环境的实例列表，并刷新总览及特性环境数量。 */
-  function handleFeatureDeploySuccess(env?: EnvOutput) {
-    if (env?.name) {
+  /** 首次部署特性环境：完成环境变量预检查后切到实例页并打开快速部署侧栏。 */
+  async function handleDeployFeatureEnv(env: EnvOutput) {
+    if (!env.name || precheckLoading.value) return;
+
+    precheckLoading.value = true;
+    try {
+      const precheckPassed = await precheck(env.name);
+      if (!precheckPassed) return;
+
+      isShowFeatureEnvSideslider.value = false;
       envSelectRefreshKey.value += 1;
       envStore.updateCurrentEnv(env.name);
       trpcDeployStore.updateCurEnvItem(env);
-      activeTab.value = 'instance';
+      activeTab.value = TAB_NAMES.instance;
+      latestDeployStatus.value = null;
+      effectiveDeploySpec.value = undefined;
+      initLoading.value = true;
+      overviewDeployTargets.value = undefined;
+      isShowQuicklyDeploy.value = true;
+    } catch (error) {
+      console.warn(error);
+    } finally {
+      precheckLoading.value = false;
     }
-    deployOverviewRef.value?.load();
-    fetchFeatureEnvList();
+  }
+
+  /** 特性环境列表的字段是 EnvOutput 子集，优先复用完整环境信息。 */
+  function handleDeployFeatureEnvFromList(env: FeatureEnvOutput) {
+    if (!env.name) return;
+    const knownEnv = envList.value.find(item => item.name === env.name);
+    handleDeployFeatureEnv(
+      knownEnv || {
+        displayName: env.displayName,
+        id: env.id,
+        kind: 'feature',
+        name: env.name,
+        status: env.status,
+        type: env.type,
+      },
+    );
   }
 
   /** 删除特性环境后修正单/多选环境状态，避免后续继续请求已销毁环境。 */
@@ -1025,10 +1055,10 @@
     refreshFeatureEnvData();
   }
 
-  /** 权限与应用类型允许时打开复用的特性部署侧栏。 */
-  function handleShowFeatureDeploy() {
-    if (!canFeatureDeploy.value) return;
-    isShowFeatureDeploy.value = true;
+  /** 应用类型允许时打开新建环境侧栏；列表侧栏保持打开以支持双层侧栏。 */
+  function handleShowCreateFeatureEnv() {
+    if (!canManageFeatureEnvs.value) return;
+    isShowCreateFeatureEnv.value = true;
   }
 
   /** 重新创建环境选择器并刷新总览、特性环境列表，确保三处数据一致。 */

@@ -25,7 +25,7 @@
     placement="bottom-start"
     theme="light"
     trigger="click"
-    :width="800"
+    :width="panelWidth"
     @after-hidden="handlePopoverHidden"
     @after-show="handlePopoverShow"
   >
@@ -35,6 +35,7 @@
         'flex items-center min-w-[280px] max-w-[626px] border border-[#c4c6cc] rounded-[2px] bg-[#FFF] cursor-pointer overflow-hidden transition-border-color duration-200 hover:border-[#979BA5]',
         { '!border-[#3a84ff] shadow-[0_0_3px_0_#a3c5fd]': isPopoverVisible },
         mode === 'multi' ? 'h-auto min-h-[32px] !w-[626px]' : 'h-[32px]',
+        { '!max-w-none': !showEnvPrefix },
       ]"
     >
       <!-- 模式切换区域 -->
@@ -57,7 +58,7 @@
         />
       </Select>
       <div
-        v-else
+        v-else-if="showEnvPrefix"
         class="flex items-center h-[32px] px-[10px] border-r-[1px] border-[#c4c6cc] shrink-0"
       >
         {{ $t('环境') }}
@@ -165,6 +166,7 @@
             </template>
           </Input>
           <div
+            v-if="showOnlyDeployedFilter"
             class="h-[40px] flex items-center border-l-[1px] border-b-[1px] border-[#DCDEE5] ml-[-1px] pl-[8px] pb-[2px]"
           >
             <Checkbox
@@ -185,7 +187,8 @@
         <!-- 分组列表 -->
         <div
           v-else
-          class="flex gap-[8px]"
+          class="gap-[8px]"
+          :class="columns === 2 ? 'grid grid-cols-2' : 'flex'"
         >
           <div
             v-for="group in filteredGroups"
@@ -318,8 +321,12 @@
   };
 
   interface IProps {
+    /** 下拉面板列数，实例列表为 4 列，表单内收成 2 列 */
+    columns?: 2 | 4;
     /** 当无选中值时是否自动选中第一个可用环境 */
     initFirstEnvWhenEmpty?: boolean;
+    /** 只展示这些 kind 的环境，不传则全部展示 */
+    kinds?: string[];
     /** 选择模式 */
     mode?: 'multi' | 'single';
     /** 单选模式当前选中环境名 */
@@ -328,15 +335,28 @@
     modelValues?: string[];
     /** 是否允许切换单选/多选模式 */
     multiSelectable?: boolean;
+    /** 下拉面板宽度，默认 4 列为 800、2 列为 560 */
+    popoverWidth?: number;
     /** 单选值暂未出现在环境列表时，是否保留外部传入值 */
     preserveMissingModelValue?: boolean;
+    /** 是否展示触发器左侧的“环境”前缀 */
+    showEnvPrefix?: boolean;
+    /** 是否展示“仅显示已部署环境”筛选 */
+    showOnlyDeployedFilter?: boolean;
+    /** 选中环境时是否同步部署页当前环境 */
+    syncEnvStore?: boolean;
     /** 业务类型标识 */
     type?: string;
   }
 
   defineOptions({ inheritAttrs: false });
 
-  const props = defineProps<IProps>();
+  const props = withDefaults(defineProps<IProps>(), {
+    columns: 4,
+    showEnvPrefix: true,
+    showOnlyDeployedFilter: true,
+    syncEnvStore: true,
+  });
   const emits = defineEmits<Emits>();
 
   const envStore = useDeployEnvStore();
@@ -362,21 +382,26 @@
   /** 环境类型分组顺序：开发 -> 测试 -> 预发布 -> 生产 */
   const envTypeOrder = ['development', 'test', 'staging', 'production'];
   const FEATURE_ENV_KIND = 'feature';
+  const panelWidth = computed(() => props.popoverWidth || (props.columns === 2 ? 560 : 800));
+  const selectableEnvList = computed(() => {
+    if (!props.kinds?.length) return envList.value;
+    return envList.value.filter(env => props.kinds?.includes(env.kind || 'standard'));
+  });
 
   /** 单选模式下当前选中的环境对象 */
-  const selectedEnvItem = computed(() => envList.value.find(item => item.name === props.modelValue));
+  const selectedEnvItem = computed(() => selectableEnvList.value.find(item => item.name === props.modelValue));
   /** 多选模式下当前选中的所有环境对象 */
   const selectedMultiEnvItems = computed(() => {
     if (mode.value !== 'multi') return [];
     return (props.modelValues || [])
-      .map(name => envList.value.find(item => item.name === name))
+      .map(name => selectableEnvList.value.find(item => item.name === name))
       .filter((item): item is EnvOutput => !!item);
   });
   /** 多选模式的 Tag 名称列表，供 OverflowTags 进行宽度估算 */
   const multiEnvDisplayNames = computed(() => selectedMultiEnvItems.value.map(item => item.displayName ?? ''));
   const normalizedSearchKeyword = computed(() => searchKeyword.value.trim().toLowerCase());
   /** 父子关系仅随环境列表变化，避免搜索或部署过滤变化时重复构建映射 */
-  const envFeatureRelations = computed(() => buildEnvFeatureRelations(envList.value));
+  const envFeatureRelations = computed(() => buildEnvFeatureRelations(selectableEnvList.value));
 
   /** 将特性环境关联到来源环境，无法关联的特性环境按独立环境处理 */
   function buildEnvFeatureRelations(list: EnvOutput[]): EnvFeatureRelations {
@@ -518,16 +543,18 @@
    * 自动过滤 NotReady 环境，并同步选中项与 modelValues
    */
   function emitMultiEnvChange(values: string[], options: { fallbackWhenEmpty?: boolean } = {}) {
-    let validValues = values.filter(v => envList.value.some(item => item.name === v && item.status !== 'NotReady'));
+    let validValues = values.filter(v =>
+      selectableEnvList.value.some(item => item.name === v && item.status !== 'NotReady'),
+    );
     if (options.fallbackWhenEmpty && values.length && validValues.length === 0 && props.initFirstEnvWhenEmpty) {
-      const firstEnv = envList.value.find(item => item.status !== 'NotReady');
+      const firstEnv = selectableEnvList.value.find(item => item.status !== 'NotReady');
       validValues = firstEnv?.name ? [firstEnv.name] : [];
     }
     if (!isEqual(validValues, props.modelValues || [])) {
       emits('update:modelValues', validValues);
     }
     const selectedItems = validValues
-      .map(name => envList.value.find(item => item.name === name))
+      .map(name => selectableEnvList.value.find(item => item.name === name))
       .filter((item): item is EnvOutput => !!item);
     emits('update:items', selectedItems);
   }
@@ -568,8 +595,10 @@
 
   /** 单选模式的选中值变更处理 */
   function handleEnvChange(env: string) {
-    const envItem = envList.value.find(item => item.name === env && item.status !== 'NotReady');
-    envStore.updateCurrentEnv(envItem?.name || '');
+    const envItem = selectableEnvList.value.find(item => item.name === env && item.status !== 'NotReady');
+    if (props.syncEnvStore) {
+      envStore.updateCurrentEnv(envItem?.name || '');
+    }
     emits('update:item', envItem);
     emits('update:modelValue', envItem?.name || '');
   }
@@ -584,7 +613,7 @@
       if (props.modelValues?.length) {
         emitMultiEnvChange(props.modelValues, { fallbackWhenEmpty: true });
       } else if (props.initFirstEnvWhenEmpty) {
-        const firstEnv = envList.value.find(item => item.status !== 'NotReady');
+        const firstEnv = selectableEnvList.value.find(item => item.status !== 'NotReady');
         if (firstEnv?.name) {
           emitMultiEnvChange([firstEnv.name]);
         }
@@ -592,15 +621,16 @@
     } else {
       // 单选模式初始化
       if (props.modelValue) {
-        const selectedEnv = envList.value.find(item => item.name === props.modelValue);
+        const selectedEnv = selectableEnvList.value.find(item => item.name === props.modelValue);
         if (!selectedEnv && props.preserveMissingModelValue) {
           emits('update:modelValue', props.modelValue);
         } else {
           handleEnvChange(props.modelValue);
         }
       } else if (props.initFirstEnvWhenEmpty) {
-        const currentEnvExists = envStore.currentEnv && envList.value.some(item => item.name === envStore.currentEnv);
-        const env = currentEnvExists ? envStore.currentEnv : envList.value[0]?.name || '';
+        const currentEnvExists =
+          envStore.currentEnv && selectableEnvList.value.some(item => item.name === envStore.currentEnv);
+        const env = currentEnvExists ? envStore.currentEnv : selectableEnvList.value[0]?.name || '';
         if (env) handleEnvChange(env);
       }
     }
@@ -699,7 +729,9 @@
       emitMultiEnvChange(currentValues);
     } else {
       // 单选模式：保持原有逻辑
-      envStore.updateCurrentEnv(env.name);
+      if (props.syncEnvStore) {
+        envStore.updateCurrentEnv(env.name);
+      }
       emits('update:item', env);
       emits('update:modelValue', env.name);
       popoverRef.value?.hide();
