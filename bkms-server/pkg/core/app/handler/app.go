@@ -167,7 +167,12 @@ func (h *Handler) CreateApp(c *gin.Context) {
 	if err = build.ValidatePlatformBuildImages(
 		ctx, imageReferenceValidator, h.persistMgr, buildConfig, app.WorkspaceID,
 	); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
+		// 镜像源鉴权失败或不可达时改镜像引用也没用，按内部错误上报；其余按参数问题
+		errCode := bkerrs.ErrCodeInvalidArgument
+		if build.IsImageRegistryFailure(err) {
+			errCode = bkerrs.ErrCodeInternalServerError
+		}
+		bkerrs.AbortWithErr(c, bkerrs.New(errCode, err.Error()))
 		return
 	}
 	if err = bkci.EnsureWorkspaceRepositories(
@@ -183,20 +188,21 @@ func (h *Handler) CreateApp(c *gin.Context) {
 		return
 	}
 
-	// 构建配置已落库后再异步 get_or_create 自定义镜像记录；仅新建时触发快照
-	// 失败只打日志，不回滚本次已保存的构建配置；WithoutCancel 避免请求结束后 persist 被取消
+	// 根据应用类型创建特定资源（复用现有逻辑）
+	if err = h.createAppByType(ctx, app, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	// 应用与构建配置都已落库后再异步 get_or_create 自定义镜像记录，尚无成功快照的镜像会触发一次刷新
+	// 放在应用创建之后，避免创建失败时仍往工作空间写入候选镜像
+	// 失败只打日志，不回滚已保存的数据；WithoutCancel 避免请求结束后 persist 被取消
 	go func() {
 		rCtx := context.WithoutCancel(ctx)
 		if persistErr := h.persistMgr.PersistAfterSave(rCtx, app.WorkspaceID, buildConfig); persistErr != nil {
 			log.Errorf(rCtx, "persist custom runtime images for workspace %s failed: %v", app.WorkspaceID, persistErr)
 		}
 	}()
-
-	// 根据应用类型创建特定资源（复用现有逻辑）
-	if err = h.createAppByType(ctx, app, &input); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
 
 	// 创建应用后，异步为该应用初始化默认监控告警策略，应用部署后真正下发到监控平台
 	go func() {

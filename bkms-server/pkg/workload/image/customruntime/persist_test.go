@@ -20,12 +20,14 @@ package customruntime
 
 import (
 	"context"
+	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -88,7 +90,17 @@ var _ = Describe("PersistManager", func() {
 		return NewPersistManager(store, snapshotSvc)
 	}
 
+	// mockSnapshotStatus 模拟快照状态：refreshedAt 为 nil 表示该镜像从未成功刷新过
+	mockSnapshotStatus := func(refreshedAt *time.Time) {
+		var status *snapshot.RepoSnapshotStatus
+		if refreshedAt != nil {
+			status = &snapshot.RepoSnapshotStatus{LastRefreshedAt: refreshedAt}
+		}
+		mockey.Mock((*snapshot.Service).GetWorkspaceSnapshotStatus).Return(status, nil).Build()
+	}
+
 	It("writes a new custom image and refreshes snapshots", func() {
+		mockSnapshotStatus(nil)
 		refreshCalls := 0
 		mockey.Mock((*snapshot.Service).RefreshWorkspaceSnapshots).To(
 			func(_ *snapshot.Service, _ context.Context, gotWorkspaceID, gotImageName string) (*snapshot.RefreshResult, error) {
@@ -112,9 +124,10 @@ var _ = Describe("PersistManager", func() {
 		Expect(runnerErr).To(MatchError(ErrCustomRuntimeImageNotFound))
 	})
 
-	It("does not refresh snapshots when the custom image already exists", func() {
+	It("does not refresh snapshots when the image already has a successful snapshot", func() {
 		existing := &Image{WorkspaceID: workspaceID, Type: ImageTypeBuilder, Name: imageName}
 		Expect(store.Upsert(ctx, existing)).To(Succeed())
+		mockSnapshotStatus(lo.ToPtr(time.Now()))
 
 		refreshCalls := 0
 		mockey.Mock((*snapshot.Service).RefreshWorkspaceSnapshots).To(
@@ -133,7 +146,29 @@ var _ = Describe("PersistManager", func() {
 		Expect(got.ID).To(Equal(existing.ID))
 	})
 
+	It("retries the refresh when the record exists but was never refreshed successfully", func() {
+		// 首次刷新失败的现场：记录已落库，但快照状态里没有成功刷新时间
+		Expect(store.Upsert(ctx, &Image{
+			WorkspaceID: workspaceID, Type: ImageTypeBuilder, Name: imageName,
+		})).To(Succeed())
+		mockSnapshotStatus(nil)
+
+		refreshCalls := 0
+		mockey.Mock((*snapshot.Service).RefreshWorkspaceSnapshots).To(
+			func(_ *snapshot.Service, _ context.Context, _, _ string) (*snapshot.RefreshResult, error) {
+				refreshCalls++
+				return &snapshot.RefreshResult{}, nil
+			},
+		).Build()
+
+		err := newManager().PersistAfterSave(ctx, workspaceID, platformPersistConfig(imageRef, "debian:12"))
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(refreshCalls).To(Equal(1))
+	})
+
 	It("keeps the persisted record when snapshot refresh fails", func() {
+		mockSnapshotStatus(nil)
 		mockey.Mock((*snapshot.Service).RefreshWorkspaceSnapshots).Return(
 			nil, errors.New("refresh failed"),
 		).Build()

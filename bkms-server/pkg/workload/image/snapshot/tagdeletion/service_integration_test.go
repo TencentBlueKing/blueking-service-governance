@@ -192,11 +192,13 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		var deletedTag string
 		// 避免真实访问仓库，只记录 service 传给 registry client 的删除参数。
 		mockey.Mock(registry.New).Return(&registry.Client{}).Build()
-		mockey.Mock((*registry.Client).DeleteTag).To(func(_ *registry.Client, repoName, tag string) error {
-			deletedRepoName = repoName
-			deletedTag = tag
-			return nil
-		}).Build()
+		mockey.Mock((*registry.Client).DeleteTag).To(
+			func(_ *registry.Client, _ context.Context, repoName, tag string) error {
+				deletedRepoName = repoName
+				deletedTag = tag
+				return nil
+			},
+		).Build()
 
 		err = service.DeleteImageTag(ctx, fixture.app.ID, fixture.inUseTag)
 		Expect(err).NotTo(HaveOccurred())
@@ -235,9 +237,11 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
 		mockey.Mock(registry.New).Return(&registry.Client{}).Build()
-		mockey.Mock((*registry.Client).DeleteTag).To(func(_ *registry.Client, _, _ string) error {
-			return pkgerrors.New("delete tag: UNAUTHORIZED: authentication required")
-		}).Build()
+		mockey.Mock((*registry.Client).DeleteTag).To(
+			func(_ *registry.Client, _ context.Context, _, _ string) error {
+				return pkgerrors.New("delete tag: UNAUTHORIZED: authentication required")
+			},
+		).Build()
 
 		err := service.DeleteImageTag(ctx, fixture.app.ID, fixture.inUseTag)
 		Expect(err).To(HaveOccurred())

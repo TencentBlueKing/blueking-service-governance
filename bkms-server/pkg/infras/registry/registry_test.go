@@ -19,6 +19,7 @@
 package registry
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -45,11 +46,13 @@ func localRepoName(repo string) string {
 var _ = Describe("Registry Client", func() {
 	var regCli *Client
 	var sampleRepo string
+	var ctx context.Context
 
 	BeforeEach(func() {
 		// Local test registry access (insecure)
 		regCli = New("", "", true)
 		sampleRepo = localRepoName("fixture/sample")
+		ctx = context.Background()
 	})
 
 	AfterEach(func() {
@@ -95,7 +98,7 @@ var _ = Describe("Registry Client", func() {
 	Describe("ListTags", func() {
 		Context("when listing tags for nginx repository", func() {
 			It("should return a list of tags", func() {
-				tags, total, err := regCli.ListTags(sampleRepo, "", 1, 500)
+				tags, total, err := regCli.ListTags(ctx, sampleRepo, "", 1, 500)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(len(tags)).To(Equal(total))
 				Expect(tags).NotTo(BeEmpty())
@@ -105,7 +108,7 @@ var _ = Describe("Registry Client", func() {
 
 		Context("when repository name is invalid", func() {
 			It("should return an error", func() {
-				_, _, err := regCli.ListTags(localRepoName("invalid-repo"), "", 1, 5)
+				_, _, err := regCli.ListTags(ctx, localRepoName("invalid-repo"), "", 1, 5)
 				Expect(err).To(HaveOccurred())
 			})
 		})
@@ -114,7 +117,7 @@ var _ = Describe("Registry Client", func() {
 	Describe("GetTagDetail", func() {
 		Context("when getting details for nginx:latest", func() {
 			It("should return image details", func() {
-				detail, err := regCli.GetTagDetail(sampleRepo, "latest")
+				detail, err := regCli.GetTagDetail(ctx, sampleRepo, "latest")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(detail.Tag).To(Equal("latest"))
 				Expect(detail.Digest).NotTo(BeEmpty())
@@ -125,7 +128,7 @@ var _ = Describe("Registry Client", func() {
 
 		Context("when tag does not exist", func() {
 			It("should return an error", func() {
-				_, err := regCli.GetTagDetail(sampleRepo, "nonexistent-tag-12345")
+				_, err := regCli.GetTagDetail(ctx, sampleRepo, "nonexistent-tag-12345")
 				Expect(err).To(HaveOccurred())
 			})
 		})
@@ -147,7 +150,28 @@ var _ = Describe("Registry Client", func() {
 			}).Build()
 
 			client := New("", "", true)
-			Expect(client.HeadManifest("registry.example.com/"+repoName, tagName)).To(Succeed())
+			Expect(client.HeadManifest(ctx, "registry.example.com/"+repoName, tagName)).To(Succeed())
+		})
+
+		It("should append the caller context to the base remote options", func() {
+			const (
+				repoName = "fixture/sample"
+				tagName  = "latest"
+			)
+
+			var gotOptCount int
+			mockey.Mock(remote.Head).To(func(_ name.Reference, opts ...remote.Option) (*v1.Descriptor, error) {
+				gotOptCount = len(opts)
+				return nil, fmt.Errorf("stop here")
+			}).Build()
+
+			client := New("", "", true)
+			baseOptCount := len(client.remoteOpts)
+			_ = client.HeadManifest(ctx, "registry.example.com/"+repoName, tagName)
+
+			// 多出的一项即 remote.WithContext；同时确认基础选项没有被就地追加污染
+			Expect(gotOptCount).To(Equal(baseOptCount + 1))
+			Expect(client.remoteOpts).To(HaveLen(baseOptCount))
 		})
 
 		It("should classify tag not found when head returns 404", func() {
@@ -160,7 +184,7 @@ var _ = Describe("Registry Client", func() {
 			}).Build()
 
 			client := New("", "", true)
-			err := client.HeadManifest("registry.example.com/"+repoName, tagName)
+			err := client.HeadManifest(ctx, "registry.example.com/"+repoName, tagName)
 			Expect(err).To(HaveOccurred())
 			Expect(IsTagNotFound(err)).To(BeTrue())
 			Expect(IsAuthRequired(err)).To(BeFalse())
@@ -176,7 +200,7 @@ var _ = Describe("Registry Client", func() {
 			}).Build()
 
 			client := New("", "", true)
-			err := client.HeadManifest("registry.example.com/"+repoName, tagName)
+			err := client.HeadManifest(ctx, "registry.example.com/"+repoName, tagName)
 			Expect(err).To(HaveOccurred())
 			Expect(IsAuthRequired(err)).To(BeTrue())
 			Expect(IsTagNotFound(err)).To(BeFalse())
@@ -207,7 +231,7 @@ var _ = Describe("Registry Client", func() {
 			}).Build()
 
 			client := New("", "", true)
-			err = client.DeleteTag("registry.example.com/"+repoName, tagName)
+			err = client.DeleteTag(ctx, "registry.example.com/"+repoName, tagName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deleteRef).To(Equal("registry.example.com/" + repoName + "@" + digest))
 		})
@@ -225,7 +249,7 @@ var _ = Describe("Registry Client", func() {
 			}).Build()
 
 			client := New("", "", true)
-			err := client.DeleteTag("registry.example.com/"+repoName, tagName)
+			err := client.DeleteTag(ctx, "registry.example.com/"+repoName, tagName)
 			Expect(err).To(HaveOccurred())
 			Expect(IsTagNotFound(err)).To(BeTrue())
 			Expect(err.Error()).To(ContainSubstring("head manifest"))
@@ -236,7 +260,7 @@ var _ = Describe("Registry Client", func() {
 	Describe("ListTagsWithDetail", func() {
 		Context("when getting detail for all tags", func() {
 			It("should return detail for all tags", func() {
-				details, total, err := regCli.ListTagsWithDetail(sampleRepo, "1.0.0", 1, 10)
+				details, total, err := regCli.ListTagsWithDetail(ctx, sampleRepo, "1.0.0", 1, 10)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(total).To(BeNumerically(">=", 1))
 				Expect(details).NotTo(BeEmpty())
@@ -252,7 +276,7 @@ var _ = Describe("Registry Client", func() {
 
 		Context("when repository does not exist", func() {
 			It("should return an error", func() {
-				_, _, err := regCli.ListTagsWithDetail(localRepoName("nonexistent-repo-12345"), "", 1, 5)
+				_, _, err := regCli.ListTagsWithDetail(ctx, localRepoName("nonexistent-repo-12345"), "", 1, 5)
 				Expect(err).To(HaveOccurred())
 			})
 		})
@@ -279,13 +303,13 @@ var _ = Describe("Registry Client", func() {
 		Context("when testing with local registry sample repository", func() {
 			It("should perform end-to-end operations", func() {
 				By("listing tags for sample repository")
-				tags, total, err := regCli.ListTags(sampleRepo, "", 1, 10)
+				tags, total, err := regCli.ListTags(ctx, sampleRepo, "", 1, 10)
 				Expect(total).To(BeNumerically(">=", 1))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(tags).NotTo(BeEmpty())
 
 				By("getting details for the latest tag")
-				detail, err := regCli.GetTagDetail(sampleRepo, "latest")
+				detail, err := regCli.GetTagDetail(ctx, sampleRepo, "latest")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(detail.Tag).To(Equal("latest"))
 				Expect(detail.Size).To(BeNumerically(">", 0))
@@ -295,7 +319,7 @@ var _ = Describe("Registry Client", func() {
 				Expect(humanSize).To(MatchRegexp(`^\d+(\.\d+)?\s+B$`))
 
 				By("getting all repository details")
-				details, total, err := regCli.ListTagsWithDetail(sampleRepo, "", 1, 15)
+				details, total, err := regCli.ListTagsWithDetail(ctx, sampleRepo, "", 1, 15)
 				Expect(total).To(BeNumerically(">=", 1))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(details).NotTo(BeEmpty())

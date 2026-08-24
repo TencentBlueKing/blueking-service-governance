@@ -66,6 +66,9 @@ func NewService(
 	if imageReferenceValidator == nil {
 		return nil, errors.New("imageReferenceValidator must not be nil")
 	}
+	if customImageChecker == nil {
+		return nil, errors.New("customImageChecker must not be nil")
+	}
 	return &Service{
 		buildConfigStore:        buildConfigStore,
 		buildRecordStore:        buildRecordStore,
@@ -96,7 +99,8 @@ func (s *Service) validateBeforeBuild(ctx context.Context, app *bkmsapp.Applicat
 	if app.TrpcSpec == nil || app.TrpcSpec.Language != appmodel.LanguageGo {
 		return errors.New("platform generated Dockerfile build only supports Go language for now")
 	}
-	// 确保平台构建选择的 builder & runner 镜像都来自平台维护的运行时镜像清单
+	// 确保 builder & runner 镜像可用：落在工作空间生效镜像源路径下的按自定义镜像向仓库确认，
+	// 其余仍要求来自平台维护的运行时镜像清单
 	if err := ValidatePlatformBuildImages(
 		ctx, s.imageReferenceValidator, s.customImageChecker, cfg, app.WorkspaceID,
 	); err != nil {

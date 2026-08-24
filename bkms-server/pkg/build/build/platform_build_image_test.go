@@ -270,6 +270,9 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			Expect(err).To(MatchError(ContainSubstring(
 				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage custom image docker.bkrepo.example.com/demo/repo/missing does not exist in workspace registry",
 			)))
+			// 用户填错镜像名，handler 应按参数问题处理
+			Expect(IsImageReferenceInvalid(err)).To(BeTrue())
+			Expect(IsImageRegistryFailure(err)).To(BeFalse())
 		})
 	})
 
@@ -294,6 +297,35 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			Expect(err).To(MatchError(ContainSubstring(
 				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage workspace registry access failed",
 			)))
+			// 仓库不可达不是用户能改的，handler 应按内部错误上报
+			Expect(IsImageRegistryFailure(err)).To(BeTrue())
+			Expect(IsImageReferenceInvalid(err)).To(BeFalse())
+		})
+	})
+
+	It("attributes a registry auth failure to the registry rather than the user", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			validator := &workloadruntime.ImageReferenceValidator{}
+			customImage := "docker.bkrepo.example.com/demo/repo/my-golang:1.0"
+			cfg := platformConfig(func(c *imagebuild.Config) {
+				c.CodeRepo.PlatformBuildConfig.BuilderImage = customImage
+			})
+			checker := &stubCustomChecker{
+				matches: map[string]bool{
+					"docker.bkrepo.example.com/demo/repo/my-golang": true,
+				},
+				validateErrs: map[string]error{
+					customImage: customruntime.ErrRegistryAccessDenied,
+				},
+			}
+
+			err := ValidatePlatformBuildImages(context.Background(), validator, checker, cfg, "ws-demo")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage workspace registry auth failed",
+			)))
+			Expect(IsImageRegistryFailure(err)).To(BeTrue())
+			Expect(IsImageReferenceInvalid(err)).To(BeFalse())
 		})
 	})
 

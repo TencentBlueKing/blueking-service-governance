@@ -178,7 +178,13 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "start build auto deploy"))
+		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错属参数问题，
+		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
+		errCode := bkerrs.ErrCodeInternalServerError
+		if build.IsImageReferenceInvalid(err) {
+			errCode = bkerrs.ErrCodeInvalidArgument
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start build auto deploy"))
 		return
 	}
 

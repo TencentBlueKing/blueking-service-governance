@@ -77,7 +77,7 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			mockey.Mock((*registry.Client).GetTagDetail).
-				To(func(_ *registry.Client, repoName, tag string) (registry.ImageDetail, error) {
+				To(func(_ *registry.Client, _ context.Context, repoName, tag string) (registry.ImageDetail, error) {
 					Expect(repoName).To(Equal(info.RepoName))
 					builtAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 					return registry.ImageDetail{
@@ -126,7 +126,7 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			mockey.Mock((*registry.Client).GetTagDetail).
-				To(func(_ *registry.Client, _, tag string) (registry.ImageDetail, error) {
+				To(func(_ *registry.Client, _ context.Context, _, tag string) (registry.ImageDetail, error) {
 					if tag == "v1.1.0" {
 						return registry.ImageDetail{}, errors.Errorf("detail lookup failed")
 					}
@@ -179,7 +179,7 @@ var _ = Describe("DetailSyncer", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 			mockey.Mock((*registry.Client).GetTagDetail).
-				To(func(*registry.Client, string, string) (registry.ImageDetail, error) {
+				To(func(*registry.Client, context.Context, string, string) (registry.ImageDetail, error) {
 					Fail("GetTagDetail should not be called")
 					return registry.ImageDetail{}, nil
 				}).
@@ -223,7 +223,7 @@ var _ = Describe("DetailSyncer", func() {
 
 			freshBuiltAt := time.Date(2026, 4, 23, 11, 52, 14, 0, time.UTC)
 			mockey.Mock((*registry.Client).GetTagDetail).
-				To(func(_ *registry.Client, _, tag string) (registry.ImageDetail, error) {
+				To(func(_ *registry.Client, _ context.Context, _, tag string) (registry.ImageDetail, error) {
 					if tag == "core-test-02" {
 						return registry.ImageDetail{}, errors.Errorf("registry unreachable")
 					}
@@ -271,7 +271,7 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			mockey.Mock((*registry.Client).GetTagDetail).
-				To(func(*registry.Client, string, string) (registry.ImageDetail, error) {
+				To(func(*registry.Client, context.Context, string, string) (registry.ImageDetail, error) {
 					Fail("GetTagDetail should not be called")
 					return registry.ImageDetail{}, nil
 				}).
@@ -296,7 +296,7 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			mockey.Mock((*registry.Client).GetTagDetail).
-				To(func(*registry.Client, string, string) (registry.ImageDetail, error) {
+				To(func(*registry.Client, context.Context, string, string) (registry.ImageDetail, error) {
 					Fail("GetTagDetail should not be called")
 					return registry.ImageDetail{}, nil
 				}).

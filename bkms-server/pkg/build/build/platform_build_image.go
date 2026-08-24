@@ -50,10 +50,17 @@ type CustomImageChecker interface {
 	ValidateTaggedReference(ctx context.Context, workspaceID, image string) error
 }
 
+// 编译期接口实现检查（断言放在接口定义处：customruntime 不能反向依赖本包）
+var (
+	_ CustomImageChecker = (*customruntime.ExistenceChecker)(nil)
+	_ CustomImageChecker = (*customruntime.PersistManager)(nil)
+)
+
 // ValidatePlatformBuildImages 校验平台通用构建配置中的 builderImage 和 runnerImage
 //
 // builder / runner 各自独立判定：落在工作空间生效镜像源路径下走自定义存在性确认，
-// 否则维持官方 runtime_images + 快照口径
+// 否则维持官方 runtime_images + 快照口径。
+// customChecker 或 workspaceID 为空时全部按官方口径校验，便于无工作空间上下文时直接调用
 func ValidatePlatformBuildImages(
 	ctx context.Context,
 	validator ImageReferenceValidator,
@@ -140,11 +147,13 @@ func validatePlatformBuildImage(
 		return errors.Wrapf(err, "%s is invalid", field)
 	}
 
+	// 与自定义镜像一致地保留哨兵错误，供 handler 用 errors.Is 判定归因后选错误码
 	switch {
 	case errors.Is(err, workloadruntime.ErrRuntimeImageNotFound):
-		return errors.Errorf("%s runtime image %s does not exist", field, validated.Name)
+		return errors.Wrapf(err, "%s runtime image %s does not exist", field, validated.Name)
 	case errors.Is(err, workloadruntime.ErrRuntimeImageTagNotFound):
-		return errors.Errorf(
+		return errors.Wrapf(
+			err,
 			"%s tag %s does not exist in runtime image %s snapshot",
 			field,
 			validated.Tag,
@@ -155,13 +164,16 @@ func validatePlatformBuildImage(
 	}
 }
 
-// newCustomImageValidateError 把自定义镜像校验错误映射成带字段路径的 INVALID_ARGUMENT 文案
+// newCustomImageValidateError 把自定义镜像校验错误映射成带字段路径的文案。
+//
+// 一律保留底层哨兵错误：调用方需要用 errors.Is 区分「用户填错镜像引用」与「镜像源本身故障」，
+// 两者对应的 HTTP 错误码不同，而错误码只在 handler 层决定
 func newCustomImageValidateError(field string, ref *workloadruntime.ImageReference, err error) error {
 	switch {
 	case errors.Is(err, customruntime.ErrImageNameNotFound):
-		return errors.Errorf("%s custom image %s does not exist in workspace registry", field, ref.Name)
+		return errors.Wrapf(err, "%s custom image %s does not exist in workspace registry", field, ref.Name)
 	case errors.Is(err, customruntime.ErrImageTagNotFound):
-		return errors.Errorf("%s tag %s does not exist in custom image %s", field, ref.Tag, ref.Name)
+		return errors.Wrapf(err, "%s tag %s does not exist in custom image %s", field, ref.Tag, ref.Name)
 	case errors.Is(err, customruntime.ErrRegistryAccessDenied):
 		return errors.Wrapf(err, "%s workspace registry auth failed", field)
 	case errors.Is(err, customruntime.ErrRegistryAccessFailed):
@@ -169,4 +181,22 @@ func newCustomImageValidateError(field string, ref *workloadruntime.ImageReferen
 	default:
 		return errors.Wrapf(err, "validate %s", field)
 	}
+}
+
+// IsImageRegistryFailure 判断镜像校验失败是否源于工作空间镜像源本身（鉴权失败或不可达）。
+//
+// 这类失败改镜像引用也解决不了，handler 应按内部错误上报，不能归为参数问题
+func IsImageRegistryFailure(err error) bool {
+	return errors.Is(err, customruntime.ErrRegistryAccessDenied) ||
+		errors.Is(err, customruntime.ErrRegistryAccessFailed)
+}
+
+// IsImageReferenceInvalid 判断镜像校验失败是否为用户可自行修正的镜像引用问题。
+//
+// 覆盖官方运行时镜像与工作空间自定义镜像两条口径，handler 据此返回参数类错误
+func IsImageReferenceInvalid(err error) bool {
+	return errors.Is(err, workloadruntime.ErrRuntimeImageNotFound) ||
+		errors.Is(err, workloadruntime.ErrRuntimeImageTagNotFound) ||
+		errors.Is(err, customruntime.ErrImageNameNotFound) ||
+		errors.Is(err, customruntime.ErrImageTagNotFound)
 }

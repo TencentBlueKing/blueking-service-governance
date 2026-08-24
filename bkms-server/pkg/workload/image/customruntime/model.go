@@ -22,6 +22,13 @@
 // 维度、带描述且由平台维护，自定义镜像归属某个工作空间、无描述且由用户在构建配置
 // 中隐式添加。实体类型不共用，避免官方镜像被自定义镜像的演进牵连；builder / runner
 // 枚举与官方镜像相同，因此 ImageType 直接复用 runtime 包的定义。
+//
+// 本包只存镜像仓库名（不含 tag），不存 tag：可用 tag 属于快照数据，由
+// pkg/workload/image/snapshot 按 repoKey 维护，本包在新镜像入库时触发它初始化一次。
+//
+// 记录的产生是隐式的：用户在构建配置里填了一个落在本工作空间生效镜像源路径下的镜像，
+// 保存成功后由 PersistManager 补登记，用于下次填写时作为候选项展示，没有独立的增删接口。
+// 三个环节分别是 existence.go 判定归属与存在性、store.go 落库、persist.go 编排两者。
 package customruntime
 
 import (

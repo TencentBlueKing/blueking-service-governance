@@ -104,7 +104,7 @@ func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
 	}
 
 	client := registry.New(info.Username, info.Password, true)
-	if err = client.DeleteTag(info.RepoName, tag); err != nil {
+	if err = client.DeleteTag(ctx, info.RepoName, tag); err != nil {
 		if registry.IsAuthRequired(err) {
 			return errors.Wrapf(ErrImageRepoAuthRequired, "registry authentication required: %v", err)
 		}

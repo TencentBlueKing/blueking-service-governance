@@ -124,27 +124,16 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		return
 	}
 
-	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.RuntimeImageStore,
-		h.registry.SnapshotStore,
-	)
-	if err = build.ValidatePlatformBuildImages(
-		ctx, imageReferenceValidator, h.persistMgr, cfg, app.WorkspaceID,
-	); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
+	// 校验放在所有副作用之前，避免非法配置已登记代码库或落库
+	if err = h.validatePlatformBuildImages(ctx, app.WorkspaceID, cfg); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	if cfg != nil && cfg.SourceType == imagebuild.SourceTypeCodeRepository && cfg.CodeRepo != nil {
-		if err = bkci.EnsureWorkspaceRepositories(ctx, app.WorkspaceID, []bkci.RepositoryInitSpec{{
-			URL:   cfg.CodeRepo.RepoURL,
-			Alias: cfg.CodeRepo.RepoAlias,
-		}}); err != nil {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"),
-			)
-			return
-		}
+
+	// 登记代码库放在落库之前，蓝盾侧失败时本次配置整体不生效
+	if err = h.ensureCodeRepositoryRegistered(ctx, app.WorkspaceID, cfg); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
 	}
 
 	if err = h.registry.BuildConfigStore.Update(ctx, cfg); err != nil {
@@ -154,6 +143,58 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		return
 	}
 
+	// 收尾读已生效的配置，必须在落库成功之后
+	h.scheduleBuildConfigUpdateFollowUps(ctx, app, dataBefore, cfg)
+
+	ginutils.OK(c, buildserializer.UpdateBuildConfigOutput{
+		Data: new(buildserializer.BuildConfigOutputObj).FromModel(cfg),
+	})
+}
+
+// validatePlatformBuildImages 校验平台构建的 builder / runner 镜像，镜像源故障报内部错误，其余报参数错误
+func (h *Handler) validatePlatformBuildImages(
+	ctx context.Context, workspaceID string, cfg *imagebuild.Config,
+) error {
+	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
+		h.registry.RuntimeImageStore,
+		h.registry.SnapshotStore,
+	)
+	err := build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, h.persistMgr, cfg, workspaceID)
+	if err == nil {
+		return nil
+	}
+
+	errCode := bkerrs.ErrCodeInvalidArgument
+	if build.IsImageRegistryFailure(err) {
+		errCode = bkerrs.ErrCodeInternalServerError
+	}
+	return bkerrs.New(errCode, err.Error())
+}
+
+// ensureCodeRepositoryRegistered 把代码库来源的构建配置登记到蓝盾，登记幂等，其余来源直接跳过
+func (h *Handler) ensureCodeRepositoryRegistered(
+	ctx context.Context, workspaceID string, cfg *imagebuild.Config,
+) error {
+	if cfg == nil || cfg.SourceType != imagebuild.SourceTypeCodeRepository || cfg.CodeRepo == nil {
+		return nil
+	}
+	if err := bkci.EnsureWorkspaceRepositories(ctx, workspaceID, []bkci.RepositoryInitSpec{{
+		URL:   cfg.CodeRepo.RepoURL,
+		Alias: cfg.CodeRepo.RepoAlias,
+	}}); err != nil {
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories")
+	}
+	return nil
+}
+
+// scheduleBuildConfigUpdateFollowUps 异步收尾：快照刷新、自定义镜像落库、审计记录，失败只打日志不回滚
+//
+// WithoutCancel 重建 context，避免请求返回后协程被连带取消
+func (h *Handler) scheduleBuildConfigUpdateFollowUps(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	dataBefore, cfg *imagebuild.Config,
+) {
 	go func() {
 		rCtx := context.WithoutCancel(ctx)
 		refreshErr := h.triggerSnapshotRefreshOnConfigChange(rCtx, app.ID, dataBefore, cfg)
@@ -162,8 +203,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		}
 	}()
 
-	// 构建配置已落库后再异步 get_or_create 自定义镜像记录；仅新建时触发快照
-	// 失败只打日志，不回滚本次已保存的构建配置；WithoutCancel 避免请求结束后 persist 被取消
+	// 尚无成功快照的自定义镜像会在这里触发一次刷新；失败不回滚已保存的构建配置
 	go func() {
 		rCtx := context.WithoutCancel(ctx)
 		if persistErr := h.persistMgr.PersistAfterSave(rCtx, app.WorkspaceID, cfg); persistErr != nil {
@@ -182,10 +222,6 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
 	)
-
-	ginutils.OK(c, buildserializer.UpdateBuildConfigOutput{
-		Data: new(buildserializer.BuildConfigOutputObj).FromModel(cfg),
-	})
 }
 
 // ListBuildRecords 获取应用构建记录列表。
@@ -294,7 +330,13 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 		build.StartOptions{},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "start and schedule build"))
+		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错属参数问题，
+		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
+		errCode := bkerrs.ErrCodeInternalServerError
+		if build.IsImageReferenceInvalid(err) {
+			errCode = bkerrs.ErrCodeInvalidArgument
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start and schedule build"))
 		return
 	}
 
@@ -351,7 +393,7 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 			return
 		}
 		client := registry.New(repoInfo.Username, repoInfo.Password, true)
-		tags, listErr := client.ListAllTags(repoInfo.RepoName)
+		tags, listErr := client.ListAllTags(ctx, repoInfo.RepoName)
 		if listErr != nil {
 			bkerrs.AbortWithErr(
 				c, bkerrs.Wrapf(listErr, bkerrs.ErrCodeInternalServerError, "list tags for %s", repoInfo.RepoName),

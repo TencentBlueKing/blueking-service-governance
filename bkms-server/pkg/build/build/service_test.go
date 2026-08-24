@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 )
 
@@ -121,4 +122,35 @@ var _ = Describe("Service build validation", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 	})
+
+	// validateBeforeBuild 用 pkg/errors 逐层包装校验错误，handler 依赖包装后仍能用 errors.Is
+	// 区分「镜像填错」与「镜像源故障」来选 HTTP 错误码，因此断言真实调用链上的归因没有丢
+	DescribeTable("keeps the failure attribution through the wrap chain",
+		func(validateErr error, wantReferenceInvalid, wantRegistryFailure bool) {
+			const (
+				customImageName = "docker.bkrepo.example.com/demo/repo/my-golang"
+				customImage     = customImageName + ":1.0"
+			)
+			cfg.CodeRepo.PlatformBuildConfig.BuilderImage = customImage
+			buildService.customImageChecker = &stubCustomChecker{
+				matches:      map[string]bool{customImageName: true},
+				validateErrs: map[string]error{customImage: validateErr},
+			}
+
+			err := buildService.validateBeforeBuild(ctx, app, cfg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ContainSubstring("validate platform generated Dockerfile build images")))
+			Expect(IsImageReferenceInvalid(err)).To(Equal(wantReferenceInvalid))
+			Expect(IsImageRegistryFailure(err)).To(Equal(wantRegistryFailure))
+		},
+		Entry("image name not found is a user input problem",
+			customruntime.ErrImageNameNotFound, true, false),
+		Entry("image tag not found is a user input problem",
+			customruntime.ErrImageTagNotFound, true, false),
+		Entry("registry auth failure is not attributable to the user",
+			customruntime.ErrRegistryAccessDenied, false, true),
+		Entry("registry unreachable is not attributable to the user",
+			customruntime.ErrRegistryAccessFailed, false, true),
+	)
 })

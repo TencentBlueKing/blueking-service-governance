@@ -21,6 +21,7 @@ package customruntime
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -30,6 +31,9 @@ import (
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
+
+// existenceCheckTimeout 单次镜像存在性确认的总时间预算，含 HEAD 与可能的 tag 列表回退
+const existenceCheckTimeout = 20 * time.Second
 
 // ExistenceChecker 判断镜像是否属于工作空间生效镜像源，并向仓库确认 name + tag 存在
 type ExistenceChecker struct {
@@ -52,7 +56,7 @@ func (c *ExistenceChecker) MatchesWorkspaceRegistry(
 	}
 	reg, err := c.lookupRegistry(ctx, workspaceID)
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "lookup workspace %s registry", workspaceID)
 	}
 	if reg == nil {
 		return false, nil
@@ -60,7 +64,10 @@ func (c *ExistenceChecker) MatchesWorkspaceRegistry(
 	return nameBelongsToRegistry(imageName, reg.Registry), nil
 }
 
-// ValidateTaggedReference 向生效镜像源确认镜像名与 tag 都真实存在
+// ValidateTaggedReference 向生效镜像源确认镜像名与 tag 都真实存在。
+//
+// 本方法处在创建应用 / 保存构建配置 / 触发构建的同步路径上，因此整段探测有总时间预算，
+// HEAD 与回退的 tag 列表都受同一个 context 约束，超时即中断
 func (c *ExistenceChecker) ValidateTaggedReference(
 	ctx context.Context, workspaceID, image string,
 ) error {
@@ -70,7 +77,7 @@ func (c *ExistenceChecker) ValidateTaggedReference(
 
 	ref, err := workloadruntime.ParseTaggedImageReference(image)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "parse custom runtime image reference %s", image)
 	}
 
 	info, err := c.snapshotSvc.ResolveRepoKeyForWorkspace(ctx, workspaceID, ref.Name)
@@ -78,8 +85,11 @@ func (c *ExistenceChecker) ValidateTaggedReference(
 		return errors.Wrap(err, "resolve workspace registry credentials")
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, existenceCheckTimeout)
+	defer cancel()
+
 	client := infrasreg.New(info.Username, info.Password, true)
-	if err = client.HeadManifest(info.RepoName, ref.Tag); err == nil {
+	if err = client.HeadManifest(ctx, info.RepoName, ref.Tag); err == nil {
 		return nil
 	}
 
@@ -92,7 +102,7 @@ func (c *ExistenceChecker) ValidateTaggedReference(
 	}
 
 	// Head 404 时再列 tag：列表成功说明镜像名在、tag 不在；列表也 404 则镜像名不存在
-	_, listErr := client.ListAllTags(info.RepoName)
+	_, listErr := client.ListAllTags(ctx, info.RepoName)
 	if listErr == nil {
 		return errors.Wrapf(ErrImageTagNotFound, "tag %s", ref.Tag)
 	}
@@ -143,14 +153,28 @@ func classifyRegistryAccessError(err error) error {
 
 // registryPathPrefix 生成带路径边界的前缀，避免 .../repo 误匹配 .../repo-evil
 func registryPathPrefix(registryAddr string) string {
-	return strings.TrimRight(strings.TrimSpace(registryAddr), "/") + "/"
+	return strings.TrimRight(normalizeRegistryAddr(registryAddr), "/") + "/"
+}
+
+// normalizeRegistryAddr 归一化镜像源地址，供路径归属判断使用。
+//
+// 镜像源地址由用户填写且未强制格式（见 workspace serializer 的 ImageRegistryInput），
+// 可能带 scheme；镜像引用里则不会有 scheme。仓库 host 按惯例大小写不敏感，
+// 这里统一转小写，避免仅因大小写或 scheme 差异把自定义镜像误判成官方镜像
+func normalizeRegistryAddr(registryAddr string) string {
+	addr := strings.ToLower(strings.TrimSpace(registryAddr))
+	for _, scheme := range []string{"https://", "http://"} {
+		if trimmed, ok := strings.CutPrefix(addr, scheme); ok {
+			return trimmed
+		}
+	}
+	return addr
 }
 
 // nameBelongsToRegistry 判断不含 tag 的镜像名是否落在生效镜像源路径下
 func nameBelongsToRegistry(imageName, registryAddr string) bool {
-	imageName = strings.TrimSpace(imageName)
-	registryAddr = strings.TrimSpace(registryAddr)
-	if imageName == "" || registryAddr == "" {
+	imageName = strings.ToLower(strings.TrimSpace(imageName))
+	if imageName == "" || normalizeRegistryAddr(registryAddr) == "" {
 		return false
 	}
 	return strings.HasPrefix(imageName, registryPathPrefix(registryAddr))

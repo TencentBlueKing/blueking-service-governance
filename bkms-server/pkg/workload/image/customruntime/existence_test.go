@@ -85,12 +85,16 @@ var _ = Describe("ExistenceChecker", func() {
 			headErr   error
 			listTags  []string
 			listErr   error
+			// 记录两次远端调用拿到的 context 是否带 deadline，用于确认超时预算传导到底
+			headCtxHasDeadline bool
+			listCtxHasDeadline bool
 		)
 
 		BeforeEach(func() {
 			headCalls, listCalls = 0, 0
 			headErr, listErr = nil, nil
 			listTags = nil
+			headCtxHasDeadline, listCtxHasDeadline = false, false
 
 			mockey.Mock((*snapshot.Service).ResolveRepoKeyForWorkspace).Return(
 				&snapshot.RepoKeyInfo{
@@ -101,14 +105,20 @@ var _ = Describe("ExistenceChecker", func() {
 				nil,
 			).Build()
 			mockey.Mock(infrasreg.New).Return(&infrasreg.Client{}).Build()
-			mockey.Mock((*infrasreg.Client).HeadManifest).To(func(_ *infrasreg.Client, _, _ string) error {
-				headCalls++
-				return headErr
-			}).Build()
-			mockey.Mock((*infrasreg.Client).ListAllTags).To(func(_ *infrasreg.Client, _ string) ([]string, error) {
-				listCalls++
-				return listTags, listErr
-			}).Build()
+			mockey.Mock((*infrasreg.Client).HeadManifest).To(
+				func(_ *infrasreg.Client, gotCtx context.Context, _, _ string) error {
+					headCalls++
+					_, headCtxHasDeadline = gotCtx.Deadline()
+					return headErr
+				},
+			).Build()
+			mockey.Mock((*infrasreg.Client).ListAllTags).To(
+				func(_ *infrasreg.Client, gotCtx context.Context, _ string) ([]string, error) {
+					listCalls++
+					_, listCtxHasDeadline = gotCtx.Deadline()
+					return listTags, listErr
+				},
+			).Build()
 		})
 
 		It("only sends HEAD when the tag exists", func() {
@@ -134,6 +144,24 @@ var _ = Describe("ExistenceChecker", func() {
 			Expect(err).To(MatchError(ErrImageNameNotFound))
 		})
 
+		It("classifies an unauthorized tag list after a 404 head as registry access denied", func() {
+			headErr = &transport.Error{StatusCode: http.StatusNotFound}
+			listErr = &transport.Error{StatusCode: http.StatusUnauthorized}
+
+			err := checker.ValidateTaggedReference(context.Background(), workspaceID, imageRef)
+			Expect(err).To(MatchError(ErrRegistryAccessDenied))
+			Expect(listCalls).To(Equal(1))
+		})
+
+		It("classifies an unexpected tag list failure after a 404 head as registry access failed", func() {
+			headErr = &transport.Error{StatusCode: http.StatusNotFound}
+			listErr = errors.New("connection reset")
+
+			err := checker.ValidateTaggedReference(context.Background(), workspaceID, imageRef)
+			Expect(err).To(MatchError(ErrRegistryAccessFailed))
+			Expect(listCalls).To(Equal(1))
+		})
+
 		It("classifies unauthorized HEAD as registry access denied", func() {
 			headErr = &transport.Error{StatusCode: http.StatusUnauthorized}
 
@@ -148,6 +176,17 @@ var _ = Describe("ExistenceChecker", func() {
 			err := checker.ValidateTaggedReference(context.Background(), workspaceID, imageRef)
 			Expect(err).To(MatchError(ErrRegistryAccessFailed))
 			Expect(listCalls).To(Equal(0))
+		})
+
+		It("passes a context with the check timeout down to both registry calls", func() {
+			// 同步路径上的探测必须可中断，HEAD 与回退的 tag 列表都要拿到带 deadline 的 context
+			headErr = &transport.Error{StatusCode: http.StatusNotFound}
+			listTags = []string{"2.0"}
+
+			err := checker.ValidateTaggedReference(context.Background(), workspaceID, imageRef)
+			Expect(err).To(MatchError(ErrImageTagNotFound))
+			Expect(headCtxHasDeadline).To(BeTrue())
+			Expect(listCtxHasDeadline).To(BeTrue())
 		})
 	})
 })
@@ -171,6 +210,8 @@ var _ = Describe("nameBelongsToRegistry", func() {
 			"golang", false),
 		Entry("does not match a blank image name",
 			"", false),
+		Entry("matches regardless of registry host letter case",
+			"DOCKER.BKRepo.example.com/demo/repo/my-golang", true),
 	)
 
 	It("trims trailing slash on the registry address before matching", func() {
@@ -179,4 +220,16 @@ var _ = Describe("nameBelongsToRegistry", func() {
 			registryAddr+"/",
 		)).To(BeTrue())
 	})
+
+	DescribeTable("registry address with a scheme",
+		func(addr string) {
+			// 镜像源地址由用户填写且未强制格式，带 scheme 时不能把自定义镜像误判成官方镜像
+			Expect(nameBelongsToRegistry(
+				"docker.bkrepo.example.com/demo/repo/my-golang", addr,
+			)).To(BeTrue())
+		},
+		Entry("https", "https://"+registryAddr),
+		Entry("http", "http://"+registryAddr),
+		Entry("mixed case https", "HTTPS://DOCKER.BKRepo.example.com/demo/repo"),
+	)
 })

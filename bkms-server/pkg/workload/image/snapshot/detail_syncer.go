@@ -107,7 +107,7 @@ func (s *DetailSyncer) syncDetailBatch(
 			// 释放信号量
 			defer func() { <-sem }()
 			gCtx := context.WithoutCancel(ctx)
-			detail, err := client.GetTagDetail(repoName, tag)
+			detail, err := client.GetTagDetail(gCtx, repoName, tag)
 			if err != nil {
 				log.Errorf(gCtx, "get tag detail for %s:%s failed: %v", repoName, tag, err)
 				mu.Lock()
