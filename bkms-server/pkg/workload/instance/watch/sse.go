@@ -29,11 +29,12 @@ import (
 	"github.com/pkg/errors"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
-// 单条 SSE 写入的超时；每次写前重置，因此不限制连接总时长
-// 作用是防止客户端连着但不读时，写缓冲写满导致 goroutine 永久阻塞
+// 单条 SSE 写入的超时；每次写前重置，只约束这一次 Write，不承担连接总时长
+// 连接总时长由 Manager.maxAge 硬限制；这里防止客户端连着但不读时写缓冲写满、goroutine 永久阻塞
 const chunkWriteTimeout = 30 * time.Second
 
 // sseStream 一条 SSE 连接的写入端，负责逐条 Flush 与单次写超时
@@ -82,7 +83,12 @@ func (s *sseStream) writeEvent(event serializer.AppInstanceWatchEvent) error {
 		return errors.Wrapf(err, "marshal %s watch event", event.Type)
 	}
 
-	return s.write(fmt.Appendf(nil, "event: message\ndata: %s\n\n", data))
+	if err = s.write(fmt.Appendf(nil, "event: message\ndata: %s\n\n", data)); err != nil {
+		return err
+	}
+
+	metrics.InstanceWatchEventPushed(event.Type)
+	return nil
 }
 
 // write 落盘一段 SSE payload 并立即 Flush，逐条下发而不是攒在缓冲里

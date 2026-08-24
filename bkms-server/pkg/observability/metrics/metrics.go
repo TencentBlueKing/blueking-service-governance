@@ -37,6 +37,8 @@ const (
 	StatusOK = "ok"
 	// StatusErr 调用失败
 	StatusErr = "err"
+	// StatusFail 二元结果中的失败（与 StatusErr 区分，用于 result=ok|fail）
+	StatusFail = "fail"
 	// StatusTimeout 调用超时/轮询超时
 	StatusTimeout = "timeout"
 	// StatusCancelled 调用被取消
@@ -62,6 +64,9 @@ const (
 	ScaleDirectionDown = "down"
 	// ScaleDirectionSame 副本数不变
 	ScaleDirectionSame = "same"
+
+	// WatchEventTypeUnknown 无法识别的 Watch 事件类型，防止标签基数膨胀
+	WatchEventTypeUnknown = "unknown"
 )
 
 // 异步任务类耗时指标共用的 Bucket（单位：秒）
@@ -286,6 +291,38 @@ var (
 		[]string{"direction"},
 	)
 
+	// instanceWatchActiveConnections 当前活跃的实例 Watch SSE 连接数。
+	instanceWatchActiveConnections = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "bkms",
+			Subsystem: "instance",
+			Name:      "watch_active_connections",
+			Help:      "Current number of active instance watch SSE connections.",
+		},
+	)
+
+	// instanceWatchEventsTotal 实例 Watch 成功写出的 SSE 事件数。
+	instanceWatchEventsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "bkms",
+			Subsystem: "instance",
+			Name:      "watch_events_total",
+			Help:      "Total number of instance watch SSE events pushed by type.",
+		},
+		[]string{"type"},
+	)
+
+	// instanceWatchPolarisRefetchTotal 实例 Watch 北极星真拉次数。
+	instanceWatchPolarisRefetchTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "bkms",
+			Subsystem: "instance",
+			Name:      "watch_polaris_refetch_total",
+			Help:      "Total number of instance watch Polaris refetches by result.",
+		},
+		[]string{"result"},
+	)
+
 	// depservicePolarisFailure 北极星依赖服务操作失败计数。
 	depservicePolarisFailure = promauto.NewCounterVec(
 		prometheus.CounterOpts{
@@ -426,6 +463,31 @@ func InstanceScaled(oldReplicas, targetReplicas int32) {
 	instanceScaleTotal.WithLabelValues(normalizeScaleDirection(oldReplicas, targetReplicas)).Inc()
 }
 
+// InstanceWatchStarted 记录一条实例 Watch SSE 连接开始。
+func InstanceWatchStarted() {
+	instanceWatchActiveConnections.Inc()
+}
+
+// InstanceWatchFinished 记录一条实例 Watch SSE 连接结束。
+func InstanceWatchFinished() {
+	instanceWatchActiveConnections.Dec()
+}
+
+// InstanceWatchEventPushed 记录一条成功写出的实例 Watch SSE 事件。
+func InstanceWatchEventPushed(eventType string) {
+	instanceWatchEventsTotal.WithLabelValues(normalizeWatchEventType(eventType)).Inc()
+}
+
+// InstanceWatchPolarisRefetch 记录一轮实例 Watch 北极星真拉结果。
+func InstanceWatchPolarisRefetch(ok bool) {
+	result := StatusOK
+	if !ok {
+		result = StatusFail
+	}
+
+	instanceWatchPolarisRefetchTotal.WithLabelValues(result).Inc()
+}
+
 // DepservicePolarisFailed 记录北极星依赖服务操作失败。
 func DepservicePolarisFailed(operation string) {
 	depservicePolarisFailure.WithLabelValues(operation).Inc()
@@ -484,6 +546,15 @@ func normalizeScaleDirection(oldReplicas, targetReplicas int32) string {
 		return ScaleDirectionDown
 	default:
 		return ScaleDirectionSame
+	}
+}
+
+func normalizeWatchEventType(eventType string) string {
+	switch eventType {
+	case "ADDED", "MODIFIED", "DELETED", "ENDED":
+		return eventType
+	default:
+		return WatchEventTypeUnknown
 	}
 }
 

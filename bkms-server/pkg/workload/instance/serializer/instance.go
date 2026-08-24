@@ -313,15 +313,11 @@ func extractMainContainerResources(containers []any) AppInstanceResourcesObj {
 }
 
 // MergePolarisInfoToAppInstances 将北极星实例信息合并到应用实例输出对象中。
-// 按 Pod IP + 服务端口匹配；命中多个北极星服务时按服务坐标排序，保证同样的输入得到同样的顺序
+// 按 Pod IP + 服务端口匹配；命中多个北极星服务时的顺序由 buildPolarisInfos 保证
 func MergePolarisInfoToAppInstances(
 	appInstances []*AppInstanceOutputObj,
 	svcInstances []*polaris.PolarisServiceInstances,
 ) {
-	type polarisMatch struct {
-		svc  *polaris.PolarisServiceInstances
-		inst *polarisInfra.Instance
-	}
 	ipIndex := make(map[string][]polarisMatch)
 	for _, svc := range svcInstances {
 		for _, inst := range svc.Instances {
@@ -330,37 +326,52 @@ func MergePolarisInfoToAppInstances(
 	}
 
 	for _, instance := range appInstances {
-		matches, ok := ipIndex[instance.IP]
-		if !ok {
+		infos := buildPolarisInfos(ipIndex[instance.IP])
+		if len(infos) == 0 {
 			continue
 		}
-		for _, m := range matches {
-			if int64(m.inst.Port) != int64(m.svc.ServicePort) {
-				continue
-			}
-			instance.PolarisInfos = append(instance.PolarisInfos, &PolarisInstanceInfoOutputObj{
-				ServiceNamespace:  m.svc.ServiceNamespace,
-				ServiceName:       m.svc.ServiceName,
-				IP:                m.inst.IP,
-				Port:              m.inst.Port,
-				IsHealthy:         m.inst.IsHealthy,
-				Weight:            int64(m.inst.Weight),
-				IsIsolated:        m.inst.IsIsolated,
-				EnableHealthCheck: m.inst.EnableHealthCheck,
-				Metadata:          m.inst.Metadata,
-			})
+
+		instance.PolarisInfos = infos
+	}
+}
+
+// polarisMatch 一条北极星实例与其所属服务的配对，供按 Pod IP 命中后再过滤端口
+type polarisMatch struct {
+	svc  *polaris.PolarisServiceInstances
+	inst *polarisInfra.Instance
+}
+
+// buildPolarisInfos 从已按 IP 命中的匹配项构造输出并按服务坐标定序
+// 北极星侧返回顺序不保证稳定；Watch 周期补拉靠前后两次结果比对，顺序漂移会被误判成变化
+func buildPolarisInfos(matches []polarisMatch) []*PolarisInstanceInfoOutputObj {
+	var infos []*PolarisInstanceInfoOutputObj
+	for _, m := range matches {
+		if int64(m.inst.Port) != int64(m.svc.ServicePort) {
+			continue
 		}
 
-		// 北极星侧返回顺序不保证稳定，按服务坐标定序后再输出
-		// Watch 的周期补拉靠前后两次结果比对差异，顺序漂移会被误判成变化并重复推送
-		slices.SortFunc(instance.PolarisInfos, func(a, b *PolarisInstanceInfoOutputObj) int {
-			return cmp.Or(
-				cmp.Compare(a.ServiceNamespace, b.ServiceNamespace),
-				cmp.Compare(a.ServiceName, b.ServiceName),
-				cmp.Compare(a.Port, b.Port),
-			)
+		infos = append(infos, &PolarisInstanceInfoOutputObj{
+			ServiceNamespace:  m.svc.ServiceNamespace,
+			ServiceName:       m.svc.ServiceName,
+			IP:                m.inst.IP,
+			Port:              m.inst.Port,
+			IsHealthy:         m.inst.IsHealthy,
+			Weight:            int64(m.inst.Weight),
+			IsIsolated:        m.inst.IsIsolated,
+			EnableHealthCheck: m.inst.EnableHealthCheck,
+			Metadata:          m.inst.Metadata,
 		})
 	}
+
+	slices.SortFunc(infos, func(a, b *PolarisInstanceInfoOutputObj) int {
+		return cmp.Or(
+			cmp.Compare(a.ServiceNamespace, b.ServiceNamespace),
+			cmp.Compare(a.ServiceName, b.ServiceName),
+			cmp.Compare(a.Port, b.Port),
+		)
+	})
+
+	return infos
 }
 
 // SkippedAppInstanceObj 无法投影为 AppInstanceOutputObj 而被跳过的实例。

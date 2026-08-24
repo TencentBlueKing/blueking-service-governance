@@ -26,12 +26,15 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8swatch "k8s.io/apimachinery/pkg/watch"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
@@ -39,12 +42,19 @@ const (
 	// streamTickInterval 一次 tick 同时驱动 SSE 心跳与北极星补拉
 	// 15s 取自北极星 SDK 的缓存量级，补得更密只会空转
 	streamTickInterval = 15 * time.Second
+	// streamMaxAge 单条 SSE 连接的硬性上限；到期推 ENDED，不向客户端承诺更长连接
+	streamMaxAge = 2 * time.Minute
 	// ENDED 事件的 reason，前端据此识别集群中断并重连
 	clusterWatchEndedReason = "cluster watch interrupted"
+	// watchTimeoutEndedReason 连接达到 maxAge 时的 ENDED reason；前端同样重新 List 再建 Watch
+	watchTimeoutEndedReason = "watch timeout"
 )
 
 // errClusterInterrupted 已成流后集群 Watch 断开；内部信号，对外表现为推 ENDED 后收流
 var errClusterInterrupted = errors.New("cluster watch interrupted")
+
+// errStreamTimedOut 已成流后到达连接硬上限；内部信号，对外表现为推 ENDED 后收流
+var errStreamTimedOut = errors.New("watch timeout")
 
 // errSkipEvent 该事件不投影给前端，但流继续
 var errSkipEvent = errors.New("skip watch event")
@@ -56,9 +66,12 @@ type Manager struct {
 	listPolaris PolarisLister
 	// tickInterval 心跳与北极星补拉共用的周期；单测调小以免真实等待
 	tickInterval time.Duration
+	// maxAge 本条 SSE 的最长存活时间；单测调小以免真实等待
+	maxAge time.Duration
 	// polarisCache 最近一轮北极星拉取结果，供密集的 Pod 事件复用，见 attachPolaris
+	// nil 表示从未成功缓存；成功拉取即使空结果也写成空切片，与 nil 区分
 	polarisCache []*polaris.PolarisServiceInstances
-	// polarisCachedAt polarisCache 的取回时刻；零值即从未拉过，首个 Pod 事件必然真拉
+	// polarisCachedAt polarisCache 的取回时刻；配合 polarisCache == nil 判断是否该真拉
 	polarisCachedAt time.Time
 }
 
@@ -68,10 +81,11 @@ func NewManager(podWatcher PodWatcher, listPolaris PolarisLister) *Manager {
 		podWatcher:   podWatcher,
 		listPolaris:  listPolaris,
 		tickInterval: streamTickInterval,
+		maxAge:       streamMaxAge,
 	}
 }
 
-// Run 从续传位点起把集群 Pod 变更投影为 SSE，直到客户端断开或集群中断
+// Run 从续传位点起把集群 Pod 变更投影为 SSE，直到客户端断开、集群中断或达到连接硬上限
 // 返回 error 只代表流未建立，调用方按普通 HTTP 错误返回；已成流后的中断先推 ENDED 再收流
 func (m *Manager) Run(ctx context.Context, w http.ResponseWriter, p RunParams) error {
 	stream, err := newSSEStream(ctx, w)
@@ -80,26 +94,32 @@ func (m *Manager) Run(ctx context.Context, w http.ResponseWriter, p RunParams) e
 	}
 
 	// 先建立集群 Watch；此时尚未写响应头，失败仍可返回普通 HTTP 错误
-	// 位点过期（410 Gone）是这里最常见的失败，带上 resourceVersion 才能与其他集群故障区分
+	// TimeoutSeconds 与 SSE 硬上限对齐，避免集群侧 Watch 比本条连接活得更久
+	timeoutSeconds := m.watchTimeoutSeconds()
 	watcher, err := m.podWatcher.Watch(ctx, p.Namespace, metav1.ListOptions{
 		LabelSelector:   p.LabelSelector,
 		ResourceVersion: p.ResourceVersion,
+		TimeoutSeconds:  &timeoutSeconds,
 	})
 	if err != nil {
-		return errors.Wrapf(err, "watch pods from resourceVersion %s", p.ResourceVersion)
+		return wrapWatchStartErr(err, p.ResourceVersion)
 	}
 	defer watcher.Stop()
 
 	// Watch 建立成功才写 SSE 头，避免失败响应被当成 200 事件流
 	stream.writeHeaders()
 
+	// 成流后才计入活跃连接；建流失败没有 SSE，不涨 Gauge
+	metrics.InstanceWatchStarted()
+	defer metrics.InstanceWatchFinished()
+
 	err = m.consume(ctx, stream, watcher, p.DeployID)
 
-	// 已成流后集群中断：补一条 ENDED 供前端识别并重连，之后以这次写入的结果为准
-	if errors.Is(err, errClusterInterrupted) {
+	// 已成流后的集群中断或到达硬上限：补一条 ENDED 供前端识别并重连
+	if reason, ok := endedReason(err); ok {
 		err = stream.writeEvent(serializer.AppInstanceWatchEvent{
 			Type:   string(EventEnded),
-			Reason: clusterWatchEndedReason,
+			Reason: reason,
 		})
 	}
 
@@ -116,7 +136,35 @@ func (m *Manager) Run(ctx context.Context, w http.ResponseWriter, p RunParams) e
 	return nil
 }
 
-// consume 消费集群事件并写 SSE；ctx 取消安静退出，通道关闭视为集群中断
+// watchTimeoutSeconds 把 maxAge 换成 k8s TimeoutSeconds；不足 1s 时取 1，避免单测毫秒级 maxAge 传 0
+func (m *Manager) watchTimeoutSeconds() int64 {
+	seconds := int64(m.maxAge / time.Second)
+	seconds = lo.Ternary(seconds < 1, 1, seconds)
+	return seconds
+}
+
+// wrapWatchStartErr 建流失败尚未写头；位点过期单独成哨兵，其余原样包装
+func wrapWatchStartErr(err error, resourceVersion string) error {
+	if k8serrors.IsGone(err) || k8serrors.IsResourceExpired(err) {
+		return errors.Wrapf(ErrResourceVersionGone, "watch pods from resourceVersion %s: %s", resourceVersion, err)
+	}
+
+	return errors.Wrapf(err, "watch pods from resourceVersion %s", resourceVersion)
+}
+
+// endedReason 已成流后需要补 ENDED 的内部信号；客户端断开不在此列
+func endedReason(err error) (string, bool) {
+	switch {
+	case errors.Is(err, errClusterInterrupted):
+		return clusterWatchEndedReason, true
+	case errors.Is(err, errStreamTimedOut):
+		return watchTimeoutEndedReason, true
+	default:
+		return "", false
+	}
+}
+
+// consume 消费集群事件并写 SSE；ctx 取消安静退出，通道关闭视为集群中断，到期视为超时
 func (m *Manager) consume(
 	ctx context.Context,
 	stream *sseStream,
@@ -126,6 +174,9 @@ func (m *Manager) consume(
 	ticker := time.NewTicker(m.tickInterval)
 	defer ticker.Stop()
 
+	maxAge := time.NewTimer(m.maxAge)
+	defer maxAge.Stop()
+
 	// 连接级记录，存已推送出去的投影；随本次 consume 结束一起释放
 	pushed := newPushedInstances()
 
@@ -134,6 +185,9 @@ func (m *Manager) consume(
 		case <-ctx.Done():
 			// 客户端断开不必再写 ENDED，由前端 onerror/onclose 重连
 			return nil
+
+		case <-maxAge.C:
+			return errStreamTimedOut
 
 		case <-ticker.C:
 			// 先补拉北极星，只对有变化的实例补推 MODIFIED；拉取失败只跳过本轮

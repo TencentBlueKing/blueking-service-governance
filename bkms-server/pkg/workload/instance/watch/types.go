@@ -22,11 +22,16 @@ package watch
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8swatch "k8s.io/apimachinery/pkg/watch"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 )
+
+// ErrResourceVersionGone 续传位点已过期（apiserver 410 Gone / Expired）
+// 尚未成流，handler 映射为 409，前端必须重新 List 再 Watch
+var ErrResourceVersionGone = errors.New("resourceVersion expired")
 
 // EventType 实例 Watch 事件类型（平台投影事件，非原生 Pod Watch）
 type EventType string

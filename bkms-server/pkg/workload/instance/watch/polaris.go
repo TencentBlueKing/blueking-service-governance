@@ -27,6 +27,7 @@ import (
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
@@ -84,7 +85,7 @@ func (m *Manager) attachPolaris(ctx context.Context, instance *serializer.AppIns
 	// 而每次拉取都要查一次北极星配置库，且北极星 SDK 自身有 15s 缓存，比这更密的拉取
 	// 拿回来的是同一份数据。因此缓存未过期就直接复用，新实例的北极星信息由下一轮补拉补上
 	svcInstances := m.polarisCache
-	if time.Since(m.polarisCachedAt) >= m.tickInterval {
+	if m.polarisCache == nil || time.Since(m.polarisCachedAt) >= m.tickInterval {
 		fresh, ok := m.fetchPolaris(ctx)
 		if !ok {
 			// 拉不到北极星不阻塞该 Pod 推送：保持空数组，与「未注册北极星」同形，由前端展示为未知
@@ -109,10 +110,19 @@ func (m *Manager) fetchPolaris(ctx context.Context) ([]*polaris.PolarisServiceIn
 			slog.String("err", err.Error()),
 		)
 
+		metrics.InstanceWatchPolarisRefetch(false)
+
 		return nil, false
 	}
 
+	// nil 归一成空切片，让 polarisCache == nil 只表示从未成功缓存
+	if svcInstances == nil {
+		svcInstances = []*polaris.PolarisServiceInstances{}
+	}
+
 	m.polarisCache, m.polarisCachedAt = svcInstances, time.Now()
+
+	metrics.InstanceWatchPolarisRefetch(true)
 
 	return svcInstances, true
 }

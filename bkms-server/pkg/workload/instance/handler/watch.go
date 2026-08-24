@@ -20,6 +20,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 
 	"github.com/gin-gonic/gin"
 	"k8s.io/apimachinery/pkg/labels"
@@ -38,7 +39,7 @@ import (
 //
 // 只推增量，不推首包快照；resourceVersion 必填，来自 List 成功响应
 // 鉴权 / 非 AppModel / 无部署记录：与 List 同一套拒绝，建不成连接
-// 集群 Watch 建立失败返回 500；已成流后中断则先推 ENDED 再关连接
+// 集群 Watch 建立失败：位点过期返回 409，其他返回 500；已成流后中断则先推 ENDED 再关连接
 // MODIFIED 有两个来源：集群 Pod 变更，以及连接期内北极星周期补拉，二者形态一致
 //
 //	@ID			WatchAppInstances
@@ -57,7 +58,6 @@ import (
 //	@Param		resourceVersion		query		string	true	"List 成功响应带回的续传位点"
 //	@Success	200					{string}	string	"SSE event stream"
 //	@Failure	400					{object}	bkerrs.GinErrorOutput
-//	@Failure	404					{object}	bkerrs.GinErrorOutput
 //	@Failure	500					{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/envs/{envName}/instances/watch [get]
 func (h *Handler) WatchAppInstances(c *gin.Context) {
@@ -95,6 +95,14 @@ func (h *Handler) WatchAppInstances(c *gin.Context) {
 		DeployID:        record.ID.Hex(),
 	})
 	if err != nil {
+		// 位点过期必须与其他集群故障分开：前端据此重新 List，而不是当 500 重试旧位点
+		if errors.Is(err, watch.ErrResourceVersionGone) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(
+				err, bkerrs.ErrCodeAborted, "resourceVersion expired, re-list required",
+			))
+			return
+		}
+
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "watch app instances"))
 	}
 }

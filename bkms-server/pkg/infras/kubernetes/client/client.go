@@ -166,6 +166,7 @@ func (c *Client) List(
 }
 
 // Watch 从 opts.ResourceVersion 起订阅资源变更；调用方负责 Stop
+// 连接时长由调用方通过 opts.TimeoutSeconds 约束，本方法不写死上限
 // 这里不校验 ResourceVersion：留空是 apiserver 允许的用法（从当前状态起推），
 // 是否必须带续传位点属于业务语义，由调用方在上层校验
 // BOOKMARK 原样返回，是否转发由调用方过滤

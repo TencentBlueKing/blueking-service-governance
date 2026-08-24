@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
@@ -29,6 +30,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	pkgerrors "github.com/pkg/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8swatch "k8s.io/apimachinery/pkg/watch"
@@ -181,6 +184,50 @@ var _ = Describe("Manager", func() {
 
 		Expect(err).To(HaveOccurred())
 		Expect(rec.Header().Get("Content-Type")).To(BeEmpty())
+	})
+
+	// 位点过期尚未成流：必须返回哨兵而不是写成 200 SSE，handler 才能映射 409
+	It("returns ErrResourceVersionGone when the watch start is expired", func() {
+		rec := httptest.NewRecorder()
+		expired := pkgerrors.Wrap(k8serrors.NewResourceExpired("too old"), "watch pods")
+
+		err := NewManager(&stubPodWatch{err: expired}, failingPolaris).
+			Run(context.Background(), rec, testParams)
+
+		Expect(err).To(MatchError(ErrResourceVersionGone))
+		Expect(rec.Header().Get("Content-Type")).To(BeEmpty())
+	})
+
+	It("returns ErrResourceVersionGone when the watch start is gone", func() {
+		rec := httptest.NewRecorder()
+		gone := &k8serrors.StatusError{ErrStatus: metav1.Status{
+			Status:  metav1.StatusFailure,
+			Reason:  metav1.StatusReasonGone,
+			Code:    int32(http.StatusGone),
+			Message: "gone",
+		}}
+
+		err := NewManager(&stubPodWatch{err: gone}, failingPolaris).
+			Run(context.Background(), rec, testParams)
+
+		Expect(err).To(MatchError(ErrResourceVersionGone))
+		Expect(rec.Header().Get("Content-Type")).To(BeEmpty())
+	})
+
+	// 连接硬上限到期：通道仍开着也要推 ENDED，前端按断流口径重新 List
+	It("ends the stream with ENDED when the max age is reached", func() {
+		w := newStubPodWatch()
+		m := NewManager(w, failingPolaris)
+		m.maxAge = 20 * time.Millisecond
+
+		rec := httptest.NewRecorder()
+		done := make(chan error, 1)
+		go func() { done <- m.Run(context.Background(), rec, testParams) }()
+		Eventually(done).Should(Receive(BeNil()))
+
+		events := parseSSE(rec)
+		Expect(eventTypes(events)).To(Equal([]string{"ENDED"}))
+		Expect(events[0].Reason).To(Equal(watchTimeoutEndedReason))
 	})
 
 	// 坏 Pod / BOOKMARK 跳过、北极星失败降级空数组、DELETED 只留 id
