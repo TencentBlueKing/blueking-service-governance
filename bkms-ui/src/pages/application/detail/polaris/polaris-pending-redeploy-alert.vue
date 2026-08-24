@@ -69,66 +69,74 @@
         <span>{{ $t('操作') }}</span>
       </div>
       <div
-        v-for="row in pendingRedeployRows"
-        :key="`${row.envName}-${row.configName}`"
-        class="pending-redeploy-grid items-center border-b border-[#F5F7FA] py-[10px] last:border-b-0"
+        v-for="group in pendingRedeployGroups"
+        :key="group.envName"
+        class="pending-redeploy-grid border-b border-[#F5F7FA] last:border-b-0"
       >
         <div class="flex min-w-0 items-center">
           <OverflowTitle
             class="min-w-0 text-[12px] text-[#313238]"
-            :content="row.envDisplayName"
+            :content="group.envDisplayName"
             placement="top-start"
             resizeable
             type="tips"
           />
           <Tag
-            v-if="row.envType && envTypeMap[row.envType]"
-            :class="['ml-[6px] shrink-0', envTypeTagClassMap[row.envType]]"
+            v-if="group.envType && envTypeMap[group.envType]"
+            :class="['ml-[6px] shrink-0', envTypeTagClassMap[group.envType]]"
             size="small"
           >
-            {{ envTypeMap[row.envType].name }}
+            {{ envTypeMap[group.envType].name }}
           </Tag>
         </div>
-        <div class="w-full min-w-0 overflow-hidden">
-          <OverflowTitle
-            :key="row.polarisName || '--'"
-            class="w-full min-w-0 text-[12px] text-[#313238]"
-            :content="row.polarisName || '--'"
-            placement="top-start"
-            resizeable
-            type="tips"
-          />
-        </div>
-        <div class="min-w-0 text-[12px] leading-[20px] text-[#979BA5]">
-          <template v-if="row.changes.length">
-            <div
-              v-for="change in row.changes"
-              :key="change.key"
-            >
-              {{ change.label }}
-              <template v-if="change.oldValue !== undefined">
-                {{ formatRedeployValue(change.oldValue) }}
-                <span class="mx-[4px] text-[#C4C6CC]">→</span>
-              </template>
-              <span class="font-medium text-[#313238]">{{ formatRedeployValue(change.newValue) }}</span>
+        <div class="pending-redeploy-items min-w-0">
+          <div
+            v-for="item in group.items"
+            :key="item.configName"
+            class="pending-redeploy-item-grid border-b border-[#F5F7FA] py-[10px] last:border-b-0"
+          >
+            <div class="w-full min-w-0 overflow-hidden">
+              <OverflowTitle
+                :key="item.polarisName || '--'"
+                class="w-full min-w-0 text-[12px] text-[#313238]"
+                :content="item.polarisName || '--'"
+                placement="top-start"
+                resizeable
+                type="tips"
+              />
             </div>
-          </template>
-          <span v-else>
-            {{
-              isPendingDeleteStatus(row.status)
-                ? $t('解除关联（重新部署后实例将从北极星摘除）')
-                : $t('北极星配置待重新部署生效')
-            }}
-          </span>
+            <div class="min-w-0 text-[12px] leading-[20px] text-[#979BA5]">
+              <template v-if="item.changes.length">
+                <div
+                  v-for="change in item.changes"
+                  :key="change.key"
+                >
+                  {{ change.label }}
+                  <template v-if="change.oldValue !== undefined">
+                    {{ formatRedeployValue(change.oldValue) }}
+                    <span class="mx-[4px] text-[#C4C6CC]">→</span>
+                  </template>
+                  <span class="font-medium text-[#313238]">{{ formatRedeployValue(change.newValue) }}</span>
+                </div>
+              </template>
+              <span v-else>
+                {{
+                  isPendingDeleteStatus(item.status)
+                    ? $t('解除关联（重新部署后实例将从北极星摘除）')
+                    : $t('北极星配置待重新部署生效')
+                }}
+              </span>
+            </div>
+          </div>
         </div>
         <Button
-          class="!px-0 justify-self-start"
-          :disabled="isEnvDeploying(row.envName)"
+          class="pending-redeploy-action !px-0 justify-self-start"
+          :disabled="isEnvDeploying(group.envName)"
           text
           theme="primary"
-          @click="emit('go-deploy', row.envName)"
+          @click="emit('go-deploy', group.envName)"
         >
-          {{ isEnvDeploying(row.envName) ? $t('部署中') : $t('去部署') }}
+          {{ isEnvDeploying(group.envName) ? $t('部署中') : $t('去部署') }}
         </Button>
       </div>
     </div>
@@ -212,13 +220,6 @@
   /** 顶部提示数量按环境统计，而不是按北极星配置数量统计。 */
   const pendingRedeployEnvCount = computed(() => pendingRedeployGroups.value.length);
 
-  type PendingRedeployRow = Omit<PendingRedeployGroup, 'items'> & PendingRedeployItem;
-
-  /** 明细按行展示：环境、服务名、变更、操作各占一列。 */
-  const pendingRedeployRows = computed<PendingRedeployRow[]>(() =>
-    pendingRedeployGroups.value.flatMap(({ items, ...env }) => items.map(item => ({ ...env, ...item }))),
-  );
-
   /** 统一复用北极星待部署变更值格式化逻辑，供顶部提示表格渲染。 */
   function formatRedeployValue(value?: number | string) {
     return formatPolarisRedeployValue(value);
@@ -265,6 +266,21 @@
   .pending-redeploy-grid {
     display: grid;
     grid-template-columns: 200px minmax(220px, 1fr) minmax(280px, 1.2fr) 64px;
+    column-gap: 16px;
+    align-items: center;
+  }
+
+  .pending-redeploy-items {
+    grid-column: 2 / 4;
+  }
+
+  .pending-redeploy-action {
+    grid-column: 4;
+  }
+
+  .pending-redeploy-item-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.2fr);
     column-gap: 16px;
     align-items: center;
   }
