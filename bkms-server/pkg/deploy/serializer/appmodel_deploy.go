@@ -169,7 +169,7 @@ type AppModelDeployRecordOutputObj struct {
 	// Commit ID（仅构建+部署记录返回）
 	CommitID string `json:"commitID"`
 	Replicas int32  `json:"replicas"`
-	// 本次部署的主工作负载类型（GameDeployment 或 Deployment）；存量记录可能为空
+	// 本次部署的主工作负载类型（GameDeployment 或 Deployment）
 	WorkloadKind string    `json:"workloadKind"`
 	Message      string    `json:"message"`
 	Status       string    `json:"status"`
@@ -195,7 +195,8 @@ func (o *AppModelDeployRecordOutputObj) FromModel(record appmodeldeploy.Record) 
 		o.CommitID = record.Extras[appmodeldeploy.ExtraKeyBuildCommitID]
 	}
 	o.Replicas = record.Replicas
-	o.WorkloadKind = record.WorkloadKind
+	kind, _ := record.MainWorkload()
+	o.WorkloadKind = kind
 	o.Message = record.Message
 	o.Status = string(record.Status)
 	o.Operator = record.Updater

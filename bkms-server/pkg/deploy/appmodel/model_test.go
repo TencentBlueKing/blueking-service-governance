@@ -113,7 +113,7 @@ var _ = Describe("Record", func() {
 			Expect(name).To(Equal("demo"))
 		})
 
-		It("falls back to GameDeployment for legacy records", func() {
+		It("falls back to GameDeployment when WorkloadKind is empty", func() {
 			record := &appmodel.Record{
 				ResourceKeys: appmodel.ResourceKeys{
 					{Kind: "GameDeployment", Name: "demo"},

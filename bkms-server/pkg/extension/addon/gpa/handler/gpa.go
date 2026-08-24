@@ -53,6 +53,8 @@ func abortWithGPAApplyError(c *gin.Context, clusterID string, err error) {
 		return
 	}
 	switch {
+	case errors.Is(err, gpa.ErrFederationNotSupported):
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "apply gpa CR"))
 	case errors.Is(err, gpa.ErrComponentNotInstalled):
 		bkerrs.AbortWithErr(c, bkerrs.WrapComponentNotInstalled(err, gpa.ClusterAddonName, clusterID))
 	default:
@@ -145,6 +147,14 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 	_, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	if env.Cluster.IsFederation {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(
+			gpa.ErrFederationNotSupported,
+			bkerrs.ErrCodeInvalidRequest,
+			"gpa is not supported in federation environment",
+		))
 		return
 	}
 

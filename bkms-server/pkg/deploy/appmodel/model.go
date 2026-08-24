@@ -189,7 +189,6 @@ type Record struct {
 	// LabelSelector 标签选择器
 	LabelSelector map[string]string `bson:"labelSelector"`
 	// WorkloadKind 本次部署的主工作负载类型（GameDeployment 或 Deployment）。
-	// 存量记录可能为空，读取时通过 MainWorkload 从 ResourceKeys 推断。
 	WorkloadKind string `bson:"workloadKind"`
 	// ResourceKeys 本次部署关联的资源
 	ResourceKeys ResourceKeys `bson:"resourceKeys"`
@@ -216,7 +215,7 @@ type Record struct {
 }
 
 // MainWorkload 返回本次部署的主工作负载 Kind 与名称。
-// 优先使用 WorkloadKind；旧记录没有该字段时从 ResourceKeys 推断。
+// 优先使用 WorkloadKind；为空时从 ResourceKeys 推断（Deployment 优先于 GameDeployment）。
 func (r *Record) MainWorkload() (kind, name string) {
 	if r == nil {
 		return "", ""

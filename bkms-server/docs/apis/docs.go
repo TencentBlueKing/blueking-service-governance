@@ -19831,7 +19831,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "workloadKind": {
-                    "description": "本次部署的主工作负载类型（GameDeployment 或 Deployment）；存量记录可能为空",
+                    "description": "本次部署的主工作负载类型（GameDeployment 或 Deployment）",
                     "type": "string"
                 }
             }

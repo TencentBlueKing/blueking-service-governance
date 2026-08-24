@@ -1,0 +1,103 @@
+[
+  {
+    "update": "app_model_deploy_records",
+    "updates": [
+      {
+        "q": {
+          "$and": [
+            {
+              "$or": [
+                {
+                  "workloadKind": {
+                    "$exists": false
+                  }
+                },
+                {
+                  "workloadKind": ""
+                },
+                {
+                  "workloadKind": null
+                }
+              ]
+            },
+            {
+              "resourceKeys.kind": {
+                "$in": [
+                  "Deployment",
+                  "GameDeployment"
+                ]
+              }
+            }
+          ]
+        },
+        "u": [
+          {
+            "$set": {
+              "workloadKind": {
+                "$ifNull": [
+                  {
+                    "$arrayElemAt": [
+                      {
+                        "$map": {
+                          "input": {
+                            "$filter": {
+                              "input": {
+                                "$ifNull": [
+                                  "$resourceKeys",
+                                  []
+                                ]
+                              },
+                              "as": "rk",
+                              "cond": {
+                                "$eq": [
+                                  "$$rk.kind",
+                                  "Deployment"
+                                ]
+                              }
+                            }
+                          },
+                          "as": "rk",
+                          "in": "$$rk.kind"
+                        }
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "$arrayElemAt": [
+                      {
+                        "$map": {
+                          "input": {
+                            "$filter": {
+                              "input": {
+                                "$ifNull": [
+                                  "$resourceKeys",
+                                  []
+                                ]
+                              },
+                              "as": "rk",
+                              "cond": {
+                                "$eq": [
+                                  "$$rk.kind",
+                                  "GameDeployment"
+                                ]
+                              }
+                            }
+                          },
+                          "as": "rk",
+                          "in": "$$rk.kind"
+                        }
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "multi": true
+      }
+    ]
+  }
+]

@@ -366,7 +366,7 @@ func (d *Deployer) UpdateInstances(
 		patches = append(patches, patchBuilder.BuildRollingUpdatePatch())
 	}
 
-	if err = d.patchGameDeployment(ctx, clusterID, namespace, gameDeploy.Name, patches); err != nil {
+	if err = d.patchWorkload(ctx, clusterID, namespace, gameDeploy.Name, gvr.GameDeploy, patches); err != nil {
 		log.Errorf(
 			ctx, "patch record %s game deployment %s with patches %+v failed, err: %v",
 			record.ID.Hex(), gameDeploy.Name, patches, err,
@@ -653,15 +653,6 @@ func (d *Deployer) patchWorkload(
 		return errors.Wrap(err, "patch workload")
 	}
 	return nil
-}
-
-// patchGameDeployment 通过 patch 的方式更新 GameDeployment 资源
-func (d *Deployer) patchGameDeployment(
-	ctx context.Context,
-	clusterID, namespace, gameDeployName string,
-	patches []map[string]any,
-) error {
-	return d.patchWorkload(ctx, clusterID, namespace, gameDeployName, gvr.GameDeploy, patches)
 }
 
 // buildResourceKeys 构建资源引用信息（用于后续资源管理和追踪）。

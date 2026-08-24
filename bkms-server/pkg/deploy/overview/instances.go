@@ -241,6 +241,7 @@ func queryEnvClusterDataForEnv(
 	}, nil
 }
 
+// mainWorkloadView 主工作负载视图，包含名称、命名空间、副本数与容器规格。
 type mainWorkloadView struct {
 	Name       string
 	Namespace  string

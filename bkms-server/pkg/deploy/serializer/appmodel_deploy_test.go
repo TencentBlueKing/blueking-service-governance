@@ -142,6 +142,19 @@ var _ = Describe("AppModel deploy serializers", func() {
 			Expect(output.WorkloadKind).To(Equal("Deployment"))
 			Expect(output.CommitID).To(Equal("commit-123"))
 		})
+
+		It("infers WorkloadKind from ResourceKeys when the field is empty", func() {
+			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
+				ID:        bson.NewObjectID(),
+				ClusterID: "cls-1",
+				Namespace: "default",
+				ResourceKeys: appmodeldeploy.ResourceKeys{
+					{Kind: "Service", Name: "demo"},
+					{Kind: "GameDeployment", Name: "demo"},
+				},
+			})
+			Expect(output.WorkloadKind).To(Equal("GameDeployment"))
+		})
 	})
 
 	Describe("AppModelResourceSnapshot FromModel", func() {

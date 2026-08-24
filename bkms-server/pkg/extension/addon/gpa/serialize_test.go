@@ -37,7 +37,7 @@ var _ = Describe("buildGPAManifest", func() {
 			},
 		}
 
-		manifest := buildGPAManifest(config, "ws-1", "dev", "web", false)
+		manifest := buildGPAManifest(config, "ws-1", "dev", "web")
 
 		Expect(manifest["apiVersion"]).To(Equal("autoscaling.tkex.tencent.com/v1alpha1"))
 		Expect(manifest["kind"]).To(Equal("GeneralPodAutoscaler"))
@@ -78,21 +78,6 @@ var _ = Describe("buildGPAManifest", func() {
 		Expect(memTarget["averageUtilization"]).To(Equal(int32(70)))
 	})
 
-	It("should point scaleTargetRef at Deployment when the env is federation", func() {
-		config := &GPAConfig{
-			Name:        "web-autoscale",
-			AppID:       "app-1",
-			MinReplicas: 2,
-			MaxReplicas: 10,
-			Metrics:     []GPAMetric{{Resource: ResourceCPU, AverageUtilization: 60}},
-		}
-		manifest := buildGPAManifest(config, "ws-1", "dev", "web", true)
-		scaleTargetRef := manifest["spec"].(map[string]any)["scaleTargetRef"].(map[string]any)
-		Expect(scaleTargetRef["kind"]).To(Equal("Deployment"))
-		Expect(scaleTargetRef["apiVersion"]).To(Equal("apps/v1"))
-		Expect(scaleTargetRef["name"]).To(Equal("web"))
-	})
-
 	It("should build a single-metric manifest", func() {
 		config := &GPAConfig{
 			Name:        "single",
@@ -101,7 +86,7 @@ var _ = Describe("buildGPAManifest", func() {
 			MaxReplicas: 5,
 			Metrics:     []GPAMetric{{Resource: ResourceCPU, AverageUtilization: 80}},
 		}
-		manifest := buildGPAManifest(config, "ws-1", "prod", "svc", false)
+		manifest := buildGPAManifest(config, "ws-1", "prod", "svc")
 		spec := manifest["spec"].(map[string]any)
 		metrics := spec["metric"].(map[string]any)["metrics"].([]any)
 		Expect(metrics).To(HaveLen(1))
@@ -121,7 +106,7 @@ var _ = Describe("buildGPAManifest", func() {
 				{DesiredReplicas: 6, Schedule: "* 4-5 * * *", Enabled: true},
 			},
 		}
-		manifest := buildGPAManifest(config, "ws-1", "dev", "web", false)
+		manifest := buildGPAManifest(config, "ws-1", "dev", "web")
 		spec := manifest["spec"].(map[string]any)
 
 		// 仅定时模式时不应输出 spec.metric
@@ -144,7 +129,7 @@ var _ = Describe("buildGPAManifest", func() {
 			Metrics:     []GPAMetric{{Resource: ResourceCPU, AverageUtilization: 60}},
 			TimeRanges:  []GPATimeRange{{DesiredReplicas: 8, Schedule: "* 9-18 * * 1-5", Enabled: true}},
 		}
-		manifest := buildGPAManifest(config, "ws-1", "dev", "web", false)
+		manifest := buildGPAManifest(config, "ws-1", "dev", "web")
 		spec := manifest["spec"].(map[string]any)
 
 		metrics := spec["metric"].(map[string]any)["metrics"].([]any)
@@ -164,7 +149,7 @@ var _ = Describe("buildGPAManifest", func() {
 				{DesiredReplicas: 6, Schedule: "* 4-5 * * *", Enabled: false},
 			},
 		}
-		manifest := buildGPAManifest(config, "ws-1", "dev", "web", false)
+		manifest := buildGPAManifest(config, "ws-1", "dev", "web")
 		spec := manifest["spec"].(map[string]any)
 
 		// 仅启用的规则被写入
@@ -184,7 +169,7 @@ var _ = Describe("buildGPAManifest", func() {
 				{DesiredReplicas: 4, Schedule: "* 2-3 * * *", Enabled: false},
 			},
 		}
-		manifest := buildGPAManifest(config, "ws-1", "dev", "web", false)
+		manifest := buildGPAManifest(config, "ws-1", "dev", "web")
 		spec := manifest["spec"].(map[string]any)
 
 		// 全部未启用时不应输出 spec.time
@@ -201,7 +186,7 @@ var _ = Describe("buildGPAManifest", func() {
 			Metrics:         []GPAMetric{{Resource: ResourceCPU, AverageUtilization: 60}},
 			ComputeByLimits: true,
 		}
-		manifest := buildGPAManifest(config, "ws-1", "dev", "web", false)
+		manifest := buildGPAManifest(config, "ws-1", "dev", "web")
 		metadata := manifest["metadata"].(map[string]any)
 
 		annotations := metadata["annotations"].(map[string]any)

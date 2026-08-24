@@ -39,7 +39,7 @@ Builder **永远先造 GameDeployment**，组件 / 北极星 / 环境变量都�
 - 丢掉：GD 独有字段（`podsToDelete`、原地更新、灰度分区等）
 - 不剥离 `io.tencent.bcs.dev/*` 一类 BCS 注解
 
-`BuildResult` 带 `WorkloadKind` + `MainWorkload`。部署记录写入 `Record.WorkloadKind`；存量空值由 `Record.MainWorkload()` 从 ResourceKeys 推断（优先 Deployment，再 GameDeployment）。
+`BuildResult` 带 `WorkloadKind` + `MainWorkload`。部署记录写入 `Record.WorkloadKind`。
 
 ### 能力差异
 
@@ -55,7 +55,7 @@ Builder **永远先造 GameDeployment**，组件 / 北极星 / 环境变量都�
 
 ### Create 补 namespace
 
-调用方仍禁止 manifest 自带 `metadata.namespace`。`Create` 校验后 DeepCopy 并 `SetNamespace`，满足联邦网关 / 准入 webhook（GPA 曾因缺 namespace 被 `gpa-validator` 拒绝）。
+调用方仍禁止 manifest 自带 `metadata.namespace`。`Create` 校验后 DeepCopy 并 `SetNamespace`，满足联邦网关 / 准入 webhook。
 
 ### Upsert 双路径
 
@@ -90,12 +90,9 @@ Builder **永远先造 GameDeployment**，组件 / 北极星 / 环境变量都�
 
 ## 6. GPA
 
-`scaleTargetRef` 随环境走：
+联邦侧目前需要通过单独的 CR (FedGeneralPodAutoscaler)来进行自动扩缩容，且不支持基于指标的扩缩容， 因此本期**不支持 GPA** 。创建 / 更新 / 开启返回 `INVALID_REQUEST`（`gpa is not supported in federation environment`）。关闭和删除仍可用，便于清理误下发的配置。
 
-- 联邦 → `apps/v1` `Deployment`
-- 非联邦 → `tkex.tencent.com/v1alpha1` `GameDeployment`
 
-Create 路径依赖 Client 注入 namespace，见第 4 节。
 
 ## 7. 关键代码
 
@@ -109,5 +106,5 @@ Create 路径依赖 Client 注入 namespace，见第 4 节。
 | 部署状态 | `pkg/deploy/appmodel/state_getter.go`、`pkg/infras/kubernetes/status/workload/deployment/deployment.go` |
 | 拓扑 Deployment 状态 | `pkg/workload/topology/node_status.go`、`builder.go` |
 | K8s Client | `pkg/infras/kubernetes/client/client.go`、`merge_patch.go` |
-| GPA | `pkg/extension/addon/gpa/serialize.go` |
+| GPA（联邦拒绝） | `pkg/extension/addon/gpa/service.go`、`handler/gpa.go` |
 | 拓扑 YAML | `pkg/workload/topology/manifest.go` |

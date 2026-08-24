@@ -38,6 +38,8 @@ var (
 	ErrCRNotFound = errors.New("gpa CR not found in cluster")
 	// ErrComponentNotInstalled 环境所在集群未安装 GPA 组件
 	ErrComponentNotInstalled = errors.New("gpa component is not installed in cluster")
+	// ErrFederationNotSupported 联邦环境本期不支持 GPA
+	ErrFederationNotSupported = errors.New("gpa is not supported in federation environment")
 )
 
 // GPAService 负责将 GPA 配置下发为 GeneralPodAutoscaler CR 并管理其生命周期。
@@ -55,6 +57,10 @@ func NewGPAService(appModelStore appmodel.AppModelStore) *GPAService {
 
 // Apply 将 GPA 配置下发到目标集群（幂等 Upsert）。
 func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config *GPAConfig) error {
+	if env != nil && env.Cluster.IsFederation {
+		return ErrFederationNotSupported
+	}
+
 	scaleTargetName, err := s.resolveScaleTargetName(ctx, config.AppID)
 	if err != nil {
 		return err
@@ -69,7 +75,7 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 		return errors.Wrap(err, "create k8s client for gpa")
 	}
 
-	manifest := buildGPAManifest(config, env.WorkspaceID, env.Name, scaleTargetName, env.Cluster.IsFederation)
+	manifest := buildGPAManifest(config, env.WorkspaceID, env.Name, scaleTargetName)
 	if _, err = k8sClient.Upsert(ctx, env.Cluster.Namespace, manifest, metav1.PatchOptions{}); err != nil {
 		// discovery 缓存可能过期：缓存中仍有 GPA 的 GVR 信息，但 CRD 实际已被卸载，
 		// apiserver 会返回 404 "the server could not find the requested resource"。

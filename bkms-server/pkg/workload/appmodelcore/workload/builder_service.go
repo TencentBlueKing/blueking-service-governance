@@ -83,10 +83,10 @@ type BuildResult struct {
 	UndefinedEnvVars []envvarrefs.UndefinedEnvVar
 }
 
-// mainInfo 从 MainWorkload 抽出 GameDeployment / Deployment 的公共字段。
+// workloadMeta 从 MainWorkload 抽出 GameDeployment / Deployment 的公共字段。
 // 这两种对象没有统一接口，部署侧需要名称、selector、对象级和 PodTemplate 级 metadata；
 // 用这一层避免调用方对 runtime.Object 做类型分支。
-type mainInfo struct {
+type workloadMeta struct {
 	name         string
 	selector     map[string]string
 	objectMeta   *metav1.ObjectMeta
@@ -132,27 +132,27 @@ func (r *BuildResult) TemplateMeta() *metav1.ObjectMeta {
 	return info.templateMeta
 }
 
-func (r *BuildResult) mainInfo() (mainInfo, bool) {
+func (r *BuildResult) mainInfo() (workloadMeta, bool) {
 	if r == nil || r.MainWorkload == nil {
-		return mainInfo{}, false
+		return workloadMeta{}, false
 	}
 	switch obj := r.MainWorkload.(type) {
 	case *appsv1.Deployment:
-		return mainInfo{
+		return workloadMeta{
 			name:         obj.Name,
 			selector:     labelSelectorMatchLabels(obj.Spec.Selector),
 			objectMeta:   &obj.ObjectMeta,
 			templateMeta: &obj.Spec.Template.ObjectMeta,
 		}, true
 	case *tkex.GameDeployment:
-		return mainInfo{
+		return workloadMeta{
 			name:         obj.Name,
 			selector:     labelSelectorMatchLabels(obj.Spec.Selector),
 			objectMeta:   &obj.ObjectMeta,
 			templateMeta: &obj.Spec.Template.ObjectMeta,
 		}, true
 	default:
-		return mainInfo{}, false
+		return workloadMeta{}, false
 	}
 }
 
