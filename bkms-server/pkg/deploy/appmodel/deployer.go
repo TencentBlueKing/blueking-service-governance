@@ -329,7 +329,6 @@ func (d *Deployer) UpdateInstances(
 	if err != nil {
 		return errors.Wrap(err, "get latest game deployment")
 	}
-
 	clusterID, namespace := record.ClusterID, record.Namespace
 	// 通过 Patch 的方式更新 GameDeployment 更新策略
 	patchBuilder := NewGameDeploymentJSONPatchBuilder(gameDeploy)

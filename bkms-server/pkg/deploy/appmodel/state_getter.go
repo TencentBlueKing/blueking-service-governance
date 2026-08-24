@@ -28,7 +28,6 @@ import (
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
-	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	k8sstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status"
 	k8sworkload "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/workload"
 )
@@ -174,13 +173,4 @@ func (g *DeployStateGetter) getMainWorkload() (kind, name string) {
 		return "", ""
 	}
 	return g.workloadKind, g.resourceKeys.NameByKind(g.workloadKind)
-}
-
-// getGameDeployName 获取 GameDeployment 名称
-func (g *DeployStateGetter) getGameDeployName() string {
-	kind, name := g.getMainWorkload()
-	if kind == k8skind.GameDeploy {
-		return name
-	}
-	return ""
 }

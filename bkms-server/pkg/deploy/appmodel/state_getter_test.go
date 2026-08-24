@@ -208,18 +208,6 @@ var _ = Describe("DeployStateGetter", func() {
 		})
 	})
 
-	Describe("getGameDeployName", func() {
-		It("should return GameDeployment name when exists", func() {
-			name := getter.getGameDeployName()
-			Expect(name).To(Equal("test-game-deploy"))
-
-			record.ResourceKeys = ResourceKeys{{Kind: k8skind.SVC, Name: "test-service"}}
-			getter = NewDeployStateGetter(record)
-			name = getter.getGameDeployName()
-			Expect(name).To(BeEmpty())
-		})
-	})
-
 	Describe("getMainWorkload", func() {
 		It("prefers Deployment over GameDeployment", func() {
 			record.ResourceKeys = ResourceKeys{

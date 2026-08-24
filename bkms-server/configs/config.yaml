@@ -55,6 +55,7 @@ bcs:
   baseUrl: https://bcs-api.example.com
   token: masked
   # 联邦 Host 集群 ID 列表。创建/更新环境时 clusterID 命中则视为联邦集群，部署使用原生 Deployment
+  # 跟 BCS 侧确认只能通过配置项来判断
   federationClusterIDs: []
 # 蓝盾配置，用于项目初始化 & 流水线模板加载
 bkci:

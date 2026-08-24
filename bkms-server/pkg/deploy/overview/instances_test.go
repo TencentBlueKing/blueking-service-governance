@@ -21,7 +21,6 @@ package overview
 import (
 	"context"
 
-	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
@@ -34,21 +33,6 @@ import (
 )
 
 var _ = Describe("instance helpers", func() {
-	Describe("extractGameDeployReplicas", func() {
-		It("returns replicas from spec", func() {
-			replicas, ok := extractGameDeployReplicas(&tkex.GameDeployment{
-				Spec: tkex.GameDeploymentSpec{Replicas: lo.ToPtr(int32(5))},
-			})
-			Expect(ok).To(BeTrue())
-			Expect(replicas).To(Equal(int32(5)))
-		})
-
-		It("returns not found when replicas missing", func() {
-			_, ok := extractGameDeployReplicas(&tkex.GameDeployment{})
-			Expect(ok).To(BeFalse())
-		})
-	})
-
 	Describe("countPodStates", func() {
 		newPod := func(phase, readyStatus string) unstructured.Unstructured {
 			return unstructured.Unstructured{Object: map[string]any{
@@ -95,8 +79,7 @@ var _ = Describe("instance helpers", func() {
 		})
 	})
 
-	Describe("instanceCounts", func() {
-		gd := &tkex.GameDeployment{Spec: tkex.GameDeploymentSpec{Replicas: lo.ToPtr(int32(3))}}
+	Describe("instanceCountsFromReplicas", func() {
 		pods := []unstructured.Unstructured{
 			{Object: map[string]any{"status": map[string]any{
 				"phase":      "Running",
@@ -106,38 +89,17 @@ var _ = Describe("instance helpers", func() {
 		}
 
 		It("returns nil when pod list failed", func() {
-			Expect(instanceCounts(gd, pods, false)).To(BeNil())
+			Expect(instanceCounts(lo.ToPtr(int32(3)), pods, false)).To(BeNil())
 		})
 
 		It("returns nil when replicas are missing", func() {
-			Expect(instanceCounts(&tkex.GameDeployment{}, pods, true)).To(BeNil())
 			Expect(instanceCounts(nil, pods, true)).To(BeNil())
 		})
 
-		It("fills expected from GD and running/abnormal from pods", func() {
-			Expect(instanceCounts(gd, pods, true)).To(Equal(&InstanceCounts{
+		It("fills expected from replicas and running/abnormal from pods", func() {
+			Expect(instanceCounts(lo.ToPtr(int32(3)), pods, true)).To(Equal(&InstanceCounts{
 				Running: 1, Expected: 3, Abnormal: 1,
 			}))
-		})
-	})
-
-	Describe("extractGameDeployName", func() {
-		It("picks the GameDeployment out of the recorded resources", func() {
-			name := extractGameDeployName(&appmodel.Record{ResourceKeys: appmodel.ResourceKeys{
-				{Kind: k8skind.SVC, Name: "svc-app"},
-				{Kind: k8skind.GameDeploy, Name: "app"},
-			}})
-			Expect(name).To(Equal("app"))
-		})
-
-		It("returns an empty name when no GameDeployment was recorded", func() {
-			Expect(extractGameDeployName(&appmodel.Record{})).To(BeEmpty())
-		})
-
-		It("does not treat Deployment as GameDeployment", func() {
-			Expect(extractGameDeployName(&appmodel.Record{ResourceKeys: appmodel.ResourceKeys{
-				{Kind: k8skind.Deploy, Name: "app"},
-			}})).To(BeEmpty())
 		})
 	})
 
@@ -209,7 +171,7 @@ var _ = Describe("instance helpers", func() {
 		})
 	})
 
-	Describe("extractMainContainerResources", func() {
+	Describe("extractMainContainerResourcesFromContainers", func() {
 		qty := func(s string) resource.Quantity { return resource.MustParse(s) }
 		container := func(name, cpuReq, cpuLim, memReq, memLim string) corev1.Container {
 			return corev1.Container{
@@ -227,26 +189,19 @@ var _ = Describe("instance helpers", func() {
 			}
 		}
 
-		It("returns an empty spec when the game deployment has no containers", func() {
-			Expect(extractMainContainerResources(context.Background(), nil)).To(Equal(ResourceSpec{}))
+		It("returns an empty spec when the workload has no containers", func() {
 			Expect(extractMainContainerResources(
-				context.Background(), &tkex.GameDeployment{},
+				context.Background(), "ns", "app", nil,
 			)).To(Equal(ResourceSpec{}))
 		})
 
 		It("reads cpu and memory from the main container and ignores sidecars", func() {
-			out := extractMainContainerResources(context.Background(), &tkex.GameDeployment{
-				Spec: tkex.GameDeploymentSpec{
-					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{
-								container("sidecar", "50m", "100m", "64Mi", "128Mi"),
-								container("main", "2", "4", "4Gi", "8Gi"),
-							},
-						},
-					},
+			out := extractMainContainerResources(
+				context.Background(), "ns", "app", []corev1.Container{
+					container("sidecar", "50m", "100m", "64Mi", "128Mi"),
+					container("main", "2", "4", "4Gi", "8Gi"),
 				},
-			})
+			)
 			Expect(out).To(Equal(ResourceSpec{
 				CPULimits:      "4",
 				CPURequests:    "2",
@@ -256,17 +211,11 @@ var _ = Describe("instance helpers", func() {
 		})
 
 		It("returns an empty spec when only sidecar containers exist", func() {
-			out := extractMainContainerResources(context.Background(), &tkex.GameDeployment{
-				Spec: tkex.GameDeploymentSpec{
-					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{
-								container("sidecar", "50m", "100m", "64Mi", "128Mi"),
-							},
-						},
-					},
+			out := extractMainContainerResources(
+				context.Background(), "ns", "app", []corev1.Container{
+					container("sidecar", "50m", "100m", "64Mi", "128Mi"),
 				},
-			})
+			)
 			Expect(out).To(Equal(ResourceSpec{}))
 		})
 	})

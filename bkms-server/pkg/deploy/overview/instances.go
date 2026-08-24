@@ -24,7 +24,6 @@ import (
 	"maps"
 	"sync"
 
-	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"golang.org/x/sync/semaphore"
@@ -37,7 +36,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
-	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	podstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/pod"
 	k8sworkload "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
@@ -237,8 +235,8 @@ func queryEnvClusterDataForEnv(
 		return nil, wlErr
 	}
 	return &envClusterData{
-		Resources: extractMainContainerResourcesFromContainers(ctx, item.Record.Namespace, name, wl.Containers),
-		Instances: instanceCountsFromReplicas(wl.Replicas, pods, podsErr == nil),
+		Resources: extractMainContainerResources(ctx, item.Record.Namespace, name, wl.Containers),
+		Instances: instanceCounts(wl.Replicas, pods, podsErr == nil),
 	}, nil
 }
 
@@ -271,23 +269,16 @@ func getMainWorkload(
 	return driver.View(res.Object)
 }
 
-// instanceCounts 仅在 Pod List 成功且 GD 带有 replicas 时返回实例数，否则为 nil。
-func instanceCounts(gd *tkex.GameDeployment, pods []unstructured.Unstructured, podsOK bool) *InstanceCounts {
-	if gd == nil {
-		return nil
-	}
-	return instanceCountsFromReplicas(gd.Spec.Replicas, pods, podsOK)
-}
-
-func instanceCountsFromReplicas(replicas *int32, pods []unstructured.Unstructured, podsOK bool) *InstanceCounts {
-	expected, ok := extractReplicas(replicas)
-	if !podsOK || !ok {
+// instanceCounts 仅在 Pod List 成功且工作负载带有 replicas 时返回实例数，否则为 nil。
+// replicas 缺失时视为「期望数不可用」：K8s 缺省虽为 1，总览更稳妥地不去猜。
+func instanceCounts(replicas *int32, pods []unstructured.Unstructured, podsOK bool) *InstanceCounts {
+	if !podsOK || replicas == nil {
 		return nil
 	}
 	running, abnormal := countPodStates(pods)
 	return &InstanceCounts{
 		Running:  running,
-		Expected: expected,
+		Expected: *replicas,
 		Abnormal: abnormal,
 	}
 }
@@ -307,15 +298,6 @@ func countPodStates(pods []unstructured.Unstructured) (running, abnormal int32) 
 // extractMainWorkload 从部署记录取主工作负载 Kind 与名称。
 func extractMainWorkload(rec *appmodel.Record) (kind, name string) {
 	return rec.MainWorkload()
-}
-
-// extractGameDeployName 从部署记录的 ResourceKeys 中取 GameDeployment 名称；没有则返回空串。
-func extractGameDeployName(rec *appmodel.Record) string {
-	kind, name := extractMainWorkload(rec)
-	if kind == k8skind.GameDeploy {
-		return name
-	}
-	return ""
 }
 
 // listPods 在环境命名空间内按 LabelSelector List Pod。
@@ -351,34 +333,9 @@ func listPods(
 	return list.Items, nil
 }
 
-// extractGameDeployReplicas 读取 GameDeployment.spec.replicas。
-// 字段缺失时返回 ok=false：K8s 缺省虽为 1，总览更稳妥地视为「期望数不可用」。
-func extractGameDeployReplicas(gd *tkex.GameDeployment) (int32, bool) {
-	if gd == nil {
-		return 0, false
-	}
-	return extractReplicas(gd.Spec.Replicas)
-}
-
-func extractReplicas(replicas *int32) (int32, bool) {
-	if replicas == nil {
-		return 0, false
-	}
-	return *replicas, true
-}
-
 // extractMainContainerResources 读取 workload 主容器的 CPU/内存 requests 与 limits。
 // 找不到主容器或字段缺失时，对应字段为空字符串。
-func extractMainContainerResources(ctx context.Context, gd *tkex.GameDeployment) ResourceSpec {
-	if gd == nil {
-		return ResourceSpec{}
-	}
-	return extractMainContainerResourcesFromContainers(
-		ctx, gd.Namespace, gd.Name, gd.Spec.Template.Spec.Containers,
-	)
-}
-
-func extractMainContainerResourcesFromContainers(
+func extractMainContainerResources(
 	ctx context.Context, ns, name string, containers []corev1.Container,
 ) ResourceSpec {
 	c, found := lo.Find(containers, func(c corev1.Container) bool {
