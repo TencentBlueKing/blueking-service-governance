@@ -157,7 +157,7 @@ var _ = Describe("Custom runtime image store", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exists).To(BeFalse())
 
-			_, err = store.Exists(ctx, "  ", builder.Name)
+			_, err = store.Exists(ctx, "", builder.Name)
 			Expect(err).To(MatchError(ContainSubstring("workspaceID is required")))
 		})
 	})

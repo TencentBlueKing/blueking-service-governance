@@ -463,26 +463,35 @@ var _ = Describe("Service", func() {
 		})
 	})
 
-	Describe("shouldTriggerRefresh", func() {
-		It("should trigger only for an empty or stale snapshot with the TTL enabled", func() {
-			stale := &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-6 * time.Minute))}
-			fresh := &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-time.Minute))}
-
-			Expect(service.shouldTriggerRefresh(0, nil, "", staleTTLDisabled)).To(BeTrue())
-			// 状态缺失或从未成功刷新过都算过期，否则这批快照永远不会被刷新
-			Expect(service.shouldTriggerRefresh(1, nil, "", customImageStaleTTL)).To(BeTrue())
-			Expect(service.shouldTriggerRefresh(1, &RepoSnapshotStatus{}, "", customImageStaleTTL)).To(BeTrue())
-			Expect(service.shouldTriggerRefresh(1, stale, "", customImageStaleTTL)).To(BeTrue())
-			Expect(service.shouldTriggerRefresh(1, fresh, "", customImageStaleTTL)).To(BeFalse())
-			Expect(service.shouldTriggerRefresh(1, stale, "", staleTTLDisabled)).To(BeFalse())
-			// 关键字未命中的 0 不是空快照；已在刷新中也不再起 goroutine
-			Expect(service.shouldTriggerRefresh(0, fresh, "no-such-tag", customImageStaleTTL)).To(BeFalse())
-			Expect(service.shouldTriggerRefresh(0, stale, "no-such-tag", customImageStaleTTL)).To(BeTrue())
-			Expect(service.shouldTriggerRefresh(0, &RepoSnapshotStatus{
-				RefreshStatus: RefreshStatusRefreshing,
-			}, "", customImageStaleTTL)).To(BeFalse())
-		})
-	})
+	DescribeTable("shouldTriggerRefresh",
+		func(total int64, status *RepoSnapshotStatus, keyword string, staleTTL time.Duration, want bool) {
+			Expect(service.shouldTriggerRefresh(total, status, keyword, staleTTL)).To(Equal(want))
+		},
+		Entry("empty snapshot still initializes when TTL is off",
+			int64(0), nil, "", staleTTLDisabled, true),
+		Entry("missing status is treated as stale",
+			int64(1), nil, "", customImageStaleTTL, true),
+		Entry("never-refreshed status is treated as stale",
+			int64(1), &RepoSnapshotStatus{}, "", customImageStaleTTL, true),
+		Entry("stale snapshot triggers refresh",
+			int64(1), &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-6 * time.Minute))},
+			"", customImageStaleTTL, true),
+		Entry("fresh snapshot skips refresh",
+			int64(1), &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-time.Minute))},
+			"", customImageStaleTTL, false),
+		Entry("TTL off skips stale refresh",
+			int64(1), &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-6 * time.Minute))},
+			"", staleTTLDisabled, false),
+		Entry("keyword miss on a fresh snapshot is not an empty snapshot",
+			int64(0), &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-time.Minute))},
+			"no-such-tag", customImageStaleTTL, false),
+		Entry("keyword miss on a stale snapshot still refreshes",
+			int64(0), &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-6 * time.Minute))},
+			"no-such-tag", customImageStaleTTL, true),
+		Entry("refreshing status does not start another goroutine",
+			int64(0), &RepoSnapshotStatus{RefreshStatus: RefreshStatusRefreshing},
+			"", customImageStaleTTL, false),
+	)
 
 	Describe("ListWorkspaceSnapshots", func() {
 		const imageName = "docker.bkrepo.example.com/demo/repo/my-golang"

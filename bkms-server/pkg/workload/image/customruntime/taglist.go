@@ -35,8 +35,8 @@ import (
 
 // tag 查询与刷新的同步时间预算
 const (
-	// realtimeTagFetchTimeout 手动输入镜像实时拉取 tag 的同步等待上限
-	realtimeTagFetchTimeout = 5 * time.Second
+	// realtimeTagFetchTimeout 手动输入镜像实时拉取 tag 的同步等待上限，给慢网络留余量
+	realtimeTagFetchTimeout = 30 * time.Second
 	// tagRefreshTimeout 显式刷新的同步等待上限
 	tagRefreshTimeout = 10 * time.Second
 )

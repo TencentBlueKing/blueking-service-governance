@@ -37,12 +37,9 @@ import (
 
 // 快照陈旧阈值
 const (
-	// staleTTLDisabled 不启用 TTL 懒刷新，仅保留「快照为空则初始化」
+	// staleTTLDisabled 关闭按时间过期刷新：已有快照即使很久没更新也不刷，只在条数为 0 时初始化
 	staleTTLDisabled time.Duration = 0
-	// customImageStaleTTL 工作空间自定义镜像的快照陈旧阈值。
-	//
-	// 自定义镜像的 tag 只能从下拉框选择、不支持手动输入，若快照仅在落库时同步一次，
-	// 用户新推送的 tag 将永远选不到且无绕过手段；该阈值同时用于抑制反复展开下拉造成的远程调用风暴
+	// customImageStaleTTL 工作空间自定义镜像超过此时长未刷新则视为过期，查询时顺带异步补刷
 	customImageStaleTTL = 5 * time.Minute
 )
 

@@ -174,8 +174,6 @@ func (s *StoreMongo) GetByWorkspaceTypeAndName(
 
 // Exists 判断工作空间下是否已有指定名称的记录，不区分 builder / runner
 func (s *StoreMongo) Exists(ctx context.Context, workspaceID, name string) (bool, error) {
-	workspaceID = strings.TrimSpace(workspaceID)
-	name = strings.TrimSpace(name)
 	if workspaceID == "" {
 		return false, errors.New("workspaceID is required")
 	}
