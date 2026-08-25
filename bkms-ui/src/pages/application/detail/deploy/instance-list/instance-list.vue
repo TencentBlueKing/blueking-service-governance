@@ -37,6 +37,8 @@
         :can-gray-deploy="canGrayDeploy"
         :disable-admin-command="isCrossPageSelection"
         :disable-delete="isCrossPageSelection"
+        :disable-gray="isFederationEnv"
+        :gray-disabled-tip="isFederationEnv ? $t('联邦集群不支持灰度操作') : ''"
         :is-all-instances-selected="isAllInstancesSelected"
         :selected-count="selectedCount"
         show-remove-deploy-shortcut
@@ -67,6 +69,7 @@
       :enable-max-height="false"
       :env-name="trpcDeployStore.curEnvItem?.name || ''"
       :filter-options="filterOptions"
+      :is-federation="isFederationEnv"
       mode="single"
       show-filter
       :total-count="total"
@@ -130,6 +133,7 @@
   const total = ref(0);
   const paginationCurrent = ref(1);
   const paginationLimit = ref(10);
+  const isFederationEnv = computed(() => trpcDeployStore.curEnvItem?.cluster?.isFederation === true);
 
   const isCrossPageSelection = computed(() => instanceTableRef.value?.isCrossPageSelection ?? false);
 
@@ -218,6 +222,7 @@
 
   // 灰度：需要处理跨页全选的特殊逻辑
   function handleShowGrayUpgrade(row?: AppInstanceOutputObj) {
+    if (isFederationEnv.value) return;
     if (row) {
       instanceTableRef.value?.clearSelections?.();
     }

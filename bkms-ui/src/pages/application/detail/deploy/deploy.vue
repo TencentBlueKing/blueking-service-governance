@@ -318,10 +318,11 @@
       :latest-build-status="buildLogInfo.status"
       @update="handleUpdateDeploySuccess"
     />
-    <!-- 普通部署在打开侧栏前执行环境变量预检查 -->
+    <!-- 普通部署在打开侧栏前统一执行“资源规格”和“环境变量”预检查 -->
     <EnvVarPrecheckDialog
       v-model:is-show="isShowPrecheckDialog"
       :env-name="precheckEnvName"
+      :mismatches="federationMismatches"
       :undefined-vars="undefinedVars"
       @cancel="cancelDeploy"
       @go-modify="cancelDeploy"
@@ -397,7 +398,7 @@
   import QuicklyDeploy from './quickly-deploy.vue';
   import RemoveDeploy from './remove-deploy.vue';
   import { DeployableAppType, useDeployAPIs } from './use-deploy';
-  import { useEnvVarPrecheck } from './use-env-var-precheck';
+  import { useDeployPrecheck } from './use-deploy-precheck';
 
   import type { DeployOverviewDeployTarget } from './overview/use-deploy-overview';
   import type { AppDeployedEnvOutputObj } from '~/@types/v1/app';
@@ -418,8 +419,15 @@
   const appDetailStore = useAppDetail();
   const { getAppDeployStatusInfo } = useDeployStatusMap();
   const { t } = useI18n();
-  const { cancelDeploy, continueDeploy, isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } =
-    useEnvVarPrecheck();
+  const {
+    cancelDeploy,
+    continueDeploy,
+    federationMismatches,
+    isShowPrecheckDialog,
+    precheck,
+    precheckEnvName,
+    undefinedVars,
+  } = useDeployPrecheck();
 
   // 环境列表（从 EnvSelect 组件 emit 获取）
   const envSelectPanelRef = ref<null | { refreshDeployStatuses?: () => Promise<void> }>(null);
@@ -868,8 +876,9 @@
 
     precheckLoading.value = true;
     try {
-      const precheckPassed = await precheck(envName);
+      const precheckPassed = await precheck(envName, trpcDeployStore.curEnvItem);
       if (!precheckPassed) return;
+      if (trpcDeployStore.curEnvItem?.name !== envName) return;
 
       // 清空总览目标是入口标记，保证实例列表仍读取当前环境，不显示目标环境选择器。
       overviewDeployTargets.value = undefined;
@@ -909,8 +918,8 @@
 
     precheckLoading.value = true;
     try {
-      const precheckPassed = await precheck(envName);
-      if (precheckPassed) {
+      const precheckPassed = await precheck(envName, trpcDeployStore.curEnvItem);
+      if (precheckPassed && trpcDeployStore.curEnvItem?.name === envName) {
         showFullUpdateDialog.value = true;
       }
     } catch (error) {

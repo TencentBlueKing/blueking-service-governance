@@ -1620,6 +1620,13 @@ Key 不能重复: Key 不能重复
 "删除需要具备写权限的凭证。跳转到：{0} 配置凭证后重试。": "Delete requires write permission credentials. Please go to {0} to configure credentials and try again."
 去配置: Configure
 "部署预检发现{0}类问题": "Pre-deployment check found {0} type(s) of issues"
+联邦集群资源规格不一致: Federated cluster resource spec mismatch
+当前环境已绑定联邦集群。联邦集群要求 CPU、内存的 Requests 与 Limits 必须一致，否则无法部署。: This environment is bound to a federated cluster. CPU and memory Requests must match Limits, otherwise the environment cannot be deployed.
+"建议前往 {0} 将 Requests 调整为与 Limits 一致后再部署。": "Go to {0} and set Requests equal to Limits before deploying."
+存在阻断问题，请先解决后再部署: Blocking issues exist. Resolve them before deploying.
+资源: Resource
+联邦集群不支持灰度操作: Federated clusters do not support gray deployment.
+联邦集群暂不支持自动扩缩: Federated clusters do not currently support autoscaling.
 环境变量未定义: Undefined Environment Variables
 "{0} 个变量": "{0} variables"
 "以下环境变量在当前配置中被引用，但在目标部署环境中未定义，部署后将被渲染为空值，{0}": "The following environment variables are referenced in the current configuration but are not defined in the target deployment environment. The deployment will be rendered as empty value, {0}"

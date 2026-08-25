@@ -39,13 +39,14 @@
         :can-gray-deploy="canGrayDeploy"
         :disable-admin-command="hasCrossPageSelection"
         :disable-delete="hasCrossPageSelection"
-        :disable-gray="hasCrossPageSelection"
+        :disable-gray="hasCrossPageSelection || isSelectedEnvFederation"
+        :gray-disabled-tip="isSelectedEnvFederation ? $t('联邦集群不支持灰度操作') : ''"
         :is-all-instances-selected="isSelectedEnvAllInstancesSelected"
         :selected-count="selectedCount"
         show-remove-deploy-shortcut
         @admin-command="instanceActions.openAdminCommand"
         @delete="instanceActions.openDelete"
-        @gray="instanceActions.openGray()"
+        @gray="handleOpenGray"
         @monitor="instanceActions.openMonitor(undefined, undefined, selectedEnvs)"
         @remove-deploy="handleRemoveDeploy"
       />
@@ -64,6 +65,7 @@
         :env-kind="getEnvKind(envName)"
         :env-name="envName"
         :env-type="getEnvType(envName)"
+        :is-federation="isEnvFederation(envName)"
         mode="multiEnv"
         :selected-env-name="selectedEnvName"
         show-env-header
@@ -141,6 +143,11 @@
     return envItem?.type || '';
   }
 
+  // 判断环境是否是联邦集群
+  function isEnvFederation(envName: string): boolean {
+    return envStore.envList?.find(env => env.name === envName)?.cluster?.isFederation === true;
+  }
+
   /** 判断指定环境是否属于可请求范围 */
   function isEnvRequestable(envName: string): boolean {
     return requestableEnvNameSet.value.has(envName);
@@ -173,6 +180,11 @@
     }
     return undefined;
   });
+
+  /** 当前选中环境是否是联邦集群 */
+  const isSelectedEnvFederation = computed(() =>
+    selectedEnvName.value ? isEnvFederation(selectedEnvName.value) : false,
+  );
 
   /** 汇总所有环境表格的选中实例总数 */
   const selectedCount = computed(() => {
@@ -278,6 +290,12 @@
   function handleEnvSelectionChange(payload: InstanceSelectionChangePayload) {
     envSelections.value.set(payload.envName, payload.selections);
     envSelections.value = new Map(envSelections.value);
+  }
+
+  // 打开灰度部署弹窗
+  function handleOpenGray() {
+    if (isSelectedEnvFederation.value) return;
+    instanceActions.openGray();
   }
 
   // 刷新所有未折叠环境表格的数据。

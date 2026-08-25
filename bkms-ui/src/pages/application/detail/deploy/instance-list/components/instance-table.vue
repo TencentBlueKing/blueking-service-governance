@@ -479,10 +479,10 @@
             <div class="flex items-center gap-[10px]">
               <Button
                 v-bk-tooltips="{
-                  content: $t('仅支持实例状态为 Running、Pending 的实例'),
-                  disabled: canInstanceGrayDeploy(row),
+                  content: isFederation ? $t('联邦集群不支持灰度操作') : $t('仅支持实例状态为 Running、Pending 的实例'),
+                  disabled: !isFederation && canInstanceGrayDeploy(row),
                 }"
-                :disabled="!canInstanceGrayDeploy(row)"
+                :disabled="isFederation || !canInstanceGrayDeploy(row)"
                 text
                 theme="primary"
                 @click.stop="
@@ -594,6 +594,7 @@
     envType?: string;
     /** 列筛选项数据 */
     filterOptions?: Record<string, FilterItem[]>;
+    isFederation?: boolean;
     mode?: InstanceTableMode;
     selectedEnvName?: string;
     showEnvHeader?: boolean;
@@ -607,6 +608,7 @@
     envDisplayName: '',
     envKind: '',
     envType: '',
+    isFederation: false,
     mode: 'multiEnv',
     showEnvHeader: true,
     data: undefined,

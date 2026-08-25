@@ -74,7 +74,12 @@
               {{ $t('手动调节') }}
             </Button>
             <Button
+              v-bk-tooltips="{
+                content: $t('联邦集群暂不支持自动扩缩'),
+                disabled: !isFederationEnv,
+              }"
               class="flex-1"
+              :disabled="isFederationEnv"
               :selected="formModel.mode === 'auto'"
               @click="handleChangeMode('auto')"
             >
@@ -314,6 +319,7 @@
   const isShow = ref(false);
   const isInitLoading = ref(false);
   const isSubmitLoading = ref(false);
+  const isFederationEnv = computed(() => trpcDeployStore.curEnvItem?.cluster?.isFederation === true);
   const formRef = ref<InstanceType<typeof Form>>();
   const hasGPAConfig = ref(false);
   const initialEnabled = ref(false);
@@ -488,6 +494,7 @@
 
   // 保存自动调节配置，提交 GPA 最小/最大实例数和指标阈值。
   async function handleAutoSubmit() {
+    if (isFederationEnv.value) return false;
     const shouldConfirmSwitch = initialMode.value !== 'auto';
     const shouldEnableGPA = hasGPAConfig.value && !initialEnabled.value;
     if (shouldConfirmSwitch && !(await showToggleConfirm('auto'))) {
@@ -535,6 +542,7 @@
 
   // 切换扩缩容方式，并在进入自动调节时补齐默认指标行。
   function handleChangeMode(mode: ScaleMode) {
+    if (mode === 'auto' && isFederationEnv.value) return;
     formModel.mode = mode;
     if (mode === 'auto' && formModel.metrics.length === 0) {
       formModel.metrics.push(createMetric());

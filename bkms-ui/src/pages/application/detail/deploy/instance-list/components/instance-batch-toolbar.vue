@@ -26,11 +26,11 @@
     </Button>
     <Button
       v-bk-tooltips="{
-        content: disableGray ? $t('多环境跨页全选后暂不支持批量灰度') : $t('仅支持实例状态为 Running、Pending 的实例'),
-        disabled: !selectedCount || (!disableGray && canGrayDeploy),
+        content: grayTooltipContent,
+        disabled: isGrayTooltipDisabled,
       }"
       class="bg-[#fff]"
-      :disabled="!selectedCount || disableGray || !canGrayDeploy"
+      :disabled="isGrayDisabled"
       @click="emit('gray')"
     >
       {{ $t('灰度') }}
@@ -93,6 +93,7 @@
   import { computed, ref } from 'vue';
 
   import { Button, Popover } from 'bkui-vue';
+  import { useI18n } from 'vue-i18n';
 
   const props = withDefaults(
     defineProps<{
@@ -100,11 +101,13 @@
       disableAdminCommand?: boolean; // 是否禁用管理命令（跨页全选时）
       disableDelete?: boolean; // 是否禁用删除（跨页全选时）
       disableGray?: boolean; // 是否禁用灰度（跨页全选/多环境选中时）
+      grayDisabledTip?: string; // 灰度被能力限制禁用时的优先提示
       isAllInstancesSelected: boolean; // 是否已全选所有实例
       selectedCount: number; // 已选实例数量
       showRemoveDeployShortcut?: boolean; // 是否展示“移除部署”快捷入口
     }>(),
     {
+      grayDisabledTip: '',
       showRemoveDeployShortcut: false,
     },
   );
@@ -117,10 +120,26 @@
     'remove-deploy': [];
   }>();
 
+  const { t } = useI18n();
   const removeDeployPopoverRef = ref<InstanceType<typeof Popover> | null>(null);
 
   // 是否有任意实例被选中
   const hasSelection = computed(() => props.selectedCount > 0);
+
+  // 灰度按钮是否禁用：未选中 / 跨页全选禁用 / 不允许灰度部署
+  const isGrayDisabled = computed(() => !props.selectedCount || props.disableGray || !props.canGrayDeploy);
+
+  // 灰度按钮 tooltip 文案：优先使用能力受限提示，其次按禁用原因给出对应文案
+  const grayTooltipContent = computed(
+    () =>
+      props.grayDisabledTip ||
+      (props.disableGray ? t('多环境跨页全选后暂不支持批量灰度') : t('仅支持实例状态为 Running、Pending 的实例')),
+  );
+
+  // 灰度 tooltip 是否禁用：存在自定义提示时始终展示；否则仅在按钮非可用（未选中或被灰度限制禁用）时不展示
+  const isGrayTooltipDisabled = computed(
+    () => !props.grayDisabledTip && (!props.selectedCount || (!props.disableGray && props.canGrayDeploy)),
+  );
 
   // “移除部署”快捷入口可见条件：开启快捷入口 + 有选中 + 删除未禁用 + 已全选
   const isRemoveDeployShortcutVisible = computed(

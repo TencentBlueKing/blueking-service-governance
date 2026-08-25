@@ -50,7 +50,9 @@
         <!-- 目标环境选择器 -->
         <EnvSelectPanel
           v-model="targetFormModel.envName"
+          :aria-disabled="confirmLoading"
           class="w-full"
+          :class="{ 'pointer-events-none opacity-60': confirmLoading }"
           :columns="2"
           :show-env-prefix="false"
           :show-only-deployed-filter="false"
@@ -176,11 +178,11 @@
         const valid = await targetEnvFormRef.value?.validate?.().catch(() => false);
         if (!valid) return;
       }
-      const envName = targetEnv.value?.name;
-      if (!envName) return;
+      const env = targetEnv.value;
+      if (!env?.name) return;
 
       confirmLoading.value = true;
-      const submitted = await deployFormRef.value?.submit(envName);
+      const submitted = await deployFormRef.value?.submit(env.name, env);
       if (!submitted) return;
 
       Message({
@@ -189,7 +191,7 @@
       });
       deployFormRef.value?.reset(1);
       isShow.value = false;
-      emits('update', envName);
+      emits('update', env.name);
     } catch (err) {
       console.error(err);
     } finally {

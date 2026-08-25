@@ -101,11 +101,12 @@
     </Form.FormItem>
   </Form>
 
-  <!-- 环境变量预检查弹窗 -->
+  <!-- “资源规格” 和 “环境变量” 统一预检查弹窗 -->
   <EnvVarPrecheckDialog
     v-if="precheckBeforeSubmit"
     v-model:is-show="isShowPrecheckDialog"
     :env-name="precheckEnvName"
+    :mismatches="federationMismatches"
     :undefined-vars="undefinedVars"
     @cancel="cancelDeploy"
     @go-modify="cancelDeploy"
@@ -126,7 +127,9 @@
   import ImageSelect from '../../components/image-select.vue';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from './use-deploy';
-  import { useEnvVarPrecheck } from './use-env-var-precheck';
+  import { useDeployPrecheck } from './use-deploy-precheck';
+
+  import type { EnvOutput } from '~/@types/v1/env';
 
   // 镜像来源类型：从源码构建 / 已构建镜像
   type ImageSourceType = 'code' | 'image';
@@ -149,8 +152,15 @@
 
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
-  const { cancelDeploy, continueDeploy, isShowPrecheckDialog, precheck, precheckEnvName, undefinedVars } =
-    useEnvVarPrecheck();
+  const {
+    cancelDeploy,
+    continueDeploy,
+    federationMismatches,
+    isShowPrecheckDialog,
+    precheck,
+    precheckEnvName,
+    undefinedVars,
+  } = useDeployPrecheck();
 
   const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
     () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
@@ -256,12 +266,12 @@
   }
 
   // 提交部署：内部完成校验、部署和脏标记清理
-  async function submit(targetEnvName: string) {
+  async function submit(targetEnvName: string, targetEnv?: EnvOutput) {
     const valid = await validate();
     if (!valid) return false;
 
     if (props.precheckBeforeSubmit) {
-      const precheckPassed = await precheck(targetEnvName);
+      const precheckPassed = await precheck(targetEnvName, targetEnv);
       if (!precheckPassed) return false;
     }
 
