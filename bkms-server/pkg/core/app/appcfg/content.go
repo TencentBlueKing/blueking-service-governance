@@ -27,22 +27,19 @@ import (
 // ErrNoConfigFileFound is returned when no config file is found for the given criteria.
 var ErrNoConfigFileFound = errors.New("no config file found")
 
-// PlainConfigFileContent describes one plain config file selected for the current environment.
-type PlainConfigFileContent struct {
+// ConfigFileWithContent 将一个配置文件记录与其编译后的最终内容匹配
+type ConfigFileWithContent struct {
 	File    AppConfigFile
 	Content string
 }
 
-// GetEnvContent retrieves the framework config file selected for an app environment with priority:
+// GetFrameworkEnvContent retrieves the framework config file selected for an app
+// environment with priority:
 // 1. Environment-specific framework config (envName = current environment name)
 // 2. Application-level default framework config (envName = "")
 //
-// Returns:
-// - The selected logical config file
-// - The compiled content string
-// - ErrNoConfigFileFound if no config file exists for both env and default
-// - Other errors for query or compilation failures
-func GetEnvContent(
+// Returns ErrNoConfigFileFound if no framework config file exists.
+func GetFrameworkEnvContent(
 	ctx context.Context,
 	store AppConfigFileStore,
 	appID, envName string,
@@ -114,7 +111,7 @@ func ListEnvPlainContents(
 	ctx context.Context,
 	store AppConfigFileStore,
 	appID, envName string,
-) ([]PlainConfigFileContent, error) {
+) ([]ConfigFileWithContent, error) {
 	configFiles, err := store.List(ctx, appID)
 	if err != nil {
 		return nil, errors.Wrapf(err, "list config files for app %s", appID)
@@ -145,7 +142,7 @@ func ListEnvPlainContents(
 	}
 
 	// 2. 逐个 root 判断当前环境下应该使用 root 自身，还是某条环境实例记录。
-	result := make([]PlainConfigFileContent, 0)
+	result := make([]ConfigFileWithContent, 0)
 	for _, root := range plainRoots {
 		if !root.IsMountedToEnv(envName) {
 			continue
@@ -169,7 +166,7 @@ func ListEnvPlainContents(
 		if compileErr != nil {
 			return nil, errors.Wrap(compileErr, "compiling app config file content")
 		}
-		result = append(result, PlainConfigFileContent{
+		result = append(result, ConfigFileWithContent{
 			File:    target,
 			Content: content,
 		})

@@ -76,7 +76,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 		return
 	}
 
-	_, content, err := appcfg.GetEnvContent(ctx, h.registry.AppConfigFileStore, app.ID, env.Name)
+	_, content, err := appcfg.GetFrameworkEnvContent(ctx, h.registry.AppConfigFileStore, app.ID, env.Name)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting env content"))
 		return

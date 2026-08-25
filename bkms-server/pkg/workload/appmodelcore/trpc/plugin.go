@@ -129,7 +129,7 @@ func (p *Plugin) computeTrpcConfig(
 		content = appModel.Workload.TrpcConfig.FileContent
 	} else {
 		var acf *appcfg.AppConfigFile
-		acf, content, err = appcfg.GetEnvContent(ctx, p.appConfigFileStore, app.ID, env.Name)
+		acf, content, err = appcfg.GetFrameworkEnvContent(ctx, p.appConfigFileStore, app.ID, env.Name)
 		if err != nil {
 			return "", "", err
 		}

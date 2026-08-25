@@ -189,7 +189,7 @@ func (s *TafAdminService) Init(ctx context.Context) error {
 // 解析 local 字段中的 -p 参数获取端口号, -h 参数获取监听 IP
 func (s *TafAdminService) GetAdminConfig(ctx context.Context) (string, int32, error) {
 	// 获取配置文件内容
-	_, configContent, err := appcfg.GetEnvContent(ctx, s.Stores.AppConfigFileStore, s.App.ID, s.Env.Name)
+	_, configContent, err := appcfg.GetFrameworkEnvContent(ctx, s.Stores.AppConfigFileStore, s.App.ID, s.Env.Name)
 	if err != nil {
 		return "", 0, errors.Wrap(err, "get taf config content")
 	}

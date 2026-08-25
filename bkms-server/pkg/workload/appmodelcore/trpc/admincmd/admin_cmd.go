@@ -457,7 +457,7 @@ func (s *TrpcAdminService) GetAdminPort(cfg *AdminConfig) (string, error) {
 
 // GetAdminConfig 获取并解析 admin 配置
 func (s *TrpcAdminService) GetAdminConfig(ctx context.Context) (*AdminConfig, error) {
-	_, configContent, err := appcfg.GetEnvContent(ctx, s.AppConfigFileStore, s.App.ID, s.Env.Name)
+	_, configContent, err := appcfg.GetFrameworkEnvContent(ctx, s.AppConfigFileStore, s.App.ID, s.Env.Name)
 	if err != nil {
 		return nil, err
 	}

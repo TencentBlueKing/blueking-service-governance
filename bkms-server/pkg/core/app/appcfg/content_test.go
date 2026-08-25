@@ -32,7 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
 
-var _ = Describe("GetEnvContent", func() {
+var _ = Describe("GetFrameworkEnvContent", func() {
 	var diApp *fxtest.App
 	var ctx context.Context
 	var appStore bkmsapp.ApplicationStore
@@ -75,7 +75,7 @@ var _ = Describe("GetEnvContent", func() {
 		})
 
 		It("should return default config when querying non-existent env", func() {
-			acf, content, err := appcfg.GetEnvContent(ctx, store, app.ID, "test-env")
+			acf, content, err := appcfg.GetFrameworkEnvContent(ctx, store, app.ID, "test-env")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(acf.Name).To(Equal(appcfg.DefaultAppConfigFileName))
 			Expect(content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
@@ -102,14 +102,14 @@ var _ = Describe("GetEnvContent", func() {
 		})
 
 		It("should return env-specific config when querying that env", func() {
-			acf, content, err := appcfg.GetEnvContent(ctx, store, app.ID, "prod")
+			acf, content, err := appcfg.GetFrameworkEnvContent(ctx, store, app.ID, "prod")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(acf.Name).To(Equal("prod"))
 			Expect(content).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
 		})
 
 		It("should return default config when querying non-existent env", func() {
-			acf, content, err := appcfg.GetEnvContent(ctx, store, app.ID, "test-env")
+			acf, content, err := appcfg.GetFrameworkEnvContent(ctx, store, app.ID, "test-env")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(acf.Name).To(Equal(appcfg.DefaultAppConfigFileName))
 			Expect(content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
@@ -162,7 +162,7 @@ var _ = Describe("GetEnvContent", func() {
 		})
 
 		It("should still return the framework env-specific config", func() {
-			acf, content, err := appcfg.GetEnvContent(ctx, store, app.ID, "prod")
+			acf, content, err := appcfg.GetFrameworkEnvContent(ctx, store, app.ID, "prod")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(acf.Name).To(Equal("prod-framework"))
 			Expect(content).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
@@ -189,7 +189,7 @@ var _ = Describe("GetEnvContent", func() {
 				OverlayContent:      &overlayContent,
 			})
 
-			acf, content, err := appcfg.GetEnvContent(ctx, store, app.ID, "prod")
+			acf, content, err := appcfg.GetFrameworkEnvContent(ctx, store, app.ID, "prod")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(acf.Name).To(Equal("prod-overlay"))

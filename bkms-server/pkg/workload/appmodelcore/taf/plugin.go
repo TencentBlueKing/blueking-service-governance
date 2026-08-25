@@ -111,7 +111,7 @@ func (p *Plugin) computeTafConfig(
 	if p.appConfigFileStore == nil {
 		return appModel.Workload.TafConfig.FileName, appModel.Workload.TafConfig.FileContent, nil
 	}
-	acf, content, err := appcfg.GetEnvContent(ctx, p.appConfigFileStore, app.ID, env.Name)
+	acf, content, err := appcfg.GetFrameworkEnvContent(ctx, p.appConfigFileStore, app.ID, env.Name)
 	if err != nil {
 		return "", "", err
 	}
