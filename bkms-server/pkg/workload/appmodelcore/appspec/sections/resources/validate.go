@@ -41,27 +41,22 @@ func validateResourceQuantity(fl validator.FieldLevel) bool {
 	return err == nil
 }
 
-// validateStruct performs cross-field validation for the Spec struct, ensuring that if limits are set,
-// requests must also be set, and that requests do not exceed limits.
+// validateStruct performs cross-field validation for the Spec struct.
+// A lone request or limit is allowed so env overlays and section patches can
+// update one side without resending the other. When both are set, request
+// must not exceed limit.
 func validateStruct(sl validator.StructLevel) {
 	spec := sl.Current().Interface().(Spec)
 
-	validateResourcePair(sl, "CPURequests", "CPULimits", spec.CPURequests, spec.CPULimits)
-	validateResourcePair(sl, "MemoryRequests", "MemoryLimits", spec.MemoryRequests, spec.MemoryLimits)
+	validateResourcePair(sl, "CPURequests", spec.CPURequests, spec.CPULimits)
+	validateResourcePair(sl, "MemoryRequests", spec.MemoryRequests, spec.MemoryLimits)
 }
 
 func validateResourcePair(
 	sl validator.StructLevel,
-	requestField, limitField string,
+	requestField string,
 	request, limit *string,
 ) {
-	if request == nil && limit == nil {
-		return
-	}
-	if request == nil && limit != nil {
-		sl.ReportError(limit, limitField, "", "resource_limit_requires_request", "")
-		return
-	}
 	if request == nil || limit == nil {
 		return
 	}

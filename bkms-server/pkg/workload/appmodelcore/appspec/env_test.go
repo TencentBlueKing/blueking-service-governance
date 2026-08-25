@@ -123,6 +123,51 @@ var _ = Describe("Env AppSpec", func() {
 		Expect(effective.DevMode.MountPath).To(BeNil())
 	})
 
+	It("keeps default resource limits when env override only sets requests", func() {
+		app := dbfactory.Application(ctx, appStore)
+		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			AppID: app.ID,
+			Workload: appmodel.Workload{
+				Resources: map[string]string{
+					"cpu":    "0.1-1",
+					"memory": "256Mi-1Gi",
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+			Resources: &ResourcesSpec{
+				Replicas:       lo.ToPtr(int32(1)),
+				CPURequests:    lo.ToPtr("0.1"),
+				CPULimits:      lo.ToPtr("1"),
+				MemoryRequests: lo.ToPtr("256Mi"),
+				MemoryLimits:   lo.ToPtr("1Gi"),
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		err = SetEnv(ctx, appSpecStore, &AppSpec{
+			AppID:   app.ID,
+			EnvName: "stag",
+			Resources: &ResourcesSpec{
+				Replicas:       lo.ToPtr(int32(1)),
+				CPURequests:    lo.ToPtr("0.1"),
+				CPULimits:      lo.ToPtr("1"),
+				MemoryRequests: lo.ToPtr("256Mi"),
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		effective, err := GetEnvEffective(ctx, appSpecStore, appModelStore, app.ID, "stag")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*effective.Resources.Replicas).To(Equal(int32(1)))
+		Expect(*effective.Resources.CPURequests).To(Equal("0.1"))
+		Expect(*effective.Resources.CPULimits).To(Equal("1"))
+		Expect(*effective.Resources.MemoryRequests).To(Equal("256Mi"))
+		Expect(*effective.Resources.MemoryLimits).To(Equal("1Gi"))
+	})
+
 	It("falls back to the default spec when env override is missing", func() {
 		app := dbfactory.Application(ctx, appStore)
 		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{

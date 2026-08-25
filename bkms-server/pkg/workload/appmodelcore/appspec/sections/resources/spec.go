@@ -56,6 +56,7 @@ func HasData(spec *Spec) bool {
 }
 
 // Merge overlays non-nil values from override onto base.
+// A nil field on override means the field is not set and the base value is kept.
 func Merge(base, override *Spec) *Spec {
 	switch {
 	case base == nil && override == nil:
@@ -72,20 +73,12 @@ func Merge(base, override *Spec) *Spec {
 	}
 	if override.CPURequests != nil {
 		merged.CPURequests = override.CPURequests
-		// Set limits to requests if not explicitly set
-		if override.CPULimits == nil {
-			merged.CPULimits = override.CPURequests
-		}
 	}
 	if override.CPULimits != nil {
 		merged.CPULimits = override.CPULimits
 	}
 	if override.MemoryRequests != nil {
 		merged.MemoryRequests = override.MemoryRequests
-		// Set limits to requests if not explicitly set
-		if override.MemoryLimits == nil {
-			merged.MemoryLimits = override.MemoryRequests
-		}
 	}
 	if override.MemoryLimits != nil {
 		merged.MemoryLimits = override.MemoryLimits

@@ -290,7 +290,8 @@ var _ = Describe("Builder Shared Tests", func() {
 
 			container := gd.Spec.Template.Spec.Containers[0]
 			Expect(container.Resources.Requests.Memory().String()).To(Equal("64Mi"))
-			Expect(container.Resources.Limits.Memory().String()).To(Equal("64Mi"))
+			// Memory limits should stay intact as default when the env override omits them.
+			Expect(container.Resources.Limits.Memory().String()).To(Equal("4Gi"))
 			// Cpu resources should stay intact as default
 			Expect(container.Resources.Requests.Cpu().String()).To(Equal("1"))
 			Expect(container.Resources.Limits.Cpu().String()).To(Equal("2"))
