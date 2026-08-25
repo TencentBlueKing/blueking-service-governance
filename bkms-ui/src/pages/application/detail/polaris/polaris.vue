@@ -275,6 +275,8 @@
     <ViewCertificate
       v-model:is-show="isShowViewCertificate"
       :config-name="certificateConfig?.name || ''"
+      :polaris-name="certificateConfig?.polarisName"
+      :polaris-namespace="certificateConfig?.polarisNamespace"
       :register-mode="certificateConfig?.registerMode"
     />
 

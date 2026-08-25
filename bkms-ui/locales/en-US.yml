@@ -1031,10 +1031,10 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 凭证信息会写入到应用环境变量中:
   The credential information will be written into the application
   environment variable
-"该配置为立即生效，凭证信息不会写入到应用环境变量中，如需在应用内使用请自行配置":
-  This config takes effect immediately, so the credential information is not written
-  into the application environment variables; configure it yourself if the
-  application needs it
+"该配置为立即生效，凭证不会写入应用环境变量。如需查看北极星 Token，请到北极星控制台查看（仅北极星负责人可见）。":
+  This configuration takes effect immediately, so credentials are not written to application environment variables.
+  To view the Polaris token, go to the Polaris console (visible only to Polaris owners).
+前往北极星: Go to Polaris
 敏感字段，仅支持在应用环境变量中获取: Sensitive field, only available in application environment variables
 请输入数字、英文字母、.、-、_，长度不超过128个字符:
   Please enter numbers, English letters , -, _, with
