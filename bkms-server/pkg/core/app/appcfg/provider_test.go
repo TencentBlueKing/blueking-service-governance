@@ -50,18 +50,22 @@ var _ = Describe("Local Provider", func() {
 
 		normalAcf = &AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeNormal,
-				ContentSourceType: ContentSourceTypeLocal,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  AppConfigFileTypeNormal,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeLocal,
+				},
 			},
 		}
 		overlayAcf = &AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeOverlay,
-				ContentSourceType: ContentSourceTypeLocal,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  AppConfigFileTypeOverlay,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeLocal,
+				},
 			},
 		}
 	})
@@ -78,11 +82,13 @@ var _ = Describe("Local Provider", func() {
 			baseContent := "base: content"
 			baseAcf := &AppConfigFile{
 				AppConfigFileContentSpec: AppConfigFileContentSpec{
-					AppID:             appID,
-					Name:              "base-values",
-					Type:              AppConfigFileTypeNormal,
-					ContentSourceType: ContentSourceTypeLocal,
-					Content:           &baseContent,
+					AppID: appID,
+					Name:  "base-values",
+					Type:  AppConfigFileTypeNormal,
+					VersionedContent: VersionedContent{
+						ContentSourceType: ContentSourceTypeLocal,
+						Content:           &baseContent,
+					},
 				},
 			}
 			baseID, err := store.Add(ctx, *baseAcf)
@@ -122,18 +128,22 @@ var _ = Describe("BSCP Provider", func() {
 
 		normalAcf = &AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeNormal,
-				ContentSourceType: ContentSourceTypeBSCP,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  AppConfigFileTypeNormal,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeBSCP,
+				},
 			},
 		}
 		overlayAcf = &AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeOverlay,
-				ContentSourceType: ContentSourceTypeBSCP,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  AppConfigFileTypeOverlay,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeBSCP,
+				},
 			},
 		}
 	})
@@ -176,9 +186,11 @@ var _ = Describe("BSCP Provider", func() {
 					AppID: appID,
 					Name:  "base-values",
 					Type:  AppConfigFileTypeNormal,
-					// Use the Local type as base for testing because reading BSCP content is not implemented yet
-					ContentSourceType: ContentSourceTypeLocal,
-					Content:           &baseContent,
+					VersionedContent: VersionedContent{
+						// Use the Local type as base for testing because reading BSCP content is not implemented yet
+						ContentSourceType: ContentSourceTypeLocal,
+						Content:           &baseContent,
+					},
 				},
 			}
 			baseID, err := store.Add(ctx, *baseAcf)

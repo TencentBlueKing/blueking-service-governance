@@ -626,11 +626,13 @@ imagePullSecrets:
   - name: ${{ bkms.APP_IMAGE_PULL_SECRET }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
 					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-						AppID:             app.ID,
-						Name:              "test-values",
-						Type:              appcfg.AppConfigFileTypeNormal,
-						ContentSourceType: appcfg.ContentSourceTypeLocal,
-						Content:           &content,
+						AppID: app.ID,
+						Name:  "test-values",
+						Type:  appcfg.AppConfigFileTypeNormal,
+						VersionedContent: appcfg.VersionedContent{
+							ContentSourceType: appcfg.ContentSourceTypeLocal,
+							Content:           &content,
+						},
 					},
 				}
 				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
@@ -681,11 +683,13 @@ imagePullSecrets:
   tag: ${{ bkms.ARTIFACT_IMAGE_TAG }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
 					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-						AppID:             app.ID,
-						Name:              "overlay-values",
-						Type:              appcfg.AppConfigFileTypeOverlay,
-						ContentSourceType: appcfg.ContentSourceTypeLocal,
-						OverlayContent:    &overlayContent,
+						AppID: app.ID,
+						Name:  "overlay-values",
+						Type:  appcfg.AppConfigFileTypeOverlay,
+						VersionedContent: appcfg.VersionedContent{
+							ContentSourceType: appcfg.ContentSourceTypeLocal,
+							OverlayContent:    &overlayContent,
+						},
 					},
 				}
 				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
@@ -718,7 +722,9 @@ custom: ${{ env.MY_VAR }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
 					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
 						AppID: app.ID, Name: "v", Type: appcfg.AppConfigFileTypeNormal,
-						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
+						VersionedContent: appcfg.VersionedContent{
+							ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
+						},
 					},
 				}
 				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
@@ -750,7 +756,9 @@ custom: ${{ env.MY_VAR }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
 					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
 						AppID: app.ID, Name: "v", Type: appcfg.AppConfigFileTypeNormal,
-						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
+						VersionedContent: appcfg.VersionedContent{
+							ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
+						},
 					},
 				}
 				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()

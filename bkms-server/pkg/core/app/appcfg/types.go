@@ -167,43 +167,15 @@ func (c *BSCPConfig) FetchContent(ctx context.Context) (string, error) {
 	return content, nil
 }
 
-// AppConfigFileContentSpec 包含 AppConfigFile 与 AppConfigFileVersion 共享的内容相关字段。
-type AppConfigFileContentSpec struct {
-	// AppID 是该应用配置文件所属应用的 ID。
-	AppID string `bson:"appID"`
-	// EnvName 是该应用配置文件所属环境的名称。
-	// 其使用方式会随应用类型不同而变化：
-	// - Helm 应用：始终为空
-	// - tRPC 应用：为空表示应用级默认配置，非空表示环境级配置
-	EnvName string `bson:"envName"`
-
-	// Name 是应用配置文件名称。
-	Name string `bson:"name"`
-	// Type 表示应用配置文件类型（normal 或 overlay）。
-	Type AppConfigFileType `bson:"type"`
+// VersionedContent 包含参与版本快照与回滚的"文件内容"字段。
+// 回滚操作只恢复此结构中的字段，不会影响文件身份或环境配置策略。
+type VersionedContent struct {
 	// ContentSourceType 表示应用配置文件内容来源，
 	// 可以来自本地存储，也可以来自 BSCP 等外部系统。
 	ContentSourceType ContentSourceType `bson:"contentSourceType"`
 	// Format 表示配置文件格式（如 yaml、taf）。
 	// 未指定时默认按 yaml 处理。
 	Format FileFormat `bson:"format,omitempty"`
-	// ConfigKind 表示配置文件遵循 framework 语义还是 plain-file 语义。
-	// 历史记录如果没有该字段，则按 framework 文件处理。
-	ConfigKind ConfigKind `bson:"configKind,omitempty"`
-	// MountPath 是 plain 配置文件在容器内的完整挂载路径。
-	// Framework 文件仍然沿用 workload 层的 FilePath + FileName，而不使用该字段。
-	MountPath string `bson:"mountPath,omitempty"`
-	// DefaultAppConfigFileID 在当前记录是环境级 plain 实例时，指向其所属的默认逻辑文件。
-	// 默认逻辑文件自身不设置该字段，并使用自己的 ID 作为逻辑根。
-	DefaultAppConfigFileID *bson.ObjectID `bson:"rootAppConfigFileID,omitempty"`
-	// IsUnifiedConfig 表示当前逻辑文件是否为统一配置模式。
-	// true = 所有挂载环境共用同一份内容；false = 按环境独立配置。
-	// 不能使用 omitempty：Update 走 $set，false 被省略后数据库会留下旧的 true。
-	IsUnifiedConfig bool `bson:"isUnifiedConfig"`
-	// MountedEnvNames 表示当前文件的挂载环境范围。
-	// nil = 对所有环境生效；非 nil 空切片 = 不挂载到任何环境；非空 = 仅对列出的环境生效。
-	MountedEnvNames []string `bson:"mountedEnvNames"`
-
 	// BSCPConfig is BSCP resource config reference.
 	// This field is only set when ContentSourceType is bscp.
 	BSCPConfig *BSCPConfig `bson:"bscpConfig,omitempty"`
@@ -227,15 +199,60 @@ type AppConfigFileContentSpec struct {
 	//
 	// The patches field might contain multiple patch documents.
 	OverlayContent *string `bson:"overlayContent,omitempty"`
+}
 
+// EnvConfigPolicy 包含环境维度的配置策略与关系元数据。
+// 这些字段描述挂载位置、环境关联、统一/独立配置模式等运行时策略，不参与版本回滚。
+// Framework 和 plain 文件共用 IsUnifiedConfig 与 MountedEnvNames；
+// MountPath 和 DefaultAppConfigFileID 仅 plain 文件使用。
+type EnvConfigPolicy struct {
+	// MountPath 是 plain 配置文件在容器内的完整挂载路径。
+	// Framework 文件仍然沿用 workload 层的 FilePath + FileName，而不使用该字段。
+	MountPath string `bson:"mountPath,omitempty"`
+	// DefaultAppConfigFileID 在当前记录是环境级 plain 实例时，指向其所属的默认逻辑文件。
+	// 默认逻辑文件自身不设置该字段，并使用自己的 ID 作为逻辑根。
+	DefaultAppConfigFileID *bson.ObjectID `bson:"defaultAppConfigFileID,omitempty"`
+	// IsUnifiedConfig 表示当前逻辑文件是否为统一配置模式。
+	// true = 所有挂载环境共用同一份内容；false = 按环境独立配置。
+	// 不能使用 omitempty：Update 走 $set，false 被省略后数据库会留下旧的 true。
+	IsUnifiedConfig bool `bson:"isUnifiedConfig"`
+	// MountedEnvNames 表示当前文件的挂载环境范围。
+	// nil = 对所有环境生效；非 nil 空切片 = 不挂载到任何环境；非空 = 仅对列出的环境生效。
+	MountedEnvNames []string `bson:"mountedEnvNames"`
+}
+
+// AppConfigFileContentSpec 包含 AppConfigFile 与 AppConfigFileVersion 共享的字段集。
+//
+// 内部按职责分为两组：
+//   - 身份字段：AppID、EnvName、Name 等创建后不变的标识信息
+//   - VersionedContent（内联）：文件内容及格式，参与版本快照与回滚
+type AppConfigFileContentSpec struct {
+	// ── 身份字段（创建后不变）────────────────────────────────────
+
+	// AppID 是该应用配置文件所属应用的 ID。
+	AppID string `bson:"appID"`
+	// EnvName 是该应用配置文件所属环境的名称。
+	// 其使用方式会随应用类型不同而变化：
+	// - Helm 应用：始终为空
+	// - tRPC 应用：为空表示应用级默认配置，非空表示环境级配置
+	EnvName string `bson:"envName"`
+	// Name 是应用配置文件名称。
+	Name string `bson:"name"`
+	// Type 表示应用配置文件类型（normal 或 overlay）。
+	Type AppConfigFileType `bson:"type"`
+	// ConfigKind 表示配置文件遵循 framework 语义还是 plain-file 语义。
+	// 历史记录如果没有该字段，则按 framework 文件处理。
+	ConfigKind ConfigKind `bson:"configKind,omitempty"`
 	// BaseAppConfigFileID is the ID of the base app config file, it is only set when Type is overlay.
 	BaseAppConfigFileID *bson.ObjectID `bson:"baseAppConfigFileID,omitempty"`
-
 	// Creator is the creator of this logical file / version record.
 	Creator string `bson:"creator"`
-
 	// CreatedAt is the creation time
 	CreatedAt time.Time `bson:"createdAt"`
+
+	// ── 可版本化内容（参与回滚）──────────────────────────────────
+
+	VersionedContent `bson:",inline"`
 }
 
 // AppConfigFile represents an app config file, e.g. Helm values file, tRPC config file, etc.
@@ -258,8 +275,13 @@ type AppConfigFileContentSpec struct {
 //   - For a given appID and envName, there should be at most ONE app config file
 type AppConfigFile struct {
 	// ID is the unique identifier for the app config file.
-	ID                       bson.ObjectID `bson:"_id,omitempty"`
+	ID bson.ObjectID `bson:"_id,omitempty"`
+	// AppConfigFileContentSpec 内联嵌入身份字段与可版本化内容。
 	AppConfigFileContentSpec `bson:",inline"`
+
+	// ── 环境配置策略（仅存在于 AppConfigFile，不写入版本记录）────────
+	EnvConfigPolicy `bson:",inline"`
+
 	// CurrentVersion is the current active version number of this file.
 	CurrentVersion int64 `bson:"currentVersion"`
 
@@ -270,19 +292,32 @@ type AppConfigFile struct {
 	UpdatedAt time.Time `bson:"updatedAt"`
 }
 
-// AppConfigFileVersion stores immutable records of app config file changes
+// AppConfigFileVersion 存储配置文件变更的不可变历史记录。
+//
+// 每次对 AppConfigFile 执行创建、更新或回滚操作时，都会追加一条版本记录。
 type AppConfigFileVersion struct {
-	ID                       bson.ObjectID `bson:"_id,omitempty"`
-	AppConfigFileID          bson.ObjectID `bson:"appConfigFileID"`
+	// ID 是版本记录的唯一标识。
+	ID bson.ObjectID `bson:"_id,omitempty"`
+	// AppConfigFileID 指向该版本所属的配置文件。
+	AppConfigFileID bson.ObjectID `bson:"appConfigFileID"`
+	// AppConfigFileContentSpec 内联嵌入，存储该版本时刻的身份字段与可版本化内容。
 	AppConfigFileContentSpec `bson:",inline"`
-	Version                  int64                             `bson:"version"`
-	Description              string                            `bson:"description,omitempty"`
-	BaseVersion              *int64                            `bson:"baseVersion,omitempty"`
-	OperationType            AppConfigFileVersionOperationType `bson:"operationType"`
-	RollbackFromVersion      *int64                            `bson:"rollbackFromVersion,omitempty"`
-	IsDeleted                bool                              `bson:"isDeleted"`
-	Deleter                  string                            `bson:"deleter,omitempty"`
-	DeletedAt                *time.Time                        `bson:"deletedAt,omitempty"`
+	// Version 是单调递增的版本号，同一文件内唯一。
+	Version int64 `bson:"version"`
+	// Description 是本次变更的描述信息。
+	Description string `bson:"description,omitempty"`
+	// BaseVersion 仅在 overlay 文件中使用，记录创建版本时 base 文件的当前版本号。
+	BaseVersion *int64 `bson:"baseVersion,omitempty"`
+	// OperationType 标识版本产生的方式：create、update 或 rollback。
+	OperationType AppConfigFileVersionOperationType `bson:"operationType"`
+	// RollbackFromVersion 仅在 OperationType 为 rollback 时设置，记录回滚的目标版本号。
+	RollbackFromVersion *int64 `bson:"rollbackFromVersion,omitempty"`
+	// IsDeleted 标识该版本是否已被软删除。软删除后默认不展示，但仍可通过选项查询。
+	IsDeleted bool `bson:"isDeleted"`
+	// Deleter 是执行软删除操作的用户。
+	Deleter string `bson:"deleter,omitempty"`
+	// DeletedAt 是软删除的时间戳。
+	DeletedAt *time.Time `bson:"deletedAt,omitempty"`
 }
 
 // GetConfigFormat returns the config format of the app config file, default to YAML format if not specified.
@@ -309,29 +344,29 @@ func (s *AppConfigFileContentSpec) GetConfigKind() ConfigKind {
 // HasIndependentEnvConfig 判断当前逻辑文件是否处于按环境独立配置模式。
 // 对于旧数据（IsUnifiedConfig 零值 false、无 env instance），进入独立分支后
 // 查不到 env instance 会回退到默认内容，行为与统一配置一致，无副作用。
-func (s *AppConfigFileContentSpec) HasIndependentEnvConfig() bool {
-	if s == nil {
+func (p *EnvConfigPolicy) HasIndependentEnvConfig() bool {
+	if p == nil {
 		return false
 	}
-	return !s.IsUnifiedConfig
+	return !p.IsUnifiedConfig
 }
 
 // IsMountedToEnv 判断该逻辑文件是否应挂载到指定环境。
 // nil 表示对所有环境生效；非 nil 空切片表示不挂载到任何环境。
-func (s *AppConfigFileContentSpec) IsMountedToEnv(envName string) bool {
-	if s == nil {
+func (p *EnvConfigPolicy) IsMountedToEnv(envName string) bool {
+	if p == nil {
 		return false
 	}
-	if s.MountedEnvNames == nil {
+	if p.MountedEnvNames == nil {
 		return true
 	}
-	return lo.Contains(s.MountedEnvNames, envName)
+	return lo.Contains(p.MountedEnvNames, envName)
 }
 
 // GetLogicalRootID returns the logical-root config file ID when it is known.
-func (s *AppConfigFileContentSpec) GetLogicalRootID(selfID bson.ObjectID) (bson.ObjectID, bool) {
-	if s.DefaultAppConfigFileID != nil {
-		return *s.DefaultAppConfigFileID, true
+func (p *EnvConfigPolicy) GetLogicalRootID(selfID bson.ObjectID) (bson.ObjectID, bool) {
+	if p.DefaultAppConfigFileID != nil {
+		return *p.DefaultAppConfigFileID, true
 	}
 	if selfID != bson.NilObjectID {
 		return selfID, true

@@ -369,14 +369,14 @@ var _ = Describe("ListEnvPlainContents", func() {
 	})
 })
 
-var _ = Describe("AppConfigFileContentSpec", func() {
-	It("treats zero-value spec as independent env config", func() {
-		spec := appcfg.AppConfigFileContentSpec{}
-		Expect(spec.HasIndependentEnvConfig()).To(BeTrue())
+var _ = Describe("EnvConfigPolicy", func() {
+	It("treats zero-value policy as independent env config", func() {
+		policy := appcfg.EnvConfigPolicy{}
+		Expect(policy.HasIndependentEnvConfig()).To(BeTrue())
 	})
 
-	It("does not treat explicitly unified spec as independent", func() {
-		spec := appcfg.AppConfigFileContentSpec{IsUnifiedConfig: true}
-		Expect(spec.HasIndependentEnvConfig()).To(BeFalse())
+	It("does not treat explicitly unified policy as independent", func() {
+		policy := appcfg.EnvConfigPolicy{IsUnifiedConfig: true}
+		Expect(policy.HasIndependentEnvConfig()).To(BeFalse())
 	})
 })

@@ -79,21 +79,25 @@ func (s *AppConfigFileService) Create(
 
 	acf := AppConfigFile{
 		AppConfigFileContentSpec: AppConfigFileContentSpec{
-			AppID:                  params.AppID,
-			EnvName:                params.EnvName,
-			Name:                   params.Name,
-			Type:                   params.Type,
-			ContentSourceType:      params.ContentSourceType,
-			Format:                 params.Format,
-			ConfigKind:             params.ConfigKind,
+			AppID:      params.AppID,
+			EnvName:    params.EnvName,
+			Name:       params.Name,
+			Type:       params.Type,
+			ConfigKind: params.ConfigKind,
+			Creator:    params.Creator,
+			VersionedContent: VersionedContent{
+				ContentSourceType: params.ContentSourceType,
+				Format:            params.Format,
+				BSCPConfig:        params.BSCPConfig,
+				Content:           params.Content,
+				OverlayContent:    params.OverlayContent,
+			},
+		},
+		EnvConfigPolicy: EnvConfigPolicy{
 			MountPath:              params.MountPath,
 			DefaultAppConfigFileID: params.DefaultAppConfigFileID,
 			IsUnifiedConfig:        params.IsUnifiedConfig,
 			MountedEnvNames:        params.MountedEnvNames,
-			BSCPConfig:             params.BSCPConfig,
-			Content:                params.Content,
-			OverlayContent:         params.OverlayContent,
-			Creator:                params.Creator,
 		},
 		Updater:        params.Creator,
 		CurrentVersion: 1,
@@ -744,7 +748,7 @@ func (s *AppConfigFileService) Rollback(
 		return nil, nil, err
 	}
 	rollbackFromVersion := targetVersion.Version
-	acf.AppConfigFileContentSpec = targetVersion.AppConfigFileContentSpec
+	acf.VersionedContent = targetVersion.VersionedContent
 
 	if description == "" {
 		description = fmt.Sprintf("回滚到 v%d", targetVersion.Version)

@@ -48,18 +48,22 @@ var _ = Describe("Local Editor", func() {
 
 		normalAcf = &AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeNormal,
-				ContentSourceType: ContentSourceTypeLocal,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  AppConfigFileTypeNormal,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeLocal,
+				},
 			},
 		}
 		overlayAcf = &AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeOverlay,
-				ContentSourceType: ContentSourceTypeLocal,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  AppConfigFileTypeOverlay,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeLocal,
+				},
 			},
 		}
 		normalAcf.ID, _ = store.Add(ctx, *normalAcf)
@@ -109,11 +113,13 @@ var _ = Describe("Local Editor", func() {
   replicas: 3`
 		baseAcf := AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "base-values",
-				Type:              AppConfigFileTypeNormal,
-				ContentSourceType: ContentSourceTypeLocal,
-				Content:           &baseContent,
+				AppID: appID,
+				Name:  "base-values",
+				Type:  AppConfigFileTypeNormal,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeLocal,
+					Content:           &baseContent,
+				},
 			},
 		}
 		oid, err := store.Add(ctx, baseAcf)
@@ -128,9 +134,11 @@ patches:
 				AppID:               appID,
 				Name:                "overlay-values",
 				Type:                AppConfigFileTypeOverlay,
-				ContentSourceType:   ContentSourceTypeLocal,
 				BaseAppConfigFileID: &oid,
-				OverlayContent:      &overlayContent,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeLocal,
+					OverlayContent:    &overlayContent,
+				},
 			},
 		}
 		_, err = store.Add(ctx, overlayAcfNew)
@@ -275,18 +283,22 @@ var _ = Describe("BSCP Editor", func() {
 
 		normalAcf = &AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeNormal,
-				ContentSourceType: ContentSourceTypeBSCP,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  AppConfigFileTypeNormal,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeBSCP,
+				},
 			},
 		}
 		overlayAcf = &AppConfigFile{
 			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeOverlay,
-				ContentSourceType: ContentSourceTypeBSCP,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  AppConfigFileTypeOverlay,
+				VersionedContent: VersionedContent{
+					ContentSourceType: ContentSourceTypeBSCP,
+				},
 			},
 		}
 	})

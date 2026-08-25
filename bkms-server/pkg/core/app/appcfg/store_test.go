@@ -60,11 +60,13 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
  replicas: 3`
 		testAppConfigFile = appcfg.AppConfigFile{
 			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Content:           &content,
+				AppID: appID,
+				Name:  "test-values",
+				Type:  appcfg.AppConfigFileTypeNormal,
+				VersionedContent: appcfg.VersionedContent{
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+				},
 			},
 		}
 	})
@@ -129,12 +131,14 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			appLevelContent := "config: app-level"
 			appLevelFile := appcfg.AppConfigFile{
 				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-					AppID:             appID,
-					EnvName:           appcfg.EnvNameDefault,
-					Name:              "app-level-config",
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &appLevelContent,
+					AppID:   appID,
+					EnvName: appcfg.EnvNameDefault,
+					Name:    "app-level-config",
+					Type:    appcfg.AppConfigFileTypeNormal,
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Content:           &appLevelContent,
+					},
 				},
 			}
 			_, err := store.Add(ctx, appLevelFile)
@@ -144,12 +148,14 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			prodContent := "config: prod"
 			prodFile := appcfg.AppConfigFile{
 				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-					AppID:             appID,
-					EnvName:           "prod",
-					Name:              "prod-config",
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &prodContent,
+					AppID:   appID,
+					EnvName: "prod",
+					Name:    "prod-config",
+					Type:    appcfg.AppConfigFileTypeNormal,
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Content:           &prodContent,
+					},
 				},
 			}
 			_, err = store.Add(ctx, prodFile)
@@ -186,14 +192,18 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{
 				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-					AppID:             appID,
-					Name:              "custom-env",
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &content,
-					ConfigKind:        appcfg.ConfigKindPlain,
-					MountPath:         "/data/app/conf/custom.env",
-					Format:            appcfg.FileFormat("env"),
+					AppID:      appID,
+					Name:       "custom-env",
+					Type:       appcfg.AppConfigFileTypeNormal,
+					ConfigKind: appcfg.ConfigKindPlain,
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Content:           &content,
+						Format:            appcfg.FileFormat("env"),
+					},
+				},
+				EnvConfigPolicy: appcfg.EnvConfigPolicy{
+					MountPath: "/data/app/conf/custom.env",
 				},
 			}
 			_, err := store.Add(ctx, plainFile)
@@ -232,16 +242,20 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{
 				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-					AppID:             appID,
-					Name:              "scoped-env",
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &content,
-					ConfigKind:        appcfg.ConfigKindPlain,
-					MountPath:         "/data/app/conf/scoped.env",
-					Format:            appcfg.FileFormat("env"),
-					IsUnifiedConfig:   true,
-					MountedEnvNames:   []string{},
+					AppID:      appID,
+					Name:       "scoped-env",
+					Type:       appcfg.AppConfigFileTypeNormal,
+					ConfigKind: appcfg.ConfigKindPlain,
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Content:           &content,
+						Format:            appcfg.FileFormat("env"),
+					},
+				},
+				EnvConfigPolicy: appcfg.EnvConfigPolicy{
+					MountPath:       "/data/app/conf/scoped.env",
+					IsUnifiedConfig: true,
+					MountedEnvNames: []string{},
 				},
 			}
 			oid, err := store.Add(ctx, plainFile)
@@ -257,15 +271,19 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{
 				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-					AppID:             appID,
-					Name:              "unified-flag-update",
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &content,
-					ConfigKind:        appcfg.ConfigKindPlain,
-					MountPath:         "/data/app/conf/unified-flag.env",
-					Format:            appcfg.FileFormat("env"),
-					IsUnifiedConfig:   true,
+					AppID:      appID,
+					Name:       "unified-flag-update",
+					Type:       appcfg.AppConfigFileTypeNormal,
+					ConfigKind: appcfg.ConfigKindPlain,
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Content:           &content,
+						Format:            appcfg.FileFormat("env"),
+					},
+				},
+				EnvConfigPolicy: appcfg.EnvConfigPolicy{
+					MountPath:       "/data/app/conf/unified-flag.env",
+					IsUnifiedConfig: true,
 				},
 			}
 			oid, err := store.Add(ctx, plainFile)
@@ -285,16 +303,20 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{
 				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-					AppID:             appID,
-					Name:              "scoped-env-update",
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &content,
-					ConfigKind:        appcfg.ConfigKindPlain,
-					MountPath:         "/data/app/conf/scoped-update.env",
-					Format:            appcfg.FileFormat("env"),
-					IsUnifiedConfig:   true,
-					MountedEnvNames:   []string{"prod"},
+					AppID:      appID,
+					Name:       "scoped-env-update",
+					Type:       appcfg.AppConfigFileTypeNormal,
+					ConfigKind: appcfg.ConfigKindPlain,
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Content:           &content,
+						Format:            appcfg.FileFormat("env"),
+					},
+				},
+				EnvConfigPolicy: appcfg.EnvConfigPolicy{
+					MountPath:       "/data/app/conf/scoped-update.env",
+					IsUnifiedConfig: true,
+					MountedEnvNames: []string{"prod"},
 				},
 			}
 			oid, err := store.Add(ctx, plainFile)

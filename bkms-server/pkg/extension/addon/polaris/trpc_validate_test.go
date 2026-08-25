@@ -85,12 +85,14 @@ var _ = Describe("CollectConfigWarnings", func() {
 	createAppLevelConfigFile := func(content string) {
 		acf := appcfg.AppConfigFile{
 			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-				AppID:             testAppID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              appcfg.DefaultAppConfigFileName,
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Content:           &content,
+				AppID:   testAppID,
+				EnvName: appcfg.EnvNameDefault,
+				Name:    appcfg.DefaultAppConfigFileName,
+				Type:    appcfg.AppConfigFileTypeNormal,
+				VersionedContent: appcfg.VersionedContent{
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+				},
 			},
 		}
 		_, err := appConfigFileStore.Add(ctx, acf)
@@ -101,12 +103,14 @@ var _ = Describe("CollectConfigWarnings", func() {
 	createEnvConfigFile := func(envName, content string) {
 		acf := appcfg.AppConfigFile{
 			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-				AppID:             testAppID,
-				EnvName:           envName,
-				Name:              envName,
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Content:           &content,
+				AppID:   testAppID,
+				EnvName: envName,
+				Name:    envName,
+				Type:    appcfg.AppConfigFileTypeNormal,
+				VersionedContent: appcfg.VersionedContent{
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Content:           &content,
+				},
 			},
 		}
 		_, err := appConfigFileStore.Add(ctx, acf)

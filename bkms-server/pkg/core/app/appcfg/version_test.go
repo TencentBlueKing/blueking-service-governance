@@ -78,12 +78,14 @@ var _ = Describe("AppConfigFileVersionStoreMongo", func() {
 		_, err = fileStore.Add(ctx, appcfg.AppConfigFile{
 			ID: fileID,
 			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-				AppID:             app.ID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              "values-main",
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Format:            appcfg.FileFormatYAML,
+				AppID:   app.ID,
+				EnvName: appcfg.EnvNameDefault,
+				Name:    "values-main",
+				Type:    appcfg.AppConfigFileTypeNormal,
+				VersionedContent: appcfg.VersionedContent{
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Format:            appcfg.FileFormatYAML,
+				},
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -107,12 +109,14 @@ var _ = Describe("AppConfigFileVersionStoreMongo", func() {
 					EnvName:             "prod",
 					Name:                "values",
 					Type:                appcfg.AppConfigFileTypeOverlay,
-					ContentSourceType:   appcfg.ContentSourceTypeLocal,
-					Format:              appcfg.FileFormatYAML,
-					OverlayContent:      &content,
 					BaseAppConfigFileID: &baseID,
 					Creator:             "tester",
 					CreatedAt:           time.Now(),
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Format:            appcfg.FileFormatYAML,
+						OverlayContent:    &content,
+					},
 				},
 				Version:             2,
 				Description:         "second version",

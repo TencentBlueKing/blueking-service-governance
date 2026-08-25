@@ -128,10 +128,10 @@ plain：
   - **不创建** env instance（引用模型，环境默认引用默认记录内容）
   - 若调整挂载范围导致某些已有 env instance 不在新范围内，删除这些 env instance
 
-- `fallbackConfigEnv`（回退为共用配置）
-  - 在按环境独立配置模式下，指定要回退为引用状态的环境名称
-  - 删除该环境的 env instance 及其版本历史
-  - 这些环境回到引用默认记录内容的状态
+- `fallbackConfigEnv`（单环境回退为引用状态）
+  - 仅在按环境独立配置模式（`isUnifiedConfig=false`）下有效
+  - 指定要回退的环境名称，删除该环境的 env instance 及其版本历史
+  - 该环境恢复为引用默认记录内容的状态，其他环境的独立配置不受影响
 
 ### 3. 环境内容更新（copy-on-write）
 
@@ -184,19 +184,22 @@ plain 引入后，环境生命周期会影响配置文件实例生命周期。
 - 更新配置文件基础属性
 - 配置文件列表
 - 配置文件详情
-- 配置文件版本列表/详情/对比/回滚相关输出
 
 新增或扩展的核心字段包括：
 
 - `configKind`
-- `mountPath`
-- `isUnifiedConfig`
-- `mountedEnvNames`
+- `mountPath`（仅文件接口，版本接口不包含）
+- `isUnifiedConfig`（仅文件接口，版本接口不包含）
+- `mountedEnvNames`（仅文件接口，版本接口不包含）
 
 其中：
 
 - `framework` 默认兼容旧语义
 - `plain` 明确表示容器额外挂载文件
+
+> 注：环境配置策略字段（`mountPath`、`isUnifiedConfig`、`mountedEnvNames`）仅存在于
+> `AppConfigFile`，不写入版本记录。版本记录只保存身份字段与可版本化内容
+> （`VersionedContent`），回滚操作也只恢复内容部分，不影响策略配置。
 
 ### 2. 创建接口
 

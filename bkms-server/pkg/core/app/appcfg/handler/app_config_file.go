@@ -631,11 +631,13 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 	virtualConfig := &appcfg.AppConfigFile{
 		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
 			Type:                appcfg.AppConfigFileTypeOverlay,
-			ContentSourceType:   appcfg.ContentSourceTypeLocal,
 			BaseAppConfigFileID: &baseID,
-			OverlayContent:      &input.OverlayContent,
 			ConfigKind:          baseFile.GetConfigKind(),
-			Format:              baseFile.GetConfigFormat(),
+			VersionedContent: appcfg.VersionedContent{
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				OverlayContent:    &input.OverlayContent,
+				Format:            baseFile.GetConfigFormat(),
+			},
 		},
 	}
 	if validateErr := validateFrameworkFileContent(input.OverlayContent); validateErr != nil {

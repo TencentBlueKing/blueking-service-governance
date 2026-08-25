@@ -166,7 +166,6 @@ var _ = Describe("App config file serializers", func() {
 					{
 						ID:                  "v1",
 						Version:             7,
-						IsUnifiedConfig:     true,
 						BaseVersion:         &baseVersion,
 						RollbackFromVersion: &rollbackFromVersion,
 					},
@@ -190,8 +189,6 @@ var _ = Describe("App config file serializers", func() {
 						"type": "",
 						"contentSourceType": "",
 						"configKind": "",
-						"isUnifiedConfig": true,
-						"mountedEnvNames": null,
 						"fileFormat": "",
 						"baseVersion": 2,
 						"operationType": "",

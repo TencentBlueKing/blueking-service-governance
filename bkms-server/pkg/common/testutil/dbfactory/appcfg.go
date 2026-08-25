@@ -71,20 +71,24 @@ func AppConfigFile(
 
 	acf := &appcfg.AppConfigFile{
 		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-			AppID:                  opts.AppID,
-			EnvName:                opts.EnvName,
-			Name:                   opts.Name,
-			Type:                   opts.Type,
-			ContentSourceType:      appcfg.ContentSourceTypeLocal,
-			Format:                 opts.Format,
-			ConfigKind:             opts.ConfigKind,
+			AppID:               opts.AppID,
+			EnvName:             opts.EnvName,
+			Name:                opts.Name,
+			Type:                opts.Type,
+			ConfigKind:          opts.ConfigKind,
+			BaseAppConfigFileID: opts.BaseAppConfigFileID,
+			VersionedContent: appcfg.VersionedContent{
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            opts.Format,
+				Content:           opts.Content,
+				OverlayContent:    opts.OverlayContent,
+			},
+		},
+		EnvConfigPolicy: appcfg.EnvConfigPolicy{
 			MountPath:              opts.MountPath,
 			DefaultAppConfigFileID: opts.DefaultAppConfigFileID,
 			IsUnifiedConfig:        opts.IsUnifiedConfig,
 			MountedEnvNames:        opts.MountedEnvNames,
-			Content:                opts.Content,
-			OverlayContent:         opts.OverlayContent,
-			BaseAppConfigFileID:    opts.BaseAppConfigFileID,
 		},
 	}
 	id, err := store.Add(ctx, *acf)
@@ -145,15 +149,17 @@ func AppConfigFileVersion(opts *AppConfigFileVersionOpts) appcfg.AppConfigFileVe
 	return appcfg.AppConfigFileVersion{
 		AppConfigFileID: opts.AppConfigFileID,
 		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-			AppID:             opts.AppID,
-			EnvName:           opts.EnvName,
-			Name:              opts.Name,
-			Type:              opts.Type,
-			ContentSourceType: opts.ContentSourceType,
-			Format:            opts.Format,
-			Content:           &content,
-			Creator:           opts.Creator,
-			CreatedAt:         opts.CreatedAt,
+			AppID:     opts.AppID,
+			EnvName:   opts.EnvName,
+			Name:      opts.Name,
+			Type:      opts.Type,
+			Creator:   opts.Creator,
+			CreatedAt: opts.CreatedAt,
+			VersionedContent: appcfg.VersionedContent{
+				ContentSourceType: opts.ContentSourceType,
+				Format:            opts.Format,
+				Content:           &content,
+			},
 		},
 		Version:       opts.Version,
 		Description:   opts.Description,
