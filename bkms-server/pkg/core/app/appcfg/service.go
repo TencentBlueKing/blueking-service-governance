@@ -75,7 +75,7 @@ func (s *AppConfigFileService) Create(
 	params.MountedEnvNames = normalizeEnvNames(params.MountedEnvNames)
 
 	acf := AppConfigFile{
-		AppConfigFileContentSpec: AppConfigFileContentSpec{
+		AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 			AppID:      params.AppID,
 			EnvName:    params.EnvName,
 			Name:       params.Name,
@@ -90,11 +90,13 @@ func (s *AppConfigFileService) Create(
 				OverlayContent:    params.OverlayContent,
 			},
 		},
-		EnvConfigPolicy: EnvConfigPolicy{
+		PlainFileAttrs: PlainFileAttrs{
 			MountPath:              params.MountPath,
 			DefaultAppConfigFileID: params.DefaultAppConfigFileID,
-			IsUnifiedConfig:        params.IsUnifiedConfig,
-			MountedEnvNames:        params.MountedEnvNames,
+		},
+		EnvConfigMode: EnvConfigMode{
+			IsUnifiedConfig: params.IsUnifiedConfig,
+			MountedEnvNames: params.MountedEnvNames,
 		},
 		Updater:        params.Creator,
 		CurrentVersion: 1,
@@ -830,13 +832,13 @@ func (s *AppConfigFileService) buildVersionRecord(
 	creator string,
 ) (AppConfigFileVersion, error) {
 	version := AppConfigFileVersion{
-		AppConfigFileID:          acf.ID,
-		AppConfigFileContentSpec: acf.AppConfigFileContentSpec,
-		Version:                  acf.CurrentVersion,
-		Description:              description,
-		OperationType:            operationType,
-		RollbackFromVersion:      rollbackFromVersion,
-		IsDeleted:                false,
+		AppConfigFileID:            acf.ID,
+		AppConfigFileVersionedSpec: acf.AppConfigFileVersionedSpec,
+		Version:                    acf.CurrentVersion,
+		Description:                description,
+		OperationType:              operationType,
+		RollbackFromVersion:        rollbackFromVersion,
+		IsDeleted:                  false,
 	}
 	version.Creator = creator
 	version.CreatedAt = time.Now()

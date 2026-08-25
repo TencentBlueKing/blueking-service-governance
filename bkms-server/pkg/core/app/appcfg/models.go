@@ -48,11 +48,13 @@ import (
 type AppConfigFile struct {
 	// ID is the unique identifier for the app config file.
 	ID bson.ObjectID `bson:"_id,omitempty"`
-	// AppConfigFileContentSpec 内联嵌入身份字段与可版本化内容。
-	AppConfigFileContentSpec `bson:",inline"`
+	// AppConfigFileVersionedSpec 保存参与版本管理的字段。
+	AppConfigFileVersionedSpec `bson:",inline"`
 
-	// ── 环境配置策略（仅存在于 AppConfigFile，不写入版本记录）────────
-	EnvConfigPolicy `bson:",inline"`
+	// PlainFileAttrs 保存 plain 文件专属附加属性。
+	PlainFileAttrs `bson:",inline"`
+	// EnvConfigMode 保存当前环境配置模式。
+	EnvConfigMode `bson:",inline"`
 
 	// CurrentVersion is the current active version number of this file.
 	CurrentVersion int64 `bson:"currentVersion"`
@@ -65,18 +67,13 @@ type AppConfigFile struct {
 }
 
 // AppConfigFileVersion 存储配置文件变更的不可变历史记录。
-//
-// 每次对 AppConfigFile 执行创建、更新或回滚操作时，都会追加一条版本记录。
-// 版本记录通过内联嵌入 AppConfigFileContentSpec 保存身份字段与 VersionedContent 快照。
-// EnvConfigPolicy（挂载路径、统一/独立模式等）不包含在版本记录中——
-// 这些策略字段仅存在于 AppConfigFile，不参与版本 diff 与回滚。
 type AppConfigFileVersion struct {
 	// ID 是版本记录的唯一标识。
 	ID bson.ObjectID `bson:"_id,omitempty"`
 	// AppConfigFileID 指向该版本所属的配置文件。
 	AppConfigFileID bson.ObjectID `bson:"appConfigFileID"`
-	// AppConfigFileContentSpec 内联嵌入，存储该版本时刻的身份字段与可版本化内容。
-	AppConfigFileContentSpec `bson:",inline"`
+	// AppConfigFileVersionedSpec 内联嵌入该版本的可版本化字段。
+	AppConfigFileVersionedSpec `bson:",inline"`
 	// Version 是单调递增的版本号，同一文件内唯一。
 	Version int64 `bson:"version"`
 	// Description 是本次变更的描述信息。
@@ -128,14 +125,18 @@ type VersionedContent struct {
 	OverlayContent *string `bson:"overlayContent,omitempty"`
 }
 
-// EnvConfigPolicy 包含环境维度的配置策略与关系元数据，不参与版本管理
-type EnvConfigPolicy struct {
+// PlainFileAttrs 保存 plain 文件专属附加属性，不参与版本管理。
+type PlainFileAttrs struct {
 	// MountPath 是 plain 配置文件在容器内的完整挂载路径。
 	// Framework 文件仍然沿用 workload 层的 FilePath + FileName，而不使用该字段。
 	MountPath string `bson:"mountPath,omitempty"`
 	// DefaultAppConfigFileID 在当前记录是环境级 plain 实例时，指向其所属的默认逻辑文件。
 	// 默认逻辑文件自身不设置该字段，并使用自己的 ID 作为逻辑根。
 	DefaultAppConfigFileID *bson.ObjectID `bson:"defaultAppConfigFileID,omitempty"`
+}
+
+// EnvConfigMode 描述逻辑文件当前采用的环境配置模式，不参与版本管理。
+type EnvConfigMode struct {
 	// IsUnifiedConfig 表示当前逻辑文件是否为统一配置模式。
 	// true = 所有挂载环境共用同一份内容；false = 按环境独立配置。
 	// 不能使用 omitempty：Update 走 $set，false 被省略后数据库会留下旧的 true。
@@ -145,12 +146,8 @@ type EnvConfigPolicy struct {
 	MountedEnvNames []string `bson:"mountedEnvNames"`
 }
 
-// AppConfigFileContentSpec 包含 AppConfigFile 与 AppConfigFileVersion 共享的字段集。
-//
-// 内部按职责分为两组：
-//   - 身份字段：AppID、EnvName、Name 等创建后不变的标识信息
-//   - VersionedContent（内联）：文件内容及格式，参与版本快照与回滚
-type AppConfigFileContentSpec struct {
+// AppConfigFileVersionedSpec 包含会进入版本记录并参与回滚的字段。
+type AppConfigFileVersionedSpec struct {
 	// -- 身份字段 --
 
 	// AppID 是该应用配置文件所属应用的 ID。
@@ -191,7 +188,7 @@ type AppValuesConfig struct {
 }
 
 // GetConfigFormat returns the config format of the app config file, default to YAML format if not specified.
-func (s *AppConfigFileContentSpec) GetConfigFormat() FileFormat {
+func (s *AppConfigFileVersionedSpec) GetConfigFormat() FileFormat {
 	// For backward compatibility
 	if s.Format == "" {
 		log.WarnNoContextf("app config file %s/%s has no format, default to YAML format", s.AppID, s.Name)
@@ -201,36 +198,39 @@ func (s *AppConfigFileContentSpec) GetConfigFormat() FileFormat {
 }
 
 // GetConfigKind returns the semantic kind of the app config file.
-func (s *AppConfigFileContentSpec) GetConfigKind() ConfigKind {
+func (s *AppConfigFileVersionedSpec) GetConfigKind() ConfigKind {
 	return s.ConfigKind
 }
 
 // HasIndependentEnvConfig 判断当前逻辑文件是否处于按环境独立配置模式。
 // 对于旧数据（IsUnifiedConfig 零值 false、无 env instance），进入独立分支后
 // 查不到 env instance 会回退到默认内容，行为与统一配置一致，无副作用。
-func (p *EnvConfigPolicy) HasIndependentEnvConfig() bool {
-	if p == nil {
+func (m *EnvConfigMode) HasIndependentEnvConfig() bool {
+	if m == nil {
 		return false
 	}
-	return !p.IsUnifiedConfig
+	return !m.IsUnifiedConfig
 }
 
 // IsMountedToEnv 判断该逻辑文件是否应挂载到指定环境。
 // nil 表示对所有环境生效；非 nil 空切片表示不挂载到任何环境。
-func (p *EnvConfigPolicy) IsMountedToEnv(envName string) bool {
-	if p == nil {
+func (m *EnvConfigMode) IsMountedToEnv(envName string) bool {
+	if m == nil {
 		return false
 	}
-	if p.MountedEnvNames == nil {
+	if m.MountedEnvNames == nil {
 		return true
 	}
-	return lo.Contains(p.MountedEnvNames, envName)
+	return lo.Contains(m.MountedEnvNames, envName)
 }
 
 // GetLogicalRootID returns the logical-root config file ID when it is known.
-func (p *EnvConfigPolicy) GetLogicalRootID(selfID bson.ObjectID) (bson.ObjectID, bool) {
-	if p.DefaultAppConfigFileID != nil {
-		return *p.DefaultAppConfigFileID, true
+//
+// 对于 plain 环境实例，逻辑根是 DefaultAppConfigFileID 指向的默认记录；
+// 对于默认记录自身，则逻辑根就是自己的 ID。
+func (a *PlainFileAttrs) GetLogicalRootID(selfID bson.ObjectID) (bson.ObjectID, bool) {
+	if a != nil && a.DefaultAppConfigFileID != nil {
+		return *a.DefaultAppConfigFileID, true
 	}
 	if selfID != bson.NilObjectID {
 		return selfID, true

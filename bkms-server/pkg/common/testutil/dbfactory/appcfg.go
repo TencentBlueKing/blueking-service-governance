@@ -70,7 +70,7 @@ func AppConfigFile(
 	}
 
 	acf := &appcfg.AppConfigFile{
-		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+		AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 			AppID:               opts.AppID,
 			EnvName:             opts.EnvName,
 			Name:                opts.Name,
@@ -84,11 +84,13 @@ func AppConfigFile(
 				OverlayContent:    opts.OverlayContent,
 			},
 		},
-		EnvConfigPolicy: appcfg.EnvConfigPolicy{
+		PlainFileAttrs: appcfg.PlainFileAttrs{
 			MountPath:              opts.MountPath,
 			DefaultAppConfigFileID: opts.DefaultAppConfigFileID,
-			IsUnifiedConfig:        opts.IsUnifiedConfig,
-			MountedEnvNames:        opts.MountedEnvNames,
+		},
+		EnvConfigMode: appcfg.EnvConfigMode{
+			IsUnifiedConfig: opts.IsUnifiedConfig,
+			MountedEnvNames: opts.MountedEnvNames,
 		},
 	}
 	id, err := store.Add(ctx, *acf)
@@ -148,7 +150,7 @@ func AppConfigFileVersion(opts *AppConfigFileVersionOpts) appcfg.AppConfigFileVe
 
 	return appcfg.AppConfigFileVersion{
 		AppConfigFileID: opts.AppConfigFileID,
-		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+		AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 			AppID:     opts.AppID,
 			EnvName:   opts.EnvName,
 			Name:      opts.Name,

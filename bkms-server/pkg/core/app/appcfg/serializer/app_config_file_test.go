@@ -148,7 +148,7 @@ var _ = Describe("App config file serializers", func() {
 
 	It("fills version fileFormat via GetConfigFormat when format is empty", func() {
 		output := new(serializer.AppConfigFileVersionOutputObj).FromModel(appcfg.AppConfigFileVersion{
-			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 				Name: "demo",
 			},
 		})

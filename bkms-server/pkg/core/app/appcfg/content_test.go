@@ -345,14 +345,14 @@ var _ = Describe("ListEnvPlainContents", func() {
 	})
 })
 
-var _ = Describe("EnvConfigPolicy", func() {
+var _ = Describe("EnvConfigMode", func() {
 	It("treats zero-value policy as independent env config", func() {
-		policy := appcfg.EnvConfigPolicy{}
+		policy := appcfg.EnvConfigMode{}
 		Expect(policy.HasIndependentEnvConfig()).To(BeTrue())
 	})
 
 	It("does not treat explicitly unified policy as independent", func() {
-		policy := appcfg.EnvConfigPolicy{IsUnifiedConfig: true}
+		policy := appcfg.EnvConfigMode{IsUnifiedConfig: true}
 		Expect(policy.HasIndependentEnvConfig()).To(BeFalse())
 	})
 })

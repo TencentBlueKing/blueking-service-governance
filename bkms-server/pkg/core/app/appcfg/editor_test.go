@@ -47,7 +47,7 @@ var _ = Describe("Local Editor", func() {
 		appID = "test-app-" + stringx.Random(6)
 
 		normalAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  AppConfigFileTypeNormal,
@@ -57,7 +57,7 @@ var _ = Describe("Local Editor", func() {
 			},
 		}
 		overlayAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  AppConfigFileTypeOverlay,
@@ -112,7 +112,7 @@ var _ = Describe("Local Editor", func() {
   image: myapp:latest
   replicas: 3`
 		baseAcf := AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "base-values",
 				Type:  AppConfigFileTypeNormal,
@@ -130,7 +130,7 @@ patches:
 - global:
     image: myapp:v2.0`
 		overlayAcfNew := AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID:               appID,
 				Name:                "overlay-values",
 				Type:                AppConfigFileTypeOverlay,
@@ -282,7 +282,7 @@ var _ = Describe("BSCP Editor", func() {
 		appID = "test-app-" + stringx.Random(6)
 
 		normalAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  AppConfigFileTypeNormal,
@@ -292,7 +292,7 @@ var _ = Describe("BSCP Editor", func() {
 			},
 		}
 		overlayAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  AppConfigFileTypeOverlay,

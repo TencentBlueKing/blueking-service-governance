@@ -84,7 +84,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 	// 辅助函数：创建应用级别 tRPC 配置文件
 	createAppLevelConfigFile := func(content string) {
 		acf := appcfg.AppConfigFile{
-			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 				AppID:   testAppID,
 				EnvName: appcfg.EnvNameDefault,
 				Name:    appcfg.DefaultAppConfigFileName,
@@ -102,7 +102,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 	// 辅助函数：创建环境级别 tRPC 配置文件
 	createEnvConfigFile := func(envName, content string) {
 		acf := appcfg.AppConfigFile{
-			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 				AppID:   testAppID,
 				EnvName: envName,
 				Name:    envName,

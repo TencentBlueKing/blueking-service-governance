@@ -59,7 +59,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
  image: myapp:latest
  replicas: 3`
 		testAppConfigFile = appcfg.AppConfigFile{
-			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  appcfg.AppConfigFileTypeNormal,
@@ -130,7 +130,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			// Create app-level default config (envName = "")
 			appLevelContent := "config: app-level"
 			appLevelFile := appcfg.AppConfigFile{
-				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 					AppID:   appID,
 					EnvName: appcfg.EnvNameDefault,
 					Name:    "app-level-config",
@@ -147,7 +147,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			// Create prod environment config
 			prodContent := "config: prod"
 			prodFile := appcfg.AppConfigFile{
-				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 					AppID:   appID,
 					EnvName: "prod",
 					Name:    "prod-config",
@@ -191,7 +191,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		It("should return the plain config file matched by mountPath", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{
-				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 					AppID:      appID,
 					Name:       "custom-env",
 					Type:       appcfg.AppConfigFileTypeNormal,
@@ -202,7 +202,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 						Format:            appcfg.FileFormat("env"),
 					},
 				},
-				EnvConfigPolicy: appcfg.EnvConfigPolicy{
+				PlainFileAttrs: appcfg.PlainFileAttrs{
 					MountPath: "/data/app/conf/custom.env",
 				},
 			}
@@ -241,7 +241,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		It("should persist empty mountedEnvNames as empty slice not nil", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{
-				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 					AppID:      appID,
 					Name:       "scoped-env",
 					Type:       appcfg.AppConfigFileTypeNormal,
@@ -252,8 +252,10 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 						Format:            appcfg.FileFormat("env"),
 					},
 				},
-				EnvConfigPolicy: appcfg.EnvConfigPolicy{
-					MountPath:       "/data/app/conf/scoped.env",
+				PlainFileAttrs: appcfg.PlainFileAttrs{
+					MountPath: "/data/app/conf/scoped.env",
+				},
+				EnvConfigMode: appcfg.EnvConfigMode{
 					IsUnifiedConfig: true,
 					MountedEnvNames: []string{},
 				},
@@ -270,7 +272,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		It("should persist isUnifiedConfig false on update", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{
-				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 					AppID:      appID,
 					Name:       "unified-flag-update",
 					Type:       appcfg.AppConfigFileTypeNormal,
@@ -281,8 +283,10 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 						Format:            appcfg.FileFormat("env"),
 					},
 				},
-				EnvConfigPolicy: appcfg.EnvConfigPolicy{
-					MountPath:       "/data/app/conf/unified-flag.env",
+				PlainFileAttrs: appcfg.PlainFileAttrs{
+					MountPath: "/data/app/conf/unified-flag.env",
+				},
+				EnvConfigMode: appcfg.EnvConfigMode{
 					IsUnifiedConfig: true,
 				},
 			}
@@ -302,7 +306,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		It("should persist clearing mountedEnvNames to empty slice on update", func() {
 			content := "KEY=VALUE"
 			plainFile := appcfg.AppConfigFile{
-				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 					AppID:      appID,
 					Name:       "scoped-env-update",
 					Type:       appcfg.AppConfigFileTypeNormal,
@@ -313,8 +317,10 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 						Format:            appcfg.FileFormat("env"),
 					},
 				},
-				EnvConfigPolicy: appcfg.EnvConfigPolicy{
-					MountPath:       "/data/app/conf/scoped-update.env",
+				PlainFileAttrs: appcfg.PlainFileAttrs{
+					MountPath: "/data/app/conf/scoped-update.env",
+				},
+				EnvConfigMode: appcfg.EnvConfigMode{
 					IsUnifiedConfig: true,
 					MountedEnvNames: []string{"prod"},
 				},

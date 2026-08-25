@@ -153,8 +153,8 @@ type PolarisConfigPropertyDraft struct {
 // AppConfigFileVersionTafDraft 与 AppConfigFileTafDraft 同形，
 // 但对应 app_config_file_versions（版本历史表）。
 //
-// 这张表的 Content / OverlayContent 通过内嵌的 AppConfigFileContentSpec 提供，
-// 见 pkg/core/app/appcfg/types.go: AppConfigFileVersion。
+// 这张表的 Content / OverlayContent 通过内嵌的 AppConfigFileVersionedSpec 提供，
+// 见 pkg/core/app/appcfg/models.go: AppConfigFileVersion。
 // 必须迁这张表，否则用户回滚到一个旧版本时，
 // 旧版本里的 legacy {{...}} 会被重新写回 app_config_files。
 type AppConfigFileVersionTafDraft struct {

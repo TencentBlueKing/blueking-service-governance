@@ -49,7 +49,7 @@ var _ = Describe("Local Provider", func() {
 		appID = "test-app-" + stringx.Random(6)
 
 		normalAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  AppConfigFileTypeNormal,
@@ -59,7 +59,7 @@ var _ = Describe("Local Provider", func() {
 			},
 		}
 		overlayAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  AppConfigFileTypeOverlay,
@@ -81,7 +81,7 @@ var _ = Describe("Local Provider", func() {
 			// Create and save a base app config file
 			baseContent := "base: content"
 			baseAcf := &AppConfigFile{
-				AppConfigFileContentSpec: AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 					AppID: appID,
 					Name:  "base-values",
 					Type:  AppConfigFileTypeNormal,
@@ -127,7 +127,7 @@ var _ = Describe("BSCP Provider", func() {
 		appID = "test-app-" + stringx.Random(6)
 
 		normalAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  AppConfigFileTypeNormal,
@@ -137,7 +137,7 @@ var _ = Describe("BSCP Provider", func() {
 			},
 		}
 		overlayAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 				AppID: appID,
 				Name:  "test-values",
 				Type:  AppConfigFileTypeOverlay,
@@ -182,7 +182,7 @@ var _ = Describe("BSCP Provider", func() {
 			// Create and save a base app config file
 			baseContent := "base: content"
 			baseAcf := &AppConfigFile{
-				AppConfigFileContentSpec: AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 					AppID: appID,
 					Name:  "base-values",
 					Type:  AppConfigFileTypeNormal,

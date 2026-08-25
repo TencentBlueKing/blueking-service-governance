@@ -77,7 +77,7 @@ var _ = Describe("AppConfigFileVersionStoreMongo", func() {
 		fileID = bson.NewObjectID()
 		_, err = fileStore.Add(ctx, appcfg.AppConfigFile{
 			ID: fileID,
-			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+			AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 				AppID:   app.ID,
 				EnvName: appcfg.EnvNameDefault,
 				Name:    "values-main",
@@ -104,7 +104,7 @@ var _ = Describe("AppConfigFileVersionStoreMongo", func() {
 			content := "foo: v2"
 			version := appcfg.AppConfigFileVersion{
 				AppConfigFileID: fileID,
-				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 					AppID:               appID,
 					EnvName:             "prod",
 					Name:                "values",
