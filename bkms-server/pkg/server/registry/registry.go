@@ -34,6 +34,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	appcfghooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/hooks"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -266,6 +267,7 @@ func (r *Registry) registerStoreHooks() {
 	r.WorkspaceCompsStore.SetComponentHooks(workspace.NewComponentRefCountHooks(r.ComponentDefStore))
 	r.AppModelStore.SetComponentHooks(appmodel.NewComponentRefCountHooks(r.ComponentDefStore))
 	envvarhooks.RegisterDeleteHooks(r.ScopedEnvVarStore)
+	appcfghooks.RegisterDeleteHooks(r.AppStore, r.AppConfigFileStore, r.AppConfigFileVersionStore)
 	alertstrategyhooks.RegisterUpdateHooks(
 		r.WorkspaceStore,
 		r.AlertStrategyStore,

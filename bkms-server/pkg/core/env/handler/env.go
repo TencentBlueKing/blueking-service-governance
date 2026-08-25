@@ -26,7 +26,6 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/serializer"
@@ -567,13 +566,7 @@ func (h *Handler) DeleteEnv(c *gin.Context) {
 		log.Warnf(ctx, "remove env %s from all APMs failed: %v", envID.Hex(), err)
 	}
 
-	svc := bkmsenv.NewEnvService(h.registry.EnvStore).WithDeleteCleaner(
-		appcfg.NewPlainEnvInstanceCleaner(
-			h.registry.AppStore,
-			h.registry.AppConfigFileStore,
-			h.registry.AppConfigFileVersionStore,
-		).CleanupBeforeDelete,
-	)
+	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
 	if err = svc.Delete(ctx, envID); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete environment"))
 		return

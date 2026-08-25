@@ -73,9 +73,6 @@ func (s *AppConfigFileService) Create(
 ) (*AppConfigFile, error) {
 	params = normalizeCreateCfgFileParams(params)
 	params.MountedEnvNames = normalizeEnvNames(params.MountedEnvNames)
-	if err := validatePlainCreateParams(params); err != nil {
-		return nil, err
-	}
 
 	acf := AppConfigFile{
 		AppConfigFileContentSpec: AppConfigFileContentSpec{
@@ -450,80 +447,20 @@ func normalizeCreateCfgFileParams(params CreateCfgFileParams) CreateCfgFileParam
 	return params
 }
 
-// validatePlainCreateParams 在持久化之前，校验普通文件（plain-file）类型配置特有的创建约束。
-func validatePlainCreateParams(params CreateCfgFileParams) error {
-	if params.ConfigKind != ConfigKindPlain && strings.TrimSpace(params.MountPath) != "" {
-		return errors.Wrap(ErrInvalidConfigSpec, "framework config does not support mountPath")
-	}
-	if params.ConfigKind != ConfigKindPlain && params.MountedEnvNames != nil {
-		return errors.Wrap(ErrInvalidConfigSpec, "framework config does not support mountedEnvNames")
-	}
-	if params.ConfigKind != ConfigKindPlain {
-		return nil
-	}
-	if params.Type != AppConfigFileTypeNormal {
-		return errors.Wrap(ErrInvalidConfigSpec, "plain config only supports normal type")
-	}
-	if params.ContentSourceType != ContentSourceTypeLocal {
-		return errors.Wrap(ErrInvalidConfigSpec, "plain config only supports local content source")
-	}
-	if params.BaseAppConfigFileID != nil {
-		return errors.Wrap(ErrInvalidConfigSpec, "plain config does not support base app config file")
-	}
-	if params.OverlayContent != nil {
-		return errors.Wrap(ErrInvalidConfigSpec, "plain config does not support overlay content")
-	}
-	if err := validatePlainMountPath(params.MountPath); err != nil {
-		return err
-	}
-	if params.EnvName != EnvNameDefault && params.DefaultAppConfigFileID == nil {
-		return errors.Wrap(ErrInvalidConfigSpec, "plain env instance requires defaultAppConfigFileID")
-	}
-	return nil
-}
-
-// validatePlainMountPath 要求 mountPath 是容器内的绝对文件路径：以 / 开头、不是根目录、不以 / 结尾。
-func validatePlainMountPath(mountPath string) error {
-	if mountPath == "" {
-		return errors.Wrap(ErrInvalidConfigSpec, "mountPath is required for plain config")
-	}
-	if !strings.HasPrefix(mountPath, "/") || mountPath == "/" || strings.HasSuffix(mountPath, "/") {
-		return errors.Wrap(ErrInvalidConfigSpec, "mountPath must be an absolute file path")
-	}
-	return nil
-}
-
-// validatePlainConfigFile 校验 plain 文件约束以及 mountPath 唯一性。
+// validatePlainConfigFile 校验 plain 文件的业务约束。
 func (s *AppConfigFileService) validatePlainConfigFile(ctx context.Context, acf *AppConfigFile) error {
-	if acf == nil {
+	if acf == nil || acf.GetConfigKind() != ConfigKindPlain {
 		return nil
 	}
 	acf.MountPath = strings.TrimSpace(acf.MountPath)
-	if acf.GetConfigKind() != ConfigKindPlain {
-		if acf.MountPath != "" {
-			return errors.Wrap(ErrInvalidConfigSpec, "framework config does not support mountPath")
-		}
-		if acf.MountedEnvNames != nil {
-			return errors.Wrap(ErrInvalidConfigSpec, "framework config does not support mountedEnvNames")
-		}
-		return nil
-	}
-	if acf.Type != AppConfigFileTypeNormal {
-		return errors.Wrap(ErrInvalidConfigSpec, "plain config only supports normal type")
-	}
-	if acf.ContentSourceType != ContentSourceTypeLocal {
-		return errors.Wrap(ErrInvalidConfigSpec, "plain config only supports local content source")
-	}
-	if acf.BaseAppConfigFileID != nil {
-		return errors.Wrap(ErrInvalidConfigSpec, "plain config does not support base app config file")
-	}
+
 	if acf.OverlayContent != nil {
 		return errors.Wrap(ErrInvalidConfigSpec, "plain config does not support overlay content")
 	}
-
-	if err := validatePlainMountPath(acf.MountPath); err != nil {
-		return err
+	if acf.EnvName != EnvNameDefault && acf.DefaultAppConfigFileID == nil {
+		return errors.Wrap(ErrInvalidConfigSpec, "plain env instance requires defaultAppConfigFileID")
 	}
+
 	if acf.DefaultAppConfigFileID != nil {
 		root, err := s.fileStore.GetByID(ctx, *acf.DefaultAppConfigFileID)
 		if err != nil {

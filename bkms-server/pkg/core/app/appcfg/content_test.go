@@ -118,15 +118,6 @@ var _ = Describe("GetFrameworkEnvContent", func() {
 
 	Context("when framework and plain env-specific config coexist", func() {
 		BeforeEach(func() {
-			defaultContent := "server:\n  address: 0.0.0.0:8080\n"
-			dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
-				AppID:      app.ID,
-				EnvName:    appcfg.EnvNameDefault,
-				Name:       appcfg.DefaultAppConfigFileName,
-				ConfigKind: appcfg.ConfigKindFramework,
-				Content:    &defaultContent,
-			})
-
 			frameworkProdContent := "server:\n  address: 0.0.0.0:9090\n"
 			dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
 				AppID:      app.ID,
@@ -136,28 +127,13 @@ var _ = Describe("GetFrameworkEnvContent", func() {
 				Content:    &frameworkProdContent,
 			})
 
-			plainDefaultContent := "benchmark.enabled=true\n"
-			plainRoot := dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
-				AppID:           app.ID,
-				EnvName:         appcfg.EnvNameDefault,
-				Name:            "custom-env",
-				ConfigKind:      appcfg.ConfigKindPlain,
-				IsUnifiedConfig: false,
-				MountedEnvNames: []string{"prod"},
-				MountPath:       "/data/app/conf/custom.env",
-				Format:          appcfg.FileFormat("properties"),
-				Content:         &plainDefaultContent,
-			})
 			plainProdContent := "benchmark.enabled=false\n"
 			dbfactory.AppConfigFile(ctx, store, &dbfactory.AppConfigFileOpts{
-				AppID:                  app.ID,
-				EnvName:                "prod",
-				Name:                   "custom-env--prod",
-				ConfigKind:             appcfg.ConfigKindPlain,
-				MountPath:              "/data/app/conf/custom.env",
-				DefaultAppConfigFileID: &plainRoot.ID,
-				Format:                 appcfg.FileFormat("properties"),
-				Content:                &plainProdContent,
+				AppID:      app.ID,
+				EnvName:    "prod",
+				Name:       "custom-env--prod",
+				ConfigKind: appcfg.ConfigKindPlain,
+				Content:    &plainProdContent,
 			})
 		})
 

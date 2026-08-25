@@ -62,11 +62,11 @@ func (h *Handler) validateAndGetAppConfigFile(
 func (h *Handler) validateBaseAppConfigFileID(
 	ctx context.Context,
 	appID string,
-	configKind appcfg.ConfigKind,
+	kind appcfg.ConfigKind,
 	fileType string,
 	baseID string,
 ) (*bson.ObjectID, error) {
-	if configKind == appcfg.ConfigKindPlain {
+	if kind == appcfg.ConfigKindPlain {
 		return nil, nil
 	}
 	if appcfg.AppConfigFileType(fileType) != appcfg.AppConfigFileTypeOverlay {
@@ -98,12 +98,12 @@ func (h *Handler) validateBaseAppConfigFileID(
 
 func (h *Handler) validateBSCPConfig(
 	ctx context.Context,
-	configKind appcfg.ConfigKind,
+	kind appcfg.ConfigKind,
 	sourceType appcfg.ContentSourceType,
 	cfg *slz.BSCPAppConfigFileConfig,
 	fileFormat appcfg.FileFormat,
 ) (*appcfg.BSCPConfig, error) {
-	if configKind == appcfg.ConfigKindPlain {
+	if kind == appcfg.ConfigKindPlain {
 		if sourceType == appcfg.ContentSourceTypeBSCP {
 			return nil, pkgerrors.Wrap(appcfg.ErrInvalidConfigSpec, "plain config only supports local content source")
 		}

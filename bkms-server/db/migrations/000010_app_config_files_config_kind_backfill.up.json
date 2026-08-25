@@ -1,0 +1,38 @@
+[
+  {
+    "update": "app_config_files",
+    "updates": [
+      {
+        "q": {
+          "$or": [
+            { "configKind": { "$exists": false } },
+            { "configKind": "" },
+            { "configKind": null }
+          ]
+        },
+        "u": {
+          "$set": { "configKind": "framework" }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "update": "app_config_file_versions",
+    "updates": [
+      {
+        "q": {
+          "$or": [
+            { "configKind": { "$exists": false } },
+            { "configKind": "" },
+            { "configKind": null }
+          ]
+        },
+        "u": {
+          "$set": { "configKind": "framework" }
+        },
+        "multi": true
+      }
+    ]
+  }
+]

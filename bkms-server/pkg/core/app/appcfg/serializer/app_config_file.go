@@ -21,6 +21,7 @@ package serializer
 
 import (
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin/binding"
@@ -40,6 +41,10 @@ func init() {
 		if err := v.RegisterValidation("app_config_file_format", validateAppConfigFileFormat); err != nil {
 			panic("failed to register app_config_file_format validator: " + err.Error())
 		}
+		if err := v.RegisterValidation("plain_mount_path", validatePlainMountPath); err != nil {
+			panic("failed to register plain_mount_path validator: " + err.Error())
+		}
+		v.RegisterStructValidation(validateCreateAppConfigFileInput, CreateAppConfigFileInput{})
 	}
 }
 
@@ -55,6 +60,51 @@ var (
 	appConfigFileNamePattern   = regexp.MustCompile("^[a-zA-Z0-9-_]+$")
 	appConfigFileFormatPattern = regexp.MustCompile("^[a-z0-9._-]+$")
 )
+
+// validatePlainMountPath 校验容器内绝对文件路径：以 / 开头、不等于 /、不以 / 结尾。
+func validatePlainMountPath(fl validator.FieldLevel) bool {
+	p := strings.TrimSpace(fl.Field().String())
+	if p == "" {
+		return true // 空值由 required 或 struct-level 校验处理
+	}
+	return strings.HasPrefix(p, "/") && p != "/" && !strings.HasSuffix(p, "/")
+}
+
+// validateCreateAppConfigFileInput 校验 CreateAppConfigFileInput 的跨字段约束。
+func validateCreateAppConfigFileInput(sl validator.StructLevel) {
+	input := sl.Current().Interface().(CreateAppConfigFileInput)
+	kind := strings.ToLower(strings.TrimSpace(input.ConfigKind))
+	isPlain := kind == string(appcfg.ConfigKindPlain)
+
+	if !isPlain {
+		if strings.TrimSpace(input.MountPath) != "" {
+			sl.ReportError(input.MountPath, "MountPath", "MountPath", "excluded_for_framework", "")
+		}
+		if input.MountedEnvNames != nil {
+			sl.ReportError(input.MountedEnvNames, "MountedEnvNames", "MountedEnvNames", "excluded_for_framework", "")
+		}
+		return
+	}
+	// plain 类型约束
+	if input.Type != "normal" {
+		sl.ReportError(input.Type, "Type", "Type", "plain_must_be_normal", "")
+	}
+	if input.ContentSourceType != "local" {
+		sl.ReportError(input.ContentSourceType, "ContentSourceType", "ContentSourceType", "plain_must_be_local", "")
+	}
+	if input.BaseAppConfigFileID != "" {
+		sl.ReportError(
+			input.BaseAppConfigFileID,
+			"BaseAppConfigFileID",
+			"BaseAppConfigFileID",
+			"excluded_for_plain",
+			"",
+		)
+	}
+	if strings.TrimSpace(input.MountPath) == "" {
+		sl.ReportError(input.MountPath, "MountPath", "MountPath", "required_for_plain", "")
+	}
+}
 
 // AppURIInput is the path input for APIs scoped by application.
 type AppURIInput struct {
@@ -121,13 +171,13 @@ type CreateAppConfigFileInput struct {
 	// 配置文件语义类型，不传时默认按 framework 处理
 	ConfigKind string `json:"configKind,omitempty" binding:"omitempty,oneof=framework plain"`
 	// plain 配置文件的容器内完整挂载路径
-	MountPath string `json:"mountPath,omitempty" binding:"omitempty,min=1,max=255"`
+	MountPath string `json:"mountPath,omitempty" binding:"omitempty,min=1,max=255,plain_mount_path"`
 	// 挂载环境范围。不传/nil = 对所有环境生效；传空数组 = 不挂载到任何环境；
 	// 非空 = 仅对列出的环境生效。创建时始终按统一配置处理，此字段仅控制挂载范围。
 	MountedEnvNames []string `json:"mountedEnvNames,omitempty" binding:"omitempty,dive,min=1,max=64"`
 	// 环境名称，可选。为空表示应用级别配置，非空表示特定环境的配置
 	EnvName *string `json:"envName,omitempty"`
-	// 文件格式标识，framework 兼容历史语义，plain 仅做弱校验
+	// 文件格式标识，framework 可选 yaml 或 taf，plain 不校验文件格式
 	FileFormat string `json:"fileFormat" binding:"required,min=1,max=32,app_config_file_format"`
 	// 版本描述
 	Description string `json:"description"`
@@ -142,7 +192,7 @@ type UpdateAppConfigFileInput struct {
 	// 当 contentSourceType 为 bscp 时，bscpConfig 为必填
 	BscpConfig *BSCPAppConfigFileConfig `json:"bscpConfig,omitempty"`
 	// plain 配置文件的容器内完整挂载路径
-	MountPath string `json:"mountPath,omitempty" binding:"omitempty,min=1,max=255"`
+	MountPath string `json:"mountPath,omitempty" binding:"omitempty,min=1,max=255,plain_mount_path"`
 	// 文件格式标识，plain 仅做弱校验
 	FileFormat string `json:"fileFormat,omitempty" binding:"omitempty,min=1,max=32,app_config_file_format"`
 	// 版本描述
