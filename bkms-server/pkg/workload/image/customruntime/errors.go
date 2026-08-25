@@ -27,6 +27,12 @@ var (
 	ErrImageTagNotFound = errors.New("custom runtime image tag not found in registry")
 	// ErrRegistryAccessDenied 访问生效镜像源鉴权失败
 	ErrRegistryAccessDenied = errors.New("custom runtime image registry auth required")
-	// ErrRegistryAccessFailed 访问生效镜像源超时或网络失败
+	// ErrRegistryAccessFailed 访问生效镜像源网络失败（超时见 ErrRegistryAccessTimeout）
 	ErrRegistryAccessFailed = errors.New("custom runtime image registry access failed")
+	// ErrRegistryAccessTimeout 访问生效镜像源超出同步等待预算，与其它访问失败区分以便对外给出可识别提示
+	ErrRegistryAccessTimeout = errors.New("custom runtime image registry access timed out")
+	// ErrWorkspaceRegistryUnbound 工作空间尚未绑定镜像源，无从取得访问凭证
+	ErrWorkspaceRegistryUnbound = errors.New("workspace image registry is not bound")
+	// ErrImageNotInWorkspaceRegistry 镜像名不在工作空间生效镜像源路径下
+	ErrImageNotInWorkspaceRegistry = errors.New("image does not belong to the workspace image registry")
 )

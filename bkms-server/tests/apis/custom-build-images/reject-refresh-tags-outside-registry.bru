@@ -1,0 +1,35 @@
+meta {
+  name: reject-refresh-tags-outside-registry
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{customBuildImagesWorkspaceID}}/custom-build-images/tags/refresh
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "docker.io/library/nginx"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  // 刷新同样会取工作空间凭证出网，前缀校验必须与查询接口一致
+  test("should reject refreshing tags for an image outside the workspace registry", () => {
+    expect(res.status).to.equal(400);
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

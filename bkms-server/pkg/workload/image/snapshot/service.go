@@ -35,6 +35,17 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 )
 
+// 快照陈旧阈值
+const (
+	// staleTTLDisabled 不启用 TTL 懒刷新，仅保留「快照为空则初始化」
+	staleTTLDisabled time.Duration = 0
+	// customImageStaleTTL 工作空间自定义镜像的快照陈旧阈值。
+	//
+	// 自定义镜像的 tag 只能从下拉框选择、不支持手动输入，若快照仅在落库时同步一次，
+	// 用户新推送的 tag 将永远选不到且无绕过手段；该阈值同时用于抑制反复展开下拉造成的远程调用风暴
+	customImageStaleTTL = 5 * time.Minute
+)
+
 // Service 镜像快照服务
 type Service struct {
 	snapshotStore    SnapshotStore
@@ -182,7 +193,8 @@ func (s *Service) ListRepositorySnapshots(
 		return nil, 0, nil, err
 	}
 
-	return s.listSnapshotsByRepoInfo(ctx, info, keyword, page, pageSize)
+	// 官方镜像不启用 TTL 懒刷新，其快照陈旧属存量问题，另行评估
+	return s.listSnapshotsByRepoInfo(ctx, info, keyword, page, pageSize, staleTTLDisabled)
 }
 
 // ListAppSnapshots 从本地快照查询镜像列表
@@ -196,15 +208,48 @@ func (s *Service) ListAppSnapshots(
 		return nil, 0, nil, errors.Wrapf(err, "resolve repo key for app %s", appID)
 	}
 
-	return s.listSnapshotsByRepoInfo(ctx, info, keyword, page, pageSize)
+	// 应用产物镜像已有构建成功等 4 个事件驱动的刷新触发点，不需要 TTL 懒刷新
+	return s.listSnapshotsByRepoInfo(ctx, info, keyword, page, pageSize, staleTTLDisabled)
 }
 
-// listSnapshotsByRepoInfo 从本地快照查询仓库实例的标签列表
+// ListWorkspaceSnapshots 从本地快照查询工作空间自定义镜像的标签列表。
+//
+// 与官方镜像、应用产物镜像不同，本路径启用 TTL 懒刷新：快照超过 customImageStaleTTL
+// 未成功刷新时异步补一次，本次请求仍立即返回当前快照内容
+func (s *Service) ListWorkspaceSnapshots(
+	ctx context.Context,
+	workspaceID, imageName, keyword string,
+	page, pageSize int,
+) ([]Image, int64, *RepoSnapshotStatus, error) {
+	info, err := s.ResolveRepoKeyForWorkspace(ctx, workspaceID, imageName)
+	if err != nil {
+		return nil, 0, nil, errors.Wrapf(err, "resolve repo key for workspace %s image %s", workspaceID, imageName)
+	}
+
+	return s.listSnapshotsByRepoInfo(ctx, info, keyword, page, pageSize, customImageStaleTTL)
+}
+
+// ListWorkspaceSnapshotsByRepoInfo 在 repoKey 已解析好时读自定义镜像快照，启用 TTL 懒刷新
+func (s *Service) ListWorkspaceSnapshotsByRepoInfo(
+	ctx context.Context, info *RepoKeyInfo, keyword string, page, pageSize int,
+) ([]Image, int64, *RepoSnapshotStatus, error) {
+	return s.listSnapshotsByRepoInfo(ctx, info, keyword, page, pageSize, customImageStaleTTL)
+}
+
+// RefreshSnapshotsByRepoInfo 在 repoKey 已解析好时同步刷新快照
+func (s *Service) RefreshSnapshotsByRepoInfo(ctx context.Context, info *RepoKeyInfo) (*RefreshResult, error) {
+	return s.refreshSnapshotsByRepoInfo(ctx, info)
+}
+
+// listSnapshotsByRepoInfo 从本地快照查询仓库实例的标签列表。
+//
+// staleTTL 控制是否启用 TTL 懒刷新，传 staleTTLDisabled 则只保留「快照为空则初始化」的原有行为
 func (s *Service) listSnapshotsByRepoInfo(
 	ctx context.Context,
 	info *RepoKeyInfo,
 	keyword string,
 	page, pageSize int,
+	staleTTL time.Duration,
 ) ([]Image, int64, *RepoSnapshotStatus, error) {
 	// 查询快照
 	snapshots, total, err := s.snapshotStore.ListByRepoKey(ctx, info.RepoKey, keyword, page, pageSize)
@@ -218,18 +263,41 @@ func (s *Service) listSnapshotsByRepoInfo(
 		return nil, 0, nil, errors.Wrap(err, "get snapshot status")
 	}
 
-	// 如果无快照，异步触发初始快照填充
-	if total == 0 {
-		log.Info(ctx, "no snapshots found, triggering initial refresh")
+	// 刷新只能异步：本次请求必须立即返回当前快照，不被远端镜像仓库请求阻塞
+	if s.shouldTriggerRefresh(total, status, keyword, staleTTL) {
+		log.Infof(ctx, "snapshot of %s is empty or stale, triggering refresh", info.RepoName)
 		go func() {
 			rCtx := context.WithoutCancel(ctx)
 			if _, rErr := s.refreshSnapshotsByRepoInfo(rCtx, info); rErr != nil {
-				log.Errorf(rCtx, "trigger initial refresh for %s failed: %v", info.RepoName, rErr)
+				log.Errorf(rCtx, "trigger refresh for %s failed: %v", info.RepoName, rErr)
 			}
 		}()
 	}
 
 	return snapshots, total, status, nil
+}
+
+// shouldTriggerRefresh 判断查询标签列表时是否顺带触发一次异步刷新
+func (s *Service) shouldTriggerRefresh(
+	total int64, status *RepoSnapshotStatus, keyword string, staleTTL time.Duration,
+) bool {
+	// 已在刷新中再起 goroutine 也只会撞上 TrySetRefreshing，直接跳过
+	if status != nil && status.RefreshStatus == RefreshStatusRefreshing {
+		return false
+	}
+	// 未过滤时 total==0 才是从未初始化；带关键字的 0 只说明当前搜索没命中
+	if total == 0 && strings.TrimSpace(keyword) == "" {
+		return true
+	}
+	// 存量路径传 staleTTLDisabled，不做陈旧判断
+	if staleTTL <= staleTTLDisabled {
+		return false
+	}
+	// 状态记录缺失或从未成功刷新过，都视为已过期，否则这批快照将永远不会被刷新
+	if status == nil || status.LastRefreshedAt == nil {
+		return true
+	}
+	return time.Since(*status.LastRefreshedAt) > staleTTL
 }
 
 // RefreshAppSnapshots 刷新应用镜像快照。
@@ -275,21 +343,23 @@ func (s *Service) refreshSnapshotsByRepoInfo(
 	if !acquired {
 		log.Infof(ctx, "snapshot refresh for %s is already in progress", info.RepoKey)
 		return &RefreshResult{
-			Status:  "refreshing",
+			Status:  RefreshResultRefreshing,
 			Message: "Snapshot refresh for this repository is already in progress",
 		}, nil
 	}
 
 	result, err := s.doRefresh(ctx, info)
 	if err != nil {
-		// 刷新失败，将状态重置为 idle 并记录错误信息
-		if statusErr := s.snapshotStore.UpsertStatus(ctx, &RepoSnapshotStatus{
+		// 回置要用未取消的 ctx：失败常源于 ctx 超时，复用同一个 ctx 会连状态也写不进去，
+		// 而 TrySetRefreshing 无超时恢复，状态将永久停在 refreshing 挡死后续所有刷新
+		rCtx := context.WithoutCancel(ctx)
+		if statusErr := s.snapshotStore.UpsertStatus(rCtx, &RepoSnapshotStatus{
 			RepoKey:       info.RepoKey,
 			RepoName:      info.RepoName,
 			RefreshStatus: RefreshStatusIdle,
 			LastError:     err.Error(),
 		}); statusErr != nil {
-			log.Errorf(ctx, "record refresh failure status for %s failed: %v", info.RepoKey, statusErr)
+			log.Errorf(rCtx, "record refresh failure status for %s failed: %v", info.RepoKey, statusErr)
 		}
 		return nil, errors.Wrapf(err, "refresh snapshots for %s", info.RepoKey)
 	}
@@ -305,8 +375,11 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		return nil, errors.Wrapf(err, "list all tags for %s", info.RepoName)
 	}
 
+	// 远端已返回，后续落库不得再受请求取消影响，否则 tag 已拉到却写不进状态
+	persistCtx := context.WithoutCancel(ctx)
+
 	// 获取本地已有标签
-	localTags, err := s.snapshotStore.ListAllTags(ctx, info.RepoKey)
+	localTags, err := s.snapshotStore.ListAllTags(persistCtx, info.RepoKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "list all tags")
 	}
@@ -327,14 +400,14 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 				Tag:     tag,
 			})
 		}
-		if err = s.snapshotStore.UpsertSnapshots(ctx, info.RepoKey, snapshots); err != nil {
+		if err = s.snapshotStore.UpsertSnapshots(persistCtx, info.RepoKey, snapshots); err != nil {
 			return nil, errors.Wrap(err, "upsert new snapshots")
 		}
 		addedCount = int64(len(newTags))
 	}
 
 	// 删除远程已消失的标签
-	removedCount, err := s.snapshotStore.DeleteByRepoKeyExcludeTags(ctx, info.RepoKey, remoteTags)
+	removedCount, err := s.snapshotStore.DeleteByRepoKeyExcludeTags(persistCtx, info.RepoKey, remoteTags)
 	if err != nil {
 		return nil, errors.Wrap(err, "delete excluded tags")
 	}
@@ -342,20 +415,20 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	// 更新状态为 idle + lastRefreshedAt（必须在提交异步任务之前，确保状态已重置为 idle，
 	// 否则异步任务消费时 TrySetDetailSyncing 会因状态非 idle 而失败）
 	refreshAt := time.Now()
-	if err = s.snapshotStore.UpsertStatus(ctx, &RepoSnapshotStatus{
+	if err = s.snapshotStore.UpsertStatus(persistCtx, &RepoSnapshotStatus{
 		RepoKey:         info.RepoKey,
 		RepoName:        info.RepoName,
 		RefreshStatus:   RefreshStatusIdle,
 		LastRefreshedAt: &refreshAt,
 		LastError:       "",
 	}); err != nil {
-		log.Errorf(ctx, "update status after refresh for %s failed: %v", info.RepoKey, err)
+		log.Errorf(persistCtx, "update status after refresh for %s failed: %v", info.RepoKey, err)
 		return nil, errors.Wrap(err, "update status after refresh")
 	}
 
 	// 状态重置为 idle 后，判断是否需要异步触发详情同步
 	resultMsg := "Snapshot refresh completed, no tags need detail sync"
-	unsyncedDetailTags, err := s.snapshotStore.ListUnsyncedDetailTags(ctx, info.RepoKey)
+	unsyncedDetailTags, err := s.snapshotStore.ListUnsyncedDetailTags(persistCtx, info.RepoKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "list unsynced detail tags")
 	}
@@ -366,10 +439,10 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 			info.RepoKey, info.RepoName, info.Username, info.Password,
 		)
 		if encryptErr != nil {
-			log.Errorf(ctx, "encrypt credentials for detail sync task %s failed: %v", info.RepoKey, encryptErr)
+			log.Errorf(persistCtx, "encrypt credentials for detail sync task %s failed: %v", info.RepoKey, encryptErr)
 			resultMsg = "Snapshot refresh completed, but the detail sync task was not submitted"
-		} else if enqueueErr := taskq.Enqueue(ctx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
-			log.Errorf(ctx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
+		} else if enqueueErr := taskq.Enqueue(persistCtx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
+			log.Errorf(persistCtx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
 			return nil, errors.Wrap(enqueueErr, "enqueue image detail sync task")
 		} else {
 			resultMsg = "Snapshot refresh completed, and the detail sync task has started asynchronously"
@@ -377,7 +450,7 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	}
 
 	return &RefreshResult{
-		Status:        "success",
+		Status:        RefreshResultSuccess,
 		Message:       resultMsg,
 		AddedTagCnt:   addedCount,
 		RemovedTagCnt: removedCount,

@@ -1,0 +1,35 @@
+meta {
+  name: reject-list-tags-name-with-tag
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{customBuildImagesWorkspaceID}}/custom-build-images/tags?name=mirror.example.com/demo/repo/my-golang:latest&page=1&pageSize=10
+  body: none
+  auth: inherit
+}
+
+params:query {
+  name: mirror.example.com/demo/repo/my-golang:latest
+  page: 1
+  pageSize: 10
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  // name 只接受不含 tag / digest 的完整仓库名，带 tag 在绑定阶段拒绝
+  test("should reject a tag query whose image name includes a tag", () => {
+    expect(res.status).to.equal(400);
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

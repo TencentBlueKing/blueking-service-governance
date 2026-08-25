@@ -1,0 +1,35 @@
+meta {
+  name: reject-list-tags-outside-registry
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{customBuildImagesWorkspaceID}}/custom-build-images/tags?name=docker.io/library/nginx&page=1&pageSize=10
+  body: none
+  auth: inherit
+}
+
+params:query {
+  name: docker.io/library/nginx
+  page: 1
+  pageSize: 10
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  // 镜像名必须落在工作空间生效镜像源路径下，否则凭证会被发往第三方主机
+  test("should reject listing tags for an image outside the workspace registry", () => {
+    expect(res.status).to.equal(400);
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

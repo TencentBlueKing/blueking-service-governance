@@ -53,9 +53,19 @@ const (
 	RefreshStatusDetailSyncing RefreshStatus = "detail_syncing"
 )
 
+// RefreshResult.Status 取值
+const (
+	// RefreshResultSuccess 本次刷新已完成
+	RefreshResultSuccess = "success"
+	// RefreshResultRefreshing 已有刷新在进行中，本次未重复发起远程调用，属正常响应而非错误
+	RefreshResultRefreshing = "refreshing"
+	// RefreshResultFailed 刷新失败，快照仍保留上一次成功的内容
+	RefreshResultFailed = "failed"
+)
+
 // RefreshResult 刷新结果
 type RefreshResult struct {
-	// Status 刷新状态：success / refreshing / failed
+	// Status 刷新状态，取值见 RefreshResultSuccess / RefreshResultRefreshing / RefreshResultFailed
 	Status string
 	// Message 提示信息
 	Message string

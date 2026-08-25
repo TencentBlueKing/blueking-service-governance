@@ -1,0 +1,35 @@
+meta {
+  name: reject-refresh-tags-name-with-tag
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{customBuildImagesWorkspaceID}}/custom-build-images/tags/refresh
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "mirror.example.com/demo/repo/my-golang:latest"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  // 刷新入参与查询共用同一套仓库名校验，带 tag 同样在绑定阶段拒绝
+  test("should reject a refresh whose image name includes a tag", () => {
+    expect(res.status).to.equal(400);
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

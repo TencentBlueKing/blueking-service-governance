@@ -133,6 +133,35 @@ var _ = Describe("Custom runtime image store", func() {
 		})
 	})
 
+	Describe("Exists", func() {
+		It("matches by workspace and name regardless of type", func() {
+			builder := newTestImage("ws-demo", ImageTypeBuilder)
+			Expect(store.Upsert(ctx, builder)).To(Succeed())
+
+			exists, err := store.Exists(ctx, "ws-demo", builder.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeTrue())
+
+			// 只落 runner 时同样按名称命中，调用方无需知道类型
+			runner := newTestImage("ws-demo", ImageTypeRunner)
+			Expect(store.Upsert(ctx, runner)).To(Succeed())
+			exists, err = store.Exists(ctx, "ws-demo", runner.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeTrue())
+
+			exists, err = store.Exists(ctx, "ws-other", builder.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeFalse())
+
+			exists, err = store.Exists(ctx, "ws-demo", builder.Name+"-missing")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeFalse())
+
+			_, err = store.Exists(ctx, "  ", builder.Name)
+			Expect(err).To(MatchError(ContainSubstring("workspaceID is required")))
+		})
+	})
+
 	Describe("List", func() {
 		It("lists records in one workspace and ignores other workspaces", func() {
 			inWorkspace := newTestImage("ws-demo", ImageTypeBuilder)

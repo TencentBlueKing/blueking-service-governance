@@ -19,16 +19,19 @@
 package handler
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
-
-// FIXME: Tag 列表与显式刷新尚未实现，这两个 handler 继续返回 NOT_IMPLEMENTED
 
 // ListCustomBuildImages 获取工作空间自定义构建镜像候选列表
 //
@@ -118,9 +121,33 @@ func (h *Handler) ListCustomBuildImageTags(c *gin.Context) {
 		return
 	}
 
-	bkerrs.AbortWithErr(
-		c, bkerrs.New(bkerrs.ErrCodeNotImplemented, "list custom build image tags is not implemented yet"),
+	queried, err := h.newTagQueryManager().ListTags(
+		ctx,
+		uriInput.WorkspaceID,
+		queryInput.Name,
+		queryInput.Keyword,
+		int(queryInput.Page),
+		int(queryInput.PageSize),
 	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+			err, customTagErrCode(err), "list tags of custom build image %s", queryInput.Name,
+		))
+		return
+	}
+
+	results := make([]*serializer.CustomRuntimeImageTagOutputObj, 0, len(queried.Tags))
+	for _, snap := range queried.Tags {
+		results = append(results, new(serializer.CustomRuntimeImageTagOutputObj).FromModel(snap))
+	}
+
+	ginutils.OK(c, serializer.ListCustomRuntimeImageTagsOutput{
+		Data: &serializer.PaginatedCustomRuntimeImageTagOutputObjs{
+			Count:          queried.Total,
+			Results:        results,
+			SnapshotStatus: new(serializer.SnapshotStatusInfoOutputObj).FromModel(queried.Status),
+		},
+	})
 }
 
 // RefreshCustomBuildImageTags 手动刷新工作空间自定义构建镜像的 TAG 快照
@@ -147,14 +174,63 @@ func (h *Handler) RefreshCustomBuildImageTags(c *gin.Context) {
 	}
 
 	// 刷新会改快照，权限档位用 TypeEdit
-	// FIXME: 尚未按镜像名触发工作空间凭证的 TAG 快照刷新
 	ctx := c.Request.Context()
 	if _, err := perm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, perm.TypeEdit); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
-	bkerrs.AbortWithErr(
-		c, bkerrs.New(bkerrs.ErrCodeNotImplemented, "refresh custom build image tags is not implemented yet"),
+	startedAt := time.Now()
+	metricStatus := metrics.StatusOK
+	defer func() {
+		metrics.ImageSnapshotRefreshFinished(metricStatus, startedAt)
+	}()
+
+	result, err := h.newTagQueryManager().RefreshTags(ctx, uriInput.WorkspaceID, jsonInput.Name)
+	if err != nil {
+		// 超时单独上报，便于与仓库拒绝、平台故障区分开观测
+		metricStatus = metrics.StatusErr
+		if errors.Is(err, customruntime.ErrRegistryAccessTimeout) {
+			metricStatus = metrics.StatusTimeout
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+			err, customTagErrCode(err), "refresh tags of custom build image %s", jsonInput.Name,
+		))
+		return
+	}
+	if result.Status == snapshot.RefreshResultFailed {
+		metricStatus = metrics.StatusErr
+	}
+
+	ginutils.OK(c, serializer.RefreshCustomRuntimeImageTagsOutput{
+		Data: new(serializer.RefreshResultInfoOutputObj).FromModel(result),
+	})
+}
+
+// newTagQueryManager 组装自定义镜像 tag 查询依赖。
+//
+// 工作空间口径的 repoKey 只依赖镜像源账密，不读构建配置与应用，故快照服务的另两个 store 传 nil
+func (h *Handler) newTagQueryManager() *customruntime.TagQueryManager {
+	return customruntime.NewTagQueryManager(
+		h.registry.CustomRuntimeImageStore,
+		snapshot.NewService(h.registry.SnapshotStore, nil, nil),
 	)
+}
+
+// customTagErrCode 把自定义镜像 tag 链路的错误映射为对外错误码。
+//
+// 全部复用既有 ErrCode，不新增常量；bkerrs 没有 deadline 语义的错误码，
+// 超时只能归入服务端错误，可识别性由错误信息中的超时字样承担
+func customTagErrCode(err error) bkerrs.ErrCode {
+	switch {
+	case errors.Is(err, customruntime.ErrImageNameNotFound),
+		errors.Is(err, customruntime.ErrCustomRuntimeImageNotFound):
+		return bkerrs.ErrCodeNotFound
+	case errors.Is(err, customruntime.ErrRegistryAccessDenied),
+		errors.Is(err, customruntime.ErrWorkspaceRegistryUnbound),
+		errors.Is(err, customruntime.ErrImageNotInWorkspaceRegistry):
+		return bkerrs.ErrCodeInvalidRequest
+	default:
+		return bkerrs.ErrCodeInternalServerError
+	}
 }

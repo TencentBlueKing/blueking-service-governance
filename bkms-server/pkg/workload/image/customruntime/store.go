@@ -54,6 +54,11 @@ type Store interface {
 		name string,
 	) (*Image, error)
 
+	// Exists 判断工作空间下是否已有指定名称的记录，不区分 builder / runner。
+	//
+	// tag 查询只拿到镜像名，而唯一键含类型，因此不能走 GetByWorkspaceTypeAndName
+	Exists(ctx context.Context, workspaceID, name string) (bool, error)
+
 	// List 查询指定工作空间下的自定义运行时镜像记录列表。
 	//
 	// 候选口径仅以落库记录为准：不过滤快照同步状态，也不校验镜像在 registry 中是否
@@ -165,6 +170,31 @@ func (s *StoreMongo) GetByWorkspaceTypeAndName(
 		)
 	}
 	return &result, nil
+}
+
+// Exists 判断工作空间下是否已有指定名称的记录，不区分 builder / runner
+func (s *StoreMongo) Exists(ctx context.Context, workspaceID, name string) (bool, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	name = strings.TrimSpace(name)
+	if workspaceID == "" {
+		return false, errors.New("workspaceID is required")
+	}
+	if name == "" {
+		return false, errors.New("name is required")
+	}
+
+	// 只按 workspaceID + name 查，任一类型命中即视为已落库
+	err := s.coll.FindOne(ctx, bson.M{
+		"workspaceID": workspaceID,
+		"name":        name,
+	}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "check custom runtime image %s/%s exists", workspaceID, name)
+	}
+	return true, nil
 }
 
 // List 查询指定工作空间下的自定义运行时镜像记录列表

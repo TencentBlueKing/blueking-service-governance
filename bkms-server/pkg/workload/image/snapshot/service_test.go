@@ -22,12 +22,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -431,6 +433,138 @@ var _ = Describe("Service", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("enqueue image detail sync task"))
 				Expect(err.Error()).To(ContainSubstring("asynq unavailable"))
+			})
+		})
+
+		It("should reset the refresh status even when the context deadline has already passed", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				// 让远程调用一直等到 ctx 超时，复现「失败原因就是超时」这一场景
+				mockey.Mock((*registry.Client).ListAllTags).To(
+					func(_ *registry.Client, rCtx context.Context, _ string) ([]string, error) {
+						<-rCtx.Done()
+						return nil, rCtx.Err()
+					},
+				).Build()
+
+				expiring, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+				defer cancel()
+
+				_, err := service.RefreshAppSnapshots(expiring, testAppID1)
+				Expect(err).To(HaveOccurred())
+
+				// 回置若复用已超时的 ctx 就会写不进去，状态将永久停在 refreshing 挡住后续刷新
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				status, getErr := store.GetStatus(ctx, repoKey)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+				Expect(status.LastError).NotTo(BeEmpty())
+			})
+		})
+	})
+
+	Describe("shouldTriggerRefresh", func() {
+		It("should trigger only for an empty or stale snapshot with the TTL enabled", func() {
+			stale := &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-6 * time.Minute))}
+			fresh := &RepoSnapshotStatus{LastRefreshedAt: lo.ToPtr(time.Now().Add(-time.Minute))}
+
+			Expect(service.shouldTriggerRefresh(0, nil, "", staleTTLDisabled)).To(BeTrue())
+			// 状态缺失或从未成功刷新过都算过期，否则这批快照永远不会被刷新
+			Expect(service.shouldTriggerRefresh(1, nil, "", customImageStaleTTL)).To(BeTrue())
+			Expect(service.shouldTriggerRefresh(1, &RepoSnapshotStatus{}, "", customImageStaleTTL)).To(BeTrue())
+			Expect(service.shouldTriggerRefresh(1, stale, "", customImageStaleTTL)).To(BeTrue())
+			Expect(service.shouldTriggerRefresh(1, fresh, "", customImageStaleTTL)).To(BeFalse())
+			Expect(service.shouldTriggerRefresh(1, stale, "", staleTTLDisabled)).To(BeFalse())
+			// 关键字未命中的 0 不是空快照；已在刷新中也不再起 goroutine
+			Expect(service.shouldTriggerRefresh(0, fresh, "no-such-tag", customImageStaleTTL)).To(BeFalse())
+			Expect(service.shouldTriggerRefresh(0, stale, "no-such-tag", customImageStaleTTL)).To(BeTrue())
+			Expect(service.shouldTriggerRefresh(0, &RepoSnapshotStatus{
+				RefreshStatus: RefreshStatusRefreshing,
+			}, "", customImageStaleTTL)).To(BeFalse())
+		})
+	})
+
+	Describe("ListWorkspaceSnapshots", func() {
+		const imageName = "docker.bkrepo.example.com/demo/repo/my-golang"
+
+		var (
+			repoKey      string
+			listAllCalls int32
+		)
+
+		// mockWorkspaceRegistry 让工作空间口径的 repoKey 与预置快照对上，并统计远程调用次数
+		mockWorkspaceRegistry := func() {
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&bkmsreg.ImageRegistry{
+				Registry: "docker.bkrepo.example.com/demo/repo",
+				Username: "ws-user",
+				Password: "ws-pass",
+			}, nil).Build()
+			mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+			mockey.Mock((*registry.Client).ListAllTags).To(
+				func(_ *registry.Client, _ context.Context, _ string) ([]string, error) {
+					atomic.AddInt32(&listAllCalls, 1)
+					return []string{"v1", "v2"}, nil
+				},
+			).Build()
+			mockey.Mock(taskq.Enqueue).Return(nil).Build()
+		}
+
+		// seedRepo 预置一条快照与其最后刷新时间
+		seedRepo := func(key, name string, lastRefreshedAt time.Time) {
+			Expect(store.UpsertSnapshots(ctx, key, []Image{{Tag: "v1"}})).To(Succeed())
+			Expect(store.UpsertStatus(ctx, &RepoSnapshotStatus{
+				RepoKey:         key,
+				RepoName:        name,
+				RefreshStatus:   RefreshStatusIdle,
+				LastRefreshedAt: &lastRefreshedAt,
+			})).To(Succeed())
+		}
+
+		BeforeEach(func() {
+			repoKey = GenerateRepoKey(imageName, "ws-user", "ws-pass")
+			atomic.StoreInt32(&listAllCalls, 0)
+		})
+
+		It("should refresh only the custom image path when every snapshot is stale", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				mockWorkspaceRegistry()
+
+				staleAt := time.Now().Add(-time.Hour)
+				officialRepo := "registry.example.com/team/runtime"
+				seedRepo(repoKey, imageName, staleAt)
+				seedRepo(GenerateRepoKey(officialRepo, "", ""), officialRepo, staleAt)
+				seedRepo(GenerateRepoKey("library/busybox", "alice", "secret"), "library/busybox", staleAt)
+
+				// 本次请求不等后台刷新，因此还看不到远程新增的 v2
+				tags, total, status, err := service.ListWorkspaceSnapshots(
+					ctx, testWorkspaceID1, imageName, "", 1, 10,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(total).To(BeEquivalentTo(1))
+				Expect(tags).To(HaveLen(1))
+				Expect(status).NotTo(BeNil())
+				Eventually(func() int64 {
+					_, refreshed, lErr := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
+					Expect(lErr).NotTo(HaveOccurred())
+					return refreshed
+				}, "5s", "50ms").Should(BeEquivalentTo(2))
+
+				// 官方与产物镜像同样陈旧，但未启用 TTL，远端调用数应始终停在自定义镜像那一次
+				_, _, _, err = service.ListRepositorySnapshots(ctx, officialRepo, "", 1, 10)
+				Expect(err).NotTo(HaveOccurred())
+				_, _, _, err = service.ListAppSnapshots(ctx, testAppID1, "", 1, 10)
+				Expect(err).NotTo(HaveOccurred())
+				Consistently(func() int32 { return atomic.LoadInt32(&listAllCalls) }, "300ms", "50ms").
+					Should(BeEquivalentTo(1))
+
+				// 刷新完成后快照已新鲜，关键字未命中不得再当成空快照去拉远端
+				_, total, _, err = service.ListWorkspaceSnapshots(
+					ctx, testWorkspaceID1, imageName, "no-such-tag", 1, 10,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(total).To(BeZero())
+				Consistently(func() int32 { return atomic.LoadInt32(&listAllCalls) }, "300ms", "50ms").
+					Should(BeEquivalentTo(1))
 			})
 		})
 	})
