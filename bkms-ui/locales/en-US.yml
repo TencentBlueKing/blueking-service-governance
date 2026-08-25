@@ -2004,3 +2004,23 @@ CPU Limits 利用率: CPU Limits Utilization
 镜像 Tag 刷新成功: Image tags refreshed successfully
 刷新镜像 Tag 失败: Failed to refresh image tags
 已有刷新任务进行中，请稍后重试: A refresh task is already in progress, please try again later
+网络访问: Network Access
+HostPort 端口映射: HostPort Mapping
+环境绑定联邦集群时，容器需要通过所在节点的 HostPort 对外暴露访问。声明端口后，部署时会为容器端口自动映射节点端口，并将节点端口注入容器环境变量。: When an environment is bound to a federation cluster, containers are exposed via the node's HostPort. After declaring ports, node ports are automatically mapped to container ports and injected into container environment variables.
+端口声明: Port Declaration
+容器端口: Container Port
+对应环境变量: Corresponding Environment Variable
+"{count} 个环境待部署生效": "{count} environment(s) pending deployment"
+如 8080: e.g. 8080
+添加容器端口: Add Container Port
+对所有绑定联邦集群的环境生效: Takes effect for all environments bound to federation clusters
+请输入容器端口: Please enter a container port
+端口需为 1-65535 之间的整数: Port must be an integer between 1 and 65535
+端口重复: Duplicate port
+保存成功，需重新部署绑定联邦集群的环境后才会生效: Saved successfully. Redeploy environments bound to federation clusters for the changes to take effect.
+"新增端口：{ports}": "Add port(s): {ports}"
+"删除端口：{ports}": "Remove port(s): {ports}"
+节点端口的环境变量: Environment variable for node port
+填写容器端口后自动生成: Container port automatically generated
+当前空间没有绑定联邦集群的环境: No environments bound to a federation cluster in the current workspace
+HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only takes effect for environments bound to federation clusters

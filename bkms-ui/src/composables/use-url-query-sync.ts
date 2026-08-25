@@ -15,7 +15,7 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
-import { type WritableComputedRef, computed, onBeforeUnmount, onMounted } from 'vue';
+import { type WritableComputedRef, computed, onMounted } from 'vue';
 
 import { useRoute, useRouter } from 'vue-router';
 
@@ -54,9 +54,6 @@ export function useUrlQuerySync<F extends Record<string, UrlFieldConfig>>(config
   const route = useRoute();
   const router = useRouter();
 
-  // 本页声明的同步字段：挂载时校验写回、卸载时仅清理这些字段（不触碰外部注入的 query 参数）
-  const declaredKeys = new Set(Object.values(configs).map(config => config.queryKey));
-
   const fields = {} as unknown as FieldsMap<F>;
 
   for (const [name, config] of Object.entries(configs)) {
@@ -88,6 +85,7 @@ export function useUrlQuerySync<F extends Record<string, UrlFieldConfig>>(config
   // 挂载时校验：缺失字段补默认值，非法值收敛为实际渲染值，与 URL 现值有差异才合并为一次 replace
   onMounted(() => {
     const query = { ...route.query };
+    let needReplace = false;
     // 逐个字段校验：缺失补默认 / override 禁用则移除 / 有差异才写回
     for (const [name, config] of Object.entries(configs)) {
       const { queryKey, data } = config;
@@ -98,24 +96,19 @@ export function useUrlQuerySync<F extends Record<string, UrlFieldConfig>>(config
       if (result.type === 'skip') {
         continue;
       }
+      needReplace = true;
       if (result.type === 'remove') {
         delete query[queryKey];
         continue;
       }
       query[queryKey] = result.value;
     }
-    // 无条件 replace：卸载清理是异步的，挂载必须总是把本页值写回，才能对抗"卸载清理"对切换应用的误伤
-    router.replace({ query });
-  });
-
-  // 离开时仅清理本页 hook 声明的字段：非 hook 注入的 query 参数保留给下一页
-  // 注意：卸载时 URL 已属新页面，此处 replace 作用于新页面；新页若为消费页，靠挂载时无条件写回恢复
-  onBeforeUnmount(() => {
-    const query = { ...route.query };
-    for (const key of declaredKeys) {
-      delete query[key];
+    // 有差异才 replace。故意不在 onBeforeUnmount 清 query：
+    // 切应用时 detail 会先卸载子页再 await push，卸载 replace 会打断 push；
+    // 跨菜单已由 detail 传 query: undefined；同菜单靠快照 + 本处写回。
+    if (needReplace) {
+      router.replace({ query });
     }
-    router.replace({ query });
   });
 
   return { fields };

@@ -18,6 +18,7 @@ export * from './deploy';
 export * from './instance-log';
 export * from './topology';
 export * from './build-autodeploy';
+export * from './hostport';
 export * from './app-networking';
 export * from './bkintegrations-bcs';
 export * from './bkintegrations-bkcc';

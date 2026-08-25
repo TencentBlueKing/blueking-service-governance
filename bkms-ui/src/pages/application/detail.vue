@@ -121,7 +121,7 @@
   const applicationList = ref<AppInfoOutputObj[]>([]);
   // 'overview' | 'build' | 'repo' | 'deploy' | 'info' | 'orchestrate' | 'history' | 'module';
   // trpc没有的子菜单
-  const TrpcSpecNotHas = ['orchestrate', 'network'];
+  const TrpcSpecNotHas = ['orchestrate'];
   // helm没有的子菜单
   const HelmSpecNotHas = ['module', 'observation', 'polaris', 'appConfig'];
 
@@ -211,6 +211,13 @@
     },
   );
 
+  /**
+   * 切应用 / 切菜单时的路由同步 Promise。
+   * 子页会先因 detailLoading 卸载（避免 routerViewKey 变化导致先挂一次再卸），
+   * 再 await 本 Promise，保证 URL 更新完成后再拉详情并重新挂载。
+   */
+  let pendingRouteSync: null | Promise<unknown> = null;
+
   watch(
     [activeKey, type, currentApplicationName],
     ([key, type, name], [oldKey]) => {
@@ -229,15 +236,17 @@
         // 快照当前 query 供新页 hook（useUrlQuerySync）接管：watch 同步阶段已固化进导航参数（快照），
         // 旧页卸载时 hook 会清理自身字段，新页挂载时按该快照写回恢复，保证状态正确继承且不残留旧页字段
         const snapshotQuery = router.currentRoute.value.query;
-        router.push({
-          name: 'detail',
-          params: {
-            type,
-            name,
-            menuName: key as string,
-          },
-          query: isMenuSwitch ? undefined : snapshotQuery,
-        });
+        pendingRouteSync = router
+          .push({
+            name: 'detail',
+            params: {
+              type,
+              name,
+              menuName: key as string,
+            },
+            query: isMenuSwitch ? undefined : snapshotQuery,
+          })
+          .catch(() => undefined);
       }
     },
     {
@@ -248,7 +257,14 @@
   // 监听应用变化，更新应用详情；加载完成前不挂载子页面，避免竞态
   watch(currentApplication, async app => {
     const currentAppId = app?.id || '';
+    // 先置 loading 卸载子页：若等 push 完成后再 loading，routerViewKey 会先变并挂载一次，
+    // 随后 loading 再卸/挂，网络访问等页接口会打两次。
     detailLoading.value = true;
+    // 再等路由 push 落定（此时子页已卸，useUrlQuerySync 不再 replace 打断 push）
+    if (pendingRouteSync) {
+      await pendingRouteSync;
+      pendingRouteSync = null;
+    }
     appDetailStore.updateAppID(currentAppId);
     try {
       await appDetailStore.fetchAppDetail(currentAppId);

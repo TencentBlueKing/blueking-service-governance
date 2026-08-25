@@ -129,6 +129,16 @@ export const TRPC_NAVIGATION: NavigationItem[] = [
         component: polaris,
       },
       {
+        // tRPC / TAF：网络访问页仅含 HostPort 端口映射
+        key: 'network',
+        name: i18n.global.t('网络访问'),
+        icon: 'wangye',
+        component: networkAccess,
+        meta: {
+          layout: 'empty',
+        },
+      },
+      {
         key: 'module',
         name: i18n.global.t('组件配置'),
         icon: 'component-configuration',
@@ -230,6 +240,7 @@ export const HELM_NAVIGATION: NavigationItem[] = [
         },
       },
       {
+        // Helm：网络访问页仅含 Service
         key: 'network',
         name: i18n.global.t('网络访问'),
         icon: 'wangye',
