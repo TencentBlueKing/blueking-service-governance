@@ -317,6 +317,10 @@ export interface EnvClusterOutput {
    */
   clusterType?: string;
   /**
+   * 是否为 BCS 联邦 Host 集群
+   */
+  isFederation?: boolean;
+  /**
    * 集群命名空间
    */
   namespace?: string;

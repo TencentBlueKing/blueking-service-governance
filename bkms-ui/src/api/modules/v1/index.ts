@@ -25,6 +25,7 @@ export * from './bkintegrations-bkhcm';
 export * from './bkintegrations-bscp';
 export * from './component-defs';
 export * from './component-insts';
+export * from './devmode';
 export * from './cluster-addon';
 export * from './port-pool';
 export * from './bkintegrations-kubeinsight';

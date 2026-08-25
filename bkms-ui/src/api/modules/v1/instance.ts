@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListEventsRequest, PaginatedEventsOutputObj, ListAppInstancesRequest, PaginatedAppInstancesOutputObj, UpdateAppInstancesRequest, EmptyOutput, ListTrpcAdminCmdsRequest, ListTrpcAdminCmdsOutputObjs, ExecuteTrpcAdminCmdRequest, ExecuteTrpcAdminCmdOutputObjs, BatchDeleteAppInstancesRequest, UpdateAppInstancePolarisRequest, ScaleAppInstancesRequest, ExecuteTafAdminCmdRequest, ExecuteTafAdminCmdOutputObjs, WatchAppInstancesRequest, AppInstanceWatchEvent, ListAppInstanceLogsRequest, LogEntryOutputObj, PortForwardRequest, CreateAppInstanceWebConsoleRequest, WebConsoleInfoOutputObj } from '~/@types/v1/instance';
+import type { ListEventsRequest, PaginatedEventsOutputObj, ListAppInstancesRequest, PaginatedAppInstancesOutputObj, UpdateAppInstancesRequest, EmptyOutput, ListTrpcAdminCmdsRequest, ListTrpcAdminCmdsOutputObjs, ExecuteTrpcAdminCmdRequest, ExecuteTrpcAdminCmdOutputObjs, BatchDeleteAppInstancesRequest, UpdateAppInstancePolarisRequest, ScaleAppInstancesRequest, ExecuteTafAdminCmdRequest, ExecuteTafAdminCmdOutputObjs, WatchAppInstancesRequest, ListAppInstanceLogsRequest, LogEntryOutputObj, PortForwardRequest, CreateAppInstanceWebConsoleRequest, WebConsoleInfoOutputObj } from '~/@types/v1/instance';
 
 export const InstanceService = {
   /**
@@ -166,7 +166,9 @@ export const InstanceService = {
   /**
    * 订阅应用实例投影变更
    *
-   * 事件类型为 ADDED / MODIFIED / DELETED；object 对齐 AppInstanceOutputObj（含 polarisInfos）。
+   * SSE 推送 ADDED/MODIFIED/DELETED/ENDED；DELETED 只保证 id，ENDED 时 object 为 null。
+   * MODIFIED 有两个来源：集群 Pod 变更，以及北极星周期补拉（约 15s 一轮，仅 polarisInfos 变化时推），二者形态一致。
+   * 北极星拉取失败不阻塞推送：polarisInfos 为空数组，与未注册北极星同形，K8s 字段照常推。
    *
    * @method GET
    * @path /apps/{appID}/envs/{envName}/instances/watch
@@ -174,11 +176,12 @@ export const InstanceService = {
    * @param appID path string required 应用 ID
    * @param envName path string required 部署环境名称
    * @param trafficLaneName query string 部署的泳道名称（空字符串表示不使用泳道）
-   * @response 200 AppInstanceWatchEvent Watch 事件逻辑结构（编码格式随传输形态而定）
+   * @param resourceVersion query string required List 成功响应带回的续传位点
+   * @response 200 string SSE event stream
    * @response 400 GinErrorOutput Bad Request
-   * @response 501 GinErrorOutput Not Implemented
+   * @response 500 GinErrorOutput Internal Server Error
    */
-  watchAppInstances: async <Request extends WatchAppInstancesRequest = WatchAppInstancesRequest, ResponseData = AppInstanceWatchEvent>(
+  watchAppInstances: async <Request extends WatchAppInstancesRequest = WatchAppInstancesRequest, ResponseData = string>(
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/instances/watch')(params, config),

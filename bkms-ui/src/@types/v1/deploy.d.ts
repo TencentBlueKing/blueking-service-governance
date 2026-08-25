@@ -530,6 +530,10 @@ export interface AppModelDeployRecordOutputObj {
   replicas?: number;
   status?: string;
   updatedAt?: string;
+  /**
+   * 本次部署的主工作负载类型（GameDeployment 或 Deployment）
+   */
+  workloadKind?: string;
 }
 
 export interface PaginatedHelmDeployRecordOutputObjs {
