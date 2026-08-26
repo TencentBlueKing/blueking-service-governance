@@ -42,7 +42,12 @@ sequenceDiagram
 
 Watch 把集群 Pod 变更转成**平台投影事件**：事件里的 `object` 是 `AppInstanceOutputObj`，与 List 的元素同构，不是原生 Pod JSON。只推增量，不推首包快照。
 
-传输用 SSE，事件类型 `ADDED` / `MODIFIED` / `DELETED` / `ENDED`。`DELETED` 只保证 `id`，其余字段不投影也不拉北极星；`ENDED` 的 `object` 为 null。
+传输用 SSE。同一条流上有两类事件，信封不同：
+
+- **Pod 事件** `ADDED` / `MODIFIED` / `DELETED` / `ENDED`，由基础层产出。`DELETED` 只保证 `id`；`ENDED` 的 `object` 为 null。Pod 事件**不承载附属数据**，`polarisInfos` 恒为空数组
+- **附属数据事件** `PLUGIN`，由插件层产出，带 `plugin` 标识来源，`object` 为 `{id, data}`。它不是实例的增删改，只更新已有行上某个插件的数据
+
+分成两类事件是为了让 Pod 流与附属数据解耦，详见 §4.3。
 
 `watch.Manager` 是核心：建流后进一条 select 循环，同时处理集群事件、定时 tick、连接硬上限和连接取消。异常口径为：
 
@@ -67,34 +72,83 @@ Watch 把集群 Pod 变更转成**平台投影事件**：事件里的 `object` �
 
 响应头写出之后就改不了 HTTP 状态码，因此流中途的写失败只落 WARN 日志，不再向调用方返回错误。
 
+### 4.3 分层与插件抽象
+
+Watch 分两层，边界就是包边界：
+
+- **基础层** `watch/`：Pod 的 list/watch、投影、SSE 写入、心跳、`ENDED`、连接生命周期。它**不引用任何附属数据源**，这条线目前靠 Code Review 守住：改动 `watch/` 下的文件时，评审要确认没有引入对北极星等具体数据源的 import
+- **插件层** `watch/plugin/`：`Plugin` 接口与 `Runner`。每个 tick 把「本连接当前存活的全量实例快照」交给每个已注册插件，收集返回值后推 `PLUGIN` 事件
+- **插件实现** `watch/plugin/polaris/`：北极星是目前唯一的生产插件
+
+```mermaid
+graph LR
+    handler[instance/handler] --> base[watch 基础层]
+    handler --> polarisPlugin[watch/plugin/polaris]
+    base --> runner[watch/plugin Runner]
+    polarisPlugin --> runner
+```
+
+依赖是单向的：基础层只认识 `Plugin` 接口，具体插件在 `handler.newWatchManager` 注册。新增一种附属数据 = 实现一个接口 + 在 handler 加一行注册，基础层零改动，事件 `type` 也不用扩。
+
+职责这样切分是因为「判断有没有变化」对所有插件都一样，没必要每个插件重写一遍：
+
+- **插件只返回当前值**，不维护历史、不判断变化。唯一的额外要求是集合类载荷必须定序
+- **Runner 统一比对**：拿每个插件上次成功推送的载荷做深比较，只有差异才推。深比较能处理载荷里的 map（北极星的 `metadata`），但要求顺序稳定，否则每轮都会误判成变化
+- **快照来自基础层的 `pushedInstances`**，只含已成功推送且未 `DELETED` 的实例。因此插件既不会补出从没推过的实例，也不会给已删除的实例补事件
+
+交给插件的是**全量存活快照**而不是本轮有变动的 Pod。附属数据的变化与 Pod 变化无关（北极星健康位翻转时 Pod 一动不动），只给变动集就等于放弃了这个场景。
+
+插件调用留在 `consume` 的同一个 goroutine 里顺序执行。`pushedInstances` 与 `Runner` 都不加锁，前提正是「Pod 事件与周期任务是同一 goroutine 的两个 select case」；若以后把插件挪进独立 goroutine，两处都得先补锁。
+
+单个插件失败只跳过本轮该插件：不推事件、不拆流、不动已推送记录，也不影响其它插件与 Pod 事件。
+
+### 4.4 前端如何合并两类事件
+
+| 事件 | 前端动作 |
+|------|---------|
+| `ADDED` | 按 `object.id` 新增本地行；附属数据暂空，最多一个周期（约 15s）后由 `PLUGIN` 补齐 |
+| `MODIFIED` | 按 `object.id` 更新 K8s 字段，**不要覆盖**该行已有的插件数据 |
+| `DELETED` | 按 `object.id` 移除本地行及其插件数据 |
+| `PLUGIN` | 按 `object.id` 找到本地行，用 `data` 覆盖 `plugin` 对应的附属数据；找不到行则忽略该事件 |
+| `ENDED` / `onerror` / `onclose` | 按 §4.1 重新 List 取新位点后重建 Watch |
+
+附属数据的首包与增量来自不同地方：**首包读 List 响应里内嵌的 `polarisInfos`，之后的更新只看 `PLUGIN` 事件**。Watch 的 Pod 事件里 `polarisInfos` 恒为空数组，不要从那里取。
+
+`PLUGIN` 事件的 `data` 由插件决定，`plugin=polaris` 时是 `PolarisInstanceInfoOutputObj` 列表，可以是空列表（表示该实例当前没有注册信息）。前端按 `plugin` 取值分派即可，后续新增插件不会改变信封结构。
+
 ## 5. 北极星信息
 
-北极星实例状态（健康 / 权重 / 隔离）按 Pod IP + 服务端口匹配后挂到实例上，List 和 Watch 共用同一套合并算法。
+北极星实例状态（健康 / 权重 / 隔离）按 Pod IP + 服务端口匹配后挂到实例上。List 和 Watch 共用 `BuildPolarisInfosForIP` 做投影，但挂载位置不同：List 经 `MergePolarisInfoToAppInstances` 内嵌在实例投影里，Watch 走 `PLUGIN` 事件单独推。
 
-**它没有原生 Watch**。若只在 Pod 事件上合并，Pod 不动时页面上的状态就停住了。所以连接存活期间每 15s 补拉一次（与 SSE 心跳共用一个 ticker，间隔取自北极星 SDK 的缓存量级），只对 `polarisInfos` 相对上次推送**有变化**的实例补推一条 `MODIFIED`。不新增事件类型，K8s 展示字段沿用该实例上次已知投影。
+**它没有原生 Watch**，只能周期拉取。因此在 Watch 里它是一个插件（`watch/plugin/polaris`）：每个 tick 拿到存活实例快照，对每个实例调 `BuildPolarisInfosForIP` 返回当前的 `polarisInfos`。走同一个函数是为了让字段口径与排序跟 List 完全一致——两条口径算出不同结果就会被 Runner 误判成变化。
 
-比对靠连接级的 `pushedInstances`：记下每个实例最后一次推出去的投影，`DELETED` 时移除。所以既不会补出从没推过的实例，也不会给已删除的实例补事件。它是请求级内存，随 `DELETED` 出栈因而不随事件数累积，驻留量上界是该环境存活的实例数（与一次 List 全量同量级），连接一关就整体释放。
+周期是 15s，与 SSE 心跳共用一个 ticker，间隔取自北极星 SDK 的缓存量级：SDK 自己就有 15s 缓存，拉得更密拿回来的是同一份数据。
 
-比对还依赖顺序稳定，因此构造 `polarisInfos` 时按 `(serviceNamespace, serviceName, port)` 定序输出——北极星侧返回顺序会漂移，不定序就会被误判成变化、每轮重复推送。定序发生在产出切片的那一层，Merge 只负责按 IP 匹配后赋值。
+比对依赖顺序稳定，因此构造 `polarisInfos` 时按 `(serviceNamespace, serviceName, port)` 定序输出——北极星侧返回顺序会漂移，不定序就会被误判成变化、每轮重复推送。定序发生在产出切片的那一层，Merge 只负责按 IP 匹配后赋值。
 
-Pod 事件不单独拉北极星，而是复用最近一轮结果：`polarisCache == nil`（从未成功缓存）或缓存超过一个 tick 才真拉。成功拉取即使空结果也写成空切片，与「从未缓存」区分。Pod 的 `MODIFIED` 很密（一个 Pod 从 Pending 到 Ready 就有多条，滚动更新瞬间几百条），每条都拉要多查一次无缓存的北极星配置库，而 SDK 自身有 15s 缓存，更密的拉取拿回来的是同一份数据。新实例因此可能有一轮拿不到北极星信息，由下一轮补拉补上。
+未命中时返回**空切片而不是 nil**，与「配置被删后成功拉回空」同形。这样「曾经有注册信息、现在没了」能被识别为变化并推一条 `data: []`，而「从来就没注册过」在首轮被 Runner 的空载荷抑制规则挡掉，不会刷出一串空事件。
 
-### 5.1 拉不到时降级为未知
+Pod 事件完全不拉北极星，所以插件化之后拉取频率反而更低：一个 tick 恰好一次，不再受 Pod 事件密度影响（一个 Pod 从 Pending 到 Ready 就有多条 `MODIFIED`，滚动更新瞬间几百条）。代价是新实例最多要等一个周期才拿到北极星信息，这与之前「新实例由下一轮补拉补上」是同一量级。
 
-北极星是旁路信息源，**它不可用不应该牵连 Pod 数据**。List 不整次失败、Watch 不拆流，两边都降级为 `polarisInfos=[]`，K8s 字段照常返回，失败原因只落 WARN 日志。
+### 5.1 拉不到时的两种口径
 
-降级结果与「该应用确实没注册北极星」同形，服务端不做区分，前端一律展示为未知。
+北极星是旁路信息源，**它不可用不应该牵连 Pod 数据**。但 List 与 Watch 的降级方式不同：
 
-唯一的例外是周期补拉失败：那时页面上已有上一轮拿到的真实状态，清成空是信息倒退，所以跳过本轮、保留上次已知值。
+- **List**：降级为 `polarisInfos=[]`，K8s 字段照常返回，不整次失败。结果与「该应用确实没注册北极星」同形，服务端不做区分，前端一律展示为未知
+- **Watch**：跳过本轮，不推事件、不拆流。页面上保留的是上一轮拿到的真实状态——清成空是信息倒退
+
+Watch 侧不再有「降级为空数组」这条口径：Pod 事件已经不承载附属数据，无处可降；插件失败就是本轮没有新数据，沉默即正确。失败原因只落 WARN 日志，另有 `bkms_instance_watch_plugin_fetch_total{plugin,result}` 计数。
 
 ## 6. 代码地图
 
 `pkg/workload/instance/` 下：
 
 - `handler/instance.go`、`handler/list.go` — List 编排：绑定校验、取部署记录、投影、合并北极星
-- `handler/watch.go` — Watch handler，把部署记录换算成订阅范围后交给 `Manager`
-- `watch/stream.go` — `Manager`，建流与事件循环
+- `handler/watch.go` — Watch handler，把部署记录换算成订阅范围后交给 `Manager`；插件注册也在这里
+- `watch/stream.go` — `Manager`，建流与事件循环（基础层）
 - `watch/sse.go` — `sseStream`，SSE 写入与滚动写超时
-- `watch/polaris.go` — 北极星周期补拉、缓存与差异比对
-- `watch/pushed.go` — `pushedInstances`，连接级的已推送投影
-- `serializer/instance.go` — 查询 DTO、Pod 投影与北极星合并算法
+- `watch/pushed.go` — `pushedInstances`，连接级的已推送投影，同时是插件层的快照来源
+- `watch/plugin/plugin.go` — `Plugin` 接口与插件契约
+- `watch/plugin/runner.go` — `Runner`，周期驱动插件、统一差异比对与事件产出
+- `watch/plugin/polaris/plugin.go` — 北极星插件
+- `serializer/instance.go` — 查询 DTO、Pod 投影、事件信封与北极星合并算法

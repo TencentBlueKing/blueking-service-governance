@@ -30,7 +30,6 @@ import (
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
 // 单条 SSE 写入的超时；每次写前重置，只约束这一次 Write，不承担连接总时长
@@ -76,18 +75,19 @@ func (s *sseStream) writeHeartbeat() error {
 	return s.write([]byte(":\n\n"))
 }
 
-// writeEvent 按 `event: message` + `data: {json}` 写出一条投影事件
-func (s *sseStream) writeEvent(event serializer.AppInstanceWatchEvent) error {
+// writeEvent 按 `event: message` + `data: {json}` 写出一条事件
+// event 取 Pod 投影事件或附属数据事件，两者信封不同字段；eventType 只用于 metrics 与错误信息
+func (s *sseStream) writeEvent(event any, eventType string) error {
 	data, err := json.Marshal(event)
 	if err != nil {
-		return errors.Wrapf(err, "marshal %s watch event", event.Type)
+		return errors.Wrapf(err, "marshal %s watch event", eventType)
 	}
 
 	if err = s.write(fmt.Appendf(nil, "event: message\ndata: %s\n\n", data)); err != nil {
 		return err
 	}
 
-	metrics.InstanceWatchEventPushed(event.Type)
+	metrics.InstanceWatchEventPushed(eventType)
 	return nil
 }
 

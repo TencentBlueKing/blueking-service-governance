@@ -312,15 +312,15 @@ var (
 		[]string{"type"},
 	)
 
-	// instanceWatchPolarisRefetchTotal 实例 Watch 北极星真拉次数。
-	instanceWatchPolarisRefetchTotal = promauto.NewCounterVec(
+	// instanceWatchPluginFetchTotal 实例 Watch 附属数据插件的拉取次数。
+	instanceWatchPluginFetchTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "bkms",
 			Subsystem: "instance",
-			Name:      "watch_polaris_refetch_total",
-			Help:      "Total number of instance watch Polaris refetches by result.",
+			Name:      "watch_plugin_fetch_total",
+			Help:      "Total number of instance watch plugin fetches by plugin and result.",
 		},
-		[]string{"result"},
+		[]string{"plugin", "result"},
 	)
 
 	// depservicePolarisFailure 北极星依赖服务操作失败计数。
@@ -478,14 +478,14 @@ func InstanceWatchEventPushed(eventType string) {
 	instanceWatchEventsTotal.WithLabelValues(normalizeWatchEventType(eventType)).Inc()
 }
 
-// InstanceWatchPolarisRefetch 记录一轮实例 Watch 北极星真拉结果。
-func InstanceWatchPolarisRefetch(ok bool) {
+// InstanceWatchPluginFetch 记录一轮实例 Watch 附属数据插件的拉取结果。
+func InstanceWatchPluginFetch(plugin string, ok bool) {
 	result := StatusOK
 	if !ok {
 		result = StatusFail
 	}
 
-	instanceWatchPolarisRefetchTotal.WithLabelValues(result).Inc()
+	instanceWatchPluginFetchTotal.WithLabelValues(plugin, result).Inc()
 }
 
 // DepservicePolarisFailed 记录北极星依赖服务操作失败。
@@ -551,7 +551,7 @@ func normalizeScaleDirection(oldReplicas, targetReplicas int32) string {
 
 func normalizeWatchEventType(eventType string) string {
 	switch eventType {
-	case "ADDED", "MODIFIED", "DELETED", "ENDED":
+	case "ADDED", "MODIFIED", "DELETED", "ENDED", "PLUGIN":
 		return eventType
 	default:
 		return WatchEventTypeUnknown

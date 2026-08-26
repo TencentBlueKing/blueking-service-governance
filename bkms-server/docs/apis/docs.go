@@ -8458,7 +8458,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "SSE 推送 ADDED/MODIFIED/DELETED/ENDED；DELETED 只保证 id，ENDED 时 object 为 null。\nMODIFIED 有两个来源：集群 Pod 变更，以及北极星周期补拉（约 15s 一轮，仅 polarisInfos 变化时推），二者形态一致。\n北极星拉取失败不阻塞推送：polarisInfos 为空数组，与未注册北极星同形，K8s 字段照常推。",
+                "description": "SSE 同一条流上推送两类事件，信封不同：\n1) Pod 事件 ADDED/MODIFIED/DELETED/ENDED，object 为实例投影；\nDELETED 只保证 id，ENDED 时 object 为 null；Pod 事件不承载附属数据，polarisInfos 恒为空数组。\n2) 附属数据事件 PLUGIN，带 plugin 标识来源（当前仅 polaris），object 为 {id, data}；\n约 15s 一轮，仅该实例的附属数据有变化时推送。它不是实例的增删改，前端按 id 覆盖对应行的插件数据即可。\n3）附属数据首包取自 List 响应内嵌的 polarisInfos，增量只看 PLUGIN 事件。\n4）插件拉取失败时跳过本轮、不推事件也不拆流，页面保留上次已知状态。",
                 "produces": [
                     "text/event-stream"
                 ],
@@ -8498,9 +8498,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "SSE event stream",
+                        "description": "SSE 事件流；每条 data 为 podEvent 或 pluginEvent 之一，响应体本身不是该对象",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/serializer.AppInstanceWatchStreamDoc"
                         }
                     },
                     "400": {
@@ -19760,6 +19760,42 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.AppInstancePluginObj": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "插件自有载荷；polaris 插件为 PolarisInstanceInfoOutputObj 列表，可为空列表"
+                },
+                "id": {
+                    "description": "实例 ID（即 k8s pod 的 name），供前端关联本地行",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.AppInstancePluginWatchEvent": {
+            "type": "object",
+            "properties": {
+                "object": {
+                    "description": "附属数据载荷",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.AppInstancePluginObj"
+                        }
+                    ]
+                },
+                "plugin": {
+                    "description": "附属数据来源插件名，如 polaris",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "事件类型；恒为 PLUGIN，取值见 instance/watch/plugin.EventTypePlugin\nEnums: PLUGIN",
+                    "type": "string",
+                    "enum": [
+                        "PLUGIN"
+                    ]
+                }
+            }
+        },
         "serializer.AppInstanceResourcesObj": {
             "type": "object",
             "properties": {
@@ -19778,6 +19814,54 @@ const docTemplate = `{
                 "memoryRequests": {
                     "description": "Memory requests，可选：未配置时不返回该字段",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.AppInstanceWatchEvent": {
+            "type": "object",
+            "properties": {
+                "object": {
+                    "description": "实例投影；字段集合对齐 AppInstanceOutputObj，其中 polarisInfos 在 Watch 场景恒为空数组",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.AppInstanceOutputObj"
+                        }
+                    ]
+                },
+                "reason": {
+                    "description": "流结束原因；仅 ENDED 使用",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "事件类型\nEnums: ADDED, MODIFIED, DELETED, ENDED",
+                    "type": "string",
+                    "enum": [
+                        "ADDED",
+                        "MODIFIED",
+                        "DELETED",
+                        "ENDED"
+                    ]
+                }
+            }
+        },
+        "serializer.AppInstanceWatchStreamDoc": {
+            "type": "object",
+            "properties": {
+                "pluginEvent": {
+                    "description": "附属数据事件：PLUGIN",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.AppInstancePluginWatchEvent"
+                        }
+                    ]
+                },
+                "podEvent": {
+                    "description": "Pod 投影事件：ADDED / MODIFIED / DELETED / ENDED",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.AppInstanceWatchEvent"
+                        }
+                    ]
                 }
             }
         },

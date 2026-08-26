@@ -33,13 +33,13 @@ import (
 	k8swatch "k8s.io/apimachinery/pkg/watch"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/watch/plugin"
 )
 
 const (
-	// streamTickInterval 一次 tick 同时驱动 SSE 心跳与北极星补拉
+	// streamTickInterval 一次 tick 同时驱动 SSE 心跳与插件层的一轮拉取
 	// 15s 取自北极星 SDK 的缓存量级，补得更密只会空转
 	streamTickInterval = 15 * time.Second
 	// streamMaxAge 单条 SSE 连接的硬性上限；到期推 ENDED，不向客户端承诺更长连接
@@ -59,27 +59,25 @@ var errStreamTimedOut = errors.New("watch timeout")
 // errSkipEvent 该事件不投影给前端，但流继续
 var errSkipEvent = errors.New("skip watch event")
 
-// Manager 将集群 Pod Watch 投影为 SSE 事件
+// Manager 将集群 Pod Watch 投影为 SSE 事件，是 Watch 的基础层
+// 只管 Pod 的 list/watch 与投影推送，不感知任何附属数据源；附属数据由插件层补充
 // 连接级对象：每条 Watch 请求新建一个，字段只在 consume 的单 goroutine 内读写，故不加锁
 type Manager struct {
-	podWatcher  PodWatcher
-	listPolaris PolarisLister
-	// tickInterval 心跳与北极星补拉共用的周期；单测调小以免真实等待
+	podWatcher PodWatcher
+	// pluginRunner 附属数据插件执行时；每个 tick 驱动一轮，产出独立的 PLUGIN 事件
+	pluginRunner *plugin.Runner
+	// tickInterval 心跳与插件层共用的周期；单测调小以免真实等待
 	tickInterval time.Duration
 	// maxAge 本条 SSE 的最长存活时间；单测调小以免真实等待
 	maxAge time.Duration
-	// polarisCache 最近一轮北极星拉取结果，供密集的 Pod 事件复用，见 attachPolaris
-	// nil 表示从未成功缓存；成功拉取即使空结果也写成空切片，与 nil 区分
-	polarisCache []*polaris.PolarisServiceInstances
-	// polarisCachedAt polarisCache 的取回时刻；配合 polarisCache == nil 判断是否该真拉
-	polarisCachedAt time.Time
 }
 
-// NewManager 创建 Watch 投影流 Manager
-func NewManager(podWatcher PodWatcher, listPolaris PolarisLister) *Manager {
+// NewManager 创建 Watch 投影流 Manager；plugins 为附属数据插件，按注册顺序驱动
+// 基础层不认识具体插件，注册在 handler 组装时完成
+func NewManager(podWatcher PodWatcher, plugins ...plugin.Plugin) *Manager {
 	return &Manager{
 		podWatcher:   podWatcher,
-		listPolaris:  listPolaris,
+		pluginRunner: plugin.NewRunner(plugins...),
 		tickInterval: streamTickInterval,
 		maxAge:       streamMaxAge,
 	}
@@ -120,7 +118,7 @@ func (m *Manager) Run(ctx context.Context, w http.ResponseWriter, p RunParams) e
 		err = stream.writeEvent(serializer.AppInstanceWatchEvent{
 			Type:   string(EventEnded),
 			Reason: reason,
-		})
+		}, string(EventEnded))
 	}
 
 	// 响应头已写出，改不了 HTTP 状态码，流内错误只能落日志，否则写失败会彻底无声
@@ -190,8 +188,8 @@ func (m *Manager) consume(
 			return errStreamTimedOut
 
 		case <-ticker.C:
-			// 先补拉北极星，只对有变化的实例补推 MODIFIED；拉取失败只跳过本轮
-			if err := m.resyncPolaris(ctx, stream, pushed); err != nil {
+			// 先跑一轮插件层，只对附属数据有变化的实例推 PLUGIN；单个插件失败只跳过本轮
+			if err := m.runPlugins(ctx, stream, pushed); err != nil {
 				return err
 			}
 
@@ -206,7 +204,7 @@ func (m *Manager) consume(
 			}
 
 			// 投影失败或 BOOKMARK 用 errSkipEvent 吞掉，不拆流
-			err := m.handleEvent(ctx, stream, pushed, ev, deployID)
+			err := m.handleEvent(stream, pushed, ev, deployID)
 			if err != nil && !errors.Is(err, errSkipEvent) {
 				return err
 			}
@@ -215,8 +213,8 @@ func (m *Manager) consume(
 }
 
 // handleEvent 把单条集群事件投影为 SSE；BOOKMARK 跳过，Error 视为集群中断
+// 整条 Pod 事件路径都不碰附属数据，因此不需要 ctx：拉取只发生在插件层
 func (m *Manager) handleEvent(
-	ctx context.Context,
 	stream *sseStream,
 	pushed *pushedInstances,
 	ev k8swatch.Event,
@@ -233,27 +231,43 @@ func (m *Manager) handleEvent(
 	}
 
 	// 投影失败返回 errSkipEvent，调用方继续消费后续事件
-	event, err := m.projectEvent(ctx, ev, deployID)
+	event, err := m.projectEvent(ev, deployID)
 	if err != nil {
 		return err
 	}
 
-	if err = stream.writeEvent(event); err != nil {
+	if err = stream.writeEvent(event, event.Type); err != nil {
 		return err
 	}
 
-	// 推送成功后才记录：没推出去的实例不参与后续北极星补拉比对
+	// 推送成功后才记录：没推出去的实例不进插件层快照，也就不会被补出附属数据事件
 	pushed.track(event)
 
 	return nil
 }
 
+// runPlugins 把本连接存活实例的快照交给插件层跑一轮，有变化的实例推独立 PLUGIN 事件
+// 快照只含已成功推送且未 DELETED 的实例，因此不会补出从未推过的实例，也不会推已删除的
+// 插件调用留在 consume 的同一 goroutine 内顺序执行：pushedInstances 与 Runner 的免锁前提
+// 正是「Pod 事件与周期任务是同一 goroutine 的两个 case」
+func (m *Manager) runPlugins(ctx context.Context, stream *sseStream, pushed *pushedInstances) error {
+	// 还没成功推送过任何实例时快照必为空，省掉一次排序与遍历
+	if pushed.empty() {
+		return nil
+	}
+
+	return m.pluginRunner.Run(
+		ctx,
+		pushed.sorted(),
+		func(event serializer.AppInstancePluginWatchEvent) error {
+			return stream.writeEvent(event, event.Type)
+		},
+	)
+}
+
 // projectEvent 把集群对象投影为平台事件；无法识别或投影失败则跳过，不推 skipped
-func (m *Manager) projectEvent(
-	ctx context.Context,
-	ev k8swatch.Event,
-	deployID string,
-) (serializer.AppInstanceWatchEvent, error) {
+// 投影只看事件本身，附属数据一律由插件层另行推送，因此这里不需要 ctx
+func (m *Manager) projectEvent(ev k8swatch.Event, deployID string) (serializer.AppInstanceWatchEvent, error) {
 	// dynamic client Watch 只应给出 Unstructured，其他类型不投影
 	obj, ok := ev.Object.(*unstructured.Unstructured)
 	if !ok {
@@ -280,8 +294,9 @@ func (m *Manager) projectEvent(
 		return serializer.AppInstanceWatchEvent{}, errSkipEvent
 	}
 
-	// 北极星失败不拆流，K8s 字段照常推
-	m.attachPolaris(ctx, instance)
+	// Pod 事件不承载附属数据：置空数组而不是留 nil，避免 JSON 出现 polarisInfos: null
+	// 北极星等附属信息由插件层以独立 PLUGIN 事件推送，前端不得从这里读取
+	instance.PolarisInfos = []*serializer.PolarisInstanceInfoOutputObj{}
 
 	eventType := EventModified
 	if ev.Type == k8swatch.Added {

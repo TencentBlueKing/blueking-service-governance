@@ -160,17 +160,53 @@ func (q *WatchAppInstancesQueryInput) Validate() error {
 	return nil
 }
 
-// AppInstanceWatchEvent 实例 Watch 推送的平台投影事件（非原生 Pod JSON）
+// AppInstanceWatchEvent 实例 Watch 推送的 Pod 投影事件（非原生 Pod JSON）
 // DELETED 时 Object 只保证 id；ENDED 时 Object 为空、Reason 说明流结束原因
 // Type 取值对齐 watch.EventType：ADDED / MODIFIED / DELETED / ENDED
+//
+// Pod 事件不承载附属数据：Object.PolarisInfos 恒为空数组，北极星等附属信息
+// 一律由 AppInstancePluginWatchEvent 单独推送，前端不得从本事件读取
 type AppInstanceWatchEvent struct {
 	// 事件类型
 	// Enums: ADDED, MODIFIED, DELETED, ENDED
 	Type string `json:"type" enums:"ADDED,MODIFIED,DELETED,ENDED"`
 	// 流结束原因；仅 ENDED 使用
 	Reason string `json:"reason,omitempty"`
-	// 实例投影；字段集合对齐 AppInstanceOutputObj（含 polarisInfos）
+	// 实例投影；字段集合对齐 AppInstanceOutputObj，其中 polarisInfos 在 Watch 场景恒为空数组
 	Object *AppInstanceOutputObj `json:"object"`
+}
+
+// AppInstancePluginWatchEvent 实例 Watch 推送的附属数据事件
+//
+// 与 Pod 事件同流同信封，但语义不同：它不是实例的 ADDED / MODIFIED / DELETED，
+// 前端不得据此增删本地行，只能按 object.id 找到已有行后覆盖该 plugin 对应的附属数据；
+// 找不到对应行时忽略该事件
+type AppInstancePluginWatchEvent struct {
+	// 事件类型；恒为 PLUGIN，取值见 instance/watch/plugin.EventTypePlugin
+	// Enums: PLUGIN
+	Type string `json:"type" enums:"PLUGIN"`
+	// 附属数据来源插件名，如 polaris
+	Plugin string `json:"plugin"`
+	// 附属数据载荷
+	Object *AppInstancePluginObj `json:"object"`
+}
+
+// AppInstancePluginObj 单个实例的附属数据载荷
+type AppInstancePluginObj struct {
+	// 实例 ID（即 k8s pod 的 name），供前端关联本地行
+	ID string `json:"id"`
+	// 插件自有载荷；polaris 插件为 PolarisInstanceInfoOutputObj 列表，可为空列表
+	Data any `json:"data"`
+}
+
+// AppInstanceWatchStreamDoc 仅用于 OpenAPI 声明 SSE 两类事件形态，不是实际响应体
+// Watch 接口返回的是 text/event-stream，每条 data 为其中之一；swag 无法在单个
+// 响应码上声明两个模型，故用本类型把两者一并带进 definitions 供前端生成类型
+type AppInstanceWatchStreamDoc struct {
+	// Pod 投影事件：ADDED / MODIFIED / DELETED / ENDED
+	PodEvent *AppInstanceWatchEvent `json:"podEvent"`
+	// 附属数据事件：PLUGIN
+	PluginEvent *AppInstancePluginWatchEvent `json:"pluginEvent"`
 }
 
 // PolarisInstanceInfoOutputObj 关联到应用实例的北极星实例状态。
@@ -312,12 +348,32 @@ func extractMainContainerResources(containers []any) AppInstanceResourcesObj {
 	return AppInstanceResourcesObj{}
 }
 
-// MergePolarisInfoToAppInstances 将北极星实例信息合并到应用实例输出对象中。
+// BuildPolarisInfosForIP 按 Pod IP + 服务端口投影北极星实例
+// List 的 Merge 与 Watch 插件共用，保证字段口径和排序一致
+// 未命中返回空切片而不是 nil，与「配置被删后成功拉回空」同形，供 Runner 判断变化
+func BuildPolarisInfosForIP(
+	ip string,
+	svcInstances []*polaris.PolarisServiceInstances,
+) []*PolarisInstanceInfoOutputObj {
+	return polarisInfosForIP(ip, indexPolarisMatches(svcInstances))
+}
+
+// MergePolarisInfoToAppInstances 将北极星实例信息合并到应用实例输出对象中
 // 按 Pod IP + 服务端口匹配；命中多个北极星服务时的顺序由 buildPolarisInfos 保证
 func MergePolarisInfoToAppInstances(
 	appInstances []*AppInstanceOutputObj,
 	svcInstances []*polaris.PolarisServiceInstances,
 ) {
+	// 索引只建一次，再按实例 IP 取投影，避免每个实例都扫一遍北极星结果
+	ipIndex := indexPolarisMatches(svcInstances)
+
+	for _, instance := range appInstances {
+		instance.PolarisInfos = polarisInfosForIP(instance.IP, ipIndex)
+	}
+}
+
+// indexPolarisMatches 按实例 IP 建索引，供按 Pod 查询时复用
+func indexPolarisMatches(svcInstances []*polaris.PolarisServiceInstances) map[string][]polarisMatch {
 	ipIndex := make(map[string][]polarisMatch)
 	for _, svc := range svcInstances {
 		for _, inst := range svc.Instances {
@@ -325,14 +381,17 @@ func MergePolarisInfoToAppInstances(
 		}
 	}
 
-	for _, instance := range appInstances {
-		infos := buildPolarisInfos(ipIndex[instance.IP])
-		if len(infos) == 0 {
-			continue
-		}
+	return ipIndex
+}
 
-		instance.PolarisInfos = infos
+// polarisInfosForIP 从索引取出该 IP 的投影；未命中是空切片而不是 nil
+func polarisInfosForIP(ip string, ipIndex map[string][]polarisMatch) []*PolarisInstanceInfoOutputObj {
+	infos := buildPolarisInfos(ipIndex[ip])
+	if infos == nil {
+		return []*PolarisInstanceInfoOutputObj{}
 	}
+
+	return infos
 }
 
 // polarisMatch 一条北极星实例与其所属服务的配对，供按 Pod IP 命中后再过滤端口
