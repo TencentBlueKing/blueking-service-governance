@@ -265,21 +265,23 @@ var _ = Describe("TafWorkloadBuilder", func() {
 
 			prodResult, err := builder.Build(ctx, prodEnv)
 			Expect(err).NotTo(HaveOccurred())
+			prodGD := asGameDeployment(prodResult)
 			prodConfigMapData := prodResult.ExtraObjects[0].Object["data"].(map[string]any)
 			Expect(prodConfigMapData).To(HaveKeyWithValue(
 				"01-plain.env",
 				"REGION=ap-guangzhou\nPOD_NAME=__#VAR_PLACEHOLDER#__BKMS_POD_NAME__",
 			))
-			prodContainer := prodResult.GameDeployment.Spec.Template.Spec.Containers[0]
+			prodContainer := prodGD.Spec.Template.Spec.Containers[0]
 			Expect(prodContainer.VolumeMounts).To(HaveLen(2))
 			Expect(prodContainer.VolumeMounts[1].MountPath).To(Equal("/data/app/conf/plain.env"))
 
 			testResult, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
+			testGD := asGameDeployment(testResult)
 			testConfigMapData := testResult.ExtraObjects[0].Object["data"].(map[string]any)
 			Expect(testConfigMapData).To(HaveKey("00-taf_config.conf"))
 			Expect(testConfigMapData).NotTo(HaveKey("01-plain.env"))
-			testContainer := testResult.GameDeployment.Spec.Template.Spec.Containers[0]
+			testContainer := testGD.Spec.Template.Spec.Containers[0]
 			Expect(testContainer.VolumeMounts).To(HaveLen(1))
 			Expect(testContainer.VolumeMounts[0].MountPath).To(Equal("/etc/taf/taf_config.conf"))
 		})

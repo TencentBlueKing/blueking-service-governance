@@ -259,6 +259,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			builder := workload.NewBuilder(builderSvc, app, appModel)
 			result, err := builder.Build(ctx, appEnv)
 			Expect(err).NotTo(HaveOccurred())
+			gd := asGameDeployment(result)
 
 			extraObjs := result.ExtraObjects
 			Expect(extraObjs).To(HaveLen(1))
@@ -269,12 +270,12 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				"REGION=ap-guangzhou\nPOD_IP=__#VAR_PLACEHOLDER#__BKMS_POD_IP__",
 			))
 
-			container := result.GameDeployment.Spec.Template.Spec.Containers[0]
+			container := gd.Spec.Template.Spec.Containers[0]
 			Expect(container.VolumeMounts).To(HaveLen(2))
 			Expect(container.VolumeMounts[0].MountPath).To(Equal("/etc/trpc/trpc_go.yaml"))
 			Expect(container.VolumeMounts[1].MountPath).To(Equal("/data/app/conf/plain.env"))
 
-			initContainer := result.GameDeployment.Spec.Template.Spec.InitContainers[0]
+			initContainer := gd.Spec.Template.Spec.InitContainers[0]
 			Expect(initContainer.Command[2]).To(ContainSubstring(
 				"cp '/trpc-config-template/01-plain.env' '/trpc-config-rendered/01-plain.env'",
 			))

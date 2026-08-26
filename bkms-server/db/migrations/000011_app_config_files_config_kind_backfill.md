@@ -6,7 +6,7 @@
 
 存量数据在引入 `plain` 类型之前创建，全部属于 `framework` 语义。
 
-读路径 `GetConfigKind()` 仍保留空值时返回 `framework` 的防御逻辑，迁移完成后可移除该 fallback。
+读路径已不再兜底空 `configKind`，因此需要通过该迁移补齐存量数据。
 
 ## 迁移语句说明
 
@@ -18,7 +18,7 @@
 
 **更新：`$set configKind: "framework"`**
 
-将缺失的 `configKind` 统一设为 `"framework"`，与 `GetConfigKind()` 的 fallback 行为一致。
+将缺失的 `configKind` 统一设为 `"framework"`，与存量数据的实际语义保持一致。
 
 ## down
 

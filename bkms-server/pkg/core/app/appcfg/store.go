@@ -199,6 +199,8 @@ type ListOptions struct {
 	orderBy ListOrderByField
 	// The type of app config file to filter, default to no filtering
 	filterType AppConfigFileType
+	// The semantic kind of app config file to filter, default to no filtering
+	filterConfigKind ConfigKind
 	// The environment name to filter, default to no filtering
 	// Use EnvNameFilterAppLevel to filter only app-level config files
 	filterEnvName *string
@@ -210,6 +212,14 @@ type AcfFilterType string
 // ApplyToOptions applies the option to the given options.
 func (ft AcfFilterType) ApplyToOptions(opts *ListOptions) {
 	opts.filterType = AppConfigFileType(ft)
+}
+
+// AcfFilterConfigKind usage: .List(..., AcfFilterConfigKind(ConfigKindPlain))
+type AcfFilterConfigKind ConfigKind
+
+// ApplyToOptions applies the option to the given options.
+func (fk AcfFilterConfigKind) ApplyToOptions(opts *ListOptions) {
+	opts.filterConfigKind = ConfigKind(fk)
 }
 
 // AcfFilterEnvName usage: .List(..., AcfFilterEnvName("prod")) or .List(..., AcfFilterEnvName(EnvNameFilterAppLevel))
@@ -248,6 +258,9 @@ func (s *AppConfigFileStoreMongo) List(
 	filter := bson.M{"appID": appID}
 	if listOptsObj.filterType != "" {
 		filter["type"] = listOptsObj.filterType
+	}
+	if listOptsObj.filterConfigKind != "" {
+		filter["configKind"] = listOptsObj.filterConfigKind
 	}
 	// Apply envName filter if specified
 	if listOptsObj.filterEnvName != nil {

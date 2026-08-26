@@ -60,9 +60,10 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
  replicas: 3`
 		testAppConfigFile = appcfg.AppConfigFile{
 			AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
-				AppID: appID,
-				Name:  "test-values",
-				Type:  appcfg.AppConfigFileTypeNormal,
+				AppID:      appID,
+				Name:       "test-values",
+				Type:       appcfg.AppConfigFileTypeNormal,
+				ConfigKind: appcfg.ConfigKindFramework,
 				VersionedContent: appcfg.VersionedContent{
 					ContentSourceType: appcfg.ContentSourceTypeLocal,
 					Content:           &content,
@@ -184,6 +185,54 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			appConfigFiles, err = store.List(ctx, appID, appcfg.AcfFilterEnvName("staging"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(appConfigFiles).To(BeEmpty())
+		})
+		It("should filter by configKind", func() {
+			frameworkContent := "config: framework"
+			frameworkFile := appcfg.AppConfigFile{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
+					AppID:      appID,
+					Name:       "framework-config",
+					Type:       appcfg.AppConfigFileTypeNormal,
+					ConfigKind: appcfg.ConfigKindFramework,
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Content:           &frameworkContent,
+					},
+				},
+			}
+			_, err := store.Add(ctx, frameworkFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			plainContent := "KEY=VALUE"
+			plainFile := appcfg.AppConfigFile{
+				AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
+					AppID:      appID,
+					Name:       "plain-config",
+					Type:       appcfg.AppConfigFileTypeNormal,
+					ConfigKind: appcfg.ConfigKindPlain,
+					VersionedContent: appcfg.VersionedContent{
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Content:           &plainContent,
+					},
+				},
+				PlainFileAttrs: appcfg.PlainFileAttrs{
+					MountPath: "/data/app/conf/custom.env",
+				},
+			}
+			_, err = store.Add(ctx, plainFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			appConfigFiles, err := store.List(ctx, appID, appcfg.AcfFilterConfigKind(appcfg.ConfigKindFramework))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(appConfigFiles).To(HaveLen(1))
+			Expect(appConfigFiles[0].GetConfigKind()).To(Equal(appcfg.ConfigKindFramework))
+			Expect(appConfigFiles[0].Name).To(Equal("framework-config"))
+
+			appConfigFiles, err = store.List(ctx, appID, appcfg.AcfFilterConfigKind(appcfg.ConfigKindPlain))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(appConfigFiles).To(HaveLen(1))
+			Expect(appConfigFiles[0].GetConfigKind()).To(Equal(appcfg.ConfigKindPlain))
+			Expect(appConfigFiles[0].Name).To(Equal("plain-config"))
 		})
 	})
 

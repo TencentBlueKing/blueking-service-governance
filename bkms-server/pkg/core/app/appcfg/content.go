@@ -73,24 +73,23 @@ func getFrameworkConfigFileAndCompiledContent(
 	store AppConfigFileStore,
 	appID, envName string,
 ) (*AppConfigFile, string, error) {
-	configFiles, err := store.List(ctx, appID, AcfFilterEnvName(envName))
+	configFiles, err := store.List(
+		ctx,
+		appID,
+		AcfFilterEnvName(envName),
+		AcfFilterConfigKind(ConfigKindFramework),
+	)
 	if err != nil {
 		return nil, "", errors.Wrapf(err, "list config files for app %s env %s", appID, envName)
 	}
-	frameworkFiles := make([]AppConfigFile, 0, len(configFiles))
-	for _, item := range configFiles {
-		if item.GetConfigKind() == ConfigKindFramework {
-			frameworkFiles = append(frameworkFiles, item)
-		}
-	}
-	if len(frameworkFiles) == 0 {
+	if len(configFiles) == 0 {
 		return nil, "", ErrNoConfigFileFound
 	}
-	if len(frameworkFiles) > 1 {
+	if len(configFiles) > 1 {
 		return nil, "", errors.Errorf("multiple config files found for app %s env %s", appID, envName)
 	}
 
-	acf := &frameworkFiles[0]
+	acf := &configFiles[0]
 	editor, err := NewAppConfigFileEditor(store, acf)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "creating app config file editor")
@@ -112,7 +111,7 @@ func ListEnvPlainContents(
 	store AppConfigFileStore,
 	appID, envName string,
 ) ([]ConfigFileWithContent, error) {
-	configFiles, err := store.List(ctx, appID)
+	configFiles, err := store.List(ctx, appID, AcfFilterConfigKind(ConfigKindPlain))
 	if err != nil {
 		return nil, errors.Wrapf(err, "list config files for app %s", appID)
 	}
@@ -121,16 +120,12 @@ func ListEnvPlainContents(
 	plainRoots := make([]AppConfigFile, 0)
 	envFilesByRoot := make(map[string]map[string]AppConfigFile)
 	for _, item := range configFiles {
-		// 这里只关心 plain 文件；framework 文件由其他读取逻辑处理。
-		if item.GetConfigKind() != ConfigKindPlain {
-			continue
-		}
 		// 默认环境名为空的记录代表 plain 逻辑根文件。
 		if item.EnvName == EnvNameDefault {
 			plainRoots = append(plainRoots, item)
 			continue
 		}
-		// 其余 plain 记录视为环境实例，按所属根文件分组，便于后续按环境查找。
+		// 跳过default为空的单环境plain文件，避免脏数据
 		if item.DefaultAppConfigFileID == nil {
 			continue
 		}

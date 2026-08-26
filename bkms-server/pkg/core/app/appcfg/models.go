@@ -162,7 +162,6 @@ type AppConfigFileVersionedSpec struct {
 	// Type 表示应用配置文件类型（normal 或 overlay）。
 	Type AppConfigFileType `bson:"type"`
 	// ConfigKind 表示配置文件遵循 framework 语义还是 plain-file 语义。
-	// 历史记录如果没有该字段，则按 framework 文件处理。
 	ConfigKind ConfigKind `bson:"configKind,omitempty"`
 	// BaseAppConfigFileID is the ID of the base app config file, it is only set when Type is overlay.
 	BaseAppConfigFileID *bson.ObjectID `bson:"baseAppConfigFileID,omitempty"`
