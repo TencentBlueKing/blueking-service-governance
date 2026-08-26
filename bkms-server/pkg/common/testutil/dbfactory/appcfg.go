@@ -68,6 +68,9 @@ func AppConfigFile(
 	if opts.Format == "" {
 		opts.Format = appcfg.FileFormatYAML
 	}
+	if opts.ConfigKind == "" {
+		opts.ConfigKind = appcfg.ConfigKindFramework
+	}
 
 	acf := &appcfg.AppConfigFile{
 		AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{

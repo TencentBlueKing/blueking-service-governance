@@ -74,6 +74,10 @@ func (s *AppConfigFileService) Create(
 	params = normalizeCreateCfgFileParams(params)
 	params.MountedEnvNames = normalizeEnvNames(params.MountedEnvNames)
 
+	if err := validateCreateCfgFileSemantics(params); err != nil {
+		return nil, err
+	}
+
 	acf := AppConfigFile{
 		AppConfigFileVersionedSpec: AppConfigFileVersionedSpec{
 			AppID:      params.AppID,
@@ -447,6 +451,37 @@ func normalizeCreateCfgFileParams(params CreateCfgFileParams) CreateCfgFileParam
 	}
 	params.MountPath = strings.TrimSpace(params.MountPath)
 	return params
+}
+
+// validateCreateCfgFileSemantics 校验创建参数的领域不变量，不依赖 DB。
+func validateCreateCfgFileSemantics(params CreateCfgFileParams) error {
+	if params.ConfigKind == ConfigKindPlain {
+		if params.Type != AppConfigFileTypeNormal {
+			return errors.Wrap(ErrInvalidConfigSpec, "plain config must be of type normal")
+		}
+		if params.ContentSourceType != ContentSourceTypeLocal {
+			return errors.Wrap(ErrInvalidConfigSpec, "plain config only supports local content source")
+		}
+		if params.BaseAppConfigFileID != nil {
+			return errors.Wrap(ErrInvalidConfigSpec, "plain config does not support baseAppConfigFileID")
+		}
+		if !isValidPlainMountPath(params.MountPath) {
+			return errors.Wrap(ErrInvalidConfigSpec, "plain config mountPath must be an absolute file path")
+		}
+		return nil
+	}
+	if params.MountPath != "" {
+		return errors.Wrap(ErrInvalidConfigSpec, "framework config does not support mountPath")
+	}
+	if params.MountedEnvNames != nil {
+		return errors.Wrap(ErrInvalidConfigSpec, "framework config does not support mountedEnvNames")
+	}
+	return nil
+}
+
+// isValidPlainMountPath 校验容器内绝对文件路径。
+func isValidPlainMountPath(p string) bool {
+	return strings.HasPrefix(p, "/") && p != "/" && !strings.HasSuffix(p, "/")
 }
 
 // validatePlainConfigFile 校验 plain 文件的业务约束。

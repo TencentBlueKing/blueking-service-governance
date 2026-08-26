@@ -789,7 +789,9 @@ custom: ${{ env.MY_VAR }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
 					AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
 						AppID: app.ID, Name: "v", Type: appcfg.AppConfigFileTypeNormal,
-						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
+						VersionedContent: appcfg.VersionedContent{
+							ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
+						},
 					},
 				}
 				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
@@ -850,11 +852,13 @@ custom: ${{ env.MY_VAR }}`
 				content := "test content"
 				mockAppConfigFile := &appcfg.AppConfigFile{
 					AppConfigFileVersionedSpec: appcfg.AppConfigFileVersionedSpec{
-						AppID:             app.ID,
-						Name:              "test-values",
-						Type:              appcfg.AppConfigFileTypeNormal,
-						ContentSourceType: appcfg.ContentSourceTypeLocal,
-						Content:           &content,
+						AppID: app.ID,
+						Name:  "test-values",
+						Type:  appcfg.AppConfigFileTypeNormal,
+						VersionedContent: appcfg.VersionedContent{
+							ContentSourceType: appcfg.ContentSourceTypeLocal,
+							Content:           &content,
+						},
 					},
 				}
 				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
