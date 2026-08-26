@@ -22,6 +22,7 @@ package build
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -33,8 +34,15 @@ import (
 	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
+)
+
+// ErrWorkspaceImageCredentialMissing 本次会拉取自定义镜像，但工作空间生效镜像源没有蓝盾凭证
+var ErrWorkspaceImageCredentialMissing = errors.New(
+	"workspace image registry credential is not configured",
 )
 
 // BuildResult 构建执行结果
@@ -106,7 +114,63 @@ func (s *Service) validateBeforeBuild(ctx context.Context, app *bkmsapp.Applicat
 	); err != nil {
 		return errors.Wrap(err, "validate platform generated Dockerfile build images")
 	}
+	// 自定义镜像拉取依赖蓝盾凭证，缺凭证时拦在触发侧，避免进入蓝盾后再失败
+	if err := s.validateCustomImageCredential(ctx, app, cfg); err != nil {
+		return errors.Wrap(err, "validate custom image credential before build")
+	}
 	return nil
+}
+
+// validateCustomImageCredential 本次会拉自定义镜像时，要求生效镜像源已有 bkCICredentialID
+func (s *Service) validateCustomImageCredential(
+	ctx context.Context, app *bkmsapp.Application, cfg *imgbuild.Config,
+) error {
+	if cfg.CodeRepo.PlatformBuildConfig == nil {
+		return nil
+	}
+	usesCustom, err := s.usesCustomBuildImage(
+		ctx, app.WorkspaceID,
+		cfg.CodeRepo.PlatformBuildConfig.BuilderImage,
+		cfg.CodeRepo.PlatformBuildConfig.RunnerImage,
+	)
+	if err != nil {
+		return errors.Wrap(err, "classify custom build images")
+	}
+	if !usesCustom {
+		return nil
+	}
+	registry, err := workspace.GetWorkspaceImageRegistry(ctx, app.WorkspaceID)
+	if err != nil {
+		return errors.Wrapf(err, "get workspace %s image registry", app.WorkspaceID)
+	}
+	if strings.TrimSpace(registry.BkCICredentialID) != "" {
+		return nil
+	}
+	return errors.Wrap(
+		ErrWorkspaceImageCredentialMissing,
+		"complete workspace image registry setup before pulling custom images",
+	)
+}
+
+// usesCustomBuildImage builder / runner 是否有一条落在工作空间生效镜像源路径下
+func (s *Service) usesCustomBuildImage(ctx context.Context, workspaceID string, images ...string) (bool, error) {
+	if s.customImageChecker == nil || workspaceID == "" {
+		return false, nil
+	}
+	for _, image := range images {
+		ref, err := workloadruntime.ParseTaggedImageReference(image)
+		if err != nil {
+			return false, errors.Wrapf(err, "parse image %s", image)
+		}
+		matches, err := s.customImageChecker.MatchesWorkspaceRegistry(ctx, workspaceID, ref.Name)
+		if err != nil {
+			return false, errors.Wrapf(err, "classify image %s", image)
+		}
+		if matches {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Build 执行构建并落库，返回构建结果

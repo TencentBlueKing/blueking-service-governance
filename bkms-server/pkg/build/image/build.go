@@ -38,6 +38,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
 const (
@@ -96,7 +97,7 @@ func ExecuteBKCIPipelineBuild(
 			return nil, nil, errors.Wrapf(err, "init pipeline")
 		}
 		// 根据配置生成流水线参数（镜像相关）
-		params, err = genPipelineBuildRepoAndImageParams(ctx, app, branch, imageTag)
+		params, err = genPipelineBuildRepoAndImageParams(ctx, app, cfg, branch, imageTag)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "generate pipeline build image params for %s", appInfo)
 		}
@@ -169,7 +170,7 @@ func genPipelineBuildParams(
 	}
 
 	// 镜像相关参数
-	params, err := genPipelineBuildRepoAndImageParams(ctx, app, branch, imageTag)
+	params, err := genPipelineBuildRepoAndImageParams(ctx, app, cfg, branch, imageTag)
 	if err != nil {
 		return nil, errors.Wrapf(err, "generate pipeline build image params for %s", app.ID)
 	}
@@ -298,7 +299,7 @@ func getPlatformDockerfileLanguage(app *bkmsapp.Application) (string, error) {
 
 // genPipelineBuildRepoAndImageParams 生成蓝盾流水线构建参数（镜像和仓库版本信息相关）
 func genPipelineBuildRepoAndImageParams(
-	ctx context.Context, app *bkmsapp.Application, branch, imageTag string,
+	ctx context.Context, app *bkmsapp.Application, cfg *Config, branch, imageTag string,
 ) (map[string]string, error) {
 	registry, err := workspace.GetWorkspaceImageRegistry(ctx, app.WorkspaceID)
 	if err != nil {
@@ -310,10 +311,39 @@ func genPipelineBuildRepoAndImageParams(
 		pipelineparam.RepoCheckoutBy: "BRANCH",
 		pipelineparam.RepoRevision:   branch,
 		// 镜像仓库相关参数
-		pipelineparam.ImageRegistry: registry.Registry,
-		pipelineparam.ImageName:     app.Name,
-		pipelineparam.ImageTag:      imageTag,
-		// 已经预先添加到蓝盾上的镜像仓库凭证 ID
+		pipelineparam.ImageRegistry:     registry.Registry,
+		pipelineparam.ImageRegistryHost: sourceImageRegistryHost(cfg, registry),
+		pipelineparam.ImageName:         app.Name,
+		pipelineparam.ImageTag:          imageTag,
+		// 已经预先添加到蓝盾上的镜像仓库凭证 ID；源镜像拉取与推送同源复用
 		pipelineparam.ImageCredential: registry.BkCICredentialID,
 	}, nil
+}
+
+// sourceImageRegistryHost 插件 sourceMirrorTicketPair 要的是 registry host。
+// 只在平台生成 Dockerfile 且镜像源有账号、有凭证时写入，避免仓库 Dockerfile / 公开仓库拿空凭证去 login
+func sourceImageRegistryHost(cfg *Config, registry *bkmsreg.ImageRegistry) string {
+	// 仓库 Dockerfile / 非代码库来源不补源镜像凭证，host 留空让插件 pair 失效
+	if cfg == nil || cfg.CodeRepo == nil ||
+		cfg.SourceType != SourceTypeCodeRepository ||
+		cfg.CodeRepo.EffectiveImageBuildMode() != ImageBuildModePlatform {
+		return ""
+	}
+	if registry == nil {
+		return ""
+	}
+	// 公开仓库或未登记蓝盾凭证时不要填 pair，否则插件会拿空凭证去 docker login
+	if strings.TrimSpace(registry.Username) == "" || strings.TrimSpace(registry.BkCICredentialID) == "" {
+		return ""
+	}
+	// 插件键只要 host（可带端口），Registry 字段是 host/namespace 且可能带 scheme
+	addr := strings.ToLower(strings.TrimSpace(registry.Registry))
+	for _, scheme := range []string{"https://", "http://"} {
+		if trimmed, ok := strings.CutPrefix(addr, scheme); ok {
+			addr = trimmed
+			break
+		}
+	}
+	host, _, _ := strings.Cut(addr, "/")
+	return host
 }

@@ -34,6 +34,8 @@ const (
 
 	// ImageRegistry 镜像源仓库（如 mirrors.tencent.com/example）
 	ImageRegistry = "BKMS_IMAGE_REGISTRY"
+	// ImageRegistryHost 镜像源仓库 host（不含路径），供源镜像拉取凭证配对
+	ImageRegistryHost = "BKMS_IMAGE_REGISTRY_HOST"
 	// ImageName 镜像名称
 	ImageName = "BKMS_IMAGE_NAME"
 	// ImageTag 镜像标签

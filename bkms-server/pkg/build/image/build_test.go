@@ -406,6 +406,7 @@ var _ = Describe("Build Functions", func() {
 			// 验证镜像信息
 			Expect(params[pipelineparam.ImageCredential]).To(Equal("cred-123"))
 			Expect(params[pipelineparam.ImageRegistry]).To(Equal("hub.example.com"))
+			Expect(params[pipelineparam.ImageRegistryHost]).To(BeEmpty())
 			Expect(params[pipelineparam.ImageName]).To(Equal(testApp.Name))
 			Expect(params[pipelineparam.ImageTag]).To(Equal(imageTag))
 			// 验证 platform 构建相关参数：repositoryDockerfile 模式下参数集固定，除 sourceType 和 ToolchainBaseURL 外其余为空字符串
@@ -566,7 +567,7 @@ var _ = Describe("Build Functions", func() {
 			}, nil).Build()
 
 			// 生成参数
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, branch, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, testCfg, branch, imageTag)
 
 			// 验证结果
 			Expect(err).NotTo(HaveOccurred())
@@ -576,8 +577,46 @@ var _ = Describe("Build Functions", func() {
 			Expect(params[pipelineparam.RepoRevision]).To(Equal(branch))
 			// 验证镜像仓库信息
 			Expect(params[pipelineparam.ImageRegistry]).To(Equal("hub.example.com"))
+			Expect(params[pipelineparam.ImageRegistryHost]).To(BeEmpty())
 			Expect(params[pipelineparam.ImageName]).To(Equal(testApp.Name))
 			Expect(params[pipelineparam.ImageTag]).To(Equal(imageTag))
+			Expect(params[pipelineparam.ImageCredential]).To(Equal("cred-123"))
+		})
+
+		It("should fill registry host for platform mode with username and credential", func() {
+			testCfg.CodeRepo.ImageBuildMode = ImageBuildModePlatform
+			testCfg.CodeRepo.PlatformBuildConfig = &PlatformBuildConfig{
+				BuilderImage: "golang:1.24",
+				RunnerImage:  "debian:12",
+			}
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
+				Registry:         "https://mirrors.tencent.com/example",
+				Username:         "robot",
+				BkCICredentialID: "cred-123",
+			}, nil).Build()
+
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, testCfg, branch, imageTag)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(params[pipelineparam.ImageRegistryHost]).To(Equal("mirrors.tencent.com"))
+			Expect(params[pipelineparam.ImageCredential]).To(Equal("cred-123"))
+		})
+
+		It("should leave registry host empty for platform public registry", func() {
+			testCfg.CodeRepo.ImageBuildMode = ImageBuildModePlatform
+			testCfg.CodeRepo.PlatformBuildConfig = &PlatformBuildConfig{
+				BuilderImage: "golang:1.24",
+				RunnerImage:  "debian:12",
+			}
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
+				Registry:         "mirrors.tencent.com/example",
+				BkCICredentialID: "cred-123",
+			}, nil).Build()
+
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, testCfg, branch, imageTag)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(params[pipelineparam.ImageRegistryHost]).To(BeEmpty())
 			Expect(params[pipelineparam.ImageCredential]).To(Equal("cred-123"))
 		})
 
@@ -588,7 +627,7 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 生成参数
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, branch, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, testCfg, branch, imageTag)
 
 			// 验证错误
 			Expect(err).To(HaveOccurred())
@@ -596,6 +635,26 @@ var _ = Describe("Build Functions", func() {
 			Expect(params).To(BeNil())
 		})
 	})
+
+	DescribeTable("sourceImageRegistryHost clips registry to host",
+		func(addr, want string) {
+			platformCfg := &Config{
+				SourceType: SourceTypeCodeRepository,
+				CodeRepo: &RepositoryConfig{
+					ImageBuildMode:      ImageBuildModePlatform,
+					PlatformBuildConfig: &PlatformBuildConfig{BuilderImage: "golang:1.24", RunnerImage: "debian:12"},
+				},
+			}
+			Expect(sourceImageRegistryHost(platformCfg, &registry.ImageRegistry{
+				Registry:         addr,
+				Username:         "robot",
+				BkCICredentialID: "cred-123",
+			})).To(Equal(want))
+		},
+		Entry("path only", "mirrors.tencent.com/example", "mirrors.tencent.com"),
+		Entry("https scheme", "https://mirrors.tencent.com/example", "mirrors.tencent.com"),
+		Entry("host with port", "mirrors.tencent.com:5000/example", "mirrors.tencent.com:5000"),
+	)
 })
 
 func decodeDockerfileCommandsParam(param string) []string {

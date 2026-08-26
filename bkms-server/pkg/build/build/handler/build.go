@@ -330,10 +330,10 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 		build.StartOptions{},
 	)
 	if err != nil {
-		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错属参数问题，
+		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
 		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
 		errCode := bkerrs.ErrCodeInternalServerError
-		if build.IsImageReferenceInvalid(err) {
+		if build.IsImageReferenceInvalid(err) || pkgerrors.Is(err, build.ErrWorkspaceImageCredentialMissing) {
 			errCode = bkerrs.ErrCodeInvalidArgument
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start and schedule build"))

@@ -29,8 +29,10 @@ import (
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 )
 
@@ -153,4 +155,54 @@ var _ = Describe("Service build validation", func() {
 		Entry("registry unreachable is not attributable to the user",
 			customruntime.ErrRegistryAccessFailed, false, true),
 	)
+
+	Describe("custom image credential precheck", func() {
+		const (
+			customImageName = "docker.bkrepo.example.com/demo/repo/my-golang"
+			customImage     = customImageName + ":1.0"
+		)
+
+		BeforeEach(func() {
+			mockey.Mock(ValidatePlatformBuildImages).Return(nil).Build()
+			cfg.CodeRepo.PlatformBuildConfig.BuilderImage = customImage
+			buildService.customImageChecker = &stubCustomChecker{
+				matches: map[string]bool{customImageName: true},
+			}
+		})
+
+		It("rejects custom image build when bkCICredentialID is missing", func() {
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
+				Registry: "docker.bkrepo.example.com/demo/repo",
+				Username: "robot",
+			}, nil).Build()
+
+			err := buildService.validateBeforeBuild(ctx, app, cfg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ContainSubstring("complete workspace image registry setup")))
+			Expect(errors.Is(err, ErrWorkspaceImageCredentialMissing)).To(BeTrue())
+		})
+
+		It("allows custom image build when bkCICredentialID exists", func() {
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
+				Registry:         "docker.bkrepo.example.com/demo/repo",
+				Username:         "robot",
+				BkCICredentialID: "cred-123",
+			}, nil).Build()
+
+			err := buildService.validateBeforeBuild(ctx, app, cfg)
+
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("does not block official images when bkCICredentialID is missing", func() {
+			cfg.CodeRepo.PlatformBuildConfig.BuilderImage = "golang:1.24"
+			cfg.CodeRepo.PlatformBuildConfig.RunnerImage = "debian:12"
+			buildService.customImageChecker = &stubCustomChecker{matches: map[string]bool{}}
+
+			err := buildService.validateBeforeBuild(ctx, app, cfg)
+
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })
