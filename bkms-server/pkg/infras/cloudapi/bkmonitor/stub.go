@@ -267,23 +267,6 @@ func cloneStubUserGroupDetail(detail *UserGroupDetail) *UserGroupDetail {
 	return &result
 }
 
-// ListMetadataSpaceByUID 模拟根据 space_uid 获取空间
-func (s *StubClient) ListMetadataSpaceByUID(ctx context.Context, uid string) (*Space, error) {
-	log.Infof(ctx, "Stub: ListMetadataSpaceByUID request: uid=%s", uid)
-	return &Space{
-		ID:          -100001,
-		SpaceTypeID: "bkci",
-		SpaceID:     "stub-project-a",
-		SpaceCode:   "stub0001stub0001stub0001stub0001",
-		SpaceName:   "Stub 项目 A",
-		SpaceUid:    uid,
-		IsBcsValid:  true,
-		Status:      "normal",
-		Creator:     "stub-user",
-		CreatedAt:   "2026-01-01 00:00:00",
-	}, nil
-}
-
 // GetMetadataSpaceDetail 模拟获取空间详情
 func (s *StubClient) GetMetadataSpaceDetail(ctx context.Context, bcsProjectCode string) (*Space, error) {
 	log.Infof(ctx, "Stub: GetMetadataSpaceDetail request: bcsProjectCode=%s", bcsProjectCode)

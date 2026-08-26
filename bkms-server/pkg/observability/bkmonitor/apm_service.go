@@ -23,7 +23,6 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -67,19 +66,13 @@ func (s *ApmService) Get(
 	}
 
 	// Not found locally, fetch from remote
-	client, err := bkmapi.New(param.Username)
+	client, err := bkmapi.NewMonitorClient(param.Username)
 	if err != nil {
 		return nil, errors.Wrap(err, "new bkmonitor client")
 	}
-	apmAppsData, err := client.ListApmApp(ctx, param.BkmProjectID)
+	targetApmApp, err := client.GetApmApp(ctx, param.BkmProjectID, apmID, "")
 	if err != nil {
-		return nil, errors.Wrap(err, "list apm app from bkmonitor")
-	}
-	targetApmApp, ok := lo.Find(apmAppsData, func(item *bkmapi.ApmApp) bool {
-		return item.ID == apmID
-	})
-	if !ok || targetApmApp == nil {
-		return nil, errors.Errorf("apm %d not found in bkmonitor", apmID)
+		return nil, errors.Wrapf(err, "get apm %d from bkmonitor", apmID)
 	}
 
 	newApm := &ApmInstConfig{
@@ -194,7 +187,7 @@ func (s *ApmService) CreateAndBindToEnv(
 
 	// 2. If not found locally, create via remote API and persist
 	if apm == nil {
-		client, cErr := bkmapi.New(param.Username)
+		client, cErr := bkmapi.NewMonitorClient(param.Username)
 		if cErr != nil {
 			return nil, errors.Wrap(cErr, "new bkmonitor client")
 		}

@@ -62,7 +62,7 @@ const (
 )
 
 // userGroupClientFactory 创建底层 bkmonitor 客户端的工厂函数，便于测试 mock
-type userGroupClientFactory func(operator string) (bkmapi.Client, error)
+type userGroupClientFactory func(operator string) (bkmapi.MonitorClient, error)
 
 // UserGroupService 封装 bkmonitor 告警组业务逻辑
 type UserGroupService struct {
@@ -82,7 +82,7 @@ func NewUserGroupService(
 	envStore envmodel.EnvironmentStore,
 ) *UserGroupService {
 	return &UserGroupService{
-		newClient: bkmapi.New,
+		newClient: bkmapi.NewMonitorClient,
 		permMgr:   permMgr,
 		envStore:  envStore,
 	}

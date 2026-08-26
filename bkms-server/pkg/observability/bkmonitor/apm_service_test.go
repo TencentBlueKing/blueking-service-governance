@@ -111,11 +111,10 @@ var _ = Describe("ApmService", func() {
 			// 本地不存在时，应从远程 API 获取并持久化到本地
 			It("should fetch from remote API and persist locally", func() {
 				mockey.PatchConvey("fetch APM from remote successfully", GinkgoT(), func() {
-					mockClient := new(bkmonitor.ApiClient)
-					mockey.Mock(bkmonitor.New).Return(mockClient, nil).Build()
-					mockey.Mock((*bkmonitor.ApiClient).ListApmApp).Return([]*bkmonitor.ApmApp{
-						{ID: 3001, AppName: "remote-apm", Token: "remote-token", BkBizID: 100},
-						{ID: 3002, AppName: "other-apm", Token: "other-token", BkBizID: 100},
+					mockClient := &bkmonitor.MonitorGatewayClient{ApiClient: new(bkmonitor.ApiClient)}
+					mockey.Mock(bkmonitor.NewMonitorClient).Return(mockClient, nil).Build()
+					mockey.Mock((*bkmonitor.MonitorGatewayClient).GetApmApp).Return(&bkmonitor.ApmApp{
+						ID: 3001, AppName: "remote-apm", Token: "remote-token", BkBizID: 100,
 					}, nil).Build()
 
 					result, err := svc.Get(ctx, 3001, CreateApmInstParams{
@@ -138,14 +137,14 @@ var _ = Describe("ApmService", func() {
 				})
 			})
 
-			// 远程 API 中找不到目标 APM 时，应返回错误
+			// 远程 API 返回 not found 时，应返回错误
 			It("should return error when target APM not found in remote API", func() {
 				mockey.PatchConvey("target APM not found in remote", GinkgoT(), func() {
-					mockClient := new(bkmonitor.ApiClient)
-					mockey.Mock(bkmonitor.New).Return(mockClient, nil).Build()
-					mockey.Mock((*bkmonitor.ApiClient).ListApmApp).Return([]*bkmonitor.ApmApp{
-						{ID: 9999, AppName: "other-apm", Token: "other-token", BkBizID: 100},
-					}, nil).Build()
+					mockClient := &bkmonitor.MonitorGatewayClient{ApiClient: new(bkmonitor.ApiClient)}
+					mockey.Mock(bkmonitor.NewMonitorClient).Return(mockClient, nil).Build()
+					mockey.Mock((*bkmonitor.MonitorGatewayClient).GetApmApp).Return(
+						nil, bkmonitor.ErrApmAppNotFound,
+					).Build()
 
 					result, err := svc.Get(ctx, 3001, CreateApmInstParams{
 						WorkspaceID:  "test-workspace",
@@ -290,16 +289,16 @@ var _ = Describe("ApmService", func() {
 			// 应调用远程 API 创建 APM，持久化并绑定到环境
 			It("should call remote API to create, persist and bind", func() {
 				mockey.PatchConvey("remote APM creation succeeded", GinkgoT(), func() {
-					mockClient := new(bkmonitor.ApiClient)
-					mockey.Mock(bkmonitor.New).Return(mockClient, nil).Build()
-					mockey.Mock((*bkmonitor.ApiClient).GetOrCreate).Return(&bkmonitor.ApmApp{
+					mockClient := &bkmonitor.MonitorGatewayClient{ApiClient: new(bkmonitor.ApiClient)}
+					mockey.Mock(bkmonitor.NewMonitorClient).Return(mockClient, nil).Build()
+					mockey.Mock((*bkmonitor.MonitorGatewayClient).GetOrCreate).Return(&bkmonitor.ApmApp{
 						ID:      6001,
 						AppName: "new-env",
 						Token:   "new-token",
 						BkBizID: 100,
 					}, nil).Build()
-					mockey.Mock((*bkmonitor.ApiClient).ListApmApp).Return([]*bkmonitor.ApmApp{
-						{ID: 6001, AppName: "new-env", Token: "new-token", BkBizID: 100},
+					mockey.Mock((*bkmonitor.MonitorGatewayClient).GetApmApp).Return(&bkmonitor.ApmApp{
+						ID: 6001, AppName: "new-env", Token: "new-token", BkBizID: 100,
 					}, nil).Build()
 
 					envID := bson.NewObjectID()

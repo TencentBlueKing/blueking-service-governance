@@ -139,7 +139,7 @@ func (h *Handler) ListApms(c *gin.Context) {
 		return
 	}
 
-	client, err := bkmapi.New(auth.MustGetUser(ctx).ID)
+	client, err := bkmapi.NewMonitorClient(auth.MustGetUser(ctx).ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "new bkmonitor client"))
 		return

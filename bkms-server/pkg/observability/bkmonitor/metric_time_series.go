@@ -28,19 +28,19 @@ import (
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 )
 
-// clientFactory 工厂函数类型
-type clientFactory func(username string) (bkmapi.Client, error)
+// monitorClientFactory 工厂函数类型
+type monitorClientFactory func(username string) (bkmapi.MonitorClient, error)
 
 // MetricTimeSeriesService 时序指标查询服务
 type MetricTimeSeriesService struct {
 	// newClient 创建底层 bkmonitor 客户端的工厂函数
-	newClient clientFactory
+	newClient monitorClientFactory
 }
 
 // NewMetricTimeSeriesService 创建 MetricTimeSeriesService 实例
 func NewMetricTimeSeriesService() *MetricTimeSeriesService {
 	return &MetricTimeSeriesService{
-		newClient: bkmapi.New,
+		newClient: bkmapi.NewMonitorClient,
 	}
 }
 
