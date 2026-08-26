@@ -733,6 +733,11 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 		return errors.Wrapf(err, "delete app(%s) polaris configs", app.Name)
 	}
 
+	// 4. 删除 HostPort 配置
+	if err := h.registry.HostPortStore.DeleteByApp(ctx, app.ID); err != nil {
+		return errors.Wrapf(err, "delete app(%s) hostport config", app.Name)
+	}
+
 	// 删除应用规格配置
 	if err := h.registry.AppSpecStore.DeleteByApp(ctx, app.ID); err != nil {
 		return errors.Wrap(err, "delete app specs")

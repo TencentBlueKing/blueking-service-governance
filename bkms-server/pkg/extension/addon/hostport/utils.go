@@ -45,21 +45,6 @@ func NormalizePorts(ports []int32) []int32 {
 	return uniq
 }
 
-// ValidateContainerPort checks that port is in [1, 65535].
-func ValidateContainerPort(port int32) bool {
-	return port >= 1 && port <= 65535
-}
-
-// FirstInvalidContainerPort returns the first out-of-range port, if any.
-func FirstInvalidContainerPort(ports []int32) (int32, bool) {
-	for _, port := range ports {
-		if !ValidateContainerPort(port) {
-			return port, true
-		}
-	}
-	return 0, false
-}
-
 // DiffPorts returns ports in desired but not applied (add) and in applied but not desired (remove).
 func DiffPorts(desired, applied []int32) (add, remove []int32) {
 	desiredSet := lo.SliceToMap(NormalizePorts(desired), func(p int32) (int32, struct{}) {

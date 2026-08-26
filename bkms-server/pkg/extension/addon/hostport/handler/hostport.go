@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
@@ -109,19 +110,15 @@ func (h *Handler) PutHostPorts(c *gin.Context) {
 		return
 	}
 
-	if invalid, ok := hostport.FirstInvalidContainerPort(input.Ports); ok {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "invalid container port: %d", invalid),
-		)
+	var before *hostport.HostPortConfig
+	if existing, gErr := h.registry.HostPortStore.Get(ctx, app.ID); gErr == nil {
+		before = existing
+	} else if !errors.Is(gErr, hostport.ErrConfigNotFound) {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(gErr, bkerrs.ErrCodeInternalServerError, "get hostports"))
 		return
 	}
 
 	if _, err = h.service().ReplacePorts(ctx, app.ID, input.Ports); err != nil {
-		if errors.Is(err, hostport.ErrInvalidPort) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "invalid container port"))
-			return
-		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "put hostports"))
 		return
 	}
@@ -130,5 +127,18 @@ func (h *Handler) PutHostPorts(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get hostports"))
 		return
 	}
+
+	go audit.AddOperationRecordAsync(
+		c.Request.Context(),
+		audit.OperationTypeUpdate,
+		audit.ResourceTypeApp,
+		app.ID,
+		audit.WithAttribute(audit.AttributeHostPort),
+		audit.WithDataBefore(before),
+		audit.WithDataAfter(result),
+		audit.WithWorkspaceID(app.WorkspaceID),
+		audit.WithAppID(app.ID),
+	)
+
 	ginutils.OK(c, new(serializer.HostPortsOutput).FromModel(result))
 }

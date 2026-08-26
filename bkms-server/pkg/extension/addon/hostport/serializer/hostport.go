@@ -27,8 +27,9 @@ type AppURIInput struct {
 }
 
 // PutHostPortsInput is the request body for replacing hostport declarations.
+// An empty ports list clears the declaration (store deletes the config document).
 type PutHostPortsInput struct {
-	Ports []int32 `json:"ports" binding:"required"`
+	Ports []int32 `json:"ports" binding:"dive,min=1,max=65535"`
 }
 
 // HostPortEnvStateOutput is one federated environment's HostPort status.

@@ -96,35 +96,3 @@ var _ = Describe("FormatPortsAnnotationValue", func() {
 		Expect(hostport.FormatPortsAnnotationValue(nil)).To(Equal(""))
 	})
 })
-
-var _ = Describe("ValidateContainerPort", func() {
-	It("accepts ports in 1-65535", func() {
-		Expect(hostport.ValidateContainerPort(1)).To(BeTrue())
-		Expect(hostport.ValidateContainerPort(65535)).To(BeTrue())
-	})
-
-	It("rejects out-of-range ports", func() {
-		Expect(hostport.ValidateContainerPort(0)).To(BeFalse())
-		Expect(hostport.ValidateContainerPort(65536)).To(BeFalse())
-	})
-})
-
-var _ = Describe("FirstInvalidContainerPort", func() {
-	It("returns false when all ports are valid", func() {
-		port, ok := hostport.FirstInvalidContainerPort([]int32{1, 80, 65535})
-		Expect(ok).To(BeFalse())
-		Expect(port).To(Equal(int32(0)))
-	})
-
-	It("returns the first invalid port", func() {
-		port, ok := hostport.FirstInvalidContainerPort([]int32{80, 0, 65536})
-		Expect(ok).To(BeTrue())
-		Expect(port).To(Equal(int32(0)))
-	})
-
-	It("returns false for empty input", func() {
-		port, ok := hostport.FirstInvalidContainerPort(nil)
-		Expect(ok).To(BeFalse())
-		Expect(port).To(Equal(int32(0)))
-	})
-})

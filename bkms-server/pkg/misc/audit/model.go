@@ -206,6 +206,8 @@ const (
 	AttributePolaris Attribute = "polaris"
 	// AttributeGPA 自动扩缩容（GPA）配置
 	AttributeGPA Attribute = "gpa"
+	// AttributeHostPort 随机 HostPort 端口映射
+	AttributeHostPort Attribute = "hostport"
 )
 
 // DisplayName 属性展示用名称 TODO 国际化
@@ -247,6 +249,8 @@ func (t Attribute) DisplayName() string {
 		return "北极星"
 	case AttributeGPA:
 		return "自动扩缩容配置"
+	case AttributeHostPort:
+		return "HostPort 端口映射"
 	default:
 		// 默认返回原始值
 		return string(t)

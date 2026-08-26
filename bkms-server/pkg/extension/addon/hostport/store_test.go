@@ -89,18 +89,16 @@ var _ = Describe("HostPortStore", func() {
 			Expect(config.Ports).To(Equal([]int32{443}))
 		})
 
-		It("clears ports with an empty list", func() {
+		It("deletes the config document when ports is empty", func() {
 			_, err := store.ReplacePorts(ctx, testAppID, []int32{80})
 			Expect(err).NotTo(HaveOccurred())
 
 			config, err := store.ReplacePorts(ctx, testAppID, []int32{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(config.Ports).To(Equal([]int32{}))
-		})
 
-		It("rejects invalid ports", func() {
-			_, err := store.ReplacePorts(ctx, testAppID, []int32{80, 0})
-			Expect(err).To(MatchError(hostport.ErrInvalidPort))
+			_, err = store.Get(ctx, testAppID)
+			Expect(err).To(MatchError(hostport.ErrConfigNotFound))
 		})
 	})
 

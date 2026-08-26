@@ -34,8 +34,6 @@ const collectionName = "hostport_configs"
 var (
 	// ErrConfigNotFound is returned when the app has no HostPort config document.
 	ErrConfigNotFound = errors.New("hostport config not found")
-	// ErrInvalidPort is returned when the container port is out of range.
-	ErrInvalidPort = errors.New("hostport container port is invalid")
 )
 
 // HostPortStore persists HostPortConfig documents.
@@ -88,11 +86,18 @@ func (s *HostPortStoreMongo) ListPorts(ctx context.Context, appID string) ([]int
 }
 
 // ReplacePorts replaces the declared container ports for an app (upsert).
-// Ports are normalized (unique, sorted). Empty slice clears the declaration.
+// Ports are normalized (unique, sorted). An empty slice deletes the config document.
 func (s *HostPortStoreMongo) ReplacePorts(ctx context.Context, appID string, ports []int32) (*HostPortConfig, error) {
 	ports = NormalizePorts(ports)
-	if _, ok := FirstInvalidContainerPort(ports); ok {
-		return nil, ErrInvalidPort
+	if len(ports) == 0 {
+		if err := s.DeleteByApp(ctx, appID); err != nil {
+			return nil, err
+		}
+		return &HostPortConfig{
+			AppID:     appID,
+			Ports:     []int32{},
+			EnvStates: map[string]HostPortEnvState{},
+		}, nil
 	}
 
 	now := time.Now()
@@ -170,7 +175,7 @@ func (s *HostPortStoreMongo) RemoveEnvState(ctx context.Context, appID, envName 
 	return nil
 }
 
-// DeleteByApp deletes the HostPort config for an app (tests / cleanup).
+// DeleteByApp deletes the HostPort config for an app.
 func (s *HostPortStoreMongo) DeleteByApp(ctx context.Context, appID string) error {
 	_, err := s.collection.DeleteOne(ctx, bson.M{"appID": appID})
 	if err != nil {
