@@ -39,10 +39,9 @@ import (
 )
 
 const (
-	// legacyGatewayName 旧版蓝鲸监控网关名（bkmonitorv3），用于 APM、metadata 等存量接口。
-	legacyGatewayName = "bkmonitorv3"
-	// newGatewayName 新版蓝鲸监控网关名（bk-monitor），告警策略等新增接口走此网关，后续均切换到新网关。
-	newGatewayName = "bk-monitor"
+	gatewayName = "bk-monitor"
+	// headerBkapiUserName 蓝鲸 API 网关用户名请求头
+	headerBkapiUserName = "X-Bkapi-User-Name"
 )
 
 // Client 蓝鲸监控 API 客户端接口
@@ -63,8 +62,6 @@ type Client interface {
 	) (*ApmApp, error)
 	// ListApmApp 列出 APM 应用
 	ListApmApp(ctx context.Context, bkBizID int64) ([]*ApmApp, error)
-	// ListMetadataSpaceByUID 根据 space_uid 获取空间
-	ListMetadataSpaceByUID(ctx context.Context, uid string) (*Space, error)
 	// GetMetadataSpaceDetail 获取空间详情
 	GetMetadataSpaceDetail(ctx context.Context, bcsProjectCode string) (*Space, error)
 	// SearchUserGroups 查询告警组列表
@@ -96,29 +93,19 @@ type MonitorClient interface {
 	GetAlertDetail(ctx context.Context, req *AlertDetailReq) (map[string]any, error)
 }
 
-// ApiClient 蓝鲸监控 APM API 客户端
+// ApiClient 蓝鲸监控 API 客户端
 type ApiClient struct {
 	define.BkApiClient
 }
 
-// New 创建蓝鲸监控 APM API 客户端实例
-func New(operator string) (Client, error) {
-	if config.G.Development.UseStubBkMonitor {
-		log.InfoNoContext("use stub bkmonitor client according to config")
-		return NewStub(operator), nil
-	}
-
-	return newAPIClient(operator, config.G.BkMonitor.Endpoint, legacyGatewayName)
-}
-
-// NewMonitorClient 创建新版 bk-monitor 网关客户端，供新增监控接口复用。
+// NewMonitorClient 创建 bk-monitor 网关客户端。
 func NewMonitorClient(operator string) (MonitorClient, error) {
 	if config.G.Development.UseStubBkMonitor {
 		log.InfoNoContext("use stub bkmonitor client according to config")
 		return NewStub(operator), nil
 	}
 
-	client, err := newAPIClient(operator, config.G.BkMonitor.GatewayEndpoint, newGatewayName)
+	client, err := newAPIClient(operator, config.G.BkMonitor.GatewayEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +124,7 @@ func generateAuthInfo() (string, error) {
 	return string(authorization), nil
 }
 
-func newAPIClient(operator, endpoint, gatewayName string) (*ApiClient, error) {
+func newAPIClient(operator, endpoint string) (*ApiClient, error) {
 	authInfo, err := generateAuthInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to generate auth info")
@@ -146,7 +133,7 @@ func newAPIClient(operator, endpoint, gatewayName string) (*ApiClient, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create %s api client", gatewayName)
 	}
-	return &ApiClient{client}, nil
+	return &ApiClient{BkApiClient: client}, nil
 }
 
 // buildClientConfig 构建客户端配置
@@ -168,9 +155,9 @@ func (c *ApiClient) handleOperation(
 	ctx context.Context, op define.Operation,
 ) (result map[string]any, err error) {
 	started := time.Now()
-	defer metrics.ClientRequest("bkmonitorv3", op.FullName(), started, &err)
+	defer metrics.ClientRequest(gatewayName, op.FullName(), started, &err)
 
-	ctx, span := apm.StartClientSpan(ctx, "bkmonitorv3", op.FullName())
+	ctx, span := apm.StartClientSpan(ctx, gatewayName, op.FullName())
 	resp, err := op.SetContext(ctx).SetResult(&result).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
@@ -180,8 +167,8 @@ func (c *ApiClient) handleOperation(
 
 	if !httpresp.IsSuccess(resp) {
 		errMsg, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("call bkmonitorv3 api %s failed, http code: %d, err: %s",
-			op.FullName(), resp.StatusCode, errMsg)
+		return nil, errors.Errorf("call %s api %s failed, http code: %d, err: %s",
+			gatewayName, op.FullName(), resp.StatusCode, errMsg)
 	}
 
 	if !mapx.GetBool(result, "result") {

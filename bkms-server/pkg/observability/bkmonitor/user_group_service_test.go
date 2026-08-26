@@ -118,7 +118,7 @@ var _ = Describe("UserGroupService", func() {
 		// client 工厂失败时错误被正确包装上抛
 		It("return wrapped error when client factory fails", func() {
 			svc := &UserGroupService{
-				newClient: func(_ string) (bkmapi.Client, error) {
+				newClient: func(_ string) (bkmapi.MonitorClient, error) {
 					return nil, errors.New("mock client error")
 				},
 			}
@@ -160,8 +160,8 @@ var _ = Describe("UserGroupService", func() {
 			return d
 		}
 
-		mockClient := &bkmapi.ApiClient{}
-		factory := func(_ string) (bkmapi.Client, error) { return mockClient, nil }
+		mockClient := &bkmapi.MonitorGatewayClient{ApiClient: &bkmapi.ApiClient{}}
+		factory := func(_ string) (bkmapi.MonitorClient, error) { return mockClient, nil }
 
 		// mock time.Sleep 避免真实等待
 		BeforeEach(func() {
@@ -175,12 +175,12 @@ var _ = Describe("UserGroupService", func() {
 		It("save members on first attempt when group exists", func() {
 			mockey.PatchConvey("first attempt success", GinkgoT(), func() {
 				var saveCalls int32
-				mockey.Mock((*bkmapi.ApiClient).SearchUserGroups).
+				mockey.Mock((*bkmapi.MonitorGatewayClient).SearchUserGroups).
 					Return(matchedGroups(), nil).Build()
-				mockey.Mock((*bkmapi.ApiClient).SearchUserGroupDetail).
+				mockey.Mock((*bkmapi.MonitorGatewayClient).SearchUserGroupDetail).
 					Return(detail(), nil).Build()
-				mockey.Mock((*bkmapi.ApiClient).SaveUserGroup).To(
-					func(_ *bkmapi.ApiClient, _ context.Context, _ *bkmapi.SaveUserGroupReq,
+				mockey.Mock((*bkmapi.MonitorGatewayClient).SaveUserGroup).To(
+					func(_ *bkmapi.MonitorGatewayClient, _ context.Context, _ *bkmapi.SaveUserGroupReq,
 					) (*bkmapi.UserGroupDetail, error) {
 						atomic.AddInt32(&saveCalls, 1)
 						return detail(), nil
@@ -202,8 +202,8 @@ var _ = Describe("UserGroupService", func() {
 		It("retry on NotFound and succeed on later attempt", func() {
 			mockey.PatchConvey("notfound then success", GinkgoT(), func() {
 				var searchCalls, saveCalls int32
-				mockey.Mock((*bkmapi.ApiClient).SearchUserGroups).To(
-					func(_ *bkmapi.ApiClient, _ context.Context, _ *bkmapi.SearchUserGroupsReq,
+				mockey.Mock((*bkmapi.MonitorGatewayClient).SearchUserGroups).To(
+					func(_ *bkmapi.MonitorGatewayClient, _ context.Context, _ *bkmapi.SearchUserGroupsReq,
 					) ([]*bkmapi.UserGroup, error) {
 						n := atomic.AddInt32(&searchCalls, 1)
 						if n < 3 {
@@ -211,10 +211,10 @@ var _ = Describe("UserGroupService", func() {
 						}
 						return matchedGroups(), nil
 					}).Build()
-				mockey.Mock((*bkmapi.ApiClient).SearchUserGroupDetail).
+				mockey.Mock((*bkmapi.MonitorGatewayClient).SearchUserGroupDetail).
 					Return(detail(), nil).Build()
-				mockey.Mock((*bkmapi.ApiClient).SaveUserGroup).To(
-					func(_ *bkmapi.ApiClient, _ context.Context, _ *bkmapi.SaveUserGroupReq,
+				mockey.Mock((*bkmapi.MonitorGatewayClient).SaveUserGroup).To(
+					func(_ *bkmapi.MonitorGatewayClient, _ context.Context, _ *bkmapi.SaveUserGroupReq,
 					) (*bkmapi.UserGroupDetail, error) {
 						atomic.AddInt32(&saveCalls, 1)
 						return detail(), nil
@@ -237,14 +237,14 @@ var _ = Describe("UserGroupService", func() {
 		It("stop retrying immediately on non-NotFound error", func() {
 			mockey.PatchConvey("non-notfound error stops retry", GinkgoT(), func() {
 				var searchCalls, saveCalls int32
-				mockey.Mock((*bkmapi.ApiClient).SearchUserGroups).To(
-					func(_ *bkmapi.ApiClient, _ context.Context, _ *bkmapi.SearchUserGroupsReq,
+				mockey.Mock((*bkmapi.MonitorGatewayClient).SearchUserGroups).To(
+					func(_ *bkmapi.MonitorGatewayClient, _ context.Context, _ *bkmapi.SearchUserGroupsReq,
 					) ([]*bkmapi.UserGroup, error) {
 						atomic.AddInt32(&searchCalls, 1)
 						return nil, errors.New("mock network error")
 					}).Build()
-				mockey.Mock((*bkmapi.ApiClient).SaveUserGroup).To(
-					func(_ *bkmapi.ApiClient, _ context.Context, _ *bkmapi.SaveUserGroupReq,
+				mockey.Mock((*bkmapi.MonitorGatewayClient).SaveUserGroup).To(
+					func(_ *bkmapi.MonitorGatewayClient, _ context.Context, _ *bkmapi.SaveUserGroupReq,
 					) (*bkmapi.UserGroupDetail, error) {
 						atomic.AddInt32(&saveCalls, 1)
 						return nil, nil

@@ -60,7 +60,7 @@ func initHandler(ctx context.Context, args InitializationArgs) error {
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", args.WorkspaceID)
 	}
-	client, err := bkmonitor.New(ws.Creator)
+	client, err := bkmonitor.NewMonitorClient(ws.Creator)
 	if err != nil {
 		return errors.Wrapf(err, "create bkmonitor client")
 	}
