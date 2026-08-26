@@ -1,16 +1,51 @@
-## Purpose
+# AGENTS.md
 
-* These brief instructions apply to the whole repository. Module-specific guidance lives in the nested `AGENTS.md` files, e.g. `bkms-server/AGENTS.md` and `bkms-cli/AGENTS.md`.
-* **Humans** are always responsible for changes being proposed and must pre-review all agentic work before turning it into a PR.
+> Agent 认知本项目的第一站——快速了解项目全貌、找到代码和规范、知道规矩。
 
-## Repository layout
+## 项目概述
 
-* `bkms-server/` — Gin REST API service (Go)
-* `bkms-cli/` — Cobra-based CLI (Go)
-* `bkms-dockerfile-generator/` — Dockerfile generation tool (Go)
-* `libs/bkms-adapter/` — shared adapter library (Go)
-* `bkms-ui/` — Vue 3 + TypeScript frontend
-* `charts/` — Helm charts
+- **项目名称**：blueking-service-governance（蓝鲸服务治理平台）
+- **仓库地址**：https://github.com/TencentBlueKing/blueking-service-governance
+- **定位**：面向游戏开发者、SRE 的一站式应用全生命周期管理服务
+- **目标**：围绕应用托管、制品交付、开发联调、应用观测、管理策略和持续部署，帮助业务团队以更低成本完成微服务应用的构建、运行、发布和治理
+
+## 目录结构
+
+```
+bkms-server/               # 服务端核心服务（Gin REST API），空间/环境/应用/组件/部署等领域能力，前端对接的主要 API 入口
+bkms-ui/                   # Web 前端（Vue 3 + TypeScript + Vite），产品化交互界面
+bkms-cli/                  # 命令行工具（Cobra），应用信息查看、构建、部署、发布、部署结果查询
+bkms-dockerfile-generator/ # 镜像构建流程中的 Dockerfile 生成工具，基于流水线配置生成平台默认 Dockerfile
+libs/bkms-adapter/         # 公共适配层模块，封装与外部系统或基础设施的对接逻辑
+charts/                    # Helm Chart 部署清单（服务端 + 前端）
+```
+
+## 关键规范
+
+- Harness 规范（工具能力、Skill 清单、架构约束等）→ `docs/harness/README.md`
+- 技术开发规范 → `docs/standards/README.md`
+- 开发地图（graphify 知识图谱，查询代码结构与概念关联）→ [`docs/dev-map/README.md`](docs/dev-map/README.md)
+
+## 局部入口（工作单元 AGENTS）
+
+修改某路径前，阅读该路径向上最近的 `AGENTS.md`；**局部约定优先于根**。根不替代工作单元入口。
+
+| 路径 | 角色 |
+|------|------|
+| `bkms-server/AGENTS.md` | bkms-server（Gin REST 服务）开发约定：分层、日志、测试（Ginkgo）、Swagger、数据库迁移 |
+| `bkms-cli/AGENTS.md` | bkms-cli（Cobra CLI）开发约定：子命令结构、测试（Ginkgo + E2E） |
+| `bkms-server/db/AGENTS.md` | 数据库迁移（golang-migrate）文件命名与维护约定 |
+| `bkms-server/scripts/AGENTS.md` | bkms-server 脚本编写约定 |
+
+## 编码前必读（门闩）
+
+写或改**业务代码**前（非纯文档/纯问答）：
+1. 打开 `docs/standards/README.md`，确认「当前项目选用的规范」与「加载预算」。
+2. 按预算表与「章节快速索引」**只 Read 本任务相关章节**（可用行号/偏移；**禁止**无差别灌入整份长规范）。
+3. 未选用的端：不得假装存在规范。若 README 含「未覆盖的技术栈」节则按其处理，否则向用户确认。
+4. 提交/宣称完成前：按相关节的检查清单自检，并运行**当前工作单元 / 仓库已有**的 `lint`/`test`/`build` 脚本（无脚本不得声称已通过）。
+
+---
 
 ## License headers
 
@@ -40,3 +75,8 @@ This project is open source under the MIT License (see `LICENSE`). **Every newly
 
 * In `bkms-ui`, ESLint checks the header on `.js` and `.ts` files through the `codecc/license` rule configured in `bkms-ui/eslint.config.mjs`. Run `pnpm lint` to check and `pnpm lint:fix` to insert a missing header. The rule is deliberately overridden there, because the upstream `@blueking/bkui-lint` preset ships a different project's header text.
 * Other file types are not machine-checked, so add the header by hand.
+
+## Purpose（人类协作约定）
+
+* These brief instructions apply to the whole repository. Module-specific guidance lives in the nested `AGENTS.md` files listed above.
+* **Humans** are always responsible for changes being proposed and must pre-review all agentic work before turning it into a PR.
