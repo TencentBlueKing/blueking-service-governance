@@ -51,6 +51,7 @@
 | `BK_LOGIN_URL` | 登录地址（关联退出登录） |
 | `BK_POLARIS_URL` | 北极星项目地址 |
 | `BK_DOC_URL` | 文档地址 |
+| `BK_IAM_URL` | 权限中心地址 |
 | `BK_API_URL_TMPL` | 蓝鲸 API 网关模板 |
 | `BK_REPO_URL` | 代码库数据源地址 |
 | `BK_GOLANG_PROXY_URL` | Go 代理地址 |

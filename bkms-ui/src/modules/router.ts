@@ -19,6 +19,7 @@
 import { setupLayouts } from 'virtual:generated-layouts';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import CustomRouterComponent from '~/components/custom-router-component.vue';
+import Forbidden from '~/pages/app/403.vue';
 import NotFound from '~/pages/app/404.vue';
 import Application from '~/pages/application/application.vue';
 import createApplication from '~/pages/application/create.vue';
@@ -267,6 +268,15 @@ const routes = setupLayouts([
       },
     ],
   },
+  // 无权限页面使用空布局，避免展示依赖当前空间权限的导航内容。
+  {
+    path: '/403',
+    name: '403',
+    component: Forbidden,
+    meta: {
+      layout: 'empty',
+    },
+  },
   { path: '/:pathMatch(.*)*', name: '404', component: NotFound },
 ]);
 
@@ -344,10 +354,16 @@ export const install: UserModule = ({ app }) => {
         list = await spaceStore.handleGetWorkspaceList();
       }
       const space = list.find(item => item.id === to.params.space);
-      // 空间不存在或者空间停用，跳转404
+      // 空间不在可访问列表中时，由 403 页面通过详情接口进一步区分无权限和不存在
       if (!space) {
-        console.log('space not found');
-        next({ name: '404' });
+        console.log('space is not in the accessible list');
+        next({
+          name: '403',
+          query: {
+            redirect: to.fullPath,
+            workspaceID: String(to.params.space),
+          },
+        });
       } else if (space?.state !== spaceStore.spaceState.Ready) {
         console.log('space not ready');
         next({ name: '404' });

@@ -68,6 +68,7 @@ const apiPrefix = import.meta.env.BK_API_PREFIX;
 | `BK_LOGIN_URL`              | 登录地址（401 跳转 + 退出登录）    | `api/fetch.ts`、`index.html` |
 | `BK_POLARIS_URL`            | 北极星项目地址                     | `index.html`                 |
 | `BK_DOC_URL`                | 文档地址                           | `index.html`                 |
+| `BK_IAM_URL`                | 权限中心地址                       | `pages/app/403.vue`          |
 | `BK_API_URL_TMPL`           | 蓝鲸 API 网关模板 `{api_name}`     | `vite.config.mts` proxy      |
 | `BK_REPO_URL`               | 代码库数据源地址                   | `vite.config.mts` proxy      |
 | `BK_GOLANG_PROXY_URL`       | Go 代理地址                        | 运行时                       |
@@ -129,6 +130,7 @@ BK_MONITOR = 'https://monitor.example.com'
 BK_BCS_API_BASE_URL = 'https://bcs-api.example.com'
 BK_POLARIS_URL = 'https://polaris.example.com'
 BK_DOC_URL = 'https://docs.example.com'
+BK_IAM_URL = 'https://iam.example.com'
 BK_API_URL_TMPL = 'https://{api_name}.apigw.example.com'
 BK_REPO_URL = 'https://devops.example.com'
 BK_GOLANG_PROXY_URL = 'https://goproxy.example.com'

@@ -124,6 +124,16 @@ export const useSpaceStore = defineStore('space', () => {
     statusTab.value = type;
   }
 
+  // 详情接口确认空间可访问后，同步修正可能已过期的空间列表缓存。
+  function upsertWorkspace(workspace: WorkspaceInfoOutputObj) {
+    const index = list.value.findIndex(item => item.id === workspace.id);
+    if (index === -1) {
+      list.value.push(workspace);
+      return;
+    }
+    list.value.splice(index, 1, workspace);
+  }
+
   function refreshRouteViewKey() {
     routeViewKey.value = random(10);
   }
@@ -145,6 +155,7 @@ export const useSpaceStore = defineStore('space', () => {
     handleUpdateWorkspace,
     handleDeleteWorkspace,
     handleChangeStatusTab,
+    upsertWorkspace,
     refreshRouteViewKey,
   };
 });

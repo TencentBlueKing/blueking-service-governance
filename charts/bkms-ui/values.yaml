@@ -49,6 +49,8 @@ env:
   BK_POLARIS_URL: ""
   # 文档地址
   BK_DOC_URL: ""
+  # 权限中心地址
+  BK_IAM_URL: ""
   # 蓝鲸 API 网关模板
   BK_API_URL_TMPL: ""
   # 代码库数据源地址

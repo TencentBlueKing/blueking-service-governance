@@ -32,6 +32,7 @@ interface ImportMetaEnv {
   readonly BK_DEVOPS: string;
   readonly BK_DOC_URL: string;
   readonly BK_GOLANG_PROXY_URL: string;
+  readonly BK_IAM_URL: string;
   readonly BK_LOGIN_URL: string;
   readonly BK_MONITOR: string;
   readonly BK_NODE_ENV: string;
