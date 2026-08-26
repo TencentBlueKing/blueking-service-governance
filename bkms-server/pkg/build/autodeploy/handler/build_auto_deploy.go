@@ -21,6 +21,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy/serializer"
@@ -178,10 +179,10 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		},
 	)
 	if err != nil {
-		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错属参数问题，
+		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
 		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
 		errCode := bkerrs.ErrCodeInternalServerError
-		if build.IsImageReferenceInvalid(err) {
+		if build.IsImageReferenceInvalid(err) || errors.Is(err, build.ErrWorkspaceImageCredentialMissing) {
 			errCode = bkerrs.ErrCodeInvalidArgument
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start build auto deploy"))
