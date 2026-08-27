@@ -98,6 +98,14 @@ type EnvironmentStore interface {
 	// 当应用从当前环境删除时, 会调用此方法
 	RemoveApp(ctx context.Context, envID bson.ObjectID, appID string) error
 
+	// GetByClusterNamespace 查找已绑定到指定 clusterID + namespace 的环境，排除 excludeEnvID 自身。
+	// 如果未找到匹配的环境，返回 nil, nil。
+	GetByClusterNamespace(
+		ctx context.Context,
+		clusterID, namespace string,
+		excludeEnvID bson.ObjectID,
+	) (*Environment, error)
+
 	// DeleteAll deletes all environments while preserving the collection and its indexes.
 	// Attention: only used in unit test
 	DeleteAll(ctx context.Context) error
@@ -449,6 +457,31 @@ func (s *EnvironmentStoreMongo) RemoveApp(ctx context.Context, envID bson.Object
 func (s *EnvironmentStoreMongo) DeleteAll(ctx context.Context) error {
 	_, err := s.collection.DeleteMany(ctx, bson.M{})
 	return err
+}
+
+// GetByClusterNamespace 查找已绑定到指定 clusterID + namespace 的环境，排除 excludeEnvID 自身。
+// 如果未找到匹配的环境，返回 nil, nil。
+func (s *EnvironmentStoreMongo) GetByClusterNamespace(
+	ctx context.Context,
+	clusterID, namespace string,
+	excludeEnvID bson.ObjectID,
+) (*Environment, error) {
+	filter := bson.M{
+		"cluster.clusterID": clusterID,
+		"cluster.namespace": namespace,
+	}
+	if !excludeEnvID.IsZero() {
+		filter["_id"] = bson.M{"$ne": excludeEnvID}
+	}
+
+	env := new(Environment)
+	if err := s.collection.FindOne(ctx, filter).Decode(env); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return env, nil
 }
 
 func (s *EnvironmentStoreMongo) listByFilter(ctx context.Context, filter bson.M) ([]Environment, error) {

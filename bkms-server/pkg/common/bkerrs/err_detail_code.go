@@ -49,4 +49,7 @@ const (
 
 	// ErrDetailCodeBuildLogUnavailable 构建日志已过期或已清理
 	ErrDetailCodeBuildLogUnavailable ErrDetailCode = "BUILD_LOG_UNAVAILABLE"
+
+	// ErrDetailCodeEnvClusterNamespaceOccupied 环境绑定的集群+命名空间已被其他环境占用
+	ErrDetailCodeEnvClusterNamespaceOccupied ErrDetailCode = "ENV_CLUSTER_NAMESPACE_OCCUPIED"
 )

@@ -551,6 +551,9 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 	defaultEnvs := workspace.BuildDefaultEnvs(auth.MustGetUser(ctx).ID, ws.ID, bkSystem.BkBCSProjectCode)
 	for _, env := range defaultEnvs {
 		if _, envErr := envSvc.Create(ctx, &env); envErr != nil {
+			if abortIfEnvClusterNamespaceOccupied(c, envErr) {
+				return
+			}
 			bkerrs.AbortWithErr(
 				c,
 				bkerrs.Wrapf(envErr, bkerrs.ErrCodeInternalServerError, "create default env %s", env.Name),
@@ -947,4 +950,19 @@ func (h *Handler) hasActiveDeploymentsInWorkspace(ctx context.Context, workspace
 		}
 	}
 	return false, nil
+}
+
+func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
+	occupiedErr, ok := bkmsenv.GetEnvClusterNamespaceConflictInfo(err)
+	if !ok {
+		return false
+	}
+
+	bkerrs.AbortWithErr(c, bkerrs.WrapEnvClusterNamespaceOccupied(
+		occupiedErr.ClusterID,
+		occupiedErr.Namespace,
+		occupiedErr.OccupiedByEnvName,
+		occupiedErr.OccupiedByWorkspaceID,
+	))
+	return true
 }

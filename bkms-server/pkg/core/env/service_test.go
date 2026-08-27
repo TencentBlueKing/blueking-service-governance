@@ -111,6 +111,56 @@ var _ = Describe("Test EnvService", func() {
 			Expect(updateErr.Error()).To(ContainSubstring("cannot update cluster"))
 		})
 
+		It("returns domain conflict error when creating an env with occupied cluster namespace", func() {
+			_, createErr := envSvc.Create(ctx, &model.Environment{
+				Name:        "conflict-" + stringx.Random(6),
+				DisplayName: "conflict",
+				Type:        "test",
+				WorkspaceID: "ws-" + stringx.Random(6),
+				Cluster:     Cluster,
+			})
+			Expect(IsErrEnvClusterNamespaceOccupied(createErr)).To(BeTrue())
+
+			occupiedErr, ok := GetEnvClusterNamespaceConflictInfo(createErr)
+			Expect(ok).To(BeTrue())
+			Expect(occupiedErr.ClusterID).To(Equal(Cluster.ClusterID))
+			Expect(occupiedErr.Namespace).To(Equal(Cluster.Namespace))
+			Expect(occupiedErr.OccupiedByEnvName).To(Equal(envName))
+			Expect(occupiedErr.OccupiedByWorkspaceID).To(Equal(workspaceID))
+		})
+
+		It("returns domain conflict error when updating an env to an occupied cluster namespace", func() {
+			occupiedCluster := model.BizCluster{
+				ClusterID:   "cluster-" + stringx.Random(6),
+				ClusterType: "single",
+				Namespace:   "ns-" + stringx.Random(6),
+			}
+			occupiedEnvName := "occupied-" + stringx.Random(6)
+			occupiedWorkspaceID := "ws-" + stringx.Random(6)
+			_, createErr := envSvc.Create(ctx, &model.Environment{
+				Name:        occupiedEnvName,
+				DisplayName: occupiedEnvName,
+				Type:        "test",
+				WorkspaceID: occupiedWorkspaceID,
+				Cluster:     occupiedCluster,
+			})
+			Expect(createErr).NotTo(HaveOccurred())
+
+			updateErr := envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{
+				ClusterID:   &occupiedCluster.ClusterID,
+				ClusterType: &occupiedCluster.ClusterType,
+				Namespace:   &occupiedCluster.Namespace,
+			})
+			Expect(IsErrEnvClusterNamespaceOccupied(updateErr)).To(BeTrue())
+
+			occupiedErr, ok := GetEnvClusterNamespaceConflictInfo(updateErr)
+			Expect(ok).To(BeTrue())
+			Expect(occupiedErr.ClusterID).To(Equal(occupiedCluster.ClusterID))
+			Expect(occupiedErr.Namespace).To(Equal(occupiedCluster.Namespace))
+			Expect(occupiedErr.OccupiedByEnvName).To(Equal(occupiedEnvName))
+			Expect(occupiedErr.OccupiedByWorkspaceID).To(Equal(occupiedWorkspaceID))
+		})
+
 		It("runs update hooks with before and after env when type changes", func() {
 			beforeType := envType
 			afterType := "staging"
