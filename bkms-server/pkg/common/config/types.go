@@ -151,9 +151,7 @@ func (c *BKRepoConfig) GenRepoEndpoint(projectID, repoType string) (string, erro
 
 // BkMonitorConfig 蓝鲸监控配置
 type BkMonitorConfig struct {
-	// Endpoint 网关地址
-	Endpoint string
-	// GatewayEndpoint 新版 bk-monitor 网关地址，供新增接口（如 user group）使用
+	// GatewayEndpoint bk-monitor 统一网关地址
 	GatewayEndpoint string
 
 	// APMEndpoint 蓝鲸监控 APM gRPC 上报地址，APMHttpEndpoint 为空时作为兼容配置使用
