@@ -23,7 +23,7 @@
   >
     <div
       v-bkloading="{ loading: detailLoading }"
-      class="min-h-full"
+      class="h-full min-h-full"
     >
       <RouterView
         v-if="!detailLoading"

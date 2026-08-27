@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div class="h-full px-[24px] pt-[20px] overflow-auto flex flex-col">
+  <div class="flex h-full min-h-0 flex-col overflow-auto px-[24px] pt-[20px]">
     <Skeleton
       :full-height="false"
       :loading="isLoading || appDetailStore.loading"

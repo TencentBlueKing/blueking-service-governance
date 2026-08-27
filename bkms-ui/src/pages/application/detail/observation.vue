@@ -17,8 +17,8 @@
 -->
 
 <template>
-  <div class="h-full">
-    <FlexRow class="px-[12px] py-[8px] mb-[16px] bg-[#EAEBF0] shadow-[0_2px_4px_0_#0000001a]">
+  <div class="flex h-full min-h-0 flex-col">
+    <FlexRow class="mb-[16px] flex-shrink-0 bg-[#EAEBF0] px-[12px] py-[8px] shadow-[0_2px_4px_0_#0000001a]">
       <template #left>
         <div class="flex">
           <EnvSelectPanel
@@ -38,7 +38,7 @@
     </FlexRow>
     <div
       ref="iframeContainerRef"
-      class="h-[calc(100%-64px)] bg-white"
+      class="min-h-0 flex-1 bg-white"
     >
       <MonitorIframe
         v-if="currentApm && !apmConfigMissing"
