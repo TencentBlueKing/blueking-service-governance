@@ -21,6 +21,7 @@
     :collapsible="true"
     :edit-disabled="!currentEnv?.isDefault"
     :edit-disabled-tips="$t('全局配置跨环境共享，不支持按环境修改')"
+    :editing="isEditing"
     :show-edit-icon="!isEditing"
     @edit="handleEdit"
   >

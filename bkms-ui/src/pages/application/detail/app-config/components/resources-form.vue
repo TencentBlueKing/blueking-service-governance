@@ -20,6 +20,7 @@
   <BkmsContent
     class="shadow-[0_2px_4px_0_#1919290d]"
     :collapsible="true"
+    :editing="isEditing"
     :show-edit-icon="!isEditing"
     @edit="handleEdit"
   >

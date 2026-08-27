@@ -72,6 +72,7 @@
     collapsible?: boolean;
     editDisabled?: boolean;
     editDisabledTips?: string;
+    editing?: boolean;
     showEditIcon?: boolean;
     title?: string;
   }
@@ -79,6 +80,7 @@
   const props = withDefaults(defineProps<Props>(), {
     collapsible: false,
     collapsed: false,
+    editing: false,
   });
   const emits = defineEmits(['edit', 'update:collapsed', 'collapse-change']);
 
@@ -95,6 +97,16 @@
     emits('update:collapsed', val);
     emits('collapse-change', val);
   });
+
+  watch(
+    () => props.editing,
+    val => {
+      if (val) {
+        innerCollapsed.value = false;
+      }
+    },
+    { immediate: true },
+  );
 
   const editTooltip = computed(() => {
     if (props.editDisabled && props.editDisabledTips) {

@@ -19,6 +19,7 @@
 <template>
   <BkmsContent
     :collapsible="true"
+    :editing="isEditing"
     :show-edit-icon="!isEditing"
     @edit="handleEdit"
   >

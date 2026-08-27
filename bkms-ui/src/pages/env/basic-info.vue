@@ -84,6 +84,7 @@
     <!-- 基础信息 -->
     <BkmsContent
       collapsible
+      :editing="isBasicInfoEditing"
       :show-edit-icon="!isBasicInfoEditing"
       :title="$t('基本信息')"
       @edit="handleBasicInfoEdit"
@@ -220,6 +221,7 @@
     <BkmsContent
       class="mt-[24px]"
       collapsible
+      :editing="clusterResources.isEdit"
       :show-edit-icon="!clusterResources.isEdit"
       :title="$t('集群资源')"
       @edit="handleClusterResourcesEdit"
