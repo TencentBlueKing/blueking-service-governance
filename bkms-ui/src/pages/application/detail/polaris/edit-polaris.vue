@@ -682,14 +682,6 @@
     forceCleanDirtyTag();
   }
 
-  /** 防止绕过选择器提交联邦环境。 */
-  function hasFederationEnvSelection() {
-    return (formModel.value.scopeEnvNames || []).some(envName => {
-      const env = props.envList.find(item => item.name === envName);
-      return isFederationEnv(env);
-    });
-  }
-
   let refreshed = false;
   function handleRefreshEnvVar() {
     envVarRef.value?.reRefreshTable();
@@ -847,14 +839,6 @@
       focusOnErrorField();
       return;
     }
-    if (hasFederationEnvSelection()) {
-      Message({
-        message: t('暂不支持选择绑定联邦集群的环境'),
-        theme: 'warning',
-      });
-      return;
-    }
-
     if (isEditMode.value) {
       await handleUpdate();
     } else {
