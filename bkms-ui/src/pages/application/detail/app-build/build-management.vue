@@ -603,17 +603,6 @@
     const validate = await executeFormRef.value?.validate().catch(() => false);
     if (!validate) throw new Error(t('表单验证失败'));
     isLoading.value = true;
-    shouldTrackCreatedBuildStatus.value = true;
-    // 请求返回前先展示本次表单信息，构建 ID 返回后 ViewBuildLog 会自动开始拉取日志。
-    buildLogInfo.value = createBuildInfo(
-      {},
-      {
-        imageTag: formData.value.tag,
-        revision: formData.value.branch,
-        status: 'running',
-      },
-    );
-    showBuildLog.value = true;
 
     const result = await BuildsService.createBuild(
       {
@@ -628,13 +617,11 @@
           theme: 'success',
           message: t('操作成功'),
         });
+        // API 成功后再写入构建信息，保证侧滑打开时已有 buildID 可拉取日志
         buildLogInfo.value = createBuildInfo(record);
         return true;
       })
       .catch(err => {
-        // 创建失败时保留日志侧滑，并将临时状态从“构建中”更新为“构建失败”。
-        buildLogInfo.value.status = 'failed';
-        shouldTrackCreatedBuildStatus.value = false;
         const { handleError } = useErrorHandler();
         handleError(err.error ?? err, 409, {
           theme: 'error',
@@ -643,8 +630,13 @@
         return false;
       });
     isLoading.value = false;
-    showPopConfirm.value = false;
+
+    // 仅成功时关闭「执行构建」弹窗，再打开「构建日志」侧滑，避免两者叠在一起
     if (result) {
+      shouldTrackCreatedBuildStatus.value = true;
+      showPopConfirm.value = false;
+      await nextTick();
+      showBuildLog.value = true;
       // 点击构建重新开启轮询
       stop();
       await fetchBuildList();
