@@ -85,7 +85,6 @@ asynq:
     password: asynqpass
 # 蓝鲸监控 apm 配置
 bkMonitor:
-  endpoint: "https://bkmonitorv3.example.com"
   gatewayEndpoint: "https://bk-monitor.example.com"
   # 蓝鲸监控 APM 上报地址
   apmEndpoint: "bk-example.com:4317"
@@ -147,7 +146,6 @@ development:
 			Expect(cfg.Account.LoginURL).To(Equal("http://login.example.com"))
 			Expect(cfg.Account.AuthEnvName).To(Equal("test"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
-			Expect(cfg.BkMonitor.Endpoint).To(Equal("https://bkmonitorv3.example.com"))
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(config.G.Encrypt.Secret).To(Equal(originalSecret))
 			Expect(cfg.Mongo.Username).To(Equal("testuser"))
@@ -199,7 +197,6 @@ account:
   loginURL: http://login.example.com
 # 蓝鲸监控 apm 配置
 bkMonitor:
-  endpoint: "https://bkmonitorv3.example.com"
   gatewayEndpoint: "https://bk-monitor.example.com"
   # 蓝鲸监控 APM 上报地址
   apmEndpoint: "bk-example.com:4317"
@@ -241,7 +238,6 @@ asynq:
 			Expect(cfg.HTTPServer.ShutdownTimeout).To(Equal(config.DefaultHTTPServerShutdownTimeout))
 			Expect(cfg.Account.AuthEnvName).To(Equal("prod"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
-			Expect(cfg.BkMonitor.Endpoint).To(Equal("https://bkmonitorv3.example.com"))
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageCode).To(BeEmpty())
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageVersion).To(BeEmpty())

@@ -270,10 +270,8 @@ svcConf:
         endpointTmpl: "http://helm.bkrepo.example.com/api/%s/%s/charts"
   # 蓝鲸监控 APM 配置，供 Gin/HTTP APM 上报以及绑定 APM 时向业务应用下发环境变量使用
   bkMonitor:
-    # 旧版 bkmonitorv3 网关地址，供存量接口使用
-    endpoint: ""
-    # 新版 bk-monitor 网关地址，供新增接口（如 user group）使用
-    newGatewayEndpoint: ""
+    # bk-monitor 统一网关地址
+    gatewayEndpoint: ""
     # bkms-server 自身上报 trace 使用的 APM Endpoint：值带 http/https scheme 时按 HTTP OTLP 处理，
     # 否则按 gRPC OTLP 处理
     apmEndpoint: 127.0.0.1:11800

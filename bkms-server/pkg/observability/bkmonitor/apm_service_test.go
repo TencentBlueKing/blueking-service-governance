@@ -152,7 +152,7 @@ var _ = Describe("ApmService", func() {
 						BkmProjectID: 100,
 					})
 					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring("apm 3001 not found"))
+					Expect(err.Error()).To(ContainSubstring("APM app does not exist"))
 					Expect(result).To(BeNil())
 				})
 			})

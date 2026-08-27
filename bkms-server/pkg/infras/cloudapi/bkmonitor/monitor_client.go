@@ -34,7 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 )
 
-// MonitorGatewayClient 使用新版 bk-monitor 网关访问新增监控能力。
+// MonitorGatewayClient 是蓝鲸监控统一客户端实现。
 type MonitorGatewayClient struct {
 	*ApiClient
 }
@@ -225,25 +225,23 @@ func (c *MonitorGatewayClient) ListApmApp(ctx context.Context, bkBizID int64) ([
 		return nil, err
 	}
 
+	params := map[string]string{
+		"bk_biz_id": cast.ToString(req.BkBizID),
+	}
+
 	resp, err := c.handleOperation(ctx, c.NewOperation(
 		bkapi.OperationConfig{
-			Name:   "apm_service_list",
-			Method: http.MethodPost,
-			Path:   "/app/apm/service/service_list/",
+			Name:   "list_apm_application",
+			Method: http.MethodGet,
+			Path:   "/app/apm/list_apm_application/",
 		},
-		bkapi.OptSetRequestBody(req),
-	))
+	).SetQueryParams(params))
 	if err != nil {
 		return nil, errors.Wrapf(err, "list apm app failed, bk_biz_id: %d", req.BkBizID)
 	}
 
-	items := mapx.GetList(resp, "data")
-	if len(items) == 0 {
-		items = mapx.GetList(resp, "data.list")
-	}
-
 	result := make([]*ApmApp, 0)
-	if err = mapstructure.Decode(items, &result); err != nil {
+	if err = mapstructure.Decode(mapx.GetList(resp, "data"), &result); err != nil {
 		return nil, errors.Wrapf(err, "read apm app list failed, bk_biz_id: %d", req.BkBizID)
 	}
 
@@ -252,43 +250,29 @@ func (c *MonitorGatewayClient) ListApmApp(ctx context.Context, bkBizID int64) ([
 
 // GetMetadataSpaceDetail 获取空间详情。
 func (c *MonitorGatewayClient) GetMetadataSpaceDetail(ctx context.Context, bcsProjectCode string) (*Space, error) {
-	targetSpaceUID := fmt.Sprintf(SpaceUIDFormat, bcsProjectCode)
+	params := map[string]string{
+		"space_uid": fmt.Sprintf(SpaceUIDFormat, bcsProjectCode),
+	}
 	resp, err := c.handleOperation(ctx, c.NewOperation(
 		bkapi.OperationConfig{
-			Name:   "metadata_list_spaces_by_user",
+			Name:   "metadata_get_space_detail",
 			Method: http.MethodGet,
-			Path:   "/user/metadata/list_spaces/by_user/",
+			Path:   "/app/metadata/get_space_detail/",
 		},
-	))
+	).SetQueryParams(params))
 	if err != nil {
 		return nil, errors.Wrapf(ErrSpaceNotFound, "get metadata space detail failed: %v", err)
 	}
 
-	items := mapx.GetList(resp, "data.list")
-	if len(items) == 0 {
-		items = mapx.GetList(resp, "data")
-	}
-
-	spaces := make([]*Space, 0)
-	if err = mapstructure.Decode(items, &spaces); err != nil {
+	space := new(Space)
+	if err = mapstructure.Decode(resp["data"], space); err != nil {
 		return nil, errors.Wrapf(err, "get metadata space detail failed: %v", err)
 	}
 
-	for _, space := range spaces {
-		if space == nil {
-			continue
-		}
-		if space.SpaceUid != targetSpaceUID && space.SpaceID != bcsProjectCode {
-			continue
-		}
-
-		if space.ID > 0 {
-			space.ID = -space.ID
-		}
-		return space, nil
+	if space.ID > 0 {
+		space.ID = -space.ID
 	}
-
-	return nil, ErrSpaceNotFound
+	return space, nil
 }
 
 // TimeSeriesUnifyQuery 统一时序数据查询。

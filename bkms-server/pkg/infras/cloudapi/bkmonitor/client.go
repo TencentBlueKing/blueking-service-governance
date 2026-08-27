@@ -44,8 +44,8 @@ const (
 	headerBkapiUserName = "X-Bkapi-User-Name"
 )
 
-// Client 蓝鲸监控 API 客户端接口
-type Client interface {
+// MonitorClient 蓝鲸监控统一客户端接口。
+type MonitorClient interface {
 	// CreateApmApp 创建 APM 应用
 	CreateApmApp(
 		ctx context.Context,
@@ -72,11 +72,6 @@ type Client interface {
 	SaveUserGroup(ctx context.Context, req *SaveUserGroupReq) (*UserGroupDetail, error)
 	// TimeSeriesUnifyQuery 统一时序数据查询
 	TimeSeriesUnifyQuery(ctx context.Context, req *TimeSeriesUnifyQueryReq) (*TimeSeriesUnifyQueryResp, error)
-}
-
-// MonitorClient 蓝鲸监控新版 bk-monitor 网关客户端接口。
-type MonitorClient interface {
-	Client
 	// DeleteUserGroup 删除告警组
 	DeleteUserGroup(ctx context.Context, req *DeleteUserGroupReq) error
 	// SearchAlarmStrategy 查询告警策略列表
@@ -98,7 +93,9 @@ type ApiClient struct {
 	define.BkApiClient
 }
 
-// NewMonitorClient 创建 bk-monitor 网关客户端。
+var _ MonitorClient = (*MonitorGatewayClient)(nil)
+
+// NewMonitorClient 创建蓝鲸监控统一客户端。
 func NewMonitorClient(operator string) (MonitorClient, error) {
 	if config.G.Development.UseStubBkMonitor {
 		log.InfoNoContext("use stub bkmonitor client according to config")
