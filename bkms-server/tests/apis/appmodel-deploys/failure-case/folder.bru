@@ -23,6 +23,7 @@ script:pre-request {
     const workspaceID = `apdf-ws-${suffix}`;
     const envName = `apdf-env-${suffix}`;
     const helmAppID = `apdf-helm-${suffix}`;
+    const namespace = `apdf-ns-${suffix}`;
 
     const ws = await common.createWorkspace({id: workspaceID});
     await common.createEnvironment({
@@ -33,7 +34,7 @@ script:pre-request {
       cluster: {
         clusterID: "BCS-K8S-00001",
         clusterType: "single",
-        namespace: "default"
+        namespace: namespace
       }
     });
     // Helm app is enough to trigger the "not appmodel app" / "invalid app type"

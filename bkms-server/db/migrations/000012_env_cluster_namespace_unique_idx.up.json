@@ -1,0 +1,19 @@
+[
+  {
+    "createIndexes": "environments",
+    "indexes": [
+      {
+        "key": {
+          "cluster.clusterID": 1,
+          "cluster.namespace": 1
+        },
+        "name": "cluster.clusterID_1_cluster.namespace_1",
+        "unique": true,
+        "partialFilterExpression": {
+          "cluster.clusterID": { "$gt": "" },
+          "cluster.namespace": { "$gt": "" }
+        }
+      }
+    ]
+  }
+]

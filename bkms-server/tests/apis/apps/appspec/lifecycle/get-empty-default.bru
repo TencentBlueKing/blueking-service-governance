@@ -34,7 +34,7 @@ script:pre-request {
     cluster: {
       clusterID: 'BCS-K8S-12345',
       clusterType: 'single',
-      namespace: 'default'
+      namespace: `default-${suffix}`
     }
   })
   bru.setVar("testEnv", envName)

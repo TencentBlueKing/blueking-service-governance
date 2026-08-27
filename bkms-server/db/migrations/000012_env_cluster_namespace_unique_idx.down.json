@@ -1,0 +1,6 @@
+[
+  {
+    "dropIndexes": "environments",
+    "index": "cluster.clusterID_1_cluster.namespace_1"
+  }
+]

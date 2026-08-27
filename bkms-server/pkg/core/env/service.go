@@ -52,8 +52,13 @@ type ImageRegistryInfoInput struct {
 
 // Create 创建环境数据.
 func (s *EnvService) Create(ctx context.Context, environment *model.Environment) (bson.ObjectID, error) {
+	if err := findClusterNamespaceOccupant(ctx, s.EnvironmentStore, environment.Cluster, bson.NilObjectID); err != nil {
+		return bson.NilObjectID, errors.Wrap(err, "check environment cluster namespace conflict")
+	}
+
 	envID, err := s.EnvironmentStore.Create(ctx, environment)
 	if err != nil {
+		err = rewriteWriteErrIfClusterOccupied(ctx, s.EnvironmentStore, environment.Cluster, bson.NilObjectID, err)
 		return bson.NilObjectID, errors.Wrap(err, "create environment")
 	}
 	return envID, nil
@@ -70,16 +75,25 @@ func (s *EnvService) Update(
 		return errors.Wrap(err, "get environment")
 	}
 
+	finalCluster := applyClusterUpdate(environment.Cluster, updateData)
+
 	// 更新集群信息时, 需要检查环境是否有部署应用
 	if updateData.ClusterID != nil || updateData.Namespace != nil {
 		appCount := len(environment.AppIDs)
 		if appCount != 0 {
 			return errors.Errorf("environment has %d apps, cannot update cluster", appCount)
 		}
+
+		if err = findClusterNamespaceOccupant(ctx, s.EnvironmentStore, finalCluster, envID); err != nil {
+			return errors.Wrap(err, "check environment cluster namespace conflict")
+		}
 	}
 
 	if err = s.EnvironmentStore.Update(ctx, envID, updateData); err != nil {
-		return err
+		if updateData.ClusterID != nil || updateData.Namespace != nil {
+			err = rewriteWriteErrIfClusterOccupied(ctx, s.EnvironmentStore, finalCluster, envID, err)
+		}
+		return errors.Wrap(err, "update environment")
 	}
 
 	updatedEnv, err := s.Get(ctx, envID)
@@ -101,6 +115,24 @@ func (s *EnvService) Update(
 	}(*environment, *updatedEnv)
 
 	return nil
+}
+
+// applyClusterUpdate 将 partial update 中的集群字段合并到现有 BizCluster，返回合并后的结果。
+func applyClusterUpdate(cluster model.BizCluster, updateData *model.EnvironmentUpdateData) model.BizCluster {
+	finalCluster := cluster
+	if updateData.ClusterID != nil {
+		finalCluster.ClusterID = *updateData.ClusterID
+	}
+	if updateData.ClusterType != nil {
+		finalCluster.ClusterType = *updateData.ClusterType
+	}
+	if updateData.Namespace != nil {
+		finalCluster.Namespace = *updateData.Namespace
+	}
+	if updateData.IsFederation != nil {
+		finalCluster.IsFederation = *updateData.IsFederation
+	}
+	return finalCluster
 }
 
 // Delete 删除环境

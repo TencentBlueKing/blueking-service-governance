@@ -15,6 +15,7 @@ script:pre-request {
     const keySuffix = suffix.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
     const workspaceID = `evpc-ws-${suffix}`;
     const envName = `evpc-env-${suffix}`;
+    const namespace = `evpc-ns-${suffix}`;
     const trpcAppID = `evpc-trpc-${suffix}`;
     const tafAppID = `evpc-taf-${suffix}`;
     const definedAppID = `evpc-defined-${suffix}`;
@@ -31,7 +32,7 @@ script:pre-request {
       cluster: {
         clusterID: "BCS-K8S-00001",
         clusterType: "single",
-        namespace: "default"
+        namespace: namespace
       }
     });
 
