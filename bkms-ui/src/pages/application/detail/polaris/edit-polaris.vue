@@ -110,12 +110,13 @@
             <ToggleCard
               class="mb-[24px]"
               content-class="!p-0 !mt-[12px]"
-              :name="$t('组件可用环境')"
+              :name="$t('可用环境')"
               type="normal"
             >
               <EnvGroupSelector
                 v-model="formModel.scopeEnvNames"
                 :env-list="envList"
+                :get-env-disabled-reason="getScopeEnvDisabledReason"
               />
             </ToggleCard>
 
@@ -463,6 +464,7 @@
   import EnvGroupSelector from '~/components/env-group-selector.vue';
   import KeyValue from '~/components/key-value.vue';
   import { useFocusOnErrorField } from '~/composables/use-focus-on-error-field';
+  import { isFederationEnv } from '~/composables/use-is-federation-env';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useAppDetail } from '~/stores/app-detail';
   import { useUserStore } from '~/stores/user';
@@ -644,6 +646,11 @@
     ],
   };
 
+  /** 北极星暂不支持选择绑定联邦集群的环境。 */
+  function getScopeEnvDisabledReason(env: EnvOutput) {
+    return isFederationEnv(env) ? t('暂不支持选择绑定联邦集群的环境') : undefined;
+  }
+
   function handleBeforeClose() {
     return confirmBox();
   }
@@ -673,6 +680,14 @@
    */
   function handleInitKeyValue() {
     forceCleanDirtyTag();
+  }
+
+  /** 防止绕过选择器提交联邦环境。 */
+  function hasFederationEnvSelection() {
+    return (formModel.value.scopeEnvNames || []).some(envName => {
+      const env = props.envList.find(item => item.name === envName);
+      return isFederationEnv(env);
+    });
   }
 
   let refreshed = false;
@@ -830,6 +845,13 @@
     const valid = await formRef.value.validate().catch(() => false);
     if (!valid) {
       focusOnErrorField();
+      return;
+    }
+    if (hasFederationEnvSelection()) {
+      Message({
+        message: t('暂不支持选择绑定联邦集群的环境'),
+        theme: 'warning',
+      });
       return;
     }
 

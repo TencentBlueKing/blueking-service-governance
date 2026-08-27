@@ -93,6 +93,7 @@
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
   import TableException from '~/components/table-exception.vue';
+  import { isFederationEnv } from '~/composables/use-is-federation-env';
   import { useAppDetail } from '~/stores/app-detail';
   import { useDeployEnvStore } from '~/stores/deploy-env';
 
@@ -145,7 +146,7 @@
 
   // 判断环境是否是联邦集群
   function isEnvFederation(envName: string): boolean {
-    return envStore.envList?.find(env => env.name === envName)?.cluster?.isFederation === true;
+    return isFederationEnv(envStore.envList?.find(env => env.name === envName));
   }
 
   /** 判断指定环境是否属于可请求范围 */

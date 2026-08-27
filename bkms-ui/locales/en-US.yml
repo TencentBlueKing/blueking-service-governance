@@ -1627,6 +1627,8 @@ Key 不能重复: Key 不能重复
 资源: Resource
 联邦集群不支持灰度操作: Federated clusters do not support gray deployment.
 联邦集群暂不支持自动扩缩: Federated clusters do not currently support autoscaling.
+该环境绑定联邦集群，不支持作为来源环境创建新环境: This environment is bound to a federated cluster and cannot be used as the source for a new environment.
+暂不支持选择绑定联邦集群的环境: Environments bound to federated clusters are not currently supported.
 环境变量未定义: Undefined Environment Variables
 "{0} 个变量": "{0} variables"
 "以下环境变量在当前配置中被引用，但在目标部署环境中未定义，部署后将被渲染为空值，{0}": "The following environment variables are referenced in the current configuration but are not defined in the target deployment environment. The deployment will be rendered as empty value, {0}"

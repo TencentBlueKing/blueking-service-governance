@@ -283,6 +283,7 @@
   import { hasErrorCode, showApiErrorMessage } from '~/common/util';
   import DividerHeader from '~/components/divider-header.vue';
   import { useGPAConfigPolling } from '~/composables/use-gpa-config-polling';
+  import useIsFederationEnv from '~/composables/use-is-federation-env';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import AutoScaleTag from '~/pages/application/detail/components/auto-scale-tag.vue';
   import { useAppDetail } from '~/stores/app-detail';
@@ -319,7 +320,7 @@
   const isShow = ref(false);
   const isInitLoading = ref(false);
   const isSubmitLoading = ref(false);
-  const isFederationEnv = computed(() => trpcDeployStore.curEnvItem?.cluster?.isFederation === true);
+  const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
   const formRef = ref<InstanceType<typeof Form>>();
   const hasGPAConfig = ref(false);
   const initialEnabled = ref(false);

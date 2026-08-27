@@ -99,6 +99,7 @@
   import { AppInstanceOutputObj } from '~/@types/v1/instance';
   import { InstanceService } from '~/api/modules/v1';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import useIsFederationEnv from '~/composables/use-is-federation-env';
   import useSearchFilter from '~/composables/use-search-filter';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -133,7 +134,7 @@
   const total = ref(0);
   const paginationCurrent = ref(1);
   const paginationLimit = ref(10);
-  const isFederationEnv = computed(() => trpcDeployStore.curEnvItem?.cluster?.isFederation === true);
+  const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
 
   const isCrossPageSelection = computed(() => instanceTableRef.value?.isCrossPageSelection ?? false);
 

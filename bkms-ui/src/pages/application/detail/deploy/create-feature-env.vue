@@ -108,6 +108,7 @@
             v-model="sourceEnvName"
             class="w-full"
             :columns="2"
+            :get-env-disabled-reason="getSourceEnvDisabledReason"
             :kinds="['standard']"
             :show-env-prefix="false"
             :show-only-deployed-filter="false"
@@ -163,6 +164,7 @@
   import { BKMS_REGEX } from '~/common/const';
   import DividerHeader from '~/components/divider-header.vue';
   import EnvSelectPanel from '~/components/env-select-panel.vue';
+  import { isFederationEnv } from '~/composables/use-is-federation-env';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
@@ -198,7 +200,9 @@
 
   // 特性环境只能基于标准环境创建，未就绪的环境也没有集群可继承
   const availableEnvList = computed(() =>
-    envList.value.filter(env => env.id && env.status !== 'NotReady' && (env.kind || 'standard') === 'standard'),
+    envList.value.filter(
+      env => env.id && env.status !== 'NotReady' && (env.kind || 'standard') === 'standard' && !isFederationEnv(env),
+    ),
   );
   const {
     confirmBox: confirmFormLeave,
@@ -212,7 +216,7 @@
       {
         message: t('请选择来源环境'),
         trigger: 'change',
-        validator: (value: string) => !!value,
+        validator: (value: string) => availableEnvList.value.some(env => env.id === value),
       },
     ],
     displayName: [
@@ -223,6 +227,11 @@
       },
     ],
   };
+
+  /** 联邦环境可见但不能作为特性环境的来源环境。 */
+  function getSourceEnvDisabledReason(env: EnvOutput) {
+    return isFederationEnv(env) ? t('该环境绑定联邦集群，不支持作为来源环境创建新环境') : undefined;
+  }
 
   // 关闭前确认：已创建成功则直接放行，否则检查表单是否有未保存修改
   function handleBeforeClose() {
@@ -303,7 +312,7 @@
 
   // 来源环境变更：更新表单值并清除校验状态
   function handleSourceEnvChange(env?: EnvOutput) {
-    formModel.sourceEnvID = env?.id || '';
+    formModel.sourceEnvID = env && !isFederationEnv(env) ? env.id || '' : '';
     if (env?.name) {
       nextTick(() => formRef.value?.clearValidate?.());
     }
@@ -313,6 +322,7 @@
   async function handleSubmit() {
     const valid = await formRef.value?.validate().catch(() => false);
     if (!valid || !appDetailStore.appID) return;
+    if (!availableEnvList.value.some(env => env.id === formModel.sourceEnvID)) return;
 
     confirmLoading.value = true;
     try {

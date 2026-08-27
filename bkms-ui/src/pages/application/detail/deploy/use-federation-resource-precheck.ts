@@ -19,6 +19,7 @@
 import { AppSpecService, EnvService } from '~/api/modules/v1';
 import { isQuantityEqual, parseCpuCores, parseMemoryToMiB } from '~/common/resource-quantity';
 import { isAppModelAppType } from '~/composables/app-type';
+import { isFederationEnv } from '~/composables/use-is-federation-env';
 import { useAppDetail } from '~/stores/app-detail';
 import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
@@ -84,7 +85,7 @@ export function useFederationResourcePrecheck() {
 
     const env = await resolveEnv(appID, envName, targetEnv);
     // 非联邦集群无需 Requests==Limits 约束，直接放行
-    if (env?.cluster?.isFederation !== true) return [];
+    if (!isFederationEnv(env)) return [];
 
     const spec = await AppSpecService.getEnvEffectiveAppSpecResources({
       appID,
