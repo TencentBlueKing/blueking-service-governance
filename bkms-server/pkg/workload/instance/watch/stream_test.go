@@ -92,7 +92,7 @@ func (s *stubPlugin) Name() string { return s.name }
 
 func (s *stubPlugin) Fetch(
 	_ context.Context,
-	snapshot []*serializer.AppInstanceOutputObj,
+	snapshot []serializer.AppInstanceOutputObj,
 ) (map[string]any, error) {
 	ids := make([]string, 0, len(snapshot))
 	for _, instance := range snapshot {

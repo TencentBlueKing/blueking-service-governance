@@ -39,8 +39,9 @@ import (
 )
 
 const (
-	// streamTickInterval 一次 tick 同时驱动 SSE 心跳与插件层的一轮拉取
-	// 15s 取自北极星 SDK 的缓存量级，补得更密只会空转
+	// streamTickInterval 一次 tick 同时驱动 SSE 心跳与全部插件的一轮拉取
+	// 15s 取自当前唯一插件（北极星 SDK）的缓存量级，补得更密只会空转
+	// 多插件暂共用这一周期；有独立节奏需求时再按插件拆 ticker
 	streamTickInterval = 15 * time.Second
 	// streamMaxAge 单条 SSE 连接的硬性上限；到期推 ENDED，不向客户端承诺更长连接
 	streamMaxAge = 2 * time.Minute
@@ -213,7 +214,6 @@ func (m *Manager) consume(
 }
 
 // handleEvent 把单条集群事件投影为 SSE；BOOKMARK 跳过，Error 视为集群中断
-// 整条 Pod 事件路径都不碰附属数据，因此不需要 ctx：拉取只发生在插件层
 func (m *Manager) handleEvent(
 	stream *sseStream,
 	pushed *pushedInstances,
@@ -266,7 +266,6 @@ func (m *Manager) runPlugins(ctx context.Context, stream *sseStream, pushed *pus
 }
 
 // projectEvent 把集群对象投影为平台事件；无法识别或投影失败则跳过，不推 skipped
-// 投影只看事件本身，附属数据一律由插件层另行推送，因此这里不需要 ctx
 func (m *Manager) projectEvent(ev k8swatch.Event, deployID string) (serializer.AppInstanceWatchEvent, error) {
 	// dynamic client Watch 只应给出 Unstructured，其他类型不投影
 	obj, ok := ev.Object.(*unstructured.Unstructured)

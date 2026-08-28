@@ -21,6 +21,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -34,11 +35,21 @@ type fakePlugin struct {
 	calls   int
 	rounds  []map[string]any
 	failAll bool
+	mutate  func([]serializer.AppInstanceOutputObj)
+	lastIP  string
 }
 
 func (f *fakePlugin) Name() string { return f.name }
 
-func (f *fakePlugin) Fetch(context.Context, []*serializer.AppInstanceOutputObj) (map[string]any, error) {
+func (f *fakePlugin) Fetch(_ context.Context, snapshot []serializer.AppInstanceOutputObj) (map[string]any, error) {
+	if f.mutate != nil {
+		f.mutate(snapshot)
+	}
+
+	if len(snapshot) > 0 {
+		f.lastIP = snapshot[0].IP
+	}
+
 	if f.failAll {
 		return nil, errors.New("fetch failed")
 	}
@@ -47,6 +58,21 @@ func (f *fakePlugin) Fetch(context.Context, []*serializer.AppInstanceOutputObj) 
 	f.calls++
 
 	return round, nil
+}
+
+// blockUntilCancelPlugin 卡住直到 ctx 取消，用来验证 Runner 的拉取超时
+type blockUntilCancelPlugin struct {
+	name string
+}
+
+func (p *blockUntilCancelPlugin) Name() string { return p.name }
+
+func (p *blockUntilCancelPlugin) Fetch(
+	ctx context.Context,
+	_ []serializer.AppInstanceOutputObj,
+) (map[string]any, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 func snapshotOf(ids ...string) []*serializer.AppInstanceOutputObj {
@@ -166,5 +192,41 @@ var _ = Describe("Runner", func() {
 
 		Expect(first).To(HaveLen(1))
 		Expect(again).To(HaveLen(1))
+	})
+
+	// 超时与拉取失败同一口径：不推事件、不拆流，让心跳和 Pod 事件能继续
+	It("treats a timed-out fetch as a skippable failure", func() {
+		p := &blockUntilCancelPlugin{name: "slow"}
+		runner := NewRunner(p)
+		runner.fetchTimeout = 20 * time.Millisecond
+
+		var events []serializer.AppInstancePluginWatchEvent
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- runner.Run(ctx, snapshotOf("a"), collect(&events))
+		}()
+
+		Eventually(errCh, time.Second).Should(Receive(BeNil()))
+		Expect(events).To(BeEmpty())
+	})
+
+	// 按值拷贝后再交给插件：改顶层字段既碰不到调用方快照，也影响不到后续插件
+	It("isolates snapshot mutations across plugins and the caller", func() {
+		mut := &fakePlugin{
+			name:   "mut",
+			rounds: []map[string]any{{"a": []string{"x"}}},
+			mutate: func(snapshot []serializer.AppInstanceOutputObj) {
+				snapshot[0].IP = "hacked"
+			},
+		}
+		read := &fakePlugin{name: "read", rounds: []map[string]any{{"a": []string{"y"}}}}
+		snapshot := snapshotOf("a")
+		snapshot[0].IP = "10.0.0.1"
+
+		var events []serializer.AppInstancePluginWatchEvent
+		Expect(NewRunner(mut, read).Run(ctx, snapshot, collect(&events))).To(Succeed())
+
+		Expect(snapshot[0].IP).To(Equal("10.0.0.1"))
+		Expect(read.lastIP).To(Equal("10.0.0.1"))
 	})
 })

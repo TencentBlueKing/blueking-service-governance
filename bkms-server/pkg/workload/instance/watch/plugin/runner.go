@@ -22,6 +22,7 @@ import (
 	"context"
 	"log/slog"
 	"reflect"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -29,6 +30,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
+
+// pluginFetchTimeout 单次插件拉取上限
+// 插件与 Pod 事件 / 心跳共用 consume goroutine，超时后按本轮失败跳过，避免一次卡住拖死整条流
+const pluginFetchTimeout = 5 * time.Second
 
 // Emit 把一条插件事件写给客户端；返回 error 表示流已不可写，Runner 立即中止本轮
 type Emit func(event serializer.AppInstancePluginWatchEvent) error
@@ -42,11 +47,17 @@ type Runner struct {
 	// pushed 每个插件上次成功推给前端的载荷，索引为 pushed[插件名][实例 ID]
 	// 它是判断「有没有变化」的唯一基准：本轮拉取失败不动它，页面因此保留上次已知值
 	pushed map[string]map[string]any
+	// fetchTimeout 单次 Fetch 上限；单测调小以免真实等待
+	fetchTimeout time.Duration
 }
 
 // NewRunner 按注册顺序创建插件执行时；无插件时 Run 直接空转
 func NewRunner(plugins ...Plugin) *Runner {
-	return &Runner{plugins: plugins, pushed: make(map[string]map[string]any, len(plugins))}
+	return &Runner{
+		plugins:      plugins,
+		pushed:       make(map[string]map[string]any, len(plugins)),
+		fetchTimeout: pluginFetchTimeout,
+	}
 }
 
 // Run 跑一轮：把存活实例快照交给每个插件，仅对相对上次推送有变化的实例 emit 事件
@@ -58,9 +69,9 @@ func (r *Runner) Run(ctx context.Context, snapshot []*serializer.AppInstanceOutp
 	}
 
 	for _, p := range r.plugins {
-		// 拉取失败按「本轮不可用」处理：不推事件、不拆流、不动已推送记录
+		// 拉取失败（含超时）按「本轮不可用」处理：不推事件、不拆流、不动已推送记录
 		// 失败被这里吞掉，不会体现在响应里，只能靠日志与 metrics 排查
-		payloads, err := p.Fetch(ctx, snapshot)
+		payloads, err := r.fetch(ctx, p, snapshot)
 		if err != nil {
 			log.WarnAttrs(ctx, "watch plugin fetch failed, skip this round",
 				slog.String("plugin", p.Name()),
@@ -80,6 +91,28 @@ func (r *Runner) Run(ctx context.Context, snapshot []*serializer.AppInstanceOutp
 	}
 
 	return nil
+}
+
+// fetch 带超时地拉一轮；快照按值交给插件，避免改顶层字段污染 pushed
+func (r *Runner) fetch(
+	ctx context.Context,
+	p Plugin,
+	snapshot []*serializer.AppInstanceOutputObj,
+) (map[string]any, error) {
+	fetchCtx, cancel := context.WithTimeout(ctx, r.fetchTimeout)
+	defer cancel()
+
+	copied := make([]serializer.AppInstanceOutputObj, len(snapshot))
+	for i, inst := range snapshot {
+		copied[i] = *inst
+	}
+
+	payloads, err := p.Fetch(fetchCtx, copied)
+	if err != nil {
+		return nil, errors.Wrapf(err, "fetch plugin %s", p.Name())
+	}
+
+	return payloads, nil
 }
 
 // emitChanged 按快照顺序比对单个插件的本轮结果，仅差异才推

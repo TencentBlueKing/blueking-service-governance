@@ -59,7 +59,7 @@ func (p *Plugin) Name() string {
 // 拉取失败直接返回 error：Runner 会跳过本轮，页面保留上次已知状态，不会被清成空数组
 func (p *Plugin) Fetch(
 	ctx context.Context,
-	snapshot []*serializer.AppInstanceOutputObj,
+	snapshot []serializer.AppInstanceOutputObj,
 ) (map[string]any, error) {
 	svcInstances, err := p.lister(ctx)
 	if err != nil {

@@ -42,8 +42,8 @@ func svcInstances(ip string, port uint32) []*polarisaddon.PolarisServiceInstance
 	}}
 }
 
-func snapshotOf(id, ip string) []*serializer.AppInstanceOutputObj {
-	return []*serializer.AppInstanceOutputObj{{ID: id, IP: ip}}
+func snapshotOf(id, ip string) []serializer.AppInstanceOutputObj {
+	return []serializer.AppInstanceOutputObj{{ID: id, IP: ip}}
 }
 
 // polarisInfos 把插件载荷取回成北极星投影列表
