@@ -115,21 +115,20 @@
   const router = useRouter();
   const spaceStore = useSpaceStore();
 
-  const currentApplicationName = ref(
-    (Array.isArray(route.params.name) ? route.params.name[0] : route.params.name) || '',
-  );
+  /** 将路由 params 单值/数组统一为 string，缺省回退 fallback */
+  function getRouteParam(value: string | string[] | undefined, fallback = ''): string {
+    return (Array.isArray(value) ? value[0] : value) || fallback;
+  }
+
+  const currentApplicationName = ref(getRouteParam(route.params.name));
   const applicationList = ref<AppInfoOutputObj[]>([]);
-  // 'overview' | 'build' | 'repo' | 'deploy' | 'info' | 'orchestrate' | 'history' | 'module';
+  // 'overview' | 'build' | 'repo' | 'deploy' | 'info' | 'orchestrate' | 'history' | 'module'
   // trpc没有的子菜单
   const TrpcSpecNotHas = ['orchestrate'];
   // helm没有的子菜单
   const HelmSpecNotHas = ['module', 'observation', 'polaris', 'appConfig'];
 
-  const activeKey = ref<string>(
-    (Array.isArray(router.currentRoute.value.params.menuName)
-      ? router.currentRoute.value.params.menuName[0]
-      : router.currentRoute.value.params.menuName) || 'info',
-  );
+  const activeKey = ref<string>(getRouteParam(router.currentRoute.value.params.menuName, 'info'));
   const isSpacePopoverShow = ref(false);
   // 应用列表与应用详情加载完成前，不挂载子页面，避免子页面读取到空 appID/appDetail
   const detailLoading = ref(true);
@@ -194,7 +193,18 @@
   watch(
     () => router.currentRoute.value.params.menuName,
     newValue => {
-      activeKey.value = (Array.isArray(newValue) ? newValue[0] : newValue) || 'info';
+      activeKey.value = getRouteParam(newValue, 'info');
+    },
+  );
+
+  // 浏览器后退/前进或外链直达时，将 URL 中的应用名同步回 Select，避免 UI 与地址栏不一致
+  watch(
+    () => router.currentRoute.value.params.name,
+    newValue => {
+      const name = getRouteParam(newValue);
+      if (name && name !== currentApplicationName.value) {
+        currentApplicationName.value = name;
+      }
     },
   );
 
@@ -217,6 +227,11 @@
    * 再 await 本 Promise，保证 URL 更新完成后再拉详情并重新挂载。
    */
   let pendingRouteSync: null | Promise<unknown> = null;
+  /**
+   * 应用切换世代号：每次 currentApplication 变化递增。
+   * 快速连切时旧 async 回调在 await 后对照本值，过期则直接退出，避免抢写 appID。
+   */
+  let appSwitchGeneration = 0;
 
   watch(
     [activeKey, type, currentApplicationName],
@@ -231,6 +246,16 @@
       } else if (isHelmLikeAppType(type) && HelmSpecNotHas.includes(key as string)) {
         activeKey.value = 'info';
       } else if (key && type && name) {
+        const current = router.currentRoute.value;
+        // URL 已是目标（如浏览器后退触发的反向同步）时跳过 push，避免污染历史栈
+        const alreadyOnTarget =
+          current.name === 'detail' &&
+          getRouteParam(current.params.name) === name &&
+          getRouteParam(current.params.type) === type &&
+          getRouteParam(current.params.menuName) === key;
+        if (alreadyOnTarget) {
+          return;
+        }
         // 同菜单内切换应用沿用 query：让新应用继承当前 Tab 等页面状态；跨菜单切换则重置为默认
         const isMenuSwitch = oldKey && oldKey !== key;
         // 快照当前 query 供新页 hook（useUrlQuerySync）接管：watch 同步阶段已固化进导航参数（快照），
@@ -257,24 +282,30 @@
   // 监听应用变化，更新应用详情；加载完成前不挂载子页面，避免竞态
   watch(currentApplication, async app => {
     const currentAppId = app?.id || '';
+    // 本轮世代号：后续 await 后若已被更新的切换取代，则不再写 store / 解锁
+    const generation = ++appSwitchGeneration;
     // 先置 loading 卸载子页：若等 push 完成后再 loading，routerViewKey 会先变并挂载一次，
     // 随后 loading 再卸/挂，网络访问等页接口会打两次。
     detailLoading.value = true;
-    // 再等路由 push 落定（此时子页已卸，useUrlQuerySync 不再 replace 打断 push）
-    if (pendingRouteSync) {
-      await pendingRouteSync;
-      pendingRouteSync = null;
+    // 捕获本轮看到的 sync Promise；不清空他人的最新 pending，避免快速连切时抢清空
+    const routeSync = pendingRouteSync;
+    if (routeSync) {
+      await routeSync;
+      // 仅当全局 pending 仍是我们 await 的那一个时才清空
+      if (pendingRouteSync === routeSync) {
+        pendingRouteSync = null;
+      }
+    }
+    // 快速连切 A→B→C：过期回调在此退出，避免 updateAppID 把已切到 C 的 store 写回 B
+    if (generation !== appSwitchGeneration) {
+      return;
     }
     appDetailStore.updateAppID(currentAppId);
     try {
       await appDetailStore.fetchAppDetail(currentAppId);
     } finally {
-      // 快速切换应用 A→B 时两个 async 回调并行，仅当当前仍为本次应用时才解锁，
-      // 避免 A 先返回提前解锁读到 A 数据（串台）。
-      // 基于 appID（watch 内同步更新）判断：请求失败/清空选择时 appDetail 为 null，
-      // 用 appID 判断可正常解锁，不会卡死在 loading 态。
-      // 过期请求的覆盖由 store 层 fetchAppDetail 的 appID 校验丢弃，这里只需负责解锁。
-      if (appDetailStore.appID === currentAppId) {
+      // 仅最新一轮且 appID 仍匹配时解锁；过期请求的覆盖由 store 层 appID 校验丢弃
+      if (generation === appSwitchGeneration && appDetailStore.appID === currentAppId) {
         detailLoading.value = false;
       }
     }
