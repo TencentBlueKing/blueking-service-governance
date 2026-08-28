@@ -118,14 +118,14 @@ graph LR
 
 ## 5. 北极星信息
 
-北极星实例状态（健康 / 权重 / 隔离）按 Pod IP + 服务端口匹配。List 和 Watch 共用 `BuildPolarisInfosForIP` 做投影：
+北极星实例状态（健康 / 权重 / 隔离）按 Pod IP + 服务端口匹配。匹配与定序在 `addon/polaris.InstanceMatcher`，API 投影走 `PolarisInstanceInfoOutputObj.FromModel`：
 
-- **List**：`MergePolarisInfoToAppInstances` 把结果写进实例的 `polarisInfos`
-- **Watch**：北极星没有原生 Watch，只能周期拉取。插件每个 tick 对快照里每个实例调 `BuildPolarisInfosForIP`，有差异则推 `PLUGIN` 事件
+- **List**：`MergePolarisInfoToAppInstances` 把投影写进实例的 `polarisInfos`
+- **Watch**：北极星没有原生 Watch，只能周期拉取。插件每个 tick 用 Matcher 取领域结果，写出前 `FromModel`，有差异则推 `PLUGIN` 事件
 
 周期 15s，与 SSE 心跳共用一个 ticker。间隔取自北极星 SDK 的缓存量级：拉得更密拿回来的是同一份数据。新实例最多等一个周期才拿到北极星信息。
 
-`polarisInfos` 按 `(serviceNamespace, serviceName, port)` 定序。北极星侧返回顺序会漂移，不定序就会被 Runner 误判成变化、每轮重复推送。定序发生在投影函数里，Merge 只负责按 IP 赋值。
+`polarisInfos` 按 `(serviceNamespace, serviceName, port)` 定序。北极星侧返回顺序会漂移，不定序就会被 Runner 误判成变化、每轮重复推送。定序发生在 Matcher 里。
 
 未命中返回**空切片而不是 nil**，与「配置被删后成功拉回空」同形，才能被识别为变化并推 `data: []`。
 

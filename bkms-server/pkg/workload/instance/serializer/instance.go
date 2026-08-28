@@ -20,7 +20,6 @@
 package serializer
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"time"
@@ -32,7 +31,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/timex"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	podstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/pod"
-	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 	instancelogsvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/instancelog"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
@@ -231,6 +229,41 @@ type PolarisInstanceInfoOutputObj struct {
 	Metadata map[string]string `json:"metadata"`
 }
 
+// FromModel 从领域匹配结果填充 API 投影；m 为 nil 时保持接收者为零值
+func (o *PolarisInstanceInfoOutputObj) FromModel(m *polaris.MatchedInstance) *PolarisInstanceInfoOutputObj {
+	if m == nil {
+		return o
+	}
+
+	*o = PolarisInstanceInfoOutputObj{
+		ServiceNamespace:  m.ServiceNamespace,
+		ServiceName:       m.ServiceName,
+		IP:                m.IP,
+		Port:              m.Port,
+		IsHealthy:         m.IsHealthy,
+		Weight:            m.Weight,
+		IsIsolated:        m.IsIsolated,
+		EnableHealthCheck: m.EnableHealthCheck,
+		Metadata:          m.Metadata,
+	}
+
+	return o
+}
+
+// PolarisInfosFromModels 把匹配结果投影为 API 列表；空输入返回空切片而不是 nil
+func PolarisInfosFromModels(models []*polaris.MatchedInstance) []*PolarisInstanceInfoOutputObj {
+	infos := make([]*PolarisInstanceInfoOutputObj, 0, len(models))
+	for _, m := range models {
+		if m == nil {
+			continue
+		}
+
+		infos = append(infos, new(PolarisInstanceInfoOutputObj).FromModel(m))
+	}
+
+	return infos
+}
+
 // AppInstanceResourcesObj is the main-container CPU/memory quantities from the live Pod.
 type AppInstanceResourcesObj struct {
 	// CPU limits（Kubernetes quantity 字符串），可选：未配置时不返回该字段
@@ -348,89 +381,18 @@ func extractMainContainerResources(containers []any) AppInstanceResourcesObj {
 	return AppInstanceResourcesObj{}
 }
 
-// BuildPolarisInfosForIP 按 Pod IP + 服务端口投影北极星实例
-// List 的 Merge 与 Watch 插件共用，保证字段口径和排序一致
-// 未命中返回空切片而不是 nil，与「配置被删后成功拉回空」同形，供 Runner 判断变化
-func BuildPolarisInfosForIP(
-	ip string,
-	svcInstances []*polaris.PolarisServiceInstances,
-) []*PolarisInstanceInfoOutputObj {
-	return polarisInfosForIP(ip, indexPolarisMatches(svcInstances))
-}
-
-// MergePolarisInfoToAppInstances 将北极星实例信息合并到应用实例输出对象中
-// 按 Pod IP + 服务端口匹配；命中多个北极星服务时的顺序由 buildPolarisInfos 保证
+// MergePolarisInfoToAppInstances 将北极星匹配结果投影并挂到实例输出上
+// 匹配与定序由 addon/polaris.InstanceMatcher 完成，这里只做 FromModel
 func MergePolarisInfoToAppInstances(
 	appInstances []*AppInstanceOutputObj,
 	svcInstances []*polaris.PolarisServiceInstances,
 ) {
-	// 索引只建一次，再按实例 IP 取投影，避免每个实例都扫一遍北极星结果
-	ipIndex := indexPolarisMatches(svcInstances)
+	// 索引只建一次，再按实例 IP 取匹配结果
+	matcher := polaris.NewInstanceMatcher(svcInstances)
 
 	for _, instance := range appInstances {
-		instance.PolarisInfos = polarisInfosForIP(instance.IP, ipIndex)
+		instance.PolarisInfos = PolarisInfosFromModels(matcher.ForIP(instance.IP))
 	}
-}
-
-// indexPolarisMatches 按实例 IP 建索引，供按 Pod 查询时复用
-func indexPolarisMatches(svcInstances []*polaris.PolarisServiceInstances) map[string][]polarisMatch {
-	ipIndex := make(map[string][]polarisMatch)
-	for _, svc := range svcInstances {
-		for _, inst := range svc.Instances {
-			ipIndex[inst.IP] = append(ipIndex[inst.IP], polarisMatch{svc: svc, inst: inst})
-		}
-	}
-
-	return ipIndex
-}
-
-// polarisInfosForIP 从索引取出该 IP 的投影；未命中是空切片而不是 nil
-func polarisInfosForIP(ip string, ipIndex map[string][]polarisMatch) []*PolarisInstanceInfoOutputObj {
-	infos := buildPolarisInfos(ipIndex[ip])
-	if infos == nil {
-		return []*PolarisInstanceInfoOutputObj{}
-	}
-
-	return infos
-}
-
-// polarisMatch 一条北极星实例与其所属服务的配对，供按 Pod IP 命中后再过滤端口
-type polarisMatch struct {
-	svc  *polaris.PolarisServiceInstances
-	inst *polarisInfra.Instance
-}
-
-// buildPolarisInfos 从已按 IP 命中的匹配项构造输出并按服务坐标定序
-// 北极星侧返回顺序不保证稳定；Watch 周期补拉靠前后两次结果比对，顺序漂移会被误判成变化
-func buildPolarisInfos(matches []polarisMatch) []*PolarisInstanceInfoOutputObj {
-	var infos []*PolarisInstanceInfoOutputObj
-	for _, m := range matches {
-		if int64(m.inst.Port) != int64(m.svc.ServicePort) {
-			continue
-		}
-
-		infos = append(infos, &PolarisInstanceInfoOutputObj{
-			ServiceNamespace:  m.svc.ServiceNamespace,
-			ServiceName:       m.svc.ServiceName,
-			IP:                m.inst.IP,
-			Port:              m.inst.Port,
-			IsHealthy:         m.inst.IsHealthy,
-			Weight:            int64(m.inst.Weight),
-			IsIsolated:        m.inst.IsIsolated,
-			EnableHealthCheck: m.inst.EnableHealthCheck,
-			Metadata:          m.inst.Metadata,
-		})
-	}
-
-	slices.SortFunc(infos, func(a, b *PolarisInstanceInfoOutputObj) int {
-		return cmp.Or(
-			cmp.Compare(a.ServiceNamespace, b.ServiceNamespace),
-			cmp.Compare(a.ServiceName, b.ServiceName),
-			cmp.Compare(a.Port, b.Port),
-		)
-	})
-
-	return infos
 }
 
 // SkippedAppInstanceObj 无法投影为 AppInstanceOutputObj 而被跳过的实例。

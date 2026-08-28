@@ -136,7 +136,7 @@ func (c *Collector) Collect(
 
 // CountMatched 按 Pod IP + 服务端口匹配北极星实例并统计。
 //
-// 匹配规则（与实例列表 MergePolarisInfoToAppInstances 一致）：
+// 匹配规则（与 InstanceMatcher 一致）：
 //  1. 实例 IP 落在本环境 Pod IP 集合中
 //  2. 实例 Port 等于配置的 ServicePort
 //
@@ -151,7 +151,7 @@ func CountMatched(
 			return false
 		}
 		_, ok := podIPs[inst.IP]
-		// 与 MergePolarisInfoToAppInstances 一致：经 int64 比较端口
+		// 与 InstanceMatcher 一致：经 int64 比较端口
 		return ok && int64(inst.Port) == int64(servicePort)
 	})
 

@@ -28,6 +28,7 @@ import (
 	polarisaddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisinfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
+	watchplugin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/watch/plugin"
 )
 
 // svcInstances 构造一条注册在 8080 端口的北极星服务；port 用来制造端口不匹配的场景
@@ -42,8 +43,8 @@ func svcInstances(ip string, port uint32) []*polarisaddon.PolarisServiceInstance
 	}}
 }
 
-func snapshotOf(id, ip string) []serializer.AppInstanceOutputObj {
-	return []serializer.AppInstanceOutputObj{{ID: id, IP: ip}}
+func snapshotOf(id, ip string) []watchplugin.InstanceSnapshot {
+	return []watchplugin.InstanceSnapshot{{ID: id, IP: ip}}
 }
 
 // polarisInfos 把插件载荷取回成北极星投影列表

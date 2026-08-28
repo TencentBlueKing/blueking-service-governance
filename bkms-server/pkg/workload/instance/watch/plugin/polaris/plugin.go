@@ -59,17 +59,20 @@ func (p *Plugin) Name() string {
 // 拉取失败直接返回 error：Runner 会跳过本轮，页面保留上次已知状态，不会被清成空数组
 func (p *Plugin) Fetch(
 	ctx context.Context,
-	snapshot []serializer.AppInstanceOutputObj,
+	snapshot []watchplugin.InstanceSnapshot,
 ) (map[string]any, error) {
+	// 按应用环境拉北极星实例；失败抛给 Runner 跳过本轮
 	svcInstances, err := p.lister(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "list polaris service instances")
 	}
 
+	// 匹配走领域层，写出前再投影成 API 对象，保证与 List 口径一致
+	matcher := polarisaddon.NewInstanceMatcher(svcInstances)
+
 	payloads := make(map[string]any, len(snapshot))
 	for _, instance := range snapshot {
-		// 走与 List 相同的投影：字段口径和排序一致，否则 Runner 会把同内容误判成变化
-		payloads[instance.ID] = serializer.BuildPolarisInfosForIP(instance.IP, svcInstances)
+		payloads[instance.ID] = serializer.PolarisInfosFromModels(matcher.ForIP(instance.IP))
 	}
 
 	return payloads, nil

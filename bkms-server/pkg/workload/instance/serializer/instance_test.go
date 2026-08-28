@@ -231,43 +231,24 @@ var _ = Describe("Instance serializer", func() {
 		})
 	})
 
-	Describe("BuildPolarisInfosForIP", func() {
-		It("returns matched Polaris instances by pod IP and service port", func() {
-			svcInstances := []*polaris.PolarisServiceInstances{
-				{
-					ServiceNamespace: "Production",
-					ServiceName:      "svc-a",
-					ServicePort:      8080,
-					Instances: []*polarisInfra.Instance{
-						{
-							IP:                "127.0.0.1",
-							Port:              8080,
-							Weight:            100,
-							IsHealthy:         true,
-							EnableHealthCheck: true,
-							Metadata:          map[string]string{"k": "v"},
-						},
-						{IP: "127.0.0.1", Port: 9090},
-					},
-				},
-			}
+	Describe("PolarisInstanceInfoOutputObj", func() {
+		It("fills API fields from a matched domain instance", func() {
+			output := new(serializer.PolarisInstanceInfoOutputObj).FromModel(&polaris.MatchedInstance{
+				ServiceNamespace:  "Production",
+				ServiceName:       "svc-a",
+				IP:                "127.0.0.1",
+				Port:              8080,
+				IsHealthy:         true,
+				Weight:            100,
+				EnableHealthCheck: true,
+				Metadata:          map[string]string{"k": "v"},
+			})
 
-			infos := serializer.BuildPolarisInfosForIP("127.0.0.1", svcInstances)
-
-			Expect(infos).To(HaveLen(1))
-			Expect(infos[0].ServiceNamespace).To(Equal("Production"))
-			Expect(infos[0].ServiceName).To(Equal("svc-a"))
-			Expect(infos[0].Port).To(Equal(uint32(8080)))
-			Expect(infos[0].Weight).To(Equal(int64(100)))
-			Expect(infos[0].Metadata).To(Equal(map[string]string{"k": "v"}))
-		})
-
-		// 未命中必须是空切片：Watch 插件把返回值直接当载荷，nil 和空切片会被 Runner 判成不同状态
-		It("returns an empty slice rather than nil when nothing matches", func() {
-			infos := serializer.BuildPolarisInfosForIP("10.0.0.1", nil)
-
-			Expect(infos).NotTo(BeNil())
-			Expect(infos).To(BeEmpty())
+			Expect(output.ServiceNamespace).To(Equal("Production"))
+			Expect(output.ServiceName).To(Equal("svc-a"))
+			Expect(output.Port).To(Equal(uint32(8080)))
+			Expect(output.Weight).To(Equal(int64(100)))
+			Expect(output.Metadata).To(Equal(map[string]string{"k": "v"}))
 		})
 	})
 

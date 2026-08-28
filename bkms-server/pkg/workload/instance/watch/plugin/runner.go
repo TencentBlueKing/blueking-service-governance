@@ -68,10 +68,16 @@ func (r *Runner) Run(ctx context.Context, snapshot []*serializer.AppInstanceOutp
 		return nil
 	}
 
+	// 抽出插件快照后再逐个 Fetch；各插件共用这一份，改字段碰不到 pushed
+	views := make([]InstanceSnapshot, 0, len(snapshot))
+	for _, inst := range snapshot {
+		views = append(views, InstanceSnapshot{ID: inst.ID, IP: inst.IP})
+	}
+
 	for _, p := range r.plugins {
 		// 拉取失败（含超时）按「本轮不可用」处理：不推事件、不拆流、不动已推送记录
 		// 失败被这里吞掉，不会体现在响应里，只能靠日志与 metrics 排查
-		payloads, err := r.fetch(ctx, p, snapshot)
+		payloads, err := r.fetch(ctx, p, views)
 		if err != nil {
 			log.WarnAttrs(ctx, "watch plugin fetch failed, skip this round",
 				slog.String("plugin", p.Name()),
@@ -85,7 +91,7 @@ func (r *Runner) Run(ctx context.Context, snapshot []*serializer.AppInstanceOutp
 
 		metrics.InstanceWatchPluginFetch(p.Name(), true)
 
-		if err = r.emitChanged(p.Name(), snapshot, payloads, emit); err != nil {
+		if err = r.emitChanged(p.Name(), views, payloads, emit); err != nil {
 			return err
 		}
 	}
@@ -93,21 +99,16 @@ func (r *Runner) Run(ctx context.Context, snapshot []*serializer.AppInstanceOutp
 	return nil
 }
 
-// fetch 带超时地拉一轮；快照按值交给插件，避免改顶层字段污染 pushed
+// fetch 带超时地拉一轮
 func (r *Runner) fetch(
 	ctx context.Context,
 	p Plugin,
-	snapshot []*serializer.AppInstanceOutputObj,
+	snapshot []InstanceSnapshot,
 ) (map[string]any, error) {
 	fetchCtx, cancel := context.WithTimeout(ctx, r.fetchTimeout)
 	defer cancel()
 
-	copied := make([]serializer.AppInstanceOutputObj, len(snapshot))
-	for i, inst := range snapshot {
-		copied[i] = *inst
-	}
-
-	payloads, err := p.Fetch(fetchCtx, copied)
+	payloads, err := p.Fetch(fetchCtx, snapshot)
 	if err != nil {
 		return nil, errors.Wrapf(err, "fetch plugin %s", p.Name())
 	}
@@ -118,7 +119,7 @@ func (r *Runner) fetch(
 // emitChanged 按快照顺序比对单个插件的本轮结果，仅差异才推
 func (r *Runner) emitChanged(
 	name string,
-	snapshot []*serializer.AppInstanceOutputObj,
+	snapshot []InstanceSnapshot,
 	payloads map[string]any,
 	emit Emit,
 ) error {

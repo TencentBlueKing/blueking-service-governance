@@ -37,6 +37,7 @@ import (
 	k8swatch "k8s.io/apimachinery/pkg/watch"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/watch/plugin"
 )
 
 var testParams = RunParams{DeployID: "deploy-1", ResourceVersion: "100"}
@@ -92,7 +93,7 @@ func (s *stubPlugin) Name() string { return s.name }
 
 func (s *stubPlugin) Fetch(
 	_ context.Context,
-	snapshot []serializer.AppInstanceOutputObj,
+	snapshot []plugin.InstanceSnapshot,
 ) (map[string]any, error) {
 	ids := make([]string, 0, len(snapshot))
 	for _, instance := range snapshot {

@@ -35,19 +35,14 @@ type fakePlugin struct {
 	calls   int
 	rounds  []map[string]any
 	failAll bool
-	mutate  func([]serializer.AppInstanceOutputObj)
-	lastIP  string
+	mutate  func([]InstanceSnapshot)
 }
 
 func (f *fakePlugin) Name() string { return f.name }
 
-func (f *fakePlugin) Fetch(_ context.Context, snapshot []serializer.AppInstanceOutputObj) (map[string]any, error) {
+func (f *fakePlugin) Fetch(_ context.Context, snapshot []InstanceSnapshot) (map[string]any, error) {
 	if f.mutate != nil {
 		f.mutate(snapshot)
-	}
-
-	if len(snapshot) > 0 {
-		f.lastIP = snapshot[0].IP
 	}
 
 	if f.failAll {
@@ -69,7 +64,7 @@ func (p *blockUntilCancelPlugin) Name() string { return p.name }
 
 func (p *blockUntilCancelPlugin) Fetch(
 	ctx context.Context,
-	_ []serializer.AppInstanceOutputObj,
+	_ []InstanceSnapshot,
 ) (map[string]any, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
@@ -210,23 +205,21 @@ var _ = Describe("Runner", func() {
 		Expect(events).To(BeEmpty())
 	})
 
-	// 按值拷贝后再交给插件：改顶层字段既碰不到调用方快照，也影响不到后续插件
-	It("isolates snapshot mutations across plugins and the caller", func() {
+	// 插件快照是抽出的值拷贝，改 IP 碰不到调用方的投影对象
+	It("does not let plugin mutations reach the caller snapshot", func() {
 		mut := &fakePlugin{
 			name:   "mut",
 			rounds: []map[string]any{{"a": []string{"x"}}},
-			mutate: func(snapshot []serializer.AppInstanceOutputObj) {
+			mutate: func(snapshot []InstanceSnapshot) {
 				snapshot[0].IP = "hacked"
 			},
 		}
-		read := &fakePlugin{name: "read", rounds: []map[string]any{{"a": []string{"y"}}}}
 		snapshot := snapshotOf("a")
 		snapshot[0].IP = "10.0.0.1"
 
 		var events []serializer.AppInstancePluginWatchEvent
-		Expect(NewRunner(mut, read).Run(ctx, snapshot, collect(&events))).To(Succeed())
+		Expect(NewRunner(mut).Run(ctx, snapshot, collect(&events))).To(Succeed())
 
 		Expect(snapshot[0].IP).To(Equal("10.0.0.1"))
-		Expect(read.lastIP).To(Equal("10.0.0.1"))
 	})
 })
