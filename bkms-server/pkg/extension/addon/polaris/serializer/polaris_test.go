@@ -83,6 +83,20 @@ var _ = Describe("PolarisConfigOutputObj", func() {
 			Expect(out.EnvStates).To(BeEmpty())
 			Expect(out.EnvWeights).ToNot(BeNil())
 			Expect(out.EnvWeights).To(BeEmpty())
+			Expect(out.EnvDynamicWeights).ToNot(BeNil())
+			Expect(out.EnvDynamicWeights).To(BeEmpty())
+		})
+
+		It("should echo both levels of the dynamic weight switches", func() {
+			config := polaris.PolarisConfig{
+				ScopeEnvNames:     []string{"dev", "staging"},
+				Properties:        polaris.Properties{EnableWeightFactor: true},
+				EnvDynamicWeights: map[string]bool{"dev": true, "staging": false},
+			}
+
+			out := new(serializer.PolarisConfigOutputObj).FromModel(config, nil)
+			Expect(out.EnableWeightFactor).To(BeTrue())
+			Expect(out.EnvDynamicWeights).To(Equal(map[string]bool{"dev": true, "staging": false}))
 		})
 
 		It("should synthesize pending-create states for scoped environments without snapshots", func() {

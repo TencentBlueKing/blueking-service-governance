@@ -26,6 +26,7 @@ import (
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -313,6 +314,105 @@ var _ = Describe("PolarisConfigService", func() {
 		})
 	})
 
+	Describe("Weight factor", func() {
+		It("should persist the switch on create", func() {
+			config := newTestConfig(app.ID, "cfg-weight-factor-create", []string{environment.Name}, nil)
+			config.EnableWeightFactor = true
+			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+
+			stored, err := store.Get(ctx, app.ID, config.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored.EnableWeightFactor).To(BeTrue())
+			// 动态权重开关不随环境加入 scope 预建，缺省即关闭
+			Expect(stored.EnvDynamicWeights).To(BeEmpty())
+		})
+
+		It("should default the switch to off when create omits it", func() {
+			config := newTestConfig(app.ID, "cfg-weight-factor-default", []string{environment.Name}, nil)
+			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+
+			stored, err := store.Get(ctx, app.ID, config.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored.EnableWeightFactor).To(BeFalse())
+		})
+
+		It("should enqueue dynamic apply when the switch is turned on", func() {
+			enqueued := 0
+			service = polaris.NewPolarisConfigService(
+				store,
+				polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+				envStateManager,
+				envStore,
+				appModelStore,
+				envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+				func(_ context.Context, _, _, _ string) error {
+					enqueued++
+					return nil
+				},
+			)
+
+			applied := redeployFields("k1", "t1", 8080)
+			config := newTestConfig(
+				app.ID,
+				"cfg-weight-factor-apply",
+				[]string{environment.Name},
+				map[string]polaris.PolarisEnvState{environment.Name: envState(applied)},
+			)
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			enabled := true
+			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				EnableWeightFactor: &enabled,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnableWeightFactor).To(BeTrue())
+			// 该字段只落 CR、不进部署快照，因此无需重新部署即可下发
+			Expect(enqueued).To(Equal(1))
+			Expect(updated.GetEnvState(environment.Name).AppliedFields).To(Equal(applied))
+		})
+
+		It("should keep the environment switches when turned off", func() {
+			config := newTestConfig(
+				app.ID,
+				"cfg-weight-factor-off",
+				[]string{environment.Name, otherEnvironment.Name},
+				nil,
+			)
+			config.EnableWeightFactor = true
+			config.EnvDynamicWeights = map[string]bool{
+				environment.Name:      true,
+				otherEnvironment.Name: true,
+			}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			disabled := false
+			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				EnableWeightFactor: &disabled,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnableWeightFactor).To(BeFalse())
+			// 环境级开关是用户意图的记录，关闭配置级开关不改写它们
+			Expect(updated.EnvDynamicWeights).To(Equal(map[string]bool{
+				environment.Name:      true,
+				otherEnvironment.Name: true,
+			}))
+		})
+
+		It("should restore the environment switches when turned back on", func() {
+			config := newTestConfig(app.ID, "cfg-weight-factor-restore", []string{environment.Name}, nil)
+			config.EnvDynamicWeights = map[string]bool{environment.Name: true}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			enabled := true
+			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				EnableWeightFactor: &enabled,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnableWeightFactor).To(BeTrue())
+			Expect(updated.EnvDynamicWeights).To(Equal(map[string]bool{environment.Name: true}))
+		})
+	})
+
 	Describe("Environment weights", func() {
 		It("should persist a pending environment weight without touching deployment state", func() {
 			config := newTestConfig(
@@ -323,7 +423,7 @@ var _ = Describe("PolarisConfigService", func() {
 			)
 			Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
-			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 0)
+			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.EnvWeights).To(Equal(map[string]int32{environment.Name: 0}))
@@ -416,7 +516,7 @@ var _ = Describe("PolarisConfigService", func() {
 			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
 				mockPolarisDiscoveryFailure()
 
-				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 0)
+				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 0, nil)
 				Expect(err).To(MatchError(ContainSubstring("patch env weight")))
 				Expect(updated).To(BeNil())
 				stored, getErr := store.Get(ctx, app.ID, config.Name)
@@ -446,7 +546,7 @@ var _ = Describe("PolarisConfigService", func() {
 			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
 				mockPolarisDiscoveryFailure()
 
-				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 25)
+				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 25, nil)
 				Expect(err).To(MatchError(ContainSubstring("patch env weight")))
 				Expect(updated).To(BeNil())
 				stored, getErr := store.Get(ctx, app.ID, config.Name)
@@ -454,6 +554,150 @@ var _ = Describe("PolarisConfigService", func() {
 				Expect(stored.EnvWeights[environment.Name]).To(Equal(int32(20)))
 				Expect(stored.GetEnvState(environment.Name).LastError).To(BeEmpty())
 			})
+		})
+	})
+
+	Describe("Environment dynamic weights", func() {
+		It("should persist the switch of an undeployed environment without any cluster call", func() {
+			config := newTestConfig(app.ID, "cfg-dynamic-weight-pending", []string{environment.Name}, nil)
+			config.EnableWeightFactor = true
+			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+
+			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 80, lo.ToPtr(true))
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnvWeights[environment.Name]).To(Equal(int32(80)))
+			Expect(updated.EnvDynamicWeights).To(Equal(map[string]bool{environment.Name: true}))
+			Expect(polaris.PolarisEnvStatus(
+				updated, environment.Name, updated.GetEnvState(environment.Name),
+			)).To(Equal(polaris.PolarisEnvStatusPendingCreate))
+		})
+
+		It("should keep the switch untouched when the request omits it", func() {
+			config := newTestConfig(app.ID, "cfg-dynamic-weight-omitted", []string{environment.Name}, nil)
+			config.EnableWeightFactor = true
+			config.EnvDynamicWeights = map[string]bool{environment.Name: true}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 60, nil)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnvWeights[environment.Name]).To(Equal(int32(60)))
+			Expect(updated.EnvDynamicWeights[environment.Name]).To(BeTrue())
+		})
+
+		It("should drop the switch when an undeployed environment leaves scope", func() {
+			config := newTestConfig(app.ID, "cfg-dynamic-weight-drop", []string{environment.Name}, nil)
+			config.EnableWeightFactor = true
+			config.EnvDynamicWeights = map[string]bool{environment.Name: true}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnvDynamicWeights).NotTo(HaveKey(environment.Name))
+		})
+
+		It("should retain and reuse the switch when a deployed environment leaves and returns to scope", func() {
+			// 快照与当前配置不一致，回到 scope 时不会触发动态下发
+			applied := redeployFields("old-key", "t1", 8080)
+			config := newTestConfig(
+				app.ID,
+				"cfg-dynamic-weight-retain",
+				[]string{environment.Name},
+				map[string]polaris.PolarisEnvState{environment.Name: envState(applied)},
+			)
+			config.EnableWeightFactor = true
+			config.EnvDynamicWeights = map[string]bool{environment.Name: true}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			removed, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(removed.EnvDynamicWeights[environment.Name]).To(BeTrue())
+
+			readded, err := service.Update(ctx, app, removed, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{environment.Name},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(readded.EnvDynamicWeights[environment.Name]).To(BeTrue())
+		})
+
+		// 已部署环境走即时 Patch。集群侧的断言在带 k8s 标签的用例里，本机无集群时会跳过，
+		// 所以这里直接拦下 applier，校验 service 算出的下发值。
+		patchedDynamicWeight := func(
+			configName string, weightFactor bool, stored, requested *bool,
+		) bool {
+			applied := redeployFields("k1", "t1", 8080)
+			config := newTestConfig(
+				app.ID,
+				configName,
+				[]string{environment.Name},
+				map[string]polaris.PolarisEnvState{environment.Name: envState(applied)},
+			)
+			config.EnableWeightFactor = weightFactor
+			if stored != nil {
+				config.EnvDynamicWeights = map[string]bool{environment.Name: *stored}
+			}
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			var patched bool
+			mockey.Mock((*polaris.CRApplier).PatchWeight).To(func(
+				_ *polaris.CRApplier,
+				_ context.Context,
+				_ *bkmsapp.Application,
+				_ *bkmsenv.Environment,
+				_ *polaris.PolarisConfig,
+				_ int32,
+				dynamicWeight bool,
+			) error {
+				patched = dynamicWeight
+				return nil
+			}).Build()
+
+			_, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 40, requested)
+			Expect(err).NotTo(HaveOccurred())
+			return patched
+		}
+
+		It("should patch the requested switch while the weight factor is on", func() {
+			mockey.PatchConvey("capture the patched dynamic weight", GinkgoT(), func() {
+				Expect(patchedDynamicWeight(
+					"cfg-dynamic-weight-patch-on", true, nil, lo.ToPtr(true),
+				)).To(BeTrue())
+			})
+		})
+
+		It("should patch the requested switch even while the weight factor is off", func() {
+			mockey.PatchConvey("capture the patched dynamic weight", GinkgoT(), func() {
+				Expect(patchedDynamicWeight(
+					"cfg-dynamic-weight-patch-gated", false, nil, lo.ToPtr(true),
+				)).To(BeTrue())
+			})
+		})
+
+		It("should patch the stored switch when the request omits it", func() {
+			mockey.PatchConvey("capture the patched dynamic weight", GinkgoT(), func() {
+				Expect(patchedDynamicWeight(
+					"cfg-dynamic-weight-patch-omitted", true, lo.ToPtr(true), nil,
+				)).To(BeTrue())
+			})
+		})
+
+		It("should not pre-create a default switch for an environment joining scope", func() {
+			config := newTestConfig(app.ID, "cfg-dynamic-weight-no-default", []string{environment.Name}, nil)
+			config.EnableWeightFactor = true
+			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+
+			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{environment.Name, otherEnvironment.Name},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			// 权重补默认值，动态权重开关缺省即关闭，不预建条目
+			Expect(updated.EnvWeights).To(HaveKey(otherEnvironment.Name))
+			Expect(updated.EnvDynamicWeights).To(BeEmpty())
 		})
 	})
 

@@ -22140,6 +22140,10 @@ const docTemplate = `{
                     "description": "是否启用健康检查，默认 false",
                     "type": "boolean"
                 },
+                "enableWeightFactor": {
+                    "description": "是否启用权重因子，默认 false。开启后北极星按实例机型标记权重因子，\n各环境还需单独开启动态权重才会真正按机型分流",
+                    "type": "boolean"
+                },
                 "instanceKey": {
                     "description": "组件实例标识，用于环境变量拼接，只能包含字母、数字、下划线",
                     "type": "string"
@@ -27106,6 +27110,10 @@ const docTemplate = `{
                     "description": "是否启用健康检查（可选更新）",
                     "type": "boolean"
                 },
+                "enableWeightFactor": {
+                    "description": "是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值",
+                    "type": "boolean"
+                },
                 "instanceKey": {
                     "description": "组件实例标识（可选更新）",
                     "type": "string"
@@ -27337,6 +27345,17 @@ const docTemplate = `{
                 "enableHealthCheck": {
                     "description": "是否启用健康检查",
                     "type": "boolean"
+                },
+                "enableWeightFactor": {
+                    "description": "是否启用权重因子（开启后才能为单个环境开启动态权重）",
+                    "type": "boolean"
+                },
+                "envDynamicWeights": {
+                    "description": "各环境是否开启动态权重，key 为环境名称；未出现的环境表示未开启",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "boolean"
+                    }
                 },
                 "envStates": {
                     "description": "各环境中已经生效的关键字段、下发错误和部署状态",
@@ -28250,6 +28269,10 @@ const docTemplate = `{
                 "weight"
             ],
             "properties": {
+                "dynamicWeight": {
+                    "description": "该环境是否开启动态权重，不传表示保持原值。\n开启后上面的权重作为动态调权的基准权重",
+                    "type": "boolean"
+                },
                 "weight": {
                     "description": "单实例权重，取值范围 0-10000",
                     "type": "integer",
@@ -28273,9 +28296,6 @@ const docTemplate = `{
         },
         "serializer.PutHostPortsInput": {
             "type": "object",
-            "required": [
-                "ports"
-            ],
             "properties": {
                 "ports": {
                     "type": "array",

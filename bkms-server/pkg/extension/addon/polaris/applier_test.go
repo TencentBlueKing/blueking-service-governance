@@ -26,6 +26,7 @@ import (
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	corev1 "k8s.io/api/core/v1"
@@ -129,7 +130,7 @@ var _ = Describe("Polaris CR applier", func() {
 		mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
 			mockPolarisDiscoveryFailure()
 
-			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 20)
+			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 20, nil)
 			Expect(err).To(MatchError(ContainSubstring("patch env weight")))
 			Expect(updated).To(BeNil())
 			stored, getErr := store.Get(ctx, app.ID, config.Name)
@@ -236,7 +237,7 @@ var _ = Describe("Polaris CR applier", func() {
 			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
 				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 
-				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 20)
+				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 20, nil)
 				Expect(updateErr).To(MatchError(ContainSubstring("patch env weight")))
 				Expect(updated).To(BeNil())
 
@@ -258,7 +259,7 @@ var _ = Describe("Polaris CR applier", func() {
 			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
 				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 
-				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 0)
+				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 0, nil)
 				Expect(updateErr).NotTo(HaveOccurred())
 				Expect(updated.EnvWeights[clusterEnv.Name]).To(BeZero())
 
@@ -277,6 +278,93 @@ var _ = Describe("Polaris CR applier", func() {
 				state := updated.GetEnvState(clusterEnv.Name)
 				Expect(state.LastError).To(Equal("previous error"))
 				Expect(state.AppliedFields).To(Equal(applied))
+			})
+		})
+
+		It("should patch the dynamic weight switch together with the weight", func() {
+			enabled := true
+			Expect(store.Update(ctx, app.ID, config.Name, &polaris.ConfigUpdateData{
+				EnableWeightFactor: &enabled,
+			})).To(Succeed())
+			stored, err := store.Get(ctx, app.ID, config.Name)
+			Expect(err).NotTo(HaveOccurred())
+
+			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
+				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
+
+				updated, updateErr := service.UpdateEnvWeight(
+					ctx, app, stored, clusterEnv.Name, 100, lo.ToPtr(true),
+				)
+				Expect(updateErr).NotTo(HaveOccurred())
+				Expect(updated.EnvWeights[clusterEnv.Name]).To(Equal(int32(100)))
+				Expect(updated.EnvDynamicWeights[clusterEnv.Name]).To(BeTrue())
+
+				obj, getErr := client.Get(ctx, "default", crName, metav1.GetOptions{})
+				Expect(getErr).NotTo(HaveOccurred())
+				currentService := mapx.GetList(obj.Object, "spec.services")[0].(map[string]any)
+				Expect(mapx.GetInt64(currentService, "weight")).To(BeEquivalentTo(100))
+				Expect(mapx.GetBool(obj.Object, "spec.polaris.dynamicWeight.enable")).To(BeTrue())
+				Expect(mapx.GetBool(obj.Object, "spec.polaris.dynamicWeight.preserveServiceConfig")).To(BeTrue())
+
+				// 关闭开关时同样是整对象替换，preserveServiceConfig 保持下发
+				updated, updateErr = service.UpdateEnvWeight(
+					ctx, app, updated, clusterEnv.Name, 100, lo.ToPtr(false),
+				)
+				Expect(updateErr).NotTo(HaveOccurred())
+				Expect(updated.EnvDynamicWeights[clusterEnv.Name]).To(BeFalse())
+
+				obj, getErr = client.Get(ctx, "default", crName, metav1.GetOptions{})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(mapx.GetBool(obj.Object, "spec.polaris.dynamicWeight.enable")).To(BeFalse())
+				Expect(mapx.GetBool(obj.Object, "spec.polaris.dynamicWeight.preserveServiceConfig")).To(BeTrue())
+			})
+		})
+
+		It("should keep the patched dynamic weight untouched when the request omits it", func() {
+			enabled := true
+			Expect(store.Update(ctx, app.ID, config.Name, &polaris.ConfigUpdateData{
+				EnableWeightFactor: &enabled,
+			})).To(Succeed())
+			stored, err := store.Get(ctx, app.ID, config.Name)
+			Expect(err).NotTo(HaveOccurred())
+
+			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
+				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
+
+				updated, updateErr := service.UpdateEnvWeight(
+					ctx, app, stored, clusterEnv.Name, 100, lo.ToPtr(true),
+				)
+				Expect(updateErr).NotTo(HaveOccurred())
+
+				// 只调权重的请求不得把 CR 上已开启的开关顺手关掉
+				updated, updateErr = service.UpdateEnvWeight(
+					ctx, app, updated, clusterEnv.Name, 50, nil,
+				)
+				Expect(updateErr).NotTo(HaveOccurred())
+				Expect(updated.EnvDynamicWeights[clusterEnv.Name]).To(BeTrue())
+
+				obj, getErr := client.Get(ctx, "default", crName, metav1.GetOptions{})
+				Expect(getErr).NotTo(HaveOccurred())
+				currentService := mapx.GetList(obj.Object, "spec.services")[0].(map[string]any)
+				Expect(mapx.GetInt64(currentService, "weight")).To(BeEquivalentTo(50))
+				Expect(mapx.GetBool(obj.Object, "spec.polaris.dynamicWeight.enable")).To(BeTrue())
+			})
+		})
+
+		It("should patch the dynamic weight even when the weight factor is off", func() {
+			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
+				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
+
+				// 配置级开关不参与 CR 组装，环境开关照常落库并下发
+				updated, updateErr := service.UpdateEnvWeight(
+					ctx, app, config, clusterEnv.Name, 40, lo.ToPtr(true),
+				)
+				Expect(updateErr).NotTo(HaveOccurred())
+				Expect(updated.EnvDynamicWeights[clusterEnv.Name]).To(BeTrue())
+
+				obj, getErr := client.Get(ctx, "default", crName, metav1.GetOptions{})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(mapx.GetBool(obj.Object, "spec.polaris.dynamicWeight.enable")).To(BeTrue())
 			})
 		})
 
@@ -339,7 +427,7 @@ var _ = Describe("Polaris CR applier", func() {
 			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
 				mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 
-				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 25)
+				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 25, nil)
 				Expect(updateErr).To(MatchError(ContainSubstring("patch env weight")))
 				Expect(updated).To(BeNil())
 				stored, getErr := store.Get(ctx, app.ID, config.Name)

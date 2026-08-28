@@ -61,11 +61,37 @@ type RedeployRequiredFields struct {
 - `direct`
 - `keepNotReadyPod`
 - `enableHealthCheck`
+- `enableWeightFactor`
 - `serviceLabels`
 
 一次 PATCH 可以同时改两类字段。系统不去分析请求里具体改了哪些字段，只看**改完之后**的三个部署关联字段和环境快照是否还一致。
 
 环境权重不再属于配置 PATCH。它只能通过环境级 PUT 修改，并走独立的 JSON Patch 下发路径。
+
+### 2.3 权重因子与 spec.polaris.dynamicWeight
+
+动态权重是两级开关：配置级的 `enableWeightFactor` 决定用户能否为这个北极星配置启用权重因子，环境级的 `envDynamicWeights[env]` 决定具体哪些环境开。
+
+CR 上的 `dynamicWeight.enable` **直接取环境级开关**，平台不再叠加 `enableWeightFactor` 做二次判断。两级开关的组合关系在用户输入侧就已经决定，下发时照搬结果即可。这样即使出现「总开关关着、某环境开关仍为 `true`」的组合，平台也照常下发 `enable: true`：`preserveServiceConfig` 固定为 `true` 时 operator 只给实例打权重因子标记，是否真的按机型调权取决于北极星服务侧的 `internal-enable-dynamic-weight`（见下文），因此这个组合不会造成实际影响，不值得为它在两条下发路径上各写一次判断。
+
+关闭 `enableWeightFactor` 不清理环境级开关：它们记录的是用户对每个环境的意图，重新打开后各环境按原样恢复。
+
+两级开关都不进部署快照，所以按 §2.2 的规则可以动态下发。
+
+CR 片段的形状很简单，且**始终下发**：
+
+```json
+{"enable": "<envDynamicWeights[env]，缺省 false>", "preserveServiceConfig": true}
+```
+
+关闭时下发 `enable: false`，而不是省略 `dynamicWeight` 这个键。省略的做法看起来更干净，但清理要靠 Server-Side Apply 回收字段——SSA 只删「本 FieldManager 通过 Apply 拥有、本次又省略」的字段，而环境级即时下发走的是 `types.JSONPatchType`，属于 Update 类操作，会把 `/spec/polaris/dynamicWeight` 的所有权转出 `bkms-server` 的 Apply 条目。一旦某个环境用过即时下发，后续关闭开关时 SSA 就删不掉这个字段，CR 上会残留 `enable: true`。让字段常驻可以让值始终反映真实状态，不依赖 SSA 的删除语义。
+
+部署下发（`workload.go`）与环境级 JSON Patch（`applier.go`）各自拼这个片段，两处必须保持一致。部署侧直接取 `cfg.EnvDynamicWeights[env]`；PUT 侧用 `lo.FromPtrOr(dynamicWeight, config.EnvDynamicWeights[envName])`：请求带了新值就用新值，没带则沿用库中现值。
+
+平台只下发这两个字段，公式参数（`func` / `a` / `b` / `min` / `max`）既不存储也不下发，原因有两条：
+
+- `preserveServiceConfig` 固定为 `true`，operator 因此只给实例标记权重因子，不改写北极星服务上的服务级配置（`internal-enable-dynamic-weight`、`internal-dynamic-weight-config`）。平台对北极星服务的配置由平台自己维护，不被底层控制器覆盖；相应地，服务级的动态权重开关与公式需要在北极星侧自行配置。
+- CRD 规定 `preserveServiceConfig=true` 时公式参数必须留空。即便要下发，产品要求的默认值 `{"func":"linear","params":{"a":1,"b":1,"min":-1,"max":1.5}}` 也逐项等于 CRD 字段默认值，平台没有理由再维护一份。
 
 ## 3. 能不能动态下发完整 CR
 
@@ -100,14 +126,15 @@ AND AppliedFields == DesiredFields  // 部署关联字段没变
 
 ## 4. 环境维度的数据
 
-PolarisConfig 用环境名做 key 存两份环境级数据：
+PolarisConfig 用环境名做 key 存三份环境级数据：
 
 ```go
 type PolarisConfig struct {
     // ...其他字段
-    ScopeEnvNames []string                   // 生效环境
-    EnvStates     map[string]PolarisEnvState // 部署快照 + 下发错误
-    EnvWeights    map[string]int32           // 单环境权重
+    ScopeEnvNames     []string                   // 生效环境
+    EnvStates         map[string]PolarisEnvState // 部署快照 + 下发错误
+    EnvWeights        map[string]int32           // 单环境权重
+    EnvDynamicWeights map[string]bool            // 单环境动态权重开关
 }
 
 type PolarisEnvState struct {
@@ -125,10 +152,16 @@ type PolarisEnvState struct {
 | `LastError` | 最近一次异步动态下发的错误；部署完成或下发成功后清空 |
 | `UpdatedAt` | 环境信息更新时间，由 Store 统一写 |
 | `EnvWeights[env]` | 该环境的单实例权重；没有这一项时固定回退到 `DefaultEnvWeight = 100` |
+| `EnvDynamicWeights[env]` | 该环境是否按机型动态调权；没有这一项时按关闭处理 |
 
 创建配置时不需要为 scope 里的环境预建 `EnvStates`。Go 读 map 里不存在的 key 会拿到零值（`AppliedFields == nil`），所以判定逻辑不用区分"没有这条记录"和"有记录但没部署过"。
 
 判断是否部署过统一走 `PolarisEnvState.IsDeployed()`，不要直接比 `AppliedFields != nil`。
+
+`EnvDynamicWeights` 与 `EnvWeights` 同属「环境级配置」——由用户按环境设置、共享同一套清理时机（见 §8.2），在 store 层由 `envSettingFields` 统一登记、`RemoveEnvSettings` 一起清理。两者只有两点不同：
+
+- **加入 scope 时不预建默认值**。权重必须有个具体数值才能下发，所以补 `100`；动态权重开关缺省即关闭，预建 `false` 只会多出一条无意义的记录，新环境自动按关闭处理更安全。
+- **独立决定 CR 上的开关**。它的取值直接下发为 `dynamicWeight.enable`，不与配置级 `enableWeightFactor` 做二次组合；关闭后者也不会清除这里的取值（见 §2.3）。
 
 ## 5. 三个组件的分工
 
@@ -164,16 +197,18 @@ Service 不含资源构建算法，也不含环境状态算法。托管服务的
 
 ### PolarisEnvStateManager
 
-管环境快照、权重生命周期和下发结果：
+管环境快照、环境级设置的生命周期和下发结果：
 
-- `reconcileEnvWeightsForScope`：规范化 `envWeights`（补默认值、清理离域项）；`immediate` 配置离域即删权重，因为它没有"等下次部署清理"这个阶段；
+- `reconcileEnvSettingsForScope`：规范化 `envWeights` 与 `envDynamicWeights`（清理离域项，只给权重补默认值）；`immediate` 配置离域即删，因为它没有"等下次部署清理"这个阶段；
 - `PrepareDynamicApply`：清掉没有部署事实的离域 `EnvState`，返回可动态下发的环境名；
 - `PolarisConfig.EnvNamesOutsideScope` / `TrackedEnvNames`：离域环境、以及 scope ∪ 仍有记录的环境；
 - `RecordDynamicApplyResult`：仅在配置顶层 `UpdatedAt` 仍匹配时记录该环境下发结果，版本已变则跳过；
 - `RecordImmediateApplyResult`：记录 `immediate` 下发结果，成功时一并写 `AppliedFields`；
-- `ReleaseEnv`：`immediate` 配置的集群资源删干净后，移除该环境的 `EnvState` 与 `envWeights`；
+- `ReleaseEnv`：`immediate` 配置的集群资源删干净后，移除该环境的 `EnvState` 与环境级设置；
 - `ReconcileAfterDeploy`：部署完成后写 `AppliedFields`，或清理离域数据；
-- `ReconcileAfterUninstall`：卸载完成后删 `EnvState`，离域时连 `envWeights` 一起删。
+- `ReconcileAfterUninstall`：卸载完成后删 `EnvState`，离域时连环境级设置一起删。
+
+`envWeights` 与 `envDynamicWeights` 的清理时机完全一致，三处清理点统一调 `store.RemoveEnvSettings`，避免将来只改了一半。
 
 另外还提供两个纯函数供 serializer 计算展示状态：`PolarisEnvStatus` 和 `PolarisTokenChanged`。
 
@@ -184,7 +219,7 @@ Manager 不持有请求级状态，可以同时注入给 API Service 和 AppMode
 只管单次下发：
 
 - `Apply` 复用和应用部署相同的资源构建函数，再按调用方声明的 kind 过滤后 Upsert：on_deploy 动态下发只推 PolarisConfig CR，immediate 还要推配套 Service；
-- 权重 PUT 生成只包含 service-name `test` 和 weight `add` 的 JSON Patch；
+- 权重 PUT 生成只包含 service-name `test`、weight `add`，以及可选的 `dynamicWeight` `add` 的 JSON Patch；
 - `immediate` 配置删除或离域时 `DeleteResources` 按资源名删掉 CR 与 Service；
 - 所有路径都解析目标集群的 GVR，但权重路径使用 `types.JSONPatchType`，不会替换 `services` 数组。
 
@@ -288,17 +323,17 @@ sequenceDiagram
     participant K8s as Kubernetes
 
     API->>API: 校验 inScope 或 IsDeployed
-    API->>Service: UpdateEnvWeight(envName, weight)
+    API->>Service: UpdateEnvWeight(envName, weight, dynamicWeight)
     alt 尚未部署但在 scope
-        Service->>Store: $set envWeights.envName
+        Service->>Store: $set envWeights.envName + envDynamicWeights.envName
         Service->>Store: 读回最新配置
         Service-->>API: 返回配置（200）
     else 已部署（含 pendingModify / pendingDelete）
-        Service->>Applier: patchWeight(weight)（同步）
-        Applier->>K8s: JSON Patch test service name + add weight
+        Service->>Applier: patchWeight(weight, dynamicWeight)（同步）
+        Applier->>K8s: JSON Patch test service name + add weight (+ add dynamicWeight)
         alt Patch 成功
             Applier-->>Service: nil
-            Service->>Store: $set envWeights.envName
+            Service->>Store: $set envWeights.envName + envDynamicWeights.envName
             Service->>Store: 读回最新配置
             Service-->>API: 返回配置（200）
         else Patch 失败
@@ -310,6 +345,12 @@ sequenceDiagram
 ```
 
 JSON Patch 固定针对 `/spec/services/0`：先 `test /spec/services/0/name`，再 `add /spec/services/0/weight`。`add` 同时兼容 weight 字段存在和不存在。PUT 会等待本次同步尝试完成；service 名不匹配、CR 不存在或集群调用失败时记录错误日志并返回 500，不持久化新权重，也不修改 `LastError`。Patch 成功后才持久化并记录配置变更审计，返回 200，已有的 `LastError` 保持不变。Kubernetes 与 MongoDB 不具备跨系统事务；若 Patch 成功后持久化失败，接口记录错误并返回 500，此时集群权重可能已变化，后续重试可重新收敛。
+
+Patch 固定带第三个 operation `add /spec/polaris/dynamicWeight`，权重与开关一次提交，不会出现权重已变、开关未变的中间态。这里替换的是整个 `dynamicWeight` 对象而不是它的 `enable` 子路径：存量 CR 可能还没有 `dynamicWeight` 父节点，子路径的 `add` 会直接失败。
+
+下发值取 `lo.FromPtrOr(dynamicWeight, config.EnvDynamicWeights[envName])`：请求带了 `dynamicWeight` 就用请求值，没带则沿用库中现值，因此「只调权重」不会改变 CR 上的开关，同时顺带把存量 CR 缺失的片段补齐。
+
+**接口不因 `enableWeightFactor` 关闭而拒绝写入环境级开关**，也不因此改变下发值（见 §2.3）。请求不带 `dynamicWeight` 时不写库，开关保持原值，旧客户端行为不变。
 
 ## 7. 部署和卸载之后
 
@@ -324,7 +365,7 @@ PolarisEnvStateManager.ReconcileAfterDeploy(ctx, app, env)
 Manager 遍历该应用下所有 PolarisConfig：
 
 - 配置在这个环境仍然生效：写入 `AppliedFields`，清空 `LastError`；
-- 配置已经不在这个环境生效：删掉该环境的 `EnvState` 和 `envWeights`。
+- 配置已经不在这个环境生效：删掉该环境的 `EnvState`、`envWeights` 和 `envDynamicWeights`。
 
 这一步在完整资源下发之后执行，所以 `AppliedFields` 代表的是"部署流程处理过的配置"，而不是某次动态 CR 更新的结果。
 
@@ -336,9 +377,9 @@ Manager 遍历该应用下所有 PolarisConfig：
 PolarisEnvStateManager.ReconcileAfterUninstall(ctx, app, envName)
 ```
 
-Manager 从该应用所有 PolarisConfig 里删掉这个环境的 `EnvState`。`envWeights` 则看环境是否还在 scope 内：
+Manager 从该应用所有 PolarisConfig 里删掉这个环境的 `EnvState`。`envWeights` 和 `envDynamicWeights` 则看环境是否还在 scope 内：
 
-- **还在 scope 内**：保留权重，下次部署继续用；
+- **还在 scope 内**：保留权重与动态权重开关，下次部署继续用；
 - **已经离域**：一起删掉。
 
 这两个同步动作都在部署/卸载主体完成后执行，同步失败只记日志，不影响部署或卸载的最终结果。
@@ -348,21 +389,21 @@ Manager 从该应用所有 PolarisConfig 里删掉这个环境的 `EnvState`。`
 ### 8.1 环境加入 scope
 
 - 一般情况下还没有 `AppliedFields`，要等这个环境首次部署才建立快照；
-- 如果这个环境之前是"已部署状态离开 scope"且还没被清理，会直接复用原有的 `AppliedFields` 和 `envWeights`；
-- 否则 `reconcileEnvWeightsForScope` 给它补上固定默认权重 `100`。
+- 如果这个环境之前是"已部署状态离开 scope"且还没被清理，会直接复用原有的 `AppliedFields`、`envWeights` 和 `envDynamicWeights`；
+- 否则 `reconcileEnvSettingsForScope` 给它补上固定默认权重 `100`，动态权重开关不预建、缺省即关闭。
 
 ### 8.2 环境离开 scope
 
-`EnvStates` 和 `envWeights` 共享同一套生命周期：
+`EnvStates`、`envWeights` 和 `envDynamicWeights` 共享同一套生命周期：
 
 | 环境状态 | 离开 scope 时 | 最终清理时机 |
 | --- | --- | --- |
-| 没部署过 | 立即删除 `EnvState` 和 `envWeights` | 即时 |
+| 没部署过 | 立即删除 `EnvState` 和环境级设置 | 即时 |
 | 部署过 | 保留（`status = pendingDelete`） | 该环境下次**部署**且仍离域，或**卸载**且仍离域 |
 
-保留是为了环境再次加入 scope 时不丢快照和自定义权重。
+保留是为了环境再次加入 scope 时不丢快照、自定义权重和动态权重开关。
 
-`immediate` 配置不适用这张表：它在保存请求内就同步删掉了集群资源，删成功即连 `EnvState` 和 `envWeights` 一起清掉，没有 `pendingDelete` 这个停留期。删失败才保留 `EnvState`（带 `LastError`），等下次保存重试。
+`immediate` 配置不适用这张表：它在保存请求内就同步删掉了集群资源，删成功即连 `EnvState` 和环境级设置一起清掉，没有 `pendingDelete` 这个停留期。删失败才保留 `EnvState`（带 `LastError`），等下次保存重试。
 
 ### 8.3 删除整条配置
 
@@ -377,14 +418,17 @@ Manager 从该应用所有 PolarisConfig 里删掉这个环境的 `EnvState`。`
 ```go
 UpsertEnvState(ctx, appID, configName, envName, update)
 RemoveEnvStates(ctx, appID, configName, envNames)
-UpsertEnvWeight(ctx, appID, configName, envName, weight)
-RemoveEnvWeights(ctx, appID, configName, envNames)
+UpsertEnvWeight(ctx, appID, configName, envName, weight, dynamicWeight)
+RemoveEnvSettings(ctx, appID, configName, envNames)
 ```
 
 - `UpsertEnvState` 定位到 `envStates.<envName>`，只更新调用方传的字段，并刷新 `UpdatedAt`；
-- `UpsertEnvWeight` 对 `envWeights.<envName>` 做 `$set` 并刷新 `UpdatedAt`，PUT 单环境权重走这条；
-- 两个 `Remove*` 用 `$unset` 批量删，传空列表或重复删除都返回成功；
-- Create 会为全部 scope 环境初始化 `100`；PATCH 改到 `scopeEnvNames` 时，Service 先经 Manager 规范化，再整个 map `$set` 覆盖。
+- `UpsertEnvWeight` 在一次 `$set` 里写 `envWeights.<envName>` 和 `envDynamicWeights.<envName>` 并刷新 `UpdatedAt`，PUT 单环境权重走这条。`dynamicWeight` 传 `nil` 时不带动态权重字段，开关保持原值；
+- `RemoveEnvSettings` 在一次 `$unset` 里删掉这些环境在**全部**环境级配置字段下的条目，不会出现只清理了一半的中间态。字段清单由 store 层的 `envSettingFields` 登记，新增环境级配置字段时只改这一处；
+- 两个 `Remove*` 都用 `$unset` 批量删，传空列表或重复删除都返回成功；
+- Create 会为全部 scope 环境初始化权重 `100`，但不初始化动态权重开关；PATCH 改到 `scopeEnvNames` 时，Service 先经 Manager 规范化，再把两个 map 分别整体 `$set` 覆盖。
+
+`envStates` 不在 `envSettingFields` 里：它记录的是系统观测到的部署事实，写入方与清理时机都和用户设置的环境级配置不同，所以保留独立的 `RemoveEnvStates`。
 
 环境名直接当MongoDB 子文档字段名用。`envFieldPrefix` 会拒绝空串和含 `.`、`$` 的环境名，保证字段路径安全。
 
@@ -432,7 +476,7 @@ RemoveEnvWeights(ctx, appID, configName, envNames)
 - `immediate` 配置只有下发失败的环境会停在 `pendingCreate`，成功下发即 `deployed`；
 - 存量数据缺 `registerMode` 时，响应固定补成 `on_deploy`，不会出现空串；
 - 没有任何相关环境时 `envStates` 是 `{}`，不是 `null`；
-- 模型中的 `EnvWeights` 即使为 `nil`，响应里的 `envWeights` 也固定序列化为 `{}`；
+- 模型中的 `EnvWeights` 即使为 `nil`，响应里的 `envWeights` 也固定序列化为 `{}`，`envDynamicWeights` 同理；
 - `lastError` 不参与 `status` 计算；
 - `appliedFields.polarisToken` 固定返回 `******`，前端靠 `polarisTokenChanged` 判断 Token 有没有变。
 
@@ -442,11 +486,14 @@ RemoveEnvWeights(ctx, appID, configName, envNames)
 | --- | --- | --- |
 | Create | `scopeEnvNames` | 环境维度生效范围；所有 scope 环境自动初始化权重 `100` |
 | Create | `registerMode` | 可选，`immediate` 或 `on_deploy`，缺省 `on_deploy`；显式传空串会被拒绝 |
+| Create | `enableWeightFactor` | 可选，缺省 `false`；`envDynamicWeights` 不预建 |
 | PATCH | `scopeEnvNames` | 传了就全量替换，`[]` 清空，不传（`nil`）表示不更新 |
+| PATCH | `enableWeightFactor` | 不传（`nil`）表示不更新；改为 `false` 不动 `envDynamicWeights`，也不改变 CR |
 | PATCH | `registerMode` | 不暴露，创建后不可修改 |
 | PUT | `/envs/{envName}/weight` | 允许 scope 内环境或任何已部署环境；待部署只持久化，已部署同步 Patch 集群 |
+| PUT | `/envs/{envName}/weight` 的 `dynamicWeight` | 可选，不传保持原值；不受配置的 `enableWeightFactor` 约束 |
 
-PUT 的 `weight` 取值范围是 `0 - 10000`，`0` 是合法值（表示不接流量）。没有显式环境值时固定使用 `DefaultEnvWeight = 100`。
+PUT 的 `weight` 取值范围是 `0 - 10000`，`0` 是合法值（表示不接流量）。没有显式环境值时固定使用 `DefaultEnvWeight = 100`。`weight` 始终必填，接口不提供只改 `dynamicWeight` 的形态：产品交互上基准权重和动态权重开关是一次保存提交的。
 
 Create/PATCH serializer 不声明 `weight` 或 `envWeights`；旧客户端继续传这两个字段时，按当前 Gin JSON 绑定行为静默忽略。响应也不再包含配置级 `weight`。
 
@@ -454,7 +501,8 @@ Create/PATCH serializer 不声明 `weight` 或 `envWeights`；旧客户端继续
 
 ```json
 {
-  "weight": 20
+  "weight": 20,
+  "dynamicWeight": true
 }
 ```
 
@@ -466,21 +514,24 @@ Create/PATCH serializer 不声明 `weight` 或 `envWeights`；旧客户端继续
 | --- | --- | --- |
 | 首次部署前改配置 | 否 | 等应用部署 |
 | 已部署，只改普通 CR 字段 | 是（快照匹配时） | 异步 Upsert 完整 CR |
+| 开关 `enableWeightFactor` | 是（快照匹配时） | 异步 Upsert，但 CR 内容不因此变化：`dynamicWeight.enable` 直接取环境级开关 |
 | scope 内待部署环境 PUT 权重 | 否 | 仅持久化，下次部署写进 CR |
 | 已部署环境 PUT 权重 | 是 | 不受 readiness 限制，同步 JSON Patch 该环境的 weight |
 | scope 外且未部署环境 PUT 权重 | 不适用 | 返回 400，不持久化 |
+| 已部署环境 PUT 动态权重 | 是 | 与 weight 在同一次同步 JSON Patch 里提交，下发值不受 `enableWeightFactor` 影响 |
+| PUT 请求不带 `dynamicWeight` | 是 | 开关不写库、保持原值，Patch 按库中现值下发 |
 | 改部署关联字段 | 否 | 等应用部署更新完整资源和快照 |
 | 把部署关联字段改回快照的值 | 是 | 下次 PATCH 重新满足条件 |
-| 新环境加入 scope | 否 | 首次部署后建快照；权重由规范化补默认值 |
-| 已部署环境离开 scope | 否 | 保留快照和权重，下次离域部署时清理 |
-| 未部署环境离开 scope | 不适用 | 立即删 `EnvState` 和 `envWeights` |
-| 环境卸载（仍在 scope） | 不适用 | 删 `EnvState`，保留 `envWeights` |
-| 环境卸载（已离域） | 不适用 | `EnvState` 和 `envWeights` 都删 |
+| 新环境加入 scope | 否 | 首次部署后建快照；权重补默认值，动态权重开关不预建 |
+| 已部署环境离开 scope | 否 | 保留快照和环境级设置，下次离域部署时清理 |
+| 未部署环境离开 scope | 不适用 | 立即删 `EnvState`、`envWeights` 和 `envDynamicWeights` |
+| 环境卸载（仍在 scope） | 不适用 | 删 `EnvState`，保留 `envWeights` 和 `envDynamicWeights` |
+| 环境卸载（已离域） | 不适用 | `EnvState` 与两份环境级设置都删 |
 | 删除整条配置 | 不适用 | 下次部署按资源差异清理集群资源 |
 | **以下为 immediate 配置** | | |
 | 创建配置 / 新环境加入 scope | 是（同步） | Upsert CR + Service，成功写快照落到 `deployed`，失败写 `LastError` 并返回 500 |
 | 改任意 CR 字段 | 是（同步） | 对 scope 内全部环境重新 Upsert，幂等 |
-| 环境离开 scope | 不适用 | 同步删 CR + Service，成功后删 `EnvState` 与 `envWeights`，失败保留记录待重试 |
+| 环境离开 scope | 不适用 | 同步删 CR + Service，成功后删 `EnvState` 与环境级设置，失败保留记录待重试 |
 | 删除整条配置 | 不适用 | 先同步删所有相关环境的集群资源，全部成功才删配置记录 |
 | 应用部署 | 不适用 | 部署仍会下发同样的 CR + Service，结果与平台主动下发一致 |
 

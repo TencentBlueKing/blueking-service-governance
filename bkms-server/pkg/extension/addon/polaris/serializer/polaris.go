@@ -116,6 +116,8 @@ type PolarisConfigOutputObj struct {
 	KeepNotReadyPod bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查
 	EnableHealthCheck bool `json:"enableHealthCheck"`
+	// 是否启用权重因子（开启后才能为单个环境开启动态权重）
+	EnableWeightFactor bool `json:"enableWeightFactor"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
 	// 注册模式：immediate（绑定后立即注册）| on_deploy（等部署后注册）
@@ -135,6 +137,8 @@ type PolarisConfigOutputObj struct {
 	EnvStates map[string]PolarisEnvStateOutput `json:"envStates"`
 	// 各环境的单实例权重，key 为环境名称
 	EnvWeights map[string]int32 `json:"envWeights"`
+	// 各环境是否开启动态权重，key 为环境名称；未出现的环境表示未开启
+	EnvDynamicWeights map[string]bool `json:"envDynamicWeights"`
 }
 
 // PolarisEnvStateOutput is the JSON representation of a single environment's applied state.
@@ -168,27 +172,33 @@ func (o *PolarisConfigOutputObj) FromModel(config polaris.PolarisConfig, warning
 	if envWeights == nil {
 		envWeights = map[string]int32{}
 	}
+	envDynamicWeights := config.EnvDynamicWeights
+	if envDynamicWeights == nil {
+		envDynamicWeights = map[string]bool{}
+	}
 	*o = PolarisConfigOutputObj{
-		AppID:             config.AppID,
-		Name:              config.Name,
-		DepSvcInstID:      depSvcInstIDToString(config.DepSvcInstID),
-		InstanceKey:       config.InstanceKey,
-		PolarisName:       config.PolarisName,
-		PolarisNamespace:  config.PolarisNamespace,
-		PolarisToken:      config.PolarisToken,
-		ServicePort:       config.ServicePort,
-		Direct:            config.Direct,
-		KeepNotReadyPod:   config.KeepNotReadyPod,
-		EnableHealthCheck: config.EnableHealthCheck,
-		ServiceLabels:     config.ServiceLabels,
-		RegisterMode:      registerModeOutput(config.RegisterMode),
-		ScopeEnvNames:     config.ScopeEnvNames,
-		Operator:          config.Operator,
-		CreatedAt:         config.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:         config.UpdatedAt.Format(time.RFC3339),
-		Warnings:          warnings,
-		EnvStates:         toEnvStateOutputs(&config),
-		EnvWeights:        envWeights,
+		AppID:              config.AppID,
+		Name:               config.Name,
+		DepSvcInstID:       depSvcInstIDToString(config.DepSvcInstID),
+		InstanceKey:        config.InstanceKey,
+		PolarisName:        config.PolarisName,
+		PolarisNamespace:   config.PolarisNamespace,
+		PolarisToken:       config.PolarisToken,
+		ServicePort:        config.ServicePort,
+		Direct:             config.Direct,
+		KeepNotReadyPod:    config.KeepNotReadyPod,
+		EnableHealthCheck:  config.EnableHealthCheck,
+		EnableWeightFactor: config.EnableWeightFactor,
+		ServiceLabels:      config.ServiceLabels,
+		RegisterMode:       registerModeOutput(config.RegisterMode),
+		ScopeEnvNames:      config.ScopeEnvNames,
+		Operator:           config.Operator,
+		CreatedAt:          config.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:          config.UpdatedAt.Format(time.RFC3339),
+		Warnings:           warnings,
+		EnvStates:          toEnvStateOutputs(&config),
+		EnvWeights:         envWeights,
+		EnvDynamicWeights:  envDynamicWeights,
 	}
 	return o
 }
@@ -267,6 +277,9 @@ type CreateAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查，默认 false
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
+	// 是否启用权重因子，默认 false。开启后北极星按实例机型标记权重因子，
+	// 各环境还需单独开启动态权重才会真正按机型分流
+	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
 	// 操作人(即北极星负责人, 仅 createNewService 为 true 时有效)
@@ -303,6 +316,8 @@ type PatchAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查（可选更新）
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
+	// 是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值
+	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签（可选更新，传入时全量替换）
 	ServiceLabels map[string]string `json:"serviceLabels"`
 	// 组件实例标识（可选更新）
@@ -380,6 +395,9 @@ type AppConfigEnvNameURIInput struct {
 type PutEnvWeightInput struct {
 	// 单实例权重，取值范围 0-10000
 	Weight *int32 `json:"weight" binding:"required,min=0,max=10000"`
+	// 该环境是否开启动态权重，不传表示保持原值。
+	// 开启后上面的权重作为动态调权的基准权重
+	DynamicWeight *bool `json:"dynamicWeight"`
 }
 
 // PutEnvWeightOutput is the JSON response for updating an environment's weight.

@@ -135,23 +135,32 @@ type jsonPatchOperation struct {
 	Value any    `json:"value"`
 }
 
-func buildWeightPatch(serviceName string, weight int32) ([]byte, error) {
+// buildWeightPatch 构建环境权重与动态权重开关的 JSON Patch。
+//
+// 整个 dynamicWeight 对象一次替换，而不是 patch 其 enable 子路径：
+// 存量 CR 可能没有 dynamicWeight 父节点，子路径 add 会失败。
+func buildWeightPatch(serviceName string, weight int32, dynamicWeight bool) ([]byte, error) {
 	return json.Marshal([]jsonPatchOperation{
 		{Op: "test", Path: "/spec/services/0/name", Value: serviceName},
 		{Op: "add", Path: "/spec/services/0/weight", Value: int64(weight)},
+		{Op: "add", Path: "/spec/polaris/dynamicWeight", Value: map[string]any{
+			"enable":                dynamicWeight,
+			"preserveServiceConfig": true,
+		}},
 	})
 }
 
-// PatchWeight 仅更新现有 PolarisConfig CR 的服务权重，不修改其他配置字段。
+// PatchWeight 仅更新现有 PolarisConfig CR 的服务权重与动态权重开关，不修改其他配置字段。
 func (a *CRApplier) PatchWeight(
 	ctx context.Context,
 	app *bkmsapp.Application,
 	env *bkmsenv.Environment,
 	config *PolarisConfig,
 	weight int32,
+	dynamicWeight bool,
 ) error {
 	crName, serviceName := PolarisResourceNames(app.Name, config.Name)
-	patch, err := buildWeightPatch(serviceName, weight)
+	patch, err := buildWeightPatch(serviceName, weight, dynamicWeight)
 	if err != nil {
 		return errors.Wrap(err, "build polaris CR weight patch")
 	}

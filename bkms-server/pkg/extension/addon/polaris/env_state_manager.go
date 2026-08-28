@@ -33,8 +33,8 @@ import (
 //
 // 配置更新后调用 PrepareDynamicApply，清理无效记录并返回允许动态下发的环境；
 // 动态下发完成后调用 RecordDynamicApplyResult，按配置版本记录下发结果，避免旧任务覆盖新配置状态；
-// 应用部署后调用 ReconcileAfterDeploy，记录本次部署生效的关键字段并清理离域权重；
-// 应用卸载后调用 ReconcileAfterUninstall，移除对应环境的记录与离域权重（条件见函数说明）。
+// 应用部署后调用 ReconcileAfterDeploy，记录本次部署生效的关键字段并清理离域环境级设置；
+// 应用卸载后调用 ReconcileAfterUninstall，移除对应环境的记录与离域环境级设置（条件见函数说明）。
 type PolarisEnvStateManager struct {
 	store PolarisConfigStore
 }
@@ -111,25 +111,21 @@ func (m *PolarisEnvStateManager) removeUnappliedEnvStatesOutsideScope(
 	return nil
 }
 
-// reconcileEnvWeightsForScope 根据 scope 变化调整环境权重，与 EnvState 生命周期对齐：
-// - 保留 scope 内的权重，并为 scope 内缺失的环境补充默认值；
-// - 未部署且不在 scope 的权重立即丢弃。
+// reconcileEnvSettingsForScope 根据 scope 变化调整环境权重与动态权重开关，与 EnvState 生命周期对齐：
+// - 保留仍应存在的环境条目，丢弃未部署且离域的条目；
+// - 为 scope 内缺失的环境补充默认权重。
 //
-// on_deploy（含空值）还会暂时保留已部署且离开 scope 的权重，直到下次部署/卸载清理。
-// immediate 离域时会同步删除集群资源，没有"等下次部署清理"的阶段，因此不保留离域权重。
-func (*PolarisEnvStateManager) reconcileEnvWeightsForScope(
+// 动态权重开关不补默认值：缺省即关闭，新环境自动按关闭处理比预建 false 更安全。
+func (*PolarisEnvStateManager) reconcileEnvSettingsForScope(
 	scopeEnvNames []string,
 	envWeights map[string]int32,
+	envDynamicWeights map[string]bool,
 	envStates map[string]PolarisEnvState,
 	registerMode string,
-) map[string]int32 {
+) (map[string]int32, map[string]bool) {
 	weights := make(map[string]int32, len(scopeEnvNames)+len(envWeights))
 	for envName, w := range envWeights {
-		if lo.Contains(scopeEnvNames, envName) {
-			weights[envName] = w
-			continue
-		}
-		if registerMode != RegisterModeImmediate && envStates[envName].IsDeployed() {
+		if keepEnvSettingForScope(envName, scopeEnvNames, envStates, registerMode) {
 			weights[envName] = w
 		}
 	}
@@ -138,7 +134,30 @@ func (*PolarisEnvStateManager) reconcileEnvWeightsForScope(
 			weights[envName] = DefaultEnvWeight
 		}
 	}
-	return weights
+
+	dynamicWeights := make(map[string]bool, len(envDynamicWeights))
+	for envName, enabled := range envDynamicWeights {
+		if keepEnvSettingForScope(envName, scopeEnvNames, envStates, registerMode) {
+			dynamicWeights[envName] = enabled
+		}
+	}
+	return weights, dynamicWeights
+}
+
+// keepEnvSettingForScope 判断某环境的环境级设置在 scope 变化后是否保留。
+//
+// on_deploy（含空值）会暂时保留已部署且离开 scope 的设置，直到下次部署/卸载清理。
+// immediate 离域时会同步删除集群资源，没有"等下次部署清理"的阶段，因此不保留离域设置。
+func keepEnvSettingForScope(
+	envName string,
+	scopeEnvNames []string,
+	envStates map[string]PolarisEnvState,
+	registerMode string,
+) bool {
+	if lo.Contains(scopeEnvNames, envName) {
+		return true
+	}
+	return registerMode != RegisterModeImmediate && envStates[envName].IsDeployed()
 }
 
 // selectEnvNamesForDynamicApply 返回 scope 内满足动态下发条件的环境名称。
@@ -184,7 +203,7 @@ func (m *PolarisEnvStateManager) RecordImmediateApplyResult(
 	return nil
 }
 
-// ReleaseEnv 在 immediate 配置的集群资源删除成功后，移除该环境的记录与权重。
+// ReleaseEnv 在 immediate 配置的集群资源删除成功后，移除该环境的记录与环境级设置。
 func (m *PolarisEnvStateManager) ReleaseEnv(
 	ctx context.Context,
 	appID, configName, envName string,
@@ -193,8 +212,8 @@ func (m *PolarisEnvStateManager) ReleaseEnv(
 	if err := m.store.RemoveEnvStates(ctx, appID, configName, envNames); err != nil {
 		return errors.Wrapf(err, "remove env state for env %s after release", envName)
 	}
-	if err := m.store.RemoveEnvWeights(ctx, appID, configName, envNames); err != nil {
-		return errors.Wrapf(err, "remove env weight for env %s after release", envName)
+	if err := m.store.RemoveEnvSettings(ctx, appID, configName, envNames); err != nil {
+		return errors.Wrapf(err, "remove env settings for env %s after release", envName)
 	}
 	return nil
 }
@@ -253,8 +272,8 @@ func (m *PolarisEnvStateManager) reconcileEnvStateAfterDeploy(
 		if err := m.store.RemoveEnvStates(ctx, appID, config.Name, []string{envName}); err != nil {
 			return errors.Wrapf(err, "remove out-of-scope env state for config %s", config.Name)
 		}
-		if err := m.store.RemoveEnvWeights(ctx, appID, config.Name, []string{envName}); err != nil {
-			return errors.Wrapf(err, "remove out-of-scope env weight for config %s", config.Name)
+		if err := m.store.RemoveEnvSettings(ctx, appID, config.Name, []string{envName}); err != nil {
+			return errors.Wrapf(err, "remove out-of-scope env settings for config %s", config.Name)
 		}
 		return nil
 	}
@@ -288,13 +307,13 @@ func (m *PolarisEnvStateManager) ReconcileAfterUninstall(
 		if err = m.store.RemoveEnvStates(ctx, app.ID, config.Name, []string{envName}); err != nil {
 			return errors.Wrapf(err, "remove env state for config %s after uninstall", config.Name)
 		}
-		// 若环境仍在 scope 内时保留权重供下次部署使用
+		// 若环境仍在 scope 内时保留权重与动态权重开关，供下次部署使用
 		if lo.Contains(config.ScopeEnvNames, envName) {
 			continue
 		}
-		// 若环境已不在 scope 内，同步清理此前保留的 envWeights
-		if err = m.store.RemoveEnvWeights(ctx, app.ID, config.Name, []string{envName}); err != nil {
-			return errors.Wrapf(err, "remove env weight for config %s after uninstall", config.Name)
+		// 若环境已不在 scope 内，同步清理此前保留的环境级设置
+		if err = m.store.RemoveEnvSettings(ctx, app.ID, config.Name, []string{envName}); err != nil {
+			return errors.Wrapf(err, "remove env settings for config %s after uninstall", config.Name)
 		}
 	}
 	return nil

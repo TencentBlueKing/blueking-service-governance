@@ -31,10 +31,8 @@ import (
 
 const collectionName = "hostport_configs"
 
-var (
-	// ErrConfigNotFound is returned when the app has no HostPort config document.
-	ErrConfigNotFound = errors.New("hostport config not found")
-)
+// ErrConfigNotFound is returned when the app has no HostPort config document.
+var ErrConfigNotFound = errors.New("hostport config not found")
 
 // HostPortStore persists HostPortConfig documents.
 type HostPortStore interface {

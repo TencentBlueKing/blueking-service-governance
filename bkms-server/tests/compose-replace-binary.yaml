@@ -11,7 +11,8 @@
 #
 # 除了替换二进制外，还把仓库内的 pipeline_templates 目录挂载进容器覆盖镜像里的
 # 老版本模板，避免本地 binary 引入的模板校验规则（如 semver version）
-# 与旧镜像中 assets 不匹配导致启动失败。
+# 与旧镜像中 assets 不匹配导致启动失败。内建组件定义（assets/comps）同理，
+# 由 migration 服务通过 --folderPath 读取，也必须来自本地仓库。
 services:
   bkms-server:
     volumes:
@@ -32,3 +33,4 @@ services:
     volumes:
       - ${BKMS_LOCAL_BINARY:-../build/bkms-server}:/usr/bin/bkms-server:ro
       - ../pkg/bkintegrations/bkci/assets/pipeline_templates:/app/assets/pipeline_templates:ro
+      - ../pkg/extension/component/assets/comps:/app/assets/comps:ro

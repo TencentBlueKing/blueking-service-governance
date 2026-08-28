@@ -122,6 +122,21 @@ func buildExtraResources(
 		serviceSpec["extraMeta"] = extraMeta
 	}
 
+	// enable 直接取环境级开关，不叠加 cfg.EnableWeightFactor 二次判断。
+	//
+	// dynamicWeight 始终下发：关闭时写 enable=false，而不是省略整个键。
+	// 省略要靠 SSA 回收字段，但环境级即时 Patch 走 JSON Patch，会把字段所有权
+	// 转出本 FieldManager，之后 SSA 省略时删不掉，CR 上会残留 enable=true。
+	polarisSpec := map[string]any{
+		"name":      cfg.PolarisName,
+		"namespace": cfg.PolarisNamespace,
+		"token":     cfg.PolarisToken,
+		"dynamicWeight": map[string]any{
+			"enable":                cfg.EnvDynamicWeights[env.Name],
+			"preserveServiceConfig": true,
+		},
+	}
+
 	crMap := map[string]any{
 		"apiVersion": polarisConfigCRAPIVersion,
 		"kind":       polarisConfigCRKind,
@@ -129,11 +144,7 @@ func buildExtraResources(
 			"name": crName,
 		},
 		"spec": map[string]any{
-			"polaris": map[string]any{
-				"name":      cfg.PolarisName,
-				"namespace": cfg.PolarisNamespace,
-				"token":     cfg.PolarisToken,
-			},
+			"polaris":  polarisSpec,
 			"services": []any{serviceSpec},
 		},
 	}

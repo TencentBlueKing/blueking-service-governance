@@ -31,6 +31,19 @@ import (
 // The name of the MongoDB collection for storing polaris config data.
 const collectionName = "polaris_configs"
 
+// 环境维度子文档的根字段名，key 均为环境名。
+const (
+	envStatesField         = "envStates"
+	envWeightsField        = "envWeights"
+	envDynamicWeightsField = "envDynamicWeights"
+)
+
+// envSettingFields 登记全部「环境级配置」根字段：由用户按环境设置、共享同一套生命周期，
+// 随环境离域或卸载一起清理。新增这类字段时在此登记，清理路径无需再改。
+//
+// envStates 不属于此列——它记录的是系统观测到的部署事实，清理时机与写入方都不同。
+var envSettingFields = []string{envWeightsField, envDynamicWeightsField}
+
 // 错误定义
 var (
 	// ErrConfigNotFound 北极星配置不存在
@@ -65,12 +78,13 @@ type PolarisConfigStore interface {
 		expectedUpdatedAt time.Time,
 		update PolarisEnvStateUpdate,
 	) (bool, error)
-	// UpsertEnvWeight 幂等设置指定环境的单实例权重
-	UpsertEnvWeight(ctx context.Context, appID, name, envName string, weight int32) error
+	// UpsertEnvWeight 幂等设置指定环境的单实例权重与动态权重开关。
+	// dynamicWeight 为 nil 表示不改开关；两个字段在同一次更新中写入，不会出现中间态
+	UpsertEnvWeight(ctx context.Context, appID, name, envName string, weight int32, dynamicWeight *bool) error
 	// RemoveEnvStates 幂等移除多个指定环境的信息
 	RemoveEnvStates(ctx context.Context, appID, name string, envNames []string) error
-	// RemoveEnvWeights 幂等移除多个指定环境的单实例权重
-	RemoveEnvWeights(ctx context.Context, appID, name string, envNames []string) error
+	// RemoveEnvSettings 幂等移除多个指定环境的全部环境级配置（见 envSettingFields），
+	RemoveEnvSettings(ctx context.Context, appID, name string, envNames []string) error
 	// Delete 根据应用 ID 和配置名称删除北极星配置
 	Delete(ctx context.Context, appID, name string) error
 	// DeleteByApp 删除应用下的所有北极星配置（仅测试使用）
@@ -189,6 +203,10 @@ func (s *PolarisConfigStoreMongo) Update(
 		updateSet["enableHealthCheck"] = *updateData.EnableHealthCheck
 		needUpdate = true
 	}
+	if updateData.EnableWeightFactor != nil {
+		updateSet["enableWeightFactor"] = *updateData.EnableWeightFactor
+		needUpdate = true
+	}
 	if updateData.ServiceLabels != nil {
 		updateSet["serviceLabels"] = updateData.ServiceLabels
 		needUpdate = true
@@ -206,10 +224,13 @@ func (s *PolarisConfigStoreMongo) Update(
 		needUpdate = true
 	}
 	if updateData.envWeights != nil {
-		updateSet["envWeights"] = updateData.envWeights
+		updateSet[envWeightsField] = updateData.envWeights
 		needUpdate = true
 	}
-
+	if updateData.envDynamicWeights != nil {
+		updateSet[envDynamicWeightsField] = updateData.envDynamicWeights
+		needUpdate = true
+	}
 	if !needUpdate {
 		return nil
 	}
@@ -247,7 +268,7 @@ func (s *PolarisConfigStoreMongo) UpsertEnvState(
 	appID, name, envName string,
 	update PolarisEnvStateUpdate,
 ) error {
-	fieldPrefix, err := envFieldPrefix("envStates", envName)
+	fieldPrefix, err := envFieldPrefix(envStatesField, envName)
 	if err != nil {
 		return err
 	}
@@ -280,7 +301,7 @@ func (s *PolarisConfigStoreMongo) UpsertEnvStateIfUpdatedAtMatch(
 	expectedUpdatedAt time.Time,
 	update PolarisEnvStateUpdate,
 ) (bool, error) {
-	fieldPrefix, err := envFieldPrefix("envStates", envName)
+	fieldPrefix, err := envFieldPrefix(envStatesField, envName)
 	if err != nil {
 		return false, err
 	}
@@ -302,22 +323,33 @@ func (s *PolarisConfigStoreMongo) UpsertEnvStateIfUpdatedAtMatch(
 	return result.MatchedCount > 0, nil
 }
 
-// UpsertEnvWeight 幂等设置指定环境的单实例权重。
+// UpsertEnvWeight 幂等设置指定环境的单实例权重与动态权重开关。
+// 两者在同一次更新中写入，保证集群侧的单次 Patch 与库侧记录一致。
 func (s *PolarisConfigStoreMongo) UpsertEnvWeight(
 	ctx context.Context,
 	appID, name, envName string,
 	weight int32,
+	dynamicWeight *bool,
 ) error {
-	fieldPath, err := envFieldPrefix("envWeights", envName)
+	weightPath, err := envFieldPrefix(envWeightsField, envName)
 	if err != nil {
 		return err
 	}
+	setFields := bson.M{
+		weightPath:  weight,
+		"updatedAt": time.Now(),
+	}
+	if dynamicWeight != nil {
+		dynamicWeightPath, pathErr := envFieldPrefix(envDynamicWeightsField, envName)
+		if pathErr != nil {
+			return pathErr
+		}
+		setFields[dynamicWeightPath] = *dynamicWeight
+	}
+
 	result, err := s.collection.UpdateOne(ctx,
 		bson.M{"appID": appID, "name": name},
-		bson.M{"$set": bson.M{
-			fieldPath:   weight,
-			"updatedAt": time.Now(),
-		}},
+		bson.M{"$set": setFields},
 	)
 	if err != nil {
 		return errors.Wrap(err, "upsert polaris env weight")
@@ -332,55 +364,46 @@ func (s *PolarisConfigStoreMongo) UpsertEnvWeight(
 func (s *PolarisConfigStoreMongo) RemoveEnvStates(
 	ctx context.Context, appID, name string, envNames []string,
 ) error {
-	if len(envNames) == 0 {
-		return nil
-	}
-
-	unsetFields := make(bson.M, len(envNames))
-	for _, envName := range envNames {
-		fieldPrefix, err := envFieldPrefix("envStates", envName)
-		if err != nil {
-			return err
-		}
-		unsetFields[fieldPrefix] = ""
-	}
-	_, err := s.collection.UpdateOne(ctx,
-		bson.M{"appID": appID, "name": name},
-		bson.M{"$unset": unsetFields},
-	)
-	if err != nil {
-		return errors.Wrap(err, "remove polaris env states")
-	}
-	return nil
+	return s.removeEnvFields(ctx, appID, name, []string{envStatesField}, envNames)
 }
 
-// RemoveEnvWeights 幂等移除多个指定环境的单实例权重。
-func (s *PolarisConfigStoreMongo) RemoveEnvWeights(
+// RemoveEnvSettings 幂等移除多个指定环境的全部环境级配置。
+func (s *PolarisConfigStoreMongo) RemoveEnvSettings(
 	ctx context.Context, appID, name string, envNames []string,
+) error {
+	return s.removeEnvFields(ctx, appID, name, envSettingFields, envNames)
+}
+
+// removeEnvFields 从 roots 指向的各个环境维度子文档中 unset 多个环境条目。
+// 所有路径在同一次更新中提交，避免部分字段清理成功、部分残留。
+func (s *PolarisConfigStoreMongo) removeEnvFields(
+	ctx context.Context, appID, name string, roots, envNames []string,
 ) error {
 	if len(envNames) == 0 {
 		return nil
 	}
 
-	unsetFields := make(bson.M, len(envNames))
-	for _, envName := range envNames {
-		fieldPath, err := envFieldPrefix("envWeights", envName)
-		if err != nil {
-			return err
+	unsetFields := make(bson.M, len(envNames)*len(roots))
+	for _, root := range roots {
+		for _, envName := range envNames {
+			fieldPath, err := envFieldPrefix(root, envName)
+			if err != nil {
+				return err
+			}
+			unsetFields[fieldPath] = ""
 		}
-		unsetFields[fieldPath] = ""
 	}
 	_, err := s.collection.UpdateOne(ctx,
 		bson.M{"appID": appID, "name": name},
 		bson.M{"$unset": unsetFields},
 	)
 	if err != nil {
-		return errors.Wrap(err, "remove polaris env weights")
+		return errors.Wrapf(err, "remove polaris env fields %v", roots)
 	}
 	return nil
 }
 
-// envFieldPrefix 校验环境名并生成 envStates/envWeights 嵌套字段路径前缀
+// envFieldPrefix 校验环境名并生成环境维度子文档的嵌套字段路径前缀
 func envFieldPrefix(root, envName string) (string, error) {
 	if envName == "" || strings.ContainsAny(envName, ".$") {
 		return "", errors.Errorf("invalid env name %q", envName)

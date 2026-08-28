@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -99,9 +100,9 @@ func (s *PolarisConfigService) Create(
 		config.DepSvcInstID = result.ServiceInstanceID
 	}
 
-	// 过滤掉 scope 外且未部署的环境权重，并为 scope 内未设置权重的环境补充默认值
-	config.EnvWeights = s.envStateManager.reconcileEnvWeightsForScope(
-		config.ScopeEnvNames, config.EnvWeights, nil, config.RegisterMode,
+	// 过滤掉 scope 外且未部署的环境级设置，并为 scope 内未设置权重的环境补充默认值
+	config.EnvWeights, config.EnvDynamicWeights = s.envStateManager.reconcileEnvSettingsForScope(
+		config.ScopeEnvNames, config.EnvWeights, config.EnvDynamicWeights, nil, config.RegisterMode,
 	)
 
 	if err := s.polarisConfigStore.Create(ctx, config); err != nil {
@@ -136,10 +137,11 @@ func (s *PolarisConfigService) Update(
 	}
 
 	if updateData.ScopeEnvNames != nil {
-		// scope 变化时保留仍有效的权重，并为新增环境补充默认值。
-		updateData.envWeights = s.envStateManager.reconcileEnvWeightsForScope(
+		// scope 变化时保留仍有效的环境级设置，并为新增环境补充默认权重。
+		updateData.envWeights, updateData.envDynamicWeights = s.envStateManager.reconcileEnvSettingsForScope(
 			updateData.ScopeEnvNames,
 			oldConfig.EnvWeights,
+			oldConfig.EnvDynamicWeights,
 			oldConfig.EnvStates,
 			oldConfig.RegisterMode,
 		)
@@ -361,32 +363,41 @@ func (s *PolarisConfigService) patchEnvWeight(
 	config *PolarisConfig,
 	envName string,
 	weight int32,
+	dynamicWeight bool,
 ) error {
 	env, err := s.envStore.GetByName(ctx, app.WorkspaceID, app.ID, envName)
 	if err != nil {
 		return errors.Wrapf(err, "get env %s", envName)
 	}
-	return s.applier.PatchWeight(ctx, app, env, config, weight)
+	return s.applier.PatchWeight(ctx, app, env, config, weight, dynamicWeight)
 }
 
-// UpdateEnvWeight 更新指定环境的北极星实例权重；已部署环境会先同步 Patch 集群资源，成功后再持久化。
+// UpdateEnvWeight 更新指定环境的北极星实例权重与动态权重开关；
+// dynamicWeight 为 nil 表示只调权重、不动开关。
+// 已部署环境会先同步 Patch 集群资源，成功后再持久化。
 func (s *PolarisConfigService) UpdateEnvWeight(
 	ctx context.Context,
 	app *bkmsapp.Application,
 	config *PolarisConfig,
 	envName string,
 	weight int32,
+	dynamicWeight *bool,
 ) (*PolarisConfig, error) {
 	isDeployed := config.GetEnvState(envName).IsDeployed()
 	if isDeployed {
-		if err := s.patchEnvWeight(ctx, app, config, envName, weight); err != nil {
+		if err := s.patchEnvWeight(
+			ctx, app, config, envName, weight,
+			lo.FromPtrOr(dynamicWeight, config.EnvDynamicWeights[envName]),
+		); err != nil {
 			log.Errorf(ctx, "patch polaris CR weight failed, app=%s config=%s env=%s: %v",
 				app.ID, config.Name, envName, err)
 			return nil, errors.Wrap(err, "patch env weight")
 		}
 	}
 
-	if err := s.polarisConfigStore.UpsertEnvWeight(ctx, app.ID, config.Name, envName, weight); err != nil {
+	if err := s.polarisConfigStore.UpsertEnvWeight(
+		ctx, app.ID, config.Name, envName, weight, dynamicWeight,
+	); err != nil {
 		if isDeployed {
 			log.Errorf(ctx, "persist polaris env weight after cluster patch failed, app=%s config=%s env=%s: %v",
 				app.ID, config.Name, envName, err)

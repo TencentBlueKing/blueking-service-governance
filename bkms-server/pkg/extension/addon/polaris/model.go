@@ -83,6 +83,9 @@ type Properties struct {
 	KeepNotReadyPod bool `bson:"keepNotReadyPod"`
 	// EnableHealthCheck 是否启用健康检查
 	EnableHealthCheck bool `bson:"enableHealthCheck"`
+	// EnableWeightFactor 该北极星配置是否启用权重因子，决定用户能否为单个环境开启动态权重。
+	// 具体哪些环境开由 EnvDynamicWeights 记录，CR 上的开关直接取后者
+	EnableWeightFactor bool `bson:"enableWeightFactor"`
 	// ServiceLabels 服务标签
 	ServiceLabels map[string]string `bson:"serviceLabels"`
 	// Operator 操作人
@@ -111,10 +114,16 @@ type PolarisConfig struct {
 	// EnvStates 各环境中已经生效的关键字段和下发错误
 	EnvStates map[string]PolarisEnvState `bson:"envStates,omitempty"`
 
+	// NOTE: 后续考虑是否合并 EnvWeights 与 EnvDynamicWeights 等为一个字段，统一管理环境配置
 	// EnvWeights 各环境的单实例权重（key 为环境名）。
 	// 基本与 EnvStates 同生命周期：未部署离域立即删除；已部署离域保留至下次离域部署/卸载；
 	// 仍在 scope 内卸载时保留，供再次部署使用。缺省使用 DefaultEnvWeight。
 	EnvWeights map[string]int32 `bson:"envWeights,omitempty"`
+
+	// EnvDynamicWeights 各环境是否开启动态权重（key 为环境名），缺省视为关闭。
+	// 直接决定 CR 上的 dynamicWeight.enable，平台不再叠加 EnableWeightFactor 二次判断。
+	// 与 EnvWeights 共享环境生命周期，但加入 scope 时不预建默认值
+	EnvDynamicWeights map[string]bool `bson:"envDynamicWeights,omitempty"`
 
 	// CreatedAt 创建时间
 	CreatedAt time.Time `bson:"createdAt"`
@@ -185,18 +194,20 @@ func (c *PolarisConfig) GetVars() []ConfigVar {
 
 // ConfigUpdateData 定义了更新 PolarisConfig 时允许修改的数据
 type ConfigUpdateData struct {
-	InstanceKey       *string
-	ServicePort       *int32
-	Direct            *bool
-	KeepNotReadyPod   *bool
-	EnableHealthCheck *bool
-	ServiceLabels     map[string]string
+	InstanceKey        *string
+	ServicePort        *int32
+	Direct             *bool
+	KeepNotReadyPod    *bool
+	EnableHealthCheck  *bool
+	EnableWeightFactor *bool
+	ServiceLabels      map[string]string
 	// ScopeEnvNames 生效环境列表；nil 表示不更新，非 nil（含空切片）表示覆盖
 	ScopeEnvNames []string
 	PolarisToken  *string
 	Operator      *string
-	// envWeights 仅由 service 在 scope 变化时生成并交给 store 持久化。
-	envWeights map[string]int32
+	// envWeights、envDynamicWeights 仅由 service 在 scope 变化时生成并交给 store 持久化。
+	envWeights        map[string]int32
+	envDynamicWeights map[string]bool
 }
 
 // affectsWorkload 判断本次更新是否影响 PolarisConfig CR / 工作负载渲染。
@@ -210,6 +221,7 @@ func (d *ConfigUpdateData) affectsWorkload() bool {
 		d.Direct != nil ||
 		d.KeepNotReadyPod != nil ||
 		d.EnableHealthCheck != nil ||
+		d.EnableWeightFactor != nil ||
 		d.ServiceLabels != nil ||
 		d.ScopeEnvNames != nil ||
 		d.PolarisToken != nil

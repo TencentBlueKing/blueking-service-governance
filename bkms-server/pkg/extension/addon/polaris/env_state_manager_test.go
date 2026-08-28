@@ -25,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -358,20 +359,23 @@ var _ = Describe("PolarisEnvStateManager", func() {
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 		})
 
-		It("should remove retained weight when an out-of-scope environment is deployed", func() {
+		It("should remove retained env settings when an out-of-scope environment is deployed", func() {
 			state := envState(redeployFields("k1", "t1", 8080))
 			config := createConfig(
 				"cfg-out-of-scope-weight",
 				nil,
 				map[string]polaris.PolarisEnvState{environment.Name: state},
 			)
-			Expect(store.UpsertEnvWeight(ctx, app.ID, config.Name, environment.Name, 35)).To(Succeed())
+			Expect(store.UpsertEnvWeight(
+				ctx, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
+			)).To(Succeed())
 
 			Expect(manager.ReconcileAfterDeploy(ctx, app, environment)).To(Succeed())
 			stored, err := store.Get(ctx, app.ID, config.Name)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 			Expect(stored.EnvWeights).NotTo(HaveKey(environment.Name))
+			Expect(stored.EnvDynamicWeights).NotTo(HaveKey(environment.Name))
 		})
 	})
 
@@ -414,7 +418,7 @@ var _ = Describe("PolarisEnvStateManager", func() {
 			Expect(stored.GetEnvState(otherEnvironment.Name).AppliedFields).To(Equal(applied))
 		})
 
-		It("should keep weight for an in-scope environment after uninstall", func() {
+		It("should keep env settings for an in-scope environment after uninstall", func() {
 			config := createConfig(
 				"cfg-uninstall-keep-weight",
 				[]string{environment.Name},
@@ -422,16 +426,19 @@ var _ = Describe("PolarisEnvStateManager", func() {
 					environment.Name: envState(redeployFields("k1", "t1", 8080)),
 				},
 			)
-			Expect(store.UpsertEnvWeight(ctx, app.ID, config.Name, environment.Name, 35)).To(Succeed())
+			Expect(store.UpsertEnvWeight(
+				ctx, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
+			)).To(Succeed())
 
 			Expect(manager.ReconcileAfterUninstall(ctx, app, environment.Name)).To(Succeed())
 			stored, err := store.Get(ctx, app.ID, config.Name)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 			Expect(stored.EnvWeights[environment.Name]).To(Equal(int32(35)))
+			Expect(stored.EnvDynamicWeights[environment.Name]).To(BeTrue())
 		})
 
-		It("should remove retained weight for an out-of-scope environment after uninstall", func() {
+		It("should remove retained env settings for an out-of-scope environment after uninstall", func() {
 			config := createConfig(
 				"cfg-uninstall-drop-weight",
 				nil,
@@ -439,13 +446,16 @@ var _ = Describe("PolarisEnvStateManager", func() {
 					environment.Name: envState(redeployFields("k1", "t1", 8080)),
 				},
 			)
-			Expect(store.UpsertEnvWeight(ctx, app.ID, config.Name, environment.Name, 35)).To(Succeed())
+			Expect(store.UpsertEnvWeight(
+				ctx, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
+			)).To(Succeed())
 
 			Expect(manager.ReconcileAfterUninstall(ctx, app, environment.Name)).To(Succeed())
 			stored, err := store.Get(ctx, app.ID, config.Name)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 			Expect(stored.EnvWeights).NotTo(HaveKey(environment.Name))
+			Expect(stored.EnvDynamicWeights).NotTo(HaveKey(environment.Name))
 		})
 	})
 })

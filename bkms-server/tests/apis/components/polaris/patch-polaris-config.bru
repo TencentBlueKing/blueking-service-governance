@@ -17,6 +17,7 @@ body:json {
     "direct": true,
     "keepNotReadyPod": false,
     "enableHealthCheck": true,
+    "enableWeightFactor": false,
     "polarisToken": "updated-polaris-token-xxx",
     "serviceLabels": {
       "env": "test",
@@ -46,6 +47,7 @@ tests {
     expect(config.direct).to.equal(true);
     expect(config.keepNotReadyPod).to.equal(false);
     expect(config.enableHealthCheck).to.equal(true);
+    expect(config.enableWeightFactor).to.equal(false);
     expect(config.polarisToken).to.equal("updated-polaris-token-xxx");
     expect(config.serviceLabels).to.deep.equal({
       env: "test",
@@ -56,6 +58,7 @@ tests {
     expect(config.envStates).to.be.an('object');
     expect(Object.keys(config.envStates)).to.have.length(0);
     expect(config.envWeights).to.deep.equal({});
+    expect(config.envDynamicWeights).to.deep.equal({});
   });
 }
 

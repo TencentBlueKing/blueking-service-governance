@@ -26,6 +26,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -168,7 +169,7 @@ var _ = Describe("PolarisConfigStore", func() {
 
 				// MongoDB DateTime 精度为毫秒，断言 updatedAt 被刷新需要等到下一个精度窗口
 				time.Sleep(5 * time.Millisecond)
-				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 0)).To(Succeed())
+				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 0, nil)).To(Succeed())
 
 				updatedConfig, err := store.Get(ctx, testAppID, configName)
 				Expect(err).NotTo(HaveOccurred())
@@ -177,43 +178,75 @@ var _ = Describe("PolarisConfigStore", func() {
 				Expect(updatedConfig.UpdatedAt).NotTo(BeTemporally("<", before.UpdatedAt))
 			})
 
+			It("should write the weight and the dynamic weight switch in one update", func() {
+				Expect(store.UpsertEnvWeight(
+					ctx, testAppID, configName, "dev", 80, lo.ToPtr(true),
+				)).To(Succeed())
+
+				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updatedConfig.EnvWeights["dev"]).To(Equal(int32(80)))
+				Expect(updatedConfig.EnvDynamicWeights["dev"]).To(BeTrue())
+			})
+
+			It("should keep the dynamic weight switch untouched when it is not given", func() {
+				Expect(store.UpsertEnvWeight(
+					ctx, testAppID, configName, "dev", 80, lo.ToPtr(true),
+				)).To(Succeed())
+				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 20, nil)).To(Succeed())
+
+				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updatedConfig.EnvWeights["dev"]).To(Equal(int32(20)))
+				Expect(updatedConfig.EnvDynamicWeights["dev"]).To(BeTrue())
+			})
+
 			It("should return not found when the config does not exist", func() {
-				err := store.UpsertEnvWeight(ctx, testAppID, "missing-config", "dev", 10)
+				err := store.UpsertEnvWeight(ctx, testAppID, "missing-config", "dev", 10, nil)
 				Expect(errors.Is(err, polaris.ErrConfigNotFound)).To(BeTrue())
 			})
 		})
 
-		Context("when removing environment weights", func() {
-			It("should remove selected weights and preserve others", func() {
-				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 10)).To(Succeed())
-				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "staging", 20)).To(Succeed())
-				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "prod", 30)).To(Succeed())
+		Context("when removing environment settings", func() {
+			BeforeEach(func() {
+				Expect(store.UpsertEnvWeight(
+					ctx, testAppID, configName, "dev", 10, lo.ToPtr(true),
+				)).To(Succeed())
+				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "staging", 20, nil)).To(Succeed())
+				Expect(store.UpsertEnvWeight(
+					ctx, testAppID, configName, "prod", 30, lo.ToPtr(true),
+				)).To(Succeed())
+			})
 
-				Expect(store.RemoveEnvWeights(
+			It("should remove every env setting of the selected environments in one go", func() {
+				Expect(store.RemoveEnvSettings(
 					ctx, testAppID, configName, []string{"dev", "staging"},
 				)).To(Succeed())
-				Expect(store.RemoveEnvWeights(
+				Expect(store.RemoveEnvSettings(
 					ctx, testAppID, configName, []string{"dev", "staging"},
 				)).To(Succeed())
 
 				updatedConfig, err := store.Get(ctx, testAppID, configName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.EnvWeights).To(Equal(map[string]int32{"prod": 30}))
+				Expect(updatedConfig.EnvDynamicWeights).To(Equal(map[string]bool{"prod": true}))
 			})
 
 			It("should do nothing for an empty environment list", func() {
-				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 10)).To(Succeed())
-
-				Expect(store.RemoveEnvWeights(ctx, testAppID, configName, nil)).To(Succeed())
+				Expect(store.RemoveEnvSettings(ctx, testAppID, configName, nil)).To(Succeed())
 
 				updatedConfig, err := store.Get(ctx, testAppID, configName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.EnvWeights["dev"]).To(Equal(int32(10)))
+				Expect(updatedConfig.EnvDynamicWeights["dev"]).To(BeTrue())
 			})
 
 			It("should reject unsafe environment names", func() {
-				Expect(store.RemoveEnvWeights(
+				Expect(store.RemoveEnvSettings(
 					ctx, testAppID, configName, []string{"dev.test"},
+				)).To(MatchError(ContainSubstring("invalid env name")))
+				Expect(store.RemoveEnvSettings(
+					ctx, testAppID, configName, []string{"dev$test"},
 				)).To(MatchError(ContainSubstring("invalid env name")))
 			})
 		})

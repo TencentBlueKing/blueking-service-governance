@@ -155,7 +155,7 @@ var _ = Describe("WorkloadBuilder", func() {
 
 	It("uses the environment weight in the PolarisConfig resource", func() {
 		config := createConfig("env-weight", []string{environment.Name}, 8080, nil)
-		Expect(store.UpsertEnvWeight(ctx, app.ID, config.Name, environment.Name, 35)).To(Succeed())
+		Expect(store.UpsertEnvWeight(ctx, app.ID, config.Name, environment.Name, 35, nil)).To(Succeed())
 
 		result, err := builder.Build(
 			ctx,
@@ -179,6 +179,84 @@ var _ = Describe("WorkloadBuilder", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(found).To(BeTrue())
 		Expect(services[0].(map[string]any)["weight"]).To(BeEquivalentTo(int32(35)))
+	})
+
+	It("writes dynamicWeight with enable false when no environment has opted in", func() {
+		createConfig("no-weight-factor", []string{environment.Name}, 8080, nil)
+
+		result, err := builder.Build(
+			ctx, app, environment, nil,
+			corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}},
+			nil,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		dynamicWeight, found, err := unstructured.NestedMap(
+			polarisConfigCR(result.ExtraObjects).Object, "spec", "polaris", "dynamicWeight",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeTrue())
+		Expect(dynamicWeight).To(Equal(map[string]any{
+			"enable":                false,
+			"preserveServiceConfig": true,
+		}))
+	})
+
+	// dynamicWeight 片段始终下发，enable 由总开关与环境开关共同决定
+	buildWeightFactorCR := func(weightFactorOn, envOptedIn bool) map[string]any {
+		var envDynamicWeights map[string]bool
+		if envOptedIn {
+			envDynamicWeights = map[string]bool{environment.Name: true}
+		}
+		Expect(store.Create(ctx, &polaris.PolarisConfig{
+			Name:  "weight-factor",
+			AppID: app.ID,
+			Properties: polaris.Properties{
+				InstanceKey:        "wf",
+				PolarisName:        "weight-factor-service",
+				ServicePort:        8080,
+				EnableWeightFactor: weightFactorOn,
+			},
+			ScopeEnvNames:     []string{environment.Name},
+			EnvDynamicWeights: envDynamicWeights,
+		})).To(Succeed())
+
+		result, err := builder.Build(
+			ctx, app, environment, nil,
+			corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}},
+			nil,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		dynamicWeight, found, err := unstructured.NestedMap(
+			polarisConfigCR(result.ExtraObjects).Object, "spec", "polaris", "dynamicWeight",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeTrue())
+		return dynamicWeight
+	}
+
+	It("writes dynamicWeight with enable true once the environment opts in", func() {
+		// 公式参数交由北极星侧维护，preserveServiceConfig=true 时 CRD 要求它们留空
+		Expect(buildWeightFactorCR(true, true)).To(Equal(map[string]any{
+			"enable":                true,
+			"preserveServiceConfig": true,
+		}))
+	})
+
+	It("writes dynamicWeight with enable false while the environment has not opted in", func() {
+		Expect(buildWeightFactorCR(true, false)).To(Equal(map[string]any{
+			"enable":                false,
+			"preserveServiceConfig": true,
+		}))
+	})
+
+	// enable 只反映环境级开关：配置级 enableWeightFactor 决定用户能否开启，不参与 CR 组装
+	It("writes the environment switch regardless of the weight factor", func() {
+		Expect(buildWeightFactorCR(false, true)).To(Equal(map[string]any{
+			"enable":                true,
+			"preserveServiceConfig": true,
+		}))
 	})
 
 	It("filters configs by environment and leaves existing container ports unchanged", func() {
@@ -245,6 +323,16 @@ var _ = Describe("WorkloadBuilder", func() {
 		Expect(err).To(MatchError(ContainSubstring("render service label invalid")))
 	})
 })
+
+func polarisConfigCR(objects []unstructured.Unstructured) unstructured.Unstructured {
+	for _, object := range objects {
+		if object.GetKind() == "PolarisConfig" {
+			return object
+		}
+	}
+	Fail("no PolarisConfig CR in built resources")
+	return unstructured.Unstructured{}
+}
 
 func nestedString(object map[string]any, fields ...string) string {
 	value, found, err := unstructured.NestedString(object, fields...)
