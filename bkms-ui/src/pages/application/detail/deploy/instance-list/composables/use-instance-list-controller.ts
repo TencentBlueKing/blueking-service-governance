@@ -18,43 +18,36 @@
 
 import { type ComputedRef, type Ref, computed } from 'vue';
 
-import useInterval from '~/composables/use-interval';
-
 import { canInstanceGrayDeploy } from '../instance-utils';
 import { type UseInstanceActionsOptions, useInstanceActions } from './use-instance-actions';
 
 import type InstanceActionsHost from '../components/instance-actions-host.vue';
 import type { InstanceRowActionPayload } from '../types';
 
-interface UseInstanceListControllerOptions
-  extends Omit<UseInstanceActionsOptions, 'isAllInstancesSelected' | 'selectedCount' | 'timer'> {
+interface UseInstanceListControllerOptions extends Omit<
+  UseInstanceActionsOptions,
+  'isAllInstancesSelected' | 'selectedCount'
+> {
   actionsHostRef: Ref<InstanceType<typeof InstanceActionsHost> | null>;
   isAllInstancesSelected: ComputedRef<boolean>;
-  pollInterval: number;
   selectedCount: ComputedRef<number> | Ref<number>;
   beforeRowAction?: (payload: InstanceRowActionPayload) => void;
 }
 
 // 统一收口实例列表的批量操作、轮询和行操作处理。
 export function useInstanceListController(options: UseInstanceListControllerOptions) {
-  const { actionsHostRef, beforeRowAction, isAllInstancesSelected, pollInterval, selectedCount, ...actionOptions } =
-    options;
+  const { actionsHostRef, beforeRowAction, isAllInstancesSelected, selectedCount, ...actionOptions } = options;
 
   const canGrayDeploy = computed(() => {
     const selections = actionOptions.getSelectedInstances();
     return selections.length > 0 && selections.every(instance => canInstanceGrayDeploy(instance));
   });
 
-  const { start, stop, timer } = useInterval(async () => {
-    await Promise.resolve(actionOptions.refreshData());
-  }, pollInterval);
-
   const instanceActions = useInstanceActions(
     {
       ...actionOptions,
       isAllInstancesSelected,
       selectedCount,
-      timer: { start, stop },
     },
     actionsHostRef,
   );
@@ -69,8 +62,5 @@ export function useInstanceListController(options: UseInstanceListControllerOpti
     canGrayDeploy,
     handleRowAction,
     instanceActions,
-    timer,
-    startPolling: start,
-    stopPolling: stop,
   };
 }

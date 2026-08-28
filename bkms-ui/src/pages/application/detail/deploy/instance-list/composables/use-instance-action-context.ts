@@ -29,7 +29,7 @@ export function provideInstanceActionContext(context: InstanceActionContext) {
   provide(INSTANCE_ACTION_CONTEXT_KEY, context);
 }
 
-/** 操作提交成功后的统一副作用：提示、刷新、重启轮询 */
+/** 操作提交成功后的统一副作用：提示并刷新 List + Watch。 */
 export async function runActionSuccess(context: InstanceActionContext, options?: { clearSelection?: boolean }) {
   Message({
     theme: 'success',
@@ -40,9 +40,7 @@ export async function runActionSuccess(context: InstanceActionContext, options?:
     context.clearSelections();
   }
 
-  context.timer?.stop();
   await context.refreshData();
-  context.timer?.start();
 }
 
 export function useInstanceActionContext(): InstanceActionContext {

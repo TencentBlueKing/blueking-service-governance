@@ -16,11 +16,10 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { type AppInstanceOutputObj } from '~/@types/v1/instance';
+import { type AppInstanceOutputObj, type PolarisInstanceInfoOutputObj } from '~/@types/v1/instance';
 
 /** 实例操作上下文（各 Action 组件共享） */
 export interface InstanceActionContext {
-  timer?: { start: () => void; stop: () => void };
   clearSelections: () => void;
   getEnvName: (context?: { instance?: AppInstanceOutputObj }) => string;
   getSelectedInstances: () => AppInstanceOutputObj[];
@@ -32,6 +31,23 @@ export interface InstanceDataLoadedPayload {
   envName: string;
   instances: AppInstanceOutputObj[];
   total: number;
+}
+
+/** 实例附属插件数据事件。 */
+export interface InstancePluginWatchEvent {
+  plugin?: string;
+  type: 'PLUGIN';
+  object?: null | {
+    data?: PolarisInstanceInfoOutputObj[];
+    id?: string;
+  };
+}
+
+/** 实例 Pod 增量事件。 */
+export interface InstancePodWatchEvent {
+  object?: AppInstanceOutputObj | null;
+  reason?: string;
+  type: 'ADDED' | 'DELETED' | 'ENDED' | 'MODIFIED';
 }
 
 /** 行操作类型 */
@@ -65,3 +81,6 @@ export interface InstanceTableExpose {
 
 /** 实例表格模式 */
 export type InstanceTableMode = 'multiEnv' | 'single';
+
+/** 实例 Watch SSE 的业务事件。 */
+export type InstanceWatchEvent = InstancePluginWatchEvent | InstancePodWatchEvent;

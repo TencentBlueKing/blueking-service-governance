@@ -58,7 +58,6 @@ export function useInstanceActions(
     getSelectedInstances: options.getSelectedInstances,
     clearSelections: options.clearSelections,
     refreshData: options.refreshData,
-    timer: options.timer,
   });
 
   function openGray(instance?: AppInstanceOutputObj, envName?: string) {
@@ -189,10 +188,8 @@ function useDeleteInstances(context: InstanceActionContext) {
             theme: 'success',
             message: t('操作成功'),
           });
-          context.timer?.stop();
           context.clearSelections();
           await context.refreshData();
-          context.timer?.start();
         }
       },
     });

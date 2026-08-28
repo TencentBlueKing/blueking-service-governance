@@ -69,8 +69,6 @@
         mode="multiEnv"
         :selected-env-name="selectedEnvName"
         show-env-header
-        :total-count="isEnvRequestable(envName) ? undefined : 0"
-        @collapse-change="handleCollapseChange"
         @data-loaded="handleEnvDataLoaded"
         @row-action="handleRowAction"
         @selection-change="handleEnvSelectionChange"
@@ -87,7 +85,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
 
   import { AppInstanceOutputObj } from '~/@types/v1/instance';
   import Layout from '~/components/skeleton/skeleton-layout';
@@ -124,8 +122,6 @@
   const isLoading = ref(false);
   /** 环境名称到 InstanceTable 实例的映射 */
   const envTableRefs = ref<Map<string, InstanceTableExpose>>(new Map());
-  /** 已折叠的环境名称集合 */
-  const collapsedEnvNames = ref<Set<string>>(new Set());
 
   // 获取环境展示名称，优先使用环境中心返回的 displayName。
   function getEnvDisplayName(envName: string): string {
@@ -152,11 +148,6 @@
   /** 判断指定环境是否属于可请求范围 */
   function isEnvRequestable(envName: string): boolean {
     return requestableEnvNameSet.value.has(envName);
-  }
-
-  /** 判断两个环境名称数组是否完全一致（顺序和长度都相等） */
-  function isSameEnvNames(a: string[] = [], b: string[] = []) {
-    return a.length === b.length && a.every((envName, index) => envName === b[index]);
   }
 
   // 维护每个环境表格实例的引用映射。
@@ -227,11 +218,6 @@
     return false;
   });
 
-  /** 是否存在未折叠且有数据的激活环境 */
-  const hasActiveSelectedEnv = computed(() =>
-    selectedEnvs.value.some(envName => !collapsedEnvNames.value.has(envName)),
-  );
-
   // 汇总所有环境表格中的已选实例。
   function getAllSelections(): AppInstanceOutputObj[] {
     const all: AppInstanceOutputObj[] = [];
@@ -256,29 +242,6 @@
       tableRef?.clearSelections?.();
     }
     envSelections.value = new Map();
-  }
-
-  /** 处理环境表格折叠/展开变化：折叠时停止轮询，展开时加载数据并启动轮询 */
-  async function handleCollapseChange(payload: { envName: string; isCollapsed: boolean }) {
-    const nextCollapsedEnvNames = new Set(collapsedEnvNames.value);
-    if (payload.isCollapsed) {
-      nextCollapsedEnvNames.add(payload.envName);
-    } else {
-      nextCollapsedEnvNames.delete(payload.envName);
-    }
-    collapsedEnvNames.value = nextCollapsedEnvNames;
-
-    if (payload.isCollapsed) {
-      if (!hasActiveSelectedEnv.value) {
-        stopPolling();
-      }
-      return;
-    }
-
-    await envTableRefs.value.get(payload.envName)?.loadInstances?.();
-    if (!timer.value) {
-      startPolling();
-    }
   }
 
   // 同步单个环境表格返回的总数信息。
@@ -320,31 +283,28 @@
     emit('remove-deploy', envItem);
   }
 
-  /** 实例列表控制器：统一管理批量操作、轮询、灰度部署等逻辑 */
-  const { canGrayDeploy, handleRowAction, instanceActions, startPolling, stopPolling, timer } =
-    useInstanceListController({
-      actionsHostRef,
-      pollInterval: 10000,
-      getEnvName: () => selectedEnvName.value || selectedEnvs.value[0] || '',
-      getSelectedInstances: getAllSelections,
-      selectedCount,
-      isAllInstancesSelected,
-      clearSelections: handleClearAllSelections,
-      refreshData: handleRefreshAll,
-      resolveGrayInstanceIds: () => {
-        const table = getSelectedEnvTableRef();
-        if (!table) return undefined;
-        const isReallySelectAll = table.isCrossPageSelection && table.selectedCount === table.getTotal();
-        return isReallySelectAll ? [] : undefined;
-      },
-    });
+  /** 实例列表控制器：统一管理批量操作、刷新和灰度部署等逻辑。 */
+  const { canGrayDeploy, handleRowAction, instanceActions } = useInstanceListController({
+    actionsHostRef,
+    getEnvName: () => selectedEnvName.value || selectedEnvs.value[0] || '',
+    getSelectedInstances: getAllSelections,
+    selectedCount,
+    isAllInstancesSelected,
+    clearSelections: handleClearAllSelections,
+    refreshData: handleRefreshAll,
+    resolveGrayInstanceIds: () => {
+      const table = getSelectedEnvTableRef();
+      if (!table) return undefined;
+      const isReallySelectAll = table.isCrossPageSelection && table.selectedCount === table.getTotal();
+      return isReallySelectAll ? [] : undefined;
+    },
+  });
 
-  /** 监听 appID、选中环境、可请求环境变化：清理无效数据并控制轮询启停 */
+  /** 监听选中环境和可请求环境变化，清理已失效的汇总数据。 */
   watch(
     [() => appDetailStore.appID, selectedEnvs, () => props.requestableEnvNames],
-    async () => {
+    () => {
       if (!appDetailStore.appID || selectedEnvs.value.length === 0) {
-        stopPolling();
         return;
       }
 
@@ -356,42 +316,9 @@
       }
       envSelections.value = new Map(envSelections.value);
       envTotals.value = new Map(envTotals.value);
-      collapsedEnvNames.value = new Set(
-        [...collapsedEnvNames.value].filter(envName => selectedEnvs.value.includes(envName)),
-      );
-
-      if (hasActiveSelectedEnv.value && !timer.value) {
-        startPolling();
-      } else if (!hasActiveSelectedEnv.value) {
-        stopPolling();
-      }
     },
     { immediate: true, deep: true },
   );
-
-  /** 监听可请求环境列表变化：环境就绪后刷新数据并启动轮询 */
-  watch(
-    () => props.requestableEnvNames,
-    async (requestableEnvNames, oldRequestableEnvNames = []) => {
-      if (!appDetailStore.appID || selectedEnvs.value.length === 0) {
-        return;
-      }
-      if (isSameEnvNames(requestableEnvNames, oldRequestableEnvNames)) {
-        return;
-      }
-      await nextTick();
-      await handleRefreshAll();
-      if (hasActiveSelectedEnv.value && !timer.value) {
-        startPolling();
-      }
-    },
-    { deep: true },
-  );
-
-  /** 组件卸载前停止轮询 */
-  onBeforeUnmount(() => {
-    stopPolling();
-  });
 
   /** 暴露给父组件的方法 */
   defineExpose({

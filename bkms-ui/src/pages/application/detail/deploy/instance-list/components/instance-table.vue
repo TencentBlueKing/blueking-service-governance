@@ -69,10 +69,12 @@
         }"
         :settings="settings"
         :show-settings="true"
+        :sort-config="{ remote: true }"
         @filter-change="handleFilterChange"
         @page-limit-change="handlePageSizeChange"
         @page-value-change="handlePageChange"
         @setting-change="handleSettingChange"
+        @sort-change="handleSortChange"
       >
         <template #empty>
           <TableException
@@ -557,7 +559,6 @@
   import { Button, Checkbox, Dropdown, Popover, Tag } from 'bkui-vue';
   import { AngleDownLine, RightShape } from 'bkui-vue/lib/icon';
   import { AppInstanceOutputObj } from '~/@types/v1/instance';
-  import { InstanceService } from '~/api/modules/v1';
   import CustomFilter from '~/components/custom-filter.vue';
   import HoverCopy from '~/components/hover-copy.vue';
   import StatusDotIcon from '~/components/status-dot-icon.vue';
@@ -572,6 +573,12 @@
   import AutoScaleTag from '~/pages/application/detail/components/auto-scale-tag.vue';
   import { useAppDetail } from '~/stores/app-detail';
 
+  import {
+    type RestartSortOrder,
+    paginateInstances,
+    sortInstancesByRestart,
+  } from '../composables/instance-watch-utils';
+  import { useInstanceListWatch } from '../composables/use-instance-list-watch';
   import { canInstanceGrayDeploy, canLogin, canViewLog, isPolarisHealthy } from '../instance-utils';
 
   import type {
@@ -600,8 +607,6 @@
     showEnvHeader?: boolean;
     /** 是否显示列筛选头 */
     showFilter?: boolean;
-    /** 外部传入总条数（单环境模式） */
-    totalCount?: number;
   }
 
   const props = withDefaults(defineProps<Props>(), {
@@ -612,7 +617,6 @@
     mode: 'multiEnv',
     showEnvHeader: true,
     data: undefined,
-    totalCount: undefined,
     showFilter: false,
     filterOptions: () => ({}),
     enableMaxHeight: true,
@@ -657,10 +661,45 @@
     });
   }
 
-  // 实例列表数据
-  const instanceList = ref<AppInstanceOutputObj[]>([]);
-  const total = ref(0);
-  const isLoading = ref(false);
+  // 是否使用外部数据
+  const isExternalData = computed(() => props.data !== undefined);
+
+  const {
+    clear: clearWatchedInstances,
+    instances: watchedInstances,
+    lastError: watchError,
+    refresh: refreshWatch,
+  } = useInstanceListWatch({
+    enabled: () => !isExternalData.value && !isCollapsed.value,
+    getScope: () => ({
+      appID: appDetailStore.appID,
+      envName: props.envName,
+    }),
+  });
+
+  watch(isExternalData, external => {
+    if (external) clearWatchedInstances();
+  });
+
+  /** 单环境使用父组件传入的全量筛选结果，多环境使用当前环境的 Watch 快照。 */
+  const allInstances = computed<AppInstanceOutputObj[]>(() =>
+    isExternalData.value ? (props.data ?? []) : watchedInstances.value,
+  );
+
+  // 分页与 Restart 本地排序
+  const paginationInternal = ref({
+    current: 1,
+    limit: 10,
+  });
+  const restartSortOrder = ref<RestartSortOrder>(null);
+
+  const sortedInstances = computed(() => sortInstancesByRestart(allInstances.value, restartSortOrder.value));
+
+  const displayTotal = computed(() => allInstances.value.length);
+  const instanceList = computed(() => {
+    return paginateInstances(sortedInstances.value, paginationInternal.value.current, paginationInternal.value.limit);
+  });
+
   const {
     enabled: isAutoScaleEnabled,
     status: autoScaleStatus,
@@ -670,40 +709,6 @@
     appID: () => appDetailStore.appID,
     envName: () => props.envName,
   });
-
-  // 是否使用外部数据
-  const isExternalData = computed(() => props.data !== undefined);
-
-  // 同步外部数据
-  watch(
-    () => props.data,
-    newData => {
-      if (newData !== undefined) {
-        instanceList.value = newData;
-      }
-    },
-    { immediate: true },
-  );
-
-  watch(
-    () => props.totalCount,
-    newTotal => {
-      if (newTotal !== undefined) {
-        total.value = newTotal;
-      }
-    },
-    { immediate: true },
-  );
-
-  // 分页
-  const paginationInternal = ref({
-    current: 1,
-    limit: 10,
-  });
-
-  const displayTotal = computed(() =>
-    isExternalData.value && props.totalCount !== undefined ? props.totalCount : total.value,
-  );
 
   // Table 最大高度
   const maxHeight = computed(() => {
@@ -731,18 +736,39 @@
     filters: emptyFilters,
   });
 
+  watch(watchError, error => {
+    if (error && allInstances.value.length === 0) {
+      setTypeToError();
+    } else if (!error) {
+      clearErrorType();
+    }
+  });
+
+  watch(
+    displayTotal,
+    total => {
+      const maxPage = Math.max(1, Math.ceil(total / paginationInternal.value.limit));
+      if (paginationInternal.value.current > maxPage) {
+        paginationInternal.value.current = maxPage;
+      }
+      emit('data-loaded', {
+        envName: props.envName,
+        total,
+        instances: allInstances.value,
+      });
+    },
+    { immediate: true },
+  );
+
   // 筛选事件
   // 将表格列筛选变化透传给父组件。
   function handleFilterChange(event: { field: string; values: string[] }) {
     emit('filter-change', event);
   }
 
-  // 处理页码变化并按模式决定是否自行拉取数据。
+  // 处理本地分页变化。
   function handlePageChange(current: number) {
     paginationInternal.value.current = current;
-    if (!isExternalData.value) {
-      loadInstances();
-    }
     emit('page-change', current);
   }
 
@@ -750,9 +776,6 @@
   function handlePageSizeChange(limit: number) {
     paginationInternal.value.current = 1;
     paginationInternal.value.limit = limit;
-    if (!isExternalData.value) {
-      loadInstances();
-    }
     emit('page-size-change', limit);
   }
 
@@ -763,38 +786,17 @@
     }
   }
 
-  // 加载实例数据（多环境模式使用）
-  // 在多环境模式下按环境拉取实例列表数据。
+  // Restart 在全量集合上排序后再分页。
+  function handleSortChange(event: { field?: string; order?: null | string }) {
+    restartSortOrder.value =
+      event.field === 'restartCount' && (event.order === 'asc' || event.order === 'desc') ? event.order : null;
+    resetPage();
+  }
+
+  // 重新执行全量 List + Watch（多环境模式使用）。
   async function loadInstances() {
     if (isExternalData.value) return;
-    if (!appDetailStore.appID || !props.envName) return;
-
-    isLoading.value = true;
-    try {
-      const res = await InstanceService.listAppInstances({
-        appID: appDetailStore.appID,
-        envName: props.envName,
-        page: paginationInternal.value.current,
-        pageSize: paginationInternal.value.limit,
-      });
-
-      instanceList.value = (res.results || []) as AppInstanceOutputObj[];
-      total.value = Number(res.count) || 0;
-      clearErrorType();
-
-      emit('data-loaded', {
-        envName: props.envName,
-        total: total.value,
-        instances: instanceList.value,
-      });
-    } catch (err) {
-      console.error(err);
-      setTypeToError();
-      instanceList.value = [];
-      total.value = 0;
-    } finally {
-      isLoading.value = false;
-    }
+    await refreshWatch();
   }
 
   function resetPage(current = 1) {
@@ -818,6 +820,19 @@
     handleClearSelection,
   } = useTableCheckbox(instanceList, 'id', totalRef);
 
+  // Watch 删除实例时清理失效选择，MODIFIED 时把已选对象同步为最新投影。
+  watch(
+    allInstances,
+    instances => {
+      const instanceMap = new Map(instances.map(instance => [instance.id, instance]));
+      selections.value = selections.value
+        .map(selection => instanceMap.get(selection.id))
+        .filter((selection): selection is AppInstanceOutputObj => Boolean(selection));
+      excludedIds.value = new Set([...excludedIds.value].filter(instanceID => instanceMap.has(instanceID)));
+    },
+    { deep: true },
+  );
+
   // 跨环境禁用逻辑
   const isCheckboxDisabled = computed(() => {
     if (!props.selectedEnvName) return false;
@@ -826,9 +841,9 @@
   const isSelectAllDisabled = computed(() => isCheckboxDisabled.value);
 
   const selectedCount = computed(() =>
-    isCrossPageSelection.value ? total.value - excludedIds.value.size : selections.value.length,
+    isCrossPageSelection.value ? displayTotal.value - excludedIds.value.size : selections.value.length,
   );
-  const isAllSelected = computed(() => selectedCount.value === total.value && total.value > 0);
+  const isAllSelected = computed(() => selectedCount.value === displayTotal.value && displayTotal.value > 0);
 
   // 表头 Checkbox 点击
   // 统一处理表头复选框的全选与取消全选。
@@ -853,7 +868,7 @@
     [selections, isCrossPageSelection, () => excludedIds.value.size],
     () => {
       const effectiveSelections = isCrossPageSelection.value
-        ? instanceList.value.filter(item => !excludedIds.value.has(item.id))
+        ? allInstances.value.filter(item => !excludedIds.value.has(item.id))
         : selections.value;
       emit('selection-change', {
         envName: props.envName,
@@ -863,29 +878,18 @@
     { deep: true },
   );
 
-  // 监听 appID 变化重新加载（仅内部数据模式）
-  watch(
-    () => appDetailStore.appID,
-    () => {
-      if (!isExternalData.value && appDetailStore.appID) {
-        loadInstances();
-      }
-    },
-    { immediate: true },
-  );
-
   watch(isAutoScaleEnabled, enabled => updateAutoScalePolling(enabled), { immediate: true });
 
   defineExpose({
     clearSelections: handleClearSelection,
     getSelections: () =>
       isCrossPageSelection.value
-        ? instanceList.value.filter(item => !excludedIds.value.has(item.id))
+        ? allInstances.value.filter(item => !excludedIds.value.has(item.id))
         : selections.value,
     selectedCount,
     isAllSelected,
     isCrossPageSelection,
-    getTotal: () => total.value,
+    getTotal: () => displayTotal.value,
     isCollapsed,
     loadInstances,
     resetPage,
