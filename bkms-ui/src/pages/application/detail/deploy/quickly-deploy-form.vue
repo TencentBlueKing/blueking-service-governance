@@ -72,7 +72,7 @@
           v-model="formModel.branch"
           :repository-id="repoAlias"
           :workspace-id="workspaceId"
-          @update:model-value="handleBranchSelect"
+          @branch-commit="handleBranchSelect"
         />
       </Form.FormItem>
     </template>
@@ -193,6 +193,7 @@
 
   // 推荐镜像 Tag：源码构建模式下自动推荐
   const { getDefaultBranch, fetchRecommendTag } = useRecommendTag(() => formModel.branch, {
+    manualFetchOnly: computed(() => !repoAlias.value),
     onRecommend: tag => {
       if (imageSource.value === 'code') {
         formModel.imageTag = tag;

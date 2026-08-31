@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { computed, watch } from 'vue';
+import { type MaybeRefOrGetter, computed, toValue, watch } from 'vue';
 
 import { useDebounce } from '@vueuse/core';
 import { get } from 'lodash-es';
@@ -31,8 +31,12 @@ import { useAppDetail } from '~/stores/app-detail';
  *
  * @param branchGetter 获取当前分支的函数
  * @param options.onRecommend 获取到推荐 Tag 后的回调
+ * @param options.manualFetchOnly 为 true 时不监听分支变化自动拉取，仅通过 fetchRecommendTag 手动触发
  */
-export function useRecommendTag(branchGetter: () => string, options?: { onRecommend?: (tag: string) => void }) {
+export function useRecommendTag(
+  branchGetter: () => string,
+  options?: { manualFetchOnly?: MaybeRefOrGetter<boolean>; onRecommend?: (tag: string) => void },
+) {
   const appDetailStore = useAppDetail();
   let skipNextWatch = false;
 
@@ -61,6 +65,7 @@ export function useRecommendTag(branchGetter: () => string, options?: { onRecomm
   // debounce watch：分支变化时自动获取推荐 Tag
   const debounceBranch = useDebounce(computed(branchGetter), 500);
   watch(debounceBranch, async newBranch => {
+    if (toValue(options?.manualFetchOnly)) return;
     if (skipNextWatch) {
       skipNextWatch = false;
       return;

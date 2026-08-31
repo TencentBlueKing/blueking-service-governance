@@ -68,7 +68,7 @@
                 <Button
                   class="mr-[10px] w-[80px]"
                   theme="primary"
-                  @click="handleShowPopConfirm"
+                  @click="showPopConfirm = true"
                 >
                   {{ $t('执行构建') }}
                 </Button>
@@ -94,7 +94,7 @@
                           class="w-[400px]"
                           :repository-id="repoAlias"
                           :workspace-id="workspaceId"
-                          @update:model-value="handleBranchSelect"
+                          @branch-commit="handleBranchSelect"
                         />
                       </Form.FormItem>
                       <Form.FormItem
@@ -489,16 +489,17 @@
   const rules = {
     branch: [
       {
-        validator: (value: string) => value.length,
+        // bkui validator 仅 true/false/字符串有明确语义，返回 0 会被当成通过
+        validator: (value: string) => !!String(value ?? '').trim(),
         message: t('分支不能为空'),
-        trigger: 'change',
+        trigger: ['change', 'blur'],
       },
     ],
     tag: [
       {
-        validator: (value: string) => value.length,
+        validator: (value: string) => !!String(value ?? '').trim(),
         message: t('tag不能为空'),
-        trigger: 'blur',
+        trigger: ['change', 'blur'],
       },
     ],
   };
@@ -524,30 +525,30 @@
   const recommendTag = ref('');
   // 获取推荐版本号
   const { getDefaultBranch, fetchRecommendTag } = useRecommendTag(() => formData.value.branch, {
+    manualFetchOnly: computed(() => !repoAlias.value),
     onRecommend: tag => {
-      if (showPopConfirm.value) {
-        formData.value.tag = tag;
-        recommendTag.value = tag;
-      }
+      if (!showPopConfirm.value) return;
+      formData.value.tag = tag;
+      recommendTag.value = tag;
     },
   });
 
-  /** 分支变化立即拉取推荐 Tag（避免依赖 useRecommendTag 的防抖导致展示延迟） */
-  function handleBranchSelect(value: string) {
-    if (value) fetchRecommendTag(value);
+  /** 分支确认后拉取推荐 Tag（Select 选中 / Input 失焦 / prepare 回填） */
+  function handleBranchSelect(branch: string) {
+    if (branch) fetchRecommendTag(branch);
   }
 
-  async function handleShowPopConfirm() {
-    showPopConfirm.value = true;
-    // prepare 会先回填默认分支，此时 @update:model-value 会触发 handleBranchSelect 获取推荐 Tag
-    await prepareBranchAfterMount(getDefaultBranch());
-  }
-
-  // 关闭执行构建 Popover 时同步收起分支下拉，避免残留浮层
-  watch(showPopConfirm, visible => {
+  // 打开：复位表单并回填默认分支；关闭：收起分支下拉
+  watch(showPopConfirm, async visible => {
     if (!visible) {
       resetBranchSelect();
+      return;
     }
+    formData.value = { branch: '', tag: '' };
+    recommendTag.value = '';
+    await nextTick();
+    await prepareBranchAfterMount(getDefaultBranch());
+    executeFormRef.value?.clearValidate?.();
   });
 
   const isLoading = ref<boolean>(false);
@@ -601,7 +602,7 @@
 
   async function handleExecuteSource() {
     const validate = await executeFormRef.value?.validate().catch(() => false);
-    if (!validate) throw new Error(t('表单验证失败'));
+    if (!validate) return;
     isLoading.value = true;
 
     const result = await BuildsService.createBuild(

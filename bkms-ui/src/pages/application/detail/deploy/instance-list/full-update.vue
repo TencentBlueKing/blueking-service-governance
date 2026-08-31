@@ -95,7 +95,7 @@
               v-model="formModel.branch"
               :repository-id="repoAlias"
               :workspace-id="workspaceId"
-              @update:model-value="handleBranchSelect"
+              @branch-commit="handleBranchSelect"
             />
           </Form.FormItem>
           <Form.FormItem
@@ -240,6 +240,7 @@
   // 切换为“仅配置”时会保留之前的镜像来源，因此只有“镜像+配置”选择源码时才触发构建。
   const shouldBuildFromSource = computed(() => formModel.updateContent === 'both' && imageSource.value === 'code');
   const { getDefaultBranch, fetchRecommendTag } = useRecommendTag(() => formModel.branch, {
+    manualFetchOnly: computed(() => !repoAlias.value),
     onRecommend: tag => {
       if (shouldBuildFromSource.value) {
         formModel.imageTag = tag;
