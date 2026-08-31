@@ -61,7 +61,6 @@ type RedeployRequiredFields struct {
 - `direct`
 - `keepNotReadyPod`
 - `enableHealthCheck`
-- `enableWeightFactor`
 - `serviceLabels`
 
 一次 PATCH 可以同时改两类字段。系统不去分析请求里具体改了哪些字段，只看**改完之后**的三个部署关联字段和环境快照是否还一致。
@@ -76,7 +75,7 @@ CR 上的 `dynamicWeight.enable` **直接取环境级开关**，平台不再叠�
 
 关闭 `enableWeightFactor` 不清理环境级开关：它们记录的是用户对每个环境的意图，重新打开后各环境按原样恢复。
 
-两级开关都不进部署快照，所以按 §2.2 的规则可以动态下发。
+环境级开关不进部署快照，通过环境级 PUT 即时下发；配置级 `enableWeightFactor` 同样不进快照，但它也不参与 CR 组装，单独 PATCH 它不会触发动态下发（与 `operator` 同类）。
 
 CR 片段的形状很简单，且**始终下发**：
 
@@ -488,7 +487,7 @@ RemoveEnvSettings(ctx, appID, configName, envNames)
 | Create | `registerMode` | 可选，`immediate` 或 `on_deploy`，缺省 `on_deploy`；显式传空串会被拒绝 |
 | Create | `enableWeightFactor` | 可选，缺省 `false`；`envDynamicWeights` 不预建 |
 | PATCH | `scopeEnvNames` | 传了就全量替换，`[]` 清空，不传（`nil`）表示不更新 |
-| PATCH | `enableWeightFactor` | 不传（`nil`）表示不更新；改为 `false` 不动 `envDynamicWeights`，也不改变 CR |
+| PATCH | `enableWeightFactor` | 不传（`nil`）表示不更新；改为 `false` 不动 `envDynamicWeights`，不改变 CR，也不触发动态下发 |
 | PATCH | `registerMode` | 不暴露，创建后不可修改 |
 | PUT | `/envs/{envName}/weight` | 允许 scope 内环境或任何已部署环境；待部署只持久化，已部署同步 Patch 集群 |
 | PUT | `/envs/{envName}/weight` 的 `dynamicWeight` | 可选，不传保持原值；不受配置的 `enableWeightFactor` 约束 |
@@ -514,7 +513,7 @@ Create/PATCH serializer 不声明 `weight` 或 `envWeights`；旧客户端继续
 | --- | --- | --- |
 | 首次部署前改配置 | 否 | 等应用部署 |
 | 已部署，只改普通 CR 字段 | 是（快照匹配时） | 异步 Upsert 完整 CR |
-| 开关 `enableWeightFactor` | 是（快照匹配时） | 异步 Upsert，但 CR 内容不因此变化：`dynamicWeight.enable` 直接取环境级开关 |
+| 开关 `enableWeightFactor` | 否 | 只落库，不触发动态下发；CR 不因此变化 |
 | scope 内待部署环境 PUT 权重 | 否 | 仅持久化，下次部署写进 CR |
 | 已部署环境 PUT 权重 | 是 | 不受 readiness 限制，同步 JSON Patch 该环境的 weight |
 | scope 外且未部署环境 PUT 权重 | 不适用 | 返回 400，不持久化 |

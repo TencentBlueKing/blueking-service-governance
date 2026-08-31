@@ -211,7 +211,6 @@ type ConfigUpdateData struct {
 }
 
 // affectsWorkload 判断本次更新是否影响 PolarisConfig CR / 工作负载渲染。
-// operator 只同步北极星 Owners，不参与 CR，因此单独更新负责人时不触发动态下发。
 func (d *ConfigUpdateData) affectsWorkload() bool {
 	if d == nil {
 		return false
@@ -221,7 +220,6 @@ func (d *ConfigUpdateData) affectsWorkload() bool {
 		d.Direct != nil ||
 		d.KeepNotReadyPod != nil ||
 		d.EnableHealthCheck != nil ||
-		d.EnableWeightFactor != nil ||
 		d.ServiceLabels != nil ||
 		d.ScopeEnvNames != nil ||
 		d.PolarisToken != nil

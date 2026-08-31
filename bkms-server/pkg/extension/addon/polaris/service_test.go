@@ -336,7 +336,7 @@ var _ = Describe("PolarisConfigService", func() {
 			Expect(stored.EnableWeightFactor).To(BeFalse())
 		})
 
-		It("should enqueue dynamic apply when the switch is turned on", func() {
+		It("should not enqueue dynamic apply when only the weight factor is updated", func() {
 			enqueued := 0
 			service = polaris.NewPolarisConfigService(
 				store,
@@ -354,7 +354,7 @@ var _ = Describe("PolarisConfigService", func() {
 			applied := redeployFields("k1", "t1", 8080)
 			config := newTestConfig(
 				app.ID,
-				"cfg-weight-factor-apply",
+				"cfg-weight-factor-no-apply",
 				[]string{environment.Name},
 				map[string]polaris.PolarisEnvState{environment.Name: envState(applied)},
 			)
@@ -366,8 +366,8 @@ var _ = Describe("PolarisConfigService", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.EnableWeightFactor).To(BeTrue())
-			// 该字段只落 CR、不进部署快照，因此无需重新部署即可下发
-			Expect(enqueued).To(Equal(1))
+			// 该字段不参与 CR 组装，单独更新不应空转下发
+			Expect(enqueued).To(Equal(0))
 			Expect(updated.GetEnvState(environment.Name).AppliedFields).To(Equal(applied))
 		})
 
