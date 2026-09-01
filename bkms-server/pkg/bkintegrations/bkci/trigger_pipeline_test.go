@@ -50,7 +50,8 @@ var _ = Describe("build-trigger type helpers", func() {
 			Expect(got).To(Equal(expectedType))
 		},
 		Entry("shared builtin", "dockerfile", PipelineTypeDockerfile, true),
-		Entry("build-trigger composite", "build-trigger-demo", PipelineTypeBuildTrigger, true),
+		Entry("build-trigger template type", "build-trigger", PipelineType(""), false),
+		Entry("build-trigger instance type", "build-trigger-demo", PipelineType(""), false),
 		Entry("custom pipeline", "p-0123456789abcdef0123456789abcdef", PipelineType(""), false),
 	)
 
@@ -65,12 +66,13 @@ var _ = Describe("build-trigger type helpers", func() {
 		Expect(name).To(Equal("[bkms] 自动构建触发（demo-app）"))
 
 		stages := []map[string]any{
-			{"script": "url=[[ .callbackURL ]] cred=[[ .credentialID ]]"},
+			{"script": "url=[[ .callbackURL ]] cred=[[ .credentialID ]]", "nested": map[string]any{"keep": "raw"}},
 		}
 		rendered, err := renderBuildTriggerStages(stages, renderCtx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rendered[0]["script"]).To(Equal("url=https://bkms.example.com/cb cred=bkms_bt_demo"))
 		Expect(stages[0]["script"]).To(Equal("url=[[ .callbackURL ]] cred=[[ .credentialID ]]"))
+		Expect(stages[0]["nested"]).To(Equal(map[string]any{"keep": "raw"}))
 	})
 
 	DescribeTable("buildCredentialID",
@@ -96,40 +98,6 @@ var _ = Describe("build-trigger type helpers", func() {
 	})
 })
 
-var _ = Describe("PipelineManager Initialize build-trigger guard", func() {
-	var (
-		ctx           context.Context
-		manager       *PipelineManager
-		pipelineStore *PipelineStoreMongo
-	)
-
-	BeforeEach(func() {
-		ctx = context.Background()
-		manager = NewPipelineManager(managerTestWorkspaceID)
-		_, pipelineStore, _ = setupManagerTestStores()
-	})
-
-	It("should return existing build-trigger pipeline and reject creating missing ones", func() {
-		pipelineType := string(BuildTriggerPipelineType("demo-app"))
-		Expect(pipelineStore.Create(ctx, &Pipeline{
-			ID:              "p-bt-existing",
-			Type:            pipelineType,
-			WorkspaceID:     managerTestWorkspaceID,
-			ProjectCode:     managerTestProjectCode,
-			Name:            "[bkms] 自动构建触发（demo-app）",
-			TemplateVersion: "1.0.0",
-			Creator:         "test-user",
-		})).To(Succeed())
-
-		got, err := manager.Initialize(ctx, pipelineType)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(got.ID).To(Equal("p-bt-existing"))
-
-		_, err = manager.Initialize(ctx, string(BuildTriggerPipelineType("missing-app")))
-		Expect(errors.Is(err, ErrBuildTriggerPipelineRequireEnsure)).To(BeTrue())
-	})
-})
-
 var _ = Describe("TriggerPipelineManager", func() {
 	const testAppID = "demo-app"
 
@@ -143,8 +111,10 @@ var _ = Describe("TriggerPipelineManager", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		user := mockUser()
+		ctx = auth.WithUser(context.Background(), user)
 		manager = NewTriggerPipelineManager(managerTestWorkspaceID)
+		manager.Client = cloudbkci.NewStub(user)
 		projectStore, pipelineStore, templateStore = setupManagerTestStores()
 		Expect(projectStore.Create(ctx, mockProject())).To(Succeed())
 		Expect(templateStore.Upsert(ctx, &PipelineTemplate{
@@ -188,10 +158,6 @@ var _ = Describe("TriggerPipelineManager", func() {
 		config.G.HTTPServer.PublicBaseURL = "https://bkms.example.com"
 
 		mockey.PatchConvey("ensure", GinkgoT(), func() {
-			user := mockUser()
-			mockey.Mock(auth.MustGetUser).Return(user).Build()
-			mockey.Mock(cloudbkci.New).Return(cloudbkci.NewStub(user), nil).Build()
-
 			first, err := manager.Ensure(ctx, testAppID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(first.CallbackCredentialID).To(Equal("bkms_bt_demo_app"))
@@ -209,12 +175,9 @@ var _ = Describe("TriggerPipelineManager", func() {
 
 	It("Ensure: rollback remote pipeline when local insert fails after CreatePipeline", func() {
 		mockey.PatchConvey("rollback remote pipeline", GinkgoT(), func() {
-			user := mockUser()
 			const remotePipelineID = "p-bt-rollback-after-db-fail"
 			var deletedPipelineID string
 
-			mockey.Mock(auth.MustGetUser).Return(user).Build()
-			mockey.Mock(cloudbkci.New).Return(cloudbkci.NewStub(user), nil).Build()
 			mockey.Mock((*cloudbkci.StubApiClient).CreatePipeline).
 				Return(remotePipelineID, nil).
 				Build()
@@ -235,10 +198,6 @@ var _ = Describe("TriggerPipelineManager", func() {
 
 	It("Cleanup: clear local when credential or remote pipeline delete is soft-failed", func() {
 		mockey.PatchConvey("cleanup", GinkgoT(), func() {
-			user := mockUser()
-			mockey.Mock(auth.MustGetUser).Return(user).Build()
-			mockey.Mock(cloudbkci.New).Return(cloudbkci.NewStub(user), nil).Build()
-
 			_, err := manager.Ensure(ctx, testAppID)
 			Expect(err).NotTo(HaveOccurred())
 			mockey.Mock((*cloudbkci.StubApiClient).DeleteCredential).
