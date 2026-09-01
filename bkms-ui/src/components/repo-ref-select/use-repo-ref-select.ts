@@ -113,7 +113,7 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
       repositoryType: REPOSITORY_TYPE_NAME,
       page: 1,
       pageSize: DEFAULT_PAGE_SIZE,
-      ...(search ? { search } : {}),
+      ...(search && { search }),
     };
   }
 
@@ -192,7 +192,7 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
 
   /** 远程搜索：只改关键字，由防抖 watch 决定是否请求 */
   function handleSearch(keyword: string) {
-    searchKeyword.value = keyword?.trim() || '';
+    searchKeyword.value = keyword.trim();
   }
 
   /**

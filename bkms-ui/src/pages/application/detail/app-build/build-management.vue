@@ -87,7 +87,7 @@
                         property="branch"
                         :required="isBuildFieldRequired"
                       >
-                        <!-- 分支/Tag 下拉 -->
+                        <!-- 代码分支 -->
                         <RepoRefSelect
                           ref="branchSelectRef"
                           v-model="formData.branch"
@@ -489,17 +489,16 @@
   const rules = {
     branch: [
       {
-        // bkui validator 仅 true/false/字符串有明确语义，返回 0 会被当成通过
-        validator: (value: string) => !!String(value ?? '').trim(),
+        validator: (value: string) => value.length,
         message: t('分支不能为空'),
-        trigger: ['change', 'blur'],
+        trigger: ['blur', 'change'],
       },
     ],
     tag: [
       {
-        validator: (value: string) => !!String(value ?? '').trim(),
+        validator: (value: string) => value.length,
         message: t('tag不能为空'),
-        trigger: ['change', 'blur'],
+        trigger: 'blur',
       },
     ],
   };
@@ -533,7 +532,7 @@
     },
   });
 
-  /** 分支确认后拉取推荐 Tag（Select 选中 / Input 失焦 / prepare 回填） */
+  /** 分支确认后拉取推荐 Tag（Select 选中 / Input change 防抖后 / prepare 回填） */
   function handleBranchSelect(branch: string) {
     if (branch) fetchRecommendTag(branch);
   }
@@ -546,8 +545,11 @@
     }
     formData.value = { branch: '', tag: '' };
     recommendTag.value = '';
-    await nextTick();
     await prepareBranchAfterMount(getDefaultBranch());
+    // 流水线模式无 repoAlias，prepare 不会触发 branch-commit，需主动拉取推荐版本号
+    if (!repoAlias.value) {
+      await fetchRecommendTag('');
+    }
     executeFormRef.value?.clearValidate?.();
   });
 
