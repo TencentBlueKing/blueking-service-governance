@@ -35,10 +35,16 @@ const collectionName = "component_defs"
 // ErrComponentDefNotFound is returned when a component-def is not found in the store.
 var ErrComponentDefNotFound = errors.New("component def not found")
 
+// ErrComponentDefAlreadyExists is returned when creating a component-def whose name and version already exist.
+var ErrComponentDefAlreadyExists = errors.New("component def already exists")
+
 // ComponentDefStore defines the interface for component-def storage operations.
 type ComponentDefStore interface {
-	// Create creates a new component-def or updates if it already exists (based on name and version)
+	// Create 仅插入新组件定义。name + version 已存在时返回 ErrComponentDefAlreadyExists。
 	Create(ctx context.Context, component *ComponentDef) error
+
+	// Upsert 按 name + version 创建或覆盖组件定义。
+	Upsert(ctx context.Context, component *ComponentDef) error
 
 	// Get gets an existing component-def by name and version
 	Get(ctx context.Context, name, version string) (*ComponentDef, error)
@@ -84,29 +90,37 @@ func NewComponentDefStoreMongo(client *mongo.Client, dbName string) (*ComponentD
 	return &ComponentDefStoreMongo{collection: coll}, nil
 }
 
-// Create creates a new component-def or updates an existing one(based on name and version)
-//
-// - ctx: The context object for cancellation and timeout
-// - compDef: The component-def to create or update
-//
-// Return an error if the operation fails.
+// Create 仅插入新组件定义，已存在时返回 ErrComponentDefAlreadyExists。
 func (s *ComponentDefStoreMongo) Create(ctx context.Context, compDef *ComponentDef) error {
-	// Validate the component struct to ensure required fields are present
-	if err := ValidateComponentDef(compDef); err != nil {
-		return errors.Wrap(err, "component validation failed")
+	if err := prepareComponentDefWrite(compDef); err != nil {
+		return err
 	}
 
-	// Prepare the timestamp fields
-	now := time.Now()
-	if compDef.CreatedAt.IsZero() {
-		compDef.CreatedAt = now
+	doc, err := buildComponentDefSetDoc(compDef)
+	if err != nil {
+		return errors.Wrap(err, "prepare the creation document")
 	}
-	compDef.UpdatedAt = now
+	doc["createdAt"] = compDef.CreatedAt
+
+	if _, err = s.collection.InsertOne(ctx, doc); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return ErrComponentDefAlreadyExists
+		}
+		return errors.Wrap(err, "insert component def")
+	}
+	return nil
+}
+
+// Upsert 按 name + version 创建或覆盖组件定义。
+func (s *ComponentDefStoreMongo) Upsert(ctx context.Context, compDef *ComponentDef) error {
+	if err := prepareComponentDefWrite(compDef); err != nil {
+		return err
+	}
 
 	filter := bson.M{"name": compDef.Name, "version": compDef.Version}
 	setDoc, err := buildComponentDefSetDoc(compDef)
 	if err != nil {
-		return errors.Wrap(err, "prepare the creation document")
+		return errors.Wrap(err, "prepare the upsert document")
 	}
 	update := bson.M{
 		"$set":         setDoc,
@@ -114,7 +128,7 @@ func (s *ComponentDefStoreMongo) Create(ctx context.Context, compDef *ComponentD
 	}
 	opts := options.UpdateOne().SetUpsert(true)
 	if _, err := s.collection.UpdateOne(ctx, filter, update, opts); err != nil {
-		return errors.Wrap(err, "creating/updating component")
+		return errors.Wrap(err, "upsert component def")
 	}
 	return nil
 }
@@ -245,6 +259,19 @@ func (s *ComponentDefStoreMongo) UpdateInstanceCount(
 	if err != nil {
 		return errors.Wrapf(err, "incr ref count for component def(%s) field(%s) delta(%d)", name, instanceType, delta)
 	}
+	return nil
+}
+
+func prepareComponentDefWrite(compDef *ComponentDef) error {
+	if err := ValidateComponentDef(compDef); err != nil {
+		return errors.Wrap(err, "component validation failed")
+	}
+
+	now := time.Now()
+	if compDef.CreatedAt.IsZero() {
+		compDef.CreatedAt = now
+	}
+	compDef.UpdatedAt = now
 	return nil
 }
 

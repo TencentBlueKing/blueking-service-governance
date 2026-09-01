@@ -86,44 +86,48 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 				Entry("specs only", nil, []string{"apiVersion: v1\nkind: ConfigMap\n"}),
 			)
 
-			It("createdAt and updatedAt fields should behaviour normally", func() {
+			It("should return ErrComponentDefAlreadyExists when name+version already exists", func() {
+				Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
+
 				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.CreatedAt.IsZero()).To(BeFalse())
-				Expect(retrieved.UpdatedAt.IsZero()).To(BeFalse())
-
-				oldCreatedAt := retrieved.CreatedAt
-				oldUpdatedAt := retrieved.UpdatedAt
-				// Update the component and check the time related fields
-				compDef.DisplayName = "Updated Name"
-				err = compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err = compDefStore.Get(ctx, compDef.Name, compDef.Version)
-				Expect(err).NotTo(HaveOccurred())
-				// CreatedAt should remain unchanged, UpdatedAt should be later than before
-				Expect(retrieved.CreatedAt).To(Equal(oldCreatedAt))
-				Expect(retrieved.UpdatedAt.Compare(oldUpdatedAt)).To(BeElementOf(0, 1))
+				Expect(err).To(MatchError(component.ErrComponentDefAlreadyExists))
 			})
 		})
+	})
 
-		Context("Update existing component-def", func() {
-			It("should update successfully", func() {
-				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
+	Describe("Upsert", func() {
+		It("should update an existing component-def", func() {
+			err := compDefStore.Create(ctx, compDef)
+			Expect(err).NotTo(HaveOccurred())
 
-				// Update the component
-				compDef.DisplayName = "Updated Name"
-				err = compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
+			compDef.DisplayName = "Updated Name"
+			err = compDefStore.Upsert(ctx, compDef)
+			Expect(err).NotTo(HaveOccurred())
 
-				retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.DisplayName).To(Equal("Updated Name"))
-			})
+			retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(retrieved.DisplayName).To(Equal("Updated Name"))
+		})
+
+		It("createdAt and updatedAt fields should behaviour normally", func() {
+			err := compDefStore.Create(ctx, compDef)
+			Expect(err).NotTo(HaveOccurred())
+
+			retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(retrieved.CreatedAt.IsZero()).To(BeFalse())
+			Expect(retrieved.UpdatedAt.IsZero()).To(BeFalse())
+
+			oldCreatedAt := retrieved.CreatedAt
+			oldUpdatedAt := retrieved.UpdatedAt
+			compDef.DisplayName = "Updated Name"
+			err = compDefStore.Upsert(ctx, compDef)
+			Expect(err).NotTo(HaveOccurred())
+
+			retrieved, err = compDefStore.Get(ctx, compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(retrieved.CreatedAt).To(Equal(oldCreatedAt))
+			Expect(retrieved.UpdatedAt.Compare(oldUpdatedAt)).To(BeElementOf(0, 1))
 		})
 	})
 

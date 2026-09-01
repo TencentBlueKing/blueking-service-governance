@@ -87,8 +87,8 @@ func LoadBuiltinFromFolder(ctx context.Context, store ComponentDefStore, folderP
 
 	// Save the components to the store
 	for _, compDef := range compDefs {
-		if err := store.Create(ctx, compDef); err != nil {
-			return errors.Wrapf(err, "creating builtin componentDef %s:%s", compDef.Name, compDef.Version)
+		if err := store.Upsert(ctx, compDef); err != nil {
+			return errors.Wrapf(err, "upserting builtin componentDef %s:%s", compDef.Name, compDef.Version)
 		}
 	}
 

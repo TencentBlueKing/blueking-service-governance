@@ -52,10 +52,7 @@ var _ = Describe("entities tests", func() {
 				},
 			})
 
-			// Save the component-def and retrieve it again, the DefaultValue of the property
-			// will be serialized/deserialized in the process.
-			err := compDefStore.Create(ctx, compDef)
-			Expect(err).NotTo(HaveOccurred())
+			// dbfactory.CompDef 已落库，再读回以验证 DefaultValue 的序列化/反序列化。
 			retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
 			Expect(err).NotTo(HaveOccurred())
 

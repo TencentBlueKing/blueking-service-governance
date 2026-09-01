@@ -102,7 +102,17 @@ func (h *Handler) CreateComponentDef(c *gin.Context) {
 	compDef := input.ToModel(auth.MustGetUser(c.Request.Context()).ID)
 
 	ctx := c.Request.Context()
+	// name + version 全局唯一，由 store.Create 的唯一索引保证，避免并发下先查后写被覆盖。
 	if err := h.registry.ComponentDefStore.Create(ctx, compDef); err != nil {
+		if errors.Is(err, component.ErrComponentDefAlreadyExists) {
+			bkerrs.AbortWithErr(c, bkerrs.Errorf(
+				bkerrs.ErrCodeAlreadyExists,
+				"component def(%s:%s) already exists",
+				compDef.Name,
+				compDef.Version,
+			))
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create component def"))
 		return
 	}
@@ -175,7 +185,7 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.ComponentDefStore.Create(ctx, nextCompDef); err != nil {
+	if err = h.registry.ComponentDefStore.Upsert(ctx, nextCompDef); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update component def"))
 		return
 	}
