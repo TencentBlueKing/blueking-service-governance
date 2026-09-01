@@ -81,4 +81,6 @@ export const DOC_LINKS = {
   POLARIS_DYNAMIC_WEIGHT: '/p/4037433105',
   // 北极星实例注册生命周期
   POLARIS_INSTANCE_LIFECYCLE: '/p/4034655971',
+  // HostPort 详细文档
+  HOST_PORT: '/p/4036088770',
 };

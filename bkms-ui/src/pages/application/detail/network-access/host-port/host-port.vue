@@ -351,6 +351,7 @@
   import { Copy, Del, Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { EnvService, HostportService } from '~/api/modules/v1';
+  import { DOC_LINKS } from '~/common/const';
   import BkmsContent from '~/components/bkms-content.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { isAppModelAppType } from '~/composables/app-type';
@@ -453,9 +454,9 @@
     return formModel.ports.map(item => parseContainerPort(item.port)!);
   }
 
-  /** 跳转HostPort 详细文档（iWiki） */
+  /** 跳转 HostPort 详细文档 */
   function handleHostPortDoc() {
-    window.open('https://iwiki.woa.com/p/4036088770', '_blank');
+    window.open(`${import.meta.env.BK_DOC_URL}${DOC_LINKS.HOST_PORT}`, '_blank');
   }
 
   const portRules = [

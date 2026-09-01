@@ -158,10 +158,19 @@
     return groupId === 'branch' ? t('代码分支') : 'Tag';
   }
 
-  /** Input 输入变化：立即 trim 同步绑定值，防抖后确认分支 */
+  /** Input 输入变化：立即 trim 同步绑定值；仅分支值实际变化时才防抖确认 */
   function handleInputChange(value: string) {
     const branch = value.trim();
+    const prevBranch = (props.modelValue ?? '').trim();
+
     emit('update:modelValue', branch);
+
+    // trim 后与当前绑定值相同则无需再次确认
+    if (branch === prevBranch) {
+      debouncedInputConfirm.cancel();
+      return;
+    }
+
     debouncedInputConfirm(branch);
   }
 
