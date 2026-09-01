@@ -1,0 +1,23 @@
+{
+  "name": "bkms-e2e-bdd",
+  "private": true,
+  "description": "BKMS E2E BDD 测试（playwright-bdd）",
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@types/node": "^25.6.0",
+    "playwright-bdd": "8.5.0",
+    "dotenv": "^17.4.1"
+  },
+  "scripts": {
+    "test": "node ./scripts/run-profile.mjs all",
+    "test:all": "node ./scripts/run-profile.mjs all",
+    "test:smoke": "node ./scripts/run-profile.mjs smoke",
+    "test:deploy": "node ./scripts/run-profile.mjs deploy",
+    "test:config": "node ./scripts/run-profile.mjs config",
+    "test:readonly": "node ./scripts/run-profile.mjs readonly",
+    "test:spec": "node ./scripts/run-profile.mjs spec",
+    "test:ui": "node ./scripts/run-profile.mjs all -- --ui",
+    "test:debug": "node ./scripts/run-profile.mjs all -- --debug",
+    "codegen": "pnpm playwright codegen"
+  }
+}
