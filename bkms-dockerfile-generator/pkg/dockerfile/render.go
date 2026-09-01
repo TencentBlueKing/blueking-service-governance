@@ -131,7 +131,6 @@ func Render(input Input) (string, error) {
 	}
 
 	tmpl, err := template.New("dockerfile").Funcs(template.FuncMap{
-		"imageTagContains":  imageTagContains,
 		"quoteStartCommand": strconv.Quote,
 	}).Parse(string(templateContent))
 	if err != nil {
@@ -244,31 +243,6 @@ func normalizeDockerBuildArgNames(names []string) []string {
 		seen[name] = struct{}{}
 		return name, true
 	})
-}
-
-// imageTagContains 判断镜像 tag 中是否包含指定片段
-//
-// 这里仅解析最后一个路径段中的 tag，避免仓库地址或命名空间包含关键字时造成误判
-// 带 digest 的镜像引用会先剥离 @sha256:...，否则 digest 内部冒号会干扰 tag 定位
-func imageTagContains(image string, fragment string) bool {
-	image = strings.TrimSpace(image)
-	fragment = strings.TrimSpace(fragment)
-	if image == "" || fragment == "" {
-		return false
-	}
-
-	image, _, _ = strings.Cut(image, "@")
-	image = strings.TrimSpace(image)
-	if image == "" {
-		return false
-	}
-
-	lastSlashIndex := strings.LastIndex(image, "/")
-	lastColonIndex := strings.LastIndex(image, ":")
-	if lastColonIndex <= lastSlashIndex {
-		return false
-	}
-	return strings.Contains(strings.ToLower(image[lastColonIndex+1:]), strings.ToLower(fragment))
 }
 
 // parseCommands 解析流水线传入的 Dockerfile 命令参数

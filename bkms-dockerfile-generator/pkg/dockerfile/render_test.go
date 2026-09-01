@@ -81,8 +81,15 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).To(ContainSubstring("FROM golang:1.25 AS builder"))
 		Expect(content).To(ContainSubstring("WORKDIR /workspace"))
 		Expect(content).To(ContainSubstring("RUN mkdir -p /out"))
-		Expect(content).To(ContainSubstring("RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git"))
-		Expect(content).NotTo(ContainSubstring("RUN apk add --no-cache ca-certificates git"))
+		Expect(content).To(ContainSubstring("command -v git"))
+		Expect(content).To(ContainSubstring("apk add --no-cache ca-certificates git"))
+		Expect(content).To(ContainSubstring("apt-get update && apt-get install -y --no-install-recommends ca-certificates git"))
+		Expect(content).To(ContainSubstring("yum install -y ca-certificates git"))
+		Expect(content).To(ContainSubstring("dnf install -y ca-certificates git"))
+		Expect(content).NotTo(ContainSubstring("microdnf"))
+		Expect(indexOf(content, "dnf install -y ca-certificates git")).To(BeNumerically(
+			"<", indexOf(content, "yum install -y ca-certificates git"),
+		))
 		Expect(content).To(ContainSubstring("COPY go.mod ./"))
 		Expect(content).To(ContainSubstring("COPY go.sum ./"))
 		Expect(content).NotTo(ContainSubstring("COPY go.mod go.sum ./"))
@@ -97,8 +104,8 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).To(ContainSubstring("COPY --from=builder /out/demo-api /app/demo-api"))
 		Expect(content).To(ContainSubstring("ENTRYPOINT [\"/app/demo-api\"]"))
 
-		Expect(indexOf(content, "RUN mkdir -p /out")).To(BeNumerically("<", indexOf(content, "RUN apt-get update")))
-		Expect(indexOf(content, "RUN apt-get update")).To(BeNumerically("<", indexOf(content, "COPY go.mod ./")))
+		Expect(indexOf(content, "RUN mkdir -p /out")).To(BeNumerically("<", indexOf(content, "command -v git")))
+		Expect(indexOf(content, "command -v git")).To(BeNumerically("<", indexOf(content, "COPY go.mod ./")))
 		Expect(indexOf(content, "COPY go.mod ./")).To(BeNumerically("<", indexOf(content, "COPY go.sum ./")))
 		Expect(indexOf(content, "COPY go.sum ./")).To(BeNumerically("<", indexOf(content, "RUN go mod download")))
 		Expect(indexOf(content, "RUN go mod download")).To(BeNumerically("<", indexOf(content, "COPY . .")))
@@ -120,54 +127,31 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).NotTo(ContainSubstring("go.sum"))
 	})
 
-	It("renders Go builder dependency installation for Debian based images", func() {
-		input := defaultInput(LanguageGo)
-		input.BuilderImage = "golang:1.25.3"
+	DescribeTable("renders package-manager-agnostic git install for Go builder images",
+		func(builderImage string) {
+			input := defaultInput(LanguageGo)
+			input.BuilderImage = builderImage
 
-		content, err := Render(input)
-		Expect(err).NotTo(HaveOccurred())
+			content, err := Render(input)
+			Expect(err).NotTo(HaveOccurred())
 
-		Expect(content).To(ContainSubstring("FROM golang:1.25.3 AS builder"))
-		Expect(content).To(ContainSubstring("RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git"))
-		Expect(content).To(ContainSubstring("rm -rf /var/lib/apt/lists/*"))
-		Expect(content).NotTo(ContainSubstring("RUN apk add --no-cache ca-certificates git"))
-	})
-
-	It("renders Go builder dependency installation for Alpine tag images", func() {
-		input := defaultInput(LanguageGo)
-		input.BuilderImage = "golang:1.25.3-alpine3.22"
-
-		content, err := Render(input)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(content).To(ContainSubstring("FROM golang:1.25.3-alpine3.22 AS builder"))
-		Expect(content).To(ContainSubstring("RUN apk add --no-cache ca-certificates git"))
-		Expect(content).NotTo(ContainSubstring("RUN apt-get update"))
-	})
-
-	It("renders Go builder dependency installation for Alpine tag images with digest", func() {
-		input := defaultInput(LanguageGo)
-		input.BuilderImage = "golang:1.25.3-alpine3.22@sha256:abcd"
-
-		content, err := Render(input)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(content).To(ContainSubstring("FROM golang:1.25.3-alpine3.22@sha256:abcd AS builder"))
-		Expect(content).To(ContainSubstring("RUN apk add --no-cache ca-certificates git"))
-		Expect(content).NotTo(ContainSubstring("RUN apt-get update"))
-	})
-
-	It("uses image tag only when checking Alpine builder images", func() {
-		input := defaultInput(LanguageGo)
-		input.BuilderImage = "registry.example.com/alpine/golang:1.25"
-
-		content, err := Render(input)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(content).To(ContainSubstring("FROM registry.example.com/alpine/golang:1.25 AS builder"))
-		Expect(content).To(ContainSubstring("RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git"))
-		Expect(content).NotTo(ContainSubstring("RUN apk add --no-cache ca-certificates git"))
-	})
+			Expect(content).To(ContainSubstring("FROM " + builderImage + " AS builder"))
+			Expect(content).To(ContainSubstring("command -v git"))
+			Expect(content).To(ContainSubstring("apk add --no-cache ca-certificates git"))
+			Expect(content).To(ContainSubstring("apt-get update && apt-get install -y --no-install-recommends ca-certificates git"))
+			Expect(content).To(ContainSubstring("dnf install -y ca-certificates git"))
+			Expect(content).To(ContainSubstring("yum install -y ca-certificates git"))
+			Expect(content).NotTo(ContainSubstring("microdnf"))
+			Expect(indexOf(content, "dnf install -y ca-certificates git")).To(BeNumerically(
+				"<", indexOf(content, "yum install -y ca-certificates git"),
+			))
+		},
+		Entry("Debian golang tag", "golang:1.25.3"),
+		Entry("Alpine golang tag", "golang:1.25.3-alpine3.22"),
+		Entry("Alpine tag with digest", "golang:1.25.3-alpine3.22@sha256:abcd"),
+		Entry("namespace contains alpine", "registry.example.com/alpine/golang:1.25"),
+		Entry("custom tlinux compile image", "docker.bkrepo.woa.com/sgameai/repo/compile/visual_processor-leonyue:0.0.1"),
+	)
 
 	It("renders advanced Go commands at expected positions", func() {
 		input := defaultInput(LanguageGo)
