@@ -27,6 +27,8 @@ import { extractSseEventBlocks, parseInstanceSseBlock, reduceInstanceWatchEvent 
 import type { InstanceWatchEvent } from '../types';
 
 const RECONNECT_ENDED_REASONS = new Set(['watch timeout', 'cluster watch interrupted']);
+// 异常断流 / 409 重连前的冷却时长，正常 ENDED 续流不受此限制。
+const ABNORMAL_RECONNECT_DELAY_MS = 5000;
 
 interface InstanceWatchScope {
   appID: string;
@@ -51,6 +53,8 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
   let activeController: AbortController | undefined;
   let disposed = false;
   let generation = 0;
+  // 异常重连冷却期间的挂起定时器，代次失效或停止时需清除以避免过期后误触发重连。
+  let abnormalReconnectTimer: ReturnType<typeof setTimeout> | undefined;
   // 同一作用域拿到过首包后，后续手动刷新或正常续流不再遮住现有列表展示 Skeleton。
   let hasLoadedSnapshot = false;
   let lastScopeKey = '';
@@ -66,9 +70,17 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
     );
   }
 
-  /** 使当前代次失效并中止 List 请求或 Watch 流，过期回调会被 generation 校验丢弃。 */
+  /** 清除挂起的异常重连定时器，防止冷却结束后触发已失效的重连。 */
+  function clearAbnormalReconnectTimer() {
+    if (!abnormalReconnectTimer) return;
+    clearTimeout(abnormalReconnectTimer);
+    abnormalReconnectTimer = undefined;
+  }
+
+  /** 使当前代次失效并中止 List 请求、Watch 流或异常重连等待。 */
   function invalidateCurrentConnection() {
     generation += 1;
+    clearAbnormalReconnectTimer();
     activeController?.abort();
     activeController = undefined;
     isWatching.value = false;
@@ -105,11 +117,29 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
     notifyInstanceWatchError(error);
   }
 
-  /** 断流、标准 ENDED 或 409 都必须完整重新 List，禁止复用旧 resourceVersion。 */
-  function reconnect(runGeneration: number, error?: unknown) {
+  /**
+   * 断流、标准 ENDED 或 409 都必须完整重新 List，禁止复用旧 resourceVersion。
+   * delay=true 时先冷却再重连（异常断流 / 409 专用），默认立即续流（正常 ENDED）。
+   */
+  function reconnect(runGeneration: number, error?: unknown, options: { delay?: boolean } = {}) {
     if (runGeneration !== generation || isAbortError(error) || !isEnabled()) return;
     isWatching.value = false;
     lastError.value = undefined;
+
+    if (options.delay) {
+      // 只有异常断流和 409 做冷却，避免服务端持续立即断开时前端空转打 List + Watch。
+      clearAbnormalReconnectTimer();
+      activeController?.abort();
+      activeController = undefined;
+      abnormalReconnectTimer = setTimeout(() => {
+        abnormalReconnectTimer = undefined;
+        // 冷却结束后再次校验代次与可见性，期间若已停止或切换作用域则放弃本次重连。
+        if (runGeneration !== generation || !isEnabled()) return;
+        void refresh();
+      }, ABNORMAL_RECONNECT_DELAY_MS);
+      return;
+    }
+
     void refresh();
   }
 
@@ -212,7 +242,8 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
         });
       } catch (error) {
         if (isWatchConflict(error)) {
-          reconnect(runGeneration, error);
+          // 409 说明位点失效，若 List 返回的 RV 持续冲突需冷却，避免高频空转重连。
+          reconnect(runGeneration, error, { delay: true });
         } else {
           handleFailure(error, runGeneration);
         }
@@ -234,7 +265,7 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
           handleFailure(new Error(reason || 'instance watch stream ended'), runGeneration);
         })
         // reader.read、SSE 解析和异常 EOF 都可能遗漏增量，必须重新 List 补齐后再 Watch。
-        .catch(error => reconnect(runGeneration, error));
+        .catch(error => reconnect(runGeneration, error, { delay: true }));
     } catch (error) {
       handleFailure(error, runGeneration);
     } finally {

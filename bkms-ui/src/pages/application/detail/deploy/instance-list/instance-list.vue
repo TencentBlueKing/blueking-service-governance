@@ -159,6 +159,9 @@
     return instanceTableRef.value?.getSelections?.() ?? [];
   }
 
+  /** 是否存在生效的筛选条件（SearchSelect 与列筛选均同步到 searchValue） */
+  const isFiltered = computed(() => searchValue.value.some(filter => filter.values?.length));
+
   const { canGrayDeploy, handleRowAction, instanceActions } = useInstanceListController({
     actionsHostRef,
     beforeRowAction: payload => {
@@ -178,7 +181,10 @@
       const table = instanceTableRef.value;
       if (!table) return undefined;
       const isReallySelectAll = table.isCrossPageSelection && table.selectedCount === table.getTotal();
-      return isReallySelectAll ? [] : undefined;
+      // 仅未筛选时整环境全选用 [] 表示后端全量灰度；筛选后 getTotal() 为筛选长度，
+      // 用 [] 会误伤未筛中的实例，故回退 undefined（上层按实际选中 id 下发）。
+      if (isReallySelectAll && !isFiltered.value) return [];
+      return undefined;
     },
   });
 

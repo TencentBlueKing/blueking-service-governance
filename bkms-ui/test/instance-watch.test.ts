@@ -270,7 +270,7 @@ describe('instance List + Watch lifecycle', () => {
     expect(state.isWatching.value).toBe(true);
   });
 
-  it('re-lists with a new resourceVersion after an unexpected EOF', async () => {
+  it('re-lists with a new resourceVersion after the abnormal reconnect cooldown for an unexpected EOF', async () => {
     const firstStream = createControlledStream();
     const secondStream = createControlledStream();
     instanceServiceMocks.listAppInstances
@@ -285,13 +285,19 @@ describe('instance List + Watch lifecycle', () => {
     firstStream.close();
     await flushPromises();
 
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await flushPromises();
+
     expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(2);
     expect(instanceServiceMocks.watchAppInstances.mock.calls[1][0]).toMatchObject({ resourceVersion: 'rv-2' });
     expect(state.instances.value.map(instance => instance.id)).toEqual(['pod-b']);
     expect(notifyFailureMock).not.toHaveBeenCalled();
   });
 
-  it('re-lists with a new resourceVersion after a Watch 409', async () => {
+  it('re-lists with a new resourceVersion after the abnormal reconnect cooldown for a Watch 409', async () => {
     const stream = createControlledStream();
     instanceServiceMocks.listAppInstances
       .mockResolvedValueOnce({ results: [{ id: 'pod-a' }], resourceVersion: 'rv-1' })
@@ -302,11 +308,47 @@ describe('instance List + Watch lifecycle', () => {
     const state = startWatch();
     await flushPromises();
 
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(1);
+    expect(instanceServiceMocks.watchAppInstances).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await flushPromises();
+
     expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(2);
     expect(instanceServiceMocks.watchAppInstances).toHaveBeenCalledTimes(2);
     expect(instanceServiceMocks.watchAppInstances.mock.calls[1][0]).toMatchObject({ resourceVersion: 'rv-2' });
     expect(state.instances.value.map(instance => instance.id)).toEqual(['pod-b']);
     expect(notifyFailureMock).not.toHaveBeenCalled();
+  });
+
+  it('cancels a delayed abnormal reconnect while hidden and starts fresh when visible again', async () => {
+    const firstStream = createControlledStream();
+    const secondStream = createControlledStream();
+    instanceServiceMocks.listAppInstances
+      .mockResolvedValueOnce({ results: [{ id: 'pod-a' }], resourceVersion: 'rv-1' })
+      .mockResolvedValueOnce({ results: [{ id: 'pod-b' }], resourceVersion: 'rv-2' });
+    instanceServiceMocks.watchAppInstances
+      .mockResolvedValueOnce(firstStream.response)
+      .mockResolvedValueOnce(secondStream.response);
+
+    const state = startWatch();
+    await flushPromises();
+    firstStream.close();
+    await flushPromises();
+    visibilityDocument.visibilityState = 'hidden';
+    visibilityDocument.dispatchEvent(new Event('visibilitychange'));
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(1);
+
+    visibilityDocument.visibilityState = 'visible';
+    visibilityDocument.dispatchEvent(new Event('visibilitychange'));
+    await flushPromises();
+
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(2);
+    expect(instanceServiceMocks.watchAppInstances.mock.calls[1][0]).toMatchObject({ resourceVersion: 'rv-2' });
+    expect(state.instances.value.map(instance => instance.id)).toEqual(['pod-b']);
   });
 
   it('reports a non-409 Watch connection failure without reconnecting', async () => {
