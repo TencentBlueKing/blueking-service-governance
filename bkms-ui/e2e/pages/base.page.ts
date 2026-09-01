@@ -183,17 +183,45 @@ export default class BasePage {
 
   /**
    * 轮询等待条件满足。
+   *
+   * 优化点：
+   * - 先查后等：进入循环立即判定一次 condition，命中即刻返回，避免白等一个 interval。
+   * - 退避间隔：起始间隔较短（快速命中早就绪的场景），逐步退避到传入的 interval 上限，
+   *   兼顾"尽快发现"与"不过度刷新"。
+   * - reload 使用 domcontentloaded + networkidle 兜底，避免持续轮询接口导致 reload 挂满超时。
    * @param {() => Promise<boolean>} condition
    * @param {{ timeout?: number, interval?: number }} opts
    */
   async pollUntil(condition: () => Promise<boolean>, { timeout = 120000, interval = 15000 } = {}) {
     const deadline = Date.now() + timeout;
+    // 起始间隔取 5s 与传入 interval 的较小值，命中前更快复查
+    let currentInterval = Math.min(interval, 5000);
     while (Date.now() < deadline) {
       if (await condition()) return true;
-      await this.page.waitForTimeout(interval);
-      await this.page.reload({ waitUntil: 'networkidle' });
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await this.page.waitForTimeout(Math.min(currentInterval, remaining));
+      await this.page.reload({ waitUntil: 'domcontentloaded' });
+      await this.safeWaitForNetworkIdle();
+      // 指数退避到 interval 上限
+      currentInterval = Math.min(Math.round(currentInterval * 1.5), interval);
     }
     return false;
+  }
+
+  /**
+   * 等待网络空闲，但带超时兜底。
+   *
+   * 说明：BKMS 这类管理台常有轮询 / 心跳接口，裸 `waitForLoadState('networkidle')`
+   * 可能永远无法触发，直到挂满 navigationTimeout（30s）。这里给一个较短的显式超时，
+   * 能达成就快速返回，达不成最多等待 timeout，避免隐性卡顿。
+   */
+  async safeWaitForNetworkIdle(timeout = 5000) {
+    try {
+      await this.page.waitForLoadState('networkidle', { timeout });
+    } catch {
+      // 存在持续网络请求时忽略，交由后续显式元素等待兜底
+    }
   }
 
   async screenshot(name: string) {
@@ -236,8 +264,8 @@ export default class BasePage {
       await popContent.locator('.bk-select-option').first().click();
     }
 
-    await this.page.waitForLoadState('networkidle');
-    await this.page.waitForTimeout(500);
+    await this.safeWaitForNetworkIdle();
+    await this.page.waitForTimeout(300);
   }
 
   async selectOptionBy(selector: Locator | string, optionText: string) {
@@ -294,7 +322,7 @@ export default class BasePage {
   }
 
   async waitForReady(extraMs = 2000) {
-    await this.page.waitForLoadState('networkidle');
+    await this.safeWaitForNetworkIdle();
     if (extraMs > 0) await this.page.waitForTimeout(extraMs);
   }
   async waitForSideslider() {

@@ -187,6 +187,8 @@ Then('页面应包含 {string} 和 {string}', async ({ page }, text1, text2) => 
 // ─── 页面刷新步骤 ──────────────────────────────────────────────
 
 When('刷新页面', async ({ page }) => {
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  // 网络空闲带超时兜底：存在轮询接口时不阻塞满 navigationTimeout
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(2000);
 });

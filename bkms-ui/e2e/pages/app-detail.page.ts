@@ -661,7 +661,7 @@ export default class AppDetailPage extends BasePage {
     maxReplicas: number;
     minReplicas: number;
   }) {
-    await this.page.reload({ waitUntil: 'networkidle' });
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
     await this.waitForReady(2000);
     await this.openScaleSideslider();
     await this.selectAutoScaleMode();
@@ -1272,7 +1272,7 @@ export default class AppDetailPage extends BasePage {
 
   /** 刷新应用配置页并重新选择第一个测试环境 */
   async reloadAppConfigAndSelectFirstTestEnv() {
-    await this.page.reload({ waitUntil: 'networkidle' });
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
     await this.waitForReady(2000);
     await this.selectConfigFirstTestEnv();
     await this.expectDevModeSectionVisible();
