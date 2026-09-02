@@ -421,6 +421,22 @@ var _ = Describe("Build Functions", func() {
 			Expect(params[pipelineparam.DockerfileStartCommand]).To(Equal(""))
 		})
 
+		It("should fill registry host for repository Dockerfile mode", func() {
+			// 仓库自带 Dockerfile 也可能引用镜像源里的私有基础镜像，凭证配对不能因构建方式被跳过
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
+				Registry:         "mirrors.tencent.com/example",
+				Username:         "robot",
+				BkCICredentialID: "cred-123",
+			}, nil).Build()
+
+			params, err := genPipelineBuildParams(ctx, testApp, testCfg, branch, imageTag)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(params[pipelineparam.DockerfileSourceType]).To(Equal(bkciDockerfileSourceRepository))
+			Expect(params[pipelineparam.ImageRegistryHost]).To(Equal("mirrors.tencent.com"))
+			Expect(params[pipelineparam.ImageCredential]).To(Equal("cred-123"))
+		})
+
 		It("should populate platform build params when image build mode is platform", func() {
 			// Mock 工作空间镜像仓库
 			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
@@ -567,7 +583,7 @@ var _ = Describe("Build Functions", func() {
 			}, nil).Build()
 
 			// 生成参数
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, testCfg, branch, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, branch, imageTag)
 
 			// 验证结果
 			Expect(err).NotTo(HaveOccurred())
@@ -583,41 +599,43 @@ var _ = Describe("Build Functions", func() {
 			Expect(params[pipelineparam.ImageCredential]).To(Equal("cred-123"))
 		})
 
-		It("should fill registry host for platform mode with username and credential", func() {
-			testCfg.CodeRepo.ImageBuildMode = ImageBuildModePlatform
-			testCfg.CodeRepo.PlatformBuildConfig = &PlatformBuildConfig{
-				BuilderImage: "golang:1.24",
-				RunnerImage:  "debian:12",
-			}
+		It("should fill registry host when registry has username and credential", func() {
 			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
 				Registry:         "https://mirrors.tencent.com/example",
 				Username:         "robot",
 				BkCICredentialID: "cred-123",
 			}, nil).Build()
 
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, testCfg, branch, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, branch, imageTag)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.ImageRegistryHost]).To(Equal("mirrors.tencent.com"))
 			Expect(params[pipelineparam.ImageCredential]).To(Equal("cred-123"))
 		})
 
-		It("should leave registry host empty for platform public registry", func() {
-			testCfg.CodeRepo.ImageBuildMode = ImageBuildModePlatform
-			testCfg.CodeRepo.PlatformBuildConfig = &PlatformBuildConfig{
-				BuilderImage: "golang:1.24",
-				RunnerImage:  "debian:12",
-			}
+		It("should leave registry host empty for public registry", func() {
 			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
 				Registry:         "mirrors.tencent.com/example",
 				BkCICredentialID: "cred-123",
 			}, nil).Build()
 
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, testCfg, branch, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, branch, imageTag)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.ImageRegistryHost]).To(BeEmpty())
 			Expect(params[pipelineparam.ImageCredential]).To(Equal("cred-123"))
+		})
+
+		It("should leave registry host empty when bkci credential is missing", func() {
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
+				Registry: "mirrors.tencent.com/example",
+				Username: "robot",
+			}, nil).Build()
+
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, branch, imageTag)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(params[pipelineparam.ImageRegistryHost]).To(BeEmpty())
 		})
 
 		It("should return error when getting workspace registry fails", func() {
@@ -627,7 +645,7 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 生成参数
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, testCfg, branch, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, branch, imageTag)
 
 			// 验证错误
 			Expect(err).To(HaveOccurred())
@@ -638,14 +656,7 @@ var _ = Describe("Build Functions", func() {
 
 	DescribeTable("sourceImageRegistryHost clips registry to host",
 		func(addr, want string) {
-			platformCfg := &Config{
-				SourceType: SourceTypeCodeRepository,
-				CodeRepo: &RepositoryConfig{
-					ImageBuildMode:      ImageBuildModePlatform,
-					PlatformBuildConfig: &PlatformBuildConfig{BuilderImage: "golang:1.24", RunnerImage: "debian:12"},
-				},
-			}
-			Expect(sourceImageRegistryHost(platformCfg, &registry.ImageRegistry{
+			Expect(sourceImageRegistryHost(&registry.ImageRegistry{
 				Registry:         addr,
 				Username:         "robot",
 				BkCICredentialID: "cred-123",
