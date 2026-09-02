@@ -104,6 +104,11 @@ export interface CreateAppPolarisConfigInput {
    */
   enableHealthCheck?: boolean;
   /**
+   * 是否启用权重因子，默认 false。开启后北极星按实例机型标记权重因子，
+   * 各环境还需单独开启动态权重才会真正按机型分流
+   */
+  enableWeightFactor?: boolean;
+  /**
    * 组件实例标识，用于环境变量拼接，只能包含字母、数字、下划线
    */
   instanceKey: string;
@@ -171,6 +176,10 @@ export interface PatchAppPolarisConfigInput {
    */
   enableHealthCheck?: boolean;
   /**
+   * 是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值
+   */
+  enableWeightFactor?: boolean;
+  /**
    * 组件实例标识（可选更新）
    */
   instanceKey?: string;
@@ -212,6 +221,11 @@ export interface GetEnvInstanceStatsOutput {
 }
 
 export interface PutEnvWeightInput {
+  /**
+   * 该环境是否开启动态权重，不传表示保持原值。
+   * 开启后上面的权重作为动态调权的基准权重
+   */
+  dynamicWeight?: boolean;
   /**
    * 单实例权重，取值范围 0-10000
    */
@@ -264,6 +278,14 @@ export interface PolarisConfigOutputObj {
    * 是否启用健康检查
    */
   enableHealthCheck?: boolean;
+  /**
+   * 是否启用权重因子（开启后才能为单个环境开启动态权重）
+   */
+  enableWeightFactor?: boolean;
+  /**
+   * 各环境是否开启动态权重，key 为环境名称；未出现的环境表示未开启
+   */
+  envDynamicWeights?: Record<string, boolean>;
   /**
    * 各环境中已经生效的关键字段、下发错误和部署状态
    */

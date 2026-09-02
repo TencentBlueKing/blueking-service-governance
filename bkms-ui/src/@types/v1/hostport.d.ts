@@ -23,7 +23,7 @@ export interface HostPortsOutput {
 }
 
 export interface PutHostPortsInput {
-  ports: number[];
+  ports?: number[];
 }
 
 export interface HostPortEnvStateOutput {

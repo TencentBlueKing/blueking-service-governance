@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListEventsRequest, PaginatedEventsOutputObj, ListAppInstancesRequest, PaginatedAppInstancesOutputObj, UpdateAppInstancesRequest, EmptyOutput, ListTrpcAdminCmdsRequest, ListTrpcAdminCmdsOutputObjs, ExecuteTrpcAdminCmdRequest, ExecuteTrpcAdminCmdOutputObjs, BatchDeleteAppInstancesRequest, UpdateAppInstancePolarisRequest, ScaleAppInstancesRequest, ExecuteTafAdminCmdRequest, ExecuteTafAdminCmdOutputObjs, WatchAppInstancesRequest, ListAppInstanceLogsRequest, LogEntryOutputObj, PortForwardRequest, CreateAppInstanceWebConsoleRequest, WebConsoleInfoOutputObj } from '~/@types/v1/instance';
+import type { ListEventsRequest, PaginatedEventsOutputObj, ListAppInstancesRequest, PaginatedAppInstancesOutputObj, UpdateAppInstancesRequest, EmptyOutput, ListTrpcAdminCmdsRequest, ListTrpcAdminCmdsOutputObjs, ExecuteTrpcAdminCmdRequest, ExecuteTrpcAdminCmdOutputObjs, BatchDeleteAppInstancesRequest, UpdateAppInstancePolarisRequest, ScaleAppInstancesRequest, ExecuteTafAdminCmdRequest, ExecuteTafAdminCmdOutputObjs, WatchAppInstancesRequest, AppInstanceWatchStreamDoc, ListAppInstanceLogsRequest, LogEntryOutputObj, PortForwardRequest, CreateAppInstanceWebConsoleRequest, WebConsoleInfoOutputObj } from '~/@types/v1/instance';
 
 export const InstanceService = {
   /**
@@ -166,9 +166,13 @@ export const InstanceService = {
   /**
    * 订阅应用实例投影变更
    *
-   * SSE 推送 ADDED/MODIFIED/DELETED/ENDED；DELETED 只保证 id，ENDED 时 object 为 null。
-   * MODIFIED 有两个来源：集群 Pod 变更，以及北极星周期补拉（约 15s 一轮，仅 polarisInfos 变化时推），二者形态一致。
-   * 北极星拉取失败不阻塞推送：polarisInfos 为空数组，与未注册北极星同形，K8s 字段照常推。
+   * SSE 同一条流上推送两类事件，信封不同：
+   * 1) Pod 事件 ADDED/MODIFIED/DELETED/ENDED，object 为实例投影；
+   * DELETED 只保证 id，ENDED 时 object 为 null；Pod 事件不承载附属数据，polarisInfos 恒为空数组。
+   * 2) 附属数据事件 PLUGIN，带 plugin 标识来源（当前仅 polaris），object 为 {id, data}；
+   * 约 15s 一轮，仅该实例的附属数据有变化时推送。它不是实例的增删改，前端按 id 覆盖对应行的插件数据即可。
+   * 3）附属数据首包取自 List 响应内嵌的 polarisInfos，增量只看 PLUGIN 事件。
+   * 4）插件拉取失败时跳过本轮、不推事件也不拆流，页面保留上次已知状态。
    *
    * @method GET
    * @path /apps/{appID}/envs/{envName}/instances/watch
@@ -177,11 +181,11 @@ export const InstanceService = {
    * @param envName path string required 部署环境名称
    * @param trafficLaneName query string 部署的泳道名称（空字符串表示不使用泳道）
    * @param resourceVersion query string required List 成功响应带回的续传位点
-   * @response 200 string SSE event stream
+   * @response 200 AppInstanceWatchStreamDoc SSE 事件流；每条 data 为 podEvent 或 pluginEvent 之一，响应体本身不是该对象
    * @response 400 GinErrorOutput Bad Request
    * @response 500 GinErrorOutput Internal Server Error
    */
-  watchAppInstances: async <Request extends WatchAppInstancesRequest = WatchAppInstancesRequest, ResponseData = string>(
+  watchAppInstances: async <Request extends WatchAppInstancesRequest = WatchAppInstancesRequest, ResponseData = AppInstanceWatchStreamDoc>(
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/instances/watch')(params, config),

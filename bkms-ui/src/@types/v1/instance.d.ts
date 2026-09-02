@@ -353,6 +353,17 @@ export interface ExecuteTafAdminCmdOutput {
   data?: ExecuteTafAdminCmdOutputObjs;
 }
 
+export interface AppInstanceWatchStreamDoc {
+  /**
+   * 附属数据事件：PLUGIN
+   */
+  pluginEvent?: AppInstancePluginWatchEvent;
+  /**
+   * Pod 投影事件：ADDED / MODIFIED / DELETED / ENDED
+   */
+  podEvent?: AppInstanceWatchEvent;
+}
+
 export interface ListAppInstanceLogsOutput {
   data?: LogEntryOutputObj[];
 }
@@ -384,6 +395,158 @@ export interface LogEntryOutputObj {
    * 日志时间戳
    */
   timestamp?: string;
+}
+
+export interface AppInstancePluginWatchEvent {
+  /**
+   * 附属数据载荷
+   */
+  object?: AppInstancePluginObj;
+  /**
+   * 附属数据来源插件名，如 polaris
+   */
+  plugin?: string;
+  /**
+   * 事件类型；恒为 PLUGIN，取值见 instance/watch/plugin.EventTypePlugin
+   * Enums: PLUGIN
+   */
+  type?: "PLUGIN";
+}
+
+export interface AppInstanceWatchEvent {
+  /**
+   * 实例投影；字段集合对齐 AppInstanceOutputObj，其中 polarisInfos 在 Watch 场景恒为空数组
+   */
+  object?: AppInstanceOutputObj;
+  /**
+   * 流结束原因；仅 ENDED 使用
+   */
+  reason?: string;
+  /**
+   * 事件类型
+   * Enums: ADDED, MODIFIED, DELETED, ENDED
+   */
+  type?: "ADDED" | "MODIFIED" | "DELETED" | "ENDED";
+}
+
+export interface AppInstanceOutputObj {
+  /**
+   * 存在时间，格式如：2d1h，24m29s
+   */
+  age?: string;
+  /**
+   * 部署记录 ID
+   */
+  deployID?: string;
+  /**
+   * 实例 ID（即 k8s pod 的 name）
+   */
+  id?: string;
+  /**
+   * 镜像
+   */
+  image?: string;
+  /**
+   * Pod IP
+   */
+  ip?: string;
+  /**
+   * 健康状态，即 k8s 探针检查结果
+   */
+  isHealthy?: boolean;
+  /**
+   * 状态详情，一般为 pod.status.reason
+   */
+  message?: string;
+  /**
+   * 节点 IP，Pod 所在节点的 IP 地址
+   */
+  nodeIP?: string;
+  /**
+   * 北极星实例状态列表（一个 Pod 可能注册到多个北极星服务）
+   */
+  polarisInfos?: PolarisInstanceInfoOutputObj[];
+  /**
+   * 主容器资源规格（集群 Pod 实际值）
+   */
+  resources?: AppInstanceResourcesObj;
+  /**
+   * 重启次数
+   */
+  restartCount?: string;
+  /**
+   * 状态，由 pod.status.phase 等解析获得
+   */
+  status?: string;
+}
+
+export interface PolarisInstanceInfoOutputObj {
+  /**
+   * 是否启用健康检查
+   */
+  enableHealthCheck?: boolean;
+  /**
+   * 实例 IP（等于 Pod IP）
+   */
+  ip?: string;
+  /**
+   * 健康状态
+   */
+  isHealthy?: boolean;
+  /**
+   * 隔离状态
+   */
+  isIsolated?: boolean;
+  /**
+   * 元数据
+   */
+  metadata?: Record<string, string>;
+  /**
+   * 实例端口（等于应用监听的服务端口）
+   */
+  port?: number;
+  /**
+   * 北极星服务名
+   */
+  serviceName?: string;
+  /**
+   * 北极星命名空间
+   */
+  serviceNamespace?: string;
+  /**
+   * 权重
+   */
+  weight?: string;
+}
+
+export interface AppInstanceResourcesObj {
+  /**
+   * CPU limits（Kubernetes quantity 字符串），可选：未配置时不返回该字段
+   */
+  cpuLimits?: string;
+  /**
+   * CPU requests，可选：未配置时不返回该字段
+   */
+  cpuRequests?: string;
+  /**
+   * Memory limits，可选：未配置时不返回该字段
+   */
+  memoryLimits?: string;
+  /**
+   * Memory requests，可选：未配置时不返回该字段
+   */
+  memoryRequests?: string;
+}
+
+export interface AppInstancePluginObj {
+  /**
+   * 插件自有载荷；polaris 插件为 PolarisInstanceInfoOutputObj 列表，可为空列表
+   */
+  data?: unknown;
+  /**
+   * 实例 ID（即 k8s pod 的 name），供前端关联本地行
+   */
+  id?: string;
 }
 
 export interface ExecuteTafAdminCmdOutputObjs {
@@ -472,57 +635,6 @@ export interface PaginatedAppInstancesOutputObj {
   skippedCount?: string;
 }
 
-export interface AppInstanceOutputObj {
-  /**
-   * 存在时间，格式如：2d1h，24m29s
-   */
-  age?: string;
-  /**
-   * 部署记录 ID
-   */
-  deployID?: string;
-  /**
-   * 实例 ID（即 k8s pod 的 name）
-   */
-  id?: string;
-  /**
-   * 镜像
-   */
-  image?: string;
-  /**
-   * Pod IP
-   */
-  ip?: string;
-  /**
-   * 健康状态，即 k8s 探针检查结果
-   */
-  isHealthy?: boolean;
-  /**
-   * 状态详情，一般为 pod.status.reason
-   */
-  message?: string;
-  /**
-   * 节点 IP，Pod 所在节点的 IP 地址
-   */
-  nodeIP?: string;
-  /**
-   * 北极星实例状态列表（一个 Pod 可能注册到多个北极星服务）
-   */
-  polarisInfos?: PolarisInstanceInfoOutputObj[];
-  /**
-   * 主容器资源规格（集群 Pod 实际值）
-   */
-  resources?: AppInstanceResourcesObj;
-  /**
-   * 重启次数
-   */
-  restartCount?: string;
-  /**
-   * 状态，由 pod.status.phase 等解析获得
-   */
-  status?: string;
-}
-
 export interface SkippedAppInstanceObj {
   /**
    * 实例 ID（即 k8s pod 的 name）；解析前无 name 时为空字符串
@@ -532,64 +644,6 @@ export interface SkippedAppInstanceObj {
    * 跳过原因
    */
   reason?: string;
-}
-
-export interface PolarisInstanceInfoOutputObj {
-  /**
-   * 是否启用健康检查
-   */
-  enableHealthCheck?: boolean;
-  /**
-   * 实例 IP（等于 Pod IP）
-   */
-  ip?: string;
-  /**
-   * 健康状态
-   */
-  isHealthy?: boolean;
-  /**
-   * 隔离状态
-   */
-  isIsolated?: boolean;
-  /**
-   * 元数据
-   */
-  metadata?: Record<string, string>;
-  /**
-   * 实例端口（等于应用监听的服务端口）
-   */
-  port?: number;
-  /**
-   * 北极星服务名
-   */
-  serviceName?: string;
-  /**
-   * 北极星命名空间
-   */
-  serviceNamespace?: string;
-  /**
-   * 权重
-   */
-  weight?: string;
-}
-
-export interface AppInstanceResourcesObj {
-  /**
-   * CPU limits（Kubernetes quantity 字符串），可选：未配置时不返回该字段
-   */
-  cpuLimits?: string;
-  /**
-   * CPU requests，可选：未配置时不返回该字段
-   */
-  cpuRequests?: string;
-  /**
-   * Memory limits，可选：未配置时不返回该字段
-   */
-  memoryLimits?: string;
-  /**
-   * Memory requests，可选：未配置时不返回该字段
-   */
-  memoryRequests?: string;
 }
 
 export interface PaginatedEventsOutputObj {
