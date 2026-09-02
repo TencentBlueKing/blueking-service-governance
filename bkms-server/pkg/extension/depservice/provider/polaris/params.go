@@ -20,6 +20,7 @@ package polaris
 
 import (
 	"github.com/go-playground/validator/v10"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
 )
@@ -37,6 +38,8 @@ type CreateParams struct {
 	PolarisName      string `mapstructure:"polarisName" validate:"required"`
 	PolarisNamespace string `mapstructure:"polarisNamespace" validate:"required"`
 	Owners           string `mapstructure:"Owners"`
+	// Metadata 创建时写入北极星服务的 metadata；空则不下发该字段。
+	Metadata map[string]string `mapstructure:"metadata"`
 }
 
 // Validate 使用 validator 校验 CreateParams 中所有必填字段是否已设置
@@ -46,12 +49,20 @@ func (p *CreateParams) Validate() error {
 
 // UpdateParams 更新北极星服务实例所需的参数
 type UpdateParams struct {
-	Owners string `mapstructure:"Owners" validate:"required"`
+	// Owners 为空表示不改负责人，PUT 时不下发该字段。
+	Owners string `mapstructure:"Owners"`
+	// Metadata 要覆盖写入的键。与 MetadataKeysToDelete 一起作用在 GET 到的现有 metadata 上；
+	Metadata map[string]string `mapstructure:"metadata"`
+	// MetadataKeysToDelete 要从现有 metadata 中删除的键。
+	MetadataKeysToDelete []string `mapstructure:"metadataKeysToDelete"`
 }
 
-// Validate 使用 validator 校验 UpdateParams 中所有必填字段是否已设置
+// Validate 至少要改负责人或 metadata 之一。
 func (p *UpdateParams) Validate() error {
-	return validate.Struct(p)
+	if p.Owners == "" && len(p.Metadata) == 0 && len(p.MetadataKeysToDelete) == 0 {
+		return errors.New("owners or metadata is required")
+	}
+	return nil
 }
 
 // InstConfig 北极星服务实例配置

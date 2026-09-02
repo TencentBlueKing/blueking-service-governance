@@ -160,6 +160,7 @@ var _ = Describe("PolarisConfigService", func() {
 				) (*polaris.CreatePolarisServiceResult, error) {
 					Expect(params.AppID).To(Equal(app.ID))
 					Expect(params.WorkspaceID).To(Equal(app.WorkspaceID))
+					Expect(params.EnableWeightFactor).To(BeFalse())
 					return &polaris.CreatePolarisServiceResult{
 						ServiceInstanceID: serviceInstanceID,
 						Token:             "managed-token",
@@ -221,7 +222,7 @@ var _ = Describe("PolarisConfigService", func() {
 
 			operator := "lisi"
 			_, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{Operator: &operator})
-			Expect(err).To(MatchError(polaris.ErrOperatorNotManaged))
+			Expect(err).To(MatchError(polaris.ErrNotManaged))
 
 			stored, getErr := store.Get(ctx, app.ID, config.Name)
 			Expect(getErr).NotTo(HaveOccurred())
@@ -235,14 +236,15 @@ var _ = Describe("PolarisConfigService", func() {
 				config.Operator = "zhangsan"
 				Expect(store.Create(ctx, config)).To(Succeed())
 
-				mockey.Mock((*polaris.PolarisPlatformManager).UpdateServiceOwners).To(func(
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).To(func(
 					_ *polaris.PolarisPlatformManager,
 					_ context.Context,
 					got *polaris.PolarisConfig,
-					owners string,
+					params *polaris.UpdateServiceParams,
 				) error {
 					Expect(got.Name).To(Equal(config.Name))
-					Expect(owners).To(Equal("lisi"))
+					Expect(*params.Owners).To(Equal("lisi"))
+					Expect(params.EnableWeightFactor).To(BeNil())
 					return nil
 				}).Build()
 
@@ -282,7 +284,7 @@ var _ = Describe("PolarisConfigService", func() {
 				config.Operator = "zhangsan"
 				Expect(store.Create(ctx, config)).To(Succeed())
 
-				mockey.Mock((*polaris.PolarisPlatformManager).UpdateServiceOwners).Return(nil).Build()
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).Return(nil).Build()
 
 				operator := "lisi"
 				_, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{Operator: &operator})
@@ -298,7 +300,7 @@ var _ = Describe("PolarisConfigService", func() {
 				config.Operator = "zhangsan"
 				Expect(store.Create(ctx, config)).To(Succeed())
 
-				mockey.Mock((*polaris.PolarisPlatformManager).UpdateServiceOwners).Return(
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).Return(
 					errors.New("invalid owners"),
 				).Build()
 
@@ -337,79 +339,132 @@ var _ = Describe("PolarisConfigService", func() {
 		})
 
 		It("should not enqueue dynamic apply when only the weight factor is updated", func() {
-			enqueued := 0
-			service = polaris.NewPolarisConfigService(
-				store,
-				polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
-				envStateManager,
-				envStore,
-				appModelStore,
-				envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
-				func(_ context.Context, _, _, _ string) error {
-					enqueued++
-					return nil
-				},
-			)
+			mockey.PatchConvey("weight factor update skips dynamic apply", GinkgoT(), func() {
+				enqueued := 0
+				service = polaris.NewPolarisConfigService(
+					store,
+					polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+					envStateManager,
+					envStore,
+					appModelStore,
+					envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+					func(_ context.Context, _, _, _ string) error {
+						enqueued++
+						return nil
+					},
+				)
 
-			applied := redeployFields("k1", "t1", 8080)
-			config := newTestConfig(
-				app.ID,
-				"cfg-weight-factor-no-apply",
-				[]string{environment.Name},
-				map[string]polaris.PolarisEnvState{environment.Name: envState(applied)},
-			)
-			Expect(store.Create(ctx, config)).To(Succeed())
+				applied := redeployFields("k1", "t1", 8080)
+				config := newTestConfig(
+					app.ID,
+					"cfg-weight-factor-no-apply",
+					[]string{environment.Name},
+					map[string]polaris.PolarisEnvState{environment.Name: envState(applied)},
+				)
+				config.DepSvcInstID = bson.NewObjectID()
+				Expect(store.Create(ctx, config)).To(Succeed())
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).Return(nil).Build()
 
-			enabled := true
-			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
-				EnableWeightFactor: &enabled,
+				enabled := true
+				updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+					EnableWeightFactor: &enabled,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnableWeightFactor).To(BeTrue())
+				// 该字段不参与 CR 组装，单独更新不应空转下发
+				Expect(enqueued).To(Equal(0))
+				Expect(updated.GetEnvState(environment.Name).AppliedFields).To(Equal(applied))
 			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updated.EnableWeightFactor).To(BeTrue())
-			// 该字段不参与 CR 组装，单独更新不应空转下发
-			Expect(enqueued).To(Equal(0))
-			Expect(updated.GetEnvState(environment.Name).AppliedFields).To(Equal(applied))
 		})
 
 		It("should keep the environment switches when turned off", func() {
-			config := newTestConfig(
-				app.ID,
-				"cfg-weight-factor-off",
-				[]string{environment.Name, otherEnvironment.Name},
-				nil,
-			)
-			config.EnableWeightFactor = true
-			config.EnvDynamicWeights = map[string]bool{
-				environment.Name:      true,
-				otherEnvironment.Name: true,
-			}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			mockey.PatchConvey("keep env switches when weight factor off", GinkgoT(), func() {
+				config := newTestConfig(
+					app.ID,
+					"cfg-weight-factor-off",
+					[]string{environment.Name, otherEnvironment.Name},
+					nil,
+				)
+				config.DepSvcInstID = bson.NewObjectID()
+				config.EnableWeightFactor = true
+				config.EnvDynamicWeights = map[string]bool{
+					environment.Name:      true,
+					otherEnvironment.Name: true,
+				}
+				Expect(store.Create(ctx, config)).To(Succeed())
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).Return(nil).Build()
 
-			disabled := false
-			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
-				EnableWeightFactor: &disabled,
+				disabled := false
+				updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+					EnableWeightFactor: &disabled,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnableWeightFactor).To(BeFalse())
+				// 环境级开关是用户意图的记录，关闭配置级开关不改写它们
+				Expect(updated.EnvDynamicWeights).To(Equal(map[string]bool{
+					environment.Name:      true,
+					otherEnvironment.Name: true,
+				}))
 			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updated.EnableWeightFactor).To(BeFalse())
-			// 环境级开关是用户意图的记录，关闭配置级开关不改写它们
-			Expect(updated.EnvDynamicWeights).To(Equal(map[string]bool{
-				environment.Name:      true,
-				otherEnvironment.Name: true,
-			}))
 		})
 
-		It("should restore the environment switches when turned back on", func() {
-			config := newTestConfig(app.ID, "cfg-weight-factor-restore", []string{environment.Name}, nil)
-			config.EnvDynamicWeights = map[string]bool{environment.Name: true}
-			Expect(store.Create(ctx, config)).To(Succeed())
+		It("should sync polaris metadata then persist the switch for managed configs", func() {
+			mockey.PatchConvey("sync weight factor on", GinkgoT(), func() {
+				config := newTestConfig(app.ID, "cfg-weight-factor-managed-on", []string{environment.Name}, nil)
+				config.DepSvcInstID = bson.NewObjectID()
+				config.Operator = "zhangsan"
+				Expect(store.Create(ctx, config)).To(Succeed())
 
-			enabled := true
-			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
-				EnableWeightFactor: &enabled,
+				enabled := true
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).To(func(
+					_ *polaris.PolarisPlatformManager,
+					_ context.Context,
+					got *polaris.PolarisConfig,
+					params *polaris.UpdateServiceParams,
+				) error {
+					Expect(got.Name).To(Equal(config.Name))
+					Expect(params.Owners).To(BeNil())
+					Expect(*params.EnableWeightFactor).To(BeTrue())
+					return nil
+				}).Build()
+
+				updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+					EnableWeightFactor: &enabled,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnableWeightFactor).To(BeTrue())
 			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updated.EnableWeightFactor).To(BeTrue())
-			Expect(updated.EnvDynamicWeights).To(Equal(map[string]bool{environment.Name: true}))
+		})
+
+		It("should delete polaris metadata when the managed switch is turned off", func() {
+			mockey.PatchConvey("sync weight factor off", GinkgoT(), func() {
+				config := newTestConfig(app.ID, "cfg-weight-factor-managed-off", []string{environment.Name}, nil)
+				config.DepSvcInstID = bson.NewObjectID()
+				config.Operator = "zhangsan"
+				config.EnableWeightFactor = true
+				Expect(store.Create(ctx, config)).To(Succeed())
+
+				disabled := false
+				operator := "lisi"
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).To(func(
+					_ *polaris.PolarisPlatformManager,
+					_ context.Context,
+					_ *polaris.PolarisConfig,
+					params *polaris.UpdateServiceParams,
+				) error {
+					Expect(*params.Owners).To(Equal("lisi"))
+					Expect(*params.EnableWeightFactor).To(BeFalse())
+					return nil
+				}).Build()
+
+				updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+					EnableWeightFactor: &disabled,
+					Operator:           &operator,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnableWeightFactor).To(BeFalse())
+				Expect(updated.Operator).To(Equal("lisi"))
+			})
 		})
 	})
 

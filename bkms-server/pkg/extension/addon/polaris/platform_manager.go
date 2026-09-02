@@ -42,18 +42,26 @@ const defaultWaitReadyTimeout = 60 * time.Second
 
 // CreatePolarisServiceParams 创建北极星服务的参数
 type CreatePolarisServiceParams struct {
-	PolarisName      string
-	PolarisNamespace string
-	Operator         string // 北极星负责人/操作人
-	WorkspaceID      string
-	AppID            string
-	ScopeEnvNames    []string
+	PolarisName        string
+	PolarisNamespace   string
+	Operator           string // 北极星负责人/操作人
+	WorkspaceID        string
+	AppID              string
+	ScopeEnvNames      []string
+	EnableWeightFactor bool
 }
 
 // CreatePolarisServiceResult 创建北极星服务的结果
 type CreatePolarisServiceResult struct {
 	ServiceInstanceID bson.ObjectID
 	Token             string
+}
+
+// UpdateServiceParams 同步到北极星服务的字段。nil 表示该字段不改。
+type UpdateServiceParams struct {
+	Owners *string
+	// EnableWeightFactor true 写入固定公式，false 删除两项。
+	EnableWeightFactor *bool
 }
 
 // PolarisPlatformManager 北极星平台服务管理器，封装创建和删除能力
@@ -89,6 +97,11 @@ func (m *PolarisPlatformManager) CreateService(
 	// 按需创建 ServiceManager
 	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
 
+	var metadata map[string]string
+	if params.EnableWeightFactor {
+		metadata = weightFactorMetadata()
+	}
+
 	// 调用 depservice 创建北极星服务
 	instID, err := svcMgr.CreateServiceInstance(ctx, &depservice.CreateServiceInstanceParams{
 		// NOTE: 依赖服务名称存在唯一索引。这里增加随机字符串，避免首次创建失败后，影响后续创建
@@ -102,6 +115,7 @@ func (m *PolarisPlatformManager) CreateService(
 			PolarisName:      params.PolarisName,
 			PolarisNamespace: params.PolarisNamespace,
 			Owners:           params.Operator,
+			Metadata:         metadata,
 		},
 	})
 	if err != nil {
@@ -202,17 +216,27 @@ func (m *PolarisPlatformManager) DeleteService(
 	return nil
 }
 
-// UpdateServiceOwners 将平台创建的北极星服务负责人同步到北极星侧。
-func (m *PolarisPlatformManager) UpdateServiceOwners(
+// UpdateService 将平台创建的北极星服务字段同步到北极星侧，一次 PUT。
+func (m *PolarisPlatformManager) UpdateService(
 	ctx context.Context,
 	config *PolarisConfig,
-	owners string,
+	params *UpdateServiceParams,
 ) error {
+	update := &polarisprovider.UpdateParams{}
+	if params.Owners != nil {
+		update.Owners = *params.Owners
+	}
+	if params.EnableWeightFactor != nil {
+		if *params.EnableWeightFactor {
+			update.Metadata = weightFactorMetadata()
+		} else {
+			update.MetadataKeysToDelete = weightFactorMetadataKeys()
+		}
+	}
+
 	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
-	if err := svcMgr.UpdateServiceInstance(ctx, config.DepSvcInstID, &polarisprovider.UpdateParams{
-		Owners: owners,
-	}); err != nil {
-		return errors.Wrap(err, "update polaris service owners")
+	if err := svcMgr.UpdateServiceInstance(ctx, config.DepSvcInstID, update); err != nil {
+		return errors.Wrap(err, "update polaris service")
 	}
 	return nil
 }

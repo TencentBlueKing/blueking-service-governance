@@ -52,8 +52,8 @@ var (
 	ErrConfigNameExists = errors.New("polaris config name already exists")
 	// ErrOperatorEmpty 不允许将负责人清空
 	ErrOperatorEmpty = errors.New("operator cannot be empty")
-	// ErrOperatorNotManaged 仅平台创建的北极星配置允许修改负责人
-	ErrOperatorNotManaged = errors.New("operator can only be updated for platform-created polaris services")
+	// ErrNotManaged 仅平台创建的北极星配置允许修改需同步北极星的字段（负责人、权重因子）
+	ErrNotManaged = errors.New("field can only be updated for platform-created polaris services")
 )
 
 // PolarisConfigStore 北极星配置存储接口

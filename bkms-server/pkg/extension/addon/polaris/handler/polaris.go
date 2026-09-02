@@ -276,7 +276,7 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 			return
 		}
 		if errors.Is(updateErr, polaris.ErrOperatorEmpty) ||
-			errors.Is(updateErr, polaris.ErrOperatorNotManaged) {
+			errors.Is(updateErr, polaris.ErrNotManaged) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(updateErr, bkerrs.ErrCodeInvalidRequest, updateErr.Error()))
 			return
 		}

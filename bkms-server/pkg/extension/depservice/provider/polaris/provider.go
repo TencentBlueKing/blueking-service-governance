@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
@@ -94,6 +95,7 @@ func (p *Provider) CreateInstance(
 		createParams.PolarisName,
 		createParams.PolarisNamespace,
 		createParams.Owners,
+		createParams.Metadata,
 	)
 	if err != nil {
 		metrics.DepservicePolarisFailed("create")
@@ -143,12 +145,26 @@ func (p *Provider) UpdateInstance(
 	if err = instCfg.Validate(); err != nil {
 		return errors.Wrap(err, "validate polaris inst config")
 	}
+
+	includeMetadata := len(updateParams.Metadata) > 0 || len(updateParams.MetadataKeysToDelete) > 0
+	var metadata map[string]string
+	if includeMetadata {
+		existing, getErr := p.getServiceMetadata(ctx, instCfg.PolarisName, instCfg.PolarisNamespace)
+		if getErr != nil {
+			metrics.DepservicePolarisFailed("update")
+			return errors.Wrap(getErr, "get polaris service metadata")
+		}
+		metadata = mergeServiceMetadata(existing, updateParams.Metadata, updateParams.MetadataKeysToDelete)
+	}
+
 	if err = p.updateService(
 		ctx,
 		instCfg.PolarisName,
 		instCfg.PolarisNamespace,
 		instCfg.Token,
 		updateParams.Owners,
+		metadata,
+		includeMetadata,
 	); err != nil {
 		metrics.DepservicePolarisFailed("update")
 		return errors.Wrap(err, "update polaris service")
@@ -183,16 +199,21 @@ func (p *Provider) DeleteInstance(
 }
 
 // createService calls Polaris API to create a service
-func (p *Provider) createService(ctx context.Context, name, namespace, owners string) (string, error) {
-	reqBody := []map[string]any{
-		{
-			"name":      name,
-			"namespace": namespace,
-			"owners":    owners,
-		},
+func (p *Provider) createService(
+	ctx context.Context,
+	name, namespace, owners string,
+	metadata map[string]string,
+) (string, error) {
+	item := map[string]any{
+		"name":      name,
+		"namespace": namespace,
+		"owners":    owners,
+	}
+	if len(metadata) > 0 {
+		item["metadata"] = metadata
 	}
 
-	respBody, err := p.doRequest(ctx, http.MethodPost, "/naming/v1/services", reqBody)
+	respBody, err := p.doRequest(ctx, http.MethodPost, "/naming/v1/services", []map[string]any{item})
 	if err != nil {
 		return "", err
 	}
@@ -206,18 +227,45 @@ func (p *Provider) createService(ctx context.Context, name, namespace, owners st
 }
 
 // updateService calls Polaris API to update a service.
-func (p *Provider) updateService(ctx context.Context, name, namespace, token, owners string) error {
-	reqBody := []map[string]any{
-		{
-			"name":      name,
-			"namespace": namespace,
-			"token":     token,
-			"owners":    owners,
-		},
+// includeMetadata 为 true 时带上 metadata（空 map 也会下发，以便清空）。
+func (p *Provider) updateService(
+	ctx context.Context,
+	name, namespace, token, owners string,
+	metadata map[string]string,
+	includeMetadata bool,
+) error {
+	item := map[string]any{
+		"name":      name,
+		"namespace": namespace,
+		"token":     token,
+	}
+	if owners != "" {
+		item["owners"] = owners
+	}
+	if includeMetadata {
+		if metadata == nil {
+			metadata = map[string]string{}
+		}
+		item["metadata"] = metadata
 	}
 
-	_, err := p.doRequest(ctx, http.MethodPut, "/naming/v1/services", reqBody)
+	_, err := p.doRequest(ctx, http.MethodPut, "/naming/v1/services", []map[string]any{item})
 	return err
+}
+
+// getServiceMetadata 查询北极星服务当前 metadata，供更新时合并。
+func (p *Provider) getServiceMetadata(ctx context.Context, name, namespace string) (map[string]string, error) {
+	query := url.Values{}
+	query.Set("name", name)
+	query.Set("namespace", namespace)
+	query.Set("offset", "0")
+	query.Set("limit", "10")
+
+	respBody, err := p.doRequest(ctx, http.MethodGet, "/naming/v1/services?"+query.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return parseServiceMetadata(respBody, name, namespace)
 }
 
 // deleteService calls Polaris API to delete a service
@@ -273,4 +321,45 @@ func (p *Provider) doRequest(ctx context.Context, method, path string, body any)
 	}
 
 	return respBody, nil
+}
+
+func parseServiceMetadata(respBody []byte, name, namespace string) (map[string]string, error) {
+	services := gjson.GetBytes(respBody, "services")
+	if !services.IsArray() {
+		return nil, errors.New("invalid polaris services response")
+	}
+	for _, svc := range services.Array() {
+		if svc.Get("name").String() != name || svc.Get("namespace").String() != namespace {
+			continue
+		}
+		return gjsonObjectToStringMap(svc.Get("metadata")), nil
+	}
+	return nil, errors.New("polaris service not found")
+}
+
+func gjsonObjectToStringMap(obj gjson.Result) map[string]string {
+	result := make(map[string]string)
+	if !obj.IsObject() {
+		return result
+	}
+	obj.ForEach(func(key, value gjson.Result) bool {
+		result[key.String()] = value.String()
+		return true
+	})
+	return result
+}
+
+// mergeServiceMetadata 以 existing 为底，先写入 overlay，再删除指定键。
+func mergeServiceMetadata(existing, overlay map[string]string, deleteKeys []string) map[string]string {
+	merged := make(map[string]string, len(existing)+len(overlay))
+	for k, v := range existing {
+		merged[k] = v
+	}
+	for k, v := range overlay {
+		merged[k] = v
+	}
+	for _, k := range deleteKeys {
+		delete(merged, k)
+	}
+	return merged
 }

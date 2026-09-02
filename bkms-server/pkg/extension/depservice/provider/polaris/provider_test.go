@@ -226,8 +226,216 @@ var _ = Describe("Test polaris provider", func() {
 				&UpdateParams{},
 			)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("Owners"))
+			Expect(err.Error()).To(ContainSubstring("owners or metadata is required"))
 		})
+	})
+
+	It("test create instance with metadata", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			token := stringx.Random(12)
+			gock.New(testURL).
+				Post("/naming/v1/services").
+				JSON([]map[string]any{{
+					"name":      "test-service",
+					"namespace": "test-namespace",
+					"owners":    "test-user",
+					"metadata": map[string]string{
+						"internal-enable-dynamic-weight": "true",
+					},
+				}}).
+				Reply(200).
+				JSON(map[string]any{"responses": []map[string]any{{"service": map[string]any{"token": token}}}})
+
+			result, err := p.CreateInstance(
+				ctx,
+				"test-inst-id",
+				&types.ServicePlanConfig{Config: planConfig},
+				&CreateParams{
+					PolarisName:      "test-service",
+					PolarisNamespace: "test-namespace",
+					Owners:           "test-user",
+					Metadata:         map[string]string{"internal-enable-dynamic-weight": "true"},
+				},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.InstConfig["token"]).To(Equal(token))
+		})
+	})
+
+	It("test update instance merges metadata", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				MatchParam("name", "test-service").
+				MatchParam("namespace", "test-namespace").
+				Reply(200).
+				JSON(map[string]any{
+					"services": []map[string]any{{
+						"name":      "test-service",
+						"namespace": "test-namespace",
+						"metadata":  map[string]string{"keep": "yes", "old": "1"},
+					}},
+				})
+			gock.New(testURL).
+				Put("/naming/v1/services").
+				JSON([]map[string]any{{
+					"name":      "test-service",
+					"namespace": "test-namespace",
+					"token":     "test-token",
+					"owners":    "lisi",
+					"metadata":  map[string]string{"keep": "yes", "new": "2"},
+				}}).
+				Reply(200).
+				JSON(map[string]any{})
+
+			err := p.UpdateInstance(
+				ctx,
+				"test-inst-id",
+				&types.ServicePlanConfig{Config: planConfig},
+				map[string]any{
+					"polarisName":      "test-service",
+					"polarisNamespace": "test-namespace",
+					"token":            "test-token",
+				},
+				&UpdateParams{
+					Owners:               "lisi",
+					Metadata:             map[string]string{"new": "2"},
+					MetadataKeysToDelete: []string{"old"},
+				},
+			)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	It("test update instance omits owners when not provided", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				MatchParam("name", "test-service").
+				MatchParam("namespace", "test-namespace").
+				Reply(200).
+				JSON(map[string]any{
+					"services": []map[string]any{{
+						"name":      "test-service",
+						"namespace": "test-namespace",
+						"metadata":  map[string]string{},
+					}},
+				})
+			gock.New(testURL).
+				Put("/naming/v1/services").
+				JSON([]map[string]any{{
+					"name":      "test-service",
+					"namespace": "test-namespace",
+					"token":     "test-token",
+					"metadata":  map[string]string{"k": "v"},
+				}}).
+				Reply(200).
+				JSON(map[string]any{})
+
+			err := p.UpdateInstance(
+				ctx,
+				"test-inst-id",
+				&types.ServicePlanConfig{Config: planConfig},
+				map[string]any{
+					"polarisName":      "test-service",
+					"polarisNamespace": "test-namespace",
+					"token":            "test-token",
+				},
+				&UpdateParams{Metadata: map[string]string{"k": "v"}},
+			)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	It("test update instance deletes metadata keys leaving empty map", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				MatchParam("name", "test-service").
+				MatchParam("namespace", "test-namespace").
+				Reply(200).
+				JSON(map[string]any{
+					"services": []map[string]any{{
+						"name":      "test-service",
+						"namespace": "test-namespace",
+						"metadata": map[string]string{
+							"internal-enable-dynamic-weight": "true",
+						},
+					}},
+				})
+			gock.New(testURL).
+				Put("/naming/v1/services").
+				JSON([]map[string]any{{
+					"name":      "test-service",
+					"namespace": "test-namespace",
+					"token":     "test-token",
+					"owners":    "lisi",
+					"metadata":  map[string]string{},
+				}}).
+				Reply(200).
+				JSON(map[string]any{})
+
+			err := p.UpdateInstance(
+				ctx,
+				"test-inst-id",
+				&types.ServicePlanConfig{Config: planConfig},
+				map[string]any{
+					"polarisName":      "test-service",
+					"polarisNamespace": "test-namespace",
+					"token":            "test-token",
+				},
+				&UpdateParams{
+					Owners:               "lisi",
+					MetadataKeysToDelete: []string{"internal-enable-dynamic-weight"},
+				},
+			)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	It("test update instance get metadata failure", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				Reply(500).
+				JSON(map[string]any{"info": "query failed"})
+
+			err := p.UpdateInstance(
+				ctx,
+				"test-inst-id",
+				&types.ServicePlanConfig{Config: planConfig},
+				map[string]any{
+					"polarisName":      "test-service",
+					"polarisNamespace": "test-namespace",
+					"token":            "test-token",
+				},
+				&UpdateParams{
+					Owners:   "lisi",
+					Metadata: map[string]string{"k": "v"},
+				},
+			)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("query failed"))
+		})
+	})
+
+	It("test mergeServiceMetadata overlays then deletes", func() {
+		merged := mergeServiceMetadata(
+			map[string]string{"keep": "yes", "old": "1"},
+			map[string]string{"new": "2"},
+			[]string{"old"},
+		)
+		Expect(merged).To(Equal(map[string]string{"keep": "yes", "new": "2"}))
 	})
 
 	It("test update instance invalid params type", func() {

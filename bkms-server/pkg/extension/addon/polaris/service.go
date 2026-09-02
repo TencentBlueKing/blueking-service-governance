@@ -86,12 +86,13 @@ func (s *PolarisConfigService) Create(
 ) error {
 	if createNewService {
 		result, err := s.platformManager.CreateService(ctx, &CreatePolarisServiceParams{
-			PolarisName:      config.PolarisName,
-			PolarisNamespace: config.PolarisNamespace,
-			Operator:         config.Operator,
-			WorkspaceID:      app.WorkspaceID,
-			AppID:            app.ID,
-			ScopeEnvNames:    config.ScopeEnvNames,
+			PolarisName:        config.PolarisName,
+			PolarisNamespace:   config.PolarisNamespace,
+			Operator:           config.Operator,
+			WorkspaceID:        app.WorkspaceID,
+			AppID:              app.ID,
+			ScopeEnvNames:      config.ScopeEnvNames,
+			EnableWeightFactor: config.EnableWeightFactor,
 		})
 		if err != nil {
 			return errors.Wrap(err, "create polaris service")
@@ -123,17 +124,8 @@ func (s *PolarisConfigService) Update(
 	oldConfig *PolarisConfig,
 	updateData *ConfigUpdateData,
 ) (*PolarisConfig, error) {
-	// 处理对负责人字段的更新
-	if updateData.Operator != nil {
-		if strings.TrimSpace(*updateData.Operator) == "" {
-			return nil, ErrOperatorEmpty
-		}
-		if oldConfig.DepSvcInstID.IsZero() {
-			return nil, ErrOperatorNotManaged
-		}
-		if err := s.platformManager.UpdateServiceOwners(ctx, oldConfig, *updateData.Operator); err != nil {
-			return nil, err
-		}
+	if err := s.syncManagedService(ctx, oldConfig, updateData); err != nil {
+		return nil, err
 	}
 
 	if updateData.ScopeEnvNames != nil {
@@ -412,4 +404,30 @@ func (s *PolarisConfigService) UpdateEnvWeight(
 	}
 
 	return newConfig, nil
+}
+
+// syncManagedService 把仅平台创建服务可改的字段同步到北极星。
+// 引入的服务没有 DepSvcInstID，改负责人或权重因子都会直接报错。
+func (s *PolarisConfigService) syncManagedService(
+	ctx context.Context,
+	oldConfig *PolarisConfig,
+	updateData *ConfigUpdateData,
+) error {
+	if updateData.Operator != nil && strings.TrimSpace(*updateData.Operator) == "" {
+		return ErrOperatorEmpty
+	}
+	if updateData.Operator == nil && updateData.EnableWeightFactor == nil {
+		return nil
+	}
+	if oldConfig.DepSvcInstID.IsZero() {
+		return ErrNotManaged
+	}
+
+	if err := s.platformManager.UpdateService(ctx, oldConfig, &UpdateServiceParams{
+		Owners:             updateData.Operator,
+		EnableWeightFactor: updateData.EnableWeightFactor,
+	}); err != nil {
+		return errors.Wrap(err, "update polaris service")
+	}
+	return nil
 }

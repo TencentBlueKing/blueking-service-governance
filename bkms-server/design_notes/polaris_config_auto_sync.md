@@ -96,7 +96,7 @@ AND AppliedFields == DesiredFields  // 部署关联字段没变
 | --- | --- | --- |
 | 首次部署前改配置 | 否 | 等应用部署 |
 | 已部署，只改普通 CR 字段 | 是（快照匹配时） | 异步 Upsert 完整 CR |
-| 开关 `enableWeightFactor` | 否 | 只落库，不触发动态下发；CR 不因此变化 |
+| 开关 `enableWeightFactor` | 否 | 平台创建的服务先同步北极星服务 metadata（开启写入固定公式，关闭删除两项），再落库；引入的服务 PATCH 该开关直接报错。不触发 CR 动态下发 |
 | scope 内待部署环境 PUT 权重 | 否 | 仅持久化，下次部署写进 CR |
 | 已部署环境 PUT 权重 | 是 | 不受 readiness 限制，同步 JSON Patch 该环境的 weight |
 | scope 外且未部署环境 PUT 权重 | 不适用 | 返回 400，不持久化 |
