@@ -4027,12 +4027,6 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
                     }
                 }
             }
@@ -4099,12 +4093,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -8498,7 +8486,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "SSE 事件流；每条 data 为 podEvent 或 pluginEvent 之一，响应体本身不是该对象",
+                        "description": "SSE 事件流；每条 data 为 podEvent 或",
                         "schema": {
                             "$ref": "#/definitions/serializer.AppInstanceWatchStreamDoc"
                         }
@@ -22225,7 +22213,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "enableWeightFactor": {
-                    "description": "是否启用权重因子，默认 false。开启后北极星按实例机型标记权重因子，\n各环境还需单独开启动态权重才会真正按机型分流",
+                    "description": "是否启用权重因子，默认 false。仅 createNewService 为 true 时允许开启；\n开启后北极星按实例机型标记权重因子，\n各环境还需单独开启动态权重才会真正按机型分流",
                     "type": "boolean"
                 },
                 "instanceKey": {
@@ -27598,6 +27586,11 @@ const docTemplate = `{
                 "serviceNamespace": {
                     "description": "北极星命名空间",
                     "type": "string"
+                },
+                "staticWeight": {
+                    "description": "静态权重；开源版恒为 0，内部版为注册时的静态权重",
+                    "type": "string",
+                    "example": "0"
                 },
                 "weight": {
                     "description": "权重",

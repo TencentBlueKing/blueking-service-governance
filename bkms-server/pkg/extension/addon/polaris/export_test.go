@@ -18,19 +18,4 @@
 
 package polaris
 
-import (
-	"reflect"
-	"testing"
-)
-
-func TestWeightFactorMetadata(t *testing.T) {
-	t.Parallel()
-
-	want := map[string]string{
-		"internal-enable-dynamic-weight": "true",
-		"internal-dynamic-weight-config": `{"func":"linear","params":{"a":1,"b":1,"min":-1,"max":1.5}}`,
-	}
-	if got := weightFactorMetadata(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("weightFactorMetadata() = %#v, want %#v", got, want)
-	}
-}
+var WeightFactorMetadata = weightFactorMetadata

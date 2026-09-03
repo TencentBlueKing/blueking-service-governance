@@ -293,8 +293,8 @@ func (p *Provider) doRequest(ctx context.Context, method, path string, body any)
 		reqBody = bytes.NewBuffer(jsonBody)
 	}
 
-	url := p.config.BaseURL + path
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	reqURL := p.config.BaseURL + path
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, reqBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "create request")
 	}

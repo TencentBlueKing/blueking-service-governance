@@ -34,6 +34,7 @@ type MatchedInstance struct {
 	Port              uint32
 	IsHealthy         bool
 	Weight            int64
+	StaticWeight      int64
 	IsIsolated        bool
 	EnableHealthCheck bool
 	Metadata          map[string]string
@@ -101,6 +102,7 @@ func buildMatchedInstances(matches []ipMatch) []*MatchedInstance {
 			Port:              item.inst.Port,
 			IsHealthy:         item.inst.IsHealthy,
 			Weight:            int64(item.inst.Weight),
+			StaticWeight:      int64(item.inst.StaticWeight),
 			IsIsolated:        item.inst.IsIsolated,
 			EnableHealthCheck: item.inst.EnableHealthCheck,
 			Metadata:          item.inst.Metadata,

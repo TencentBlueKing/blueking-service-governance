@@ -2878,7 +2878,8 @@ definitions:
         type: boolean
       enableWeightFactor:
         description: |-
-          是否启用权重因子，默认 false。开启后北极星按实例机型标记权重因子，
+          是否启用权重因子，默认 false。仅 createNewService 为 true 时允许开启；
+          开启后北极星按实例机型标记权重因子，
           各环境还需单独开启动态权重才会真正按机型分流
         type: boolean
       instanceKey:
@@ -6537,6 +6538,10 @@ definitions:
         type: string
       serviceNamespace:
         description: 北极星命名空间
+        type: string
+      staticWeight:
+        description: 静态权重；开源版恒为 0，内部版为注册时的静态权重
+        example: "0"
         type: string
       weight:
         description: 权重
@@ -11811,10 +11816,6 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -11857,10 +11858,6 @@ paths:
             $ref: '#/definitions/serializer.PutEnvWeightOutput'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "500":
-          description: Internal Server Error
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
@@ -14662,7 +14659,7 @@ paths:
       - text/event-stream
       responses:
         "200":
-          description: SSE 事件流；每条 data 为 podEvent 或 pluginEvent 之一，响应体本身不是该对象
+          description: SSE 事件流；每条 data 为 podEvent 或
           schema:
             $ref: '#/definitions/serializer.AppInstanceWatchStreamDoc'
         "400":

@@ -221,6 +221,8 @@ type PolarisInstanceInfoOutputObj struct {
 	IsHealthy bool `json:"isHealthy"`
 	// 权重
 	Weight int64 `json:"weight,string"`
+	// 静态权重；开源版恒为 0，内部版为注册时的静态权重
+	StaticWeight int64 `json:"staticWeight,string"`
 	// 隔离状态
 	IsIsolated bool `json:"isIsolated"`
 	// 是否启用健康检查
@@ -242,6 +244,7 @@ func (o *PolarisInstanceInfoOutputObj) FromModel(m *polaris.MatchedInstance) *Po
 		Port:              m.Port,
 		IsHealthy:         m.IsHealthy,
 		Weight:            m.Weight,
+		StaticWeight:      m.StaticWeight,
 		IsIsolated:        m.IsIsolated,
 		EnableHealthCheck: m.EnableHealthCheck,
 		Metadata:          m.Metadata,

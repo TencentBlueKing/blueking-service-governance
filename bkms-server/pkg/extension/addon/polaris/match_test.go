@@ -38,6 +38,7 @@ var _ = Describe("InstanceMatcher", func() {
 						IP:                "127.0.0.1",
 						Port:              8080,
 						Weight:            100,
+						StaticWeight:      80,
 						IsHealthy:         true,
 						EnableHealthCheck: true,
 						Metadata:          map[string]string{"k": "v"},
@@ -54,6 +55,7 @@ var _ = Describe("InstanceMatcher", func() {
 		Expect(infos[0].ServiceName).To(Equal("svc-a"))
 		Expect(infos[0].Port).To(Equal(uint32(8080)))
 		Expect(infos[0].Weight).To(Equal(int64(100)))
+		Expect(infos[0].StaticWeight).To(Equal(int64(80)))
 		Expect(infos[0].Metadata).To(Equal(map[string]string{"k": "v"}))
 	})
 

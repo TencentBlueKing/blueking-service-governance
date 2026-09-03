@@ -55,8 +55,10 @@ type Instance struct {
 	IP string
 	// Port 实例端口（对应应用监听的服务端口）
 	Port uint32
-	// Weight 实例权重
+	// Weight 实际生效权重
 	Weight int
+	// StaticWeight 注册时的静态权重
+	StaticWeight int
 	// IsHealthy 健康状态
 	IsHealthy bool
 	// IsIsolated 隔离状态
@@ -155,6 +157,7 @@ func (p *defaultProvider) GetInstances(_ context.Context, namespace, serviceName
 			IP:                item.GetHost(),
 			Port:              item.GetPort(),
 			Weight:            item.GetWeight(),
+			StaticWeight:      0,
 			IsHealthy:         item.IsHealthy(),
 			IsIsolated:        item.IsIsolated(),
 			EnableHealthCheck: item.IsEnableHealthCheck(),

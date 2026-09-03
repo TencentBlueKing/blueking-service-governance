@@ -317,16 +317,42 @@ var _ = Describe("PolarisConfigService", func() {
 	})
 
 	Describe("Weight factor", func() {
-		It("should persist the switch on create", func() {
-			config := newTestConfig(app.ID, "cfg-weight-factor-create", []string{environment.Name}, nil)
+		It("should reject enabling the weight factor when importing a polaris service", func() {
+			config := newTestConfig(app.ID, "cfg-weight-factor-import", []string{environment.Name}, nil)
 			config.EnableWeightFactor = true
-			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+			Expect(service.Create(ctx, app, config, false)).To(MatchError(polaris.ErrNotManaged))
 
-			stored, err := store.Get(ctx, app.ID, config.Name)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(stored.EnableWeightFactor).To(BeTrue())
-			// 动态权重开关不随环境加入 scope 预建，缺省即关闭
-			Expect(stored.EnvDynamicWeights).To(BeEmpty())
+			_, err := store.Get(ctx, app.ID, config.Name)
+			Expect(err).To(MatchError(polaris.ErrConfigNotFound))
+		})
+
+		It("should persist the switch when creating a managed polaris service", func() {
+			mockey.PatchConvey("create managed polaris service with weight factor", GinkgoT(), func() {
+				serviceInstanceID := bson.NewObjectID()
+				mockey.Mock((*polaris.PolarisPlatformManager).CreateService).To(func(
+					_ *polaris.PolarisPlatformManager,
+					_ context.Context,
+					params *polaris.CreatePolarisServiceParams,
+				) (*polaris.CreatePolarisServiceResult, error) {
+					Expect(params.EnableWeightFactor).To(BeTrue())
+					return &polaris.CreatePolarisServiceResult{
+						ServiceInstanceID: serviceInstanceID,
+						Token:             "managed-token",
+					}, nil
+				}).Build()
+
+				config := newTestConfig(app.ID, "cfg-weight-factor-create", []string{environment.Name}, nil)
+				config.EnableWeightFactor = true
+				config.Operator = "owner"
+				Expect(service.Create(ctx, app, config, true)).To(Succeed())
+
+				stored, err := store.Get(ctx, app.ID, config.Name)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(stored.EnableWeightFactor).To(BeTrue())
+				Expect(stored.DepSvcInstID).To(Equal(serviceInstanceID))
+				// 动态权重开关不随环境加入 scope 预建，缺省即关闭
+				Expect(stored.EnvDynamicWeights).To(BeEmpty())
+			})
 		})
 
 		It("should default the switch to off when create omits it", func() {
@@ -616,7 +642,7 @@ var _ = Describe("PolarisConfigService", func() {
 		It("should persist the switch of an undeployed environment without any cluster call", func() {
 			config := newTestConfig(app.ID, "cfg-dynamic-weight-pending", []string{environment.Name}, nil)
 			config.EnableWeightFactor = true
-			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+			Expect(store.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 80, lo.ToPtr(true))
 
@@ -744,7 +770,7 @@ var _ = Describe("PolarisConfigService", func() {
 		It("should not pre-create a default switch for an environment joining scope", func() {
 			config := newTestConfig(app.ID, "cfg-dynamic-weight-no-default", []string{environment.Name}, nil)
 			config.EnableWeightFactor = true
-			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+			Expect(store.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
 				ScopeEnvNames: []string{environment.Name, otherEnvironment.Name},
