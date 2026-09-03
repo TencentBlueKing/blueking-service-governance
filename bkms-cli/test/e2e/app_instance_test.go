@@ -51,7 +51,7 @@ var _ = Describe("App Instance", Ordered, func() {
 
 		// app instance list 缺少 --env 退出码为非零且输出包含 required
 		It("app instance list without --env exits with non-zero code and output contains required", func() {
-			result := cli.Run("app", "instance", "list", "--app", "demo")
+			result := cli.Run("app", "instance", "list", "--app", envCfg.AppID)
 			Expect(result.ExitCode).NotTo(Equal(0))
 			Expect(result.CombinedOutput()).To(ContainSubstring("required"))
 		})
