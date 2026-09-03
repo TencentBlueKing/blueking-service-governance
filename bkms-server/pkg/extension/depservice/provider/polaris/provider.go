@@ -300,6 +300,7 @@ func (p *Provider) doRequest(ctx context.Context, method, path string, body any)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := p.httpCli.Do(req)
 	if err != nil {
