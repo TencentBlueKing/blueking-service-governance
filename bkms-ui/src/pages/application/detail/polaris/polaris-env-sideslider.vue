@@ -83,22 +83,33 @@
             field="weight"
             :label="$t('单实例权重')"
             min-width="180"
+            :show-overflow="false"
           >
             <template #default="{ row }">
-              <span>{{ row.weight }}</span>
-              <Tag
-                v-if="row.weightOverriddenInstanceCount > 0"
-                v-bk-tooltips="
-                  $t('该环境下有 {count} 个实例在实例列表中单独调整过权重；总权重按各实例实际权重求和', {
-                    count: row.weightOverriddenInstanceCount,
-                  })
-                "
-                class="ml-[8px]"
-                size="small"
-                theme="warning"
-              >
-                {{ $t('部分实例已覆盖') }}
-              </Tag>
+              <div class="flex items-center gap-[8px]">
+                <span>{{ row.weight }}</span>
+                <Tag
+                  v-if="row.dynamicWeight"
+                  v-bk-tooltips="$t('该环境已开启动态权重，北极星会按实例机型调整实际下发权重。')"
+                  class="shrink-0"
+                  size="small"
+                  theme="warning"
+                >
+                  {{ $t('动态权重') }}
+                </Tag>
+                <Tag
+                  v-if="row.weightOverriddenInstanceCount > 0"
+                  v-bk-tooltips="
+                    $t('该环境下有 {count} 个实例在实例列表中单独调整过权重；总权重按各实例实际权重求和', {
+                      count: row.weightOverriddenInstanceCount,
+                    })
+                  "
+                  class="shrink-0"
+                  size="small"
+                >
+                  {{ $t('部分实例已覆盖') }}
+                </Tag>
+              </div>
             </template>
           </TableColumn>
           <TableColumn
@@ -184,8 +195,24 @@
           <TableColumn
             field="weight"
             :label="$t('单实例权重')"
-            min-width="260"
-          />
+            min-width="240"
+            :show-overflow="false"
+          >
+            <template #default="{ row }">
+              <div class="flex items-center">
+                <span>{{ row.weight }}</span>
+                <Tag
+                  v-if="row.dynamicWeight"
+                  v-bk-tooltips="$t('该环境已开启动态权重，北极星会按实例机型调整实际下发权重。')"
+                  class="ml-[8px] shrink-0"
+                  size="small"
+                  theme="warning"
+                >
+                  {{ $t('动态权重') }}
+                </Tag>
+              </div>
+            </template>
+          </TableColumn>
           <TableColumn
             :label="$t('操作')"
             width="140"
@@ -210,6 +237,8 @@
     v-model:is-show="weightDialogVisible"
     :deployed="editingEnv?.deployed ?? false"
     :display-name="editingEnv?.displayName || ''"
+    :dynamic-weight="editingEnv?.dynamicWeight"
+    :enable-weight-factor="!!currentConfig?.enableWeightFactor"
     :env-type="editingEnv?.envType"
     :healthy-count="editingEnv?.healthyCount ?? 0"
     :loading="submitting"
@@ -236,11 +265,12 @@
   import PolarisEnvWeightDialog from './polaris-env-weight-dialog.vue';
 
   import type { EnvOutput } from '~/@types/v1/env';
-  import type { EnvInstanceStatsOutput, PolarisConfigOutputObj } from '~/@types/v1/polaris-config';
+  import type { EnvInstanceStatsOutput, PolarisConfigOutputObj, PutEnvWeightInput } from '~/@types/v1/polaris-config';
 
   interface EnvWeightRow {
     deployed: boolean;
     displayName: string;
+    dynamicWeight: boolean;
     envType?: string;
     envTypeClass?: string;
     envTypeName?: string;
@@ -313,6 +343,9 @@
       envTypeName: envTypeMap[envType]?.name,
       envTypeClass: envTypeTagClassMap[envType],
       deployed,
+      dynamicWeight: Boolean(
+        currentConfig.value?.enableWeightFactor && currentConfig.value?.envDynamicWeights?.[envName],
+      ),
       weight: currentConfig.value?.envWeights?.[envName] ?? DEFAULT_ENV_WEIGHT,
       healthyCount: deployed ? (instanceStats?.healthyInstanceCount ?? 0) : 0,
       healthyInstanceWeight: deployed ? (instanceStats?.healthyInstanceWeight ?? 0) : 0,
@@ -342,7 +375,7 @@
   }
 
   /** 提交环境权重，同步配置后重新拉取实例统计与全量健康权重。 */
-  async function handleConfirmWeight(weight: number) {
+  async function handleConfirmWeight({ weight, dynamicWeight }: PutEnvWeightInput) {
     if (submitting.value || !currentConfig.value?.name || !editingEnv.value) return;
 
     submitting.value = true;
@@ -352,6 +385,7 @@
         configName: currentConfig.value.name,
         envName: editingEnv.value.name,
         weight,
+        ...(currentConfig.value.enableWeightFactor ? { dynamicWeight } : {}),
       });
       currentConfig.value = updatedConfig;
       emit('updated', updatedConfig);

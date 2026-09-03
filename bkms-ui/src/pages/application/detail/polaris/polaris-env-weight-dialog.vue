@@ -142,6 +142,26 @@
           </p>
         </div>
       </Form.FormItem>
+      <Form.FormItem>
+        <template #label>
+          <span>{{ $t('动态权重') }}</span>
+        </template>
+        <div class="flex items-center gap-[10px]">
+          <Switcher
+            v-model="draftDynamicWeight"
+            class="shrink-0"
+            :disabled="!enableWeightFactor"
+            theme="primary"
+          />
+          <span class="text-[12px] leading-[20px] text-[#979BA5]">
+            {{
+              enableWeightFactor
+                ? $t('开启后北极星按机型动态调整该环境实例权重，上方填写的是基准权重。')
+                : $t('需先编辑该北极星并开启「权重因子」，保存后再回到此处打开。')
+            }}
+          </span>
+        </div>
+      </Form.FormItem>
     </Form>
 
     <template #footer>
@@ -169,7 +189,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
 
-  import { Alert, Button, Dialog, Form, Input, Tag } from 'bkui-vue';
+  import { Alert, Button, Dialog, Form, Input, Switcher, Tag } from 'bkui-vue';
   import DividerHeader from '~/components/divider-header.vue';
   import FormPrefix from '~/components/form-prefix.vue';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
@@ -177,6 +197,8 @@
   interface Props {
     deployed: boolean;
     displayName: string;
+    dynamicWeight?: boolean;
+    enableWeightFactor?: boolean;
     envType?: string;
     healthyCount: number;
     loading?: boolean;
@@ -194,10 +216,11 @@
   const isShow = defineModel<boolean>('isShow', { default: false });
   const props = defineProps<Props>();
   const emit = defineEmits<{
-    (e: 'confirm', weight: number): void;
+    (e: 'confirm', payload: { dynamicWeight?: boolean; weight: number }): void;
   }>();
 
   const draftWeight = ref('0');
+  const draftDynamicWeight = ref(false);
   /** 用户点击过确定后持续展示校验错误，避免输入过程中提前打扰。 */
   const weightTouched = ref(false);
 
@@ -240,7 +263,10 @@
       return;
     }
 
-    emit('confirm', Number(draftWeight.value));
+    emit('confirm', {
+      weight: Number(draftWeight.value),
+      ...(props.enableWeightFactor ? { dynamicWeight: draftDynamicWeight.value } : {}),
+    });
   }
 
   /** 判断输入是否为允许范围内的整数权重。 */
@@ -258,6 +284,7 @@
     if (val) {
       // 每次打开都使用列表中的最新权重，并重置上一次的校验状态。
       draftWeight.value = String(props.weight);
+      draftDynamicWeight.value = !!props.dynamicWeight;
       weightTouched.value = false;
     }
   });

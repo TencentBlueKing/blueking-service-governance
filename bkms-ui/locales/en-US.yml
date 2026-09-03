@@ -1022,6 +1022,8 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 您修改了北极星配置信息，以上环境需要重新部署应用后方可生效: You have modified Polaris configuration. The above environments require redeployment to take effect.
 "您修改了以下内容，需要重新部署应用后方可生效：": "You have modified the following content. Redeployment is required for the changes to take effect:"
 权重: Weight
+权重因子: Weight Factor
+"按实例机型动态分配流量。开启后，可在关联环境中打开「动态权重」": Dynamically distribute traffic based on instance machine type. After enabling it, you can enable Dynamic Weight in associated environments.
 北极星负责人: Polaris Owner
 请输入负责人: Please enter owner
 服务标签: Service Labels
@@ -1854,6 +1856,16 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 目标环境: Target Environment
 未部署环境: Undeployed Environments
 单实例权重: Per-instance Weight
+动态权重: Dynamic Weight
+开启后北极星按机型动态调整该环境实例权重，上方填写的是基准权重。:
+  When on, Polaris adjusts this environment's instance weights by machine type.
+  The value above is the baseline weight.
+需先编辑该北极星并开启「权重因子」，保存后再回到此处打开。:
+  Edit this Polaris config and turn on Weight Factor first, save, then return
+  here to enable it.
+该环境已开启动态权重，北极星会按实例机型调整实际下发权重。:
+  Dynamic weight is on. Polaris adjusts the actual weight by instance machine
+  type.
 部分实例已覆盖: Some Instances Overridden
 "该环境下有 {count} 个实例在实例列表中单独调整过权重；总权重按各实例实际权重求和": "{count} instances in this environment have individually adjusted weights in the instance list. The total weight is the sum of the actual weights of all instances"
 健康实例数: Healthy Instances
