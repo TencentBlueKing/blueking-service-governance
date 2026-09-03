@@ -302,13 +302,13 @@ describe('instance List + Watch lifecycle', () => {
     expect(state.instances.value.map(instance => instance.id)).toEqual(['pod-b']);
   });
 
-  it('slows the polling interval to 15s after a slow List and recovers to 10s once responses speed up', async () => {
+  it('backs off by 5s for consecutive slow Lists and gradually recovers after fast responses', async () => {
     let call = 0;
     instanceServiceMocks.listAppInstances.mockImplementation((_request: unknown, _config: { signal: AbortSignal }) => {
       call += 1;
       const result = { results: [{ id: `pod-${call}` }], resourceVersion: `rv-${call}` };
-      // 第一轮 List 耗时 14s（慢于一个基准周期），后续各轮立即返回。
-      if (call === 1) {
+      // 前五轮 List 耗时 14s（慢于一个基准周期），后续各轮立即返回。
+      if (call <= 5) {
         return new Promise(resolve => {
           setTimeout(() => resolve(result), 14000);
         });
@@ -317,27 +317,58 @@ describe('instance List + Watch lifecycle', () => {
     });
 
     const state = startWatch(ref('fed'), () => 'polling');
-    // 推进到首轮 List（14s）返回；耗时 ≥ 10s 触发降级。
+    // 推进到首轮 List（14s）返回；耗时 ≥ 10s 后，间隔从 10s 退避到 15s。
     await vi.advanceTimersByTimeAsync(14000);
     await flushPromises();
     expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(1);
     expect(state.pollingIntervalMs.value).toBe(15000);
 
-    // 降级后下一轮应在 15s（而非 10s）后触发。
-    await vi.advanceTimersByTimeAsync(14999);
-    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1);
+    // 连续慢响应时每轮继续增加 5s，允许退避至 30s 及更长。
+    await vi.advanceTimersByTimeAsync(15000);
+    await vi.advanceTimersByTimeAsync(14000);
     await flushPromises();
     expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(2);
-    // 第二轮立即返回，耗时回落，间隔恢复基准 10s。
-    expect(state.pollingIntervalMs.value).toBe(10000);
+    expect(state.pollingIntervalMs.value).toBe(20000);
 
-    await vi.advanceTimersByTimeAsync(9999);
-    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(20000);
+    await vi.advanceTimersByTimeAsync(14000);
     await flushPromises();
     expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(3);
-    expect(state.instances.value.map(instance => instance.id)).toEqual(['pod-3']);
+    expect(state.pollingIntervalMs.value).toBe(25000);
+
+    await vi.advanceTimersByTimeAsync(25000);
+    await vi.advanceTimersByTimeAsync(14000);
+    await flushPromises();
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(4);
+    expect(state.pollingIntervalMs.value).toBe(30000);
+
+    // 达到上限后继续慢响应也不再增长。
+    await vi.advanceTimersByTimeAsync(30000);
+    await vi.advanceTimersByTimeAsync(14000);
+    await flushPromises();
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(5);
+    expect(state.pollingIntervalMs.value).toBe(30000);
+
+    // 快响应每轮只恢复一个步长，避免从 30s 直接跳回 10s。
+    await vi.advanceTimersByTimeAsync(30000);
+    await flushPromises();
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(6);
+    expect(state.pollingIntervalMs.value).toBe(25000);
+
+    await vi.advanceTimersByTimeAsync(25000);
+    await flushPromises();
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(7);
+    expect(state.pollingIntervalMs.value).toBe(20000);
+
+    await vi.advanceTimersByTimeAsync(20000);
+    await flushPromises();
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(8);
+    expect(state.pollingIntervalMs.value).toBe(15000);
+
+    await vi.advanceTimersByTimeAsync(15000);
+    await flushPromises();
+    expect(instanceServiceMocks.listAppInstances).toHaveBeenCalledTimes(9);
+    expect(state.pollingIntervalMs.value).toBe(10000);
   });
 
   it('shows the List error for every polling failure and clears it after a successful List', async () => {

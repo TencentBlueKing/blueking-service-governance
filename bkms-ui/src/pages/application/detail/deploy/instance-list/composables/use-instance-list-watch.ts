@@ -29,13 +29,14 @@ import type { InstanceListSourceMode, InstanceWatchEvent } from '../types';
 const RECONNECT_ENDED_REASONS = new Set(['watch timeout', 'cluster watch interrupted']);
 // 异常断流 / 409 重连前的冷却时长，正常 ENDED 续流不受此限制。
 const ABNORMAL_RECONNECT_DELAY_MS = 5000;
-// 联邦环境暂不支持 Watch，退化为固定周期的全量 List 轮询，此为正常状态下的基准间隔。
-const POLLING_INTERVAL_MS = 10000;
-// 接口响应过慢时降级到更长的轮询周期，避免慢接口与下一轮请求叠加加重集群压力。
-const POLLING_DEGRADED_INTERVAL_MS = 15000;
-// 单轮 List 耗时达到该阈值（慢于一个基准周期）即判定为慢响应并降级。
-const POLLING_SLOW_RESPONSE_MS = POLLING_INTERVAL_MS;
-// 耗时回落到该阈值以下才恢复基准间隔；与慢响应阈值之间留出滞后区间，防止在边界反复抖动。
+// 联邦环境暂不支持 Watch，退化为全量 List 轮询；所有轮询退避参数集中在此处，便于按集群容量调整。
+const POLLING_DEFAULT_INTERVAL_MS = 10000;
+const POLLING_INTERVAL_STEP_MS = 5000;
+// 限制最大等待时间，避免持续慢响应使轮询无限退避。
+const POLLING_MAX_INTERVAL_MS = 30000;
+// 单轮 List 耗时达到默认间隔即判定为慢响应，下轮增加一个退避步长。
+const POLLING_SLOW_RESPONSE_MS = POLLING_DEFAULT_INTERVAL_MS;
+// 恢复阈值低于慢响应阈值，形成滞后区间，避免耗时在边界附近频繁切换间隔。
 const POLLING_RECOVER_RESPONSE_MS = 8000;
 
 interface InstanceWatchScope {
@@ -58,8 +59,8 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
   // 仅 Watch 模式在 SSE 建连成功后为 true；联邦轮询模式没有长连接，isWatching 恒为 false。
   const isWatching = ref(false);
   const lastError = shallowRef<unknown>();
-  // 联邦轮询的自适应间隔：接口变慢时降级为更长周期，响应恢复后回落到基准间隔。
-  const pollingIntervalMs = ref(POLLING_INTERVAL_MS);
+  // 联邦轮询的自适应间隔：慢响应逐次退避，恢复后逐步回落，避免大量 Pod 场景请求堆积。
+  const pollingIntervalMs = ref(POLLING_DEFAULT_INTERVAL_MS);
 
   // 每次停止或刷新都会递增 generation，异步返回值只有代次一致时才允许写入当前页面。
   let activeController: AbortController | undefined;
@@ -123,15 +124,18 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
     instances.value = [];
     hasLoadedSnapshot = false;
     // 切换作用域视为全新环境，轮询间隔回到基准，避免沿用上一环境的降级状态。
-    pollingIntervalMs.value = POLLING_INTERVAL_MS;
+    pollingIntervalMs.value = POLLING_DEFAULT_INTERVAL_MS;
   }
 
-  /** 依据本轮 List 实际耗时在基准/降级两档间调整下一轮间隔，滞后区间避免边界抖动。 */
+  /** 依据本轮 List 实际耗时逐步调整下一轮间隔；滞后区间避免在阈值附近抖动。 */
   function adjustPollingInterval(elapsedMs: number) {
     if (elapsedMs >= POLLING_SLOW_RESPONSE_MS) {
-      pollingIntervalMs.value = POLLING_DEGRADED_INTERVAL_MS;
+      pollingIntervalMs.value = Math.min(pollingIntervalMs.value + POLLING_INTERVAL_STEP_MS, POLLING_MAX_INTERVAL_MS);
     } else if (elapsedMs <= POLLING_RECOVER_RESPONSE_MS) {
-      pollingIntervalMs.value = POLLING_INTERVAL_MS;
+      pollingIntervalMs.value = Math.max(
+        pollingIntervalMs.value - POLLING_INTERVAL_STEP_MS,
+        POLLING_DEFAULT_INTERVAL_MS,
+      );
     }
   }
 
