@@ -95,7 +95,6 @@ export const PolarisConfigService = {
    * @response 200 GetEnvInstanceStatsOutput OK
    * @response 400 GinErrorOutput Bad Request
    * @response 404 GinErrorOutput Not Found
-   * @response 500 GinErrorOutput Internal Server Error
    */
   getEnvInstanceStats: async <Request extends GetEnvInstanceStatsRequest = GetEnvInstanceStatsRequest, ResponseData = GetEnvInstanceStatsOutputObj>(
     params?: NoInfer<Request>,
@@ -113,7 +112,6 @@ export const PolarisConfigService = {
    * @param body body PutEnvWeightInput required 请求体
    * @response 200 PutEnvWeightOutput OK
    * @response 400 GinErrorOutput Bad Request
-   * @response 500 GinErrorOutput Internal Server Error
    */
   putEnvWeight: async <Request extends PutEnvWeightRequest = PutEnvWeightRequest, ResponseData = PolarisConfigOutputObj>(
     params?: NoInfer<Request>,

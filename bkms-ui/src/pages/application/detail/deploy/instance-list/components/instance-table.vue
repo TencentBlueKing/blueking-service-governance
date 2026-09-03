@@ -365,7 +365,7 @@
                   >
                     <TableColumn
                       :label="$t('健康状态')"
-                      min-width="100"
+                      min-width="80"
                     >
                       <template #default="{ row: polarisRow }">
                         <div class="flex items-center">
@@ -379,7 +379,7 @@
                     </TableColumn>
                     <TableColumn
                       label="ServiceName"
-                      min-width="140"
+                      min-width="120"
                       show-overflow="tooltip"
                     >
                       <template #default="{ row: polarisRow }">
@@ -402,11 +402,24 @@
                       </template>
                     </TableColumn>
                     <TableColumn
-                      :label="$t('流量权重')"
-                      min-width="80"
+                      v-if="hasDynamicWeight(row.polarisInfos)"
+                      :label="$t('动态权重')"
+                      min-width="60"
                     >
                       <template #default="{ row: polarisRow }">
                         {{ polarisRow.weight }}
+                      </template>
+                    </TableColumn>
+                    <TableColumn
+                      :label="$t('流量权重')"
+                      min-width="60"
+                    >
+                      <template #default="{ row: polarisRow }">
+                        {{
+                          hasDynamicWeight(row.polarisInfos)
+                            ? polarisRow.staticWeight || polarisRow.weight
+                            : polarisRow.weight
+                        }}
                       </template>
                     </TableColumn>
                   </Table>
@@ -647,6 +660,12 @@
 
   // 特性环境
   const isFeatureEnv = computed(() => props.envKind === 'feature');
+
+  function hasDynamicWeight(polarisInfos: AppInstanceOutputObj['polarisInfos']) {
+    return polarisInfos?.some(
+      info => info.staticWeight !== undefined && info.staticWeight !== '' && info.staticWeight !== info.weight,
+    );
+  }
 
   // 折叠状态
   const isCollapsed = ref(false);

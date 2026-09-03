@@ -291,6 +291,18 @@
                     </Radio>
                   </div>
                 </Radio.Group>
+                <div class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]">
+                  <span>{{ $t('实例何时注册、摘除北极星，还受生命周期和健康探针影响') }}</span>
+                  <a
+                    class="ml-[8px] text-[#3A84FF]"
+                    :href="instanceLifecycleDocUrl"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {{ $t('参考文档') }}
+                    <Share class="ml-[2px] align-[-2px]" />
+                  </a>
+                </div>
                 <div
                   v-if="isEditMode"
                   class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]"
@@ -565,8 +577,9 @@
   );
   // 侧栏宽度
   const sliderWidth = computed(() => (showRedeployTip.value || isCollaspeAside.value ? 960 : 1400));
-  const heartbeatDocUrl = `${window.BK_DOC_URL || 'https://iwiki.woa.com'}${DOC_LINKS.POLARIS_HEARTBEAT}`;
-  const weightFactorDocUrl = `${window.BK_DOC_URL || 'https://iwiki.woa.com'}${DOC_LINKS.POLARIS_DYNAMIC_WEIGHT}`;
+  const heartbeatDocUrl = `${window.BK_DOC_URL}${DOC_LINKS.POLARIS_HEARTBEAT}`;
+  const weightFactorDocUrl = `${window.BK_DOC_URL}${DOC_LINKS.POLARIS_DYNAMIC_WEIGHT}`;
+  const instanceLifecycleDocUrl = `${window.BK_DOC_URL}${DOC_LINKS.POLARIS_INSTANCE_LIFECYCLE}`;
 
   // 北极星环境类型选项
   const polarisEnvTypes = ['Development', 'Test', 'Pre-release', 'Production'];

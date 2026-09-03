@@ -514,6 +514,10 @@ export interface PolarisInstanceInfoOutputObj {
    */
   serviceNamespace?: string;
   /**
+   * 静态权重；开源版恒为 0，内部版为注册时的静态权重
+   */
+  staticWeight?: string;
+  /**
    * 权重
    */
   weight?: string;

@@ -181,7 +181,7 @@ export const InstanceService = {
    * @param envName path string required 部署环境名称
    * @param trafficLaneName query string 部署的泳道名称（空字符串表示不使用泳道）
    * @param resourceVersion query string required List 成功响应带回的续传位点
-   * @response 200 AppInstanceWatchStreamDoc SSE 事件流；每条 data 为 podEvent 或 pluginEvent 之一，响应体本身不是该对象
+   * @response 200 AppInstanceWatchStreamDoc SSE 事件流；每条 data 为 podEvent 或
    * @response 400 GinErrorOutput Bad Request
    * @response 500 GinErrorOutput Internal Server Error
    */
