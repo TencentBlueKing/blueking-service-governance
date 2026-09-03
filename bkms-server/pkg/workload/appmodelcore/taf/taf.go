@@ -82,16 +82,21 @@ func NewService(
 	appDefaultRuleStore appdefaults.RuleStore,
 	envStore envmodel.EnvironmentStore,
 	appConfigFileStore appcfg.AppConfigFileStore,
+	appConfigFileDefStore appcfg.AppConfigFileDefStore,
 	appConfigFileVersionStore appcfg.AppConfigFileVersionStore,
 	appStore bkmsapp.ApplicationStore,
 ) *Service {
 	return &Service{
-		appModelStore:        appModelStore,
-		appSpecStore:         appSpecStore,
-		appDefaultRuleStore:  appDefaultRuleStore,
-		envStore:             envStore,
-		appStore:             appStore,
-		appConfigFileService: appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore),
+		appModelStore:       appModelStore,
+		appSpecStore:        appSpecStore,
+		appDefaultRuleStore: appDefaultRuleStore,
+		envStore:            envStore,
+		appStore:            appStore,
+		appConfigFileService: appcfg.NewAppConfigFileService(
+			appConfigFileStore,
+			appConfigFileDefStore,
+			appConfigFileVersionStore,
+		),
 	}
 }
 

@@ -44,6 +44,7 @@ var _ = Describe("AppEnvVarService", func() {
 		appStore                  bkmsapp.ApplicationStore
 		appModelStore             appmodel.AppModelStore
 		appConfigFileStore        appcfg.AppConfigFileStore
+		appConfigFileDefStore     appcfg.AppConfigFileDefStore
 		appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 		buildConfigStore          imagebuild.ConfigStore
 		service                   *appmodel.AppEnvVarService
@@ -65,6 +66,7 @@ var _ = Describe("AppEnvVarService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&buildConfigStore,
 				&service,
@@ -82,6 +84,7 @@ var _ = Describe("AppEnvVarService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigFileVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{

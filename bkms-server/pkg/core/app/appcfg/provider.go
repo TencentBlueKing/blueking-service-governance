@@ -38,15 +38,28 @@ type BaseContentProvider interface {
 }
 
 // NewBaseContentProvider creates provider object based on the given file object.
-func NewBaseContentProvider(store AppConfigFileStore, acf *AppConfigFile) (BaseContentProvider, error) {
+func NewBaseContentProvider(
+	store AppConfigFileStore,
+	defStore AppConfigFileDefStore,
+	acf *AppConfigFile,
+) (BaseContentProvider, error) {
 	switch acf.ContentSourceType {
 	case ContentSourceTypeLocal:
-		return newLocalBaseContentProvider(store, acf), nil
+		return newLocalBaseContentProvider(store, defStore, acf), nil
 	case ContentSourceTypeBSCP:
-		return newBSCPBaseContentProvider(store, acf), nil
+		return newBSCPBaseContentProvider(store, defStore, acf), nil
 	default:
 		return nil, errors.New("invalid content source type")
 	}
+}
+
+// getNameByDefID 从 defStore 获取文件名。
+func getNameByDefID(ctx context.Context, defStore AppConfigFileDefStore, defID bson.ObjectID) string {
+	def, err := defStore.GetByID(ctx, defID)
+	if err != nil {
+		return ""
+	}
+	return def.Name
 }
 
 // BaseContentInfo represents the information of the base content, some app config files such as
@@ -73,13 +86,18 @@ var ErrBaseContentEmpty = errors.New("base content is empty")
 
 // LocalBaseContentProvider provides base content for local content source app config files
 type LocalBaseContentProvider struct {
-	store AppConfigFileStore
-	acf   *AppConfigFile
+	store    AppConfigFileStore
+	defStore AppConfigFileDefStore
+	acf      *AppConfigFile
 }
 
 // newLocalBaseContentProvider creates a new LocalBaseContentProvider
-func newLocalBaseContentProvider(store AppConfigFileStore, acf *AppConfigFile) BaseContentProvider {
-	return &LocalBaseContentProvider{store: store, acf: acf}
+func newLocalBaseContentProvider(
+	store AppConfigFileStore,
+	defStore AppConfigFileDefStore,
+	acf *AppConfigFile,
+) BaseContentProvider {
+	return &LocalBaseContentProvider{store: store, defStore: defStore, acf: acf}
 }
 
 // GetInfo returns the base content info for local app config files
@@ -94,7 +112,7 @@ func (p *LocalBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInf
 		return nil, errors.Wrap(err, "retrieving the base app config file")
 	}
 	// 获取 Base AppConfigFile 的 Content
-	editor, err := NewAppConfigFileEditor(p.store, baseAcf)
+	editor, err := NewAppConfigFileEditor(p.store, p.defStore, baseAcf)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating the base content provider")
 	}
@@ -104,7 +122,7 @@ func (p *LocalBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInf
 	}
 	return &BaseContentInfo{
 		HolderID:                baseAcf.ID,
-		HolderName:              baseAcf.Name,
+		HolderName:              getNameByDefID(ctx, p.defStore, baseAcf.DefID),
 		HolderContentSourceType: string(baseAcf.ContentSourceType),
 		IsFromAnotherFile:       true,
 		Content:                 compiledContent,
@@ -115,13 +133,18 @@ var _ BaseContentProvider = &LocalBaseContentProvider{}
 
 // BSCPBaseContentProvider provides base content for BSCP content source app config files
 type BSCPBaseContentProvider struct {
-	store AppConfigFileStore
-	acf   *AppConfigFile
+	store    AppConfigFileStore
+	defStore AppConfigFileDefStore
+	acf      *AppConfigFile
 }
 
 // newBSCPBaseContentProvider creates a new BSCPBaseContentProvider
-func newBSCPBaseContentProvider(store AppConfigFileStore, acf *AppConfigFile) BaseContentProvider {
-	return &BSCPBaseContentProvider{store: store, acf: acf}
+func newBSCPBaseContentProvider(
+	store AppConfigFileStore,
+	defStore AppConfigFileDefStore,
+	acf *AppConfigFile,
+) BaseContentProvider {
+	return &BSCPBaseContentProvider{store: store, defStore: defStore, acf: acf}
 }
 
 // GetInfo 返回 AppConfigFile 的 BaseContentInfo
@@ -147,7 +170,7 @@ func (p *BSCPBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInfo
 	}
 
 	// 获取 Base AppConfigFile 的 Content
-	editor, err := NewAppConfigFileEditor(p.store, targetAcf)
+	editor, err := NewAppConfigFileEditor(p.store, p.defStore, targetAcf)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating the base content provider")
 	}
@@ -158,7 +181,7 @@ func (p *BSCPBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInfo
 
 	return &BaseContentInfo{
 		HolderID:                targetAcf.ID,
-		HolderName:              targetAcf.Name,
+		HolderName:              getNameByDefID(ctx, p.defStore, targetAcf.DefID),
 		HolderContentSourceType: string(targetAcf.ContentSourceType),
 		IsFromAnotherFile:       isFromAnotherFile,
 		Content:                 compiledContent,

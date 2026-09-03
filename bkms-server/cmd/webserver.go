@@ -101,6 +101,7 @@ func NewWebServerCmd() *cobra.Command {
 			router := server.RegisterRouter(ctx, *cfg, cmd.Name())
 			workload.InitPlugin(
 				reg.AppConfigFileStore,
+				reg.AppConfigFileDefStore,
 				reg.PolarisConfigStore,
 			)
 

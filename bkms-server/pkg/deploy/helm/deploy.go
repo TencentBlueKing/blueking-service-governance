@@ -520,6 +520,10 @@ func genHelmDeployValues(
 	if err != nil {
 		return "", nil, nil, errors.Wrap(err, "initial app config file store")
 	}
+	defStore, err := appcfg.NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
+	if err != nil {
+		return "", nil, nil, errors.Wrap(err, "initial app config file def store")
+	}
 	acfID, err := bson.ObjectIDFromHex(appConfigFileID)
 	if err != nil {
 		return "", nil, nil, errors.Wrapf(err, "invalid app config file id %s", appConfigFileID)
@@ -530,7 +534,7 @@ func genHelmDeployValues(
 	}
 
 	// 2. 获取 AppConfigFile 内容
-	editor, err := appcfg.NewAppConfigFileEditor(store, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(store, defStore, acf)
 	if err != nil {
 		return "", nil, nil, errors.Wrap(err, "creating app config file editor")
 	}

@@ -28,6 +28,7 @@ var _ = Describe("tRPC application service", func() {
 	var diApp *fxtest.App
 	var appStore bkmsapp.ApplicationStore
 	var appConfigFileStore appcfg.AppConfigFileStore
+	var appConfigFileDefStore appcfg.AppConfigFileDefStore
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var envStore envmodel.EnvironmentStore
 	var envService *bkmsenv.EnvService
@@ -53,6 +54,7 @@ var _ = Describe("tRPC application service", func() {
 			fx.Populate(
 				&appStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&envStore,
 				&envService,
@@ -123,6 +125,7 @@ var _ = Describe("tRPC application service", func() {
 			ruleStore,
 			envStore,
 			appConfigFileStore,
+			appConfigFileDefStore,
 			appConfigFileVersionStore,
 			appStore,
 		).Create(ctx, application, &trpc.CreateParams{
@@ -184,6 +187,7 @@ var _ = Describe("tRPC application service", func() {
 			ruleStore,
 			envStore,
 			appConfigFileStore,
+			appConfigFileDefStore,
 			appConfigFileVersionStore,
 			appStore,
 		).Create(ctx, application, &trpc.CreateParams{

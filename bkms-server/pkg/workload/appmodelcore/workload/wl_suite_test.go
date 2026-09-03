@@ -51,8 +51,8 @@ var _ = AfterSuite(func() {
 })
 
 func initWorkloadPlugin() {
-	appConfigFileStore, polarisConfigStore := newWorkloadPluginDependencies()
-	workload.InitPlugin(appConfigFileStore, polarisConfigStore)
+	appConfigFileStore, appConfigFileDefStore, polarisConfigStore := newWorkloadPluginDependencies()
+	workload.InitPlugin(appConfigFileStore, appConfigFileDefStore, polarisConfigStore)
 }
 
 func asGameDeployment(result *workload.BuildResult) *tkex.GameDeployment {

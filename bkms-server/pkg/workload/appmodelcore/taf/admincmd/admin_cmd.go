@@ -74,12 +74,13 @@ type InstanceExecuteTafAdminCmdResult struct {
 
 // AdminServiceStores AdminService 所需的存储依赖
 type AdminServiceStores struct {
-	TafDeployRecordStore appmodeldeploy.RecordStore
-	AppConfigFileStore   appcfg.AppConfigFileStore
-	EnvStore             envmodel.EnvironmentStore
-	AppStore             bkmsapp.ApplicationStore
-	AppModelStore        appmodel.AppModelStore
-	EnvVarsReader        *envvars.UnifiedEnvVarsReader
+	TafDeployRecordStore  appmodeldeploy.RecordStore
+	AppConfigFileStore    appcfg.AppConfigFileStore
+	AppConfigFileDefStore appcfg.AppConfigFileDefStore
+	EnvStore              envmodel.EnvironmentStore
+	AppStore              bkmsapp.ApplicationStore
+	AppModelStore         appmodel.AppModelStore
+	EnvVarsReader         *envvars.UnifiedEnvVarsReader
 }
 
 // TafAdminService TAF Admin 服务，封装所有 TAF Admin 相关的功能
@@ -189,7 +190,13 @@ func (s *TafAdminService) Init(ctx context.Context) error {
 // 解析 local 字段中的 -p 参数获取端口号, -h 参数获取监听 IP
 func (s *TafAdminService) GetAdminConfig(ctx context.Context) (string, int32, error) {
 	// 获取配置文件内容
-	_, configContent, err := appcfg.GetEnvContent(ctx, s.Stores.AppConfigFileStore, s.App.ID, s.Env.Name)
+	_, _, configContent, err := appcfg.GetEnvContent(
+		ctx,
+		s.Stores.AppConfigFileStore,
+		s.Stores.AppConfigFileDefStore,
+		s.App.ID,
+		s.Env.Name,
+	)
 	if err != nil {
 		return "", 0, errors.Wrap(err, "get taf config content")
 	}

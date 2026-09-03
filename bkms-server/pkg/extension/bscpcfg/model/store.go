@@ -64,13 +64,13 @@ type Store interface {
 
 // StoreMongo Store 的 MongoDB 实现，组合 Metadata 和 EnvBinding 存储
 type StoreMongo struct {
-	metaStore    MetadataStore
+	defStore     MetadataStore
 	bindingStore EnvBindingStore
 }
 
 // NewStoreMongo 创建统一的配置管理存储
 func NewStoreMongo(client *mongo.Client, dbName string) (Store, error) {
-	metaStore, err := NewMetadataStoreMongo(client, dbName)
+	defStore, err := NewMetadataStoreMongo(client, dbName)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func NewStoreMongo(client *mongo.Client, dbName string) (Store, error) {
 		return nil, err
 	}
 	return &StoreMongo{
-		metaStore:    metaStore,
+		defStore:     defStore,
 		bindingStore: bindingStore,
 	}, nil
 }
@@ -88,12 +88,12 @@ func NewStoreMongo(client *mongo.Client, dbName string) (Store, error) {
 
 // CreateMetadata 创建 Metadata（一个 app 一条记录）
 func (s *StoreMongo) CreateMetadata(ctx context.Context, meta *Metadata) error {
-	return s.metaStore.Create(ctx, meta)
+	return s.defStore.Create(ctx, meta)
 }
 
 // GetMetadata 获取指定 app 的 Metadata
 func (s *StoreMongo) GetMetadata(ctx context.Context, appID string) (*Metadata, error) {
-	return s.metaStore.Get(ctx, appID)
+	return s.defStore.Get(ctx, appID)
 }
 
 // UpdateMetadata 更新 Metadata（可更新 mountPath、token、credentialID、credential）
@@ -102,12 +102,12 @@ func (s *StoreMongo) UpdateMetadata(
 	appID string,
 	updateData *MetadataUpdate,
 ) error {
-	return s.metaStore.Update(ctx, appID, updateData)
+	return s.defStore.Update(ctx, appID, updateData)
 }
 
 // DeleteMetadata 删除指定 app 的 Metadata
 func (s *StoreMongo) DeleteMetadata(ctx context.Context, appID string) error {
-	return s.metaStore.Delete(ctx, appID)
+	return s.defStore.Delete(ctx, appID)
 }
 
 // === EnvBinding 操作 ===
@@ -151,7 +151,7 @@ func (s *StoreMongo) ListEnvBindingsByApp(ctx context.Context, appID string) ([]
 // GetSnapshot 获取指定 app+env 的聚合快照。
 // 如果 Metadata 不存在或 EnvBinding 不存在，返回 nil, nil。
 func (s *StoreMongo) GetSnapshot(ctx context.Context, appID, envName string) (*Snapshot, error) {
-	meta, err := s.metaStore.Get(ctx, appID)
+	meta, err := s.defStore.Get(ctx, appID)
 	if err != nil {
 		if errors.Is(err, ErrMetadataNotFound) {
 			return nil, nil

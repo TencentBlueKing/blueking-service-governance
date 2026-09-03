@@ -42,6 +42,7 @@ type AppConfigFileVersionStore interface {
 	List(ctx context.Context, opts AppConfigFileVersionListOptions) ([]AppConfigFileVersion, int64, error)
 	SoftDeleteByID(ctx context.Context, id bson.ObjectID, deleter string) (int64, error)
 	DeleteByFileID(ctx context.Context, appConfigFileID bson.ObjectID) (int64, error)
+	DeleteByApp(ctx context.Context, appID string) (int64, error)
 }
 
 // AppConfigFileVersionListOptions holds version list filters
@@ -220,6 +221,15 @@ func (s *AppConfigFileVersionStoreMongo) DeleteByFileID(
 	result, err := s.collection.DeleteMany(ctx, bson.M{"appConfigFileID": appConfigFileID})
 	if err != nil {
 		return 0, err
+	}
+	return result.DeletedCount, nil
+}
+
+// DeleteByApp 删除指定应用下的全部版本记录。
+func (s *AppConfigFileVersionStoreMongo) DeleteByApp(ctx context.Context, appID string) (int64, error) {
+	result, err := s.collection.DeleteMany(ctx, bson.M{"appID": appID})
+	if err != nil {
+		return 0, errors.Wrapf(err, "delete app config file versions for app [%s]", appID)
 	}
 	return result.DeletedCount, nil
 }

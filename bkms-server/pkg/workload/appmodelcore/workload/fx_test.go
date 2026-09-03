@@ -29,9 +29,11 @@ import (
 
 func newWorkloadPluginDependencies() (
 	appcfg.AppConfigFileStore,
+	appcfg.AppConfigFileDefStore,
 	polaris.PolarisConfigStore,
 ) {
 	var appConfigFileStore appcfg.AppConfigFileStore
+	var appConfigFileDefStore appcfg.AppConfigFileDefStore
 	var polarisConfigStore polaris.PolarisConfigStore
 
 	diApp := fxtest.New(
@@ -40,11 +42,12 @@ func newWorkloadPluginDependencies() (
 		polaris.FxModule,
 		fx.Populate(
 			&appConfigFileStore,
+			&appConfigFileDefStore,
 			&polarisConfigStore,
 		),
 	)
 	diApp.RequireStart()
 	diApp.RequireStop()
 
-	return appConfigFileStore, polarisConfigStore
+	return appConfigFileStore, appConfigFileDefStore, polarisConfigStore
 }

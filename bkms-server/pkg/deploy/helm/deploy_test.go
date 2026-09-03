@@ -625,10 +625,9 @@ var _ = Describe("genHelmDeployValues", func() {
 imagePullSecrets:
   - name: ${{ bkms.APP_IMAGE_PULL_SECRET }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
-					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-						AppID:             app.ID,
-						Name:              "test-values",
-						Type:              appcfg.AppConfigFileTypeNormal,
+					AppID: app.ID,
+					Type:  appcfg.AppConfigFileTypeNormal,
+					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal,
 						Content:           &content,
 					},
@@ -680,10 +679,9 @@ imagePullSecrets:
   registry: ${{ bkms.ARTIFACT_IMAGE_REGISTRY }}
   tag: ${{ bkms.ARTIFACT_IMAGE_TAG }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
-					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-						AppID:             app.ID,
-						Name:              "overlay-values",
-						Type:              appcfg.AppConfigFileTypeOverlay,
+					AppID: app.ID,
+					Type:  appcfg.AppConfigFileTypeOverlay,
+					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal,
 						OverlayContent:    &overlayContent,
 					},
@@ -716,8 +714,8 @@ imagePullSecrets:
 				content := `image: ${{ bkms.ARTIFACT_IMAGE }}
 custom: ${{ env.MY_VAR }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
-					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-						AppID: app.ID, Name: "v", Type: appcfg.AppConfigFileTypeNormal,
+					AppID: app.ID, Type: appcfg.AppConfigFileTypeNormal,
+					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
 					},
 				}
@@ -748,8 +746,8 @@ custom: ${{ env.MY_VAR }}`
 
 				content := `secret: ${{ env.SECRET }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
-					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-						AppID: app.ID, Name: "v", Type: appcfg.AppConfigFileTypeNormal,
+					AppID: app.ID, Type: appcfg.AppConfigFileTypeNormal,
+					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
 					},
 				}
@@ -779,8 +777,8 @@ custom: ${{ env.MY_VAR }}`
 
 				content := `a: ${{ env.UNKNOWN }}`
 				mockAppConfigFile := &appcfg.AppConfigFile{
-					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-						AppID: app.ID, Name: "v", Type: appcfg.AppConfigFileTypeNormal,
+					AppID: app.ID, Type: appcfg.AppConfigFileTypeNormal,
+					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
 					},
 				}
@@ -841,10 +839,9 @@ custom: ${{ env.MY_VAR }}`
 
 				content := "test content"
 				mockAppConfigFile := &appcfg.AppConfigFile{
-					AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-						AppID:             app.ID,
-						Name:              "test-values",
-						Type:              appcfg.AppConfigFileTypeNormal,
+					AppID: app.ID,
+					Type:  appcfg.AppConfigFileTypeNormal,
+					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal,
 						Content:           &content,
 					},

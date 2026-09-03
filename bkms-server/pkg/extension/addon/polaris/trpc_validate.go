@@ -40,6 +40,7 @@ func CollectConfigWarnings(
 	ctx context.Context,
 	appModelStore appmodel.AppModelStore,
 	appConfigFileStore appcfg.AppConfigFileStore,
+	appConfigFileDefStore appcfg.AppConfigFileDefStore,
 	config *PolarisConfig,
 ) (warnings []string) {
 	if config.IsImmediateRegister() {
@@ -59,7 +60,7 @@ func CollectConfigWarnings(
 	}
 
 	for _, envName := range config.ScopeEnvNames {
-		warning := validateServiceNameInEnv(ctx, config, appConfigFileStore, envName)
+		warning := validateServiceNameInEnv(ctx, config, appConfigFileStore, appConfigFileDefStore, envName)
 		if warning != "" {
 			warnings = append(warnings, warning)
 		}
@@ -72,9 +73,16 @@ func validateServiceNameInEnv(
 	ctx context.Context,
 	config *PolarisConfig,
 	appConfigFileStore appcfg.AppConfigFileStore,
+	appConfigFileDefStore appcfg.AppConfigFileDefStore,
 	envName string,
 ) string {
-	serviceNames, err := appcfg.GetTrpcServiceNames(ctx, appConfigFileStore, config.AppID, envName)
+	serviceNames, err := appcfg.GetTrpcServiceNames(
+		ctx,
+		appConfigFileStore,
+		appConfigFileDefStore,
+		config.AppID,
+		envName,
+	)
 	if err != nil {
 		if envName == "" {
 			return fmt.Sprintf("[%s] 读取 tRPC 配置文件失败: %v", config.Name, err)

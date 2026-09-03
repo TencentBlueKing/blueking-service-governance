@@ -49,6 +49,7 @@ var _ = Describe("ImportService", func() {
 		appStore              coreapp.ApplicationStore
 		appModelStore         appmodel.AppModelStore
 		appConfigFileStore    appcfg.AppConfigFileStore
+		appConfigFileDefStore appcfg.AppConfigFileDefStore
 		appConfigVersionStore appcfg.AppConfigFileVersionStore
 		buildConfigStore      build.ConfigStore
 		service               *importer.Service
@@ -69,6 +70,7 @@ var _ = Describe("ImportService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigVersionStore,
 				&buildConfigStore,
 			),
@@ -167,6 +169,7 @@ ANOTHER_ENV_KEY=another-value
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{

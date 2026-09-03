@@ -72,6 +72,7 @@ var _ = Describe("EnvVarPreChecker Check", func() {
 		appStore                  bkmsapp.ApplicationStore
 		appModelStore             appmodel.AppModelStore
 		appConfigFileStore        appcfg.AppConfigFileStore
+		appConfigFileDefStore     appcfg.AppConfigFileDefStore
 		appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 		componentDefStore         component.ComponentDefStore
 		polarisConfigStore        polaris.PolarisConfigStore
@@ -105,6 +106,7 @@ var _ = Describe("EnvVarPreChecker Check", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&componentDefStore,
 				&polarisConfigStore,
@@ -115,13 +117,14 @@ var _ = Describe("EnvVarPreChecker Check", func() {
 			),
 		)
 		fxApp.RequireStart()
-		workload.InitPlugin(appConfigFileStore, polarisConfigStore)
+		workload.InitPlugin(appConfigFileStore, appConfigFileDefStore, polarisConfigStore)
 
 		newApp = func(opts *dbfactory.TrpcApplicationOpts) (*bkmsapp.Application, *envmodel.Environment) {
 			app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, opts)
@@ -240,20 +243,21 @@ ignored: ${LEGACY}
 			TrpcConfig: &appmodel.TrpcConfig{FileContent: "default: ${{ env.DEFAULT_ONLY }}\n"},
 		})
 		content := "environment: ${{ env.ENV_ONLY }}\n"
-		_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore).Create(
-			ctx,
-			appcfg.CreateCfgFileParams{
-				AppID:             app.ID,
-				EnvName:           appEnv.Name,
-				Name:              appEnv.Name,
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Format:            appcfg.FileFormatYAML,
-				Content:           &content,
-				Creator:           appcfg.CfgSystemUser,
-				Description:       appcfg.CfgSystemVersionDescription,
-			},
-		)
+		_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
+			Create(
+				ctx,
+				appcfg.CreateCfgFileParams{
+					AppID:             app.ID,
+					EnvName:           appEnv.Name,
+					Name:              appEnv.Name,
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Format:            appcfg.FileFormatYAML,
+					Content:           &content,
+					Creator:           appcfg.CfgSystemUser,
+					Description:       appcfg.CfgSystemVersionDescription,
+				},
+			)
 		Expect(err).NotTo(HaveOccurred())
 
 		result, err := checker.Check(ctx, app, appEnv)

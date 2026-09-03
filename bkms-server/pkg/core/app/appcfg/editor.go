@@ -56,12 +56,16 @@ type AppConfigFileEditor interface {
 }
 
 // NewAppConfigFileEditor creates an editor object based on the given file object.
-func NewAppConfigFileEditor(store AppConfigFileStore, acf *AppConfigFile) (AppConfigFileEditor, error) {
+func NewAppConfigFileEditor(
+	store AppConfigFileStore,
+	defStore AppConfigFileDefStore,
+	acf *AppConfigFile,
+) (AppConfigFileEditor, error) {
 	switch acf.ContentSourceType {
 	case ContentSourceTypeLocal:
-		return newLocalAppConfigFileEditor(store, acf), nil
+		return newLocalAppConfigFileEditor(store, defStore, acf), nil
 	case ContentSourceTypeBSCP:
-		return newBSCPAppConfigFileEditor(store, acf), nil
+		return newBSCPAppConfigFileEditor(store, defStore, acf), nil
 	default:
 		return nil, errors.New("invalid content source type")
 	}
@@ -69,13 +73,18 @@ func NewAppConfigFileEditor(store AppConfigFileStore, acf *AppConfigFile) (AppCo
 
 // LocalAppConfigFileEditor for ContentSourceType: local
 type LocalAppConfigFileEditor struct {
-	store AppConfigFileStore
-	acf   *AppConfigFile
+	store    AppConfigFileStore
+	defStore AppConfigFileDefStore
+	acf      *AppConfigFile
 }
 
 // newLocalAppConfigFileEditor creates a new LocalAppConfigFileEditor
-func newLocalAppConfigFileEditor(store AppConfigFileStore, acf *AppConfigFile) AppConfigFileEditor {
-	return &LocalAppConfigFileEditor{store: store, acf: acf}
+func newLocalAppConfigFileEditor(
+	store AppConfigFileStore,
+	defStore AppConfigFileDefStore,
+	acf *AppConfigFile,
+) AppConfigFileEditor {
+	return &LocalAppConfigFileEditor{store: store, defStore: defStore, acf: acf}
 }
 
 // GetEditableContentField returns the editable field of the app config file content
@@ -119,7 +128,7 @@ func (e *LocalAppConfigFileEditor) GetCompiledContent(ctx context.Context) (stri
 		return *e.acf.Content, nil
 	// Overlay 类型，需要先获取 BaseContent，再与 OverlayContent 合并
 	case AppConfigFileTypeOverlay:
-		provider, err := NewBaseContentProvider(e.store, e.acf)
+		provider, err := NewBaseContentProvider(e.store, e.defStore, e.acf)
 		if err != nil {
 			return "", errors.Wrap(err, "create base content provider")
 		}
@@ -143,13 +152,18 @@ var _ AppConfigFileEditor = (*LocalAppConfigFileEditor)(nil)
 
 // BSCPAppConfigFileEditor for ContentSourceType: BSCP
 type BSCPAppConfigFileEditor struct {
-	store AppConfigFileStore
-	acf   *AppConfigFile
+	store    AppConfigFileStore
+	defStore AppConfigFileDefStore
+	acf      *AppConfigFile
 }
 
 // newBSCPAppConfigFileEditor creates a new BSCPAppConfigFileEditor.
-func newBSCPAppConfigFileEditor(store AppConfigFileStore, acf *AppConfigFile) AppConfigFileEditor {
-	return &BSCPAppConfigFileEditor{store: store, acf: acf}
+func newBSCPAppConfigFileEditor(
+	store AppConfigFileStore,
+	defStore AppConfigFileDefStore,
+	acf *AppConfigFile,
+) AppConfigFileEditor {
+	return &BSCPAppConfigFileEditor{store: store, defStore: defStore, acf: acf}
 }
 
 // GetEditableContentField returns the editable field of the app config file content
@@ -197,7 +211,7 @@ func (e *BSCPAppConfigFileEditor) GetCompiledContent(ctx context.Context) (strin
 
 	// Overlay 类型，需要先获取 BaseContent，再从 bscp 取配置内容合并
 	case AppConfigFileTypeOverlay:
-		provider, err := NewBaseContentProvider(e.store, e.acf)
+		provider, err := NewBaseContentProvider(e.store, e.defStore, e.acf)
 		if err != nil {
 			return "", errors.Wrap(err, "create base content provider")
 		}

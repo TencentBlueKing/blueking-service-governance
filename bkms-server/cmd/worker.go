@@ -91,6 +91,7 @@ func NewWorkerCmd() *cobra.Command {
 			// 初始化 workload 插件（必须在 store 初始化之后）
 			workload.InitPlugin(
 				storereg.G().AppConfigFileStore,
+				storereg.G().AppConfigFileDefStore,
 				storereg.G().PolarisConfigStore,
 			)
 

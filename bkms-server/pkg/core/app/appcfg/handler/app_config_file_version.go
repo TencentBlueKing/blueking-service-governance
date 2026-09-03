@@ -73,11 +73,12 @@ func (h *Handler) ListAppConfigFileVersions(c *gin.Context) {
 		return
 	}
 
-	cfgService := appcfg.NewAppConfigFileService(
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	versions, total, err := cfgService.ListVersions(ctx, opts)
+	versions, total, err := acfService.ListVersions(ctx, opts)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app config file versions"))
 		return
@@ -128,11 +129,12 @@ func (h *Handler) GetAppConfigFileVersion(c *gin.Context) {
 		return
 	}
 
-	cfgService := appcfg.NewAppConfigFileService(
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	version, err := cfgService.GetVersionByAppAndID(ctx, app.ID, id)
+	version, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get app config file version"))
 		return
@@ -177,11 +179,12 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 		return
 	}
 
-	cfgService := appcfg.NewAppConfigFileService(
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	previous, current, err := cfgService.CompareVersions(ctx, app.ID, previousID, currentID)
+	previous, current, err := acfService.CompareVersions(ctx, app.ID, previousID, currentID)
 	if err != nil {
 		if errors.Is(err, appcfg.ErrAppCfgFileVersionNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotFound, err.Error()))
@@ -236,11 +239,12 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 		return
 	}
 
-	cfgService := appcfg.NewAppConfigFileService(
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	targetVersion, err := cfgService.GetVersionByAppAndID(ctx, app.ID, id)
+	targetVersion, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get rollback target version"))
 		return
@@ -257,7 +261,7 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 	if input.Description != nil {
 		rollbackDescription = *input.Description
 	}
-	if acf, _, err = cfgService.Rollback(
+	if acf, _, err = acfService.Rollback(
 		ctx,
 		app.ID,
 		id,
@@ -278,11 +282,11 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 		app,
 		acf.EnvName,
 		audit.OperationTypeRollback,
-		buildAppConfigFileAuditData(&oldAcf),
-		buildAppConfigFileAuditData(acf),
+		buildAppConfigFileAuditData(&oldAcf, targetVersion.Name),
+		buildAppConfigFileAuditData(acf, targetVersion.Name),
 	)
 	ginutils.OK(c, serializer.RollbackAppConfigFileVersionOutput{
-		Data: new(serializer.AppConfigFileOutputObj).FromModel(*acf),
+		Data: new(serializer.AppConfigFileOutputObj).FromModel(*acf, targetVersion.Name),
 	})
 }
 
@@ -320,11 +324,12 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 	}
 
 	deleter := auth.MustGetUser(ctx).ID
-	cfgService := appcfg.NewAppConfigFileService(
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	version, _, err := cfgService.DeleteVersion(ctx, app.ID, id, deleter)
+	version, _, err := acfService.DeleteVersion(ctx, app.ID, id, deleter)
 	if err != nil {
 		if errors.Is(err, appcfg.ErrAppCfgFileVersionNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get app config file version"))

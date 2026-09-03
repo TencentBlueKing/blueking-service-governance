@@ -55,6 +55,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 	var envSvc *env.EnvService
 	var builderSvc *workload.BuilderService
 	var appConfigFileStore appcfg.AppConfigFileStore
+	var appConfigFileDefStore appcfg.AppConfigFileDefStore
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var buildConfigStore build.ConfigStore
 	var componentDefStore component.ComponentDefStore
@@ -80,6 +81,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&buildConfigStore,
 				&componentDefStore,
@@ -112,6 +114,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TrpcApplicationOpts{
@@ -135,19 +138,20 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 
 			// Create prod environment-specific AppConfigFile (overlay)
 			prodOverlayContent := "server:\n  address: 0.0.0.0:9090"
-			_, err = appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore).Create(
-				ctx,
-				appcfg.CreateCfgFileParams{
-					AppID:               app.ID,
-					EnvName:             prodEnv.Name,
-					Name:                "trpc-prod-config",
-					Type:                appcfg.AppConfigFileTypeOverlay,
-					ContentSourceType:   appcfg.ContentSourceTypeLocal,
-					Format:              appcfg.FileFormatYAML,
-					BaseAppConfigFileID: &defaultFileID,
-					OverlayContent:      &prodOverlayContent,
-				},
-			)
+			_, err = appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
+				Create(
+					ctx,
+					appcfg.CreateCfgFileParams{
+						AppID:               app.ID,
+						EnvName:             prodEnv.Name,
+						Name:                "trpc-prod-config",
+						Type:                appcfg.AppConfigFileTypeOverlay,
+						ContentSourceType:   appcfg.ContentSourceTypeLocal,
+						Format:              appcfg.FileFormatYAML,
+						BaseAppConfigFileID: &defaultFileID,
+						OverlayContent:      &prodOverlayContent,
+					},
+				)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -235,6 +239,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TrpcApplicationOpts{
@@ -282,6 +287,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TrpcApplicationOpts{
@@ -300,6 +306,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigFileVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
@@ -370,6 +377,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TrpcApplicationOpts{

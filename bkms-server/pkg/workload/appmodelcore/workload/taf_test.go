@@ -51,6 +51,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 	var envSvc *env.EnvService
 	var builderSvc *workload.BuilderService
 	var appConfigFileStore appcfg.AppConfigFileStore
+	var appConfigFileDefStore appcfg.AppConfigFileDefStore
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var buildConfigStore build.ConfigStore
 
@@ -73,6 +74,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&buildConfigStore,
 				&envSvc,
@@ -100,6 +102,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TafApplicationOpts{
@@ -122,19 +125,20 @@ var _ = Describe("TafWorkloadBuilder", func() {
 
 			// Create prod environment-specific AppConfigFile (overlay)
 			prodOverlayContent := "<taf>\n  <application>\n    <server>\n      logpath=/data/prod/log\n    </server>\n  </application>\n</taf>\n"
-			_, err = appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore).Create(
-				ctx,
-				appcfg.CreateCfgFileParams{
-					AppID:               app.ID,
-					EnvName:             prodEnv.Name,
-					Name:                "taf-prod-config",
-					Type:                appcfg.AppConfigFileTypeOverlay,
-					ContentSourceType:   appcfg.ContentSourceTypeLocal,
-					Format:              appcfg.FileFormatTAF,
-					BaseAppConfigFileID: &defaultFileID,
-					OverlayContent:      &prodOverlayContent,
-				},
-			)
+			_, err = appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
+				Create(
+					ctx,
+					appcfg.CreateCfgFileParams{
+						AppID:               app.ID,
+						EnvName:             prodEnv.Name,
+						Name:                "taf-prod-config",
+						Type:                appcfg.AppConfigFileTypeOverlay,
+						ContentSourceType:   appcfg.ContentSourceTypeLocal,
+						Format:              appcfg.FileFormatTAF,
+						BaseAppConfigFileID: &defaultFileID,
+						OverlayContent:      &prodOverlayContent,
+					},
+				)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -225,6 +229,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TafApplicationOpts{
@@ -264,6 +269,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TafApplicationOpts{

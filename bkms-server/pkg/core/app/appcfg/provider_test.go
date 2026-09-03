@@ -34,6 +34,7 @@ import (
 
 var _ = Describe("Local Provider", func() {
 	var store *AppConfigFileStoreMongo
+	var defStore *AppConfigFileDefStoreMongo
 	var ctx context.Context
 
 	var appID string
@@ -45,22 +46,22 @@ var _ = Describe("Local Provider", func() {
 
 		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
+		defStore, err = NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
+		Expect(err).NotTo(HaveOccurred())
 
 		appID = "test-app-" + stringx.Random(6)
 
 		normalAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeNormal,
+			AppID: appID,
+			Type:  AppConfigFileTypeNormal,
+			VersionedContent: VersionedContent{
 				ContentSourceType: ContentSourceTypeLocal,
 			},
 		}
 		overlayAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeOverlay,
+			AppID: appID,
+			Type:  AppConfigFileTypeOverlay,
+			VersionedContent: VersionedContent{
 				ContentSourceType: ContentSourceTypeLocal,
 			},
 		}
@@ -68,19 +69,26 @@ var _ = Describe("Local Provider", func() {
 
 	Context("GetBaseContentInfo", func() {
 		It("should return nil for normal file", func() {
-			info, err := newLocalBaseContentProvider(store, normalAcf).GetInfo(ctx)
+			info, err := newLocalBaseContentProvider(store, defStore, normalAcf).GetInfo(ctx)
 			Expect(errors.Is(err, ErrBaseContentEmpty)).To(BeTrue())
 			Expect(info).To(BeNil())
 		})
 
 		It("should return base content info for overlay file", func() {
-			// Create and save a base app config file
+			baseDef := AppConfigFileDef{
+				AppID:      appID,
+				Name:       "base-config",
+				ConfigKind: ConfigKindFramework,
+			}
+			baseDefID, err := defStore.Add(ctx, baseDef)
+			Expect(err).ToNot(HaveOccurred())
+
 			baseContent := "base: content"
 			baseAcf := &AppConfigFile{
-				AppConfigFileContentSpec: AppConfigFileContentSpec{
-					AppID:             appID,
-					Name:              "base-values",
-					Type:              AppConfigFileTypeNormal,
+				DefID: baseDefID,
+				AppID: appID,
+				Type:  AppConfigFileTypeNormal,
+				VersionedContent: VersionedContent{
 					ContentSourceType: ContentSourceTypeLocal,
 					Content:           &baseContent,
 				},
@@ -88,14 +96,13 @@ var _ = Describe("Local Provider", func() {
 			baseID, err := store.Add(ctx, *baseAcf)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Set the base app config file ID for overlay file
 			overlayAcf.BaseAppConfigFileID = &baseID
 
-			baseInfo, err := newLocalBaseContentProvider(store, overlayAcf).GetInfo(ctx)
+			baseInfo, err := newLocalBaseContentProvider(store, defStore, overlayAcf).GetInfo(ctx)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(baseInfo).To(Equal(&BaseContentInfo{
 				HolderID:                baseID,
-				HolderName:              baseAcf.Name,
+				HolderName:              "base-config",
 				HolderContentSourceType: "local",
 				IsFromAnotherFile:       true,
 				Content:                 baseContent,
@@ -106,6 +113,7 @@ var _ = Describe("Local Provider", func() {
 
 var _ = Describe("BSCP Provider", func() {
 	var store *AppConfigFileStoreMongo
+	var defStore *AppConfigFileDefStoreMongo
 	var ctx context.Context
 
 	var appID string
@@ -117,22 +125,22 @@ var _ = Describe("BSCP Provider", func() {
 
 		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
+		defStore, err = NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
+		Expect(err).NotTo(HaveOccurred())
 
 		appID = "test-app-" + stringx.Random(6)
 
 		normalAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeNormal,
+			AppID: appID,
+			Type:  AppConfigFileTypeNormal,
+			VersionedContent: VersionedContent{
 				ContentSourceType: ContentSourceTypeBSCP,
 			},
 		}
 		overlayAcf = &AppConfigFile{
-			AppConfigFileContentSpec: AppConfigFileContentSpec{
-				AppID:             appID,
-				Name:              "test-values",
-				Type:              AppConfigFileTypeOverlay,
+			AppID: appID,
+			Type:  AppConfigFileTypeOverlay,
+			VersionedContent: VersionedContent{
 				ContentSourceType: ContentSourceTypeBSCP,
 			},
 		}
@@ -156,11 +164,11 @@ var _ = Describe("BSCP Provider", func() {
 				normalAcf.BSCPConfig = &BSCPConfig{BizID: "123", ServiceID: "456", VersionID: "789", ConfigID: "666"}
 				normalAcf.OverlayContent = &overlayContent
 
-				baseInfo, err := newBSCPBaseContentProvider(store, normalAcf).GetInfo(ctx)
+				baseInfo, err := newBSCPBaseContentProvider(store, defStore, normalAcf).GetInfo(ctx)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(baseInfo).To(Equal(&BaseContentInfo{
 					HolderID:                normalAcf.ID,
-					HolderName:              normalAcf.Name,
+					HolderName:              "",
 					HolderContentSourceType: "bscp",
 					IsFromAnotherFile:       false,
 					Content:                 "foo: bar\nbar: bax\n",
@@ -169,14 +177,20 @@ var _ = Describe("BSCP Provider", func() {
 		})
 
 		It("should return base content info for overlay file", func() {
-			// Create and save a base app config file
+			baseDef := AppConfigFileDef{
+				AppID:      appID,
+				Name:       "bscp-base-config",
+				ConfigKind: ConfigKindFramework,
+			}
+			baseDefID, err := defStore.Add(ctx, baseDef)
+			Expect(err).ToNot(HaveOccurred())
+
 			baseContent := "base: content"
 			baseAcf := &AppConfigFile{
-				AppConfigFileContentSpec: AppConfigFileContentSpec{
-					AppID: appID,
-					Name:  "base-values",
-					Type:  AppConfigFileTypeNormal,
-					// Use the Local type as base for testing because reading BSCP content is not implemented yet
+				DefID: baseDefID,
+				AppID: appID,
+				Type:  AppConfigFileTypeNormal,
+				VersionedContent: VersionedContent{
 					ContentSourceType: ContentSourceTypeLocal,
 					Content:           &baseContent,
 				},
@@ -184,14 +198,13 @@ var _ = Describe("BSCP Provider", func() {
 			baseID, err := store.Add(ctx, *baseAcf)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Set the base app config file ID for overlay file
 			overlayAcf.BaseAppConfigFileID = &baseID
 
-			baseInfo, err := newBSCPBaseContentProvider(store, overlayAcf).GetInfo(ctx)
+			baseInfo, err := newBSCPBaseContentProvider(store, defStore, overlayAcf).GetInfo(ctx)
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(baseInfo).To(Equal(&BaseContentInfo{
 				HolderID:                baseID,
-				HolderName:              baseAcf.Name,
+				HolderName:              "bscp-base-config",
 				HolderContentSourceType: "local",
 				IsFromAnotherFile:       true,
 				Content:                 baseContent,

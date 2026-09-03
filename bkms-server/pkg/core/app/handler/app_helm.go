@@ -122,11 +122,12 @@ func (h *Handler) UpdateHelmSpec(c *gin.Context) {
 func (h *Handler) createHelmApp(ctx context.Context, app *bkmsapp.Application) error {
 	// 创建 Helm 应用默认的 Values 文件
 	// 新应用默认拥有一个名为 default 的本地普通 values 文件
-	cfgService := appcfg.NewAppConfigFileService(
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	if _, err := cfgService.Create(
+	if _, err := acfService.Create(
 		ctx,
 		appcfg.CreateCfgFileParams{
 			AppID:             app.ID,
@@ -150,9 +151,15 @@ func (h *Handler) createHelmApp(ctx context.Context, app *bkmsapp.Application) e
 
 // deleteHelmApp 删除 Helm 类型应用
 func (h *Handler) deleteHelmApp(ctx context.Context, app *bkmsapp.Application) error {
-	// 删除所有关联的 Values 文件
+	// 删除所有关联的配置文件、def 及版本记录
 	if _, err := h.registry.AppConfigFileStore.DeleteByApp(ctx, app.ID); err != nil {
 		return errors.Wrap(err, "delete values files")
+	}
+	if _, err := h.registry.AppConfigFileDefStore.DeleteByApp(ctx, app.ID); err != nil {
+		return errors.Wrap(err, "delete values file metas")
+	}
+	if _, err := h.registry.AppConfigFileVersionStore.DeleteByApp(ctx, app.ID); err != nil {
+		return errors.Wrap(err, "delete values file versions")
 	}
 	return nil
 }

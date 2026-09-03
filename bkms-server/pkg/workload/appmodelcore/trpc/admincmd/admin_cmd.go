@@ -117,6 +117,8 @@ type TrpcAdminService struct {
 	TrpcDeployRecordStore appmodeldeploy.RecordStore
 	// AppConfigFileStore 配置文件存储
 	AppConfigFileStore appcfg.AppConfigFileStore
+	// AppConfigFileDefStore 配置文件 def 存储
+	AppConfigFileDefStore appcfg.AppConfigFileDefStore
 	// EnvStore 环境存储
 	EnvStore envmodel.EnvironmentStore
 	// AppStore 应用存储
@@ -157,6 +159,7 @@ func NewAdminService(
 	instanceIDs []string,
 	trpcDeployRecordStore appmodeldeploy.RecordStore,
 	appConfigFileStore appcfg.AppConfigFileStore,
+	appConfigFileDefStore appcfg.AppConfigFileDefStore,
 	envStore envmodel.EnvironmentStore,
 	appStore bkmsapp.ApplicationStore,
 	appModelStore appmodel.AppModelStore,
@@ -170,6 +173,7 @@ func NewAdminService(
 		InstanceIDs:           instanceIDs,
 		TrpcDeployRecordStore: trpcDeployRecordStore,
 		AppConfigFileStore:    appConfigFileStore,
+		AppConfigFileDefStore: appConfigFileDefStore,
 		EnvStore:              envStore,
 		AppStore:              appStore,
 		AppModelStore:         appModelStore,
@@ -457,7 +461,13 @@ func (s *TrpcAdminService) GetAdminPort(cfg *AdminConfig) (string, error) {
 
 // GetAdminConfig 获取并解析 admin 配置
 func (s *TrpcAdminService) GetAdminConfig(ctx context.Context) (*AdminConfig, error) {
-	_, configContent, err := appcfg.GetEnvContent(ctx, s.AppConfigFileStore, s.App.ID, s.Env.Name)
+	_, _, configContent, err := appcfg.GetEnvContent(
+		ctx,
+		s.AppConfigFileStore,
+		s.AppConfigFileDefStore,
+		s.App.ID,
+		s.Env.Name,
+	)
 	if err != nil {
 		return nil, err
 	}

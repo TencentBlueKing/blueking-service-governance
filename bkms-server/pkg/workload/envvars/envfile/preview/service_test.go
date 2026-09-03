@@ -52,6 +52,7 @@ var _ = Describe("ImportPreviewService", func() {
 		appStore              coreapp.ApplicationStore
 		appModelStore         appmodel.AppModelStore
 		appConfigFileStore    appcfg.AppConfigFileStore
+		appConfigFileDefStore appcfg.AppConfigFileDefStore
 		appConfigVersionStore appcfg.AppConfigFileVersionStore
 		buildConfigStore      build.ConfigStore
 		service               *previewpkg.ImportPreviewService
@@ -72,6 +73,7 @@ var _ = Describe("ImportPreviewService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigVersionStore,
 				&buildConfigStore,
 			),
@@ -245,6 +247,7 @@ SENSITIVE_PUBLIC_KEY=updated-secret
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
@@ -285,6 +288,7 @@ BKMS_APP_NAME=custom-app-name
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
@@ -414,6 +418,7 @@ ENV_ONLY_KEY=env-override-value
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{

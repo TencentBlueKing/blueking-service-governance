@@ -37,7 +37,19 @@ func init() {
 		if err := v.RegisterValidation("app_config_file_name", validateAppConfigFileName); err != nil {
 			panic("failed to register app_config_file_name validator: " + err.Error())
 		}
+		if err := v.RegisterValidation("mount_dir", validateMountDir); err != nil {
+			panic("failed to register mount_dir validator: " + err.Error())
+		}
 	}
+}
+
+// validateMountDir 校验容器内绝对目录路径：以 / 开头、不等于 /、不以 / 结尾。
+func validateMountDir(fl validator.FieldLevel) bool {
+	s := fl.Field().String()
+	if len(s) < 2 {
+		return false
+	}
+	return s[0] == '/' && s[len(s)-1] != '/'
 }
 
 func validateAppConfigFileName(fl validator.FieldLevel) bool {
@@ -193,11 +205,11 @@ type AppConfigFileOutputObj struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
-// FromModel fills output fields from an app config file model.
-func (o *AppConfigFileOutputObj) FromModel(obj appcfg.AppConfigFile) *AppConfigFileOutputObj {
+// FromModel fills output fields from an app config file model, name 从 def 传入。
+func (o *AppConfigFileOutputObj) FromModel(obj appcfg.AppConfigFile, name string) *AppConfigFileOutputObj {
 	*o = AppConfigFileOutputObj{
 		ID:                obj.ID.Hex(),
-		Name:              obj.Name,
+		Name:              name,
 		Type:              string(obj.Type),
 		ContentSourceType: string(obj.ContentSourceType),
 		EnvName:           obj.EnvName,
