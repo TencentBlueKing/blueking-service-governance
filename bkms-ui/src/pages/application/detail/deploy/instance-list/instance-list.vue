@@ -19,7 +19,7 @@
 <template>
   <Skeleton
     :full-height="false"
-    :loading="isLoading"
+    :loading="isLoading || !isFederationResolved"
   >
     <template #loading>
       <div class="flex items-center justify-between mb-[12px]">
@@ -129,6 +129,8 @@
   // 部署列表
   const instanceTableRef = ref<InstanceType<typeof InstanceTable> | null>(null);
   const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
+  // 联邦标识由环境信息异步补齐；未确定前不把环境误判为普通集群而建立 Watch。
+  const isFederationResolved = computed(() => typeof trpcDeployStore.curEnvItem?.cluster?.isFederation === 'boolean');
 
   /** 单环境联邦回退轮询，其它环境继续使用 Watch。 */
   function getInstanceListSourceMode(): InstanceListSourceMode {
@@ -143,7 +145,8 @@
     refresh: handleListReleaseInstances,
     stop: stopInstanceWatch,
   } = useInstanceListWatch({
-    enabled: () => Boolean(props.hasDeployRecord),
+    // 环境集群信息就绪后才按联邦/普通模式建立数据源，避免联邦环境首屏误发 Watch。
+    enabled: () => Boolean(props.hasDeployRecord) && isFederationResolved.value,
     getMode: getInstanceListSourceMode,
     getScope: () => ({
       appID: appDetailStore.appID,
