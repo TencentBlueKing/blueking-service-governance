@@ -55,7 +55,7 @@ export async function createTrpcApp({ appPage }: { appPage: AppPage }, appType: 
 
 /**
  * 执行立即部署：打开 Sideslider → 设置实例数 → 选第一个可用镜像 → 提交。
- * 关闭 Sideslider 后不做部署完成断言，断言交由 `waitForInstanceCount` 完成。
+ * 关闭 Sideslider 后不做部署完成断言，断言交由 SSE 驱动的实例列表等待完成。
  */
 export async function deployApp({ appDetailPage }: { appDetailPage: AppDetailPage }, replicas: number) {
   await appDetailPage.clickQuicklyDeploy();
@@ -66,33 +66,31 @@ export async function deployApp({ appDetailPage }: { appDetailPage: AppDetailPag
 
 // ─── 部署管理（部署/扩缩容/移除） ───────────────────────────────────
 
-/** 轮询等待实例数稳定到期望值（达不到则抛错） */
+/** 等待 SSE 同步后的实例数稳定到期望值（达不到则抛错） */
 export async function expectInstanceCount(
   { appDetailPage }: { appDetailPage: AppDetailPage },
   expected: number,
-  opts?: { intervalMs?: number; timeoutMs?: number },
+  opts?: { timeoutMs?: number },
 ) {
   const ok = await appDetailPage.waitForInstanceCount(expected, {
     timeout: opts?.timeoutMs ?? 180000,
-    interval: opts?.intervalMs ?? 15000,
   });
   if (!ok) {
-    throw new Error(`期望实例数达到 ${expected}，轮询超时未满足`);
+    throw new Error(`期望实例数达到 ${expected}，等待 SSE 更新超时未满足`);
   }
 }
 
-/** 轮询等待实例数精确匹配，并要求每个 Pod 都处于 Running/Healthy */
+/** 等待 SSE 同步后的实例数精确匹配，并要求每个 Pod 都处于 Running/Healthy */
 export async function expectInstanceReadyCount(
   { appDetailPage }: { appDetailPage: AppDetailPage },
   expected: number,
-  opts?: { intervalMs?: number; timeoutMs?: number },
+  opts?: { timeoutMs?: number },
 ) {
   const ok = await appDetailPage.waitForInstanceReadyCount(expected, {
     timeout: opts?.timeoutMs ?? 180000,
-    interval: opts?.intervalMs ?? 15000,
   });
   if (!ok) {
-    throw new Error(`期望实例数精确达到 ${expected} 且全部 Running/Healthy，轮询超时未满足`);
+    throw new Error(`期望实例数精确达到 ${expected} 且全部 Running/Healthy，等待 SSE 更新超时未满足`);
   }
 }
 

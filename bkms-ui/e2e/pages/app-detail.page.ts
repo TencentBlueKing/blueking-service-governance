@@ -791,11 +791,23 @@ export default class AppDetailPage extends BasePage {
       state: 'visible',
       timeout: 10000,
     });
-    await this.getDevModeSection().getByRole('button', { name: '执行部署' }).waitFor({
+    await this.getDevModeSection().getByText('执行部署', { exact: true }).waitFor({
       state: 'visible',
       timeout: 10000,
     });
-    await this.getDevModeSection().getByRole('button', { name: '使用 bkms-cli' }).waitFor({
+    await this.getDevModeSection().getByRole('button', { name: '去部署' }).waitFor({
+      state: 'visible',
+      timeout: 10000,
+    });
+    await this.getDevModeSection().getByText('登录 bkms-cli', { exact: true }).waitFor({
+      state: 'visible',
+      timeout: 10000,
+    });
+    await this.getDevModeSection().getByRole('button', { name: '查看 Token' }).waitFor({
+      state: 'visible',
+      timeout: 10000,
+    });
+    await this.getDevModeSection().getByText('使用 bkms-cli 发布二进制', { exact: true }).waitFor({
       state: 'visible',
       timeout: 10000,
     });
@@ -950,7 +962,7 @@ export default class AppDetailPage extends BasePage {
     }
   }
 
-  // ─── 部署管理页：实例列表断言/轮询 ─────────────────────────────────
+  // ─── 部署管理页：实例列表断言 ─────────────────────────────────
 
   /** 断言元数据配置卡片包含指定文本 */
   async expectMetadataContains(label: string, text: string) {
@@ -1203,9 +1215,9 @@ export default class AppDetailPage extends BasePage {
     await this.waitForReady(3000);
   }
 
-  /** 获取部署实例列表表格主体（不含表头） */
+  /** 获取实例列表主表的行，排除固定选择列和操作列复制出的 VXE 行 */
   instanceRows(): Locator {
-    return this.page.locator('.bk-table-body tr, .vxe-table--body tr');
+    return this.page.locator('.instance-table .vxe-table--main-wrapper .vxe-table--body tr');
   }
 
   /**
@@ -1568,27 +1580,36 @@ export default class AppDetailPage extends BasePage {
     await this.getBuilderConfigFormItem('代码库').waitFor({ state: 'visible', timeout: 10000 });
   }
 
-  /** 轮询等待实例数满足期望（达成返回 true，超时返回 false） */
-  async waitForInstanceCount(expected: number, { timeout = 180000, interval = 15000 } = {}) {
-    return this.pollUntil(
-      async () => {
-        const count = await this.instanceRows().count();
-        return count >= expected;
-      },
-      { timeout, interval },
-    );
+  /** 等待 SSE 推送后的实例数满足期望（达成返回 true，超时返回 false） */
+  async waitForInstanceCount(expected: number, { timeout = 180000 } = {}) {
+    try {
+      await expect
+        .poll(() => this.instanceRows().count(), { timeout })
+        .toBeGreaterThanOrEqual(expected);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  /** 轮询等待实例数精确匹配且每行状态均为 Running/Healthy */
-  async waitForInstanceReadyCount(expected: number, { timeout = 180000, interval = 15000 } = {}) {
-    return this.pollUntil(
-      async () => {
-        const rowTexts = await this.visibleInstanceRowTexts();
-        return (
-          rowTexts.length === expected && rowTexts.every(text => text.includes('Running') && text.includes('Healthy'))
-        );
-      },
-      { timeout, interval },
-    );
+  /** 等待 SSE 推送后实例数精确匹配且每行状态均为 Running/Healthy */
+  async waitForInstanceReadyCount(expected: number, { timeout = 180000 } = {}) {
+    try {
+      await expect
+        .poll(
+          async () => {
+            const rowTexts = await this.visibleInstanceRowTexts();
+            return (
+              rowTexts.length === expected &&
+              rowTexts.every(text => text.includes('Running') && text.includes('Healthy'))
+            );
+          },
+          { timeout },
+        )
+        .toBe(true);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

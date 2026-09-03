@@ -182,34 +182,6 @@ export default class BasePage {
   }
 
   /**
-   * 轮询等待条件满足。
-   *
-   * 优化点：
-   * - 先查后等：进入循环立即判定一次 condition，命中即刻返回，避免白等一个 interval。
-   * - 退避间隔：起始间隔较短（快速命中早就绪的场景），逐步退避到传入的 interval 上限，
-   *   兼顾"尽快发现"与"不过度刷新"。
-   * - reload 使用 domcontentloaded + networkidle 兜底，避免持续轮询接口导致 reload 挂满超时。
-   * @param {() => Promise<boolean>} condition
-   * @param {{ timeout?: number, interval?: number }} opts
-   */
-  async pollUntil(condition: () => Promise<boolean>, { timeout = 120000, interval = 15000 } = {}) {
-    const deadline = Date.now() + timeout;
-    // 起始间隔取 5s 与传入 interval 的较小值，命中前更快复查
-    let currentInterval = Math.min(interval, 5000);
-    while (Date.now() < deadline) {
-      if (await condition()) return true;
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) break;
-      await this.page.waitForTimeout(Math.min(currentInterval, remaining));
-      await this.page.reload({ waitUntil: 'domcontentloaded' });
-      await this.safeWaitForNetworkIdle();
-      // 指数退避到 interval 上限
-      currentInterval = Math.min(Math.round(currentInterval * 1.5), interval);
-    }
-    return false;
-  }
-
-  /**
    * 等待网络空闲，但带超时兜底。
    *
    * 说明：BKMS 这类管理台常有轮询 / 心跳接口，裸 `waitForLoadState('networkidle')`
