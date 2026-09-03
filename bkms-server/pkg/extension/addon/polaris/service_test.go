@@ -317,13 +317,17 @@ var _ = Describe("PolarisConfigService", func() {
 	})
 
 	Describe("Weight factor", func() {
-		It("should reject enabling the weight factor when importing a polaris service", func() {
+		It("should persist the switch on import without writing polaris metadata", func() {
 			config := newTestConfig(app.ID, "cfg-weight-factor-import", []string{environment.Name}, nil)
 			config.EnableWeightFactor = true
-			Expect(service.Create(ctx, app, config, false)).To(MatchError(polaris.ErrNotManaged))
+			Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
-			_, err := store.Get(ctx, app.ID, config.Name)
-			Expect(err).To(MatchError(polaris.ErrConfigNotFound))
+			stored, err := store.Get(ctx, app.ID, config.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored.EnableWeightFactor).To(BeTrue())
+			Expect(stored.DepSvcInstID.IsZero()).To(BeTrue())
+			// 动态权重开关不随环境加入 scope 预建，缺省即关闭
+			Expect(stored.EnvDynamicWeights).To(BeEmpty())
 		})
 
 		It("should persist the switch when creating a managed polaris service", func() {

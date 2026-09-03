@@ -181,10 +181,6 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 			))
 			return
 		}
-		if errors.Is(createErr, polaris.ErrNotManaged) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(createErr, bkerrs.ErrCodeInvalidRequest, createErr.Error()))
-			return
-		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(createErr, bkerrs.ErrCodeInternalServerError, "create polaris config"))
 		return
 	}

@@ -146,9 +146,9 @@ func (p *Provider) UpdateInstance(
 		return errors.Wrap(err, "validate polaris inst config")
 	}
 
-	includeMetadata := len(updateParams.Metadata) > 0 || len(updateParams.MetadataKeysToDelete) > 0
+	updateMetadata := len(updateParams.Metadata) > 0 || len(updateParams.MetadataKeysToDelete) > 0
 	var metadata map[string]string
-	if includeMetadata {
+	if updateMetadata {
 		existing, getErr := p.getServiceMetadata(ctx, instCfg.PolarisName, instCfg.PolarisNamespace)
 		if getErr != nil {
 			metrics.DepservicePolarisFailed("update")
@@ -164,7 +164,7 @@ func (p *Provider) UpdateInstance(
 		instCfg.Token,
 		updateParams.Owners,
 		metadata,
-		includeMetadata,
+		updateMetadata,
 	); err != nil {
 		metrics.DepservicePolarisFailed("update")
 		return errors.Wrap(err, "update polaris service")
@@ -232,7 +232,7 @@ func (p *Provider) updateService(
 	ctx context.Context,
 	name, namespace, token, owners string,
 	metadata map[string]string,
-	includeMetadata bool,
+	updateMetadata bool,
 ) error {
 	item := map[string]any{
 		"name":      name,
@@ -242,7 +242,7 @@ func (p *Provider) updateService(
 	if owners != "" {
 		item["owners"] = owners
 	}
-	if includeMetadata {
+	if updateMetadata {
 		if metadata == nil {
 			metadata = map[string]string{}
 		}

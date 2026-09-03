@@ -22213,7 +22213,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "enableWeightFactor": {
-                    "description": "是否启用权重因子，默认 false。仅 createNewService 为 true 时允许开启；\n开启后北极星按实例机型标记权重因子，\n各环境还需单独开启动态权重才会真正按机型分流",
+                    "description": "是否启用权重因子，默认 false。仅 createNewService 为 true 时写入北极星；\n开启后北极星按实例机型标记权重因子，\n各环境还需单独开启动态权重才会真正按机型分流",
                     "type": "boolean"
                 },
                 "instanceKey": {

@@ -84,11 +84,6 @@ func (s *PolarisConfigService) Create(
 	config *PolarisConfig,
 	createNewService bool,
 ) error {
-	// 引入的服务没有 DepSvcInstID，后续也无法 PATCH 该开关去补 metadata
-	if !createNewService && config.EnableWeightFactor {
-		return ErrNotManaged
-	}
-
 	if createNewService {
 		result, err := s.platformManager.CreateService(ctx, &CreatePolarisServiceParams{
 			PolarisName:        config.PolarisName,

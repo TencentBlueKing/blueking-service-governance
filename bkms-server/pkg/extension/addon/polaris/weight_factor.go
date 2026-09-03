@@ -19,6 +19,7 @@
 package polaris
 
 const (
+	// 开启动态权重时，写入北极星服务的相关 metadata
 	polarisMetaEnableDynamicWeight = "internal-enable-dynamic-weight"
 	polarisMetaDynamicWeightConfig = "internal-dynamic-weight-config"
 )

@@ -277,7 +277,7 @@ type CreateAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查，默认 false
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
-	// 是否启用权重因子，默认 false。仅 createNewService 为 true 时允许开启；
+	// 是否启用权重因子，默认 false。仅 createNewService 为 true 时写入北极星；
 	// 开启后北极星按实例机型标记权重因子，
 	// 各环境还需单独开启动态权重才会真正按机型分流
 	EnableWeightFactor *bool `json:"enableWeightFactor"`
