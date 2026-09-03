@@ -24,11 +24,19 @@ import { InstanceService } from '~/api/modules/v1';
 import { notifyInstanceWatchError } from './instance-watch-notifier';
 import { extractSseEventBlocks, parseInstanceSseBlock, reduceInstanceWatchEvent } from './instance-watch-utils';
 
-import type { InstanceWatchEvent } from '../types';
+import type { InstanceListSourceMode, InstanceWatchEvent } from '../types';
 
 const RECONNECT_ENDED_REASONS = new Set(['watch timeout', 'cluster watch interrupted']);
 // 异常断流 / 409 重连前的冷却时长，正常 ENDED 续流不受此限制。
 const ABNORMAL_RECONNECT_DELAY_MS = 5000;
+// 联邦环境暂不支持 Watch，退化为固定周期的全量 List 轮询，此为正常状态下的基准间隔。
+const POLLING_INTERVAL_MS = 10000;
+// 接口响应过慢时降级到更长的轮询周期，避免慢接口与下一轮请求叠加加重集群压力。
+const POLLING_DEGRADED_INTERVAL_MS = 15000;
+// 单轮 List 耗时达到该阈值（慢于一个基准周期）即判定为慢响应并降级。
+const POLLING_SLOW_RESPONSE_MS = POLLING_INTERVAL_MS;
+// 耗时回落到该阈值以下才恢复基准间隔；与慢响应阈值之间留出滞后区间，防止在边界反复抖动。
+const POLLING_RECOVER_RESPONSE_MS = 8000;
 
 interface InstanceWatchScope {
   appID: string;
@@ -38,16 +46,20 @@ interface InstanceWatchScope {
 
 interface UseInstanceListWatchOptions {
   enabled?: () => boolean;
+  getMode?: () => InstanceListSourceMode;
   getScope: () => InstanceWatchScope;
 }
 
-/** 管理单个应用环境的实例全量 List 与增量 Watch。 */
+/** 管理单个应用环境的实例全量 List 与后续 Watch/轮询数据源。 */
 export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
   // 对页面暴露的状态：实例始终保存全量快照，筛选、排序和分页由消费方在本地完成。
   const instances = ref<AppInstanceOutputObj[]>([]);
   const isInitialLoading = ref(false);
+  // 仅 Watch 模式在 SSE 建连成功后为 true；联邦轮询模式没有长连接，isWatching 恒为 false。
   const isWatching = ref(false);
   const lastError = shallowRef<unknown>();
+  // 联邦轮询的自适应间隔：接口变慢时降级为更长周期，响应恢复后回落到基准间隔。
+  const pollingIntervalMs = ref(POLLING_INTERVAL_MS);
 
   // 每次停止或刷新都会递增 generation，异步返回值只有代次一致时才允许写入当前页面。
   let activeController: AbortController | undefined;
@@ -55,11 +67,17 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
   let generation = 0;
   // 异常重连冷却期间的挂起定时器，代次失效或停止时需清除以避免过期后误触发重连。
   let abnormalReconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  // 联邦轮询的下一轮定时器，停止、隐藏或切换环境时必须同步清理。
+  let pollingTimer: ReturnType<typeof setTimeout> | undefined;
   // 同一作用域拿到过首包后，后续手动刷新或正常续流不再遮住现有列表展示 Skeleton。
   let hasLoadedSnapshot = false;
   let lastScopeKey = '';
 
-  /** 只有页面可见、作用域完整且业务允许请求时才能启动 List + Watch。 */
+  function getMode() {
+    return options.getMode?.() ?? 'watch';
+  }
+
+  /** 只有页面可见、作用域完整且业务允许请求时才能启动实例数据源。 */
   function isEnabled() {
     const scope = options.getScope();
     return (
@@ -77,10 +95,18 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
     abnormalReconnectTimer = undefined;
   }
 
-  /** 使当前代次失效并中止 List 请求、Watch 流或异常重连等待。 */
+  /** 清除联邦轮询定时器，防止停止后继续发起下一轮 List。 */
+  function clearPollingTimer() {
+    if (!pollingTimer) return;
+    clearTimeout(pollingTimer);
+    pollingTimer = undefined;
+  }
+
+  /** 使当前代次失效并中止 List 请求、Watch 流或等待中的定时任务。 */
   function invalidateCurrentConnection() {
     generation += 1;
     clearAbnormalReconnectTimer();
+    clearPollingTimer();
     activeController?.abort();
     activeController = undefined;
     isWatching.value = false;
@@ -96,6 +122,17 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
   function clear() {
     instances.value = [];
     hasLoadedSnapshot = false;
+    // 切换作用域视为全新环境，轮询间隔回到基准，避免沿用上一环境的降级状态。
+    pollingIntervalMs.value = POLLING_INTERVAL_MS;
+  }
+
+  /** 依据本轮 List 实际耗时在基准/降级两档间调整下一轮间隔，滞后区间避免边界抖动。 */
+  function adjustPollingInterval(elapsedMs: number) {
+    if (elapsedMs >= POLLING_SLOW_RESPONSE_MS) {
+      pollingIntervalMs.value = POLLING_DEGRADED_INTERVAL_MS;
+    } else if (elapsedMs <= POLLING_RECOVER_RESPONSE_MS) {
+      pollingIntervalMs.value = POLLING_INTERVAL_MS;
+    }
   }
 
   /** 主动 abort 属于正常生命周期清理，不作为请求失败提示给用户。 */
@@ -112,6 +149,14 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
   function handleFailure(error: unknown, runGeneration: number) {
     if (runGeneration !== generation || isAbortError(error) || !isEnabled()) return;
     isWatching.value = false;
+    activeController = undefined;
+    lastError.value = error;
+    notifyInstanceWatchError(error);
+  }
+
+  /** 联邦轮询失败时保留现有列表，并展示本次 List 接口返回的错误，后台仍等待下一轮恢复。 */
+  function handlePollingFailure(error: unknown, runGeneration: number) {
+    if (runGeneration !== generation || isAbortError(error) || !isEnabled() || getMode() !== 'polling') return;
     activeController = undefined;
     lastError.value = error;
     notifyInstanceWatchError(error);
@@ -146,6 +191,27 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
   /** 用纯函数归并事件，保证所有页面共用一致的 ADDED/MODIFIED/DELETED/PLUGIN 语义。 */
   function applyEvent(event: InstanceWatchEvent) {
     instances.value = reduceInstanceWatchEvent(instances.value, event);
+  }
+
+  /** 拉取实例全量快照；Watch 与联邦轮询都复用该入口，保证请求参数一致。 */
+  async function listAllInstances(scope: InstanceWatchScope, controller: AbortController, runGeneration: number) {
+    const listResult = await InstanceService.listAppInstances(
+      {
+        appID: scope.appID,
+        envName: scope.envName,
+        all: true,
+        ...(scope.trafficLaneName ? { trafficLaneName: scope.trafficLaneName } : {}),
+      },
+      { interceptorErr: false, signal: controller.signal },
+    );
+    if (runGeneration !== generation || controller.signal.aborted) return undefined;
+
+    instances.value = (listResult.results || []) as AppInstanceOutputObj[];
+    hasLoadedSnapshot = true;
+    // Watch 返回响应头可能较慢，List 首包可展示后立即关闭 loading；轮询首包同样不等待下一轮。
+    isInitialLoading.value = false;
+    lastError.value = undefined;
+    return listResult;
   }
 
   /** 按块消费 SSE；返回 ENDED.reason，读流、解析或异常关流由调用方触发重新 List。 */
@@ -201,27 +267,51 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
     }
   }
 
+  /** 调度下一次联邦轮询；每轮 List 结束后再排下一轮，避免请求重叠。间隔按上一轮响应耗时自适应。 */
+  function schedulePolling(runGeneration: number) {
+    clearPollingTimer();
+    if (runGeneration !== generation || !isEnabled() || getMode() !== 'polling') return;
+    pollingTimer = setTimeout(() => {
+      pollingTimer = undefined;
+      if (runGeneration !== generation || !isEnabled() || getMode() !== 'polling') return;
+      const controller = new AbortController();
+      activeController = controller;
+      void poll(runGeneration, controller);
+    }, pollingIntervalMs.value);
+  }
+
+  /** 联邦环境轮询路径：只做全量 List，不建 Watch，不依赖 resourceVersion。 */
+  async function poll(runGeneration: number, controller: AbortController) {
+    const scope = options.getScope();
+    // 记录本轮 List 起点，用于在结束后按实际响应耗时调整下一轮间隔。
+    const startedAt = Date.now();
+    try {
+      // 首次失败后后台轮询不再反复展示 Skeleton，保留错误空态直到下一次成功快照到达。
+      isInitialLoading.value = !hasLoadedSnapshot && !lastError.value;
+      const listResult = await listAllInstances(scope, controller, runGeneration);
+      if (!listResult) return;
+    } catch (error) {
+      handlePollingFailure(error, runGeneration);
+    } finally {
+      if (runGeneration === generation) {
+        isInitialLoading.value = false;
+        if (activeController === controller) {
+          activeController = undefined;
+        }
+        // 无论成功或失败都以本轮实际耗时评估，接口变慢（含超时）时同样触发降级。
+        adjustPollingInterval(Date.now() - startedAt);
+        schedulePolling(runGeneration);
+      }
+    }
+  }
+
   /** 先用 List(all=true) 替换全量快照，再从同一次响应的 resourceVersion 建立 Watch。 */
-  async function connect(runGeneration: number, controller: AbortController) {
+  async function connectWatch(runGeneration: number, controller: AbortController) {
     const scope = options.getScope();
     try {
       isInitialLoading.value = !hasLoadedSnapshot;
-      const listResult = await InstanceService.listAppInstances(
-        {
-          appID: scope.appID,
-          envName: scope.envName,
-          all: true,
-          ...(scope.trafficLaneName ? { trafficLaneName: scope.trafficLaneName } : {}),
-        },
-        { interceptorErr: false, signal: controller.signal },
-      );
-      if (runGeneration !== generation || controller.signal.aborted) return;
-
-      instances.value = (listResult.results || []) as AppInstanceOutputObj[];
-      hasLoadedSnapshot = true;
-      // Watch 返回响应头可能较慢，List 首包可展示后立即关闭 loading，不等待 Watch 建连。
-      isInitialLoading.value = false;
-      lastError.value = undefined;
+      const listResult = await listAllInstances(scope, controller, runGeneration);
+      if (!listResult) return;
       const resourceVersion = listResult.resourceVersion;
       if (!resourceVersion) throw new Error('instance list response is missing resourceVersion');
 
@@ -275,7 +365,7 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
     }
   }
 
-  /** 完整刷新会先终止旧代次，确保同一作用域最多只有一条有效 Watch。 */
+  /** 完整刷新会先终止旧代次，确保同一作用域最多只有一条有效 Watch 或轮询。 */
   async function refresh() {
     invalidateCurrentConnection();
     if (!isEnabled()) return;
@@ -283,7 +373,11 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
     const runGeneration = generation;
     const controller = new AbortController();
     activeController = controller;
-    await connect(runGeneration, controller);
+    if (getMode() === 'polling') {
+      await poll(runGeneration, controller);
+    } else {
+      await connectWatch(runGeneration, controller);
+    }
   }
 
   /** 页面隐藏时立即断流；重新可见时从新的 List 位点恢复，避免补读旧连接。 */
@@ -297,13 +391,13 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
 
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  // 应用、环境、泳道或 enabled 变化时重建作用域；切换作用域必须清空旧环境快照。
+  // 应用、环境、泳道、enabled 或数据源模式变化时重建连接；切换作用域必须清空旧环境快照。
   watch(
     () => {
       const scope = options.getScope();
-      return [scope.appID, scope.envName, scope.trafficLaneName || '', options.enabled?.() ?? true] as const;
+      return [scope.appID, scope.envName, scope.trafficLaneName || '', options.enabled?.() ?? true, getMode()] as const;
     },
-    ([appID, envName, trafficLaneName, enabled]) => {
+    ([appID, envName, trafficLaneName, enabled, _mode]) => {
       const scopeKey = [appID, envName, trafficLaneName].join('\u0000');
       if (scopeKey !== lastScopeKey) {
         lastScopeKey = scopeKey;
@@ -334,6 +428,7 @@ export function useInstanceListWatch(options: UseInstanceListWatchOptions) {
     isInitialLoading,
     isWatching,
     lastError,
+    pollingIntervalMs,
     refresh,
     stop,
   };

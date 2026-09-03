@@ -65,6 +65,7 @@
         :env-kind="getEnvKind(envName)"
         :env-name="envName"
         :env-type="getEnvType(envName)"
+        :instance-source-mode="getEnvInstanceSourceMode(envName)"
         :is-federation="isEnvFederation(envName)"
         mode="multiEnv"
         :selected-env-name="selectedEnvName"
@@ -98,9 +99,15 @@
   import InstanceActionsHost from './components/instance-actions-host.vue';
   import InstanceBatchToolbar from './components/instance-batch-toolbar.vue';
   import InstanceTable from './components/instance-table.vue';
+  import { resolveInstanceSourceMode } from './composables/instance-watch-utils';
   import { useInstanceListController } from './composables/use-instance-list-controller';
 
-  import type { InstanceDataLoadedPayload, InstanceSelectionChangePayload, InstanceTableExpose } from './types';
+  import type {
+    InstanceDataLoadedPayload,
+    InstanceListSourceMode,
+    InstanceSelectionChangePayload,
+    InstanceTableExpose,
+  } from './types';
   import type { EnvOutputObj } from '~/@types/env';
 
   const props = defineProps<{
@@ -127,6 +134,11 @@
   function getEnvDisplayName(envName: string): string {
     const envItem = envStore.envList?.find(e => e.name === envName);
     return envItem?.displayName || envName;
+  }
+
+  /** 多环境实例数据源：联邦环境回退轮询，其它环境继续使用 Watch。 */
+  function getEnvInstanceSourceMode(envName: string): InstanceListSourceMode {
+    return resolveInstanceSourceMode(isEnvFederation(envName));
   }
 
   function getEnvKind(envName: string): string {

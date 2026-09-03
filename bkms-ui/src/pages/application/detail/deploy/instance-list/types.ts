@@ -33,6 +33,9 @@ export interface InstanceDataLoadedPayload {
   total: number;
 }
 
+/** 实例列表数据源模式：普通环境走 Watch，联邦环境临时回退轮询。 */
+export type InstanceListSourceMode = 'polling' | 'watch';
+
 /** 实例附属插件数据事件。 */
 export interface InstancePluginWatchEvent {
   plugin?: string;

@@ -589,6 +589,7 @@
   import {
     type RestartSortOrder,
     paginateInstances,
+    resolveInstanceSourceMode,
     sortInstancesByRestart,
   } from '../composables/instance-watch-utils';
   import { useInstanceListWatch } from '../composables/use-instance-list-watch';
@@ -596,6 +597,7 @@
 
   import type {
     InstanceDataLoadedPayload,
+    InstanceListSourceMode,
     InstanceRowAction,
     InstanceRowActionPayload,
     InstanceSelectionChangePayload,
@@ -614,6 +616,8 @@
     envType?: string;
     /** 列筛选项数据 */
     filterOptions?: Record<string, FilterItem[]>;
+    /** 内部数据源模式；多环境父组件按联邦/非联邦明确传入。 */
+    instanceSourceMode?: InstanceListSourceMode;
     isFederation?: boolean;
     mode?: InstanceTableMode;
     selectedEnvName?: string;
@@ -682,6 +686,10 @@
 
   // 是否使用外部数据
   const isExternalData = computed(() => props.data !== undefined);
+  /** 多环境内部数据源：优先用父组件明确传入的模式，否则按联邦标识回退；外部数据模式不会启用。 */
+  const instanceSourceMode = computed<InstanceListSourceMode>(
+    () => props.instanceSourceMode ?? resolveInstanceSourceMode(Boolean(props.isFederation)),
+  );
 
   const {
     clear: clearWatchedInstances,
@@ -690,6 +698,7 @@
     refresh: refreshWatch,
   } = useInstanceListWatch({
     enabled: () => !isExternalData.value && !isCollapsed.value,
+    getMode: () => instanceSourceMode.value,
     getScope: () => ({
       appID: appDetailStore.appID,
       envName: props.envName,

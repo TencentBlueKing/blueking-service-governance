@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import type { InstanceWatchEvent } from '../types';
+import type { InstanceListSourceMode, InstanceWatchEvent } from '../types';
 import type { AppInstanceOutputObj } from '~/@types/v1/instance';
 
 export type RestartSortOrder = 'asc' | 'desc' | null;
@@ -131,6 +131,11 @@ export function reduceInstanceWatchEvent(
   }
 
   return instances;
+}
+
+/** 统一的实例数据源判定：联邦环境暂不支持 Watch，退化为全量 List 轮询，其它环境走 Watch。 */
+export function resolveInstanceSourceMode(isFederation: boolean): InstanceListSourceMode {
+  return isFederation ? 'polling' : 'watch';
 }
 
 /** 在分页前对全量实例按重启次数做稳定排序，缺失值始终置后。 */

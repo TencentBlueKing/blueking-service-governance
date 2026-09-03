@@ -105,10 +105,12 @@
   import InstanceActionsHost from './components/instance-actions-host.vue';
   import InstanceBatchToolbar from './components/instance-batch-toolbar.vue';
   import InstanceTable from './components/instance-table.vue';
+  import { resolveInstanceSourceMode } from './composables/instance-watch-utils';
   import { useInstanceListController } from './composables/use-instance-list-controller';
   import { useInstanceListWatch } from './composables/use-instance-list-watch';
   import { isPolarisHealthy } from './instance-utils';
 
+  import type { InstanceListSourceMode } from './types';
   import type { ISearchValue } from 'bkui-vue/lib/search-select/utils';
 
   const props = defineProps<{
@@ -128,6 +130,11 @@
   const instanceTableRef = ref<InstanceType<typeof InstanceTable> | null>(null);
   const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
 
+  /** 单环境联邦回退轮询，其它环境继续使用 Watch。 */
+  function getInstanceListSourceMode(): InstanceListSourceMode {
+    return resolveInstanceSourceMode(isFederationEnv.value);
+  }
+
   const {
     clear: clearInstanceList,
     instances: instanceList,
@@ -137,6 +144,7 @@
     stop: stopInstanceWatch,
   } = useInstanceListWatch({
     enabled: () => Boolean(props.hasDeployRecord),
+    getMode: getInstanceListSourceMode,
     getScope: () => ({
       appID: appDetailStore.appID,
       envName: trpcDeployStore.curEnvItem?.name || '',
