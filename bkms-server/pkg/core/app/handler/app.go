@@ -775,9 +775,15 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 		return errors.Wrapf(err, "delete app(%s) model", app.Name)
 	}
 
-	// 2. 删除所有关联的配置文件（AppConfigFile）
+	// 2. 删除所有关联的配置文件、def 及版本记录
 	if _, err := h.registry.AppConfigFileStore.DeleteByApp(ctx, app.ID); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config files", app.Name)
+	}
+	if _, err := h.registry.AppConfigFileDefStore.DeleteByApp(ctx, app.ID); err != nil {
+		return errors.Wrapf(err, "delete app(%s) config file defs", app.Name)
+	}
+	if _, err := h.registry.AppConfigFileVersionStore.DeleteByApp(ctx, app.ID); err != nil {
+		return errors.Wrapf(err, "delete app(%s) config file versions", app.Name)
 	}
 
 	// 3. 删除北极星配置

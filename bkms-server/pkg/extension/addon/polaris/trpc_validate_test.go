@@ -34,12 +34,13 @@ import (
 
 var _ = Describe("CollectConfigWarnings", func() {
 	var (
-		ctx                context.Context
-		diApp              *fxtest.App
-		appModelStore      appmodel.AppModelStore
-		appConfigFileStore appcfg.AppConfigFileStore
-		polarisConfigStore polaris.PolarisConfigStore
-		testAppID          string
+		ctx                   context.Context
+		diApp                 *fxtest.App
+		appModelStore         appmodel.AppModelStore
+		appConfigFileStore    appcfg.AppConfigFileStore
+		appConfigFileDefStore appcfg.AppConfigFileDefStore
+		polarisConfigStore    polaris.PolarisConfigStore
+		testAppID             string
 	)
 
 	BeforeEach(func() {
@@ -54,6 +55,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 			fx.Populate(
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&polarisConfigStore,
 			),
 		)
@@ -64,6 +66,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 		// 清理测试数据
 		_ = appModelStore.DeleteAppModel(ctx, testAppID)
 		_, _ = appConfigFileStore.DeleteByApp(ctx, testAppID)
+		_, _ = appConfigFileDefStore.DeleteByApp(ctx, testAppID)
 		_ = polarisConfigStore.DeleteByApp(ctx, testAppID)
 
 		diApp.RequireStop()
@@ -83,33 +86,47 @@ var _ = Describe("CollectConfigWarnings", func() {
 
 	// 辅助函数：创建应用级别 tRPC 配置文件
 	createAppLevelConfigFile := func(content string) {
+		defID, err := appConfigFileDefStore.Add(ctx, appcfg.AppConfigFileDef{
+			AppID:      testAppID,
+			Name:       appcfg.DefaultAppConfigFileName,
+			ConfigKind: appcfg.ConfigKindFramework,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
 		acf := appcfg.AppConfigFile{
-			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-				AppID:             testAppID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              appcfg.DefaultAppConfigFileName,
-				Type:              appcfg.AppConfigFileTypeNormal,
+			DefID:   defID,
+			AppID:   testAppID,
+			EnvName: appcfg.EnvNameDefault,
+			Type:    appcfg.AppConfigFileTypeNormal,
+			VersionedContent: appcfg.VersionedContent{
 				ContentSourceType: appcfg.ContentSourceTypeLocal,
 				Content:           &content,
 			},
 		}
-		_, err := appConfigFileStore.Add(ctx, acf)
+		_, err = appConfigFileStore.Add(ctx, acf)
 		Expect(err).NotTo(HaveOccurred())
 	}
 
 	// 辅助函数：创建环境级别 tRPC 配置文件
 	createEnvConfigFile := func(envName, content string) {
+		defID, err := appConfigFileDefStore.Add(ctx, appcfg.AppConfigFileDef{
+			AppID:      testAppID,
+			Name:       envName,
+			ConfigKind: appcfg.ConfigKindFramework,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
 		acf := appcfg.AppConfigFile{
-			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-				AppID:             testAppID,
-				EnvName:           envName,
-				Name:              envName,
-				Type:              appcfg.AppConfigFileTypeNormal,
+			DefID:   defID,
+			AppID:   testAppID,
+			EnvName: envName,
+			Type:    appcfg.AppConfigFileTypeNormal,
+			VersionedContent: appcfg.VersionedContent{
 				ContentSourceType: appcfg.ContentSourceTypeLocal,
 				Content:           &content,
 			},
 		}
-		_, err := appConfigFileStore.Add(ctx, acf)
+		_, err = appConfigFileStore.Add(ctx, acf)
 		Expect(err).NotTo(HaveOccurred())
 	}
 
@@ -126,7 +143,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					PolarisName: "trpc.app.server.service",
 				},
 			}
-			warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+			warnings := polaris.CollectConfigWarnings(
+				ctx,
+				appModelStore,
+				appConfigFileStore,
+				appConfigFileDefStore,
+				config,
+			)
 			Expect(warnings).To(BeEmpty())
 		})
 	})
@@ -157,7 +180,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					},
 					ScopeEnvNames: []string{"dev"},
 				}
-				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				warnings := polaris.CollectConfigWarnings(
+					ctx,
+					appModelStore,
+					appConfigFileStore,
+					appConfigFileDefStore,
+					config,
+				)
 				Expect(warnings).To(BeEmpty())
 			})
 		})
@@ -182,7 +211,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					},
 					ScopeEnvNames: []string{"dev"},
 				}
-				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				warnings := polaris.CollectConfigWarnings(
+					ctx,
+					appModelStore,
+					appConfigFileStore,
+					appConfigFileDefStore,
+					config,
+				)
 				Expect(warnings).To(HaveLen(1))
 				Expect(warnings[0]).To(ContainSubstring("环境 'dev'"))
 				Expect(warnings[0]).To(ContainSubstring("推荐与 tRPC 配置中的服务名"))
@@ -200,7 +235,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					},
 					ScopeEnvNames: []string{"dev"},
 				}
-				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				warnings := polaris.CollectConfigWarnings(
+					ctx,
+					appModelStore,
+					appConfigFileStore,
+					appConfigFileDefStore,
+					config,
+				)
 				Expect(warnings).To(BeEmpty())
 			})
 		})
@@ -226,7 +267,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					},
 					ScopeEnvNames: []string{"dev"},
 				}
-				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				warnings := polaris.CollectConfigWarnings(
+					ctx,
+					appModelStore,
+					appConfigFileStore,
+					appConfigFileDefStore,
+					config,
+				)
 				Expect(warnings).To(BeEmpty())
 			})
 		})
@@ -248,7 +295,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					},
 					ScopeEnvNames: []string{"dev"},
 				}
-				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				warnings := polaris.CollectConfigWarnings(
+					ctx,
+					appModelStore,
+					appConfigFileStore,
+					appConfigFileDefStore,
+					config,
+				)
 				Expect(warnings).To(HaveLen(1))
 				Expect(warnings[0]).To(ContainSubstring("[my-polaris]"))
 				Expect(warnings[0]).To(ContainSubstring("环境 'dev'"))
@@ -287,7 +340,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					},
 					ScopeEnvNames: []string{"dev", "prod"},
 				}
-				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				warnings := polaris.CollectConfigWarnings(
+					ctx,
+					appModelStore,
+					appConfigFileStore,
+					appConfigFileDefStore,
+					config,
+				)
 				// dev 匹配，prod 不匹配
 				Expect(warnings).To(HaveLen(1))
 				Expect(warnings[0]).To(ContainSubstring("环境 'prod'"))
@@ -315,7 +374,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					},
 					ScopeEnvNames: []string{"dev", "staging"},
 				}
-				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				warnings := polaris.CollectConfigWarnings(
+					ctx,
+					appModelStore,
+					appConfigFileStore,
+					appConfigFileDefStore,
+					config,
+				)
 				Expect(warnings).To(BeEmpty())
 			})
 		})
@@ -339,7 +404,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 					},
 					ScopeEnvNames: []string{"dev"},
 				}
-				warnings := polaris.CollectConfigWarnings(ctx, appModelStore, appConfigFileStore, config)
+				warnings := polaris.CollectConfigWarnings(
+					ctx,
+					appModelStore,
+					appConfigFileStore,
+					appConfigFileDefStore,
+					config,
+				)
 				Expect(warnings).To(BeEmpty())
 			})
 		})

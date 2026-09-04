@@ -1,0 +1,40 @@
+[
+  {
+    "update": "app_config_file_defs",
+    "updates": [
+      {
+        "q": { "configKind": "framework" },
+        "u": { "$unset": { "mountDir": "" } },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "dropIndexes": "app_config_files",
+    "index": [
+      "defID_1_envName_1",
+      "defID_1"
+    ]
+  },
+  {
+    "createIndexes": "app_config_files",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "name": 1
+        },
+        "name": "appID_1_name_1",
+        "unique": true
+      }
+    ]
+  },
+  {
+    "dropIndexes": "app_config_file_defs",
+    "index": [
+      "appID_1_name_1",
+      "appID_1_configKind_1",
+      "appID_1_mountDir_1"
+    ]
+  }
+]

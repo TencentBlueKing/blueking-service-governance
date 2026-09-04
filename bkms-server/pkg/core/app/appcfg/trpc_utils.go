@@ -41,9 +41,10 @@ type trpcServiceConfig struct {
 func GetTrpcServiceNames(
 	ctx context.Context,
 	store AppConfigFileStore,
+	defStore AppConfigFileDefStore,
 	appID, envName string,
 ) ([]string, error) {
-	_, content, err := GetEnvContent(ctx, store, appID, envName)
+	_, _, content, err := GetEnvContent(ctx, store, defStore, appID, envName)
 	if err != nil {
 		return nil, err
 	}

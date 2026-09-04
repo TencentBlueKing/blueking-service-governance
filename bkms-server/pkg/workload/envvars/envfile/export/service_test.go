@@ -48,6 +48,7 @@ var _ = Describe("ExportService", func() {
 		appStore              coreapp.ApplicationStore
 		appModelStore         appmodel.AppModelStore
 		appConfigFileStore    appcfg.AppConfigFileStore
+		appConfigFileDefStore appcfg.AppConfigFileDefStore
 		appConfigVersionStore appcfg.AppConfigFileVersionStore
 		buildConfigStore      build.ConfigStore
 		service               *Service
@@ -68,6 +69,7 @@ var _ = Describe("ExportService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigVersionStore,
 				&buildConfigStore,
 			),
@@ -154,6 +156,7 @@ var _ = Describe("ExportService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
@@ -184,6 +187,7 @@ var _ = Describe("ExportService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{

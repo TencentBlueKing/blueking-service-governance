@@ -51,6 +51,7 @@ var _ = Describe("TrpcAdminService", func() {
 	// Store instances
 	var appStore bkmsapp.ApplicationStore
 	var appConfigFileStore appcfg.AppConfigFileStore
+	var appConfigFileDefStore appcfg.AppConfigFileDefStore
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var buildConfigStore build.ConfigStore
 	var scopedEnvVarStore envvars.ScopedEnvVarStore
@@ -81,6 +82,7 @@ var _ = Describe("TrpcAdminService", func() {
 			fx.Populate(
 				&appStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&buildConfigStore,
 				&scopedEnvVarStore,
@@ -97,6 +99,7 @@ var _ = Describe("TrpcAdminService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigFileVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
@@ -112,9 +115,14 @@ var _ = Describe("TrpcAdminService", func() {
 
 		// 创建 TrpcAdminService（跳过验证逻辑）
 		adminService = &admincmd.TrpcAdminService{
-			AppConfigFileStore: appConfigFileStore,
-			AppModelStore:      appModelStore,
-			EnvVarsReader:      envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+			AppConfigFileStore:    appConfigFileStore,
+			AppConfigFileDefStore: appConfigFileDefStore,
+			AppModelStore:         appModelStore,
+			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
+				scopedEnvVarStore,
+				appDepsVarReader,
+				polarisVarReader,
+			),
 		}
 		adminService.App = testApp
 		adminService.AppModel = testAppModel
@@ -140,18 +148,19 @@ var _ = Describe("TrpcAdminService", func() {
   admin_port: "8081"`
 
 				var err error
-				acf, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore).Create(
-					ctx,
-					appcfg.CreateCfgFileParams{
-						AppID:             testApp.ID,
-						EnvName:           testEnv.Name,
-						Name:              "trpc_go.yaml",
-						Type:              appcfg.AppConfigFileTypeNormal,
-						ContentSourceType: appcfg.ContentSourceTypeLocal,
-						Format:            appcfg.FileFormatYAML,
-						Content:           &configContent,
-					},
-				)
+				acf, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
+					Create(
+						ctx,
+						appcfg.CreateCfgFileParams{
+							AppID:             testApp.ID,
+							EnvName:           testEnv.Name,
+							Name:              "trpc_go.yaml",
+							Type:              appcfg.AppConfigFileTypeNormal,
+							ContentSourceType: appcfg.ContentSourceTypeLocal,
+							Format:            appcfg.FileFormatYAML,
+							Content:           &configContent,
+						},
+					)
 				Expect(err).NotTo(HaveOccurred())
 				configFileID = acf.ID
 				Expect(configFileID).NotTo(Equal(bson.ObjectID{}))
@@ -274,18 +283,19 @@ var _ = Describe("TrpcAdminService", func() {
 	Describe("Precheck", func() {
 		// 辅助函数：创建指定内容的配置文件
 		createConfigFile := func(content string) {
-			_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore).Create(
-				ctx,
-				appcfg.CreateCfgFileParams{
-					AppID:             testApp.ID,
-					EnvName:           testEnv.Name,
-					Name:              "trpc_go.yaml",
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Format:            appcfg.FileFormatYAML,
-					Content:           &content,
-				},
-			)
+			_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
+				Create(
+					ctx,
+					appcfg.CreateCfgFileParams{
+						AppID:             testApp.ID,
+						EnvName:           testEnv.Name,
+						Name:              "trpc_go.yaml",
+						Type:              appcfg.AppConfigFileTypeNormal,
+						ContentSourceType: appcfg.ContentSourceTypeLocal,
+						Format:            appcfg.FileFormatYAML,
+						Content:           &content,
+					},
+				)
 			Expect(err).NotTo(HaveOccurred())
 		}
 

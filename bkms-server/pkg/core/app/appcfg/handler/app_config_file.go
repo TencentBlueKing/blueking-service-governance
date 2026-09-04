@@ -22,13 +22,16 @@ package handler
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -100,11 +103,12 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	}
 
 	creator := auth.MustGetUser(ctx).ID
-	cfgService := appcfg.NewAppConfigFileService(
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	obj, err := cfgService.Create(
+	obj, err := acfService.Create(
 		ctx,
 		appcfg.CreateCfgFileParams{
 			AppID:               app.ID,
@@ -124,9 +128,16 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 		return
 	}
 
-	h.addAppConfigFileAudit(ctx, app, obj.EnvName, audit.OperationTypeCreate, nil, buildAppConfigFileAuditData(obj))
+	h.addAppConfigFileAudit(
+		ctx,
+		app,
+		obj.EnvName,
+		audit.OperationTypeCreate,
+		nil,
+		buildAppConfigFileAuditData(obj, input.Name),
+	)
 	ginutils.OK(c, slz.CreateAppConfigFileOutput{
-		Item: new(slz.AppConfigFileOutputObj).FromModel(*obj),
+		Item: new(slz.AppConfigFileOutputObj).FromModel(*obj, input.Name),
 	})
 }
 
@@ -179,16 +190,16 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 		acf.BSCPConfig = bscpCfg
 	}
 
-	acf.Name = input.Name
+	oldName := h.resolveDefName(ctx, acf.DefID)
+
 	operator := auth.MustGetUser(ctx).ID
-	cfgService := appcfg.NewAppConfigFileService(
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	if err = cfgService.UpdateFile(
-		ctx,
-		acf,
-		operator,
+	if err = acfService.UpdateFile(
+		ctx, acf, input.Name, operator,
 		appcfg.UpdateCfgFileOptions{
 			OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
 			Description:            input.Description,
@@ -203,16 +214,15 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 		return
 	}
 
-	h.addAppConfigFileAudit(
-		ctx,
-		app,
-		acf.EnvName,
-		audit.OperationTypeUpdate,
-		buildAppConfigFileAuditData(&oldAcf),
-		buildAppConfigFileAuditData(acf),
+	// TODO: 老接口兼容——同步更新 def name，迁移新接口后可删除
+	h.syncDefName(ctx, acf.DefID, input.Name, oldName)
+
+	h.addAppConfigFileAudit(ctx, app, acf.EnvName, audit.OperationTypeUpdate,
+		buildAppConfigFileAuditData(&oldAcf, oldName),
+		buildAppConfigFileAuditData(acf, input.Name),
 	)
 	ginutils.OK(c, slz.UpdateAppConfigFileOutput{
-		Item: new(slz.AppConfigFileOutputObj).FromModel(*acf),
+		Item: new(slz.AppConfigFileOutputObj).FromModel(*acf, input.Name),
 	})
 }
 
@@ -245,7 +255,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 		return
 	}
 
-	opts := []appcfg.AcfListOption{appcfg.AcfOrderBy(appcfg.ListOrderByName)}
+	opts := []appcfg.AcfListOption{}
 	if val := lo.FromPtr(queryInput.Type); val != "" {
 		opts = append(opts, appcfg.AcfFilterType(val))
 	}
@@ -258,9 +268,29 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 		return
 	}
 
+	// 批量查 def 获取 name 映射，并在上层按原 name 排序语义兼容老接口。
+	defNameMap := make(map[bson.ObjectID]string)
+	for _, acf := range appConfigFiles {
+		if _, ok := defNameMap[acf.DefID]; !ok {
+			if def, dErr := h.registry.AppConfigFileDefStore.GetByID(ctx, acf.DefID); dErr == nil {
+				defNameMap[acf.DefID] = def.Name
+			}
+		}
+	}
+	sort.SliceStable(appConfigFiles, func(i, j int) bool {
+		leftName := defNameMap[appConfigFiles[i].DefID]
+		rightName := defNameMap[appConfigFiles[j].DefID]
+		if leftName != rightName {
+			return leftName < rightName
+		}
+		if !appConfigFiles[i].CreatedAt.Equal(appConfigFiles[j].CreatedAt) {
+			return appConfigFiles[i].CreatedAt.Before(appConfigFiles[j].CreatedAt)
+		}
+		return appConfigFiles[i].ID.Hex() < appConfigFiles[j].ID.Hex()
+	})
 	items := make([]*slz.AppConfigFileOutputObj, 0, len(appConfigFiles))
 	for _, acf := range appConfigFiles {
-		items = append(items, new(slz.AppConfigFileOutputObj).FromModel(acf))
+		items = append(items, new(slz.AppConfigFileOutputObj).FromModel(acf, defNameMap[acf.DefID]))
 	}
 	ginutils.OK(c, slz.ListAppConfigFilesOutput{Items: items})
 }
@@ -298,11 +328,20 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 		return
 	}
 
-	cfgService := appcfg.NewAppConfigFileService(
+	// 先查 def 获取 name
+	defName := ""
+	if acf, gErr := h.registry.AppConfigFileStore.GetByID(ctx, id); gErr == nil {
+		if def, dErr := h.registry.AppConfigFileDefStore.GetByID(ctx, acf.DefID); dErr == nil {
+			defName = def.Name
+		}
+	}
+
+	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	oldAcf, err := cfgService.DeleteFile(ctx, app.ID, id)
+	oldAcf, err := acfService.DeleteFile(ctx, app.ID, id)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "deleting app config file"))
 		return
@@ -313,7 +352,7 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 		app,
 		oldAcf.EnvName,
 		audit.OperationTypeDelete,
-		buildAppConfigFileAuditData(oldAcf),
+		buildAppConfigFileAuditData(oldAcf, defName),
 		nil,
 	)
 	ginutils.OK(c, slz.AppConfigFileEmptyOutput{})
@@ -346,7 +385,11 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 		return
 	}
 
-	provider, err := appcfg.NewBaseContentProvider(h.registry.AppConfigFileStore, acf)
+	provider, err := appcfg.NewBaseContentProvider(
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
+		acf,
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating values file editor"))
 		return
@@ -368,7 +411,7 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 		}
 	}
 
-	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, h.registry.AppConfigFileDefStore, acf)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating values file editor"))
 		return
@@ -504,8 +547,8 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 	}
 
 	virtualConfig := &appcfg.AppConfigFile{
-		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-			Type:                appcfg.AppConfigFileTypeOverlay,
+		Type: appcfg.AppConfigFileTypeOverlay,
+		VersionedContent: appcfg.VersionedContent{
 			ContentSourceType:   appcfg.ContentSourceTypeLocal,
 			BaseAppConfigFileID: &baseID,
 			OverlayContent:      &input.OverlayContent,
@@ -517,7 +560,11 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 		return
 	}
 
-	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, virtualConfig)
+	editor, err := appcfg.NewAppConfigFileEditor(
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
+		virtualConfig,
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create editor"))
 		return
@@ -558,7 +605,7 @@ func (h *Handler) updateContentOrOverlay(
 		return nil, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate file content")
 	}
 
-	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, h.registry.AppConfigFileDefStore, acf)
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "creating values file editor")
 	}
@@ -584,33 +631,9 @@ func (h *Handler) updateContentOrOverlay(
 	}
 
 	operator := auth.MustGetUser(ctx).ID
-	cfgService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileVersionStore,
-	)
-	if err = cfgService.UpdateFile(
-		ctx,
-		acf,
-		operator,
-		appcfg.UpdateCfgFileOptions{
-			OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
-			Description:            description,
-			ExpectedCurrentVersion: expectedCurrentVersion,
-		},
-	); err != nil {
-		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
-			return nil, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex())
-		}
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create app config file version")
+	if err = h.persistContentUpdate(ctx, app, &oldAcf, acf, operator, description, expectedCurrentVersion); err != nil {
+		return nil, err
 	}
-	h.addAppConfigFileAudit(
-		ctx,
-		app,
-		acf.EnvName,
-		audit.OperationTypeUpdate,
-		buildAppConfigFileAuditData(&oldAcf),
-		buildAppConfigFileAuditData(acf),
-	)
 
 	return &slz.UpdateAppConfigFileContentOutput{
 		CompiledContent: compiledContent,
@@ -625,4 +648,68 @@ func (h *Handler) updateContentOrOverlay(
 			},
 		},
 	}, nil
+}
+
+// persistContentUpdate 保存文件内容变更的版本记录并写入审计日志。
+func (h *Handler) persistContentUpdate(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	oldAcf *appcfg.AppConfigFile,
+	acf *appcfg.AppConfigFile,
+	operator, description string,
+	expectedCurrentVersion *int64,
+) error {
+	// TODO: 老接口 Name 从 def 获取，迁移后可简化
+	defName := ""
+	if def, dErr := h.registry.AppConfigFileDefStore.GetByID(ctx, acf.DefID); dErr == nil {
+		defName = def.Name
+	}
+	acfService := appcfg.NewAppConfigFileService(
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
+		h.registry.AppConfigFileVersionStore,
+	)
+	if err := acfService.UpdateFile(
+		ctx, acf, defName, operator,
+		appcfg.UpdateCfgFileOptions{
+			OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
+			Description:            description,
+			ExpectedCurrentVersion: expectedCurrentVersion,
+		},
+	); err != nil {
+		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
+			return bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex())
+		}
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create app config file version")
+	}
+	h.addAppConfigFileAudit(
+		ctx, app, acf.EnvName, audit.OperationTypeUpdate,
+		buildAppConfigFileAuditData(oldAcf, defName),
+		buildAppConfigFileAuditData(acf, defName),
+	)
+	return nil
+}
+
+// resolveDefName 从 def 获取文件名称，def 不存在时返回空字符串。
+// TODO: 老接口兼容辅助，迁移新接口后可删除。
+func (h *Handler) resolveDefName(ctx context.Context, defID bson.ObjectID) string {
+	def, err := h.registry.AppConfigFileDefStore.GetByID(ctx, defID)
+	if err != nil {
+		return ""
+	}
+	return def.Name
+}
+
+// syncDefName 老接口兼容：同步更新 def name。
+// TODO: 迁移新接口后可删除。
+func (h *Handler) syncDefName(ctx context.Context, defID bson.ObjectID, newName, oldName string) {
+	if newName == oldName {
+		return
+	}
+	def, err := h.registry.AppConfigFileDefStore.GetByID(ctx, defID)
+	if err != nil {
+		return
+	}
+	def.Name = newName
+	_, _ = h.registry.AppConfigFileDefStore.Update(ctx, *def)
 }

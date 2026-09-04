@@ -35,12 +35,16 @@ import (
 
 // Plugin provides workload extensions for TAF applications.
 type Plugin struct {
-	appConfigFileStore appcfg.AppConfigFileStore
+	appConfigFileStore    appcfg.AppConfigFileStore
+	appConfigFileDefStore appcfg.AppConfigFileDefStore
 }
 
 // NewPlugin creates a new TAF plugin with the given dependencies.
-func NewPlugin(appConfigFileStore appcfg.AppConfigFileStore) *Plugin {
-	return &Plugin{appConfigFileStore: appConfigFileStore}
+func NewPlugin(
+	appConfigFileStore appcfg.AppConfigFileStore,
+	appConfigFileDefStore appcfg.AppConfigFileDefStore,
+) *Plugin {
+	return &Plugin{appConfigFileStore: appConfigFileStore, appConfigFileDefStore: appConfigFileDefStore}
 }
 
 // Type returns the workload type handled by this plugin.
@@ -98,11 +102,17 @@ func (p *Plugin) computeTafConfig(
 	if p.appConfigFileStore == nil {
 		return appModel.Workload.TafConfig.FileName, appModel.Workload.TafConfig.FileContent, nil
 	}
-	acf, content, err := appcfg.GetEnvContent(ctx, p.appConfigFileStore, app.ID, env.Name)
+	_, name, content, err := appcfg.GetEnvContent(
+		ctx,
+		p.appConfigFileStore,
+		p.appConfigFileDefStore,
+		app.ID,
+		env.Name,
+	)
 	if err != nil {
 		return "", "", err
 	}
-	return acf.Name, content, nil
+	return name, content, nil
 }
 
 // buildTafConfig builds the TAF spec configuration with init container support for runtime

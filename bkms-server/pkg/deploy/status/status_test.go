@@ -85,6 +85,7 @@ var _ = Describe("DeployStatusService", func() {
 		appStore                   bkmsapp.ApplicationStore
 		appModelStore              appmodel.AppModelStore
 		appConfigFileStore         appcfg.AppConfigFileStore
+		appConfigFileDefStore      appcfg.AppConfigFileDefStore
 		appConfigFileVersionStore  appcfg.AppConfigFileVersionStore
 		buildConfigStore           build.ConfigStore
 		buildAutoDeployRecordStore autodeploy.RecordStore
@@ -111,6 +112,7 @@ var _ = Describe("DeployStatusService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&buildConfigStore,
 				&envStore,
@@ -149,6 +151,7 @@ var _ = Describe("DeployStatusService", func() {
 					AppStore:                  appStore,
 					AppModelStore:             appModelStore,
 					AppConfigFileStore:        appConfigFileStore,
+					AppConfigFileDefStore:     appConfigFileDefStore,
 					AppConfigFileVersionStore: appConfigFileVersionStore,
 					BuildConfigStore:          buildConfigStore,
 				}, nil)
@@ -438,6 +441,7 @@ var _ = Describe("DeployStatusService", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, nil)
@@ -620,6 +624,7 @@ var _ = Describe("DeployStatusService", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, nil)
@@ -627,6 +632,7 @@ var _ = Describe("DeployStatusService", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
+				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TrpcApplicationOpts{WorkspaceID: trpcApp.WorkspaceID})

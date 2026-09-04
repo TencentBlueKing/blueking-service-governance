@@ -102,6 +102,7 @@ type SharedTestStores struct {
 	PolarisConfigStore        polaris.PolarisConfigStore
 	AppSpecStore              appspec.AppSpecStore
 	AppConfigFileStore        appcfg.AppConfigFileStore
+	AppConfigFileDefStore     appcfg.AppConfigFileDefStore
 	ScopedEnvVarStore         envvars.ScopedEnvVarStore
 	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	BuildConfigStore          build.ConfigStore
@@ -129,6 +130,7 @@ func createApplication(
 			AppStore:                  stores.AppStore,
 			AppModelStore:             stores.AppModelStore,
 			AppConfigFileStore:        stores.AppConfigFileStore,
+			AppConfigFileDefStore:     stores.AppConfigFileDefStore,
 			AppConfigFileVersionStore: stores.AppConfigFileVersionStore,
 			BuildConfigStore:          stores.BuildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
@@ -146,6 +148,7 @@ func createApplication(
 			AppStore:                  stores.AppStore,
 			AppModelStore:             stores.AppModelStore,
 			AppConfigFileStore:        stores.AppConfigFileStore,
+			AppConfigFileDefStore:     stores.AppConfigFileDefStore,
 			AppConfigFileVersionStore: stores.AppConfigFileVersionStore,
 			BuildConfigStore:          stores.BuildConfigStore,
 		}, &dbfactory.TafApplicationOpts{
@@ -192,6 +195,7 @@ var _ = Describe("Builder Shared Tests", func() {
 				&stores.PolarisConfigStore,
 				&stores.AppSpecStore,
 				&stores.AppConfigFileStore,
+				&stores.AppConfigFileDefStore,
 				&stores.AppConfigFileVersionStore,
 				&stores.BuildConfigStore,
 				&stores.ScopedEnvVarStore,

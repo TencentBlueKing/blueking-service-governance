@@ -1,0 +1,178 @@
+[
+  {
+    "create": "app_config_file_defs"
+  },
+  {
+    "createIndexes": "app_config_file_defs",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "name": 1
+        },
+        "name": "appID_1_name_1",
+        "unique": true
+      },
+      {
+        "key": {
+          "appID": 1,
+          "configKind": 1
+        },
+        "name": "appID_1_configKind_1"
+      }
+    ]
+  },
+  {
+    "update": "app_config_files",
+    "updates": [
+      {
+        "q": {
+          "$or": [
+            { "configKind": { "$exists": false } },
+            { "configKind": "" },
+            { "configKind": null }
+          ]
+        },
+        "u": { "$set": { "configKind": "framework" } },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "update": "app_config_file_versions",
+    "updates": [
+      {
+        "q": {
+          "$or": [
+            { "configKind": { "$exists": false } },
+            { "configKind": "" },
+            { "configKind": null }
+          ]
+        },
+        "u": { "$set": { "configKind": "framework" } },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "aggregate": "app_config_files",
+    "pipeline": [
+      {
+        "$match": {
+          "$or": [
+            { "envName": "" },
+            { "envName": { "$exists": false } },
+            { "envName": null }
+          ]
+        }
+      },
+      {
+        "$project": {
+          "_id": "$_id",
+          "appID": "$appID",
+          "name": "$name",
+          "configKind": { "$ifNull": ["$configKind", "framework"] },
+          "mountDir": "$mountPath",
+          "isUnifiedConfig": { "$ifNull": ["$isUnifiedConfig", false] },
+          "mountedEnvNames": "$mountedEnvNames",
+          "creator": "$creator",
+          "createdAt": "$createdAt"
+        }
+      },
+      {
+        "$merge": {
+          "into": "app_config_file_defs",
+          "on": "_id",
+          "whenMatched": "keepExisting",
+          "whenNotMatched": "insert"
+        }
+      }
+    ],
+    "cursor": {}
+  },
+  {
+    "update": "app_config_files",
+    "updates": [
+      {
+        "q": {
+          "$and": [
+            {
+              "$or": [
+                { "envName": "" },
+                { "envName": { "$exists": false } },
+                { "envName": null }
+              ]
+            },
+            {
+              "$or": [
+                { "defID": { "$exists": false } },
+                { "defID": null }
+              ]
+            }
+          ]
+        },
+        "u": [{ "$set": { "defID": "$_id" } }],
+        "multi": true
+      },
+      {
+        "q": {
+          "$and": [
+            { "envName": { "$exists": true } },
+            { "envName": { "$nin": ["", null] } },
+            { "defaultAppConfigFileID": { "$exists": true, "$ne": null } },
+            {
+              "$or": [
+                { "defID": { "$exists": false } },
+                { "defID": null }
+              ]
+            }
+          ]
+        },
+        "u": [{ "$set": { "defID": "$defaultAppConfigFileID" } }],
+        "multi": true
+      }
+    ]
+  },
+  {
+    "dropIndexes": "app_config_files",
+    "index": "appID_1_name_1"
+  },
+  {
+    "createIndexes": "app_config_file_defs",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "mountDir": 1
+        },
+        "name": "appID_1_mountDir_1",
+        "unique": true,
+        "partialFilterExpression": {
+          "mountDir": { "$exists": true, "$gt": "" }
+        }
+      }
+    ]
+  },
+  {
+    "createIndexes": "app_config_files",
+    "indexes": [
+      {
+        "key": {
+          "defID": 1,
+          "envName": 1
+        },
+        "name": "defID_1_envName_1",
+        "unique": true,
+        "partialFilterExpression": {
+          "defID": { "$exists": true, "$type": "objectId" }
+        }
+      },
+      {
+        "key": {
+          "defID": 1
+        },
+        "name": "defID_1"
+      }
+    ]
+  }
+]

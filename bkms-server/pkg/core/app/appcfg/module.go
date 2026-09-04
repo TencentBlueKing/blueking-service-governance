@@ -28,6 +28,7 @@ var FxModule = fx.Module("appcfg",
 	database.PrivateFxModule,
 	fx.Provide(
 		fx.Annotate(NewAppConfigFileStoreMongo, fx.As(new(AppConfigFileStore))),
+		fx.Annotate(NewAppConfigFileDefStoreMongo, fx.As(new(AppConfigFileDefStore))),
 		fx.Annotate(NewAppConfigFileVersionStoreMongo, fx.As(new(AppConfigFileVersionStore))),
 	),
 )

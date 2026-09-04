@@ -250,6 +250,7 @@ type TrpcApplicationStores struct {
 	AppStore                  bkmsapp.ApplicationStore
 	AppModelStore             appmodel.AppModelStore
 	AppConfigFileStore        appcfg.AppConfigFileStore
+	AppConfigFileDefStore     appcfg.AppConfigFileDefStore
 	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	BuildConfigStore          build.ConfigStore
 }

@@ -26,10 +26,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 )
 
-func buildAppConfigFileAuditData(acf *appcfg.AppConfigFile) map[string]any {
+func buildAppConfigFileAuditData(acf *appcfg.AppConfigFile, name string) map[string]any {
 	data := map[string]any{
 		"id":                acf.ID.Hex(),
-		"name":              acf.Name,
+		"name":              name,
 		"type":              string(acf.Type),
 		"envName":           acf.EnvName,
 		"contentSourceType": string(acf.ContentSourceType),

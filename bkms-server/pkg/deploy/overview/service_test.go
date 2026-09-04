@@ -59,6 +59,7 @@ var _ = Describe("overview.Service", func() {
 		appModelStore              appmodel.AppModelStore
 		appSpecStore               appspec.AppSpecStore
 		appConfigFileStore         appcfg.AppConfigFileStore
+		appConfigFileDefStore      appcfg.AppConfigFileDefStore
 		appConfigFileVersionStore  appcfg.AppConfigFileVersionStore
 		buildConfigStore           build.ConfigStore
 		buildAutoDeployRecordStore autodeploy.RecordStore
@@ -90,6 +91,7 @@ var _ = Describe("overview.Service", func() {
 				&appModelStore,
 				&appSpecStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&buildConfigStore,
 				&envStore,
@@ -123,6 +125,7 @@ var _ = Describe("overview.Service", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigFileVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, nil)

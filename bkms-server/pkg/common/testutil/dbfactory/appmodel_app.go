@@ -118,7 +118,10 @@ func TrpcApplication(
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// 创建 app-level 默认 AppConfigFile（tRPC plugin 需要）
-	_, err = appcfg.NewAppConfigFileService(stores.AppConfigFileStore, stores.AppConfigFileVersionStore).Create(
+	acfService := appcfg.NewAppConfigFileService(
+		stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
+	)
+	_, err = acfService.Create(
 		ctx,
 		appcfg.CreateCfgFileParams{
 			AppID:             app.ID,
@@ -162,6 +165,7 @@ type TafApplicationStores struct {
 	AppStore                  bkmsapp.ApplicationStore
 	AppModelStore             appmodel.AppModelStore
 	AppConfigFileStore        appcfg.AppConfigFileStore
+	AppConfigFileDefStore     appcfg.AppConfigFileDefStore
 	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	BuildConfigStore          build.ConfigStore
 }
@@ -260,7 +264,10 @@ func TafApplication(
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// 创建 app-level 默认 AppConfigFile（TAF plugin 需要）
-	_, err = appcfg.NewAppConfigFileService(stores.AppConfigFileStore, stores.AppConfigFileVersionStore).Create(
+	acfService := appcfg.NewAppConfigFileService(
+		stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
+	)
+	_, err = acfService.Create(
 		ctx,
 		appcfg.CreateCfgFileParams{
 			AppID:             app.ID,

@@ -49,6 +49,7 @@ var _ = Describe("TafAdminService", func() {
 	// Store instances
 	var appStore bkmsapp.ApplicationStore
 	var appConfigFileStore appcfg.AppConfigFileStore
+	var appConfigFileDefStore appcfg.AppConfigFileDefStore
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var appModelStore appmodel.AppModelStore
 	var envStore envmodel.EnvironmentStore
@@ -71,29 +72,35 @@ var _ = Describe("TafAdminService", func() {
 		svc.Env = testEnv
 		svc.EnvName = testEnv.Name
 		svc.Stores = &admincmd.AdminServiceStores{
-			AppConfigFileStore: appConfigFileStore,
-			AppModelStore:      appModelStore,
-			EnvStore:           envStore,
-			AppStore:           appStore,
-			EnvVarsReader:      envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+			AppConfigFileStore:    appConfigFileStore,
+			AppConfigFileDefStore: appConfigFileDefStore,
+			AppModelStore:         appModelStore,
+			EnvStore:              envStore,
+			AppStore:              appStore,
+			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
+				scopedEnvVarStore,
+				appDepsVarReader,
+				polarisVarReader,
+			),
 		}
 		return svc
 	}
 
 	// 辅助函数：创建指定内容的 TAF 配置文件
 	createConfigFile := func(content string) {
-		_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileVersionStore).Create(
-			ctx,
-			appcfg.CreateCfgFileParams{
-				AppID:             testApp.ID,
-				EnvName:           testEnv.Name,
-				Name:              "taf.tafconfig.xml",
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Format:            appcfg.FileFormatTAF,
-				Content:           &content,
-			},
-		)
+		_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
+			Create(
+				ctx,
+				appcfg.CreateCfgFileParams{
+					AppID:             testApp.ID,
+					EnvName:           testEnv.Name,
+					Name:              "taf.tafconfig.xml",
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Format:            appcfg.FileFormatTAF,
+					Content:           &content,
+				},
+			)
 		Expect(err).NotTo(HaveOccurred())
 	}
 
@@ -114,6 +121,7 @@ var _ = Describe("TafAdminService", func() {
 			fx.Populate(
 				&appStore,
 				&appConfigFileStore,
+				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&buildConfigStore,
 				&appModelStore,
@@ -131,6 +139,7 @@ var _ = Describe("TafAdminService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigFileVersionStore,
 			BuildConfigStore:          buildConfigStore,
 		}, nil)

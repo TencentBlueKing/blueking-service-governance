@@ -60,11 +60,10 @@ func AppConfigFile(
 	}
 
 	acf := &appcfg.AppConfigFile{
-		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-			AppID:               opts.AppID,
-			EnvName:             opts.EnvName,
-			Name:                opts.Name,
-			Type:                opts.Type,
+		AppID:   opts.AppID,
+		EnvName: opts.EnvName,
+		Type:    opts.Type,
+		VersionedContent: appcfg.VersionedContent{
 			ContentSourceType:   appcfg.ContentSourceTypeLocal,
 			Format:              opts.Format,
 			Content:             opts.Content,
@@ -129,17 +128,17 @@ func AppConfigFileVersion(opts *AppConfigFileVersionOpts) appcfg.AppConfigFileVe
 
 	return appcfg.AppConfigFileVersion{
 		AppConfigFileID: opts.AppConfigFileID,
-		AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-			AppID:             opts.AppID,
-			EnvName:           opts.EnvName,
-			Name:              opts.Name,
-			Type:              opts.Type,
+		AppID:           opts.AppID,
+		EnvName:         opts.EnvName,
+		Name:            opts.Name,
+		Type:            opts.Type,
+		VersionedContent: appcfg.VersionedContent{
 			ContentSourceType: opts.ContentSourceType,
 			Format:            opts.Format,
 			Content:           &content,
-			Creator:           opts.Creator,
-			CreatedAt:         opts.CreatedAt,
 		},
+		Creator:       opts.Creator,
+		CreatedAt:     opts.CreatedAt,
 		Version:       opts.Version,
 		Description:   opts.Description,
 		OperationType: opts.OperationType,

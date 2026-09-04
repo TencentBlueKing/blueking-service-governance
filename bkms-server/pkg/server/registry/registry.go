@@ -96,6 +96,7 @@ type Registry struct {
 	AppSpecStore              appspec.AppSpecStore
 	AppDefaultRuleStore       appdefaults.RuleStore
 	AppConfigFileStore        appcfg.AppConfigFileStore
+	AppConfigFileDefStore     appcfg.AppConfigFileDefStore
 	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	AppServiceStore           appnetworking.ServiceStore
 	PolarisConfigStore        polaris.PolarisConfigStore
@@ -210,6 +211,7 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	r.AppSpecStore = mustInit(appspec.NewAppSpecStoreMongo(mongoClient, dbName))
 	r.AppDefaultRuleStore = mustInit(appdefaults.NewRuleStoreMongo(mongoClient, dbName))
 	r.AppConfigFileStore = mustInit(appcfg.NewAppConfigFileStoreMongo(mongoClient, dbName))
+	r.AppConfigFileDefStore = mustInit(appcfg.NewAppConfigFileDefStoreMongo(mongoClient, dbName))
 	r.AppConfigFileVersionStore = mustInit(appcfg.NewAppConfigFileVersionStoreMongo(mongoClient, dbName))
 	r.PolarisConfigStore = mustInit(polaris.NewPolarisConfigStoreMongo(mongoClient, dbName))
 	r.HostPortStore = mustInit(hostport.NewHostPortStoreMongo(mongoClient, dbName))

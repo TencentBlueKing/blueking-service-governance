@@ -37,6 +37,7 @@ var _ = Describe("AppConfigFileService", func() {
 	var diApp *fxtest.App
 	var appStore bkmsapp.ApplicationStore
 	var fileStore appcfg.AppConfigFileStore
+	var defStore appcfg.AppConfigFileDefStore
 	var versionStore appcfg.AppConfigFileVersionStore
 	var service *appcfg.AppConfigFileService
 	var ctx context.Context
@@ -50,6 +51,8 @@ var _ = Describe("AppConfigFileService", func() {
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("app_config_files")
 		Expect(err).NotTo(HaveOccurred())
+		err = testutil.CleanupCollection("app_config_file_defs")
+		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("applications")
 		Expect(err).NotTo(HaveOccurred())
 
@@ -57,14 +60,14 @@ var _ = Describe("AppConfigFileService", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &fileStore, &versionStore),
+			fx.Populate(&appStore, &fileStore, &defStore, &versionStore),
 		)
 		diApp.RequireStart()
 
 		app := dbfactory.Application(ctx, appStore)
 		appID = app.ID
 
-		service = appcfg.NewAppConfigFileService(fileStore, versionStore)
+		service = appcfg.NewAppConfigFileService(fileStore, defStore, versionStore)
 	})
 
 	AfterEach(func() {
@@ -130,7 +133,7 @@ var _ = Describe("AppConfigFileService", func() {
 			newContent := "foo: baz"
 			acf.Content = &newContent
 
-			err = service.UpdateFile(ctx, acf, "new-user", appcfg.UpdateCfgFileOptions{
+			err = service.UpdateFile(ctx, acf, "", "new-user", appcfg.UpdateCfgFileOptions{
 				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
 				Description:   "update values",
 			})
@@ -184,7 +187,7 @@ var _ = Describe("AppConfigFileService", func() {
 			// 更新到 v2
 			content2 := "foo: v2"
 			acf.Content = &content2
-			err = service.UpdateFile(ctx, acf, "updater", appcfg.UpdateCfgFileOptions{
+			err = service.UpdateFile(ctx, acf, "", "updater", appcfg.UpdateCfgFileOptions{
 				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
 				Description:   "second version",
 			})
@@ -193,7 +196,7 @@ var _ = Describe("AppConfigFileService", func() {
 			// 更新到 v3
 			content3 := "foo: v3"
 			acf.Content = &content3
-			err = service.UpdateFile(ctx, acf, "updater", appcfg.UpdateCfgFileOptions{
+			err = service.UpdateFile(ctx, acf, "", "updater", appcfg.UpdateCfgFileOptions{
 				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
 				Description:   "third version",
 			})
@@ -262,7 +265,7 @@ var _ = Describe("AppConfigFileService", func() {
 			// update to create a second version
 			newContent := "foo: baz"
 			acf.Content = &newContent
-			err = service.UpdateFile(ctx, acf, "updater", appcfg.UpdateCfgFileOptions{
+			err = service.UpdateFile(ctx, acf, "", "updater", appcfg.UpdateCfgFileOptions{
 				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
 				Description:   "second version",
 			})
@@ -271,7 +274,7 @@ var _ = Describe("AppConfigFileService", func() {
 			// delete the file
 			deletedAcf, err := service.DeleteFile(ctx, appID, acf.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(deletedAcf.Name).To(Equal("values"))
+			Expect(deletedAcf).NotTo(BeNil())
 
 			// file should be gone
 			_, err = fileStore.GetByID(ctx, acf.ID)

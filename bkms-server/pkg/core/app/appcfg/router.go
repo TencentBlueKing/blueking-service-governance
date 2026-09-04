@@ -73,3 +73,18 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	// Delete a historical version record by version ID.
 	versions.DELETE("/:id", h.DeleteAppConfigFileVersion)
 }
+
+// ---------------------------新引入接口-----------------------------------------------------
+
+// AppCfgFileDefRouteHandler 新接口路由的处理器接口，path 中 :id 为 Def ID。
+type AppCfgFileDefRouteHandler interface {
+	AppConfigFileDefUpdate(c *gin.Context)
+}
+
+// RegisterAppCfgFileDefRoutes 注册新版配置文件 def 路由。
+func RegisterAppCfgFileDefRoutes(rg *gin.RouterGroup, h AppCfgFileDefRouteHandler) {
+	apps := rg.Group("/apps/:appID")
+	defs := apps.Group("/app-config-file-defs")
+	// 更新逻辑文件 def（name、isUnifiedConfig），:id 为 Def ID。
+	defs.PUT("/:id", h.AppConfigFileDefUpdate)
+}

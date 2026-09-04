@@ -37,17 +37,20 @@ import (
 
 // Plugin provides workload extensions for tRPC applications.
 type Plugin struct {
-	appConfigFileStore appcfg.AppConfigFileStore
-	configPatchers     []appcfg.ConfigPatcher
+	appConfigFileStore    appcfg.AppConfigFileStore
+	appConfigFileDefStore appcfg.AppConfigFileDefStore
+	configPatchers        []appcfg.ConfigPatcher
 }
 
 // NewPlugin creates a new tRPC plugin with the given dependencies.
 func NewPlugin(
 	appConfigFileStore appcfg.AppConfigFileStore,
+	appConfigFileDefStore appcfg.AppConfigFileDefStore,
 	polarisConfigStore polaris.PolarisConfigStore,
 ) *Plugin {
 	return &Plugin{
-		appConfigFileStore: appConfigFileStore,
+		appConfigFileStore:    appConfigFileStore,
+		appConfigFileDefStore: appConfigFileDefStore,
 		configPatchers: []appcfg.ConfigPatcher{
 			patcher.NewPolarisRegistryPatcher(polarisConfigStore),
 		},
@@ -115,12 +118,12 @@ func (p *Plugin) computeTrpcConfig(
 	if p.appConfigFileStore == nil {
 		content = appModel.Workload.TrpcConfig.FileContent
 	} else {
-		var acf *appcfg.AppConfigFile
-		acf, content, err = appcfg.GetEnvContent(ctx, p.appConfigFileStore, app.ID, env.Name)
+		_, sourceName, content, err = appcfg.GetEnvContent(
+			ctx, p.appConfigFileStore, p.appConfigFileDefStore, app.ID, env.Name,
+		)
 		if err != nil {
 			return "", "", err
 		}
-		sourceName = acf.Name
 	}
 
 	// 依次调用注册的 ConfigPatcher 对配置进行补丁

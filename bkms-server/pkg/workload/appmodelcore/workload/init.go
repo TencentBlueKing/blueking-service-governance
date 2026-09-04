@@ -36,14 +36,16 @@ var initOnce sync.Once
 // This function must be called after database initialization and before the server starts.
 func InitPlugin(
 	appConfigFileStore appcfg.AppConfigFileStore,
+	appConfigFileDefStore appcfg.AppConfigFileDefStore,
 	polarisConfigStore polaris.PolarisConfigStore,
 ) {
 	initOnce.Do(func() {
 		plugin.MustRegisterWorkloadPlugin(standard.Plugin{})
 		plugin.MustRegisterWorkloadPlugin(trpc.NewPlugin(
 			appConfigFileStore,
+			appConfigFileDefStore,
 			polarisConfigStore,
 		))
-		plugin.MustRegisterWorkloadPlugin(taf.NewPlugin(appConfigFileStore))
+		plugin.MustRegisterWorkloadPlugin(taf.NewPlugin(appConfigFileStore, appConfigFileDefStore))
 	})
 }

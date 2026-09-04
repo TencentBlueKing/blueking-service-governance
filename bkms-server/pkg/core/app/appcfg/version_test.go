@@ -76,12 +76,11 @@ var _ = Describe("AppConfigFileVersionStoreMongo", func() {
 		app := dbfactory.Application(ctx, appStore)
 		fileID = bson.NewObjectID()
 		_, err = fileStore.Add(ctx, appcfg.AppConfigFile{
-			ID: fileID,
-			AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-				AppID:             app.ID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              "values-main",
-				Type:              appcfg.AppConfigFileTypeNormal,
+			ID:      fileID,
+			AppID:   app.ID,
+			EnvName: appcfg.EnvNameDefault,
+			Type:    appcfg.AppConfigFileTypeNormal,
+			VersionedContent: appcfg.VersionedContent{
 				ContentSourceType: appcfg.ContentSourceTypeLocal,
 				Format:            appcfg.FileFormatYAML,
 			},
@@ -102,18 +101,18 @@ var _ = Describe("AppConfigFileVersionStoreMongo", func() {
 			content := "foo: v2"
 			version := appcfg.AppConfigFileVersion{
 				AppConfigFileID: fileID,
-				AppConfigFileContentSpec: appcfg.AppConfigFileContentSpec{
-					AppID:               appID,
-					EnvName:             "prod",
-					Name:                "values",
-					Type:                appcfg.AppConfigFileTypeOverlay,
+				AppID:           appID,
+				EnvName:         "prod",
+				Name:            "values",
+				Type:            appcfg.AppConfigFileTypeOverlay,
+				VersionedContent: appcfg.VersionedContent{
 					ContentSourceType:   appcfg.ContentSourceTypeLocal,
 					Format:              appcfg.FileFormatYAML,
 					OverlayContent:      &content,
 					BaseAppConfigFileID: &baseID,
-					Creator:             "tester",
-					CreatedAt:           time.Now(),
 				},
+				Creator:             "tester",
+				CreatedAt:           time.Now(),
 				Version:             2,
 				Description:         "second version",
 				BaseVersion:         &baseVersion,

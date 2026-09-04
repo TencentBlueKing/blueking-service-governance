@@ -106,6 +106,7 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 			ctx,
 			h.registry.AppModelStore,
 			h.registry.AppConfigFileStore,
+			h.registry.AppConfigFileDefStore,
 			config,
 		)
 		return new(serializer.PolarisConfigOutputObj).FromModel(*config, warnings)
@@ -477,6 +478,7 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 		ctx,
 		h.registry.AppModelStore,
 		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
 		config,
 	)
 
