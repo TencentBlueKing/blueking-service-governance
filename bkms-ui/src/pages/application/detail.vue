@@ -37,9 +37,12 @@
         v-model="currentApplicationName"
         class="w-full h-full"
         :clearable="false"
+        :custom-content="applicationListLoading"
         filterable
-        placeholder="请选择应用"
-        search-placeholder="请输入应用名称"
+        :min-height="204"
+        :placeholder="$t('请选择应用')"
+        :popover-min-width="244"
+        :search-placeholder="$t('请输入应用名称')"
         @toggle="isSpacePopoverShow = !isSpacePopoverShow"
       >
         <template #trigger>
@@ -72,8 +75,16 @@
             <span>{{ $t('创建应用') }}</span>
           </Button>
         </template>
+        <Loading
+          v-if="applicationListLoading"
+          class="block"
+          :loading="true"
+        >
+          <div class="h-[196px]"></div>
+        </Loading>
         <Select.Option
           v-for="item in applicationList"
+          v-else
           :id="item.name"
           :key="item.name"
           :name="item.name"
@@ -95,11 +106,10 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
 
-  import { Select } from 'bkui-vue';
-  import { Button } from 'bkui-vue';
+  import { Button, Loading, Select } from 'bkui-vue';
   import { AngleDownFill, Plus } from 'bkui-vue/lib/icon';
   import { useRoute, useRouter } from 'vue-router';
-  import { ApiServerService } from '~/api/modules/bkmsserver';
+  import { AppService } from '~/api/modules/v1/app';
   import { isHelmLikeAppType } from '~/composables/app-type';
   import { getMenuList } from '~/composables/use-router-menu';
   import { useAppDetail } from '~/stores/app-detail';
@@ -107,7 +117,7 @@
 
   import TypeIcon from './components/type-icon.vue';
 
-  import type { AppInfoOutputObj } from '~/@types/app';
+  import type { AppInfoOutputObj } from '~/@types/v1/app';
   import type { AppNavigationType } from '~/config/navigation/app';
 
   const appDetailStore = useAppDetail();
@@ -122,6 +132,7 @@
 
   const currentApplicationName = ref(getRouteParam(route.params.name));
   const applicationList = ref<AppInfoOutputObj[]>([]);
+  const applicationListLoading = ref(false);
   // 'overview' | 'build' | 'repo' | 'deploy' | 'info' | 'orchestrate' | 'history' | 'module'
   // trpc没有的子菜单
   const TrpcSpecNotHas = ['orchestrate'];
@@ -182,11 +193,16 @@
   // 获取应用列表
   async function handleGetAppList() {
     if (!spaceStore.currentSpace) return;
-    applicationList.value = await ApiServerService.ListApps({
-      workspaceID: spaceStore.currentSpace,
-    }).catch(() => []);
-    if (!applicationList.value.some(item => item.name === currentApplicationName.value)) {
-      currentApplicationName.value = applicationList.value[0]?.name || '';
+    applicationListLoading.value = true;
+    try {
+      applicationList.value = await AppService.listApps({
+        workspaceID: spaceStore.currentSpace,
+      }).catch(() => []);
+      if (!applicationList.value.some(item => item.name === currentApplicationName.value)) {
+        currentApplicationName.value = applicationList.value[0]?.name || '';
+      }
+    } finally {
+      applicationListLoading.value = false;
     }
   }
 
