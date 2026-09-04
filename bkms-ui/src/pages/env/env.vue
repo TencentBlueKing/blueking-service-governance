@@ -48,7 +48,6 @@
             />
             {{ $t('新建环境') }}
           </Button>
-          <!-- TODO: 公共环境变量 -->
           <Button
             outline
             theme="primary"
@@ -119,6 +118,7 @@
         :row-height="56"
         :sort-config="sortConfig"
         @filter-change="filterChangeEvent"
+        @row-click="handleRowClick"
       >
         <template #empty>
           <TableException
@@ -139,7 +139,7 @@
               <Button
                 text
                 theme="primary"
-                @click="handleShowEnvDetail(row)"
+                @click.stop="handleShowEnvDetail(row)"
                 >{{ row.displayName }}</Button
               >
               <div class="text-[#979BA5]">{{ row.name }}</div>
@@ -457,7 +457,7 @@
   const ENV_TYPE_ORDER: Record<string, number> = { development: 1, test: 2, staging: 3, production: 4 };
 
   function getRowActiveClass({ row }: { row: EnvOutput }) {
-    return router.currentRoute.value.query?.active === row.name ? 'row--current' : '';
+    return router.currentRoute.value.query?.active === row.name ? 'row--current cursor-pointer' : 'cursor-pointer';
   }
 
   // 获取环境列表
@@ -491,6 +491,11 @@
         envName: row.name,
       },
     });
+  }
+
+  // 点击环境行时切换当前环境；操作列按钮通过 .stop 保持各自的行为。
+  function handleRowClick(_event: Event, row: EnvOutput) {
+    handleShowEnvDetail(row);
   }
 
   // env详情：行点击同步 URL（active 定位当前环境，供刷新/直达恢复）
