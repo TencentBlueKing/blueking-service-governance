@@ -171,6 +171,20 @@ export default ({ mode }: { mode: string }) => {
     test: {
       include: ['test/**/*.test.ts'],
       environment: 'jsdom',
+      // jsdom 环境垫片（ResizeObserver / PointerEvent 等）：须在测试文件 import 组件链之前执行
+      setupFiles: ['test/setup.ts'],
+      // bkui-vue / monaco-editor 在 vitest（SSR 解析）下无法定位入口（ESM-only / exports 条件问题）；
+      // bkui-vue 主入口与 lib/ 子路径（如 bkui-vue/lib/shared）alias 到真实文件，
+      // monaco-editor alias 到极简 stub（测试加载链不触达其 API）。仅影响 vitest，不影响构建。
+      // 路径统一 POSIX 分隔符（Vite 内部按 POSIX 处理 alias replacement）
+      alias: (() => {
+        const root = __dirname.replaceAll('\\', '/');
+        return [
+          { find: /^bkui-vue$/, replacement: `${root}/node_modules/bkui-vue/lib/index.js` },
+          { find: /^bkui-vue\/lib\//, replacement: `${root}/node_modules/bkui-vue/lib/` },
+          { find: /^monaco-editor$/, replacement: `${root}/test/stubs/monaco-editor.ts` },
+        ];
+      })(),
     },
 
     ssr: {

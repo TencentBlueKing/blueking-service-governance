@@ -1612,4 +1612,20 @@ export default class AppDetailPage extends BasePage {
       return false;
     }
   }
+
+  // ─── 布局高度回归测试定位（tests/layout.spec.ts 专用） ──────────────
+
+  /**
+   * 观测数据页的监控 iframe（MonitorIframe 渲染）。
+   * 按 src 的 `#/apm/` 路由特征过滤（buildIframeUrl 产物），避免未来页面出现其他 iframe
+   * 时 first() 静默命中错误元素；不用 data-testid 是因为 e2e 纪律禁止修改前端源码。
+   */
+  getMonitorIframe(): Locator {
+    return this.page.locator('iframe[src*="#/apm/"]').first();
+  }
+
+  /** 框架配置文件 tab 的 Monaco 编辑器（monaco 实例根，高度随宿主高度链塌陷） */
+  getFrameworkMonacoEditor(): Locator {
+    return this.page.locator('.monaco-editor').first();
+  }
 }
