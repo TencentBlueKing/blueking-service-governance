@@ -51,8 +51,8 @@ export const BASIC_NAVIGATION: NavigationItem[] = [
   },
   {
     key: 'defaultConfigGroup',
-    name: i18n.global.t('默认配置'),
-    foldName: i18n.global.t('默认配置'),
+    name: i18n.global.t('配置'),
+    foldName: i18n.global.t('配置'),
     children: [
       {
         key: 'appDefaultConfig',

@@ -227,6 +227,8 @@ tag不能为空: Tag cannot be empty
 查看操作详情: view record detail
 成功: success
 失败: failed
+请选择应用: Please select an application
+请输入应用名称: Please enter the application name
 搜索操作人、操作类型、操作状态: "search operator, type, status"
 环境管理: Environment management
 新建环境: Create environment
