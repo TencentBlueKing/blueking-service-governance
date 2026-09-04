@@ -70,9 +70,7 @@ bkrepo:
       endpointTmpl: "http://helm.bkrepo.example.com/api/%s/%s/charts"
 # 蓝鲸监控 apm 配置
 bkMonitor:
-  # 旧版 bkmonitorv3 网关地址，供存量接口使用
-  endpoint: "https://bkmonitorv3.apigw.example.com"
-  # 新版 bk-monitor 网关地址，供新增接口（如 user group）使用
+  # bk-monitor 统一网关地址
   gatewayEndpoint: "https://bk-monitor.apigw.example.com"
   # 蓝鲸监控 APM 上报地址
   apmEndpoint: "bk-example.com:4317"
