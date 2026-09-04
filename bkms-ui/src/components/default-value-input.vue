@@ -29,7 +29,6 @@
       :class="isShowChange ? '!border-[#F8B64F]' : ''"
       clearable
       :placeholder="inputConfig?.placeholder"
-      :readonly="inputConfig?.readonly"
       :style="widthStyle"
     />
     <template #content>
@@ -48,7 +47,6 @@
     :class="isShowChange ? '!border-[#F8B64F]' : ''"
     clearable
     :placeholder="inputConfig?.placeholder"
-    :readonly="inputConfig?.readonly"
     :style="widthStyle"
   />
 </template>
@@ -61,9 +59,9 @@
   interface IProps {
     defaultValue?: number | string;
     width?: number;
+    /** 透传给 Input 的展示配置 */
     inputConfig: {
       placeholder?: string;
-      readonly?: boolean;
     };
   }
 

@@ -109,6 +109,35 @@ docker run --rm \
 | `pnpm test:readonly` | `@readonly` | 只读用例，默认 `E2E_PARALLEL=true` 且 `E2E_WORKERS=2` |
 | `pnpm test:spec` | `playwright.spec.config.ts` | 普通 Playwright spec，不参与 BDD 生成 |
 
+### 构建管理 Spec（普通 Playwright）
+
+文件：`tests/build-management-execute-build.spec.ts`（与个人 aitest 副本 `../tests/e2e/build-management-execute-build.spec.ts` 对偶）。
+
+```bash
+cd e2e
+pnpm test:spec -- build-management-execute-build
+```
+
+用例内约定公开测试应用名（可进仓库，非敏感）：
+
+| 默认应用 | 用途 | 构建模式要求 |
+|------|------|------|
+| `e2e-build-pipeline` | 流水线构建 | 分支为 Input（无 repoAlias） |
+| `e2e-trpc` | 源码仓库构建 | 分支为 Select（有 repoAlias） |
+
+路由由 `BKMS_TEST_DEFAULT_SPACE` + 应用名拼出：`/#/{space}/app/{app}/trpc/build`。  
+请保证这两台应用长期存在、构建来源勿改；清理任务建议排除 `e2e-*`。
+
+可选覆盖（一般不必配）：
+
+| 变量 | 说明 |
+|------|------|
+| `BKMS_TEST_BUILD_PIPELINE_APP` | 覆盖流水线应用名（默认 `e2e-build-pipeline`） |
+| `BKMS_TEST_BUILD_REPO_APP` | 覆盖仓库应用名（默认 `e2e-trpc`） |
+| `BKMS_TEST_BUILD_APP_TYPE` | 路由中的类型段（默认 `trpc`） |
+
+另需：`BKMS_TEST_ACCESS_TOKEN`、`BKMS_TEST_DEFAULT_SPACE`，以及本地 `BK_APP_HOST`/`BK_APP_PORT` 或 CI 的 `BKMS_TEST_SITE`。
+
 `./run.sh --tags '<expr>'` 优先级高于 `--profile`，适合临时组合标签。
 
 ## 环境变量
@@ -124,6 +153,9 @@ docker run --rm \
 | `BKMS_TEST_DEFAULT_APP` | 默认应用（对应 `@app:default`，可空；未配置时可自动发现 `e2e-` 前缀 tRPC 应用） |
 | `BKMS_TEST_TRPC_APP` | tRPC 测试应用覆盖值（对应 `@app:trpc`，推荐 `e2e-trpc`；未配置时回退 `BKMS_TEST_DEFAULT_APP`，再自动发现） |
 | `BKMS_TEST_HELM_APP` | Helm 测试应用覆盖值（对应 `@app:helm`，推荐 `e2e-helm`；未配置时自动发现） |
+| `BKMS_TEST_BUILD_PIPELINE_APP` | 构建管理 Spec：流水线应用名覆盖（默认 `e2e-build-pipeline`） |
+| `BKMS_TEST_BUILD_REPO_APP` | 构建管理 Spec：源码仓库应用名覆盖（默认 `e2e-trpc`） |
+| `BKMS_TEST_BUILD_APP_TYPE` | 构建管理 Spec：路由类型段覆盖（默认 `trpc`） |
 | `BKMS_TEST_REPORT_DIR` | 报告输出目录（相对路径按仓库根目录解析） |
 | `BK_CI` | CI 模式：retries=1、headless |
 | `BKMS_TEST_USE_MOCK` | 启用 `mocks.json` 路由拦截 |
@@ -139,7 +171,7 @@ docker run --rm \
 
 ### 测试应用与数据命名
 
-- 优先使用 `e2e-` 前缀应用承载测试，例如 `e2e-trpc`、`e2e-helm`。
+- 优先使用 `e2e-` 前缀应用承载测试，例如 `e2e-trpc`、`e2e-helm`、`e2e-build-pipeline`（流水线构建专用）。
 - `@app:trpc` / `@app:helm` 表示应用类型语义，不在 feature 中写死具体环境应用名。
 - 应用解析优先级：显式环境变量覆盖（如 `BKMS_TEST_HELM_APP`）→ 当前空间内自动查找类型匹配且名称以 `e2e-` 开头的应用；若存在 `e2e-${appType}` 会优先使用。
 - 长期 stateful 测试数据使用 `e2e-${timestamp}-${caseId}` 命名，便于识别、清理和后续并行隔离。

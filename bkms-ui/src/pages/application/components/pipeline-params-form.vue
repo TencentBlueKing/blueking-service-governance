@@ -28,7 +28,7 @@
       v-for="item in params"
       :key="item.id"
       :description="item?.description"
-      :label="item?.id && item?.name ? `${item.id}(${item.name})` : item?.id || item?.name"
+      :label="getParamLabel(item)"
       :property="item.id"
       :required="item.required"
     >
@@ -37,7 +37,6 @@
         :default-value="item.defaultValue"
         :input-config="{
           placeholder: item.placeholder,
-          readonly: item.readOnly,
         }"
       />
     </Form.FormItem>
@@ -65,6 +64,27 @@
   const formRef = ref();
   const form = ref<Record<string, number | string>>({});
   const key = ref(0);
+
+  /** 读取蓝鲸语言 cookie（blueking_language），缺省 zh-cn */
+  function getBluekingLanguage() {
+    const match = document.cookie.match(/(?:^|;\s*)blueking_language=([^;]*)/);
+    return decodeURIComponent(match?.[1]?.trim() || 'zh-cn');
+  }
+
+  /**
+   * 流水线参数表单项 label：有 id 与 name 时拼成「id（name）」样式。
+   * id 与 name 完全相同时只展示 id，避免重复；
+   * 括号样式按 cookie：zh-cn 用全角，其它语言用半角。
+   */
+  function getParamLabel(item: IParam) {
+    if (!(item?.id && item?.name)) {
+      return item?.id || item?.name;
+    }
+    if (item.id === item.name) {
+      return item.id;
+    }
+    return getBluekingLanguage() === 'zh-cn' ? `${item.id}（${item.name}）` : `${item.id}(${item.name})`;
+  }
 
   const initForm = () => {
     // 重置表单，避免保留之前流水线的参数
