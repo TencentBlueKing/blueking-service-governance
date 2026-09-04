@@ -21,6 +21,7 @@ package hostport_test
 import (
 	"context"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/fx"
@@ -49,6 +50,7 @@ var _ = Describe("Service", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		suffix := stringx.Random(6)
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsapp.FxModule,
@@ -67,7 +69,7 @@ var _ = Describe("Service", func() {
 				ProjectCode:  "proj",
 				ClusterID:    "BCS-FED-1",
 				ClusterType:  "single",
-				Namespace:    "ns-fed",
+				Namespace:    "ns-fed-" + suffix,
 				IsFederation: true,
 			},
 		})
@@ -78,7 +80,7 @@ var _ = Describe("Service", func() {
 				ProjectCode: "proj",
 				ClusterID:   "BCS-SINGLE-1",
 				ClusterType: "single",
-				Namespace:   "ns-single",
+				Namespace:   "ns-single-" + suffix,
 			},
 		})
 	})

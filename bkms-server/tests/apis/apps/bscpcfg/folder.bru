@@ -14,7 +14,11 @@ script:pre-request {
     const suffix = bru.getVar("randomSuffix");
     const ws = await common.createWorkspace({id: `bscpcfg-ws-${suffix}`, bkCCBizID: 100})
     const app = await common.createHelmApp({id: `bscpcfg-app-${suffix}`, workspaceID: ws.id})
-    const env = await common.createEnvironment({name: `dev`, workspaceID: ws.id, cluster: {clusterID: "BCS-K8S-12345", namespace: "default"}})
+    const env = await common.createEnvironment({
+      name: `dev`,
+      workspaceID: ws.id,
+      cluster: {clusterID: "BCS-K8S-12345", namespace: `default-${suffix}`}
+    })
 
     bru.setVar("bscpCfgWorkspaceID", ws.id);
     bru.setVar("bscpCfgAppID", app.id);

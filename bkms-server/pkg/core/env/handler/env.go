@@ -100,8 +100,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 	// 创建环境(包括内置环境变量)
 	creator := auth.MustGetUser(ctx).ID
 	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
-
-	envID, err := svc.Create(ctx, &envmodel.Environment{
+	envData := &envmodel.Environment{
 		Name:        input.Name,
 		WorkspaceID: ws.ID,
 		Type:        input.Type,
@@ -115,9 +114,14 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 			IsFederation: bkmsenv.IsFederationCluster(input.Cluster.ClusterID),
 		},
 		Creator: creator,
-	})
+	}
+
+	envID, err := svc.Create(ctx, envData)
 	if err != nil {
 		metrics.CreateEnvFailed(ws.ID, input.Name)
+		if abortIfEnvClusterNamespaceOccupied(c, err) {
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "create env %s", input.Name))
 		return
 	}
@@ -228,6 +232,9 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		Creator:     auth.MustGetUser(ctx).ID,
 	})
 	if err != nil {
+		if abortIfEnvClusterNamespaceOccupied(c, err) {
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "create feature environment"))
 		return
 	}
@@ -519,6 +526,9 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
+		if abortIfEnvClusterNamespaceOccupied(c, err) {
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env cluster"))
 		return
 	}
@@ -629,4 +639,19 @@ func (h *Handler) ListEnvTrafficLanes(c *gin.Context) {
 		}),
 	},
 	)
+}
+
+func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
+	occupiedErr, ok := bkmsenv.GetEnvClusterNamespaceConflictInfo(err)
+	if !ok {
+		return false
+	}
+
+	bkerrs.AbortWithErr(c, bkerrs.WrapEnvClusterNamespaceOccupied(
+		occupiedErr.ClusterID,
+		occupiedErr.Namespace,
+		occupiedErr.OccupiedByEnvName,
+		occupiedErr.OccupiedByWorkspaceID,
+	))
+	return true
 }
