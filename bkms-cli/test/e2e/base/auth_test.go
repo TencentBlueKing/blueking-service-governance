@@ -17,17 +17,16 @@
  */
 
 // Package 端到端测试
-package e2e_test
+package base_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/test/e2e/framework"
 )
 
 // 对应 cmd/auth/
-var _ = Describe("Auth", Ordered, func() {
+var _ = Describe("Auth", Ordered, Label("smoke"), func() {
 	BeforeAll(func() {
 		framework.GenerateConfigFile(envCfg, true)
 	})
@@ -35,22 +34,20 @@ var _ = Describe("Auth", Ordered, func() {
 	Context("Login", func() {
 		// 使用有效 AccessToken 登录
 		It("login with valid AccessToken", func() {
-			result := cli.Run("login", "--access-token", envCfg.Token)
-			Expect(result.ExitCode).To(Equal(0))
-			Expect(result.CombinedOutput()).To(ContainSubstring("Success"))
+			cli.Run("login", "--access-token", envCfg.Token).
+				ExpectSuccess().ExpectOutputContains("Success")
 		})
 
 		// 使用无效 Token 登录退出码为非零
 		It("login with invalid token exits with non-zero code", func() {
-			result := cli.Run("login", "--access-token", "invalid-token-12345")
-			Expect(result.ExitCode).NotTo(Equal(0))
+			cli.Run("login", "--access-token", "invalid-token-12345").
+				ExpectFailure()
 		})
 
 		// login 同时使用 --access-token 和 --bk-ticket 退出码为非零
 		It("login with both --access-token and --bk-ticket exits with non-zero code", func() {
-			result := cli.Run("login", "--access-token", "some-token", "--bk-ticket")
-			Expect(result.ExitCode).NotTo(Equal(0))
-			Expect(result.CombinedOutput()).To(ContainSubstring("cannot use both"))
+			cli.Run("login", "--access-token", "some-token", "--bk-ticket").
+				ExpectFailure().ExpectOutputContains("cannot use both")
 		})
 	})
 
@@ -60,9 +57,7 @@ var _ = Describe("Auth", Ordered, func() {
 			// 先确保已登录
 			cli.Run("login", "--access-token", envCfg.Token)
 
-			result := cli.Run("logout")
-			Expect(result.ExitCode).To(Equal(0))
-			Expect(result.CombinedOutput()).To(ContainSubstring("success"))
+			cli.Run("logout").ExpectSuccess().ExpectOutputContains("success")
 		})
 	})
 

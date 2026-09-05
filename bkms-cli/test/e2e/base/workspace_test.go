@@ -17,17 +17,16 @@
  */
 
 // Package 端到端测试
-package e2e_test
+package base_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/test/e2e/framework"
 )
 
 // 对应 cmd/workspace/
-var _ = Describe("Workspace", Ordered, func() {
+var _ = Describe("Workspace", Ordered, Label("readonly"), func() {
 	BeforeAll(func() {
 		framework.EnsureLoggedIn(cli, envCfg)
 	})
@@ -35,17 +34,14 @@ var _ = Describe("Workspace", Ordered, func() {
 	Context("List", func() {
 		// workspace list 退出码为 0
 		It("workspace list exits with code 0", func() {
-			result := cli.Run("workspace", "list")
-			Expect(result.ExitCode).To(Equal(0))
+			cli.Run("workspace", "list").ExpectSuccess()
 		})
 
 		// 未登录执行 workspace list 退出码为非零且输出包含认证提示
 		It("workspace list without login exits with non-zero code and shows auth hint", func() {
 			framework.RunWithoutAuth(cli, envCfg, func() {
-				result := cli.Run("workspace", "list")
-				Expect(result.ExitCode).NotTo(Equal(0))
-				Expect(result.CombinedOutput()).To(
-					MatchRegexp(`(?i)unauthorized|login|Unauthorized`))
+				cli.Run("workspace", "list").
+					ExpectFailure().ExpectOutputContains("unauthorized")
 			})
 		})
 	})
@@ -53,15 +49,13 @@ var _ = Describe("Workspace", Ordered, func() {
 	Context("Set", func() {
 		// workspace set 退出码为 0 且输出包含 successfully
 		It("workspace set exits with code 0 and output contains successfully", func() {
-			result := cli.Run("workspace", "set", envCfg.WorkspaceID)
-			Expect(result.ExitCode).To(Equal(0))
-			Expect(result.CombinedOutput()).To(ContainSubstring("successfully"))
+			cli.Run("workspace", "set", envCfg.WorkspaceID).
+				ExpectSuccess().ExpectOutputContains("successfully")
 		})
 
 		// workspace set 不带参数退出码为非零
 		It("workspace set without args exits with non-zero code", func() {
-			result := cli.Run("workspace", "set")
-			Expect(result.ExitCode).NotTo(Equal(0))
+			cli.Run("workspace", "set").ExpectFailure()
 		})
 	})
 
@@ -71,9 +65,8 @@ var _ = Describe("Workspace", Ordered, func() {
 			// 先 set 再 unset
 			cli.Run("workspace", "set", envCfg.WorkspaceID)
 
-			result := cli.Run("workspace", "unset")
-			Expect(result.ExitCode).To(Equal(0))
-			Expect(result.CombinedOutput()).To(ContainSubstring("successfully"))
+			cli.Run("workspace", "unset").
+				ExpectSuccess().ExpectOutputContains("successfully")
 		})
 	})
 

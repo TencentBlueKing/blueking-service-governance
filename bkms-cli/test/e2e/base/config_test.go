@@ -17,7 +17,7 @@
  */
 
 // Package 端到端测试
-package e2e_test
+package base_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -27,33 +27,28 @@ import (
 )
 
 // 对应 cmd/config/
-var _ = Describe("Config", Ordered, func() {
+var _ = Describe("Config", Ordered, Label("readonly"), func() {
 	BeforeAll(func() {
-		framework.GenerateConfigFile(envCfg, true)
-		cli.Run("login", "--access-token", envCfg.Token)
+		framework.EnsureLoggedIn(cli, envCfg)
 	})
 
 	Context("View", func() {
 		// config view 退出码为 0 且输出包含 username 和 bkmsBaseUrl
 		It("config view exits with code 0 and output contains username and bkmsBaseUrl", func() {
-			result := cli.Run("config", "view")
-			Expect(result.ExitCode).To(Equal(0))
-			Expect(result.CombinedOutput()).To(ContainSubstring("username"))
-			Expect(result.CombinedOutput()).To(ContainSubstring("bkmsBaseUrl"))
+			cli.Run("config", "view").
+				ExpectSuccess().
+				ExpectOutputContains("username").
+				ExpectOutputContains("bkmsBaseUrl")
 		})
 
-		// 登出后 config view 凭证已被清除
-		It("config view shows cleared credentials after logout", func() {
-			// 先登出
-			cli.Run("logout")
-
-			result := cli.Run("config", "view")
-			Expect(result.ExitCode).To(Equal(0))
-			// 登出后 accessToken 应为空（不应包含有效的 token 值）
-			Expect(result.CombinedOutput()).NotTo(MatchRegexp(`accessToken: [A-Za-z0-9]+`))
-
-			// 恢复登录状态
-			cli.Run("login", "--access-token", envCfg.Token)
+		// 未认证状态下 config view 凭证已被清除
+		It("config view shows cleared credentials without auth", func() {
+			framework.RunWithoutAuth(cli, envCfg, func() {
+				result := cli.Run("config", "view")
+				result.ExpectSuccess()
+				// 未认证配置中 accessToken 应为空
+				Expect(result.CombinedOutput()).NotTo(MatchRegexp(`accessToken: [A-Za-z0-9]+`))
+			})
 		})
 	})
 })

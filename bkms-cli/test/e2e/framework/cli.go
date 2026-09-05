@@ -21,15 +21,19 @@ package framework
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/onsi/ginkgo/v2"
 )
+
+const defaultTimeout = 30 * time.Second
 
 // Result 封装 CLI 命令执行结果
 type Result struct {
@@ -65,19 +69,27 @@ func NewCLI() *CLI {
 	return &CLI{BinPath: binPath}
 }
 
-// Run 执行 CLI 命令并返回结果
+// Run 执行 CLI 命令并返回结果（默认 30s 超时）
 func (c *CLI) Run(args ...string) Result {
-	return c.execute("", args...)
+	return c.execute("", defaultTimeout, args...)
 }
 
-// RunWithStdin 执行 CLI 命令，并通过 stdin 传入输入内容
+// RunWithStdin 执行 CLI 命令，并通过 stdin 传入输入内容（默认 30s 超时）
 func (c *CLI) RunWithStdin(stdin string, args ...string) Result {
-	return c.execute(stdin, args...)
+	return c.execute(stdin, defaultTimeout, args...)
+}
+
+// RunWithTimeout 执行 CLI 命令并返回结果，使用自定义超时时间
+func (c *CLI) RunWithTimeout(timeout time.Duration, args ...string) Result {
+	return c.execute("", timeout, args...)
 }
 
 // execute 内部执行方法
-func (c *CLI) execute(stdin string, args ...string) Result {
-	cmd := exec.Command(c.BinPath, args...) //nolint:gosec // 测试框架中执行 E2E CLI 二进制
+func (c *CLI) execute(stdin string, timeout time.Duration, args ...string) Result {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, c.BinPath, args...) //nolint:gosec // 测试框架中执行 E2E CLI 二进制
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -99,7 +111,10 @@ func (c *CLI) execute(stdin string, args ...string) Result {
 	}
 
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		if ctx.Err() == context.DeadlineExceeded {
+			result.ExitCode = -1
+			Logf("CMD", "Command timed out after %s", timeout)
+		} else if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
 			// 非退出码错误（如二进制不存在），设为 -1
