@@ -15,7 +15,7 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
-import { type Locator, type Response, expect } from '@playwright/test';
+import { type Locator, type Response, type Route, expect } from '@playwright/test';
 
 import BasePage from './base.page';
 
@@ -64,6 +64,10 @@ export default class AppDetailPage extends BasePage {
 
   private builderConfigOriginalImageRegistryName = '';
 
+  private buildRecordSearchKeyword = '';
+
+  private helmChartSearchVersion = '';
+
   private async assertApiResponseOk(response: Response, action: string) {
     if (response.ok()) return;
 
@@ -92,6 +96,29 @@ export default class AppDetailPage extends BasePage {
     }
   }
 
+  private buildRecord(overrides: Record<string, unknown> = {}) {
+    return {
+      artifact: 'registry.example.com/bkms/e2e-service:v1.0.0',
+      buildID: 'build-e2e-001',
+      commitID: 'abcdef1234567890',
+      endedAt: '2026-01-01T10:03:30Z',
+      extras: {
+        BK_CI_GIT_REPO_HEAD_COMMIT_ID: 'abcdef1234567890',
+        BK_CI_GIT_REPO_URL: 'https://example.com/bkms/e2e-service.git',
+      },
+      num: '101',
+      operator: 'e2e-user',
+      params: {
+        BKMS_IMAGE_TAG: 'v1.0.0',
+      },
+      pipelineID: 'pipeline-e2e',
+      revision: 'main',
+      startedAt: '2026-01-01T10:00:00Z',
+      status: 'success',
+      ...overrides,
+    };
+  }
+
   private async closeScaleSidesliderIfOpen() {
     if (
       !(await this.getScaleSidesliderTitle()
@@ -111,6 +138,24 @@ export default class AppDetailPage extends BasePage {
     await this.waitForReady(500);
   }
 
+  private async closeVisibleSideslider(title?: string) {
+    const titleLocator = title ? this.page.getByText(title, { exact: true }).last() : null;
+    if (titleLocator && !(await titleLocator.isVisible().catch(() => false))) return;
+
+    const closeButton = this.page.locator('.bk-sideslider-close:visible').last();
+    if (await closeButton.isVisible().catch(() => false)) {
+      await closeButton.click();
+    } else {
+      await this.page.keyboard.press('Escape');
+    }
+    if (titleLocator) {
+      await expect(titleLocator)
+        .toBeHidden({ timeout: 10000 })
+        .catch(() => null);
+    }
+    await this.waitForSidesliderSettled();
+  }
+
   private async confirmScaleModeSwitch(confirmText: string) {
     const confirmButton = this.page.getByRole('button', { name: confirmText }).last();
     try {
@@ -120,6 +165,19 @@ export default class AppDetailPage extends BasePage {
     } catch {
       return false;
     }
+  }
+
+  private containerImage(overrides: Record<string, unknown> = {}) {
+    return {
+      builtAt: '2026-01-01T10:00:00Z',
+      deployedEnvs: [{ envName: 'test', envType: 'test' }],
+      digest: 'sha256:abcdef1234567890',
+      isPromoted: false,
+      repository: 'registry.example.com/bkms/e2e-service',
+      size: '1024',
+      tag: 'e2e-lifecycle-1',
+      ...overrides,
+    };
   }
 
   private async fillHealthProbeInput(section: Locator, label: string, value: string) {
@@ -144,6 +202,14 @@ export default class AppDetailPage extends BasePage {
     const input = this.getUpdateStrategyInput(label);
     await input.click({ clickCount: 3 });
     await input.fill(value);
+  }
+
+  private async fulfillJson(route: Route, data: unknown, status = 200) {
+    await route.fulfill({
+      body: JSON.stringify(data),
+      contentType: 'application/json',
+      status,
+    });
   }
 
   private getAutoScaleCpuInput() {
@@ -270,6 +336,16 @@ export default class AppDetailPage extends BasePage {
       .first();
   }
 
+  private helmChart(overrides: Record<string, unknown> = {}) {
+    return {
+      chartVersion: '1.2.3',
+      createdAt: '2026-01-01T10:00:00Z',
+      deployedEnvs: [{ envName: 'test', envType: 'test' }],
+      digest: 'sha256:fedcba9876543210',
+      ...overrides,
+    };
+  }
+
   private async isBuilderConfigSourceDisabled(name: '代码仓库' | '流水线' | '源码仓库' | '镜像仓库') {
     const slider = this.getBuilderConfigSideslider();
     const radio = slider.getByRole('radio', { name }).first();
@@ -283,6 +359,306 @@ export default class AppDetailPage extends BasePage {
     }
 
     return false;
+  }
+
+  private async routeBkciRepoRefs() {
+    await this.page.route('**/workspaces/*/bkci-repositories/**', async route => {
+      const url = new URL(route.request().url());
+      if (!url.pathname.includes('/bkci-repositories/')) {
+        await route.fallback();
+        return;
+      }
+      await this.fulfillJson(route, {
+        data: [{ name: 'main' }],
+        status: 0,
+      });
+    });
+  }
+
+  private async routeBuildLogStream(message = 'e2e build log line') {
+    await this.page.route('**/apps/*/builds/*/logs/stream', async route => {
+      await route.fulfill({
+        body: [
+          'event: message',
+          `data: {"Logs":[{"Timestamp":"2026-01-01T10:00:10Z","Message":"${message}"}]}`,
+          '',
+          'event: done',
+          'data: {}',
+          '',
+        ].join('\n'),
+        contentType: 'text/event-stream',
+        status: 200,
+      });
+    });
+  }
+
+  private async routeBuildRecords(records: Array<Record<string, unknown>>, options: { failFirst?: boolean } = {}) {
+    let failed = false;
+    await this.page.route('**/apps/*/builds**', async route => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (request.method() !== 'GET' || !url.pathname.endsWith('/builds')) {
+        await route.fallback();
+        return;
+      }
+
+      if (options.failFirst && !failed) {
+        failed = true;
+        await this.fulfillJson(
+          route,
+          {
+            error: {
+              message: 'build records list failed',
+            },
+            status: 500,
+          },
+          500,
+        );
+        return;
+      }
+
+      const keyword = (url.searchParams.get('keyword') || '').trim().toLowerCase();
+      const page = Number(url.searchParams.get('page') || 1);
+      const pageSize = Number(url.searchParams.get('pageSize') || 10);
+      const filtered = keyword
+        ? records.filter(record => JSON.stringify(record).toLowerCase().includes(keyword))
+        : records;
+      const results = filtered.slice((page - 1) * pageSize, page * pageSize);
+      await this.fulfillJson(route, {
+        data: {
+          count: String(filtered.length),
+          results,
+        },
+        status: 0,
+      });
+    });
+  }
+
+  private async routeEnvList() {
+    await this.page.route('**/workspaces/*/envs**', async route => {
+      const url = new URL(route.request().url());
+      if (route.request().method() !== 'GET' || !url.pathname.endsWith('/envs')) {
+        await route.fallback();
+        return;
+      }
+      await this.fulfillJson(route, {
+        data: [
+          { displayName: '测试环境', name: 'test', type: 'test' },
+          { displayName: '生产环境', name: 'prod', type: 'production' },
+        ],
+        status: 0,
+      });
+    });
+  }
+
+  private async routeHelmChartLifecycle() {
+    let buildListCalls = 0;
+    await this.routeBkciRepoRefs();
+    await this.page.route('**/apps/*/charts**', async route => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const { pathname } = url;
+      const method = request.method();
+
+      if (method === 'GET' && pathname.endsWith('/charts')) {
+        const keyword = (url.searchParams.get('keyword') || '').trim();
+        const charts = [this.helmChart(), this.helmChart({ chartVersion: '1.2.4' })];
+        const results = keyword ? charts.filter(chart => String(chart.chartVersion).includes(keyword)) : charts;
+        await this.fulfillJson(route, {
+          data: {
+            count: String(results.length),
+            results,
+          },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'GET' && pathname.endsWith('/charts/semver')) {
+        await this.fulfillJson(route, {
+          data: {
+            latest: { major: '1', minor: '2', patch: '3', version: '1.2.3' },
+            next: { major: '1', minor: '2', patch: '4', version: '1.2.4' },
+          },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'POST' && pathname.endsWith('/charts/builds')) {
+        await this.fulfillJson(route, {
+          data: {
+            buildID: 'helm-build-e2e-001',
+            chartVersion: '1.2.4',
+          },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'GET' && pathname.endsWith('/charts/builds')) {
+        buildListCalls += 1;
+        await this.fulfillJson(route, {
+          data: {
+            count: '1',
+            results: [
+              {
+                buildID: 'helm-build-e2e-001',
+                chartVersion: '1.2.4',
+                endedAt: buildListCalls > 1 ? '2026-01-01T10:02:00Z' : '0001-01-01T00:00:00Z',
+                extras: {
+                  BK_CI_GIT_REPO_HEAD_COMMIT_ID: '1234567890abcdef',
+                  BK_CI_GIT_REPO_URL: 'https://example.com/bkms/e2e-helm.git',
+                },
+                num: '501',
+                operator: 'e2e-user',
+                params: {
+                  BKMS_REPO_REVISION: 'main',
+                },
+                pipelineID: 'helm-pipeline-e2e',
+                startedAt: '2026-01-01T10:00:00Z',
+                status: buildListCalls > 1 ? 'success' : 'running',
+              },
+            ],
+          },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'GET' && pathname.endsWith('/files')) {
+        await this.fulfillJson(route, {
+          data: {
+            chartName: 'e2e-chart',
+            chartVersion: '1.2.3',
+            root: {
+              children: [
+                {
+                  content: 'apiVersion: v2\nname: e2e-chart\nversion: 1.2.3\n',
+                  isBinary: false,
+                  isDir: false,
+                  name: 'Chart.yaml',
+                  path: 'Chart.yaml',
+                  size: '48',
+                },
+              ],
+              isDir: true,
+              name: 'e2e-chart',
+              path: '',
+            },
+          },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'GET' && pathname.endsWith('/valuesfile')) {
+        await this.fulfillJson(route, { data: 'replicaCount: 1\n', status: 0 });
+        return;
+      }
+
+      await route.fallback();
+    });
+  }
+
+  private async routeImageLifecycle(deleteMode: 'permission-error' | 'success' = 'success') {
+    const state = {
+      images: [this.containerImage(), this.containerImage({ isPromoted: true, tag: 'e2e-promoted-1' })],
+    };
+    await this.routeEnvList();
+    await this.page.route('**/apps/*/images**', async route => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const { pathname } = url;
+      const method = request.method();
+
+      if (method === 'GET' && pathname.endsWith('/images')) {
+        const keyword = (url.searchParams.get('keyword') || '').trim();
+        const results = keyword ? state.images.filter(image => String(image.tag).includes(keyword)) : state.images;
+        await this.fulfillJson(route, {
+          data: {
+            count: String(results.length),
+            productionEnvNames: ['prod'],
+            results,
+            snapshotStatus: { refreshStatus: 'idle' },
+          },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'POST' && pathname.endsWith('/images/refresh')) {
+        state.images.unshift(this.containerImage({ tag: 'e2e-synced-1' }));
+        await this.fulfillJson(route, {
+          data: { addedTagCnt: '1', removedTagCnt: '0', status: 'success' },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'GET' && pathname.endsWith('/deploy-records')) {
+        await this.fulfillJson(route, {
+          data: {
+            count: '1',
+            results: [{ createdAt: '2026-01-01T11:00:00Z', envName: 'test', operator: 'e2e-user', status: 'deployed' }],
+          },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'GET' && pathname.endsWith('/usages')) {
+        await this.fulfillJson(route, {
+          data: {
+            inUse: true,
+            usages: [{ envName: 'test', laneName: '', status: 'deployed', workloadName: 'e2e-workload' }],
+          },
+          status: 0,
+        });
+        return;
+      }
+
+      if (method === 'PATCH' && pathname.endsWith('/promote')) {
+        state.images = state.images.map(image =>
+          image.tag === 'e2e-lifecycle-1'
+            ? { ...image, isPromoted: true, promotedAt: '2026-01-01T12:00:00Z', promotedBy: 'e2e-user' }
+            : image,
+        );
+        await this.fulfillJson(route, { data: {}, status: 0 });
+        return;
+      }
+
+      if (method === 'DELETE' && pathname.includes('/images/')) {
+        if (deleteMode === 'permission-error') {
+          await this.fulfillJson(
+            route,
+            {
+              error: {
+                details: [
+                  {
+                    code: 'IMAGE_REPOSITORY_AUTH_REQUIRED',
+                    extras: {},
+                    message: 'permission required',
+                    module: 'images',
+                    system: 'bkms',
+                  },
+                ],
+                message: 'permission required',
+              },
+              status: 500,
+            },
+            500,
+          );
+          return;
+        }
+
+        state.images = state.images.filter(image => image.tag !== 'e2e-lifecycle-1');
+        await this.fulfillJson(route, { data: {}, status: 0 });
+        return;
+      }
+
+      await route.fallback();
+    });
   }
 
   private async visibleInstanceRowTexts() {
@@ -323,6 +699,16 @@ export default class AppDetailPage extends BasePage {
     await this.waitForReady(1000);
   }
 
+  /** 构建记录搜索输入框 */
+  buildRecordSearchInput(): Locator {
+    return this.page.locator('input[type="search"]').first();
+  }
+
+  /** 获取构建管理主表行，排除固定列复制出的 VXE 行 */
+  buildTableMainRows(): Locator {
+    return this.page.locator('.build-table .vxe-table--main-wrapper .vxe-table--body tr');
+  }
+
   /** 取消构建配置编辑并处理离开确认 */
   async cancelBuilderConfigEdit() {
     await this.getBuilderConfigSideslider().getByRole('button', { name: '取消' }).click();
@@ -336,6 +722,29 @@ export default class AppDetailPage extends BasePage {
       await leaveButton.click();
     }
     await this.expectBuilderConfigSidesliderClosed();
+  }
+
+  /** 切换构建记录每页条数为 20 */
+  async changeBuildRecordsPageSizeToTwenty() {
+    const pagination = this.page.locator('.bk-pagination').last();
+    await pagination.locator('.bk-select').first().click();
+    const option = this.page.getByText('20', { exact: true }).last();
+    await option.click();
+    await expect(this.buildTableMainRows()).toHaveCount(18, { timeout: 10000 });
+  }
+
+  /** 切换构建记录分页到第二页 */
+  async changeBuildRecordsToSecondPage() {
+    const pagination = this.page.locator('.bk-pagination').last();
+    await pagination.getByText('2', { exact: true }).click();
+    await expect(this.getBuildTable().getByText('#211', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+  }
+
+  /** 清空构建记录搜索 */
+  async clearBuildRecordSearch() {
+    const searchInput = this.buildRecordSearchInput();
+    await searchInput.fill('');
+    await expect(this.getBuildTable().getByText('#101', { exact: true }).first()).toBeVisible({ timeout: 10000 });
   }
 
   /** 清空环境变量搜索框 */
@@ -454,6 +863,8 @@ export default class AppDetailPage extends BasePage {
     await this.waitForReady(1000);
   }
 
+  // ─── 部署管理页：立即部署 Sideslider ────────────────────────────────
+
   /** 点击元数据配置卡片的「取消」按钮 */
   async clickMetadataCancel(label: string) {
     await this.getMetadataCard(label).getByRole('button', { name: '取消' }).click();
@@ -493,13 +904,13 @@ export default class AppDetailPage extends BasePage {
     await this.waitForReady(1000);
   }
 
+  // ─── 部署管理页：扩缩容 PopConfirm ──────────────────────────────────
+
   /** 点击「立即部署」按钮（未部署空态时显示） */
   async clickQuicklyDeploy() {
     await this.clickButton('立即部署');
     await this.waitForSideslider();
   }
-
-  // ─── 部署管理页：立即部署 Sideslider ────────────────────────────────
 
   /** 在更多菜单中点击「移除部署」，并等待确认弹窗出现 */
   async clickRemoveDeploy() {
@@ -523,8 +934,6 @@ export default class AppDetailPage extends BasePage {
     await this.getResourceSection().getByRole('button', { name: '保存' }).click();
   }
 
-  // ─── 部署管理页：扩缩容 PopConfirm ──────────────────────────────────
-
   /** 点击更新策略编辑态的「取消」按钮 */
   async clickUpdateStrategyCancel() {
     await this.getUpdateStrategySection().getByRole('button', { name: '取消' }).click();
@@ -536,6 +945,8 @@ export default class AppDetailPage extends BasePage {
     await this.getUpdateStrategySection().getByRole('button', { name: '编辑' }).click();
     await this.getUpdateStrategyInput('最大超出数量').waitFor({ state: 'visible', timeout: 10000 });
   }
+
+  // ─── 部署管理页：移除部署 ──────────────────────────────────────────
 
   /** 点击更新策略编辑态的「保存」按钮 */
   async clickUpdateStrategySave() {
@@ -589,6 +1000,45 @@ export default class AppDetailPage extends BasePage {
     await this.waitForDialogClosed();
   }
 
+  /** 新建 Helm Chart 版本并打开构建记录 */
+  async createHelmChartVersionBuild() {
+    await this.closeVisibleSideslider('版本详情');
+    await this.page.getByRole('button', { name: '新建版本' }).click();
+    const dialog = this.getDialog();
+    await expect(dialog.getByText('新建版本', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(dialog.getByRole('textbox').last()).toHaveValue(/1\.2\.4/, { timeout: 10000 });
+
+    const branchFormItem = dialog.locator('.bk-form-item').filter({ hasText: '分支' }).first();
+    const branchSelect = branchFormItem.locator('.repo-ref-select');
+    if (await branchSelect.isVisible().catch(() => false)) {
+      await branchSelect.click();
+      await this.selectOption('main');
+    } else {
+      const branchInput = branchFormItem.getByRole('textbox').first();
+      await branchInput.fill('main');
+    }
+
+    const responsePromise = this.page.waitForResponse(
+      response => response.request().method() === 'POST' && response.url().includes('/charts/builds'),
+      { timeout: 30000 },
+    );
+    await dialog.getByRole('button', { name: '确定' }).click();
+    await this.assertApiResponseOk(await responsePromise, '新建 Helm Chart 版本');
+    await this.expectHelmChartBuildRecordVisible();
+  }
+
+  /** 确认删除首个镜像 Tag */
+  async deleteFirstImageTag() {
+    await this.page.locator('.artifact-table').getByRole('button', { name: '删除' }).first().click();
+    const dialog = this.getDialog();
+    await expect(dialog.getByText('确定删除镜像 Tag ?', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(dialog.locator('.bk-loading')).toBeHidden({ timeout: 10000 });
+    const input = dialog.getByPlaceholder('请输入镜像 Tag');
+    await input.fill('e2e-lifecycle-1');
+    await expect(dialog.getByRole('button', { name: '删除' })).toBeEnabled({ timeout: 10000 });
+    await dialog.getByRole('button', { name: '删除' }).click();
+  }
+
   /** 确保开发模式处于关闭状态，便于用例可重复运行 */
   async ensureDevModeDisabled() {
     await this.expectDevModeSectionVisible();
@@ -599,8 +1049,6 @@ export default class AppDetailPage extends BasePage {
     await this.clickDevModeConfirm('disable');
     await this.expectDevModeDisabled();
   }
-
-  // ─── 部署管理页：移除部署 ──────────────────────────────────────────
 
   /** 确保生命周期处于编辑态 */
   async ensureLifecycleEditMode() {
@@ -669,28 +1117,6 @@ export default class AppDetailPage extends BasePage {
     await expect(this.getAutoScaleMaxInput()).toHaveValue(String(maxReplicas), { timeout: 10000 });
     await expect(this.getAutoScaleCpuInput()).toHaveValue(String(cpuUtilization), { timeout: 10000 });
     await this.closeScaleSidesliderIfOpen();
-  }
-
-  /** 断言部署管理 Header Tab 已切换到目标页签 */
-  async expectDeploymentTabActive(tab: DeploymentTab) {
-    const tabTextMap: Record<DeploymentTab, string> = {
-      event: '事件',
-      history: '部署历史',
-      instance: '实例列表',
-      overview: '部署总览',
-      topo: '资源拓扑',
-    };
-    const targetTab = this.page.locator('.tab-header-container .bk-tab-header-item').filter({ hasText: tabTextMap[tab] });
-    await expect(targetTab).toHaveClass(/active/, { timeout: 10000 });
-  }
-
-  /** 断言部署管理「实例列表」页签内容已渲染 */
-  async expectDeploymentInstanceTabVisible() {
-    await this.page.getByText('部署管理', { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 });
-    await this.page
-      .getByText(/该环境尚未部署应用|部署状态|实例|镜像 Tag|暂无可用的环境/)
-      .first()
-      .waitFor({ state: 'visible', timeout: 15000 });
   }
 
   /** 断言构建配置侧栏展示当前来源对应表单 */
@@ -773,6 +1199,90 @@ export default class AppDetailPage extends BasePage {
     await this.getBuilderConfigSubmitButton().waitFor({ state: 'visible', timeout: 10000 });
     await slider.getByRole('button', { name: '取消' }).waitFor({ state: 'visible', timeout: 10000 });
     await this.expectBuilderConfigCurrentSourceFormVisible();
+  }
+
+  /** 断言构建失败状态可打开日志 */
+  async expectBuildFailedRecordsVisible() {
+    const table = this.getBuildTable();
+    await expect(table.getByText('#301', { exact: true })).toBeVisible();
+    await expect(table.getByText('#302', { exact: true })).toBeVisible();
+  }
+
+  /** 断言构建日志侧栏内容已加载 */
+  async expectBuildLogPanelVisible(statusText = '构建成功') {
+    await expect(this.page.getByText('构建日志', { exact: true }).last()).toBeVisible({ timeout: 10000 });
+    await expect(this.page.getByText(statusText, { exact: false }).last()).toBeVisible();
+    await expect(this.page.getByText('e2e build log line', { exact: false })).toBeVisible({ timeout: 10000 });
+  }
+
+  /** 断言构建管理页的记录列表与查询入口已加载 */
+  async expectBuildManagementVisible() {
+    const table = this.getBuildTable();
+    await expect(this.page.getByText('构建管理', { exact: true }).last()).toBeVisible();
+    await expect(this.page.getByRole('button', { name: '执行构建' }).first()).toBeVisible();
+    await expect(this.buildRecordSearchInput()).toBeVisible();
+    await expect(table).toBeVisible();
+    for (const column of ['构建号', '源材料', '触发人', '构建开始时间', '构建结束时间', '构建耗时', '制品']) {
+      await expect(table.getByText(column, { exact: true }).first()).toBeVisible();
+    }
+    await expect(this.buildTableMainRows().first()).toBeVisible({ timeout: 10000 });
+  }
+
+  /** 断言构建记录搜索结果与关键字匹配 */
+  async expectBuildRecordSearchResultMatches() {
+    if (!this.buildRecordSearchKeyword) {
+      throw new Error('未设置构建记录查询关键字');
+    }
+    await expect(this.buildTableMainRows()).toHaveCount(1, { timeout: 10000 });
+    await expect(this.getBuildTable().getByText(this.buildRecordSearchKeyword, { exact: true }).first()).toBeVisible();
+  }
+
+  /** 断言构建记录错误空态可见 */
+  async expectBuildRecordsErrorVisible() {
+    const exception = this.getBuildTable().locator('.bk-exception:visible').filter({ hasText: '数据获取异常' }).first();
+    await expect(exception).toBeVisible({ timeout: 10000 });
+    await expect(exception.getByRole('button', { name: '刷新' })).toBeVisible();
+  }
+
+  /** 断言构建记录每页 20 条展示 */
+  async expectBuildRecordsPageSizeTwentyVisible() {
+    await expect(this.buildTableMainRows()).toHaveCount(18);
+    await expect(this.getBuildTable().getByText('#218', { exact: true }).first()).toBeVisible();
+  }
+
+  /** 断言构建记录已恢复到完整列表 */
+  async expectBuildRecordsRestored() {
+    await expect(this.getBuildTable().getByText('#101', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+    await expect(this.getBuildTable().getByText('#102', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+  }
+
+  /** 断言构建记录分页第二页展示 */
+  async expectBuildRecordsSecondPageVisible() {
+    await expect(this.getBuildTable().getByText('#211', { exact: true }).first()).toBeVisible();
+  }
+
+  /** 断言部署管理「实例列表」页签内容已渲染 */
+  async expectDeploymentInstanceTabVisible() {
+    await this.page.getByText('部署管理', { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 });
+    await this.page
+      .getByText(/该环境尚未部署应用|部署状态|实例|镜像 Tag|暂无可用的环境/)
+      .first()
+      .waitFor({ state: 'visible', timeout: 15000 });
+  }
+
+  /** 断言部署管理 Header Tab 已切换到目标页签 */
+  async expectDeploymentTabActive(tab: DeploymentTab) {
+    const tabTextMap: Record<DeploymentTab, string> = {
+      event: '事件',
+      history: '部署历史',
+      instance: '实例列表',
+      overview: '部署总览',
+      topo: '资源拓扑',
+    };
+    const targetTab = this.page
+      .locator('.tab-header-container .bk-tab-header-item')
+      .filter({ hasText: tabTextMap[tab] });
+    await expect(targetTab).toHaveClass(/active/, { timeout: 10000 });
   }
 
   /** 断言开发模式处于关闭状态 */
@@ -898,6 +1408,60 @@ export default class AppDetailPage extends BasePage {
     });
   }
 
+  /** 确认 Helm Chart 构建记录侧栏展示目标构建 */
+  async expectHelmChartBuildRecordVisible() {
+    await expect(this.page.getByText('版本构建记录', { exact: true }).last()).toBeVisible({ timeout: 10000 });
+    const recordRow = this.page.locator('.vxe-body--row:visible').filter({ hasText: '#501' }).last();
+    await expect(recordRow).toBeVisible({ timeout: 10000 });
+    await expect(recordRow).toContainText('1.2.4');
+  }
+
+  /** 断言 Helm Chart 列表与详情已加载 */
+  async expectHelmChartDetailVisible() {
+    const slider = this.getSideslider();
+    await expect(slider.getByText('版本详情', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(slider.getByText('Chart.yaml', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+    await expect(slider.getByText('e2e-chart', { exact: false }).first()).toBeVisible({ timeout: 10000 });
+  }
+
+  // ─── 部署管理页：实例列表断言 ─────────────────────────────────
+
+  /** 断言 Helm Chart 搜索结果匹配 */
+  async expectHelmChartSearchResultMatches() {
+    if (!this.helmChartSearchVersion) {
+      throw new Error('未设置 Helm Chart 查询版本');
+    }
+    await expect(this.page.locator('.helm-chart-table .vxe-table--main-wrapper .vxe-body--row')).toHaveCount(1, {
+      timeout: 10000,
+    });
+    await expect(this.page.getByText(this.helmChartSearchVersion, { exact: true }).first()).toBeVisible();
+  }
+
+  /** 断言镜像删除成功并从列表移除 */
+  async expectImageDeleted() {
+    await expect(this.page.getByText('镜像 Tag 删除成功', { exact: false })).toBeVisible({ timeout: 10000 });
+    await expect(
+      this.page.locator('.artifact-table .vxe-table--fixed-left-wrapper').getByText('e2e-lifecycle-1', { exact: true }),
+    ).toHaveCount(0, { timeout: 10000 });
+  }
+
+  /** 断言镜像删除权限错误弹窗可见 */
+  async expectImageDeletePermissionErrorVisible() {
+    await expect(this.page.getByText('镜像 Tag 删除失败', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(this.page.getByRole('button', { name: '构建管理 - 构建配置' })).toBeVisible();
+  }
+
+  /** 断言镜像已晋级 */
+  async expectImagePromoted() {
+    await expect(this.page.getByText('已晋级', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+  }
+
+  /** 断言一键同步后新增镜像已展示 */
+  async expectImageSynced() {
+    await expect(this.page.getByText('镜像同步成功', { exact: false })).toBeVisible({ timeout: 10000 });
+    await expect(this.page.getByText('e2e-synced-1', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+  }
+
   /** 断言生命周期区域包含指定文本 */
   async expectLifecycleContains(text: string) {
     await this.getLifecycleSection().getByText(text, { exact: false }).first().waitFor({
@@ -961,8 +1525,6 @@ export default class AppDetailPage extends BasePage {
       await this.getMetadataCard(label).waitFor({ state: 'visible', timeout: 10000 });
     }
   }
-
-  // ─── 部署管理页：实例列表断言 ─────────────────────────────────
 
   /** 断言元数据配置卡片包含指定文本 */
   async expectMetadataContains(label: string, text: string) {
@@ -1102,6 +1664,8 @@ export default class AppDetailPage extends BasePage {
     await this.fillLifecycleGracePeriod(config.gracePeriod);
   }
 
+  // ─── 应用配置页：部署配置 EnvSelect（环境视角） ─────────────────────
+
   /** 填写元数据配置文本模式内容 */
   async fillMetadataText(label: string, value: string) {
     const textarea = this.getMetadataCard(label).getByRole('textbox').first();
@@ -1127,9 +1691,24 @@ export default class AppDetailPage extends BasePage {
     return this.page.locator('.bkms-content').filter({ hasText: '构建配置' }).first();
   }
 
+  /** 获取构建日志侧栏 */
+  getBuildLogSideslider(): Locator {
+    return this.page.locator('.build-log-sideslider:visible').first();
+  }
+
+  /** 获取构建管理表格 */
+  getBuildTable(): Locator {
+    return this.page.locator('.build-table').first();
+  }
+
   /** 获取开发模式区域 */
   getDevModeSection(): Locator {
     return this.page.locator('.bkms-content').filter({ hasText: '开发模式' }).first();
+  }
+
+  /** 框架配置文件 tab 的 Monaco 编辑器（monaco 实例根，高度随宿主高度链塌陷） */
+  getFrameworkMonacoEditor(): Locator {
+    return this.page.locator('.monaco-editor').first();
   }
 
   /** 获取健康探针任意状态卡片 */
@@ -1157,8 +1736,6 @@ export default class AppDetailPage extends BasePage {
     return this.page.locator('.bkms-content').filter({ hasText: '生命周期' }).first();
   }
 
-  // ─── 应用配置页：部署配置 EnvSelect（环境视角） ─────────────────────
-
   /** 获取元数据配置卡片 */
   getMetadataCard(label: string): Locator {
     return this.getMetadataSection().locator('.metadata-card').filter({ hasText: label }).first();
@@ -1167,6 +1744,15 @@ export default class AppDetailPage extends BasePage {
   /** 获取元数据配置区域 */
   getMetadataSection(): Locator {
     return this.page.locator('.bkms-content').filter({ hasText: '元数据配置' }).first();
+  }
+
+  /**
+   * 观测数据页的监控 iframe（MonitorIframe 渲染）。
+   * 按 src 的 `#/apm/` 路由特征过滤（buildIframeUrl 产物），避免未来页面出现其他 iframe
+   * 时 first() 静默命中错误元素；不用 data-testid 是因为 e2e 纪律禁止修改前端源码。
+   */
+  getMonitorIframe(): Locator {
+    return this.page.locator('iframe[src*="#/apm/"]').first();
   }
 
   /** 获取资源规格卡片（BkmsContent 包裹块） */
@@ -1184,6 +1770,8 @@ export default class AppDetailPage extends BasePage {
     await this.gotoMenu('appConfig');
   }
 
+  // ─── 应用配置页：环境变量 Tab ─────────────────────────────────────
+
   /** 进入制品管理页（二级菜单 key: artifact） */
   async gotoArtifactManagement() {
     await this.gotoMenu('artifact');
@@ -1196,6 +1784,12 @@ export default class AppDetailPage extends BasePage {
     await this.expectBuilderConfigSectionVisible();
   }
 
+  /** 进入构建管理页（二级菜单 key: build） */
+  async gotoBuildManagement() {
+    await this.gotoMenu('build');
+    await this.expectBuildManagementVisible();
+  }
+
   /** 进入部署管理页（部署管理 = 二级菜单 key: deployment） */
   async gotoDeployment(tab: DeploymentTab = 'instance') {
     await this.gotoMenu('deployment', { activeTab: tab });
@@ -1203,6 +1797,14 @@ export default class AppDetailPage extends BasePage {
     if (tab === 'instance') {
       await this.expectDeploymentInstanceTabVisible();
     }
+  }
+
+  /** 进入 Helm Chart 制品页 */
+  async gotoHelmChartArtifactManagement() {
+    await this.gotoMenu('artifact', { activeTab: 'helm-chart' });
+    await expect(this.page.getByText('制品管理', { exact: true }).last()).toBeVisible({ timeout: 10000 });
+    await expect(this.page.getByText('Helm Chart', { exact: true }).first()).toBeVisible();
+    await expect(this.page.locator('.helm-chart-table')).toBeVisible({ timeout: 10000 });
   }
 
   /**
@@ -1261,6 +1863,21 @@ export default class AppDetailPage extends BasePage {
     await this.waitForReady(2000);
   }
 
+  /** 打开首行构建日志侧栏 */
+  async openFirstBuildLog() {
+    const firstBuildLink = this.page
+      .locator('.build-table .vxe-table--fixed-left-wrapper .vxe-body--row')
+      .first()
+      .getByText(/^#/);
+    await firstBuildLink.click();
+  }
+
+  /** 打开 Helm Chart 版本详情 */
+  async openHelmChartVersionDetail() {
+    await this.page.locator('.helm-chart-table').getByRole('button', { name: '1.2.3' }).click();
+    await this.expectHelmChartDetailVisible();
+  }
+
   /** 展开部署页右上角「更多」菜单 */
   async openMoreMenu() {
     await this.assertCurrentDeployReadyForOperation('移除部署');
@@ -1280,7 +1897,20 @@ export default class AppDetailPage extends BasePage {
     await this.page.waitForTimeout(500);
   }
 
-  // ─── 应用配置页：环境变量 Tab ─────────────────────────────────────
+  /** 晋级首个镜像 Tag */
+  async promoteFirstImageTag() {
+    await this.page.locator('.artifact-table').getByRole('button', { name: '晋级' }).first().click();
+    const dialog = this.getDialog();
+    await expect(dialog.getByText('确认晋级', { exact: true })).toBeVisible({ timeout: 10000 });
+    await dialog.getByRole('button', { name: '确定' }).click();
+    await this.expectImagePromoted();
+  }
+
+  /** 点击构建记录错误空态中的刷新 */
+  async refreshBuildRecordsFromError() {
+    await this.getBuildTable().locator('.bk-exception:visible').getByRole('button', { name: '刷新' }).click();
+    await expect(this.getBuildTable().getByText('#101', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+  }
 
   /** 刷新应用配置页并重新选择第一个测试环境 */
   async reloadAppConfigAndSelectFirstTestEnv() {
@@ -1330,6 +1960,27 @@ export default class AppDetailPage extends BasePage {
     await searchInput.fill(this.artifactSearchTag);
     await searchInput.press('Enter');
     await expect(firstRow.getByText(this.artifactSearchTag, { exact: true })).toBeVisible({ timeout: 15000 });
+  }
+
+  /** 按约定关键字搜索构建记录 */
+  async searchBuildRecordsByKnownKeyword() {
+    this.buildRecordSearchKeyword = 'e2e-filter-user';
+    const searchInput = this.buildRecordSearchInput();
+    await searchInput.fill(this.buildRecordSearchKeyword);
+    await expect(this.getBuildTable().getByText(this.buildRecordSearchKeyword, { exact: true }).first()).toBeVisible({
+      timeout: 10000,
+    });
+  }
+
+  /** 搜索 Helm Chart 版本 */
+  async searchHelmChartByVersion() {
+    this.helmChartSearchVersion = '1.2.3';
+    const input = this.page.locator('input[type="search"]').first();
+    await input.fill(this.helmChartSearchVersion);
+    await input.press('Enter');
+    await expect(this.page.getByText(this.helmChartSearchVersion, { exact: true }).first()).toBeVisible({
+      timeout: 10000,
+    });
   }
 
   /** 选择自动调节模式 */
@@ -1467,6 +2118,91 @@ export default class AppDetailPage extends BasePage {
     await input.fill(String(count));
   }
 
+  /** 配置构建日志 SSE mock */
+  async setupBuildLogStreamMock() {
+    await this.routeBuildLogStream();
+  }
+
+  /** 配置构建记录接口先失败再恢复的 mock */
+  async setupBuildRecordsErrorRecoveryMock() {
+    await this.routeBuildRecords(
+      [
+        this.buildRecord(),
+        this.buildRecord({
+          artifact: 'registry.example.com/bkms/e2e-service:v1.0.1',
+          buildID: 'build-e2e-002',
+          num: '102',
+          params: { BKMS_IMAGE_TAG: 'v1.0.1' },
+        }),
+      ],
+      { failFirst: true },
+    );
+  }
+
+  /** 配置构建记录分页 mock */
+  async setupBuildRecordsPaginationMock() {
+    const records = Array.from({ length: 18 }, (_, index) => {
+      const num = String(201 + index);
+      return this.buildRecord({
+        artifact: `registry.example.com/bkms/e2e-service:v2.0.${index + 1}`,
+        buildID: `build-e2e-page-${num}`,
+        num,
+        operator: index === 10 ? 'e2e-second-page-user' : 'e2e-page-user',
+        params: { BKMS_IMAGE_TAG: `v2.0.${index + 1}` },
+      });
+    });
+    await this.routeBuildRecords(records);
+  }
+
+  /** 配置构建记录只读 mock */
+  async setupBuildRecordsReadonlyMock() {
+    await this.routeBuildRecords([
+      this.buildRecord(),
+      this.buildRecord({
+        artifact: 'registry.example.com/bkms/e2e-service:v1.0.1',
+        buildID: 'build-e2e-002',
+        num: '102',
+        operator: 'e2e-filter-user',
+        params: { BKMS_IMAGE_TAG: 'v1.0.1' },
+      }),
+    ]);
+  }
+
+  /** 配置构建失败状态记录 mock */
+  async setupBuildRecordsWithFailedStatusesMock() {
+    await this.routeBuildRecords([
+      this.buildRecord({
+        artifact: 'registry.example.com/bkms/e2e-service:v3.0.1',
+        buildID: 'build-e2e-failed',
+        num: '301',
+        params: { BKMS_IMAGE_TAG: 'v3.0.1' },
+        status: 'failed',
+      }),
+      this.buildRecord({
+        artifact: 'registry.example.com/bkms/e2e-service:v3.0.2',
+        buildID: 'build-e2e-polling-broken',
+        num: '302',
+        params: { BKMS_IMAGE_TAG: 'v3.0.2' },
+        status: 'pollingBroken',
+      }),
+    ]);
+  }
+
+  /** 配置容器镜像生命周期 mock */
+  async setupContainerImageLifecycleMock() {
+    await this.routeImageLifecycle('success');
+  }
+
+  /** 配置容器镜像删除权限异常 mock */
+  async setupContainerImagePermissionErrorMock() {
+    await this.routeImageLifecycle('permission-error');
+  }
+
+  /** 配置 Helm Chart 生命周期 mock */
+  async setupHelmChartLifecycleMock() {
+    await this.routeHelmChartLifecycle();
+  }
+
   /** 环境级变量侧栏表格行（不含表头，兼容 bk-table / vxe-table） */
   sliderEnvVarRows(): Locator {
     const slider = this.getSideslider();
@@ -1580,12 +2316,18 @@ export default class AppDetailPage extends BasePage {
     await this.getBuilderConfigFormItem('代码库').waitFor({ state: 'visible', timeout: 10000 });
   }
 
+  /** 执行容器镜像一键同步 */
+  async syncContainerImages() {
+    await this.page.getByRole('button', { name: '一键同步' }).click();
+    await this.expectImageSynced();
+  }
+
+  // ─── 布局高度回归测试定位（tests/layout.spec.ts 专用） ──────────────
+
   /** 等待 SSE 推送后的实例数满足期望（达成返回 true，超时返回 false） */
   async waitForInstanceCount(expected: number, { timeout = 180000 } = {}) {
     try {
-      await expect
-        .poll(() => this.instanceRows().count(), { timeout })
-        .toBeGreaterThanOrEqual(expected);
+      await expect.poll(() => this.instanceRows().count(), { timeout }).toBeGreaterThanOrEqual(expected);
       return true;
     } catch {
       return false;
@@ -1611,21 +2353,5 @@ export default class AppDetailPage extends BasePage {
     } catch {
       return false;
     }
-  }
-
-  // ─── 布局高度回归测试定位（tests/layout.spec.ts 专用） ──────────────
-
-  /**
-   * 观测数据页的监控 iframe（MonitorIframe 渲染）。
-   * 按 src 的 `#/apm/` 路由特征过滤（buildIframeUrl 产物），避免未来页面出现其他 iframe
-   * 时 first() 静默命中错误元素；不用 data-testid 是因为 e2e 纪律禁止修改前端源码。
-   */
-  getMonitorIframe(): Locator {
-    return this.page.locator('iframe[src*="#/apm/"]').first();
-  }
-
-  /** 框架配置文件 tab 的 Monaco 编辑器（monaco 实例根，高度随宿主高度链塌陷） */
-  getFrameworkMonacoEditor(): Locator {
-    return this.page.locator('.monaco-editor').first();
   }
 }
