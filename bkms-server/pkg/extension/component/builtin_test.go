@@ -57,6 +57,32 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			Expect(len(compDef.Properties)).To(Equal(2))
 		})
 
+		It("should load VolumeConfigMap and preserve newlines in data", func() {
+			err := component.LoadBuiltinFromFolder(
+				ctx,
+				compDefStore,
+				"./assets/comps/VolumeConfigMap_v1.0.0.yaml",
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			compDef, err := compDefStore.Get(ctx, "VolumeConfigMap", "v1.0.0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(compDef.Specs).To(HaveLen(1))
+			Expect(component.ValidateFragmentTemplate(compDef.Specs[0])).To(Succeed())
+
+			rendered, renderErr := render.RenderGoTemplate(compDef.Specs[0], map[string]any{
+				"name": "app-mycm",
+				"data": "line1\nline2",
+			})
+			Expect(renderErr).NotTo(HaveOccurred())
+
+			var payload map[string]any
+			Expect(yaml.Unmarshal([]byte(rendered), &payload)).To(Succeed())
+			data, ok := payload["data"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(data["app-mycm"]).To(Equal("line1\nline2"))
+		})
+
 		It("should load and render ImportPolaris fragments", func() {
 			err := component.LoadBuiltinFromFolder(
 				ctx,
