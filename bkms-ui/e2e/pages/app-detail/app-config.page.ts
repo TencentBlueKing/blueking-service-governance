@@ -15,7 +15,7 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
-import { expect } from '@playwright/test';
+import { type Locator, expect } from '@playwright/test';
 
 import AppDetailBase from './app-detail-base.page';
 
@@ -33,6 +33,23 @@ export default class AppConfigPage extends AppDetailBase {
 
   private getDevModeSwitcher() {
     return this.getDevModeSection().locator('.bk-switcher').first();
+  }
+
+  private getEnvPopover() {
+    return this.page.locator('.c-env-select-v2-popover').first();
+  }
+
+  private getEnvSelect() {
+    return this.page.locator('xpath=//div[normalize-space()="环境视角"]/ancestor::div[1]');
+  }
+
+  /** 等待环境选择器和配置卡片均更新到指定环境，避免在切换中的旧卡片上继续操作。 */
+  private async waitForEnvConfigReady(envSelect: Locator, envDisplayName: string) {
+    await expect(envSelect.getByText(envDisplayName, { exact: true })).toBeVisible({ timeout: 10000 });
+    await this.getResourceSection()
+      .getByText(`环境：${envDisplayName}`, { exact: true })
+      .waitFor({ state: 'visible', timeout: 15000 });
+    await this.safeWaitForNetworkIdle();
   }
 
   /** 清空环境变量搜索框 */
@@ -174,22 +191,20 @@ export default class AppConfigPage extends AppDetailBase {
     await this.getResourceSection().getByRole('button', { name: '编辑' }).waitFor({ state: 'visible', timeout: 10000 });
   }
 
-  /** 断言侧栏内环境变量搜索框可见 */
-  async expectSliderEnvVarSearchVisible() {
-    const slider = this.getSideslider();
-    await slider.getByPlaceholder('搜索变量名、变量值、描述').waitFor({ state: 'visible', timeout: 10000 });
+  /** 断言侧栏环境变量表格为空 */
+  async expectSliderEnvVarRowsEmpty() {
+    await expect(this.sliderEnvVarRows()).toHaveCount(0, { timeout: 10000 });
   }
 
   /** 断言侧栏环境变量表格已有数据 */
   async expectSliderEnvVarRowsVisible() {
-    await expect
-      .poll(() => this.sliderEnvVarRows().count(), { timeout: 10000 })
-      .toBeGreaterThan(0);
+    await expect.poll(() => this.sliderEnvVarRows().count(), { timeout: 10000 }).toBeGreaterThan(0);
   }
 
-  /** 断言侧栏环境变量表格为空 */
-  async expectSliderEnvVarRowsEmpty() {
-    await expect(this.sliderEnvVarRows()).toHaveCount(0, { timeout: 10000 });
+  /** 断言侧栏内环境变量搜索框可见 */
+  async expectSliderEnvVarSearchVisible() {
+    const slider = this.getSideslider();
+    await slider.getByPlaceholder('搜索变量名、变量值、描述').waitFor({ state: 'visible', timeout: 10000 });
   }
 
   /** 在环境变量搜索框中输入关键字（默认环境变量视图下可见） */
@@ -240,40 +255,58 @@ export default class AppConfigPage extends AppDetailBase {
 
   /** 在部署配置的环境选择器中选择默认配置 */
   async selectConfigDefaultEnv() {
-    const envSelect = this.page.locator('xpath=//div[normalize-space()="环境视角"]/ancestor::div[1]');
+    const envSelect = this.getEnvSelect();
+    if (
+      await envSelect
+        .getByText('默认配置', { exact: true })
+        .isVisible()
+        .catch(() => false)
+    ) {
+      await this.getResourceSection()
+        .getByText('按环境', { exact: true })
+        .waitFor({ state: 'visible', timeout: 15000 });
+      return;
+    }
+
     await envSelect.click();
-    const envPopover = this.page.locator('.c-env-select-v2-popover.visible').first();
+    const envPopover = this.getEnvPopover();
     await envPopover.waitFor({ state: 'visible', timeout: 10000 });
 
     const defaultGroup = envPopover.locator(
       'xpath=.//*[normalize-space()="默认"]/ancestor::div[contains(@class, "flex-1")][1]',
     );
     await defaultGroup.locator('.env-list-scroll > div').filter({ hasText: '默认配置' }).first().click();
-    // 切换到「默认配置」后生命周期卡片（默认视角内容）出现，即视为页面已就绪
-    await this.page
-      .locator('.bkms-content')
-      .filter({ hasText: '生命周期' })
-      .first()
-      .getByText('生命周期', { exact: false })
-      .first()
-      .waitFor({ state: 'visible', timeout: 10000 });
+    await expect(envSelect.getByText('默认配置', { exact: true })).toBeVisible({ timeout: 10000 });
+    await this.getResourceSection().getByText('按环境', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     await this.safeWaitForNetworkIdle();
   }
 
   /** 在部署配置的环境选择器中选择第一个类型=「测试」的环境 */
   async selectConfigFirstTestEnv() {
-    const envSelect = this.page.locator('xpath=//div[normalize-space()="环境视角"]/ancestor::div[1]');
+    const envSelect = this.getEnvSelect();
+    // 首次进入页面时，环境切换会被页面自身的 loading 锁保护。先等待配置区完成初始渲染，
+    // 再触发选择，避免点击被忽略后仍停留在默认配置。
+    await this.getResourceSection().waitFor({ state: 'visible', timeout: 15000 });
+    // 页面刷新会保留已选环境；此时无需再次打开 Popover，避免把已就绪的选择器切回关闭状态。
+    if (
+      await envSelect
+        .getByText('测试', { exact: true })
+        .isVisible()
+        .catch(() => false)
+    )
+      return;
+
     await envSelect.click();
-    const envPopover = this.page.locator('.c-env-select-v2-popover.visible').first();
+    const envPopover = this.getEnvPopover();
     await envPopover.waitFor({ state: 'visible', timeout: 10000 });
 
     const testEnvColumn = envPopover.locator(
       'xpath=.//*[normalize-space()="测试"]/ancestor::div[contains(@class, "flex-1")][1]',
     );
     const option = testEnvColumn.locator('.env-list-scroll > div').first();
+    const envDisplayName = await option.locator('.text-ov').innerText();
     await option.click();
-    await this.getResourceSection().getByText('资源规格').waitFor({ state: 'visible', timeout: 10000 });
-    await this.safeWaitForNetworkIdle();
+    await this.waitForEnvConfigReady(envSelect, envDisplayName);
   }
 
   /** 环境级变量侧栏表格行（不含表头，兼容 bk-table / vxe-table） */
