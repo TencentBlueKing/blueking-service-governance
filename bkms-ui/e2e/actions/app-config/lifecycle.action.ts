@@ -23,36 +23,36 @@ export const LIFECYCLE_SAVED_GRACE_PERIOD = '45';
 
 /** 编辑生命周期后取消：用于验证取消不会把草稿带回查看态 */
 export async function editLifecycleAndCancel({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickLifecycleEdit();
-  await appDetailPage.fillLifecycleShellCommandConfig({
+  await appDetailPage.appSpec.clickLifecycleEdit();
+  await appDetailPage.appSpec.fillLifecycleShellCommandConfig({
     command: LIFECYCLE_CANCEL_COMMAND,
     gracePeriod: LIFECYCLE_SAVED_GRACE_PERIOD,
   });
-  await appDetailPage.clickLifecycleCancel();
+  await appDetailPage.appSpec.clickLifecycleCancel();
 }
 
 /** 保存有效生命周期配置：用于验证 lifecycle PUT 保存链路与查看态回显 */
 export async function saveValidLifecycle({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.fillLifecycleShellCommandConfig({
+  await appDetailPage.appSpec.fillLifecycleShellCommandConfig({
     command: LIFECYCLE_SAVED_COMMAND,
     gracePeriod: LIFECYCLE_SAVED_GRACE_PERIOD,
   });
-  await appDetailPage.clickLifecycleSaveAndWait();
+  await appDetailPage.appSpec.clickLifecycleSaveAndWait();
 }
 
 /** 选择生命周期自定义命令：用于显式验证 preStop 自定义命令选项与 shell 编辑器展示 */
 export async function selectLifecycleCustomCommandOption({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.ensureLifecycleEditMode();
-  await appDetailPage.selectLifecycleShellCommandMode();
-  await appDetailPage.expectLifecycleCustomCommandEditorVisible();
+  await appDetailPage.appSpec.ensureLifecycleEditMode();
+  await appDetailPage.appSpec.selectLifecycleShellCommandMode();
+  await appDetailPage.appSpec.expectLifecycleCustomCommandEditorVisible();
 }
 
 /** 提交无效生命周期配置：用于验证 shell 命令必填校验 */
 export async function submitInvalidLifecycle({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.ensureLifecycleEditMode();
-  await appDetailPage.fillLifecycleShellCommandConfig({
+  await appDetailPage.appSpec.ensureLifecycleEditMode();
+  await appDetailPage.appSpec.fillLifecycleShellCommandConfig({
     command: '',
     gracePeriod: LIFECYCLE_SAVED_GRACE_PERIOD,
   });
-  await appDetailPage.clickLifecycleSave();
+  await appDetailPage.appSpec.clickLifecycleSave();
 }

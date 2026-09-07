@@ -50,23 +50,23 @@ When('我提交系统保留标签配置', async ({ pages }) => {
 });
 
 Then('标签元数据不应包含取消测试值', async ({ pages }) => {
-  await pages.appDetailPage.expectMetadataTextHidden(METADATA_LABELS_LABEL, METADATA_CANCEL_LABEL_KEY);
+  await pages.appDetailPage.appSpec.expectMetadataTextHidden(METADATA_LABELS_LABEL, METADATA_CANCEL_LABEL_KEY);
 });
 
 Then('标签元数据应展示已保存配置', async ({ pages }) => {
-  await pages.appDetailPage.expectMetadataContains(METADATA_LABELS_LABEL, METADATA_LABEL_KEY);
-  await pages.appDetailPage.expectMetadataContains(METADATA_LABELS_LABEL, METADATA_LABEL_VALUE);
+  await pages.appDetailPage.appSpec.expectMetadataContains(METADATA_LABELS_LABEL, METADATA_LABEL_KEY);
+  await pages.appDetailPage.appSpec.expectMetadataContains(METADATA_LABELS_LABEL, METADATA_LABEL_VALUE);
 });
 
 Then('元数据配置区域应展示标签和注解卡片', async ({ pages }) => {
-  await pages.appDetailPage.expectMetadataCardsVisible();
+  await pages.appDetailPage.appSpec.expectMetadataCardsVisible();
 });
 
 Then('元数据配置应展示系统保留字段校验提示', async ({ pages }) => {
-  await pages.appDetailPage.expectMetadataValidationVisible('system reserved field');
+  await pages.appDetailPage.appSpec.expectMetadataValidationVisible('system reserved field');
 });
 
 Then('注解元数据应展示已保存配置', async ({ pages }) => {
-  await pages.appDetailPage.expectMetadataContains(METADATA_ANNOTATIONS_LABEL, METADATA_ANNOTATION_KEY);
-  await pages.appDetailPage.expectMetadataContains(METADATA_ANNOTATIONS_LABEL, METADATA_ANNOTATION_VALUE);
+  await pages.appDetailPage.appSpec.expectMetadataContains(METADATA_ANNOTATIONS_LABEL, METADATA_ANNOTATION_KEY);
+  await pages.appDetailPage.appSpec.expectMetadataContains(METADATA_ANNOTATIONS_LABEL, METADATA_ANNOTATION_VALUE);
 });

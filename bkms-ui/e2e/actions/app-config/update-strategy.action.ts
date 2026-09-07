@@ -23,29 +23,29 @@ export const UPDATE_STRATEGY_SAVED_MAX_UNAVAILABLE = '0';
 
 /** 编辑更新策略后取消：用于验证取消不会把草稿带回查看态 */
 export async function editUpdateStrategyAndCancel({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickUpdateStrategyEdit();
-  await appDetailPage.fillUpdateStrategyConfig({
+  await appDetailPage.appSpec.clickUpdateStrategyEdit();
+  await appDetailPage.appSpec.fillUpdateStrategyConfig({
     maxSurge: UPDATE_STRATEGY_INVALID_VALUE,
     maxUnavailable: UPDATE_STRATEGY_SAVED_MAX_UNAVAILABLE,
   });
-  await appDetailPage.clickUpdateStrategyCancel();
+  await appDetailPage.appSpec.clickUpdateStrategyCancel();
 }
 
 /** 保存有效更新策略配置：用于验证 update-strategy PUT 保存链路与查看态回显 */
 export async function saveValidUpdateStrategy({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.fillUpdateStrategyConfig({
+  await appDetailPage.appSpec.fillUpdateStrategyConfig({
     maxSurge: UPDATE_STRATEGY_SAVED_MAX_SURGE,
     maxUnavailable: UPDATE_STRATEGY_SAVED_MAX_UNAVAILABLE,
   });
-  await appDetailPage.clickUpdateStrategySaveAndWait();
+  await appDetailPage.appSpec.clickUpdateStrategySaveAndWait();
 }
 
 /** 提交无效更新策略配置：用于验证 maxSurge/maxUnavailable 格式校验 */
 export async function submitInvalidUpdateStrategy({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickUpdateStrategyEdit();
-  await appDetailPage.fillUpdateStrategyConfig({
+  await appDetailPage.appSpec.clickUpdateStrategyEdit();
+  await appDetailPage.appSpec.fillUpdateStrategyConfig({
     maxSurge: UPDATE_STRATEGY_INVALID_VALUE,
     maxUnavailable: UPDATE_STRATEGY_SAVED_MAX_UNAVAILABLE,
   });
-  await appDetailPage.clickUpdateStrategySave();
+  await appDetailPage.appSpec.clickUpdateStrategySave();
 }

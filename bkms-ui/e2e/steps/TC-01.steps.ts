@@ -23,16 +23,16 @@ import { deployApp, expectInstanceCount, expectInstanceReadyCount } from '../act
 import { Given, test, Then, When } from '../fixtures/fixtures';
 
 Given('我在当前应用的部署管理页', async ({ pages }) => {
-  await pages.appDetailPage.gotoDeployment();
+  await pages.appDetailPage.deploy.gotoDeployment();
 });
 
 Given('当前应用已部署则跳过本用例', async ({ pages }) => {
-  const deployed = await pages.appDetailPage.isDeployed();
+  const deployed = await pages.appDetailPage.deploy.isDeployed();
   test.skip(deployed, '当前默认应用已部署，跳过未部署空态校验');
 });
 
 Given('当前应用未部署则先部署 {int} 个实例', async ({ pages }, replicas: number) => {
-  if (await pages.appDetailPage.isDeployed()) return;
+  if (await pages.appDetailPage.deploy.isDeployed()) return;
 
   await deployApp({ appDetailPage: pages.appDetailPage }, replicas);
   await expectInstanceReadyCount({ appDetailPage: pages.appDetailPage }, replicas, { timeoutMs: 180000 });
@@ -43,7 +43,7 @@ When('我立即部署 {int} 个实例', async ({ pages }, replicas: number) => {
 });
 
 Then('应用应处于未部署状态', async ({ pages }) => {
-  await pages.appDetailPage.expectUninstalled();
+  await pages.appDetailPage.deploy.expectUninstalled();
 });
 
 Then('实例列表应至少出现 {int} 个 Pod，最多等待 {int} 秒', async ({ pages }, expected: number, timeoutSec: number) => {

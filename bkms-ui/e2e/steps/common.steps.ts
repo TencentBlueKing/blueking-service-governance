@@ -119,16 +119,6 @@ When('勾选所有 Checkbox', async ({ pages }) => {
   }
 });
 
-When('等待页面加载', async ({ pages }) => {
-  const basePage = pages.basePage;
-  await basePage.waitForReady(2000);
-});
-
-When('等待 {int} 毫秒', async ({ pages }, ms) => {
-  const basePage = pages.basePage;
-  await basePage.waitForReady(ms);
-});
-
 When('等待弹窗出现', async ({ pages }) => {
   const basePage = pages.basePage;
   await basePage.waitForDialog();
@@ -188,7 +178,4 @@ Then('页面应包含 {string} 和 {string}', async ({ page }, text1, text2) => 
 
 When('刷新页面', async ({ page }) => {
   await page.reload({ waitUntil: 'domcontentloaded' });
-  // 网络空闲带超时兜底：存在轮询接口时不阻塞满 navigationTimeout
-  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(2000);
 });

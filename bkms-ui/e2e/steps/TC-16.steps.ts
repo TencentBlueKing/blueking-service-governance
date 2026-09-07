@@ -19,69 +19,69 @@
 import { Given, Then, When } from '../fixtures/fixtures';
 
 Given('容器镜像接口返回生命周期测试数据', async ({ pages }) => {
-  await pages.appDetailPage.setupContainerImageLifecycleMock();
+  await pages.appDetailPage.artifact.setupContainerImageLifecycleMock();
 });
 
 Given('容器镜像接口返回删除权限异常测试数据', async ({ pages }) => {
-  await pages.appDetailPage.setupContainerImagePermissionErrorMock();
+  await pages.appDetailPage.artifact.setupContainerImagePermissionErrorMock();
 });
 
 Given('Helm Chart 接口返回生命周期测试数据', async ({ pages }) => {
-  await pages.appDetailPage.setupHelmChartLifecycleMock();
+  await pages.appDetailPage.artifact.setupHelmChartLifecycleMock();
 });
 
 Given('我在 Helm 应用的 Helm Chart 制品页', async ({ pages }) => {
-  await pages.appDetailPage.gotoHelmChartArtifactManagement();
+  await pages.appDetailPage.artifact.gotoHelmChartArtifactManagement();
 });
 
 When('我执行容器镜像一键同步', async ({ pages }) => {
-  await pages.appDetailPage.syncContainerImages();
+  await pages.appDetailPage.artifact.syncContainerImages();
 });
 
 When('我晋级首个容器镜像 Tag', async ({ pages }) => {
-  await pages.appDetailPage.promoteFirstImageTag();
+  await pages.appDetailPage.artifact.promoteFirstImageTag();
 });
 
 When('我删除首个容器镜像 Tag', async ({ pages }) => {
-  await pages.appDetailPage.deleteFirstImageTag();
+  await pages.appDetailPage.artifact.deleteFirstImageTag();
 });
 
 When('我按约定版本搜索 Helm Chart', async ({ pages }) => {
-  await pages.appDetailPage.searchHelmChartByVersion();
+  await pages.appDetailPage.artifact.searchHelmChartByVersion();
 });
 
 When('我打开 Helm Chart 版本详情', async ({ pages }) => {
-  await pages.appDetailPage.openHelmChartVersionDetail();
+  await pages.appDetailPage.artifact.openHelmChartVersionDetail();
 });
 
 When('我新建 Helm Chart 版本构建', async ({ pages }) => {
-  await pages.appDetailPage.createHelmChartVersionBuild();
+  await pages.appDetailPage.artifact.createHelmChartVersionBuild();
 });
 
 Then('容器镜像同步结果应展示', async ({ pages }) => {
-  await pages.appDetailPage.expectImageSynced();
+  await pages.appDetailPage.artifact.expectImageSynced();
 });
 
 Then('容器镜像应展示已晋级状态', async ({ pages }) => {
-  await pages.appDetailPage.expectImagePromoted();
+  await pages.appDetailPage.artifact.expectImagePromoted();
 });
 
 Then('容器镜像 Tag 应从列表移除', async ({ pages }) => {
-  await pages.appDetailPage.expectImageDeleted();
+  await pages.appDetailPage.artifact.expectImageDeleted();
 });
 
 Then('容器镜像删除权限错误应展示构建配置引导', async ({ pages }) => {
-  await pages.appDetailPage.expectImageDeletePermissionErrorVisible();
+  await pages.appDetailPage.artifact.expectImageDeletePermissionErrorVisible();
 });
 
 Then('Helm Chart 搜索结果应匹配版本', async ({ pages }) => {
-  await pages.appDetailPage.expectHelmChartSearchResultMatches();
+  await pages.appDetailPage.artifact.expectHelmChartSearchResultMatches();
 });
 
 Then('Helm Chart 版本详情应展示文件内容', async ({ pages }) => {
-  await pages.appDetailPage.expectHelmChartDetailVisible();
+  await pages.appDetailPage.artifact.expectHelmChartDetailVisible();
 });
 
 Then('Helm Chart 构建记录侧栏应展示目标构建', async ({ pages }) => {
-  await pages.appDetailPage.expectHelmChartBuildRecordVisible();
+  await pages.appDetailPage.artifact.expectHelmChartBuildRecordVisible();
 });

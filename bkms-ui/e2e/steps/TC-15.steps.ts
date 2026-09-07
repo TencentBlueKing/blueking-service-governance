@@ -19,25 +19,25 @@
 import { Given, Then, When } from '../fixtures/fixtures';
 
 Given('构建日志接口返回流式日志', async ({ pages }) => {
-  await pages.appDetailPage.setupBuildLogStreamMock();
+  await pages.appDetailPage.buildManagement.setupBuildLogStreamMock();
 });
 
 Given('构建记录接口返回失败状态测试数据', async ({ pages }) => {
-  await pages.appDetailPage.setupBuildRecordsWithFailedStatusesMock();
+  await pages.appDetailPage.buildManagement.setupBuildRecordsWithFailedStatusesMock();
 });
 
 When('我打开首行构建日志', async ({ pages }) => {
-  await pages.appDetailPage.openFirstBuildLog();
+  await pages.appDetailPage.buildManagement.openFirstBuildLog();
 });
 
 Then('构建日志侧栏应展示成功状态和日志内容', async ({ pages }) => {
-  await pages.appDetailPage.expectBuildLogPanelVisible('构建成功');
+  await pages.appDetailPage.buildManagement.expectBuildLogPanelVisible('构建成功');
 });
 
 Then('构建日志侧栏应展示失败状态和日志内容', async ({ pages }) => {
-  await pages.appDetailPage.expectBuildLogPanelVisible('构建失败');
+  await pages.appDetailPage.buildManagement.expectBuildLogPanelVisible('构建失败');
 });
 
 Then('构建失败记录应可见', async ({ pages }) => {
-  await pages.appDetailPage.expectBuildFailedRecordsVisible();
+  await pages.appDetailPage.buildManagement.expectBuildFailedRecordsVisible();
 });

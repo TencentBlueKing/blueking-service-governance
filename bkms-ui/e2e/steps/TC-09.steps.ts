@@ -48,14 +48,14 @@ When('我刷新页面并切换到测试环境', async ({ pages }) => {
 });
 
 Then('开发模式区域应展示关闭状态', async ({ pages }) => {
-  await pages.appDetailPage.expectDevModeSectionVisible();
-  await pages.appDetailPage.expectDevModeDisabled();
+  await pages.appDetailPage.appConfig.expectDevModeSectionVisible();
+  await pages.appDetailPage.appConfig.expectDevModeDisabled();
 });
 
 Then('开发模式应保持关闭', async ({ pages }) => {
-  await pages.appDetailPage.expectDevModeDisabled();
+  await pages.appDetailPage.appConfig.expectDevModeDisabled();
 });
 
 Then('开发模式应展示开启后的操作步骤', async ({ pages }) => {
-  await pages.appDetailPage.expectDevModeEnabledStepsVisible();
+  await pages.appDetailPage.appConfig.expectDevModeEnabledStepsVisible();
 });

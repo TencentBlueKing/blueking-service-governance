@@ -21,53 +21,53 @@
 import { Given, Then, When } from '../fixtures/fixtures';
 
 Given('我在 tRPC 应用的基本信息页', async ({ pages }) => {
-  await pages.appDetailPage.gotoBaseInfo();
+  await pages.appDetailPage.buildConfig.gotoBaseInfo();
 });
 
 When('我保存有效构建配置', async ({ pages }) => {
-  await pages.appDetailPage.saveValidBuilderConfig();
+  await pages.appDetailPage.buildConfig.saveValidBuilderConfig();
 });
 
 When('我打开构建配置编辑侧栏', async ({ pages }) => {
-  await pages.appDetailPage.openBuilderConfigSideslider();
+  await pages.appDetailPage.buildConfig.openBuilderConfigSideslider();
 });
 
 When('我取消构建配置编辑', async ({ pages }) => {
-  await pages.appDetailPage.cancelBuilderConfigEdit();
+  await pages.appDetailPage.buildConfig.cancelBuilderConfigEdit();
 });
 
 When('我提交无效构建配置', async ({ pages, userData }) => {
-  userData.builderConfigInvalidSubmitted = await pages.appDetailPage.submitInvalidBuilderConfig();
+  userData.builderConfigInvalidSubmitted = await pages.appDetailPage.buildConfig.submitInvalidBuilderConfig();
 });
 
 When('我在构建配置侧栏切换来源', async ({ pages }) => {
-  await pages.appDetailPage.switchBuilderConfigSource();
+  await pages.appDetailPage.buildConfig.switchBuilderConfigSource();
 });
 
 Then('构建配置保存成功并关闭侧栏', async ({ pages }) => {
-  await pages.appDetailPage.expectBuilderConfigSaveCompleted();
+  await pages.appDetailPage.buildConfig.expectBuilderConfigSaveCompleted();
 });
 
 Then('构建配置侧栏应展示当前来源表单', async ({ pages }) => {
-  await pages.appDetailPage.expectBuilderConfigCurrentSourceFormVisible();
+  await pages.appDetailPage.buildConfig.expectBuilderConfigCurrentSourceFormVisible();
 });
 
 Then('构建配置侧栏应展示必填校验提示', async ({ pages, userData }) => {
   if (userData.builderConfigInvalidSubmitted === false) {
-    await pages.appDetailPage.expectBuilderConfigCurrentSourceFormVisible();
+    await pages.appDetailPage.buildConfig.expectBuilderConfigCurrentSourceFormVisible();
     return;
   }
-  await pages.appDetailPage.expectBuilderConfigRequiredValidationVisible();
+  await pages.appDetailPage.buildConfig.expectBuilderConfigRequiredValidationVisible();
 });
 
 Then('构建配置区域应可见', async ({ pages }) => {
-  await pages.appDetailPage.expectBuilderConfigSectionVisible();
+  await pages.appDetailPage.buildConfig.expectBuilderConfigSectionVisible();
 });
 
 Then('编辑构建配置侧栏应关闭', async ({ pages }) => {
-  await pages.appDetailPage.expectBuilderConfigSidesliderClosed();
+  await pages.appDetailPage.buildConfig.expectBuilderConfigSidesliderClosed();
 });
 
 Then('编辑构建配置侧栏应可见', async ({ pages }) => {
-  await pages.appDetailPage.expectBuilderConfigSidesliderVisible();
+  await pages.appDetailPage.buildConfig.expectBuilderConfigSidesliderVisible();
 });

@@ -41,24 +41,24 @@ When('我提交无效更新策略配置', async ({ pages }) => {
 });
 
 Then('更新策略不应包含取消测试值', async ({ pages }) => {
-  await pages.appDetailPage.expectUpdateStrategyTextHidden(UPDATE_STRATEGY_INVALID_VALUE);
+  await pages.appDetailPage.appSpec.expectUpdateStrategyTextHidden(UPDATE_STRATEGY_INVALID_VALUE);
 });
 
 Then('更新策略区域应展示当前配置', async ({ pages }) => {
-  await pages.appDetailPage.expectUpdateStrategyInViewMode();
-  await pages.appDetailPage.expectUpdateStrategyContains('最大超出数量');
-  await pages.appDetailPage.expectUpdateStrategyContains('最大不可用数量');
+  await pages.appDetailPage.appSpec.expectUpdateStrategyInViewMode();
+  await pages.appDetailPage.appSpec.expectUpdateStrategyContains('最大超出数量');
+  await pages.appDetailPage.appSpec.expectUpdateStrategyContains('最大不可用数量');
 });
 
 Then('更新策略应处于查看态', async ({ pages }) => {
-  await pages.appDetailPage.expectUpdateStrategyInViewMode();
+  await pages.appDetailPage.appSpec.expectUpdateStrategyInViewMode();
 });
 
 Then('更新策略应展示格式校验提示', async ({ pages }) => {
-  await pages.appDetailPage.expectUpdateStrategyValidationVisible('请输入非负整数或百分比');
+  await pages.appDetailPage.appSpec.expectUpdateStrategyValidationVisible('请输入非负整数或百分比');
 });
 
 Then('更新策略应展示已保存配置', async ({ pages }) => {
-  await pages.appDetailPage.expectUpdateStrategyContains(UPDATE_STRATEGY_SAVED_MAX_SURGE);
-  await pages.appDetailPage.expectUpdateStrategyContains(UPDATE_STRATEGY_SAVED_MAX_UNAVAILABLE);
+  await pages.appDetailPage.appSpec.expectUpdateStrategyContains(UPDATE_STRATEGY_SAVED_MAX_SURGE);
+  await pages.appDetailPage.appSpec.expectUpdateStrategyContains(UPDATE_STRATEGY_SAVED_MAX_UNAVAILABLE);
 });

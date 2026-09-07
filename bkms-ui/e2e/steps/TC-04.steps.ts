@@ -24,8 +24,8 @@ import { transformFormData } from '../utils/form';
 
 Given('我在当前应用的测试环境部署配置页', async ({ pages }) => {
   const { appDetailPage } = pages;
-  await appDetailPage.gotoAppConfig();
-  await appDetailPage.selectConfigFirstTestEnv();
+  await appDetailPage.appConfig.gotoAppConfig();
+  await appDetailPage.appConfig.selectConfigFirstTestEnv();
 });
 
 When('我修改资源规格', async ({ pages, userData }, dataTable) => {
@@ -39,9 +39,9 @@ When('我恢复默认资源规格配置', async ({ pages }) => {
 });
 
 Then('资源规格应处于查看态', async ({ pages }) => {
-  await pages.appDetailPage.expectResourceInViewMode();
+  await pages.appDetailPage.appConfig.expectResourceInViewMode();
 });
 
 Then('资源规格区域应包含 {string}', async ({ pages }, text: string) => {
-  await pages.appDetailPage.expectResourceContains(text);
+  await pages.appDetailPage.appConfig.expectResourceContains(text);
 });

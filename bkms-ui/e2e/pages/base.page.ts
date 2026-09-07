@@ -52,12 +52,10 @@ export default class BasePage {
 
   async clickLink(name: string) {
     await this.page.getByRole('link', { name }).click();
-    await this.waitForReady(2000);
   }
 
   async clickTab(tabName: string) {
     await this.page.locator('.bk-tab-header-item').filter({ hasText: tabName }).click();
-    await this.waitForReady(2000);
   }
 
   async clickText(text: string) {
@@ -177,8 +175,7 @@ export default class BasePage {
 
   async navTo(space: string, nav: string) {
     const route = NAVIGATION_ROUTE_MAP[nav as keyof typeof NAVIGATION_ROUTE_MAP] || nav;
-    await this.page.goto(`/#/${space}/${route}`);
-    await this.waitForReady(3000);
+    await this.page.goto(`/#/${space}/${route}`, { waitUntil: 'domcontentloaded' });
   }
 
   /**
@@ -224,8 +221,9 @@ export default class BasePage {
    * 点击 select 后等待弹出层选项出现，再按文本匹配点击。
    */
   async selectOption(optionText?: string) {
-    await this.page.waitForTimeout(500);
     const popContent = this.getVisibleSelectPopover();
+    // 等待弹出层渲染（替代固定 sleep）；未弹出则交由选项点击的显式超时兜底
+    await popContent.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
     if (!(await popContent.count())) return;
     if (optionText) {
       const option = popContent
@@ -237,7 +235,6 @@ export default class BasePage {
     }
 
     await this.safeWaitForNetworkIdle();
-    await this.page.waitForTimeout(300);
   }
 
   async selectOptionBy(selector: Locator | string, optionText: string) {
@@ -285,24 +282,17 @@ export default class BasePage {
    */
   async waitForModal() {
     await this.page.waitForSelector('.bk-modal-wrapper', { state: 'visible', timeout: 15000 });
-    await this.page.waitForTimeout(500);
   }
 
   async waitForPopConfirm() {
     await this.page.waitForSelector('.bk-pop-confirm', { state: 'visible', timeout: 10000 });
-    await this.page.waitForTimeout(500);
   }
 
-  async waitForReady(extraMs = 2000) {
-    await this.safeWaitForNetworkIdle();
-    if (extraMs > 0) await this.page.waitForTimeout(extraMs);
-  }
   async waitForSideslider() {
     await this.page.locator('.bk-sideslider .bk-modal-body:visible').first().waitFor({
       state: 'visible',
       timeout: 15000,
     });
-    await this.page.waitForTimeout(1000);
   }
 
   async waitSelectReady() {

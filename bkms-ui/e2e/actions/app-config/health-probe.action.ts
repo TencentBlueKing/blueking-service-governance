@@ -62,12 +62,12 @@ export async function editHealthProbeAndCancel({
 }) {
   const probeLabel = resolveHealthProbeLabel(label);
   const config = getHealthProbeConfig(probeLabel);
-  await appDetailPage.clickHealthProbeEdit(probeLabel);
-  await appDetailPage.fillHealthProbeHttpConfig(probeLabel, {
+  await appDetailPage.appSpec.clickHealthProbeEdit(probeLabel);
+  await appDetailPage.appSpec.fillHealthProbeHttpConfig(probeLabel, {
     port: config.savedPort,
     url: config.cancelPath,
   });
-  await appDetailPage.clickHealthProbeCancel(probeLabel);
+  await appDetailPage.appSpec.clickHealthProbeCancel(probeLabel);
 }
 
 /** 编辑存活探针后取消：用于验证取消不会把编辑内容带回查看态 */
@@ -83,11 +83,11 @@ export function getHealthProbeConfig(label: string) {
 export async function saveValidHealthProbe({ appDetailPage, label }: { appDetailPage: AppDetailPage; label: string }) {
   const probeLabel = resolveHealthProbeLabel(label);
   const config = getHealthProbeConfig(probeLabel);
-  await appDetailPage.fillHealthProbeHttpConfig(probeLabel, {
+  await appDetailPage.appSpec.fillHealthProbeHttpConfig(probeLabel, {
     port: config.savedPort,
     url: config.savedPath,
   });
-  await appDetailPage.clickHealthProbeSaveAndWait(probeLabel);
+  await appDetailPage.appSpec.clickHealthProbeSaveAndWait(probeLabel);
 }
 
 /** 保存有效存活探针配置：用于验证 PUT 保存链路与查看态回显 */
@@ -104,12 +104,12 @@ export async function submitInvalidHealthProbe({
   label: string;
 }) {
   const probeLabel = resolveHealthProbeLabel(label);
-  await appDetailPage.clickHealthProbeEdit(probeLabel);
-  await appDetailPage.fillHealthProbeHttpConfig(probeLabel, {
+  await appDetailPage.appSpec.clickHealthProbeEdit(probeLabel);
+  await appDetailPage.appSpec.fillHealthProbeHttpConfig(probeLabel, {
     port: HEALTH_PROBE_INVALID_PORT,
     url: '',
   });
-  await appDetailPage.clickHealthProbeSave(probeLabel);
+  await appDetailPage.appSpec.clickHealthProbeSave(probeLabel);
 }
 
 /** 提交无效存活探针配置：用于验证路径为空与端口超限校验 */

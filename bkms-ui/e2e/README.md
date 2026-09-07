@@ -16,6 +16,11 @@ e2e/
 ├── steps/           # Step 定义（common.steps.ts + <TC-ID>.steps.ts）
 ├── actions/         # 业务流程封装（按业务模块划分，可被多个 TC 复用）
 ├── pages/           # Page Object（BasePage + 子页面，原子 UI 操作）
+│   └── app-detail/          # 应用详情按业务域拆分：
+│                            #   deploy（部署/扩缩容/移除/实例）、appConfig（环境变量/资源规格/开发模式）、
+│                            #   appSpec（探针/生命周期/元数据/更新策略）、buildConfig、buildManagement、artifact
+│                            #   + app-detail-base.page.ts（跨域共享 helper 与 gotoMenu）
+│                            # app-detail.page.ts 为组合门面：pages.appDetailPage.<domain>.<method>()
 ├── data/            # 表单 schema 与数据
 ├── utils/           # 工具与常量（NAVIGATION_ROUTE_MAP、Schema 类型等）
 ├── fixtures/        # playwright-bdd fixtures（pages / testConfig / userData）
@@ -200,6 +205,7 @@ pnpm test:spec -- build-management-execute-build
    - 复杂流程委托给 `actions/*.action.ts`，禁止写 selector
 
 3. **（可选）扩 Page Object**：`pages/<name>.page.ts` 继承 `BasePage`，只写原子操作；新建后**必须**在 `fixtures/fixtures.ts` 的 `pages` fixture 注册实例
+   - 应用详情页的操作优先落到 `pages/app-detail/` 对应业务域文件（继承 `AppDetailBase`），通过 `pages.appDetailPage.<domain>.<method>()` 访问；跨域共享 helper 放 `app-detail-base.page.ts`
 
 4. **（可选）写 Action**：按业务模块命名（如 `deploy.action.ts`），组合 Page Object 方法形成完整业务流程
 

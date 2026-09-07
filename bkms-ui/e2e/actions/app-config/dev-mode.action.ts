@@ -19,28 +19,28 @@ import type AppDetailPage from '../../pages/app-detail.page';
 
 /** 尝试开启开发模式后取消：用于验证取消不会改变开关状态 */
 export async function cancelEnableDevMode({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickDevModeSwitch();
-  await appDetailPage.clickDevModeCancel();
+  await appDetailPage.appConfig.clickDevModeSwitch();
+  await appDetailPage.appConfig.clickDevModeCancel();
 }
 
 /** 关闭开发模式：用于验证 DELETE 保存链路与关闭态回显 */
 export async function disableDevMode({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickDevModeSwitch();
-  await appDetailPage.clickDevModeConfirm('disable');
+  await appDetailPage.appConfig.clickDevModeSwitch();
+  await appDetailPage.appConfig.clickDevModeConfirm('disable');
 }
 
 /** 开启开发模式：用于验证 PUT 保存链路与操作步骤展示 */
 export async function enableDevMode({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickDevModeSwitch();
-  await appDetailPage.clickDevModeConfirm('enable');
+  await appDetailPage.appConfig.clickDevModeSwitch();
+  await appDetailPage.appConfig.clickDevModeConfirm('enable');
 }
 
 /** 确保开发模式关闭：用于保证用例初始状态稳定 */
 export async function ensureDevModeDisabled({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.ensureDevModeDisabled();
+  await appDetailPage.appConfig.ensureDevModeDisabled();
 }
 
 /** 刷新应用配置页并切回测试环境：用于验证开发模式刷新后仍正确回显 */
 export async function reloadAndSelectTestEnv({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.reloadAppConfigAndSelectFirstTestEnv();
+  await appDetailPage.appConfig.reloadAppConfigAndSelectFirstTestEnv();
 }

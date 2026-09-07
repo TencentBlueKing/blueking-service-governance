@@ -30,13 +30,13 @@ export async function editResourceSpec(
   { appDetailPage, basePage }: { appDetailPage: AppDetailPage; basePage: BasePage },
   data: Record<string, unknown>,
 ) {
-  await appDetailPage.clickResourceEdit();
+  await appDetailPage.appConfig.clickResourceEdit();
   await fillFormByType(basePage, 'ResourceSpec', data as Parameters<typeof fillFormByType<'ResourceSpec'>>[2]);
-  await appDetailPage.clickResourceSave();
+  await appDetailPage.appConfig.clickResourceSave();
 }
 
 /** 恢复资源规格为默认配置：编辑态点击「恢复默认配置」 */
 export async function resetResourceToDefault({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickResourceEdit();
-  await appDetailPage.clickResourceResetToDefault();
+  await appDetailPage.appConfig.clickResourceEdit();
+  await appDetailPage.appConfig.clickResourceResetToDefault();
 }

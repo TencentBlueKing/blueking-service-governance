@@ -28,7 +28,7 @@ import {
 import { Then, When } from '../fixtures/fixtures';
 
 Then('健康探针区域应展示三个探针卡片', async ({ pages }) => {
-  await pages.appDetailPage.expectHealthProbeCardsVisible();
+  await pages.appDetailPage.appSpec.expectHealthProbeCardsVisible();
 });
 
 When('我编辑 {string} 后取消', async ({ pages }, label: string) => {
@@ -45,20 +45,20 @@ When('我提交无效 {string} 配置', async ({ pages }, label: string) => {
 
 Then('{string} 不应包含取消测试路径', async ({ pages }, label: string) => {
   const { cancelPath } = getHealthProbeConfig(label);
-  await pages.appDetailPage.expectHealthProbeTextHidden(label, cancelPath);
+  await pages.appDetailPage.appSpec.expectHealthProbeTextHidden(label, cancelPath);
 });
 
 Then('{string} 应处于查看态', async ({ pages }, label: string) => {
-  await pages.appDetailPage.expectHealthProbeInViewMode(label);
+  await pages.appDetailPage.appSpec.expectHealthProbeInViewMode(label);
 });
 
 Then('{string} 应展示校验提示并限制异常端口', async ({ pages }, label: string) => {
-  await pages.appDetailPage.expectHealthProbeValidationVisible('检查路径不能为空');
-  await pages.appDetailPage.expectHealthProbeInputValue(label, '检查端口', HEALTH_PROBE_CLAMPED_PORT);
+  await pages.appDetailPage.appSpec.expectHealthProbeValidationVisible('检查路径不能为空');
+  await pages.appDetailPage.appSpec.expectHealthProbeInputValue(label, '检查端口', HEALTH_PROBE_CLAMPED_PORT);
 });
 
 Then('{string} 应展示已保存配置', async ({ pages }, label: string) => {
   const { savedPath, savedPort } = getHealthProbeConfig(label);
-  await pages.appDetailPage.expectHealthProbeContains(label, savedPath);
-  await pages.appDetailPage.expectHealthProbeContains(label, savedPort);
+  await pages.appDetailPage.appSpec.expectHealthProbeContains(label, savedPath);
+  await pages.appDetailPage.appSpec.expectHealthProbeContains(label, savedPort);
 });

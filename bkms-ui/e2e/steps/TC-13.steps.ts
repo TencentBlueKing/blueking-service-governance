@@ -19,37 +19,37 @@
 import { Given, Then, When } from '../fixtures/fixtures';
 
 Given('我在当前应用的制品管理页', async ({ pages }) => {
-  await pages.appDetailPage.gotoArtifactManagement();
+  await pages.appDetailPage.artifact.gotoArtifactManagement();
 });
 
 Then('制品管理页应展示镜像列表和查询入口', async ({ pages }) => {
-  await pages.appDetailPage.expectArtifactManagementVisible();
+  await pages.appDetailPage.artifact.expectArtifactManagementVisible();
 });
 
 When('我展开制品列表首行', async ({ pages }) => {
-  await pages.appDetailPage.expandFirstArtifactRow();
+  await pages.appDetailPage.artifact.expandFirstArtifactRow();
 });
 
 Then('制品列表首行详情应展示', async ({ pages }) => {
-  await pages.appDetailPage.expectFirstArtifactRowExpanded();
+  await pages.appDetailPage.artifact.expectFirstArtifactRowExpanded();
 });
 
 When('我收起制品列表首行', async ({ pages }) => {
-  await pages.appDetailPage.collapseFirstArtifactRow();
+  await pages.appDetailPage.artifact.collapseFirstArtifactRow();
 });
 
 Then('制品列表首行详情应隐藏', async ({ pages }) => {
-  await pages.appDetailPage.expectFirstArtifactRowCollapsed();
+  await pages.appDetailPage.artifact.expectFirstArtifactRowCollapsed();
 });
 
 When('我按制品列表首行 Tag 查询', async ({ pages }) => {
-  await pages.appDetailPage.searchArtifactsByFirstRowTag();
+  await pages.appDetailPage.artifact.searchArtifactsByFirstRowTag();
 });
 
 Then('制品列表应仅展示匹配的 Tag', async ({ pages }) => {
-  await pages.appDetailPage.expectArtifactSearchResultMatches();
+  await pages.appDetailPage.artifact.expectArtifactSearchResultMatches();
 });
 
 Then('制品列表首行详情应展示完整制品字段和部署记录状态', async ({ pages }) => {
-  await pages.appDetailPage.expectFirstArtifactRowDetailVisible();
+  await pages.appDetailPage.artifact.expectFirstArtifactRowDetailVisible();
 });

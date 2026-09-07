@@ -39,6 +39,6 @@ When(
 Then(
   '自动调节配置应展示最小 {int} 最大 {int} CPU 使用率 {int}%',
   async ({ pages }, minReplicas: number, maxReplicas: number, cpuUtilization: number) => {
-    await pages.appDetailPage.expectAutoScaleConfig({ cpuUtilization, maxReplicas, minReplicas });
+    await pages.appDetailPage.deploy.expectAutoScaleConfig({ cpuUtilization, maxReplicas, minReplicas });
   },
 );

@@ -31,33 +31,33 @@ export const METADATA_RESERVED_LABEL_TEXT = 'app.kubernetes.io/name=e2e-reserved
 
 /** 编辑 Labels 元数据后取消：用于验证取消不会把草稿带回查看态 */
 export async function editLabelsMetadataAndCancel({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickMetadataEdit(METADATA_LABELS_LABEL);
-  await appDetailPage.selectMetadataTextMode(METADATA_LABELS_LABEL);
-  await appDetailPage.fillMetadataText(METADATA_LABELS_LABEL, METADATA_CANCEL_LABEL_TEXT);
-  await appDetailPage.clickMetadataCancel(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.clickMetadataEdit(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.selectMetadataTextMode(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.fillMetadataText(METADATA_LABELS_LABEL, METADATA_CANCEL_LABEL_TEXT);
+  await appDetailPage.appSpec.clickMetadataCancel(METADATA_LABELS_LABEL);
 }
 
 /** 保存有效 Annotations 元数据配置：用于验证 annotations PUT 保存链路与查看态回显 */
 export async function saveValidAnnotationsMetadata({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickMetadataEdit(METADATA_ANNOTATIONS_LABEL);
-  await appDetailPage.selectMetadataTextMode(METADATA_ANNOTATIONS_LABEL);
-  await appDetailPage.fillMetadataText(METADATA_ANNOTATIONS_LABEL, METADATA_ANNOTATION_TEXT);
-  await appDetailPage.clickMetadataSaveAndWait(METADATA_ANNOTATIONS_LABEL, 'annotations');
+  await appDetailPage.appSpec.clickMetadataEdit(METADATA_ANNOTATIONS_LABEL);
+  await appDetailPage.appSpec.selectMetadataTextMode(METADATA_ANNOTATIONS_LABEL);
+  await appDetailPage.appSpec.fillMetadataText(METADATA_ANNOTATIONS_LABEL, METADATA_ANNOTATION_TEXT);
+  await appDetailPage.appSpec.clickMetadataSaveAndWait(METADATA_ANNOTATIONS_LABEL, 'annotations');
 }
 
 /** 保存有效 Labels 元数据配置：用于验证 labels PUT 保存链路与查看态回显 */
 export async function saveValidLabelsMetadata({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickMetadataCancel(METADATA_LABELS_LABEL);
-  await appDetailPage.clickMetadataEdit(METADATA_LABELS_LABEL);
-  await appDetailPage.selectMetadataTextMode(METADATA_LABELS_LABEL);
-  await appDetailPage.fillMetadataText(METADATA_LABELS_LABEL, METADATA_LABEL_TEXT);
-  await appDetailPage.clickMetadataSaveAndWait(METADATA_LABELS_LABEL, 'labels');
+  await appDetailPage.appSpec.clickMetadataCancel(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.clickMetadataEdit(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.selectMetadataTextMode(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.fillMetadataText(METADATA_LABELS_LABEL, METADATA_LABEL_TEXT);
+  await appDetailPage.appSpec.clickMetadataSaveAndWait(METADATA_LABELS_LABEL, 'labels');
 }
 
 /** 提交系统保留 Labels 元数据：用于验证保留 key 校验 */
 export async function submitReservedLabelsMetadata({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.clickMetadataEdit(METADATA_LABELS_LABEL);
-  await appDetailPage.selectMetadataTextMode(METADATA_LABELS_LABEL);
-  await appDetailPage.fillMetadataText(METADATA_LABELS_LABEL, METADATA_RESERVED_LABEL_TEXT);
-  await appDetailPage.clickMetadataSave(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.clickMetadataEdit(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.selectMetadataTextMode(METADATA_LABELS_LABEL);
+  await appDetailPage.appSpec.fillMetadataText(METADATA_LABELS_LABEL, METADATA_RESERVED_LABEL_TEXT);
+  await appDetailPage.appSpec.clickMetadataSave(METADATA_LABELS_LABEL);
 }

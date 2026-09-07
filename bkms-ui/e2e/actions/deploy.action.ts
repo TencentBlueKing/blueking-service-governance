@@ -38,11 +38,11 @@ export async function configureAutoScale(
     minReplicas: number;
   },
 ) {
-  await appDetailPage.openScaleSideslider();
-  await appDetailPage.selectAutoScaleMode();
-  await appDetailPage.setAutoScaleReplicas({ maxReplicas, minReplicas });
-  await appDetailPage.setAutoScaleCpuUtilization(cpuUtilization);
-  await appDetailPage.submitAutoScale();
+  await appDetailPage.deploy.openScaleSideslider();
+  await appDetailPage.deploy.selectAutoScaleMode();
+  await appDetailPage.deploy.setAutoScaleReplicas({ maxReplicas, minReplicas });
+  await appDetailPage.deploy.setAutoScaleCpuUtilization(cpuUtilization);
+  await appDetailPage.deploy.submitAutoScale();
 }
 
 /** 创建 TRPC 应用：进入应用列表 → 点「创建应用」→ 选应用类型 → 下一步 */
@@ -58,10 +58,10 @@ export async function createTrpcApp({ appPage }: { appPage: AppPage }, appType: 
  * 关闭 Sideslider 后不做部署完成断言，断言交由 SSE 驱动的实例列表等待完成。
  */
 export async function deployApp({ appDetailPage }: { appDetailPage: AppDetailPage }, replicas: number) {
-  await appDetailPage.clickQuicklyDeploy();
-  await appDetailPage.setDeployReplicas(replicas);
-  await appDetailPage.selectFirstImageTag();
-  await appDetailPage.submitSideslider();
+  await appDetailPage.deploy.clickQuicklyDeploy();
+  await appDetailPage.deploy.setDeployReplicas(replicas);
+  await appDetailPage.deploy.selectFirstImageTag();
+  await appDetailPage.deploy.submitSideslider();
 }
 
 // ─── 部署管理（部署/扩缩容/移除） ───────────────────────────────────
@@ -72,7 +72,7 @@ export async function expectInstanceCount(
   expected: number,
   opts?: { timeoutMs?: number },
 ) {
-  const ok = await appDetailPage.waitForInstanceCount(expected, {
+  const ok = await appDetailPage.deploy.waitForInstanceCount(expected, {
     timeout: opts?.timeoutMs ?? 180000,
   });
   if (!ok) {
@@ -86,7 +86,7 @@ export async function expectInstanceReadyCount(
   expected: number,
   opts?: { timeoutMs?: number },
 ) {
-  const ok = await appDetailPage.waitForInstanceReadyCount(expected, {
+  const ok = await appDetailPage.deploy.waitForInstanceReadyCount(expected, {
     timeout: opts?.timeoutMs ?? 180000,
   });
   if (!ok) {
@@ -96,9 +96,9 @@ export async function expectInstanceReadyCount(
 
 /** 验证移除部署确认弹窗要求输入环境名称 */
 export async function expectRemoveDeployConfirmationGuard({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.openMoreMenu();
-  await appDetailPage.clickRemoveDeploy();
-  await appDetailPage.expectRemoveDeployConfirmationGuard();
+  await appDetailPage.deploy.openMoreMenu();
+  await appDetailPage.deploy.clickRemoveDeploy();
+  await appDetailPage.deploy.expectRemoveDeployConfirmationGuard();
 }
 
 /**
@@ -117,17 +117,17 @@ export async function fillAppForm<K extends FormType>(
 
 /** 移除部署：更多菜单 → 移除部署 → 输入环境名 → 删除 */
 export async function removeDeploy({ appDetailPage }: { appDetailPage: AppDetailPage }) {
-  await appDetailPage.openMoreMenu();
-  await appDetailPage.clickRemoveDeploy();
-  await appDetailPage.confirmRemoveDeploy();
+  await appDetailPage.deploy.openMoreMenu();
+  await appDetailPage.deploy.clickRemoveDeploy();
+  await appDetailPage.deploy.confirmRemoveDeploy();
 }
 
 /** 手动扩缩容：打开 Sideslider → 选择手动调节 → 设置副本数 → 确认 */
 export async function scaleAppManually({ appDetailPage }: { appDetailPage: AppDetailPage }, replicas: number) {
-  await appDetailPage.openScaleSideslider();
-  await appDetailPage.selectManualScaleMode();
-  await appDetailPage.setScaleReplicas(replicas);
-  await appDetailPage.submitManualScale();
+  await appDetailPage.deploy.openScaleSideslider();
+  await appDetailPage.deploy.selectManualScaleMode();
+  await appDetailPage.deploy.setScaleReplicas(replicas);
+  await appDetailPage.deploy.submitManualScale();
 }
 
 /** 等待应用创建成功 */

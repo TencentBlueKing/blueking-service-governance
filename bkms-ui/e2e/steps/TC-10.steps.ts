@@ -31,8 +31,8 @@ import { Given, Then, When } from '../fixtures/fixtures';
 
 Given('我在当前应用的默认部署配置页', async ({ pages }) => {
   const { appDetailPage } = pages;
-  await appDetailPage.gotoAppConfig();
-  await appDetailPage.selectConfigDefaultEnv();
+  await appDetailPage.appConfig.gotoAppConfig();
+  await appDetailPage.appConfig.selectConfigDefaultEnv();
 });
 
 When('我编辑生命周期后取消', async ({ pages }) => {
@@ -52,27 +52,27 @@ When('我提交无效生命周期配置', async ({ pages }) => {
 });
 
 Then('生命周期不应包含取消测试命令', async ({ pages }) => {
-  await pages.appDetailPage.expectLifecycleTextHidden(LIFECYCLE_CANCEL_COMMAND);
+  await pages.appDetailPage.appSpec.expectLifecycleTextHidden(LIFECYCLE_CANCEL_COMMAND);
 });
 
 Then('生命周期区域应展示当前配置', async ({ pages }) => {
-  await pages.appDetailPage.expectLifecycleSectionVisible();
-  await pages.appDetailPage.expectLifecycleInViewMode();
+  await pages.appDetailPage.appSpec.expectLifecycleSectionVisible();
+  await pages.appDetailPage.appSpec.expectLifecycleInViewMode();
 });
 
 Then('生命周期应展示自定义命令输入项', async ({ pages }) => {
-  await pages.appDetailPage.expectLifecycleCustomCommandEditorVisible();
+  await pages.appDetailPage.appSpec.expectLifecycleCustomCommandEditorVisible();
 });
 
 Then('生命周期应处于查看态', async ({ pages }) => {
-  await pages.appDetailPage.expectLifecycleInViewMode();
+  await pages.appDetailPage.appSpec.expectLifecycleInViewMode();
 });
 
 Then('生命周期应展示必填校验提示', async ({ pages }) => {
-  await pages.appDetailPage.expectLifecycleValidationVisible('必填项');
+  await pages.appDetailPage.appSpec.expectLifecycleValidationVisible('必填项');
 });
 
 Then('生命周期应展示已保存配置', async ({ pages }) => {
-  await pages.appDetailPage.expectLifecycleContains(LIFECYCLE_SAVED_COMMAND);
-  await pages.appDetailPage.expectLifecycleContains(`${LIFECYCLE_SAVED_GRACE_PERIOD} 秒`);
+  await pages.appDetailPage.appSpec.expectLifecycleContains(LIFECYCLE_SAVED_COMMAND);
+  await pages.appDetailPage.appSpec.expectLifecycleContains(`${LIFECYCLE_SAVED_GRACE_PERIOD} 秒`);
 });

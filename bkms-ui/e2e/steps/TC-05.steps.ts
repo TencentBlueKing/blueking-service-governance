@@ -18,48 +18,42 @@
 /**
  * TC-05 环境变量查看与搜索：业务语义步骤。
  */
-import { expect } from '@playwright/test';
-
 import { Given, Then, When } from '../fixtures/fixtures';
 
 Given('我在当前应用的环境变量页', async ({ pages }) => {
   const { appDetailPage, basePage } = pages;
-  await appDetailPage.gotoAppConfig();
+  await appDetailPage.appConfig.gotoAppConfig();
   await basePage.clickTab('环境变量');
 });
 
 When('我点击查看环境级变量', async ({ pages }) => {
-  await pages.appDetailPage.openEnvLevelVarsSlider();
+  await pages.appDetailPage.appConfig.openEnvLevelVarsSlider();
 });
 
 When('我在侧栏搜索环境变量 {string}', async ({ pages }, keyword: string) => {
-  await pages.appDetailPage.fillSliderEnvVarSearch(keyword);
-  await pages.basePage.waitForReady(1000);
+  await pages.appDetailPage.appConfig.fillSliderEnvVarSearch(keyword);
 });
 
 When('我清空侧栏环境变量搜索', async ({ pages }) => {
-  await pages.appDetailPage.clearSliderEnvVarSearch();
-  await pages.basePage.waitForReady(1000);
+  await pages.appDetailPage.appConfig.clearSliderEnvVarSearch();
 });
 
 Then('环境变量搜索框应可见', async ({ pages }) => {
-  await pages.appDetailPage.expectEnvVarSearchVisible();
+  await pages.appDetailPage.appConfig.expectEnvVarSearchVisible();
 });
 
 Then('环境级变量侧栏应可见', async ({ pages }) => {
-  await pages.appDetailPage.expectEnvLevelVarsSliderVisible();
+  await pages.appDetailPage.appConfig.expectEnvLevelVarsSliderVisible();
 });
 
 Then('侧栏环境变量搜索框应可见', async ({ pages }) => {
-  await pages.appDetailPage.expectSliderEnvVarSearchVisible();
+  await pages.appDetailPage.appConfig.expectSliderEnvVarSearchVisible();
 });
 
 Then('侧栏环境变量表格应有数据', async ({ pages }) => {
-  const count = await pages.appDetailPage.sliderEnvVarRows().count();
-  expect(count).toBeGreaterThan(0);
+  await pages.appDetailPage.appConfig.expectSliderEnvVarRowsVisible();
 });
 
 Then('侧栏环境变量表格应无数据', async ({ pages }) => {
-  const count = await pages.appDetailPage.sliderEnvVarRows().count();
-  expect(count).toBe(0);
+  await pages.appDetailPage.appConfig.expectSliderEnvVarRowsEmpty();
 });
