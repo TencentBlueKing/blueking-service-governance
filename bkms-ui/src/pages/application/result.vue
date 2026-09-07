@@ -28,7 +28,7 @@
         height="64px"
         width="64px"
       />
-      <span class="text-[24px] leading-[32px] mb-[16px]">{{ $t('{name} 应用创建成功', data.name) }}</span>
+      <span class="text-[24px] leading-[32px] mb-[16px]">{{ $t('{name} 应用创建成功', { name: data.name }) }}</span>
       <span class="text-[14px] text-[#4D4F56] leading-[22px] mb-[28px]">
         <template v-if="!isHelmLikeAppType(appType)">
           {{ $t('接下来你可以直接 “查看应用” 或 继续 “创建应用”') }}
