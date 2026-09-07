@@ -63,9 +63,9 @@ console.log('tRPC 应用', process.env.BKMS_TEST_TRPC_APP);
 console.log('Helm 应用', process.env.BKMS_TEST_HELM_APP);
 console.log('====================');
 
-// playwright-bdd 配置：从 features + steps 生成测试文件
+// playwright-bdd 配置：递归读取按业务域拆分的 features + steps 并生成测试文件
 const testDir = defineBddConfig({
-  features: 'features/*.feature',
+  features: 'features/**/*.feature',
   steps: ['steps/**/*.steps.ts', 'fixtures/**/*.ts'],
   outputDir: '.features-gen',
   /* 使用英文，因为 bkms-bdd-gen 生成的测试用例是英文的 */

@@ -6,7 +6,13 @@
 
 ```
 e2e/
-├── features/        # Gherkin .feature 用例（每个 TC 一份）
+├── features/        # Gherkin .feature 用例（按业务域分目录，每个 TC 一份）
+│   ├── smoke/               # 冒烟验证
+│   ├── deployment/          # 部署、扩缩容、卸载与部署资源
+│   ├── application-config/  # 应用运行配置
+│   ├── build-config/        # 构建配置
+│   ├── artifact-management/ # 制品管理与制品生命周期
+│   └── build-management/    # 构建记录与构建日志
 ├── steps/           # Step 定义（common.steps.ts + <TC-ID>.steps.ts）
 ├── actions/         # 业务流程封装（按业务模块划分，可被多个 TC 复用）
 ├── pages/           # Page Object（BasePage + 子页面，原子 UI 操作）
@@ -180,8 +186,9 @@ pnpm test:spec -- build-management-execute-build
 
 > 推荐：直接调用 `bkms-bdd-gen` skill 让 AI 生成；以下为手工流程参考。
 
-1. **写 `.feature`**：在 `features/` 新建 `TC-XX-<desc>.feature`
+1. **写 `.feature`**：在对应业务域目录新建 `features/<domain>/TC-XX-<desc>.feature`
    - 首行 `@TC-XX @P0`
+   - TC 编号全局递增且永久保留：新增 `TC-17`、`TC-18`；不因调整目录插号、重排或复用旧编号
    - `Background: Given AccessToken 认证已配置`
    - 按需打 `@space:default` / `@env:xxx` / `@app:xxx` / `@appType:xxx`
    - 步骤优先复用 `steps/common.steps.ts` 中已有 step
