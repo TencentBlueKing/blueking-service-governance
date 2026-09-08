@@ -55,6 +55,10 @@ const (
 	MaxPlatformBuildCommandCount = 32
 	// MaxPlatformBuildCommandLen 单条命令允许的最大长度。
 	MaxPlatformBuildCommandLen = 4096
+	// MaxPlatformBuildExtraFileCount 打包额外文件路径允许的最大条数
+	MaxPlatformBuildExtraFileCount = 32
+	// MaxPlatformBuildExtraFileLen 单条打包额外文件路径允许的最大长度
+	MaxPlatformBuildExtraFileLen = 256
 )
 
 // CustomTagOpts 自定义 Tag 选项，仅当 TagConfig.Type 为 custom 时有效
@@ -156,6 +160,8 @@ type PlatformBuildConfig struct {
 	RunnerImage string `bson:"runnerImage"`
 	// Commands 命令配置
 	Commands *BuildCommands `bson:"commands,omitempty"`
+	// ExtraFiles 相对构建目录的额外文件路径，runner 阶段从构建上下文 COPY 到 /app
+	ExtraFiles []string `bson:"extraFiles,omitempty"`
 }
 
 // BuildCommands 平台通用构建命令配置。

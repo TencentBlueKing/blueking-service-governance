@@ -286,6 +286,7 @@ var _ = Describe("Build Functions", func() {
 				pipelineparam.DockerfileBuildCommands:      "",
 				pipelineparam.DockerfileRuntimeEnvCommands: "",
 				pipelineparam.DockerfileStartCommand:       "",
+				pipelineparam.DockerfileExtraFiles:         "",
 			}))
 		})
 
@@ -300,6 +301,7 @@ var _ = Describe("Build Functions", func() {
 					RuntimeEnv: []string{"apt-get update", "apt-get install -y ca-certificates"},
 					Start:      "./app",
 				},
+				ExtraFiles: []string{"data/key.pem", "certs", "data/*.pem"},
 			}
 
 			params, err := genPlatformBuildParams(testCfg.CodeRepo, testApp)
@@ -320,6 +322,9 @@ var _ = Describe("Build Functions", func() {
 				[]string{"apt-get update", "apt-get install -y ca-certificates"},
 			))
 			Expect(params[pipelineparam.DockerfileStartCommand]).To(Equal("./app"))
+			Expect(decodeDockerfileCommandsParam(params[pipelineparam.DockerfileExtraFiles])).To(Equal(
+				[]string{"data/key.pem", "certs", "data/*.pem"},
+			))
 		})
 
 		It("should encode platform commands with special characters", func() {
@@ -419,6 +424,7 @@ var _ = Describe("Build Functions", func() {
 			Expect(params[pipelineparam.DockerfileBuildCommands]).To(Equal(""))
 			Expect(params[pipelineparam.DockerfileRuntimeEnvCommands]).To(Equal(""))
 			Expect(params[pipelineparam.DockerfileStartCommand]).To(Equal(""))
+			Expect(params[pipelineparam.DockerfileExtraFiles]).To(Equal(""))
 		})
 
 		It("should fill registry host for repository Dockerfile mode", func() {
@@ -476,6 +482,7 @@ var _ = Describe("Build Functions", func() {
 				[]string{"apt-get update"},
 			))
 			Expect(params[pipelineparam.DockerfileStartCommand]).To(Equal("./app"))
+			Expect(params[pipelineparam.DockerfileExtraFiles]).To(Equal(""))
 			// SourceDir 仍作为 build context 保留
 			Expect(params[pipelineparam.DockerBuildDir]).To(Equal("src"))
 			Expect(params[pipelineparam.DockerfilePath]).To(Equal("src/.bkms/Dockerfile.generated"))

@@ -21,6 +21,7 @@ package serializer
 import (
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pkg/errors"
 
@@ -31,6 +32,7 @@ import (
 const (
 	platformBuildConfigField       = "buildConfig.repoBuildConfig.platformBuildConfig"
 	platformBuildCommandsField     = platformBuildConfigField + ".commands"
+	platformBuildExtraFilesField   = platformBuildConfigField + ".extraFiles"
 	repoBuildConfigDockerfileField = "buildConfig.repoBuildConfig.dockerfile"
 	repoBuildConfigSourceDirField  = "buildConfig.repoBuildConfig.sourceDir"
 )
@@ -178,12 +180,17 @@ type PlatformBuildConfigInput struct {
 	RunnerImage string `json:"runnerImage"`
 	// 命令配置
 	Commands *BuildCommandsInput `json:"commands"`
+	// 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
+	ExtraFiles []string `json:"extraFiles"`
 }
 
 // Validate validates platform build input fields.
 func (c *PlatformBuildConfigInput) Validate() error {
 	if c == nil {
 		return errors.New(platformBuildConfigField + " is required")
+	}
+	if err := ValidatePlatformBuildExtraFiles(platformBuildExtraFilesField, c.ExtraFiles); err != nil {
+		return errors.Wrap(err, "validate platform build extra files")
 	}
 	return c.Commands.Validate()
 }
@@ -201,6 +208,7 @@ func (c *PlatformBuildConfigInput) ToModel() *imagebuild.PlatformBuildConfig {
 		BuilderImage: c.BuilderImage,
 		RunnerImage:  c.RunnerImage,
 		Commands:     commands,
+		ExtraFiles:   normalizePlatformBuildExtraFiles(c.ExtraFiles),
 	}
 }
 
@@ -269,6 +277,66 @@ func ValidatePlatformBuildCommands(prefix, field string, commands []string) erro
 		}
 	}
 	return nil
+}
+
+// platformBuildExtraFileUnsafeChars 会拆坏未加引号的 Dockerfile COPY，或被当成指令选项 / 续行
+const platformBuildExtraFileUnsafeChars = " \t\\#$\"'"
+
+// ValidatePlatformBuildExtraFiles 校验平台通用构建打包额外文件路径
+//
+// 空列表表示不额外拷贝；不访问仓库、不检查文件是否存在。每条 trim 后必须是构建目录内相对路径
+func ValidatePlatformBuildExtraFiles(field string, extraFiles []string) error {
+	if len(extraFiles) > imagebuild.MaxPlatformBuildExtraFileCount {
+		return errors.Errorf("%s length must not exceed %d", field, imagebuild.MaxPlatformBuildExtraFileCount)
+	}
+	seen := make(map[string]struct{}, len(extraFiles))
+	for i, extraFile := range extraFiles {
+		path := strings.TrimSpace(extraFile)
+		if path == "" {
+			return errors.Errorf("%s[%d] is required", field, i)
+		}
+		if utf8.RuneCountInString(path) > imagebuild.MaxPlatformBuildExtraFileLen {
+			return errors.Errorf(
+				"%s[%d] length must not exceed %d",
+				field, i, imagebuild.MaxPlatformBuildExtraFileLen,
+			)
+		}
+		if strings.ContainsAny(path, "\r\n") {
+			return errors.Errorf("%s[%d] must not contain newline characters", field, i)
+		}
+		if strings.ContainsAny(path, platformBuildExtraFileUnsafeChars) {
+			return errors.Errorf("%s[%d] must not contain whitespace or Dockerfile-unsafe characters", field, i)
+		}
+		if strings.HasPrefix(path, "-") {
+			return errors.Errorf("%s[%d] must not start with '-'", field, i)
+		}
+		if path == "." || path == "./" {
+			return errors.Errorf("%s[%d] must not copy the entire build context", field, i)
+		}
+		if strings.HasPrefix(path, "/") {
+			return errors.Errorf("%s[%d] must not start with '/'", field, i)
+		}
+		if strings.Contains(path, "..") {
+			return errors.Errorf("%s[%d] must not contain '..'", field, i)
+		}
+		if _, ok := seen[path]; ok {
+			return errors.Errorf("%s[%d] is duplicated", field, i)
+		}
+		seen[path] = struct{}{}
+	}
+	return nil
+}
+
+// normalizePlatformBuildExtraFiles 去掉路径首尾空白；空列表归一为 nil，配合 omitempty 不落库
+func normalizePlatformBuildExtraFiles(extraFiles []string) []string {
+	if len(extraFiles) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(extraFiles))
+	for _, extraFile := range extraFiles {
+		normalized = append(normalized, strings.TrimSpace(extraFile))
+	}
+	return normalized
 }
 
 // ValidatePlatformBuildStart validates platform build start command input.
@@ -368,6 +436,8 @@ type PlatformBuildConfigOutputObj struct {
 	RunnerImage string `json:"runnerImage"`
 	// 命令配置
 	Commands *BuildCommandsOutputObj `json:"commands,omitempty"`
+	// 打包额外文件路径，相对构建目录
+	ExtraFiles []string `json:"extraFiles,omitempty"`
 }
 
 // BuildCommandsOutputObj is the JSON representation of platform build commands.
@@ -440,6 +510,7 @@ func (o *BuildConfigOutputObj) FromModel(cfg *imagebuild.Config) *BuildConfigOut
 			o.CodeRepo.PlatformBuildConfig = &PlatformBuildConfigOutputObj{
 				BuilderImage: platformCfg.BuilderImage,
 				RunnerImage:  platformCfg.RunnerImage,
+				ExtraFiles:   platformCfg.ExtraFiles,
 			}
 			if commands := platformCfg.Commands; commands != nil {
 				o.CodeRepo.PlatformBuildConfig.Commands = &BuildCommandsOutputObj{

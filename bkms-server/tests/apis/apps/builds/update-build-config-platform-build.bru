@@ -34,7 +34,12 @@ body:json {
             "apt-get update && apt-get install -y ca-certificates"
           ],
           "start": "./app"
-        }
+        },
+        "extraFiles": [
+          "data/key.pem",
+          "certs",
+          "data/*.pem"
+        ]
       }
     }
   }
@@ -66,6 +71,11 @@ tests {
     expect(codeRepo.platformBuildConfig.commands.build).to.deep.equal(['go build -o app ./cmd/server']);
     expect(codeRepo.platformBuildConfig.commands.runtimeEnv).to.deep.equal([
       'apt-get update && apt-get install -y ca-certificates'
+    ]);
+    expect(codeRepo.platformBuildConfig.extraFiles).to.deep.equal([
+      'data/key.pem',
+      'certs',
+      'data/*.pem'
     ]);
   });
 }

@@ -39,6 +39,7 @@ var _ = Describe("Config load", func() {
 		Expect(cfg.DockerBuildDir).To(Equal("/workspace/source"))
 		Expect(cfg.DockerBuildArgNames).To(Equal(`["GOPROXY","GOSUMDB"]`))
 		Expect(cfg.ImageName).To(Equal("demo.api_1-2"))
+		Expect(cfg.ExtraFiles).To(Equal(`["data/key.pem","certs"]`))
 	})
 
 	It("returns error when generated config image name is unsafe", func() {
@@ -72,6 +73,7 @@ func validGeneratedEnviron(imageName string) []string {
 		EnvDockerfileBuilderImage + "=golang:1.25",
 		EnvDockerfileRunnerImage + "=alpine:3.20",
 		EnvDockerBuildArgNames + `=["GOPROXY","GOSUMDB"]`,
+		EnvDockerfileExtraFiles + `=["data/key.pem","certs"]`,
 		EnvImageName + "=" + imageName,
 	}
 }

@@ -80,6 +80,17 @@ export type CreateAppRequest = CreateAppInput & {
   workspaceID: string;
 };
 
+export interface ResolveAppRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 应用 ID 或名称
+   */
+  app: string;
+}
+
 export interface GetAppIDAutoSuffixOutput {
   /**
    * 后缀字符串
@@ -163,6 +174,15 @@ export interface CreateAppInput {
 
 export interface CreateAppOutput {
   data?: AppOutputObj;
+}
+
+export interface ResolveAppOutput {
+  data?: ResolveAppOutputObj;
+}
+
+export interface ResolveAppOutputObj {
+  id?: string;
+  name?: string;
 }
 
 export interface AppOutputObj {
@@ -391,6 +411,10 @@ export interface PlatformBuildConfigInput {
    * 命令配置
    */
   commands?: BuildCommandsInput;
+  /**
+   * 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
+   */
+  extraFiles?: string[];
   /**
    * 运行阶段基础镜像
    */
@@ -984,6 +1008,10 @@ export interface PlatformBuildConfigOutputObj {
    * 命令配置
    */
   commands?: BuildCommandsOutputObj;
+  /**
+   * 打包额外文件路径，相对构建目录
+   */
+  extraFiles?: string[];
   /**
    * 运行阶段基础镜像
    */

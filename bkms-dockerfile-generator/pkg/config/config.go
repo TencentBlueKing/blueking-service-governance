@@ -37,6 +37,7 @@ const (
 	EnvDockerfileBuildCommands     = "BKMS_DOCKERFILE_BUILD_COMMANDS"
 	EnvDockerfileRuntimeEnvCommand = "BKMS_DOCKERFILE_RUNTIME_ENV_COMMANDS"
 	EnvDockerfileStartCommand      = "BKMS_DOCKERFILE_START_COMMAND"
+	EnvDockerfileExtraFiles        = "BKMS_DOCKERFILE_EXTRA_FILES"
 	EnvDockerBuildArgNames         = "BKMS_DOCKER_BUILD_ARG_NAMES"
 	EnvImageName                   = "BKMS_IMAGE_NAME"
 
@@ -58,6 +59,7 @@ type Config struct {
 	BuildCommands       string
 	RuntimeEnvCommands  string
 	StartCommand        string
+	ExtraFiles          string
 	DockerBuildArgNames string
 	ImageName           string
 }
@@ -76,6 +78,7 @@ func LoadFromEnviron(environ []string) (Config, error) {
 		BuildCommands:       envs[EnvDockerfileBuildCommands],
 		RuntimeEnvCommands:  envs[EnvDockerfileRuntimeEnvCommand],
 		StartCommand:        strings.TrimSpace(envs[EnvDockerfileStartCommand]),
+		ExtraFiles:          envs[EnvDockerfileExtraFiles],
 		DockerBuildArgNames: envs[EnvDockerBuildArgNames],
 		ImageName:           strings.TrimSpace(envs[EnvImageName]),
 	}

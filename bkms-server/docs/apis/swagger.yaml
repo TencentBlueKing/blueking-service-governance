@@ -618,6 +618,11 @@ definitions:
         allOf:
         - $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildCommandsInput'
         description: 命令配置
+      extraFiles:
+        description: 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
+        items:
+          type: string
+        type: array
       runnerImage:
         description: 运行阶段基础镜像
         type: string
@@ -631,6 +636,11 @@ definitions:
         allOf:
         - $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildCommandsOutputObj'
         description: 命令配置
+      extraFiles:
+        description: 打包额外文件路径，相对构建目录
+        items:
+          type: string
+        type: array
       runnerImage:
         description: 运行阶段基础镜像
         type: string
@@ -792,6 +802,11 @@ definitions:
         allOf:
         - $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.BuildCommandsOutputObj'
         description: 命令配置
+      extraFiles:
+        description: 打包额外文件路径，相对构建目录
+        items:
+          type: string
+        type: array
       runnerImage:
         description: 运行阶段基础镜像
         type: string
@@ -1032,6 +1047,68 @@ definitions:
     properties:
       name:
         type: string
+    type: object
+  serializer.AppConfigFileDefOutputObj:
+    properties:
+      baseAppConfigFileID:
+        description: 基础应用配置文件 ID
+        type: string
+      configKind:
+        description: 配置种类
+        type: string
+      contentSourceType:
+        description: 文件内容来源
+        type: string
+      currentVersion:
+        description: 当前生效版本号
+        type: integer
+      envName:
+        description: 环境名称
+        type: string
+      fileFormat:
+        description: 文件格式
+        type: string
+      id:
+        description: Def ID
+        type: string
+      isUnifiedConfig:
+        description: 是否统一配置
+        type: boolean
+      mountDir:
+        description: 容器内挂载目录
+        type: string
+      name:
+        description: 文件名称
+        type: string
+      type:
+        description: 文件类型
+        type: string
+      updatedAt:
+        description: 最后修改时间
+        type: string
+      updater:
+        description: 最后修改人
+        type: string
+    type: object
+  serializer.AppConfigFileDefUpdateInput:
+    properties:
+      isUnifiedConfig:
+        description: 是否统一配置；不传表示不修改。true = 统一配置；false = 按环境独立配置。
+        type: boolean
+      mountDir:
+        description: 容器内挂载目录；不传表示不修改。
+        maxLength: 255
+        type: string
+      name:
+        description: 应用配置文件名称；不传表示不修改，传时不能为空。
+        maxLength: 64
+        minLength: 1
+        type: string
+    type: object
+  serializer.AppConfigFileDefUpdateOutput:
+    properties:
+      item:
+        $ref: '#/definitions/serializer.AppConfigFileDefOutputObj'
     type: object
   serializer.AppConfigFileEmptyOutput:
     type: object
@@ -9236,6 +9313,45 @@ paths:
       summary: 查询单个应用详情
       tags:
       - app
+  /apps/{appID}/app-config-file-defs/{id}:
+    put:
+      consumes:
+      - application/json
+      operationId: AppConfigFileDefUpdate
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 应用配置文件 Def ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 更新逻辑定义信息请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.AppConfigFileDefUpdateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.AppConfigFileDefUpdateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 修改应用配置文件的逻辑定义信息
+      tags:
+      - app-config-files
   /apps/{appID}/app-config-file/versions:
     get:
       operationId: ListAppConfigFileVersions

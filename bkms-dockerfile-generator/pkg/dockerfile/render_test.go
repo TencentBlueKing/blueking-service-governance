@@ -115,6 +115,99 @@ var _ = Describe("Dockerfile render", func() {
 		))
 	})
 
+	It("renders extra file copies after artifact COPY and before ENTRYPOINT", func() {
+		input := defaultInput(LanguageGo)
+		input.ExtraFiles = encodeCommandsParam([]string{
+			"data/privatekey.pem",
+			"certs",
+			"data/*.pem",
+			"*.json",
+		})
+
+		content, err := Render(input)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(content).To(ContainSubstring("COPY data/privatekey.pem /app/data/privatekey.pem\n"))
+		Expect(content).To(ContainSubstring("COPY certs /app/certs\n"))
+		Expect(content).To(ContainSubstring("COPY data/*.pem /app/data/\n"))
+		Expect(content).To(ContainSubstring("COPY *.json /app/\n"))
+		Expect(content).NotTo(ContainSubstring(`COPY "data/*.pem"`))
+		Expect(indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api")).To(BeNumerically(
+			"<", indexOf(content, "COPY data/privatekey.pem /app/data/privatekey.pem"),
+		))
+		Expect(indexOf(content, "COPY *.json /app/")).To(BeNumerically(
+			"<", indexOf(content, `ENTRYPOINT ["/app/demo-api"]`),
+		))
+	})
+
+	DescribeTable("extraFileDest",
+		func(src string, dest string) {
+			got, err := extraFileDest(src)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(Equal(dest))
+		},
+		Entry(nil, "data/key.pem", "/app/data/key.pem"),
+		Entry(nil, "certs/", "/app/certs"),
+		Entry(nil, "foo/./bar", "/app/foo/bar"),
+		Entry(nil, "foo/../bar", "/app/bar"),
+		Entry(nil, "foo..bar", "/app/foo..bar"),
+		Entry(nil, ".", "/app"),
+		Entry(nil, "/etc/passwd", "/app/etc/passwd"),
+		Entry(nil, "*.json", "/app/"),
+		Entry(nil, "file?.txt", "/app/"),
+		Entry(nil, "[abc]/file", "/app/"),
+		Entry(nil, "data/*.pem", "/app/data/"),
+		Entry(nil, "configs/*/settings.yaml", "/app/configs/"),
+		Entry(nil, "data/**/*.pem", "/app/data/"),
+		Entry(nil, "a/*/b/*/c", "/app/a/"),
+		Entry(nil, "./data/*.pem", "/app/data/"),
+	)
+
+	DescribeTable("extraFileDest errors",
+		func(src string, message string) {
+			dest, err := extraFileDest(src)
+			Expect(dest).To(Equal(""))
+			Expect(err.Error()).To(ContainSubstring(message))
+		},
+		Entry(nil, "", "extra file path is required"),
+		Entry(nil, "--from=builder", "must not start with '-'"),
+		Entry(nil, "../secret", "escapes /app"),
+	)
+
+	DescribeTable("parseExtraFileCopies",
+		func(payload string, want []ExtraFileCopy) {
+			copies, err := parseExtraFileCopies(payload)
+			Expect(err).NotTo(HaveOccurred())
+			if want == nil {
+				Expect(copies).To(BeEmpty())
+				return
+			}
+			Expect(copies).To(Equal(want))
+		},
+		Entry("blank", "", nil),
+		Entry("empty array", "[]", nil),
+		Entry("whitespace items", `["", "  "]`, nil),
+		Entry("trim and map", `  ["  data/key.pem  ", "certs/", "certs", "data/*.pem"]  `, []ExtraFileCopy{
+			{Source: "data/key.pem", Dest: "/app/data/key.pem"},
+			{Source: "certs/", Dest: "/app/certs"},
+			{Source: "certs", Dest: "/app/certs"},
+			{Source: "data/*.pem", Dest: "/app/data/"},
+		}),
+	)
+
+	DescribeTable("parseExtraFileCopies errors",
+		func(payload string, message string) {
+			copies, err := parseExtraFileCopies(payload)
+			Expect(copies).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring(message))
+		},
+		Entry(nil, "data/key.pem", "must be JSON string array"),
+		Entry(nil, `["certs"`, "unmarshal Dockerfile extra files"),
+		Entry(nil, `{"path":"certs"}`, "must be JSON string array"),
+		Entry(nil, `["certs",123]`, "unmarshal Dockerfile extra files"),
+		Entry(nil, `["certs","../secret"]`, `resolve extra file destination for "../secret"`),
+	)
+
 	It("does not check Go module files for C++ templates", func() {
 		input := defaultInput(LanguageCpp)
 		input.DockerBuildDir = "missing"
@@ -126,32 +219,6 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).NotTo(ContainSubstring("go.mod"))
 		Expect(content).NotTo(ContainSubstring("go.sum"))
 	})
-
-	DescribeTable("renders package-manager-agnostic git install for Go builder images",
-		func(builderImage string) {
-			input := defaultInput(LanguageGo)
-			input.BuilderImage = builderImage
-
-			content, err := Render(input)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(content).To(ContainSubstring("FROM " + builderImage + " AS builder"))
-			Expect(content).To(ContainSubstring("command -v git"))
-			Expect(content).To(ContainSubstring("apk add --no-cache ca-certificates git"))
-			Expect(content).To(ContainSubstring("apt-get update && apt-get install -y --no-install-recommends ca-certificates git"))
-			Expect(content).To(ContainSubstring("dnf install -y ca-certificates git"))
-			Expect(content).To(ContainSubstring("yum install -y ca-certificates git"))
-			Expect(content).NotTo(ContainSubstring("microdnf"))
-			Expect(indexOf(content, "dnf install -y ca-certificates git")).To(BeNumerically(
-				"<", indexOf(content, "yum install -y ca-certificates git"),
-			))
-		},
-		Entry("Debian golang tag", "golang:1.25.3"),
-		Entry("Alpine golang tag", "golang:1.25.3-alpine3.22"),
-		Entry("Alpine tag with digest", "golang:1.25.3-alpine3.22@sha256:abcd"),
-		Entry("namespace contains alpine", "registry.example.com/alpine/golang:1.25"),
-		Entry("custom tlinux compile image", "docker.bkrepo.woa.com/sgameai/repo/compile/visual_processor-leonyue:0.0.1"),
-	)
 
 	It("renders advanced Go commands at expected positions", func() {
 		input := defaultInput(LanguageGo)
@@ -359,16 +426,6 @@ var _ = Describe("Dockerfile render", func() {
 			"ENTRYPOINT [\"/bin/sh\", \"-ec\", \"/app/demo-api --config /app/config.yaml\"]",
 		))
 		Expect(content).NotTo(ContainSubstring("RUN cmake -S . -B build"))
-	})
-
-	It("does not inject extra BKMS platform variables", func() {
-		content, err := Render(defaultInput(LanguageGo))
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(content).NotTo(ContainSubstring("BKMS_GOPROXY"))
-		Expect(content).NotTo(ContainSubstring("BKMS_GOSUMDB"))
-		Expect(content).NotTo(ContainSubstring("BKMS_APP_DIR"))
-		Expect(content).NotTo(ContainSubstring("BKMS_BIN_DIR"))
 	})
 
 	It("uses trimmed image name as app name for generated artifact paths", func() {

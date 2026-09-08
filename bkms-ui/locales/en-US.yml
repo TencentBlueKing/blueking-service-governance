@@ -1773,6 +1773,9 @@ CPU requests 使用率: CPU Requests Usage
 使用仓库 Dockerfile: Use Repository Dockerfile
 构建镜像: Build Image
 运行镜像: Runtime Image
+打包额外文件: Extra Files
+"每行一个，可填写文件路径或目录，相对构建目录，例如：": "One path or directory per line, relative to the build directory, for example:"
+文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。: Files are copied into /app in the runtime image by relative path. For example, data/privatekey.pem becomes /app/data/privatekey.pem.
 请选择镜像: Please select an image
 请选择标签: Please select a tag
 该镜像已不在当前平台镜像列表中，请重新选择: This image is no longer in the platform's image list, please select again

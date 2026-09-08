@@ -57,7 +57,7 @@ func prepareGoTemplateData(input Input, data *templateData) error {
 		optionalFiles: []string{goSumFile},
 	})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "collect Go dependency files")
 	}
 	data.DependencyFiles = dependencyFiles
 	return nil

@@ -47,7 +47,11 @@ body:json {
               "apt-get update && apt-get install -y ca-certificates"
             ],
             "start": "./app"
-          }
+          },
+          "extraFiles": [
+            "data/key.pem",
+            "certs"
+          ]
         }
       }
     }

@@ -33,6 +33,10 @@ tests {
     expect(repoBuildConfig.platformBuildConfig.commands.runtimeEnv).to.deep.equal([
       'apt-get update && apt-get install -y ca-certificates'
     ]);
+    expect(repoBuildConfig.platformBuildConfig.extraFiles).to.deep.equal([
+      'data/key.pem',
+      'certs'
+    ]);
   });
 }
 

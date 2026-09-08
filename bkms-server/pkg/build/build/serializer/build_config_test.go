@@ -19,6 +19,7 @@
 package serializer_test
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin/binding"
@@ -64,6 +65,7 @@ var _ = Describe("Build config serializers", func() {
 						PreBuild: []string{"go mod download"},
 						Start:    "./app",
 					},
+					ExtraFiles: []string{"data/key.pem", "certs"},
 				},
 			},
 		})
@@ -78,6 +80,7 @@ var _ = Describe("Build config serializers", func() {
 				RuntimeEnv: []string{},
 				Start:      "./app",
 			},
+			ExtraFiles: []string{"data/key.pem", "certs"},
 		}))
 	})
 
@@ -161,6 +164,125 @@ var _ = Describe("Build config serializers", func() {
 			Expect(err).To(MatchError(
 				"buildConfig.repoBuildConfig.platformBuildConfig.commands.start must not be blank",
 			))
+		})
+	})
+
+	Describe("Platform build extra files validation", func() {
+		platformRepoInput := func(extraFiles []string) *serializer.RepositoryBuildConfigInput {
+			return &serializer.RepositoryBuildConfigInput{
+				Type:           string(imagebuild.RepositoryTypeTGit),
+				DefaultBranch:  "main",
+				RepoAlias:      "demo",
+				RepoURL:        "https://git.example.com/demo",
+				ImageBuildMode: string(imagebuild.ImageBuildModePlatform),
+				PlatformBuildConfig: &serializer.PlatformBuildConfigInput{
+					BuilderImage: "golang:1.24",
+					RunnerImage:  "debian:12",
+					ExtraFiles:   extraFiles,
+				},
+			}
+		}
+
+		It("accepts a valid extra files list", func() {
+			err := platformRepoInput([]string{
+				"data/key.pem",
+				"certs",
+				"data/*.pem",
+				"*.json",
+			}).ValidatePlatformBuildConfig()
+
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("accepts empty extra files", func() {
+			err := platformRepoInput(nil).ValidatePlatformBuildConfig()
+
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("rejects parent path segments", func() {
+			err := platformRepoInput([]string{"data/key.pem", "foo/../bar"}).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[1] must not contain '..'",
+			)))
+		})
+
+		It("rejects absolute paths", func() {
+			err := platformRepoInput([]string{"/etc/passwd"}).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[0] must not start with '/'",
+			)))
+		})
+
+		It("rejects duplicated paths after trim", func() {
+			err := platformRepoInput([]string{"data/key.pem", "  data/key.pem  "}).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[1] is duplicated",
+			)))
+		})
+
+		It("rejects extra files exceeding the max count", func() {
+			extraFiles := make([]string, imagebuild.MaxPlatformBuildExtraFileCount+1)
+			for i := range extraFiles {
+				extraFiles[i] = "file-" + strconv.Itoa(i)
+			}
+			err := platformRepoInput(extraFiles).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles length must not exceed",
+			)))
+		})
+
+		It("rejects an extra file longer than the max length", func() {
+			err := platformRepoInput([]string{strings.Repeat("a", imagebuild.MaxPlatformBuildExtraFileLen+1)}).
+				ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[0] length must not exceed",
+			)))
+		})
+
+		It("rejects extra files containing newline characters", func() {
+			err := platformRepoInput([]string{"data/key.pem\ncerts"}).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[0] must not contain newline characters",
+			)))
+		})
+
+		It("rejects extra files containing whitespace", func() {
+			err := platformRepoInput([]string{"my key.pem"}).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[0] " +
+					"must not contain whitespace or Dockerfile-unsafe characters",
+			)))
+		})
+
+		It("rejects extra files that look like COPY options", func() {
+			err := platformRepoInput([]string{"--from=builder"}).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[0] must not start with '-'",
+			)))
+		})
+
+		It("rejects copying the entire build context", func() {
+			err := platformRepoInput([]string{"."}).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[0] must not copy the entire build context",
+			)))
+		})
+
+		It("accepts extra files whose rune count is within the max length", func() {
+			err := platformRepoInput([]string{strings.Repeat("文", imagebuild.MaxPlatformBuildExtraFileLen)}).
+				ValidatePlatformBuildConfig()
+
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

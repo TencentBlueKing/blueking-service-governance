@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetAppIDAutoSuffixRequest, GetAppIDAutoSuffixOutput, GetAppRequest, AppDetailOutputObj, DeleteAppRequest, EmptyOutput, GetAppDeployOverviewRequest, AppDeployOverviewEnvObj, GetAppDeployStatusesRequest, AppDeployedEnvOutputObj, UpdateAppDisplayNameRequest, UpdateHelmSpecRequest, UpdateAppTafSpecRequest, UpdateAppTrpcSpecRequest, ListAppsRequest, AppInfoOutputObj, CreateAppRequest, AppOutputObj } from '~/@types/v1/app';
+import type { GetAppIDAutoSuffixRequest, GetAppIDAutoSuffixOutput, GetAppRequest, AppDetailOutputObj, DeleteAppRequest, EmptyOutput, GetAppDeployOverviewRequest, AppDeployOverviewEnvObj, GetAppDeployStatusesRequest, AppDeployedEnvOutputObj, UpdateAppDisplayNameRequest, UpdateHelmSpecRequest, UpdateAppTafSpecRequest, UpdateAppTrpcSpecRequest, ListAppsRequest, AppInfoOutputObj, CreateAppRequest, AppOutputObj, ResolveAppRequest, ResolveAppOutputObj } from '~/@types/v1/app';
 
 export const AppService = {
   /**
@@ -167,4 +167,19 @@ export const AppService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/apps')(params, config),
+  /**
+   * 通过 ID 或 Name 解析应用
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/apps/resolve/{app}
+   * @tag app
+   * @param workspaceID path string required 工作空间 ID
+   * @param app path string required 应用 ID 或名称
+   * @response 200 ResolveAppOutput OK
+   * @response 404 GinErrorOutput Not Found
+   */
+  resolveApp: async <Request extends ResolveAppRequest = ResolveAppRequest, ResponseData = ResolveAppOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/apps/resolve/{app}')(params, config),
 };

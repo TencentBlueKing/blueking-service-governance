@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -89,9 +90,16 @@ type Input struct {
 	BuildCommands       string
 	RuntimeEnvCommands  string
 	StartCommand        string
+	ExtraFiles          string
 	DockerBuildArgNames string
 	DockerBuildDir      string
 	ImageName           string
+}
+
+// ExtraFileCopy 是 runner 阶段从构建上下文 COPY 到 /app 的一条路径映射
+type ExtraFileCopy struct {
+	Source string
+	Dest   string
 }
 
 type templateData struct {
@@ -102,6 +110,7 @@ type templateData struct {
 	BuildCommands       []string
 	RuntimeEnvCommands  []string
 	StartCommand        string
+	ExtraFileCopies     []ExtraFileCopy
 	AppName             string
 	DependencyFiles     []string
 }
@@ -120,7 +129,7 @@ func Render(input Input) (string, error) {
 
 	appName, err := appNameFromImageName(input.ImageName)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "derive app name from image name")
 	}
 
 	templateContent, err := fs.ReadFile(templateFiles, spec.templatePath)
@@ -139,7 +148,7 @@ func Render(input Input) (string, error) {
 
 	data, err := buildTemplateData(input, spec, appName)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "build Dockerfile template data")
 	}
 	var buf bytes.Buffer
 	if err = tmpl.Execute(&buf, data); err != nil {
@@ -161,27 +170,31 @@ func appNameFromImageName(imageName string) (string, error) {
 	return appName, nil
 }
 
-func buildTemplateData(input Input, spec languageSpec, appName string) (templateData, error) {
+func buildTemplateData(input Input, spec languageSpec, appName string) (*templateData, error) {
 	buildCommands, err := parseCommands("build commands", input.BuildCommands)
 	if err != nil {
-		return templateData{}, err
+		return nil, errors.Wrap(err, "parse build commands")
 	}
 	if len(buildCommands) == 0 {
 		buildCommands = []string{spec.defaultBuildCommand(appName)}
 	}
 	preBuildCommands, err := parseCommands("pre-build commands", input.PreBuildCommands)
 	if err != nil {
-		return templateData{}, err
+		return nil, errors.Wrap(err, "parse pre-build commands")
 	}
 	runtimeEnvCommands, err := parseCommands("runtime env commands", input.RuntimeEnvCommands)
 	if err != nil {
-		return templateData{}, err
+		return nil, errors.Wrap(err, "parse runtime env commands")
 	}
 	dockerBuildArgs, err := parseDockerBuildArgNames(input.DockerBuildArgNames)
 	if err != nil {
-		return templateData{}, err
+		return nil, errors.Wrap(err, "parse Docker build arg names")
 	}
-	data := templateData{
+	extraFileCopies, err := parseExtraFileCopies(input.ExtraFiles)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse extra files")
+	}
+	data := &templateData{
 		BuilderImage:        input.BuilderImage,
 		RunnerImage:         input.RunnerImage,
 		DockerBuildArgNames: dockerBuildArgs,
@@ -189,11 +202,12 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (template
 		BuildCommands:       buildCommands,
 		RuntimeEnvCommands:  runtimeEnvCommands,
 		StartCommand:        strings.TrimSpace(input.StartCommand),
+		ExtraFileCopies:     extraFileCopies,
 		AppName:             appName,
 	}
 	if spec.prepareTemplateData != nil {
-		if err = spec.prepareTemplateData(input, &data); err != nil {
-			return templateData{}, err
+		if err = spec.prepareTemplateData(input, data); err != nil {
+			return nil, errors.Wrap(err, "prepare language-specific template data")
 		}
 	}
 	return data, nil
@@ -243,6 +257,69 @@ func normalizeDockerBuildArgNames(names []string) []string {
 		seen[name] = struct{}{}
 		return name, true
 	})
+}
+
+// parseExtraFileCopies 解析 BKMS_DOCKERFILE_EXTRA_FILES 传入的 JSON 字符串数组
+//
+// 格式与安全规则由服务端保存期校验；这里只负责算出 COPY dest
+func parseExtraFileCopies(extraFiles string) ([]ExtraFileCopy, error) {
+	paths, err := parseCommands("extra files", extraFiles)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse extra files JSON")
+	}
+	copies := make([]ExtraFileCopy, 0, len(paths))
+	for _, src := range paths {
+		dest, destErr := extraFileDest(src)
+		if destErr != nil {
+			return nil, errors.Wrapf(destErr, "resolve extra file destination for %q", src)
+		}
+		copies = append(copies, ExtraFileCopy{
+			Source: src,
+			Dest:   dest,
+		})
+	}
+	return copies, nil
+}
+
+// extraFileDest 按是否含通配符决定 COPY 目标
+//
+// 通配 dest 取第一个含 * / ? / [ 的路径段之前的前缀，避免 configs/*/a 落到 /app/configs/*/
+// 前导 '-' 会让未加引号的 COPY 变成指令选项，构建不一定失败，所以这里仍拦截
+func extraFileDest(src string) (string, error) {
+	if src == "" {
+		return "", errors.New("extra file path is required")
+	}
+	if strings.HasPrefix(src, "-") {
+		return "", errors.Errorf("extra file path %q must not start with '-'", src)
+	}
+	var dest string
+	if strings.ContainsAny(src, "*?[") {
+		prefix := extraFileGlobPrefix(src)
+		if prefix == "" {
+			dest = "/app/"
+		} else {
+			dest = path.Join("/app", prefix) + "/"
+		}
+	} else {
+		dest = path.Join("/app", src)
+	}
+	if dest != "/app" && dest != "/app/" && !strings.HasPrefix(dest, "/app/") {
+		return "", errors.Errorf("extra file destination %q escapes /app", dest)
+	}
+	return dest, nil
+}
+
+// extraFileGlobPrefix 返回第一个通配段之前的目录前缀，根级通配返回空串
+func extraFileGlobPrefix(src string) string {
+	parts := strings.Split(src, "/")
+	prefix := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if strings.ContainsAny(part, "*?[") {
+			break
+		}
+		prefix = append(prefix, part)
+	}
+	return strings.Join(prefix, "/")
 }
 
 // parseCommands 解析流水线传入的 Dockerfile 命令参数

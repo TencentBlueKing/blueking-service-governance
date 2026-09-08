@@ -53,6 +53,10 @@ RUN {{ . }}
 
 COPY --from=builder /out/{{ .AppName }} /app/{{ .AppName }}
 
+{{ range .ExtraFileCopies -}}
+COPY {{ .Source }} {{ .Dest }}
+{{ end -}}
+
 {{ if .StartCommand -}}
 ENTRYPOINT ["/bin/sh", "-ec", {{ quoteStartCommand .StartCommand }}]
 {{ else -}}

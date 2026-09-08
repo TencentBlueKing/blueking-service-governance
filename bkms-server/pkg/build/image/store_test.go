@@ -78,6 +78,7 @@ var _ = Describe("ConfigStore", func() {
 						RuntimeEnv: []string{"apt-get update"},
 						Start:      "./app",
 					},
+					ExtraFiles: []string{"data/key.pem", "certs"},
 				},
 			},
 		}
@@ -117,6 +118,7 @@ var _ = Describe("ConfigStore", func() {
 					RuntimeEnv: []string{"apt-get update"},
 					Start:      "./app",
 				},
+				ExtraFiles: []string{"data/key.pem", "certs"},
 			}))
 		})
 
@@ -149,6 +151,7 @@ var _ = Describe("ConfigStore", func() {
 					RuntimeEnv: []string{"apt-get install -y ca-certificates"},
 					Start:      "./server",
 				},
+				ExtraFiles: []string{"data/*.pem"},
 			}
 			err = store.Update(ctx, &codeRepoBuildCfg)
 			Expect(err).NotTo(HaveOccurred())
@@ -167,6 +170,7 @@ var _ = Describe("ConfigStore", func() {
 					RuntimeEnv: []string{"apt-get install -y ca-certificates"},
 					Start:      "./server",
 				},
+				ExtraFiles: []string{"data/*.pem"},
 			}))
 		})
 	})

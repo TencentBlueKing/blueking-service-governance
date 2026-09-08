@@ -208,7 +208,7 @@ func genDockerfilePath(cfg *RepositoryConfig, buildDir string) string {
 // genPlatformBuildParams 生成镜像构建方式相关的流水线参数。
 //
 // - repositoryDockerfile 模式：sourceType=repository，其余平台生成 Dockerfile 参数为空字符串。
-// - platform 模式：sourceType=bkms_generated，写入 language / builderImage / runnerImage / 各命令数组 / start。
+// - platform 模式：sourceType=bkms_generated，写入 language / builderImage / runnerImage / 各命令数组 / start / extraFiles。
 //
 // 命令数组以 JSON 字符串数组传递，避免流水线环境变量注入吞掉真实换行
 func genPlatformBuildParams(cfg *RepositoryConfig, app *bkmsapp.Application) (map[string]string, error) {
@@ -224,6 +224,7 @@ func genPlatformBuildParams(cfg *RepositoryConfig, app *bkmsapp.Application) (ma
 		pipelineparam.DockerfileBuildCommands:      "",
 		pipelineparam.DockerfileRuntimeEnvCommands: "",
 		pipelineparam.DockerfileStartCommand:       "",
+		pipelineparam.DockerfileExtraFiles:         "",
 	}
 	if cfg.EffectiveImageBuildMode() != ImageBuildModePlatform || cfg.PlatformBuildConfig == nil {
 		return params, nil
@@ -242,15 +243,16 @@ func genPlatformBuildParams(cfg *RepositoryConfig, app *bkmsapp.Application) (ma
 	params[pipelineparam.DockerfileRunnerImage] = platBuildCfg.RunnerImage
 
 	if cmds := platBuildCfg.Commands; cmds != nil {
-		preBuildCommands, err := encodeDockerfileCommands(cmds.PreBuild)
+		var preBuildCommands, buildCommands, runtimeEnvCommands string
+		preBuildCommands, err = encodeDockerfileCommands(cmds.PreBuild)
 		if err != nil {
 			return nil, errors.Wrap(err, "encode Dockerfile pre-build commands")
 		}
-		buildCommands, err := encodeDockerfileCommands(cmds.Build)
+		buildCommands, err = encodeDockerfileCommands(cmds.Build)
 		if err != nil {
 			return nil, errors.Wrap(err, "encode Dockerfile build commands")
 		}
-		runtimeEnvCommands, err := encodeDockerfileCommands(cmds.RuntimeEnv)
+		runtimeEnvCommands, err = encodeDockerfileCommands(cmds.RuntimeEnv)
 		if err != nil {
 			return nil, errors.Wrap(err, "encode Dockerfile runtime env commands")
 		}
@@ -259,6 +261,11 @@ func genPlatformBuildParams(cfg *RepositoryConfig, app *bkmsapp.Application) (ma
 		params[pipelineparam.DockerfileRuntimeEnvCommands] = runtimeEnvCommands
 		params[pipelineparam.DockerfileStartCommand] = cmds.Start
 	}
+	extraFiles, err := encodeDockerfileCommands(platBuildCfg.ExtraFiles)
+	if err != nil {
+		return nil, errors.Wrap(err, "encode Dockerfile extra files")
+	}
+	params[pipelineparam.DockerfileExtraFiles] = extraFiles
 	return params, nil
 }
 

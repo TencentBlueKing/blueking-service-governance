@@ -326,6 +326,10 @@ export interface PlatformBuildConfigOutputObj {
    */
   commands?: BuildCommandsOutputObj;
   /**
+   * 打包额外文件路径，相对构建目录
+   */
+  extraFiles?: string[];
+  /**
    * 运行阶段基础镜像
    */
   runnerImage?: string;
@@ -450,6 +454,10 @@ export interface PlatformBuildConfigInput {
    * 命令配置
    */
   commands?: BuildCommandsInput;
+  /**
+   * 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
+   */
+  extraFiles?: string[];
   /**
    * 运行阶段基础镜像
    */

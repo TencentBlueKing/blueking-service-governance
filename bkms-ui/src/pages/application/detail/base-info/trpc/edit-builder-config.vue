@@ -202,6 +202,23 @@
                     $t('写入镜像的默认启动方式（ENTRYPOINT），构建时固化到镜像中。部署时可被「运行命令」覆盖')
                   }}</span>
                 </div>
+                <div class="mb-[24px] last:mb-0">
+                  <div class="flex items-center gap-[8px] mb-[8px]">
+                    <span class="text-[14px] text-[#313238]">{{ $t('打包额外文件') }}</span>
+                    <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
+                  </div>
+                  <Input
+                    v-model="extraFilesText"
+                    :placeholder="extraFilesPlaceholder"
+                    :rows="4"
+                    type="textarea"
+                  />
+                  <span class="text-[#c4c6cc]">{{
+                    $t(
+                      '文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。',
+                    )
+                  }}</span>
+                </div>
               </ToggleCard>
             </Form.FormItem>
           </template>
@@ -369,6 +386,7 @@
     platformBuildConfig: {
       builderImage: '',
       runnerImage: '',
+      extraFiles: [],
       commands: {
         build: [],
         preBuild: [],
@@ -385,6 +403,9 @@
   const { t } = useI18n();
   const buildPlaceholder = computed(
     () => `${t('留空则使用平台默认：')}\ngo build -o /out/${props.appName || '{{ appName }}'} .`,
+  );
+  const extraFilesPlaceholder = computed(
+    () => `${t('每行一个，可填写文件路径或目录，相对构建目录，例如：')}\ndata/privatekey.pem\ncerts/`,
   );
 
   // 镜像字段校验已迁移至 ImageModeSelect 组件内 FormItem 级 rules，
@@ -428,6 +449,7 @@
         builderData.value.repoBuildConfig.platformBuildConfig = {
           builderImage: '',
           runnerImage: '',
+          extraFiles: [],
           commands: {
             build: [],
             preBuild: [],
@@ -473,6 +495,20 @@
     set: val => {
       if (builderData.value?.repoBuildConfig?.platformBuildConfig?.commands) {
         builderData.value.repoBuildConfig.platformBuildConfig.commands.runtimeEnv = val
+          ? val
+              .split('\n')
+              .map(s => s.trim())
+              .filter(Boolean)
+          : [];
+      }
+    },
+  });
+
+  const extraFilesText = computed({
+    get: () => builderData.value?.repoBuildConfig?.platformBuildConfig?.extraFiles?.join('\n') ?? '',
+    set: val => {
+      if (builderData.value?.repoBuildConfig?.platformBuildConfig) {
+        builderData.value.repoBuildConfig.platformBuildConfig.extraFiles = val
           ? val
               .split('\n')
               .map(s => s.trim())
@@ -679,6 +715,7 @@
           builderData.value.repoBuildConfig.platformBuildConfig = {
             builderImage: '',
             runnerImage: '',
+            extraFiles: [],
             commands: {
               build: [],
               preBuild: [],
@@ -687,6 +724,12 @@
             },
           };
         }
+      }
+      if (
+        builderData.value.repoBuildConfig?.platformBuildConfig &&
+        !builderData.value.repoBuildConfig.platformBuildConfig.extraFiles
+      ) {
+        builderData.value.repoBuildConfig.platformBuildConfig.extraFiles = [];
       }
       // 镜像列表由 ImageModeSelect 组件挂载后自行拉取与模式识别
     }

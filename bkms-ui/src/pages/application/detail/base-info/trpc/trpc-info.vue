@@ -296,6 +296,28 @@
                           v-text="platformCommandsStart"
                         ></pre>
                       </ToggleCard>
+                      <ToggleCard
+                        v-if="platformExtraFiles"
+                        class="rounded-[2px] overflow-hidden"
+                        content-class="px-[38px] py-[8px] mt-0 border-t"
+                        header-class="!hover:bg-[#f0f1f5]"
+                        normal-bg-color="#F5F7FA"
+                        type="normal"
+                      >
+                        <template #icon>
+                          <i class="bkms-icon bkms-icon-angle-right font-bold"></i>
+                        </template>
+                        <template #title>
+                          <div class="flex items-center gap-[8px] ml-[10px]">
+                            <span>{{ $t('打包额外文件') }}</span>
+                            <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
+                          </div>
+                        </template>
+                        <pre
+                          class="m-0 text-[12px] font-mono leading-[22px] text-[#63656e] whitespace-pre-wrap"
+                          v-text="platformExtraFiles"
+                        ></pre>
+                      </ToggleCard>
                     </div>
                   </template>
                 </FieldItem>
@@ -445,7 +467,18 @@
   });
   const isPlatformCommandsEmpty = computed(() => {
     const cmds = platformCommands.value;
-    return isEmpty(cmds?.preBuild) && isEmpty(cmds?.build) && isEmpty(cmds?.runtimeEnv) && !cmds?.start;
+    return (
+      isEmpty(cmds?.preBuild) &&
+      isEmpty(cmds?.build) &&
+      isEmpty(cmds?.runtimeEnv) &&
+      !cmds?.start &&
+      !platformExtraFiles.value
+    );
+  });
+  const platformExtraFiles = computed(() => {
+    const extraFiles = appData.value?.buildConfig?.repoBuildConfig?.platformBuildConfig?.extraFiles;
+    if (isEmpty(extraFiles)) return '';
+    return (extraFiles as string[]).join('\n');
   });
 
   /**

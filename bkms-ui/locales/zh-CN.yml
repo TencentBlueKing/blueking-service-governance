@@ -1533,6 +1533,9 @@ CPU requests 使用率: CPU requests 使用率
 使用仓库 Dockerfile: 使用仓库 Dockerfile
 构建镜像: 构建镜像
 运行镜像: 运行镜像
+打包额外文件: 打包额外文件
+"每行一个，可填写文件路径或目录，相对构建目录，例如：": "每行一个，可填写文件路径或目录，相对构建目录，例如："
+文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。: 文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。
 请选择镜像: 请选择镜像
 请选择标签: 请选择标签
 该镜像已不在当前平台镜像列表中，请重新选择: 该镜像已不在当前平台镜像列表中，请重新选择

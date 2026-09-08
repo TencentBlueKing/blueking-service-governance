@@ -307,6 +307,7 @@ var _ = Describe("App serializers", func() {
 						RuntimeEnv: []string{"apt-get update"},
 						Start:      "./app",
 					},
+					ExtraFiles: []string{"data/key.pem", "certs"},
 				},
 			},
 		})
@@ -321,6 +322,7 @@ var _ = Describe("App serializers", func() {
 				RuntimeEnv: []string{"apt-get update"},
 				Start:      "./app",
 			},
+			ExtraFiles: []string{"data/key.pem", "certs"},
 		}))
 	})
 
@@ -748,6 +750,7 @@ var _ = Describe("App serializers", func() {
 						RuntimeEnv: []string{"apt-get update"},
 						Start:      "./app",
 					},
+					ExtraFiles: []string{" data/key.pem ", "certs"},
 				},
 			},
 		}).ToModel("app-id")
@@ -763,6 +766,7 @@ var _ = Describe("App serializers", func() {
 				RuntimeEnv: []string{"apt-get update"},
 				Start:      "./app",
 			},
+			ExtraFiles: []string{"data/key.pem", "certs"},
 		}))
 	})
 
@@ -952,6 +956,18 @@ var _ = Describe("Platform build serializer edge cases", func() {
 			Expect(err).To(MatchError(ContainSubstring(
 				"buildConfig.repoBuildConfig.platformBuildConfig" +
 					".commands.build[0] must not contain newline characters",
+			)))
+		})
+	})
+
+	Context("extra files validation", func() {
+		It("rejects parent path segments", func() {
+			_, err := buildRepoInput(func(r *serializer.RepoBuildConfigInput) {
+				r.PlatformBuildConfig.ExtraFiles = []string{"foo/../bar"}
+			}).ToModel("app-id")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[0] must not contain '..'",
 			)))
 		})
 	})

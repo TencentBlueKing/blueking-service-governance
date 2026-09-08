@@ -185,6 +185,8 @@ type PlatformBuildConfigOutputObj struct {
 	RunnerImage string `json:"runnerImage"`
 	// 命令配置
 	Commands *BuildCommandsOutputObj `json:"commands,omitempty"`
+	// 打包额外文件路径，相对构建目录
+	ExtraFiles []string `json:"extraFiles,omitempty"`
 }
 
 // BuildCommandsOutputObj is the platform build commands output.
@@ -248,6 +250,7 @@ func (o *BuildConfigOutputObj) FromModel(cfg *build.Config) *BuildConfigOutputOb
 			o.RepoBuildConfig.PlatformBuildConfig = &PlatformBuildConfigOutputObj{
 				BuilderImage: platformCfg.BuilderImage,
 				RunnerImage:  platformCfg.RunnerImage,
+				ExtraFiles:   platformCfg.ExtraFiles,
 			}
 			if platformCfg.Commands != nil {
 				o.RepoBuildConfig.PlatformBuildConfig.Commands = &BuildCommandsOutputObj{

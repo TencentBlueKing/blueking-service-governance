@@ -77,6 +77,9 @@ const (
 	DockerfileRuntimeEnvCommands = "BKMS_DOCKERFILE_RUNTIME_ENV_COMMANDS"
 	// DockerfileStartCommand 平台生成 Dockerfile 模式下的启动命令
 	DockerfileStartCommand = "BKMS_DOCKERFILE_START_COMMAND"
+	// DockerfileExtraFiles 平台生成 Dockerfile 模式下的打包额外文件路径列表
+	// 当前使用 JSON 字符串数组传递，需要 Dockerfile Generator 按相同协议解析
+	DockerfileExtraFiles = "BKMS_DOCKERFILE_EXTRA_FILES"
 
 	// 基于 Git 源码仓库构建 HelmChart 流水线变量
 

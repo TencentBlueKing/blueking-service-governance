@@ -1,0 +1,51 @@
+meta {
+  name: update-build-config-platform-build-should-fail-when-extra-files-has-parent-path
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{serviceURL}}/apps/{{testBuildTrpcAppID}}/build-configs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "sourceType": "codeRepository",
+    "codeRepo": {
+      "type": "TGit",
+      "defaultBranch": "main",
+      "repoAlias": "test-repo",
+      "repoURL": "https://git.com/bkms-govern.git",
+      "sourceDir": ".",
+      "imageBuildMode": "platform",
+      "platformBuildConfig": {
+        "builderImage": "golang:1.24",
+        "runnerImage": "debian:12",
+        "extraFiles": [
+          "data/key.pem",
+          "foo/../bar"
+        ]
+      }
+    }
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject extra files containing parent path segments", () => {
+    expect(res.body.error.message).to.contains(
+      "buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[1] must not contain '..'"
+    );
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
