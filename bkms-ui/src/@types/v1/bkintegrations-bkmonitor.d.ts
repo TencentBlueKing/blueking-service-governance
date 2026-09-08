@@ -319,6 +319,13 @@ export interface ListApmsRequest {
   workspaceID: string;
 }
 
+export interface ListDashboardDirectoryTreeRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
 export interface ListUserGroupsRequest {
   /**
    * 工作空间 ID
@@ -442,6 +449,10 @@ export interface GetAlertDetailResp {
 
 export interface ListApmsResp {
   data?: ListApmOutput;
+}
+
+export interface ListDashboardsResp {
+  data?: DashboardDirectoryOutput[];
 }
 
 export interface ListUserGroupsResp {
@@ -775,6 +786,23 @@ export interface UserGroup {
    * Users 通知接收人员
    */
   users?: UserGroupUser[];
+}
+
+export interface DashboardDirectoryOutput {
+  dashboards?: DashboardOutput[];
+  id?: number;
+  title?: string;
+  uid?: string;
+  uri?: string;
+  url?: string;
+}
+
+export interface DashboardOutput {
+  id?: number;
+  title?: string;
+  uid?: string;
+  uri?: string;
+  url?: string;
 }
 
 export interface ListApmOutput {

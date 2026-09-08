@@ -6,9 +6,25 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListAppConfigFileVersionsRequest, PaginatedAppConfigFileVersionOutputObjs, CompareAppConfigFileVersionsRequest, CompareAppConfigFileVersionsOutput, GetAppConfigFileVersionRequest, AppConfigFileVersionOutputObj, DeleteAppConfigFileVersionRequest, AppConfigFileEmptyOutput, RollbackAppConfigFileVersionRequest, AppConfigFileOutputObj, ListAppConfigFilesRequest, ListAppConfigFilesOutput, CreateAppConfigFileRequest, CreateAppConfigFileOutput, UpdateAppConfigFileRequest, UpdateAppConfigFileOutput, DeleteAppConfigFileRequest, UpdateAppConfigFileContentRequest, UpdateAppConfigFileContentOutput, GetAppConfigFileDetailsRequest, GetAppConfigFileDetailsOutput, UpdateAppConfigFileOverlayContentRequest, PreviewOverlayMergeRequest } from '~/@types/v1/app-config-files';
+import type { AppConfigFileDefUpdateRequest, AppConfigFileDefUpdateOutput, ListAppConfigFileVersionsRequest, PaginatedAppConfigFileVersionOutputObjs, CompareAppConfigFileVersionsRequest, CompareAppConfigFileVersionsOutput, GetAppConfigFileVersionRequest, AppConfigFileVersionOutputObj, DeleteAppConfigFileVersionRequest, AppConfigFileEmptyOutput, RollbackAppConfigFileVersionRequest, AppConfigFileOutputObj, ListAppConfigFilesRequest, ListAppConfigFilesOutput, CreateAppConfigFileRequest, CreateAppConfigFileOutput, UpdateAppConfigFileRequest, UpdateAppConfigFileOutput, DeleteAppConfigFileRequest, UpdateAppConfigFileContentRequest, UpdateAppConfigFileContentOutput, GetAppConfigFileDetailsRequest, GetAppConfigFileDetailsOutput, UpdateAppConfigFileOverlayContentRequest, PreviewOverlayMergeRequest } from '~/@types/v1/app-config-files';
 
 export const AppConfigFilesService = {
+  /**
+   * 修改应用配置文件的逻辑定义信息
+   *
+   * @method PUT
+   * @path /apps/{appID}/app-config-file-defs/{id}
+   * @tag app-config-files
+   * @param appID path string required 应用 ID
+   * @param id path string required 应用配置文件 Def ID
+   * @param body body AppConfigFileDefUpdateInput required 更新逻辑定义信息请求
+   * @response 200 AppConfigFileDefUpdateOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  appConfigFileDefUpdate: async <Request extends AppConfigFileDefUpdateRequest = AppConfigFileDefUpdateRequest, ResponseData = AppConfigFileDefUpdateOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/app-config-file-defs/{id}')(params, config),
   /**
    * 查询应用配置文件版本列表
    *

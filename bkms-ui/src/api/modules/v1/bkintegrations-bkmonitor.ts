@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetApmServiceNameRequest, GetApmServiceNameOutput, GetInstanceTimeSeriesRequest, MetricTimeSeries, GetEnvApmRequest, GetEnvApmOutput, CreateEnvApmRequest, ApmOutput, BindApmToEnvRequest, EmptyOutput, ListAlertStrategiesRequest, ListAlertStrategiesOutput, CreateAlertStrategyRequest, AlertStrategyOutput, GetAlertStrategyRequest, UpdateAlertStrategyRequest, DeleteAlertStrategyRequest, ListAlertEventsByStrategyRequest, ListAlertEventsOutput, SwitchAlertStrategyRequest, SyncAlertStrategyRequest, ListAlertEventsRequest, GetAlertDetailRequest, ListApmsRequest, ListApmOutput, ListUserGroupsRequest, ListUserGroupsOutput, CreateUserGroupRequest, UserGroupDetail, GetUserGroupRequest, UpdateUserGroupRequest, DeleteUserGroupRequest } from '~/@types/v1/bkintegrations-bkmonitor';
+import type { GetApmServiceNameRequest, GetApmServiceNameOutput, GetInstanceTimeSeriesRequest, MetricTimeSeries, GetEnvApmRequest, GetEnvApmOutput, CreateEnvApmRequest, ApmOutput, BindApmToEnvRequest, EmptyOutput, ListAlertStrategiesRequest, ListAlertStrategiesOutput, CreateAlertStrategyRequest, AlertStrategyOutput, GetAlertStrategyRequest, UpdateAlertStrategyRequest, DeleteAlertStrategyRequest, ListAlertEventsByStrategyRequest, ListAlertEventsOutput, SwitchAlertStrategyRequest, SyncAlertStrategyRequest, ListAlertEventsRequest, GetAlertDetailRequest, ListApmsRequest, ListApmOutput, ListDashboardDirectoryTreeRequest, DashboardDirectoryOutput, ListUserGroupsRequest, ListUserGroupsOutput, CreateUserGroupRequest, UserGroupDetail, GetUserGroupRequest, UpdateUserGroupRequest, DeleteUserGroupRequest } from '~/@types/v1/bkintegrations-bkmonitor';
 
 export const BkintegrationsBkmonitorService = {
   /**
@@ -291,6 +291,20 @@ export const BkintegrationsBkmonitorService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/apms')(params, config),
+  /**
+   * 获取蓝鲸监控仪表盘数据
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/bkmonitor/dashboards
+   * @tag bkintegrations-bkmonitor
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 ListDashboardsResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listDashboardDirectoryTree: async <Request extends ListDashboardDirectoryTreeRequest = ListDashboardDirectoryTreeRequest, ResponseData = DashboardDirectoryOutput[]>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/bkmonitor/dashboards')(params, config),
   /**
    * 查询告警组列表
    *
