@@ -350,7 +350,10 @@
               </Form.FormItem>
 
               <!-- 权重因子：开启后关联环境才可配置动态权重 -->
-              <Form.FormItem :label="$t('权重因子')">
+              <Form.FormItem
+                v-if="showWeightFactor"
+                :label="$t('权重因子')"
+              >
                 <div class="flex items-center gap-[10px]">
                   <Switcher
                     v-model="formModel.enableWeightFactor"
@@ -603,6 +606,7 @@
   const showHealthCheckTip = computed(
     () => formModel.value.registerMode !== undefined && !!formModel.value.enableHealthCheck,
   );
+  const showWeightFactor = computed(() => !!formModel.value.createNewService);
 
   const servicePortHint = computed(() =>
     isImmediateRegister(formModel.value)
@@ -844,13 +848,15 @@
       const servicePort = normalizeServicePort();
 
       // 处理 operator：如果是 createNewService，将数组转为逗号分隔的字符串
-      const operator =
-        formModel.value.createNewService && formModel.value.operator ? formModel.value.operator.join(',') : '';
+      const createNewService = !!formModel.value.createNewService;
+      const operator = createNewService && formModel.value.operator ? formModel.value.operator.join(',') : '';
+      const { enableWeightFactor, ...formData } = formModel.value;
 
       // 构建请求参数，确保类型正确
       const requestParams: CreateAppPolarisConfigRequest = {
         appID: appDetailStore.appID,
-        ...(formModel.value as FormModelType),
+        ...(formData as FormModelType),
+        ...(createNewService ? { enableWeightFactor } : {}),
         servicePort,
         operator,
       } as CreateAppPolarisConfigRequest;
@@ -896,18 +902,19 @@
       const servicePort = normalizeServicePort();
       const needsRedeployTip = hasRedeployFieldChanged.value;
       const operator = formModel.value.operator?.join(',');
+      const createNewService = !!formModel.value.createNewService;
       // 构建更新参数，确保必需字段存在
       const params: PatchAppPolarisConfigRequest = {
         appID: appDetailStore.appID,
         configName: props.editData?.name || '',
         servicePort,
         enableHealthCheck: formModel.value.enableHealthCheck,
-        enableWeightFactor: formModel.value.enableWeightFactor,
+        ...(createNewService ? { enableWeightFactor: formModel.value.enableWeightFactor } : {}),
         serviceLabels: formModel.value.serviceLabels,
         instanceKey: formModel.value.instanceKey || '',
         polarisToken: formModel.value.polarisToken,
         scopeEnvNames: formModel.value.scopeEnvNames as string[],
-        ...(formModel.value.createNewService && operator !== props.editData?.operator ? { operator } : {}),
+        ...(createNewService && operator !== props.editData?.operator ? { operator } : {}),
       };
       await PolarisConfigService.patchAppPolarisConfig(params);
       forceCleanDirtyTag(() => {
