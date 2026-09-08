@@ -2043,3 +2043,25 @@ HostPort 端口映射: HostPort Mapping
 填写容器端口后自动生成: Container port automatically generated
 当前空间没有绑定联邦集群的环境: No environments bound to a federation cluster in the current workspace
 HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only takes effect for environments bound to federation clusters
+仪表盘: Dashboard
+配置仪表盘: Configure Dashboards
+暂未配置仪表盘: No dashboards configured
+添加仪表盘: Add Dashboard
+编辑仪表盘: Edit Dashboard
+请选择仪表盘: Select a dashboard
+仪表盘名称: Dashboard Name
+展示名称: Display Name
+前往监控平台新建: Create in Monitoring Platform
+展示名称不能超过 64 个字符: Display name cannot exceed 64 characters
+请选择仪表盘名称: Please select a dashboard name
+请选择监控平台中的仪表盘: Select a dashboard from the monitoring platform
+刷新仪表盘列表: Refresh dashboard list
+仪表盘列表已刷新: Dashboard list refreshed
+从监控平台已有仪表盘中选择，新建后可刷新列表: Select from existing monitoring dashboards. Refresh the list after creating a new one.
+选填，不填则使用仪表盘名称: Optional. Defaults to the dashboard name
+已添加到本应用: Added to this application
+确认删除该仪表盘？: Delete this dashboard?
+"展示名称: {name}": "Display name: {name}"
+可嵌入蓝鲸监控仪表盘，查看应用指标。配置步骤见 {0}: Embed BlueKing Monitor dashboards to view application metrics. See {0} for setup steps.
+仪表盘地址缺失: Dashboard URL missing
+当前仪表盘缺少监控平台访问地址，请重新配置: The selected dashboard does not have a monitoring platform URL. Please reconfigure it.

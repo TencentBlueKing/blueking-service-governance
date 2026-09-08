@@ -19,7 +19,7 @@
 export default function useToLink() {
   /**
    * 统一跳转辅助（跨域跳转统一开新标签页；同域跳转请直接使用 vue-router）
-   * @param type 跳转目标类型，支持 'devops' | 'bcs' | 'monitor' | 'monitor-alert'
+   * @param type 跳转目标类型，支持 'devops' | 'bcs' | 'monitor' | 'monitor-grafana' | 'monitor-alert'
    * @param bKProject 业务项目 ID（monitor 类型下为 bkMonitorProjectID）
    * @param alertID 仅 'monitor-alert' 必填，告警事件 ID
    */
@@ -35,6 +35,10 @@ export default function useToLink() {
         break;
       case 'monitor':
         url = `${import.meta.env.BK_MONITOR}/?bizId=${bKProject}#/apm/home`;
+        break;
+      case 'monitor-grafana':
+        // 监控平台 Grafana 仪表盘页
+        url = `${import.meta.env.BK_MONITOR}/?bizId=${bKProject}#/grafana`;
         break;
       case 'monitor-alert':
         if (!alertID) return;

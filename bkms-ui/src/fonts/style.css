@@ -62,6 +62,9 @@ url("fonts/iconcool.eot?#iefix") format("embedded-opentype");
 .bkms-icon-close-circle-shape:before {
 	content: "\e10f";
 }
+.bkms-icon-dashboard-2-shape:before {
+	content: "\e1bf";
+}
 .bkms-icon-info-circle-shape:before {
 	content: "\e10e";
 }

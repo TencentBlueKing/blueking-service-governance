@@ -83,6 +83,8 @@ export const DOC_LINKS = {
   POLARIS_INSTANCE_LIFECYCLE: '/p/4034655971',
   // HostPort 详细文档
   HOST_PORT: '/p/4036088770',
+  // 应用仪表盘配置指引
+  DASHBOARD_GUIDE: '/p/4037840772',
 };
 
 /**
