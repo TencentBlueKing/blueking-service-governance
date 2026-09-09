@@ -36,19 +36,18 @@ type trpcServiceConfig struct {
 	} `yaml:"server"`
 }
 
-// GetTrpcServiceNames 获取指定应用和环境下 tRPC 配置文件中的所有服务名
-// 该方法组合了 GetEnvContent 和 parseTrpcServiceNames，供需要从环境配置中读取服务名的业务流程使用
+// GetTrpcServiceNames 获取指定应用和环境下 tRPC 配置文件中的所有服务名。
+// 该方法组合了 GetFrameworkContent 和 parseTrpcServiceNames，供需要从环境配置中读取服务名的业务流程使用。
 func GetTrpcServiceNames(
 	ctx context.Context,
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
+	provider AppConfigContentProvider,
 	appID, envName string,
 ) ([]string, error) {
-	_, _, content, err := GetEnvContent(ctx, store, defStore, appID, envName)
+	cfwc, err := provider.GetFrameworkContent(ctx, appID, envName)
 	if err != nil {
 		return nil, err
 	}
-	return parseTrpcServiceNames(content)
+	return parseTrpcServiceNames(cfwc.Content)
 }
 
 // parseTrpcServiceNames 从 tRPC 配置 YAML 内容中提取所有 server.service[].name

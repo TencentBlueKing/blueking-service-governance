@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+// defCollectionName 存储配置文件定义信息
 const defCollectionName = "app_config_file_defs"
 
 // AppConfigFileDefStore 配置文件 def 的存储接口。
@@ -118,7 +119,13 @@ func (s *AppConfigFileDefStoreMongo) ListByApp(
 
 	filter := bson.M{"appID": appID}
 	if listOpts.filterConfigKind != nil {
-		filter["configKind"] = string(*listOpts.filterConfigKind)
+		if *listOpts.filterConfigKind == ConfigKindFramework {
+			filter["configKind"] = bson.M{
+				"$in": []string{string(ConfigKindFramework), ""},
+			}
+		} else {
+			filter["configKind"] = string(*listOpts.filterConfigKind)
+		}
 	}
 
 	findOpts := options.Find().SetSort(bson.D{{Key: "name", Value: 1}})

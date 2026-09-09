@@ -16,20 +16,30 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package appcfg
+package hooks_test
 
 import (
-	"go.uber.org/fx"
+	"testing"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
-var FxModule = fx.Module("appcfg",
-	database.PrivateFxModule,
-	fx.Provide(
-		fx.Annotate(NewAppConfigFileStoreMongo, fx.As(new(AppConfigFileStore))),
-		fx.Annotate(NewAppConfigFileDefStoreMongo, fx.As(new(AppConfigFileDefStore))),
-		fx.Annotate(NewAppConfigFileVersionStoreMongo, fx.As(new(AppConfigFileVersionStore))),
-		NewContentProvider,
-	),
-)
+func TestHooks(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "AppCfg Hooks Suite")
+}
+
+var _ = BeforeSuite(func() {
+	if err := testutil.SetUpGlobalDatabase(); err != nil {
+		panic("failed to set up global database: " + err.Error())
+	}
+})
+
+var _ = AfterSuite(func() {
+	if err := testutil.TeardownGlobalDatabase(); err != nil {
+		panic("failed to teardown global database: " + err.Error())
+	}
+})

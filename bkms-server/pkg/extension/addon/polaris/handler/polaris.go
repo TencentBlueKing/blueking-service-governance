@@ -27,6 +27,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/instancestats"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/serializer"
@@ -101,12 +102,16 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 		return
 	}
 
+	cfgProvider := appcfg.NewContentProvider(
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
+		h.registry.AppConfigFileVersionStore,
+	)
 	outputList := lo.Map(configs, func(config *polaris.PolarisConfig, _ int) *serializer.PolarisConfigOutputObj {
 		warnings := polaris.CollectConfigWarnings(
 			ctx,
 			h.registry.AppModelStore,
-			h.registry.AppConfigFileStore,
-			h.registry.AppConfigFileDefStore,
+			cfgProvider,
 			config,
 		)
 		return new(serializer.PolarisConfigOutputObj).FromModel(*config, warnings)
@@ -477,8 +482,11 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 	warnings := polaris.CollectConfigWarnings(
 		ctx,
 		h.registry.AppModelStore,
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		appcfg.NewContentProvider(
+			h.registry.AppConfigFileStore,
+			h.registry.AppConfigFileDefStore,
+			h.registry.AppConfigFileVersionStore,
+		),
 		config,
 	)
 

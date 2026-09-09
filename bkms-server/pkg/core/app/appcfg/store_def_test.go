@@ -73,6 +73,19 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 			Expect(got.MountDir).To(Equal("/data/conf"))
 			Expect(got.EnvConfigMode.IsUnifiedConfig).To(BeTrue())
 		})
+
+		It("should preserve explicit empty mounted env names", func() {
+			def := newDef()
+			def.EnvConfigMode.MountedEnvNames = []string{}
+
+			id, err := store.Add(ctx, def)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := store.GetByID(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.EnvConfigMode.MountedEnvNames).NotTo(BeNil())
+			Expect(got.EnvConfigMode.MountedEnvNames).To(BeEmpty())
+		})
 	})
 
 	Context("Update", func() {

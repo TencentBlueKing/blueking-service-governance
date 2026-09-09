@@ -33,13 +33,15 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
 
-var _ = Describe("GetEnvContent", func() {
+var _ = Describe("GetFrameworkContent", func() {
 	var diApp *fxtest.App
 	var ctx context.Context
 	var appStore bkmsapp.ApplicationStore
 	var store appcfg.AppConfigFileStore
 	var defStore appcfg.AppConfigFileDefStore
+	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
+	var provider appcfg.AppConfigContentProvider
 
 	BeforeEach(func() {
 		var err error
@@ -56,11 +58,12 @@ var _ = Describe("GetEnvContent", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &store, &defStore),
+			fx.Populate(&appStore, &store, &defStore, &versionStore),
 		)
 		diApp.RequireStart()
 
 		app = dbfactory.Application(ctx, appStore)
+		provider = appcfg.NewContentProvider(store, defStore, versionStore)
 	})
 
 	createDef := func(name string) bson.ObjectID {
@@ -96,10 +99,10 @@ var _ = Describe("GetEnvContent", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should return default config when querying non-existent env", func() {
-			_, _, content, err := appcfg.GetEnvContent(ctx, store, defStore, app.ID, "test-env")
+		It("should fall back to default config when querying non-existent env", func() {
+			cfwc, err := provider.GetFrameworkContent(ctx, app.ID, "test-env")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
+			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
 		})
 	})
 
@@ -136,20 +139,20 @@ var _ = Describe("GetEnvContent", func() {
 		})
 
 		It("should return env-specific config when querying that env", func() {
-			_, _, content, err := appcfg.GetEnvContent(ctx, store, defStore, app.ID, "prod")
+			cfwc, err := provider.GetFrameworkContent(ctx, app.ID, "prod")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(content).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
+			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
 		})
 
-		It("should return default config when querying non-existent env", func() {
-			_, _, content, err := appcfg.GetEnvContent(ctx, store, defStore, app.ID, "test-env")
+		It("should fall back to default config when querying non-existent env", func() {
+			cfwc, err := provider.GetFrameworkContent(ctx, app.ID, "test-env")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
+			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
 		})
 	})
 
 	Context("when the env-specific config is an overlay", func() {
-		It("should return the overlay logical file and compiled content", func() {
+		It("should return the compiled content after overlay merge", func() {
 			defID := createDef(appcfg.DefaultAppConfigFileName)
 			baseContent := "database:\n  host: ${{ env.BASE_HOST }}\n  port: 3306\n"
 			baseID, err := store.Add(ctx, appcfg.AppConfigFile{
@@ -180,10 +183,156 @@ var _ = Describe("GetEnvContent", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, _, content, err := appcfg.GetEnvContent(ctx, store, defStore, app.ID, "prod")
+			cfwc, err := provider.GetFrameworkContent(ctx, app.ID, "prod")
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
+			Expect(cfwc.Content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
 		})
+	})
+})
+
+var _ = Describe("GetPlainContents", func() {
+	var diApp *fxtest.App
+	var ctx context.Context
+	var appStore bkmsapp.ApplicationStore
+	var store appcfg.AppConfigFileStore
+	var defStore appcfg.AppConfigFileDefStore
+	var versionStore appcfg.AppConfigFileVersionStore
+	var app *bkmsapp.Application
+	var provider appcfg.AppConfigContentProvider
+
+	BeforeEach(func() {
+		var err error
+
+		ctx = context.Background()
+		err = testutil.CleanupCollection("app_config_file_defs")
+		Expect(err).NotTo(HaveOccurred())
+		err = testutil.CleanupCollection("app_config_files")
+		Expect(err).NotTo(HaveOccurred())
+		err = testutil.CleanupCollection("applications")
+		Expect(err).NotTo(HaveOccurred())
+
+		diApp = fxtest.New(
+			GinkgoT(),
+			bkmsapp.FxModule,
+			appcfg.FxModule,
+			fx.Populate(&appStore, &store, &defStore, &versionStore),
+		)
+		diApp.RequireStart()
+
+		app = dbfactory.Application(ctx, appStore)
+		provider = appcfg.NewContentProvider(store, defStore, versionStore)
+	})
+
+	AfterEach(func() {
+		diApp.RequireStop()
+	})
+
+	createPlainDef := func(name, mountDir string) bson.ObjectID {
+		id, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+			AppID:      app.ID,
+			Name:       name,
+			ConfigKind: appcfg.ConfigKindPlain,
+			MountDir:   mountDir,
+			Creator:    "tester",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return id
+	}
+
+	addDefaultFile := func(defID bson.ObjectID, content string) {
+		_, err := store.Add(ctx, appcfg.AppConfigFile{
+			DefID:   defID,
+			AppID:   app.ID,
+			EnvName: appcfg.EnvNameDefault,
+			Type:    appcfg.AppConfigFileTypeNormal,
+			VersionedContent: appcfg.VersionedContent{
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	It("should return empty when no plain defs exist", func() {
+		result, err := provider.GetPlainContents(ctx, app.ID, "prod")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(BeEmpty())
+	})
+
+	It("should return multiple plain files with correct mount dirs", func() {
+		defA := createPlainDef("nginx.conf", "/etc/nginx")
+		addDefaultFile(defA, "worker_processes 4;")
+
+		defB := createPlainDef("redis.conf", "/etc/redis")
+		addDefaultFile(defB, "maxmemory 256mb")
+
+		result, err := provider.GetPlainContents(ctx, app.ID, "prod")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(HaveLen(2))
+
+		names := []string{result[0].Name, result[1].Name}
+		Expect(names).To(ContainElements("nginx.conf", "redis.conf"))
+	})
+
+	It("should use env-specific file when it exists", func() {
+		defID := createPlainDef("app.conf", "/etc/app")
+		addDefaultFile(defID, "default-content")
+
+		envContent := "prod-content"
+		_, err := store.Add(ctx, appcfg.AppConfigFile{
+			DefID:   defID,
+			AppID:   app.ID,
+			EnvName: "prod",
+			Type:    appcfg.AppConfigFileTypeNormal,
+			VersionedContent: appcfg.VersionedContent{
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &envContent,
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := provider.GetPlainContents(ctx, app.ID, "prod")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(HaveLen(1))
+		Expect(result[0].Content).To(Equal("prod-content"))
+		Expect(result[0].MountDir).To(Equal("/etc/app"))
+	})
+
+	It("should fall back to default when env-specific file does not exist", func() {
+		defID := createPlainDef("app.conf", "/etc/app")
+		addDefaultFile(defID, "default-content")
+
+		result, err := provider.GetPlainContents(ctx, app.ID, "staging")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(HaveLen(1))
+		Expect(result[0].Content).To(Equal("default-content"))
+	})
+
+	It("should return empty when mounted env names is explicitly empty", func() {
+		defID, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+			AppID:      app.ID,
+			Name:       "app.conf",
+			ConfigKind: appcfg.ConfigKindPlain,
+			MountDir:   "/etc/app",
+			Creator:    "tester",
+			EnvConfigMode: appcfg.EnvConfigMode{
+				IsUnifiedConfig: true,
+				MountedEnvNames: []string{},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		addDefaultFile(defID, "default-content")
+
+		result, err := provider.GetPlainContents(ctx, app.ID, "staging")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(BeEmpty())
 	})
 })
