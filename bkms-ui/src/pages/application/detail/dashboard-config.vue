@@ -182,23 +182,6 @@
           {{ $t('从监控平台已有仪表盘中选择，新建后可刷新列表') }}
         </div>
       </Form.FormItem>
-      <Form.FormItem
-        :label="$t('展示名称')"
-        property="title"
-      >
-        <div class="flex items-center gap-[6px]">
-          <Input
-            v-model.trim="formData.title"
-            class="min-w-0 flex-1"
-            :maxlength="64"
-            :placeholder="$t('选填，不填则使用仪表盘名称')"
-          />
-          <span
-            aria-hidden="true"
-            class="w-[32px] shrink-0"
-          ></span>
-        </div>
-      </Form.FormItem>
     </Form>
     <template #footer>
       <Button
@@ -221,7 +204,7 @@
   import { computed, h, ref, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
-  import { Alert, Button, Dialog, Form, InfoBox, Input, Message, OverflowTitle, Select, Sideslider } from 'bkui-vue';
+  import { Alert, Button, Dialog, Form, InfoBox, Message, OverflowTitle, Select, Sideslider } from 'bkui-vue';
   import { Plus, Share } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import DividerHeader from '~/components/divider-header.vue';
@@ -263,8 +246,6 @@
     title: '',
     uid: '',
   });
-  /** 记录最近一次自动填充的展示名称，用于判断用户是否已手动改过 */
-  const lastAutoTitle = ref('');
 
   const isEdit = computed(() => Boolean(editingRow.value));
   /** 可选仪表盘：补齐当前选中项（可能已不在监控列表中），并把已绑定的排到末尾 */
@@ -282,14 +263,6 @@
     return items.sort((a, b) => Number(isUidTaken(a.uid)) - Number(isUidTaken(b.uid)));
   });
   const formRules = {
-    // 展示名称选填，填写时限制长度
-    title: [
-      {
-        message: t('展示名称不能超过 64 个字符'),
-        trigger: 'blur',
-        validator: (value: string) => !value || value.length <= 64,
-      },
-    ],
     uid: [{ message: t('请选择仪表盘名称'), required: true, trigger: 'change' }],
   };
   const { curPageData, pagination, pageChange, pageSizeChange, handleResetPage } = usePageConf(
@@ -342,7 +315,6 @@
       title: row.title || '',
       uid: row.uid || '',
     };
-    lastAutoTitle.value = monitorDashboards.value.find(item => item.uid === row.uid)?.title || '';
     dialogVisible.value = true;
   }
 
@@ -381,14 +353,10 @@
     }
   }
 
-  /** 切换仪表盘时自动填充展示名称，不覆盖用户已手动修改的值 */
+  /** 切换仪表盘时同步展示名称，接口仍需传 title */
   function handleUidChange(uid: string) {
     const selected = catalogOptions.value.find(item => item.uid === uid);
-    const nextTitle = selected?.title || uid;
-    if (!formData.value.title || formData.value.title === lastAutoTitle.value) {
-      formData.value.title = nextTitle;
-    }
-    lastAutoTitle.value = nextTitle;
+    formData.value.title = selected?.title || uid;
   }
 
   /** 该仪表盘是否已被本应用绑定（编辑时排除自身） */
@@ -405,7 +373,6 @@
 
   function resetForm() {
     formData.value = { title: '', uid: '' };
-    lastAutoTitle.value = '';
     formRef.value?.clearValidate();
   }
 
