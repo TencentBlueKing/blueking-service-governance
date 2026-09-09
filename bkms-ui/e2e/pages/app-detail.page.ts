@@ -21,6 +21,7 @@ import AppSpecPage from './app-detail/app-spec.page';
 import ArtifactPage from './app-detail/artifact.page';
 import BuildConfigPage from './app-detail/build-config.page';
 import BuildManagementPage from './app-detail/build-management.page';
+import DeployInstancePage from './app-detail/deploy-instance.page';
 import DeployPage from './app-detail/deploy.page';
 import { type BasePageDependencies } from './base.page';
 
@@ -31,7 +32,8 @@ import { type BasePageDependencies } from './base.page';
  * 目前 E2E 覆盖的应用类型默认为 TRPC，后续如需 Helm / TAF 可通过 `type` 参数覆盖。
  *
  * 实现按业务域拆分在 `pages/app-detail/` 目录下，各自继承 AppDetailBase：
- * - `deploy`          部署管理：部署、扩缩容、移除部署、实例列表
+ * - `deploy`          部署管理：部署、扩缩容、移除部署、页签导航
+ * - `deployInstance`  部署管理实例列表：实例展示、行操作、批量操作、管理命令、联邦/特性环境
  * - `appConfig`       应用配置：环境视角、环境变量、资源规格、开发模式
  * - `appSpec`         运行配置卡片：健康探针、生命周期、元数据、更新策略
  * - `buildConfig`     构建配置（基本信息页）
@@ -57,8 +59,11 @@ export default class AppDetailPage extends AppDetailBase {
   /** 构建管理域：构建记录、构建日志 */
   readonly buildManagement: BuildManagementPage;
 
-  /** 部署管理域：部署、扩缩容、移除部署、实例列表 */
+  /** 部署管理域：部署、扩缩容、移除部署、页签导航 */
   readonly deploy: DeployPage;
+
+  /** 部署管理实例列表域：实例展示、行操作、批量操作、管理命令、联邦/特性环境 */
+  readonly deployInstance: DeployInstancePage;
 
   constructor(deps: BasePageDependencies) {
     super(deps);
@@ -68,6 +73,7 @@ export default class AppDetailPage extends AppDetailBase {
     this.buildConfig = new BuildConfigPage(deps);
     this.buildManagement = new BuildManagementPage(deps);
     this.deploy = new DeployPage(deps);
+    this.deployInstance = new DeployInstancePage(deps);
   }
 
   /** 框架配置文件 tab 的 Monaco 编辑器（monaco 实例根，高度随宿主高度链塌陷） */

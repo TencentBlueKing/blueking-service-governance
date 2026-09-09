@@ -7,10 +7,10 @@
  *
  *  http://opensource.org/licenses/MIT
  *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
- * OF ANY KIND, either express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
@@ -24,8 +24,9 @@ type DeploymentTab = 'event' | 'history' | 'instance' | 'overview' | 'topo';
 /**
  * 部署管理域 Page Object。
  *
- * 覆盖：立即部署、扩缩容（手动/自动）、移除部署、实例列表与部署页签。
+ * 覆盖：立即部署、扩缩容（手动/自动）、移除部署、部署页签导航。
  * 只封装原子 UI 操作；复杂业务流程（部署/扩缩容/移除）由 action 层组合完成。
+ * 实例列表相关操作与 mock 见 deploy-instance.page.ts。
  */
 export default class DeployPage extends AppDetailBase {
   private async assertCurrentDeployReadyForOperation(action: string) {
@@ -96,23 +97,6 @@ export default class DeployPage extends AppDetailBase {
 
   private getScaleSidesliderTitle() {
     return this.page.getByText('扩缩容配置', { exact: true }).first();
-  }
-
-  private async visibleInstanceRowTexts() {
-    const texts = await this.instanceRows().evaluateAll(rows =>
-      rows
-        .filter(row => {
-          const rect = row.getBoundingClientRect();
-          const style = window.getComputedStyle(row);
-          return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-        })
-        .map(row => row.textContent?.replace(/\s+/g, ' ').trim() || ''),
-    );
-
-    const instanceStatePattern = /\b(Running|Pending|Failed|Succeeded|Unknown|Healthy|Unhealthy|Error)\b/;
-    return texts.filter(
-      text => text && !text.includes('暂无数据') && !text.includes('No Data') && instanceStatePattern.test(text),
-    );
   }
 
   private waitForScaleResponse(path: string, method: string) {
@@ -236,11 +220,6 @@ export default class DeployPage extends AppDetailBase {
     if (tab === 'instance') {
       await this.expectDeploymentInstanceTabVisible();
     }
-  }
-
-  /** 获取实例列表主表的行，排除固定选择列和操作列复制出的 VXE 行 */
-  instanceRows(): Locator {
-    return this.page.locator('.instance-table .vxe-table--main-wrapper .vxe-table--body tr');
   }
 
   /**
@@ -397,36 +376,5 @@ export default class DeployPage extends AppDetailBase {
     await submitButton.click();
     await this.assertApiResponseOk(await responsePromise, '部署应用');
     await this.waitForSidesliderSettled();
-  }
-
-  /** 等待 SSE 推送后的实例数满足期望（达成返回 true，超时返回 false） */
-  async waitForInstanceCount(expected: number, { timeout = 180000 } = {}) {
-    try {
-      await expect.poll(() => this.instanceRows().count(), { timeout }).toBeGreaterThanOrEqual(expected);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /** 等待 SSE 推送后实例数精确匹配且每行状态均为 Running/Healthy */
-  async waitForInstanceReadyCount(expected: number, { timeout = 180000 } = {}) {
-    try {
-      await expect
-        .poll(
-          async () => {
-            const rowTexts = await this.visibleInstanceRowTexts();
-            return (
-              rowTexts.length === expected &&
-              rowTexts.every(text => text.includes('Running') && text.includes('Healthy'))
-            );
-          },
-          { timeout },
-        )
-        .toBe(true);
-      return true;
-    } catch {
-      return false;
-    }
   }
 }

@@ -72,7 +72,7 @@ export async function expectInstanceCount(
   expected: number,
   opts?: { timeoutMs?: number },
 ) {
-  const ok = await appDetailPage.deploy.waitForInstanceCount(expected, {
+  const ok = await appDetailPage.deployInstance.waitForInstanceCount(expected, {
     timeout: opts?.timeoutMs ?? 180000,
   });
   if (!ok) {
@@ -86,7 +86,7 @@ export async function expectInstanceReadyCount(
   expected: number,
   opts?: { timeoutMs?: number },
 ) {
-  const ok = await appDetailPage.deploy.waitForInstanceReadyCount(expected, {
+  const ok = await appDetailPage.deployInstance.waitForInstanceReadyCount(expected, {
     timeout: opts?.timeoutMs ?? 180000,
   });
   if (!ok) {
