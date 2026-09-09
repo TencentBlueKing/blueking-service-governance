@@ -123,6 +123,61 @@ func (h *Handler) preCheckDeployEnvVars(c *gin.Context, expectedAppType string) 
 	ginutils.OK(c, new(serializer.EnvVarPreCheckOutput).FromModel(result))
 }
 
+// preCheckDeployResourceConflicts 检查 AppModel 部署中与目标 namespace 的资源名称冲突
+func (h *Handler) preCheckDeployResourceConflicts(c *gin.Context, expectedAppType string) {
+	var uriInput serializer.AppEnvURIInput
+	if err := ginutils.BindURI(c, &uriInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	app, environment, err := h.validateAppModelDeployAppEnv(
+		ctx, uriInput.AppID, uriInput.EnvName, perm.TypeEdit, true,
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	if app.Type != expectedAppType {
+		bkerrs.AbortWithErr(c, bkerrs.New(
+			bkerrs.ErrCodeInvalidRequest,
+			fmt.Sprintf("invalid app type: expected %s, got %s", expectedAppType, app.Type),
+		))
+		return
+	}
+
+	checker := h.newResourceConflictPreChecker()
+	result, err := checker.Check(ctx, app, environment)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(
+			err, bkerrs.ErrCodeInternalServerError, "pre-check deployment resource conflicts",
+		))
+		return
+	}
+	ginutils.OK(c, new(serializer.ResourceConflictPreCheckOutput).FromModel(result))
+}
+
+func (h *Handler) newResourceConflictPreChecker() *deploypkg.ResourceConflictPreChecker {
+	builderService := workload.NewBuilderService(
+		h.registry.ScopedEnvVarStore,
+		h.registry.AppDepsVarReader,
+		h.registry.PolarisVarReader,
+		h.registry.WorkspaceCompsStore,
+		h.registry.PolarisConfigStore,
+		h.registry.HostPortStore,
+		h.registry.BscpCfgStore,
+		h.registry.AppModelStore,
+		h.registry.AppSpecStore,
+		h.registry.BuildConfigStore,
+	)
+	return deploypkg.NewResourceConflictPreChecker(
+		h.registry.AppModelStore,
+		builderService,
+		h.registry.AppModelDeployRecordStore,
+	)
+}
+
 func (h *Handler) newEnvVarPreChecker() *deploypkg.EnvVarPreChecker {
 	builderService := workload.NewBuilderService(
 		h.registry.ScopedEnvVarStore,

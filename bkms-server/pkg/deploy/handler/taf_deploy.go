@@ -68,6 +68,24 @@ func (h *Handler) PreCheckTafDeployEnvVars(c *gin.Context) {
 	h.preCheckDeployEnvVars(c, bkmsapp.AppTypeTAF)
 }
 
+// PreCheckTafDeployResourceConflicts checks K8s resource name conflicts before a TAF deployment.
+//
+//	@ID			PreCheckTafDeployResourceConflicts
+//	@Summary	TAF 部署前资源冲突检测
+//	@Tags		deploy
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID	path		string	true	"应用 ID"
+//	@Param		envName	path		string	true	"部署环境名称"
+//	@Success	200		{object}	serializer.ResourceConflictPreCheckOutput
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Failure	404		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/envs/{envName}/taf-deploys/resource-conflict-precheck [get]
+func (h *Handler) PreCheckTafDeployResourceConflicts(c *gin.Context) {
+	h.preCheckDeployResourceConflicts(c, bkmsapp.AppTypeTAF)
+}
+
 // CreateTafDeploy 创建 TAF 应用部署
 //
 //	@ID			CreateTafDeploy
