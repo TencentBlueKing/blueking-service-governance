@@ -44,32 +44,28 @@
   import { useSpaceStore } from '~/stores/space';
 
   const props = defineProps<{
+    /** 仪表盘访问 URL（接口返回的 url 参数） */
     url: string;
   }>();
 
   const spaceStore = useSpaceStore();
-  const bizId = ref('');
+  const bkCIProjectID = ref('');
   const isLoading = ref(false);
 
+  /** 拼接规则：{BK_MONITOR}/{resp.url}/?space_uid=bkci__{bkCIProjectID} */
   const iframeUrl = computed(() => {
-    if (!props.url || !bizId.value) return '';
+    if (!props.url || !bkCIProjectID.value) return '';
 
-    try {
-      const baseUrl = `${import.meta.env.BK_MONITOR}`.replace(/\/$/, '');
-      const url = new URL(props.url, `${baseUrl}/`);
-      url.searchParams.set('bizId', bizId.value);
-      url.searchParams.set('pure', '1');
-      return url.href;
-    } catch {
-      return '';
-    }
+    const baseUrl = `${import.meta.env.BK_MONITOR}`.replace(/\/+$/, '');
+    const dashboardPath = props.url.replace(/^\/+|\/+$/g, '');
+    return `${baseUrl}/${dashboardPath}/?space_uid=bkci__${bkCIProjectID.value}`;
   });
 
-  async function fetchBizId() {
+  async function fetchBkCIProjectID() {
     const workspaceData = await ApiServerService.GetWorkspace({
       workspaceID: spaceStore.currentSpace,
     }).catch(() => null);
-    bizId.value = workspaceData?.bkSystems?.bkMonitorProjectID || '';
+    bkCIProjectID.value = workspaceData?.bkSystems?.bkCIProjectID || '';
   }
 
   watch(
@@ -83,9 +79,9 @@
   watch(
     () => spaceStore.currentSpace,
     space => {
-      bizId.value = '';
+      bkCIProjectID.value = '';
       if (space) {
-        fetchBizId();
+        fetchBkCIProjectID();
       }
     },
     { immediate: true },

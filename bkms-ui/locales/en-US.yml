@@ -2063,5 +2063,3 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 确认删除该仪表盘？: Delete this dashboard?
 "展示名称: {name}": "Display name: {name}"
 可嵌入蓝鲸监控仪表盘，查看应用指标。配置步骤见 {0}: Embed BlueKing Monitor dashboards to view application metrics. See {0} for setup steps.
-仪表盘地址缺失: Dashboard URL missing
-当前仪表盘缺少监控平台访问地址，请重新配置: The selected dashboard does not have a monitoring platform URL. Please reconfigure it.

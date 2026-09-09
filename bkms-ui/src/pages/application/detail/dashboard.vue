@@ -111,29 +111,6 @@
             v-if="selectedDashboard?.url"
             :url="selectedDashboard.url"
           />
-          <!-- 绑定了仪表盘但缺少访问地址时的兜底空态 -->
-          <Exception
-            v-else
-            class="large-exception"
-            scene="part"
-            type="empty"
-          >
-            <template #type>
-              <img src="/empty.svg" />
-            </template>
-            <template #description>
-              <div class="text-[24px] text-[#313238]">{{ $t('仪表盘地址缺失') }}</div>
-              <div class="mt-[16px] text-[14px] leading-[22px] text-[#4D4F56]">
-                {{ $t('当前仪表盘缺少监控平台访问地址，请重新配置') }}
-              </div>
-            </template>
-            <Button
-              theme="primary"
-              @click="configVisible = true"
-            >
-              {{ $t('配置仪表盘') }}
-            </Button>
-          </Exception>
         </div>
       </div>
     </div>

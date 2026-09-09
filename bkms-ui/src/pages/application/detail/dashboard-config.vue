@@ -63,15 +63,9 @@
             <TableException type="empty" />
           </template>
           <TableColumn
-            field="uid"
+            field="title"
             :label="$t('仪表盘名称')"
             min-width="200"
-            show-overflow="tooltip"
-          />
-          <TableColumn
-            field="title"
-            :label="$t('展示名称')"
-            min-width="180"
             show-overflow="tooltip"
           />
           <TableColumn
@@ -133,7 +127,7 @@
               v-for="item in catalogOptions"
               :key="item.uid"
               :disabled="isUidTaken(item.uid)"
-              :label="item.uid"
+              :label="item.title || item.uid"
               :value="item.uid"
             >
               <div class="flex w-full min-w-0 items-center justify-between gap-[8px] leading-[20px]">
@@ -141,7 +135,7 @@
                   class="min-w-0 flex-1"
                   type="tips"
                 >
-                  {{ item.uid }}
+                  {{ item.title || item.uid }}
                 </OverflowTitle>
                 <span
                   v-if="isUidTaken(item.uid)"
@@ -149,13 +143,6 @@
                 >
                   {{ $t('已添加到本应用') }}
                 </span>
-                <OverflowTitle
-                  v-else-if="item.title && item.title !== item.uid"
-                  class="max-w-[40%] shrink-0 text-[12px] text-[#979BA5]"
-                  type="tips"
-                >
-                  {{ item.title }}
-                </OverflowTitle>
               </div>
             </Select.Option>
             <template #extension>
