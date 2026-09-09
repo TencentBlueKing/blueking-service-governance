@@ -23,6 +23,7 @@ import BuildConfigPage from './app-detail/build-config.page';
 import BuildManagementPage from './app-detail/build-management.page';
 import DeployInstancePage from './app-detail/deploy-instance.page';
 import DeployPage from './app-detail/deploy.page';
+import PolarisPage from './app-detail/polaris.page';
 import { type BasePageDependencies } from './base.page';
 
 /**
@@ -65,6 +66,9 @@ export default class AppDetailPage extends AppDetailBase {
   /** 部署管理实例列表域：实例展示、行操作、批量操作、管理命令、联邦/特性环境 */
   readonly deployInstance: DeployInstancePage;
 
+  /** 北极星配置域：配置增删改、凭证入口、关联环境与权重统计 */
+  readonly polaris: PolarisPage;
+
   constructor(deps: BasePageDependencies) {
     super(deps);
     this.appConfig = new AppConfigPage(deps);
@@ -74,6 +78,7 @@ export default class AppDetailPage extends AppDetailBase {
     this.buildManagement = new BuildManagementPage(deps);
     this.deploy = new DeployPage(deps);
     this.deployInstance = new DeployInstancePage(deps);
+    this.polaris = new PolarisPage(deps);
   }
 
   /** 框架配置文件 tab 的 Monaco 编辑器（monaco 实例根，高度随宿主高度链塌陷） */
