@@ -79,6 +79,29 @@ func (o *EnvVarPreCheckOutput) FromModel(result *deploypkg.EnvVarPreCheckResult)
 	return o
 }
 
+// ResourceConflictPreCheckOutput is the response body for a deployment resource conflict pre-check.
+type ResourceConflictPreCheckOutput struct {
+	ConflictResources []ConflictResourceOutput `json:"conflictResources"`
+}
+
+// ConflictResourceOutput contains one K8s resource that conflicts with the deployment.
+type ConflictResourceOutput struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
+// FromModel converts a domain pre-check result to an API output.
+func (o *ResourceConflictPreCheckOutput) FromModel(
+	result *deploypkg.ResourceConflictPreCheckResult,
+) *ResourceConflictPreCheckOutput {
+	conflicts := make([]ConflictResourceOutput, 0, len(result.ConflictResources))
+	for _, r := range result.ConflictResources {
+		conflicts = append(conflicts, ConflictResourceOutput{Kind: r.Kind, Name: r.Name})
+	}
+	*o = ResourceConflictPreCheckOutput{ConflictResources: conflicts}
+	return o
+}
+
 // DeployURIInput contains app, env and deploy path parameters.
 type DeployURIInput struct {
 	// 应用 ID

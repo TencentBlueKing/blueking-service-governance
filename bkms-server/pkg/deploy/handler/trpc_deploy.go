@@ -67,6 +67,24 @@ func (h *Handler) PreCheckTrpcDeployEnvVars(c *gin.Context) {
 	h.preCheckDeployEnvVars(c, bkmsapp.AppTypeTRPC)
 }
 
+// PreCheckTrpcDeployResourceConflicts checks K8s resource name conflicts before a Trpc deployment.
+//
+//	@ID			PreCheckTrpcDeployResourceConflicts
+//	@Summary	Trpc 部署前资源冲突检测
+//	@Tags		deploy
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID	path		string	true	"应用 ID"
+//	@Param		envName	path		string	true	"部署环境名称"
+//	@Success	200		{object}	serializer.ResourceConflictPreCheckOutput
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Failure	404		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/envs/{envName}/trpc-deploys/resource-conflict-precheck [get]
+func (h *Handler) PreCheckTrpcDeployResourceConflicts(c *gin.Context) {
+	h.preCheckDeployResourceConflicts(c, bkmsapp.AppTypeTRPC)
+}
+
 // CreateTrpcDeploy 创建 Trpc 应用部署
 //
 //	@ID			CreateTrpcDeploy
