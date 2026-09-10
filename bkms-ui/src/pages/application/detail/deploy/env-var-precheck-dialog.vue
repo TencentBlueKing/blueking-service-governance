@@ -35,7 +35,7 @@
     <div
       v-if="hasResourceBlocker"
       class="overflow-hidden rounded-[2px] border border-[#F8B4B4]"
-      :class="{ 'mb-[16px]': hasUndefinedVars }"
+      :class="{ 'mb-[16px]': hasMissingRequiredClusterAddons || hasUndefinedVars }"
     >
       <div
         class="flex cursor-pointer items-center justify-between bg-[#FEEBEA] px-[12px] py-[8px]"
@@ -92,6 +92,64 @@
               :min-width="140"
             />
           </Table>
+        </div>
+      </transition>
+    </div>
+
+    <!-- 环境组件缺失 -->
+    <div
+      v-if="hasMissingRequiredClusterAddons"
+      class="overflow-hidden rounded-[2px] border border-[#F8B4B4]"
+      :class="{ 'mb-[16px]': hasUndefinedVars }"
+    >
+      <div
+        class="flex cursor-pointer items-center justify-between bg-[#FEEBEA] px-[12px] py-[8px]"
+        @click="clusterAddonCollapsed = !clusterAddonCollapsed"
+      >
+        <div class="flex items-center">
+          <i class="bkms-icon bkms-icon-close-circle-shape text-[14px] text-[#EA3636]" />
+          <span class="mx-[8px] text-base font-bold text-[#EA3636]">{{ $t('缺少必选集群组件') }}</span>
+          <span class="rounded-[2px] bg-[#FCD5D3] px-[8px] py-[2px] text-[12px] text-[#EA3636]">
+            <i18n-t keypath="{0} 个组件">
+              <span class="pl-[2px]">{{ missingRequiredClusterAddons.length }}</span>
+            </i18n-t>
+          </span>
+        </div>
+        <AngleDown
+          class="text-[22px] text-[#979BA5] transition-transform duration-200"
+          :class="{ 'rotate-180': !clusterAddonCollapsed }"
+        />
+      </div>
+
+      <transition name="collapse">
+        <div
+          v-show="!clusterAddonCollapsed"
+          class="border-t border-[#F8B4B4] bg-[#FFF5F4] px-[12px] py-[8px]"
+        >
+          <p class="text-[12px] leading-[20px] text-[#4D4F56]">
+            {{ $t('以下必选集群组件在目标环境所在集群中尚未安装，缺失时应用无法正常部署。') }}
+          </p>
+          <i18n-t
+            class="mb-[8px] text-[12px] leading-[20px] text-[#4D4F56]"
+            keypath="建议前往 {0} 安装组件后再部署。"
+            tag="p"
+          >
+            <span
+              class="cursor-pointer text-[#3A84FF]"
+              @click="handleGoClusterAddonModify"
+            >
+              「{{ $t('环境管理') }} / {{ $t('集群组件') }}」
+            </span>
+          </i18n-t>
+          <div class="flex flex-wrap gap-[8px]">
+            <span
+              v-for="(name, index) in clusterAddonNames"
+              :key="`${name}:${index}`"
+              class="rounded-[2px] bg-[#F0F1F5] px-[16px] py-[4px] text-[14px] leading-[24px] text-[#63656E]"
+            >
+              {{ name }}
+            </span>
+          </div>
         </div>
       </transition>
     </div>
@@ -182,7 +240,7 @@
 
     <template #footer>
       <div
-        v-if="hasResourceBlocker"
+        v-if="hasBlockingIssue"
         class="flex items-center justify-between"
       >
         <span class="text-[12px] leading-[20px] text-[#EA3636]">
@@ -233,7 +291,7 @@
   import { useRoute, useRouter } from 'vue-router';
 
   import type { FederationResourceMismatch } from './use-federation-resource-precheck';
-  import type { UndefinedEnvVarOutput } from '~/@types/v1/deploy';
+  import type { ClusterAddonReferenceOutput, UndefinedEnvVarOutput } from '~/@types/v1/deploy';
 
   interface DisplayRow {
     key: string;
@@ -249,6 +307,7 @@
   const props = defineProps<{
     envName: string;
     mismatches: FederationResourceMismatch[];
+    missingRequiredClusterAddons: ClusterAddonReferenceOutput[];
     undefinedVars: UndefinedEnvVarOutput[];
   }>();
   const emit = defineEmits<{
@@ -262,13 +321,24 @@
   const route = useRoute();
   const router = useRouter();
   const resourceCollapsed = ref(false);
+  const clusterAddonCollapsed = ref(false);
   const envVarCollapsed = ref(false);
   const current = ref(1);
   const limit = ref(10);
 
+  // 是否存在资源规格不一致问题
   const hasResourceBlocker = computed(() => props.mismatches.length > 0);
+  // 是否缺少必选集群组件
+  const hasMissingRequiredClusterAddons = computed(() => props.missingRequiredClusterAddons.length > 0);
+  // 是否存在阻断部署的问题（资源规格不一致 / 缺组件）
+  const hasBlockingIssue = computed(() => hasResourceBlocker.value || hasMissingRequiredClusterAddons.value);
+  // 是否存在未定义环境变量
   const hasUndefinedVars = computed(() => props.undefinedVars.length > 0);
-  const problemCount = computed(() => Number(hasResourceBlocker.value) + Number(hasUndefinedVars.value));
+  // 问题类型总数（用于标题展示）
+  const problemCount = computed(
+    () =>
+      [hasResourceBlocker.value, hasMissingRequiredClusterAddons.value, hasUndefinedVars.value].filter(Boolean).length,
+  );
 
   const sourceTypeMap: Record<string, { className: string; label: string }> = {
     appConfigFile: {
@@ -285,6 +355,7 @@
     },
   };
 
+  /** 将变量的来源列表转换为表格展示数据，去重并补充默认样式 */
   function formatSources(item: UndefinedEnvVarOutput): DisplaySource[] {
     const sources = item.sources ?? [];
     if (sources.length === 0) {
@@ -305,6 +376,7 @@
     return [...sourceMap.values()];
   }
 
+  // 资源规格不一致的表格行数据
   const resourceRows = computed(() =>
     props.mismatches.map(item => ({
       key: item.key,
@@ -314,6 +386,12 @@
     })),
   );
 
+  // 缺失必选集群组件的名称列表
+  const clusterAddonNames = computed(() =>
+    props.missingRequiredClusterAddons.map(item => item.displayName || item.name || '--'),
+  );
+
+  // 未定义环境变量的表格行数据
   const envVarRows = computed<DisplayRow[]>(() =>
     props.undefinedVars.map(item => ({
       key: item.key || '--',
@@ -321,6 +399,7 @@
     })),
   );
 
+  // 变量数超过一页时展示分页
   const showPagination = computed(() => envVarRows.value.length > 10);
   const pagination = computed(() => ({
     current: current.value,
@@ -329,16 +408,33 @@
     limitList: [10, 20, 50],
   }));
 
+  /** 发出前往修改事件并关闭弹窗 */
   function closeAfterModify() {
     emit('goModify');
     isShow.value = false;
   }
 
+  /** 取消：发出 cancel 事件并关闭弹窗 */
   function handleCancel() {
     emit('cancel');
     isShow.value = false;
   }
 
+  /** 新窗口打开「环境管理 / 集群组件」页，引导安装缺失组件 */
+  function handleGoClusterAddonModify() {
+    const resolved = router.resolve({
+      name: 'env',
+      params: { space: route.params.space },
+      query: {
+        active: props.envName,
+        activeTab: 'basicInfo',
+      },
+    });
+    window.open(resolved.href, '_blank');
+    closeAfterModify();
+  }
+
+  /** 新窗口打开「环境管理 / 环境变量」页，引导补充变量配置 */
   function handleGoEnvVarModify() {
     const resolved = router.resolve({
       name: 'env',
@@ -352,6 +448,7 @@
     closeAfterModify();
   }
 
+  /** 新窗口打开「应用配置 / 部署配置」页，引导调整资源规格 */
   function handleGoResourceModify() {
     const resolved = router.resolve({
       name: 'detail',
@@ -369,24 +466,29 @@
     closeAfterModify();
   }
 
+  /** 翻页 */
   function handlePageChange(page: number) {
     current.value = page;
   }
 
+  /** 调整每页条数并回到第一页 */
   function handlePageLimitChange(limitValue: number) {
     limit.value = limitValue;
     current.value = 1;
   }
 
+  /** 仍然部署：存在阻断问题时不可执行，否则发出事件并关闭弹窗 */
   function handleStillDeploy() {
-    if (hasResourceBlocker.value) return;
+    if (hasBlockingIssue.value) return;
     emit('stillDeploy');
     isShow.value = false;
   }
 
+  // 弹窗每次打开时重置折叠状态与分页
   watch(isShow, show => {
     if (show) {
       resourceCollapsed.value = false;
+      clusterAddonCollapsed.value = false;
       envVarCollapsed.value = false;
       current.value = 1;
       limit.value = 10;

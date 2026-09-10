@@ -231,6 +231,7 @@ tag不能为空: Tag cannot be empty
 请输入应用名称: Please enter the application name
 搜索操作人、操作类型、操作状态: "search operator, type, status"
 环境管理: Environment management
+集群组件: Cluster Components
 新建环境: Create environment
 环境模板: Environment template
 去添加集群: Add Cluster
@@ -1638,6 +1639,10 @@ Key 不能重复: Key 不能重复
 联邦集群资源规格不一致: Federated cluster resource spec mismatch
 当前环境已绑定联邦集群。联邦集群要求 CPU、内存的 Requests 与 Limits 必须一致，否则无法部署。: This environment is bound to a federated cluster. CPU and memory Requests must match Limits, otherwise the environment cannot be deployed.
 "建议前往 {0} 将 Requests 调整为与 Limits 一致后再部署。": "Go to {0} and set Requests equal to Limits before deploying."
+缺少必选集群组件: Missing Required Cluster Components
+"{0} 个组件": "{0} component(s)"
+以下必选集群组件在目标环境所在集群中尚未安装，缺失时应用无法正常部署。: The following required cluster components are not installed in the target environment's cluster, so the application cannot be deployed normally.
+"建议前往 {0} 安装组件后再部署。": "Go to {0}, install the components, and then deploy."
 存在阻断问题，请先解决后再部署: Blocking issues exist. Resolve them before deploying.
 资源: Resource
 联邦集群不支持灰度操作: Federated clusters do not support gray deployment.

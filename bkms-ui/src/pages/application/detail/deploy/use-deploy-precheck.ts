@@ -24,7 +24,7 @@ import { useEnvVarPrecheck } from './use-env-var-precheck';
 import { useFederationResourcePrecheck } from './use-federation-resource-precheck';
 
 import type { FederationResourceMismatch } from './use-federation-resource-precheck';
-import type { UndefinedEnvVarOutput } from '~/@types/v1/deploy';
+import type { ClusterAddonReferenceOutput, UndefinedEnvVarOutput } from '~/@types/v1/deploy';
 import type { EnvOutput } from '~/@types/v1/env';
 
 /** 将联邦资源硬阻断与环境变量警告汇总到同一次部署预检。 */
@@ -35,6 +35,8 @@ export function useDeployPrecheck() {
   const isShowPrecheckDialog = ref(false);
   const precheckEnvName = ref('');
   const federationMismatches = ref<FederationResourceMismatch[]>([]);
+  // 缺失的必选集群组件，属于硬阻断问题
+  const missingRequiredClusterAddons = ref<ClusterAddonReferenceOutput[]>([]);
   const undefinedVars = ref<UndefinedEnvVarOutput[]>([]);
   let precheckRunID = 0;
   let resolvePrecheck: ((passed: boolean) => void) | undefined;
@@ -52,8 +54,8 @@ export function useDeployPrecheck() {
   }
 
   function continueDeploy() {
-    // 资源规格不一致属于硬阻断，不能通过事件绕过弹窗按钮状态继续部署。
-    if (federationMismatches.value.length > 0) return;
+    // 硬阻断问题不能通过事件绕过弹窗按钮状态继续部署。
+    if (federationMismatches.value.length > 0 || missingRequiredClusterAddons.value.length > 0) return;
     completePrecheck(true);
   }
 
@@ -66,6 +68,7 @@ export function useDeployPrecheck() {
     const appID = appDetailStore.appID;
     precheckEnvName.value = envName;
     federationMismatches.value = [];
+    missingRequiredClusterAddons.value = [];
     undefinedVars.value = [];
     isShowPrecheckDialog.value = false;
 
@@ -74,10 +77,13 @@ export function useDeployPrecheck() {
     if (runID !== precheckRunID || appID !== appDetailStore.appID) return false;
     federationMismatches.value = mismatches;
 
-    const vars = await envVarPrecheck.check(envName);
+    const result = await envVarPrecheck.check(envName);
     if (runID !== precheckRunID || appID !== appDetailStore.appID) return false;
-    undefinedVars.value = vars;
-    if (mismatches.length === 0 && vars.length === 0) return true;
+    undefinedVars.value = result.undefinedVars ?? [];
+    missingRequiredClusterAddons.value = result.missingRequiredClusterAddons ?? [];
+    // 集群组件缺失与资源规格不一致同为硬阻断，存在任一阻断或未定义变量时弹出确认弹窗
+    const hasBlockingIssue = mismatches.length > 0 || missingRequiredClusterAddons.value.length > 0;
+    if (!hasBlockingIssue && undefinedVars.value.length === 0) return true;
 
     isShowPrecheckDialog.value = true;
     return new Promise<boolean>(resolve => {
@@ -100,6 +106,7 @@ export function useDeployPrecheck() {
     continueDeploy,
     federationMismatches,
     isShowPrecheckDialog,
+    missingRequiredClusterAddons,
     precheck,
     precheckEnvName,
     undefinedVars,

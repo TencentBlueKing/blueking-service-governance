@@ -21,30 +21,28 @@ import { useAppDetail } from '~/stores/app-detail';
 
 import { useDeployAPIs } from './use-deploy';
 
-import type { UndefinedEnvVarOutput } from '~/@types/v1/deploy';
+import type { DeployPreCheckOutput } from '~/@types/v1/deploy';
 
-/** 获取 tRPC / TAF 部署前未定义的环境变量。 */
+/** 获取 tRPC / TAF 部署前的环境变量与必选集群组件检查结果。 */
 export function useEnvVarPrecheck() {
   const appDetailStore = useAppDetail();
 
-  async function check(envName: string): Promise<UndefinedEnvVarOutput[]> {
+  async function check(envName: string): Promise<DeployPreCheckOutput> {
     const appType = appDetailStore.appType;
     const appID = appDetailStore.appID;
-    if (!isAppModelAppType(appType)) return [];
+    if (!isAppModelAppType(appType)) return {};
 
-    const preCheckDeployEnvVars = useDeployAPIs(appType).preCheckDeployEnvVars;
-    if (!preCheckDeployEnvVars) return [];
+    const preCheckDeploy = useDeployAPIs(appType).preCheckDeploy;
+    if (!preCheckDeploy) return {};
 
-    // 预检查接口直接返回 { undefinedVars }，需要保留完整响应体，避免请求封装按默认规则读取 data 后得到 undefined。
-    const response = await preCheckDeployEnvVars(
+    // 预检查接口直接返回结果对象，需要保留完整响应体，避免请求封装按默认规则读取 data 后得到 undefined。
+    return preCheckDeploy(
       {
         appID,
         envName,
       },
       { needRes: true },
     );
-
-    return response.undefinedVars ?? [];
   }
 
   return {

@@ -27,7 +27,7 @@ import {
   type DeleteHelmDeployRequest,
   type DeleteTafDeployRequest,
   type DeleteTrpcDeployRequest,
-  type EnvVarPreCheckOutput,
+  type DeployPreCheckOutput,
   type GetLatestAppModelDeployStatusOutput,
   type GetLatestTafDeployStatusRequest,
   type GetLatestTrpcDeployStatusRequest,
@@ -35,8 +35,8 @@ import {
   type ListHelmDeployRecordsRequest,
   type ListTafDeployRecordsRequest,
   type ListTrpcDeployRecordsRequest,
-  type PreCheckTafDeployEnvVarsRequest,
-  type PreCheckTrpcDeployEnvVarsRequest,
+  type PreCheckTafDeployRequest,
+  type PreCheckTrpcDeployRequest,
 } from '~/@types/v1/deploy';
 import {
   type ExecuteTafAdminCmdOutput,
@@ -126,12 +126,12 @@ interface DeployAPIs {
   ) => Promise<ExtractData<GetLatestAppModelDeployStatusOutput>>;
 
   /**
-   * 部署前检查目标环境是否存在未定义的环境变量
+   * 部署前检查目标环境的环境变量和必选集群组件
    */
-  preCheckDeployEnvVars?: (
-    params?: PreCheckTafDeployEnvVarsRequest | PreCheckTrpcDeployEnvVarsRequest,
+  preCheckDeploy?: (
+    params?: PreCheckTafDeployRequest | PreCheckTrpcDeployRequest,
     config?: Config,
-  ) => Promise<EnvVarPreCheckOutput>;
+  ) => Promise<DeployPreCheckOutput>;
 }
 
 /**
@@ -178,7 +178,7 @@ export async function downloadInstanceLog(params: {
 export function useDeployAPIs(appType: DeployableAppType): DeployAPIs {
   const apiMapping: Record<DeployableAppType, DeployAPIs> = {
     trpc: {
-      preCheckDeployEnvVars: DeployService.preCheckTrpcDeployEnvVars,
+      preCheckDeploy: DeployService.preCheckTrpcDeploy,
       listDeployRecords: DeployService.listTrpcDeployRecords,
       listLatestDeployRecords: DeployService.getLatestTrpcDeployStatus,
       createDeployDirectly: DeployService.createTrpcDeploy,
@@ -187,7 +187,7 @@ export function useDeployAPIs(appType: DeployableAppType): DeployAPIs {
       executeAdminCmd: InstanceService.executeTrpcAdminCmd as DeployAPIs['executeAdminCmd'],
     },
     taf: {
-      preCheckDeployEnvVars: DeployService.preCheckTafDeployEnvVars,
+      preCheckDeploy: DeployService.preCheckTafDeploy,
       listDeployRecords: DeployService.listTafDeployRecords,
       listLatestDeployRecords: DeployService.getLatestTafDeployStatus,
       createDeployDirectly: DeployService.createTafDeploy,

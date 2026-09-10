@@ -107,6 +107,7 @@
     v-model:is-show="isShowPrecheckDialog"
     :env-name="precheckEnvName"
     :mismatches="federationMismatches"
+    :missing-required-cluster-addons="missingRequiredClusterAddons"
     :undefined-vars="undefinedVars"
     @cancel="cancelDeploy"
     @go-modify="cancelDeploy"
@@ -157,6 +158,7 @@
     continueDeploy,
     federationMismatches,
     isShowPrecheckDialog,
+    missingRequiredClusterAddons,
     precheck,
     precheckEnvName,
     undefinedVars,
