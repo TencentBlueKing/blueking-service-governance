@@ -40,7 +40,7 @@
   import { computed, ref, watch } from 'vue';
 
   import { Loading } from 'bkui-vue';
-  import { ApiServerService } from '~/api/modules/bkmsserver';
+  import { WorkspaceService } from '~/api/modules/v1/workspace';
   import { useSpaceStore } from '~/stores/space';
 
   const props = defineProps<{
@@ -51,18 +51,18 @@
   const spaceStore = useSpaceStore();
   const bkCIProjectID = ref('');
   const isLoading = ref(false);
+  const monitorBaseUrl = `${import.meta.env.BK_MONITOR}`.replace(/\/+$/, '');
+  const trimSlashes = (url: string) => url.replace(/^\/+|\/+$/g, '');
 
   /** 拼接规则：{BK_MONITOR}/{resp.url}/?space_uid=bkci__{bkCIProjectID} */
   const iframeUrl = computed(() => {
-    if (!props.url || !bkCIProjectID.value) return '';
+    if (!props.url) return '';
 
-    const baseUrl = `${import.meta.env.BK_MONITOR}`.replace(/\/+$/, '');
-    const dashboardPath = props.url.replace(/^\/+|\/+$/g, '');
-    return `${baseUrl}/${dashboardPath}/?space_uid=bkci__${bkCIProjectID.value}`;
+    return `${monitorBaseUrl}/${trimSlashes(props.url)}/?space_uid=bkci__${bkCIProjectID.value}`;
   });
 
   async function fetchBkCIProjectID() {
-    const workspaceData = await ApiServerService.GetWorkspace({
+    const workspaceData = await WorkspaceService.getWorkspace({
       workspaceID: spaceStore.currentSpace,
     }).catch(() => null);
     bkCIProjectID.value = workspaceData?.bkSystems?.bkCIProjectID || '';

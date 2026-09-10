@@ -293,7 +293,7 @@
       confirmButtonTheme: 'danger',
       confirmText: t('删除'),
       content: h('div', { class: 'text-left' }, [
-        h('div', [t('展示名称: {name}', { name: row.title || row.uid })]),
+        h('div', [t('仪表盘名称: {name}', { name: row.title || row.uid })]),
         h('div', { class: 'mt-[14px] bg-[#F5F7FA] py-[12px] px-[16px]' }, [t('删除后，将不可恢复，请谨慎操作！')]),
       ]),
       footerAlign: 'center',
