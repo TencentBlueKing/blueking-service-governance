@@ -538,4 +538,247 @@ var _ = Describe("AppCfgFileDefService", func() {
 			Expect(conflictResult.File.ID).To(Equal(created.ID))
 		})
 	})
+
+	Context("GetEnvFileDetail", func() {
+		It("should return default file for unified config", func() {
+			result := createFile("values.yaml")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			detail, err := svc.GetEnvFileDetail(ctx, def, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.DefaultFile).NotTo(BeNil())
+			Expect(detail.DisplayFile).NotTo(BeNil())
+			Expect(detail.DisplayFile.ID).To(Equal(detail.DefaultFile.ID))
+			Expect(detail.DisplayFile.ID).To(Equal(result.ID))
+			Expect(detail.HasEnvInstance).To(BeFalse())
+			Expect(detail.EditableContentField).To(Equal("content"))
+		})
+
+		It("should return nil display file for framework overlay strategy without env instance", func() {
+			result := createFile("values.yaml")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			detail, err := svc.GetEnvFileDetail(ctx, def, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.DefaultFile).NotTo(BeNil())
+			Expect(detail.DisplayFile).To(BeNil())
+			Expect(detail.HasEnvInstance).To(BeFalse())
+			Expect(detail.EditableContentField).To(Equal("none"))
+		})
+
+		It("should return default file for plain overwrite strategy without env instance", func() {
+			result := createPlainFile("app.conf", "/data", "k=v")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			mounted := []string{"prod"}
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				MountedEnvNames: &mounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			detail, err := svc.GetEnvFileDetail(ctx, def, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.DefaultFile).NotTo(BeNil())
+			Expect(detail.DisplayFile).NotTo(BeNil())
+			Expect(detail.DisplayFile.ID).To(Equal(detail.DefaultFile.ID))
+			Expect(detail.HasEnvInstance).To(BeFalse())
+			Expect(detail.EditableContentField).To(Equal("content"))
+		})
+
+		It("should return env file when env instance exists", func() {
+			result := createFile("values.yaml")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			overlay := "env: prod\n"
+			created, _, isNewFile, err := svc.PrepareEnvContentUpdate(ctx, def, "prod", overlay, "editor")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(isNewFile).To(BeTrue())
+			created, err = svc.CreateFileWithVersion(ctx, *created, def.Name, "prod overlay", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			detail, err := svc.GetEnvFileDetail(ctx, def, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.DisplayFile).NotTo(BeNil())
+			Expect(detail.DisplayFile.ID).To(Equal(created.ID))
+			Expect(detail.HasEnvInstance).To(BeTrue())
+			Expect(detail.EditableContentField).To(Equal("overlayContent"))
+			Expect(detail.BaseContentInfo).NotTo(BeNil())
+			Expect(detail.BaseContentInfo.HolderID).To(Equal(result.ID))
+			Expect(detail.BaseContentInfo.HolderName).To(Equal("values.yaml"))
+			Expect(detail.BaseContentInfo.HolderContentSourceType).To(Equal("local"))
+			Expect(detail.BaseContentInfo.IsFromAnotherFile).To(BeTrue())
+			Expect(detail.BaseContentInfo.Content).To(ContainSubstring("key: value"))
+		})
+
+		It("should return error when plain file is not effective for env", func() {
+			result := createPlainFile("app.conf", "/data", "k=v")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			mounted := []string{"prod"}
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				MountedEnvNames: &mounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = svc.GetEnvFileDetail(ctx, def, "staging")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not effective"))
+		})
+
+		It("should return default file when querying default env name", func() {
+			result := createFile("values.yaml")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			detail, err := svc.GetEnvFileDetail(ctx, def, appcfg.EnvNameDefault)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.DefaultFile).NotTo(BeNil())
+			Expect(detail.DisplayFile).NotTo(BeNil())
+			Expect(detail.DisplayFile.ID).To(Equal(result.ID))
+			Expect(detail.HasEnvInstance).To(BeFalse())
+			Expect(detail.EditableContentField).To(Equal("content"))
+		})
+	})
+
+	Context("GetMountPreview", func() {
+		It("should include framework defs for any env", func() {
+			createFile("values.yaml")
+
+			items, err := svc.GetMountPreview(ctx, appID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(HaveLen(1))
+			Expect(items[0].Def.Name).To(Equal("values.yaml"))
+			Expect(items[0].ContentSource).To(Equal(appcfg.AppConfigFileTypeNormal))
+			Expect(items[0].HasEnvFile).To(BeFalse())
+		})
+
+		It("should include plain defs only for mounted envs", func() {
+			result := createPlainFile("app.conf", "/data", "k=v")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			mounted := []string{"prod"}
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				MountedEnvNames: &mounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			items, err := svc.GetMountPreview(ctx, appID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(HaveLen(1))
+			Expect(items[0].Def.Name).To(Equal("app.conf"))
+
+			items, err = svc.GetMountPreview(ctx, appID, "staging")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(BeEmpty())
+		})
+
+		It("should mark HasEnvFile when env instance exists", func() {
+			result := createFile("values.yaml")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			overlay := "env: prod\n"
+			created, _, _, err := svc.PrepareEnvContentUpdate(ctx, def, "prod", overlay, "editor")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = svc.CreateFileWithVersion(ctx, *created, def.Name, "prod overlay", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			items, err := svc.GetMountPreview(ctx, appID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(HaveLen(1))
+			Expect(items[0].HasEnvFile).To(BeTrue())
+		})
+
+		It("should show overlay content source for framework env instance", func() {
+			result := createFile("values.yaml")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			overlay := "env: prod\n"
+			created, _, _, err := svc.PrepareEnvContentUpdate(ctx, def, "prod", overlay, "editor")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = svc.CreateFileWithVersion(ctx, *created, def.Name, "prod overlay", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			items, err := svc.GetMountPreview(ctx, appID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(HaveLen(1))
+			Expect(items[0].HasEnvFile).To(BeTrue())
+			Expect(items[0].ContentSource).To(Equal(appcfg.AppConfigFileTypeOverlay))
+		})
+
+		It("should show overwrite content source for plain env instance", func() {
+			result := createPlainFile("app.conf", "/data", "k=v")
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			mounted := []string{"prod"}
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				MountedEnvNames: &mounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			created, _, _, err := svc.PrepareEnvContentUpdate(ctx, def, "prod", "key=prod", "editor")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = svc.CreateFileWithVersion(ctx, *created, def.Name, "plain prod overwrite", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			items, err := svc.GetMountPreview(ctx, appID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(HaveLen(1))
+			Expect(items[0].HasEnvFile).To(BeTrue())
+			Expect(items[0].ContentSource).To(Equal(appcfg.AppConfigFileType("overwrite")))
+		})
+	})
 })

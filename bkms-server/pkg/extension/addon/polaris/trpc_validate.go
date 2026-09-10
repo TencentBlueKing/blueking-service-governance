@@ -39,7 +39,7 @@ import (
 func CollectConfigWarnings(
 	ctx context.Context,
 	appModelStore appmodel.AppModelStore,
-	cfgProvider appcfg.AppConfigContentProvider,
+	cfgProvider appcfg.MountableFileProvider,
 	config *PolarisConfig,
 ) (warnings []string) {
 	if config.IsImmediateRegister() {
@@ -71,7 +71,7 @@ func CollectConfigWarnings(
 func validateServiceNameInEnv(
 	ctx context.Context,
 	config *PolarisConfig,
-	cfgProvider appcfg.AppConfigContentProvider,
+	cfgProvider appcfg.MountableFileProvider,
 	envName string,
 ) string {
 	serviceNames, err := appcfg.GetTrpcServiceNames(

@@ -20,6 +20,7 @@ package appcfg
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -129,12 +130,7 @@ func (m *EnvConfigMode) ContainsEnv(envName string) bool {
 	if m == nil {
 		return false
 	}
-	for _, n := range m.MountedEnvNames {
-		if n == envName {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(m.MountedEnvNames, envName)
 }
 
 // IsIndependent 返回是否处于按环境独立配置模式。

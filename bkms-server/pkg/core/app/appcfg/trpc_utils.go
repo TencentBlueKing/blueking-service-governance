@@ -37,13 +37,13 @@ type trpcServiceConfig struct {
 }
 
 // GetTrpcServiceNames 获取指定应用和环境下 tRPC 配置文件中的所有服务名。
-// 该方法组合了 GetFrameworkContent 和 parseTrpcServiceNames，供需要从环境配置中读取服务名的业务流程使用。
+// 该方法组合了 GetFrameworkMountableFile 和 parseTrpcServiceNames，供需要从环境配置中读取服务名的业务流程使用。
 func GetTrpcServiceNames(
 	ctx context.Context,
-	provider AppConfigContentProvider,
+	provider MountableFileProvider,
 	appID, envName string,
 ) ([]string, error) {
-	cfwc, err := provider.GetFrameworkContent(ctx, appID, envName)
+	cfwc, err := provider.GetFrameworkMountableFile(ctx, appID, envName)
 	if err != nil {
 		return nil, err
 	}

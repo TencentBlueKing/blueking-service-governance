@@ -28,42 +28,41 @@ import (
 // ErrNoConfigFileFound is returned when no config file is found for the given criteria.
 var ErrNoConfigFileFound = errors.New("no config file found")
 
-// ConfigFileWithContent 配置文件的挂载信息与编译后最终内容的轻量值对象。
-type ConfigFileWithContent struct {
-	Name     string
+// MountableFile 可挂载到容器的配置文件，包含文件名、挂载目录和编译后最终内容。
+type MountableFile struct {
+	// Name 配置文件名，对应 AppConfigFileDef.Name。
+	Name string
+	// MountDir 容器内挂载目录。plain 文件取自 def 上的用户配置；
+	// framework 文件当前为空——其挂载路径仍由 app 级 ConfigFilePath 管理，
+	// 待迁移至 def 后此字段将对所有 kind 统一填充。
 	MountDir string
-	Content  string
+	// Content 经 overlay/overwrite 策略编译后的最终文件内容。
+	Content string
 }
 
-type effectiveFileGroup struct {
-	defaultFile *AppConfigFile
-	envFile     *AppConfigFile
-	def         AppConfigFileDef
+// MountableFileProvider 提供环境级可挂载配置文件的解析能力，workload 层通过该接口获取最终要挂载到容器的文件信息。
+type MountableFileProvider interface {
+	// GetFrameworkMountableFile 获取 framework 类型的可挂载文件（单条）。
+	GetFrameworkMountableFile(ctx context.Context, appID, envName string) (*MountableFile, error)
+	// ListPlainMountableFiles 获取 plain 类型的可挂载文件（可能多条）。
+	ListPlainMountableFiles(ctx context.Context, appID, envName string) ([]MountableFile, error)
 }
 
-// AppConfigContentProvider 提供环境级配置内容解析能力，workload 层通过该接口获取生效的配置文件内容，无需直接依赖 service 实现。
-type AppConfigContentProvider interface {
-	// GetFrameworkContent 获取 framework 类型配置（单条）。
-	GetFrameworkContent(ctx context.Context, appID, envName string) (*ConfigFileWithContent, error)
-	// GetPlainContents 获取 plain 类型配置（可能多条）。
-	GetPlainContents(ctx context.Context, appID, envName string) ([]ConfigFileWithContent, error)
-}
-
-// NewContentProvider 构造一个 AppConfigContentProvider 实例
+// NewContentProvider 构造一个 MountableFileProvider 实例
 func NewContentProvider(
 	fileStore AppConfigFileStore,
 	defStore AppConfigFileDefStore,
 	versionStore AppConfigFileVersionStore,
-) AppConfigContentProvider {
+) MountableFileProvider {
 	return NewAppConfigFileService(fileStore, defStore, versionStore)
 }
 
-// GetFrameworkContent 获取应用在指定环境下生效的框架配置文件内容。
+// GetFrameworkMountableFile 获取应用在指定环境下生效的框架可挂载文件。
 // TODO: 待挂载路径迁移至 def 后，plugin 应改为使用此处返回的 MountDir。
-func (s *AppCfgFileDefService) GetFrameworkContent(
+func (s *AppCfgFileDefService) GetFrameworkMountableFile(
 	ctx context.Context,
 	appID, envName string,
-) (*ConfigFileWithContent, error) {
+) (*MountableFile, error) {
 	items, err := s.listEffectiveContents(ctx, appID, envName, ConfigKindFramework)
 	if err != nil {
 		return nil, err
@@ -78,11 +77,11 @@ func (s *AppCfgFileDefService) GetFrameworkContent(
 	return &items[0], nil
 }
 
-// GetPlainContents 获取应用在指定环境下生效的所有 plain 配置文件内容。
-func (s *AppCfgFileDefService) GetPlainContents(
+// ListPlainMountableFiles 获取应用在指定环境下生效的所有 plain 可挂载文件。
+func (s *AppCfgFileDefService) ListPlainMountableFiles(
 	ctx context.Context,
 	appID, envName string,
-) ([]ConfigFileWithContent, error) {
+) ([]MountableFile, error) {
 	return s.listEffectiveContents(ctx, appID, envName, ConfigKindPlain)
 }
 
@@ -91,7 +90,13 @@ func (s *AppCfgFileDefService) listEffectiveContents(
 	ctx context.Context,
 	appID, envName string,
 	configKind ConfigKind,
-) ([]ConfigFileWithContent, error) {
+) ([]MountableFile, error) {
+	// fileGroup 将同一 def 下的默认文件与环境实例文件配对，供后续逐组编译最终内容。
+	type fileGroup struct {
+		defaultFile *AppConfigFile // envName=__default__ 的基础文件
+		envFile     *AppConfigFile // 目标环境的独立实例，nil 表示未创建
+	}
+
 	// 1. 按 configKind 查 def 列表
 	defs, err := s.DefStore.ListByApp(ctx, appID, DefFilterConfigKind(configKind))
 	if err != nil {
@@ -116,14 +121,13 @@ func (s *AppCfgFileDefService) listEffectiveContents(
 	}
 
 	// 3. 按 def 分组：默认文件 + 环境实例
-	groups := make(map[string]*effectiveFileGroup)
+	groups := make(map[string]*fileGroup)
 	for i := range configFiles {
 		f := &configFiles[i]
 		defHex := f.DefID.Hex()
 		g, ok := groups[defHex]
 		if !ok {
-			def := defByID[f.DefID]
-			g = &effectiveFileGroup{def: def}
+			g = &fileGroup{}
 			groups[defHex] = g
 		}
 		if f.EnvName == EnvNameDefault {
@@ -134,7 +138,7 @@ func (s *AppCfgFileDefService) listEffectiveContents(
 	}
 
 	// 4. 解析每个 def 的生效内容
-	result := make([]ConfigFileWithContent, 0, len(defs))
+	result := make([]MountableFile, 0, len(defs))
 	for _, def := range defs {
 		policy, pErr := s.policyFor(def.ConfigKind)
 		if pErr != nil {
@@ -149,7 +153,7 @@ func (s *AppCfgFileDefService) listEffectiveContents(
 			continue
 		}
 
-		item, itemErr := s.buildEffectiveContentItem(ctx, def, envName, g)
+		item, itemErr := s.buildEffectiveContentItem(ctx, def, envName, g.defaultFile, g.envFile)
 		if itemErr != nil {
 			return nil, itemErr
 		}
@@ -162,23 +166,23 @@ func (s *AppCfgFileDefService) buildEffectiveContentItem(
 	ctx context.Context,
 	def AppConfigFileDef,
 	envName string,
-	group *effectiveFileGroup,
-) (ConfigFileWithContent, error) {
-	targetFile := group.defaultFile
-	if group.envFile != nil {
-		targetFile = group.envFile
+	defaultFile, envFile *AppConfigFile,
+) (MountableFile, error) {
+	targetFile := defaultFile
+	if envFile != nil {
+		targetFile = envFile
 	}
 
 	editor, err := NewAppConfigFileEditor(s.FileStore, s.DefStore, targetFile)
 	if err != nil {
-		return ConfigFileWithContent{}, errors.Wrapf(err, "creating editor for def %s", def.ID.Hex())
+		return MountableFile{}, errors.Wrapf(err, "creating editor for def %s", def.ID.Hex())
 	}
 	content, err := editor.GetCompiledContent(ctx)
 	if err != nil {
-		return ConfigFileWithContent{}, errors.Wrapf(err, "compiling content for def %s env %s", def.ID.Hex(), envName)
+		return MountableFile{}, errors.Wrapf(err, "compiling content for def %s env %s", def.ID.Hex(), envName)
 	}
 
-	return ConfigFileWithContent{
+	return MountableFile{
 		Name:     def.Name,
 		MountDir: def.MountDir,
 		Content:  content,
@@ -189,7 +193,7 @@ func (s *AppCfgFileDefService) buildEffectiveContentItem(
 // 1. Environment-specific config (envName = current environment name)
 // 2. Application-level default config (envName = "")
 //
-// Deprecated: 兼容 workload 层旧调用方（trpc/taf plugin），后续将由 AppConfigContentProvider 替代，本次暂时不处理
+// Deprecated: 兼容 workload 层旧调用方（trpc/taf plugin），后续将由 MountableFileProvider 替代，本次暂时不处理
 // todo 切换
 func GetEnvContent(
 	ctx context.Context,
@@ -221,7 +225,7 @@ func GetEnvContent(
 
 // getConfigFileAndCompiledContent retrieves the config file for an app environment and compiles its content.
 //
-// Deprecated: 兼容 GetEnvContent，后续将由 AppConfigContentProvider 替代。
+// Deprecated: 兼容 GetEnvContent，后续将由 MountableFileProvider 替代。
 func getConfigFileAndCompiledContent(
 	ctx context.Context,
 	store AppConfigFileStore,

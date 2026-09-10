@@ -33,7 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
 
-var _ = Describe("GetFrameworkContent", func() {
+var _ = Describe("GetFrameworkMountableFile", func() {
 	var diApp *fxtest.App
 	var ctx context.Context
 	var appStore bkmsapp.ApplicationStore
@@ -41,7 +41,8 @@ var _ = Describe("GetFrameworkContent", func() {
 	var defStore appcfg.AppConfigFileDefStore
 	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
-	var provider appcfg.AppConfigContentProvider
+	var provider appcfg.MountableFileProvider
+	var svc *appcfg.AppCfgFileDefService
 
 	BeforeEach(func() {
 		var err error
@@ -64,6 +65,8 @@ var _ = Describe("GetFrameworkContent", func() {
 
 		app = dbfactory.Application(ctx, appStore)
 		provider = appcfg.NewContentProvider(store, defStore, versionStore)
+		base := appcfg.NewBaseAppCfgFileService(defStore, store, versionStore)
+		svc = appcfg.NewAppCfgFileDefService(base)
 	})
 
 	createDef := func(name string) bson.ObjectID {
@@ -75,6 +78,23 @@ var _ = Describe("GetFrameworkContent", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 		return id
+	}
+
+	createFrameworkFile := func(name, content string) *appcfg.AppConfigFileWithDef {
+		result, err := svc.Create(ctx, appcfg.CreateCfgFileParams{
+			AppID:             app.ID,
+			EnvName:           appcfg.EnvNameDefault,
+			Name:              name,
+			Type:              appcfg.AppConfigFileTypeNormal,
+			ContentSourceType: appcfg.ContentSourceTypeLocal,
+			Format:            appcfg.FileFormatYAML,
+			Content:           &content,
+			Creator:           "tester",
+			Description:       "init",
+			ConfigKind:        appcfg.ConfigKindFramework,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return result
 	}
 
 	AfterEach(func() {
@@ -100,7 +120,7 @@ var _ = Describe("GetFrameworkContent", func() {
 		})
 
 		It("should fall back to default config when querying non-existent env", func() {
-			cfwc, err := provider.GetFrameworkContent(ctx, app.ID, "test-env")
+			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "test-env")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
 		})
@@ -139,13 +159,13 @@ var _ = Describe("GetFrameworkContent", func() {
 		})
 
 		It("should return env-specific config when querying that env", func() {
-			cfwc, err := provider.GetFrameworkContent(ctx, app.ID, "prod")
+			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
 		})
 
 		It("should fall back to default config when querying non-existent env", func() {
-			cfwc, err := provider.GetFrameworkContent(ctx, app.ID, "test-env")
+			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "test-env")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
 		})
@@ -183,15 +203,54 @@ var _ = Describe("GetFrameworkContent", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			cfwc, err := provider.GetFrameworkContent(ctx, app.ID, "prod")
+			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfwc.Content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
 		})
+
+		It("should return compiled content after switching to independent config via service path", func() {
+			result := createFrameworkFile(
+				appcfg.DefaultAppConfigFileName,
+				"database:\n  host: ${{ env.BASE_HOST }}\n  port: 3306\n",
+			)
+			def, err := defStore.GetByID(ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			overlay := "overlayVersion: \"2\"\npatches:\n- database:\n    host: ${{ env.OVERLAY_HOST }}\n"
+			envFile, compiled, isNewFile, err := svc.PrepareEnvContentUpdate(ctx, def, "prod", overlay, "editor")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(isNewFile).To(BeTrue())
+			Expect(compiled).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
+			_, err = svc.CreateFileWithVersion(ctx, *envFile, def.Name, "create prod overlay", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfwc.Content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
+		})
+	})
+
+	Context("when multiple framework defs exist", func() {
+		It("should return an error", func() {
+			createFrameworkFile("values-a.yaml", "a: 1\n")
+			createFrameworkFile("values-b.yaml", "b: 2\n")
+
+			_, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("multiple framework config files found"))
+		})
 	})
 })
 
-var _ = Describe("GetPlainContents", func() {
+var _ = Describe("ListPlainMountableFiles", func() {
 	var diApp *fxtest.App
 	var ctx context.Context
 	var appStore bkmsapp.ApplicationStore
@@ -199,7 +258,7 @@ var _ = Describe("GetPlainContents", func() {
 	var defStore appcfg.AppConfigFileDefStore
 	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
-	var provider appcfg.AppConfigContentProvider
+	var provider appcfg.MountableFileProvider
 
 	BeforeEach(func() {
 		var err error
@@ -256,7 +315,7 @@ var _ = Describe("GetPlainContents", func() {
 	}
 
 	It("should return empty when no plain defs exist", func() {
-		result, err := provider.GetPlainContents(ctx, app.ID, "prod")
+		result, err := provider.ListPlainMountableFiles(ctx, app.ID, "prod")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(BeEmpty())
@@ -269,7 +328,7 @@ var _ = Describe("GetPlainContents", func() {
 		defB := createPlainDef("redis.conf", "/etc/redis")
 		addDefaultFile(defB, "maxmemory 256mb")
 
-		result, err := provider.GetPlainContents(ctx, app.ID, "prod")
+		result, err := provider.ListPlainMountableFiles(ctx, app.ID, "prod")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(2))
@@ -296,7 +355,7 @@ var _ = Describe("GetPlainContents", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := provider.GetPlainContents(ctx, app.ID, "prod")
+		result, err := provider.ListPlainMountableFiles(ctx, app.ID, "prod")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(1))
@@ -308,7 +367,7 @@ var _ = Describe("GetPlainContents", func() {
 		defID := createPlainDef("app.conf", "/etc/app")
 		addDefaultFile(defID, "default-content")
 
-		result, err := provider.GetPlainContents(ctx, app.ID, "staging")
+		result, err := provider.ListPlainMountableFiles(ctx, app.ID, "staging")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(1))
@@ -330,7 +389,7 @@ var _ = Describe("GetPlainContents", func() {
 		Expect(err).NotTo(HaveOccurred())
 		addDefaultFile(defID, "default-content")
 
-		result, err := provider.GetPlainContents(ctx, app.ID, "staging")
+		result, err := provider.ListPlainMountableFiles(ctx, app.ID, "staging")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(BeEmpty())

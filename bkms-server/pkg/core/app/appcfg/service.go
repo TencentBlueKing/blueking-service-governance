@@ -30,8 +30,8 @@ type AppConfigFileService struct {
 	*AppCfgFileDefService
 }
 
-// 编译期校验：AppCfgFileDefService 必须实现 AppConfigContentProvider。
-var _ AppConfigContentProvider = (*AppCfgFileDefService)(nil)
+// 编译期校验：AppCfgFileDefService 必须实现 MountableFileProvider。
+var _ MountableFileProvider = (*AppCfgFileDefService)(nil)
 
 // NewAppConfigFileService 内部构造分层服务。
 func NewAppConfigFileService(

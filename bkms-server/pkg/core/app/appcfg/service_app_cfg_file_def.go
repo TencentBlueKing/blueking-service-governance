@@ -237,15 +237,9 @@ func (s *AppCfgFileDefService) GetEnvFileDetail(
 	def *AppConfigFileDef,
 	envName string,
 ) (*EnvFileDetailResult, error) {
-	policy, err := s.policyFor(def.ConfigKind)
+	policy, defaultFile, envFile, err := s.loadPolicyAndEnvFiles(ctx, def, envName)
 	if err != nil {
 		return nil, err
-	}
-
-	// 加载默认文件
-	defaultFile, err := s.FileStore.GetByDefIDAndEnv(ctx, def.ID, EnvNameDefault)
-	if err != nil {
-		return nil, errors.Wrap(err, "loading default file")
 	}
 
 	result := &EnvFileDetailResult{Def: def, DefaultFile: defaultFile, DisplayFile: defaultFile}
@@ -259,12 +253,6 @@ func (s *AppCfgFileDefService) GetEnvFileDetail(
 	// 策略校验：该文件是否在指定环境生效
 	if !policy.IsEffectiveForEnv(def, envName) {
 		return nil, errors.Errorf("file %s is not effective for env %s", def.Name, envName)
-	}
-
-	// 查环境实例
-	envFile, err := s.FindEnvInstance(ctx, def.ID, envName)
-	if err != nil {
-		return nil, err
 	}
 
 	strategy := policy.GetEnvInstanceStrategy()
@@ -283,6 +271,39 @@ func (s *AppCfgFileDefService) GetEnvFileDetail(
 
 	s.fillEditorInfo(ctx, result)
 	return result, nil
+}
+
+// loadPolicyAndEnvFiles 返回单个 def 在目标环境下做后续决策所需的 policy、默认文件和环境实例。
+// envFile 仅在“非默认环境 + 独立配置 + 策略上对该环境生效”时才会查询；其余场景固定为 nil。
+func (s *AppCfgFileDefService) loadPolicyAndEnvFiles(
+	ctx context.Context,
+	def *AppConfigFileDef,
+	envName string,
+) (
+	policy ConfigKindPolicy,
+	defaultFile *AppConfigFile,
+	envFile *AppConfigFile,
+	err error,
+) {
+	policy, err = s.policyFor(def.ConfigKind)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	defaultFile, err = s.FileStore.GetByDefIDAndEnv(ctx, def.ID, EnvNameDefault)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "loading default file")
+	}
+
+	if envName == EnvNameDefault || !def.EnvConfigMode.IsIndependent() || !policy.IsEffectiveForEnv(def, envName) {
+		return policy, defaultFile, nil, nil
+	}
+
+	envFile, err = s.FindEnvInstance(ctx, def.ID, envName)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "loading env file")
+	}
+	return policy, defaultFile, envFile, nil
 }
 
 // fillEditorInfo 为详情结果填充编辑器相关信息（editableContentField / baseContentInfo）。

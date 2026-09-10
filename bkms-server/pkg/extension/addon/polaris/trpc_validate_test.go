@@ -42,7 +42,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 		appConfigFileDefStore appcfg.AppConfigFileDefStore
 		versionStore          appcfg.AppConfigFileVersionStore
 		polarisConfigStore    polaris.PolarisConfigStore
-		cfgProvider           appcfg.AppConfigContentProvider
+		cfgProvider           appcfg.MountableFileProvider
 		testAppID             string
 	)
 

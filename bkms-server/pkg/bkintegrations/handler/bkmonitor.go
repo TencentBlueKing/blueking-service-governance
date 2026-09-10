@@ -80,7 +80,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	cfwc, err := cfgProvider.GetFrameworkContent(ctx, app.ID, env.Name)
+	cfwc, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting env content"))
 		return
