@@ -52,13 +52,15 @@
   const bkCIProjectID = ref('');
   const isLoading = ref(false);
   const monitorBaseUrl = `${import.meta.env.BK_MONITOR}`.replace(/\/+$/, '');
-  const trimSlashes = (url: string) => url.replace(/^\/+|\/+$/g, '');
 
   /** 拼接规则：{BK_MONITOR}/{resp.url}/?space_uid=bkci__{bkCIProjectID} */
   const iframeUrl = computed(() => {
     if (!props.url) return '';
 
-    return `${monitorBaseUrl}/${trimSlashes(props.url)}/?space_uid=bkci__${bkCIProjectID.value}`;
+    // 去掉开头的 /，避免 //xxx 被解析为协议相对地址
+    const url = new URL(props.url.replace(/^\/+/, ''), monitorBaseUrl);
+    url.searchParams.set('space_uid', `bkci__${bkCIProjectID.value}`);
+    return url.toString();
   });
 
   async function fetchBkCIProjectID() {
