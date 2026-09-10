@@ -20,10 +20,7 @@
 package model
 
 import (
-	"strings"
-
 	"github.com/go-playground/validator/v10"
-	"github.com/samber/lo"
 )
 
 // validate 包级校验器实例（复用，避免重复创建）
@@ -50,8 +47,8 @@ func validateSnapshot(sl validator.StructLevel) {
 	if d.Metadata.WorkloadName == "" {
 		sl.ReportError(d.Metadata.WorkloadName, "Metadata.WorkloadName", "WorkloadName", "required", "")
 	}
-	if d.EnvBinding != nil && len(d.EnvBinding.Services) == 0 {
-		sl.ReportError(d.EnvBinding.Services, "EnvBinding.Services", "Services", "min", "")
+	if d.EnvBinding != nil && d.EnvBinding.BscpAppID == "" {
+		sl.ReportError(d.EnvBinding.BscpAppID, "EnvBinding.BscpAppID", "BscpAppID", "required", "")
 	}
 }
 
@@ -63,15 +60,12 @@ type Snapshot struct {
 	EnvBinding *EnvBinding `validate:"required"`
 }
 
-// GetServiceNames 获取绑定的下发服务名称列表（逗号分隔）
-func (d *Snapshot) GetServiceNames() string {
+// GetBscpAppName 获取绑定的 BSCP App 名称（即 bkms appID）
+func (d *Snapshot) GetBscpAppName() string {
 	if d.EnvBinding == nil {
 		return ""
 	}
-	names := lo.Map(d.EnvBinding.Services, func(svc ServiceRef, _ int) string {
-		return svc.Name
-	})
-	return strings.Join(names, ",")
+	return d.EnvBinding.AppID
 }
 
 // Validate 校验聚合配置的必要字段

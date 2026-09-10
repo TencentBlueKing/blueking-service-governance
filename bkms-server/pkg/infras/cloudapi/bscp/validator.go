@@ -46,39 +46,65 @@ func Validate(v any) error {
 	return validate.Struct(v)
 }
 
-// Validate 校验创建 BSCP 服务请求
-func (r *CreateServiceReq) Validate() error {
+// Validate 校验创建环境请求
+func (r *CreateEnvironmentReq) Validate() error {
 	if err := Validate(r); err != nil {
 		return err
 	}
+	switch r.Type {
+	case "prod", "staging", "test", "dev":
+	default:
+		return errors.Errorf("invalid environment type: %s", r.Type)
+	}
+	return nil
+}
 
+// Validate 校验创建 App 请求
+func (r *CreateAppReq) Validate() error {
+	if err := Validate(r); err != nil {
+		return err
+	}
 	switch r.ConfigType {
 	case ConfigTypeFile, ConfigTypeKV:
 	default:
 		return errors.Errorf("invalid config_type: %s", r.ConfigType)
 	}
-
 	switch r.DataType {
 	case DataTypeAny, DataTypeString, DataTypeNumber, DataTypeText,
 		DataTypeJSON, DataTypeXML, DataTypeYAML, DataTypeSecret:
 	default:
 		return errors.Errorf("invalid data_type: %s", r.DataType)
 	}
-
 	if !r.IsApprove {
 		return nil
 	}
-
-	// 审批校验 仅在 IsApprove=true 时生效
 	switch r.ApproveType {
 	case ApproveTypeCountSign, ApproveTypeOrSign:
 	default:
 		return errors.Errorf("invalid approve_type: %s", r.ApproveType)
 	}
-
 	if r.Approver == "" {
 		return errors.New("approver is required when is_approve is true")
 	}
-
 	return nil
+}
+
+// Validate 校验创建客户端密钥请求
+func (r *CreateCredentialReq) Validate() error {
+	return Validate(r)
+}
+
+// Validate 校验更新密钥关联服务规则请求
+func (r *UpdateCredentialScopeReq) Validate() error {
+	return Validate(r)
+}
+
+// Validate 校验创建脚本请求
+func (r *CreateHookReq) Validate() error {
+	return Validate(r)
+}
+
+// Validate 校验更新 App 绑定的前后置脚本请求
+func (r *UpdateConfigHookReq) Validate() error {
+	return Validate(r)
 }

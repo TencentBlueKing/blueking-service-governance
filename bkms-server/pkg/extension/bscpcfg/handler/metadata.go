@@ -69,6 +69,13 @@ func (h *Handler) InitMetadata(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotFound, "workspace missing bizID"))
 		return
 	}
+	if ws.BkSystems.BkBSCPProjectID == "" {
+		bkerrs.AbortWithErr(
+			c,
+			bkerrs.New(bkerrs.ErrCodeNotFound, "workspace missing bscp project, run bind-bscp-project first"),
+		)
+		return
+	}
 
 	mgr, err := h.newManager(c)
 	if err != nil {
@@ -84,11 +91,13 @@ func (h *Handler) InitMetadata(c *gin.Context) {
 	}
 
 	appConfig, err := mgr.InitMetadata(ctx, &svc.InitMetadataParams{
-		AppID:        app.ID,
-		WorkloadName: workloadName,
-		WorkloadKind: workloadKind,
-		BscpBizID:    ws.BkSystems.BkCCBizID,
-		Operator:     auth.MustGetUser(ctx).ID,
+		AppID:          app.ID,
+		WorkloadName:   workloadName,
+		WorkloadKind:   workloadKind,
+		BscpBizID:      ws.BkSystems.BkCCBizID,
+		BscpProjectID:  ws.BkSystems.BkBSCPProjectID,
+		BscpProjectKey: ws.BkSystems.BkBSCPProjectKey,
+		Operator:       auth.MustGetUser(ctx).ID,
 	})
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init metadata"))

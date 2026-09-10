@@ -285,6 +285,10 @@ svcConf:
   bscp:
     # BSCP Feed Server 地址
     feedAddr: bscp-feed.example.com:9510
+    # bscp-init 镜像
+    initImage: mirrors.example.com/bscp/bscp-init:latest
+    # bscp-sidecar 镜像
+    sidecarImage: mirrors.example.com/bscp/bscp-sidecar:latest
   # ------------------------------ 服务运行时 ------------------------------
   # 业务 HTTP Server 配置
   httpServer:

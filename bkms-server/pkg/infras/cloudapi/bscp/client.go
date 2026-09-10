@@ -44,8 +44,6 @@ type Client interface {
 	ListUserBizs(ctx context.Context) ([]Biz, error)
 	// GetBiz 获取指定业务信息
 	GetBiz(ctx context.Context, bizID string) (*Biz, error)
-	// CreateService 在业务下创建 BSCP 服务
-	CreateService(ctx context.Context, req *CreateServiceReq) (*Service, error)
 	// ListBizServices 获取业务下的服务列表
 	ListBizServices(ctx context.Context, bizID string) ([]Service, error)
 	// GetBizService 获取指定服务
@@ -56,36 +54,6 @@ type Client interface {
 	ListServiceConfigs(ctx context.Context, bizID, svcID, versionID string) ([]Config, error)
 	// GetServiceConfig 获取指定的配置项
 	GetServiceConfig(ctx context.Context, bizID, svcID, versionID, id string) (Config, error)
-	// GetConfigContent 获取配置项的内容
-	GetConfigContent(ctx context.Context, bizID, svcID, versionID, id string) (string, error)
-	// GetOrCreateService 获取或创建 BSCP 服务
-	GetOrCreateService(ctx context.Context, req *CreateServiceReq) (*Service, error)
-	// CreateCredential 创建客户端密钥
-	CreateCredential(ctx context.Context, req *CreateCredentialReq) (int64, error)
-	// ListCredentials 获取业务下的客户端密钥列表
-	ListCredentials(ctx context.Context, bizID string) ([]Credential, error)
-	// UpdateCredential 更新客户端密钥
-	UpdateCredential(ctx context.Context, req *UpdateCredentialReq) error
-	// CheckCredentialName 检测客户端密钥名称是否已存在
-	CheckCredentialName(ctx context.Context, bizID, name string) (bool, error)
-	// UpdateCredentialScope 更新客户端密钥关联服务规则
-	UpdateCredentialScope(ctx context.Context, req *UpdateCredentialScopeReq) error
-	// ListCredentialScopes 获取客户端密钥关联服务列表
-	ListCredentialScopes(ctx context.Context, bizID, credentialID string) ([]CredentialScope, error)
-	// CreateHook 创建脚本
-	CreateHook(ctx context.Context, req *CreateHookReq) (int64, error)
-	// DeleteHook 删除脚本
-	DeleteHook(ctx context.Context, req *DeleteHookReq) error
-	// GetHook 获取脚本详情
-	GetHook(ctx context.Context, bizID string, hookID int64) (*Hook, error)
-	// GetReleaseHook 获取版本绑定的前后置脚本
-	GetReleaseHook(ctx context.Context, bizID string, appID, releaseID int64) (*ReleaseHook, error)
-	// ListHooks 获取脚本列表
-	ListHooks(ctx context.Context, req *ListHooksReq) (*ListHooksResp, error)
-	// UpdateConfigHook 更新服务绑定的前后置脚本
-	UpdateConfigHook(ctx context.Context, req *UpdateConfigHookReq) error
-	// UpdateHook 更新脚本信息（标签、描述）
-	UpdateHook(ctx context.Context, req *UpdateHookReq) error
 }
 
 // ApiClient 蓝鲸 BSCP 组件 API Client

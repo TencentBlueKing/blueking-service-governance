@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
+	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 )
 
@@ -38,11 +39,6 @@ const (
 	VolumeName = "bscp-temp"
 	// ShareVolumeName bscp-share volume 名称（sidecar 和主容器共享）
 	ShareVolumeName = "bscp-share"
-
-	// InitImage bscp-init 容器镜像
-	InitImage = "mirrors.tencent.com/bscp/bscp-init:latest"
-	// SidecarImage bscp-sidecar 容器镜像
-	SidecarImage = "mirrors.tencent.com/bscp/bscp-sidecar:latest"
 
 	// fileCacheDisabledArg 禁用文件缓存的启动参数
 	fileCacheDisabledArg = "--file-cache-enabled=false"
@@ -59,7 +55,7 @@ const (
 type Params struct {
 	// BscpBizID BSCP 业务 ID
 	BscpBizID string
-	// AppNames 绑定的服务名称列表（允许多个 bscp 配置，使用逗号分隔）
+	// AppNames 绑定的 BSCP App 名称（即 bkms appID）
 	AppNames string
 	// MountPath 业务容器指定的挂载路径
 	MountPath string
@@ -67,6 +63,14 @@ type Params struct {
 	FeedAddr string
 	// Token 服务秘钥
 	Token string
+	// ProjectKey BSCP 项目 Key（如 BK-BSCP-12345）
+	ProjectKey string
+	// EnvName BSCP 环境名称
+	EnvName string
+	// InitImage bscp-init 容器镜像
+	InitImage string
+	// SidecarImage bscp-sidecar 容器镜像
+	SidecarImage string
 }
 
 // PodFragment 装配产出的 pod 片段，待合并到完整 pod 中
@@ -94,6 +98,8 @@ func Build(params Params) *PodFragment {
 		{Name: "feed_addrs", Value: params.FeedAddr},
 		{Name: "token", Value: params.Token},
 		{Name: "temp_dir", Value: BscpDownloadPath},
+		{Name: "project_key", Value: params.ProjectKey},
+		{Name: "env_name", Value: params.EnvName},
 	}
 	// bscp-temp volumeMount
 	bscpTempMount := corev1.VolumeMount{
@@ -116,7 +122,7 @@ func Build(params Params) *PodFragment {
 		InitContainers: []corev1.Container{
 			{
 				Name:         InitContainerName,
-				Image:        InitImage,
+				Image:        params.InitImage,
 				Args:         []string{fileCacheDisabledArg},
 				Env:          bscpEnvVars,
 				VolumeMounts: []corev1.VolumeMount{bscpTempMount},
@@ -126,7 +132,7 @@ func Build(params Params) *PodFragment {
 		Containers: []corev1.Container{
 			{
 				Name:         SidecarContainerName,
-				Image:        SidecarImage,
+				Image:        params.SidecarImage,
 				Args:         []string{fileCacheDisabledArg},
 				Env:          bscpEnvVars,
 				VolumeMounts: []corev1.VolumeMount{bscpTempMount, sidecarShareMount},
@@ -173,11 +179,15 @@ func BuildFromStore(
 	}
 
 	fragment := Build(Params{
-		BscpBizID: snapshot.Metadata.BscpBizID,
-		AppNames:  snapshot.GetServiceNames(),
-		MountPath: snapshot.Metadata.MountPath,
-		FeedAddr:  snapshot.Metadata.FeedAddr,
-		Token:     snapshot.Metadata.Token,
+		BscpBizID:    snapshot.Metadata.BscpBizID,
+		AppNames:     snapshot.GetBscpAppName(),
+		MountPath:    snapshot.Metadata.MountPath,
+		FeedAddr:     snapshot.Metadata.FeedAddr,
+		Token:        snapshot.Metadata.Token,
+		ProjectKey:   snapshot.Metadata.ProjectKey,
+		EnvName:      snapshot.EnvBinding.BscpEnvName,
+		InitImage:    svccfg.G.BSCP.InitImage,
+		SidecarImage: svccfg.G.BSCP.SidecarImage,
 	})
 	fragment.WorkloadName = snapshot.Metadata.WorkloadName
 	fragment.WorkloadKind = snapshot.Metadata.WorkloadKind

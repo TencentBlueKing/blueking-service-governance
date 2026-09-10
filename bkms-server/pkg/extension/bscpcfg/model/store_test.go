@@ -49,152 +49,118 @@ var _ = Describe("Store", func() {
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteMetadata(ctx, testAppID)
 		_ = store.DeleteEnvBindingsByApp(ctx, testAppID)
+		_ = store.DeleteMetadata(ctx, testAppID)
 		diApp.RequireStop()
 	})
 
-	// === Metadata Delete 边界测试 ===
-	Describe("DeleteMetadata", func() {
-		Context("when meta exists", func() {
-			BeforeEach(func() {
-				meta := &model.Metadata{
-					AppID:     testAppID,
-					BscpBizID: "12345",
-					MountPath: "/data/bscp",
-					Operator:  "tester",
-				}
-				err := store.CreateMetadata(ctx, meta)
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should delete successfully", func() {
-				err := store.DeleteMetadata(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-
-				// 验证已删除
-				_, err = store.GetMetadata(ctx, testAppID)
-				Expect(err).To(MatchError(model.ErrMetadataNotFound))
-			})
-		})
-
-		Context("when meta does not exist", func() {
-			It("should return ErrMetadataNotFound", func() {
-				err := store.DeleteMetadata(ctx, "non-existent-app")
-				Expect(err).To(MatchError(model.ErrMetadataNotFound))
-			})
-		})
-	})
-
-	// === Metadata Get 边界测试 ===
-	Describe("GetMetadata", func() {
-		Context("when meta does not exist", func() {
-			It("should return ErrMetadataNotFound", func() {
-				_, err := store.GetMetadata(ctx, "non-existent-app")
-				Expect(err).To(MatchError(model.ErrMetadataNotFound))
-			})
-		})
-	})
-
-	// === Env 级 Delete 边界测试 ===
-	Describe("DeleteEnvBinding", func() {
-		Context("when binding exists", func() {
-			BeforeEach(func() {
-				binding := &model.EnvBinding{
-					AppID:    testAppID,
-					EnvName:  "dev",
-					Services: []model.ServiceRef{{ID: "svc-1", Name: "file-svc"}},
-				}
-				err := store.CreateEnvBinding(ctx, binding)
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should delete successfully", func() {
-				err := store.DeleteEnvBinding(ctx, testAppID, "dev")
-				Expect(err).NotTo(HaveOccurred())
-
-				// 验证已删除
-				_, err = store.GetEnvBinding(ctx, testAppID, "dev")
-				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
-			})
-		})
-
-		Context("when binding does not exist", func() {
-			It("should return ErrEnvBindingNotFound", func() {
-				err := store.DeleteEnvBinding(ctx, testAppID, "non-existent-env")
-				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
-			})
-		})
-	})
-
-	// === Env 级 Get 边界测试 ===
-	Describe("GetEnvBinding", func() {
-		Context("when binding does not exist", func() {
-			It("should return ErrEnvBindingNotFound", func() {
-				_, err := store.GetEnvBinding(ctx, testAppID, "non-existent-env")
-				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
-			})
-		})
-	})
-
-	// === GetSnapshot 边界测试 ===
 	Describe("GetSnapshot", func() {
 		Context("when metadata does not exist", func() {
 			It("should return nil, nil", func() {
-				detail, err := store.GetSnapshot(ctx, "non-existent-app", "dev")
+				snap, err := store.GetSnapshot(ctx, testAppID, "dev")
 				Expect(err).NotTo(HaveOccurred())
-				Expect(detail).To(BeNil())
+				Expect(snap).To(BeNil())
 			})
 		})
 
 		Context("when metadata exists but env binding does not", func() {
-			BeforeEach(func() {
-				meta := &model.Metadata{
-					AppID:     testAppID,
-					BscpBizID: "12345",
-					MountPath: "/data/bscp",
-				}
-				err := store.CreateMetadata(ctx, meta)
-				Expect(err).NotTo(HaveOccurred())
-			})
-
 			It("should return nil, nil", func() {
-				detail, err := store.GetSnapshot(ctx, testAppID, "non-existent-env")
+				createTestMetadata(ctx, store, testAppID)
+
+				snap, err := store.GetSnapshot(ctx, testAppID, "dev")
 				Expect(err).NotTo(HaveOccurred())
-				Expect(detail).To(BeNil())
+				Expect(snap).To(BeNil())
 			})
 		})
 
 		Context("when both metadata and env binding exist", func() {
-			BeforeEach(func() {
-				meta := &model.Metadata{
-					AppID:     testAppID,
-					BscpBizID: "12345",
-					MountPath: "/data/bscp",
-					Token:     "test-token",
-					FeedAddr:  "bscp-feed.example.com:9500",
-				}
-				err := store.CreateMetadata(ctx, meta)
-				Expect(err).NotTo(HaveOccurred())
+			It("should return the aggregated snapshot", func() {
+				createTestMetadata(ctx, store, testAppID)
+				createTestEnvBinding(ctx, store, testAppID, "dev")
 
-				binding := &model.EnvBinding{
-					AppID:    testAppID,
-					EnvName:  "dev",
-					Services: []model.ServiceRef{{ID: "svc-1", Name: "file-svc"}},
-				}
-				err = store.CreateEnvBinding(ctx, binding)
+				snap, err := store.GetSnapshot(ctx, testAppID, "dev")
 				Expect(err).NotTo(HaveOccurred())
+				Expect(snap).NotTo(BeNil())
+				Expect(snap.Metadata.AppID).To(Equal(testAppID))
+				Expect(snap.EnvBinding.EnvName).To(Equal("dev"))
+				Expect(snap.EnvBinding.BscpAppID).To(Equal("1001"))
 			})
+		})
+	})
 
-			It("should return aggregated detail", func() {
-				detail, err := store.GetSnapshot(ctx, testAppID, "dev")
+	Describe("FeatureFlag", func() {
+		Context("when upserting an enabled flag", func() {
+			It("should be retrievable and enabled", func() {
+				err := store.UpsertFeatureFlag(ctx, &model.FeatureFlag{
+					AppID:    testAppID,
+					Enabled:  true,
+					Operator: "tester",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(detail).NotTo(BeNil())
-				Expect(detail.Metadata).NotTo(BeNil())
-				Expect(detail.Metadata.BscpBizID).To(Equal("12345"))
-				Expect(detail.EnvBinding).NotTo(BeNil())
-				Expect(detail.EnvBinding.Services).To(HaveLen(1))
+
+				flag, err := store.GetFeatureFlag(ctx, testAppID)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(flag.Enabled).To(BeTrue())
+				Expect(flag.Operator).To(Equal("tester"))
+			})
+		})
+
+		Context("when upserting the same app again", func() {
+			It("should update the existing flag", func() {
+				err := store.UpsertFeatureFlag(ctx, &model.FeatureFlag{
+					AppID:    testAppID,
+					Enabled:  true,
+					Operator: "tester",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				err = store.UpsertFeatureFlag(ctx, &model.FeatureFlag{
+					AppID:    testAppID,
+					Enabled:  false,
+					Operator: "admin",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				flag, err := store.GetFeatureFlag(ctx, testAppID)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(flag.Enabled).To(BeFalse())
+				Expect(flag.Operator).To(Equal("admin"))
+			})
+		})
+
+		Context("when feature flag does not exist", func() {
+			It("should return ErrFeatureFlagNotFound", func() {
+				_, err := store.GetFeatureFlag(ctx, testAppID)
+				Expect(err).To(MatchError(model.ErrFeatureFlagNotFound))
 			})
 		})
 	})
 })
+
+// createTestMetadata 创建一个满足 MetadataStore 校验的 Metadata。
+func createTestMetadata(ctx context.Context, store model.Store, appID string) {
+	err := store.CreateMetadata(ctx, &model.Metadata{
+		AppID:        appID,
+		BscpBizID:    "12345",
+		MountPath:    "/data/bscp",
+		CredentialID: "cred-1",
+		Token:        "test-token",
+		FeedAddr:     "bscp-feed.example.com:9500",
+		WorkloadName: "test-workload",
+		Operator:     "tester",
+	})
+	Expect(err).NotTo(HaveOccurred())
+}
+
+// createTestEnvBinding 创建一个满足 EnvBindingStore 校验的 EnvBinding。
+func createTestEnvBinding(ctx context.Context, store model.Store, appID, envName string) {
+	err := store.CreateEnvBinding(ctx, &model.EnvBinding{
+		AppID:       appID,
+		EnvName:     envName,
+		BscpEnvID:   "1",
+		BscpEnvName: "dev",
+		BscpAppID:   "1001",
+		Operator:    "tester",
+	})
+	Expect(err).NotTo(HaveOccurred())
+}

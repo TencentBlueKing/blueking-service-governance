@@ -25,99 +25,89 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 )
 
-var _ = Describe("Snapshot Validate", func() {
-	// validSnapshot 构建一个完整有效的 Snapshot
-	validSnapshot := func() *model.Snapshot {
+var _ = Describe("Snapshot", func() {
+	// newValidSnapshot 构造一个满足 Snapshot.Validate 的完整快照。
+	newValidSnapshot := func() *model.Snapshot {
 		return &model.Snapshot{
 			Metadata: &model.Metadata{
-				AppID:        "app-1",
-				BscpBizID:    "100",
+				AppID:        "test-app",
+				BscpBizID:    "12345",
 				MountPath:    "/data/bscp",
 				Token:        "test-token",
-				FeedAddr:     "feed.example.com:9510",
-				WorkloadName: "main",
+				FeedAddr:     "bscp-feed.example.com:9500",
+				WorkloadName: "test-workload",
 			},
 			EnvBinding: &model.EnvBinding{
-				AppID:   "app-1",
-				EnvName: "prod",
-				Services: []model.ServiceRef{
-					{ID: "svc-1", Name: "order-svc"},
-				},
+				AppID:     "test-app",
+				EnvName:   "dev",
+				BscpAppID: "1001",
 			},
 		}
 	}
 
-	Context("when all fields are valid", func() {
-		It("should pass validation", func() {
-			snapshot := validSnapshot()
-			err := snapshot.Validate()
-			Expect(err).NotTo(HaveOccurred())
+	Describe("GetBscpAppName", func() {
+		Context("when EnvBinding is nil", func() {
+			It("should return empty string", func() {
+				snap := &model.Snapshot{}
+				Expect(snap.GetBscpAppName()).To(Equal(""))
+			})
+		})
+
+		Context("when EnvBinding is present", func() {
+			It("should return the bkms appID", func() {
+				snap := &model.Snapshot{
+					EnvBinding: &model.EnvBinding{AppID: "test-app"},
+				}
+				Expect(snap.GetBscpAppName()).To(Equal("test-app"))
+			})
 		})
 	})
 
-	Context("when WorkloadName is empty", func() {
-		It("should return validation error", func() {
-			snapshot := validSnapshot()
-			snapshot.Metadata.WorkloadName = ""
-
-			err := snapshot.Validate()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("WorkloadName"))
+	Describe("Validate", func() {
+		Context("when snapshot is valid", func() {
+			It("should pass", func() {
+				Expect(newValidSnapshot().Validate()).NotTo(HaveOccurred())
+			})
 		})
-	})
 
-	Context("when MountPath is empty", func() {
-		It("should return validation error", func() {
-			snapshot := validSnapshot()
-			snapshot.Metadata.MountPath = ""
-
-			err := snapshot.Validate()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("MountPath"))
+		Context("when Metadata is nil", func() {
+			It("should return error", func() {
+				snap := newValidSnapshot()
+				snap.Metadata = nil
+				Expect(snap.Validate()).To(HaveOccurred())
+			})
 		})
-	})
 
-	Context("when Token is empty", func() {
-		It("should return validation error", func() {
-			snapshot := validSnapshot()
-			snapshot.Metadata.Token = ""
-
-			err := snapshot.Validate()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("Token"))
+		Context("when Metadata.MountPath is empty", func() {
+			It("should return error", func() {
+				snap := newValidSnapshot()
+				snap.Metadata.MountPath = ""
+				Expect(snap.Validate()).To(HaveOccurred())
+			})
 		})
-	})
 
-	Context("when FeedAddr is empty", func() {
-		It("should return validation error", func() {
-			snapshot := validSnapshot()
-			snapshot.Metadata.FeedAddr = ""
-
-			err := snapshot.Validate()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("FeedAddr"))
+		Context("when Metadata.Token is empty", func() {
+			It("should return error", func() {
+				snap := newValidSnapshot()
+				snap.Metadata.Token = ""
+				Expect(snap.Validate()).To(HaveOccurred())
+			})
 		})
-	})
 
-	Context("when Metadata is nil", func() {
-		It("should return validation error", func() {
-			snapshot := &model.Snapshot{
-				Metadata:   nil,
-				EnvBinding: &model.EnvBinding{},
-			}
-
-			err := snapshot.Validate()
-			Expect(err).To(HaveOccurred())
+		Context("when Metadata.FeedAddr is empty", func() {
+			It("should return error", func() {
+				snap := newValidSnapshot()
+				snap.Metadata.FeedAddr = ""
+				Expect(snap.Validate()).To(HaveOccurred())
+			})
 		})
-	})
 
-	Context("when EnvBinding.Services is empty", func() {
-		It("should return validation error", func() {
-			snapshot := validSnapshot()
-			snapshot.EnvBinding.Services = []model.ServiceRef{}
-
-			err := snapshot.Validate()
-			Expect(err).To(HaveOccurred())
+		Context("when EnvBinding.BscpAppID is empty", func() {
+			It("should return error", func() {
+				snap := newValidSnapshot()
+				snap.EnvBinding.BscpAppID = ""
+				Expect(snap.Validate()).To(HaveOccurred())
+			})
 		})
 	})
 })

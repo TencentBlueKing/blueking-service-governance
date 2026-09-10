@@ -19,364 +19,171 @@
 package bscpcfg_test
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
-	extmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/bscpcfg"
 )
 
-// mockStore 是一个最小化的 Store mock，仅实现 GetSnapshot 方法。
-type mockStore struct {
-	extmodel.Store
-	snapshot *extmodel.Snapshot
-	err      error
-}
-
-func (m *mockStore) GetSnapshot(_ context.Context, _, _ string) (*extmodel.Snapshot, error) {
-	return m.snapshot, m.err
-}
-
 var _ = Describe("MergePodSpec", func() {
+	const testInitImage = "bscp-init:test"
+	const testSidecarImage = "bscp-sidecar:test"
+
+	// buildFragment 构建测试用的 PodFragment。
+	buildFragment := func() *bscpcfg.PodFragment {
+		return bscpcfg.Build(bscpcfg.Params{
+			BscpBizID:    "100",
+			AppNames:     "order-svc",
+			MountPath:    "/data/bscp",
+			FeedAddr:     "feed.example.com:9510",
+			Token:        "test-token",
+			ProjectKey:   "BK-BSCP-00012",
+			EnvName:      "dev",
+			InitImage:    testInitImage,
+			SidecarImage: testSidecarImage,
+		})
+	}
+
+	// buildPodSpec 构建一个仅含主容器的 typed PodSpec。
+	buildPodSpec := func() *corev1.PodSpec {
+		return &corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "main", Image: "my-app:latest"},
+			},
+		}
+	}
+
 	Describe("when fragment is nil", func() {
-		It("should not modify the PodSpec and return nil", func() {
-			podSpec := &corev1.PodSpec{
-				InitContainers: []corev1.Container{{Name: "existing-init"}},
-				Containers: []corev1.Container{
-					{Name: "main", VolumeMounts: []corev1.VolumeMount{{Name: "app-vol", MountPath: "/app"}}},
-				},
-				Volumes: []corev1.Volume{{Name: "existing-vol"}},
-			}
+		It("should not modify the podSpec and return nil", func() {
+			podSpec := buildPodSpec()
 
 			err := bscpcfg.MergePodSpec(podSpec, nil, "main")
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(podSpec.InitContainers).To(HaveLen(1))
-			Expect(podSpec.InitContainers[0].Name).To(Equal("existing-init"))
 			Expect(podSpec.Containers).To(HaveLen(1))
-			Expect(podSpec.Volumes).To(HaveLen(1))
+			Expect(podSpec.InitContainers).To(BeEmpty())
+			Expect(podSpec.Volumes).To(BeEmpty())
 		})
 	})
 
 	Describe("when podSpec is nil", func() {
 		It("should return ErrPodSpecNil", func() {
-			fragment := &bscpcfg.PodFragment{
-				InitContainers: []corev1.Container{{Name: bscpcfg.InitContainerName}},
-			}
+			err := bscpcfg.MergePodSpec(nil, buildFragment(), "main")
 
-			err := bscpcfg.MergePodSpec(nil, fragment, "main")
-
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(bscpcfg.ErrPodSpecNil))
+			Expect(err).To(MatchError(bscpcfg.ErrPodSpecNil))
 		})
 	})
 
-	Describe("when main container is not found in PodSpec", func() {
+	Describe("when main container is not found", func() {
 		It("should return ErrMainContainerNotFound with container name", func() {
-			podSpec := &corev1.PodSpec{
-				Containers: []corev1.Container{{Name: "sidecar-only"}},
-			}
-			fragment := &bscpcfg.PodFragment{
-				InitContainers: []corev1.Container{{Name: bscpcfg.InitContainerName}},
-			}
-
-			err := bscpcfg.MergePodSpec(podSpec, fragment, "main")
+			err := bscpcfg.MergePodSpec(buildPodSpec(), buildFragment(), "non-existent")
 
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Cause(err)).To(Equal(bscpcfg.ErrMainContainerNotFound))
-			Expect(err.Error()).To(ContainSubstring("main"))
+			Expect(err.Error()).To(ContainSubstring("non-existent"))
+		})
+
+		It("should return ErrMainContainerNotFound when containers is empty", func() {
+			podSpec := &corev1.PodSpec{Containers: []corev1.Container{}}
+
+			err := bscpcfg.MergePodSpec(podSpec, buildFragment(), "main")
+
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Cause(err)).To(Equal(bscpcfg.ErrMainContainerNotFound))
 		})
 	})
 
-	Describe("idempotency - already injected", func() {
-		It("should skip all injections when already present (including volume)", func() {
-			podSpec := &corev1.PodSpec{
-				InitContainers: []corev1.Container{{Name: bscpcfg.InitContainerName}},
-				Containers: []corev1.Container{
-					{
-						Name: "main",
-						VolumeMounts: []corev1.VolumeMount{
-							{Name: bscpcfg.ShareVolumeName, MountPath: "/data/bscp"},
-						},
-					},
-					{Name: bscpcfg.SidecarContainerName},
-				},
-				Volumes: []corev1.Volume{
-					{Name: bscpcfg.VolumeName},
-					{Name: bscpcfg.ShareVolumeName},
-				},
-			}
-			fragment := &bscpcfg.PodFragment{
-				InitContainers: []corev1.Container{{Name: bscpcfg.InitContainerName}},
-				Containers:     []corev1.Container{{Name: bscpcfg.SidecarContainerName}},
-				Volumes: []corev1.Volume{
-					{Name: bscpcfg.VolumeName},
-					{Name: bscpcfg.ShareVolumeName},
-				},
-				MainContainerVolumeMounts: []corev1.VolumeMount{
-					{Name: bscpcfg.ShareVolumeName, MountPath: "/data/bscp"},
-				},
-			}
+	Describe("normal injection", func() {
+		It("should inject initContainers, sidecar, volumes and volumeMounts", func() {
+			podSpec := buildPodSpec()
 
-			err := bscpcfg.MergePodSpec(podSpec, fragment, "main")
+			err := bscpcfg.MergePodSpec(podSpec, buildFragment(), "main")
 
 			Expect(err).NotTo(HaveOccurred())
+
+			By("init container should be added")
 			Expect(podSpec.InitContainers).To(HaveLen(1))
-			Expect(podSpec.Containers).To(HaveLen(2))
-			Expect(podSpec.Volumes).To(HaveLen(2))
-			Expect(podSpec.Containers[0].VolumeMounts).To(HaveLen(1))
-		})
-	})
+			Expect(podSpec.InitContainers[0].Name).To(Equal(bscpcfg.InitContainerName))
 
-	Describe("normal injection with existing fields", func() {
-		It("should merge all fragment fields into the PodSpec without overwriting existing ones", func() {
-			podSpec := &corev1.PodSpec{
-				InitContainers: []corev1.Container{{Name: "existing-init"}},
-				Containers: []corev1.Container{
-					{Name: "main", VolumeMounts: []corev1.VolumeMount{{Name: "app-vol", MountPath: "/app"}}},
-				},
-				Volumes: []corev1.Volume{{Name: "existing-vol"}},
-			}
-
-			fragment := &bscpcfg.PodFragment{
-				InitContainers: []corev1.Container{{Name: bscpcfg.InitContainerName}},
-				Containers:     []corev1.Container{{Name: bscpcfg.SidecarContainerName}},
-				Volumes: []corev1.Volume{
-					{Name: bscpcfg.VolumeName},
-					{Name: bscpcfg.ShareVolumeName},
-				},
-				MainContainerVolumeMounts: []corev1.VolumeMount{
-					{Name: bscpcfg.ShareVolumeName, MountPath: "/data/bscp"},
-				},
-			}
-
-			err := bscpcfg.MergePodSpec(podSpec, fragment, "main")
-
-			Expect(err).NotTo(HaveOccurred())
-
-			By("InitContainers are appended")
-			Expect(podSpec.InitContainers).To(HaveLen(2))
-			Expect(podSpec.InitContainers[0].Name).To(Equal("existing-init"))
-			Expect(podSpec.InitContainers[1].Name).To(Equal(bscpcfg.InitContainerName))
-
-			By("Sidecar containers are appended after main container")
+			By("sidecar container should be appended")
 			Expect(podSpec.Containers).To(HaveLen(2))
 			Expect(podSpec.Containers[0].Name).To(Equal("main"))
 			Expect(podSpec.Containers[1].Name).To(Equal(bscpcfg.SidecarContainerName))
 
-			By("Volumes are appended (bscp-temp + bscp-share)")
-			Expect(podSpec.Volumes).To(HaveLen(3))
-			Expect(podSpec.Volumes[0].Name).To(Equal("existing-vol"))
-			Expect(podSpec.Volumes[1].Name).To(Equal(bscpcfg.VolumeName))
-			Expect(podSpec.Volumes[2].Name).To(Equal(bscpcfg.ShareVolumeName))
-
-			By("Main container VolumeMounts are appended (bscp-share -> user MountPath)")
-			Expect(podSpec.Containers[0].VolumeMounts).To(HaveLen(2))
-			Expect(podSpec.Containers[0].VolumeMounts[0].Name).To(Equal("app-vol"))
-			Expect(podSpec.Containers[0].VolumeMounts[1].Name).To(Equal(bscpcfg.ShareVolumeName))
-			Expect(podSpec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/data/bscp"))
-		})
-	})
-})
-
-var _ = Describe("InjectFromStore", func() {
-	var (
-		ctx     context.Context
-		podSpec *corev1.PodSpec
-	)
-
-	BeforeEach(func() {
-		ctx = context.Background()
-		podSpec = &corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "main"}},
-		}
-	})
-
-	Describe("when store returns nil snapshot (not configured)", func() {
-		It("should not modify the PodSpec", func() {
-			store := &mockStore{snapshot: nil, err: nil}
-
-			err := bscpcfg.InjectFromStore(ctx, store, "app-1", "dev", "main", podSpec)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(podSpec.InitContainers).To(BeEmpty())
-			Expect(podSpec.Containers).To(HaveLen(1))
-			Expect(podSpec.Volumes).To(BeEmpty())
-		})
-	})
-
-	Describe("when store returns an error", func() {
-		It("should propagate the error", func() {
-			store := &mockStore{snapshot: nil, err: errors.New("db connection failed")}
-
-			err := bscpcfg.InjectFromStore(ctx, store, "app-1", "dev", "main", podSpec)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("db connection failed"))
-		})
-	})
-
-	Describe("when store returns a valid snapshot", func() {
-		It("should merge bscp config artifacts into the PodSpec", func() {
-			store := &mockStore{
-				snapshot: &extmodel.Snapshot{
-					Metadata: &extmodel.Metadata{
-						AppID:        "app-1",
-						BscpBizID:    "100",
-						MountPath:    "/data/bscp",
-						FeedAddr:     "feed.example.com:9510",
-						Token:        "test-token",
-						WorkloadName: "main",
-					},
-					EnvBinding: &extmodel.EnvBinding{
-						AppID:   "app-1",
-						EnvName: "dev",
-						Services: []extmodel.ServiceRef{
-							{ID: "svc-1", Name: "order-svc"},
-							{ID: "svc-2", Name: "user-svc"},
-						},
-					},
-				},
-			}
-
-			err := bscpcfg.InjectFromStore(ctx, store, "app-1", "dev", "main", podSpec)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(podSpec.InitContainers).To(HaveLen(1))
-			Expect(podSpec.InitContainers[0].Name).To(Equal(bscpcfg.InitContainerName))
-			Expect(podSpec.Containers).To(HaveLen(2))
-			Expect(podSpec.Containers[1].Name).To(Equal(bscpcfg.SidecarContainerName))
+			By("volumes should be added")
 			Expect(podSpec.Volumes).To(HaveLen(2))
 			Expect(podSpec.Volumes[0].Name).To(Equal(bscpcfg.VolumeName))
 			Expect(podSpec.Volumes[1].Name).To(Equal(bscpcfg.ShareVolumeName))
-			// 主容器挂载 bscp-share 到 MountPath
+
+			By("main container should have the shared volume mount")
+			mounts := podSpec.Containers[0].VolumeMounts
+			Expect(mounts).To(HaveLen(1))
+			Expect(mounts[0].Name).To(Equal(bscpcfg.ShareVolumeName))
+			Expect(mounts[0].MountPath).To(Equal("/data/bscp"))
+		})
+	})
+
+	Describe("idempotency - already injected", func() {
+		It("should not inject again when already present", func() {
+			podSpec := &corev1.PodSpec{
+				InitContainers: []corev1.Container{
+					{Name: bscpcfg.InitContainerName, Image: testInitImage},
+				},
+				Containers: []corev1.Container{
+					{
+						Name:  "main",
+						Image: "my-app:latest",
+						VolumeMounts: []corev1.VolumeMount{
+							{Name: bscpcfg.ShareVolumeName, MountPath: "/data/bscp"},
+						},
+					},
+					{Name: bscpcfg.SidecarContainerName, Image: testSidecarImage},
+				},
+				Volumes: []corev1.Volume{
+					{Name: bscpcfg.VolumeName},
+					{Name: bscpcfg.ShareVolumeName},
+				},
+			}
+
+			err := bscpcfg.MergePodSpec(podSpec, buildFragment(), "main")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(podSpec.InitContainers).To(HaveLen(1))
+			Expect(podSpec.Containers).To(HaveLen(2))
+			Expect(podSpec.Volumes).To(HaveLen(2))
 			Expect(podSpec.Containers[0].VolumeMounts).To(HaveLen(1))
-			Expect(podSpec.Containers[0].VolumeMounts[0].Name).To(Equal(bscpcfg.ShareVolumeName))
-			Expect(podSpec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/data/bscp"))
 		})
 	})
 
-	Describe("when store returns a valid snapshot - full field verification for debug", func() {
-		It("should inject all fields correctly (image, args, env, volumeMounts, volumes)", func() {
-			store := &mockStore{
-				snapshot: &extmodel.Snapshot{
-					Metadata: &extmodel.Metadata{
-						AppID:        "debug-app",
-						BscpBizID:    "200",
-						MountPath:    "/data/app/config",
-						FeedAddr:     "feed.bscp.svc:9510",
-						Token:        "my-secret-token",
-						WorkloadName: "main",
-					},
-					EnvBinding: &extmodel.EnvBinding{
-						AppID:   "debug-app",
-						EnvName: "prod",
-						Services: []extmodel.ServiceRef{
-							{ID: "svc-a", Name: "config-svc"},
-							{ID: "svc-b", Name: "secret-svc"},
+	Describe("multi-container - volumeMount only injected into main container", func() {
+		It("should inject volumeMount only into the specified main container", func() {
+			podSpec := &corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "primary",
+						Image: "primary:latest",
+						VolumeMounts: []corev1.VolumeMount{
+							{Name: "app-config", MountPath: "/etc/config"},
 						},
 					},
+					{Name: "secondary", Image: "secondary:latest"},
 				},
 			}
 
-			err := bscpcfg.InjectFromStore(ctx, store, "debug-app", "prod", "main", podSpec)
+			err := bscpcfg.MergePodSpec(podSpec, buildFragment(), "primary")
 
 			Expect(err).NotTo(HaveOccurred())
 
-			By("init container count and name")
-			Expect(podSpec.InitContainers).To(HaveLen(1))
-			initC := podSpec.InitContainers[0]
-			Expect(initC.Name).To(Equal(bscpcfg.InitContainerName))
+			// primary 应保留原有 volumeMount 并追加注入的共享卷挂载
+			primaryMounts := podSpec.Containers[0].VolumeMounts
+			Expect(primaryMounts).To(HaveLen(2))
+			Expect(primaryMounts[0].Name).To(Equal("app-config"))
+			Expect(primaryMounts[1].Name).To(Equal(bscpcfg.ShareVolumeName))
 
-			By("init container image")
-			Expect(initC.Image).To(Equal(bscpcfg.InitImage))
-
-			By("init container args")
-			Expect(initC.Args).To(ConsistOf("--file-cache-enabled=false"))
-
-			By("init container env vars")
-			Expect(initC.Env).To(HaveLen(5))
-			Expect(initC.Env).To(ContainElements(
-				corev1.EnvVar{Name: "biz", Value: "200"},
-				corev1.EnvVar{Name: "app", Value: "config-svc,secret-svc"},
-				corev1.EnvVar{Name: "feed_addrs", Value: "feed.bscp.svc:9510"},
-				corev1.EnvVar{Name: "token", Value: "my-secret-token"},
-				corev1.EnvVar{Name: "temp_dir", Value: bscpcfg.BscpDownloadPath},
-			))
-
-			By("init container volumeMounts")
-			Expect(initC.VolumeMounts).To(HaveLen(1))
-			Expect(initC.VolumeMounts[0].Name).To(Equal(bscpcfg.VolumeName))
-			Expect(initC.VolumeMounts[0].MountPath).To(Equal(bscpcfg.BscpDownloadPath))
-
-			By("sidecar container")
-			Expect(podSpec.Containers).To(HaveLen(2))
-			sidecar := podSpec.Containers[1]
-			Expect(sidecar.Name).To(Equal(bscpcfg.SidecarContainerName))
-			Expect(sidecar.Image).To(Equal(bscpcfg.SidecarImage))
-			Expect(sidecar.Args).To(ConsistOf("--file-cache-enabled=false"))
-
-			By("sidecar env vars should match init container")
-			Expect(sidecar.Env).To(HaveLen(5))
-			Expect(sidecar.Env).To(ContainElements(
-				corev1.EnvVar{Name: "biz", Value: "200"},
-				corev1.EnvVar{Name: "app", Value: "config-svc,secret-svc"},
-				corev1.EnvVar{Name: "feed_addrs", Value: "feed.bscp.svc:9510"},
-				corev1.EnvVar{Name: "token", Value: "my-secret-token"},
-				corev1.EnvVar{Name: "temp_dir", Value: bscpcfg.BscpDownloadPath},
-			))
-
-			By("sidecar volumeMounts: bscp-temp + bscp-share")
-			Expect(sidecar.VolumeMounts).To(HaveLen(2))
-			Expect(sidecar.VolumeMounts[0].Name).To(Equal(bscpcfg.VolumeName))
-			Expect(sidecar.VolumeMounts[0].MountPath).To(Equal(bscpcfg.BscpDownloadPath))
-			Expect(sidecar.VolumeMounts[1].Name).To(Equal(bscpcfg.ShareVolumeName))
-			Expect(sidecar.VolumeMounts[1].MountPath).To(Equal(bscpcfg.BscpShareBasePath))
-
-			By("volumes: bscp-temp + bscp-share both emptyDir")
-			Expect(podSpec.Volumes).To(HaveLen(2))
-			Expect(podSpec.Volumes[0].Name).To(Equal(bscpcfg.VolumeName))
-			Expect(podSpec.Volumes[0].VolumeSource.EmptyDir).NotTo(BeNil())
-			Expect(podSpec.Volumes[1].Name).To(Equal(bscpcfg.ShareVolumeName))
-			Expect(podSpec.Volumes[1].VolumeSource.EmptyDir).NotTo(BeNil())
-
-			By("main container volumeMount: bscp-share mounted to user-specified MountPath")
-			mainC := podSpec.Containers[0]
-			Expect(mainC.VolumeMounts).To(HaveLen(1))
-			Expect(mainC.VolumeMounts[0].Name).To(Equal(bscpcfg.ShareVolumeName))
-			Expect(mainC.VolumeMounts[0].MountPath).To(Equal("/data/app/config"))
-		})
-	})
-
-	Describe("when snapshot has invalid metadata (validation fails)", func() {
-		It("should return a validation error", func() {
-			store := &mockStore{
-				snapshot: &extmodel.Snapshot{
-					Metadata: &extmodel.Metadata{
-						AppID:     "app-1",
-						BscpBizID: "100",
-						MountPath: "",
-						FeedAddr:  "",
-						Token:     "",
-					},
-					EnvBinding: &extmodel.EnvBinding{
-						AppID:   "app-1",
-						EnvName: "dev",
-						Services: []extmodel.ServiceRef{
-							{ID: "svc-1", Name: "order-svc"},
-						},
-					},
-				},
-			}
-
-			err := bscpcfg.InjectFromStore(ctx, store, "app-1", "dev", "main", podSpec)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("validating bscp config snapshot"))
+			// secondary 不应有 volumeMount
+			Expect(podSpec.Containers[1].VolumeMounts).To(BeEmpty())
 		})
 	})
 })

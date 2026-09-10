@@ -142,7 +142,7 @@ var _ = Describe("MergePodSpecMap", func() {
 		It("should skip injection when already present", func() {
 			podSpecMap := map[string]any{
 				"initContainers": []any{
-					map[string]any{"name": bscpcfg.InitContainerName, "image": bscpcfg.InitImage},
+					map[string]any{"name": bscpcfg.InitContainerName, "image": "test-init:latest"},
 				},
 				"containers": []any{
 					map[string]any{
@@ -152,7 +152,7 @@ var _ = Describe("MergePodSpecMap", func() {
 							map[string]any{"name": bscpcfg.ShareVolumeName, "mountPath": "/data/bscp"},
 						},
 					},
-					map[string]any{"name": bscpcfg.SidecarContainerName, "image": bscpcfg.SidecarImage},
+					map[string]any{"name": bscpcfg.SidecarContainerName, "image": "test-sidecar:latest"},
 				},
 				"volumes": []any{
 					map[string]any{"name": bscpcfg.VolumeName, "emptyDir": map[string]any{}},
