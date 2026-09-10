@@ -24,6 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
@@ -332,11 +333,9 @@ func normalizePlatformBuildExtraFiles(extraFiles []string) []string {
 	if len(extraFiles) == 0 {
 		return nil
 	}
-	normalized := make([]string, 0, len(extraFiles))
-	for _, extraFile := range extraFiles {
-		normalized = append(normalized, strings.TrimSpace(extraFile))
-	}
-	return normalized
+	return lo.Map(extraFiles, func(extraFile string, _ int) string {
+		return strings.TrimSpace(extraFile)
+	})
 }
 
 // ValidatePlatformBuildStart validates platform build start command input.
