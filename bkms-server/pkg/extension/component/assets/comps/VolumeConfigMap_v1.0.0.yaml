@@ -41,4 +41,4 @@ specs:
   metadata:
     name: "{{ .name }}"
   data:
-    "{{ .name }}": "{{ .data }}"
+    "{{ .name }}": {{ printf "%q" (or .data "") }}

@@ -2,7 +2,7 @@ name: bcs-polaris-operator
 displayName: bcs-polaris-operator
 description: BcsPolaris-Operator 是基于北极星名字服务（Polaris）提供实例自动发现、实例注册与卸载、名字服务管理等功能的组件
 chartInfo:
-  chartName: bcspolaris-operator
+  chartName: bcs-polaris-operator
   releaseName: bcspolaris-operator
   defaultNamespace: bcs-system
 requiredForAppTypes: []
