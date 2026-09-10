@@ -1,6 +1,7 @@
 export * from './app';
 export * from './app-config-files';
 export * from './app-spec';
+export * from './bkmonitor-dashboard';
 export * from './bscpcfg';
 export * from './builds';
 export * from './build-trigger-policies';

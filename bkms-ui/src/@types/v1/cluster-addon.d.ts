@@ -9,7 +9,7 @@ export interface ListClusterAddonsRequest {
    */
   envID: string;
   /**
-   * 命名空间
+   * 命名空间，默认为插件定义中的 defaultNamespace
    */
   namespace?: string;
 }
@@ -35,7 +35,7 @@ export interface DeleteClusterAddonRequest {
    */
   addonName: string;
   /**
-   * 命名空间
+   * 命名空间，默认为插件定义中的 defaultNamespace
    */
   namespace?: string;
 }

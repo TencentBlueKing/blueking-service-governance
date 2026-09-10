@@ -16,7 +16,7 @@ export const ClusterAddonService = {
    * @path /envs/{envID}/cluster-addons
    * @tag cluster-addon
    * @param envID path string required 环境 ID
-   * @param namespace query string 命名空间
+   * @param namespace query string 命名空间，默认为插件定义中的 defaultNamespace
    * @response 200 ListClusterAddonsOutput OK
    * @response 400 GinErrorOutput Bad Request
    */
@@ -48,7 +48,7 @@ export const ClusterAddonService = {
    * @tag cluster-addon
    * @param envID path string required 环境 ID
    * @param addonName path string required 插件名称
-   * @param namespace query string 命名空间
+   * @param namespace query string 命名空间，默认为插件定义中的 defaultNamespace
    * @response 200 DeleteClusterAddonOutput OK
    * @response 400 GinErrorOutput Bad Request
    */

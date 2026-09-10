@@ -174,17 +174,6 @@ export interface DeleteTafDeployRequest {
   trafficLaneName?: string;
 }
 
-export interface PreCheckTafDeployEnvVarsRequest {
-  /**
-   * 应用 ID
-   */
-  appID: string;
-  /**
-   * 部署环境名称
-   */
-  envName: string;
-}
-
 export interface GetLatestTafDeployStatusRequest {
   /**
    * 应用 ID
@@ -198,6 +187,17 @@ export interface GetLatestTafDeployStatusRequest {
    * 部署的泳道名称（空字符串表示不使用泳道）
    */
   trafficLaneName?: string;
+}
+
+export interface PreCheckTafDeployRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
 }
 
 export interface ListTafResourceSnapshotsRequest {
@@ -295,17 +295,6 @@ export interface DeleteTrpcDeployRequest {
   trafficLaneName?: string;
 }
 
-export interface PreCheckTrpcDeployEnvVarsRequest {
-  /**
-   * 应用 ID
-   */
-  appID: string;
-  /**
-   * 部署环境名称
-   */
-  envName: string;
-}
-
 export interface GetLatestTrpcDeployStatusRequest {
   /**
    * 应用 ID
@@ -319,6 +308,17 @@ export interface GetLatestTrpcDeployStatusRequest {
    * 部署的泳道名称（空字符串表示不使用泳道）
    */
   trafficLaneName?: string;
+}
+
+export interface PreCheckTrpcDeployRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
 }
 
 export interface ListTrpcResourceSnapshotsRequest {
@@ -437,12 +437,16 @@ export interface CreateAppModelDeployInput {
   trafficLaneName?: string;
 }
 
-export interface EnvVarPreCheckOutput {
-  undefinedVars?: UndefinedEnvVarOutput[];
-}
-
 export interface GetLatestAppModelDeployStatusOutput {
   data?: LatestDeployStatus;
+}
+
+export interface DeployPreCheckOutput {
+  /**
+   * 缺失的必选集群组件标识及展示名
+   */
+  missingRequiredClusterAddons?: ClusterAddonReferenceOutput[];
+  undefinedVars?: UndefinedEnvVarOutput[];
 }
 
 export interface ListAppModelResourceSnapshotsOutput {
@@ -468,6 +472,21 @@ export interface PaginatedAppModelResourceSnapshotsOutputObjs {
   results?: AppModelResourceSnapshot[];
 }
 
+export interface ClusterAddonReferenceOutput {
+  displayName?: string;
+  name?: string;
+}
+
+export interface UndefinedEnvVarOutput {
+  key?: string;
+  sources?: EnvVarReferenceSourceOutput[];
+}
+
+export interface EnvVarReferenceSourceOutput {
+  name?: string;
+  type?: string;
+}
+
 export interface LatestDeployStatus {
   branch?: string;
   buildID?: string;
@@ -486,16 +505,6 @@ export interface LatestDeployStatus {
   stage?: string;
   startedAt?: string;
   status?: string;
-}
-
-export interface UndefinedEnvVarOutput {
-  key?: string;
-  sources?: EnvVarReferenceSourceOutput[];
-}
-
-export interface EnvVarReferenceSourceOutput {
-  name?: string;
-  type?: string;
 }
 
 export interface PaginatedAppModelDeployRecordsOutputObjs {

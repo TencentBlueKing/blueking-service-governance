@@ -80,6 +80,17 @@ export type CreateAppRequest = CreateAppInput & {
   workspaceID: string;
 };
 
+export interface ResolveAppRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 应用 ID 或名称
+   */
+  app: string;
+}
+
 export interface GetAppIDAutoSuffixOutput {
   /**
    * 后缀字符串
@@ -163,6 +174,15 @@ export interface CreateAppInput {
 
 export interface CreateAppOutput {
   data?: AppOutputObj;
+}
+
+export interface ResolveAppOutput {
+  data?: ResolveAppOutputObj;
+}
+
+export interface ResolveAppOutputObj {
+  id?: string;
+  name?: string;
 }
 
 export interface AppOutputObj {
