@@ -138,6 +138,7 @@ func (h *Handler) createHelmApp(ctx context.Context, app *bkmsapp.Application) e
 			Format:            appcfg.FileFormatYAML,
 			Creator:           appcfg.CfgSystemUser,
 			Description:       appcfg.CfgSystemVersionDescription,
+			ConfigKind:        appcfg.ConfigKindFramework,
 		},
 	); err != nil {
 		return errors.Wrap(err, "create default values file")

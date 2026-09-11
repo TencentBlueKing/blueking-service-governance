@@ -29,6 +29,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/fake"
@@ -63,6 +64,9 @@ var _ = Describe("ServiceManager", func() {
 		)
 		diApp.RequireStart()
 		mgr = depservice.New(svcStore, instStore, bindingStore, nil)
+		Expect(testutil.CleanupCollection("depservice_bindings")).To(Succeed())
+		Expect(testutil.CleanupCollection("depservice_instances")).To(Succeed())
+		Expect(testutil.CleanupCollection("depservice_services")).To(Succeed())
 
 		// serviceName 使用 "fake"，provider.New 会走注册表返回 fake.Provider，无需 Mock
 		planName = "default"

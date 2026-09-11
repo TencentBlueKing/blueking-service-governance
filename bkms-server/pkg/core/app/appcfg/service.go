@@ -30,6 +30,9 @@ type AppConfigFileService struct {
 	*AppCfgFileDefService
 }
 
+// 编译期校验：AppCfgFileDefService 必须实现 MountableFileProvider。
+var _ MountableFileProvider = (*AppCfgFileDefService)(nil)
+
 // NewAppConfigFileService 内部构造分层服务。
 func NewAppConfigFileService(
 	fileStore AppConfigFileStore,
@@ -37,7 +40,7 @@ func NewAppConfigFileService(
 	versionStore AppConfigFileVersionStore,
 ) *AppConfigFileService {
 	base := NewBaseAppCfgFileService(defStore, fileStore, versionStore)
-	inner := NewAppCfgFileDefService(base, nil)
+	inner := NewAppCfgFileDefService(base)
 	return &AppConfigFileService{AppCfgFileDefService: inner}
 }
 

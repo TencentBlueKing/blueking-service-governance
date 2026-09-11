@@ -16,20 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package appcfg
+package appcfgfiledef
 
 import (
-	"go.uber.org/fx"
+	"testing"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-var FxModule = fx.Module("appcfg",
-	database.PrivateFxModule,
-	fx.Provide(
-		fx.Annotate(NewAppConfigFileStoreMongo, fx.As(new(AppConfigFileStore))),
-		fx.Annotate(NewAppConfigFileDefStoreMongo, fx.As(new(AppConfigFileDefStore))),
-		fx.Annotate(NewAppConfigFileVersionStoreMongo, fx.As(new(AppConfigFileVersionStore))),
-		NewMountableFileProvider,
-	),
-)
+func TestAppCfgFileDef(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "AppCfgFileDef Suite")
+}

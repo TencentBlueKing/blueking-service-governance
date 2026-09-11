@@ -42,6 +42,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/appcfgfiledef"
 	appcfghandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/handler"
 	apphandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -169,7 +170,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 	buildtrigger.Register(v1, buildTriggerHandler)
 	imageapi.Register(v1, imagehandler.New(storereg.G()))
 	appcfg.Register(v1, appcfghandler.New(storereg.G()))
-	appcfg.RegisterAppCfgFileDefRoutes(v1, appcfghandler.NewAppCfgFileDefHandler(storereg.G()))
+	appcfgfiledef.RegisterRoutes(v1, appcfgfiledef.NewHandler(storereg.G()))
 	helmchart.Register(v1, helmcharthandler.New(storereg.G()))
 	instancelog.Register(v1, instanceloghandler.New(storereg.G()))
 	appdefaults.Register(v1, appdefaultshandler.New(storereg.G()))

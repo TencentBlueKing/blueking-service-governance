@@ -20,6 +20,7 @@ package appcfg
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -117,10 +118,27 @@ type AppConfigFileVersion struct {
 
 // EnvConfigMode 描述逻辑配置文件的环境差异化策略。
 type EnvConfigMode struct {
-	// IsUnifiedConfig 为 true 时所有环境共享同一配置，不产生环境实例。
+	// IsUnifiedConfig 为 true 时挂载到的环境共享同一份默认配置，不产生环境实例。
 	IsUnifiedConfig bool `bson:"isUnifiedConfig"`
-	// MountedEnvNames 已显式配置的环境列表。
-	MountedEnvNames []string `bson:"mountedEnvNames,omitempty"`
+	// MountedEnvNames 表示当前文件的挂载环境范围：
+	// nil = 对所有环境生效；非 nil 空切片 = 不挂载到任何环境；非空 = 仅对列出的环境生效。
+	MountedEnvNames []string `bson:"mountedEnvNames"`
+}
+
+// ContainsEnv 判断指定环境名是否在 MountedEnvNames 列表中。
+func (m *EnvConfigMode) ContainsEnv(envName string) bool {
+	if m == nil {
+		return false
+	}
+	return slices.Contains(m.MountedEnvNames, envName)
+}
+
+// IsIndependent 返回是否处于按环境独立配置模式。
+func (m *EnvConfigMode) IsIndependent() bool {
+	if m == nil {
+		return false
+	}
+	return !m.IsUnifiedConfig
 }
 
 // VersionedContent 配置文件的可变内容字段，AppConfigFile 和 AppConfigFileVersion 共享。
@@ -250,11 +268,8 @@ func (v *AppConfigFileWithDef) GetDefID() bson.ObjectID {
 	return v.Def.ID
 }
 
-// GetConfigKind 返回配置文件的 kind，未设置时默认 framework。
+// GetConfigKind 返回配置文件的 kind，便于从嵌套的 Def 读取。
 func (v *AppConfigFileWithDef) GetConfigKind() ConfigKind {
-	if v.Def.ConfigKind == "" {
-		return ConfigKindFramework
-	}
 	return v.Def.ConfigKind
 }
 

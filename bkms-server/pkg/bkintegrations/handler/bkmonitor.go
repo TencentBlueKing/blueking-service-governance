@@ -75,13 +75,12 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 		return
 	}
 
-	_, _, content, err := appcfg.GetEnvContent(
-		ctx,
+	cfgProvider := appcfg.NewMountableFileProvider(
 		h.registry.AppConfigFileStore,
 		h.registry.AppConfigFileDefStore,
-		app.ID,
-		env.Name,
+		h.registry.AppConfigFileVersionStore,
 	)
+	cfwc, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting env content"))
 		return
@@ -100,7 +99,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 		return
 	}
 
-	serviceName, svcErr := bkmmodel.GetApmServiceName(app.Type, content, appEnvVars.ToMap())
+	serviceName, svcErr := bkmmodel.GetApmServiceName(app.Type, cfwc.Content, appEnvVars.ToMap())
 	if svcErr != nil {
 		log.Errorf(ctx, "get apm service name error for app %s env %s: %v", app.ID, env.Name, svcErr)
 		if errors.Is(svcErr, bkmmodel.ErrAPMConfigMissing) {

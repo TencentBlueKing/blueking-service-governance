@@ -55,6 +55,8 @@ func New(registry *storereg.Registry) *Handler {
 }
 
 // CreateAppConfigFile 创建一个应用配置文件。
+// ⚠️ 存量接口：仅用于创建 framework 类型文件。创建 plain 文件或新的 framework 文件
+// 请使用新接口 POST /app-config-file-defs。
 //
 //	@ID				CreateAppConfigFile
 //	@Summary		创建一个应用配置文件
@@ -121,6 +123,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 			BSCPConfig:          bscpCfg,
 			Creator:             creator,
 			Description:         input.Description,
+			ConfigKind:          appcfg.ConfigKindFramework,
 		},
 	)
 	if err != nil {
@@ -141,21 +144,30 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	})
 }
 
-// UpdateAppConfigFile 修改一个应用配置文件的基础属性。
+// UpdateAppConfigFile 更新应用配置文件的 BSCP 绑定关系和 overlay base 引用。
 //
-//	@ID				UpdateAppConfigFile
-//	@Summary		修改一个应用配置文件的基础属性
-//	@Tags			app-config-files
-//	@Accept			json
-//	@Produce		json
-//	@Security		BkUserInfo
-//	@Security		BkUserCredential
-//	@Param			appID	path		string								true	"应用 ID"
-//	@Param			id		path		string								true	"应用配置文件 ID"
-//	@Param			body	body		slz.UpdateAppConfigFileInput	true	"更新应用配置文件基础属性请求"
-//	@Success		200		{object}	slz.UpdateAppConfigFileOutput
-//	@Failure		400		{object}	bkerrs.GinErrorOutput
-//	@Router			/apps/{appID}/app-config-files/{id} [put]
+// 职责说明：本接口负责 file 级字段的更新（baseAppConfigFileID、bscpConfig），
+// 与新接口各司其职：
+//
+//   - def 级字段（名称 / mountDir / 环境策略等） → PUT /app-config-file-defs/:id
+//
+//   - 文件内容变更 → PUT /app-config-file-defs/:id/content
+//
+//   - BSCP 绑定 / overlay base 引用变更 → 本接口（PUT /app-config-files/:id）
+//
+//     @ID				UpdateAppConfigFile
+//     @Summary		修改一个应用配置文件的基础属性
+//     @Tags			app-config-files
+//     @Accept			json
+//     @Produce		json
+//     @Security		BkUserInfo
+//     @Security		BkUserCredential
+//     @Param			appID	path		string								true	"应用 ID"
+//     @Param			id		path		string								true	"应用配置文件 ID"
+//     @Param			body	body		slz.UpdateAppConfigFileInput	true	"更新应用配置文件基础属性请求"
+//     @Success		200		{object}	slz.UpdateAppConfigFileOutput
+//     @Failure		400		{object}	bkerrs.GinErrorOutput
+//     @Router			/apps/{appID}/app-config-files/{id} [put]
 func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	var uriInput slz.AppConfigFileURIInput
 	var input slz.UpdateAppConfigFileInput
@@ -227,6 +239,8 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 }
 
 // ListAppConfigFiles 查看一个应用所有的应用配置文件列表。
+// ⚠️ 存量接口：仅返回 framework 类型的配置文件，不包含 plain 文件。
+// 查看所有类型的配置文件（含 plain）请使用新接口 GET /app-config-file-defs。
 //
 //	@ID				ListAppConfigFiles
 //	@Summary		查看一个应用所有的应用配置文件列表
@@ -262,6 +276,27 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 	if val := lo.FromPtr(queryInput.EnvName); val != "" {
 		opts = append(opts, appcfg.AcfFilterEnvName(val))
 	}
+
+	// 存量接口只返回 framework 类型，过滤掉 plain 文件。
+	frameworkDefs, err := h.registry.AppConfigFileDefStore.ListByApp(
+		ctx, app.ID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing framework defs"))
+		return
+	}
+	frameworkDefIDs := make([]bson.ObjectID, 0, len(frameworkDefs))
+	for _, d := range frameworkDefs {
+		frameworkDefIDs = append(frameworkDefIDs, d.ID)
+	}
+	if len(frameworkDefIDs) > 0 {
+		opts = append(opts, appcfg.AcfFilterDefIDs(frameworkDefIDs))
+	} else {
+		// 没有 framework def，直接返回空列表
+		ginutils.OK(c, slz.ListAppConfigFilesOutput{Items: []*slz.AppConfigFileOutputObj{}})
+		return
+	}
+
 	appConfigFiles, err := h.registry.AppConfigFileStore.List(ctx, app.ID, opts...)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing app config files"))
@@ -296,6 +331,8 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 }
 
 // DeleteAppConfigFile 通过 ID 删除应用的一个应用配置文件。
+// ⚠️ 存量接口：不允许删除 plain 环境实例。plain 文件的删除请使用
+// DELETE /app-config-file-defs/:id（删除整个 def）或通过环境策略管理。
 //
 //	@ID				DeleteAppConfigFile
 //	@Summary		通过 ID 删除应用的一个应用配置文件
@@ -333,6 +370,15 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 	if acf, gErr := h.registry.AppConfigFileStore.GetByID(ctx, id); gErr == nil {
 		if def, dErr := h.registry.AppConfigFileDefStore.GetByID(ctx, acf.DefID); dErr == nil {
 			defName = def.Name
+			// 禁止通过旧接口删除 plain 环境实例
+			if def.ConfigKind == appcfg.ConfigKindPlain && acf.EnvName != appcfg.EnvNameDefault {
+				bkerrs.AbortWithErr(c, bkerrs.Wrap(
+					appcfg.ErrPlainEnvInstanceDeleteNotAllowed,
+					bkerrs.ErrCodeInvalidArgument,
+					"plain env instance cannot be deleted via legacy API",
+				))
+				return
+			}
 		}
 	}
 
@@ -359,6 +405,8 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 }
 
 // GetAppConfigFileDetails 查看一个应用配置文件详情。
+// ⚠️ 存量接口：返回 framework 文件的编辑视图。查看 def 视角的详情（含 plain）
+// 请使用新接口 GET /app-config-file-defs/:id?envName=。
 //
 //	@ID				GetAppConfigFileDetails
 //	@Summary		查看一个应用配置文件详情
@@ -429,6 +477,8 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 }
 
 // UpdateAppConfigFileContent 修改一个应用配置文件的 Content。
+// ⚠️ 存量接口：仅供已有 framework normal 文件使用。新文件（含 plain）的内容变更
+// 请使用新接口 PUT /app-config-file-defs/:id/content。
 //
 //	@ID				UpdateAppConfigFileContent
 //	@Summary		修改一个应用配置文件的 Content
@@ -468,6 +518,8 @@ func (h *Handler) UpdateAppConfigFileContent(c *gin.Context) {
 }
 
 // UpdateAppConfigFileOverlayContent 修改一个应用配置文件的 overlayContent。
+// ⚠️ 存量接口：仅供已有 framework overlay 文件使用。新文件的内容变更
+// 请使用新接口 PUT /app-config-file-defs/:id/content。
 //
 //	@ID				UpdateAppConfigFileOverlayContent
 //	@Summary		修改一个应用配置文件的 overlayContent
@@ -507,6 +559,8 @@ func (h *Handler) UpdateAppConfigFileOverlayContent(c *gin.Context) {
 }
 
 // PreviewOverlayMerge 预览覆盖内容与基础配置文件合并的结果，不会保存任何变更。
+// 适用于所有 overlay 场景（framework / Helm 等），base 文件的内容来源（local / BSCP）
+// 由 BaseAppConfigFileID 对应记录自身的 ContentSourceType 决定，调用方无需感知。
 //
 //	@ID				PreviewOverlayMerge
 //	@Summary		预览覆盖内容与基础配置文件合并的结果

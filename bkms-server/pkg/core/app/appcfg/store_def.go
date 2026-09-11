@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+// defCollectionName 存储配置文件定义信息
 const defCollectionName = "app_config_file_defs"
 
 // AppConfigFileDefStore 配置文件 def 的存储接口。

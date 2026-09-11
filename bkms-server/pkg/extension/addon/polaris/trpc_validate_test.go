@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -39,7 +40,9 @@ var _ = Describe("CollectConfigWarnings", func() {
 		appModelStore         appmodel.AppModelStore
 		appConfigFileStore    appcfg.AppConfigFileStore
 		appConfigFileDefStore appcfg.AppConfigFileDefStore
+		versionStore          appcfg.AppConfigFileVersionStore
 		polarisConfigStore    polaris.PolarisConfigStore
+		cfgProvider           appcfg.MountableFileProvider
 		testAppID             string
 	)
 
@@ -56,10 +59,12 @@ var _ = Describe("CollectConfigWarnings", func() {
 				&appModelStore,
 				&appConfigFileStore,
 				&appConfigFileDefStore,
+				&versionStore,
 				&polarisConfigStore,
 			),
 		)
 		diApp.RequireStart()
+		cfgProvider = appcfg.NewMountableFileProvider(appConfigFileStore, appConfigFileDefStore, versionStore)
 	})
 
 	AfterEach(func() {
@@ -84,8 +89,8 @@ var _ = Describe("CollectConfigWarnings", func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	// 辅助函数：创建应用级别 tRPC 配置文件
-	createAppLevelConfigFile := func(content string) {
+	// 辅助函数：创建 framework def + 默认文件，返回 defID
+	createDefAndDefaultFile := func(content string) bson.ObjectID {
 		defID, err := appConfigFileDefStore.Add(ctx, appcfg.AppConfigFileDef{
 			AppID:      testAppID,
 			Name:       appcfg.DefaultAppConfigFileName,
@@ -105,17 +110,11 @@ var _ = Describe("CollectConfigWarnings", func() {
 		}
 		_, err = appConfigFileStore.Add(ctx, acf)
 		Expect(err).NotTo(HaveOccurred())
+		return defID
 	}
 
-	// 辅助函数：创建环境级别 tRPC 配置文件
-	createEnvConfigFile := func(envName, content string) {
-		defID, err := appConfigFileDefStore.Add(ctx, appcfg.AppConfigFileDef{
-			AppID:      testAppID,
-			Name:       envName,
-			ConfigKind: appcfg.ConfigKindFramework,
-		})
-		Expect(err).NotTo(HaveOccurred())
-
+	// 辅助函数：在已有 def 下添加环境级配置文件
+	addEnvFile := func(defID bson.ObjectID, envName, content string) {
 		acf := appcfg.AppConfigFile{
 			DefID:   defID,
 			AppID:   testAppID,
@@ -126,7 +125,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				Content:           &content,
 			},
 		}
-		_, err = appConfigFileStore.Add(ctx, acf)
+		_, err := appConfigFileStore.Add(ctx, acf)
 		Expect(err).NotTo(HaveOccurred())
 	}
 
@@ -146,8 +145,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 			warnings := polaris.CollectConfigWarnings(
 				ctx,
 				appModelStore,
-				appConfigFileStore,
-				appConfigFileDefStore,
+				cfgProvider,
 				config,
 			)
 			Expect(warnings).To(BeEmpty())
@@ -168,7 +166,7 @@ var _ = Describe("CollectConfigWarnings", func() {
       ip: 0.0.0.0
       port: 8080
 `
-				createAppLevelConfigFile(trpcYAML)
+				createDefAndDefaultFile(trpcYAML)
 			})
 
 			It("should return no warnings", func() {
@@ -183,8 +181,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
 					appModelStore,
-					appConfigFileStore,
-					appConfigFileDefStore,
+					cfgProvider,
 					config,
 				)
 				Expect(warnings).To(BeEmpty())
@@ -199,7 +196,7 @@ var _ = Describe("CollectConfigWarnings", func() {
       ip: 0.0.0.0
       port: 8080
 `
-				createAppLevelConfigFile(trpcYAML)
+				createDefAndDefaultFile(trpcYAML)
 			})
 
 			It("should return warning about name mismatch", func() {
@@ -214,8 +211,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
 					appModelStore,
-					appConfigFileStore,
-					appConfigFileDefStore,
+					cfgProvider,
 					config,
 				)
 				Expect(warnings).To(HaveLen(1))
@@ -238,8 +234,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
 					appModelStore,
-					appConfigFileStore,
-					appConfigFileDefStore,
+					cfgProvider,
 					config,
 				)
 				Expect(warnings).To(BeEmpty())
@@ -255,7 +250,7 @@ var _ = Describe("CollectConfigWarnings", func() {
     - name: trpc.app.server.service2
       port: 8081
 `
-				createAppLevelConfigFile(trpcYAML)
+				createDefAndDefaultFile(trpcYAML)
 			})
 
 			It("should return no warnings when polaris name matches one of the services", func() {
@@ -270,8 +265,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
 					appModelStore,
-					appConfigFileStore,
-					appConfigFileDefStore,
+					cfgProvider,
 					config,
 				)
 				Expect(warnings).To(BeEmpty())
@@ -283,7 +277,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				trpcYAML := `server:
   app: myapp
 `
-				createAppLevelConfigFile(trpcYAML)
+				createDefAndDefaultFile(trpcYAML)
 			})
 
 			It("should return warning about name mismatch with empty service list", func() {
@@ -298,8 +292,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
 					appModelStore,
-					appConfigFileStore,
-					appConfigFileDefStore,
+					cfgProvider,
 					config,
 				)
 				Expect(warnings).To(HaveLen(1))
@@ -317,6 +310,12 @@ var _ = Describe("CollectConfigWarnings", func() {
 
 		Context("when env-specific config matches", func() {
 			BeforeEach(func() {
+				// 创建共享 def + 空默认文件，并为各环境添加独立内容
+				defaultYAML := `server:
+  service: []
+`
+				defID := createDefAndDefaultFile(defaultYAML)
+
 				devYAML := `server:
   service:
     - name: trpc.app.server.dev-svc
@@ -327,8 +326,8 @@ var _ = Describe("CollectConfigWarnings", func() {
     - name: trpc.app.server.prod-svc
       port: 9090
 `
-				createEnvConfigFile("dev", devYAML)
-				createEnvConfigFile("prod", prodYAML)
+				addEnvFile(defID, "dev", devYAML)
+				addEnvFile(defID, "prod", prodYAML)
 			})
 
 			It("should validate each environment independently", func() {
@@ -343,8 +342,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
 					appModelStore,
-					appConfigFileStore,
-					appConfigFileDefStore,
+					cfgProvider,
 					config,
 				)
 				// dev 匹配，prod 不匹配
@@ -361,8 +359,9 @@ var _ = Describe("CollectConfigWarnings", func() {
     - name: trpc.app.server.svc
       port: 8080
 `
-				createEnvConfigFile("dev", sameYAML)
-				createEnvConfigFile("staging", sameYAML)
+				defID := createDefAndDefaultFile(sameYAML)
+				addEnvFile(defID, "dev", sameYAML)
+				addEnvFile(defID, "staging", sameYAML)
 			})
 
 			It("should return no warnings", func() {
@@ -377,8 +376,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
 					appModelStore,
-					appConfigFileStore,
-					appConfigFileDefStore,
+					cfgProvider,
 					config,
 				)
 				Expect(warnings).To(BeEmpty())
@@ -392,7 +390,7 @@ var _ = Describe("CollectConfigWarnings", func() {
     - name: trpc.app.server.svc
       port: 8080
 `
-				createAppLevelConfigFile(appYAML)
+				createDefAndDefaultFile(appYAML)
 			})
 
 			It("should fall back to app-level config", func() {
@@ -407,8 +405,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
 					appModelStore,
-					appConfigFileStore,
-					appConfigFileDefStore,
+					cfgProvider,
 					config,
 				)
 				Expect(warnings).To(BeEmpty())
