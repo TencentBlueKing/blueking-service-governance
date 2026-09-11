@@ -68,7 +68,7 @@ Sensitive values are masked with '******'.`,
 	}
 
 	cmdutil.AddWorkspaceFlag(cmd, &workspaceID)
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	return cmd
 }

@@ -54,7 +54,7 @@ You can filter results using the --keyword flag.`,
 	}
 
 	cmd.Flags().StringVar(&keyword, "keyword", "", "filter by keyword")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	return cmd
 }

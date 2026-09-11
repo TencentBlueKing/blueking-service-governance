@@ -70,7 +70,7 @@ The output in YAML format is compatible with 'app create -f', enabling a read-mo
 	}
 
 	cmdutil.AddAppFlags(cmd, &appID)
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 

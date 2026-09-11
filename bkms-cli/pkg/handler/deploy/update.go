@@ -97,7 +97,7 @@ func UpdateDeploy(ctx context.Context, workspaceID, appID, envName, updateSpecFi
 	cli := client.New()
 
 	// 校验所有环境名称合法性
-	if err := validateEnvNames(ctx, cli, workspaceID, envNames); err != nil {
+	if err := validateEnvNames(ctx, cli, appID, envNames); err != nil {
 		return err
 	}
 

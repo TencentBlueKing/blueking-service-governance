@@ -80,7 +80,7 @@ When an application has multiple config files in the same environment, use --nam
 		"",
 		"config file name; useful for Helm apps with multiple app-level config files",
 	)
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 

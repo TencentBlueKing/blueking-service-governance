@@ -49,12 +49,12 @@ func parseEnvNames(envName string) []string {
 	return result
 }
 
-// validateEnvNames 通过 ListEnvs API 校验所有环境名称是否真实存在。
+// validateEnvNames 通过应用可用环境列表校验标准环境及应用专属特性环境。
 // 一次性拉取环境列表并校验，不存在的环境名称汇总后返回错误。
-func validateEnvNames(ctx context.Context, cli client.Client, workspaceID string, envNames []string) error {
-	envs, err := cli.ListEnvs(ctx, workspaceID)
+func validateEnvNames(ctx context.Context, cli client.Client, appID string, envNames []string) error {
+	envs, err := cli.ListAppEnvs(ctx, appID)
 	if err != nil {
-		return errors.Wrapf(err, "failed to list envs for workspace %s", workspaceID)
+		return errors.Wrapf(err, "failed to list envs for app %s", appID)
 	}
 	// 构建已存在的环境名称集合
 	envSet := make(map[string]bool, len(envs))

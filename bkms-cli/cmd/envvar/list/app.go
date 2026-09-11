@@ -80,7 +80,7 @@ Sensitive values are masked with '******'.`,
 
 	cmdutil.AddAppFlags(cmd, &appID)
 	cmd.Flags().StringVar(&envName, "env", "", "environment name (optional, lists effective vars when specified)")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 

@@ -25,20 +25,13 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client/mocks"
 )
 
-// mockClient 用于测试的 mock client
-type mockClient struct {
-	client.Client
+// envListResult 保存环境列表测试场景中的 API 返回值。
+type envListResult struct {
 	envs []client.Env
 	err  error
-}
-
-func (m *mockClient) ListEnvs(_ context.Context, _ string) ([]client.Env, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.envs, nil
 }
 
 var _ = Describe("Env", func() {
@@ -82,9 +75,12 @@ var _ = Describe("Env", func() {
 			{Name: "test"},
 		}
 
-		DescribeTable("validate env names against workspace env list",
-			func(cli *mockClient, envNames []string, expectErr bool, errSubstrings []string) {
-				err := validateEnvNames(context.Background(), cli, "ws-1", envNames)
+		DescribeTable("validate env names against app env list",
+			func(data *envListResult, envNames []string, expectErr bool, errSubstrings []string) {
+				ctx := context.Background()
+				cli := mocks.NewMockClient(GinkgoT())
+				cli.EXPECT().ListAppEnvs(ctx, "app-1").Return(data.envs, data.err).Once()
+				err := validateEnvNames(ctx, cli, "app-1", envNames)
 				if !expectErr {
 					Expect(err).NotTo(HaveOccurred())
 					return
@@ -96,14 +92,21 @@ var _ = Describe("Env", func() {
 			},
 			// 所有环境名称都存在时应返回 nil
 			Entry("returns nil when all env names exist",
-				&mockClient{envs: defaultEnvs}, []string{"prod", "staging"}, false, nil),
+				&envListResult{envs: defaultEnvs}, []string{"prod", "staging"}, false, nil),
 			// 单个环境名称存在时应返回 nil
 			Entry("returns nil when a single env name exists",
-				&mockClient{envs: defaultEnvs}, []string{"prod"}, false, nil),
+				&envListResult{envs: defaultEnvs}, []string{"prod"}, false, nil),
+			Entry("accepts owned feature environments alongside standard environments",
+				&envListResult{envs: []client.Env{
+					{Name: "staging", Kind: "standard"},
+					{Name: "feat-1", Kind: "feature", OwnerAppID: "app-1"},
+				}}, []string{"staging", "feat-1"}, false, nil),
+			Entry("rejects a feature environment unavailable to this app",
+				&envListResult{envs: defaultEnvs}, []string{"other-app-feat-1"}, true, []string{"other-app-feat-1"}),
 			// 部分环境名称不存在时应返回错误
 			Entry(
 				"returns error when some env names do not exist",
-				&mockClient{
+				&envListResult{
 					envs: defaultEnvs,
 				},
 				[]string{"prod", "nonexistent"},
@@ -112,13 +115,20 @@ var _ = Describe("Env", func() {
 			),
 			// 全部环境名称不存在时应返回错误
 			Entry("returns error when all env names do not exist",
-				&mockClient{envs: defaultEnvs}, []string{"foo", "bar"}, true, []string{"foo", "bar"}),
-			// ListEnvs 返回错误时应传播错误
-			Entry("propagates error when ListEnvs fails",
-				&mockClient{err: context.DeadlineExceeded}, []string{"prod"}, true, []string{"failed to list envs"}),
+				&envListResult{envs: defaultEnvs}, []string{"foo", "bar"}, true, []string{"foo", "bar"}),
+			// ListAppEnvs 返回错误时应传播错误
+			Entry(
+				"propagates error when ListAppEnvs fails",
+				&envListResult{
+					err: context.DeadlineExceeded,
+				},
+				[]string{"prod"},
+				true,
+				[]string{"failed to list envs"},
+			),
 			// 环境列表为空时所有名称都应不存在
 			Entry("returns error when env list is empty",
-				&mockClient{envs: []client.Env{}}, []string{"prod"}, true, []string{"prod"}),
+				&envListResult{envs: []client.Env{}}, []string{"prod"}, true, []string{"prod"}),
 		)
 	})
 })

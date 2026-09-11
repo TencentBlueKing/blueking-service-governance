@@ -57,7 +57,7 @@ and are read-only.`,
 
 	cmdutil.AddAppFlags(cmd, &appID)
 	cmd.Flags().StringVar(&envName, "env", "", "environment name (required)")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 	_ = cmd.MarkFlagRequired("env")

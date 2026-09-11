@@ -25,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/clierr"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
@@ -65,6 +66,104 @@ func tableRows(rendered string) []string {
 }
 
 var _ = Describe("Output Package", func() {
+	Describe("format flag registration and validation", func() {
+		It("binds shorthand and long flag values", func() {
+			cmd := &cobra.Command{Use: "example"}
+			var format string
+			output.AddFormatFlag(cmd, &format)
+			Expect(cmd.ParseFlags([]string{"-o", "json"})).To(Succeed())
+			Expect(format).To(Equal("json"))
+			Expect(cmd.ParseFlags([]string{"--output", "jq=.name"})).To(Succeed())
+			Expect(format).To(Equal("jq=.name"))
+		})
+
+		It("preserves the default output when the flag is omitted", func() {
+			cmd := &cobra.Command{Use: "example"}
+			format := "json"
+			output.AddFormatFlag(cmd, &format)
+			Expect(cmd.ParseFlags(nil)).To(Succeed())
+			Expect(format).To(BeEmpty())
+			Expect(cmd.Flags().Lookup("output").Value.Type()).To(Equal("format"))
+		})
+
+		DescribeTable("rejects invalid formats without overwriting the previous value",
+			func(raw string) {
+				cmd := &cobra.Command{Use: "example"}
+				var format string
+				output.AddFormatFlag(cmd, &format)
+				Expect(cmd.Flags().Set("output", "json")).To(Succeed())
+				Expect(cmd.ParseFlags([]string{"-o", raw})).NotTo(Succeed())
+				Expect(format).To(Equal("json"))
+			},
+			Entry("unknown format", "jsno"),
+			Entry("empty JQ", "jq= "),
+			Entry("invalid JQ syntax", "jq=.["),
+			Entry("undefined JQ function", "jq=unknown_function"),
+		)
+
+		It("rejects invalid output before any command hook runs", func() {
+			hookCalled := false
+			cmd := &cobra.Command{
+				Use:           "example",
+				SilenceErrors: true,
+				SilenceUsage:  true,
+				PersistentPreRunE: func(*cobra.Command, []string) error {
+					hookCalled = true
+					return nil
+				},
+				RunE: func(*cobra.Command, []string) error {
+					hookCalled = true
+					return nil
+				},
+			}
+			var format string
+			output.AddFormatFlag(cmd, &format)
+			cmd.SetArgs([]string{"-o", "jsno"})
+			Expect(cmd.Execute()).NotTo(Succeed())
+			Expect(hookCalled).To(BeFalse())
+		})
+
+		It("does not depend on help text or affect ordinary string flags", func() {
+			cmd := &cobra.Command{Use: "example"}
+			var format string
+			output.AddFormatFlag(cmd, &format)
+			cmd.Flags().Lookup("output").Usage = "自定义帮助文案"
+			Expect(cmd.Flags().Set("output", "jsno")).NotTo(Succeed())
+
+			other := &cobra.Command{Use: "other"}
+			other.Flags().String("output", "", output.FlagUsage)
+			Expect(other.ParseFlags([]string{"--output", "/tmp/result.txt"})).To(Succeed())
+		})
+	})
+
+	Describe("ValidateFormat", func() {
+		DescribeTable("accepts supported formats without evaluating data-dependent expressions",
+			func(format string) {
+				Expect(output.ValidateFormat(format)).To(Succeed())
+			},
+			Entry("default", ""),
+			Entry("JSON", "json"),
+			Entry("YAML with whitespace", " yaml "),
+			Entry("table", "table"),
+			Entry("JQ accessing response fields", "jq=.cluster.namespace"),
+			Entry("JQ array transformation", "jq=[.[] | .name]"),
+		)
+
+		DescribeTable("rejects invalid formats as usage errors",
+			func(format string) {
+				err := output.ValidateFormat(format)
+				Expect(err).To(HaveOccurred())
+				var usageErr *clierr.UsageError
+				Expect(errors.As(err, &usageErr)).To(BeTrue())
+			},
+			Entry("unknown format", "jsno"),
+			Entry("unknown customizable format", "json=.name"),
+			Entry("empty JQ expression", "jq= "),
+			Entry("invalid JQ syntax", "jq=.["),
+			Entry("undefined JQ function", "jq=unknown_function"),
+		)
+	})
+
 	Describe("FormatData function", func() {
 		Context("when data is nil", func() {
 			It("should return 'null'", func() {

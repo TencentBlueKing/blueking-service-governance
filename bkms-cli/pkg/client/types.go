@@ -51,10 +51,14 @@ type Client interface {
 
 	// ListEnvs 获取环境列表
 	ListEnvs(ctx context.Context, workspaceID string) ([]Env, error)
+	// ListAppEnvs 获取应用可用的标准环境及专属特性环境
+	ListAppEnvs(ctx context.Context, appID string) ([]Env, error)
 	// GetEnv 获取环境详情
 	GetEnv(ctx context.Context, envID string) (*Env, error)
 	// CreateEnv 创建环境
 	CreateEnv(ctx context.Context, workspaceID string, body CreateEnvBody) (string, error)
+	// CreateFeatureEnv 从标准环境创建应用特性环境
+	CreateFeatureEnv(ctx context.Context, appID string, body CreateFeatureEnvBody) (*Env, error)
 	// UpdateEnvBasicInfo 更新环境基本信息（displayName / description）
 	UpdateEnvBasicInfo(ctx context.Context, envID string, body UpdateEnvBasicInfoBody) error
 	// DeleteEnv 删除环境

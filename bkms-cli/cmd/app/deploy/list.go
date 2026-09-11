@@ -44,7 +44,8 @@ specified application. You can filter results using keywords.
 
 The --env flag supports multiple environment names separated by commas (e.g. --env prod,staging).
 When multiple environments are specified, records will be retrieved for each environment
-and grouped by environment name. Environment names are validated against the workspace.
+and grouped by environment name. Environment names are validated against the application's available
+environments, including its feature environments.
 
 If you have set a default workspace using 'workspace set', the --workspace flag
 is optional. Otherwise, you must specify it explicitly.`,
@@ -89,7 +90,7 @@ is optional. Otherwise, you must specify it explicitly.`,
 	cmd.Flags().StringVar(&envName, "env", "", "environment name")
 	cmd.Flags().StringVar(&trafficLaneName, "trafficLane", "", "traffic lane name")
 	cmd.Flags().StringVar(&keyword, "keyword", "", "filter by keyword")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 	_ = cmd.MarkFlagRequired("env")

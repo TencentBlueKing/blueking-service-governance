@@ -35,7 +35,8 @@ Supported application types: helm, trpc, taf.
 
 The --env flag supports multiple environment names separated by commas (e.g. --env prod,staging).
 When multiple environments are specified, the deploy will be executed for each environment sequentially.
-Environment names are validated against the workspace before deployment.
+Environment names are validated against the application's available environments, including its feature
+environments, before deployment.
 
 If you have set a default workspace using 'workspace set', the --workspace flag
 is optional. Otherwise, you must specify it explicitly.

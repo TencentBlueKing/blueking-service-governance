@@ -58,7 +58,7 @@ func NewListCmd() *cobra.Command {
 	}
 
 	cmdutil.AddAppFlags(cmd, &appID)
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 

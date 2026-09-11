@@ -18,15 +18,24 @@
 
 package client
 
-// Env 环境
+// Env 环境。表格仅展示核心字段，JSON/YAML/JQ 保留完整信息。
 type Env struct {
-	ID          string          `json:"id" yaml:"id"`
+	ID          string          `json:"id" yaml:"id" table:"-"`
 	Name        string          `json:"name" yaml:"name"`
 	DisplayName string          `json:"displayName" yaml:"displayName"`
 	Type        string          `json:"type" yaml:"type"`
-	Description string          `json:"description" yaml:"description"`
-	UpdatedAt   string          `json:"updatedAt" yaml:"updatedAt"`
-	Cluster     *EnvClusterInfo `json:"cluster" yaml:"cluster"`
+	Description string          `json:"description" yaml:"description" table:"-"`
+	CreatedAt   string          `json:"createdAt" yaml:"createdAt" table:"-"`
+	UpdatedAt   string          `json:"updatedAt" yaml:"updatedAt" table:"-"`
+	Cluster     *EnvClusterInfo `json:"cluster" yaml:"cluster" table:"-"`
+	// Status 环境就绪状态：Ready / NotReady。
+	Status string `json:"status" yaml:"status"`
+	// Kind 环境类别：standard / feature，区别于部署阶段 Type。
+	Kind string `json:"kind" yaml:"kind"`
+	// OwnerAppID 特性环境所属应用 ID，仅特性环境返回。
+	OwnerAppID string `json:"ownerAppID,omitempty" yaml:"ownerAppID,omitempty" table:"-"`
+	// SourceEnvID 创建特性环境时的来源标准环境 ID，仅特性环境返回。
+	SourceEnvID string `json:"sourceEnvID,omitempty" yaml:"sourceEnvID,omitempty" table:"-"`
 }
 
 // EnvClusterInfo 环境运行时配置（集群信息）
@@ -54,6 +63,14 @@ type CreateEnvBody struct {
 	Type        string      `json:"type" yaml:"type"`
 	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
 	Cluster     *EnvCluster `json:"cluster" yaml:"cluster"`
+}
+
+// CreateFeatureEnvBody 创建特性环境的请求体，名称及命名空间由服务端生成。
+type CreateFeatureEnvBody struct {
+	// DisplayName 用户指定的展示名称。
+	DisplayName string `json:"displayName"`
+	// SourceEnvID 来源标准环境 ID。
+	SourceEnvID string `json:"sourceEnvID"`
 }
 
 // EnvCluster 创建环境时的集群配置

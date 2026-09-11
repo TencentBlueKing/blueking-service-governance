@@ -31,8 +31,9 @@ const (
 	updateDeployLong = `Update an existing deployment for an application.
 
 The --env flag supports multiple environment names separated by commas (e.g. --env prod,staging).
-When multiple environments are specified, the update will be executed for each environment sequentially.
-Environment names are validated against the workspace before updating.
+When multiple environments are specified, the update will be executed for each environment
+sequentially. Environment names are validated against the application's available environments,
+including its feature environments, before updating.
 
 If you have set a default workspace using 'workspace set', the --workspace flag
 is optional. Otherwise, you must specify it explicitly.

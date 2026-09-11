@@ -72,7 +72,7 @@ func NewGetCmd() *cobra.Command {
 
 	cmdutil.AddWorkspaceFlag(cmd, &workspaceID)
 	cmd.Flags().StringVar(&envName, "env", "", "environment name (required)")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("env")
 

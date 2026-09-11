@@ -51,7 +51,7 @@ const (
 )
 
 const (
-	// FlagUsage 通用 --output 参数说明
+	// FlagUsage 通用输出格式参数说明。
 	FlagUsage = "output format: json, yaml, table, jq=<expr>"
 )
 
@@ -72,6 +72,29 @@ type parsedFormat struct {
 
 type formatter interface {
 	Format(ctx context.Context, data any) (string, error)
+}
+
+// ValidateFormat 在执行有副作用的操作前校验输出格式及 JQ 表达式。
+// 只进行静态解析和编译，不执行表达式；依赖实际数据的运行时错误由 FormatData 返回。
+func ValidateFormat(format string) error {
+	parsed, err := parseFormat(format)
+	if err != nil {
+		return clierr.Usage(err)
+	}
+	if parsed.formatType != FormatJq {
+		return nil
+	}
+	if strings.TrimSpace(parsed.value) == "" {
+		return clierr.Usagef("jq expression cannot be empty")
+	}
+	query, err := gojq.Parse(parsed.value)
+	if err != nil {
+		return clierr.Usage(errors.Wrap(err, "parse jq expression"))
+	}
+	if _, err = gojq.Compile(query); err != nil {
+		return clierr.Usage(errors.Wrap(err, "compile jq expression"))
+	}
+	return nil
 }
 
 // FormatData 智能格式化数据，格式缺省时，将根据数据类型自动选择表格或 JSON 格式。

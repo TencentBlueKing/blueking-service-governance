@@ -70,7 +70,7 @@ and environment, including instance ID, IP, image, status, and age.`,
 
 	cmdutil.AddAppFlags(cmd, &appID)
 	cmd.Flags().StringVar(&envName, "env", "", "environment name")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 	_ = cmd.MarkFlagRequired("env")

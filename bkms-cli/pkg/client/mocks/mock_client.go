@@ -962,6 +962,80 @@ func (_c *MockClient_CreateEnv_Call) RunAndReturn(run func(ctx context.Context, 
 	return _c
 }
 
+// CreateFeatureEnv provides a mock function for the type MockClient
+func (_mock *MockClient) CreateFeatureEnv(ctx context.Context, appID string, body client.CreateFeatureEnvBody) (*client.Env, error) {
+	ret := _mock.Called(ctx, appID, body)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateFeatureEnv")
+	}
+
+	var r0 *client.Env
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateFeatureEnvBody) (*client.Env, error)); ok {
+		return returnFunc(ctx, appID, body)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateFeatureEnvBody) *client.Env); ok {
+		r0 = returnFunc(ctx, appID, body)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.Env)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, client.CreateFeatureEnvBody) error); ok {
+		r1 = returnFunc(ctx, appID, body)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_CreateFeatureEnv_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateFeatureEnv'
+type MockClient_CreateFeatureEnv_Call struct {
+	*mock.Call
+}
+
+// CreateFeatureEnv is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - body client.CreateFeatureEnvBody
+func (_e *MockClient_Expecter) CreateFeatureEnv(ctx any, appID any, body any) *MockClient_CreateFeatureEnv_Call {
+	return &MockClient_CreateFeatureEnv_Call{Call: _e.mock.On("CreateFeatureEnv", ctx, appID, body)}
+}
+
+func (_c *MockClient_CreateFeatureEnv_Call) Run(run func(ctx context.Context, appID string, body client.CreateFeatureEnvBody)) *MockClient_CreateFeatureEnv_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 client.CreateFeatureEnvBody
+		if args[2] != nil {
+			arg2 = args[2].(client.CreateFeatureEnvBody)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_CreateFeatureEnv_Call) Return(env *client.Env, err error) *MockClient_CreateFeatureEnv_Call {
+	_c.Call.Return(env, err)
+	return _c
+}
+
+func (_c *MockClient_CreateFeatureEnv_Call) RunAndReturn(run func(ctx context.Context, appID string, body client.CreateFeatureEnvBody) (*client.Env, error)) *MockClient_CreateFeatureEnv_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateScopedEnvVar provides a mock function for the type MockClient
 func (_mock *MockClient) CreateScopedEnvVar(ctx context.Context, workspaceID string, opts client.CreateScopedEnvVarOptions) (*client.ScopedEnvVar, error) {
 	ret := _mock.Called(ctx, workspaceID, opts)
@@ -3663,6 +3737,74 @@ func (_c *MockClient_ListAppEnvVars_Call) Return(appEnvVars []client.AppEnvVar, 
 }
 
 func (_c *MockClient_ListAppEnvVars_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) ([]client.AppEnvVar, error)) *MockClient_ListAppEnvVars_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListAppEnvs provides a mock function for the type MockClient
+func (_mock *MockClient) ListAppEnvs(ctx context.Context, appID string) ([]client.Env, error) {
+	ret := _mock.Called(ctx, appID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListAppEnvs")
+	}
+
+	var r0 []client.Env
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]client.Env, error)); ok {
+		return returnFunc(ctx, appID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []client.Env); ok {
+		r0 = returnFunc(ctx, appID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.Env)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, appID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_ListAppEnvs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAppEnvs'
+type MockClient_ListAppEnvs_Call struct {
+	*mock.Call
+}
+
+// ListAppEnvs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+func (_e *MockClient_Expecter) ListAppEnvs(ctx any, appID any) *MockClient_ListAppEnvs_Call {
+	return &MockClient_ListAppEnvs_Call{Call: _e.mock.On("ListAppEnvs", ctx, appID)}
+}
+
+func (_c *MockClient_ListAppEnvs_Call) Run(run func(ctx context.Context, appID string)) *MockClient_ListAppEnvs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ListAppEnvs_Call) Return(envs []client.Env, err error) *MockClient_ListAppEnvs_Call {
+	_c.Call.Return(envs, err)
+	return _c
+}
+
+func (_c *MockClient_ListAppEnvs_Call) RunAndReturn(run func(ctx context.Context, appID string) ([]client.Env, error)) *MockClient_ListAppEnvs_Call {
 	_c.Call.Return(run)
 	return _c
 }

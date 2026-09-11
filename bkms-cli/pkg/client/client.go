@@ -231,6 +231,22 @@ func (c *SvcBasedClient) ListEnvs(ctx context.Context, workspaceID string) ([]En
 	return respData.Data, nil
 }
 
+// ListAppEnvs 获取应用可用环境，包含标准环境和该应用专属的特性环境。
+func (c *SvcBasedClient) ListAppEnvs(ctx context.Context, appID string) ([]Env, error) {
+	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/envs", appID)
+
+	var respData ListEnvsRespData
+	resp, err := c.cli.R().SetContext(ctx).SetResult(&respData).Get(url)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, errors.Errorf("list app envs failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+	}
+
+	return respData.Data, nil
+}
+
 // GetEnv 获取环境详情
 func (c *SvcBasedClient) GetEnv(ctx context.Context, envID string) (*Env, error) {
 	var respData GetEnvRespData
@@ -291,6 +307,22 @@ func (c *SvcBasedClient) DeleteEnv(ctx context.Context, envID string) error {
 	}
 
 	return nil
+}
+
+// CreateFeatureEnv 创建特性环境，返回服务端生成的环境名称和独立命名空间。
+func (c *SvcBasedClient) CreateFeatureEnv(ctx context.Context, appID string, body CreateFeatureEnvBody) (*Env, error) {
+	url := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/feat-envs", appID)
+
+	var respData GetEnvRespData
+	resp, err := c.cli.R().SetContext(ctx).SetBody(body).SetResult(&respData).Post(url)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
+		return nil, errors.Errorf("create feature env failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+	}
+
+	return &respData.Data, nil
 }
 
 // ResolveApp 通过 ID 或 Name 解析应用，返回 appID

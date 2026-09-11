@@ -89,7 +89,7 @@ via the admin port. Only Trpc type applications are supported.`,
 	cmd.Flags().StringVar(&appID, "app", "", "application ID or name")
 	cmd.Flags().StringVar(&envName, "env", "", "environment name")
 	cmd.Flags().StringVar(&instanceIDsStr, "instance-ids", "", "instance IDs, comma separated")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 	_ = cmd.MarkFlagRequired("env")
@@ -164,7 +164,7 @@ application type:
 	cmd.Flags().StringVar(&paramsJSON, "params", "", "query params for Trpc admin cmd, JSON string")
 	cmd.Flags().StringVar(&body, "body", "", "request body for Trpc admin cmd")
 	cmd.Flags().StringVar(&command, "command", "", "command for Taf admin cmd (e.g. taf.viewversion)")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", output.FlagUsage)
+	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
 	_ = cmd.MarkFlagRequired("env")
