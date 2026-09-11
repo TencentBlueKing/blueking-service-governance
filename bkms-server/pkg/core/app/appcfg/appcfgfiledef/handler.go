@@ -51,6 +51,13 @@ func (h *Handler) newAppCfgFileDefService() *appcfg.AppCfgFileDefService {
 	return appcfg.NewAppCfgFileDefService(base)
 }
 
+func errCodeForDefError(err error) bkerrs.ErrCode {
+	if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+		return bkerrs.ErrCodeInvalidArgument
+	}
+	return bkerrs.ErrCodeInternalServerError
+}
+
 // ListDefaultFilesWithDef 列出应用下所有配置文件定义及其默认文件信息，文件数量不多不分页。
 //
 //	@ID				ListDefaultFilesWithDef
@@ -172,7 +179,7 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 		ConfigKind:          appcfg.ConfigKind(input.ConfigKind),
 	})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating def"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "creating def"))
 		return
 	}
 
@@ -218,7 +225,7 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	result, err := svc.GetEnvFileDetail(ctx, def, query.EnvName)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "loading env file detail"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "loading env file detail"))
 		return
 	}
 
@@ -272,7 +279,7 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, def.AppID, def.ID.Hex()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "updating def"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "updating def"))
 		return
 	}
 

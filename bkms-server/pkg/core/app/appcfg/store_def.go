@@ -119,13 +119,7 @@ func (s *AppConfigFileDefStoreMongo) ListByApp(
 
 	filter := bson.M{"appID": appID}
 	if listOpts.filterConfigKind != nil {
-		if *listOpts.filterConfigKind == ConfigKindFramework {
-			filter["configKind"] = bson.M{
-				"$in": []string{string(ConfigKindFramework), ""},
-			}
-		} else {
-			filter["configKind"] = string(*listOpts.filterConfigKind)
-		}
+		filter["configKind"] = string(*listOpts.filterConfigKind)
 	}
 
 	findOpts := options.Find().SetSort(bson.D{{Key: "name", Value: 1}})

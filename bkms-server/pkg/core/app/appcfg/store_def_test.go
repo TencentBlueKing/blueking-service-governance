@@ -133,6 +133,31 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(filtered).To(HaveLen(2))
 		})
+
+		It("should not treat empty configKind as framework", func() {
+			frameworkDef := newDef()
+			frameworkDef.Name = "framework.yaml"
+			_, err := store.Add(ctx, frameworkDef)
+			Expect(err).NotTo(HaveOccurred())
+
+			legacyDef := newDef()
+			legacyDef.Name = "legacy.yaml"
+			legacyDef.MountDir = "/data/conf/legacy"
+			legacyDef.ConfigKind = ""
+			_, err = store.Add(ctx, legacyDef)
+			Expect(err).NotTo(HaveOccurred())
+
+			all, err := store.ListByApp(ctx, appID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(all).To(HaveLen(2))
+
+			filtered, err := store.ListByApp(ctx, appID,
+				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(filtered).To(HaveLen(1))
+			Expect(filtered[0].Name).To(Equal("framework.yaml"))
+			Expect(filtered[0].ConfigKind).To(Equal(appcfg.ConfigKindFramework))
+		})
 	})
 
 	Context("DeleteByID", func() {

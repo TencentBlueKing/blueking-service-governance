@@ -134,6 +134,7 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 			Content:           fileContent,
 			Creator:           appcfg.CfgSystemUser,
 			Description:       appcfg.CfgSystemVersionDescription,
+			ConfigKind:        appcfg.ConfigKindFramework,
 		},
 	); err != nil {
 		return errors.Wrap(err, "create default config file")
@@ -159,7 +160,6 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 			Language: params.TrpcConfig.Language,
 		}
 	}
-
 	// 将平台默认 AppSpec 应用到 AppModel。
 	appspec.ApplyToAppModel(&resolved.Default, appModel)
 

@@ -72,7 +72,7 @@ func (FrameworkPolicy) ValidateContent(content string, _ FileFormat) error {
 	}
 	var out any
 	if err := yaml.Unmarshal([]byte(content), &out); err != nil {
-		return errors.Wrap(err, "content is not valid YAML")
+		return errors.Wrapf(ErrInvalidConfigSpec, "content is not valid YAML: %v", err)
 	}
 	return nil
 }

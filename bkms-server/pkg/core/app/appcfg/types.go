@@ -153,11 +153,6 @@ type FileDefUpdate struct {
 	Operator        string
 }
 
-// HasEnvConfigChanges 判断是否有环境配置策略变更。
-func (p FileDefUpdate) HasEnvConfigChanges() bool {
-	return p.IsUnifiedConfig != nil || p.MountedEnvNames != nil
-}
-
 // CreateEnvInstanceParams 创建环境级配置实例的参数。
 type CreateEnvInstanceParams struct {
 	EnvName        string
@@ -165,14 +160,6 @@ type CreateEnvInstanceParams struct {
 	OverlayContent *string
 	Operator       string
 	Description    string
-}
-
-// UpdateEnvConfigParams 更新环境配置策略的参数。
-type UpdateEnvConfigParams struct {
-	// IsUnifiedConfig nil = 不修改。
-	IsUnifiedConfig *bool
-	// MountedEnvNames 挂载环境范围（仅 plain 有效）。nil = 不修改。
-	MountedEnvNames *[]string
 }
 
 // UpdateCfgFileOptions 文件变更持久化选项。
