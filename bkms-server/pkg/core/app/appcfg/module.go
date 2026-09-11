@@ -30,6 +30,6 @@ var FxModule = fx.Module("appcfg",
 		fx.Annotate(NewAppConfigFileStoreMongo, fx.As(new(AppConfigFileStore))),
 		fx.Annotate(NewAppConfigFileDefStoreMongo, fx.As(new(AppConfigFileDefStore))),
 		fx.Annotate(NewAppConfigFileVersionStoreMongo, fx.As(new(AppConfigFileVersionStore))),
-		NewContentProvider,
+		NewMountableFileProvider,
 	),
 )

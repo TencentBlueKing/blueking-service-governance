@@ -48,8 +48,8 @@ type MountableFileProvider interface {
 	ListPlainMountableFiles(ctx context.Context, appID, envName string) ([]MountableFile, error)
 }
 
-// NewContentProvider 构造一个 MountableFileProvider 实例
-func NewContentProvider(
+// NewMountableFileProvider 构造一个 MountableFileProvider 实例。
+func NewMountableFileProvider(
 	fileStore AppConfigFileStore,
 	defStore AppConfigFileDefStore,
 	versionStore AppConfigFileVersionStore,
@@ -216,6 +216,12 @@ func GetEnvContent(
 	}
 
 	// 3. Resolve file name from def
+	if acf.DefID == bson.NilObjectID {
+		return nil, "", "", errors.Errorf(
+			"app config file %s (app %s, env %s) has no defID, run migration 000014 to backfill",
+			acf.ID.Hex(), appID, envName,
+		)
+	}
 	def, err := defStore.GetByID(ctx, acf.DefID)
 	if err != nil {
 		return nil, "", "", errors.Wrap(err, "loading def for name resolution")

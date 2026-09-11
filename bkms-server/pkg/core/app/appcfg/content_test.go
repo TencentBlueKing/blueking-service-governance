@@ -64,7 +64,7 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 		diApp.RequireStart()
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewContentProvider(store, defStore, versionStore)
+		provider = appcfg.NewMountableFileProvider(store, defStore, versionStore)
 		base := appcfg.NewBaseAppCfgFileService(defStore, store, versionStore)
 		svc = appcfg.NewAppCfgFileDefService(base)
 	})
@@ -280,7 +280,7 @@ var _ = Describe("ListPlainMountableFiles", func() {
 		diApp.RequireStart()
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewContentProvider(store, defStore, versionStore)
+		provider = appcfg.NewMountableFileProvider(store, defStore, versionStore)
 	})
 
 	AfterEach(func() {

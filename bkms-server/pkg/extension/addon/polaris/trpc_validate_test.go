@@ -64,7 +64,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 			),
 		)
 		diApp.RequireStart()
-		cfgProvider = appcfg.NewContentProvider(appConfigFileStore, appConfigFileDefStore, versionStore)
+		cfgProvider = appcfg.NewMountableFileProvider(appConfigFileStore, appConfigFileDefStore, versionStore)
 	})
 
 	AfterEach(func() {

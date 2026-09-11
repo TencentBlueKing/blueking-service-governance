@@ -102,7 +102,7 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 		return
 	}
 
-	cfgProvider := appcfg.NewContentProvider(
+	cfgProvider := appcfg.NewMountableFileProvider(
 		h.registry.AppConfigFileStore,
 		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
@@ -482,7 +482,7 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 	warnings := polaris.CollectConfigWarnings(
 		ctx,
 		h.registry.AppModelStore,
-		appcfg.NewContentProvider(
+		appcfg.NewMountableFileProvider(
 			h.registry.AppConfigFileStore,
 			h.registry.AppConfigFileDefStore,
 			h.registry.AppConfigFileVersionStore,

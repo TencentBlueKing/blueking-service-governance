@@ -75,7 +75,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 		return
 	}
 
-	cfgProvider := appcfg.NewContentProvider(
+	cfgProvider := appcfg.NewMountableFileProvider(
 		h.registry.AppConfigFileStore,
 		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
