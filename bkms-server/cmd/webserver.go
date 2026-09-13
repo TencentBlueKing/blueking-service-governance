@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -100,8 +101,11 @@ func NewWebServerCmd() *cobra.Command {
 			reg := storereg.G()
 			router := server.RegisterRouter(ctx, *cfg, cmd.Name())
 			workload.InitPlugin(
-				reg.AppConfigFileStore,
-				reg.AppConfigFileDefStore,
+				appcfg.NewMountableFileProvider(
+					reg.AppConfigFileStore,
+					reg.AppConfigFileDefStore,
+					reg.AppConfigFileVersionStore,
+				),
 				reg.PolarisConfigStore,
 			)
 

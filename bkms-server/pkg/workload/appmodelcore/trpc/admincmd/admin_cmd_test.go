@@ -24,7 +24,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -115,9 +114,12 @@ var _ = Describe("TrpcAdminService", func() {
 
 		// 创建 TrpcAdminService（跳过验证逻辑）
 		adminService = &admincmd.TrpcAdminService{
-			AppConfigFileStore:    appConfigFileStore,
-			AppConfigFileDefStore: appConfigFileDefStore,
-			AppModelStore:         appModelStore,
+			MountableFileProvider: appcfg.NewMountableFileProvider(
+				appConfigFileStore,
+				appConfigFileDefStore,
+				appConfigFileVersionStore,
+			),
+			AppModelStore: appModelStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
 				scopedEnvVarStore,
 				appDepsVarReader,
@@ -130,14 +132,49 @@ var _ = Describe("TrpcAdminService", func() {
 		adminService.EnvName = testEnv.Name
 	})
 
+	upsertFrameworkConfig := func(envName, content string) {
+		svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
+		defs, err := appConfigFileDefStore.ListByApp(
+			ctx,
+			testApp.ID,
+			appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defs).To(HaveLen(1))
+
+		def := &defs[0]
+		if envName != appcfg.EnvNameDefault {
+			isUnified := false
+			err = svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        appcfg.CfgSystemUser,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			def, err = appConfigFileDefStore.GetByID(ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		targetFile, _, isNewFile, err := svc.PrepareEnvContentUpdate(ctx, def, envName, content, appcfg.CfgSystemUser)
+		Expect(err).NotTo(HaveOccurred())
+		if isNewFile {
+			_, err = svc.CreateFileWithVersion(
+				ctx, *targetFile, def.Name, appcfg.CfgSystemVersionDescription, appcfg.CfgSystemUser,
+			)
+		} else {
+			err = svc.UpdateFile(ctx, targetFile, def.Name, appcfg.CfgSystemUser, appcfg.UpdateCfgFileOptions{
+				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
+				Description:   appcfg.CfgSystemVersionDescription,
+			})
+		}
+		Expect(err).NotTo(HaveOccurred())
+	}
+
 	AfterEach(func() {
 		diApp.RequireStop()
 	})
 
 	Describe("GetAdminConfig", func() {
 		Context("when config file exists for specific environment", func() {
-			var configFileID bson.ObjectID
-
 			BeforeEach(func() {
 				// 创建配置文件内容
 				configContent := `server:

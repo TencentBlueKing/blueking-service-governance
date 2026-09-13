@@ -26,6 +26,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -100,6 +101,23 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 		diApp.RequireStop()
 	})
 
+	singleConfigMapContent := func(extraObjs []unstructured.Unstructured) string {
+		for _, obj := range extraObjs {
+			if obj.GetKind() != "ConfigMap" {
+				continue
+			}
+			data := obj.Object["data"].(map[string]any)
+			Expect(data).To(HaveLen(1))
+			for _, v := range data {
+				content, ok := v.(string)
+				Expect(ok).To(BeTrue())
+				return content
+			}
+		}
+		Fail("config map not found")
+		return ""
+	}
+
 	// TRPC 特有测试：environment-specific appConfigFile
 	Context("Test Build with environment-specific appConfigFile", func() {
 		var app *bkmsapp.Application
@@ -130,13 +148,33 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			prodEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 			testEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			// 获取默认配置文件的 ID，用于创建 overlay 配置
+			// 切换到独立配置后，为 prod 创建 env-specific overlay。
 			defaultFiles, err := appConfigFileStore.List(ctx, app.ID, appcfg.AcfFilterEnvName(appcfg.EnvNameDefault))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defaultFiles).NotTo(BeEmpty())
-			defaultFileID := defaultFiles[0].ID
+			defs, err := appConfigFileDefStore.ListByApp(
+				ctx,
+				app.ID,
+				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defs).To(HaveLen(1))
 
-			// Create prod environment-specific AppConfigFile (overlay)
+			cfgSvc := appcfg.NewAppConfigFileService(
+				appConfigFileStore,
+				appConfigFileDefStore,
+				appConfigFileVersionStore,
+			)
+			isUnified := false
+			err = cfgSvc.UpdateAppCfgFileDef(ctx, &defs[0], appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        appcfg.CfgSystemUser,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = appConfigFileDefStore.GetByID(ctx, defs[0].ID)
+			Expect(err).NotTo(HaveOccurred())
+			defaultFileID := defaultFiles[0].ID
 			prodOverlayContent := "server:\n  address: 0.0.0.0:9090"
 			_, err = appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
 				Create(
@@ -177,8 +215,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			Expect(extraObjs[0].GetKind()).To(Equal("ConfigMap"))
 
 			// Verify ConfigMap contains default content
-			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["trpc_go.yaml"].(string)
+			configContent := singleConfigMapContent(extraObjs)
 			Expect(configContent).To(Equal("server:\n  address: 0.0.0.0:8080\n  timeout: 3000\n"))
 
 			// Verify volume mount exists
@@ -207,8 +244,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			Expect(extraObjs[0].GetKind()).To(Equal("ConfigMap"))
 
 			// Verify ConfigMap contains prod-specific content (not default)
-			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["trpc_go.yaml"].(string)
+			configContent := singleConfigMapContent(extraObjs)
 			Expect(configContent).To(Equal("server:\n  address: 0.0.0.0:9090\n  timeout: 3000\n"))
 
 			// Verify volume mount exists
@@ -262,8 +298,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			extraObjs := result.ExtraObjects
 			Expect(extraObjs).To(HaveLen(1))
 
-			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["trpc_go.yaml"].(string)
+			configContent := singleConfigMapContent(extraObjs)
 			expectYAMLValue := func(expected any, path ...any) {
 				actual, err := testutil.YAMLValueAt(configContent, path...)
 				Expect(err).NotTo(HaveOccurred())
@@ -292,13 +327,18 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				AppConfigFileVersionStore: appConfigFileVersionStore,
 				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TrpcApplicationOpts{
-				TrpcConfig: &appmodel.TrpcConfig{FileContent: "${{ env.BROKEN "},
+				TrpcConfig: &appmodel.TrpcConfig{
+					FileName:    "trpc_go.yaml",
+					FilePath:    "/etc/trpc",
+					Language:    "go",
+					FileContent: "${{ env. }}",
+				},
 			})
 			appEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			_, err := workload.NewBuilder(builderSvc, app, appModel).Build(ctx, appEnv)
 
-			Expect(err).To(MatchError(ContainSubstring("collecting env vars from tRPC config")))
+			Expect(err).To(MatchError(ContainSubstring("collecting env vars from config")))
 		})
 	})
 
@@ -361,7 +401,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 		Expect(result.UndefinedEnvVars).To(Equal([]envvarrefs.UndefinedEnvVar{{
 			Key: "MISSING",
 			Sources: []envvarrefs.Source{
-				{Type: envvarrefs.SourceAppConfigFile, Name: appcfg.DefaultAppConfigFileName},
+				{Type: envvarrefs.SourceAppConfigFile, Name: "trpc_go.yaml"},
 				{Type: envvarrefs.SourceComponent, Name: "missing-component"},
 				{Type: envvarrefs.SourcePolaris, Name: "polaris-main"},
 			},
@@ -425,15 +465,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			Expect(len(extraObjs)).To(BeNumerically(">=", 1))
 
 			// 找到 ConfigMap 并验证 tRPC 配置被 patcher 注入了 polaris registry
-			var configContent string
-			for _, obj := range extraObjs {
-				if obj.GetKind() == "ConfigMap" {
-					data := obj.Object["data"].(map[string]any)
-					if v, ok := data["trpc_go.yaml"]; ok {
-						configContent = v.(string)
-					}
-				}
-			}
+			configContent := singleConfigMapContent(extraObjs)
 			Expect(configContent).NotTo(BeEmpty())
 
 			var configMap map[string]any
@@ -478,15 +510,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			extraObjs := result.ExtraObjects
 
 			// 找到 ConfigMap 中的 tRPC 配置
-			var configContent string
-			for _, obj := range extraObjs {
-				if obj.GetKind() == "ConfigMap" {
-					data := obj.Object["data"].(map[string]any)
-					if v, ok := data["trpc_go.yaml"]; ok {
-						configContent = v.(string)
-					}
-				}
-			}
+			configContent := singleConfigMapContent(extraObjs)
 			Expect(configContent).NotTo(BeEmpty())
 
 			var configMap map[string]any

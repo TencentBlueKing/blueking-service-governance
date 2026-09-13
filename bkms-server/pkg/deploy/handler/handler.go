@@ -19,7 +19,10 @@
 // Package handler provide helm/trpc/taf deploy api handlers
 package handler
 
-import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+import (
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+)
 
 // Handler 处理部署相关 Gin API 请求
 type Handler struct {
@@ -29,4 +32,12 @@ type Handler struct {
 // New 创建部署相关 Gin handler
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) newMountableFileProvider() appcfg.MountableFileProvider {
+	return appcfg.NewMountableFileProvider(
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
+		h.registry.AppConfigFileVersionStore,
+	)
 }

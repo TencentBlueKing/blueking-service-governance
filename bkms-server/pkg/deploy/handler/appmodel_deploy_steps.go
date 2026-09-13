@@ -137,6 +137,7 @@ func (h *Handler) newDeployPreChecker() *deploypkg.DeployPreChecker {
 		h.registry.AppModelStore,
 		h.registry.AppSpecStore,
 		h.registry.BuildConfigStore,
+		h.newMountableFileProvider(),
 	)
 	return deploypkg.NewDeployPreChecker(
 		h.registry.AppModelStore,
@@ -472,6 +473,8 @@ func (h *Handler) newAppModelDeployService() (*appmodeldeploysvc.Service, error)
 		AppModelDeployRecordStore:           reg.AppModelDeployRecordStore,
 		AppModelDeployResourceSnapshotStore: reg.AppModelDeployResourceSnapshotStore,
 		AppConfigFileStore:                  reg.AppConfigFileStore,
+		AppConfigFileDefStore:               reg.AppConfigFileDefStore,
+		AppConfigFileVersionStore:           reg.AppConfigFileVersionStore,
 		ClusterAddonDefStore:                reg.ClusterAddonDefStore,
 	})
 }
@@ -494,6 +497,7 @@ func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer
 			h.registry.AppModelStore,
 			h.registry.AppSpecStore,
 			h.registry.BuildConfigStore,
+			h.newMountableFileProvider(),
 		),
 		h.registry.AppSpecStore,
 		h.registry.BuildConfigStore,

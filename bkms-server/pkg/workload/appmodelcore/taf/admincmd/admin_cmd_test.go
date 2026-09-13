@@ -72,11 +72,14 @@ var _ = Describe("TafAdminService", func() {
 		svc.Env = testEnv
 		svc.EnvName = testEnv.Name
 		svc.Stores = &admincmd.AdminServiceStores{
-			AppConfigFileStore:    appConfigFileStore,
-			AppConfigFileDefStore: appConfigFileDefStore,
-			AppModelStore:         appModelStore,
-			EnvStore:              envStore,
-			AppStore:              appStore,
+			MountableFileProvider: appcfg.NewMountableFileProvider(
+				appConfigFileStore,
+				appConfigFileDefStore,
+				appConfigFileVersionStore,
+			),
+			AppModelStore: appModelStore,
+			EnvStore:      envStore,
+			AppStore:      appStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
 				scopedEnvVarStore,
 				appDepsVarReader,
