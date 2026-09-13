@@ -29,6 +29,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
@@ -90,8 +91,11 @@ func NewWorkerCmd() *cobra.Command {
 
 			// 初始化 workload 插件（必须在 store 初始化之后）
 			workload.InitPlugin(
-				storereg.G().AppConfigFileStore,
-				storereg.G().AppConfigFileDefStore,
+				appcfg.NewMountableFileProvider(
+					storereg.G().AppConfigFileStore,
+					storereg.G().AppConfigFileDefStore,
+					storereg.G().AppConfigFileVersionStore,
+				),
 				storereg.G().PolarisConfigStore,
 			)
 
@@ -104,7 +108,6 @@ func NewWorkerCmd() *cobra.Command {
 			if err = taskSrv.Start(); err != nil {
 				log.Fatalf("failed to start taskq server: %v", err)
 			}
-
 			log.Info(ctx, "worker started, waiting for tasks...")
 
 			// 等待信号（SIGINT / SIGTERM）触发 ctx.Done()

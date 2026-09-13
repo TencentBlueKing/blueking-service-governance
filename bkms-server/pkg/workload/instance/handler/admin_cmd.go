@@ -27,6 +27,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
@@ -207,12 +208,15 @@ func (h *Handler) ExecuteTafAdminCmd(c *gin.Context) {
 		uriInput.EnvName,
 		input.InstanceIDs,
 		&tafadmincmd.AdminServiceStores{
-			TafDeployRecordStore:  h.registry.AppModelDeployRecordStore,
-			AppConfigFileStore:    h.registry.AppConfigFileStore,
-			AppConfigFileDefStore: h.registry.AppConfigFileDefStore,
-			EnvStore:              h.registry.EnvStore,
-			AppStore:              h.registry.AppStore,
-			AppModelStore:         h.registry.AppModelStore,
+			TafDeployRecordStore: h.registry.AppModelDeployRecordStore,
+			MountableFileProvider: appcfg.NewMountableFileProvider(
+				h.registry.AppConfigFileStore,
+				h.registry.AppConfigFileDefStore,
+				h.registry.AppConfigFileVersionStore,
+			),
+			EnvStore:      h.registry.EnvStore,
+			AppStore:      h.registry.AppStore,
+			AppModelStore: h.registry.AppModelStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
 				h.registry.ScopedEnvVarStore,
 				h.registry.AppDepsVarReader,
@@ -277,8 +281,11 @@ func (h *Handler) newTrpcAdminService(
 		envName,
 		instanceIDs,
 		h.registry.AppModelDeployRecordStore,
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		appcfg.NewMountableFileProvider(
+			h.registry.AppConfigFileStore,
+			h.registry.AppConfigFileDefStore,
+			h.registry.AppConfigFileVersionStore,
+		),
 		h.registry.EnvStore,
 		h.registry.AppStore,
 		h.registry.AppModelStore,

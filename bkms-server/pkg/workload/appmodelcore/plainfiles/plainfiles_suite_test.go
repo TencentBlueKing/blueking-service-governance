@@ -16,33 +16,26 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package workload_test
+package plainfiles_test
 
 import (
 	"testing"
 
-	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 )
 
-func TestWorkload(t *testing.T) {
+func TestPlainfiles(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Workload Suite")
+	RunSpecs(t, "Plainfiles Suite")
 }
 
 var _ = BeforeSuite(func() {
 	if err := testutil.SetUpGlobalDatabase(); err != nil {
 		panic("failed to set up global database: " + err.Error())
 	}
-
-	// init workload plugins, it's used to build workload
-	initWorkloadPlugin()
 })
 
 var _ = AfterSuite(func() {
@@ -50,27 +43,3 @@ var _ = AfterSuite(func() {
 		panic("failed to teardown global database: " + err.Error())
 	}
 })
-
-func initWorkloadPlugin() {
-	appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore, polarisConfigStore := newWorkloadPluginDependencies()
-	workload.InitPlugin(
-		appcfg.NewMountableFileProvider(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore),
-		polarisConfigStore,
-	)
-}
-
-func asGameDeployment(result *workload.BuildResult) *tkex.GameDeployment {
-	if result == nil {
-		return nil
-	}
-	gd, _ := result.MainWorkload.(*tkex.GameDeployment)
-	return gd
-}
-
-func asDeployment(result *workload.BuildResult) *appsv1.Deployment {
-	if result == nil {
-		return nil
-	}
-	d, _ := result.MainWorkload.(*appsv1.Deployment)
-	return d
-}

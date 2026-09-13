@@ -75,8 +75,7 @@ type InstanceExecuteTafAdminCmdResult struct {
 // AdminServiceStores AdminService 所需的存储依赖
 type AdminServiceStores struct {
 	TafDeployRecordStore  appmodeldeploy.RecordStore
-	AppConfigFileStore    appcfg.AppConfigFileStore
-	AppConfigFileDefStore appcfg.AppConfigFileDefStore
+	MountableFileProvider appcfg.MountableFileProvider
 	EnvStore              envmodel.EnvironmentStore
 	AppStore              bkmsapp.ApplicationStore
 	AppModelStore         appmodel.AppModelStore
@@ -190,21 +189,14 @@ func (s *TafAdminService) Init(ctx context.Context) error {
 // 解析 local 字段中的 -p 参数获取端口号, -h 参数获取监听 IP
 func (s *TafAdminService) GetAdminConfig(ctx context.Context) (string, int32, error) {
 	// 获取配置文件内容
-	//nolint:staticcheck // 兼容 workload 层旧调用方，后续由 MountableFileProvider 替代
-	_, _, configContent, err := appcfg.GetEnvContent(
-		ctx,
-		s.Stores.AppConfigFileStore,
-		s.Stores.AppConfigFileDefStore,
-		s.App.ID,
-		s.Env.Name,
-	)
+	cfwc, err := s.Stores.MountableFileProvider.GetFrameworkMountableFile(ctx, s.App.ID, s.Env.Name)
 	if err != nil {
 		return "", 0, errors.Wrap(err, "get taf config content")
 	}
 
 	// 使用 TarsGo conf 包解析 TAF 配置
 	tafConf := conf.New()
-	if err = tafConf.InitFromString(configContent); err != nil {
+	if err = tafConf.InitFromString(cfwc.Content); err != nil {
 		return "", 0, errors.Wrap(err, "parse taf config")
 	}
 

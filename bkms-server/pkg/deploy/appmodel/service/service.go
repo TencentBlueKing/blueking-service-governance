@@ -81,6 +81,8 @@ type Service struct {
 	appModelDeployRecordStore           deployappmodel.RecordStore
 	appModelDeployResourceSnapshotStore deployappmodel.ResourceSnapshotStore
 	appConfigFileStore                  appcfg.AppConfigFileStore
+	appConfigFileDefStore               appcfg.AppConfigFileDefStore
+	appConfigFileVersionStore           appcfg.AppConfigFileVersionStore
 	clusterAddonDefStore                clusteraddon.ClusterAddonDefStore
 }
 
@@ -106,6 +108,8 @@ type ServiceDeps struct {
 	AppModelDeployRecordStore           deployappmodel.RecordStore           `validate:"required"`
 	AppModelDeployResourceSnapshotStore deployappmodel.ResourceSnapshotStore `validate:"required"`
 	AppConfigFileStore                  appcfg.AppConfigFileStore            `validate:"required"`
+	AppConfigFileDefStore               appcfg.AppConfigFileDefStore         `validate:"required"`
+	AppConfigFileVersionStore           appcfg.AppConfigFileVersionStore     `validate:"required"`
 	ClusterAddonDefStore                clusteraddon.ClusterAddonDefStore    `validate:"required"`
 }
 
@@ -137,6 +141,8 @@ func NewService(deps ServiceDeps) (*Service, error) {
 		appModelDeployRecordStore:           deps.AppModelDeployRecordStore,
 		appModelDeployResourceSnapshotStore: deps.AppModelDeployResourceSnapshotStore,
 		appConfigFileStore:                  deps.AppConfigFileStore,
+		appConfigFileDefStore:               deps.AppConfigFileDefStore,
+		appConfigFileVersionStore:           deps.AppConfigFileVersionStore,
 		clusterAddonDefStore:                deps.ClusterAddonDefStore,
 	}, nil
 }
@@ -172,6 +178,8 @@ func NewServiceFromRegistry(reg *storereg.Registry) (*Service, error) {
 		AppModelDeployRecordStore:           reg.AppModelDeployRecordStore,
 		AppModelDeployResourceSnapshotStore: reg.AppModelDeployResourceSnapshotStore,
 		AppConfigFileStore:                  reg.AppConfigFileStore,
+		AppConfigFileDefStore:               reg.AppConfigFileDefStore,
+		AppConfigFileVersionStore:           reg.AppConfigFileVersionStore,
 		ClusterAddonDefStore:                reg.ClusterAddonDefStore,
 	})
 }
@@ -220,6 +228,7 @@ func (s *Service) Deploy(ctx context.Context, app *bkmsapp.Application, params D
 		s.appModelStore,
 		s.appSpecStore,
 		s.buildConfigStore,
+		appcfg.NewMountableFileProvider(s.appConfigFileStore, s.appConfigFileDefStore, s.appConfigFileVersionStore),
 	)
 	deployer := deployappmodel.NewDeployer(
 		s.appModelDeployRecordStore,

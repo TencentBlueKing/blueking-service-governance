@@ -27,6 +27,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -52,6 +53,14 @@ type Handler struct {
 // New 创建应用实例 Gin Handler。
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) newMountableFileProvider() appcfg.MountableFileProvider {
+	return appcfg.NewMountableFileProvider(
+		h.registry.AppConfigFileStore,
+		h.registry.AppConfigFileDefStore,
+		h.registry.AppConfigFileVersionStore,
+	)
 }
 
 // ListAppInstances 按最新部署记录的 LabelSelector 列出匹配 Pod 并投影为实例
@@ -434,6 +443,7 @@ func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer
 			h.registry.AppModelStore,
 			h.registry.AppSpecStore,
 			h.registry.BuildConfigStore,
+			h.newMountableFileProvider(),
 		),
 		h.registry.AppSpecStore,
 		h.registry.BuildConfigStore,

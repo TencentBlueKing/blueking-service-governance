@@ -115,7 +115,6 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 	if err != nil {
 		return errors.Wrap(err, "resolve application defaults")
 	}
-
 	// 设置配置文件内容
 	var fileContent *string
 	if params.TrpcConfig != nil && params.TrpcConfig.FileContent != "" {

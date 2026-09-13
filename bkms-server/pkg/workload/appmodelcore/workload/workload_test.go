@@ -554,7 +554,13 @@ var _ = Describe("Builder Shared Tests", func() {
 			var configMap corev1.ConfigMap
 			err = runtime.DefaultUnstructuredConverter.FromUnstructured(extraObjs[0].Object, &configMap)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(configMap.Data[tc.ConfigFileName]).To(Equal(tc.ConfigContent))
+			Expect(configMap.Data).To(HaveLen(1))
+			var actualContent string
+			for _, content := range configMap.Data {
+				actualContent = content
+				break
+			}
+			Expect(actualContent).To(Equal(tc.ConfigContent))
 		},
 		Entry("TRPC workload", workloadTestCases[0]),
 		Entry("TAF workload", workloadTestCases[1]),
@@ -1280,5 +1286,81 @@ spec:
 		},
 		Entry("TRPC workload", workloadTestCases[0]),
 		Entry("TAF workload", workloadTestCases[1]),
+	)
+
+	// Plain config files integration tests
+	DescribeTable("Build with plain config files",
+		func(tc WorkloadTestCase) {
+			app, appModel := createApplication(ctx, tc, stores, nil, nil)
+			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+
+			// Create a plain config file for the app
+			cfgSvc := appcfg.NewAppConfigFileService(
+				stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
+			)
+			plainContent := "worker_processes 4;\n"
+			_, err := cfgSvc.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             app.ID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "nginx.conf",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &plainContent,
+				MountDir:          "/etc/nginx",
+				Creator:           appcfg.CfgSystemUser,
+				Description:       "plain file test",
+				ConfigKind:        appcfg.ConfigKindPlain,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			builder := workload.NewBuilder(builderSvc, app, appModel)
+			result, err := builder.Build(ctx, testEnv)
+			Expect(err).NotTo(HaveOccurred())
+
+			gd := asGameDeployment(result)
+
+			By("should have plain-cfg ConfigMap in extra resources")
+			var plainCM *unstructured.Unstructured
+			for i := range result.ExtraObjects {
+				obj := &result.ExtraObjects[i]
+				if obj.GetKind() == "ConfigMap" && strings.Contains(obj.GetName(), "plain-cfg") {
+					plainCM = obj
+					break
+				}
+			}
+			Expect(plainCM).NotTo(BeNil(), "plain-cfg ConfigMap should exist in extra resources")
+
+			By("should have plain file content in ConfigMap data")
+			data := plainCM.Object["data"].(map[string]any)
+			Expect(data).To(HaveLen(1))
+			for _, v := range data {
+				Expect(v).To(Equal("worker_processes 4;\n"))
+			}
+
+			By("should have plain file volume mount in main container")
+			mainContainer := gd.Spec.Template.Spec.Containers[0]
+			var plainMount *corev1.VolumeMount
+			for i := range mainContainer.VolumeMounts {
+				if mainContainer.VolumeMounts[i].MountPath == "/etc/nginx/nginx.conf" {
+					plainMount = &mainContainer.VolumeMounts[i]
+					break
+				}
+			}
+			Expect(plainMount).NotTo(BeNil(), "plain file mount at /etc/nginx/nginx.conf should exist")
+
+			By("should have plain-cfg init container")
+			var plainInit *corev1.Container
+			for i := range gd.Spec.Template.Spec.InitContainers {
+				if strings.Contains(gd.Spec.Template.Spec.InitContainers[i].Name, "plain-cfg") {
+					plainInit = &gd.Spec.Template.Spec.InitContainers[i]
+					break
+				}
+			}
+			Expect(plainInit).NotTo(BeNil(), "plain-cfg init container should exist")
+			Expect(plainInit.Env).NotTo(BeEmpty(), "init container should have env vars injected")
+		},
+		Entry("TRPC workload with plain files", workloadTestCases[0]),
+		Entry("TAF workload with plain files", workloadTestCases[1]),
 	)
 })

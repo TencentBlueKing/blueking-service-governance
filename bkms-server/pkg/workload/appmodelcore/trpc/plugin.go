@@ -26,10 +26,8 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/trpc/patcher"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/plugin"
@@ -37,20 +35,17 @@ import (
 
 // Plugin provides workload extensions for tRPC applications.
 type Plugin struct {
-	appConfigFileStore    appcfg.AppConfigFileStore
-	appConfigFileDefStore appcfg.AppConfigFileDefStore
+	mountableFileProvider appcfg.MountableFileProvider
 	configPatchers        []appcfg.ConfigPatcher
 }
 
 // NewPlugin creates a new tRPC plugin with the given dependencies.
 func NewPlugin(
-	appConfigFileStore appcfg.AppConfigFileStore,
-	appConfigFileDefStore appcfg.AppConfigFileDefStore,
+	mountableFileProvider appcfg.MountableFileProvider,
 	polarisConfigStore polaris.PolarisConfigStore,
 ) *Plugin {
 	return &Plugin{
-		appConfigFileStore:    appConfigFileStore,
-		appConfigFileDefStore: appConfigFileDefStore,
+		mountableFileProvider: mountableFileProvider,
 		configPatchers: []appcfg.ConfigPatcher{
 			patcher.NewPolarisRegistryPatcher(polarisConfigStore),
 		},
@@ -63,6 +58,13 @@ func (p *Plugin) Type() string {
 }
 
 // Start initializes a plugin session for this build.
+//
+// 处理流程：
+//  1. 获取框架配置内容（含 polaris patcher）
+//  2. 调用 RenderConfigContents 收集环境变量引用并渲染模板变量
+//  3. 通过 runtimerender.BuildConfig 构建 K8s 资源（ConfigMap + init container）
+//
+// plain 配置文件由 Builder 公共步骤独立处理，plugin 只负责 framework。
 func (p *Plugin) Start(
 	ctx context.Context,
 	env *envmodel.Environment,
@@ -70,33 +72,33 @@ func (p *Plugin) Start(
 	appModel *appmodel.AppModel,
 	renderCtx plugin.RenderContext,
 ) (plugin.WorkloadPluginSession, error) {
-	// Compute and set the tRPC config file content based on environment
-	sourceName, content, err := p.computeTrpcConfig(ctx, app, env, *appModel)
+	frameworkItem, err := p.computeTrpcConfig(ctx, app, env, *appModel)
 	if err != nil {
 		return nil, errors.Wrap(err, "computing tRPC config")
 	}
 
-	// Collect undefined env var references before rendering.
-	if err = renderCtx.Collector.Collect(content, envvarrefs.Source{
-		Type: envvarrefs.SourceAppConfigFile,
-		Name: sourceName,
-	}); err != nil {
-		return nil, errors.Wrap(err, "collecting env vars from tRPC config")
-	}
-
-	// Render template variables in the tRPC config content.
-	// 平台只预渲染 ${{ env.KEY }} 格式，${KEY} 格式由 tRPC 框架运行时解析，二者并存。
-	content, err = render.New(render.SetEnvContext(renderCtx.EnvVars)).Render(content)
-	if err != nil {
-		return nil, errors.Wrap(err, "rendering tRPC config content")
-	}
-	appModel.Workload.TrpcConfig.FileContent = content
-
-	if appModel.Workload.TrpcConfig.FileName == "" {
+	if frameworkItem.Name == "" {
 		return &runtimerender.Config{}, nil
 	}
 
-	return buildTrpcConfig(appModel), nil
+	// 收集环境变量引用并渲染 ${{ env.KEY }} 模板变量
+	frameworkParams, err := runtimerender.RenderConfigContents(
+		[]appcfg.MountableFile{frameworkItem},
+		renderCtx.EnvVars,
+		renderCtx.Collector,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "rendering tRPC framework config")
+	}
+
+	// 回写渲染后的内容供其他组件使用
+	appModel.Workload.TrpcConfig.FileContent = frameworkParams[0].FileContent
+
+	return runtimerender.BuildConfig(runtimerender.ConfigParams{
+		WorkloadType:  appmodel.WorkloadTypeTrpc,
+		ConfigMapName: appModel.Workload.Name,
+		Files:         frameworkParams,
+	})
 }
 
 // computeTrpcConfig computes the tRPC configuration content based on environment.
@@ -105,57 +107,39 @@ func (p *Plugin) Start(
 // 2. Application-level default config (envName = "")
 //
 // 获取配置文件内容后，依次调用注册的 appcfg.ConfigPatcher 对配置进行补丁。
-// It also returns the selected logical file name for reference reporting.
+// 返回的 MountableFile 已完成 patch，待交给 RenderConfigContents 做环境变量渲染。
 func (p *Plugin) computeTrpcConfig(
 	ctx context.Context,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 	appModel appmodel.AppModel,
-) (string, string, error) {
-	var content string
-	sourceName := appModel.Workload.TrpcConfig.FileName
+) (appcfg.MountableFile, error) {
+	trpcCfg := appModel.Workload.TrpcConfig
+	item := appcfg.MountableFile{
+		Name:     trpcCfg.FileName,
+		Content:  trpcCfg.FileContent,
+		MountDir: trpcCfg.FilePath,
+	}
+
+	if p.mountableFileProvider != nil {
+		frameworkContent, err := p.mountableFileProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
+		if err != nil {
+			return appcfg.MountableFile{}, err
+		}
+		// framework 文件名当前仍以 app model 为准，避免把运行时挂载名意外改成 def 名（如 default）。
+		item.Content = frameworkContent.Content
+		// TODO: MountDir 当前仍由 app model（trpcCfg.FilePath）决定，未使用 def.MountDir。
+		// 待挂载路径迁移至 def 后，应改为 item.MountDir = frameworkContent.MountDir。
+	}
+
+	// 依次调用注册的 ConfigPatcher 对配置进行补丁（如 polaris 注册信息注入）
 	var err error
-	if p.appConfigFileStore == nil {
-		content = appModel.Workload.TrpcConfig.FileContent
-	} else {
-		//nolint:staticcheck // 兼容 workload 层旧调用方，后续由 MountableFileProvider 替代
-		_, sourceName, content, err = appcfg.GetEnvContent(
-			ctx, p.appConfigFileStore, p.appConfigFileDefStore, app.ID, env.Name,
-		)
+	for _, cfgPatcher := range p.configPatchers {
+		item.Content, err = cfgPatcher.Patch(ctx, app.ID, env.Name, item.Content)
 		if err != nil {
-			return "", "", err
+			return appcfg.MountableFile{}, errors.Wrap(err, "patching tRPC config")
 		}
 	}
 
-	// 依次调用注册的 ConfigPatcher 对配置进行补丁
-	for _, patcher := range p.configPatchers {
-		content, err = patcher.Patch(ctx, app.ID, env.Name, content)
-		if err != nil {
-			return "", "", errors.Wrap(err, "patching tRPC config")
-		}
-	}
-
-	return sourceName, content, nil
-}
-
-// buildTrpcConfig builds the tRPC spec configuration with init container support for runtime
-// variable rendering.
-//
-// The build produces:
-//   - A ConfigMap volume mounted at a temporary path (template source for init container)
-//   - An emptyDir volume mounted at the final config path (rendered output)
-//   - An init container that runs sed to replace __VAR_NAME__ placeholders with runtime values
-//
-// Runtime variables (BKMS_POD_IP, BKMS_POD_NAME, BKMS_NODE_IP) are rendered as special
-// placeholders (e.g., __#VAR_PLACEHOLDER#__BKMS_POD_IP__) at compile time. The init container then replaces
-// these placeholders with actual values from the Kubernetes Downward API at pod startup.
-func buildTrpcConfig(appModel *appmodel.AppModel) *runtimerender.Config {
-	config := appModel.Workload.TrpcConfig
-	return runtimerender.BuildConfig(runtimerender.ConfigParams{
-		WorkloadType:  appmodel.WorkloadTypeTrpc,
-		ConfigMapName: appModel.Workload.Name,
-		FileName:      config.FileName,
-		FilePath:      config.FilePath,
-		FileContent:   config.FileContent,
-	})
+	return item, nil
 }

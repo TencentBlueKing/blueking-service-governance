@@ -20,6 +20,7 @@ package workload
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -48,6 +49,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/plainfiles"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/plugin"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/bscpcfg"
@@ -157,6 +160,47 @@ func (b *Builder) Build(
 	}
 	for i := range pluginInitContainers {
 		pluginInitContainers[i].Env = appEnvVars.ToKubeObjs()
+	}
+
+	// Build and append plain config file mounts (cross-framework common step).
+	// Plain files 与 framework 共用 RenderConfigContents 做环境变量引用收集与模板渲染，
+	// 但通过独立的 runtimerender.BuildConfig 生成 K8s 资源，不依赖任何框架 plugin。
+	if b.mountableFileProvider != nil {
+		plainParams, pErr := plainfiles.BuildPlainConfigFiles(
+			ctx, b.mountableFileProvider, b.app.ID, env.Name, varsMap, collector,
+		)
+		if pErr != nil {
+			return nil, errors.Wrap(pErr, "building plain config files")
+		}
+		if len(plainParams) > 0 {
+			plainCfg, cfgErr := runtimerender.BuildConfig(runtimerender.ConfigParams{
+				WorkloadType:  "plain-cfg",
+				ConfigMapName: fmt.Sprintf("%s-plain-cfg", appModel.Workload.Name),
+				Files:         plainParams,
+			})
+			if cfgErr != nil {
+				return nil, errors.Wrap(cfgErr, "building plain config runtime render")
+			}
+			plainMounts, plainVols, sErr := plainCfg.Storage(ctx)
+			if sErr != nil {
+				return nil, errors.Wrap(sErr, "building plain config storage")
+			}
+			volumeMounts = append(volumeMounts, plainMounts...)
+			volumes = append(volumes, plainVols...)
+			plainExtras, eErr := plainCfg.ExtraResources(ctx)
+			if eErr != nil {
+				return nil, errors.Wrap(eErr, "building plain config extra resources")
+			}
+			extraObjs = append(extraObjs, plainExtras...)
+			plainInits, iErr := plainCfg.InitContainers(ctx)
+			if iErr != nil {
+				return nil, errors.Wrap(iErr, "building plain config init containers")
+			}
+			for i := range plainInits {
+				plainInits[i].Env = appEnvVars.ToKubeObjs()
+			}
+			pluginInitContainers = append(pluginInitContainers, plainInits...)
+		}
 	}
 
 	// Build the dev mode component
@@ -346,6 +390,23 @@ func (b *Builder) Build(
 	gd.Spec.Template.Spec = polarisResult.PodSpec
 	extraObjs = append(extraObjs, polarisResult.ExtraObjects...)
 
+	// 全局 MountPath 唯一性校验：汇总完 framework plugin、plain files、dev mode、BSCP、
+	// components、polaris 等所有来源的 VolumeMounts 后，检测每个容器内是否存在重复 MountPath。
+	// 重复挂载会导致 K8s Pod 创建失败或后者静默覆盖前者。
+	// K8s MountPath 冲突是 per-container 的，因此逐容器独立校验。
+	for i := range gd.Spec.Template.Spec.Containers {
+		c := &gd.Spec.Template.Spec.Containers[i]
+		if err = validateVolumeMountPaths(c.Name, c.VolumeMounts); err != nil {
+			return nil, errors.Wrap(err, "global mount path conflict")
+		}
+	}
+	for i := range gd.Spec.Template.Spec.InitContainers {
+		c := &gd.Spec.Template.Spec.InitContainers[i]
+		if err = validateVolumeMountPaths(c.Name, c.VolumeMounts); err != nil {
+			return nil, errors.Wrap(err, "global mount path conflict")
+		}
+	}
+
 	result := &BuildResult{
 		ExtraObjects:          extraObjs,
 		SensitiveEnvVarValues: sensitiveEnvVarValues,
@@ -384,6 +445,23 @@ func shouldEnableDevModeInEnv(envType string, effectiveAppSpec *appspec.AppSpec)
 		return false
 	}
 	return bkmsenv.IsValidEnvType(envType) && !bkmsenv.IsProductionType(bkmsenv.Type(envType))
+}
+
+// validateVolumeMountPaths 校验单个容器的 VolumeMounts 中不存在重复的 MountPath。
+// 多个来源（framework plugin、plain files、dev mode、BSCP、components）的挂载最终
+// 都汇聚到同一个 Container，重复 MountPath 会导致 Pod 创建失败或后者静默覆盖前者。
+func validateVolumeMountPaths(containerName string, mounts []corev1.VolumeMount) error {
+	seen := make(map[string]string, len(mounts))
+	for _, m := range mounts {
+		if prev, exists := seen[m.MountPath]; exists {
+			return fmt.Errorf(
+				"container %q: duplicate MountPath %q: volume %q conflicts with volume %q",
+				containerName, m.MountPath, m.Name, prev,
+			)
+		}
+		seen[m.MountPath] = m.Name
+	}
+	return nil
 }
 
 // mergeUserMetadata merges user-defined labels/annotations into the given ObjectMeta. System-managed
