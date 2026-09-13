@@ -260,6 +260,7 @@ ignored: ${LEGACY}
 					Type:              appcfg.AppConfigFileTypeNormal,
 					ContentSourceType: appcfg.ContentSourceTypeLocal,
 					Format:            appcfg.FileFormatYAML,
+					ConfigKind:        appcfg.ConfigKindFramework,
 					Content:           &content,
 					Creator:           appcfg.CfgSystemUser,
 					Description:       appcfg.CfgSystemVersionDescription,

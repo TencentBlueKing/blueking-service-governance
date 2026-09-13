@@ -21,6 +21,7 @@ package appcfg
 import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"gopkg.in/yaml.v3"
 )
 
 // ContentSourceType indicates the source type of the content.
@@ -90,6 +91,15 @@ var (
 	ErrEnvConfigRequiresDefaultFile = errors.New("env config changes require default file")
 	// ErrInvalidConfigSpec 配置规格不合法。
 	ErrInvalidConfigSpec = errors.New("invalid config spec")
+	// ErrPlainEnvInstanceDeleteNotAllowed plain 环境实例必须通过 env-config 策略或 reset 接口管理，
+	// 不允许直接删除。
+	ErrPlainEnvInstanceDeleteNotAllowed = errors.New(
+		"plain env instance must be deleted via env-config-policy on the default file",
+	)
+	// ErrResetToDefaultRequiresIndependentConfig 恢复默认操作要求文件处于独立配置模式。
+	ErrResetToDefaultRequiresIndependentConfig = errors.New(
+		"reset to default requires independent env config mode",
+	)
 )
 
 // AppConfigFileVersionOperationType indicates how a version was generated.
@@ -104,12 +114,14 @@ const (
 	AppConfigFileVersionOperationTypeRollback AppConfigFileVersionOperationType = "rollback"
 )
 
-// ConfigKind 配置文件种类，如 framework（未来可扩展 plain 等）。
+// ConfigKind 配置文件种类：framework（框架配置）或 plain（通用文本配置）。
 type ConfigKind string
 
 const (
 	// ConfigKindFramework 框架管理的配置文件（Helm values、tRPC 配置等）。
 	ConfigKindFramework ConfigKind = "framework"
+	// ConfigKindPlain 通用文本配置文件，以 overwrite 方式按环境独立管理。
+	ConfigKindPlain ConfigKind = "plain"
 )
 
 // CreateCfgFileParams 创建配置文件的参数。
@@ -137,12 +149,17 @@ type FileDefUpdate struct {
 	Name            *string
 	MountDir        *string
 	IsUnifiedConfig *bool
+	MountedEnvNames *[]string
 	Operator        string
 }
 
-// HasEnvConfigChanges 判断是否有环境配置策略变更。
-func (p FileDefUpdate) HasEnvConfigChanges() bool {
-	return p.IsUnifiedConfig != nil
+// CreateEnvInstanceParams 创建环境级配置实例的参数。
+type CreateEnvInstanceParams struct {
+	EnvName        string
+	Content        *string
+	OverlayContent *string
+	Operator       string
+	Description    string
 }
 
 // UpdateCfgFileOptions 文件变更持久化选项。
@@ -155,4 +172,49 @@ type UpdateCfgFileOptions struct {
 	// 为 nil 时使用从数据库读取的当前版本号（兼容helm逻辑）。
 	// todo 待helm前端适配版本管理后移除兼容，改为必填内容
 	ExpectedCurrentVersion *int64
+}
+
+// UpsertEnvContentParams 描述一次按环境更新配置内容的场景参数。
+type UpsertEnvContentParams struct {
+	EnvName                 string
+	Content                 string
+	Operator                string
+	Description             string
+	ExpectedCurrentVersion  *int64
+	ValidateCompiledContent func(targetFile *AppConfigFile, compiledContent string) error
+}
+
+// UpsertEnvContentResult 描述一次按环境更新配置内容后的结果。
+type UpsertEnvContentResult struct {
+	File            *AppConfigFile
+	CompiledContent string
+}
+
+// EnvFileDetailResult 环境文件详情查询结果。
+type EnvFileDetailResult struct {
+	Def         *AppConfigFileDef
+	DefaultFile *AppConfigFile
+	// DisplayFile 应展示内容的文件，由策略决定：
+	//   - 有环境实例 → 环境实例
+	//   - 无实例 + overwrite 策略 → 默认文件（默认即生效内容）
+	//   - 无实例 + overlay 策略 → nil（无定制内容）
+	DisplayFile *AppConfigFile
+	// HasEnvInstance 该环境是否存在独立实例。
+	HasEnvInstance bool
+	// EditableContentField 前端可编辑的字段名（"content" / "overlayContent" / "none"）。
+	EditableContentField string
+	// BaseContentInfo overlay / BSCP 文件的 base 内容信息，无 base 时为 nil。
+	BaseContentInfo *BaseContentInfo
+}
+
+// ValidateFrameworkFileContent 校验 framework 配置文件内容语法（必须为合法 YAML）。
+func ValidateFrameworkFileContent(content string) error {
+	if content == "" {
+		return nil
+	}
+	var out any
+	if err := yaml.Unmarshal([]byte(content), &out); err != nil {
+		return errors.Wrap(err, "content is not valid YAML")
+	}
+	return nil
 }

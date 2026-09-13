@@ -148,6 +148,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 						Type:                appcfg.AppConfigFileTypeOverlay,
 						ContentSourceType:   appcfg.ContentSourceTypeLocal,
 						Format:              appcfg.FileFormatYAML,
+						ConfigKind:          appcfg.ConfigKindFramework,
 						BaseAppConfigFileID: &defaultFileID,
 						OverlayContent:      &prodOverlayContent,
 					},

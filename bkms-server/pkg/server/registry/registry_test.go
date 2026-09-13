@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	appcfghooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/hooks"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	alertstrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/hooks"
@@ -43,6 +44,9 @@ var _ = Describe("Store registry", func() {
 		Expect(
 			bkmsenv.IsDeleteHookRegistered(envvarhooks.CleanupScopedEnvVarsByEnvHookName),
 		).To(BeTrue(), "envvars cleanup hook must be registered by store registry")
+		Expect(
+			bkmsenv.IsDeleteHookRegistered(appcfghooks.CleanupPlainEnvInstancesHookName),
+		).To(BeTrue(), "appcfg plain env cleanup hook must be registered by store registry")
 		Expect(
 			bkmsworkspace.IsPreDeleteHookRegistered(appdefaultshooks.CleanupRulesByWorkspaceHookName),
 		).To(BeTrue(), "workspace AppSpec rule cleanup hook must be registered by store registry")

@@ -158,6 +158,7 @@ var _ = Describe("TrpcAdminService", func() {
 							Type:              appcfg.AppConfigFileTypeNormal,
 							ContentSourceType: appcfg.ContentSourceTypeLocal,
 							Format:            appcfg.FileFormatYAML,
+							ConfigKind:        appcfg.ConfigKindFramework,
 							Content:           &configContent,
 						},
 					)
@@ -293,6 +294,7 @@ var _ = Describe("TrpcAdminService", func() {
 						Type:              appcfg.AppConfigFileTypeNormal,
 						ContentSourceType: appcfg.ContentSourceTypeLocal,
 						Format:            appcfg.FileFormatYAML,
+						ConfigKind:        appcfg.ConfigKindFramework,
 						Content:           &content,
 					},
 				)

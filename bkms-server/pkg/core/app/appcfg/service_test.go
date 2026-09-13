@@ -20,6 +20,7 @@ package appcfg_test
 
 import (
 	"context"
+	"errors"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -88,6 +89,7 @@ var _ = Describe("AppConfigFileService", func() {
 				Content:           &content,
 				Creator:           "tester",
 				Description:       "initial values",
+				ConfigKind:        appcfg.ConfigKindFramework,
 			})
 
 			Expect(err).NotTo(HaveOccurred())
@@ -127,6 +129,7 @@ var _ = Describe("AppConfigFileService", func() {
 				Content:           &content,
 				Creator:           "tester",
 				Description:       "initial values",
+				ConfigKind:        appcfg.ConfigKindFramework,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -181,6 +184,7 @@ var _ = Describe("AppConfigFileService", func() {
 				Content:           &content1,
 				Creator:           "tester",
 				Description:       "initial values",
+				ConfigKind:        appcfg.ConfigKindFramework,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -259,6 +263,7 @@ var _ = Describe("AppConfigFileService", func() {
 				Content:           &content,
 				Creator:           "tester",
 				Description:       "initial values",
+				ConfigKind:        appcfg.ConfigKindFramework,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -279,7 +284,7 @@ var _ = Describe("AppConfigFileService", func() {
 			// file should be gone
 			_, err = fileStore.GetByID(ctx, acf.ID)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not found"))
+			Expect(errors.Is(err, appcfg.ErrAppConfigFileNotFound)).To(BeTrue())
 
 			// version records should be fully removed
 			items, total, err := versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
@@ -312,6 +317,7 @@ var _ = Describe("AppConfigFileService", func() {
 				Content:           &content,
 				Creator:           "tester2",
 				Description:       "recreated",
+				ConfigKind:        appcfg.ConfigKindFramework,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newAcf.CurrentVersion).To(Equal(int64(1)))
@@ -341,6 +347,7 @@ var _ = Describe("AppConfigFileService", func() {
 				Content:           &content,
 				Creator:           "tester",
 				Description:       "initial values",
+				ConfigKind:        appcfg.ConfigKindFramework,
 			})
 			Expect(err).NotTo(HaveOccurred())
 

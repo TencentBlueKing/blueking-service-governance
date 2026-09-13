@@ -25,8 +25,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-// AppCfgFileDefService 场景层服务，感知 ConfigKind。
-// 内嵌 BaseAppCfgFileService 以直接暴露底层 CRUD 方法；
+// AppCfgFileDefService 场景层服务，感知 ConfigKind, 内嵌 BaseAppCfgFileService 以直接暴露底层 CRUD 方法；
 // 仅在需要 policy 校验/过滤时覆盖或新增方法。
 type AppCfgFileDefService struct {
 	*BaseAppCfgFileService
@@ -34,25 +33,19 @@ type AppCfgFileDefService struct {
 }
 
 // NewAppCfgFileDefService 创建场景层服务。
-func NewAppCfgFileDefService(
-	base *BaseAppCfgFileService,
-	policies map[ConfigKind]ConfigKindPolicy,
-) *AppCfgFileDefService {
-	if policies == nil {
-		policies = DefaultPolicies
-	}
-	return &AppCfgFileDefService{BaseAppCfgFileService: base, policies: policies}
+func NewAppCfgFileDefService(base *BaseAppCfgFileService) *AppCfgFileDefService {
+	return &AppCfgFileDefService{BaseAppCfgFileService: base, policies: DefaultPolicies}
 }
 
 func (s *AppCfgFileDefService) policyFor(kind ConfigKind) (ConfigKindPolicy, error) {
 	p, ok := s.policies[kind]
 	if !ok {
-		return nil, errors.Errorf("unsupported config kind: %s", kind)
+		return nil, errors.Wrapf(ErrInvalidConfigSpec, "unsupported config kind: %s", kind)
 	}
 	return p, nil
 }
 
-// --- Kind 感知的方法（覆盖或新增） ---
+// --- Create / Update ---
 
 // Create 创建配置文件（含 def + 默认文件记录 + 初始版本），执行 kind 级别的校验。
 func (s *AppCfgFileDefService) Create(
@@ -61,11 +54,16 @@ func (s *AppCfgFileDefService) Create(
 ) (*AppConfigFileWithDef, error) {
 	kind := params.ConfigKind
 	if kind == "" {
-		kind = ConfigKindFramework
+		return nil, errors.Wrap(ErrInvalidConfigSpec, "config kind is required")
 	}
 
 	policy, err := s.policyFor(kind)
 	if err != nil {
+		return nil, err
+	}
+
+	// kind 级别的创建参数校验
+	if err = policy.ValidateCreateParams(params); err != nil {
 		return nil, err
 	}
 
@@ -99,6 +97,7 @@ func (s *AppCfgFileDefService) createDef(
 		ConfigKind: kind,
 		MountDir:   params.MountDir,
 		EnvConfigMode: EnvConfigMode{
+			// 初始创建默认为统一配置
 			IsUnifiedConfig: true,
 		},
 		Creator: params.Creator,
@@ -145,9 +144,9 @@ func (s *AppCfgFileDefService) createFileAndVersion(
 	return s.CreateFileWithVersion(ctx, acf, params.Name, params.Description, params.Creator)
 }
 
-// UpdateFileDef 更新逻辑文件的 def 信息（name、isUnifiedConfig 等），不产生版本记录。
-// 切换环境配置模式时会执行额外操作（如切回统一配置需清理环境实例）。
-func (s *AppCfgFileDefService) UpdateFileDef(
+// UpdateAppCfgFileDef 更新逻辑文件的 def 信息（name、isUnifiedConfig 等），不产生版本记录。
+// 切换环境配置模式，挂载环境时会执行额外操作（如切回统一配置需清理环境实例）。
+func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 	ctx context.Context,
 	def *AppConfigFileDef,
 	update FileDefUpdate,
@@ -157,41 +156,33 @@ func (s *AppCfgFileDefService) UpdateFileDef(
 	}
 
 	if update.MountDir != nil {
-		if policy, err := s.policyFor(def.ConfigKind); err == nil && !policy.AllowMountDirUpdate() {
-			return errors.New("this config kind does not support modifying mountDir via def")
+		policy, err := s.policyFor(def.ConfigKind)
+		if err != nil {
+			return errors.Wrap(err, "loading config kind policy for mountDir update")
+		}
+		if !policy.AllowMountDirUpdate() {
+			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not support modifying mountDir via def")
 		}
 	}
 
 	applyStaticDefFields(def, update)
 
-	if update.HasEnvConfigChanges() && update.IsUnifiedConfig != nil {
-		if err := s.applyEnvConfigChange(ctx, def, *update.IsUnifiedConfig); err != nil {
+	if update.IsUnifiedConfig != nil && def.EnvConfigMode.IsUnifiedConfig != *update.IsUnifiedConfig {
+		def.EnvConfigMode.IsUnifiedConfig = *update.IsUnifiedConfig
+		// 从独立配置切回统一配置：删除所有环境实例及其版本记录
+		if *update.IsUnifiedConfig {
+			if err := s.deleteEnvInstances(ctx, def.ID); err != nil {
+				return err
+			}
+		}
+	}
+	if update.MountedEnvNames != nil {
+		if err := s.applyMountedEnvNamesChange(ctx, def, *update.MountedEnvNames); err != nil {
 			return err
 		}
 	}
-
 	if _, err := s.DefStore.Update(ctx, *def); err != nil {
 		return errors.Wrap(err, "updating def record")
-	}
-	return nil
-}
-
-// applyEnvConfigChange 处理环境配置模式切换的副作用。
-func (s *AppCfgFileDefService) applyEnvConfigChange(
-	ctx context.Context,
-	def *AppConfigFileDef,
-	isUnifiedConfig bool,
-) error {
-	if def.EnvConfigMode.IsUnifiedConfig == isUnifiedConfig {
-		return nil
-	}
-	def.EnvConfigMode.IsUnifiedConfig = isUnifiedConfig
-
-	// 从独立配置切回统一配置：删除所有环境实例及其版本记录
-	if isUnifiedConfig {
-		if err := s.deleteEnvInstances(ctx, def.ID); err != nil {
-			return err
-		}
 	}
 	return nil
 }

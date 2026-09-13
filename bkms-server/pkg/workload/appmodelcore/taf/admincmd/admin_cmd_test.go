@@ -98,6 +98,7 @@ var _ = Describe("TafAdminService", func() {
 					Type:              appcfg.AppConfigFileTypeNormal,
 					ContentSourceType: appcfg.ContentSourceTypeLocal,
 					Format:            appcfg.FileFormatTAF,
+					ConfigKind:        appcfg.ConfigKindFramework,
 					Content:           &content,
 				},
 			)

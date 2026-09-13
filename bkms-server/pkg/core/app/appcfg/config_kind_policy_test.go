@@ -21,6 +21,7 @@ package appcfg_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
@@ -58,12 +59,12 @@ var _ = Describe("FrameworkPolicy", func() {
 		})
 	})
 
-	Describe("IsAlwaysMount", func() {
-		It("should always mount to all environments", func() {
+	Describe("IsEffectiveForEnv", func() {
+		It("should always be effective for all environments", func() {
 			def := &appcfg.AppConfigFileDef{AppID: "app1", Name: "cfg.yaml"}
-			Expect(policy.IsAlwaysMount(def, "prod")).To(BeTrue())
-			Expect(policy.IsAlwaysMount(def, "dev")).To(BeTrue())
-			Expect(policy.IsAlwaysMount(def, "")).To(BeTrue())
+			Expect(policy.IsEffectiveForEnv(def, "prod")).To(BeTrue())
+			Expect(policy.IsEffectiveForEnv(def, "dev")).To(BeTrue())
+			Expect(policy.IsEffectiveForEnv(def, "")).To(BeTrue())
 		})
 	})
 
@@ -79,5 +80,100 @@ var _ = Describe("DefaultPolicies", func() {
 		p, ok := appcfg.DefaultPolicies[appcfg.ConfigKindFramework]
 		Expect(ok).To(BeTrue())
 		Expect(p).To(BeAssignableToTypeOf(appcfg.FrameworkPolicy{}))
+	})
+})
+
+var _ = Describe("PlainPolicy", func() {
+	var policy appcfg.ConfigKindPolicy
+
+	BeforeEach(func() {
+		policy = appcfg.PlainPolicy{}
+	})
+
+	Describe("IsEffectiveForEnv", func() {
+		It("should treat nil mounted env names as effective for all environments", func() {
+			def := &appcfg.AppConfigFileDef{
+				AppID:      "app1",
+				Name:       "plain.conf",
+				ConfigKind: appcfg.ConfigKindPlain,
+				EnvConfigMode: appcfg.EnvConfigMode{
+					IsUnifiedConfig: true,
+				},
+			}
+			Expect(policy.IsEffectiveForEnv(def, "prod")).To(BeTrue())
+			Expect(policy.IsEffectiveForEnv(def, "staging")).To(BeTrue())
+		})
+
+		It("should treat explicit empty mounted env names as not effective for any environment", func() {
+			def := &appcfg.AppConfigFileDef{
+				AppID:      "app1",
+				Name:       "plain.conf",
+				ConfigKind: appcfg.ConfigKindPlain,
+				EnvConfigMode: appcfg.EnvConfigMode{
+					IsUnifiedConfig: true,
+					MountedEnvNames: []string{},
+				},
+			}
+			Expect(policy.IsEffectiveForEnv(def, "prod")).To(BeFalse())
+			Expect(policy.IsEffectiveForEnv(def, "staging")).To(BeFalse())
+		})
+
+		It("should only be effective for listed environments", func() {
+			def := &appcfg.AppConfigFileDef{
+				AppID:      "app1",
+				Name:       "plain.conf",
+				ConfigKind: appcfg.ConfigKindPlain,
+				EnvConfigMode: appcfg.EnvConfigMode{
+					IsUnifiedConfig: false,
+					MountedEnvNames: []string{"prod"},
+				},
+			}
+			Expect(policy.IsEffectiveForEnv(def, "prod")).To(BeTrue())
+			Expect(policy.IsEffectiveForEnv(def, "staging")).To(BeFalse())
+		})
+	})
+
+	Describe("ValidateCreateParams", func() {
+		It("should accept valid plain params", func() {
+			Expect(policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+				MountDir:          "/data",
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+			})).To(Succeed())
+		})
+
+		It("should reject empty mountDir", func() {
+			err := policy.ValidateCreateParams(appcfg.CreateCfgFileParams{})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("mountDir"))
+		})
+
+		It("should reject non-local content source", func() {
+			err := policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+				MountDir:          "/data",
+				ContentSourceType: appcfg.ContentSourceTypeBSCP,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("local"))
+		})
+
+		It("should reject base reference", func() {
+			baseID := bson.NewObjectID()
+			err := policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+				MountDir:            "/data",
+				BaseAppConfigFileID: &baseID,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("base"))
+		})
+
+		It("should reject overlay content", func() {
+			overlay := "patch"
+			err := policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+				MountDir:       "/data",
+				OverlayContent: &overlay,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("overlay"))
+		})
 	})
 })

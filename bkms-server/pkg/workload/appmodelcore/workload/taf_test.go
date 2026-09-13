@@ -135,6 +135,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 						Type:                appcfg.AppConfigFileTypeOverlay,
 						ContentSourceType:   appcfg.ContentSourceTypeLocal,
 						Format:              appcfg.FileFormatTAF,
+						ConfigKind:          appcfg.ConfigKindFramework,
 						BaseAppConfigFileID: &defaultFileID,
 						OverlayContent:      &prodOverlayContent,
 					},

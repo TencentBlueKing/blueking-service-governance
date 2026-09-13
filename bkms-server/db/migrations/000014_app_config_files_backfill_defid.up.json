@@ -1,0 +1,49 @@
+[
+  {
+    "aggregate": "app_config_files",
+    "pipeline": [
+      {
+        "$match": {
+          "envName": { "$exists": true, "$nin": ["", null] },
+          "$or": [
+            { "defID": { "$exists": false } },
+            { "defID": null }
+          ]
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_config_files",
+          "let": { "appID": "$appID", "configKind": "$configKind" },
+          "pipeline": [
+            {
+              "$match": {
+                "$expr": {
+                  "$and": [
+                    { "$eq": ["$appID", "$$appID"] },
+                    { "$eq": ["$configKind", "$$configKind"] },
+                    { "$in": ["$envName", ["", null]] }
+                  ]
+                }
+              }
+            },
+            { "$limit": 1 }
+          ],
+          "as": "defaultDoc"
+        }
+      },
+      { "$unwind": "$defaultDoc" },
+      {
+        "$merge": {
+          "into": "app_config_files",
+          "on": "_id",
+          "whenMatched": [
+            { "$set": { "defID": "$$new.defaultDoc._id" } }
+          ],
+          "whenNotMatched": "discard"
+        }
+      }
+    ],
+    "cursor": {}
+  }
+]

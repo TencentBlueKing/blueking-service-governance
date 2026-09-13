@@ -244,7 +244,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 
 			// Verify the app config file was removed
 			_, err = store.GetByID(ctx, oid)
-			Expect(err.Error()).To(ContainSubstring("not found"))
+			Expect(errors.Is(err, appcfg.ErrAppConfigFileNotFound)).To(BeTrue())
 		})
 		It("should error when deleting a referenced normal app config file", func() {
 			// Add a normal app config file
@@ -265,6 +265,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 					BaseAppConfigFileID: &normalID,
 					Creator:             appcfg.CfgSystemUser,
 					Description:         appcfg.CfgSystemVersionDescription,
+					ConfigKind:          appcfg.ConfigKindFramework,
 				},
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -295,7 +296,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		It("should return error when no record matches", func() {
 			_, err := store.GetByDefIDAndEnv(ctx, bson.NewObjectID(), "non-existent")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not found"))
+			Expect(errors.Is(err, appcfg.ErrAppConfigFileNotFound)).To(BeTrue())
 		})
 
 		It("should distinguish between different envNames under the same defID", func() {

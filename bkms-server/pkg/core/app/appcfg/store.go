@@ -45,6 +45,9 @@ const (
 // ErrAppConfigFileVersionConflict indicates the file was modified concurrently.
 var ErrAppConfigFileVersionConflict = errors.New("app config file version conflict")
 
+// ErrAppConfigFileNotFound indicates a specific app config file record could not be found.
+var ErrAppConfigFileNotFound = errors.New("app config file not found")
+
 // AppConfigFileStore defines the interface for storing app config files.
 type AppConfigFileStore interface {
 	// Add adds an app config file to the store.
@@ -155,8 +158,7 @@ func (s *AppConfigFileStoreMongo) GetByID(ctx context.Context, id bson.ObjectID)
 	err := s.collection.FindOne(ctx, filter).Decode(&obj)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			// When no record can be found, return a new error
-			return nil, errors.Errorf("app config file %s not found", id.Hex())
+			return nil, errors.Wrapf(ErrAppConfigFileNotFound, "app config file %s", id.Hex())
 		}
 		return nil, err
 	}
@@ -201,6 +203,8 @@ type ListOptions struct {
 	// The environment name to filter, default to no filtering
 	// Use EnvNameFilterAppLevel to filter only app-level config files
 	filterEnvName *string
+	// filterDefIDs 按 defID 集合过滤，为空则不过滤。
+	filterDefIDs []bson.ObjectID
 }
 
 // AcfFilterType usage: .List(..., AcfFilterType("normal"))
@@ -218,6 +222,14 @@ type AcfFilterEnvName string
 func (e AcfFilterEnvName) ApplyToOptions(opts *ListOptions) {
 	s := string(e)
 	opts.filterEnvName = &s
+}
+
+// AcfFilterDefIDs 按 defID 集合过滤文件记录。
+type AcfFilterDefIDs []bson.ObjectID
+
+// ApplyToOptions applies the option to the given options.
+func (ids AcfFilterDefIDs) ApplyToOptions(opts *ListOptions) {
+	opts.filterDefIDs = ids
 }
 
 // AcfOrderBy usage: .List(..., AcfOrderBy(ListOrderByName))
@@ -251,6 +263,10 @@ func (s *AppConfigFileStoreMongo) List(
 	// Apply envName filter if specified
 	if listOptsObj.filterEnvName != nil {
 		filter["envName"] = *listOptsObj.filterEnvName
+	}
+	// Apply defID set filter if specified
+	if len(listOptsObj.filterDefIDs) > 0 {
+		filter["defID"] = bson.M{"$in": listOptsObj.filterDefIDs}
 	}
 
 	// name 已迁移到 def 表。为避免把“按 name 排序”错误降级成其他排序，
@@ -394,7 +410,7 @@ func (s *AppConfigFileStoreMongo) GetByDefIDAndEnv(
 	filter := bson.M{"defID": defID, "envName": envName}
 	if err := s.collection.FindOne(ctx, filter).Decode(&obj); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errors.Errorf("app config file for def %s env %q not found", defID.Hex(), envName)
+			return nil, errors.Wrapf(ErrAppConfigFileNotFound, "def %s env %q", defID.Hex(), envName)
 		}
 		return nil, err
 	}
