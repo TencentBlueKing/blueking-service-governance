@@ -609,38 +609,46 @@
   async function handleGetEnvList() {
     isLoading.value = true;
     emits('update:loading', true);
-    await getEnvList();
-    if (mode.value === 'multi') {
-      // 多选模式初始化
-      if (props.modelValues?.length) {
-        emitMultiEnvChange(props.modelValues, { fallbackWhenEmpty: true });
-      } else if (props.initFirstEnvWhenEmpty) {
-        const firstEnv = selectableEnvList.value.find(item => !isEnvDisabled(item));
-        if (firstEnv?.name) {
-          emitMultiEnvChange([firstEnv.name]);
+    try {
+      await getEnvList();
+      if (mode.value === 'multi') {
+        // 多选模式初始化
+        if (props.modelValues?.length) {
+          emitMultiEnvChange(props.modelValues, { fallbackWhenEmpty: true });
+        } else if (props.initFirstEnvWhenEmpty) {
+          const firstEnv = selectableEnvList.value.find(item => !isEnvDisabled(item));
+          if (firstEnv?.name) {
+            emitMultiEnvChange([firstEnv.name]);
+          }
+        }
+      } else {
+        // 单选模式初始化
+        if (props.modelValue) {
+          const selectedEnv = selectableEnvList.value.find(item => item.name === props.modelValue);
+          if (!selectedEnv && props.preserveMissingModelValue) {
+            emits('update:modelValue', props.modelValue);
+          } else {
+            handleEnvChange(props.modelValue);
+          }
+        } else if (props.initFirstEnvWhenEmpty) {
+          const currentEnvExists =
+            envStore.currentEnv &&
+            selectableEnvList.value.some(item => item.name === envStore.currentEnv && !isEnvDisabled(item));
+          const env = currentEnvExists
+            ? envStore.currentEnv
+            : selectableEnvList.value.find(item => !isEnvDisabled(item))?.name || '';
+          if (env) handleEnvChange(env);
         }
       }
-    } else {
-      // 单选模式初始化
-      if (props.modelValue) {
-        const selectedEnv = selectableEnvList.value.find(item => item.name === props.modelValue);
-        if (!selectedEnv && props.preserveMissingModelValue) {
-          emits('update:modelValue', props.modelValue);
-        } else {
-          handleEnvChange(props.modelValue);
-        }
-      } else if (props.initFirstEnvWhenEmpty) {
-        const currentEnvExists =
-          envStore.currentEnv &&
-          selectableEnvList.value.some(item => item.name === envStore.currentEnv && !isEnvDisabled(item));
-        const env = currentEnvExists
-          ? envStore.currentEnv
-          : selectableEnvList.value.find(item => !isEnvDisabled(item))?.name || '';
-        if (env) handleEnvChange(env);
-      }
+    } finally {
+      isLoading.value = false;
+      emits('update:loading', false);
     }
-    isLoading.value = false;
-    emits('update:loading', false);
+  }
+
+  /** 主动刷新环境列表和部署状态，用于侧栏打开、页面刷新等需要最新数据的交互。 */
+  async function refresh() {
+    await Promise.all([getDeployStatuses(), handleGetEnvList()]);
   }
 
   /** 监听 appID 变化，重新拉取该应用在各环境的部署状态 */
@@ -814,6 +822,8 @@
   );
 
   defineExpose({
+    refresh,
+    refreshEnvList: handleGetEnvList,
     refreshDeployStatuses: getDeployStatuses,
   });
 </script>

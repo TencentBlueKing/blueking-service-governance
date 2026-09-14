@@ -392,6 +392,7 @@
   const emit = defineEmits<{
     'create-feature-env': [];
     deploy: [targets: DeployOverviewDeployTarget[]];
+    'refresh-env-list': [];
     'update:deploy-targets': [targets: DeployOverviewDeployTarget[]];
     'view-instances': [envName: string];
   }>();
@@ -452,6 +453,7 @@
   /** 刷新过程中忽略重复点击，避免并发请求总览接口。 */
   function handleRefresh() {
     if (isLoading.value) return;
+    emit('refresh-env-list');
     void load('manual');
   }
 

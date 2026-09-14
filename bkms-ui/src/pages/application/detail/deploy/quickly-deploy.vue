@@ -49,6 +49,7 @@
       >
         <!-- 目标环境选择器 -->
         <EnvSelectPanel
+          ref="targetEnvSelectPanelRef"
           v-model="targetFormModel.envName"
           :aria-disabled="confirmLoading"
           class="w-full"
@@ -128,6 +129,7 @@
 
   const deployFormRef = ref<InstanceType<typeof QuicklyDeployForm>>();
   const targetEnvFormRef = ref();
+  const targetEnvSelectPanelRef = ref<null | { refresh?: () => Promise<void> }>(null);
   const confirmLoading = ref(false);
   const targetFormModel = reactive({ envName: '' });
   const targetFormRules = {
@@ -206,12 +208,14 @@
     }
   }
 
-  // 每次从总览打开时保持目标环境未选择，由用户明确指定部署环境。
-  watch(isShow, newVal => {
+  // 每次从总览打开时保持目标环境未选择，并重新拉取侧栏内环境下拉数据。
+  watch(isShow, async newVal => {
     if (newVal) {
       if (hasTargetSelector.value) {
         targetFormModel.envName = '';
         selectedEnvItem.value = undefined;
+        await nextTick();
+        await targetEnvSelectPanelRef.value?.refresh?.();
       }
       nextTick(() => {
         targetEnvFormRef.value?.clearValidate?.();
