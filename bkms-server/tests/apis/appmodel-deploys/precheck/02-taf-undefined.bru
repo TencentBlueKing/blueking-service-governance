@@ -19,7 +19,7 @@ tests {
   test("should return the TAF undefined variable response", () => {
     expect(res.body.undefinedVars).to.deep.equal([{
       key: bru.getVar("envVarPrecheckTafUndefinedKey"),
-      sources: [{type: "appConfigFile", name: "default"}]
+      sources: [{type: "appConfigFile", name: "taf_config.conf"}]
     }]);
     expect(res.body.missingRequiredClusterAddons).to.be.an("array");
   });

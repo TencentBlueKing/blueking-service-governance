@@ -136,28 +136,39 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			testEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			// 切换到独立配置后，为 prod 创建 env-specific overlay。
-			defaultFiles, err := appConfigFileStore.List(ctx, app.ID, appcfg.AcfFilterEnvName(appcfg.EnvNameDefault))
+			defs, err := appConfigFileDefStore.ListByApp(
+				ctx,
+				app.ID,
+				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(defaultFiles).NotTo(BeEmpty())
-			defaultFileID := defaultFiles[0].ID
+			Expect(defs).To(HaveLen(1))
 
-			// Create prod environment-specific AppConfigFile (overlay)
+			cfgSvc := appcfg.NewAppConfigFileService(
+				appConfigFileStore,
+				appConfigFileDefStore,
+				appConfigFileVersionStore,
+			)
+
+			// 切换为独立配置模式
+			isUnified := false
+			err = cfgSvc.UpdateAppCfgFileDef(ctx, &defs[0], appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        appcfg.CfgSystemUser,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// 获取已有框架 def 的默认文件，在其上创建 env overlay
+			defaultFileWithDef, err := cfgSvc.GetDefaultFileWithDef(ctx, defs[0].ID)
+			Expect(err).NotTo(HaveOccurred())
+
 			prodOverlayContent := "<taf>\n  <application>\n    <server>\n      logpath=/data/prod/log\n    </server>\n  </application>\n</taf>\n"
-			_, err = appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
-				Create(
-					ctx,
-					appcfg.CreateCfgFileParams{
-						AppID:               app.ID,
-						EnvName:             prodEnv.Name,
-						Name:                "taf-prod-config",
-						Type:                appcfg.AppConfigFileTypeOverlay,
-						ContentSourceType:   appcfg.ContentSourceTypeLocal,
-						Format:              appcfg.FileFormatTAF,
-						ConfigKind:          appcfg.ConfigKindFramework,
-						BaseAppConfigFileID: &defaultFileID,
-						OverlayContent:      &prodOverlayContent,
-					},
-				)
+			_, err = cfgSvc.CreateEnvInstance(ctx, *defaultFileWithDef, appcfg.CreateEnvInstanceParams{
+				EnvName:        prodEnv.Name,
+				OverlayContent: &prodOverlayContent,
+				Operator:       appcfg.CfgSystemUser,
+				Description:    "prod env overlay for test",
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 

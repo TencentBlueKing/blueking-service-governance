@@ -118,6 +118,7 @@ func TrpcApplication(
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// 创建 app-level 默认 AppConfigFile（tRPC plugin 需要）
+	// def.Name 使用 tRPC 配置中的实际文件名，与 app model 保持一致
 	acfService := appcfg.NewAppConfigFileService(
 		stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
 	)
@@ -126,7 +127,7 @@ func TrpcApplication(
 		appcfg.CreateCfgFileParams{
 			AppID:             app.ID,
 			EnvName:           appcfg.EnvNameDefault,
-			Name:              appcfg.DefaultAppConfigFileName,
+			Name:              trpcConfig.FileName,
 			Type:              appcfg.AppConfigFileTypeNormal,
 			ContentSourceType: appcfg.ContentSourceTypeLocal,
 			Format:            appcfg.FileFormatYAML,
@@ -265,6 +266,7 @@ func TafApplication(
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// 创建 app-level 默认 AppConfigFile（TAF plugin 需要）
+	// def.Name 使用 TAF 配置中的实际文件名，与 app model 保持一致
 	acfService := appcfg.NewAppConfigFileService(
 		stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
 	)
@@ -273,7 +275,7 @@ func TafApplication(
 		appcfg.CreateCfgFileParams{
 			AppID:             app.ID,
 			EnvName:           appcfg.EnvNameDefault,
-			Name:              appcfg.DefaultAppConfigFileName,
+			Name:              tafConfig.FileName,
 			Type:              appcfg.AppConfigFileTypeNormal,
 			ContentSourceType: appcfg.ContentSourceTypeLocal,
 			Format:            appcfg.FileFormatTAF,

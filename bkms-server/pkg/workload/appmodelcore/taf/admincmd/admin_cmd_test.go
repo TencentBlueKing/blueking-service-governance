@@ -91,20 +91,30 @@ var _ = Describe("TafAdminService", func() {
 
 	// 辅助函数：创建指定内容的 TAF 配置文件
 	createConfigFile := func(content string) {
-		_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
-			Create(
-				ctx,
-				appcfg.CreateCfgFileParams{
-					AppID:             testApp.ID,
-					EnvName:           testEnv.Name,
-					Name:              "taf.tafconfig.xml",
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Format:            appcfg.FileFormatTAF,
-					ConfigKind:        appcfg.ConfigKindFramework,
-					Content:           &content,
-				},
-			)
+		svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
+		defs, err := appConfigFileDefStore.ListByApp(
+			ctx,
+			testApp.ID,
+			appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defs).To(HaveLen(1))
+
+		def := &defs[0]
+		defaultFile, err := svc.GetDefaultFileWithDef(ctx, def.ID)
+		Expect(err).NotTo(HaveOccurred())
+
+		defaultFile.Content = &content
+		err = svc.UpdateFile(
+			ctx,
+			&defaultFile.AppConfigFile,
+			def.Name,
+			appcfg.CfgSystemUser,
+			appcfg.UpdateCfgFileOptions{
+				OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
+				Description:   appcfg.CfgSystemVersionDescription,
+			},
+		)
 		Expect(err).NotTo(HaveOccurred())
 	}
 

@@ -120,12 +120,19 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 		fileContent = &params.TafConfig.FileContent
 	}
 
+	// framework def 使用 TAF 配置中的实际文件名（如 taf.conf），
+	// 保持 def.Name 与 app model 中的 FileName 一致。
+	cfgFileName := appcfg.DefaultAppConfigFileName
+	if params.TafConfig != nil && params.TafConfig.FileName != "" {
+		cfgFileName = params.TafConfig.FileName
+	}
+
 	if _, err = s.appConfigFileService.Create(
 		ctx,
 		appcfg.CreateCfgFileParams{
 			AppID:             app.ID,
 			EnvName:           appcfg.EnvNameDefault,
-			Name:              appcfg.DefaultAppConfigFileName,
+			Name:              cfgFileName,
 			Type:              appcfg.AppConfigFileTypeNormal,
 			ContentSourceType: appcfg.ContentSourceTypeLocal,
 			Format:            appcfg.FileFormatTAF,
