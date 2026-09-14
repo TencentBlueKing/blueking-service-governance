@@ -149,9 +149,6 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			testEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			// 切换到独立配置后，为 prod 创建 env-specific overlay。
-			defaultFiles, err := appConfigFileStore.List(ctx, app.ID, appcfg.AcfFilterEnvName(appcfg.EnvNameDefault))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(defaultFiles).NotTo(BeEmpty())
 			defs, err := appConfigFileDefStore.ListByApp(
 				ctx,
 				app.ID,
@@ -165,6 +162,8 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				appConfigFileDefStore,
 				appConfigFileVersionStore,
 			)
+
+			// 切换为独立配置模式
 			isUnified := false
 			err = cfgSvc.UpdateAppCfgFileDef(ctx, &defs[0], appcfg.FileDefUpdate{
 				IsUnifiedConfig: &isUnified,
@@ -172,25 +171,17 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = appConfigFileDefStore.GetByID(ctx, defs[0].ID)
+			// 获取已有框架 def 的默认文件，在其上创建 env overlay
+			defaultFileWithDef, err := cfgSvc.GetDefaultFileWithDef(ctx, defs[0].ID)
 			Expect(err).NotTo(HaveOccurred())
-			defaultFileID := defaultFiles[0].ID
+
 			prodOverlayContent := "server:\n  address: 0.0.0.0:9090"
-			_, err = appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
-				Create(
-					ctx,
-					appcfg.CreateCfgFileParams{
-						AppID:               app.ID,
-						EnvName:             prodEnv.Name,
-						Name:                "trpc-prod-config",
-						Type:                appcfg.AppConfigFileTypeOverlay,
-						ContentSourceType:   appcfg.ContentSourceTypeLocal,
-						Format:              appcfg.FileFormatYAML,
-						ConfigKind:          appcfg.ConfigKindFramework,
-						BaseAppConfigFileID: &defaultFileID,
-						OverlayContent:      &prodOverlayContent,
-					},
-				)
+			_, err = cfgSvc.CreateEnvInstance(ctx, *defaultFileWithDef, appcfg.CreateEnvInstanceParams{
+				EnvName:        prodEnv.Name,
+				OverlayContent: &prodOverlayContent,
+				Operator:       appcfg.CfgSystemUser,
+				Description:    "prod env overlay for test",
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 

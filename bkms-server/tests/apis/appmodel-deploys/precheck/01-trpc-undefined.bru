@@ -19,7 +19,7 @@ tests {
   test("should return the tRPC undefined variable response", () => {
     expect(res.body.undefinedVars).to.deep.equal([{
       key: bru.getVar("envVarPrecheckTrpcUndefinedKey"),
-      sources: [{type: "appConfigFile", name: "default"}]
+      sources: [{type: "appConfigFile", name: "trpc_go.yaml"}]
     }]);
     expect(res.body.missingRequiredClusterAddons).to.be.an("array");
   });

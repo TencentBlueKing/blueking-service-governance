@@ -83,7 +83,6 @@ func NewWebServerCmd() *cobra.Command {
 					log.Errorf(ctx, "shutdown APM: %v", err)
 				}
 			}()
-
 			// 启动 Prometheus Metrics Server
 			// metrics.StartServer 内部会监听 ctx.Done() 自行触发优雅关闭，无需在此重复调用 StopServer
 			metrics.StartServer(ctx)
@@ -129,7 +128,6 @@ func NewWebServerCmd() *cobra.Command {
 
 			// 启动阶段主动初始化权限管理器，提前暴露 IAM client、角色存储等构造问题，避免延迟到请求首次鉴权时才失败。
 			_ = perm.NewManager()
-
 			return serveHTTP(ctx, cfg.HTTPServer, router)
 		},
 	}

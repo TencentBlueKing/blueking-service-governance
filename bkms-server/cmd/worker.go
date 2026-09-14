@@ -61,7 +61,6 @@ func NewWorkerCmd() *cobra.Command {
 			if err = log.InitDefaultLogger(cfg.Logging); err != nil {
 				return errors.Wrap(err, "init logger")
 			}
-
 			// 初始化蓝鲸监控 APM，与 webserver 保持一致，覆盖 worker 内异步任务的链路上报
 			shutdownAPM := apm.Setup(ctx, cfg.BkMonitor, cmd.Name())
 			defer func() {
