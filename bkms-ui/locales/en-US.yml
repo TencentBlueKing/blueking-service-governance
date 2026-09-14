@@ -2033,6 +2033,7 @@ CPU Limits 利用率: CPU Limits Utilization
 刷新 Tag 列表: Refresh Tag List
 镜像 Tag 刷新成功: Image tags refreshed successfully
 刷新镜像 Tag 失败: Failed to refresh image tags
+刷新失败，请稍后重试: Failed to refresh. Please try again later
 已有刷新任务进行中，请稍后重试: A refresh task is already in progress, please try again later
 网络访问: Network Access
 HostPort 端口映射: HostPort Mapping

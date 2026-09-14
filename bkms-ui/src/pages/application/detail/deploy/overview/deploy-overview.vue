@@ -376,6 +376,7 @@
   import { isAppModelAppType } from '~/composables/app-type';
   import { useElementHeight } from '~/composables/use-element-height';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
+  import useInterval from '~/composables/use-interval';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import { useTableSettings } from '~/composables/use-table-settings';
   import { formatRelativeTimeWithTooltip } from '~/composables/use-time';
@@ -436,6 +437,12 @@
   });
 
   const { height: tableHeight } = useElementHeight(tableContentRef, { watchSource: isLoading });
+  const POLLING_INTERVAL = 30_000;
+
+  /** 总览 Tab 激活期间轮询跨环境快照；useInterval 会等待本轮完成后再调度下一轮。 */
+  const { start: startPolling, stop: stopPolling } = useInterval(async () => {
+    await load('automatic');
+  }, POLLING_INTERVAL);
 
   /** 将最近部署时间转换为相对时间，并保留完整时间作为 tooltip。 */
   function formatDeployedAt(deployedAt: string) {
@@ -445,7 +452,7 @@
   /** 刷新过程中忽略重复点击，避免并发请求总览接口。 */
   function handleRefresh() {
     if (isLoading.value) return;
-    load();
+    void load('manual');
   }
 
   /** 点击总览表格任意数据单元格时进入对应环境的实例列表。 */
@@ -457,7 +464,15 @@
   defineExpose({ load });
 
   // 应用或应用类型变化时重新请求；composable 内部会丢弃上一应用的迟到响应。
-  watch([() => appDetailStore.appID, () => appDetailStore.appType], load, { immediate: true });
+  watch(
+    [() => appDetailStore.appID, () => appDetailStore.appType],
+    async ([appID]) => {
+      stopPolling();
+      await load('initial');
+      if (appID === appDetailStore.appID && appID) startPolling();
+    },
+    { immediate: true },
+  );
 
   // 环境列表可能晚于总览接口返回，持续把最新部署目标同步给已打开的新增部署侧栏。
   watch(deployTargets, targets => emit('update:deploy-targets', targets));

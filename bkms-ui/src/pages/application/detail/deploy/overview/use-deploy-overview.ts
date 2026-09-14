@@ -19,6 +19,7 @@
 import { computed, ref, watch } from 'vue';
 import type { Ref } from 'vue';
 
+import { Message } from 'bkui-vue';
 import { useI18n } from 'vue-i18n';
 import { AppService } from '~/api/modules/v1';
 import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES } from '~/common/enums/deploy';
@@ -118,6 +119,8 @@ type DeployOverviewAutoscaling = Pick<
   status?: GPAStatusOutput | null;
 };
 
+type LoadMode = 'automatic' | 'initial' | 'manual';
+
 /**
  * 部署总览的数据层：负责接口请求、字段适配、筛选、排序和分页。
  * 组件本身只负责布局与事件转发，避免接口的 null 语义和表格展示逻辑混在模板中。
@@ -137,6 +140,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
   const filterKeys = ['deployStatus'] as const;
   // 每次请求递增；应用快速切换时，仅最后一次请求可以更新页面状态。
   let loadToken = 0;
+  let currentLoad: Promise<void> | undefined;
 
   const deployStatusMaps = computed(() => getDeployStatusMaps(appDetailStore.appType || null));
 
@@ -368,17 +372,43 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     return keywords.some(keyword => candidates.some(candidate => candidate.toLowerCase().includes(keyword)));
   }
 
-  /** 请求总览唯一数据源，并用 token 丢弃应用切换前发出的过期响应。 */
-  async function load() {
-    const appID = appDetailStore.appID;
+  /**
+   * 请求总览唯一数据源，并用 token 丢弃应用切换前发出的过期响应。
+   * 自动刷新不显示 loading，失败时保留上一轮快照；首次和手动刷新保留各自的错误反馈。
+   */
+  async function load(mode: LoadMode = 'manual'): Promise<void> {
+    if (mode === 'automatic' && currentLoad) return currentLoad;
+    if (mode !== 'automatic') {
+      isLoading.value = true;
+      if (mode === 'initial') isError.value = false;
+    }
+
+    const appID = appDetailStore.appID || '';
     const token = (loadToken += 1);
+    const previousLoad = currentLoad;
+    const request = (async () => {
+      if (previousLoad) await previousLoad.catch(() => undefined);
+      await requestOverview(appID, token, mode);
+    })();
+    currentLoad = request;
+    try {
+      await request;
+    } finally {
+      if (currentLoad === request) {
+        currentLoad = undefined;
+        if (mode !== 'automatic') isLoading.value = false;
+      }
+    }
+  }
+
+  async function requestOverview(appID: string, token: number, mode: LoadMode) {
     if (!appID) {
-      rows.value = [];
-      isError.value = false;
+      if (token === loadToken) {
+        rows.value = [];
+        isError.value = false;
+      }
       return;
     }
-    isLoading.value = true;
-    isError.value = false;
     try {
       const list = await AppService.getAppDeployOverview<GetAppDeployOverviewRequest, DeployOverviewApiRow[]>(
         { appID },
@@ -386,13 +416,16 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
       );
       if (token !== loadToken) return;
       rows.value = (list || []).map(buildRow);
+      isError.value = false;
     } catch (error) {
       if (token !== loadToken) return;
       console.error(error);
-      rows.value = [];
-      isError.value = true;
-    } finally {
-      if (token === loadToken) isLoading.value = false;
+      if (mode === 'initial') {
+        rows.value = [];
+        isError.value = true;
+      } else if (mode === 'manual') {
+        Message.error(t('刷新失败，请稍后重试'));
+      }
     }
   }
 
