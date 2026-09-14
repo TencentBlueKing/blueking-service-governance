@@ -718,9 +718,10 @@
     searchKeyword.value = '';
   }
 
-  /** 下拉面板打开时标记可见状态 */
+  /** 下拉面板打开时刷新部署状态，避免状态图标和仅已部署过滤使用旧缓存。 */
   function handlePopoverShow() {
     isPopoverVisible.value = true;
+    void getDeployStatuses();
   }
 
   /** 多选模式下通过 Tag 删除已选环境 */

@@ -179,7 +179,7 @@
               <TableException
                 :type="isError ? 'error' : hasFilter ? 'search' : 'empty'"
                 @clear="clearFilters"
-                @refresh="load"
+                @refresh="refreshOverview()"
               />
             </template>
             <TableColumn
@@ -376,7 +376,6 @@
   import { isAppModelAppType } from '~/composables/app-type';
   import { useElementHeight } from '~/composables/use-element-height';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
-  import useInterval from '~/composables/use-interval';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import { useTableSettings } from '~/composables/use-table-settings';
   import { formatRelativeTimeWithTooltip } from '~/composables/use-time';
@@ -385,6 +384,7 @@
 
   import StatIcon from './stat-icon.vue';
   import { type DeployOverviewDeployTarget, type DeployOverviewRow, useDeployOverview } from './use-deploy-overview';
+  import { useDeployOverviewPolling } from './use-deploy-overview-polling';
 
   import type { EnvOutput } from '~/@types/v1/env';
 
@@ -423,6 +423,7 @@
     isLoading,
     load,
     pagination,
+    pollingIntervalMs,
     searchData,
     searchValue,
     sortConfig,
@@ -438,12 +439,11 @@
   });
 
   const { height: tableHeight } = useElementHeight(tableContentRef, { watchSource: isLoading });
-  const POLLING_INTERVAL = 30_000;
-
-  /** 总览 Tab 激活期间轮询跨环境快照；useInterval 会等待本轮完成后再调度下一轮。 */
-  const { start: startPolling, stop: stopPolling } = useInterval(async () => {
-    await load('automatic');
-  }, POLLING_INTERVAL);
+  const { refresh: refreshOverview, stop: stopPolling } = useDeployOverviewPolling({
+    getAppID: () => appDetailStore.appID,
+    getInterval: () => pollingIntervalMs.value,
+    load,
+  });
 
   /** 将最近部署时间转换为相对时间，并保留完整时间作为 tooltip。 */
   function formatDeployedAt(deployedAt: string) {
@@ -454,7 +454,7 @@
   function handleRefresh() {
     if (isLoading.value) return;
     emit('refresh-env-list');
-    void load('manual');
+    void refreshOverview('manual');
   }
 
   /** 点击总览表格任意数据单元格时进入对应环境的实例列表。 */
@@ -463,15 +463,17 @@
   }
 
   // 部署、移除部署等父级操作完成后，通过暴露的 load 主动刷新总览。
-  defineExpose({ load });
+  defineExpose({ load: refreshOverview });
 
   // 应用或应用类型变化时重新请求；composable 内部会丢弃上一应用的迟到响应。
   watch(
     [() => appDetailStore.appID, () => appDetailStore.appType],
-    async ([appID]) => {
-      stopPolling();
-      await load('initial');
-      if (appID === appDetailStore.appID && appID) startPolling();
+    () => {
+      if (document.visibilityState === 'hidden') {
+        stopPolling();
+        return;
+      }
+      void refreshOverview('initial');
     },
     { immediate: true },
   );

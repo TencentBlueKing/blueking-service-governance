@@ -22,7 +22,7 @@ import type { Ref } from 'vue';
 import { Message } from 'bkui-vue';
 import { useI18n } from 'vue-i18n';
 import { AppService } from '~/api/modules/v1';
-import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES } from '~/common/enums/deploy';
+import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES, HELM_DEPLOY_STATUS } from '~/common/enums/deploy';
 import { useDeployStatusMap } from '~/composables/use-deploy-status';
 import { envTypeMap } from '~/composables/use-env-manager';
 import { useResourceSpecDisplay } from '~/composables/use-resource-spec-display';
@@ -37,6 +37,16 @@ import type { GPAConfigOutputObj, GPAStatusOutput } from '~/@types/v1/gpa';
 
 const ENV_TYPE_ORDER = ['production', 'staging', 'test', 'development'];
 const TYPE_FILTER_ALL = '__all__';
+const FAST_POLLING_INTERVAL = 5_000;
+const SLOW_POLLING_INTERVAL = 60_000;
+const FAST_POLLING_STATUSES = new Set<string>([
+  APP_DEPLOY_STATUS.DEPLOYING,
+  APP_DEPLOY_STATUS.UNINSTALLING,
+  HELM_DEPLOY_STATUS.PENDING_INSTALL,
+  HELM_DEPLOY_STATUS.PENDING_UPGRADE,
+  HELM_DEPLOY_STATUS.PENDING_ROLLBACK,
+  HELM_DEPLOY_STATUS.UNINSTALLING,
+]);
 // GPA 未返回 phase 不代表异常；只有已启用且明确处于正常集合之外时，才展示异常状态。
 const NORMAL_AUTOSCALING_PHASES = new Set(['active', 'limited', 'initializing']);
 // 状态筛选按业务关注度排序，接口中出现但未列出的状态会追加到末尾。
@@ -106,6 +116,8 @@ export interface DeployOverviewStat {
 
 export type DeployOverviewStatKey = 'abnormalInstance' | 'deploying' | 'failed' | 'total';
 
+export type LoadMode = 'automatic' | 'initial' | 'manual';
+
 /** 补充接口字段的 null 语义，并复用现有 GPA 类型描述完整 autoscaling 数据。 */
 type DeployOverviewApiRow = Omit<AppDeployOverviewEnvObj, 'autoscalingEnabled' | 'instances'> & {
   autoscaling?: DeployOverviewAutoscaling | null;
@@ -118,8 +130,6 @@ type DeployOverviewAutoscaling = Pick<
 > & {
   status?: GPAStatusOutput | null;
 };
-
-type LoadMode = 'automatic' | 'initial' | 'manual';
 
 /**
  * 部署总览的数据层：负责接口请求、字段适配、筛选、排序和分页。
@@ -164,6 +174,11 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     globalTypeFilter.value === TYPE_FILTER_ALL
       ? rows.value
       : rows.value.filter(row => row.type === globalTypeFilter.value),
+  );
+
+  // 有部署中或卸载中环境时加快刷新，其余终态或空数据降频，减轻 API 和集群压力。
+  const pollingIntervalMs = computed(() =>
+    rows.value.some(row => FAST_POLLING_STATUSES.has(row.deployStatus)) ? FAST_POLLING_INTERVAL : SLOW_POLLING_INTERVAL,
   );
 
   /**
@@ -539,6 +554,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     isLoading,
     load,
     pagination,
+    pollingIntervalMs,
     searchData,
     searchValue,
     sortConfig,
