@@ -1816,7 +1816,7 @@ runner 阶段: Runner Stage
 "请输入{0}": "Please enter {0}"
 是: 'Yes'
 否: 'No'
-新增自定义变量: Add Custom Variable
+自定义变量: Custom Variable
 是否敏感: Is Sensitive
 '敏感环境变量的值将在页面上以脱敏形式展示，只有应用进程内能够获取到这些变量的明文值。': Sensitive environment variable values are displayed in a desensitized format. Only application processes can access the plaintext values of these variables.
 确认保存: Confirm Save

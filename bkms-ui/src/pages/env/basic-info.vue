@@ -174,11 +174,8 @@
                 </Tag>
                 <Button
                   class="ml-auto shrink-0"
-                  text
-                  theme="primary"
                   @click="handleBasicInfoEdit"
                 >
-                  <EditLine class="mr-[4px]" />
                   {{ $t('编辑') }}
                 </Button>
               </div>

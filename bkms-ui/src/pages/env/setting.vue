@@ -55,7 +55,7 @@
               :height="24"
               :width="24"
             />
-            {{ $t('新增自定义变量') }}
+            {{ $t('自定义变量') }}
           </Button>
           <Button
             class="bg-[#fff]"
@@ -71,6 +71,14 @@
           >
             <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
             {{ $t('导出') }}
+          </Button>
+          <Button
+            outline
+            theme="primary"
+            @click="showPublicEnvVarsSlider = true"
+          >
+            <i class="bkms-icon bkms-icon-variable mr-[6px] text-[14px]"></i>
+            {{ $t('公共环境变量') }}
           </Button>
         </div>
         <Input
@@ -100,6 +108,10 @@
         v-model:visible="showEnvBgVarsSlider"
         :env-id="env"
         :title="$t('内置与公共环境变量')"
+      />
+      <PublicEnvVarsSideslider
+        v-model:visible="showPublicEnvVarsSlider"
+        :space="workspace"
       />
       <!-- 环境变量导入侧栏 -->
       <EnvVarsImportSideslider
@@ -134,6 +146,7 @@
   import { useEnvDetailStore } from '~/stores/env-detail';
 
   import EnvBgVarsSideslider from '../application/detail/base-info/trpc/env-bg-vars-sideslider.vue';
+  import PublicEnvVarsSideslider from './public-env-vars/public-env-vars-sideslider.vue';
 
   import type { DownloadSingleEnvVarTemplateRequest, ExportEnvScopedEnvVarsRequest } from '~/@types/v1/envvars';
 
@@ -149,6 +162,7 @@
   const variableList = ref<EnvVariableConfig[]>([]);
   const isLoading = ref(false);
   const showEnvBgVarsSlider = ref(false);
+  const showPublicEnvVarsSlider = ref(false);
   const showImportSlider = ref(false);
   const { exportFile, isExporting } = useFileExport();
   const envTypeConfig = computed(() => envTypeMap[envDetailStore.currentEnv?.type || '']);
