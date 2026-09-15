@@ -21,10 +21,7 @@
     v-model:active-key="activeKey"
     :list="menuList"
   >
-    <div
-      v-bkloading="{ loading: pageLoading }"
-      :class="pageBodyClass"
-    >
+    <div :class="pageBodyClass">
       <Exception
         v-if="envDetailStore.error"
         class="mt-[120px] large-exception"
@@ -46,7 +43,7 @@
         </Button>
       </Exception>
       <RouterView
-        v-else-if="currentEnv"
+        v-else-if="currentEnv || envDetailStore.loading"
         :key="routerViewKey"
       />
     </div>
@@ -183,7 +180,6 @@
     const type = currentEnv.value?.type;
     return type && envTypeMap[type] ? envTypeMap[type] : undefined;
   });
-  const pageLoading = computed(() => envDetailStore.loading);
   const routerViewKey = computed(() => {
     const { envId, menuName, space } = route.params;
     return `${menuName}-${envId}-${space}`;

@@ -41,6 +41,8 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
   let listSequence = 0;
   // 最近一次请求详情的环境 ID，用于校验响应归属
   let requestedEnvId = '';
+  // 当前详情请求，供子页面复用以避免切换环境时重复请求
+  let currentEnvRequest: null | ReturnType<typeof EnvService.getEnv> = null;
 
   /** 按 workspace 拉取环境列表；workspace 变化时重置详情。 */
   async function fetchEnvList(space = workspace.value) {
@@ -64,13 +66,20 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
 
   /** 拉取当前环境详情；404 归类为 notFound，其余归为 request 错误。 */
   async function fetchCurrentEnv(envId: string) {
+    if (envId === requestedEnvId && loading.value && currentEnvRequest) {
+      await currentEnvRequest.catch(() => null);
+      return;
+    }
+
     const sequence = ++detailSequence;
     requestedEnvId = envId;
     currentEnv.value = null;
     error.value = null;
     loading.value = true;
     try {
-      const data = await EnvService.getEnv({ envID: envId }, { needStatus: true });
+      const request = EnvService.getEnv({ envID: envId }, { needStatus: true });
+      currentEnvRequest = request;
+      const data = await request;
       if (sequence !== detailSequence) return;
       if (!data?.id) error.value = 'notFound';
       else setCurrentEnv(data);
@@ -83,6 +92,13 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
     } finally {
       if (sequence === detailSequence) loading.value = false;
     }
+  }
+
+  /** 等待当前环境详情请求完成，供提前挂载的子页面复用。 */
+  async function waitForCurrentEnv(envId: string) {
+    if (requestedEnvId !== envId || !currentEnvRequest) await fetchCurrentEnv(envId);
+    else await currentEnvRequest.catch(() => null);
+    return currentEnv.value?.id === envId ? currentEnv.value : null;
   }
 
   /** 校验环境 ID 后写入详情，并同步更新列表中的对应项。 */
@@ -116,6 +132,7 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
   function resetDetail() {
     ++detailSequence;
     requestedEnvId = '';
+    currentEnvRequest = null;
     currentEnv.value = null;
     loading.value = false;
     error.value = null;
@@ -140,6 +157,7 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
     listError,
     fetchEnvList,
     fetchCurrentEnv,
+    waitForCurrentEnv,
     setCurrentEnv,
     syncSavedEnv,
     reset,

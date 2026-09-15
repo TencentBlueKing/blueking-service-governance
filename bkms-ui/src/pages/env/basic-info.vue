@@ -20,38 +20,131 @@
   <Skeleton
     :full-height="false"
     :loading="isLoading"
+    theme="gray"
   >
     <template #loading>
-      <Layout.shape
-        :height="120"
-        width="100%"
-      />
-      <Layout.shape
-        class="mt-[16px]"
-        :height="28"
-        width="100%"
-      />
-      <div class="flex mt-[12px]">
-        <Layout.shape
-          class="!block"
-          :height="136"
-          :width="280"
-        />
-        <div>
-          <Layout.formItem
-            class="ml-[30px]"
-            :item-height="18"
-            :label-height="18"
+      <div class="flex flex-col gap-[16px]">
+        <!-- 环境概览 -->
+        <div class="flex items-start p-[24px] bg-[#fff] rounded-[2px] shadow-[0_2px_4px_0_#1919290d]">
+          <Layout.shape
+            :height="72"
+            :width="72"
           />
-          <Layout.formItem
-            class="mt-[12px] ml-[30px]"
-            :item-height="18"
-            :label-height="18"
+          <div class="flex-1 min-w-0 ml-[20px]">
+            <div class="flex items-center min-h-[24px]">
+              <Layout.shape
+                :height="20"
+                :width="176"
+              />
+              <Layout.shape
+                class="ml-[8px]"
+                :height="22"
+                :width="48"
+              />
+              <Layout.shape
+                class="ml-auto"
+                :height="20"
+                :width="52"
+              />
+            </div>
+            <div class="flex flex-wrap gap-x-[40px] gap-y-[12px] mt-[16px]">
+              <Layout.formItem
+                :item-height="22"
+                :item-width="112"
+                :label-height="22"
+                :label-width="72"
+              />
+              <Layout.formItem
+                :item-height="22"
+                :item-width="96"
+                :label-height="22"
+                :label-width="72"
+              />
+              <Layout.formItem
+                :item-height="22"
+                :item-width="160"
+                :label-height="22"
+                :label-width="72"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- 集群资源 -->
+        <div class="overflow-hidden rounded-[2px] shadow-[0_2px_4px_0_#1919290d]">
+          <div class="h-[32px] bg-[#EAEBF0]"></div>
+          <div class="flex flex-wrap gap-[32px] p-[24px] bg-[#fff]">
+            <div class="w-[240px] shrink-0 overflow-hidden rounded-[2px]">
+              <div class="flex items-center h-[136px] px-[24px] bg-[#FAFBFD]">
+                <Layout.shape
+                  :height="80"
+                  type="circle"
+                  :width="80"
+                />
+                <div class="flex-1 ml-[16px]">
+                  <Layout.shape
+                    :height="18"
+                    width="100%"
+                  />
+                  <Layout.shape
+                    class="mt-[16px]"
+                    :height="18"
+                    width="80%"
+                  />
+                </div>
+              </div>
+              <Layout.shape
+                class="!block"
+                :height="32"
+                width="100%"
+              />
+            </div>
+            <div class="flex-1 grid grid-cols-1 gap-[12px] content-center min-w-0">
+              <Layout.formItem
+                :item-height="22"
+                :item-width="180"
+                :label-height="22"
+                :label-width="88"
+              />
+              <Layout.formItem
+                :item-height="22"
+                :item-width="148"
+                :label-height="22"
+                :label-width="88"
+              />
+              <Layout.formItem
+                :item-height="22"
+                :item-width="128"
+                :label-height="22"
+                :label-width="88"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- 集群组件 -->
+        <div class="overflow-hidden rounded-[2px] shadow-[0_2px_4px_0_#1919290d]">
+          <div class="h-[32px] bg-[#EAEBF0]"></div>
+          <div class="min-h-[200px] p-[16px] bg-[#fff]">
+            <Layout.shape
+              v-for="index in 3"
+              :key="index"
+              class="!block"
+              :class="{ 'mt-[8px]': index > 1 }"
+              :height="38"
+              width="80%"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-[12px] mt-[8px]">
+          <Layout.shape
+            :height="32"
+            :width="100"
           />
-          <Layout.formItem
-            class="mt-[12px] ml-[30px]"
-            :item-height="18"
-            :label-height="18"
+          <Layout.shape
+            :height="22"
+            :width="300"
           />
         </div>
       </div>
@@ -573,7 +666,7 @@
     const newData =
       envDetailStore.currentEnv?.id === envId.value
         ? envDetailStore.currentEnv
-        : await EnvService.getEnv({ envID: envId.value }).catch(() => null);
+        : await envDetailStore.waitForCurrentEnv(envId.value);
     if (disposed || !newData) {
       isLoading.value = false;
       return;
