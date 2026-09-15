@@ -41,6 +41,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/plugin"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
@@ -58,17 +59,7 @@ type ConfigParams struct {
 	ConfigMapName string
 	// Files contains all config files rendered into the workload, including the framework config file
 	// and any extra plain files.
-	Files []ConfigFileParams
-}
-
-// ConfigFileParams describes one rendered config file.
-type ConfigFileParams struct {
-	// FileName is the config file name.
-	FileName string
-	// FilePath is the config file directory in the workload container.
-	FilePath string
-	// FileContent is the config template content written to the ConfigMap.
-	FileContent string
+	Files []cfgrender.ConfigFileParams
 }
 
 // Config is the Kubernetes output for init-container based config rendering.
@@ -162,10 +153,10 @@ func BuildConfig(params ConfigParams) (*Config, error) {
 		Data:       make(map[string]string, len(files)),
 	}
 
-	mainMounts, configMapItems, commandParts := buildFileMapping(names, files, &configMap)
+	mainMounts, configMapItems := buildConfigMapData(names, files, &configMap)
 	configMapVolume.ConfigMap.Items = configMapItems
 
-	initContainer := buildInitContainer(names, commandParts)
+	initContainer := buildInitContainer(names)
 
 	return &Config{
 		MainContainerMounts: mainMounts,
@@ -175,15 +166,14 @@ func BuildConfig(params ConfigParams) (*Config, error) {
 	}, nil
 }
 
-// buildFileMapping 遍历文件列表，生成 ConfigMap 数据、主容器挂载和 init container sed 命令。
-func buildFileMapping(
+// buildConfigMapData 遍历文件列表，生成 ConfigMap 数据和主容器挂载。
+func buildConfigMapData(
 	names runtimeNames,
-	files []ConfigFileParams,
+	files []cfgrender.ConfigFileParams,
 	configMap *corev1.ConfigMap,
-) ([]corev1.VolumeMount, []corev1.KeyToPath, []string) {
+) ([]corev1.VolumeMount, []corev1.KeyToPath) {
 	mainMounts := make([]corev1.VolumeMount, 0, len(files))
 	configMapItems := make([]corev1.KeyToPath, 0, len(files))
-	commandParts := make([]string, 0, len(files))
 	for i, file := range files {
 		fileAlias := runtimeRenderFileAlias(i, file)
 
@@ -197,22 +187,19 @@ func buildFileMapping(
 			MountPath: filepath.Join(file.FilePath, file.FileName),
 			SubPath:   fileAlias,
 		})
-
-		templateFilePath := filepath.Join(names.templateMountPath, fileAlias)
-		renderedFilePath := filepath.Join(names.renderedMountPath, fileAlias)
-		commandParts = append(commandParts, BuildSedCommand(templateFilePath, renderedFilePath))
 	}
-	return mainMounts, configMapItems, commandParts
+	return mainMounts, configMapItems
 }
 
 // buildInitContainer 构建执行运行时变量替换的 init container。
-func buildInitContainer(names runtimeNames, commandParts []string) corev1.Container {
+// 使用 for 循环遍历模板目录下的所有文件，命令长度不随文件数增长。
+func buildInitContainer(names runtimeNames) corev1.Container {
 	return corev1.Container{
 		Name:  names.initContainerName,
 		Image: initContainerImage,
 		Command: []string{
 			"sh", "-c",
-			strings.Join(commandParts, " && "),
+			buildLoopScript(names.templateMountPath, names.renderedMountPath),
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
@@ -237,15 +224,48 @@ func buildInitContainer(names runtimeNames, commandParts []string) corev1.Contai
 	}
 }
 
+// buildLoopScript 生成 init container 使用的 for 循环脚本。
+// 遍历模板目录中的每个文件，先 cp 到渲染输出目录，再用 sed 一次性替换所有运行时占位符。
+// 脚本长度恒定，不随配置文件数量增长。
+//
+// 生成的脚本形如：
+//
+//	for f in /trpc-config-template/*; do
+//	  name=$(basename "$f")
+//	  cp "$f" "/trpc-config-rendered/$name" &&
+//	  sed -i \
+//	    -e 's/__#VAR_PLACEHOLDER#__BKMS_POD_IP__/'"$BKMS_POD_IP"'/g' \
+//	    -e 's/__#VAR_PLACEHOLDER#__BKMS_POD_NAME__/'"$BKMS_POD_NAME"'/g' \
+//	    -e 's/__#VAR_PLACEHOLDER#__BKMS_NODE_IP__/'"$BKMS_NODE_IP"'/g' \
+//	    "/trpc-config-rendered/$name"
+//	done
+func buildLoopScript(templateMountPath, renderedMountPath string) string {
+	sedExprs := make([]string, 0, len(envvars.RuntimeVars))
+	for _, rv := range envvars.RuntimeVars {
+		placeholder := envvars.RuntimeVarPlaceholder(rv.Name)
+		sedExprs = append(sedExprs, fmt.Sprintf(
+			"-e 's/%s/'\"$%s\"'/g'", placeholder, rv.Name,
+		))
+	}
+
+	return fmt.Sprintf(
+		`for f in %s/*; do name=$(basename "$f"); cp "$f" "%s/$name" && sed -i %s "%s/$name"; done`,
+		templateMountPath,
+		renderedMountPath,
+		strings.Join(sedExprs, " "),
+		renderedMountPath,
+	)
+}
+
 // runtimeRenderFileAlias 为运行时渲染链路生成内部文件名。
 // 使用扁平 alias 而非真实路径：中间目录只需稳定唯一标识，
 // 最终挂载位置由 main container 的 MountPath + SubPath 决定。
-func runtimeRenderFileAlias(index int, file ConfigFileParams) string {
+func runtimeRenderFileAlias(index int, file cfgrender.ConfigFileParams) string {
 	return fmt.Sprintf("%02d-%s", index, file.FileName)
 }
 
 // validateConfigFiles 校验一组待渲染文件的最终挂载目标是否冲突。
-func validateConfigFiles(files []ConfigFileParams) error {
+func validateConfigFiles(files []cfgrender.ConfigFileParams) error {
 	targetPaths := make(map[string]struct{}, len(files))
 	for _, file := range files {
 		targetPath := filepath.Join(file.FilePath, file.FileName)
@@ -278,20 +298,14 @@ func runtimeRenderNames(workloadType string) runtimeNames {
 // BuildSedCommand constructs a shell command that copies the template config file
 // and applies sed replacements for all runtime variable placeholders.
 //
-// The generated command looks like:
-//
-//	cp /config-template/file /config-rendered/file &&
-//	sed -i 's/__#VAR_PLACEHOLDER#__BKMS_POD_IP__/'"$BKMS_POD_IP"'/g' /config-rendered/file &&
-//	sed -i 's/__#VAR_PLACEHOLDER#__BKMS_POD_NAME__/'"$BKMS_POD_NAME"'/g' /config-rendered/file &&
-//	sed -i 's/__#VAR_PLACEHOLDER#__BKMS_NODE_IP__/'"$BKMS_NODE_IP"'/g' /config-rendered/file
+// Deprecated: init container 已改用 buildLoopScript 生成的 for 循环脚本，
+// 此函数仅保留供外部测试验证单文件 sed 命令格式。
 func BuildSedCommand(templatePath, renderedPath string) string {
 	parts := []string{
 		fmt.Sprintf("cp '%s' '%s'", templatePath, renderedPath),
 	}
 	for _, rv := range envvars.RuntimeVars {
 		placeholder := envvars.RuntimeVarPlaceholder(rv.Name)
-		// Use single-quote-break-single-quote pattern to safely inject the env var value:
-		// sed -i 's/__PLACEHOLDER__/'"$VAR_NAME"'/g' file
 		parts = append(parts, fmt.Sprintf(
 			"sed -i 's/%s/'\"$%s\"'/g' '%s'",
 			placeholder, rv.Name, renderedPath,

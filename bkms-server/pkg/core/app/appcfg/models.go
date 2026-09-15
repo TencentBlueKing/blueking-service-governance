@@ -43,8 +43,11 @@ type AppConfigFileDef struct {
 	MountDir string `bson:"mountDir,omitempty"`
 	// EnvConfigMode 环境配置模式（统一配置 / 按环境独立配置）。
 	EnvConfigMode EnvConfigMode `bson:"envConfigMode"`
-	Creator       string        `bson:"creator"`
-	CreatedAt     time.Time     `bson:"createdAt"`
+	// EnableEnvVarRender 是否启用环境变量渲染（编译期 ${{ env.KEY }} 替换 + 运行时占位符替换）。
+	// framework 始终为 true 且不可修改；plain 默认为 false，可通过 def 更新接口修改。
+	EnableEnvVarRender bool      `bson:"enableEnvVarRender"`
+	Creator            string    `bson:"creator"`
+	CreatedAt          time.Time `bson:"createdAt"`
 }
 
 // AppConfigFile 应用配置文件，如 Helm values 文件、tRPC 配置文件等。
@@ -280,5 +283,8 @@ func applyStaticDefFields(def *AppConfigFileDef, update FileDefUpdate) {
 	}
 	if update.MountDir != nil {
 		def.MountDir = *update.MountDir
+	}
+	if update.EnableEnvVarRender != nil {
+		def.EnableEnvVarRender = *update.EnableEnvVarRender
 	}
 }

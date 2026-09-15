@@ -24,10 +24,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
 )
 
-var _ = Describe("BuildSedCommand", func() {
+var _ = Describe("BuildSedCommand (legacy per-file format)", func() {
 	It("should copy template config and replace runtime variable placeholders", func() {
 		command := runtimerender.BuildSedCommand("/config-template/app.yaml", "/config-rendered/app.yaml")
 
@@ -76,7 +77,7 @@ var _ = Describe("BuildConfig", func() {
 		result, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
 			WorkloadType:  "trpc",
 			ConfigMapName: "demo-app",
-			Files: []runtimerender.ConfigFileParams{
+			Files: []cfgrender.ConfigFileParams{
 				{FileName: "app.yaml", FilePath: "/etc/app", FileContent: "server:\n  app: demo\n"},
 			},
 		})
@@ -95,16 +96,22 @@ var _ = Describe("BuildConfig", func() {
 		Expect(result.InitContainerSpecs[0].Image).To(Equal("busybox:1.36"))
 		Expect(result.InitContainerSpecs[0].VolumeMounts).To(HaveLen(2))
 		Expect(result.InitContainerSpecs[0].Command).To(HaveLen(3))
-		Expect(result.InitContainerSpecs[0].Command[2]).To(ContainSubstring(
-			"cp '/trpc-config-template/00-app.yaml' '/trpc-config-rendered/00-app.yaml'",
-		))
+
+		// 验证 init container 使用 for 循环脚本而非 per-file 命令
+		script := result.InitContainerSpecs[0].Command[2]
+		Expect(script).To(ContainSubstring("for f in /trpc-config-template/*"))
+		Expect(script).To(ContainSubstring(`cp "$f" "/trpc-config-rendered/$name"`))
+		Expect(script).To(ContainSubstring("__#VAR_PLACEHOLDER#__BKMS_POD_IP__"))
+		Expect(script).To(ContainSubstring("__#VAR_PLACEHOLDER#__BKMS_POD_NAME__"))
+		Expect(script).To(ContainSubstring("__#VAR_PLACEHOLDER#__BKMS_NODE_IP__"))
+		Expect(script).To(ContainSubstring("done"))
 	})
 
-	It("should build multi-file config rendering resources", func() {
+	It("should build multi-file config rendering resources with same loop script", func() {
 		result, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
 			WorkloadType:  "plain-cfg",
 			ConfigMapName: "my-app-plain-cfg",
-			Files: []runtimerender.ConfigFileParams{
+			Files: []cfgrender.ConfigFileParams{
 				{FileName: "nginx.conf", FilePath: "/etc/nginx", FileContent: "worker_processes 4;\n"},
 				{FileName: "redis.conf", FilePath: "/etc/redis", FileContent: "maxmemory 256mb\n"},
 			},
@@ -117,8 +124,12 @@ var _ = Describe("BuildConfig", func() {
 		Expect(result.MainContainerMounts).To(HaveLen(2))
 		Expect(result.MainContainerMounts[0].MountPath).To(Equal("/etc/nginx/nginx.conf"))
 		Expect(result.MainContainerMounts[1].MountPath).To(Equal("/etc/redis/redis.conf"))
-		Expect(result.InitContainerSpecs[0].Command[2]).To(ContainSubstring("00-nginx.conf"))
-		Expect(result.InitContainerSpecs[0].Command[2]).To(ContainSubstring("01-redis.conf"))
+
+		// for 循环脚本不包含文件名——它遍历整个目录
+		script := result.InitContainerSpecs[0].Command[2]
+		Expect(script).To(ContainSubstring("for f in /plain-cfg-config-template/*"))
+		Expect(script).NotTo(ContainSubstring("00-nginx.conf"))
+		Expect(script).NotTo(ContainSubstring("01-redis.conf"))
 	})
 
 	It("should return empty config when files list is empty", func() {
@@ -137,7 +148,7 @@ var _ = Describe("BuildConfig", func() {
 		_, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
 			WorkloadType:  "trpc",
 			ConfigMapName: "demo-app",
-			Files: []runtimerender.ConfigFileParams{
+			Files: []cfgrender.ConfigFileParams{
 				{FileName: "app.yaml", FilePath: "/etc/app", FileContent: "a"},
 				{FileName: "app.yaml", FilePath: "/etc/app", FileContent: "b"},
 			},

@@ -28,6 +28,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/trpc/patcher"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/plugin"
@@ -61,7 +62,7 @@ func (p *Plugin) Type() string {
 //
 // 处理流程：
 //  1. 获取框架配置内容（含 polaris patcher）
-//  2. 调用 RenderConfigContents 收集环境变量引用并渲染模板变量
+//  2. 调用 cfgrender.RenderConfigContents 收集环境变量引用并渲染模板变量
 //  3. 通过 runtimerender.BuildConfig 构建 K8s 资源（ConfigMap + init container）
 //
 // plain 配置文件由 Builder 公共步骤独立处理，plugin 只负责 framework。
@@ -82,7 +83,7 @@ func (p *Plugin) Start(
 	}
 
 	// 收集环境变量引用并渲染 ${{ env.KEY }} 模板变量
-	frameworkParams, err := runtimerender.RenderConfigContents(
+	frameworkParams, err := cfgrender.RenderConfigContents(
 		[]appcfg.MountableFile{frameworkItem},
 		renderCtx.EnvVars,
 		renderCtx.Collector,
@@ -107,7 +108,7 @@ func (p *Plugin) Start(
 // 2. Application-level default config (envName = "")
 //
 // 获取配置文件内容后，依次调用注册的 appcfg.ConfigPatcher 对配置进行补丁。
-// 返回的 MountableFile 已完成 patch，待交给 RenderConfigContents 做环境变量渲染。
+// 返回的 MountableFile 已完成 patch，待交给 cfgrender.RenderConfigContents 做环境变量渲染。
 func (p *Plugin) computeTrpcConfig(
 	ctx context.Context,
 	app *bkmsapp.Application,
@@ -121,19 +122,16 @@ func (p *Plugin) computeTrpcConfig(
 		MountDir: trpcCfg.FilePath,
 	}
 
-	if p.mountableFileProvider != nil {
-		frameworkContent, err := p.mountableFileProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
-		if err != nil {
-			return appcfg.MountableFile{}, err
-		}
-		// framework 文件名当前仍以 app model 为准，避免把运行时挂载名意外改成 def 名（如 default）。
-		item.Content = frameworkContent.Content
-		// TODO: MountDir 当前仍由 app model（trpcCfg.FilePath）决定，未使用 def.MountDir。
-		// 待挂载路径迁移至 def 后，应改为 item.MountDir = frameworkContent.MountDir。
+	frameworkContent, err := p.mountableFileProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
+	if err != nil {
+		return appcfg.MountableFile{}, err
 	}
+	// framework 文件名当前仍以 app model 为准，避免把运行时挂载名意外改成 def 名（如 default）。
+	item.Content = frameworkContent.Content
+	// TODO: MountDir 当前仍由 app model（trpcCfg.FilePath）决定，未使用 def.MountDir。
+	// 待挂载路径迁移至 def 后，应改为 item.MountDir = frameworkContent.MountDir。
 
 	// 依次调用注册的 ConfigPatcher 对配置进行补丁（如 polaris 注册信息注入）
-	var err error
 	for _, cfgPatcher := range p.configPatchers {
 		item.Content, err = cfgPatcher.Patch(ctx, app.ID, env.Name, item.Content)
 		if err != nil {

@@ -120,9 +120,9 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 		})
 
 		It("should fall back to default config when querying non-existent env", func() {
-			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "test-env")
+			frameworkFile, err := provider.GetFrameworkMountableFile(ctx, app.ID, "test-env")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
+			Expect(frameworkFile.Content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
 		})
 	})
 
@@ -159,15 +159,15 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 		})
 
 		It("should return env-specific config when querying that env", func() {
-			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
+			frameworkFile, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
+			Expect(frameworkFile.Content).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
 		})
 
 		It("should fall back to default config when querying non-existent env", func() {
-			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "test-env")
+			frameworkFile, err := provider.GetFrameworkMountableFile(ctx, app.ID, "test-env")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cfwc.Content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
+			Expect(frameworkFile.Content).To(Equal("server:\n  address: 0.0.0.0:8080\n"))
 		})
 	})
 
@@ -203,10 +203,10 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
+			frameworkFile, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cfwc.Content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
+			Expect(frameworkFile.Content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
 		})
 
 		It("should return compiled content after switching to independent config via service path", func() {
@@ -232,9 +232,9 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 			_, err = svc.CreateFileWithVersion(ctx, *envFile, def.Name, "create prod overlay", "editor")
 			Expect(err).NotTo(HaveOccurred())
 
-			cfwc, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
+			frameworkFile, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cfwc.Content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
+			Expect(frameworkFile.Content).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
 		})
 	})
 

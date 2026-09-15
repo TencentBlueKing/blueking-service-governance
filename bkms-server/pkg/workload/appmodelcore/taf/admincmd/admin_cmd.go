@@ -189,14 +189,14 @@ func (s *TafAdminService) Init(ctx context.Context) error {
 // 解析 local 字段中的 -p 参数获取端口号, -h 参数获取监听 IP
 func (s *TafAdminService) GetAdminConfig(ctx context.Context) (string, int32, error) {
 	// 获取配置文件内容
-	cfwc, err := s.Stores.MountableFileProvider.GetFrameworkMountableFile(ctx, s.App.ID, s.Env.Name)
+	frameworkFile, err := s.Stores.MountableFileProvider.GetFrameworkMountableFile(ctx, s.App.ID, s.Env.Name)
 	if err != nil {
 		return "", 0, errors.Wrap(err, "get taf config content")
 	}
 
 	// 使用 TarsGo conf 包解析 TAF 配置
 	tafConf := conf.New()
-	if err = tafConf.InitFromString(cfwc.Content); err != nil {
+	if err = tafConf.InitFromString(frameworkFile.Content); err != nil {
 		return "", 0, errors.Wrap(err, "parse taf config")
 	}
 

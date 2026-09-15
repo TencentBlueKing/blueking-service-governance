@@ -457,13 +457,13 @@ func (s *TrpcAdminService) GetAdminPort(cfg *AdminConfig) (string, error) {
 
 // GetAdminConfig 获取并解析 admin 配置
 func (s *TrpcAdminService) GetAdminConfig(ctx context.Context) (*AdminConfig, error) {
-	cfwc, err := s.MountableFileProvider.GetFrameworkMountableFile(ctx, s.App.ID, s.Env.Name)
+	frameworkFile, err := s.MountableFileProvider.GetFrameworkMountableFile(ctx, s.App.ID, s.Env.Name)
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := new(AdminConfig)
-	if err = yaml.Unmarshal([]byte(cfwc.Content), cfg); err != nil {
+	if err = yaml.Unmarshal([]byte(frameworkFile.Content), cfg); err != nil {
 		return nil, errors.Wrapf(err, "unmarshal trpc config")
 	}
 

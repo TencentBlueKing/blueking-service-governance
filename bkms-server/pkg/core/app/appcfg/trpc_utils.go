@@ -43,11 +43,11 @@ func GetTrpcServiceNames(
 	provider MountableFileProvider,
 	appID, envName string,
 ) ([]string, error) {
-	cfwc, err := provider.GetFrameworkMountableFile(ctx, appID, envName)
+	frameworkFile, err := provider.GetFrameworkMountableFile(ctx, appID, envName)
 	if err != nil {
 		return nil, err
 	}
-	return parseTrpcServiceNames(cfwc.Content)
+	return parseTrpcServiceNames(frameworkFile.Content)
 }
 
 // parseTrpcServiceNames 从 tRPC 配置 YAML 内容中提取所有 server.service[].name
