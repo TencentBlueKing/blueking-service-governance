@@ -107,8 +107,15 @@
 
   // 根据语言自动调整 fieldWidth（英文翻倍）
   const computedFieldWidth = computed(() => {
-    const baseWidth = typeof props.fieldWidth === 'number' ? props.fieldWidth : parseInt(String(props.fieldWidth), 10);
-    return i18n.global.locale.value === 'en-US' ? baseWidth * 2 : baseWidth;
+    if (typeof props.fieldWidth === 'string') {
+      const baseWidth = Number.parseFloat(props.fieldWidth);
+      return Number.isNaN(baseWidth)
+        ? props.fieldWidth
+        : i18n.global.locale.value === 'en-US'
+          ? baseWidth * 2
+          : baseWidth;
+    }
+    return i18n.global.locale.value === 'en-US' ? props.fieldWidth * 2 : props.fieldWidth;
   });
 
   const containerStyle = computed<CSSProperties>(() => ({

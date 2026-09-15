@@ -188,7 +188,7 @@
                   :container-height="22"
                   field-direction="left"
                   :field-value="$t('环境名称')"
-                  :field-width="72"
+                  field-width="auto"
                   :value="envData?.name"
                   value-color="#313238"
                 />
@@ -197,7 +197,7 @@
                   :container-height="22"
                   field-direction="left"
                   :field-value="$t('创建人')"
-                  :field-width="72"
+                  field-width="auto"
                   :value="envData.creator"
                   value-color="#313238"
                 />
@@ -206,7 +206,7 @@
                   :container-height="22"
                   field-direction="left"
                   :field-value="$t('创建时间')"
-                  :field-width="72"
+                  field-width="auto"
                   :value="formatTimeByTimezone(envData?.createdAt?.toString() || '')"
                   value-color="#313238"
                 />
@@ -311,14 +311,16 @@
       >
         <div
           v-show="!clusterResources.isEdit"
-          v-bkloading="{
-            loading: clusterScoreLoading || isLoading,
-            opacity: 1,
-            size: 'small',
-          }"
           class="flex flex-wrap gap-[32px] items-stretch p-[24px] bg-[#fff]"
         >
-          <div class="w-[240px] shrink-0 flex flex-col rounded-[2px] overflow-hidden">
+          <div
+            v-bkloading="{
+              loading: clusterScoreLoading || isLoading,
+              opacity: 1,
+              size: 'small',
+            }"
+            class="w-[240px] shrink-0 flex flex-col rounded-[2px] overflow-hidden"
+          >
             <div class="flex-1 flex flex-col items-center justify-center p-[12px] bg-[#FAFBFD]">
               <ClusterHealthScore
                 :count="{
@@ -351,7 +353,6 @@
           <div class="flex-1 grid grid-cols-1 gap-[12px] content-center min-w-0">
             <FieldItem
               :container-height="22"
-              field-direction="left"
               :field-value="$t('容器项目')"
               :field-width="88"
               :value="envData?.cluster?.projectCode"
@@ -360,7 +361,6 @@
             />
             <FieldItem
               :container-height="22"
-              field-direction="left"
               :field-value="$t('集群')"
               :field-width="88"
               :value="envData?.cluster?.clusterID"
@@ -369,7 +369,6 @@
             />
             <FieldItem
               :container-height="22"
-              field-direction="left"
               :field-value="$t('命名空间')"
               :field-width="88"
               :value="envData?.cluster?.namespace"
