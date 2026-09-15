@@ -23,27 +23,20 @@ import (
 	"time"
 )
 
-// ServiceRef 绑定的下发服务引用项
-type ServiceRef struct {
-	// ID 下发服务 ID
-	ID string `bson:"id" json:"id"`
-
-	// Name 下发服务名称（如 bkms-order-svc-dev）
-	Name string `bson:"name" json:"name"`
-}
-
-// EnvBinding 环境绑定配置（一个 app+env 一条记录）。
+// EnvBinding 环境绑定配置
 type EnvBinding struct {
-	// AppID 所属 bkms 应用 ID（关联 Metadata.AppID）
+	// AppID 所属 bkms 应用 ID
+	// bscp app name = bkms appID
 	AppID string `bson:"appID" validate:"required"`
-	// EnvName 绑定的环境名称（如 dev、prod）
+	// EnvName 绑定的 bkms 环境名称（如 dev、prod）
 	EnvName string `bson:"envName" validate:"required"`
-	// Services 绑定的下发服务列表
-	// ps: 至少包含默认服务，可额外绑定公共服务
-	Services []ServiceRef `bson:"bscpApps" validate:"required,min=1"`
-	// DefaultServiceID 创建时自动生成的默认 file Service ID
-	// ps: 不可移除，更新 Services 时必须包含此 ID
-	DefaultServiceID string `bson:"defaultBscpAppID"`
+
+	// BscpEnvID BSCP 环境 ID
+	BscpEnvID string `bson:"bscpEnvID"`
+	// BscpEnvName BSCP 环境名称
+	BscpEnvName string `bson:"bscpEnvName"`
+	// BscpAppID BSCP App ID
+	BscpAppID string `bson:"bscpAppID"`
 
 	// Operator 最近操作人
 	Operator string `bson:"operator"`
@@ -51,11 +44,4 @@ type EnvBinding struct {
 	CreatedAt time.Time `bson:"createdAt"`
 	// UpdatedAt 更新时间
 	UpdatedAt time.Time `bson:"updatedAt"`
-}
-
-// EnvBindingUpdate 定义了更新 EnvBinding 时允许修改的数据
-type EnvBindingUpdate struct {
-	// Services 更新绑定的下发服务列表
-	// ps: nil 表示不更新，非 nil 时全量替换，但必须包含 DefaultServiceID
-	Services *[]ServiceRef
 }

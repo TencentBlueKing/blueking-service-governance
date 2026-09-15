@@ -87,51 +87,14 @@ type Service struct {
 	DataType   DataType
 }
 
-// CreateServiceReq 创建 BSCP 服务
-type CreateServiceReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `json:"-" validate:"required"`
-
-	// Name 服务名称
-	Name string `json:"name" validate:"required"`
-
-	// ConfigType 服务类型
-	ConfigType ConfigType `json:"config_type" validate:"required"`
-
-	// Alias 服务别名
-	Alias string `json:"alias" validate:"required"`
-
-	// DataType 数据类型
-	DataType DataType `json:"data_type" validate:"required"`
-
-	// IsApprove 是否需要审批
-	IsApprove bool `json:"is_approve,omitempty"`
-
-	// ApproveType 审批类型，仅 IsApprove 为 true 时生效
-	ApproveType ApproveType `json:"approve_type,omitempty"`
-
-	// Approver 审批人列表（字符串，多个审批人以","分隔符拼接），仅 IsApprove 为 true 时生效
-	Approver string `json:"approver,omitempty"`
-
-	// Memo 服务描述
-	Memo string `json:"memo,omitempty"`
-}
-
-// NewCreateServiceReq 以最少必填参数创建 CreateServiceReq
-// 默认不需要审批
-func NewCreateServiceReq(
-	bizID, name, alias string,
-	configType ConfigType,
-	dataType DataType,
-) *CreateServiceReq {
-	return &CreateServiceReq{
-		BizID:      bizID,
-		Name:       name,
-		Alias:      alias,
-		DataType:   dataType,
-		ConfigType: configType,
-		IsApprove:  false,
-	}
+// App BSCP 应用（三层结构 Project → Environment → App 中的 App）
+type App struct {
+	ID         string
+	Name       string
+	Alias      string
+	Desc       string
+	ConfigType ConfigType
+	DataType   DataType
 }
 
 // Version BSCP 版本
@@ -301,40 +264,12 @@ type CredentialScope struct {
 	App string
 	// Scope 关联规则
 	Scope string
-}
-
-// CreateCredentialReq 创建客户端密钥请求
-type CreateCredentialReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `json:"-" validate:"required"`
-	// Name 密钥名称
-	Name string `json:"name" validate:"required"`
-	// Memo 密钥描述
-	Memo string `json:"memo,omitempty"`
-}
-
-// Validate 校验创建凭证请求
-func (r *CreateCredentialReq) Validate() error {
-	return Validate(r)
-}
-
-// UpdateCredentialReq 更新客户端密钥请求
-type UpdateCredentialReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `json:"-" validate:"required"`
-	// ID 密钥ID
-	ID int64 `json:"id" validate:"required"`
-	// Enable 是否启用
-	Enable *bool `json:"enable,omitempty"`
-	// Memo 密钥描述
-	Memo string `json:"memo,omitempty"`
-	// Name 密钥名称
-	Name string `json:"name,omitempty"`
-}
-
-// Validate 校验更新凭证请求
-func (r *UpdateCredentialReq) Validate() error {
-	return Validate(r)
+	// EnvID 环境 ID
+	EnvID int64
+	// EnvName 环境名称
+	EnvName string
+	// EnvType 环境类型
+	EnvType string
 }
 
 // CredentialScopeItem 新增关联规则项
@@ -343,6 +278,12 @@ type CredentialScopeItem struct {
 	App string `json:"app"`
 	// Scope 关联规则
 	Scope string `json:"scope"`
+	// EnvID 环境 ID
+	EnvID int64 `json:"env_id"`
+	// EnvName 环境名称
+	EnvName string `json:"env_name"`
+	// EnvType 环境类型
+	EnvType string `json:"env_type"`
 }
 
 // AlterScopeItem 更新关联规则项
@@ -353,25 +294,8 @@ type AlterScopeItem struct {
 	App string `json:"app"`
 	// Scope 关联规则
 	Scope string `json:"scope"`
-}
-
-// UpdateCredentialScopeReq 更新密钥关联服务规则请求
-type UpdateCredentialScopeReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `json:"-" validate:"required"`
-	// CredentialID 密钥ID，作为 URL path 参数传递
-	CredentialID string `json:"-" validate:"required"`
-	// AddScope 新增规则
-	AddScope []CredentialScopeItem `json:"addScope,omitempty"`
-	// AlterScope 更新规则
-	AlterScope []AlterScopeItem `json:"alterScope,omitempty"`
-	// DelID 删除规则ID列表
-	DelID []int64 `json:"delId,omitempty"`
-}
-
-// Validate 校验更新密钥关联规则请求
-func (r *UpdateCredentialScopeReq) Validate() error {
-	return Validate(r)
+	// EnvID 环境 ID
+	EnvID int64 `json:"env_id"`
 }
 
 // --- Hook 相关类型 ---
@@ -400,30 +324,6 @@ type Hook struct {
 	UpdateAt string
 }
 
-// ReleaseHookDetail 版本绑定的脚本详情
-type ReleaseHookDetail struct {
-	// HookID 脚本ID
-	HookID int64
-	// HookName 脚本名称
-	HookName string
-	// HookRevisionID 脚本版本ID
-	HookRevisionID int64
-	// HookRevisionName 脚本版本名称
-	HookRevisionName string
-	// Type 脚本类型
-	Type string
-	// Content 脚本内容
-	Content string
-}
-
-// ReleaseHook 版本绑定的前后置脚本
-type ReleaseHook struct {
-	// PreHook 前置脚本
-	PreHook *ReleaseHookDetail
-	// PostHook 后置脚本
-	PostHook *ReleaseHookDetail
-}
-
 // HookListItem 脚本列表项
 type HookListItem struct {
 	// Hook 脚本信息
@@ -444,92 +344,125 @@ type ListHooksResp struct {
 	Details []HookListItem
 }
 
+// --- Project / Environment 相关类型 ---
+
+// ProjectSpec BSCP 项目规格
+type ProjectSpec struct {
+	Name      string
+	Key       string
+	IsDefault bool
+	EnvCount  int64
+	AppCount  int64
+}
+
+// Project BSCP 项目
+type Project struct {
+	ID   int64
+	Spec ProjectSpec
+}
+
+// EnvironmentSpec BSCP 环境规格
+type EnvironmentSpec struct {
+	Name string
+	Type string
+	Memo string
+}
+
+// Environment BSCP 环境
+type Environment struct {
+	ID   int64
+	Spec EnvironmentSpec
+}
+
+// EnvironmentsResp 环境列表响应（按类型分组）
+type EnvironmentsResp struct {
+	ProdEnvironments    []Environment
+	StagingEnvironments []Environment
+	TestEnvironments    []Environment
+	DevEnvironments     []Environment
+}
+
+// AllEnvironments 返回所有环境（不区分类型）
+func (r *EnvironmentsResp) AllEnvironments() []Environment {
+	var all []Environment
+	all = append(all, r.ProdEnvironments...)
+	all = append(all, r.StagingEnvironments...)
+	all = append(all, r.TestEnvironments...)
+	all = append(all, r.DevEnvironments...)
+	return all
+}
+
+// --- 配置管理请求类型 ---
+
+// CreateEnvironmentReq 创建 BSCP 环境请求
+type CreateEnvironmentReq struct {
+	BizID     string `json:"-" validate:"required"`
+	ProjectID int64  `json:"-" validate:"required"`
+	Name      string `json:"name" validate:"required"`
+	Type      string `json:"type" validate:"required"`
+	Memo      string `json:"memo,omitempty"`
+}
+
+// CreateAppReq 创建 BSCP App 请求
+type CreateAppReq struct {
+	BizID       string      `json:"-" validate:"required"`
+	ProjectID   int64       `json:"-" validate:"required"`
+	EnvID       int64       `json:"-" validate:"required"`
+	Name        string      `json:"name" validate:"required"`
+	ConfigType  ConfigType  `json:"config_type" validate:"required"`
+	Alias       string      `json:"alias" validate:"required"`
+	DataType    DataType    `json:"data_type" validate:"required"`
+	IsApprove   bool        `json:"is_approve,omitempty"`
+	ApproveType ApproveType `json:"approve_type,omitempty"`
+	Approver    string      `json:"approver,omitempty"`
+	Memo        string      `json:"memo,omitempty"`
+}
+
+// CreateCredentialReq 创建客户端密钥请求
+type CreateCredentialReq struct {
+	BizID     string `json:"-" validate:"required"`
+	ProjectID int64  `json:"-" validate:"required"`
+	Name      string `json:"name" validate:"required"`
+	Memo      string `json:"memo,omitempty"`
+}
+
+// UpdateCredentialScopeReq 更新密钥关联服务规则请求
+type UpdateCredentialScopeReq struct {
+	BizID        string                `json:"-" validate:"required"`
+	ProjectID    int64                 `json:"-" validate:"required"`
+	CredentialID int64                 `json:"-" validate:"required"`
+	AddScope     []CredentialScopeItem `json:"addScope,omitempty"`
+	AlterScope   []AlterScopeItem      `json:"alterScope,omitempty"`
+	DelID        []int64               `json:"delId,omitempty"`
+}
+
 // CreateHookReq 创建脚本请求
 type CreateHookReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `json:"-" validate:"required"`
-	// Name 脚本名称
-	Name string `json:"name" validate:"required"`
-	// Type 脚本类型：shell、python、bat、powershell
-	Type string `json:"type" validate:"required"`
-	// Content 脚本内容
-	Content string `json:"content" validate:"required"`
-	// RevisionName 版本号
-	RevisionName string `json:"revision_name" validate:"required"`
-	// Tags 分类标签
-	Tags []string `json:"tags,omitempty"`
-	// Memo 脚本描述
-	Memo string `json:"memo,omitempty"`
-}
-
-// Validate 校验创建脚本请求
-func (r *CreateHookReq) Validate() error {
-	return Validate(r)
-}
-
-// DeleteHookReq 删除脚本请求
-type DeleteHookReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `validate:"required"`
-	// HookID 脚本ID
-	HookID int64 `validate:"required"`
-	// Force 是否强制删除
-	Force bool
-}
-
-// Validate 校验删除脚本请求
-func (r *DeleteHookReq) Validate() error {
-	return Validate(r)
+	BizID        string   `json:"-" validate:"required"`
+	ProjectID    int64    `json:"-" validate:"required"`
+	Name         string   `json:"name" validate:"required"`
+	Type         string   `json:"type" validate:"required"`
+	Content      string   `json:"content" validate:"required"`
+	RevisionName string   `json:"revision_name" validate:"required"`
+	Tags         []string `json:"tags,omitempty"`
+	Memo         string   `json:"memo,omitempty"`
 }
 
 // ListHooksReq 获取脚本列表请求
 type ListHooksReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `validate:"required"`
-	// Name 脚本名称过滤
-	Name string
-	// Tag 标签过滤
-	Tag string
-	// All 是否获取所有
-	All bool
-	// SearchKey 搜索关键字
-	SearchKey string
-	// Start 当前页码
-	Start int64
-	// Limit 每页条数
-	Limit int64
+	BizID     string `validate:"required"`
+	ProjectID int64  `validate:"required"`
+	Name      string
+	Tag       string
+	All       bool
 }
 
-// UpdateConfigHookReq 更新服务绑定的前后置脚本请求
+// UpdateConfigHookReq 更新 App 绑定的前后置脚本请求
 type UpdateConfigHookReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `json:"-" validate:"required"`
-	// AppID 服务ID，作为 URL path 参数传递
-	AppID int64 `json:"-" validate:"required"`
-	// PreHookID 前置脚本ID，0 表示不绑定
-	PreHookID int64 `json:"pre_hook_id"`
-	// PostHookID 后置脚本ID，0 表示不绑定
-	PostHookID int64 `json:"post_hook_id"`
-}
-
-// Validate 校验更新服务绑定脚本请求
-func (r *UpdateConfigHookReq) Validate() error {
-	return Validate(r)
-}
-
-// UpdateHookReq 更新脚本信息请求
-type UpdateHookReq struct {
-	// BizID 业务ID，作为 URL path 参数传递
-	BizID string `json:"-" validate:"required"`
-	// HookID 脚本ID，作为 URL path 参数传递
-	HookID int64 `json:"-" validate:"required"`
-	// Tags 脚本标签
-	Tags []string `json:"tags,omitempty"`
-	// Memo 脚本描述
-	Memo string `json:"memo,omitempty"`
-}
-
-// Validate 校验更新脚本请求
-func (r *UpdateHookReq) Validate() error {
-	return Validate(r)
+	BizID      string `json:"-" validate:"required"`
+	ProjectID  int64  `json:"-" validate:"required"`
+	EnvID      int64  `json:"-" validate:"required"`
+	AppID      int64  `json:"-" validate:"required"`
+	PreHookID  int64  `json:"pre_hook_id"`
+	PostHookID int64  `json:"post_hook_id"`
 }

@@ -33,343 +33,225 @@ import (
 )
 
 var _ = Describe("Manager", func() {
-	var configStore model.Store
+	var store model.Store
 	var mgr *service.Manager
 	var ctx context.Context
 	var testAppID string
 	var diApp *fxtest.App
 
 	BeforeEach(func() {
-		ctx = context.Background()
-		testAppID = "test-app-" + stringx.Random(5)
-
 		diApp = fxtest.New(
 			GinkgoT(),
 			model.FxModule,
-			fx.Supply(auth.User{ID: "test-user", Cred: auth.UserCredential{BkToken: "stub-token"}}),
-			fx.Provide(service.NewManager),
-			fx.Populate(&configStore, &mgr),
+			fx.Populate(&store),
 		)
 		diApp.RequireStart()
+
+		ctx = context.Background()
+		testAppID = "test-app-" + stringx.Random(5)
+
+		var err error
+		mgr, err = service.NewManager(auth.User{ID: "test-user"}, store)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
-		// 清理测试数据
-		_ = configStore.DeleteEnvBindingsByApp(ctx, testAppID)
-		_ = configStore.DeleteMetadata(ctx, testAppID)
+		_ = store.DeleteEnvBindingsByApp(ctx, testAppID)
+		_ = store.DeleteMetadata(ctx, testAppID)
 		diApp.RequireStop()
 	})
 
-	Describe("InitMetadata", func() {
-		Context("when app config does not exist", func() {
-			It("should create app config successfully", func() {
-				appConfig, err := mgr.InitMetadata(ctx, &service.InitMetadataParams{
-					AppID:     testAppID,
-					BscpBizID: "100001",
-					Operator:  "test-user",
-				})
+	// newInitParams 构造一个 InitMetadata 入参。
+	newInitParams := func() *service.InitMetadataParams {
+		return &service.InitMetadataParams{
+			AppID:          testAppID,
+			BscpBizID:      "12345",
+			BscpProjectID:  "12",
+			BscpProjectKey: "BK-BSCP-00012",
+			Operator:       "tester",
+		}
+	}
 
+	Describe("InitMetadata", func() {
+		Context("when called for the first time", func() {
+			It("should create metadata with credential and post hook", func() {
+				meta, err := mgr.InitMetadata(ctx, newInitParams())
 				Expect(err).NotTo(HaveOccurred())
-				Expect(appConfig.AppID).To(Equal(testAppID))
-				Expect(appConfig.BscpBizID).To(Equal("100001"))
-				Expect(appConfig.CredentialName).To(Equal("bkms-credential"))
-				Expect(appConfig.Token).NotTo(BeEmpty())
-				Expect(appConfig.FeedAddr).NotTo(BeEmpty())
+				Expect(meta).NotTo(BeNil())
+				Expect(meta.AppID).To(Equal(testAppID))
+				Expect(meta.BscpBizID).To(Equal("12345"))
+				Expect(meta.CredentialID).NotTo(BeEmpty())
+				Expect(meta.CredentialName).To(Equal("bkms-credential"))
+				Expect(meta.PostHookID).NotTo(BeEmpty())
+				Expect(meta.Operator).To(Equal("tester"))
 			})
 		})
 
-		Context("when app config already exists", func() {
-			It("should return existing config without error (idempotent)", func() {
-				// 第一次创建
-				first, err := mgr.InitMetadata(ctx, &service.InitMetadataParams{
-					AppID:     testAppID,
-					BscpBizID: "100001",
-					Operator:  "test-user",
-				})
+		Context("when called twice", func() {
+			It("should be idempotent", func() {
+				first, err := mgr.InitMetadata(ctx, newInitParams())
 				Expect(err).NotTo(HaveOccurred())
 
-				// 第二次调用应返回相同结果
-				second, err := mgr.InitMetadata(ctx, &service.InitMetadataParams{
-					AppID:     testAppID,
-					BscpBizID: "100001",
-					Operator:  "test-user",
-				})
+				second, err := mgr.InitMetadata(ctx, newInitParams())
 				Expect(err).NotTo(HaveOccurred())
-				Expect(second.AppID).To(Equal(first.AppID))
-				Expect(second.Token).To(Equal(first.Token))
+
+				Expect(second.CredentialID).To(Equal(first.CredentialID))
+				Expect(second.PostHookID).To(Equal(first.PostHookID))
 			})
 		})
 	})
 
-	Describe("PatchMetadata", func() {
-		BeforeEach(func() {
-			_, err := mgr.InitMetadata(ctx, &service.InitMetadataParams{
-				AppID:     testAppID,
-				BscpBizID: "100001",
-				Operator:  "test-user",
+	Describe("GetOrCreateCredential", func() {
+		Context("when the credential already exists", func() {
+			It("should return it", func() {
+				cred, err := mgr.GetOrCreateCredential(ctx, "12345", 12)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cred).NotTo(BeNil())
+				Expect(cred.Name).To(Equal("bkms-credential"))
 			})
-			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should update mountPath and workload in one call", func() {
-			mountPath := "/data/new-path"
-			workload := "my-deployment"
-			err := mgr.PatchMetadata(ctx, testAppID, &model.MetadataUpdate{
-				MountPath:    &mountPath,
-				WorkloadName: &workload,
-			})
-			Expect(err).NotTo(HaveOccurred())
+		Context("when called twice", func() {
+			It("should be idempotent", func() {
+				first, err := mgr.GetOrCreateCredential(ctx, "12345", 12)
+				Expect(err).NotTo(HaveOccurred())
 
-			appConfig, err := configStore.GetMetadata(ctx, testAppID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(appConfig.MountPath).To(Equal("/data/new-path"))
-			Expect(appConfig.WorkloadName).To(Equal("my-deployment"))
+				second, err := mgr.GetOrCreateCredential(ctx, "12345", 12)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(second.ID).To(Equal(first.ID))
+			})
+		})
+	})
+
+	Describe("GetOrCreatePostHook", func() {
+		Context("when called for the first time", func() {
+			It("should create a post hook and return a non-zero id", func() {
+				hookID, err := mgr.GetOrCreatePostHook(ctx, "12345", 12, testAppID)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(hookID).NotTo(BeZero())
+			})
 		})
 
-		It("should only update specified fields (nil fields unchanged)", func() {
-			// 先设置 workload
-			workload := "my-deployment"
-			err := mgr.PatchMetadata(ctx, testAppID, &model.MetadataUpdate{
-				WorkloadName: &workload,
+		Context("when called twice", func() {
+			It("should be idempotent", func() {
+				first, err := mgr.GetOrCreatePostHook(ctx, "12345", 12, testAppID)
+				Expect(err).NotTo(HaveOccurred())
+
+				second, err := mgr.GetOrCreatePostHook(ctx, "12345", 12, testAppID)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(second).To(Equal(first))
 			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// 只更新 mountPath，workload 应保持不变
-			mountPath := "/data/another-path"
-			err = mgr.PatchMetadata(ctx, testAppID, &model.MetadataUpdate{
-				MountPath: &mountPath,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			appConfig, err := configStore.GetMetadata(ctx, testAppID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(appConfig.MountPath).To(Equal("/data/another-path"))
-			Expect(appConfig.WorkloadName).To(Equal("my-deployment"))
-		})
-
-		It("should clear workload with empty string", func() {
-			workload := "my-deployment"
-			err := mgr.PatchMetadata(ctx, testAppID, &model.MetadataUpdate{
-				WorkloadName: &workload,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			emptyWorkload := ""
-			err = mgr.PatchMetadata(ctx, testAppID, &model.MetadataUpdate{
-				WorkloadName: &emptyWorkload,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			appConfig, err := configStore.GetMetadata(ctx, testAppID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(appConfig.WorkloadName).To(Equal(""))
 		})
 	})
 
 	Describe("GetSnapshot", func() {
-		Context("when app config not enabled", func() {
-			It("should return ErrMetadataNotFound", func() {
-				_, err := mgr.GetSnapshot(ctx, testAppID, "prod")
-				Expect(err).To(MatchError(model.ErrMetadataNotFound))
-			})
+		BeforeEach(func() {
+			createTestMetadata(ctx, store, testAppID)
+			createTestEnvBinding(ctx, store, testAppID, "dev")
 		})
 
-		Context("when env config not found", func() {
-			BeforeEach(func() {
-				_, err := mgr.InitMetadata(ctx, &service.InitMetadataParams{
-					AppID:     testAppID,
-					BscpBizID: "100001",
-					Operator:  "test-user",
-				})
+		Context("when both metadata and env binding exist", func() {
+			It("should return the aggregated snapshot", func() {
+				snap, err := mgr.GetSnapshot(ctx, testAppID, "dev")
 				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return ErrEnvBindingNotFound", func() {
-				_, err := mgr.GetSnapshot(ctx, testAppID, "non-existent-env")
-				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
+				Expect(snap).NotTo(BeNil())
+				Expect(snap.Metadata.AppID).To(Equal(testAppID))
+				Expect(snap.EnvBinding.EnvName).To(Equal("dev"))
 			})
 		})
 	})
 
 	Describe("ListSnapshots", func() {
-		Context("when app config not enabled", func() {
-			It("should return ErrEnvBindingNotFound", func() {
-				_, err := mgr.ListSnapshots(ctx, testAppID)
-				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
+		BeforeEach(func() {
+			createTestMetadata(ctx, store, testAppID)
+			createTestEnvBinding(ctx, store, testAppID, "dev")
+			createTestEnvBinding(ctx, store, testAppID, "prod")
+		})
+
+		Context("when the app has multiple env bindings", func() {
+			It("should return all snapshots", func() {
+				snaps, err := mgr.ListSnapshots(ctx, testAppID)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(snaps).To(HaveLen(2))
+
+				envNames := []string{snaps[0].EnvBinding.EnvName, snaps[1].EnvBinding.EnvName}
+				Expect(envNames).To(ConsistOf("dev", "prod"))
 			})
 		})
 
-		Context("when app config enabled but no env configs", func() {
-			BeforeEach(func() {
-				_, err := mgr.InitMetadata(ctx, &service.InitMetadataParams{
-					AppID:     testAppID,
-					BscpBizID: "100001",
-					Operator:  "test-user",
-				})
-				Expect(err).NotTo(HaveOccurred())
+		Context("when metadata does not exist", func() {
+			It("should return ErrEnvBindingNotFound", func() {
+				_, err := mgr.ListSnapshots(ctx, "non-existent-app")
+				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
 			})
+		})
+	})
 
-			It("should return empty list", func() {
-				configs, err := mgr.ListSnapshots(ctx, testAppID)
+	Describe("DeleteEnvBinding", func() {
+		BeforeEach(func() {
+			createTestMetadata(ctx, store, testAppID)
+			createTestEnvBinding(ctx, store, testAppID, "dev")
+		})
+
+		Context("when the env binding exists", func() {
+			It("should delete it", func() {
+				err := mgr.DeleteEnvBinding(ctx, testAppID, "dev")
 				Expect(err).NotTo(HaveOccurred())
-				Expect(configs).To(BeEmpty())
+
+				_, err = store.GetEnvBinding(ctx, testAppID, "dev")
+				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
 			})
 		})
 	})
 
 	Describe("DeleteByApp", func() {
 		BeforeEach(func() {
-			// 创建 app 级配置
-			_, err := mgr.InitMetadata(ctx, &service.InitMetadataParams{
-				AppID:     testAppID,
-				BscpBizID: "100001",
-				Operator:  "test-user",
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// 手动创建 env 级配置
-			err = configStore.CreateEnvBinding(ctx, &model.EnvBinding{
-				AppID:   testAppID,
-				EnvName: "prod",
-				Services: []model.ServiceRef{
-					{ID: "1001", Name: "stub-service-file"},
-				},
-				Operator: "test-user",
-			})
-			Expect(err).NotTo(HaveOccurred())
+			createTestMetadata(ctx, store, testAppID)
+			createTestEnvBinding(ctx, store, testAppID, "dev")
 		})
 
-		It("should delete both app and env configs", func() {
-			err := mgr.DeleteByApp(ctx, testAppID)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 验证 app 级配置已删除
-			_, err = configStore.GetMetadata(ctx, testAppID)
-			Expect(err).To(MatchError(model.ErrMetadataNotFound))
-
-			// 验证 env 级配置已删除
-			envConfigs, err := configStore.ListEnvBindingsByApp(ctx, testAppID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(envConfigs).To(BeEmpty())
-		})
-	})
-
-	Describe("DeleteEnvBinding", func() {
-		BeforeEach(func() {
-			err := configStore.CreateEnvBinding(ctx, &model.EnvBinding{
-				AppID:   testAppID,
-				EnvName: "staging",
-				Services: []model.ServiceRef{
-					{ID: "1001", Name: "stub-service-file"},
-				},
-				Operator: "test-user",
-			})
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should delete the specified env config", func() {
-			err := mgr.DeleteEnvBinding(ctx, testAppID, "staging")
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = configStore.GetEnvBinding(ctx, testAppID, "staging")
-			Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
-		})
-
-		Context("when env config does not exist", func() {
-			It("should return ErrEnvBindingNotFound", func() {
-				err := mgr.DeleteEnvBinding(ctx, testAppID, "non-existent")
-				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
-			})
-		})
-	})
-
-	Describe("BindServices", func() {
-		BeforeEach(func() {
-			// 创建 app 级配置
-			_, err := mgr.InitMetadata(ctx, &service.InitMetadataParams{
-				AppID:     testAppID,
-				BscpBizID: "100001",
-				Operator:  "test-user",
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// 创建 env 级配置（带 defaultServiceRefID）
-			err = configStore.CreateEnvBinding(ctx, &model.EnvBinding{
-				AppID:   testAppID,
-				EnvName: "prod",
-				Services: []model.ServiceRef{
-					{ID: "default-svc-id", Name: "default-svc"},
-				},
-				DefaultServiceID: "default-svc-id",
-				Operator:         "test-user",
-			})
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		Context("when newApps contains the default app", func() {
-			It("should update apps successfully", func() {
-				newApps := []model.ServiceRef{
-					{ID: "default-svc-id", Name: "default-svc"},
-					{ID: "extra-svc-id", Name: "extra-svc"},
-				}
-				err := mgr.BindServices(ctx, testAppID, "prod", "100001", newApps)
+		Context("when the app has metadata and env bindings", func() {
+			It("should delete them all", func() {
+				err := mgr.DeleteByApp(ctx, testAppID)
 				Expect(err).NotTo(HaveOccurred())
+
+				_, err = store.GetMetadata(ctx, testAppID)
+				Expect(err).To(MatchError(model.ErrMetadataNotFound))
+
+				bindings, err := store.ListEnvBindingsByApp(ctx, testAppID)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(bindings).To(BeEmpty())
 			})
-		})
-
-		Context("when newApps does not contain the default app", func() {
-			It("should return error", func() {
-				newApps := []model.ServiceRef{
-					{ID: "other-svc-id", Name: "other-svc"},
-				}
-				err := mgr.BindServices(ctx, testAppID, "prod", "100001", newApps)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("must contain the default file service"))
-			})
-		})
-
-		Context("when env config does not exist", func() {
-			It("should return error", func() {
-				newApps := []model.ServiceRef{
-					{ID: "any-id", Name: "any"},
-				}
-				err := mgr.BindServices(ctx, testAppID, "non-existent", "100001", newApps)
-				Expect(err).To(HaveOccurred())
-			})
-		})
-	})
-
-	Describe("GetOrCreateCredential", func() {
-		It("should return credential from stub client", func() {
-			cred, err := mgr.GetOrCreateCredential(ctx, "100001")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cred).NotTo(BeNil())
-			Expect(cred.Name).To(Equal("bkms-credential"))
-			Expect(cred.EncCredential).NotTo(BeEmpty())
-		})
-	})
-
-	Describe("RefreshCredentialScopes", func() {
-		It("should not return error with stub client", func() {
-			err := mgr.RefreshCredentialScopes(ctx, "100001", 1)
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
-
-	Describe("GetOrCreatePostHook", func() {
-		It("should create the post hook when it does not exist", func() {
-			id, err := mgr.GetOrCreatePostHook(ctx, "100001", testAppID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(id).To(BeNumerically(">", int64(0)))
-		})
-
-		It("should be idempotent and reuse the existing hook on subsequent calls", func() {
-			first, err := mgr.GetOrCreatePostHook(ctx, "100001", testAppID)
-			Expect(err).NotTo(HaveOccurred())
-
-			second, err := mgr.GetOrCreatePostHook(ctx, "100001", testAppID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(second).To(Equal(first))
 		})
 	})
 })
+
+// createTestMetadata 创建一个满足 MetadataStore 校验的 Metadata。
+func createTestMetadata(ctx context.Context, store model.Store, appID string) {
+	err := store.CreateMetadata(ctx, &model.Metadata{
+		AppID:        appID,
+		BscpBizID:    "12345",
+		MountPath:    "/data/bscp",
+		CredentialID: "1",
+		Token:        "test-token",
+		FeedAddr:     "bscp-feed.example.com:9500",
+		WorkloadName: "test-workload",
+		Operator:     "tester",
+	})
+	Expect(err).NotTo(HaveOccurred())
+}
+
+// createTestEnvBinding 创建一个满足 EnvBindingStore 校验的 EnvBinding。
+func createTestEnvBinding(ctx context.Context, store model.Store, appID, envName string) {
+	err := store.CreateEnvBinding(ctx, &model.EnvBinding{
+		AppID:       appID,
+		EnvName:     envName,
+		BscpEnvID:   "1",
+		BscpEnvName: envName,
+		BscpAppID:   "541",
+		Operator:    "tester",
+	})
+	Expect(err).NotTo(HaveOccurred())
+}

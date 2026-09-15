@@ -27,7 +27,6 @@ import (
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
-	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
@@ -149,24 +148,14 @@ func (input *PatchMetadataInput) ToUpdateModel() (*model.MetadataUpdate, error) 
 	return update, nil
 }
 
-// PatchEnvBindingInput 更新 EnvBinding的请求体。
-type PatchEnvBindingInput struct {
-	// Services 绑定的下发服务列表（全量替换）
-	Services []ServiceRefInput `json:"apps"`
-}
-
-// ServiceRefInput 下发服务引用输入项。
-type ServiceRefInput struct {
-	ID   string `json:"id" binding:"required"`
-	Name string `json:"name" binding:"required"`
-}
-
 // -------------------------------- Output --------------------------------
 
 // MetadataOutput Metadata 输出对象。
 type MetadataOutput struct {
 	AppID          string    `json:"appID"`
 	BscpBizID      string    `json:"bscpBizID"`
+	ProjectID      string    `json:"projectID"`
+	ProjectKey     string    `json:"projectKey"`
 	MountPath      string    `json:"mountPath"`
 	WorkloadName   string    `json:"workloadName"`
 	WorkloadKind   string    `json:"workloadKind"`
@@ -186,25 +175,20 @@ type MetadataResponse struct {
 
 // EnvBindingOutput EnvBinding输出对象。
 type EnvBindingOutput struct {
-	AppID            string              `json:"appID"`
-	EnvName          string              `json:"envName"`
-	BscpBizID        string              `json:"bscpBizID"`
-	MountPath        string              `json:"mountPath"`
-	WorkloadName     string              `json:"workloadName"`
-	WorkloadKind     string              `json:"workloadKind"`
-	Services         []*ServiceRefOutput `json:"apps"`
-	FeedAddr         string              `json:"feedAddr"`
-	Token            string              `json:"token"`
-	DefaultFileAppID string              `json:"defaultFileAppID"`
-	Operator         string              `json:"operator"`
-	CreatedAt        time.Time           `json:"createdAt"`
-	UpdatedAt        time.Time           `json:"updatedAt"`
-}
-
-// ServiceRefOutput 下发服务引用输出项。
-type ServiceRefOutput struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	AppID        string    `json:"appID"`
+	EnvName      string    `json:"envName"`
+	BscpBizID    string    `json:"bscpBizID"`
+	MountPath    string    `json:"mountPath"`
+	WorkloadName string    `json:"workloadName"`
+	WorkloadKind string    `json:"workloadKind"`
+	FeedAddr     string    `json:"feedAddr"`
+	Token        string    `json:"token"`
+	BscpEnvID    string    `json:"bscpEnvID"`
+	BscpEnvName  string    `json:"bscpEnvName"`
+	BscpAppID    string    `json:"bscpAppID"`
+	Operator     string    `json:"operator"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // EnvBindingResponse 包装 EnvBindingOutput 的响应结构。
@@ -215,6 +199,17 @@ type EnvBindingResponse struct {
 // EnvBindingListResponse 包装 EnvBindingOutput 列表的响应结构。
 type EnvBindingListResponse struct {
 	Data []*EnvBindingOutput `json:"data"`
+}
+
+// FeatureFlagOutput FeatureFlag 输出对象。
+type FeatureFlagOutput struct {
+	// Enabled 是否启用新版 BSCP 配置管理
+	Enabled bool `json:"enabled"`
+}
+
+// FeatureFlagResponse 包装 FeatureFlagOutput 的响应结构。
+type FeatureFlagResponse struct {
+	Data *FeatureFlagOutput `json:"data"`
 }
 
 // -----------------------------------------------------------------------------
@@ -236,6 +231,8 @@ func (o *MetadataOutput) FromModel(m *model.Metadata) *MetadataOutput {
 	}
 	o.AppID = m.AppID
 	o.BscpBizID = m.BscpBizID
+	o.ProjectID = m.ProjectID
+	o.ProjectKey = m.ProjectKey
 	o.MountPath = m.MountPath
 	o.WorkloadName = m.WorkloadName
 	o.WorkloadKind = m.WorkloadKind
@@ -265,15 +262,11 @@ func (o *EnvBindingOutput) FromModel(d *model.Snapshot) *EnvBindingOutput {
 	o.WorkloadKind = d.Metadata.WorkloadKind
 	o.FeedAddr = d.Metadata.FeedAddr
 	o.Token = d.Metadata.Token
-	o.DefaultFileAppID = d.EnvBinding.DefaultServiceID
+	o.BscpEnvID = d.EnvBinding.BscpEnvID
+	o.BscpEnvName = d.EnvBinding.BscpEnvName
+	o.BscpAppID = d.EnvBinding.BscpAppID
 	o.Operator = d.EnvBinding.Operator
 	o.CreatedAt = d.EnvBinding.CreatedAt
 	o.UpdatedAt = d.EnvBinding.UpdatedAt
-	o.Services = lo.Map(d.EnvBinding.Services, func(svc model.ServiceRef, _ int) *ServiceRefOutput {
-		return &ServiceRefOutput{
-			ID:   svc.ID,
-			Name: svc.Name,
-		}
-	})
 	return o
 }

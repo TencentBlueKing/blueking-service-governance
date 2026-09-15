@@ -53,9 +53,6 @@ type EnvBindingStore interface {
 	// DeleteByApp 删除应用下所有绑定（应用删除时级联）
 	DeleteByApp(ctx context.Context, appID string) error
 
-	// Update 更新绑定（可更新 services 数组）
-	Update(ctx context.Context, appID, envName string, updateData *EnvBindingUpdate) error
-
 	// Get 获取指定 app+env 的绑定
 	Get(ctx context.Context, appID, envName string) (*EnvBinding, error)
 	// ListByApp 获取应用下所有环境的绑定列表
@@ -79,9 +76,6 @@ func NewEnvBindingStoreMongo(client *mongo.Client, dbName string) (EnvBindingSto
 func (s *EnvBindingStoreMongo) Create(ctx context.Context, binding *EnvBinding) error {
 	if err := validator.New(validator.WithRequiredStructEnabled()).Struct(binding); err != nil {
 		return errors.Wrap(err, "env binding validation failed")
-	}
-	if binding.Services == nil {
-		binding.Services = make([]ServiceRef, 0)
 	}
 	if binding.CreatedAt.IsZero() {
 		binding.CreatedAt = time.Now()
@@ -127,39 +121,6 @@ func (s *EnvBindingStoreMongo) ListByApp(ctx context.Context, appID string) ([]*
 	}
 
 	return bindings, nil
-}
-
-// Update 更新绑定（支持 services 全量替换）
-func (s *EnvBindingStoreMongo) Update(
-	ctx context.Context,
-	appID, envName string,
-	updateData *EnvBindingUpdate,
-) error {
-	if updateData == nil {
-		return nil
-	}
-	needUpdate := false
-	updateSet := bson.M{}
-
-	if updateData.Services != nil {
-		updateSet["bscpApps"] = *updateData.Services
-		needUpdate = true
-	}
-	if !needUpdate {
-		return nil
-	}
-	updateSet["updatedAt"] = time.Now()
-
-	filter := bson.M{"appID": appID, "envName": envName}
-	result, err := s.collection.UpdateOne(ctx, filter, bson.M{"$set": updateSet})
-	if err != nil {
-		return errors.Wrap(err, "update env binding")
-	}
-	if result.MatchedCount == 0 {
-		return ErrEnvBindingNotFound
-	}
-
-	return nil
 }
 
 // Delete 删除指定 app+env 的绑定

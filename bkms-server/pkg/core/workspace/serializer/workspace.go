@@ -72,6 +72,10 @@ type BkSystemsOutputObj struct {
 	BkMonitorProjectID string `json:"bkMonitorProjectID"`
 	// 蓝盾制品库项目 ID
 	BkRepoProjectID string `json:"bkRepoProjectID"`
+	// BSCP 项目 ID
+	BkBSCPProjectID string `json:"bkBSCPProjectID"`
+	// BSCP 项目 Key（如 BK-BSCP-00012）
+	BkBSCPProjectKey string `json:"bkBSCPProjectKey"`
 	// bkcc 业务 ID
 	BkCCBizID string `json:"bkCCBizID"`
 	// 二级业务 ID
@@ -94,6 +98,8 @@ func (o *BkSystemsOutputObj) FromModel(bk workspace.BkSystems) *BkSystemsOutputO
 		BkLogProjectID:            bk.BkLogProjectID,
 		BkMonitorProjectID:        bk.BkMonitorProjectID,
 		BkRepoProjectID:           bk.BkRepoProjectID,
+		BkBSCPProjectID:           bk.BkBSCPProjectID,
+		BkBSCPProjectKey:          bk.BkBSCPProjectKey,
 		BkCCBizID:                 bk.BkCCBizID,
 		Level2BizID:               bk.Level2BizID,
 		ObsProductID:              bk.ObsProductID,

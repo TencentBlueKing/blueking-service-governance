@@ -22,6 +22,7 @@ package service
 import (
 	"errors"
 
+	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 )
 
@@ -45,7 +46,12 @@ type InitMetadataParams struct {
 	WorkloadKind string
 	// 从 workspace 获取的 bizID
 	BscpBizID string
-	Operator  string
+	// 从 workspace 获取的 BSCP 项目 ID
+	BscpProjectID string
+	// 从 workspace 获取的 BSCP 项目 Key（如 BK-BSCP-12345）
+	BscpProjectKey string
+	// 操作人
+	Operator string
 }
 
 // CreateEnvBindingParams 创建 EnvBinding的参数
@@ -53,9 +59,27 @@ type CreateEnvBindingParams struct {
 	AppID   string
 	AppName string
 	EnvName string
+	// EnvType bkms 环境类型（development/test/staging/production），用于映射到 BSCP 环境类型
+	EnvType string
 	// 从 workspace 获取的 bizID
 	BscpBizID string
 	// 用于 IAM 权限刷新
 	Workspace *workspace.Workspace
 	Operator  string
+}
+
+// ToBscpEnvType 将 bkms 环境类型转换为 BSCP 环境类型
+func ToBscpEnvType(bkmsEnvType string) string {
+	switch bkmsEnvType {
+	case string(bkmsenv.TypeProduction):
+		return "prod"
+	case string(bkmsenv.TypeStaging):
+		return "staging"
+	case string(bkmsenv.TypeTest):
+		return "test"
+	case string(bkmsenv.TypeDevelopment):
+		return "dev"
+	default:
+		return ""
+	}
 }

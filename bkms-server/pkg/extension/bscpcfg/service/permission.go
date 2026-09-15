@@ -37,7 +37,7 @@ import (
 func addBSCPPermissions(
 	ctx context.Context,
 	ws *workspace.Workspace,
-	fileSvc *bscpapi.Service,
+	fileSvc *bscpapi.App,
 ) error {
 	client, err := bkcc.New(auth.MustGetUser(ctx))
 	if err != nil {

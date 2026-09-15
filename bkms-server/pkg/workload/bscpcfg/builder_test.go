@@ -29,11 +29,15 @@ var _ = Describe("Build", func() {
 	Describe("when given valid params", func() {
 		It("should generate all K8s injection objects with correct values", func() {
 			params := bscpcfg.Params{
-				BscpBizID: "100",
-				AppNames:  "bkms-order-svc-dev,bkms-user-svc-dev",
-				MountPath: "/custom/path", // 主容器 bscp-share 的挂载路径
-				FeedAddr:  "bscp-feed.example.com",
-				Token:     "test-token-abc123",
+				BscpBizID:    "100",
+				AppNames:     "order-svc-app-id",
+				MountPath:    "/custom/path",
+				FeedAddr:     "bscp-feed.example.com",
+				Token:        "test-token-abc123",
+				ProjectKey:   "BK-BSCP-12345",
+				EnvName:      "dev",
+				InitImage:    "bscp-init:test",
+				SidecarImage: "bscp-sidecar:test",
 			}
 
 			result := bscpcfg.Build(params)
@@ -42,7 +46,7 @@ var _ = Describe("Build", func() {
 			Expect(result.InitContainers).To(HaveLen(1))
 			initContainer := result.InitContainers[0]
 			Expect(initContainer.Name).To(Equal(bscpcfg.InitContainerName))
-			Expect(initContainer.Image).To(Equal(bscpcfg.InitImage))
+			Expect(initContainer.Image).To(Equal("bscp-init:test"))
 			Expect(initContainer.Args).To(Equal([]string{"--file-cache-enabled=false"}))
 			Expect(initContainer.VolumeMounts).To(HaveLen(1))
 			Expect(initContainer.VolumeMounts[0].Name).To(Equal(bscpcfg.VolumeName))
@@ -53,18 +57,20 @@ var _ = Describe("Build", func() {
 			for _, env := range initContainer.Env {
 				envMap[env.Name] = env.Value
 			}
-			Expect(envMap).To(HaveLen(5))
+			Expect(envMap).To(HaveLen(7))
 			Expect(envMap["biz"]).To(Equal("100"))
-			Expect(envMap["app"]).To(Equal("bkms-order-svc-dev,bkms-user-svc-dev"))
+			Expect(envMap["app"]).To(Equal("order-svc-app-id"))
 			Expect(envMap["feed_addrs"]).To(Equal("bscp-feed.example.com"))
 			Expect(envMap["token"]).To(Equal("test-token-abc123"))
 			Expect(envMap["temp_dir"]).To(Equal(bscpcfg.BscpDownloadPath))
+			Expect(envMap["project_key"]).To(Equal("BK-BSCP-12345"))
+			Expect(envMap["env_name"]).To(Equal("dev"))
 
 			// Containers (sidecar)
 			Expect(result.Containers).To(HaveLen(1))
 			sidecar := result.Containers[0]
 			Expect(sidecar.Name).To(Equal(bscpcfg.SidecarContainerName))
-			Expect(sidecar.Image).To(Equal(bscpcfg.SidecarImage))
+			Expect(sidecar.Image).To(Equal("bscp-sidecar:test"))
 			Expect(sidecar.Args).To(Equal([]string{"--file-cache-enabled=false"}))
 			Expect(sidecar.VolumeMounts).To(HaveLen(2))
 			// [0] bscp-temp（与 init 共享的临时目录）

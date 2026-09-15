@@ -40,14 +40,18 @@ type Handler interface {
 	CreateEnvBinding(c *gin.Context)
 	// DeleteEnvBinding 删除环境绑定
 	DeleteEnvBinding(c *gin.Context)
-	// PatchEnvBinding 更新环境绑定
-	PatchEnvBinding(c *gin.Context)
 	// GetEnvBinding 获取指定环境的绑定详情
 	GetEnvBinding(c *gin.Context)
+
+	// GetFeatureFlag 查询应用的 bscpcfg 能力开关
+	GetFeatureFlag(c *gin.Context)
 }
 
 // Register 注册应用配置管理的 Gin v2 路由。
 func Register(rg *gin.RouterGroup, h Handler) {
+	// FeatureFlag 查询
+	rg.GET("/apps/:appID/bscpcfg/feature-flag", h.GetFeatureFlag)
+
 	// Metadata 操作
 	rg.POST("/apps/:appID/bscpcfg/metadata", h.InitMetadata)
 	rg.PATCH("/apps/:appID/bscpcfg/metadata", h.PatchMetadata)
@@ -58,6 +62,5 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.GET("/apps/:appID/bscpcfg/envs", h.ListEnvBindings)
 	rg.POST("/apps/:appID/bscpcfg/envs/:envName/binding", h.CreateEnvBinding)
 	rg.DELETE("/apps/:appID/bscpcfg/envs/:envName/binding", h.DeleteEnvBinding)
-	rg.PATCH("/apps/:appID/bscpcfg/envs/:envName/binding", h.PatchEnvBinding)
 	rg.GET("/apps/:appID/bscpcfg/envs/:envName/binding", h.GetEnvBinding)
 }
