@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	handler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/appcfgfile"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewEditCmd returns a Command instance for 'app app-cfg-file edit' sub command.
@@ -77,6 +78,10 @@ When an application has multiple config files in the same environment, use --nam
 			)
 			if err != nil {
 				return errors.Wrap(err, "edit app config file")
+			}
+
+			if result.Created {
+				console.Tips("Created overlay config for environment %s", envName)
 			}
 
 			if viewCompiledContent {

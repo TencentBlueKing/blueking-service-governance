@@ -102,15 +102,12 @@ var _ = Describe("View", func() {
 	Context("when environment-specific config is enabled", func() {
 		It("uses the single env file returned by ListAppConfigFiles", func() {
 			overlayContent := "patches:\n- replicas: 5\n"
-			files := []client.AppConfigFile{{
-				ID:         "prod-file",
-				Name:       "default",
-				EnvName:    "prod",
-				Type:       "overlay",
-				FileFormat: "yaml",
-			}}
+			files := []client.AppConfigFile{
+				{ID: "default-file", Name: "default", EnvName: "", Type: "normal", FileFormat: "yaml"},
+				{ID: "prod-file", Name: "prod", EnvName: "prod", Type: "overlay", FileFormat: "yaml"},
+			}
 			cli.EXPECT().
-				ListAppConfigFiles(mock.Anything, appID, "prod").
+				ListAppConfigFiles(mock.Anything, appID, "").
 				Return(files, nil)
 			cli.EXPECT().
 				GetAppConfigFileDetails(mock.Anything, appID, "prod-file").
@@ -128,6 +125,7 @@ var _ = Describe("View", func() {
 			Expect(result.EnvName).To(Equal("prod"))
 			Expect(result.Content).To(BeNil())
 			Expect(result.OverlayContent).To(Equal(&overlayContent))
+			Expect(result.IsFallback).To(BeFalse())
 
 			viewOutput, err := result.Output()
 			Expect(err).NotTo(HaveOccurred())
@@ -142,17 +140,34 @@ var _ = Describe("View", func() {
 			Expect(jsonOutput).NotTo(ContainSubstring(`"content"`))
 		})
 
-		It("returns an error when ListAppConfigFiles returns no env file", func() {
+		It("falls back to the default file when the environment has no instance", func() {
+			content := "server:\n  port: 8080\n"
+			files := []client.AppConfigFile{{
+				ID:         "default-file",
+				Name:       "default",
+				EnvName:    "",
+				Type:       "normal",
+				FileFormat: "yaml",
+			}}
 			cli.EXPECT().
-				ListAppConfigFiles(mock.Anything, appID, "prod").
-				Return(nil, nil)
+				ListAppConfigFiles(mock.Anything, appID, "").
+				Return(files, nil)
+			cli.EXPECT().
+				GetAppConfigFileDetails(mock.Anything, appID, "default-file").
+				Return(&client.AppConfigFileDetails{
+					Content:        &content,
+					CurrentVersion: 3,
+					Updater:        "alice",
+					UpdatedAt:      "2026-06-29T01:02:03Z",
+				}, nil)
 
 			result, err := View(ctx, cli, appID, "prod", "")
 
-			Expect(result).To(BeNil())
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("no app config file found"))
-			Expect(err.Error()).To(ContainSubstring("prod"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.File.ID).To(Equal("default-file"))
+			Expect(result.Content).To(Equal(&content))
+			Expect(result.IsFallback).To(BeTrue())
+			Expect(result.EnvName).To(Equal(defaultEnvLabel))
 		})
 	})
 })

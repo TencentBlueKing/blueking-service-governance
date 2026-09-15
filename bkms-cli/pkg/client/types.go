@@ -95,6 +95,8 @@ type Client interface {
 	ListAppConfigFiles(ctx context.Context, appID, envName string) ([]AppConfigFile, error)
 	// GetAppConfigFileDetails 获取应用配置文件详情
 	GetAppConfigFileDetails(ctx context.Context, appID, fileID string) (*AppConfigFileDetails, error)
+	// CreateAppConfigFile 创建应用配置文件
+	CreateAppConfigFile(ctx context.Context, appID string, opts CreateAppConfigFileOptions) (*AppConfigFile, error)
 	// ListAppConfigFileVersions 获取应用配置文件历史版本列表
 	ListAppConfigFileVersions(
 		ctx context.Context, appID string, opts ListAppConfigFileVersionsOptions,

@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	handler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/appcfgfile"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
@@ -58,6 +59,10 @@ When an application has multiple config files in the same environment, use --nam
 			result, err := handler.View(cmd.Context(), client.New(), appID, envName, cfgFileName)
 			if err != nil {
 				return errors.Wrap(err, "view app config file")
+			}
+
+			if result.IsFallback {
+				console.Tips("Environment %s has no dedicated config, showing default config", envName)
 			}
 
 			viewOutput, err := result.Output()

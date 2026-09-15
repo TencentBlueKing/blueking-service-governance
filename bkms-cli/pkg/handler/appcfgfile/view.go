@@ -29,8 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 )
 
-// defaultEnvLabel is used only for CLI display and error messages.
-// 这个值主要是为了更好的去表达“默认配置”，避免直接对外展示 env: "" 这种。
+// defaultEnvLabel 用于 CLI 展示默认配置，避免直接展示空环境名。
 const defaultEnvLabel = "<default>"
 
 // ViewResult contains the selected config file metadata and details.
@@ -45,6 +44,8 @@ type ViewResult struct {
 	OverlayContent *string
 	// EnvName is the user-facing environment label used in output.
 	EnvName string
+	// IsFallback indicates the displayed file is the default file, not the requested env's instance.
+	IsFallback bool
 }
 
 // ViewOutput is the formatted output object for app config file view.
@@ -87,12 +88,12 @@ func (r *ViewResult) Output() (*ViewOutput, error) {
 // - envName: the environment name for filtering cfg file(s), "" means the default.
 // - cfgFileName: optional, only select the cfg file with this name is given.
 func View(ctx context.Context, cli client.Client, appID, envName, cfgFileName string) (*ViewResult, error) {
-	files, err := cli.ListAppConfigFiles(ctx, appID, envName)
+	files, err := cli.ListAppConfigFiles(ctx, appID, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "list app config files")
 	}
 
-	file, err := findCfgFileBy(files, envName, cfgFileName)
+	file, isFallback, err := findViewFile(files, envName, cfgFileName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "find app config file for app %s", appID)
 	}
@@ -110,26 +111,14 @@ func View(ctx context.Context, cli client.Client, appID, envName, cfgFileName st
 		Details:        details,
 		Content:        details.Content,
 		OverlayContent: details.OverlayContent,
-		EnvName:        formatEnvName(envName),
+		EnvName:        formatEnvName(file.EnvName),
+		IsFallback:     isFallback,
 	}, nil
 }
 
-// findCfgFileBy 根据给定的条件去**明确挑选**一个 app cfg 配置文件对象，以方便进行后续操作。该函数设计较为灵活，支持
-// 多种过滤方式，并且互相组合，其中：
-//
-// - envName：匹配特定环境比如 test，默认情况下仅匹配默认环境（""）
-// - cfgFileName：匹配特定的配置文件名，环境下存在多个文件时必须提供，否则会因为无法确定是哪一个而报错
-//
-// 错误返回：找不到匹配，匹配的文件数量超过一个。
+// findCfgFileBy 根据 envName 与可选的 cfgFileName 唯一挑选一个配置文件，找不到或多于一个时返回错误。
 func findCfgFileBy(files []client.AppConfigFile, envName, cfgFileName string) (client.AppConfigFile, error) {
-	// Helm apps keep EnvName empty and may own multiple config files. The optional
-	// cfgFileName selector lets callers disambiguate those app-level files by name.
-	matches := lo.Filter(files, func(file client.AppConfigFile, _ int) bool {
-		if file.EnvName != envName {
-			return false
-		}
-		return cfgFileName == "" || file.Name == cfgFileName
-	})
+	matches := findCfgFilesBy(files, envName, cfgFileName)
 	if len(matches) == 0 {
 		return client.AppConfigFile{}, errors.Errorf(
 			"no app config file found for env %s%s",
@@ -146,6 +135,42 @@ func findCfgFileBy(files []client.AppConfigFile, envName, cfgFileName string) (c
 		)
 	}
 	return matches[0], nil
+}
+
+// findCfgFilesBy 根据 envName 和可选的 cfgFileName 过滤配置文件。
+// Helm 应用 EnvName 恒为空且可拥有多个文件，通过 cfgFileName 在应用级文件中消歧。
+func findCfgFilesBy(files []client.AppConfigFile, envName, cfgFileName string) []client.AppConfigFile {
+	return lo.Filter(files, func(file client.AppConfigFile, _ int) bool {
+		if file.EnvName != envName {
+			return false
+		}
+		return cfgFileName == "" || file.Name == cfgFileName
+	})
+}
+
+// findViewFile 按环境获取配置文件，如果没有则展示默认配置文件
+func findViewFile(
+	files []client.AppConfigFile,
+	envName, cfgFileName string,
+) (client.AppConfigFile, bool, error) {
+	if envName == "" {
+		file, err := findCfgFileBy(files, "", cfgFileName)
+		return file, false, err
+	}
+	matches := findCfgFilesBy(files, envName, cfgFileName)
+	if len(matches) == 1 {
+		return matches[0], false, nil
+	}
+	if len(matches) > 1 {
+		return client.AppConfigFile{}, false, errors.Errorf(
+			"multiple app config files found for env %s%s: %s",
+			formatEnvName(envName),
+			formatCfgFileNameSuffix(cfgFileName),
+			formatCandidates(matches),
+		)
+	}
+	file, err := findCfgFileBy(files, "", cfgFileName)
+	return file, true, err
 }
 
 func formatEnvName(envName string) string {

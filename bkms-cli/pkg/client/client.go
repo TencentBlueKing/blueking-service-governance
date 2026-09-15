@@ -563,6 +563,40 @@ func (c *SvcBasedClient) GetAppConfigFileDetails(
 	return &details, nil
 }
 
+// CreateAppConfigFile 创建应用配置文件
+func (c *SvcBasedClient) CreateAppConfigFile(
+	ctx context.Context,
+	appID string,
+	opts CreateAppConfigFileOptions,
+) (*AppConfigFile, error) {
+	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-files", url.PathEscape(appID))
+	body := map[string]any{
+		"name":                opts.Name,
+		"type":                opts.Type,
+		"baseAppConfigFileID": opts.BaseAppConfigFileID,
+		"contentSourceType":   opts.ContentSourceType,
+		"envName":             opts.EnvName,
+		"fileFormat":          opts.FileFormat,
+		"description":         opts.Description,
+	}
+
+	var respData struct {
+		Item *AppConfigFile `json:"item"`
+	}
+	resp, err := c.cli.R().SetContext(ctx).SetBody(body).SetResult(&respData).Post(path)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, errors.Errorf("create app config file failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+	}
+	if respData.Item == nil {
+		return nil, errors.New("create app config file returned empty item")
+	}
+
+	return respData.Item, nil
+}
+
 // ListAppConfigFileVersions 获取应用配置文件历史版本列表
 func (c *SvcBasedClient) ListAppConfigFileVersions(
 	ctx context.Context,
