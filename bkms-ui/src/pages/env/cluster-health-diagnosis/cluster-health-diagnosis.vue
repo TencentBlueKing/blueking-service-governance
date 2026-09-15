@@ -342,6 +342,7 @@
   import { BkintegrationsKubeinsightService } from '~/api/modules/v1';
   import { downloadBase64File, formatTimeByTimezone, generateFieldOptions } from '~/common/util';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import { envDetailLocation } from '~/composables/use-env-manager';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
   import useDynamicsHeight from '~/composables/use-table-height';
@@ -717,8 +718,7 @@
 
   // 返回上一页
   function handlePageBack() {
-    // 显式指定 fallback：环境管理页未配置为当前页的父子级路由，resolveParent 无法推导到
-    router.back({ name: 'env' });
+    router.back(envDetailLocation(props.envId));
   }
 
   function handlePageLimitChange(val: number) {

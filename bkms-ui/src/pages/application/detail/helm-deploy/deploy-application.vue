@@ -190,6 +190,7 @@
   import { EnvOutput } from '~/@types/v1/env';
   import { DeployableImageTagOutputObj } from '~/@types/v1/images';
   import { AppConfigFilesService, DeployService, ImagesService } from '~/api/modules/v1';
+  import { envDetailLocation } from '~/composables/use-env-manager';
   import { useErrorHandler } from '~/composables/use-error-handler';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useAppDetail } from '~/stores/app-detail';
@@ -412,14 +413,9 @@
   function handleGoEnvVars(source: string = 'env') {
     let resolved = null;
     if (source === 'env') {
-      resolved = router.resolve({
-        name: 'env',
-        params: { space: route.params.space },
-        query: {
-          active: props.envItem?.name,
-          activeTab: 'setting',
-        },
-      });
+      const envId = props.envItem?.id;
+      if (!envId) return;
+      resolved = router.resolve(envDetailLocation(envId, 'setting'));
     } else {
       resolved = router.resolve({
         name: 'detail',

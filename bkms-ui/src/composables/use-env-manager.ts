@@ -23,7 +23,12 @@ import { EnvService } from '~/api/modules/v1/env';
 import { i18n } from '~/modules/i18n';
 import { useSpaceStore } from '~/stores/space';
 
+import type { LocationQueryRaw, RouteLocationRaw } from 'vue-router';
 import type { EnvDetailOutput, EnvOutput, FeatureEnvSourceOutput } from '~/@types/v1/env';
+
+export const ENV_DETAIL_MENUS = ['basicInfo', 'observability', 'setting'] as const;
+export type EnvDetailMenu = (typeof ENV_DETAIL_MENUS)[number];
+export const DEFAULT_ENV_DETAIL_MENU: EnvDetailMenu = 'basicInfo';
 
 /** listAppEnvs 可能携带来源环境对象，用于兼容不同空间的特性环境返回结构。 */
 export type EnvWithSource = EnvOutput & {
@@ -38,6 +43,28 @@ export interface StandardEnvMap {
 
 interface EnvTypeConfig {
   name: string;
+}
+
+/** 生成环境详情页路由，供列表、外链和子页返回复用。 */
+export function envDetailLocation(
+  envId: string,
+  menuName: string = DEFAULT_ENV_DETAIL_MENU,
+  query?: LocationQueryRaw,
+): RouteLocationRaw {
+  const spaceStore = useSpaceStore();
+  return {
+    name: 'envDetailItem',
+    params: {
+      space: spaceStore.currentSpace,
+      envId,
+      menuName: isEnvDetailMenu(menuName) ? menuName : DEFAULT_ENV_DETAIL_MENU,
+    },
+    query,
+  };
+}
+
+export function isEnvDetailMenu(value: unknown): value is EnvDetailMenu {
+  return typeof value === 'string' && (ENV_DETAIL_MENUS as readonly string[]).includes(value);
 }
 
 export const envTypeMap: Record<string, EnvTypeConfig> = {
@@ -61,6 +88,14 @@ export const envTypeTagClassMap: Record<string, string> = {
   test: 'env-tag-test',
   staging: 'env-tag-staging',
   production: 'env-tag-production',
+};
+
+/** 环境首字头像底色，与分类 Tag 对应。 */
+export const envTypeAvatarColorMap: Record<string, string> = {
+  development: '#3A84FF',
+  test: '#0399D4',
+  staging: '#E38B02',
+  production: '#299E56',
 };
 
 /** 建立标准环境索引，避免 id/name/displayName 的 key 空间互相冲突。 */

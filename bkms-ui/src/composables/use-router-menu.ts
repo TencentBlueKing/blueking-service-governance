@@ -18,6 +18,7 @@
 
 import { appNavigationConfig } from '~/config/navigation/app';
 import { BASIC_NAVIGATION } from '~/config/navigation/basic';
+import { ENV_NAVIGATION } from '~/config/navigation/env';
 import { PLATFORM_NAVIGATION } from '~/config/navigation/platform';
 import { PLUGIN_NAVIGATION } from '~/config/navigation/plugin';
 import { useSpaceStore } from '~/stores/space';
@@ -26,7 +27,7 @@ import type { AppNavigationType } from '~/config/navigation/app';
 import type { NavigationItem } from '~/config/navigation/types';
 
 // 根据 menuId 获取对应的菜单列表
-export type MenuIdType = 'APP' | 'BASIC' | 'PLATFORM' | 'PLUGIN';
+export type MenuIdType = 'APP' | 'BASIC' | 'ENV' | 'PLATFORM' | 'PLUGIN';
 
 // 获取空间设置导航菜单
 export function getBasicMenuList(): NavigationItem[] {
@@ -34,6 +35,14 @@ export function getBasicMenuList(): NavigationItem[] {
 
   if (!spaceStore.currentSpace) return [];
   return BASIC_NAVIGATION;
+}
+
+// 获取环境详情导航菜单
+export function getEnvMenuList(): NavigationItem[] {
+  const spaceStore = useSpaceStore();
+
+  if (!spaceStore.currentSpace) return [];
+  return ENV_NAVIGATION;
 }
 
 // 获取应用管理导航菜单（指定type）
@@ -60,6 +69,7 @@ export function getPluginMenuList(): NavigationItem[] {
 const menuGetterMap: Record<MenuIdType, (type?: AppNavigationType) => NavigationItem[]> = {
   APP: (type?: AppNavigationType) => (type ? getMenuList(type) : []),
   BASIC: () => getBasicMenuList(),
+  ENV: () => getEnvMenuList(),
   PLATFORM: () => getPlatformMenuList(),
   PLUGIN: () => getPluginMenuList(),
 };

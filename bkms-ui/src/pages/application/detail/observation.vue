@@ -101,6 +101,7 @@
   import { type ApmQueryParams, DEFAULT_APM_CONFIG, DOC_LINKS } from '~/common/const';
   import FlexRow from '~/components/flex-row.vue';
   import MonitorIframe from '~/components/monitor-iframe.vue';
+  import { envDetailLocation } from '~/composables/use-env-manager';
   import {
     type MonitorIframeObservabilityType,
     type MonitorIframeSetParamsPayload,
@@ -120,8 +121,8 @@
   };
 
   const appDetailStore = useAppDetail();
-  const route = useRoute();
   const router = useRouter();
+  const route = useRoute();
 
   const envStore = useDeployEnvStore();
   const curEnv = ref(envStore.currentEnv);
@@ -176,14 +177,9 @@
 
   // 跳转到环境管理页面的「观测数据」Tab 去创建 APM
   function handleGoCreateApm() {
-    router.push({
-      name: 'env',
-      params: { space: route.params.space },
-      query: {
-        active: curEnv.value,
-        activeTab: 'observability',
-      },
-    });
+    const envId = trpcDeployStore.curEnvItem?.id;
+    if (!envId) return;
+    router.push(envDetailLocation(envId, 'observability'));
   }
 
   // 优先当前环境绑定的 APM name，没有则使用环境名

@@ -282,6 +282,7 @@
   import { DOC_LINKS } from '~/common/const';
   import { hasErrorCode, showApiErrorMessage } from '~/common/util';
   import DividerHeader from '~/components/divider-header.vue';
+  import { envDetailLocation } from '~/composables/use-env-manager';
   import { useGPAConfigPolling } from '~/composables/use-gpa-config-polling';
   import useIsFederationEnv from '~/composables/use-is-federation-env';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
@@ -754,15 +755,14 @@
       cancelText: t('关闭'),
       onConfirm: () => {
         isShow.value = false;
-        router.push({
-          name: 'env',
-          query: {
-            active: trpcDeployStore.curEnvItem?.name,
-            activeTab: 'basicInfo',
+        const envId = trpcDeployStore.curEnvItem?.id;
+        if (!envId) return;
+        router.push(
+          envDetailLocation(envId, 'basicInfo', {
             appID: appDetailStore.appID,
             appType: appDetailStore.appType,
-          },
-        });
+          }),
+        );
       },
     });
   }

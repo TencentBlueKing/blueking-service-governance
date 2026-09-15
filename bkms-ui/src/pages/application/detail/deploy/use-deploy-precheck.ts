@@ -34,6 +34,7 @@ export function useDeployPrecheck() {
   const federationPrecheck = useFederationResourcePrecheck();
   const isShowPrecheckDialog = ref(false);
   const precheckEnvName = ref('');
+  const precheckEnvId = ref('');
   const federationMismatches = ref<FederationResourceMismatch[]>([]);
   // 缺失的必选集群组件，属于硬阻断问题
   const missingRequiredClusterAddons = ref<ClusterAddonReferenceOutput[]>([]);
@@ -67,6 +68,7 @@ export function useDeployPrecheck() {
     const runID = ++precheckRunID;
     const appID = appDetailStore.appID;
     precheckEnvName.value = envName;
+    precheckEnvId.value = targetEnv?.id || '';
     federationMismatches.value = [];
     missingRequiredClusterAddons.value = [];
     undefinedVars.value = [];
@@ -109,6 +111,7 @@ export function useDeployPrecheck() {
     missingRequiredClusterAddons,
     precheck,
     precheckEnvName,
+    precheckEnvId,
     undefinedVars,
   };
 }

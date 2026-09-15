@@ -210,11 +210,12 @@
   import { Button, Dialog, Divider, Exception, Message } from 'bkui-vue';
   import { Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import { useRoute, useRouter } from 'vue-router';
+  import { useRouter } from 'vue-router';
   import { EnvDetailOutput } from '~/@types/v1/env';
   import { PortPoolConfigOutputObj, PortPoolItemInput, PortPoolItemOutput } from '~/@types/v1/port-pool';
   import { EnvService, PortPoolService } from '~/api/modules/v1';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import { envDetailLocation } from '~/composables/use-env-manager';
   import useInterval from '~/composables/use-interval';
 
   import ProtPoolSideslider from './prot-pool-sideslider.vue';
@@ -229,7 +230,6 @@
   }>();
 
   const router = useRouter();
-  const route = useRoute();
   const { t } = useI18n();
 
   const isShowSideslider = ref(false);
@@ -353,11 +353,7 @@
   }
 
   function handlePageBack() {
-    const activeEnvName = (route.query.envName as string) || '';
-    router.push({
-      name: 'env',
-      query: activeEnvName ? { active: activeEnvName } : undefined,
-    });
+    router.push(envDetailLocation(props.envId));
   }
 
   function handlePageLimitChange(val: number) {

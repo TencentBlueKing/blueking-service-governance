@@ -289,6 +289,7 @@
   import { AngleDown } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
+  import { envDetailLocation } from '~/composables/use-env-manager';
 
   import type { FederationResourceMismatch } from './use-federation-resource-precheck';
   import type { ClusterAddonReferenceOutput, UndefinedEnvVarOutput } from '~/@types/v1/deploy';
@@ -305,6 +306,7 @@
   }
 
   const props = defineProps<{
+    envId?: string;
     envName: string;
     mismatches: FederationResourceMismatch[];
     missingRequiredClusterAddons: ClusterAddonReferenceOutput[];
@@ -422,28 +424,30 @@
 
   /** 新窗口打开「环境管理 / 集群组件」页，引导安装缺失组件 */
   function handleGoClusterAddonModify() {
-    const resolved = router.resolve({
-      name: 'env',
-      params: { space: route.params.space },
-      query: {
-        active: props.envName,
-        activeTab: 'basicInfo',
-      },
-    });
+    const resolved = router.resolve(
+      props.envId
+        ? envDetailLocation(props.envId, 'basicInfo')
+        : {
+            name: 'env',
+            params: { space: route.params.space },
+            query: { active: props.envName, activeTab: 'basicInfo' },
+          },
+    );
     window.open(resolved.href, '_blank');
     closeAfterModify();
   }
 
   /** 新窗口打开「环境管理 / 环境变量」页，引导补充变量配置 */
   function handleGoEnvVarModify() {
-    const resolved = router.resolve({
-      name: 'env',
-      params: { space: route.params.space },
-      query: {
-        active: props.envName,
-        activeTab: 'setting',
-      },
-    });
+    const resolved = router.resolve(
+      props.envId
+        ? envDetailLocation(props.envId, 'setting')
+        : {
+            name: 'env',
+            params: { space: route.params.space },
+            query: { active: props.envName, activeTab: 'setting' },
+          },
+    );
     window.open(resolved.href, '_blank');
     closeAfterModify();
   }

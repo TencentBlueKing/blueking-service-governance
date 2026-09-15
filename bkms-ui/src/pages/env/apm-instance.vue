@@ -18,7 +18,7 @@
 
 <template>
   <!-- APM 实例信息 -->
-  <div class="p-[16px] bg-[#F5F7FA]">
+  <div class="p-[16px] bg-[#fff]">
     <div class="flex items-center justify-between mb-[8px]">
       <span class="text-[14px] text-[#979ba5]">{{ $t('APM 实例') }}</span>
       <Button

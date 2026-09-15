@@ -2072,3 +2072,12 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 确认删除该仪表盘？: Delete this dashboard?
 "仪表盘名称: {name}": "Dashboard Name: {name}"
 可嵌入蓝鲸监控仪表盘，查看应用指标。配置步骤见 {0}: Embed BlueKing Monitor dashboards to view application metrics. See {0} for setup steps.
+环境不存在或已被删除: The environment does not exist or has been deleted
+环境详情加载失败: Failed to load environment details
+请选择环境: Please select an environment
+重试: Retry
+获取环境详情失败，无法验证部署状态: Failed to load environment details. Unable to verify deployment status
+无匹配数据: No matching data
+环境未配置集群资源，无法部署应用: Configure cluster resources before deploying applications
+导入: Import
+导出: Export

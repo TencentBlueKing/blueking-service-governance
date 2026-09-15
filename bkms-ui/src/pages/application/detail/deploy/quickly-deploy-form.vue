@@ -105,6 +105,7 @@
   <EnvVarPrecheckDialog
     v-if="precheckBeforeSubmit"
     v-model:is-show="isShowPrecheckDialog"
+    :env-id="precheckEnvId"
     :env-name="precheckEnvName"
     :mismatches="federationMismatches"
     :missing-required-cluster-addons="missingRequiredClusterAddons"
@@ -161,6 +162,7 @@
     missingRequiredClusterAddons,
     precheck,
     precheckEnvName,
+    precheckEnvId,
     undefinedVars,
   } = useDeployPrecheck();
 

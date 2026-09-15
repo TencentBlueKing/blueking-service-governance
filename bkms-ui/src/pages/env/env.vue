@@ -109,7 +109,7 @@
         :filter-config="{ remote: true }"
         :max-height="envTableContentHeight"
         :pagination="pagination"
-        :row-class-name="getRowActiveClass"
+        row-class-name="cursor-pointer"
         :row-config="{
           keyField: 'name',
           isHover: true,
@@ -118,7 +118,13 @@
         :row-height="56"
         :sort-config="sortConfig"
         @filter-change="filterChangeEvent"
+        @page-limit-change="
+          pagination.limit = $event;
+          pagination.current = 1;
+        "
+        @page-value-change="pagination.current = $event"
         @row-click="handleRowClick"
+        @scroll="handleScroll"
       >
         <template #empty>
           <TableException
@@ -248,26 +254,9 @@
       </Table>
     </div>
   </Skeleton>
-  <EnvDetail
-    v-if="curRow"
-    ref="envDetailRef"
-    :data="curRow"
-    @delete="handleDeleteEnv"
-    @update="handleUpdate"
-  />
-  <!-- 无法删除环境（有部署应用） -->
-  <DeployedAppsWarning
-    v-model:is-show="showDeployedWarning"
-    :deployed-apps="deployedApps"
-    :dialog-title="$t('无法删除环境')"
-    :tips-text="$t('该环境已部署应用，请先卸载后再删除环境')"
-  />
-  <!-- 确认删除环境（无部署应用） -->
-  <DeleteEnvDialog
-    v-model:is-show="isShowDeleteEnvDialog"
-    :env-display-name="deleteEnvRow?.displayName || ''"
-    :env-name="deleteEnvRow?.name || ''"
-    @confirm="confirmDeleteEnv"
+  <DeleteEnvAction
+    ref="deleteEnvActionRef"
+    @deleted="handleGetEnvList"
   />
   <CreateEnv
     v-model:is-show="isShowCreateEnv"
@@ -280,30 +269,28 @@
   ></PublicEnvVarsSideslider>
 </template>
 <script lang="ts" setup>
-  import { computed, nextTick, onBeforeMount, ref, shallowRef, watch } from 'vue';
-  import { provide } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
   import { useDebounce } from '@vueuse/core';
   import { Button, Message, SearchSelect, Select } from 'bkui-vue';
   import { Done, Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import { useRoute, useRouter } from 'vue-router';
-  import { EnvAppDeployStatusOutput, EnvOutput } from '~/@types/v1/env';
+  import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+  import { EnvOutput } from '~/@types/v1/env';
   import { EnvService } from '~/api/modules/v1';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { useElementHeight } from '~/composables/use-element-height';
-  import { envTypeTagClassMap } from '~/composables/use-env-manager';
+  import { envDetailLocation, envTypeTagClassMap } from '~/composables/use-env-manager';
   import { useTableSearchSelect } from '~/composables/use-search';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
+  import { useEnvListStateStore } from '~/stores/env-list-state';
   import { useSpaceStore } from '~/stores/space';
 
+  import DeleteEnvAction from './components/delete-env-action.vue';
   import EnvCategoryDescription from './components/env-category-description.vue';
-  import DeployedAppsWarning from './components/project-selector/deployed-apps-warning.vue';
   import CreateEnv from './create-env.vue';
-  import DeleteEnvDialog from './delete-env-dialog.vue';
-  import EnvDetail from './detail.vue';
   import PublicEnvVarsSideslider from './public-env-vars/public-env-vars-sideslider.vue';
 
   import type { VxeTableDefines } from '@blueking/vxe-table';
@@ -314,23 +301,24 @@
 
   defineProps<IProps>();
 
-  // 通过 provide 向子组件注入当前环境名称
-  provide(
-    'envName',
-    computed(() => curRow.value?.name || ''),
-  );
-
   const router = useRouter();
   const route = useRoute();
   const spaceStore = useSpaceStore();
   const { createPlaceholder } = useSearchPlaceholder();
 
-  const envDetailRef = ref<InstanceType<typeof EnvDetail>>();
+  const deleteEnvActionRef = ref<InstanceType<typeof DeleteEnvAction>>();
+  const listStateStore = useEnvListStateStore();
+  const listSpace = String(route.params.space);
+  const savedState = listStateStore.get(listSpace);
+  let restoring = true;
+  let disposed = false;
+  let scrollTop = savedState?.scrollTop || 0;
+  let scrollLeft = savedState?.scrollLeft || 0;
 
   const isLoading = ref(false);
   const envList = ref<EnvOutput[]>([]);
-  const pagination = ref({ count: 0, limit: 20, current: 1 });
-  const curRow = ref<EnvOutput>();
+  let listLoaded = false;
+  const pagination = ref({ count: 0, limit: savedState?.limit || 20, current: savedState?.current || 1 });
   const sortConfig = ref({
     multiple: false,
     trigger: 'cell',
@@ -356,7 +344,9 @@
 
   // ref
   const envTableContentRef = ref<HTMLElement>();
-  const EnvTableRef = ref<HTMLElement>();
+  const EnvTableRef = ref<{
+    getVxeTableInstance: () => { scrollTo: (left: number, top: number) => Promise<unknown> };
+  }>();
 
   // 使用 useElementHeight hook 获取表格容器高度
   const { height: envTableContentHeight } = useElementHeight(envTableContentRef, {
@@ -447,18 +437,14 @@
   };
 
   // 排序配置
-  const curEnvOption = ref('type');
-  const sortOrder = ref<'asc' | 'desc'>('asc');
+  const curEnvOption = ref(savedState?.sortField || 'type');
+  const sortOrder = ref<'asc' | 'desc'>(savedState?.sortOrder || 'asc');
   const envOptions = ref([
     { label: t('环境分类'), value: 'type' },
     { label: t('环境 ID'), value: 'name' },
     { label: t('环境名称'), value: 'displayName' },
   ]);
   const ENV_TYPE_ORDER: Record<string, number> = { development: 1, test: 2, staging: 3, production: 4 };
-
-  function getRowActiveClass({ row }: { row: EnvOutput }) {
-    return router.currentRoute.value.query?.active === row.name ? 'row--current cursor-pointer' : 'cursor-pointer';
-  }
 
   // 获取环境列表
   async function handleGetEnvList() {
@@ -472,14 +458,17 @@
     )
       .then(data => {
         clearErrorType();
+        listLoaded = true;
         return data;
       })
       .catch(() => {
         setTypeToError();
         return [];
       });
-    pagination.value.count = envList.value.length;
+    pagination.value.count = tableDataMatchSearch.value.length;
+    if (!restoring) clampPage();
     isLoading.value = false;
+    if (!disposed) resolveLegacyDetail();
   }
 
   // 跳转到应用管理页面，按当前环境筛选
@@ -498,17 +487,8 @@
     handleShowEnvDetail(row);
   }
 
-  // env详情：行点击同步 URL（active 定位当前环境，供刷新/直达恢复）
-  // apmQuery 为上一环境的观测参数快照，切换环境必须一并清除，避免刷新后误用旧环境观测状态
-  // 必须先 await router.replace 完成再更新 curRow：EnvDetail 挂载时 useUrlQuerySync 的 onMounted 会无条件 replace，
-  // 若 active 尚未写入 URL，会以旧 query 快照覆盖导致 active 丢失（切行后 URL 无 active 参数）
-  async function handleShowEnvDetail(row: EnvOutput) {
-    const { apmQuery: _apmQuery, ...restQuery } = route.query;
-    await router.replace({ query: { ...restQuery, active: row.name } });
-    curRow.value = row;
-    nextTick(() => {
-      envDetailRef.value?.show();
-    });
+  function handleShowEnvDetail(row: EnvOutput) {
+    if (row.id) router.push(envDetailLocation(row.id));
   }
 
   // 排序
@@ -534,59 +514,43 @@
   // 是否展示新建环境
   const isShowCreateEnv = ref(false);
 
-  // 删除环境
-  const isShowDeleteEnvDialog = ref(false);
-  const showDeployedWarning = ref(false);
-  const deployedApps = ref<EnvAppDeployStatusOutput[]>([]);
-  const deleteEnvRow = ref<EnvOutput>();
-
-  // 确认删除环境
-  async function confirmDeleteEnv() {
-    if (!deleteEnvRow.value) return;
-    const result = await EnvService.deleteEnv({
-      envID: deleteEnvRow.value?.id || '',
-    })
-      .then(() => true)
-      .catch(() => false);
-    if (result) {
-      isShowDeleteEnvDialog.value = false;
-      Message({
-        message: t('删除成功'),
-        theme: 'success',
-      });
-      await handleGetEnvList();
-    }
-  }
-  async function handleDeleteEnv(row: EnvOutput) {
-    deleteEnvRow.value = row;
-    // 获取环境详情，检查是否有部署应用
-    let envDetail;
-    try {
-      envDetail = await EnvService.getEnv({ envID: row?.id || '' });
-    } catch (error) {
-      console.error('获取环境详情失败:', error);
-      Message({
-        message: t('获取环境详情失败，无法验证部署状态'),
-        theme: 'error',
-      });
-      return;
-    }
-    if (envDetail?.appDeployStatuses?.length) {
-      deployedApps.value = envDetail.appDeployStatuses;
-      showDeployedWarning.value = true;
-      return;
-    }
-    isShowDeleteEnvDialog.value = true;
+  function clampPage() {
+    pagination.value.current = Math.max(
+      1,
+      Math.min(pagination.value.current, Math.ceil(tableDataMatchSearch.value.length / pagination.value.limit)),
+    );
   }
 
-  // 更新环境详情后，同步详情抽屉数据并重新获取列表
-  async function handleUpdate(row: EnvOutput) {
-    curRow.value = row;
-    await handleGetEnvList();
+  function handleDeleteEnv(row: EnvOutput) {
+    deleteEnvActionRef.value?.show(row);
   }
+
+  function handleScroll(event: VxeTableDefines.ScrollEventParams) {
+    if (restoring) return;
+    scrollTop = event.scrollTop;
+    scrollLeft = event.scrollLeft;
+  }
+
+  function saveListState() {
+    if (restoring) return;
+    listStateStore.save(listSpace, {
+      search: searchValue.value,
+      sortField: curEnvOption.value,
+      sortOrder: sortOrder.value,
+      current: pagination.value.current,
+      limit: pagination.value.limit,
+      scrollTop,
+      scrollLeft,
+    });
+  }
+  onBeforeRouteLeave(saveListState);
+  onBeforeUnmount(() => {
+    saveListState();
+    disposed = true;
+  });
 
   watch(searchValue, () => {
-    pagination.value.current = 1;
+    if (!restoring) pagination.value.current = 1;
   });
 
   // 搜索（防抖）
@@ -600,14 +564,38 @@
     pagination.value.count = newValue?.length || 0;
   });
 
-  onBeforeMount(async () => {
-    await handleGetEnvList();
-    curRow.value = envList.value.find(item => item.name === router.currentRoute.value.query?.active);
-    if (router.currentRoute.value.query?.active && curRow.value) {
-      nextTick(() => {
-        envDetailRef.value?.show();
-      });
+  // Skeleton 动画结束后表格才挂载；在真实表格可用时恢复滚动。
+  watch(
+    [EnvTableRef, isLoading],
+    async ([table, loading]) => {
+      if (!table || loading || !restoring) return;
+      await nextTick();
+      if (disposed) return;
+      await table.getVxeTableInstance().scrollTo(scrollLeft, scrollTop);
+      restoring = false;
+    },
+    { flush: 'post' },
+  );
+
+  async function resolveLegacyDetail() {
+    if (!listLoaded || isLoading.value || disposed) return;
+    const { active, activeTab, ...restQuery } = route.query;
+    if (typeof active !== 'string' || !active || curExceptionType.value === 'error') return;
+    const env = envList.value.find(item => item.name === active);
+    if (env?.id) {
+      await router.replace(envDetailLocation(env.id, typeof activeTab === 'string' ? activeTab : undefined, restQuery));
+    } else {
+      Message({ message: t('环境不存在或已被删除'), theme: 'warning' });
+      await router.replace({ query: restQuery });
     }
+  }
+  watch(() => [route.query.active, route.query.activeTab], resolveLegacyDetail);
+
+  onMounted(async () => {
+    if (savedState) searchValue.value = savedState.search;
+    await handleGetEnvList();
+    if (disposed) return;
+    clampPage();
   });
 </script>
 <style lang="postcss" scoped>

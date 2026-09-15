@@ -17,12 +17,16 @@
 -->
 
 <template>
-  <Skeleton :loading="isLoading">
+  <Skeleton
+    :full-height="false"
+    :loading="isLoading"
+    theme="gray"
+  >
     <template #loading>
       <Layout.table />
       <Layout.shape class="mt-[16px]" />
     </template>
-    <div class="bg-[#fff]">
+    <div class="min-w-0">
       <Alert
         class="mb-[16px]"
         theme="info"
@@ -41,7 +45,7 @@
         </Button>
       </Alert>
 
-      <div class="mb-[16px] flex justify-between">
+      <div class="mb-[16px] flex flex-wrap gap-[12px] justify-between">
         <div class="flex gap-[8px]">
           <Button
             theme="primary"
@@ -53,11 +57,15 @@
             />
             {{ $t('新增自定义变量') }}
           </Button>
-          <Button @click="showImportSlider = true">
+          <Button
+            class="bg-[#fff]"
+            @click="showImportSlider = true"
+          >
             <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
             {{ $t('导入') }}
           </Button>
           <Button
+            class="bg-[#fff]"
             :loading="isExporting"
             @click="handleExport"
           >
@@ -67,7 +75,7 @@
         </div>
         <Input
           v-model.trim="searchKeyword"
-          class="w-[430px]"
+          class="w-[430px] max-w-full bg-white"
           clearable
           :placeholder="$t('搜索变量名、变量值、描述')"
         >
@@ -114,6 +122,7 @@
   import { Plus, Search } from 'bkui-vue/lib/icon';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
+  import { useRoute } from 'vue-router';
   import { EnvvarsService } from '~/api/modules/v1';
   import { sortByDate } from '~/common/util';
   import EditableVariableTable, { type EnvVariableConfig } from '~/components/editable-variable-table/index.vue';
@@ -122,22 +131,19 @@
   import { envTypeMap } from '~/composables/use-env-manager';
   import { useFileExport } from '~/composables/use-file-export';
   import { type IInputKey, useTableSearchInput } from '~/composables/use-search';
-  import { useSpaceStore } from '~/stores/space';
+  import { useEnvDetailStore } from '~/stores/env-detail';
 
   import EnvBgVarsSideslider from '../application/detail/base-info/trpc/env-bg-vars-sideslider.vue';
 
   import type { DownloadSingleEnvVarTemplateRequest, ExportEnvScopedEnvVarsRequest } from '~/@types/v1/envvars';
 
-  const props = defineProps<{
-    env: string;
-    envDisplayName?: string;
-    envName: string;
-    envType?: string;
-    workspace: string;
-  }>();
-
   const { t } = useI18n();
-  const spaceStore = useSpaceStore();
+  const route = useRoute();
+  const envDetailStore = useEnvDetailStore();
+  const env = String(route.params.envId);
+  const workspace = String(route.params.space);
+  const envName = computed(() => envDetailStore.currentEnv?.name || '');
+  const envDisplayName = computed(() => envDetailStore.currentEnv?.displayName || envName.value);
 
   // 环境变量列表
   const variableList = ref<EnvVariableConfig[]>([]);
@@ -145,7 +151,7 @@
   const showEnvBgVarsSlider = ref(false);
   const showImportSlider = ref(false);
   const { exportFile, isExporting } = useFileExport();
-  const envTypeConfig = computed(() => (props.envType ? envTypeMap[props.envType] : undefined));
+  const envTypeConfig = computed(() => envTypeMap[envDetailStore.currentEnv?.type || '']);
 
   /** 搜索配置 */
   const searchKeys = ref<IInputKey[]>([
@@ -162,10 +168,10 @@
 
   // 获取环境变量列表
   async function getEnvConfigList() {
-    if (!props.env) return;
+    if (!env) return;
     isLoading.value = true;
     const list = await EnvvarsService.listDetailedEnvScopedEnvVars({
-      envID: props.env,
+      envID: env,
     }).catch(() => []);
     sortByDate(list, item => item.scopedEnvVar?.createdAt);
     // 维护 key → scopedEnvVarID 映射
@@ -195,9 +201,9 @@
     handleEnvVarOperation(
       () =>
         EnvvarsService.createScopedEnvVar({
-          workspaceID: props.workspace,
+          workspaceID: workspace,
           scopeType: 'env',
-          scopeValue: props.envName,
+          scopeValue: envName.value,
           key: item.key,
           value: item.value,
           description: item.description,
@@ -219,7 +225,7 @@
     handleEnvVarOperation(
       () =>
         EnvvarsService.deleteScopedEnvVar({
-          workspaceID: props.workspace,
+          workspaceID: workspace,
           scopedEnvVarID,
         }),
       t('删除成功'),
@@ -240,7 +246,7 @@
     handleEnvVarOperation(
       () =>
         EnvvarsService.updateScopedEnvVar({
-          workspaceID: props.workspace,
+          workspaceID: workspace,
           scopedEnvVarID,
           key: newItem.key,
           value: newItem.value,
@@ -273,31 +279,28 @@
 
   // 环境变量导出
   function handleExport() {
-    if (!props.env) return;
+    if (!env) return;
     return exportFile({
       request: () =>
         EnvvarsService.exportEnvScopedEnvVars<ExportEnvScopedEnvVarsRequest, Response>(
-          { envID: props.env },
+          { envID: env },
           { originalResponse: true },
         ),
-      fallbackFilename: `env-${props.envName}-scoped-env-vars.env`,
+      fallbackFilename: `env-${envName.value}-scoped-env-vars.env`,
     });
   }
 
   function handleImportRequest(file: File) {
-    return EnvvarsService.importEnvScopedEnvVar({ envID: props.env, file }, { interceptorErr: false, multipart: true });
+    return EnvvarsService.importEnvScopedEnvVar({ envID: env, file }, { interceptorErr: false, multipart: true });
   }
 
   function handlePreviewRequest(file: File) {
-    return EnvvarsService.previewEnvScopedEnvVar(
-      { envID: props.env, file },
-      { interceptorErr: false, multipart: true },
-    );
+    return EnvvarsService.previewEnvScopedEnvVar({ envID: env, file }, { interceptorErr: false, multipart: true });
   }
 
   // 初始化
   watch(
-    [() => spaceStore.currentSpace, () => props.env],
+    [() => env],
     async () => {
       await getEnvConfigList();
     },
