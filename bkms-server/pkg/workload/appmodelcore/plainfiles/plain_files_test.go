@@ -99,6 +99,19 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
+	createPlainDefWithRender := func(name, mountDir string, enableRender bool) bson.ObjectID {
+		id, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+			AppID:              app.ID,
+			Name:               name,
+			ConfigKind:         appcfg.ConfigKindPlain,
+			MountDir:           mountDir,
+			EnableEnvVarRender: enableRender,
+			Creator:            "tester",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return id
+	}
+
 	It("should return nil when provider is nil", func() {
 		envVars := map[string]string{}
 		collector := envvarrefs.NewCollector(envVars)
@@ -109,18 +122,18 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 		Expect(result).To(BeNil())
 	})
 
-	It("should return empty when no plain defs exist", func() {
+	It("should return nil when no plain defs exist", func() {
 		envVars := map[string]string{}
 		collector := envvarrefs.NewCollector(envVars)
 
 		result, err := plainfiles.BuildPlainConfigFiles(ctx, provider, app.ID, "prod", envVars, collector)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(BeEmpty())
+		Expect(result).To(BeNil())
 	})
 
-	It("should render plain config files with env var substitution", func() {
-		defID := createPlainDef("nginx.conf", "/etc/nginx")
+	It("should render plain config files with env var substitution when EnableEnvVarRender=true", func() {
+		defID := createPlainDefWithRender("nginx.conf", "/etc/nginx", true)
 		addDefaultFile(defID, "server ${{ env.HOST }};")
 
 		envVars := map[string]string{"HOST": "localhost"}
@@ -129,14 +142,33 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 		result, err := plainfiles.BuildPlainConfigFiles(ctx, provider, app.ID, "prod", envVars, collector)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(HaveLen(1))
-		Expect(result[0].FileName).To(Equal("nginx.conf"))
-		Expect(result[0].FilePath).To(Equal("/etc/nginx"))
-		Expect(result[0].FileContent).To(Equal("server localhost;"))
+		Expect(result).NotTo(BeNil())
+		Expect(result.RenderParams).To(HaveLen(1))
+		Expect(result.RenderParams[0].FileName).To(Equal("nginx.conf"))
+		Expect(result.RenderParams[0].FilePath).To(Equal("/etc/nginx"))
+		Expect(result.RenderParams[0].FileContent).To(Equal("server localhost;"))
+		Expect(result.DirectParams).To(BeEmpty())
 	})
 
-	It("should render multiple plain config files", func() {
-		defA := createPlainDef("a.conf", "/etc/a")
+	It("should skip env var rendering when EnableEnvVarRender=false", func() {
+		defID := createPlainDef("static.conf", "/etc/app")
+		addDefaultFile(defID, "server ${{ env.HOST }};")
+
+		envVars := map[string]string{"HOST": "localhost"}
+		collector := envvarrefs.NewCollector(envVars)
+
+		result, err := plainfiles.BuildPlainConfigFiles(ctx, provider, app.ID, "prod", envVars, collector)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).NotTo(BeNil())
+		Expect(result.RenderParams).To(BeEmpty())
+		Expect(result.DirectParams).To(HaveLen(1))
+		Expect(result.DirectParams[0].FileName).To(Equal("static.conf"))
+		Expect(result.DirectParams[0].FileContent).To(Equal("server ${{ env.HOST }};"))
+	})
+
+	It("should split files into render and direct groups", func() {
+		defA := createPlainDefWithRender("a.conf", "/etc/a", true)
 		addDefaultFile(defA, "key=${{ env.A }}")
 
 		defB := createPlainDef("b.conf", "/etc/b")
@@ -148,7 +180,11 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 		result, err := plainfiles.BuildPlainConfigFiles(ctx, provider, app.ID, "prod", envVars, collector)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(HaveLen(2))
+		Expect(result).NotTo(BeNil())
+		Expect(result.RenderParams).To(HaveLen(1))
+		Expect(result.RenderParams[0].FileName).To(Equal("a.conf"))
+		Expect(result.DirectParams).To(HaveLen(1))
+		Expect(result.DirectParams[0].FileName).To(Equal("b.conf"))
 	})
 
 	It("should reject plain config files with empty mount dir", func() {

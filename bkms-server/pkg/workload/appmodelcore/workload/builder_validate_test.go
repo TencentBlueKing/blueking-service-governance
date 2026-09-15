@@ -19,97 +19,112 @@
 package workload
 
 import (
-	"testing"
-
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
 )
 
-func TestValidateVolumeMountPaths_NoConflict(t *testing.T) {
-	mounts := []corev1.VolumeMount{
-		{Name: "vol-a", MountPath: "/etc/app/config.yaml"},
-		{Name: "vol-b", MountPath: "/etc/nginx/nginx.conf"},
-		{Name: "vol-c", MountPath: "/data/logs"},
-	}
-	if err := validateVolumeMountPaths("main", mounts); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-}
-
-func TestValidateVolumeMountPaths_Conflict(t *testing.T) {
-	mounts := []corev1.VolumeMount{
-		{Name: "framework-cfg", MountPath: "/etc/app/config.yaml"},
-		{Name: "plain-cfg", MountPath: "/etc/app/config.yaml"},
-	}
-	err := validateVolumeMountPaths("main", mounts)
-	if err == nil {
-		t.Fatal("expected error for duplicate MountPath, got nil")
-	}
-	if want := `duplicate MountPath "/etc/app/config.yaml"`; !contains(err.Error(), want) {
-		t.Fatalf("error should mention duplicate path, got: %v", err)
-	}
-	if want := `"framework-cfg"`; !contains(err.Error(), want) {
-		t.Fatalf("error should mention conflicting volume, got: %v", err)
-	}
-	if want := `"plain-cfg"`; !contains(err.Error(), want) {
-		t.Fatalf("error should mention conflicting volume, got: %v", err)
-	}
-}
-
-func TestValidateVolumeMountPaths_Empty(t *testing.T) {
-	if err := validateVolumeMountPaths("init", nil); err != nil {
-		t.Fatalf("expected no error for empty mounts, got: %v", err)
-	}
-}
-
-func TestValidateVolumeMountPaths_SingleElement(t *testing.T) {
-	mounts := []corev1.VolumeMount{
-		{Name: "only-vol", MountPath: "/etc/app/config.yaml"},
-	}
-	if err := validateVolumeMountPaths("main", mounts); err != nil {
-		t.Fatalf("expected no error for single mount, got: %v", err)
-	}
-}
-
-func TestValidateVolumeMountPaths_MultipleConflicts(t *testing.T) {
-	mounts := []corev1.VolumeMount{
-		{Name: "vol-a", MountPath: "/etc/app/a.yaml"},
-		{Name: "vol-b", MountPath: "/etc/app/a.yaml"},
-		{Name: "vol-c", MountPath: "/data/b.conf"},
-		{Name: "vol-d", MountPath: "/data/b.conf"},
-	}
-	err := validateVolumeMountPaths("main", mounts)
-	if err == nil {
-		t.Fatal("expected error for duplicate MountPath, got nil")
-	}
-	// Should report the first conflict found
-	if want := `duplicate MountPath`; !contains(err.Error(), want) {
-		t.Fatalf("error should mention duplicate path, got: %v", err)
-	}
-}
-
-func TestValidateVolumeMountPaths_ContainerNameInError(t *testing.T) {
-	mounts := []corev1.VolumeMount{
-		{Name: "vol-a", MountPath: "/etc/dup"},
-		{Name: "vol-b", MountPath: "/etc/dup"},
-	}
-	err := validateVolumeMountPaths("trpc-init", mounts)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if want := `"trpc-init"`; !contains(err.Error(), want) {
-		t.Fatalf("error should contain container name, got: %v", err)
-	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchSubstring(s, substr)
-}
-
-func searchSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
+var _ = Describe("validateVolumeMountPaths", func() {
+	It("should pass when no mount paths conflict", func() {
+		mounts := []corev1.VolumeMount{
+			{Name: "vol-a", MountPath: "/etc/app/config.yaml"},
+			{Name: "vol-b", MountPath: "/etc/nginx/nginx.conf"},
+			{Name: "vol-c", MountPath: "/data/logs"},
 		}
-	}
-	return false
-}
+		Expect(validateVolumeMountPaths("main", mounts)).To(Succeed())
+	})
+
+	It("should return error when duplicate MountPath exists", func() {
+		mounts := []corev1.VolumeMount{
+			{Name: "framework-cfg", MountPath: "/etc/app/config.yaml"},
+			{Name: "plain-cfg", MountPath: "/etc/app/config.yaml"},
+		}
+		err := validateVolumeMountPaths("main", mounts)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(`duplicate MountPath "/etc/app/config.yaml"`))
+		Expect(err.Error()).To(ContainSubstring(`"framework-cfg"`))
+		Expect(err.Error()).To(ContainSubstring(`"plain-cfg"`))
+	})
+
+	It("should pass when mounts is empty or nil", func() {
+		Expect(validateVolumeMountPaths("init", nil)).To(Succeed())
+	})
+
+	It("should pass when there is only one mount", func() {
+		mounts := []corev1.VolumeMount{
+			{Name: "only-vol", MountPath: "/etc/app/config.yaml"},
+		}
+		Expect(validateVolumeMountPaths("main", mounts)).To(Succeed())
+	})
+
+	It("should report error on the first conflict when multiple duplicates exist", func() {
+		mounts := []corev1.VolumeMount{
+			{Name: "vol-a", MountPath: "/etc/app/a.yaml"},
+			{Name: "vol-b", MountPath: "/etc/app/a.yaml"},
+			{Name: "vol-c", MountPath: "/data/b.conf"},
+			{Name: "vol-d", MountPath: "/data/b.conf"},
+		}
+		err := validateVolumeMountPaths("main", mounts)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("duplicate MountPath"))
+	})
+
+	It("should include container name in error message", func() {
+		mounts := []corev1.VolumeMount{
+			{Name: "vol-a", MountPath: "/etc/dup"},
+			{Name: "vol-b", MountPath: "/etc/dup"},
+		}
+		err := validateVolumeMountPaths("trpc-init", mounts)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(`"trpc-init"`))
+	})
+})
+
+var _ = Describe("buildDirectConfigMap", func() {
+	It("should produce ConfigMap with correct data and volume mounts", func() {
+		files := []cfgrender.ConfigFileParams{
+			{FileName: "app.conf", FilePath: "/etc/app", FileContent: "key=value"},
+			{FileName: "extra.conf", FilePath: "/etc/extra", FileContent: "foo=bar"},
+		}
+
+		result := buildDirectConfigMap("my-app-plain-direct", files)
+
+		Expect(result).NotTo(BeNil())
+
+		// Verify ConfigMap
+		Expect(result.configMap.Name).To(Equal("my-app-plain-direct"))
+		Expect(result.configMap.Data).To(HaveLen(2))
+		Expect(result.configMap.Data["00-app.conf"]).To(Equal("key=value"))
+		Expect(result.configMap.Data["01-extra.conf"]).To(Equal("foo=bar"))
+
+		// Verify volume mounts
+		mounts, volumes, err := result.Storage(nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mounts).To(HaveLen(2))
+		Expect(mounts[0].MountPath).To(Equal("/etc/app/app.conf"))
+		Expect(mounts[0].SubPath).To(Equal("00-app.conf"))
+		Expect(mounts[1].MountPath).To(Equal("/etc/extra/extra.conf"))
+		Expect(mounts[1].SubPath).To(Equal("01-extra.conf"))
+
+		// Verify volumes
+		Expect(volumes).To(HaveLen(1))
+		Expect(volumes[0].Name).To(Equal("my-app-plain-direct"))
+		Expect(volumes[0].ConfigMap).NotTo(BeNil())
+		Expect(volumes[0].ConfigMap.Items).To(HaveLen(2))
+	})
+
+	It("should produce valid ExtraResources", func() {
+		files := []cfgrender.ConfigFileParams{
+			{FileName: "test.conf", FilePath: "/etc/test", FileContent: "data"},
+		}
+
+		result := buildDirectConfigMap("test-cm", files)
+		extras, err := result.ExtraResources(nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(extras).To(HaveLen(1))
+		Expect(extras[0].GetName()).To(Equal("test-cm"))
+		Expect(extras[0].GetKind()).To(Equal("ConfigMap"))
+	})
+})

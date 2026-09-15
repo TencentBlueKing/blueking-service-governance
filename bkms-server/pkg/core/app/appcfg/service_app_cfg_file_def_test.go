@@ -111,6 +111,24 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Def.ConfigKind).To(Equal(appcfg.ConfigKindPlain))
 		})
+
+		It("should set EnableEnvVarRender=true for framework kind", func() {
+			result := f.createFrameworkFile("fw.yaml")
+			Expect(result.Def.EnableEnvVarRender).To(BeTrue())
+
+			gotDef, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(gotDef.EnableEnvVarRender).To(BeTrue())
+		})
+
+		It("should set EnableEnvVarRender=false for plain kind", func() {
+			result := f.createPlainFile("plain.conf", "/etc/app", "content")
+			Expect(result.Def.EnableEnvVarRender).To(BeFalse())
+
+			gotDef, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(gotDef.EnableEnvVarRender).To(BeFalse())
+		})
 	})
 
 	Context("UpdateAppCfgFileDef", func() {
@@ -191,6 +209,39 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			updated, err := f.DefStore.GetByID(f.Ctx, def.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.MountDir).To(Equal("/new/path"))
+		})
+
+		It("should allow plain kind to update EnableEnvVarRender to true", func() {
+			result := f.createPlainFile("toggle.conf", "/etc/app", "content")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(def.EnableEnvVarRender).To(BeFalse())
+
+			enable := true
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				EnableEnvVarRender: &enable,
+				Operator:           "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.EnableEnvVarRender).To(BeTrue())
+		})
+
+		It("should reject EnableEnvVarRender update for framework kind", func() {
+			result := f.createFrameworkFile("fw.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			disable := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				EnableEnvVarRender: &disable,
+				Operator:           "editor",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("enableEnvVarRender"))
 		})
 
 		It("should reject update when def is nil", func() {

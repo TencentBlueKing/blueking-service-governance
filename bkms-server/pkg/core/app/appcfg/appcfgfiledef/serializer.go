@@ -96,27 +96,29 @@ type ListDefsOutput struct {
 
 // DefSummaryObj def 列表中的摘要信息。
 type DefSummaryObj struct {
-	ID              string   `json:"id"`
-	Name            string   `json:"name"`
-	ConfigKind      string   `json:"configKind"`
-	MountDir        string   `json:"mountDir,omitempty"`
-	IsUnifiedConfig bool     `json:"isUnifiedConfig"`
-	MountedEnvNames []string `json:"mountedEnvNames,omitempty"`
-	Creator         string   `json:"creator"`
-	CreatedAt       string   `json:"createdAt"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	ConfigKind         string   `json:"configKind"`
+	MountDir           string   `json:"mountDir,omitempty"`
+	IsUnifiedConfig    bool     `json:"isUnifiedConfig"`
+	MountedEnvNames    []string `json:"mountedEnvNames,omitempty"`
+	EnableEnvVarRender bool     `json:"enableEnvVarRender"`
+	Creator            string   `json:"creator"`
+	CreatedAt          string   `json:"createdAt"`
 }
 
 // FromDef 从 def model 填充。
 func (o *DefSummaryObj) FromDef(def appcfg.AppConfigFileDef) *DefSummaryObj {
 	*o = DefSummaryObj{
-		ID:              def.ID.Hex(),
-		Name:            def.Name,
-		ConfigKind:      string(def.ConfigKind),
-		MountDir:        def.MountDir,
-		IsUnifiedConfig: def.EnvConfigMode.IsUnifiedConfig,
-		MountedEnvNames: def.EnvConfigMode.MountedEnvNames,
-		Creator:         def.Creator,
-		CreatedAt:       def.CreatedAt.Format(time.RFC3339),
+		ID:                 def.ID.Hex(),
+		Name:               def.Name,
+		ConfigKind:         string(def.ConfigKind),
+		MountDir:           def.MountDir,
+		IsUnifiedConfig:    def.EnvConfigMode.IsUnifiedConfig,
+		MountedEnvNames:    def.EnvConfigMode.MountedEnvNames,
+		EnableEnvVarRender: def.EnableEnvVarRender,
+		Creator:            def.Creator,
+		CreatedAt:          def.CreatedAt.Format(time.RFC3339),
 	}
 	return o
 }
@@ -137,6 +139,7 @@ type DefDetailObj struct {
 	MountDir            string   `json:"mountDir,omitempty"`
 	IsUnifiedConfig     bool     `json:"isUnifiedConfig"`
 	MountedEnvNames     []string `json:"mountedEnvNames,omitempty"`
+	EnableEnvVarRender  bool     `json:"enableEnvVarRender"`
 	FileType            string   `json:"fileType,omitempty"`
 	ContentSourceType   string   `json:"contentSourceType"`
 	BaseAppConfigFileID string   `json:"baseAppConfigFileId,omitempty"`
@@ -215,6 +218,7 @@ func (o *DefDetailObj) fillDef(def appcfg.AppConfigFileDef) {
 	o.MountDir = def.MountDir
 	o.IsUnifiedConfig = def.EnvConfigMode.IsUnifiedConfig
 	o.MountedEnvNames = def.EnvConfigMode.MountedEnvNames
+	o.EnableEnvVarRender = def.EnableEnvVarRender
 	o.Creator = def.Creator
 	o.CreatedAt = def.CreatedAt.Format(time.RFC3339)
 }
@@ -238,20 +242,22 @@ func (o *DefDetailObj) fillFile(file *appcfg.AppConfigFile) {
 
 // UpdateDefInput 更新 def 信息请求体。
 type UpdateDefInput struct {
-	Name            *string   `json:"name,omitempty" binding:"omitempty,min=1,max=64,app_config_file_name"`
-	MountDir        *string   `json:"mountDir,omitempty" binding:"omitempty,max=255,mount_dir"`
-	IsUnifiedConfig *bool     `json:"isUnifiedConfig,omitempty"`
-	MountedEnvNames *[]string `json:"mountedEnvNames,omitempty"`
+	Name               *string   `json:"name,omitempty" binding:"omitempty,min=1,max=64,app_config_file_name"`
+	MountDir           *string   `json:"mountDir,omitempty" binding:"omitempty,max=255,mount_dir"`
+	IsUnifiedConfig    *bool     `json:"isUnifiedConfig,omitempty"`
+	MountedEnvNames    *[]string `json:"mountedEnvNames,omitempty"`
+	EnableEnvVarRender *bool     `json:"enableEnvVarRender,omitempty"`
 }
 
 // ToFileDefUpdate 转换为 service 层参数。
 func (i UpdateDefInput) ToFileDefUpdate(operator string) appcfg.FileDefUpdate {
 	return appcfg.FileDefUpdate{
-		Name:            i.Name,
-		MountDir:        i.MountDir,
-		IsUnifiedConfig: i.IsUnifiedConfig,
-		MountedEnvNames: i.MountedEnvNames,
-		Operator:        operator,
+		Name:               i.Name,
+		MountDir:           i.MountDir,
+		IsUnifiedConfig:    i.IsUnifiedConfig,
+		MountedEnvNames:    i.MountedEnvNames,
+		EnableEnvVarRender: i.EnableEnvVarRender,
+		Operator:           operator,
 	}
 }
 

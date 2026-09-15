@@ -16,15 +16,15 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package runtimerender_test
+package cfgrender_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
 )
 
 var _ = Describe("RenderConfigContents", func() {
@@ -35,7 +35,7 @@ var _ = Describe("RenderConfigContents", func() {
 		envVars := map[string]string{"DB_HOST": "127.0.0.1"}
 		collector := envvarrefs.NewCollector(envVars)
 
-		result, err := runtimerender.RenderConfigContents(items, envVars, collector)
+		result, err := cfgrender.RenderConfigContents(items, envVars, collector)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(1))
@@ -53,7 +53,7 @@ var _ = Describe("RenderConfigContents", func() {
 		envVars := map[string]string{"A": "1", "B": "2"}
 		collector := envvarrefs.NewCollector(envVars)
 
-		result, err := runtimerender.RenderConfigContents(items, envVars, collector)
+		result, err := cfgrender.RenderConfigContents(items, envVars, collector)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(2))
@@ -68,7 +68,7 @@ var _ = Describe("RenderConfigContents", func() {
 		envVars := map[string]string{"OTHER_VAR": "val"}
 		collector := envvarrefs.NewCollector(envVars)
 
-		result, err := runtimerender.RenderConfigContents(items, envVars, collector)
+		result, err := cfgrender.RenderConfigContents(items, envVars, collector)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(1))
@@ -86,7 +86,7 @@ var _ = Describe("RenderConfigContents", func() {
 		}
 		collector := envvarrefs.NewCollector(nil)
 
-		result, err := runtimerender.RenderConfigContents(items, nil, collector)
+		result, err := cfgrender.RenderConfigContents(items, nil, collector)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(1))
@@ -96,7 +96,7 @@ var _ = Describe("RenderConfigContents", func() {
 	It("should return empty result for empty input", func() {
 		collector := envvarrefs.NewCollector(nil)
 
-		result, err := runtimerender.RenderConfigContents(nil, nil, collector)
+		result, err := cfgrender.RenderConfigContents(nil, nil, collector)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(BeEmpty())
@@ -108,7 +108,7 @@ var _ = Describe("RenderConfigContents", func() {
 		}
 		collector := envvarrefs.NewCollector(nil)
 
-		_, err := runtimerender.RenderConfigContents(items, nil, collector)
+		_, err := cfgrender.RenderConfigContents(items, nil, collector)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("collecting env vars from config bad.yaml"))
@@ -121,7 +121,7 @@ var _ = Describe("RenderConfigContents", func() {
 		}
 		collector := envvarrefs.NewCollector(nil)
 
-		_, err := runtimerender.RenderConfigContents(items, nil, collector)
+		_, err := cfgrender.RenderConfigContents(items, nil, collector)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("bad.yaml"))
@@ -133,7 +133,7 @@ var _ = Describe("RenderConfigContents", func() {
 		}
 		collector := envvarrefs.NewCollector(nil)
 
-		result, err := runtimerender.RenderConfigContents(items, nil, collector)
+		result, err := cfgrender.RenderConfigContents(items, nil, collector)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(1))

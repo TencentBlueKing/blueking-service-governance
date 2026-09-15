@@ -38,6 +38,8 @@ type MountableFile struct {
 	MountDir string
 	// Content 经 overlay/overwrite 策略编译后的最终文件内容。
 	Content string
+	// EnableEnvVarRender 是否启用环境变量渲染，从 AppConfigFileDef.EnableEnvVarRender 传递。
+	EnableEnvVarRender bool
 }
 
 // MountableFileProvider 提供环境级可挂载配置文件的解析能力，workload 层通过该接口获取最终要挂载到容器的文件信息。
@@ -182,8 +184,9 @@ func (s *AppCfgFileDefService) buildEffectiveContentItem(
 	}
 
 	return MountableFile{
-		Name:     def.Name,
-		MountDir: def.MountDir,
-		Content:  content,
+		Name:               def.Name,
+		MountDir:           def.MountDir,
+		Content:            content,
+		EnableEnvVarRender: def.EnableEnvVarRender,
 	}, nil
 }
