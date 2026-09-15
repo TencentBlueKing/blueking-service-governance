@@ -115,11 +115,17 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 	if err != nil {
 		return errors.Wrap(err, "resolve application defaults")
 	}
-
 	// 设置配置文件内容
 	var fileContent *string
 	if params.TrpcConfig != nil && params.TrpcConfig.FileContent != "" {
 		fileContent = &params.TrpcConfig.FileContent
+	}
+
+	// framework def 使用 tRPC 配置中的实际文件名（如 trpc_go.yaml），
+	// 保持 def.Name 与 app model 中的 FileName 一致。
+	cfgFileName := appcfg.DefaultAppConfigFileName
+	if params.TrpcConfig != nil && params.TrpcConfig.FileName != "" {
+		cfgFileName = params.TrpcConfig.FileName
 	}
 
 	if _, err = s.appConfigFileService.Create(
@@ -127,7 +133,7 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 		appcfg.CreateCfgFileParams{
 			AppID:             app.ID,
 			EnvName:           appcfg.EnvNameDefault,
-			Name:              appcfg.DefaultAppConfigFileName,
+			Name:              cfgFileName,
 			Type:              appcfg.AppConfigFileTypeNormal,
 			ContentSourceType: appcfg.ContentSourceTypeLocal,
 			Format:            appcfg.FileFormatYAML,

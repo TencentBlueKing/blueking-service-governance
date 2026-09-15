@@ -28,6 +28,7 @@ import (
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -56,6 +57,7 @@ type BuilderService struct {
 	appModelStore          appmodel.AppModelStore
 	appSpecStore           appspec.AppSpecStore
 	buildConfigStore       build.ConfigStore
+	mountableFileProvider  appcfg.MountableFileProvider
 }
 
 // Builder helps to build workload resources for applications.
@@ -172,6 +174,7 @@ func NewBuilderService(
 	appModelStore appmodel.AppModelStore,
 	appSpecStore appspec.AppSpecStore,
 	buildConfigStore build.ConfigStore,
+	mountableFileProvider appcfg.MountableFileProvider,
 ) *BuilderService {
 	return &BuilderService{
 		envVarsReader:          envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
@@ -182,6 +185,7 @@ func NewBuilderService(
 		appModelStore:          appModelStore,
 		appSpecStore:           appSpecStore,
 		buildConfigStore:       buildConfigStore,
+		mountableFileProvider:  mountableFileProvider,
 	}
 }
 

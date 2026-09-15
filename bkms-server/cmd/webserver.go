@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -82,7 +83,6 @@ func NewWebServerCmd() *cobra.Command {
 					log.Errorf(ctx, "shutdown APM: %v", err)
 				}
 			}()
-
 			// 启动 Prometheus Metrics Server
 			// metrics.StartServer 内部会监听 ctx.Done() 自行触发优雅关闭，无需在此重复调用 StopServer
 			metrics.StartServer(ctx)
@@ -100,8 +100,11 @@ func NewWebServerCmd() *cobra.Command {
 			reg := storereg.G()
 			router := server.RegisterRouter(ctx, *cfg, cmd.Name())
 			workload.InitPlugin(
-				reg.AppConfigFileStore,
-				reg.AppConfigFileDefStore,
+				appcfg.NewMountableFileProvider(
+					reg.AppConfigFileStore,
+					reg.AppConfigFileDefStore,
+					reg.AppConfigFileVersionStore,
+				),
 				reg.PolarisConfigStore,
 			)
 
@@ -125,7 +128,6 @@ func NewWebServerCmd() *cobra.Command {
 
 			// 启动阶段主动初始化权限管理器，提前暴露 IAM client、角色存储等构造问题，避免延迟到请求首次鉴权时才失败。
 			_ = perm.NewManager()
-
 			return serveHTTP(ctx, cfg.HTTPServer, router)
 		},
 	}

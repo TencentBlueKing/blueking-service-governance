@@ -100,7 +100,9 @@ func (s *AppCfgFileDefService) createDef(
 			// 初始创建默认为统一配置
 			IsUnifiedConfig: true,
 		},
-		Creator: params.Creator,
+		// framework 始终启用环境变量渲染；plain 默认不启用（Go 零值 false）。
+		EnableEnvVarRender: kind == ConfigKindFramework,
+		Creator:            params.Creator,
 	}
 	defID, err := s.DefStore.Add(ctx, def)
 	if err != nil {
@@ -163,6 +165,12 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 		if !policy.AllowMountDirUpdate() {
 			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not support modifying mountDir via def")
 		}
+	}
+
+	// framework 类型不允许修改 EnableEnvVarRender（始终为 true）。
+	if update.EnableEnvVarRender != nil && def.ConfigKind == ConfigKindFramework {
+		return errors.Wrap(ErrInvalidConfigSpec,
+			"framework config file does not allow modifying enableEnvVarRender")
 	}
 
 	applyStaticDefFields(def, update)

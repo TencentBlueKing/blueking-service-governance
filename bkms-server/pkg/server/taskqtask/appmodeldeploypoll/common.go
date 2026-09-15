@@ -233,12 +233,20 @@ func resolveApmServiceName(
 		log.Errorf(ctx, "sync apm service config: get app model failed, app=%s env=%s: %v", app.ID, env.Name, err)
 		return ""
 	}
-	//nolint:staticcheck // 兼容 workload 层旧调用方，后续由 MountableFileProvider 替代
-	_, _, content, err := appcfg.GetEnvContent(
-		ctx, reg.AppConfigFileStore, reg.AppConfigFileDefStore, app.ID, env.Name,
+	cfgProvider := appcfg.NewMountableFileProvider(
+		reg.AppConfigFileStore,
+		reg.AppConfigFileDefStore,
+		reg.AppConfigFileVersionStore,
 	)
+	frameworkFile, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
 	if err != nil {
-		log.Errorf(ctx, "sync apm service config: get env content failed, app=%s env=%s: %v", app.ID, env.Name, err)
+		log.Errorf(
+			ctx,
+			"sync apm service config: get framework config failed, app=%s env=%s: %v",
+			app.ID,
+			env.Name,
+			err,
+		)
 		return ""
 	}
 	appEnvVars, err := envvars.BuildAppEnvVars(
@@ -249,7 +257,7 @@ func resolveApmServiceName(
 		log.Errorf(ctx, "sync apm service config: build app env vars failed, app=%s env=%s: %v", app.ID, env.Name, err)
 		return ""
 	}
-	serviceName, err := bkmmodel.GetApmServiceName(app.Type, content, appEnvVars.ToMap())
+	serviceName, err := bkmmodel.GetApmServiceName(app.Type, frameworkFile.Content, appEnvVars.ToMap())
 	if err != nil {
 		if errors.Is(err, bkmmodel.ErrAPMConfigMissing) {
 			log.Infof(ctx, "apm config missing, skip sync apm service config, app=%s env=%s", app.ID, env.Name)

@@ -115,10 +115,8 @@ type InstanceExecuteTrpcAdminCmdResult struct {
 type TrpcAdminService struct {
 	// TrpcDeployRecordStore 部署记录存储
 	TrpcDeployRecordStore appmodeldeploy.RecordStore
-	// AppConfigFileStore 配置文件存储
-	AppConfigFileStore appcfg.AppConfigFileStore
-	// AppConfigFileDefStore 配置文件 def 存储
-	AppConfigFileDefStore appcfg.AppConfigFileDefStore
+	// MountableFileProvider 配置挂载文件 provider
+	MountableFileProvider appcfg.MountableFileProvider
 	// EnvStore 环境存储
 	EnvStore envmodel.EnvironmentStore
 	// AppStore 应用存储
@@ -158,8 +156,7 @@ func NewAdminService(
 	envName string,
 	instanceIDs []string,
 	trpcDeployRecordStore appmodeldeploy.RecordStore,
-	appConfigFileStore appcfg.AppConfigFileStore,
-	appConfigFileDefStore appcfg.AppConfigFileDefStore,
+	mountableFileProvider appcfg.MountableFileProvider,
 	envStore envmodel.EnvironmentStore,
 	appStore bkmsapp.ApplicationStore,
 	appModelStore appmodel.AppModelStore,
@@ -172,8 +169,7 @@ func NewAdminService(
 		EnvName:               envName,
 		InstanceIDs:           instanceIDs,
 		TrpcDeployRecordStore: trpcDeployRecordStore,
-		AppConfigFileStore:    appConfigFileStore,
-		AppConfigFileDefStore: appConfigFileDefStore,
+		MountableFileProvider: mountableFileProvider,
 		EnvStore:              envStore,
 		AppStore:              appStore,
 		AppModelStore:         appModelStore,
@@ -461,20 +457,13 @@ func (s *TrpcAdminService) GetAdminPort(cfg *AdminConfig) (string, error) {
 
 // GetAdminConfig 获取并解析 admin 配置
 func (s *TrpcAdminService) GetAdminConfig(ctx context.Context) (*AdminConfig, error) {
-	//nolint:staticcheck // 兼容 workload 层旧调用方，后续由 MountableFileProvider 替代
-	_, _, configContent, err := appcfg.GetEnvContent(
-		ctx,
-		s.AppConfigFileStore,
-		s.AppConfigFileDefStore,
-		s.App.ID,
-		s.Env.Name,
-	)
+	frameworkFile, err := s.MountableFileProvider.GetFrameworkMountableFile(ctx, s.App.ID, s.Env.Name)
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := new(AdminConfig)
-	if err = yaml.Unmarshal([]byte(configContent), cfg); err != nil {
+	if err = yaml.Unmarshal([]byte(frameworkFile.Content), cfg); err != nil {
 		return nil, errors.Wrapf(err, "unmarshal trpc config")
 	}
 

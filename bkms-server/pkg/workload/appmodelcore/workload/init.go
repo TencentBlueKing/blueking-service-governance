@@ -35,17 +35,15 @@ var initOnce sync.Once
 // InitPlugin initializes and registers workload plugins with its dependencies.
 // This function must be called after database initialization and before the server starts.
 func InitPlugin(
-	appConfigFileStore appcfg.AppConfigFileStore,
-	appConfigFileDefStore appcfg.AppConfigFileDefStore,
+	mountableFileProvider appcfg.MountableFileProvider,
 	polarisConfigStore polaris.PolarisConfigStore,
 ) {
 	initOnce.Do(func() {
 		plugin.MustRegisterWorkloadPlugin(standard.Plugin{})
 		plugin.MustRegisterWorkloadPlugin(trpc.NewPlugin(
-			appConfigFileStore,
-			appConfigFileDefStore,
+			mountableFileProvider,
 			polarisConfigStore,
 		))
-		plugin.MustRegisterWorkloadPlugin(taf.NewPlugin(appConfigFileStore, appConfigFileDefStore))
+		plugin.MustRegisterWorkloadPlugin(taf.NewPlugin(mountableFileProvider))
 	})
 }

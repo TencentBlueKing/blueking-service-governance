@@ -38,6 +38,8 @@ type MountableFile struct {
 	MountDir string
 	// Content 经 overlay/overwrite 策略编译后的最终文件内容。
 	Content string
+	// EnableEnvVarRender 是否启用环境变量渲染，从 AppConfigFileDef.EnableEnvVarRender 传递。
+	EnableEnvVarRender bool
 }
 
 // MountableFileProvider 提供环境级可挂载配置文件的解析能力，workload 层通过该接口获取最终要挂载到容器的文件信息。
@@ -107,10 +109,8 @@ func (s *AppCfgFileDefService) listEffectiveContents(
 	}
 
 	defIDs := make([]bson.ObjectID, 0, len(defs))
-	defByID := make(map[bson.ObjectID]AppConfigFileDef, len(defs))
 	for _, d := range defs {
 		defIDs = append(defIDs, d.ID)
-		defByID[d.ID] = d
 	}
 
 	// 2. 查默认文件 + 目标环境文件
@@ -184,80 +184,9 @@ func (s *AppCfgFileDefService) buildEffectiveContentItem(
 	}
 
 	return MountableFile{
-		Name:     def.Name,
-		MountDir: def.MountDir,
-		Content:  content,
+		Name:               def.Name,
+		MountDir:           def.MountDir,
+		Content:            content,
+		EnableEnvVarRender: def.EnableEnvVarRender,
 	}, nil
-}
-
-// GetEnvContent retrieves the selected config file and its compiled content with priority:
-// 1. Environment-specific config (envName = current environment name)
-// 2. Application-level default config (envName = "")
-//
-// Deprecated: 兼容 workload 层旧调用方（trpc/taf plugin），后续将由 MountableFileProvider 替代，本次暂时不处理
-// todo 切换
-func GetEnvContent(
-	ctx context.Context,
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
-	appID, envName string,
-) (*AppConfigFile, string, string, error) {
-	// 1. Try environment-specific config
-	acf, content, err := getConfigFileAndCompiledContent(ctx, store, defStore, appID, envName)
-	if err != nil && !errors.Is(err, ErrNoConfigFileFound) {
-		return nil, "", "", errors.Wrapf(err, "getting env-specific config for app %s env %s", appID, envName)
-	}
-
-	// 2. Fall back to app-level default config
-	if errors.Is(err, ErrNoConfigFileFound) {
-		acf, content, err = getConfigFileAndCompiledContent(ctx, store, defStore, appID, EnvNameDefault)
-		if err != nil {
-			return nil, "", "", errors.Wrapf(err, "getting app-level config for app %s", appID)
-		}
-	}
-
-	// 3. Resolve file name from def
-	if acf.DefID == bson.NilObjectID {
-		return nil, "", "", errors.Errorf(
-			"app config file %s (app %s, env %s) has no defID, run migration 000014 to backfill",
-			acf.ID.Hex(), appID, envName,
-		)
-	}
-	def, err := defStore.GetByID(ctx, acf.DefID)
-	if err != nil {
-		return nil, "", "", errors.Wrap(err, "loading def for name resolution")
-	}
-	return acf, def.Name, content, nil
-}
-
-// getConfigFileAndCompiledContent retrieves the config file for an app environment and compiles its content.
-//
-// Deprecated: 兼容 GetEnvContent，后续将由 MountableFileProvider 替代。
-func getConfigFileAndCompiledContent(
-	ctx context.Context,
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
-	appID, envName string,
-) (*AppConfigFile, string, error) {
-	configFiles, err := store.List(ctx, appID, AcfFilterEnvName(envName))
-	if err != nil {
-		return nil, "", errors.Wrapf(err, "list config files for app %s env %s", appID, envName)
-	}
-	if len(configFiles) == 0 {
-		return nil, "", ErrNoConfigFileFound
-	}
-	if len(configFiles) > 1 {
-		return nil, "", errors.Errorf("multiple config files found for app %s env %s", appID, envName)
-	}
-
-	acf := &configFiles[0]
-	editor, err := NewAppConfigFileEditor(store, defStore, acf)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "creating app config file editor")
-	}
-	content, err := editor.GetCompiledContent(ctx)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "compiling app config file content")
-	}
-	return acf, content, nil
 }

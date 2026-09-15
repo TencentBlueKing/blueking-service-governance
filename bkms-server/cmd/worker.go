@@ -29,6 +29,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
@@ -60,7 +61,6 @@ func NewWorkerCmd() *cobra.Command {
 			if err = log.InitDefaultLogger(cfg.Logging); err != nil {
 				return errors.Wrap(err, "init logger")
 			}
-
 			// 初始化蓝鲸监控 APM，与 webserver 保持一致，覆盖 worker 内异步任务的链路上报
 			shutdownAPM := apm.Setup(ctx, cfg.BkMonitor, cmd.Name())
 			defer func() {
@@ -90,8 +90,11 @@ func NewWorkerCmd() *cobra.Command {
 
 			// 初始化 workload 插件（必须在 store 初始化之后）
 			workload.InitPlugin(
-				storereg.G().AppConfigFileStore,
-				storereg.G().AppConfigFileDefStore,
+				appcfg.NewMountableFileProvider(
+					storereg.G().AppConfigFileStore,
+					storereg.G().AppConfigFileDefStore,
+					storereg.G().AppConfigFileVersionStore,
+				),
 				storereg.G().PolarisConfigStore,
 			)
 
@@ -104,7 +107,6 @@ func NewWorkerCmd() *cobra.Command {
 			if err = taskSrv.Start(); err != nil {
 				log.Fatalf("failed to start taskq server: %v", err)
 			}
-
 			log.Info(ctx, "worker started, waiting for tasks...")
 
 			// 等待信号（SIGINT / SIGTERM）触发 ctx.Done()

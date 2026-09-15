@@ -24,7 +24,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -115,9 +114,12 @@ var _ = Describe("TrpcAdminService", func() {
 
 		// 创建 TrpcAdminService（跳过验证逻辑）
 		adminService = &admincmd.TrpcAdminService{
-			AppConfigFileStore:    appConfigFileStore,
-			AppConfigFileDefStore: appConfigFileDefStore,
-			AppModelStore:         appModelStore,
+			MountableFileProvider: appcfg.NewMountableFileProvider(
+				appConfigFileStore,
+				appConfigFileDefStore,
+				appConfigFileVersionStore,
+			),
+			AppModelStore: appModelStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
 				scopedEnvVarStore,
 				appDepsVarReader,
@@ -136,10 +138,8 @@ var _ = Describe("TrpcAdminService", func() {
 
 	Describe("GetAdminConfig", func() {
 		Context("when config file exists for specific environment", func() {
-			var configFileID bson.ObjectID
-
 			BeforeEach(func() {
-				// 创建配置文件内容
+				// 更新已有框架配置文件的默认内容
 				configContent := `server:
   admin:
     port: "11014"
@@ -147,24 +147,35 @@ var _ = Describe("TrpcAdminService", func() {
   port: "8080"
   admin_port: "8081"`
 
-				var err error
-				acf, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
-					Create(
-						ctx,
-						appcfg.CreateCfgFileParams{
-							AppID:             testApp.ID,
-							EnvName:           testEnv.Name,
-							Name:              "trpc_go.yaml",
-							Type:              appcfg.AppConfigFileTypeNormal,
-							ContentSourceType: appcfg.ContentSourceTypeLocal,
-							Format:            appcfg.FileFormatYAML,
-							ConfigKind:        appcfg.ConfigKindFramework,
-							Content:           &configContent,
-						},
-					)
+				svc := appcfg.NewAppConfigFileService(
+					appConfigFileStore,
+					appConfigFileDefStore,
+					appConfigFileVersionStore,
+				)
+				defs, err := appConfigFileDefStore.ListByApp(
+					ctx,
+					testApp.ID,
+					appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+				)
 				Expect(err).NotTo(HaveOccurred())
-				configFileID = acf.ID
-				Expect(configFileID).NotTo(Equal(bson.ObjectID{}))
+				Expect(defs).To(HaveLen(1))
+
+				def := &defs[0]
+				defaultFile, err := svc.GetDefaultFileWithDef(ctx, def.ID)
+				Expect(err).NotTo(HaveOccurred())
+
+				defaultFile.Content = &configContent
+				err = svc.UpdateFile(
+					ctx,
+					&defaultFile.AppConfigFile,
+					def.Name,
+					appcfg.CfgSystemUser,
+					appcfg.UpdateCfgFileOptions{
+						OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
+						Description:   appcfg.CfgSystemVersionDescription,
+					},
+				)
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return parsed admin config", func() {
@@ -282,22 +293,32 @@ var _ = Describe("TrpcAdminService", func() {
 	})
 
 	Describe("Precheck", func() {
-		// 辅助函数：创建指定内容的配置文件
+		// 辅助函数：更新已有框架配置文件的内容
 		createConfigFile := func(content string) {
-			_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
-				Create(
-					ctx,
-					appcfg.CreateCfgFileParams{
-						AppID:             testApp.ID,
-						EnvName:           testEnv.Name,
-						Name:              "trpc_go.yaml",
-						Type:              appcfg.AppConfigFileTypeNormal,
-						ContentSourceType: appcfg.ContentSourceTypeLocal,
-						Format:            appcfg.FileFormatYAML,
-						ConfigKind:        appcfg.ConfigKindFramework,
-						Content:           &content,
-					},
-				)
+			svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
+			defs, err := appConfigFileDefStore.ListByApp(
+				ctx,
+				testApp.ID,
+				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defs).To(HaveLen(1))
+
+			def := &defs[0]
+			defaultFile, err := svc.GetDefaultFileWithDef(ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			defaultFile.Content = &content
+			err = svc.UpdateFile(
+				ctx,
+				&defaultFile.AppConfigFile,
+				def.Name,
+				appcfg.CfgSystemUser,
+				appcfg.UpdateCfgFileOptions{
+					OperationType: appcfg.AppConfigFileVersionOperationTypeUpdate,
+					Description:   appcfg.CfgSystemVersionDescription,
+				},
+			)
 			Expect(err).NotTo(HaveOccurred())
 		}
 

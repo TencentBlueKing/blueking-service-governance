@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
@@ -88,6 +89,23 @@ var _ = Describe("TafWorkloadBuilder", func() {
 		diApp.RequireStop()
 	})
 
+	singleConfigMapContent := func(extraObjs []unstructured.Unstructured) string {
+		for _, obj := range extraObjs {
+			if obj.GetKind() != "ConfigMap" {
+				continue
+			}
+			data := obj.Object["data"].(map[string]any)
+			Expect(data).To(HaveLen(1))
+			for _, v := range data {
+				content, ok := v.(string)
+				Expect(ok).To(BeTrue())
+				return content
+			}
+		}
+		Fail("config map not found")
+		return ""
+	}
+
 	// TAF 特有测试：environment-specific appConfigFile
 	Context("Test Build with environment-specific appConfigFile", func() {
 		var app *bkmsapp.Application
@@ -117,29 +135,40 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			prodEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 			testEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			// 获取默认配置文件的 ID，用于创建 overlay 配置
-			defaultFiles, err := appConfigFileStore.List(ctx, app.ID, appcfg.AcfFilterEnvName(appcfg.EnvNameDefault))
+			// 切换到独立配置后，为 prod 创建 env-specific overlay。
+			defs, err := appConfigFileDefStore.ListByApp(
+				ctx,
+				app.ID,
+				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(defaultFiles).NotTo(BeEmpty())
-			defaultFileID := defaultFiles[0].ID
+			Expect(defs).To(HaveLen(1))
 
-			// Create prod environment-specific AppConfigFile (overlay)
+			cfgSvc := appcfg.NewAppConfigFileService(
+				appConfigFileStore,
+				appConfigFileDefStore,
+				appConfigFileVersionStore,
+			)
+
+			// 切换为独立配置模式
+			isUnified := false
+			err = cfgSvc.UpdateAppCfgFileDef(ctx, &defs[0], appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        appcfg.CfgSystemUser,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// 获取已有框架 def 的默认文件，在其上创建 env overlay
+			defaultFileWithDef, err := cfgSvc.GetDefaultFileWithDef(ctx, defs[0].ID)
+			Expect(err).NotTo(HaveOccurred())
+
 			prodOverlayContent := "<taf>\n  <application>\n    <server>\n      logpath=/data/prod/log\n    </server>\n  </application>\n</taf>\n"
-			_, err = appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
-				Create(
-					ctx,
-					appcfg.CreateCfgFileParams{
-						AppID:               app.ID,
-						EnvName:             prodEnv.Name,
-						Name:                "taf-prod-config",
-						Type:                appcfg.AppConfigFileTypeOverlay,
-						ContentSourceType:   appcfg.ContentSourceTypeLocal,
-						Format:              appcfg.FileFormatTAF,
-						ConfigKind:          appcfg.ConfigKindFramework,
-						BaseAppConfigFileID: &defaultFileID,
-						OverlayContent:      &prodOverlayContent,
-					},
-				)
+			_, err = cfgSvc.CreateEnvInstance(ctx, *defaultFileWithDef, appcfg.CreateEnvInstanceParams{
+				EnvName:        prodEnv.Name,
+				OverlayContent: &prodOverlayContent,
+				Operator:       appcfg.CfgSystemUser,
+				Description:    "prod env overlay for test",
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -164,8 +193,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			Expect(extraObjs[0].GetKind()).To(Equal("ConfigMap"))
 
 			// Verify ConfigMap contains default content
-			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["taf_config.conf"].(string)
+			configContent := singleConfigMapContent(extraObjs)
 			expectedDefaultContent := "<taf>\n  <application>\n    <server>\n" +
 				"      logpath=/data/log\n      timeout=3000\n    </server>\n  </application>\n</taf>\n"
 			Expect(configContent).To(Equal(expectedDefaultContent))
@@ -196,8 +224,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			Expect(extraObjs[0].GetKind()).To(Equal("ConfigMap"))
 
 			// Verify ConfigMap contains prod-specific content (merged with default)
-			configMapData := extraObjs[0].Object["data"].(map[string]any)
-			configContent := configMapData["taf_config.conf"].(string)
+			configContent := singleConfigMapContent(extraObjs)
 			// TAF merge should have prod-specific logpath but keep default timeout
 			Expect(configContent).To(ContainSubstring("logpath=/data/prod/log"))
 			Expect(configContent).To(ContainSubstring("timeout=3000"))
@@ -251,8 +278,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			extraObjs := result.ExtraObjects
 			Expect(extraObjs).To(HaveLen(1))
 
-			configMapData := extraObjs[0].Object["data"].(map[string]interface{})
-			configContent := configMapData["taf_config.conf"].(string)
+			configContent := singleConfigMapContent(extraObjs)
 
 			// 内置变量应被渲染为实际值
 			Expect(configContent).To(ContainSubstring("app=" + app.Name))
@@ -289,7 +315,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				Key: "MISSING",
 				Sources: []envvarrefs.Source{{
 					Type: envvarrefs.SourceAppConfigFile,
-					Name: appcfg.DefaultAppConfigFileName,
+					Name: "taf_config.conf",
 				}},
 			}}))
 		})

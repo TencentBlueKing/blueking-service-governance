@@ -127,7 +127,10 @@ var _ = Describe("DeployPreChecker Check", func() {
 			),
 		)
 		fxApp.RequireStart()
-		workload.InitPlugin(appConfigFileStore, appConfigFileDefStore, polarisConfigStore)
+		workload.InitPlugin(
+			appcfg.NewMountableFileProvider(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore),
+			polarisConfigStore,
+		)
 		statusMock = mockey.Mock(clusteraddon.InspectRequiredAddons).
 			Return(nil, nil).
 			Build()
@@ -173,10 +176,15 @@ var _ = Describe("DeployPreChecker Check", func() {
 			},
 		}
 		app, appEnv := newApp(&dbfactory.TrpcApplicationOpts{
-			TrpcConfig: &appmodel.TrpcConfig{FileContent: `z: ${{ env.ZED }}
+			TrpcConfig: &appmodel.TrpcConfig{
+				FileName: "trpc_go.yaml",
+				FilePath: "/etc/trpc",
+				Language: "go",
+				FileContent: `z: ${{ env.ZED }}
 shared: ${{ env.SHARED }} ${{ env.SHARED }}
 ignored: ${LEGACY}
-`},
+`,
+			},
 			Components: []*component.Component{comp},
 		})
 		Expect(polarisConfigStore.Create(ctx, newTestPolarisConfig(
@@ -194,7 +202,7 @@ ignored: ${LEGACY}
 				{
 					Key: "SHARED",
 					Sources: []envvarrefs.Source{
-						{Type: envvarrefs.SourceAppConfigFile, Name: appcfg.DefaultAppConfigFileName},
+						{Type: envvarrefs.SourceAppConfigFile, Name: "trpc_go.yaml"},
 						{Type: envvarrefs.SourceComponent, Name: comp.Name},
 						{Type: envvarrefs.SourcePolaris, Name: "polaris-main"},
 					},
@@ -202,7 +210,7 @@ ignored: ${LEGACY}
 				{
 					Key: "ZED",
 					Sources: []envvarrefs.Source{
-						{Type: envvarrefs.SourceAppConfigFile, Name: appcfg.DefaultAppConfigFileName},
+						{Type: envvarrefs.SourceAppConfigFile, Name: "trpc_go.yaml"},
 					},
 				},
 			},
@@ -213,6 +221,9 @@ ignored: ${LEGACY}
 	It("treats empty and sensitive env vars as defined", func() {
 		app, appEnv := newApp(&dbfactory.TrpcApplicationOpts{
 			TrpcConfig: &appmodel.TrpcConfig{
+				FileName:    "trpc_go.yaml",
+				FilePath:    "/etc/trpc",
+				Language:    "go",
 				FileContent: "empty: ${{ env.EMPTY }}\nsecret: ${{ env.SECRET }}\n",
 			},
 			EnvVars: []appmodel.Variable{
@@ -247,25 +258,42 @@ ignored: ${LEGACY}
 
 	It("uses the environment config file as the reference source", func() {
 		app, appEnv := newApp(&dbfactory.TrpcApplicationOpts{
-			TrpcConfig: &appmodel.TrpcConfig{FileContent: "default: ${{ env.DEFAULT_ONLY }}\n"},
+			TrpcConfig: &appmodel.TrpcConfig{
+				FileName:    "trpc_go.yaml",
+				FilePath:    "/etc/trpc",
+				Language:    "go",
+				FileContent: "default: ${{ env.DEFAULT_ONLY }}\n",
+			},
 		})
+		svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
+		defs, err := appConfigFileDefStore.ListByApp(
+			ctx,
+			app.ID,
+			appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defs).To(HaveLen(1))
+
+		isUnified := false
+		err = svc.UpdateAppCfgFileDef(ctx, &defs[0], appcfg.FileDefUpdate{
+			IsUnifiedConfig: &isUnified,
+			Operator:        appcfg.CfgSystemUser,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
 		content := "environment: ${{ env.ENV_ONLY }}\n"
-		_, err := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore).
-			Create(
-				ctx,
-				appcfg.CreateCfgFileParams{
-					AppID:             app.ID,
-					EnvName:           appEnv.Name,
-					Name:              appEnv.Name,
-					Type:              appcfg.AppConfigFileTypeNormal,
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Format:            appcfg.FileFormatYAML,
-					ConfigKind:        appcfg.ConfigKindFramework,
-					Content:           &content,
-					Creator:           appcfg.CfgSystemUser,
-					Description:       appcfg.CfgSystemVersionDescription,
-				},
-			)
+		envFile, _, isNewFile, err := svc.PrepareEnvContentUpdate(
+			ctx,
+			&defs[0],
+			appEnv.Name,
+			content,
+			appcfg.CfgSystemUser,
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(isNewFile).To(BeTrue())
+		_, err = svc.CreateFileWithVersion(
+			ctx, *envFile, defs[0].Name, appcfg.CfgSystemVersionDescription, appcfg.CfgSystemUser,
+		)
 		Expect(err).NotTo(HaveOccurred())
 
 		result, err := checker.Check(ctx, app, appEnv)
@@ -273,9 +301,15 @@ ignored: ${LEGACY}
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.UndefinedVars).To(Equal([]envvarrefs.UndefinedEnvVar{
 			{
+				Key: "DEFAULT_ONLY",
+				Sources: []envvarrefs.Source{
+					{Type: envvarrefs.SourceAppConfigFile, Name: "trpc_go.yaml"},
+				},
+			},
+			{
 				Key: "ENV_ONLY",
 				Sources: []envvarrefs.Source{
-					{Type: envvarrefs.SourceAppConfigFile, Name: appEnv.Name},
+					{Type: envvarrefs.SourceAppConfigFile, Name: "trpc_go.yaml"},
 				},
 			},
 		}))
@@ -435,12 +469,17 @@ ignored: ${LEGACY}
 
 	It("returns an error for invalid templates", func() {
 		app, appEnv := newApp(&dbfactory.TrpcApplicationOpts{
-			TrpcConfig: &appmodel.TrpcConfig{FileContent: "${{ env.BROKEN "},
+			TrpcConfig: &appmodel.TrpcConfig{
+				FileName:    "trpc_go.yaml",
+				FilePath:    "/etc/trpc",
+				Language:    "go",
+				FileContent: "${{ env. }}",
+			},
 		})
 
 		_, err := checker.Check(ctx, app, appEnv)
 
-		Expect(err).To(MatchError(ContainSubstring("collecting env vars from tRPC config")))
+		Expect(err).To(MatchError(ContainSubstring("collecting env vars from config")))
 	})
 
 	It("returns an error when a component definition is missing", func() {

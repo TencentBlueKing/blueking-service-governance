@@ -93,7 +93,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 	createDefAndDefaultFile := func(content string) bson.ObjectID {
 		defID, err := appConfigFileDefStore.Add(ctx, appcfg.AppConfigFileDef{
 			AppID:      testAppID,
-			Name:       appcfg.DefaultAppConfigFileName,
+			Name:       "trpc_go.yaml",
 			ConfigKind: appcfg.ConfigKindFramework,
 		})
 		Expect(err).NotTo(HaveOccurred())
