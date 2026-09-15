@@ -1,0 +1,9 @@
+[
+  {
+    "dropIndexes": "devmode_publish_records",
+    "index": [
+      "appID_1_envName_1_createdAt_-1",
+      "appID_1_envName_1_instance_1_createdAt_-1"
+    ]
+  }
+]

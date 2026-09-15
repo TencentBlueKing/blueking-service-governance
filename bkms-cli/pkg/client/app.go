@@ -74,6 +74,65 @@ type DevModePreflightRespData struct {
 	Data *DevModePreflightData `json:"data"`
 }
 
+// DevModePublishReportOptions 开发模式发布结果上报参数
+type DevModePublishReportOptions struct {
+	// BinaryName 发布的二进制名称
+	BinaryName string `json:"binaryName"`
+	// FileSize 文件大小（字节）
+	FileSize int64 `json:"fileSize"`
+	// MD5 文件 MD5 值
+	MD5 string `json:"md5"`
+	// Results 逐实例发布结果
+	Results []DevModePublishResult `json:"results"`
+}
+
+// DevModePublishResult 单个实例的发布结果
+type DevModePublishResult struct {
+	// Instance 目标实例（pod）名称
+	Instance string `json:"instance"`
+	// Status 发布状态：success / failed
+	Status string `json:"status"`
+	// Message 失败原因等附加信息
+	Message string `json:"message"`
+}
+
+// DevModePublishRecord 开发模式发布记录
+type DevModePublishRecord struct {
+	// ID 发布记录 ID
+	ID string `json:"id" yaml:"id"`
+	// Instance 目标实例（pod）名称
+	Instance string `json:"instance" yaml:"instance"`
+	// BinaryName 发布的二进制名称
+	BinaryName string `json:"binaryName" yaml:"binaryName"`
+	// FileSize 文件大小（字节）
+	FileSize int64 `json:"fileSize" yaml:"fileSize"`
+	// MD5 文件 MD5 值
+	MD5 string `json:"md5" yaml:"md5"`
+	// Status 发布状态
+	Status string `json:"status" yaml:"status"`
+	// Message 失败原因等附加信息
+	Message string `json:"message" yaml:"message"`
+	// Operator 操作人
+	Operator string `json:"operator" yaml:"operator"`
+	// CreatedAt 创建时间
+	CreatedAt string `json:"createdAt" yaml:"createdAt"`
+	// UpdatedAt 更新时间
+	UpdatedAt string `json:"updatedAt" yaml:"updatedAt"`
+}
+
+// DevModePublishRecordsRespData 开发模式发布记录列表数据
+type DevModePublishRecordsRespData struct {
+	// Count 总数
+	Count string `json:"count"`
+	// Results 发布记录
+	Results []DevModePublishRecord `json:"results"`
+}
+
+// DevModePublishRecordsResp 开发模式发布记录列表响应
+type DevModePublishRecordsResp struct {
+	Data DevModePublishRecordsRespData `json:"data"`
+}
+
 // AppFull 应用完整定义
 type AppFull struct {
 	ID           string        `json:"id" yaml:"id"`

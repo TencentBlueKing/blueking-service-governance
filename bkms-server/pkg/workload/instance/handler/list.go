@@ -24,6 +24,7 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -198,4 +199,37 @@ func (h *Handler) attachPolarisToListedAppInstances(
 
 	// 按实例标识把北极星信息挂到已投影结果上，不改变 results 顺序与条数
 	serializer.MergePolarisInfoToAppInstances(appInstances, svcInstances)
+}
+
+// attachPublishStatusToListedAppInstances 合并该应用环境各实例最近一次的开发模式发布状态
+func (h *Handler) attachPublishStatusToListedAppInstances(
+	ctx context.Context,
+	appID, envName string,
+	appInstances []*serializer.AppInstanceOutputObj,
+) {
+	if len(appInstances) == 0 {
+		return
+	}
+
+	instanceIDs := lo.Map(appInstances, func(i *serializer.AppInstanceOutputObj, _ int) string {
+		return i.ID
+	})
+
+	latestByInstance, err := h.registry.PublishRecordStore.ListLatestByInstance(ctx, appID, envName, instanceIDs)
+	if err != nil {
+		log.WarnAttrs(ctx, "list latest publish status failed, fallback to empty",
+			slog.String("app_id", appID),
+			slog.String("env_name", envName),
+			slog.String("err", err.Error()),
+		)
+		return
+	}
+
+	for _, instance := range appInstances {
+		record, ok := latestByInstance[instance.ID]
+		if !ok {
+			continue
+		}
+		instance.LatestPublish = new(serializer.PublishStatusOutputObj).FromModel(record)
+	}
 }

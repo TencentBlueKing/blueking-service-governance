@@ -39,6 +39,17 @@ type Client interface {
 		instanceIDs []string,
 		publishAll bool,
 	) (*DevModePreflightData, error)
+	// ReportDevModePublish 上报开发模式发布结果
+	ReportDevModePublish(
+		ctx context.Context,
+		appID, envName string,
+		opts DevModePublishReportOptions,
+	) error
+	// ListDevModePublishRecords 获取开发模式发布记录列表
+	ListDevModePublishRecords(
+		ctx context.Context,
+		appID, envName, keyword string,
+	) ([]DevModePublishRecord, error)
 
 	// ---------- 工作空间 ----------
 

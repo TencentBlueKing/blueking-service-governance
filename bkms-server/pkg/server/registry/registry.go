@@ -47,6 +47,7 @@ import (
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	helmcomp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/helm"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
@@ -118,6 +119,8 @@ type Registry struct {
 	HelmDeployRecordStore               helmdeploy.RecordStore
 	AppModelDeployRecordStore           appmodeldeploy.RecordStore
 	AppModelDeployResourceSnapshotStore appmodeldeploy.ResourceSnapshotStore
+	// 开发模式类
+	PublishRecordStore devmode.PublishRecordStore
 	// Helm Chart 构建类
 	HelmChartBuildRecordStore   helmchartbuild.RecordStore
 	HelmChartSemverCounterStore semver.CounterStore
@@ -233,6 +236,7 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	r.BuildAutoDeployRecordStore = mustInit(autodeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.AppModelDeployRecordStore = mustInit(appmodeldeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.AppModelDeployResourceSnapshotStore = mustInit(appmodeldeploy.NewResourceSnapshotStoreMongo(mongoClient, dbName))
+	r.PublishRecordStore = mustInit(devmode.NewPublishRecordStoreMongo(mongoClient, dbName))
 	r.HelmDeployRecordStore = mustInit(helmdeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.HelmChartBuildRecordStore = mustInit(helmchartbuild.NewRecordStoreMongo(mongoClient, dbName))
 	r.HelmChartSemverCounterStore = mustInit(semver.NewCounterStoreMongo(mongoClient, dbName))

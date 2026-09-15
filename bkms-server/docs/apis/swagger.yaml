@@ -6,6 +6,266 @@ definitions:
     type: string
     x-enum-varnames:
     - RoleCodeAdmin
+  appcfgfiledef.BSCPConfigInput:
+    properties:
+      bizID:
+        type: string
+      id:
+        type: string
+      serviceID:
+        type: string
+    required:
+    - bizID
+    - id
+    - serviceID
+    type: object
+  appcfgfiledef.BaseContentInfoObj:
+    properties:
+      content:
+        type: string
+      holderContentSourceType:
+        type: string
+      holderId:
+        type: string
+      holderName:
+        type: string
+      isFromAnotherFile:
+        type: boolean
+    type: object
+  appcfgfiledef.CreateDefInput:
+    properties:
+      baseAppConfigFileId:
+        description: overlay 文件引用的基础文件 ID（fileType=overlay 时必填）
+        type: string
+      bscpConfig:
+        allOf:
+        - $ref: '#/definitions/appcfgfiledef.BSCPConfigInput'
+        description: BSCP 来源配置（contentSourceType=bscp 时必填）
+      configKind:
+        description: 配置种类：framework / plain
+        enum:
+        - framework
+        - plain
+        type: string
+      content:
+        description: 初始内容（可选，仅 local 来源）
+        type: string
+      contentSourceType:
+        description: 内容来源：local / bscp
+        enum:
+        - local
+        - bscp
+        type: string
+      description:
+        description: 版本描述
+        type: string
+      fileFormat:
+        description: 文件格式
+        enum:
+        - yaml
+        - taf
+        type: string
+      fileType:
+        description: 文件类型：normal / overlay
+        enum:
+        - normal
+        - overlay
+        type: string
+      mountDir:
+        description: 容器内挂载目录（plain 必填）
+        maxLength: 255
+        type: string
+      name:
+        description: 文件名称
+        maxLength: 64
+        minLength: 1
+        type: string
+    required:
+    - configKind
+    - contentSourceType
+    - fileFormat
+    - fileType
+    - name
+    type: object
+  appcfgfiledef.CreateDefOutput:
+    properties:
+      item:
+        $ref: '#/definitions/appcfgfiledef.DefDetailObj'
+    type: object
+  appcfgfiledef.DefDetailObj:
+    properties:
+      baseAppConfigFileId:
+        type: string
+      baseContentInfo:
+        $ref: '#/definitions/appcfgfiledef.BaseContentInfoObj'
+      configKind:
+        type: string
+      content:
+        type: string
+      contentSourceType:
+        type: string
+      createdAt:
+        type: string
+      creator:
+        type: string
+      currentVersion:
+        type: integer
+      editableContentField:
+        description: EditableContentField 前端可编辑的字段（"content" / "overlayContent" /
+          "none"）。
+        type: string
+      fileFormat:
+        type: string
+      fileId:
+        type: string
+      fileType:
+        type: string
+      hasEnvInstance:
+        description: HasEnvInstance 指定环境是否有独立实例（仅按环境查询时有意义）。
+        type: boolean
+      id:
+        type: string
+      isUnifiedConfig:
+        type: boolean
+      mountDir:
+        type: string
+      mountedEnvNames:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      overlayContent:
+        type: string
+      updatedAt:
+        type: string
+      updater:
+        type: string
+    type: object
+  appcfgfiledef.DefSummaryObj:
+    properties:
+      configKind:
+        type: string
+      createdAt:
+        type: string
+      creator:
+        type: string
+      id:
+        type: string
+      isUnifiedConfig:
+        type: boolean
+      mountDir:
+        type: string
+      mountedEnvNames:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+    type: object
+  appcfgfiledef.DeleteDefOutput:
+    type: object
+  appcfgfiledef.EnvInstanceObj:
+    properties:
+      content:
+        type: string
+      currentVersion:
+        type: integer
+      envName:
+        type: string
+      fileId:
+        type: string
+      overlayContent:
+        type: string
+      type:
+        type: string
+      updatedAt:
+        type: string
+      updater:
+        type: string
+    type: object
+  appcfgfiledef.GetDefDetailOutput:
+    properties:
+      item:
+        $ref: '#/definitions/appcfgfiledef.DefDetailObj'
+    type: object
+  appcfgfiledef.ListDefsOutput:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/appcfgfiledef.DefDetailObj'
+        type: array
+    type: object
+  appcfgfiledef.ListEnvInstancesOutput:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/appcfgfiledef.EnvInstanceObj'
+        type: array
+    type: object
+  appcfgfiledef.MountPreviewItemObj:
+    properties:
+      configKind:
+        type: string
+      contentSource:
+        type: string
+      defId:
+        type: string
+      hasEnvFile:
+        type: boolean
+      mountDir:
+        type: string
+      name:
+        type: string
+    type: object
+  appcfgfiledef.MountPreviewOutput:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/appcfgfiledef.MountPreviewItemObj'
+        type: array
+    type: object
+  appcfgfiledef.ResetEnvOutput:
+    type: object
+  appcfgfiledef.UpdateContentInput:
+    properties:
+      content:
+        type: string
+      currentVersion:
+        type: integer
+      description:
+        type: string
+    type: object
+  appcfgfiledef.UpdateContentOutput:
+    properties:
+      content:
+        type: string
+      currentVersion:
+        type: integer
+      fileId:
+        type: string
+    type: object
+  appcfgfiledef.UpdateDefInput:
+    properties:
+      isUnifiedConfig:
+        type: boolean
+      mountDir:
+        maxLength: 255
+        type: string
+      mountedEnvNames:
+        items:
+          type: string
+        type: array
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
+    type: object
+  appcfgfiledef.UpdateDefOutput:
+    properties:
+      item:
+        $ref: '#/definitions/appcfgfiledef.DefSummaryObj'
+    type: object
   bkerrs.ErrCode:
     enum:
     - INVALID_ARGUMENT
@@ -1090,68 +1350,6 @@ definitions:
       name:
         type: string
     type: object
-  serializer.AppConfigFileDefOutputObj:
-    properties:
-      baseAppConfigFileID:
-        description: 基础应用配置文件 ID
-        type: string
-      configKind:
-        description: 配置种类
-        type: string
-      contentSourceType:
-        description: 文件内容来源
-        type: string
-      currentVersion:
-        description: 当前生效版本号
-        type: integer
-      envName:
-        description: 环境名称
-        type: string
-      fileFormat:
-        description: 文件格式
-        type: string
-      id:
-        description: Def ID
-        type: string
-      isUnifiedConfig:
-        description: 是否统一配置
-        type: boolean
-      mountDir:
-        description: 容器内挂载目录
-        type: string
-      name:
-        description: 文件名称
-        type: string
-      type:
-        description: 文件类型
-        type: string
-      updatedAt:
-        description: 最后修改时间
-        type: string
-      updater:
-        description: 最后修改人
-        type: string
-    type: object
-  serializer.AppConfigFileDefUpdateInput:
-    properties:
-      isUnifiedConfig:
-        description: 是否统一配置；不传表示不修改。true = 统一配置；false = 按环境独立配置。
-        type: boolean
-      mountDir:
-        description: 容器内挂载目录；不传表示不修改。
-        maxLength: 255
-        type: string
-      name:
-        description: 应用配置文件名称；不传表示不修改，传时不能为空。
-        maxLength: 64
-        minLength: 1
-        type: string
-    type: object
-  serializer.AppConfigFileDefUpdateOutput:
-    properties:
-      item:
-        $ref: '#/definitions/serializer.AppConfigFileDefOutputObj'
-    type: object
   serializer.AppConfigFileEmptyOutput:
     type: object
   serializer.AppConfigFileOutputObj:
@@ -1455,6 +1653,10 @@ definitions:
       isHealthy:
         description: 健康状态，即 k8s 探针检查结果
         type: boolean
+      latestPublish:
+        allOf:
+        - $ref: '#/definitions/serializer.PublishStatusOutputObj'
+        description: 最近一次开发模式发布状态
       message:
         description: 状态详情，一般为 pod.status.reason
         type: string
@@ -3339,6 +3541,42 @@ definitions:
     required:
     - name
     - poolItems
+    type: object
+  serializer.CreatePublishRecordsData:
+    properties:
+      recordIDs:
+        description: RecordIDs 新建的发布记录 ID 列表
+        items:
+          type: string
+        type: array
+    type: object
+  serializer.CreatePublishRecordsInput:
+    properties:
+      binaryName:
+        description: BinaryName 发布的二进制名称
+        type: string
+      fileSize:
+        description: FileSize 文件大小（字节）
+        minimum: 0
+        type: integer
+      md5:
+        description: MD5 文件 MD5 值
+        type: string
+      results:
+        description: Results 逐实例发布结果
+        items:
+          $ref: '#/definitions/serializer.PublishInstanceResult'
+        minItems: 1
+        type: array
+    required:
+    - binaryName
+    - md5
+    - results
+    type: object
+  serializer.CreatePublishRecordsOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.CreatePublishRecordsData'
     type: object
   serializer.CreateRedisInstanceInput:
     properties:
@@ -5843,6 +6081,11 @@ definitions:
           $ref: '#/definitions/serializer.ScopedEnvVarOutputObj'
         type: array
     type: object
+  serializer.ListPublishRecordsOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.PaginatedPublishRecords'
+    type: object
   serializer.ListRedisInstancesOutput:
     properties:
       data:
@@ -6333,6 +6576,16 @@ definitions:
         description: 查询结果
         items:
           $ref: '#/definitions/serializer.OperationRecordOutputObj'
+        type: array
+    type: object
+  serializer.PaginatedPublishRecords:
+    properties:
+      count:
+        example: "0"
+        type: string
+      results:
+        items:
+          $ref: '#/definitions/serializer.PublishRecordOutputObj'
         type: array
     type: object
   serializer.PaginatedRuntimeImageTagOutputObjs:
@@ -7229,6 +7482,68 @@ definitions:
       label:
         type: string
       value:
+        type: string
+    type: object
+  serializer.PublishInstanceResult:
+    properties:
+      instance:
+        description: Instance 目标实例（pod）名称
+        type: string
+      message:
+        description: Message 失败原因等附加信息
+        type: string
+      status:
+        description: Status 发布状态：success / failed
+        enum:
+        - success
+        - failed
+        type: string
+    required:
+    - instance
+    - status
+    type: object
+  serializer.PublishRecordOutputObj:
+    properties:
+      binaryName:
+        type: string
+      createdAt:
+        type: string
+      fileSize:
+        type: integer
+      id:
+        type: string
+      instance:
+        type: string
+      md5:
+        type: string
+      message:
+        type: string
+      operator:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  serializer.PublishStatusOutputObj:
+    properties:
+      binaryName:
+        description: 发布的二进制名称
+        type: string
+      md5:
+        description: 文件 MD5
+        type: string
+      message:
+        description: 失败原因等附加信息
+        type: string
+      operator:
+        description: 操作人
+        type: string
+      status:
+        description: 发布状态：success / failed
+        type: string
+      updatedAt:
+        description: 更新时间
         type: string
     type: object
   serializer.PutEnvWeightInput:
@@ -9400,35 +9715,30 @@ paths:
       summary: 查询单个应用详情
       tags:
       - app
-  /apps/{appID}/app-config-file-defs/{id}:
-    put:
+  /apps/{appID}/app-config-file-defs:
+    post:
       consumes:
       - application/json
-      operationId: AppConfigFileDefUpdate
+      operationId: CreateAppConfigFileDef
       parameters:
       - description: 应用 ID
         in: path
         name: appID
         required: true
         type: string
-      - description: 应用配置文件 Def ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: 更新逻辑定义信息请求
+      - description: 创建配置文件定义请求
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/serializer.AppConfigFileDefUpdateInput'
+          $ref: '#/definitions/appcfgfiledef.CreateDefInput'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/serializer.AppConfigFileDefUpdateOutput'
+            $ref: '#/definitions/appcfgfiledef.CreateDefOutput'
         "400":
           description: Bad Request
           schema:
@@ -9436,9 +9746,248 @@ paths:
       security:
       - BkUserInfo: []
       - BkUserCredential: []
-      summary: 修改应用配置文件的逻辑定义信息
+      summary: 创建配置文件定义及默认文件
       tags:
-      - app-config-files
+      - app-config-file-defs
+  /apps/{appID}/app-config-file-defs/{id}:
+    delete:
+      operationId: DeleteAppConfigFileDef
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 配置文件定义 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.DeleteDefOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除配置文件定义及关联数据
+      tags:
+      - app-config-file-defs
+    get:
+      operationId: GetAppConfigFileDefDetail
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 配置文件定义 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 环境名称，为空返回默认文件
+        in: query
+        name: envName
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.GetDefDetailOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取配置文件定义详情
+      tags:
+      - app-config-file-defs
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateAppConfigFileDef
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 配置文件定义 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 更新配置文件定义请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/appcfgfiledef.UpdateDefInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.UpdateDefOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新配置文件定义信息
+      tags:
+      - app-config-file-defs
+  /apps/{appID}/app-config-file-defs/{id}/content:
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateAppConfigFileDefContent
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 配置文件定义 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 环境名称，为空更新默认文件
+        in: query
+        name: envName
+        type: string
+      - description: 更新配置内容请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/appcfgfiledef.UpdateContentInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.UpdateContentOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新配置文件内容
+      tags:
+      - app-config-file-defs
+  /apps/{appID}/app-config-file-defs/{id}/env-instances:
+    get:
+      operationId: ListAppConfigFileDefEnvInstances
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 配置文件定义 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.ListEnvInstancesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 列出配置文件定义的环境实例
+      tags:
+      - app-config-file-defs
+  /apps/{appID}/app-config-file-defs/{id}/envs/{envName}:
+    delete:
+      operationId: ResetAppConfigFileDefEnvToDefault
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 配置文件定义 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.ResetEnvOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 恢复环境配置为默认值
+      tags:
+      - app-config-file-defs
+  /apps/{appID}/app-config-file-defs/defaults:
+    get:
+      operationId: ListDefaultFilesWithDef
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.ListDefsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 列出应用下所有配置文件定义及其默认文件信息
+      tags:
+      - app-config-file-defs
   /apps/{appID}/app-config-file/versions:
     get:
       operationId: ListAppConfigFileVersions
@@ -16271,6 +16820,36 @@ paths:
       summary: 手动刷新应用镜像快照
       tags:
       - images
+  /apps/{appID}/mount-preview:
+    get:
+      operationId: GetMountPreview
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 环境名称
+        in: query
+        name: envName
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.MountPreviewOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取配置文件挂载预览
+      tags:
+      - app-config-file-defs
   /apps/{appID}/recommended-image-tag:
     get:
       operationId: GetRecommendedImageTag
@@ -17201,6 +17780,97 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 开发模式 Publish 预检
+      tags:
+      - devmode
+  /devmode/{appID}/envs/{envName}/publish-records:
+    get:
+      operationId: ListDevModePublishRecords
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 搜索关键字
+        in: query
+        name: keyword
+        type: string
+      - description: 分页页码（从 1 开始）
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: 分页大小
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListPublishRecordsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取开发模式发布记录列表
+      tags:
+      - devmode
+    post:
+      consumes:
+      - application/json
+      operationId: CreateDevModePublishRecords
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 发布结果上报请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CreatePublishRecordsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.CreatePublishRecordsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 上报开发模式发布结果
       tags:
       - devmode
   /env-var-templates/app:

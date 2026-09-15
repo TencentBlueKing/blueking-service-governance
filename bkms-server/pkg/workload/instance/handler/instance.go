@@ -113,6 +113,9 @@ func (h *Handler) ListAppInstances(c *gin.Context) {
 	// 合并该应用环境的北极星实例；拉取失败只降级这一列，不影响 Pod 列表返回
 	h.attachPolarisToListedAppInstances(ctx, app.ID, uriInput.EnvName, results)
 
+	// 合并该应用环境各实例最近一次的开发模式发布状态
+	h.attachPublishStatusToListedAppInstances(ctx, app.ID, uriInput.EnvName, results)
+
 	// 成功响应带上首次 List 的 resourceVersion，Watch 必须原样带回
 	ginutils.OK(c, serializer.ListAppInstancesOutput{
 		Data: &serializer.PaginatedAppInstancesOutputObj{

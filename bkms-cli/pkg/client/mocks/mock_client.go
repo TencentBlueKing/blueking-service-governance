@@ -1952,6 +1952,155 @@ func (_c *MockClient_DevModePublishPreflight_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// ReportDevModePublish provides a mock function for the type MockClient
+func (_mock *MockClient) ReportDevModePublish(ctx context.Context, appID string, envName string, opts client.DevModePublishReportOptions) error {
+	ret := _mock.Called(ctx, appID, envName, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReportDevModePublish")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.DevModePublishReportOptions) error); ok {
+		r0 = returnFunc(ctx, appID, envName, opts)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_ReportDevModePublish_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReportDevModePublish'
+type MockClient_ReportDevModePublish_Call struct {
+	*mock.Call
+}
+
+// ReportDevModePublish is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - envName string
+//   - opts client.DevModePublishReportOptions
+func (_e *MockClient_Expecter) ReportDevModePublish(ctx any, appID any, envName any, opts any) *MockClient_ReportDevModePublish_Call {
+	return &MockClient_ReportDevModePublish_Call{Call: _e.mock.On("ReportDevModePublish", ctx, appID, envName, opts)}
+}
+
+func (_c *MockClient_ReportDevModePublish_Call) Run(run func(ctx context.Context, appID string, envName string, opts client.DevModePublishReportOptions)) *MockClient_ReportDevModePublish_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 client.DevModePublishReportOptions
+		if args[3] != nil {
+			arg3 = args[3].(client.DevModePublishReportOptions)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ReportDevModePublish_Call) Return(err error) *MockClient_ReportDevModePublish_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_ReportDevModePublish_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, opts client.DevModePublishReportOptions) error) *MockClient_ReportDevModePublish_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListDevModePublishRecords provides a mock function for the type MockClient
+func (_mock *MockClient) ListDevModePublishRecords(ctx context.Context, appID string, envName string, keyword string) ([]client.DevModePublishRecord, error) {
+	ret := _mock.Called(ctx, appID, envName, keyword)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListDevModePublishRecords")
+	}
+
+	var r0 []client.DevModePublishRecord
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) ([]client.DevModePublishRecord, error)); ok {
+		return returnFunc(ctx, appID, envName, keyword)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) []client.DevModePublishRecord); ok {
+		r0 = returnFunc(ctx, appID, envName, keyword)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.DevModePublishRecord)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, envName, keyword)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_ListDevModePublishRecords_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListDevModePublishRecords'
+type MockClient_ListDevModePublishRecords_Call struct {
+	*mock.Call
+}
+
+// ListDevModePublishRecords is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - envName string
+//   - keyword string
+func (_e *MockClient_Expecter) ListDevModePublishRecords(ctx any, appID any, envName any, keyword any) *MockClient_ListDevModePublishRecords_Call {
+	return &MockClient_ListDevModePublishRecords_Call{Call: _e.mock.On("ListDevModePublishRecords", ctx, appID, envName, keyword)}
+}
+
+func (_c *MockClient_ListDevModePublishRecords_Call) Run(run func(ctx context.Context, appID string, envName string, keyword string)) *MockClient_ListDevModePublishRecords_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ListDevModePublishRecords_Call) Return(devModePublishRecords []client.DevModePublishRecord, err error) *MockClient_ListDevModePublishRecords_Call {
+	_c.Call.Return(devModePublishRecords, err)
+	return _c
+}
+
+func (_c *MockClient_ListDevModePublishRecords_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, keyword string) ([]client.DevModePublishRecord, error)) *MockClient_ListDevModePublishRecords_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ExchangeBkTicketForToken provides a mock function for the type MockClient
 func (_mock *MockClient) ExchangeBkTicketForToken(username string, bkTicket string) (string, error) {
 	ret := _mock.Called(username, bkTicket)

@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -50,6 +51,11 @@ const (
 	maxUploadSize = (1 << 30) * 5
 	// defaultContainerName 默认容器名称
 	defaultContainerName = "main"
+
+	// publishStatusSuccess 发布成功状态
+	publishStatusSuccess = "success"
+	// publishStatusFailed 发布失败状态
+	publishStatusFailed = "failed"
 )
 
 // Publisher 开发模式文件发布处理器。
@@ -90,6 +96,9 @@ func (h *Publisher) PreCheck(instanceIDs []string, publishAll bool) error {
 
 	// 缓存后续发布阶段需要使用的上下文信息
 	h.preflight = preflight
+	if preflight.DevMode == nil {
+		return errors.New("server returned empty devMode config")
+	}
 	// WorkPath 由 server 端根据应用类型（trpc/taf）返回，如 /data/bkms/dev-mode/trpc 或 /data/bkms/dev-mode/taf
 	h.devModeBinPath = osfilepath.Join(preflight.DevMode.WorkPath, "/bin")
 	h.restartScriptPath = osfilepath.Join(preflight.DevMode.MountPath, "/restart.sh")
@@ -113,7 +122,8 @@ func (h *Publisher) GetInstanceIDs() []string {
 // 3. 计算文件 MD5
 // 4. 生成随机文件名
 // 5. 预先压缩文件为 tar.gz 格式
-// 6. 逐个 pod 上传文件并执行 restart.sh
+// 6. 逐个 pod 上传文件并执行 restart.sh，收集每个实例的发布结果
+// 7. 上报逐实例发布结果到 server
 func (h *Publisher) Publish(filePath string, instanceIDs []string) error {
 	if h.preflight == nil {
 		return errors.New("preCheck must be called before publish")
@@ -159,35 +169,82 @@ func (h *Publisher) Publish(filePath string, instanceIDs []string) error {
 		return errors.Wrap(err, "failed to compress file to tar.gz")
 	}
 	namespace := h.preflight.Namespace
+	binaryName := osfilepath.Base(filePath)
 	slog.Debug(fmt.Sprintf("Compressed size: %.2f MB", float64(len(tarGzData))/(1024*1024)))
 	console.Info("==================================================")
 	console.Info("Publish workflow: 1. Upload file ==> 2. Execute restart script ==> 3. Done")
 	console.Info("==================================================")
 
-	// 6. 逐个 pod 上传文件并执行 restart.sh
+	// 6. 逐个 pod 上传文件并执行 restart.sh，失败不中断，继续处理其余实例
+	results := make([]client.DevModePublishResult, 0, len(instanceIDs))
 	for i, instanceID := range instanceIDs {
 		console.Info("\n[%d/%d] Processing instance: %s", i+1, len(instanceIDs), instanceID)
 		slog.Debug(fmt.Sprintf("  Random filename: %s", randomName))
 
+		result := client.DevModePublishResult{Instance: instanceID}
+
 		// 上传已压缩的 tar.gz 数据到 pod
 		slog.Debug(fmt.Sprintf("  Uploading file to %s...", h.devModeBinPath))
 		if err = h.uploadTarGzToPod(h.ctx, tarGzData, instanceID, namespace, h.devModeBinPath); err != nil {
-			return errors.Wrapf(err, "failed to upload file to pod %s", instanceID)
+			result.Status = publishStatusFailed
+			result.Message = fmt.Sprintf("failed to upload file: %v", err)
+			console.Error("  Instance %s failed: %s", instanceID, result.Message)
+			results = append(results, result)
+			continue
 		}
 		slog.Debug("  File upload completed!")
 
 		// 执行 restart.sh 脚本
 		slog.Debug("  Executing restart.sh script...")
 		if err = h.executeRestartScript(h.ctx, instanceID, namespace, h.restartScriptPath, randomName, fileMD5); err != nil {
-			return errors.Wrapf(err, "failed to execute restart script on pod %s", instanceID)
+			result.Status = publishStatusFailed
+			result.Message = fmt.Sprintf("failed to execute restart script: %v", err)
+			console.Error("  Instance %s failed: %s", instanceID, result.Message)
+			results = append(results, result)
+			continue
 		}
+
+		result.Status = publishStatusSuccess
+		results = append(results, result)
 		console.Info("  Instance %s restart completed!", instanceID)
 	}
-	console.Info("\n==================================================")
-	console.Info("All instances published successfully!")
-	console.Info("==================================================")
 
-	return nil
+	// 7. 上报逐实例发布结果（best-effort，上报失败不影响本次发布结果）
+	defer h.report(binaryName, fileInfo.Size(), fileMD5, results)
+
+	// 8. 汇总输出，任一实例失败则返回错误
+	failed := lo.Filter(results, func(result client.DevModePublishResult, _ int) bool {
+		return result.Status == publishStatusFailed
+	})
+
+	console.Info("\n==================================================")
+	if len(failed) == 0 {
+		console.Info("All instances published successfully!")
+		console.Info("==================================================")
+		return nil
+	}
+	console.Error("Publish finished with %d failed instance(s):", len(failed))
+	for _, result := range failed {
+		console.Error("  - %s: %s", result.Instance, result.Message)
+	}
+	console.Error("==================================================")
+	return errors.Errorf("publish failed on %d instance(s)", len(failed))
+}
+
+// report 上报逐实例发布结果到 server（best-effort）。
+func (h *Publisher) report(binaryName string, fileSize int64, fileMD5 string, results []client.DevModePublishResult) {
+	if len(results) == 0 {
+		return
+	}
+	err := h.cli.ReportDevModePublish(h.ctx, h.appID, h.envName, client.DevModePublishReportOptions{
+		BinaryName: binaryName,
+		FileSize:   fileSize,
+		MD5:        fileMD5,
+		Results:    results,
+	})
+	if err != nil {
+		console.Warn("Warning: failed to report publish result to server: %v", err)
+	}
 }
 
 // buildKubeClient 使用 token 连接集群。

@@ -1,0 +1,24 @@
+[
+  {
+    "createIndexes": "devmode_publish_records",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "envName": 1,
+          "createdAt": -1
+        },
+        "name": "appID_1_envName_1_createdAt_-1"
+      },
+      {
+        "key": {
+          "appID": 1,
+          "envName": 1,
+          "instance": 1,
+          "createdAt": -1
+        },
+        "name": "appID_1_envName_1_instance_1_createdAt_-1"
+      }
+    ]
+  }
+]

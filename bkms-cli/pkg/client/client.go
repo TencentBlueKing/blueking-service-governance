@@ -186,6 +186,65 @@ func (c *SvcBasedClient) DevModePublishPreflight(
 	return respData.Data, nil
 }
 
+// ReportDevModePublish 上报开发模式发布结果
+func (c *SvcBasedClient) ReportDevModePublish(
+	ctx context.Context,
+	appID, envName string,
+	opts DevModePublishReportOptions,
+) error {
+	path := fmt.Sprintf(
+		"/bkms/v1/bkms-server/devmode/%s/envs/%s/publish-records",
+		url.PathEscape(appID),
+		url.PathEscape(envName),
+	)
+
+	resp, err := c.cli.R().SetContext(ctx).SetBody(opts).Post(path)
+	if err != nil {
+		return errors.Wrap(err, "report devmode publish request failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return errors.Errorf(
+			"report devmode publish failed: [%d] -> %s",
+			resp.StatusCode(),
+			truncateBody(resp.Body()),
+		)
+	}
+
+	return nil
+}
+
+// ListDevModePublishRecords 获取开发模式发布记录列表
+func (c *SvcBasedClient) ListDevModePublishRecords(
+	ctx context.Context,
+	appID, envName, keyword string,
+) ([]DevModePublishRecord, error) {
+	path := fmt.Sprintf(
+		"/bkms/v1/bkms-server/devmode/%s/envs/%s/publish-records",
+		url.PathEscape(appID),
+		url.PathEscape(envName),
+	)
+	queryParams := map[string]string{
+		"keyword":  keyword,
+		"page":     "1",
+		"pageSize": "100",
+	}
+
+	var respData DevModePublishRecordsResp
+	resp, err := c.cli.R().SetContext(ctx).SetQueryParams(queryParams).SetResult(&respData).Get(path)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, errors.Errorf(
+			"list devmode publish records failed: [%d] -> %s",
+			resp.StatusCode(),
+			truncateBody(resp.Body()),
+		)
+	}
+
+	return respData.Data.Results, nil
+}
+
 // ListWorkspaces 获取工作空间列表
 func (c *SvcBasedClient) ListWorkspaces(ctx context.Context, keyword string) ([]Workspace, error) {
 	var respData ListWorkspacesRespData

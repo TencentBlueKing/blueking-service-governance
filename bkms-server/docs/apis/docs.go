@@ -127,7 +127,159 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/app-config-file-defs": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "创建配置文件定义及默认文件",
+                "operationId": "CreateAppConfigFileDef",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "创建配置文件定义请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.CreateDefInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.CreateDefOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/app-config-file-defs/defaults": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "列出应用下所有配置文件定义及其默认文件信息",
+                "operationId": "ListDefaultFilesWithDef",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.ListDefsOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/app-config-file-defs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "获取配置文件定义详情",
+                "operationId": "GetAppConfigFileDefDetail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "配置文件定义 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称，为空返回默认文件",
+                        "name": "envName",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.GetDefDetailOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
             "put": {
                 "security": [
                     {
@@ -144,10 +296,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "app-config-files"
+                    "app-config-file-defs"
                 ],
-                "summary": "修改应用配置文件的逻辑定义信息",
-                "operationId": "AppConfigFileDefUpdate",
+                "summary": "更新配置文件定义信息",
+                "operationId": "UpdateAppConfigFileDef",
                 "parameters": [
                     {
                         "type": "string",
@@ -158,18 +310,18 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "应用配置文件 Def ID",
+                        "description": "配置文件定义 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "更新逻辑定义信息请求",
+                        "description": "更新配置文件定义请求",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/serializer.AppConfigFileDefUpdateInput"
+                            "$ref": "#/definitions/appcfgfiledef.UpdateDefInput"
                         }
                     }
                 ],
@@ -177,7 +329,230 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/serializer.AppConfigFileDefUpdateOutput"
+                            "$ref": "#/definitions/appcfgfiledef.UpdateDefOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "删除配置文件定义及关联数据",
+                "operationId": "DeleteAppConfigFileDef",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "配置文件定义 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.DeleteDefOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/app-config-file-defs/{id}/content": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "更新配置文件内容",
+                "operationId": "UpdateAppConfigFileDefContent",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "配置文件定义 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称，为空更新默认文件",
+                        "name": "envName",
+                        "in": "query"
+                    },
+                    {
+                        "description": "更新配置内容请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.UpdateContentInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.UpdateContentOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/app-config-file-defs/{id}/env-instances": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "列出配置文件定义的环境实例",
+                "operationId": "ListAppConfigFileDefEnvInstances",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "配置文件定义 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.ListEnvInstancesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{appID}/app-config-file-defs/{id}/envs/{envName}": {
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "恢复环境配置为默认值",
+                "operationId": "ResetAppConfigFileDefEnvToDefault",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "配置文件定义 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.ResetEnvOutput"
                         }
                     },
                     "400": {
@@ -11028,6 +11403,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/mount-preview": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "获取配置文件挂载预览",
+                "operationId": "GetMountPreview",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称",
+                        "name": "envName",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.MountPreviewOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/recommended-image-tag": {
             "get": {
                 "security": [
@@ -12502,6 +12926,148 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.PreflightOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/devmode/{appID}/envs/{envName}/publish-records": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "devmode"
+                ],
+                "summary": "获取开发模式发布记录列表",
+                "operationId": "ListDevModePublishRecords",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "搜索关键字",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分页页码（从 1 开始）",
+                        "name": "page",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分页大小",
+                        "name": "pageSize",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListPublishRecordsOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "devmode"
+                ],
+                "summary": "上报开发模式发布结果",
+                "operationId": "CreateDevModePublishRecords",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "发布结果上报请求体",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreatePublishRecordsInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreatePublishRecordsOutput"
                         }
                     },
                     "400": {
@@ -18375,6 +18941,391 @@ const docTemplate = `{
                 "RoleCodeAdmin"
             ]
         },
+        "appcfgfiledef.BSCPConfigInput": {
+            "type": "object",
+            "required": [
+                "bizID",
+                "id",
+                "serviceID"
+            ],
+            "properties": {
+                "bizID": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "serviceID": {
+                    "type": "string"
+                }
+            }
+        },
+        "appcfgfiledef.BaseContentInfoObj": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "holderContentSourceType": {
+                    "type": "string"
+                },
+                "holderId": {
+                    "type": "string"
+                },
+                "holderName": {
+                    "type": "string"
+                },
+                "isFromAnotherFile": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "appcfgfiledef.CreateDefInput": {
+            "type": "object",
+            "required": [
+                "configKind",
+                "contentSourceType",
+                "fileFormat",
+                "fileType",
+                "name"
+            ],
+            "properties": {
+                "baseAppConfigFileId": {
+                    "description": "overlay 文件引用的基础文件 ID（fileType=overlay 时必填）",
+                    "type": "string"
+                },
+                "bscpConfig": {
+                    "description": "BSCP 来源配置（contentSourceType=bscp 时必填）",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/appcfgfiledef.BSCPConfigInput"
+                        }
+                    ]
+                },
+                "configKind": {
+                    "description": "配置种类：framework / plain",
+                    "type": "string",
+                    "enum": [
+                        "framework",
+                        "plain"
+                    ]
+                },
+                "content": {
+                    "description": "初始内容（可选，仅 local 来源）",
+                    "type": "string"
+                },
+                "contentSourceType": {
+                    "description": "内容来源：local / bscp",
+                    "type": "string",
+                    "enum": [
+                        "local",
+                        "bscp"
+                    ]
+                },
+                "description": {
+                    "description": "版本描述",
+                    "type": "string"
+                },
+                "fileFormat": {
+                    "description": "文件格式",
+                    "type": "string",
+                    "enum": [
+                        "yaml",
+                        "taf"
+                    ]
+                },
+                "fileType": {
+                    "description": "文件类型：normal / overlay",
+                    "type": "string",
+                    "enum": [
+                        "normal",
+                        "overlay"
+                    ]
+                },
+                "mountDir": {
+                    "description": "容器内挂载目录（plain 必填）",
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "name": {
+                    "description": "文件名称",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                }
+            }
+        },
+        "appcfgfiledef.CreateDefOutput": {
+            "type": "object",
+            "properties": {
+                "item": {
+                    "$ref": "#/definitions/appcfgfiledef.DefDetailObj"
+                }
+            }
+        },
+        "appcfgfiledef.DefDetailObj": {
+            "type": "object",
+            "properties": {
+                "baseAppConfigFileId": {
+                    "type": "string"
+                },
+                "baseContentInfo": {
+                    "$ref": "#/definitions/appcfgfiledef.BaseContentInfoObj"
+                },
+                "configKind": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "contentSourceType": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "creator": {
+                    "type": "string"
+                },
+                "currentVersion": {
+                    "type": "integer"
+                },
+                "editableContentField": {
+                    "description": "EditableContentField 前端可编辑的字段（\"content\" / \"overlayContent\" / \"none\"）。",
+                    "type": "string"
+                },
+                "fileFormat": {
+                    "type": "string"
+                },
+                "fileId": {
+                    "type": "string"
+                },
+                "fileType": {
+                    "type": "string"
+                },
+                "hasEnvInstance": {
+                    "description": "HasEnvInstance 指定环境是否有独立实例（仅按环境查询时有意义）。",
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "isUnifiedConfig": {
+                    "type": "boolean"
+                },
+                "mountDir": {
+                    "type": "string"
+                },
+                "mountedEnvNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "overlayContent": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "updater": {
+                    "type": "string"
+                }
+            }
+        },
+        "appcfgfiledef.DefSummaryObj": {
+            "type": "object",
+            "properties": {
+                "configKind": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "creator": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "isUnifiedConfig": {
+                    "type": "boolean"
+                },
+                "mountDir": {
+                    "type": "string"
+                },
+                "mountedEnvNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "appcfgfiledef.DeleteDefOutput": {
+            "type": "object"
+        },
+        "appcfgfiledef.EnvInstanceObj": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "currentVersion": {
+                    "type": "integer"
+                },
+                "envName": {
+                    "type": "string"
+                },
+                "fileId": {
+                    "type": "string"
+                },
+                "overlayContent": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "updater": {
+                    "type": "string"
+                }
+            }
+        },
+        "appcfgfiledef.GetDefDetailOutput": {
+            "type": "object",
+            "properties": {
+                "item": {
+                    "$ref": "#/definitions/appcfgfiledef.DefDetailObj"
+                }
+            }
+        },
+        "appcfgfiledef.ListDefsOutput": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/appcfgfiledef.DefDetailObj"
+                    }
+                }
+            }
+        },
+        "appcfgfiledef.ListEnvInstancesOutput": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/appcfgfiledef.EnvInstanceObj"
+                    }
+                }
+            }
+        },
+        "appcfgfiledef.MountPreviewItemObj": {
+            "type": "object",
+            "properties": {
+                "configKind": {
+                    "type": "string"
+                },
+                "contentSource": {
+                    "type": "string"
+                },
+                "defId": {
+                    "type": "string"
+                },
+                "hasEnvFile": {
+                    "type": "boolean"
+                },
+                "mountDir": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "appcfgfiledef.MountPreviewOutput": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/appcfgfiledef.MountPreviewItemObj"
+                    }
+                }
+            }
+        },
+        "appcfgfiledef.ResetEnvOutput": {
+            "type": "object"
+        },
+        "appcfgfiledef.UpdateContentInput": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "currentVersion": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                }
+            }
+        },
+        "appcfgfiledef.UpdateContentOutput": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "currentVersion": {
+                    "type": "integer"
+                },
+                "fileId": {
+                    "type": "string"
+                }
+            }
+        },
+        "appcfgfiledef.UpdateDefInput": {
+            "type": "object",
+            "properties": {
+                "isUnifiedConfig": {
+                    "type": "boolean"
+                },
+                "mountDir": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "mountedEnvNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                }
+            }
+        },
+        "appcfgfiledef.UpdateDefOutput": {
+            "type": "object",
+            "properties": {
+                "item": {
+                    "$ref": "#/definitions/appcfgfiledef.DefSummaryObj"
+                }
+            }
+        },
         "bkerrs.ErrCode": {
             "type": "string",
             "enum": [
@@ -19920,91 +20871,6 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.AppConfigFileDefOutputObj": {
-            "type": "object",
-            "properties": {
-                "baseAppConfigFileID": {
-                    "description": "基础应用配置文件 ID",
-                    "type": "string"
-                },
-                "configKind": {
-                    "description": "配置种类",
-                    "type": "string"
-                },
-                "contentSourceType": {
-                    "description": "文件内容来源",
-                    "type": "string"
-                },
-                "currentVersion": {
-                    "description": "当前生效版本号",
-                    "type": "integer"
-                },
-                "envName": {
-                    "description": "环境名称",
-                    "type": "string"
-                },
-                "fileFormat": {
-                    "description": "文件格式",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "Def ID",
-                    "type": "string"
-                },
-                "isUnifiedConfig": {
-                    "description": "是否统一配置",
-                    "type": "boolean"
-                },
-                "mountDir": {
-                    "description": "容器内挂载目录",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "文件名称",
-                    "type": "string"
-                },
-                "type": {
-                    "description": "文件类型",
-                    "type": "string"
-                },
-                "updatedAt": {
-                    "description": "最后修改时间",
-                    "type": "string"
-                },
-                "updater": {
-                    "description": "最后修改人",
-                    "type": "string"
-                }
-            }
-        },
-        "serializer.AppConfigFileDefUpdateInput": {
-            "type": "object",
-            "properties": {
-                "isUnifiedConfig": {
-                    "description": "是否统一配置；不传表示不修改。true = 统一配置；false = 按环境独立配置。",
-                    "type": "boolean"
-                },
-                "mountDir": {
-                    "description": "容器内挂载目录；不传表示不修改。",
-                    "type": "string",
-                    "maxLength": 255
-                },
-                "name": {
-                    "description": "应用配置文件名称；不传表示不修改，传时不能为空。",
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 1
-                }
-            }
-        },
-        "serializer.AppConfigFileDefUpdateOutput": {
-            "type": "object",
-            "properties": {
-                "item": {
-                    "$ref": "#/definitions/serializer.AppConfigFileDefOutputObj"
-                }
-            }
-        },
         "serializer.AppConfigFileEmptyOutput": {
             "type": "object"
         },
@@ -20448,6 +21314,14 @@ const docTemplate = `{
                 "isHealthy": {
                     "description": "健康状态，即 k8s 探针检查结果",
                     "type": "boolean"
+                },
+                "latestPublish": {
+                    "description": "最近一次开发模式发布状态",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.PublishStatusOutputObj"
+                        }
+                    ]
                 },
                 "message": {
                     "description": "状态详情，一般为 pod.status.reason",
@@ -23229,6 +24103,57 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/serializer.PortPoolItemInput"
                     }
+                }
+            }
+        },
+        "serializer.CreatePublishRecordsData": {
+            "type": "object",
+            "properties": {
+                "recordIDs": {
+                    "description": "RecordIDs 新建的发布记录 ID 列表",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.CreatePublishRecordsInput": {
+            "type": "object",
+            "required": [
+                "binaryName",
+                "md5",
+                "results"
+            ],
+            "properties": {
+                "binaryName": {
+                    "description": "BinaryName 发布的二进制名称",
+                    "type": "string"
+                },
+                "fileSize": {
+                    "description": "FileSize 文件大小（字节）",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "md5": {
+                    "description": "MD5 文件 MD5 值",
+                    "type": "string"
+                },
+                "results": {
+                    "description": "Results 逐实例发布结果",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/serializer.PublishInstanceResult"
+                    }
+                }
+            }
+        },
+        "serializer.CreatePublishRecordsOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.CreatePublishRecordsData"
                 }
             }
         },
@@ -26941,6 +27866,14 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListPublishRecordsOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PaginatedPublishRecords"
+                }
+            }
+        },
         "serializer.ListRedisInstancesOutput": {
             "type": "object",
             "properties": {
@@ -27676,6 +28609,21 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/serializer.OperationRecordOutputObj"
+                    }
+                }
+            }
+        },
+        "serializer.PaginatedPublishRecords": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PublishRecordOutputObj"
                     }
                 }
             }
@@ -28951,6 +29899,95 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.PublishInstanceResult": {
+            "type": "object",
+            "required": [
+                "instance",
+                "status"
+            ],
+            "properties": {
+                "instance": {
+                    "description": "Instance 目标实例（pod）名称",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "Message 失败原因等附加信息",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status 发布状态：success / failed",
+                    "type": "string",
+                    "enum": [
+                        "success",
+                        "failed"
+                    ]
+                }
+            }
+        },
+        "serializer.PublishRecordOutputObj": {
+            "type": "object",
+            "properties": {
+                "binaryName": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "fileSize": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "instance": {
+                    "type": "string"
+                },
+                "md5": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "operator": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.PublishStatusOutputObj": {
+            "type": "object",
+            "properties": {
+                "binaryName": {
+                    "description": "发布的二进制名称",
+                    "type": "string"
+                },
+                "md5": {
+                    "description": "文件 MD5",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "失败原因等附加信息",
+                    "type": "string"
+                },
+                "operator": {
+                    "description": "操作人",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "发布状态：success / failed",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "更新时间",
                     "type": "string"
                 }
             }

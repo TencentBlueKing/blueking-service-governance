@@ -134,4 +134,22 @@ var _ = Describe("Publisher", func() {
 			Expect(err.Error()).To(ContainSubstring("no running instances found"))
 		})
 	})
+
+	Describe("report", func() {
+		It("reports publish result to server", func() {
+			cli.EXPECT().
+				ReportDevModePublish(mock.Anything, appID, envName, mock.Anything).
+				Return(nil)
+
+			publisher := NewPublisher(ctx, cli, appID, envName)
+			publisher.report("server", 1024, "abc", []client.DevModePublishResult{
+				{Instance: "pod-1", Status: publishStatusSuccess},
+			})
+		})
+
+		It("skips reporting when there is no result", func() {
+			publisher := NewPublisher(ctx, cli, appID, envName)
+			publisher.report("server", 1024, "abc", nil)
+		})
+	})
 })

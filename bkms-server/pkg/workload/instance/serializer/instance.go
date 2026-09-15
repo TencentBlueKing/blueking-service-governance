@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/timex"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	devmode "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	podstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload/pod"
 	instancelogsvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/instancelog"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
@@ -305,6 +306,8 @@ type AppInstanceOutputObj struct {
 	Resources AppInstanceResourcesObj `json:"resources"`
 	// 北极星实例状态列表（一个 Pod 可能注册到多个北极星服务）
 	PolarisInfos []*PolarisInstanceInfoOutputObj `json:"polarisInfos"`
+	// 最近一次开发模式发布状态
+	LatestPublish *PublishStatusOutputObj `json:"latestPublish,omitempty"`
 }
 
 // FromPodManifest 从 Kubernetes Pod manifest 填充实例输出字段。
@@ -396,6 +399,38 @@ func MergePolarisInfoToAppInstances(
 	for _, instance := range appInstances {
 		instance.PolarisInfos = PolarisInfosFromModels(matcher.ForIP(instance.IP))
 	}
+}
+
+// PublishStatusOutputObj 实例最近一次开发模式发布状态
+type PublishStatusOutputObj struct {
+	// 发布的二进制名称
+	BinaryName string `json:"binaryName"`
+	// 文件 MD5
+	MD5 string `json:"md5"`
+	// 发布状态：success / failed
+	Status string `json:"status"`
+	// 失败原因等附加信息
+	Message string `json:"message"`
+	// 操作人
+	Operator string `json:"operator"`
+	// 更新时间
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// FromModel 从发布记录填充实例最近一次发布状态
+func (o *PublishStatusOutputObj) FromModel(record *devmode.PublishRecord) *PublishStatusOutputObj {
+	if record == nil {
+		return o
+	}
+	*o = PublishStatusOutputObj{
+		BinaryName: record.BinaryName,
+		MD5:        record.MD5,
+		Status:     string(record.Status),
+		Message:    record.Message,
+		Operator:   record.Operator,
+		UpdatedAt:  record.UpdatedAt,
+	}
+	return o
 }
 
 // SkippedAppInstanceObj 无法投影为 AppInstanceOutputObj 而被跳过的实例。

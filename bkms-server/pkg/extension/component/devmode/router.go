@@ -23,10 +23,16 @@ import "github.com/gin-gonic/gin"
 // DevModeHandler contains views required by devmode Gin routes.
 type DevModeHandler interface {
 	DevModePublishPreflight(c *gin.Context)
+	CreateDevModePublishRecords(c *gin.Context)
+	ListDevModePublishRecords(c *gin.Context)
 }
 
 // RegisterRoutes registers Gin devmode routes.
 func RegisterRoutes(rg *gin.RouterGroup, h DevModeHandler) {
 	// 开发模式 Publish 预检
 	rg.POST("/devmode/:appID/envs/:envName/preflight", h.DevModePublishPreflight)
+	// 上报开发模式发布结果
+	rg.POST("/devmode/:appID/envs/:envName/publish-records", h.CreateDevModePublishRecords)
+	// 查询开发模式发布记录列表
+	rg.GET("/devmode/:appID/envs/:envName/publish-records", h.ListDevModePublishRecords)
 }
