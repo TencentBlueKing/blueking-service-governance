@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   release:
@@ -40,12 +41,21 @@ jobs:
             exit 1
           fi
 
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        id: changelog
+        with:
+          args: --current --strip header --tag ${{ github.ref_name }} --topo-order
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTPUT: ${{ runner.temp }}/RELEASE_NOTES.md
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "v2.17.1"
-          args: release --clean --skip=validate --config bkms-cli/.goreleaser.yaml
+          args: release --clean --skip=validate --config bkms-cli/.goreleaser.yaml --release-notes ${{ runner.temp }}/RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATE_SOURCE: ${{ github.repository }}
