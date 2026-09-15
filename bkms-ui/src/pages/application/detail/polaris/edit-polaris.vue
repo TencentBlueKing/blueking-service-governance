@@ -59,6 +59,7 @@
     >
       <template #main>
         <div
+          v-test="'polaris-config-editor'"
           class="p-[24px] pb-0"
           :inert="confirmLoading"
         >
@@ -130,6 +131,7 @@
             >
               <!-- 类型 -->
               <Form.FormItem
+                v-test="'polaris-config-type-options'"
                 :label="$t('类型')"
                 property="createNewService"
                 required
@@ -160,6 +162,7 @@
                 class="mb-[24px] rounded-[2px] bg-[#F5F7FA] p-[16px]"
               >
                 <Form.FormItem
+                  v-test="'polaris-config-namespace-options'"
                   :label="$t('北极星环境类型')"
                   property="polarisNamespace"
                   required
@@ -178,6 +181,7 @@
 
                 <div class="flex items-start gap-[16px]">
                   <Form.FormItem
+                    v-test="'polaris-config-service-name-field'"
                     class="polaris-connection-item min-w-0 flex-1 !mb-0"
                     :label="$t('北极星服务名')"
                     property="polarisName"
@@ -191,6 +195,7 @@
                   </Form.FormItem>
                   <Form.FormItem
                     v-if="isImportedService"
+                    v-test="'polaris-config-import-token-field'"
                     class="polaris-connection-item min-w-0 flex-1 !mb-0"
                     :label="$t('北极星Token')"
                     property="polarisToken"
@@ -248,6 +253,7 @@
 
               <Form.FormItem
                 v-if="formModel.createNewService"
+                v-test="'polaris-config-auto-owner-field'"
                 :label="$t('北极星负责人')"
                 property="operator"
                 required
@@ -401,7 +407,10 @@
               </Form.FormItem>
 
               <!-- 权重因子：开启后关联环境才可配置动态权重 -->
-              <Form.FormItem :label="$t('权重因子')">
+              <Form.FormItem
+                v-test="'polaris-config-auto-weight-factor-field'"
+                :label="$t('权重因子')"
+              >
                 <div class="flex items-center gap-[10px]">
                   <span
                     v-bk-tooltips="{

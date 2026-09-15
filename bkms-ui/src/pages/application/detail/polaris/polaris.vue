@@ -45,6 +45,7 @@
       <FlexRow class="mb-[16px]">
         <template #left>
           <Button
+            v-test="'polaris-config-add-button'"
             theme="primary"
             @click="handleCreatePolaris"
           >
@@ -240,6 +241,7 @@
               {{ $t('查看凭证') }}
             </Button>
             <Button
+              v-test="{ id: `polaris-config-edit-${row.name}` }"
               class="mx-[16px]"
               text
               theme="primary"
