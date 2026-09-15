@@ -19,6 +19,19 @@
 // Package framework 提供 e2e 基础框架功能
 package framework
 
+// SetupSuite 执行 E2E 测试套件的标准初始化流程：加载环境配置、生成 CLI 配置文件、创建 CLI 执行器。
+// 各子包的 BeforeSuite 调用一次即可。
+func SetupSuite() (*CLI, *EnvConfig) {
+	envCfg := LoadEnvConfig()
+
+	Logf("SUITE", "API_URL: %s | USERNAME: %s | WORKSPACE: %s | APP: %s | ENV: %s",
+		envCfg.ApiUrl, envCfg.Username, envCfg.WorkspaceID, envCfg.AppID, envCfg.EnvName)
+
+	GenerateConfigFile(envCfg, true)
+	cli := NewCLI()
+	return cli, envCfg
+}
+
 // EnsureLoggedIn 封装"生成配置 → 登录 → 设置 workspace"的初始化流程。
 // 各测试文件的 BeforeAll 只需一行调用即可完成认证初始化。
 // 如果 cfg.WorkspaceID 不为空，会自动执行 workspace set。
