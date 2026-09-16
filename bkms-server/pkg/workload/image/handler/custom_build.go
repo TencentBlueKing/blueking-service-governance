@@ -173,9 +173,9 @@ func (h *Handler) RefreshCustomBuildImageTags(c *gin.Context) {
 		return
 	}
 
-	// 刷新会改快照，权限档位用 TypeEdit
+	// 刷新仅更新标签查询缓存，对空间资源无业务变更，权限档位用 TypeView
 	ctx := c.Request.Context()
-	if _, err := perm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, perm.TypeEdit); err != nil {
+	if _, err := perm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, perm.TypeView); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
