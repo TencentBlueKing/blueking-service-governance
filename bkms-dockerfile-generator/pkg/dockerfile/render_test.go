@@ -115,30 +115,53 @@ var _ = Describe("Dockerfile render", func() {
 		))
 	})
 
-	It("renders extra file copies after artifact COPY and before ENTRYPOINT", func() {
-		input := defaultInput(LanguageGo)
-		input.ExtraFiles = encodeCommandsParam([]string{
-			"data/privatekey.pem",
-			"certs",
-			"data/*.pem",
-			"*.json",
-		})
+	DescribeTable("renders artifact and extra files before runtime env commands",
+		func(language string) {
+			input := defaultInput(language)
+			input.ExtraFiles = encodeCommandsParam([]string{
+				"data/privatekey.pem",
+				"certs",
+				"data/*.pem",
+				"*.json",
+			})
+			input.RuntimeEnvCommands = encodeCommandsParam([]string{
+				"test -f /app/data/privatekey.pem",
+				"mv /app/data/privatekey.pem /app/privatekey.pem",
+			})
 
-		content, err := Render(input)
-		Expect(err).NotTo(HaveOccurred())
+			content, err := Render(input)
+			Expect(err).NotTo(HaveOccurred())
 
-		Expect(content).To(ContainSubstring("COPY data/privatekey.pem /app/data/privatekey.pem\n"))
-		Expect(content).To(ContainSubstring("COPY certs /app/certs\n"))
-		Expect(content).To(ContainSubstring("COPY data/*.pem /app/data/\n"))
-		Expect(content).To(ContainSubstring("COPY *.json /app/\n"))
-		Expect(content).NotTo(ContainSubstring(`COPY "data/*.pem"`))
-		Expect(indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api")).To(BeNumerically(
-			"<", indexOf(content, "COPY data/privatekey.pem /app/data/privatekey.pem"),
-		))
-		Expect(indexOf(content, "COPY *.json /app/")).To(BeNumerically(
-			"<", indexOf(content, `ENTRYPOINT ["/app/demo-api"]`),
-		))
-	})
+			Expect(content).To(ContainSubstring("COPY data/privatekey.pem /app/data/privatekey.pem\n"))
+			Expect(content).To(ContainSubstring("COPY certs /app/certs\n"))
+			Expect(content).To(ContainSubstring("COPY data/*.pem /app/data/\n"))
+			Expect(content).To(ContainSubstring("COPY *.json /app/\n"))
+			Expect(content).NotTo(ContainSubstring(`COPY "data/*.pem"`))
+			Expect(indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api")).To(BeNumerically(
+				"<", indexOf(content, "COPY data/privatekey.pem /app/data/privatekey.pem"),
+			))
+			Expect(indexOf(content, "COPY data/privatekey.pem /app/data/privatekey.pem")).To(BeNumerically(
+				"<", indexOf(content, "COPY certs /app/certs"),
+			))
+			Expect(indexOf(content, "COPY certs /app/certs")).To(BeNumerically(
+				"<", indexOf(content, "COPY data/*.pem /app/data/"),
+			))
+			Expect(indexOf(content, "COPY data/*.pem /app/data/")).To(BeNumerically(
+				"<", indexOf(content, "COPY *.json /app/"),
+			))
+			Expect(indexOf(content, "COPY *.json /app/")).To(BeNumerically(
+				"<", indexOf(content, "RUN test -f /app/data/privatekey.pem"),
+			))
+			Expect(indexOf(content, "RUN test -f /app/data/privatekey.pem")).To(BeNumerically(
+				"<", indexOf(content, "RUN mv /app/data/privatekey.pem /app/privatekey.pem"),
+			))
+			Expect(indexOf(content, "RUN mv /app/data/privatekey.pem /app/privatekey.pem")).To(BeNumerically(
+				"<", indexOf(content, `ENTRYPOINT ["/app/demo-api"]`),
+			))
+		},
+		Entry("Go", LanguageGo),
+		Entry("C++", LanguageCpp),
+	)
 
 	DescribeTable("extraFileDest",
 		func(src string, dest string) {
@@ -259,10 +282,13 @@ var _ = Describe("Dockerfile render", func() {
 			"<", indexOf(content, "RUN test -f /out/demo-api"),
 		))
 		Expect(indexOf(content, "WORKDIR /app")).To(BeNumerically(
+			"<", indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api"),
+		))
+		Expect(indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api")).To(BeNumerically(
 			"<", indexOf(content, "RUN apk add --no-cache ca-certificates\n"),
 		))
-		Expect(indexOf(content, "RUN mkdir -p /app/config")).To(BeNumerically(
-			"<", indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api"),
+		Expect(indexOf(content, "RUN apk add --no-cache ca-certificates")).To(BeNumerically(
+			"<", indexOf(content, "RUN mkdir -p /app/config"),
 		))
 	})
 

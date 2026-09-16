@@ -47,14 +47,14 @@ FROM {{ .RunnerImage }} AS runner
 
 WORKDIR /app
 
-{{ range .RuntimeEnvCommands -}}
-RUN {{ . }}
-{{ end -}}
-
 COPY --from=builder /out/{{ .AppName }} /app/{{ .AppName }}
 
 {{ range .ExtraFileCopies -}}
 COPY {{ .Source }} {{ .Dest }}
+{{ end -}}
+
+{{ range .RuntimeEnvCommands -}}
+RUN {{ . }}
 {{ end -}}
 
 {{ if .StartCommand -}}
