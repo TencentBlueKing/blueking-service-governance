@@ -22594,9 +22594,9 @@ const docTemplate = `{
                     ]
                 },
                 "name": {
-                    "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间",
+                    "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间。\ntodo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。",
                     "type": "string",
-                    "maxLength": 20,
+                    "maxLength": 64,
                     "minLength": 1
                 },
                 "type": {
@@ -31005,9 +31005,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间",
+                    "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间",
                     "type": "string",
-                    "maxLength": 20,
+                    "maxLength": 64,
                     "minLength": 1
                 }
             }

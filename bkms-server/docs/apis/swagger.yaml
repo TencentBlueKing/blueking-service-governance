@@ -2883,8 +2883,10 @@ definitions:
         - taf
         type: string
       name:
-        description: 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间
-        maxLength: 20
+        description: |-
+          应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间。
+          todo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。
+        maxLength: 64
         minLength: 1
         type: string
       type:
@@ -8638,8 +8640,8 @@ definitions:
         description: 版本描述
         type: string
       name:
-        description: 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间
-        maxLength: 20
+        description: 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间
+        maxLength: 64
         minLength: 1
         type: string
     required:
