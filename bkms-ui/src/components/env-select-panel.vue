@@ -374,7 +374,7 @@
   const isPopoverVisible = ref(false);
   /** 全部环境列表 */
   const envList = ref<EnvOutput[]>([]);
-  /** 环境名称到部署状态的映射 */
+  /** 环境 ID 到部署状态的映射，缺少 ID 时兼容使用环境名称。 */
   const appDeployStatusMap = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
   /** 搜索关键词 */
   const searchKeyword = ref('');
@@ -445,6 +445,17 @@
     };
   }
 
+  function getEnvDeployStatus(env: EnvOutput) {
+    return (
+      (env.id ? appDeployStatusMap.value.get(env.id) : undefined) ||
+      (env.name ? appDeployStatusMap.value.get(env.name) : undefined)
+    );
+  }
+
+  function getEnvDeployStatusEntries(env: AppDeployedEnvOutputObj) {
+    return [env.id, env.name].filter((key): key is string => !!key).map(key => [key, env] as const);
+  }
+
   /** 获取环境类型对应的展示配置 */
   function getEnvTypeConfig(env?: EnvOutput) {
     return env?.type ? envTypeMap[env.type] : undefined;
@@ -494,7 +505,7 @@
   /** 判断环境是否满足仅已部署过滤条件 */
   function isEnvDeployedVisible(env: EnvOutput) {
     if (!onlyDeployed.value) return true;
-    return !!env.name && appDeployStatusMap.value.get(env.name)?.deployStatus === 'deployed';
+    return getEnvDeployStatus(env)?.deployStatus === 'deployed';
   }
 
   /** 判断环境是否同时满足部署状态和关键词过滤 */
@@ -570,13 +581,13 @@
     }
     const res = await AppService.getAppDeployStatuses({ appID: appDetailStore.appID }).catch(() => []);
     const list = (res || []) as AppDeployedEnvOutputObj[];
-    appDeployStatusMap.value = new Map(list.filter(item => item.name).map(item => [item.name!, item]));
+    appDeployStatusMap.value = new Map(list.flatMap(getEnvDeployStatusEntries));
     emits('update:deployStatusList', list);
   }
 
   /** 根据环境获取部署状态对应的状态图标名 */
   function getEnvDeployIcon(env: EnvOutput): string {
-    const deployStatus = env.name ? appDeployStatusMap.value.get(env.name)?.deployStatus : undefined;
+    const deployStatus = getEnvDeployStatus(env)?.deployStatus;
     if (!deployStatus) return 'status-unknown';
     return getDeployStatusInfo(appDetailStore.appType || null, deployStatus).icon || 'status-unknown';
   }

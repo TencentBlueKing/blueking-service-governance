@@ -18,12 +18,12 @@
 
 import { onBeforeUnmount } from 'vue';
 
-import type { LoadMode } from './use-deploy-overview';
+import type { LoadMode, LoadOptions } from './use-deploy-overview';
 
 interface DeployOverviewPollingOptions {
   getAppID: () => string | undefined;
   getInterval: () => number;
-  load: (mode: LoadMode) => Promise<void>;
+  load: (mode: LoadMode, options?: LoadOptions) => Promise<void>;
 }
 
 /**
@@ -45,13 +45,13 @@ export function useDeployOverviewPolling(options: DeployOverviewPollingOptions) 
   }
 
   /** 主动刷新会抢占当前轮询链；请求结束后由这次刷新负责续排下一轮。 */
-  async function refresh(mode: LoadMode = 'manual') {
+  async function refresh(mode: LoadMode = 'manual', loadOptions?: LoadOptions) {
     const appID = options.getAppID();
     const runGeneration = generation + 1;
     generation = runGeneration;
     clearTimer();
     try {
-      await options.load(mode);
+      await options.load(mode, loadOptions);
     } finally {
       if (runGeneration === generation && appID === options.getAppID() && isEnabled(appID)) {
         schedule(runGeneration);

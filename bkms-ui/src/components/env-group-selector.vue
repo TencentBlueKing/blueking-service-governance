@@ -143,14 +143,25 @@
   const appDetailStore = useAppDetail();
   const FEATURE_ENV_KIND = 'feature';
 
-  /** 环境名称 -> 部署状态 映射（仅 showDeployIcon 时请求） */
+  /** 环境 ID -> 部署状态 映射，缺少 ID 时兼容使用环境名称（仅 showDeployIcon 时请求）。 */
   const appDeployStatusMap = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
 
   /** 获取当前应用在各环境的部署状态 */
   async function fetchDeployStatuses(appID: string) {
     const res = await AppService.getAppDeployStatuses({ appID }).catch(() => []);
     const list = (res || []) as AppDeployedEnvOutputObj[];
-    appDeployStatusMap.value = new Map(list.filter(item => item.name).map(item => [item.name!, item]));
+    appDeployStatusMap.value = new Map(list.flatMap(getEnvDeployStatusEntries));
+  }
+
+  function getEnvDeployStatus(env: EnvOutput) {
+    return (
+      (env.id ? appDeployStatusMap.value.get(env.id) : undefined) ||
+      (env.name ? appDeployStatusMap.value.get(env.name) : undefined)
+    );
+  }
+
+  function getEnvDeployStatusEntries(env: AppDeployedEnvOutputObj) {
+    return [env.id, env.name].filter((key): key is string => !!key).map(key => [key, env] as const);
   }
 
   /** 仅当开启图标且存在 appID 时才发起部署状态请求 */
@@ -168,7 +179,7 @@
 
   /** 根据环境获取部署状态对应的 ColorIcon 图标名（与 env-select-panel.vue 保持一致） */
   function getEnvStatusIcon(env: EnvOutput): string {
-    const deployStatus = env.name ? appDeployStatusMap.value.get(env.name)?.deployStatus : undefined;
+    const deployStatus = getEnvDeployStatus(env)?.deployStatus;
     if (!deployStatus) return 'status-unknown';
     return getDeployStatusInfo(appDetailStore.appType || null, deployStatus).icon || 'status-unknown';
   }

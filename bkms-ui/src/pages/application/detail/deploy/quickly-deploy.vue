@@ -58,6 +58,7 @@
           :show-env-prefix="false"
           :show-only-deployed-filter="false"
           :sync-env-store="false"
+          @update:deploy-status-list="handleDeployStatusListUpdate"
           @update:item="handleTargetEnvItemChange"
         />
       </Form.FormItem>
@@ -105,6 +106,7 @@
 
   import QuicklyDeployForm from './quickly-deploy-form.vue';
 
+  import type { AppDeployedEnvOutputObj } from '~/@types/v1/app';
   import type { EnvOutput } from '~/@types/v1/env';
 
   type OverviewDeployTarget = {
@@ -115,6 +117,7 @@
   const isShow = defineModel<boolean>('isShow');
   const emits = defineEmits<{
     update: [envName?: string];
+    'update:deployStatusList': [list: AppDeployedEnvOutputObj[]];
   }>();
   const props = defineProps<{
     effectiveReplicas?: number;
@@ -171,6 +174,10 @@
     deployFormRef.value?.reset(1);
     targetFormModel.envName = '';
     selectedEnvItem.value = undefined;
+  }
+
+  function handleDeployStatusListUpdate(list: AppDeployedEnvOutputObj[]) {
+    emits('update:deployStatusList', list);
   }
 
   /** 校验目标环境与部署表单，提交成功后关闭侧栏并通知父组件刷新对应入口的数据。 */

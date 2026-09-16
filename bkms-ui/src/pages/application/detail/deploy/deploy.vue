@@ -66,7 +66,7 @@
                 :mode="envSelectMode"
                 :multi-selectable="isEnvMultiSelectable"
                 preserve-missing-model-value
-                @update:deploy-status-list="deployStatusList = $event"
+                @update:deploy-status-list="handleDeployStatusListUpdate"
                 @update:env-list="envList = $event"
                 @update:item="handleEnvChange"
                 @update:items="handleEnvsChange"
@@ -305,6 +305,7 @@
       :is-prod-env="isProdEnv"
       :target-envs="overviewDeployTargets"
       @update="handleQuickDeploySuccess"
+      @update:deploy-status-list="handleDeployStatusListUpdate"
     />
     <!-- 移除部署 -->
     <RemoveDeploy
@@ -853,6 +854,13 @@
   }
 
   const deployOverviewRef = ref<InstanceType<typeof DeployOverview>>();
+
+  /** 环境选择器刷新部署状态后，同步检查总览表格是否需要重新拉取。 */
+  function handleDeployStatusListUpdate(list: AppDeployedEnvOutputObj[]) {
+    deployStatusList.value = list;
+    deployOverviewRef.value?.syncDeployStatuses?.(list);
+  }
+
   // undefined 表示从实例列表打开；数组（包括空数组）表示从总览打开并启用目标环境选择器。
   const overviewDeployTargets = ref<DeployOverviewDeployTarget[] | undefined>();
 

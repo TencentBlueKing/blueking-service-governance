@@ -368,6 +368,7 @@
   import { Table, TableColumn } from '@blueking/table';
   import { Button, Popover, Radio, SearchSelect, Tag } from 'bkui-vue';
   import { Plus } from 'bkui-vue/lib/icon';
+  import { APP_DEPLOY_STATUS } from '~/common/enums/deploy';
   import CustomFilter from '~/components/custom-filter.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
@@ -386,6 +387,7 @@
   import { type DeployOverviewDeployTarget, type DeployOverviewRow, useDeployOverview } from './use-deploy-overview';
   import { useDeployOverviewPolling } from './use-deploy-overview-polling';
 
+  import type { AppDeployedEnvOutputObj } from '~/@types/v1/app';
   import type { EnvOutput } from '~/@types/v1/env';
 
   const props = defineProps<{ envList: EnvOutput[] }>();
@@ -424,6 +426,7 @@
     load,
     pagination,
     pollingIntervalMs,
+    rows,
     searchData,
     searchValue,
     sortConfig,
@@ -462,8 +465,31 @@
     emit('view-instances', row.name);
   }
 
+  /** deploy-statuses 返回默认泳道状态变化时，刷新总览唯一数据源。 */
+  function syncDeployStatuses(list: AppDeployedEnvOutputObj[]) {
+    if (!rows.value.length) return;
+
+    const statusByEnvID = new Map<string, AppDeployedEnvOutputObj>();
+    const statusByEnvNameWithoutID = new Map<string, AppDeployedEnvOutputObj>();
+    list.forEach(item => {
+      if (item.trafficLaneName) return;
+      if (item.id) {
+        statusByEnvID.set(item.id, item);
+      } else if (item.name) {
+        statusByEnvNameWithoutID.set(item.name, item);
+      }
+    });
+
+    const hasStatusChanged = rows.value.some(row => {
+      const latest = row.envID ? statusByEnvID.get(row.envID) : statusByEnvNameWithoutID.get(row.name);
+      if (!latest) return false;
+      return (latest.deployStatus || APP_DEPLOY_STATUS.UNKNOWN) !== row.deployStatus;
+    });
+    if (hasStatusChanged) void refreshOverview('automatic', { queueWhenLoading: true });
+  }
+
   // 部署、移除部署等父级操作完成后，通过暴露的 load 主动刷新总览。
-  defineExpose({ load: refreshOverview });
+  defineExpose({ load: refreshOverview, syncDeployStatuses });
 
   // 应用或应用类型变化时重新请求；composable 内部会丢弃上一应用的迟到响应。
   watch(

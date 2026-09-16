@@ -94,6 +94,7 @@ export interface DeployOverviewRow {
   deployStatus: string;
   desiredCount: null | number;
   displayName: string;
+  envID: string;
   imageTag: string;
   isFeature: boolean;
   memoryLimits: string;
@@ -117,6 +118,10 @@ export interface DeployOverviewStat {
 export type DeployOverviewStatKey = 'abnormalInstance' | 'deploying' | 'failed' | 'total';
 
 export type LoadMode = 'automatic' | 'initial' | 'manual';
+
+export interface LoadOptions {
+  queueWhenLoading?: boolean;
+}
 
 /** 补充接口字段的 null 语义，并复用现有 GPA 类型描述完整 autoscaling 数据。 */
 type DeployOverviewApiRow = Omit<AppDeployOverviewEnvObj, 'autoscalingEnabled' | 'instances'> & {
@@ -151,6 +156,8 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
   // 每次请求递增；应用快速切换时，仅最后一次请求可以更新页面状态。
   let loadToken = 0;
   let currentLoad: Promise<void> | undefined;
+  let queuedAutomaticLoad: Promise<void> | undefined;
+  let shouldQueueAutomaticLoad = false;
 
   const deployStatusMaps = computed(() => getDeployStatusMaps(appDetailStore.appType || null));
 
@@ -391,8 +398,23 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
    * 请求总览唯一数据源，并用 token 丢弃应用切换前发出的过期响应。
    * 自动刷新不显示 loading，失败时保留上一轮快照；首次和手动刷新保留各自的错误反馈。
    */
-  async function load(mode: LoadMode = 'manual'): Promise<void> {
-    if (mode === 'automatic' && currentLoad) return currentLoad;
+  async function load(mode: LoadMode = 'manual', options: LoadOptions = {}): Promise<void> {
+    if (mode === 'automatic' && currentLoad) {
+      if (!options.queueWhenLoading) return currentLoad;
+      shouldQueueAutomaticLoad = true;
+      if (!queuedAutomaticLoad) {
+        queuedAutomaticLoad = (async () => {
+          while (shouldQueueAutomaticLoad) {
+            shouldQueueAutomaticLoad = false;
+            await currentLoad?.catch(() => undefined);
+            await load('automatic');
+          }
+        })().finally(() => {
+          queuedAutomaticLoad = undefined;
+        });
+      }
+      return queuedAutomaticLoad;
+    }
     if (mode !== 'automatic') {
       isLoading.value = true;
       if (mode === 'initial') isError.value = false;
@@ -459,6 +481,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
       deployStatus: item.deployStatus || APP_DEPLOY_STATUS.UNKNOWN,
       desiredCount: item.instances ? (item.instances.expected ?? 0) : null,
       displayName: item.envDisplayName || item.envName || '--',
+      envID: item.envID || '',
       imageTag: item.imageTag || '',
       isFeature: item.envKind === 'feature',
       memoryLimits: resources.memoryLimits || '',
@@ -555,6 +578,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     load,
     pagination,
     pollingIntervalMs,
+    rows,
     searchData,
     searchValue,
     sortConfig,
