@@ -110,8 +110,9 @@ type BSCPAppConfigFileConfig struct {
 
 // CreateAppConfigFileInput is the JSON body for creating an app config file.
 type CreateAppConfigFileInput struct {
-	// 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间
-	Name string `json:"name" binding:"required,min=1,max=20,app_config_file_name"`
+	// 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间。
+	// todo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。
+	Name string `json:"name" binding:"required,min=1,max=64,app_config_file_name"`
 	// 应用配置文件类型，普通或覆盖层
 	Type string `json:"type" binding:"required,oneof=normal overlay"`
 	// 基础应用配置文件 ID，仅当 type 是 overlay 时为必填，在 handler 中做业务校验
@@ -130,8 +131,8 @@ type CreateAppConfigFileInput struct {
 
 // UpdateAppConfigFileInput is the JSON body for updating app config file metadata.
 type UpdateAppConfigFileInput struct {
-	// 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间
-	Name string `json:"name" binding:"required,min=1,max=20,app_config_file_name"`
+	// 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间
+	Name string `json:"name" binding:"required,min=1,max=64,app_config_file_name"`
 	// 基础应用配置文件 ID，仅当 type 是 overlay 时生效
 	BaseAppConfigFileID string `json:"baseAppConfigFileID"`
 	// 当 contentSourceType 为 bscp 时，bscpConfig 为必填
