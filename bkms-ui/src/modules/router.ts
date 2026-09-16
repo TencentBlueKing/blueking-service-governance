@@ -368,8 +368,31 @@ export const install: UserModule = ({ app }) => {
   router.originalBack = originalBack;
   // ---- 覆写结束 ----
 
+  /** 观测页专用参数只允许存在于对应观测页，避免跨页面污染 URL。 */
+  function isObservabilityRoute(route: RouteLocationNormalized): boolean {
+    return (
+      (route.name === 'envDetailItem' && route.params.menuName === 'observability') ||
+      (route.name === 'detail' && route.params.menuName === 'observation')
+    );
+  }
+
   // 全局前置守卫
   router.beforeEach(async (to, from, next) => {
+    // 观测页专用参数按目标页逐个判断：apmQuery 允许存在于任一观测页，env 仅允许存在于应用观测页。
+    const keepApmQuery = isObservabilityRoute(to);
+    const keepEnv = to.name === 'detail' && to.params.menuName === 'observation';
+    if ((!keepApmQuery && 'apmQuery' in to.query) || (!keepEnv && 'env' in to.query)) {
+      const query = { ...to.query };
+      if (!keepApmQuery) {
+        delete query.apmQuery;
+      }
+      // env 是应用观测页的环境选择快照；仅允许停留在该页，避免影响其他页面的同名参数。
+      if (!keepEnv) {
+        delete query.env;
+      }
+      next({ ...to, query, replace: true });
+      return;
+    }
     // 空间切换会重建布局，必须在挂载新详情前清除原空间的环境上下文。
     if (
       to.name === 'envDetailItem' &&

@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div class="w-full mt-[16px] pb-[16px]">
+  <div class="w-full">
     <div
       v-bkloading="{ loading: isLoading, opacity: 1, size: 'small' }"
       class="min-h-[100px]"

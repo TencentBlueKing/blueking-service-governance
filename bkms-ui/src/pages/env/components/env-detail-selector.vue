@@ -29,21 +29,36 @@
     @after-show="isPopoverVisible = true"
   >
     <div
-      class="flex items-center justify-between w-full h-full bg-[#F0F1F5] overflow-hidden group text-[#4D4F56] text-[12px] cursor-pointer rounded-[2px] hover:bg-[#EAEBF0]"
+      class="env-detail-selector flex items-center justify-between w-full h-full bg-[#F0F1F5] overflow-hidden group text-[#4D4F56] text-[12px] cursor-pointer rounded-[2px] hover:bg-[#EAEBF0]"
     >
-      <div class="flex items-center min-w-0 overflow-hidden px-[8px] gap-[4px]">
-        <span class="whitespace-nowrap truncate">{{ currentEnvLabel }}</span>
-        <Tag
-          v-if="currentEnvTypeConfig?.name"
-          class="shrink-0"
-          :class="envTypeTagClassMap[props.currentEnvType || '']"
-          size="small"
-        >
-          {{ currentEnvTypeConfig.name }}
-        </Tag>
+      <div class="flex min-w-0 items-center">
+        <div class="flex px-[10px] shrink-0 items-center justify-center">
+          <!-- 首字母 -->
+          <div
+            class="flex shrink-0 items-center justify-center w-[20px] h-[20px] text-[12px] font-bold text-white rounded-[2px]"
+            :style="{ backgroundColor: currentEnvAvatarColor }"
+          >
+            {{ currentEnvInitial }}
+          </div>
+        </div>
+        <div class="flex items-center min-w-0 overflow-hidden pr-[8px] gap-[4px]">
+          <span class="whitespace-nowrap truncate">{{ currentEnvLabel }}</span>
+          <Tag
+            v-if="currentEnvTypeConfig?.name"
+            class="shrink-0 cursor-pointer"
+            :class="envTypeTagClassMap[currentEnvType || '']"
+            size="small"
+            :stop-propagation="false"
+          >
+            {{ currentEnvTypeConfig.name }}
+          </Tag>
+        </div>
       </div>
       <AngleDownFill
-        :class="['mr-[5px] text-[#C4C6CC] group-hover:text-[#979BA5]', isPopoverVisible ? '' : 'rotate-180']"
+        :class="[
+          'env-detail-selector-arrow text-[14px] mr-[5px] text-[#C4C6CC] group-hover:text-[#979BA5]',
+          isPopoverVisible ? '' : 'rotate-180',
+        ]"
       />
     </div>
     <template #content>
@@ -132,7 +147,7 @@
   import { Button, Input, Popover, Tag } from 'bkui-vue';
   import { AngleDownFill, Plus, Search } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
+  import { envTypeAvatarColorMap, envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
 
   import type { EnvOutput } from '~/@types/v1/env';
 
@@ -164,9 +179,17 @@
   const isPopoverVisible = ref(false);
   const searchKeyword = ref('');
   const envTypeOrder = ['development', 'test', 'staging', 'production'];
-  const currentEnvLabel = computed(() => props.currentEnvName || t('请选择环境'));
+  /** 路由切换时详情会暂时清空，优先使用已加载的环境列表显示目标环境。 */
+  const selectedEnv = computed(() => props.envList.find(env => env.id === props.modelValue));
+  const currentEnvName = computed(
+    () => selectedEnv.value?.displayName || selectedEnv.value?.name || props.currentEnvName,
+  );
+  const currentEnvType = computed(() => selectedEnv.value?.type || props.currentEnvType);
+  const currentEnvLabel = computed(() => currentEnvName.value || t('请选择环境'));
+  const currentEnvInitial = computed(() => currentEnvName.value?.slice(0, 1) || '-');
+  const currentEnvAvatarColor = computed(() => envTypeAvatarColorMap[currentEnvType.value || ''] || '#3A84FF');
   const currentEnvTypeConfig = computed(() => {
-    const type = props.currentEnvType;
+    const type = currentEnvType.value;
     return type && envTypeMap[type] ? envTypeMap[type] : undefined;
   });
   /** 只展示至少含有一个环境的分类；搜索后同样隐藏空分类。 */
@@ -220,6 +243,11 @@
       background-color: transparent !important;
     }
   }
+
+  :global(.navigation-nav .nav-slider[style*='width: 60px'] .env-detail-selector-arrow) {
+    display: none !important;
+  }
+
   :deep(.bk-popover-reference) {
     display: block;
     height: 100%;
