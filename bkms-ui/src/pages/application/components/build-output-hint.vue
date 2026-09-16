@@ -3,7 +3,7 @@
     <template #title>
       <div class="leading-[20px]">
         <i18n-t
-          keypath="构建产物需放到 {0} 下，runner 阶段仅从此路径拷贝进运行镜像。不限定命令形式（{1} 等均可），只要最终产物落到该路径即可，例如："
+          keypath="构建产物需输出为文件 {0}，runner 阶段只会把这个文件拷贝进运行镜像。不限定命令形式（{1} 等均可），只要最终产物是该文件即可，例如："
           tag="span"
         >
           <span class="font-mono font-bold">

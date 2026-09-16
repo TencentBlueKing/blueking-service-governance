@@ -177,6 +177,25 @@
                 </div>
                 <div class="mb-[24px] last:mb-0">
                   <div class="flex items-center gap-[8px] mb-[8px]">
+                    <span class="text-[14px] text-[#313238]">{{ $t('打包额外文件') }}</span>
+                    <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
+                  </div>
+                  <Input
+                    v-model="extraFilesText"
+                    :placeholder="extraFilesPlaceholder"
+                    :rows="4"
+                    type="textarea"
+                  />
+                  <p class="mt-[4px] leading-[20px] text-[#c4c6cc]">
+                    {{
+                      $t(
+                        '文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。',
+                      )
+                    }}
+                  </p>
+                </div>
+                <div class="mb-[24px] last:mb-0">
+                  <div class="flex items-center gap-[8px] mb-[8px]">
                     <span class="text-[14px] text-[#313238]">{{ $t('运行环境命令') }}</span>
                     <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
                   </div>
@@ -198,26 +217,9 @@
                     :rows="4"
                     type="textarea"
                   />
-                  <span class="text-[#c4c6cc]">{{
-                    $t('写入镜像的默认启动方式（ENTRYPOINT），构建时固化到镜像中。部署时可被「运行命令」覆盖')
-                  }}</span>
-                </div>
-                <div class="mb-[24px] last:mb-0">
-                  <div class="flex items-center gap-[8px] mb-[8px]">
-                    <span class="text-[14px] text-[#313238]">{{ $t('打包额外文件') }}</span>
-                    <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
-                  </div>
-                  <Input
-                    v-model="extraFilesText"
-                    :placeholder="extraFilesPlaceholder"
-                    :rows="4"
-                    type="textarea"
-                  />
-                  <span class="text-[#c4c6cc]">{{
-                    $t(
-                      '文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。',
-                    )
-                  }}</span>
+                  <p class="mt-[4px] leading-[20px] text-[#c4c6cc]">
+                    {{ $t('写入镜像的默认启动方式（ENTRYPOINT），构建时固化到镜像中。部署时可被「运行命令」覆盖') }}
+                  </p>
                 </div>
               </ToggleCard>
             </Form.FormItem>
