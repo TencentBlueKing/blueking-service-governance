@@ -19,7 +19,7 @@
 <template>
   <div
     v-if="title"
-    class="flex items-center h-[52px] shadow px-[24px] bg-[#fff]"
+    class="relative z-10 flex flex-shrink-0 items-center h-[52px] shadow px-[24px] bg-[#fff]"
   >
     <span
       class="bkms-icon bkms-icon-return-small cursor-pointer text-[36px]"
