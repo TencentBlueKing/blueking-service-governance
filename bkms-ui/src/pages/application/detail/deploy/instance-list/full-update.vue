@@ -45,6 +45,33 @@
         :model="formModel"
       >
         <Form.FormItem
+          :label="$t('更新内容')"
+          required
+        >
+          <Radio.Group
+            v-model="formModel.updateContent"
+            @change="handleUpdateContentChange"
+          >
+            <Radio label="both">{{ $t('镜像+配置') }}</Radio>
+            <Radio label="config">{{ $t('仅配置') }}</Radio>
+            <Radio
+              :disabled="isFederationEnv"
+              label="image"
+            >
+              <span
+                v-bk-tooltips="{
+                  content: $t('联邦集群不支持原地更新'),
+                  disabled: !isFederationEnv,
+                }"
+              >
+                {{ $t('仅镜像 (原地重启)') }}
+              </span>
+            </Radio>
+          </Radio.Group>
+        </Form.FormItem>
+
+        <Form.FormItem
+          v-if="formModel.updateContent !== 'image'"
           :label="$t('实例数')"
           property="replicas"
           required
@@ -65,16 +92,15 @@
         </Form.FormItem>
 
         <Form.FormItem
-          :label="$t('更新内容')"
+          v-if="formModel.updateContent === 'image'"
+          :label="$t('镜像 Tag')"
+          property="imageTag"
           required
         >
-          <Radio.Group
-            v-model="formModel.updateContent"
-            @change="handleUpdateContentChange"
-          >
-            <Radio label="both">{{ $t('镜像+配置') }}</Radio>
-            <Radio label="config">{{ $t('仅配置') }}</Radio>
-          </Radio.Group>
+          <ImageSelect
+            ref="imageSelectRef"
+            v-model:value="formModel.imageTag"
+          />
         </Form.FormItem>
 
         <template v-if="formModel.updateContent === 'both'">
@@ -210,6 +236,7 @@
   import { useI18n } from 'vue-i18n';
   import { InstanceService } from '~/api/modules/v1';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
+  import useIsFederationEnv from '~/composables/use-is-federation-env';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
   import ImageSelect from '~/pages/application/components/image-select.vue';
@@ -238,6 +265,7 @@
   const { t } = useI18n();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
+  const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
 
   const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
     () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
@@ -294,7 +322,7 @@
     if (formModel.updateContent === 'config') {
       return t('本次更新仅变更应用的配置信息（包括环境变量等），镜像 Tag 保持不变');
     }
-    return t('本次更新仅变更镜像 Tag，应用的配置信息（包括环境变量等）保持不变');
+    return `${t('本次更新仅变更镜像 Tag，应用的配置信息（包括环境变量等）保持不变')}。${t('仅更新容器镜像，不重建 Pod，更新速度更快')}`;
   });
   const loading = ref(false);
   const curImageTag = ref('');
@@ -428,7 +456,7 @@
   }
 
   /**
-   * 仅镜像
+   * 仅镜像（原地重启）：instanceIDs 为空表示全量实例，与「全选后灰度」等价。
    */
   async function handleImage() {
     try {
@@ -454,10 +482,8 @@
     // 仅配置时,使用当前镜像 Tag;其他情况清空让用户选择
     formModel.imageTag = val === 'config' ? curImageTag.value : '';
 
-    // 非仅镜像时,重置为滚动更新(原地更新仅支持镜像更新)
-    if (val !== 'image') {
-      formModel.deployType = 'RollingUpdate';
-    }
+    // 仅镜像对应原地重启；其它更新内容仍走滚动更新。
+    formModel.deployType = val === 'image' ? 'InplaceUpdate' : 'RollingUpdate';
   }
 
   watch(isShow, async val => {

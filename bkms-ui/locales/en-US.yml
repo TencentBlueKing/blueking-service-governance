@@ -724,6 +724,7 @@ Helm 应用部署时需指定 values 文件（默认使用 chart 自带），用
 管理命令: Manage Command
 滚动更新: Rolling update
 原地更新: In-place update
+原地重启: In-place restart
 配置命令: Configuration Command
 执行结果: Execution Result
 编辑器: Editor
@@ -839,6 +840,7 @@ K8s 版本: K8s Version
 镜像: Image
 镜像+配置: Image + Configuration
 仅镜像: Image Only
+仅镜像 (原地重启): Image only (in-place restart)
 仅配置: Configuration Only
 当前镜像 Tag: Current Image Tag
 更新内容: Update Content
@@ -1649,6 +1651,7 @@ Key 不能重复: Key 不能重复
 存在阻断问题，请先解决后再部署: Blocking issues exist. Resolve them before deploying.
 资源: Resource
 联邦集群不支持灰度操作: Federated clusters do not support gray deployment.
+联邦集群不支持原地更新: Federated clusters do not support in-place updates.
 联邦集群暂不支持自动扩缩: Federated clusters do not currently support autoscaling.
 该环境绑定联邦集群，不支持作为来源环境创建新环境: This environment is bound to a federated cluster and cannot be used as the source for a new environment.
 暂不支持选择绑定联邦集群的环境: Environments bound to federated clusters are not currently supported.
