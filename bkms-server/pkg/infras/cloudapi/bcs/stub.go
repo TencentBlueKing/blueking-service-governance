@@ -106,6 +106,20 @@ func (s *StubApiClient) GetProject(ctx context.Context, id string) (*Project, er
 	}, nil
 }
 
+// CreateProject 模拟创建 BCS 项目
+func (s *StubApiClient) CreateProject(ctx context.Context, in CreateProjectInput) (*Project, error) {
+	log.Infof(ctx, "Stub: CreateProject request: code=%s name=%s kind=%s biz=%s",
+		in.ProjectCode, in.Name, in.Kind, in.BusinessID)
+	return &Project{
+		ID:        "stubcreatedstubcreatedstubcreated00",
+		Code:      in.ProjectCode,
+		Name:      in.Name,
+		Kind:      in.Kind,
+		BizID:     in.BusinessID,
+		IsOffline: false,
+	}, nil
+}
+
 // ListClustersByProject 模拟获取项目下的集群列表，返回 stubClusters
 func (s *StubApiClient) ListClustersByProject(ctx context.Context, projectID string) ([]Cluster, error) {
 	log.Infof(ctx, "Stub: ListClustersByProject request: projectID=%s", projectID)

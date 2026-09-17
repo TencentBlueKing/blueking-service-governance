@@ -385,9 +385,9 @@ type CreateWorkspaceInput struct {
 	DisplayName string `json:"displayName" binding:"required,min=1,max=32"`
 	// 描述信息（0-512 字符）
 	Description string `json:"description" binding:"max=512"`
-	// 蓝盾项目 ID;
-	// 创建时，新建容器项目，无需填写
-	// 创建时，绑定已有容器项目，必填.
+	// 蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。
+	// 创建时，新建容器项目，无需填写。
+	// 创建时，绑定已有容器项目，必填。
 	BkCIProjectID string `json:"bkCIProjectID"`
 	// 镜像仓库信息, 传入时代表绑定已有镜像仓库, 不传入则在容器项目的制品库中创建默认镜像仓库
 	ImageRegistry *ImageRegistryInput `json:"imageRegistry"`

@@ -45,6 +45,11 @@ bkIAMSystemIDs:
   bkrepo: bkrepo
   bscp: bk_bscp
   bkcc: bkcc
+# ------------------------------ 平台能力开关 ------------------------------
+# 测试配置显式关闭：创建空间时 BCS 复用蓝盾项目，不单独创建 BCS 项目。
+# 代码默认值为 true，这里不写 false 会走到独立创建 BCS 的路径。
+featureFlags:
+  createBCSProject: false
 # 多租户配置
 tenant:
   enableMultiTenantMode: false
