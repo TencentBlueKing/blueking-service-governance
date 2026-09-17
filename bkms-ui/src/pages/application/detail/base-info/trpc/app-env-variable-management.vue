@@ -64,7 +64,9 @@
       ref="editableTableRef"
       :editable="true"
       :list="variableList"
+      :search-keyword="searchKeyword"
       @add="handleAdd"
+      @clear="searchKeyword = ''"
       @delete="handleDelete"
       @edit="handleEdit"
     />

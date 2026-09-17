@@ -236,11 +236,7 @@
     }
 
     &:not(.is-active):hover {
-      background-color: #f5f7fa !important;
-      i,
-      .item-content {
-        color: #3a84ff;
-      }
+      background-color: #f0f1f5 !important;
     }
   }
 

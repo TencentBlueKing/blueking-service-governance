@@ -484,7 +484,7 @@
 
     &.is-active {
       border-color: #3a84ff;
-      background: #f5f7fa;
+      background: #e1ecff;
     }
 
     :deep(.bk-radio) {

@@ -98,7 +98,9 @@
         ref="editableTableRef"
         :disable-key-edit="true"
         :list="filteredList"
+        :search-keyword="searchKeyword"
         @add="handleAddItem"
+        @clear="searchKeyword = ''"
         @delete="handleDeleteItem"
         @edit="handleEditItem"
       />

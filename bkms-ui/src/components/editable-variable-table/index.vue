@@ -38,6 +38,12 @@
         v-bind="$attrs"
         :sort-config="{ remote: false, trigger: 'cell' }"
       >
+        <template #empty>
+          <TableException
+            :type="curExceptionType"
+            @clear="emit('clear')"
+          />
+        </template>
         <TableColumn
           field="key"
           label="Key"
@@ -256,7 +262,9 @@
   import { Copy, InfoLine } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { BKMS_REGEX } from '~/common/const';
+  import TableException from '~/components/table-exception.vue';
   import { useCopy } from '~/composables/use-copy';
+  import useTableEmpty from '~/composables/use-table-empty';
 
   import SensitiveValueInput from './sensitive-value-input.vue';
   import SensitiveValuePlaceholder from './sensitive-value-placeholder.vue';
@@ -290,15 +298,19 @@
       editable?: boolean;
       // 变量列表
       list: EnvVariableConfig[];
+      // 搜索关键字，用于区分空数据与搜索无结果的空态展示
+      searchKeyword?: string;
     }>(),
     {
       editable: true,
       disableKeyEdit: false,
+      searchKeyword: '',
     },
   );
 
   const emit = defineEmits<{
     add: [item: EnvVariableConfig];
+    clear: [];
     delete: [item: EnvVariableConfig];
     edit: [item: EnvVariableConfig, originalItem: EnvVariableConfig];
     update: [value: EnvVariableConfig[]];
@@ -306,6 +318,9 @@
 
   const { copyText } = useCopy();
   const { t } = useI18n();
+
+  // 空状态类型：有关键字时展示搜索无结果，否则展示暂无数据
+  const { curExceptionType } = useTableEmpty({ filters: () => props.searchKeyword });
 
   // 编辑状态管理
   interface EditState {

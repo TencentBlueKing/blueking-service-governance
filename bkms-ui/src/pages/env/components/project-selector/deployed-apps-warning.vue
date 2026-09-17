@@ -38,30 +38,10 @@
       <p class="h-[34px] w-full !text-start">
         {{ tipsText }}
       </p>
-      <Table
+      <DeployedAppsList
         class="mb-[48px] w-full"
-        :data="deployedApps"
-        :pagination="tablePagination"
-      >
-        <TableColumn
-          field="appName"
-          :label="$t('应用名称')"
-          :min-width="120"
-        />
-        <TableColumn
-          field="deployStatus"
-          :label="$t('部署状态')"
-          :min-width="120"
-        >
-          <template #default="{ row }">
-            <StatusIcon
-              :status="row.deployStatus"
-              :status-color-map="getDeployStatusMaps(row.appType).statusColorMap"
-              :status-text-map="getDeployStatusMaps(row.appType).statusTextMap"
-            />
-          </template>
-        </TableColumn>
-      </Table>
+        :deployed-apps="deployedApps"
+      />
       <Button
         class="w-[88px]"
         @click="handleClose"
@@ -74,31 +54,19 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref } from 'vue';
-
-  import { Table, TableColumn } from '@blueking/table';
   import { Button, Dialog } from 'bkui-vue';
-  import { EnvAppDeployStatusOutput } from '~/@types/v1/env';
-  import StatusIcon from '~/components/status-icon.vue';
-  import { useDeployStatusMap } from '~/composables/use-deploy-status';
+
+  import DeployedAppsList from './deployed-apps-list.vue';
+
+  import type { EnvAppDeployStatusOutput } from '~/@types/v1/env';
 
   const isShow = defineModel<boolean>('isShow');
 
-  const props = defineProps<{
+  defineProps<{
     deployedApps: EnvAppDeployStatusOutput[];
     dialogTitle: string;
     tipsText: string;
   }>();
-
-  const { getDeployStatusMaps } = useDeployStatusMap();
-
-  // 前端分页配置
-  const tablePagination = ref({
-    current: 1,
-    limit: 5,
-    count: props.deployedApps.length,
-    limitList: [5, 10, 20, 50],
-  });
 
   function handleClose() {
     isShow.value = false;

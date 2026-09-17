@@ -26,7 +26,7 @@
     trigger="click"
     :width="800"
     @after-hidden="handlePopoverHidden"
-    @after-show="isPopoverVisible = true"
+    @after-show="handlePopoverShown"
   >
     <div
       class="env-detail-selector flex items-center justify-between w-full h-full bg-[#F0F1F5] overflow-hidden group text-[#4D4F56] text-[12px] cursor-pointer rounded-[2px] hover:bg-[#EAEBF0]"
@@ -64,6 +64,7 @@
     <template #content>
       <div class="min-h-[100px]">
         <Input
+          ref="searchInputRef"
           v-model.trim="searchKeyword"
           behavior="simplicity"
           class="mt-[8px]"
@@ -143,7 +144,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref } from 'vue';
+  import { computed, nextTick, ref } from 'vue';
 
   import { Button, Input, Popover, Tag } from 'bkui-vue';
   import { AngleDownFill, Plus, Search } from 'bkui-vue/lib/icon';
@@ -177,6 +178,7 @@
   const { t } = useI18n();
 
   const popoverRef = ref<InstanceType<typeof Popover> | null>(null);
+  const searchInputRef = ref<InstanceType<typeof Input> | null>(null);
   const isPopoverVisible = ref(false);
   const searchKeyword = ref('');
   const envTypeOrder = ['development', 'test', 'staging', 'production'];
@@ -222,6 +224,14 @@
   function handlePopoverHidden() {
     isPopoverVisible.value = false;
     searchKeyword.value = '';
+  }
+
+  function handlePopoverShown() {
+    isPopoverVisible.value = true;
+    // 打开下拉面板后默认聚焦搜索框
+    nextTick(() => {
+      searchInputRef.value?.focus();
+    });
   }
 
   function handleSelect(envId?: string) {
