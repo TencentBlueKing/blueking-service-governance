@@ -121,7 +121,7 @@
       </div>
       <div class="grid grid-cols-2 h-[40px] -mx-[8px] mt-[8px] border-t border-[#DCDEE5]">
         <div
-          class="flex h-full items-center justify-center gap-[5px] text-[12px] text-[#4D4F56] cursor-pointer hover:bg-[#F0F1F5]"
+          class="flex h-full items-center justify-center gap-[6px] text-[12px] text-[#4D4F56] cursor-pointer hover:bg-[#F0F1F5]"
           @click="handleCreate"
         >
           <Plus
@@ -131,9 +131,10 @@
           <span>{{ $t('新建环境') }}</span>
         </div>
         <div
-          class="flex h-full items-center justify-center text-[12px] text-[#4D4F56] cursor-pointer hover:bg-[#F0F1F5]"
+          class="flex h-full items-center justify-center gap-[6px] text-[12px] text-[#4D4F56] cursor-pointer hover:bg-[#F0F1F5]"
           @click="handleBack"
         >
+          <i class="bkms-icon bkms-icon-return"></i>
           {{ $t('返回列表') }}
         </div>
       </div>
