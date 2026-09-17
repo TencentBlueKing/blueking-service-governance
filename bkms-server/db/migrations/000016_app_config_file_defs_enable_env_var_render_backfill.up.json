@@ -1,0 +1,20 @@
+[
+  {
+    "update": "app_config_file_defs",
+    "updates": [
+      {
+        "q": {
+          "enableEnvVarRender": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "enableEnvVarRender": true
+          }
+        },
+        "multi": true
+      }
+    ]
+  }
+]

@@ -487,7 +487,9 @@ func (b *Builder) buildPlainConfigFiles(
 		allInits = append(allInits, inits...)
 	}
 
-	// 不需要渲染的文件走直接 ConfigMap 挂载（无 init container）
+	// 不需要渲染的文件走直接 ConfigMap 挂载（无 init container）。
+	// ConfigMap 名带 workload 前缀以隔离资源；volume 用固定短名，避免
+	// {app}-plain-direct 在应用名接近 63 时超过 DNS-1123 label（volume 上限 63）。
 	if len(buildResult.DirectParams) > 0 {
 		directCfg := buildDirectConfigMap(
 			fmt.Sprintf("%s-plain-direct", appModel.Workload.Name),
@@ -529,10 +531,14 @@ func (d *directConfigMapResult) ExtraResources(_ context.Context) ([]unstructure
 	return plugin.ToUnstructured(&d.configMap)
 }
 
+// plainDirectVolumeName 是直接挂载 plain ConfigMap 时的 Pod volume 名。
+// 必须是固定短名：ConfigMap 名可到 253，volume 名只能是 63 字符的 DNS label。
+const plainDirectVolumeName = "plain-direct"
+
 // buildDirectConfigMap 为不需要 env var 渲染的 plain 文件构建直接 ConfigMap 挂载。
 // 内容直接写入 ConfigMap data，主容器通过 subPath 挂载到目标路径，无需 init container。
 func buildDirectConfigMap(configMapName string, files []cfgrender.RenderedMountableFile) *directConfigMapResult {
-	volumeName := configMapName
+	volumeName := plainDirectVolumeName
 
 	cm := corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},

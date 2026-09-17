@@ -19,6 +19,9 @@
 package workload
 
 import (
+	"context"
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -100,9 +103,10 @@ var _ = Describe("buildDirectConfigMap", func() {
 		Expect(result.configMap.Data["01-extra.conf"]).To(Equal("foo=bar"))
 
 		// Verify volume mounts
-		mounts, volumes, err := result.Storage(nil)
+		mounts, volumes, err := result.Storage(context.Background())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(mounts).To(HaveLen(2))
+		Expect(mounts[0].Name).To(Equal(plainDirectVolumeName))
 		Expect(mounts[0].MountPath).To(Equal("/etc/app/app.conf"))
 		Expect(mounts[0].SubPath).To(Equal("00-app.conf"))
 		Expect(mounts[1].MountPath).To(Equal("/etc/extra/extra.conf"))
@@ -110,9 +114,26 @@ var _ = Describe("buildDirectConfigMap", func() {
 
 		// Verify volumes
 		Expect(volumes).To(HaveLen(1))
-		Expect(volumes[0].Name).To(Equal("my-app-plain-direct"))
+		Expect(volumes[0].Name).To(Equal(plainDirectVolumeName))
 		Expect(volumes[0].ConfigMap).NotTo(BeNil())
+		Expect(volumes[0].ConfigMap.Name).To(Equal("my-app-plain-direct"))
 		Expect(volumes[0].ConfigMap.Items).To(HaveLen(2))
+	})
+
+	It("should keep volume name within DNS-1123 label limit when ConfigMap name is long", func() {
+		cmName := strings.Repeat("a", 63) + "-plain-direct"
+		result := buildDirectConfigMap(cmName, []cfgrender.RenderedMountableFile{
+			{FileName: "nginx.conf", FilePath: "/etc/nginx", FileContent: "worker_processes 1;\n"},
+		})
+		Expect(result.configMap.Name).To(Equal(cmName))
+		Expect(len(result.configMap.Name)).To(BeNumerically(">", 63))
+
+		mounts, volumes, err := result.Storage(context.Background())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(volumes[0].Name).To(Equal(plainDirectVolumeName))
+		Expect(len(volumes[0].Name)).To(BeNumerically("<=", 63))
+		Expect(mounts[0].Name).To(Equal(plainDirectVolumeName))
+		Expect(volumes[0].ConfigMap.Name).To(Equal(cmName))
 	})
 
 	It("should produce valid ExtraResources", func() {
@@ -121,7 +142,7 @@ var _ = Describe("buildDirectConfigMap", func() {
 		}
 
 		result := buildDirectConfigMap("test-cm", files)
-		extras, err := result.ExtraResources(nil)
+		extras, err := result.ExtraResources(context.Background())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(extras).To(HaveLen(1))
 		Expect(extras[0].GetName()).To(Equal("test-cm"))

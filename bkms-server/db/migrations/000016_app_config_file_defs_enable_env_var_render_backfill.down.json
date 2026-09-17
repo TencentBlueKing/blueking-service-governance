@@ -1,0 +1,19 @@
+[
+  {
+    "update": "app_config_file_defs",
+    "updates": [
+      {
+        "q": {
+          "configKind": "framework",
+          "enableEnvVarRender": true
+        },
+        "u": {
+          "$unset": {
+            "enableEnvVarRender": ""
+          }
+        },
+        "multi": true
+      }
+    ]
+  }
+]

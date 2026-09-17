@@ -30,7 +30,7 @@
 //
 //   - **patcher/spec 模板**：预览仅做 **单层 Go 模板**，模板数据为「属性名 → 已展开值」
 //     的扁平 map（含 name、bkms* 内置键等）；字段名拼写错误或引用未注入的键会得到 **`<no value>`**，
-//     不会像属性值那样先经 ${{}} 再经 legacy 的双层。
+//     不会像属性值那样先经 ${{}} 再经 legacy 的双层管线。
 //
 //   - **Patch 预览**：在本地固定的 sample GameDeployment 上顺序 strategic merge patch，用于参考
 //
