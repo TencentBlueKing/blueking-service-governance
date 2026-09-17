@@ -45,6 +45,10 @@ type ConfigKindPolicy interface {
 	IsEffectiveForEnv(def *AppConfigFileDef, envName string) bool
 	// AllowMountDirUpdate 是否允许通过 def 接口修改挂载目录。
 	AllowMountDirUpdate() bool
+	// AllowEnableEnvVarRenderUpdate 是否允许通过 def 接口修改环境变量渲染开关。
+	AllowEnableEnvVarRenderUpdate() bool
+	// DefaultEnableEnvVarRender 返回该 kind 创建时 EnableEnvVarRender 的默认值。
+	DefaultEnableEnvVarRender() bool
 }
 
 // DefaultPolicies 已注册 ConfigKind 到 policy 的映射。
@@ -91,6 +95,16 @@ func (FrameworkPolicy) IsEffectiveForEnv(_ *AppConfigFileDef, _ string) bool {
 // TODO: 待挂载路径迁移至 def 后放开此限制。
 func (FrameworkPolicy) AllowMountDirUpdate() bool {
 	return false
+}
+
+// AllowEnableEnvVarRenderUpdate framework 始终启用环境变量渲染，不允许关闭。
+func (FrameworkPolicy) AllowEnableEnvVarRenderUpdate() bool {
+	return false
+}
+
+// DefaultEnableEnvVarRender framework 创建时始终启用环境变量渲染。
+func (FrameworkPolicy) DefaultEnableEnvVarRender() bool {
+	return true
 }
 
 // --- plain policy ---
@@ -144,4 +158,14 @@ func (PlainPolicy) IsEffectiveForEnv(def *AppConfigFileDef, envName string) bool
 // AllowMountDirUpdate plain 挂载路径由用户指定，允许通过 def 修改。
 func (PlainPolicy) AllowMountDirUpdate() bool {
 	return true
+}
+
+// AllowEnableEnvVarRenderUpdate plain 允许用户自行开关环境变量渲染。
+func (PlainPolicy) AllowEnableEnvVarRenderUpdate() bool {
+	return true
+}
+
+// DefaultEnableEnvVarRender plain 创建时默认不启用环境变量渲染。
+func (PlainPolicy) DefaultEnableEnvVarRender() bool {
+	return false
 }

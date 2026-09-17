@@ -38,7 +38,7 @@ type MountableFile struct {
 	MountDir string
 	// Content 经 overlay/overwrite 策略编译后的最终文件内容。
 	Content string
-	// EnableEnvVarRender 是否启用环境变量渲染，从 AppConfigFileDef.EnableEnvVarRender 传递。
+	// EnableEnvVarRender 是否启用环境变量渲染
 	EnableEnvVarRender bool
 }
 

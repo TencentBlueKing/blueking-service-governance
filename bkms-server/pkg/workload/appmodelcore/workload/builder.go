@@ -67,6 +67,36 @@ const (
 	tkeRouteEniAnnotationValue = "tke-route-eni"
 )
 
+// buildInputs 是一次 Build 的只读输入（应用、环境、环境变量及引用收集器）。
+type buildInputs struct {
+	ctx        context.Context
+	env        *envmodel.Environment
+	appModel   *appmodel.AppModel
+	appEnvVars envvartypes.EnvVariableList
+	varsMap    map[string]string
+	collector  *envvarrefs.Collector
+}
+
+// podContents 是组装 GameDeployment 之前的 Pod 级产物。
+type podContents struct {
+	container      corev1.Container
+	volumes        []corev1.Volume
+	initContainers []corev1.Container
+	extraObjs      []unstructured.Unstructured
+}
+
+func (p *podContents) addStorage(mounts []corev1.VolumeMount, vols []corev1.Volume) {
+	p.container.VolumeMounts = append(p.container.VolumeMounts, mounts...)
+	p.volumes = append(p.volumes, vols...)
+}
+
+func (p *podContents) addInitContainers(inits []corev1.Container, env []corev1.EnvVar) {
+	for i := range inits {
+		inits[i].Env = env
+	}
+	p.initContainers = append(p.initContainers, inits...)
+}
+
 // Build builds the workload resource for the given application and environment.
 //
 // Returns:
@@ -87,124 +117,34 @@ func (b *Builder) Build(
 		return nil, errors.Wrap(err, "building app env vars")
 	}
 
-	varsMap := appEnvVars.ToMap()
-	collector := envvarrefs.NewCollector(varsMap)
-	extraObjs := make([]unstructured.Unstructured, 0)
-
-	// ── 主容器 spec（镜像、探针、资源配额、生命周期） ──
-
-	containerSpec, err := b.buildContainerSpec(appModel, appEnvVars)
-	if err != nil {
-		return nil, errors.Wrap(err, "building container spec")
-	}
-	resourceReq, err := buildResourceRequirements(appModel.Workload.Resources)
-	if err != nil {
-		return nil, errors.Wrap(err, "building resource requirements")
-	}
-	if resourceReq != nil {
-		containerSpec.Resources = *resourceReq
+	in := &buildInputs{
+		ctx:        ctx,
+		env:        env,
+		appModel:   appModel,
+		appEnvVars: appEnvVars,
+		varsMap:    appEnvVars.ToMap(),
+		collector:  envvarrefs.NewCollector(appEnvVars.ToMap()),
 	}
 
-	// 用户自定义 volume mounts
-	volumeMounts, volumes, err := buildVolumeMounts(appModel.Workload.VolumeMounts)
-	if err != nil {
-		return nil, errors.Wrap(err, "building volume mounts")
-	}
-
-	var initContainers []corev1.Container
-
-	// ── Framework plugin 提供的存储、额外资源和 init container ──
-
-	wlPlugin, err := plugin.GetWorkloadPlugin(appModel.Workload.Type)
-	if err != nil {
-		return nil, errors.Wrap(err, "resolving workload plugin")
-	}
-	pluginSession, err := wlPlugin.Start(ctx, env, b.app, appModel, plugin.RenderContext{
-		EnvVars:   varsMap,
-		Collector: collector,
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "starting workload plugin")
-	}
-
-	pluginMounts, pluginVolumes, err := pluginSession.Storage(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "building plugin storage")
-	}
-	volumeMounts = append(volumeMounts, pluginMounts...)
-	volumes = append(volumes, pluginVolumes...)
-
-	pluginExtraObjs, err := pluginSession.ExtraResources(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "building plugin extra resources")
-	}
-	extraObjs = append(extraObjs, pluginExtraObjs...)
-
-	pluginInits, err := pluginSession.InitContainers(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "building plugin init containers")
-	}
-	for i := range pluginInits {
-		pluginInits[i].Env = appEnvVars.ToKubeObjs()
-	}
-	initContainers = append(initContainers, pluginInits...)
-
-	// ── Plain 配置文件 ──
-
-	plainMounts, plainVolumes, plainExtras, plainInits, err := b.buildPlainConfigFiles(
-		ctx, appModel, env, varsMap, collector,
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "building plain config files")
-	}
-	volumeMounts = append(volumeMounts, plainMounts...)
-	volumes = append(volumes, plainVolumes...)
-	extraObjs = append(extraObjs, plainExtras...)
-	for i := range plainInits {
-		plainInits[i].Env = appEnvVars.ToKubeObjs()
-	}
-	initContainers = append(initContainers, plainInits...)
-
-	// ── Dev mode 组件 ──
-
-	devModeOutput, err := devmode.New(b.devModeConfig).Build()
-	if err != nil {
-		return nil, errors.Wrap(err, "building dev mode component")
-	}
-	if devModeOutput != nil {
-		if extraObjs, err = AppendAsUnstructured(extraObjs, devModeOutput.ConfigMap); err != nil {
-			return nil, errors.Wrap(err, "appending dev mode config map as unstructured")
-		}
-		volumes = append(volumes, devModeOutput.Volume)
-		volumeMounts = append(volumeMounts, devModeOutput.VolumeMount)
-		containerSpec.Command = devModeOutput.Command
-		containerSpec.Args = nil
-	}
-
-	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, volumeMounts...)
-
-	// ── 组装 GameDeployment ──
-
-	gd, err := b.buildGameDeployment(ctx, env, appModel, containerSpec, volumes, initContainers)
+	pod, err := b.buildPodContents(in)
 	if err != nil {
 		return nil, err
 	}
 
-	// ── 后处理：注入 metadata、hostport、BSCP、components、polaris + 校验 ──
-
-	gd, hostPortAppliedPorts, err := b.applyPostProcessing(
-		ctx, env, appModel, varsMap, collector, &extraObjs, gd,
-	)
+	gd, err := b.buildGameDeployment(in, pod)
 	if err != nil {
 		return nil, err
 	}
 
-	// ── 汇总结果 ──
+	gd, extraObjs, hostPortAppliedPorts, err := b.applyPostProcessing(in, gd, pod.extraObjs)
+	if err != nil {
+		return nil, err
+	}
 
 	result := &BuildResult{
 		ExtraObjects:          extraObjs,
 		SensitiveEnvVarValues: buildSensitiveEnvVarValues(appEnvVars),
-		UndefinedEnvVars:      collector.UndefinedEnvVars(),
+		UndefinedEnvVars:      in.collector.UndefinedEnvVars(),
 		HostPortAppliedPorts:  hostPortAppliedPorts,
 	}
 	if env.Cluster.IsFederation {
@@ -217,29 +157,112 @@ func (b *Builder) Build(
 	return result, nil
 }
 
+// buildPodContents 构建主容器，并汇入用户 volume、plugin、plain files、dev mode。
+func (b *Builder) buildPodContents(in *buildInputs) (*podContents, error) {
+	containerSpec, err := b.buildContainerSpec(in.appModel, in.appEnvVars)
+	if err != nil {
+		return nil, errors.Wrap(err, "building container spec")
+	}
+	resourceReq, err := buildResourceRequirements(in.appModel.Workload.Resources)
+	if err != nil {
+		return nil, errors.Wrap(err, "building resource requirements")
+	}
+	if resourceReq != nil {
+		containerSpec.Resources = *resourceReq
+	}
+
+	volumeMounts, volumes, err := buildVolumeMounts(in.appModel.Workload.VolumeMounts)
+	if err != nil {
+		return nil, errors.Wrap(err, "building volume mounts")
+	}
+
+	pod := &podContents{
+		container: containerSpec,
+		volumes:   volumes,
+		extraObjs: make([]unstructured.Unstructured, 0),
+	}
+	pod.container.VolumeMounts = append(pod.container.VolumeMounts, volumeMounts...)
+
+	if err = b.appendPluginAndConfigResources(in, pod); err != nil {
+		return nil, err
+	}
+	return pod, nil
+}
+
+// appendPluginAndConfigResources 把 plugin、plain files、dev mode 的存储和 init container 写入 pod。
+func (b *Builder) appendPluginAndConfigResources(in *buildInputs, pod *podContents) error {
+	wlPlugin, err := plugin.GetWorkloadPlugin(in.appModel.Workload.Type)
+	if err != nil {
+		return errors.Wrap(err, "resolving workload plugin")
+	}
+	pluginSession, err := wlPlugin.Start(in.ctx, in.env, b.app, in.appModel, plugin.RenderContext{
+		EnvVars:   in.varsMap,
+		Collector: in.collector,
+	})
+	if err != nil {
+		return errors.Wrap(err, "starting workload plugin")
+	}
+
+	pluginMounts, pluginVolumes, err := pluginSession.Storage(in.ctx)
+	if err != nil {
+		return errors.Wrap(err, "building plugin storage")
+	}
+	pod.addStorage(pluginMounts, pluginVolumes)
+
+	pluginExtraObjs, err := pluginSession.ExtraResources(in.ctx)
+	if err != nil {
+		return errors.Wrap(err, "building plugin extra resources")
+	}
+	pod.extraObjs = append(pod.extraObjs, pluginExtraObjs...)
+
+	pluginInits, err := pluginSession.InitContainers(in.ctx)
+	if err != nil {
+		return errors.Wrap(err, "building plugin init containers")
+	}
+	pod.addInitContainers(pluginInits, in.appEnvVars.ToKubeObjs())
+
+	plainMounts, plainVolumes, plainExtras, plainInits, err := b.buildPlainConfigFiles(
+		in.ctx, in.appModel, in.env, in.varsMap, in.collector,
+	)
+	if err != nil {
+		return errors.Wrap(err, "building plain config files")
+	}
+	pod.addStorage(plainMounts, plainVolumes)
+	pod.extraObjs = append(pod.extraObjs, plainExtras...)
+	pod.addInitContainers(plainInits, in.appEnvVars.ToKubeObjs())
+
+	devModeOutput, err := devmode.New(b.devModeConfig).Build()
+	if err != nil {
+		return errors.Wrap(err, "building dev mode component")
+	}
+	if devModeOutput == nil {
+		return nil
+	}
+	if pod.extraObjs, err = AppendAsUnstructured(pod.extraObjs, devModeOutput.ConfigMap); err != nil {
+		return errors.Wrap(err, "appending dev mode config map as unstructured")
+	}
+	pod.addStorage([]corev1.VolumeMount{devModeOutput.VolumeMount}, []corev1.Volume{devModeOutput.Volume})
+	pod.container.Command = devModeOutput.Command
+	pod.container.Args = nil
+	return nil
+}
+
 // buildGameDeployment 构造 GameDeployment 资源对象（含 strategy、secrets、PodTemplate）。
-func (b *Builder) buildGameDeployment(
-	ctx context.Context,
-	env *envmodel.Environment,
-	appModel *appmodel.AppModel,
-	containerSpec corev1.Container,
-	volumes []corev1.Volume,
-	initContainers []corev1.Container,
-) (tkex.GameDeployment, error) {
-	buildCfg, err := b.buildConfigStore.Get(ctx, b.app.ID)
+func (b *Builder) buildGameDeployment(in *buildInputs, pod *podContents) (tkex.GameDeployment, error) {
+	buildCfg, err := b.buildConfigStore.Get(in.ctx, b.app.ID)
 	if err != nil {
 		return tkex.GameDeployment{}, errors.Wrap(err, "get build config")
 	}
 
-	secretNames := appModel.Workload.ImagePullSecrets
+	secretNames := in.appModel.Workload.ImagePullSecrets
 	if name := secret.ResolveImagePullSecretName(
-		env.WorkspaceID, b.app.ID, buildCfg,
+		in.env.WorkspaceID, b.app.ID, buildCfg,
 	); !lo.Contains(secretNames, name) {
 		secretNames = append(secretNames, name)
 	}
 
-	gdStrategy := buildUpdateStrategy(appModel.UpdateStrategy)
-	name := appModel.Workload.Name
+	gdStrategy := buildUpdateStrategy(in.appModel.UpdateStrategy)
+	name := in.appModel.Workload.Name
 	imagePullSecrets := lo.Map(secretNames, func(name string, _ int) corev1.LocalObjectReference {
 		return corev1.LocalObjectReference{Name: name}
 	})
@@ -274,16 +297,16 @@ func (b *Builder) buildGameDeployment(
 				},
 				Spec: corev1.PodSpec{
 					ImagePullSecrets:              imagePullSecrets,
-					InitContainers:                initContainers,
-					Containers:                    []corev1.Container{containerSpec},
-					Volumes:                       volumes,
-					TerminationGracePeriodSeconds: appModel.Workload.TerminationGracePeriodSeconds,
+					InitContainers:                pod.initContainers,
+					Containers:                    []corev1.Container{pod.container},
+					Volumes:                       pod.volumes,
+					TerminationGracePeriodSeconds: in.appModel.Workload.TerminationGracePeriodSeconds,
 				},
 			},
 		},
 	}
-	if appModel.Replicas != nil {
-		gd.Spec.Replicas = appModel.Replicas
+	if in.appModel.Replicas != nil {
+		gd.Spec.Replicas = in.appModel.Replicas
 	}
 	return gd, nil
 }
@@ -312,88 +335,80 @@ func buildUpdateStrategy(strategy *appmodel.UpdateStrategy) tkex.GameDeploymentU
 
 // applyPostProcessing 在 GameDeployment 构造完成后注入各类扩展并做最终校验：
 // metadata、TKE ENI、HostPort、BSCP、Components、Polaris、MountPath 冲突检测。
-// extraObjs 通过指针传入，方法内会 append components 和 polaris 产出的额外资源。
 func (b *Builder) applyPostProcessing(
-	ctx context.Context,
-	env *envmodel.Environment,
-	appModel *appmodel.AppModel,
-	varsMap map[string]string,
-	collector *envvarrefs.Collector,
-	extraObjs *[]unstructured.Unstructured,
+	in *buildInputs,
 	gd tkex.GameDeployment,
-) (tkex.GameDeployment, []int32, error) {
-	mergeUserMetadata(&gd.Spec.Template.ObjectMeta, appModel.Labels, appModel.Annotations)
+	extraObjs []unstructured.Unstructured,
+) (tkex.GameDeployment, []unstructured.Unstructured, []int32, error) {
+	mergeUserMetadata(&gd.Spec.Template.ObjectMeta, in.appModel.Labels, in.appModel.Annotations)
 
-	if appModel.TkeRouteEni {
+	if in.appModel.TkeRouteEni {
 		if gd.Spec.Template.Annotations == nil {
 			gd.Spec.Template.Annotations = make(map[string]string)
 		}
 		gd.Spec.Template.Annotations[tkeRouteEniAnnotationKey] = tkeRouteEniAnnotationValue
 	}
 
-	// HostPort（联邦环境）
 	var hostPortAppliedPorts []int32
-	if env.Cluster.IsFederation {
+	if in.env.Cluster.IsFederation {
 		appliedPorts, err := hostport.InjectFromStore(
-			ctx, b.hostPortStore, b.app.ID,
+			in.ctx, b.hostPortStore, b.app.ID,
 			&gd.Spec.Template.ObjectMeta,
 			gd.Spec.Template.Spec.Containers,
 			defaults.WorkloadMainContainerName,
 		)
 		if err != nil {
-			return gd, nil, errors.Wrap(err, "injecting hostport")
+			return gd, extraObjs, nil, errors.Wrap(err, "injecting hostport")
 		}
 		hostPortAppliedPorts = appliedPorts
 	}
 
-	// BSCP
 	if err := bscpcfg.InjectFromStore(
-		ctx, b.bscpCfgStore, b.app.ID, env.Name,
+		in.ctx, b.bscpCfgStore, b.app.ID, in.env.Name,
 		defaults.WorkloadMainContainerName, &gd.Spec.Template.Spec,
 	); err != nil {
-		return gd, nil, errors.Wrap(err, "injecting bscp config")
+		return gd, extraObjs, nil, errors.Wrap(err, "injecting bscp config")
 	}
 
-	// Components
-	comps, err := b.ListComponents(ctx, env, appModel)
+	comps, err := b.ListComponents(in.ctx, in.env, in.appModel)
 	if err != nil {
-		return gd, nil, errors.Wrap(err, "listing components")
+		return gd, extraObjs, nil, errors.Wrap(err, "listing components")
 	}
 	compApplier, err := component.CreateDefaultApplier()
 	if err != nil {
-		return gd, nil, errors.Wrap(err, "creating component applier")
+		return gd, extraObjs, nil, errors.Wrap(err, "creating component applier")
 	}
 	evaluatedComps := make([]*component.EvaluatedComponent, 0, len(comps))
 	for _, comp := range comps {
-		evaluated, evaluateErr := compApplier.Evaluate(ctx, b.app, *comp, env.ID, varsMap, collector)
+		evaluated, evaluateErr := compApplier.Evaluate(
+			in.ctx, b.app, *comp, in.env.ID, in.varsMap, in.collector,
+		)
 		if evaluateErr != nil {
-			return gd, nil, errors.Wrapf(evaluateErr, "evaluating component %s", comp.Name)
+			return gd, extraObjs, nil, errors.Wrapf(evaluateErr, "evaluating component %s", comp.Name)
 		}
 		evaluatedComps = append(evaluatedComps, evaluated)
 	}
 	gd, extraCompObjs, err := b.applyComponents(gd, evaluatedComps)
 	if err != nil {
-		return gd, nil, errors.Wrap(err, "applying components")
+		return gd, extraObjs, nil, errors.Wrap(err, "applying components")
 	}
-	*extraObjs = append(*extraObjs, extraCompObjs...)
+	extraObjs = append(extraObjs, extraCompObjs...)
 
-	// Polaris
 	polarisResult, err := b.polarisWorkloadBuilder.Build(
-		ctx, b.app, env, varsMap,
-		gd.Spec.Template.Spec, collector,
+		in.ctx, b.app, in.env, in.varsMap,
+		gd.Spec.Template.Spec, in.collector,
 	)
 	if err != nil {
-		return gd, nil, errors.Wrap(err, "applying polaris configs")
+		return gd, extraObjs, nil, errors.Wrap(err, "applying polaris configs")
 	}
 	gd.Spec.Template.Spec = polarisResult.PodSpec
-	*extraObjs = append(*extraObjs, polarisResult.ExtraObjects...)
+	extraObjs = append(extraObjs, polarisResult.ExtraObjects...)
 
-	// 全局 MountPath 唯一性校验
 	if err = validateAllMountPaths(&gd); err != nil {
-		return gd, nil, err
+		return gd, extraObjs, nil, err
 	}
 
-	return gd, hostPortAppliedPorts, nil
+	return gd, extraObjs, hostPortAppliedPorts, nil
 }
 
 // validateAllMountPaths 校验所有容器的 MountPath 唯一性。
@@ -416,7 +431,7 @@ func validateAllMountPaths(gd *tkex.GameDeployment) error {
 // buildPlainConfigFiles 构建 plain 配置文件的 K8s 资源。
 //
 // 根据 EnableEnvVarRender 开关，plain 文件分为两条路径：
-//   - renderParams（EnableEnvVarRender=true）→ cfgrender + runtimerender 管线（ConfigMap + emptyDir + init container）
+//   - renderParams（EnableEnvVarRender=true）→ cfgrender + runtimerender （ConfigMap + emptyDir + init container）
 //   - directParams（EnableEnvVarRender=false）→ 直接 ConfigMap 挂载（无 init container）
 //
 // 两组产物各自生成 mounts/volumes/extras/inits，合并后返回。

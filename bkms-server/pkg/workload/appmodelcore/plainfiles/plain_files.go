@@ -20,7 +20,7 @@
 //
 // BuildPlainConfigFiles 是面向 plain 配置文件的上层包装，由 Builder 公共步骤调用。
 // 根据 EnableEnvVarRender 开关将文件分为两组：
-//   - RenderParams：需要经过 cfgrender.RenderConfigContents 做环境变量渲染 + runtimerender 管线
+//   - RenderParams：需要经过 cfgrender.RenderConfigContents 做环境变量渲染 + runtimerender
 //   - DirectParams：直接以原始内容构建 ConfigMap 挂载，跳过模板渲染
 package plainfiles
 
@@ -36,7 +36,7 @@ import (
 
 // BuildResult 包含按 EnableEnvVarRender 分组后的两组配置文件参数。
 type BuildResult struct {
-	// RenderParams 需要 env var 渲染 + runtime render 管线处理的文件。
+	// RenderParams 需要 env var 渲染 + runtime render 处理的文件。
 	RenderParams []cfgrender.ConfigFileParams
 	// DirectParams 直接以原始内容挂载到 ConfigMap 的文件（跳过模板渲染）。
 	DirectParams []cfgrender.ConfigFileParams
@@ -44,7 +44,7 @@ type BuildResult struct {
 
 // BuildPlainConfigFiles 获取当前环境实际生效的 plain 配置文件，
 // 按 EnableEnvVarRender 开关分为两组：
-//   - EnableEnvVarRender=true → 经 cfgrender.RenderConfigContents 渲染后走 runtimerender 管线
+//   - EnableEnvVarRender=true → 经 cfgrender.RenderConfigContents 渲染后走 runtimerender
 //   - EnableEnvVarRender=false → 跳过渲染，直接构建 ConfigMap 挂载
 //
 // 该函数由 Builder 公共步骤调用，独立于任何框架 plugin，因此所有 workload 类型
@@ -87,7 +87,7 @@ func BuildPlainConfigFiles(
 
 	result := &BuildResult{}
 
-	// 需要渲染的文件走 cfgrender 管线
+	// 需要渲染的文件走 cfgrender
 	if len(renderItems) > 0 {
 		rendered, renderErr := cfgrender.RenderConfigContents(renderItems, envVars, collector)
 		if renderErr != nil {

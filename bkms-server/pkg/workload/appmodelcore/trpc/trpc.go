@@ -166,29 +166,30 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 			Language: params.TrpcConfig.Language,
 		}
 	}
-	// 将平台默认 AppSpec 应用到 AppModel。
-	appspec.ApplyToAppModel(&resolved.Default, appModel)
+	return s.persistCreatedApp(ctx, app, appModel, resolved)
+}
 
-	// 创建 AppModel
-	if err = s.appModelStore.CreateAppModel(ctx, appModel); err != nil {
+func (s *Service) persistCreatedApp(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	appModel *appmodel.AppModel,
+	resolved *appdefaults.ResolvedAppSpec,
+) error {
+	appspec.ApplyToAppModel(&resolved.Default, appModel)
+	if err := s.appModelStore.CreateAppModel(ctx, appModel); err != nil {
 		return errors.Wrapf(err, "create app(%s) model", app.Name)
 	}
-
-	// 插入 appspec 初始配置
-	if err = s.appSpecStore.Upsert(ctx, &resolved.Default); err != nil {
+	if err := s.appSpecStore.Upsert(ctx, &resolved.Default); err != nil {
 		return errors.Wrap(err, "create default app spec")
 	}
 	for _, spec := range resolved.Environments {
-		if err = s.appSpecStore.Upsert(ctx, spec); err != nil {
+		if err := s.appSpecStore.Upsert(ctx, spec); err != nil {
 			return errors.Wrapf(err, "create app spec for environment %q", spec.EnvName)
 		}
 	}
-
-	// 创建应用基础数据
 	if err := s.appStore.CreateApp(ctx, app); err != nil {
 		return errors.Wrap(err, "create app")
 	}
-
 	return nil
 }
 

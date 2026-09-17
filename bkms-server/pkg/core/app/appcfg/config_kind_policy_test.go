@@ -73,6 +73,18 @@ var _ = Describe("FrameworkPolicy", func() {
 			Expect(policy.AllowMountDirUpdate()).To(BeFalse())
 		})
 	})
+
+	Describe("AllowEnableEnvVarRenderUpdate", func() {
+		It("should not allow enableEnvVarRender update", func() {
+			Expect(policy.AllowEnableEnvVarRenderUpdate()).To(BeFalse())
+		})
+	})
+
+	Describe("DefaultEnableEnvVarRender", func() {
+		It("should enable env var render by default", func() {
+			Expect(policy.DefaultEnableEnvVarRender()).To(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("DefaultPolicies", func() {
@@ -174,6 +186,18 @@ var _ = Describe("PlainPolicy", func() {
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("overlay"))
+		})
+	})
+
+	Describe("AllowEnableEnvVarRenderUpdate", func() {
+		It("should allow enableEnvVarRender update", func() {
+			Expect(policy.AllowEnableEnvVarRenderUpdate()).To(BeTrue())
+		})
+	})
+
+	Describe("DefaultEnableEnvVarRender", func() {
+		It("should disable env var render by default", func() {
+			Expect(policy.DefaultEnableEnvVarRender()).To(BeFalse())
 		})
 	})
 })

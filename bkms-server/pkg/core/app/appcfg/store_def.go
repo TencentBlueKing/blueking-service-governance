@@ -142,9 +142,10 @@ func (s *AppConfigFileDefStoreMongo) Update(ctx context.Context, def AppConfigFi
 		return 0, errors.New("def ID is required for update")
 	}
 	result, err := s.collection.UpdateOne(ctx, bson.M{"_id": def.ID}, bson.M{"$set": bson.M{
-		"name":          def.Name,
-		"mountDir":      def.MountDir,
-		"envConfigMode": def.EnvConfigMode,
+		"name":               def.Name,
+		"mountDir":           def.MountDir,
+		"envConfigMode":      def.EnvConfigMode,
+		"enableEnvVarRender": def.EnableEnvVarRender,
 	}})
 	if err != nil {
 		return 0, err

@@ -89,7 +89,7 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 	})
 
 	Context("Update", func() {
-		It("should update name and envConfigMode", func() {
+		It("should update name, envConfigMode and enableEnvVarRender", func() {
 			def := newDef()
 			id, err := store.Add(ctx, def)
 			Expect(err).NotTo(HaveOccurred())
@@ -99,6 +99,7 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 
 			got.Name = "new-values.yaml"
 			got.EnvConfigMode.IsUnifiedConfig = false
+			got.EnableEnvVarRender = true
 			cnt, err := store.Update(ctx, *got)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cnt).To(Equal(int64(1)))
@@ -107,6 +108,7 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.Name).To(Equal("new-values.yaml"))
 			Expect(updated.EnvConfigMode.IsUnifiedConfig).To(BeFalse())
+			Expect(updated.EnableEnvVarRender).To(BeTrue())
 		})
 	})
 

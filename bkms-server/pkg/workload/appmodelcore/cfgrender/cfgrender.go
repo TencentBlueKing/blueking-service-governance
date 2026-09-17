@@ -16,16 +16,11 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package cfgrender performs compile-time rendering of application config files.
+// Package cfgrender 在 bkms-server 构建 workload 时做编译期配置渲染。
 //
-// It collects ${{ env.KEY }} references for undefined-variable validation and
-// renders template variables into their actual values. The output
-// ConfigFileParams are consumed by runtimerender.BuildConfig to produce K8s
-// resources (ConfigMap + init container) for runtime placeholder replacement.
-//
-// Both framework and plain config files share this pipeline; callers should
-// complete any kind-specific pre-processing (e.g. polaris patching, mountDir
-// validation) before invoking RenderConfigContents.
+// 它只处理 ${{ env.KEY }} 模板：收集引用并替换成当前已知的环境变量值。
+// 不创建 ConfigMap，也不生成 init container。
+// Pod 启动后才能确定的值（BKMS_POD_IP 等）由 runtimerender 负责。
 package cfgrender
 
 import (
@@ -46,19 +41,13 @@ type ConfigFileParams struct {
 	FileContent string
 }
 
-// RenderConfigContents 对配置文件内容执行环境变量引用收集与模板变量渲染，
-// framework 和 plain 共用。
+// RenderConfigContents 只做编译期环境变量渲染，framework 和 plain 共用。
 //
-// 处理步骤：
-//  1. 收集 ${{ env.KEY }} 引用（供上游做未定义环境变量校验）
-//  2. 将模板变量渲染为实际环境变量值
-//  3. 输出 ConfigFileParams 供 runtimerender.BuildConfig 消费
+// 对每条文件：
+//  1. 扫描 ${{ env.KEY }}，写入 collector（供上游校验未定义变量）
+//  2. 用 envVars 把 ${{ env.KEY }} 替换成当前已知的值
 //
-// 注意：collector 是调用方提供的可变状态（入参兼出参），调用后 collector 中会
-// 新增本次扫描到的环境变量引用。调用方应在所有 Render 调用完成后再读取 collector
-// 的汇总结果（如 UndefinedEnvVars），以确保收集完整。
-//
-// 调用方在调用前应完成各自独有的预处理（如 framework 的 polaris patcher、plain 的 mountDir 校验）。
+// 本函数不会做 runtime 渲染：不写 ConfigMap、不跑 init container。
 func RenderConfigContents(
 	items []appcfg.MountableFile,
 	envVars map[string]string,
