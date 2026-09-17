@@ -99,6 +99,14 @@ type BCSConfig struct {
 	FederationClusterIDs []string
 }
 
+// FeatureFlagsConfig 平台能力开关
+type FeatureFlagsConfig struct {
+	// CreateBCSProject 控制 project 时 BCS 是否与蓝盾独立
+	// 为 true：蓝盾始终新建；新建容器则 Create BCS，绑定已有容器则绑定已有 BCS（只会拉取 BCS 授权的项目）
+	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目（拉取 BCS 和蓝盾授权项目的交集）。
+	CreateBCSProject bool
+}
+
 // BKCIProjInitConfig 蓝盾项目初始化默认配置
 type BKCIProjInitConfig struct {
 	Type        int
@@ -449,6 +457,8 @@ type Config struct {
 	Encrypt EncryptConfig
 
 	// --------------------------- 业务功能配置 ---------------------------
+	// FeatureFlags 平台能力开关
+	FeatureFlags FeatureFlagsConfig
 	// ClusterAddons 集群插件（Addons）配置
 	ClusterAddons ClusterAddonConfig
 	// Helm Helm 相关配置
