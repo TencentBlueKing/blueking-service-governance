@@ -70,6 +70,10 @@ func (h *Handler) UpdateHelmSpec(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "decode helm source"))
 		return
 	}
+	if err = resolveHelmGitRepo(helmSource); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 
 	// 设置 HelmRepoConfig 的 username 和 password 字段
 	// 请求中的 Username 和 Password 字段不是必填的，在请求不提供时，应当使用旧值
@@ -88,10 +92,10 @@ func (h *Handler) UpdateHelmSpec(c *gin.Context) {
 			return
 		}
 	}
-	if err = bkci.EnsureWorkspaceRepositories(
-		ctx, h.registry.DB, app.WorkspaceID, helmSourceRepositoriesToBind(helmSource),
+	if err = bkci.SaveWorkspaceRepositories(
+		ctx, h.registry.DB, helmSourceRepositoriesToSave(app.WorkspaceID, helmSource),
 	); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"))
+		bkerrs.AbortWithErr(c, toRepositoryBkErr(err))
 		return
 	}
 

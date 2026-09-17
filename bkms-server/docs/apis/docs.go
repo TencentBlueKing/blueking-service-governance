@@ -19360,6 +19360,118 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/code-repositories/connectivity-test": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "校验仓库地址与凭证，不保存代码库",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "code-repositories"
+                ],
+                "summary": "测试代码库连通性",
+                "operationId": "TestCodeRepositoryConnectivity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "代码库配置",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_coderepo_serializer.ConnectivityTestInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_coderepo_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/code-repositories/refs": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "查询未保存代码库的分支或 Tag，已保存的使用 bkci-repositories/branches、tags",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "code-repositories"
+                ],
+                "summary": "查询代码库分支或 Tag",
+                "operationId": "ListCodeRepositoryRefs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "代码库配置与查询条件",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListRefsInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListRefsOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/components": {
             "get": {
                 "security": [
@@ -20797,7 +20909,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/serializer.ConnectivityTestInput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_addon_polaris_accesspoint_serializer.ConnectivityTestInput"
                         }
                     }
                 ],
@@ -23718,6 +23830,43 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_coderepo_serializer.ConnectivityTestInput": {
+            "type": "object",
+            "required": [
+                "repoURL",
+                "type"
+            ],
+            "properties": {
+                "password": {
+                    "description": "仓库密码，仅 basic 方式使用，不传时沿用已保存的",
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "repoAlias": {
+                    "description": "代码库别名，仅蓝盾托管方式使用",
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "repoURL": {
+                    "description": "仓库 HTTP(S) 地址",
+                    "type": "string",
+                    "maxLength": 512
+                },
+                "type": {
+                    "description": "接入方式名，取值见前端开关 repoSourceTypes",
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "username": {
+                    "description": "仓库账号，仅 basic 方式使用",
+                    "type": "string",
+                    "maxLength": 128
+                }
+            }
+        },
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_coderepo_serializer.EmptyOutput": {
+            "type": "object"
+        },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_env_serializer.EmptyOutput": {
             "type": "object"
         },
@@ -23817,6 +23966,34 @@ const docTemplate = `{
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_addon_gpa_serializer.EmptyOutput": {
             "type": "object"
+        },
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_addon_polaris_accesspoint_serializer.ConnectivityTestInput": {
+            "type": "object",
+            "required": [
+                "clientHosts",
+                "consoleURL"
+            ],
+            "properties": {
+                "clientHosts": {
+                    "description": "客户端地址",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "已有接入点的 ID",
+                    "type": "string"
+                },
+                "token": {
+                    "description": "北极星鉴权 Token",
+                    "type": "string"
+                }
+            }
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_extension_component_serializer.EmptyOutput": {
             "type": "object"
@@ -27145,34 +27322,6 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.ConnectivityTestInput": {
-            "type": "object",
-            "required": [
-                "clientHosts",
-                "consoleURL"
-            ],
-            "properties": {
-                "clientHosts": {
-                    "description": "客户端地址",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "consoleURL": {
-                    "description": "北极星控制台地址",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "已有接入点的 ID",
-                    "type": "string"
-                },
-                "token": {
-                    "description": "北极星鉴权 Token",
-                    "type": "string"
-                }
-            }
-        },
         "serializer.ConnectivityTestOutput": {
             "type": "object",
             "properties": {
@@ -29914,6 +30063,13 @@ const docTemplate = `{
                 "polarisWorkspaceAccessPoint": {
                     "description": "是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，\n所有集群都使用平台托管接入点",
                     "type": "boolean"
+                },
+                "repoSourceTypes": {
+                    "description": "已启用的代码库接入方式，第一个为默认",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RepoSourceTypeOutput"
+                    }
                 }
             }
         },
@@ -30879,16 +31035,21 @@ const docTemplate = `{
         "serializer.HelmGitRepoConfigInput": {
             "type": "object",
             "required": [
-                "repoAlias",
                 "repoURL",
                 "revision",
                 "sourceDir",
                 "type"
             ],
             "properties": {
+                "password": {
+                    "description": "仓库密码，仅 basic 方式使用，不传时沿用已保存的",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "repoAlias": {
-                    "description": "代码库别名",
-                    "type": "string"
+                    "description": "代码库别名，仅蓝盾托管方式使用",
+                    "type": "string",
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码库地址",
@@ -30903,12 +31064,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "description": "代码库类型",
+                    "description": "代码库接入方式名，取值见前端开关 repoSourceTypes",
                     "type": "string",
-                    "enum": [
-                        "TGit",
-                        "GitHub"
-                    ]
+                    "maxLength": 32
+                },
+                "username": {
+                    "description": "仓库账号，仅 basic 方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
@@ -32331,6 +32494,83 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/serializer.RedisInstanceOutputObj"
+                    }
+                }
+            }
+        },
+        "serializer.ListRefsInput": {
+            "type": "object",
+            "required": [
+                "kind",
+                "page",
+                "pageSize",
+                "repoURL",
+                "type"
+            ],
+            "properties": {
+                "kind": {
+                    "description": "引用类型：branch 分支 / tag Tag",
+                    "type": "string",
+                    "enum": [
+                        "branch",
+                        "tag"
+                    ]
+                },
+                "page": {
+                    "description": "页码，最小为 1",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "pageSize": {
+                    "description": "每页数量",
+                    "type": "integer",
+                    "enum": [
+                        5,
+                        10,
+                        20,
+                        50,
+                        100
+                    ]
+                },
+                "password": {
+                    "description": "仓库密码，仅 basic 方式使用，不传时沿用已保存的",
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "repoAlias": {
+                    "description": "代码库别名，仅蓝盾托管方式使用",
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "repoURL": {
+                    "description": "仓库 HTTP(S) 地址",
+                    "type": "string",
+                    "maxLength": 512
+                },
+                "search": {
+                    "description": "名称关键字，忽略大小写",
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "type": {
+                    "description": "接入方式名，取值见前端开关 repoSourceTypes",
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "username": {
+                    "description": "仓库账号，仅 basic 方式使用",
+                    "type": "string",
+                    "maxLength": 128
+                }
+            }
+        },
+        "serializer.ListRefsOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RefOutput"
                     }
                 }
             }
@@ -34924,6 +35164,23 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.RefOutput": {
+            "type": "object",
+            "properties": {
+                "linkUrl": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "sha": {
+                    "type": "string"
+                }
+            }
+        },
         "serializer.RefreshAppImagesOutput": {
             "type": "object",
             "properties": {
@@ -35107,7 +35364,6 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "defaultBranch",
-                "repoAlias",
                 "repoURL",
                 "type"
             ],
@@ -35138,6 +35394,11 @@ const docTemplate = `{
                         "repositoryDockerfile"
                     ]
                 },
+                "password": {
+                    "description": "仓库密码，仅 basic 方式使用，不传时沿用已保存的",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "platformBuildConfig": {
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物",
                     "allOf": [
@@ -35147,10 +35408,9 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名",
+                    "description": "代码库别名，仅蓝盾托管方式使用",
                     "type": "string",
-                    "maxLength": 256,
-                    "minLength": 1
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码仓库地址",
@@ -35164,12 +35424,14 @@ const docTemplate = `{
                     "maxLength": 64
                 },
                 "type": {
-                    "description": "代码仓库类型：TGit 或 GitHub",
+                    "description": "代码库接入方式名，取值见前端开关 repoSourceTypes",
                     "type": "string",
-                    "enum": [
-                        "TGit",
-                        "GitHub"
-                    ]
+                    "maxLength": 32
+                },
+                "username": {
+                    "description": "仓库账号，仅 basic 方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
@@ -35221,11 +35483,31 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.RepoSourceTypeOutput": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "description": "展示名",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "接入方式名，即代码库配置的 type",
+                    "type": "string"
+                },
+                "spec": {
+                    "description": "实现类型：bkci_managed 蓝盾托管授权 / basic 仓库账号密码",
+                    "type": "string",
+                    "enum": [
+                        "bkci_managed",
+                        "basic"
+                    ]
+                }
+            }
+        },
         "serializer.RepositoryBuildConfigInput": {
             "type": "object",
             "required": [
                 "defaultBranch",
-                "repoAlias",
                 "repoURL",
                 "type"
             ],
@@ -35256,6 +35538,11 @@ const docTemplate = `{
                         "repositoryDockerfile"
                     ]
                 },
+                "password": {
+                    "description": "仓库密码，仅 basic 方式使用，不传时沿用已保存的",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "platformBuildConfig": {
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物",
                     "allOf": [
@@ -35265,10 +35552,9 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名",
+                    "description": "代码库别名，仅蓝盾托管方式使用",
                     "type": "string",
-                    "maxLength": 256,
-                    "minLength": 1
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码仓库地址",
@@ -35282,12 +35568,14 @@ const docTemplate = `{
                     "maxLength": 64
                 },
                 "type": {
-                    "description": "代码仓库类型：TGit 或 GitHub",
+                    "description": "代码库接入方式名，取值见前端开关 repoSourceTypes",
                     "type": "string",
-                    "enum": [
-                        "TGit",
-                        "GitHub"
-                    ]
+                    "maxLength": 32
+                },
+                "username": {
+                    "description": "仓库账号，仅 basic 方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },

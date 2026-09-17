@@ -79,7 +79,7 @@ YAML spec file fields:
 
   [buildConfig - sourceType=codeRepository]
     buildConfig.sourceType:                       codeRepository
-    buildConfig.repoBuildConfig.type:             TGit | GitHub (required)
+    buildConfig.repoBuildConfig.type:             Source type, e.g. TGit (required)
     buildConfig.repoBuildConfig.repoAlias:        Repository alias (required)
     buildConfig.repoBuildConfig.repoURL:          Repository URL (required)
     buildConfig.repoBuildConfig.defaultBranch:    Default branch (required)
@@ -108,7 +108,7 @@ YAML spec file fields:
     helmSpec.helmSource.bcsRepoConfig.chartName:    Chart name (required)
 
   [helmSpec.helmSource - repoType=GitRepo]
-    helmSpec.helmSource.gitRepoConfig.type:         TGit | GitHub (required)
+    helmSpec.helmSource.gitRepoConfig.type:         Source type, e.g. TGit (required)
     helmSpec.helmSource.gitRepoConfig.repoAlias:    Git repo alias (required)
     helmSpec.helmSource.gitRepoConfig.repoURL:      Git repo URL (required)
     helmSpec.helmSource.gitRepoConfig.revision:     Git revision/branch (required)

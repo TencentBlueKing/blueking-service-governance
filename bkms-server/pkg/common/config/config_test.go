@@ -672,5 +672,88 @@ httpServer:
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("'Mode' failed on the 'oneof' tag"))
 		})
+
+		Describe("code repository source types", func() {
+			const baseConfig = `
+bkApp:
+  code: test-app
+  secret: test-secret
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: http://login.example.com
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			load := func(extra string) (*config.Config, error) {
+				GinkgoHelper()
+				Expect(os.WriteFile(configFile, []byte(baseConfig+extra), 0o644)).To(Succeed())
+				return config.Load(ctx, configFile)
+			}
+
+			It("should use the bkci managed TGit source type when not configured", func() {
+				cfg, err := load("")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.CodeRepository.SourceTypes).To(BeEmpty())
+				Expect(cfg.CodeRepository.EffectiveSourceTypes()).To(Equal(config.DefaultRepoSourceTypes))
+			})
+
+			It("should load configured source types", func() {
+				cfg, err := load(`codeRepository:
+  sourceTypes:
+    - {name: TGit, spec: bkci_managed, label: 工蜂, enabled: true}
+    - {name: Git, spec: basic, label: Git 代码库, enabled: true}
+`)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.CodeRepository.EffectiveSourceTypes()).To(Equal([]config.RepoSourceTypeConfig{
+					{
+						Name:    config.DefaultRepoSourceTypeName,
+						Spec:    config.RepoSourceSpecBkCIManaged,
+						Label:   config.DefaultRepoSourceTypeLabel,
+						Enabled: true,
+					},
+					{
+						Name:    "Git",
+						Spec:    config.RepoSourceSpecBasic,
+						Label:   "Git 代码库",
+						Enabled: true,
+					},
+				}))
+			})
+
+			DescribeTable("should reject invalid source types",
+				func(extra, msg string) {
+					_, err := load(extra)
+					Expect(err).To(MatchError(ContainSubstring(msg)))
+				},
+				Entry("unknown spec", `codeRepository:
+  sourceTypes:
+    - {name: Git, spec: ssh, label: Git, enabled: true}
+`, "'Spec' failed on the 'oneof' tag"),
+				Entry("name with slash", `codeRepository:
+  sourceTypes:
+    - {name: a/b, spec: basic, label: Git, enabled: true}
+`, "'Name' failed on the 'excludesall' tag"),
+				Entry("oauth spec", `codeRepository:
+  sourceTypes:
+    - {name: GitLab, spec: oauth, label: GitLab, enabled: true}
+`, "spec oauth is not implemented"),
+				Entry("duplicated name", `codeRepository:
+  sourceTypes:
+    - {name: Git, spec: basic, label: Git, enabled: true}
+    - {name: Git, spec: bkci_managed, label: Git, enabled: true}
+`, "duplicated source type name Git"),
+				Entry("none enabled", `codeRepository:
+  sourceTypes:
+    - {name: Git, spec: basic, label: Git, enabled: false}
+`, "at least one enabled source type is required"),
+			)
+		})
 	})
 })

@@ -85,7 +85,7 @@ var PipelineMeta = store.Meta[Pipeline]{
 	NotFound:     ErrPipelineNotFound,
 }
 
-// RepositoryMeta 代码仓库的存储元数据。
+// RepositoryMeta 蓝盾代码库同步记录的存储元数据
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：id + projectCode
@@ -135,6 +135,11 @@ func ByWorkspaceAndAlias(workspaceID, alias string) store.Opt {
 // ByWorkspaceAndNode 按工作空间 ID 与节点 HashId 匹配一条构建机关联
 func ByWorkspaceAndNode(workspaceID, nodeHashID string) store.Opt {
 	return store.Combine(ByWorkspace(workspaceID), store.Where("nodeHashID", nodeHashID))
+}
+
+// ByWorkspaceAndRepositoryID 按工作空间 ID 与蓝盾代码库 Hash ID 匹配
+func ByWorkspaceAndRepositoryID(workspaceID, repositoryID string) store.Opt {
+	return store.Combine(ByWorkspace(workspaceID), store.Where("id", repositoryID))
 }
 
 // UpdateBuiltinTemplateVersion 更新内置流水线已应用的模板版本、名称与描述。

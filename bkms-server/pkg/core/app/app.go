@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
@@ -122,26 +123,26 @@ type HelmSource struct {
 	ValueFiles []string `json:"valueFiles" bson:"valueFiles"`
 }
 
-// GitRepoType is the type of the Git repository
+// GitRepoType 代码库接入方式名
 type GitRepoType string
 
-const (
-	// GitRepoTypeTGit TGit（工蜂）仓库
-	GitRepoTypeTGit GitRepoType = "TGit"
-	// GitRepoTypeGitHub GitHub 仓库
-	GitRepoTypeGitHub GitRepoType = "GitHub"
-)
+// GitRepoTypeTGit 默认接入方式：蓝盾托管的工蜂
+const GitRepoTypeTGit GitRepoType = config.DefaultRepoSourceTypeName
 
 // GitRepoConfig is the config for using a Git repository as the helm chart source.
-// It supports both public repositories and private repositories authenticated via OAuth token.
+// 代码库与凭证由 coderepo 保存，构建前同步到蓝盾。
 type GitRepoConfig struct {
-	// Type is the type of the Git repository, e.g. "TGit", "GitHub"
+	// Type 代码库接入方式名，如 TGit
 	Type GitRepoType `json:"type" bson:"type"`
 	// RepoAlias is the alias of the repository, used for display purposes
 	// Optional
 	RepoAlias string `json:"repoAlias" bson:"repoAlias"`
 	// RepoURL is the URL to the repository
 	RepoURL string `json:"repoURL" bson:"repoURL"`
+	// Username 仓库账号，只随请求传递，不落库
+	Username string `json:"-" bson:"-"`
+	// Password 仓库密码，只随请求传递，不落库
+	Password string `json:"-" bson:"-"`
 	// Revision is the branch or tag name to use when generating chart
 	Revision string `json:"revision" bson:"revision"`
 	// SourceDir is the directory in the repository to use as the helm chart source

@@ -35,7 +35,7 @@ tagConfig:
     withRevision: false
     withBuildTime: true
 codeRepo:
-  # TGit | GitHub
+  # 代码库接入方式，如 TGit
   type: TGit
   # 蓝盾侧仓库别名
   repoAlias: myteam/myapp

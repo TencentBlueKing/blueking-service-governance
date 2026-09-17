@@ -254,26 +254,34 @@ var _ = Describe("AppCreateSpec Validate", func() {
 		})
 	})
 
-	// ==================== buildConfig.repoBuildConfig.type 校验（required + oneof） ====================
+	// ==================== buildConfig.repoBuildConfig.type 校验（required） ====================
 	Describe("buildConfig.repoBuildConfig.type field", func() {
-		It("should return error when repoBuildConfig.type is invalid", func() {
+		newSpec := func(repoType string) *AppCreateSpec {
 			spec := validTrpcSpec()
 			spec.BuildConfig.SourceType = "codeRepository"
 			spec.BuildConfig.ImageBuildConfig = nil
 			spec.BuildConfig.RepoBuildConfig = &RepoBuildConfigSpec{
-				Type:          "InvalidType",
+				Type:          repoType,
 				RepoAlias:     "my-repo",
 				RepoURL:       "https://git.example.com/repo.git",
 				DefaultBranch: "main",
 			}
-			Expect(spec.Validate()).To(MatchError(ContainSubstring("is invalid")))
+			return spec
+		}
+
+		It("should accept source types configured on the server", func() {
+			Expect(newSpec("Git").Validate()).To(Succeed())
+		})
+
+		It("should return error when repoBuildConfig.type is empty", func() {
+			Expect(newSpec("").Validate()).To(HaveOccurred())
 		})
 	})
 
-	// ==================== helmSpec.helmSource.gitRepoConfig.type 校验（required + oneof） ====================
+	// ==================== helmSpec.helmSource.gitRepoConfig.type 校验（required） ====================
 	Describe("helmSpec.helmSource.gitRepoConfig.type field", func() {
-		It("should return error when gitRepoConfig.type is invalid", func() {
-			spec := &AppCreateSpec{
+		newSpec := func(repoType string) *AppCreateSpec {
+			return &AppCreateSpec{
 				Name: "my-git-app",
 				Type: "helm",
 				BuildConfig: &BuildConfigSpec{
@@ -286,7 +294,7 @@ var _ = Describe("AppCreateSpec Validate", func() {
 					HelmSource: &HelmSourceSpec{
 						RepoType: "GitRepo",
 						GitRepoConfig: &GitRepoConfigSpec{
-							Type:      "InvalidGit",
+							Type:      repoType,
 							RepoAlias: "my-repo",
 							RepoURL:   "https://git.example.com/charts.git",
 							Revision:  "main",
@@ -295,7 +303,14 @@ var _ = Describe("AppCreateSpec Validate", func() {
 					},
 				},
 			}
-			Expect(spec.Validate()).To(MatchError(ContainSubstring("is invalid")))
+		}
+
+		It("should accept source types configured on the server", func() {
+			Expect(newSpec("Git").Validate()).To(Succeed())
+		})
+
+		It("should return error when gitRepoConfig.type is empty", func() {
+			Expect(newSpec("").Validate()).To(HaveOccurred())
 		})
 	})
 

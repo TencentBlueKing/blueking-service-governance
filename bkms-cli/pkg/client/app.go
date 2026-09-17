@@ -331,7 +331,7 @@ type AppBuildTagCustomOpts struct {
 
 // AppBuildCodeRepoConfig 代码仓库构建配置
 type AppBuildCodeRepoConfig struct {
-	// Type 代码仓库类型：TGit | GitHub
+	// Type 代码库接入方式，如 TGit
 	Type          string `json:"type" yaml:"type"`
 	RepoAlias     string `json:"repoAlias" yaml:"repoAlias"`
 	RepoURL       string `json:"repoURL" yaml:"repoURL"`

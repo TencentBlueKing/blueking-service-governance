@@ -87,8 +87,8 @@ type ImageBuildConfigSpec struct {
 
 // RepoBuildConfigSpec 代码仓库构建配置
 type RepoBuildConfigSpec struct {
-	// Type 代码仓库类型：TGit | GitHub（必填）
-	Type string `yaml:"type" json:"type" validate:"required,oneof=TGit GitHub"`
+	// Type 代码库接入方式（必填），由服务端校验
+	Type string `yaml:"type" json:"type" validate:"required"`
 	// RepoAlias 代码仓库别名（必填）
 	RepoAlias string `yaml:"repoAlias" json:"repoAlias" validate:"required"`
 	// RepoURL 代码仓库地址（必填）
@@ -203,8 +203,8 @@ type BCSRepoConfigSpec struct {
 
 // GitRepoConfigSpec Git 仓库配置
 type GitRepoConfigSpec struct {
-	// Type 代码库类型：TGit | GitHub（必填）
-	Type string `yaml:"type" json:"type" validate:"required,oneof=TGit GitHub"`
+	// Type 代码库接入方式（必填），由服务端校验
+	Type string `yaml:"type" json:"type" validate:"required"`
 	// RepoAlias 代码库别名（必填）
 	RepoAlias string `yaml:"repoAlias" json:"repoAlias" validate:"required"`
 	// RepoURL 代码库地址（必填）

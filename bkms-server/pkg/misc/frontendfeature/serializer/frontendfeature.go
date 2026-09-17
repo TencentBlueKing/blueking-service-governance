@@ -19,7 +19,13 @@
 // Package serializer 定义前端功能开关接口的 Gin Input/Output 结构体。
 package serializer
 
-import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+import (
+	"slices"
+
+	"github.com/samber/lo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+)
 
 // FrontendFeaturesOutput 前端功能开关，只用于控制页面入口是否展示，后端接口仍各自校验。
 type FrontendFeaturesOutput struct {
@@ -38,6 +44,18 @@ type FrontendFeaturesOutput struct {
 	EnableKubeInsight bool `json:"enableKubeInsight"`
 	// 是否启用 Go 模块代理（GOPROXY）构建参数提示，默认为 false，显式开启后前端才展示相关提示与快捷添加入口
 	EnableGoProxyBuildArgsTips bool `json:"enableGoProxyBuildArgsTips"`
+	// 已启用的代码库接入方式，第一个为默认
+	RepoSourceTypes []*RepoSourceTypeOutput `json:"repoSourceTypes"`
+}
+
+// RepoSourceTypeOutput 代码库接入方式
+type RepoSourceTypeOutput struct {
+	// 接入方式名，即代码库配置的 type
+	Name string `json:"name"`
+	// 实现类型：bkci_managed 蓝盾托管授权 / basic 仓库账号密码
+	Spec string `json:"spec" enums:"bkci_managed,basic"`
+	// 展示名
+	Label string `json:"label"`
 }
 
 // NewFrontendFeaturesOutput 根据部署配置生成前端功能开关。
@@ -50,10 +68,27 @@ func NewFrontendFeaturesOutput(cfg *config.Config) *FrontendFeaturesOutput {
 		EnableBSCP:                  !cfg.FeatureIntegrations.DisableBSCP,
 		EnableKubeInsight:           !cfg.FeatureIntegrations.DisableKubeInsight,
 		EnableGoProxyBuildArgsTips:  cfg.FeatureIntegrations.EnableGoProxyBuildArgsTips,
+		RepoSourceTypes:             newRepoSourceTypesOutput(cfg.CodeRepository),
 	}
 }
 
 // FrontendFeaturesResponse 是获取前端功能开关接口的 JSON 响应。
 type FrontendFeaturesResponse struct {
 	Data *FrontendFeaturesOutput `json:"data"`
+}
+
+// newRepoSourceTypesOutput 已启用的接入方式，默认接入方式在前
+func newRepoSourceTypesOutput(cfg config.CodeRepositoryConfig) []*RepoSourceTypeOutput {
+	types := lo.Filter(
+		cfg.EffectiveSourceTypes(),
+		func(t config.RepoSourceTypeConfig, _ int) bool { return t.Enabled },
+	)
+	if i := slices.IndexFunc(types, func(t config.RepoSourceTypeConfig) bool {
+		return t.Spec == config.RepoSourceSpecBkCIManaged
+	}); i > 0 {
+		types = append([]config.RepoSourceTypeConfig{types[i]}, slices.Delete(slices.Clone(types), i, i+1)...)
+	}
+	return lo.Map(types, func(t config.RepoSourceTypeConfig, _ int) *RepoSourceTypeOutput {
+		return &RepoSourceTypeOutput{Name: t.Name, Spec: t.Spec, Label: t.Label}
+	})
 }

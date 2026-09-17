@@ -18,9 +18,7 @@
 
 package bkci
 
-import (
-	"time"
-)
+import "time"
 
 // 蓝盾 API 返回中的 Status 字段，表示某些特定的错误
 const (
@@ -36,6 +34,33 @@ const (
 	// PageSizeForAllItems 用于拉取全量数据的分页大小
 	PageSizeForAllItems = 1000
 )
+
+// 蓝盾代码库类型
+const (
+	// RepoTypeCodeGit 工蜂代码库，OAuth 关联
+	RepoTypeCodeGit = "codeGit"
+	// RepoTypeCodeTGit 工蜂代码库，凭证关联
+	RepoTypeCodeTGit = "codeTGit"
+)
+
+// 蓝盾代码库认证类型（请求体 authType），蓝盾据此校验地址协议
+const (
+	repoAuthTypeOAuth = "OAUTH"
+	repoAuthTypeHTTP  = "HTTP"
+	repoAuthTypeHTTPS = "HTTPS"
+)
+
+// CreateRepositoryOptions 创建蓝盾代码库的参数
+type CreateRepositoryOptions struct {
+	// RepoType 代码库类型
+	RepoType string
+	// URL 代码库地址
+	URL string
+	// Alias 代码库别名
+	Alias string
+	// CredentialID 凭证 ID，为空时以 OAuth 关联
+	CredentialID string
+}
 
 // Project 蓝盾项目
 type Project struct {

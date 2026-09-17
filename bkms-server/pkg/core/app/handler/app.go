@@ -147,6 +147,10 @@ func (h *Handler) CreateApp(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse helm spec"))
 			return
 		}
+		if err = resolveHelmGitRepo(helmSpec.HelmSource); err != nil {
+			bkerrs.AbortWithErr(c, err)
+			return
+		}
 		if helmSpec.HelmSource != nil && helmSpec.HelmSource.HelmRepoConfig != nil {
 			if err = helmSpec.HelmSource.HelmRepoConfig.SetUserPass(
 				nil,
@@ -218,13 +222,10 @@ func (h *Handler) createBuildConfig(
 		}
 		return nil, bkerrs.New(errCode, err.Error())
 	}
-	if err = bkci.EnsureWorkspaceRepositories(
-		ctx,
-		h.registry.DB,
-		app.WorkspaceID,
-		collectBKCIRepositoriesForCreateApp(app.Type, app.HelmSpec, buildConfig),
+	if err = bkci.SaveWorkspaceRepositories(
+		ctx, h.registry.DB, collectRepositoriesForCreateApp(app.WorkspaceID, app.Type, app.HelmSpec, buildConfig),
 	); err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories")
+		return nil, toRepositoryBkErr(err)
 	}
 	if err = h.buildConfigs().Create(ctx, buildConfig); err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create build config")

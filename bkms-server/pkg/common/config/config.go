@@ -115,6 +115,13 @@ func Load(ctx context.Context, cfgFile string) (*Config, error) {
 		return nil, errors.New("account.authBaseURL is required unless backendType is bk_token and ssmBaseURL is set")
 	}
 
+	if err := validate.Struct(cfg.FeatureIntegrations); err != nil {
+		return nil, errors.Wrap(err, "validate FeatureIntegrationsConfig")
+	}
+	if err := validateCodeRepository(cfg.CodeRepository); err != nil {
+		return nil, errors.Wrap(err, "validate CodeRepositoryConfig")
+	}
+
 	if err := validateBkLoginDependencies(&cfg); err != nil {
 		return nil, err
 	}
@@ -165,6 +172,32 @@ func validateTenantDependencies(cfg *Config) error {
 	}
 	if cfg.BkPlatUrls.BkApiUrlTmpl == "" {
 		return errors.New("bkPlatUrls.bkApiUrlTmpl is required when tenant.enableMultiTenantMode is enabled")
+	}
+	return nil
+}
+
+// validateCodeRepository 校验接入方式：名称唯一、不支持 oauth、至少启用一个
+func validateCodeRepository(cfg CodeRepositoryConfig) error {
+	if err := validate.Struct(cfg); err != nil {
+		return errors.Wrap(err, "validate struct")
+	}
+	if len(cfg.SourceTypes) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(cfg.SourceTypes))
+	enabled := false
+	for _, t := range cfg.SourceTypes {
+		if _, ok := seen[t.Name]; ok {
+			return errors.Errorf("duplicated source type name %s", t.Name)
+		}
+		seen[t.Name] = struct{}{}
+		if t.Spec == RepoSourceSpecOAuth {
+			return errors.Errorf("source type %s: spec oauth is not implemented", t.Name)
+		}
+		enabled = enabled || t.Enabled
+	}
+	if !enabled {
+		return errors.New("at least one enabled source type is required")
 	}
 	return nil
 }

@@ -427,6 +427,57 @@ type FeatureIntegrationsConfig struct {
 	DisableKubeInsight bool
 }
 
+// 代码库接入方式的实现类型（spec）
+const (
+	// RepoSourceSpecBkCIManaged 蓝盾托管授权，凭证由蓝盾持有
+	RepoSourceSpecBkCIManaged = "bkci_managed"
+	// RepoSourceSpecBasic 仓库账号密码，凭证由 bkms 持有
+	RepoSourceSpecBasic = "basic"
+	// RepoSourceSpecOAuth bkms 侧 OAuth，暂未实现
+	RepoSourceSpecOAuth = "oauth"
+)
+
+const (
+	// DefaultRepoSourceTypeName 默认接入方式名，沿用 type 的历史取值
+	DefaultRepoSourceTypeName = "TGit"
+	// DefaultRepoSourceTypeLabel 默认接入方式展示名
+	DefaultRepoSourceTypeLabel = "工蜂"
+)
+
+// CodeRepositoryConfig 代码库配置
+type CodeRepositoryConfig struct {
+	// SourceTypes 接入方式，未配置时用 DefaultRepoSourceTypes
+	SourceTypes []RepoSourceTypeConfig `validate:"dive"`
+}
+
+// RepoSourceTypeConfig 代码库接入方式
+type RepoSourceTypeConfig struct {
+	// Name 接入方式名，唯一，即代码库配置的 type
+	Name string `validate:"required,max=32,excludesall= /"`
+	// Spec 实现类型
+	Spec string `validate:"required,oneof=bkci_managed basic oauth"`
+	// Label 展示名
+	Label string `validate:"required,max=64"`
+	// Enabled 是否启用
+	Enabled bool
+}
+
+// DefaultRepoSourceTypes 默认接入方式：蓝盾托管的工蜂
+var DefaultRepoSourceTypes = []RepoSourceTypeConfig{{
+	Name:    DefaultRepoSourceTypeName,
+	Spec:    RepoSourceSpecBkCIManaged,
+	Label:   DefaultRepoSourceTypeLabel,
+	Enabled: true,
+}}
+
+// EffectiveSourceTypes 生效的接入方式，未配置时为默认值
+func (c CodeRepositoryConfig) EffectiveSourceTypes() []RepoSourceTypeConfig {
+	if len(c.SourceTypes) == 0 {
+		return DefaultRepoSourceTypes
+	}
+	return c.SourceTypes
+}
+
 // --------------------------- 开发环境专用 ---------------------------
 
 // DevConfig 包含开发相关的配置项
@@ -524,6 +575,8 @@ type Config struct {
 	Tenant TenantConfig
 	// FeatureIntegrations 可选平台集成与功能特性开关
 	FeatureIntegrations FeatureIntegrationsConfig
+	// CodeRepository 代码库配置
+	CodeRepository CodeRepositoryConfig
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用

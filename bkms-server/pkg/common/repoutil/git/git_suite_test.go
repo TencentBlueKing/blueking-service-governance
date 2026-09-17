@@ -16,39 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package bkci
+package git_test
 
 import (
-	"context"
+	"testing"
 
-	"go.mongodb.org/mongo-driver/v2/mongo"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-// RepositoryInitSpec carries the repository URL/alias pair required to
-// initialize a BKCI repository binding.
-type RepositoryInitSpec struct {
-	URL   string
-	Alias string
-}
-
-// EnsureWorkspaceRepositories initializes each distinct repository binding for
-// a workspace at most once per request.
-func EnsureWorkspaceRepositories(
-	ctx context.Context, db *mongo.Database, workspaceID string, specs []RepositoryInitSpec,
-) error {
-	initializer := NewRepositoryManager(db, workspaceID)
-	seen := make(map[RepositoryInitSpec]struct{}, len(specs))
-	for _, spec := range specs {
-		if spec.URL == "" || spec.Alias == "" {
-			continue
-		}
-		if _, ok := seen[spec]; ok {
-			continue
-		}
-		if _, err := initializer.Initialize(ctx, spec.URL, spec.Alias); err != nil {
-			return err
-		}
-		seen[spec] = struct{}{}
-	}
-	return nil
+func TestGit(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "repoutil/git Suite")
 }

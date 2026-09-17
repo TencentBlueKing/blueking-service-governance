@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 )
 
@@ -90,15 +91,11 @@ func (c TagConfig) IsAutoGenerateEnabled() bool {
 	return c.Type == VersionTypeSemver || c.Type == VersionTypeCustom
 }
 
-// RepositoryType 代码库类型
+// RepositoryType 代码库接入方式名
 type RepositoryType string
 
-const (
-	// RepositoryTypeTGit TGit（工蜂）仓库
-	RepositoryTypeTGit RepositoryType = "TGit"
-	// RepositoryTypeGitHub GitHub 仓库
-	RepositoryTypeGitHub RepositoryType = "GitHub"
-)
+// RepositoryTypeTGit 默认接入方式：蓝盾托管的工蜂
+const RepositoryTypeTGit RepositoryType = config.DefaultRepoSourceTypeName
 
 // ImageBuildMode 镜像构建方式。
 type ImageBuildMode string
@@ -112,12 +109,16 @@ const (
 
 // RepositoryConfig 代码库配置
 type RepositoryConfig struct {
-	// Type 代码库类型
+	// Type 代码库接入方式名，如 TGit
 	Type RepositoryType `bson:"type"`
 	// RepoAlias 代码库别名
 	RepoAlias string `bson:"repoAlias"`
 	// RepoURL 代码仓库地址
 	RepoURL string `bson:"repoURL"`
+	// Username 仓库账号，只随请求传递，不落库
+	Username string `json:"-" bson:"-"`
+	// Password 仓库密码，只随请求传递，不落库
+	Password string `json:"-" bson:"-"`
 	// DefaultBranch 默认分支，指构建时不手动挑选任何分支时的默认值
 	DefaultBranch string `bson:"defaultBranch"`
 	// SourceDir 应用源码目录（构建目录），为空表示仓库根目录；非空时必须是仓库内相对路径
