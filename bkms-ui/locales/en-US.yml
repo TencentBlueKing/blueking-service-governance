@@ -1233,7 +1233,7 @@ APM 实例: APM Instance
 文件内容: File Content
 "环境：{0}": "Environment: {0}"
 "默认值：{0}": "Default Value: {0}"
-全局配置跨环境共享，请先将环境视角切换到「默认配置」后再修改:
+"全局配置跨环境共享，请先将环境视角切换到「默认配置」后再修改":
   Global configuration is shared across environments. Please switch the
   environment view to "Default Configuration" before making changes
 "全局：所有环境共用，不可按环境修改。": "Global: Shared by all environments, cannot be modified per environment."
