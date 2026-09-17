@@ -88,14 +88,27 @@ type Repository struct {
 	Alias string `bson:"alias"`
 	// URL 仓库地址，格式类似于：https://git.example.com/bkms/bkms.git
 	URL string `bson:"url"`
-	// Type 仓库类型，目前仅有 codeGit
+	// Type 仓库类型（蓝盾代码源标识），如 CODE_GIT（OAuth 关联）、CODE_TGIT（账号密码关联）
 	Type string `bson:"type"`
 	// WorkspaceID 工作空间 ID
 	WorkspaceID string `bson:"workspaceID"`
 	// ProjectCode 蓝盾项目 Code
 	ProjectCode string `bson:"projectCode"`
+	// AuthType 蓝盾代码库授权方式：HTTP / HTTPS 表示账号密码凭证；为空表示 OAuth（历史数据均为 OAuth）
+	AuthType string `bson:"authType,omitempty"`
+	// CredentialID 账号密码方式关联时，蓝盾侧保存仓库账号密码的凭证 ID
+	CredentialID string `bson:"credentialID,omitempty"`
+	// Username 仓库账号，仅账号密码方式关联时有值
+	Username string `bson:"username,omitempty"`
+	// Password 仓库密码，仅账号密码方式关联时有值，库中加密存储；用于直接从 Git 仓库查询分支 / Tag
+	Password string `bson:"password,omitempty"`
 	// Creator 仓库创建人
 	Creator string `bson:"creator"`
 	// CreatedAt 仓库创建时间
 	CreatedAt time.Time `bson:"createdAt"`
+}
+
+// UsesCredential 代码库是否以账号密码凭证关联（而非 OAuth）
+func (r *Repository) UsesCredential() bool {
+	return r.CredentialID != ""
 }

@@ -229,6 +229,13 @@ svcConf:
     # false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目
     #     （绑定已有项目时拉取 BCS 和蓝盾授权项目的交集）。
     enableIndependentBCSProject: false
+    # 蓝盾流水线搜索改用 search_by_name 接口（不分页），蓝盾未提供分页搜索接口时设为 true
+    enableBkCIPipelineSearchByName: false
+    # 关闭蓝盾工蜂 OAuth 授权，无法 OAuth 授权时设为 true
+    # 开启后代码库改为填写 HTTPS 地址 + 仓库账号密码，分支 / Tag 直接使用账号密码从 Git 仓库查询
+    disableBkCIGitOAuth: false
+    # 关闭蓝盾代码库详情 / 分支 / Tag 查询接口，未提供这些接口的蓝盾版本设为 true
+    disableBkCIRepositoryQuery: false
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP
@@ -402,3 +409,7 @@ svcConf:
       timeout: 1200
       # 轮询间隔（单位：秒）
       interval: 15
+  # 多租户配置
+  tenant:
+    # 是否开启多租户模式；关闭时仅接受空 tenant 或 default
+    enableMultiTenantMode: false

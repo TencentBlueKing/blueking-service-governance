@@ -118,6 +118,10 @@ type RepositoryConfig struct {
 	RepoAlias string `bson:"repoAlias"`
 	// RepoURL 代码仓库地址
 	RepoURL string `bson:"repoURL"`
+	// Username 仓库账号，仅账号密码方式关联代码库时有值，用于展示；凭证本身保存在工作空间的蓝盾代码库记录中
+	Username string `bson:"username,omitempty"`
+	// Password 仓库密码，仅随请求传递给代码库关联流程，不落库、不输出
+	Password string `json:"-" bson:"-"`
 	// DefaultBranch 默认分支，指构建时不手动挑选任何分支时的默认值
 	DefaultBranch string `bson:"defaultBranch"`
 	// SourceDir 应用源码目录（构建目录），为空表示仓库根目录；非空时必须是仓库内相对路径

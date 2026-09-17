@@ -23,6 +23,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -81,7 +83,7 @@ var PipelineMeta = store.Meta[Pipeline]{
 	NotFound:     ErrPipelineNotFound,
 }
 
-// RepositoryMeta 代码仓库的存储元数据。
+// RepositoryMeta 代码仓库的存储元数据，仓库密码在库中对称加密存储。
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：id + projectCode
@@ -90,6 +92,8 @@ var RepositoryMeta = store.Meta[Repository]{
 	Collection:   "bkci_repositories",
 	TenantScoped: true,
 	NotFound:     ErrRepositoryNotFound,
+	Encode:       []func(*Repository) error{encryptRepositoryPassword},
+	Decode:       []func(*Repository) error{decryptRepositoryPassword},
 }
 
 // ByWorkspace 按工作空间 ID 匹配，适用于 Project、Pipeline 与 Repository
@@ -115,6 +119,21 @@ func ByWorkspaceAndType(workspaceID, pipelineType string) store.Opt {
 // ByWorkspaceAndAlias 按工作空间 ID 与仓库别名匹配 Repository
 func ByWorkspaceAndAlias(workspaceID, alias string) store.Opt {
 	return store.Combine(ByWorkspace(workspaceID), store.Where("alias", alias))
+}
+
+// ByWorkspaceAndRepositoryID 按工作空间 ID 与蓝盾代码库 Hash ID 匹配 Repository
+func ByWorkspaceAndRepositoryID(workspaceID, repositoryID string) store.Opt {
+	return store.Combine(ByWorkspace(workspaceID), store.Where("id", repositoryID))
+}
+
+func encryptRepositoryPassword(r *Repository) (err error) {
+	r.Password, err = crypto.OnDemand(config.G.Encrypt.Secret, crypto.AESEncrypt, r.Password)
+	return errors.Wrap(err, "encrypt repository password")
+}
+
+func decryptRepositoryPassword(r *Repository) (err error) {
+	r.Password, err = crypto.OnDemand(config.G.Encrypt.Secret, crypto.AESDecrypt, r.Password)
+	return errors.Wrap(err, "decrypt repository password")
 }
 
 // UpdateBuiltinTemplateVersion 更新内置流水线已应用的模板版本、名称与描述。

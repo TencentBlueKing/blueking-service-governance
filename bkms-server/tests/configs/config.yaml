@@ -26,6 +26,9 @@ featureIntegrations:
   # 测试配置显式关闭：创建空间时 BCS 复用蓝盾项目，不单独创建 BCS 项目。
   enableIndependentBCSProject: false
   disableBSCP: false                 # 关闭 BSCP 对接
+  enableBkCIPipelineSearchByName: false  # 蓝盾流水线搜索改用 search_by_name 接口
+  disableBkCIGitOAuth: false             # 关闭蓝盾工蜂 OAuth，代码库改用仓库账号密码
+  disableBkCIRepositoryQuery: false      # 关闭蓝盾代码库详情 / 分支 / Tag 查询接口
 # 蓝鲸 API 环境配置
 bkApiStages:
   kubeinsight: prod

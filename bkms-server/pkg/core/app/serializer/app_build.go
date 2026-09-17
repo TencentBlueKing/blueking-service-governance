@@ -163,6 +163,8 @@ type RepoBuildConfigOutputObj struct {
 	RepoAlias string `json:"repoAlias"`
 	// 代码库地址
 	RepoURL string `json:"repoURL"`
+	// 仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回
+	Username string `json:"username"`
 	// 默认分支
 	DefaultBranch string `json:"defaultBranch"`
 	// 源码目录
@@ -242,6 +244,7 @@ func (o *BuildConfigOutputObj) FromModel(cfg *build.Config) *BuildConfigOutputOb
 			Type:            string(cfg.CodeRepo.Type),
 			RepoAlias:       cfg.CodeRepo.RepoAlias,
 			RepoURL:         cfg.CodeRepo.RepoURL,
+			Username:        cfg.CodeRepo.Username,
 			DefaultBranch:   cfg.CodeRepo.DefaultBranch,
 			SourceDir:       cfg.CodeRepo.SourceDir,
 			Dockerfile:      cfg.CodeRepo.Dockerfile,

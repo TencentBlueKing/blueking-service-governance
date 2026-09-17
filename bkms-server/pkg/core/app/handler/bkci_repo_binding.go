@@ -21,6 +21,7 @@ package handler
 import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
@@ -34,8 +35,10 @@ func collectBKCIRepositoriesForCreateApp(
 
 	if buildConfig != nil && buildConfig.SourceType == build.SourceTypeCodeRepository && buildConfig.CodeRepo != nil {
 		repos = append(repos, bkci.RepositoryInitSpec{
-			URL:   buildConfig.CodeRepo.RepoURL,
-			Alias: buildConfig.CodeRepo.RepoAlias,
+			URL:      buildConfig.CodeRepo.RepoURL,
+			Alias:    buildConfig.CodeRepo.RepoAlias,
+			Username: buildConfig.CodeRepo.Username,
+			Password: buildConfig.CodeRepo.Password,
 		})
 	}
 
@@ -53,7 +56,23 @@ func helmSourceRepositoriesToBind(helmSource *bkmsapp.HelmSource) []bkci.Reposit
 		return nil
 	}
 	return []bkci.RepositoryInitSpec{{
-		URL:   helmSource.GitRepoConfig.RepoURL,
-		Alias: helmSource.GitRepoConfig.RepoAlias,
+		URL:      helmSource.GitRepoConfig.RepoURL,
+		Alias:    helmSource.GitRepoConfig.RepoAlias,
+		Username: helmSource.GitRepoConfig.Username,
+		Password: helmSource.GitRepoConfig.Password,
 	}}
+}
+
+// resolveHelmGitRepoAlias 确定 Helm Git 来源的代码库别名，见 bkci.ResolveRepoAlias
+func resolveHelmGitRepoAlias(helmSource *bkmsapp.HelmSource) error {
+	if helmSource == nil || helmSource.RepoType != bkmsapp.HelmSourceRepoTypeGit || helmSource.GitRepoConfig == nil {
+		return nil
+	}
+	gitRepo := helmSource.GitRepoConfig
+	alias, err := bkci.ResolveRepoAlias(gitRepo.RepoURL, gitRepo.RepoAlias)
+	if err != nil {
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidArgument, "resolve alias of repository %s", gitRepo.RepoURL)
+	}
+	gitRepo.RepoAlias = alias
+	return nil
 }

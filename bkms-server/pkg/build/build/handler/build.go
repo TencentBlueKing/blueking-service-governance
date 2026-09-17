@@ -177,10 +177,12 @@ func (h *Handler) ensureCodeRepositoryRegistered(
 		return nil
 	}
 	if err := bkci.EnsureWorkspaceRepositories(ctx, h.registry.DB, workspaceID, []bkci.RepositoryInitSpec{{
-		URL:   cfg.CodeRepo.RepoURL,
-		Alias: cfg.CodeRepo.RepoAlias,
+		URL:      cfg.CodeRepo.RepoURL,
+		Alias:    cfg.CodeRepo.RepoAlias,
+		Username: cfg.CodeRepo.Username,
+		Password: cfg.CodeRepo.Password,
 	}}); err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories")
+		return bkci.RepositoryErrToBkErr(err, "ensure bkci repositories")
 	}
 	return nil
 }

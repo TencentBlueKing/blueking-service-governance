@@ -62,6 +62,16 @@ type BkCIRepositoryRefsQueryInput struct {
 	PageSize       int64  `form:"pageSize" binding:"required,oneof=5 10 20 50 100"`
 }
 
+// BkCIRepositoryConnectivityTestInput 代码库连通性测试的请求
+type BkCIRepositoryConnectivityTestInput struct {
+	// 代码仓库地址，HTTP(S) 地址
+	RepoURL string `json:"repoURL" binding:"required,min=1,max=512,url"`
+	// 仓库账号
+	Username string `json:"username" binding:"required,max=128"`
+	// 仓库密码
+	Password string `json:"password" binding:"required,max=256"`
+}
+
 // --- BkCI Output ---
 
 // BkCIOAuthGitProjectOutput OAuth Git 项目输出

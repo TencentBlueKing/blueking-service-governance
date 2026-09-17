@@ -91,6 +91,16 @@ type FeatureIntegrationsConfig struct {
 	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
 	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
 	EnableIndependentBCSProject bool
+	// EnableBkCIPipelineSearchByName 蓝盾流水线搜索改用 search_by_name 接口（不分页），
+	// 用于未提供分页搜索接口的蓝盾版本。
+	EnableBkCIPipelineSearchByName bool
+	// DisableBkCIGitOAuth 关闭蓝盾的工蜂 OAuth 授权，用于无法 OAuth 授权的环境。
+	// 开启后不再列出 OAuth 授权的工蜂项目，代码库改由用户填写 HTTPS 地址与仓库账号密码，
+	// 以 TGit 类型 + 账号密码凭证关联到蓝盾；分支 / Tag 也直接使用账号密码从 Git 仓库查询。
+	DisableBkCIGitOAuth bool
+	// DisableBkCIRepositoryQuery 关闭蓝盾代码库详情 / 分支 / Tag 查询接口，用于未提供这些接口的蓝盾版本。
+	// 开启后关联代码库时不再回查蓝盾代码库详情；OAuth 关联的代码库无法列出分支 / Tag，需手动输入。
+	DisableBkCIRepositoryQuery bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"

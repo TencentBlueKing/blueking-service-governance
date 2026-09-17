@@ -40,6 +40,13 @@ featureIntegrations:
   # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
   # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
   disableBSCP: false
+  # 蓝盾流水线搜索改用 search_by_name 接口（不分页），蓝盾未提供分页搜索接口时设为 true
+  enableBkCIPipelineSearchByName: false
+  # 关闭蓝盾工蜂 OAuth 授权，无法 OAuth 授权时设为 true
+  # 开启后代码库改为填写 HTTPS 地址 + 仓库账号密码，分支 / Tag 直接使用账号密码从 Git 仓库查询
+  disableBkCIGitOAuth: false
+  # 关闭蓝盾代码库详情 / 分支 / Tag 查询接口，未提供这些接口的蓝盾版本设为 true
+  disableBkCIRepositoryQuery: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP

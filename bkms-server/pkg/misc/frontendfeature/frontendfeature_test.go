@@ -79,4 +79,16 @@ var _ = Describe("GetFrontendFeatures", func() {
 			EnableWeTerm:            true,
 		}))
 	})
+
+	It("should use credential auth for code repositories when git oauth is disabled", func() {
+		features := getFeatures(config.Config{
+			FeatureIntegrations: config.FeatureIntegrationsConfig{DisableBkCIGitOAuth: true},
+		})
+		Expect(features.CodeRepoCredentialAuth).To(BeTrue())
+	})
+
+	It("should use git oauth for code repositories by default", func() {
+		features := getFeatures(config.Config{})
+		Expect(features.CodeRepoCredentialAuth).To(BeFalse())
+	})
 })

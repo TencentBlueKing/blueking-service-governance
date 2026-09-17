@@ -26,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	bkciproject "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 )
@@ -71,10 +72,14 @@ type RepositoryBuildConfigInput struct {
 	Type string `json:"type" binding:"required,oneof=TGit GitHub"`
 	// 默认构建分支
 	DefaultBranch string `json:"defaultBranch" binding:"required,min=1,max=255"`
-	// 蓝盾侧仓库别名
-	RepoAlias string `json:"repoAlias" binding:"required,min=1,max=256"`
+	// 蓝盾侧仓库别名；关闭工蜂 OAuth 时忽略，由后端按仓库地址推导
+	RepoAlias string `json:"repoAlias" binding:"omitempty,max=256"`
 	// 代码仓库地址
 	RepoURL string `json:"repoURL" binding:"required,min=1,max=512,url"`
+	// 仓库账号，仅关闭工蜂 OAuth（账号密码方式关联代码库）时使用
+	Username string `json:"username" binding:"omitempty,max=128"`
+	// 仓库密码，仅关闭工蜂 OAuth 时使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+	Password string `json:"password" binding:"omitempty,max=256"`
 	// 构建目录，空表示仓库根目录；非空时必须是仓库内相对路径，不能以 / 开头，也不能包含 .. 路径段
 	SourceDir string `json:"sourceDir" binding:"omitempty,max=64"`
 	// Dockerfile 路径，空表示默认路径。仅 imageBuildMode=repositoryDockerfile 时有效
@@ -142,6 +147,10 @@ func (r *RepositoryBuildConfigInput) ToModel() (*imagebuild.RepositoryConfig, er
 	if err := r.ValidatePlatformBuildConfig(); err != nil {
 		return nil, err
 	}
+	repoAlias, err := bkciproject.ResolveRepoAlias(r.RepoURL, r.RepoAlias)
+	if err != nil {
+		return nil, errors.Wrapf(err, "resolve alias of repository %s", r.RepoURL)
+	}
 	imageBuildMode := r.EffectiveImageBuildMode()
 	var platformBuildConfig *imagebuild.PlatformBuildConfig
 	if r.PlatformBuildConfig != nil {
@@ -149,8 +158,10 @@ func (r *RepositoryBuildConfigInput) ToModel() (*imagebuild.RepositoryConfig, er
 	}
 	cfg := &imagebuild.RepositoryConfig{
 		Type:                imagebuild.RepositoryType(r.Type),
-		RepoAlias:           r.RepoAlias,
+		RepoAlias:           repoAlias,
 		RepoURL:             r.RepoURL,
+		Username:            r.Username,
+		Password:            r.Password,
 		SourceDir:           r.SourceDir,
 		Dockerfile:          r.Dockerfile,
 		DockerBuildArgs:     r.DockerBuildArgs,
@@ -448,6 +459,8 @@ type RepositoryBuildConfigOutputObj struct {
 	RepoAlias string `json:"repoAlias"`
 	// 代码仓库地址
 	RepoURL string `json:"repoURL"`
+	// 仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回
+	Username string `json:"username"`
 	// 构建目录
 	SourceDir string `json:"sourceDir"`
 	// Dockerfile 路径，仅 imageBuildMode=repositoryDockerfile 时有效
@@ -536,6 +549,7 @@ func (o *BuildConfigOutputObj) FromModel(cfg *imagebuild.Config) *BuildConfigOut
 			Type:            string(cfg.CodeRepo.Type),
 			RepoAlias:       cfg.CodeRepo.RepoAlias,
 			RepoURL:         cfg.CodeRepo.RepoURL,
+			Username:        cfg.CodeRepo.Username,
 			SourceDir:       cfg.CodeRepo.SourceDir,
 			Dockerfile:      cfg.CodeRepo.Dockerfile,
 			DockerBuildArgs: cfg.CodeRepo.DockerBuildArgs,

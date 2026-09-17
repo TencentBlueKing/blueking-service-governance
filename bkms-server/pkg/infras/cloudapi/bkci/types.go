@@ -37,6 +37,52 @@ const (
 	PageSizeForAllItems = 1000
 )
 
+// 蓝盾代码库类型
+const (
+	// RepoTypeCodeGit 工蜂代码库
+	RepoTypeCodeGit = "codeGit"
+	// RepoTypeCodeTGit TGit 代码库
+	RepoTypeCodeTGit = "codeTGit"
+)
+
+// scmCodes 蓝盾代码库类型到代码源标识（scmCode / repositoryType 枚举）的映射
+var scmCodes = map[string]string{
+	RepoTypeCodeGit:  "CODE_GIT",
+	RepoTypeCodeTGit: "CODE_TGIT",
+}
+
+// ScmCodeOf 返回代码库类型对应的代码源标识，如 codeTGit -> CODE_TGIT；未知类型原样返回
+func ScmCodeOf(repoType string) string {
+	if code, ok := scmCodes[repoType]; ok {
+		return code
+	}
+	return repoType
+}
+
+// 蓝盾代码库授权方式
+const (
+	// AuthTypeOAuth OAuth 授权
+	AuthTypeOAuth = "OAUTH"
+	// AuthTypeHTTP HTTP 凭证
+	AuthTypeHTTP = "HTTP"
+	// AuthTypeHTTPS HTTPS 凭证
+	AuthTypeHTTPS = "HTTPS"
+)
+
+// CreateRepositoryOptions 创建蓝盾代码库的参数
+type CreateRepositoryOptions struct {
+	// RepoType 代码库类型
+	RepoType string
+	// URL 代码库地址
+	URL string
+	// Alias 代码库别名
+	Alias string
+	// AuthType 授权方式，留空默认 OAuth
+	AuthType string
+	// CredentialID 访问凭据 ID，凭证方式使用
+	CredentialID string
+}
+
 // Project 蓝盾项目
 type Project struct {
 	ID            string

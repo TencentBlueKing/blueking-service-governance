@@ -2873,6 +2873,26 @@ definitions:
       type:
         type: string
     type: object
+  serializer.BkCIRepositoryConnectivityTestInput:
+    properties:
+      password:
+        description: 仓库密码
+        maxLength: 256
+        type: string
+      repoURL:
+        description: 代码仓库地址，HTTP(S) 地址
+        maxLength: 512
+        minLength: 1
+        type: string
+      username:
+        description: 仓库账号
+        maxLength: 128
+        type: string
+    required:
+    - password
+    - repoURL
+    - username
+    type: object
   serializer.BkCIRepositoryRefOutput:
     properties:
       linkUrl:
@@ -5364,6 +5384,11 @@ definitions:
     type: object
   serializer.FrontendFeaturesOutput:
     properties:
+      codeRepoCredentialAuth:
+        description: |-
+          代码库是否以仓库账号密码关联（关闭了蓝盾工蜂 OAuth）。为 true 时前端关联代码库改为填写 HTTPS 地址、
+          仓库账号与仓库密码；为 false 时使用工蜂 OAuth 授权的项目下拉
+        type: boolean
       enableBSCP:
         description: 是否启用 BSCP（服务配置中心）对接，为 false 时前端隐藏 BSCP 配置相关入口
         type: boolean
@@ -6048,8 +6073,13 @@ definitions:
     type: object
   serializer.HelmGitRepoConfigInput:
     properties:
+      password:
+        description: 仓库密码，仅关闭工蜂 OAuth 时使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+        maxLength: 256
+        type: string
       repoAlias:
-        description: 代码库别名
+        description: 代码库别名；关闭工蜂 OAuth 时忽略，由后端按仓库地址推导
+        maxLength: 256
         type: string
       repoURL:
         description: 代码库地址
@@ -6066,8 +6096,11 @@ definitions:
         - TGit
         - GitHub
         type: string
+      username:
+        description: 仓库账号，仅关闭工蜂 OAuth（账号密码方式关联代码库）时使用
+        maxLength: 128
+        type: string
     required:
-    - repoAlias
     - repoURL
     - revision
     - sourceDir
@@ -6089,6 +6122,9 @@ definitions:
         type: string
       type:
         description: 代码库类型
+        type: string
+      username:
+        description: 仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回
         type: string
     type: object
   serializer.HelmRepoConfigInput:
@@ -8939,15 +8975,18 @@ definitions:
         - platform
         - repositoryDockerfile
         type: string
+      password:
+        description: 仓库密码，仅关闭工蜂 OAuth 时使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+        maxLength: 256
+        type: string
       platformBuildConfig:
         allOf:
         - $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput'
         description: PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile
           是流水线内部中间产物
       repoAlias:
-        description: 蓝盾侧仓库别名
+        description: 蓝盾侧仓库别名；关闭工蜂 OAuth 时忽略，由后端按仓库地址推导
         maxLength: 256
-        minLength: 1
         type: string
       repoURL:
         description: 代码仓库地址
@@ -8964,9 +9003,12 @@ definitions:
         - TGit
         - GitHub
         type: string
+      username:
+        description: 仓库账号，仅关闭工蜂 OAuth（账号密码方式关联代码库）时使用
+        maxLength: 128
+        type: string
     required:
     - defaultBranch
-    - repoAlias
     - repoURL
     - type
     type: object
@@ -9003,6 +9045,9 @@ definitions:
       type:
         description: 代码库类型
         type: string
+      username:
+        description: 仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回
+        type: string
     type: object
   serializer.RepositoryBuildConfigInput:
     properties:
@@ -9027,15 +9072,18 @@ definitions:
         - platform
         - repositoryDockerfile
         type: string
+      password:
+        description: 仓库密码，仅关闭工蜂 OAuth 时使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+        maxLength: 256
+        type: string
       platformBuildConfig:
         allOf:
         - $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput'
         description: PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile
           是流水线内部中间产物
       repoAlias:
-        description: 蓝盾侧仓库别名
+        description: 蓝盾侧仓库别名；关闭工蜂 OAuth 时忽略，由后端按仓库地址推导
         maxLength: 256
-        minLength: 1
         type: string
       repoURL:
         description: 代码仓库地址
@@ -9052,9 +9100,12 @@ definitions:
         - TGit
         - GitHub
         type: string
+      username:
+        description: 仓库账号，仅关闭工蜂 OAuth（账号密码方式关联代码库）时使用
+        maxLength: 128
+        type: string
     required:
     - defaultBranch
-    - repoAlias
     - repoURL
     - type
     type: object
@@ -9090,6 +9141,9 @@ definitions:
         type: string
       type:
         description: 代码仓库类型
+        type: string
+      username:
+        description: 仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回
         type: string
     type: object
   serializer.ResolveAppOutput:
@@ -22692,6 +22746,41 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 获取代码仓库分支列表
+      tags:
+      - bkintegrations-bkci
+  /workspaces/{workspaceID}/bkci-repositories/connectivity-test:
+    post:
+      consumes:
+      - application/json
+      description: 使用仓库账号密码访问代码库，校验地址与账号密码是否正确，不关联代码库
+      operationId: TestBkCIRepositoryConnectivity
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 代码库地址与账号密码
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.BkCIRepositoryConnectivityTestInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_bkintegrations_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 测试代码库连通性
       tags:
       - bkintegrations-bkci
   /workspaces/{workspaceID}/bkci-repositories/tags:

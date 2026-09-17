@@ -138,6 +138,14 @@ func (s *StubApiClient) CreateCredential(
 	return nil
 }
 
+// UpdateCredential 模拟更新凭证，总是返回成功
+func (s *StubApiClient) UpdateCredential(
+	ctx context.Context, projectCode, credentialID, _, _, _ string,
+) error {
+	log.Infof(ctx, "Stub: UpdateCredential request: %s, %s", projectCode, credentialID)
+	return nil
+}
+
 // CreateAccessTokenCredential 模拟创建 AccessToken 凭证，总是返回成功
 func (s *StubApiClient) CreateAccessTokenCredential(
 	ctx context.Context, projectCode, credentialID, _, _ string,
@@ -428,14 +436,16 @@ func (s *StubApiClient) GetRepository(ctx context.Context, projectCode, repoHash
 }
 
 // CreateRepository 模拟创建代码库，返回模拟的代码库 Hash ID
-func (s *StubApiClient) CreateRepository(ctx context.Context, projectCode, repoUrl, repoAlias string) (string, error) {
-	log.Infof(ctx, "Stub: CreateRepository request: %s, %s, %s", projectCode, repoUrl, repoAlias)
-	repoID := stubRepositoryID(projectCode, repoUrl, repoAlias)
+func (s *StubApiClient) CreateRepository(
+	ctx context.Context, projectCode string, opts CreateRepositoryOptions,
+) (string, error) {
+	log.Infof(ctx, "Stub: CreateRepository request: %s, %s, %s, %s", projectCode, opts.URL, opts.Alias, opts.RepoType)
+	repoID := stubRepositoryID(projectCode, opts.URL, opts.Alias)
 	stubCreatedRepositories.Store(repoID, Repository{
 		ID:        repoID,
-		Alias:     repoAlias,
-		Url:       repoUrl,
-		Type:      "CODE_GIT",
+		Alias:     opts.Alias,
+		Url:       opts.URL,
+		Type:      opts.RepoType,
 		UpdatedAt: time.Now(),
 	})
 	return repoID, nil

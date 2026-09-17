@@ -133,7 +133,8 @@ const (
 )
 
 // GitRepoConfig is the config for using a Git repository as the helm chart source.
-// It supports both public repositories and private repositories authenticated via OAuth token.
+// The repository is accessed through the bkci repository binding, authenticated via OAuth
+// or a username/password credential (when Git OAuth is disabled).
 type GitRepoConfig struct {
 	// Type is the type of the Git repository, e.g. "TGit", "GitHub"
 	Type GitRepoType `json:"type" bson:"type"`
@@ -142,6 +143,10 @@ type GitRepoConfig struct {
 	RepoAlias string `json:"repoAlias" bson:"repoAlias"`
 	// RepoURL is the URL to the repository
 	RepoURL string `json:"repoURL" bson:"repoURL"`
+	// Username 仓库账号，仅账号密码方式关联代码库时有值，用于展示；凭证本身保存在工作空间的蓝盾代码库记录中
+	Username string `json:"username,omitempty" bson:"username,omitempty"`
+	// Password 仓库密码，仅随请求传递给代码库关联流程，不落库、不输出（含操作审计）
+	Password string `json:"-" bson:"-"`
 	// Revision is the branch or tag name to use when generating chart
 	Revision string `json:"revision" bson:"revision"`
 	// SourceDir is the directory in the repository to use as the helm chart source
