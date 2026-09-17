@@ -19091,6 +19091,9 @@
                     "description": "EditableContentField 前端可编辑的字段（\"content\" / \"overlayContent\" / \"none\"）。",
                     "type": "string"
                 },
+                "enableEnvVarRender": {
+                    "type": "boolean"
+                },
                 "fileFormat": {
                     "type": "string"
                 },
@@ -19144,6 +19147,9 @@
                 },
                 "creator": {
                     "type": "string"
+                },
+                "enableEnvVarRender": {
+                    "type": "boolean"
                 },
                 "id": {
                     "type": "string"
@@ -19295,6 +19301,9 @@
         "appcfgfiledef.UpdateDefInput": {
             "type": "object",
             "properties": {
+                "enableEnvVarRender": {
+                    "type": "boolean"
+                },
                 "isUnifiedConfig": {
                     "type": "boolean"
                 },

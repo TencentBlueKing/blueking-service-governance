@@ -19094,6 +19094,9 @@ const docTemplate = `{
                     "description": "EditableContentField 前端可编辑的字段（\"content\" / \"overlayContent\" / \"none\"）。",
                     "type": "string"
                 },
+                "enableEnvVarRender": {
+                    "type": "boolean"
+                },
                 "fileFormat": {
                     "type": "string"
                 },
@@ -19147,6 +19150,9 @@ const docTemplate = `{
                 },
                 "creator": {
                     "type": "string"
+                },
+                "enableEnvVarRender": {
+                    "type": "boolean"
                 },
                 "id": {
                     "type": "string"
@@ -19298,6 +19304,9 @@ const docTemplate = `{
         "appcfgfiledef.UpdateDefInput": {
             "type": "object",
             "properties": {
+                "enableEnvVarRender": {
+                    "type": "boolean"
+                },
                 "isUnifiedConfig": {
                     "type": "boolean"
                 },
