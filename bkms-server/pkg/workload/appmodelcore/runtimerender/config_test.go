@@ -77,7 +77,7 @@ var _ = Describe("BuildConfig", func() {
 		result, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
 			WorkloadType:  "trpc",
 			ConfigMapName: "demo-app",
-			Files: []cfgrender.ConfigFileParams{
+			Files: []cfgrender.RenderedMountableFile{
 				{FileName: "app.yaml", FilePath: "/etc/app", FileContent: "server:\n  app: demo\n"},
 			},
 		})
@@ -111,7 +111,7 @@ var _ = Describe("BuildConfig", func() {
 		result, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
 			WorkloadType:  "plain-cfg",
 			ConfigMapName: "my-app-plain-cfg",
-			Files: []cfgrender.ConfigFileParams{
+			Files: []cfgrender.RenderedMountableFile{
 				{FileName: "nginx.conf", FilePath: "/etc/nginx", FileContent: "worker_processes 4;\n"},
 				{FileName: "redis.conf", FilePath: "/etc/redis", FileContent: "maxmemory 256mb\n"},
 			},
@@ -148,7 +148,7 @@ var _ = Describe("BuildConfig", func() {
 		_, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
 			WorkloadType:  "trpc",
 			ConfigMapName: "demo-app",
-			Files: []cfgrender.ConfigFileParams{
+			Files: []cfgrender.RenderedMountableFile{
 				{FileName: "app.yaml", FilePath: "/etc/app", FileContent: "a"},
 				{FileName: "app.yaml", FilePath: "/etc/app", FileContent: "b"},
 			},

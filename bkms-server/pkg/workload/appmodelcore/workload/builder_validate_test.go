@@ -84,7 +84,7 @@ var _ = Describe("validateVolumeMountPaths", func() {
 
 var _ = Describe("buildDirectConfigMap", func() {
 	It("should produce ConfigMap with correct data and volume mounts", func() {
-		files := []cfgrender.ConfigFileParams{
+		files := []cfgrender.RenderedMountableFile{
 			{FileName: "app.conf", FilePath: "/etc/app", FileContent: "key=value"},
 			{FileName: "extra.conf", FilePath: "/etc/extra", FileContent: "foo=bar"},
 		}
@@ -116,7 +116,7 @@ var _ = Describe("buildDirectConfigMap", func() {
 	})
 
 	It("should produce valid ExtraResources", func() {
-		files := []cfgrender.ConfigFileParams{
+		files := []cfgrender.RenderedMountableFile{
 			{FileName: "test.conf", FilePath: "/etc/test", FileContent: "data"},
 		}
 

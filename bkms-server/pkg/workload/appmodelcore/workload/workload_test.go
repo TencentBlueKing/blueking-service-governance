@@ -1288,18 +1288,18 @@ spec:
 		Entry("TAF workload", workloadTestCases[1]),
 	)
 
-	// Plain config files integration tests
+	// Plain 默认 EnableEnvVarRender=false，走 {workload}-plain-direct，无 init。
+	// 打开开关后走 {workload}-plain-cfg + plain-cfg-init。
 	DescribeTable("Build with plain config files",
-		func(tc WorkloadTestCase) {
+		func(tc WorkloadTestCase, enableRender bool) {
 			app, appModel := createApplication(ctx, tc, stores, nil, nil)
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			// Create a plain config file for the app
 			cfgSvc := appcfg.NewAppConfigFileService(
 				stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
 			)
 			plainContent := "worker_processes 4;\n"
-			_, err := cfgSvc.Create(ctx, appcfg.CreateCfgFileParams{
+			created, err := cfgSvc.Create(ctx, appcfg.CreateCfgFileParams{
 				AppID:             app.ID,
 				EnvName:           appcfg.EnvNameDefault,
 				Name:              "nginx.conf",
@@ -1314,22 +1314,36 @@ spec:
 			})
 			Expect(err).NotTo(HaveOccurred())
 
+			if enableRender {
+				def, err := stores.AppConfigFileDefStore.GetByID(ctx, created.DefID)
+				Expect(err).NotTo(HaveOccurred())
+				err = cfgSvc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+					EnableEnvVarRender: lo.ToPtr(true),
+					Operator:           appcfg.CfgSystemUser,
+				})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
 			builder := workload.NewBuilder(builderSvc, app, appModel)
 			result, err := builder.Build(ctx, testEnv)
 			Expect(err).NotTo(HaveOccurred())
 
 			gd := asGameDeployment(result)
 
-			By("should have plain-cfg ConfigMap in extra resources")
+			cmNamePart := "plain-direct"
+			if enableRender {
+				cmNamePart = "plain-cfg"
+			}
+			By("should have the expected plain ConfigMap in extra resources")
 			var plainCM *unstructured.Unstructured
 			for i := range result.ExtraObjects {
 				obj := &result.ExtraObjects[i]
-				if obj.GetKind() == "ConfigMap" && strings.Contains(obj.GetName(), "plain-cfg") {
+				if obj.GetKind() == "ConfigMap" && strings.Contains(obj.GetName(), cmNamePart) {
 					plainCM = obj
 					break
 				}
 			}
-			Expect(plainCM).NotTo(BeNil(), "plain-cfg ConfigMap should exist in extra resources")
+			Expect(plainCM).NotTo(BeNil(), "%s ConfigMap should exist in extra resources", cmNamePart)
 
 			By("should have plain file content in ConfigMap data")
 			data := plainCM.Object["data"].(map[string]any)
@@ -1349,7 +1363,6 @@ spec:
 			}
 			Expect(plainMount).NotTo(BeNil(), "plain file mount at /etc/nginx/nginx.conf should exist")
 
-			By("should have plain-cfg init container")
 			var plainInit *corev1.Container
 			for i := range gd.Spec.Template.Spec.InitContainers {
 				if strings.Contains(gd.Spec.Template.Spec.InitContainers[i].Name, "plain-cfg") {
@@ -1357,10 +1370,18 @@ spec:
 					break
 				}
 			}
-			Expect(plainInit).NotTo(BeNil(), "plain-cfg init container should exist")
-			Expect(plainInit.Env).NotTo(BeEmpty(), "init container should have env vars injected")
+			if enableRender {
+				By("should have plain-cfg init container when render is enabled")
+				Expect(plainInit).NotTo(BeNil(), "plain-cfg init container should exist")
+				Expect(plainInit.Env).NotTo(BeEmpty(), "init container should have env vars injected")
+			} else {
+				By("should not have plain-cfg init container when render is disabled")
+				Expect(plainInit).To(BeNil())
+			}
 		},
-		Entry("TRPC workload with plain files", workloadTestCases[0]),
-		Entry("TAF workload with plain files", workloadTestCases[1]),
+		Entry("TRPC workload with plain files (direct mount)", workloadTestCases[0], false),
+		Entry("TAF workload with plain files (direct mount)", workloadTestCases[1], false),
+		Entry("TRPC workload with plain files (runtime render)", workloadTestCases[0], true),
+		Entry("TAF workload with plain files (runtime render)", workloadTestCases[1], true),
 	)
 })

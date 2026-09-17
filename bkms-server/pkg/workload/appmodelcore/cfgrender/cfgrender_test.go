@@ -28,7 +28,7 @@ import (
 )
 
 var _ = Describe("RenderConfigContents", func() {
-	It("should render env var templates and produce ConfigFileParams", func() {
+	It("should render env var templates and produce RenderedMountableFile", func() {
 		items := []appcfg.MountableFile{
 			{Name: "app.yaml", MountDir: "/etc/app", Content: "host: ${{ env.DB_HOST }}\nport: 3306"},
 		}

@@ -531,7 +531,7 @@ func (d *directConfigMapResult) ExtraResources(_ context.Context) ([]unstructure
 
 // buildDirectConfigMap 为不需要 env var 渲染的 plain 文件构建直接 ConfigMap 挂载。
 // 内容直接写入 ConfigMap data，主容器通过 subPath 挂载到目标路径，无需 init container。
-func buildDirectConfigMap(configMapName string, files []cfgrender.ConfigFileParams) *directConfigMapResult {
+func buildDirectConfigMap(configMapName string, files []cfgrender.RenderedMountableFile) *directConfigMapResult {
 	volumeName := configMapName
 
 	cm := corev1.ConfigMap{

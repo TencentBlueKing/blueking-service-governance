@@ -37,9 +37,9 @@ import (
 // BuildResult 包含按 EnableEnvVarRender 分组后的两组配置文件参数。
 type BuildResult struct {
 	// RenderParams 需要 env var 渲染 + runtime render 处理的文件。
-	RenderParams []cfgrender.ConfigFileParams
+	RenderParams []cfgrender.RenderedMountableFile
 	// DirectParams 直接以原始内容挂载到 ConfigMap 的文件（跳过模板渲染）。
-	DirectParams []cfgrender.ConfigFileParams
+	DirectParams []cfgrender.RenderedMountableFile
 }
 
 // BuildPlainConfigFiles 获取当前环境实际生效的 plain 配置文件，
@@ -98,7 +98,7 @@ func BuildPlainConfigFiles(
 
 	// 不需要渲染的文件直接构建参数（原样保留内容）
 	for _, item := range directItems {
-		result.DirectParams = append(result.DirectParams, cfgrender.ConfigFileParams{
+		result.DirectParams = append(result.DirectParams, cfgrender.RenderedMountableFile{
 			FileName:    item.Name,
 			FilePath:    item.MountDir,
 			FileContent: item.Content,

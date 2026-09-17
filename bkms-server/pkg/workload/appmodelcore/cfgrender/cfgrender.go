@@ -31,8 +31,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 )
 
-// ConfigFileParams describes one rendered config file.
-type ConfigFileParams struct {
+// RenderedMountableFile 是编译期渲染完成后的可挂载文件。
+type RenderedMountableFile struct {
 	// FileName is the config file name.
 	FileName string
 	// FilePath is the config file directory in the workload container.
@@ -52,9 +52,9 @@ func RenderConfigContents(
 	items []appcfg.MountableFile,
 	envVars map[string]string,
 	collector *envvarrefs.Collector,
-) ([]ConfigFileParams, error) {
+) ([]RenderedMountableFile, error) {
 	renderer := render.New(render.SetEnvContext(envVars))
-	result := make([]ConfigFileParams, 0, len(items))
+	result := make([]RenderedMountableFile, 0, len(items))
 
 	for _, item := range items {
 		if err := collector.Collect(item.Content, envvarrefs.Source{
@@ -69,7 +69,7 @@ func RenderConfigContents(
 			return nil, errors.Wrapf(err, "rendering config %s", item.Name)
 		}
 
-		result = append(result, ConfigFileParams{
+		result = append(result, RenderedMountableFile{
 			FileName:    item.Name,
 			FilePath:    item.MountDir,
 			FileContent: renderedContent,

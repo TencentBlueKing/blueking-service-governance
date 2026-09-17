@@ -59,7 +59,7 @@ type ConfigParams struct {
 	ConfigMapName string
 	// Files contains all config files rendered into the workload, including the framework config file
 	// and any extra plain files.
-	Files []cfgrender.ConfigFileParams
+	Files []cfgrender.RenderedMountableFile
 }
 
 // Config is the Kubernetes output for init-container based config rendering.
@@ -169,7 +169,7 @@ func BuildConfig(params ConfigParams) (*Config, error) {
 // buildConfigMapData 遍历文件列表，生成 ConfigMap 数据和主容器挂载。
 func buildConfigMapData(
 	names runtimeNames,
-	files []cfgrender.ConfigFileParams,
+	files []cfgrender.RenderedMountableFile,
 	configMap *corev1.ConfigMap,
 ) ([]corev1.VolumeMount, []corev1.KeyToPath) {
 	mainMounts := make([]corev1.VolumeMount, 0, len(files))
@@ -260,12 +260,12 @@ func buildLoopScript(templateMountPath, renderedMountPath string) string {
 // runtimeRenderFileAlias 为运行时渲染链路生成内部文件名。
 // 使用扁平 alias 而非真实路径：中间目录只需稳定唯一标识，
 // 最终挂载位置由 main container 的 MountPath + SubPath 决定。
-func runtimeRenderFileAlias(index int, file cfgrender.ConfigFileParams) string {
+func runtimeRenderFileAlias(index int, file cfgrender.RenderedMountableFile) string {
 	return fmt.Sprintf("%02d-%s", index, file.FileName)
 }
 
 // validateConfigFiles 校验一组待渲染文件的最终挂载目标是否冲突。
-func validateConfigFiles(files []cfgrender.ConfigFileParams) error {
+func validateConfigFiles(files []cfgrender.RenderedMountableFile) error {
 	targetPaths := make(map[string]struct{}, len(files))
 	for _, file := range files {
 		targetPath := filepath.Join(file.FilePath, file.FileName)
