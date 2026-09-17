@@ -44,14 +44,20 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
   // 当前详情请求，供子页面复用以避免切换环境时重复请求
   let currentEnvRequest: null | ReturnType<typeof EnvService.getEnv> = null;
 
+  /** 切换 workspace：作废在途请求并清空列表与详情。 */
+  function switchWorkspace(space: string) {
+    resetDetail();
+    ++listSequence;
+    envList.value = [];
+    workspace.value = space;
+    listLoading.value = false;
+    listError.value = false;
+  }
+
   /** 按 workspace 拉取环境列表；workspace 变化时重置详情。 */
   async function fetchEnvList(space = workspace.value) {
+    if (space !== workspace.value) switchWorkspace(space);
     const sequence = ++listSequence;
-    if (space !== workspace.value) {
-      resetDetail();
-      envList.value = [];
-      workspace.value = space;
-    }
     listLoading.value = true;
     listError.value = false;
     try {
@@ -73,7 +79,8 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
 
     const sequence = ++detailSequence;
     requestedEnvId = envId;
-    currentEnv.value = null;
+    // 同 ID 的预填数据（来自列表页）保留到请求返回，避免占位闪烁。
+    if (currentEnv.value?.id !== envId) currentEnv.value = null;
     error.value = null;
     loading.value = true;
     try {
@@ -106,6 +113,16 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
     if (env.id !== requestedEnvId) return;
     currentEnv.value = env;
     envList.value = envList.value.map(item => (item.id === env.id ? { ...item, ...env } : item));
+  }
+
+  /** 从页面上下文预填当前环境，避免详情请求返回前出现占位闪烁。 */
+  function primeCurrentEnv(env: EnvDetailOutput | EnvOutput, space = workspace.value) {
+    if (!env.id) return;
+    if (space && space !== workspace.value) switchWorkspace(space);
+    requestedEnvId = env.id;
+    currentEnvRequest = null;
+    error.value = null;
+    setCurrentEnv(currentEnv.value?.id === env.id ? { ...currentEnv.value, ...env } : { ...env });
   }
 
   /** 提交成功后同步已保存字段；后续刷新失败也不能退回旧值。 */
@@ -159,6 +176,7 @@ export const useEnvDetailStore = defineStore('envDetail', () => {
     fetchCurrentEnv,
     waitForCurrentEnv,
     setCurrentEnv,
+    primeCurrentEnv,
     syncSavedEnv,
     reset,
   };

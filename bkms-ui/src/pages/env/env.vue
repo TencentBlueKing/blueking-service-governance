@@ -117,13 +117,13 @@
         }"
         :row-height="56"
         :sort-config="sortConfig"
+        @cell-click="handleCellClick"
         @filter-change="filterChangeEvent"
         @page-limit-change="
           pagination.limit = $event;
           pagination.current = 1;
         "
         @page-value-change="pagination.current = $event"
-        @row-click="handleRowClick"
         @scroll="handleScroll"
       >
         <template #empty>
@@ -204,60 +204,24 @@
           </template>
         </TableColumn>
         <TableColumn
-          align="right"
           field="appIDs"
           :label="$t('应用')"
           show-overflow="tooltip"
-          :width="60"
         >
           <template #default="{ row }: { row: EnvOutput }">
             <Button
               v-if="row?.appIDs?.length"
               text
               theme="primary"
-              @click.stop="handleGoAppByEnv(row)"
             >
               {{ row.appIDs.length }}
             </Button>
             <span v-else>--</span>
           </template>
         </TableColumn>
-        <!-- 空列占位-->
-        <TableColumn
-          label=""
-          show-overflow="tooltip"
-          :width="50"
-        >
-        </TableColumn>
-        <TableColumn
-          :fixed="'right'"
-          :label="$t('操作')"
-          :width="150"
-        >
-          <template #default="{ row }: { row: EnvOutput }">
-            <Button
-              class="mr-[16px]"
-              text
-              theme="primary"
-              @click.stop="handleShowEnvDetail(row)"
-            >
-              {{ $t('编辑') }}
-            </Button>
-            <Button
-              text
-              theme="primary"
-              @click.stop="handleDeleteEnv(row)"
-              >{{ $t('删除') }}</Button
-            >
-          </template>
-        </TableColumn>
       </Table>
     </div>
   </Skeleton>
-  <DeleteEnvAction
-    ref="deleteEnvActionRef"
-    @deleted="handleGetEnvList"
-  />
   <CreateEnv
     v-model:is-show="isShowCreateEnv"
     @confirm="handleGetEnvList"
@@ -285,10 +249,10 @@
   import { useTableSearchSelect } from '~/composables/use-search';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
+  import { useEnvDetailStore } from '~/stores/env-detail';
   import { useEnvListStateStore } from '~/stores/env-list-state';
   import { useSpaceStore } from '~/stores/space';
 
-  import DeleteEnvAction from './components/delete-env-action.vue';
   import EnvCategoryDescription from './components/env-category-description.vue';
   import CreateEnv from './create-env.vue';
   import PublicEnvVarsSideslider from './public-env-vars/public-env-vars-sideslider.vue';
@@ -305,8 +269,8 @@
   const route = useRoute();
   const spaceStore = useSpaceStore();
   const { createPlaceholder } = useSearchPlaceholder();
+  const envDetailStore = useEnvDetailStore();
 
-  const deleteEnvActionRef = ref<InstanceType<typeof DeleteEnvAction>>();
   const listStateStore = useEnvListStateStore();
   const listSpace = String(route.params.space);
   const savedState = listStateStore.get(listSpace);
@@ -446,6 +410,20 @@
   ]);
   const ENV_TYPE_ORDER: Record<string, number> = { development: 1, test: 2, staging: 3, production: 4 };
 
+  // 仅点击 环境名称/ID、环境分类、集群资源 三列时进入环境详情页；点击 应用 列跳转应用管理页面。
+  function handleCellClick({ row, column }: VxeTableDefines.CellClickEventParams) {
+    switch (column?.field) {
+      case 'name':
+      case 'type':
+      case 'defaultNamespace':
+        handleShowEnvDetail(row);
+        break;
+      case 'appIDs':
+        if (row.appIDs?.length) handleGoAppByEnv(row);
+        break;
+    }
+  }
+
   // 获取环境列表
   async function handleGetEnvList() {
     if (!spaceStore.currentSpace) return;
@@ -482,13 +460,10 @@
     });
   }
 
-  // 点击环境行时切换当前环境；操作列按钮通过 .stop 保持各自的行为。
-  function handleRowClick(_event: Event, row: EnvOutput) {
-    handleShowEnvDetail(row);
-  }
-
   function handleShowEnvDetail(row: EnvOutput) {
-    if (row.id) router.push(envDetailLocation(row.id));
+    if (!row.id) return;
+    envDetailStore.primeCurrentEnv(row, spaceStore.currentSpace);
+    router.push(envDetailLocation(row.id));
   }
 
   // 排序
@@ -519,10 +494,6 @@
       1,
       Math.min(pagination.value.current, Math.ceil(tableDataMatchSearch.value.length / pagination.value.limit)),
     );
-  }
-
-  function handleDeleteEnv(row: EnvOutput) {
-    deleteEnvActionRef.value?.show(row);
   }
 
   function handleScroll(event: VxeTableDefines.ScrollEventParams) {
