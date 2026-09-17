@@ -221,16 +221,32 @@
               :min-width="220"
             >
               <template #default="{ row }: { row: DisplayRow }">
-                <div class="flex flex-wrap gap-[4px]">
-                  <span
-                    v-for="source in row.sources"
-                    :key="source.id"
-                    class="max-w-full break-all rounded-[2px] px-[6px] py-[2px] text-[12px] leading-[18px]"
-                    :class="source.className"
-                  >
-                    {{ source.text }}
-                  </span>
-                </div>
+                <MoreTag
+                  :data="row.sources"
+                  :more-tag-width="40"
+                  overflow-mode="popover"
+                >
+                  <template #default="{ item }: { item: DisplaySource }">
+                    <span
+                      class="max-w-full break-all rounded-[2px] px-[6px] py-[2px] text-[12px] leading-[18px]"
+                      :class="item.className"
+                    >
+                      {{ item.text }}
+                    </span>
+                  </template>
+                  <template #more-content="{ items }: { items: DisplaySource[] }">
+                    <div class="flex max-w-[320px] flex-col items-start gap-[4px]">
+                      <span
+                        v-for="source in items"
+                        :key="source.id"
+                        class="break-all rounded-[2px] px-[6px] py-[2px] text-[12px] leading-[18px]"
+                        :class="source.className"
+                      >
+                        {{ source.text }}
+                      </span>
+                    </div>
+                  </template>
+                </MoreTag>
               </template>
             </TableColumn>
           </Table>
@@ -289,6 +305,7 @@
   import { AngleDown } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
+  import MoreTag from '~/components/more-tag.vue';
   import { envDetailLocation } from '~/composables/use-env-manager';
 
   import type { FederationResourceMismatch } from './use-federation-resource-precheck';
