@@ -494,7 +494,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		return
 	}
 
-	bkSystem, err := workspace.EnsureBkSystems(ctx, input.ID, input.BkCIProjectID, input.BkCCBizID)
+	bkSystem, err := workspace.EnsureBkSystems(ctx, input.ID, input.DisplayName, input.BkCIProjectID, input.BkCCBizID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure blueking system"))
 		return

@@ -224,6 +224,10 @@ svcConf:
     bkhcm: prod
     # IAM 蓝鲸权限中心
     bkiam: prod
+  # 社区版能力开关，内部环境保持默认即可
+  featureCommunity:
+    # 为 true 时，创建工作空间会独立创建 BCS 项目，并跳过内部 CMDB / BCS 反查
+    createBCSProject: false
   # IAM 中业务系统 ID 配置
   bkIAMSystemIDs:
     bkms: bkms

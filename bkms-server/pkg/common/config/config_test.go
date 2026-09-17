@@ -126,6 +126,8 @@ logging:
 development:
   useStubPerm: true
   allowSetUserInHeader: true
+featureCommunity:
+  createBCSProject: true
 `
 			err := os.WriteFile(configFile, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
@@ -146,6 +148,7 @@ development:
 			Expect(cfg.Account.LoginURL).To(Equal("http://login.example.com"))
 			Expect(cfg.Account.AuthEnvName).To(Equal("test"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
+			Expect(cfg.FeatureCommunity.CreateBCSProject).To(BeTrue())
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(config.G.Encrypt.Secret).To(Equal(originalSecret))
 			Expect(cfg.Mongo.Username).To(Equal("testuser"))

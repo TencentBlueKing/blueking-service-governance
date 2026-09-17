@@ -400,6 +400,12 @@ type DevConfig struct {
 	AllowSkipNewerDBMigration bool
 }
 
+// FeatureCommunityConfig 社区版按能力开关，内部环境保持默认零值即可
+type FeatureCommunityConfig struct {
+	// CreateBCSProject 为 true 时，创建工作空间会独立创建 BCS 项目，并跳过内部 CMDB/BCS 反查
+	CreateBCSProject bool
+}
+
 // Config SaaS 配置
 type Config struct {
 	// --------------------------- 蓝鲸平台接入 ---------------------------
@@ -457,6 +463,8 @@ type Config struct {
 	ImageBuild ImageBuildConfig
 	// 任务轮询器
 	TaskPoller TaskPollerConfig
+	// FeatureCommunity 社区版能力开关
+	FeatureCommunity FeatureCommunityConfig
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用

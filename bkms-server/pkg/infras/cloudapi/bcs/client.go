@@ -45,6 +45,8 @@ type Client interface {
 	ListAuthorizedProjects(ctx context.Context) ([]Project, error)
 	// GetProject 根据项目 id, 获取项目详情
 	GetProject(ctx context.Context, id string) (*Project, error)
+	// CreateProject 创建 BCS 项目
+	CreateProject(ctx context.Context, in CreateProjectInput) (*Project, error)
 	// ListClustersByProject 获取项目下的集群列表
 	ListClustersByProject(ctx context.Context, projectID string) ([]Cluster, error)
 	// ListNamespacesByCluster 获取集群下的命名空间列表
@@ -177,7 +179,10 @@ func (c *ApiClient) GetProject(ctx context.Context, id string) (*Project, error)
 		return nil, err
 	}
 
-	data := mapx.GetMap(result, "data")
+	return parseProject(mapx.GetMap(result, "data")), nil
+}
+
+func parseProject(data map[string]any) *Project {
 	return &Project{
 		ID:          mapx.GetStr(data, "projectID"),
 		Code:        mapx.GetStr(data, "projectCode"),
@@ -186,7 +191,34 @@ func (c *ApiClient) GetProject(ctx context.Context, id string) (*Project, error)
 		Description: mapx.GetStr(data, "description"),
 		BizID:       mapx.GetStr(data, "businessID"),
 		IsOffline:   mapx.GetBool(data, "isOffline"),
-	}, nil
+	}
+}
+
+// CreateProject 创建 BCS 项目
+func (c *ApiClient) CreateProject(ctx context.Context, in CreateProjectInput) (*Project, error) {
+	body := map[string]any{
+		"name":        in.Name,
+		"projectCode": in.ProjectCode,
+		"kind":        in.Kind,
+	}
+	if in.BusinessID != "" {
+		body["businessID"] = in.BusinessID
+	}
+
+	op := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "create_project",
+			Method: "POST",
+			Path:   "/bcsproject/v1/projects",
+		},
+		bkapi.OptSetRequestBody(body),
+	)
+
+	result, err := c.handleOperation(ctx, op)
+	if err != nil {
+		return nil, err
+	}
+	return parseProject(mapx.GetMap(result, "data")), nil
 }
 
 // ListClustersByProject 获取项目下的集群列表

@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -38,8 +39,10 @@ import (
 )
 
 // EnsureBkSystems 保证依赖的蓝鲸项目存在
-func EnsureBkSystems(ctx context.Context, workspaceID, bkciProjectID string, bizID int64) (*BkSystems, error) {
-	cmdbInfo, err := fetchCMDBInfo(ctx, bkciProjectID, bizID)
+func EnsureBkSystems(
+	ctx context.Context, workspaceID, displayName, bkciProjectID string, bizID int64,
+) (*BkSystems, error) {
+	cmdbInfo, err := resolveCMDBInfo(ctx, bkciProjectID, bizID)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch cmdb cmdbInfo")
 	}
@@ -75,6 +78,22 @@ func EnsureBkSystems(ctx context.Context, workspaceID, bkciProjectID string, biz
 		return nil, errors.Wrap(err, "init bkrepo project")
 	}
 
+	bcsProjectID := createProjResp.ID
+	bcsProjectCode := createProjResp.Code
+	if createBCSProjectEnabled() {
+		user := auth.MustGetUser(ctx)
+		bcsClient, err := bcs.New(user)
+		if err != nil {
+			return nil, errors.Wrap(err, "initial bcs client")
+		}
+		bcsProj, err := ensureCommunityBCSProject(ctx, bcsClient, displayName, createProjResp.Code, bizID)
+		if err != nil {
+			return nil, errors.Wrap(err, "ensure community bcs project")
+		}
+		bcsProjectID = bcsProj.ID
+		bcsProjectCode = bcsProj.Code
+	}
+
 	return &BkSystems{
 		// 蓝盾项目 Code, 可读唯一字符串，如：bkce
 		BkCIProjectID: bkciProjectID,
@@ -82,10 +101,10 @@ func EnsureBkSystems(ctx context.Context, workspaceID, bkciProjectID string, biz
 		BkCIProjectUID: createProjResp.ID,
 		// BkRepo 项目 ID 使用蓝盾项目可读 code (如 bkce)
 		BkRepoProjectID: createProjResp.Code,
-		// BCS 项目 ID 使用蓝盾项目 UID (32 位字符串)
-		BkBCSProjectID: createProjResp.ID,
-		// BCS 项目 Code, 使用蓝盾项目可读 code (如 bkce)
-		BkBCSProjectCode: createProjResp.Code,
+		// BCS 项目 ID：内部与蓝盾 UID 1:1；社区为独立创建的项目
+		BkBCSProjectID: bcsProjectID,
+		// BCS 项目 Code：内部与蓝盾 code 相同；社区为独立创建的项目
+		BkBCSProjectCode: bcsProjectCode,
 		// 表明用户创建项目时是否绑定了已有的蓝盾项目
 		IsBoundExistedBKCIProject: isBoundExistedBKCIProject,
 		// 运营产品 ID
@@ -157,6 +176,43 @@ func InitWorkspaceUser(ctx context.Context, id, displayName string, managers []s
 	}
 
 	return nil
+}
+
+func createBCSProjectEnabled() bool {
+	return config.G != nil && config.G.FeatureCommunity.CreateBCSProject
+}
+
+func resolveCMDBInfo(ctx context.Context, bkciProjectID string, bizID int64) (*cmdb.BusinessDetail, error) {
+	if createBCSProjectEnabled() {
+		info := &cmdb.BusinessDetail{}
+		if bizID > 0 {
+			info.BizID = cast.ToString(bizID)
+		}
+		return info, nil
+	}
+	return fetchCMDBInfo(ctx, bkciProjectID, bizID)
+}
+
+func ensureCommunityBCSProject(
+	ctx context.Context, client bcs.Client, displayName, projectCode string, bizID int64,
+) (*bcs.Project, error) {
+	if project, err := client.GetProject(ctx, projectCode); err == nil && project != nil && project.ID != "" {
+		return project, nil
+	}
+
+	name := displayName
+	if name == "" {
+		name = projectCode
+	}
+	in := bcs.CreateProjectInput{
+		Name:        name,
+		ProjectCode: projectCode,
+		Kind:        bcs.ProjectKindK8s,
+	}
+	if bizID > 0 {
+		in.BusinessID = cast.ToString(bizID)
+	}
+	return client.CreateProject(ctx, in)
 }
 
 // fetchCMDBInfo 查询 CMDB 相关字段（二级业务 ID、运营产品 ID/名称）
