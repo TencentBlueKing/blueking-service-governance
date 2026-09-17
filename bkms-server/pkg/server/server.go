@@ -137,14 +137,23 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 	// 初始化用户账号 account 相关 API
 	// 这批 API 不要求请求必须携带有效身份信息
 	tokenClient := usertoken.NewAPIGatewayTokenClient(cfg.Account.AuthBaseURL, cfg.BkApp.Code, cfg.BkApp.Secret)
+	// 登录跳转页：社区版用 featureCommunity.bkLoginURL（PaaS /login），否则用 account.loginURL。
+	// CLI redirect_login 与 auth backend GetLoginUrl 共用这个地址。
+	loginURL := cfg.Account.LoginURL
+	if cfg.FeatureCommunity.BkLoginURL != "" {
+		loginURL = cfg.FeatureCommunity.BkLoginURL
+	}
 	accountHandler := account.NewHandler(account.Config{
 		AuthEnvName: cfg.Account.AuthEnvName,
-		LoginURL:    cfg.Account.LoginURL,
+		LoginURL:    loginURL,
 	}, tokenClient)
 	authConfig := auth.Config{
 		BackendType:          cfg.Account.BackendType,
-		LoginURL:             cfg.Account.LoginURL,
+		LoginURL:             loginURL,
+		BkLoginApigwURL:      cfg.FeatureCommunity.BkLoginApigwURL,
 		AllowSetUserInHeader: cfg.Development.AllowSetUserInHeader,
+		BkAppCode:            cfg.BkApp.Code,
+		BkAppSecret:          cfg.BkApp.Secret,
 	}
 	account.Register(r.Group(""), accountHandler, auth.Optional(authConfig, tokenClient))
 

@@ -111,6 +111,10 @@ func Load(ctx context.Context, cfgFile string) (*Config, error) {
 		return nil, errors.Wrap(err, "validate AccountConfig")
 	}
 
+	if err := validate.Struct(cfg.FeatureCommunity); err != nil {
+		return nil, errors.Wrap(err, "validate FeatureCommunityConfig")
+	}
+
 	// 设置全局环境变量
 	G = &cfg
 	return &cfg, nil

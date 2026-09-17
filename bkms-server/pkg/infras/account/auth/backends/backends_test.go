@@ -20,6 +20,7 @@ package backends
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 
@@ -48,6 +49,7 @@ var _ = Describe("Auth backends", func() {
 
 		Entry("bk_ticket", NewBkTicketAuthBackend(""), "X-User-Bk-Ticket", "bk_ticket"),
 		Entry("bk_token", NewBkTokenAuthBackend(""), "X-User-Bk-Token", "bk_token"),
+		Entry("bk_token_apigw", NewBkTokenApigwAuthBackend("", "", "", ""), "X-User-Bk-Token", "bk_token"),
 	)
 
 	It("使用 bk_ticket 获取用户信息", func() {
@@ -62,16 +64,35 @@ var _ = Describe("Auth backends", func() {
 		Expect(user).To(Equal(&UserInfo{ID: "blueking"}))
 	})
 
-	It("使用 bk_token 获取用户信息", func() {
-		server := newUserInfoServer(
-			"/accounts/get_user/", "bk_token", "token", `{"code":0,"data":{"username":"blueking"}}`,
-		)
+	It("通过 API 网关 get_bk_token_userinfo 获取用户信息", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			Expect(request.URL.Path).To(Equal("/login/api/v3/open/bk-tokens/userinfo/"))
+			Expect(request.URL.Query().Get("bk_token")).To(Equal("token"))
+
+			var authHeader map[string]string
+			Expect(json.Unmarshal([]byte(request.Header.Get("X-Bkapi-Authorization")), &authHeader)).To(Succeed())
+			Expect(authHeader).To(Equal(map[string]string{"bk_app_code": "bkms", "bk_app_secret": "secret"}))
+
+			_, _ = w.Write([]byte(`{"data":{"bk_username":"admin","tenant_id":"system","display_name":"admin"}}`))
+		}))
 		defer server.Close()
 
-		user, err := NewBkTokenAuthBackend(server.URL).GetUserInfo(context.Background(), "token")
-
+		backend := NewBkTokenApigwAuthBackend(server.URL+"/login", "bkms", "secret", "")
+		user, err := backend.GetUserInfo(context.Background(), "token")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(user).To(Equal(&UserInfo{ID: "blueking"}))
+		Expect(user).To(Equal(&UserInfo{ID: "admin"}))
+	})
+
+	It("API 网关返回登录态过期", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"VALIDATION_ERROR","message":"登录态已过期"}}`))
+		}))
+		defer server.Close()
+
+		_, err := NewBkTokenApigwAuthBackend(server.URL, "bkms", "secret", "").
+			GetUserInfo(context.Background(), "token")
+		Expect(err).To(MatchError(ContainSubstring("登录态已过期")))
 	})
 
 	DescribeTable("返回用户信息接口错误",

@@ -212,7 +212,8 @@ var _ = Describe("User authentication middleware", func() {
 		})
 	})
 
-	DescribeTable("选择用户认证后端",
+	DescribeTable(
+		"选择用户认证后端",
 		func(cfg Config, expectedType string) {
 			_, backendType := getBackend(cfg)
 			Expect(backendType).To(Equal(expectedType))
@@ -220,6 +221,11 @@ var _ = Describe("User authentication middleware", func() {
 		Entry("bk_ticket", Config{BackendType: BackendBkTicket}, BackendBkTicket),
 		Entry("bk_token", Config{BackendType: BackendBkToken}, BackendBkToken),
 		Entry("默认使用 bk_token", Config{}, BackendBkToken),
+		Entry(
+			"配了网关则走 bk_token",
+			Config{BackendType: BackendBkTicket, BkLoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login"},
+			BackendBkToken,
+		),
 	)
 })
 

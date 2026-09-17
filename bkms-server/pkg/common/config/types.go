@@ -38,12 +38,23 @@ type BkAppConfig struct {
 type AccountConfig struct {
 	// AuthBaseURL 是 auth 服务的基础 URL，通常由蓝鲸网关服务提供，usertoken 令牌相关功能使用
 	AuthBaseURL string `validate:"required,url"`
-	// LoginURL 是蓝鲸登录服务的基础 URL，auth 令牌认证、usertoken 拼接登录地址时会用到
+	// LoginURL 是内网默认的蓝鲸登录服务地址的基础 UR，auth 令牌认证、usertoken 拼接登录地址时会用到
+	// 未配 FeatureCommunity 时：既用于拼接 /plain/ 跳转，也用于直连校验。
+	// 社区版跳转页请配 FeatureCommunity.BkLoginURL
 	LoginURL string `validate:"required,url"`
 	// AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
 	AuthEnvName string
 	// BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
 	BackendType string `validate:"omitempty,oneof=bk_ticket bk_token"`
+}
+
+// FeatureCommunityConfig 社区版相对内网版的差异化配置
+// 不配置时全部为零值，跳转与校验都仍走 account.loginURL。
+type FeatureCommunityConfig struct {
+	// BkLoginURL 社区版登录页根地址（不含 /plain/），留空时跳转仍用 account.loginURL。
+	BkLoginURL string `validate:"omitempty,url"`
+	// BkLoginApigwURL 蓝鲸登录 API 网关 bk-login 前缀，不含接口路径，留空时仍直连 account.loginURL
+	BkLoginApigwURL string `validate:"omitempty,url"`
 }
 
 // BkPlatUrlsConfig 蓝鲸平台地址配置
@@ -457,6 +468,8 @@ type Config struct {
 	ImageBuild ImageBuildConfig
 	// 任务轮询器
 	TaskPoller TaskPollerConfig
+	// FeatureCommunity 社区版相对内网版的差异化配置，不配置时行为与内网版一致
+	FeatureCommunity FeatureCommunityConfig
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用
