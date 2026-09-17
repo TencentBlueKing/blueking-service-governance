@@ -374,8 +374,10 @@
   const isPopoverVisible = ref(false);
   /** 全部环境列表 */
   const envList = ref<EnvOutput[]>([]);
-  /** 环境 ID 到部署状态的映射，缺少 ID 时兼容使用环境名称。 */
-  const appDeployStatusMap = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
+  /** 部署状态分别按环境 ID 和名称索引，ID 未命中时按名称兜底。 */
+  const appDeployStatusByID = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
+  const appDeployStatusByName = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
+  let deployStatusesRequest = 0;
   /** 搜索关键词 */
   const searchKeyword = ref('');
   /** 是否仅显示已部署环境 */
@@ -447,13 +449,9 @@
 
   function getEnvDeployStatus(env: EnvOutput) {
     return (
-      (env.id ? appDeployStatusMap.value.get(env.id) : undefined) ||
-      (env.name ? appDeployStatusMap.value.get(env.name) : undefined)
+      (env.id ? appDeployStatusByID.value.get(env.id) : undefined) ||
+      (env.name ? appDeployStatusByName.value.get(env.name) : undefined)
     );
-  }
-
-  function getEnvDeployStatusEntries(env: AppDeployedEnvOutputObj) {
-    return [env.id, env.name].filter((key): key is string => !!key).map(key => [key, env] as const);
   }
 
   /** 获取环境类型对应的展示配置 */
@@ -574,14 +572,25 @@
 
   /** 获取当前应用在各环境的部署状态 */
   async function getDeployStatuses() {
-    if (!appDetailStore.appID) {
-      appDeployStatusMap.value = new Map();
+    const requestToken = ++deployStatusesRequest;
+    const appID = appDetailStore.appID;
+    if (!appID) {
+      appDeployStatusByID.value = new Map();
+      appDeployStatusByName.value = new Map();
       emits('update:deployStatusList', []);
       return;
     }
-    const res = await AppService.getAppDeployStatuses({ appID: appDetailStore.appID }).catch(() => []);
+    const res = await AppService.getAppDeployStatuses({ appID }).catch(() => []);
+    if (requestToken !== deployStatusesRequest || appID !== appDetailStore.appID) return;
     const list = (res || []) as AppDeployedEnvOutputObj[];
-    appDeployStatusMap.value = new Map(list.flatMap(getEnvDeployStatusEntries));
+    const byID = new Map<string, AppDeployedEnvOutputObj>();
+    const byName = new Map<string, AppDeployedEnvOutputObj>();
+    list.forEach(status => {
+      if (status.id) byID.set(status.id, status);
+      if (status.name) byName.set(status.name, status);
+    });
+    appDeployStatusByID.value = byID;
+    appDeployStatusByName.value = byName;
     emits('update:deployStatusList', list);
   }
 
@@ -669,7 +678,9 @@
       if (appID) {
         await Promise.all([getDeployStatuses(), handleGetEnvList()]);
       } else {
-        appDeployStatusMap.value = new Map();
+        deployStatusesRequest += 1;
+        appDeployStatusByID.value = new Map();
+        appDeployStatusByName.value = new Map();
         envList.value = [];
         isLoading.value = false;
         emits('update:deployStatusList', []);

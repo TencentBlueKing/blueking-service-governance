@@ -215,14 +215,15 @@
     }
   }
 
-  // 每次从总览打开时保持目标环境未选择，并重新拉取侧栏内环境下拉数据。
+  // 首次挂载由环境选择器自动加载；再次打开时刷新已有选择器的数据。
   watch(isShow, async newVal => {
     if (newVal) {
       if (hasTargetSelector.value) {
+        const wasTargetSelectorMounted = targetEnvSelectPanelRef.value !== null;
         targetFormModel.envName = '';
         selectedEnvItem.value = undefined;
         await nextTick();
-        await targetEnvSelectPanelRef.value?.refresh?.();
+        if (wasTargetSelectorMounted) await targetEnvSelectPanelRef.value?.refresh?.();
       }
       nextTick(() => {
         targetEnvFormRef.value?.clearValidate?.();

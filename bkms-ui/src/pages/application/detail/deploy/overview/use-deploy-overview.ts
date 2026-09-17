@@ -404,14 +404,17 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
       shouldQueueAutomaticLoad = true;
       if (!queuedAutomaticLoad) {
         queuedAutomaticLoad = (async () => {
-          while (shouldQueueAutomaticLoad) {
-            shouldQueueAutomaticLoad = false;
-            await currentLoad?.catch(() => undefined);
-            await load('automatic');
+          try {
+            while (shouldQueueAutomaticLoad) {
+              shouldQueueAutomaticLoad = false;
+              // 手动或初始加载可能替换 currentLoad；等待最新请求结束后再补刷新。
+              while (currentLoad !== undefined) await currentLoad.catch(() => undefined);
+              await load('automatic');
+            }
+          } finally {
+            queuedAutomaticLoad = undefined;
           }
-        })().finally(() => {
-          queuedAutomaticLoad = undefined;
-        });
+        })();
       }
       return queuedAutomaticLoad;
     }
@@ -422,11 +425,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
 
     const appID = appDetailStore.appID || '';
     const token = (loadToken += 1);
-    const previousLoad = currentLoad;
-    const request = (async () => {
-      if (previousLoad) await previousLoad.catch(() => undefined);
-      await requestOverview(appID, token, mode);
-    })();
+    const request = requestOverview(appID, token, mode);
     currentLoad = request;
     try {
       await request;
