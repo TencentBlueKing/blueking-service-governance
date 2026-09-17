@@ -327,6 +327,89 @@ var _ = Describe("RecordStoreMongo", func() {
 		})
 	})
 
+	Context("ListLatestByApps", func() {
+		It("should return the newest record per app and env", func() {
+			otherAppID := "test-app-" + stringx.Random(6)
+
+			_, err := store.Create(ctx, &recordA)
+			Expect(err).NotTo(HaveOccurred())
+			time.Sleep(5 * time.Millisecond)
+
+			recordB.ImageTag = "v1.0.1"
+			_, err = store.Create(ctx, &recordB)
+			Expect(err).NotTo(HaveOccurred())
+
+			prod := recordA
+			prod.EnvName = "production"
+			prod.ImageTag = "prod-v1"
+			_, err = store.Create(ctx, &prod)
+			Expect(err).NotTo(HaveOccurred())
+
+			otherStag := recordA
+			otherStag.AppID = otherAppID
+			otherStag.ImageTag = "other-stag-v1"
+			_, err = store.Create(ctx, &otherStag)
+			Expect(err).NotTo(HaveOccurred())
+			time.Sleep(5 * time.Millisecond)
+
+			otherStagNew := otherStag
+			otherStagNew.ImageTag = "other-stag-v2"
+			_, err = store.Create(ctx, &otherStagNew)
+			Expect(err).NotTo(HaveOccurred())
+
+			latest, err := store.ListLatestByApps(ctx, []string{appID, otherAppID}, trafficLaneName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(latest).To(HaveLen(2))
+			Expect(latest[appID]).To(HaveLen(2))
+			Expect(latest[appID][envName].ImageTag).To(Equal("v1.0.1"))
+			Expect(latest[appID]["production"].ImageTag).To(Equal("prod-v1"))
+			Expect(latest[otherAppID]).To(HaveLen(1))
+			Expect(latest[otherAppID][envName].ImageTag).To(Equal("other-stag-v2"))
+		})
+
+		It("should only return records of the given traffic lane", func() {
+			recordA.TrafficLaneName = trafficLaneName
+			recordA.ImageTag = "base-v1"
+			_, err := store.Create(ctx, &recordA)
+			Expect(err).NotTo(HaveOccurred())
+
+			recordB.TrafficLaneName = "feature-lane"
+			recordB.ImageTag = "lane-v1"
+			_, err = store.Create(ctx, &recordB)
+			Expect(err).NotTo(HaveOccurred())
+
+			latest, err := store.ListLatestByApps(ctx, []string{appID}, trafficLaneName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(latest).To(HaveLen(1))
+			Expect(latest[appID][envName].ImageTag).To(Equal("base-v1"))
+
+			laneLatest, err := store.ListLatestByApps(ctx, []string{appID}, "feature-lane")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(laneLatest).To(HaveLen(1))
+			Expect(laneLatest[appID][envName].ImageTag).To(Equal("lane-v1"))
+		})
+
+		It("should not return records of apps not in the list", func() {
+			otherAppID := "other-app-" + stringx.Random(6)
+
+			_, err := store.Create(ctx, &recordA)
+			Expect(err).NotTo(HaveOccurred())
+
+			other := recordA
+			other.AppID = otherAppID
+			other.ImageTag = "other-v1"
+			_, err = store.Create(ctx, &other)
+			Expect(err).NotTo(HaveOccurred())
+
+			latest, err := store.ListLatestByApps(ctx, []string{appID}, trafficLaneName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(latest).To(HaveLen(1))
+			Expect(latest).To(HaveKey(appID))
+			Expect(latest).NotTo(HaveKey(otherAppID))
+			Expect(latest[appID][envName].ImageTag).To(Equal("v1.0.0"))
+		})
+	})
+
 	Context("List", func() {
 		It("should support pagination and sorting", func() {
 			// 创建多条记录

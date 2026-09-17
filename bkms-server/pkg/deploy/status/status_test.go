@@ -509,6 +509,116 @@ var _ = Describe("DeployStatusService", func() {
 			})
 		})
 
+		Context("when multiple apps of mixed types share environments", func() {
+			var (
+				trpcApp2 *bkmsapp.Application
+				helmApp  *bkmsapp.Application
+			)
+
+			BeforeEach(func() {
+				trpcApp2, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
+					AppStore:                  appStore,
+					AppModelStore:             appModelStore,
+					AppConfigFileStore:        appConfigFileStore,
+					AppConfigFileDefStore:     appConfigFileDefStore,
+					AppConfigFileVersionStore: appConfigFileVersionStore,
+					BuildConfigStore:          buildConfigStore,
+				}, &dbfactory.TrpcApplicationOpts{WorkspaceID: workspaceID})
+				helmApp = dbfactory.HelmApplication(ctx, &dbfactory.HelmApplicationStores{
+					AppStore: appStore,
+				}, &dbfactory.HelmApplicationOpts{WorkspaceID: workspaceID})
+
+				Expect(envStore.AddApp(ctx, envStaging.ID, trpcApp.ID)).To(Succeed())
+				Expect(envStore.AddApp(ctx, envStaging.ID, trpcApp2.ID)).To(Succeed())
+				Expect(envStore.AddApp(ctx, envStaging.ID, helmApp.ID)).To(Succeed())
+				Expect(envStore.AddApp(ctx, envDev.ID, trpcApp.ID)).To(Succeed())
+				envStaging = reloadEnv(ctx, envStore, envStaging.ID)
+				envDev = reloadEnv(ctx, envStore, envDev.ID)
+			})
+
+			It("should prefetch latest statuses for all apps in one pass", func() {
+				mockListTrafficLanesReturn([]*trafficmanager.TrafficLane{{LaneName: ""}}, nil)
+
+				dbfactory.AppModelDeployRecord(
+					ctx,
+					appModelDeployRecordStore,
+					trpcApp,
+					envStaging,
+					&dbfactory.AppModelDeployRecordOpts{
+						Status:   appmodeldeploy.StatusDeployed,
+						ImageTag: "trpc-v1",
+					},
+				)
+				dbfactory.AppModelDeployRecord(
+					ctx,
+					appModelDeployRecordStore,
+					trpcApp,
+					envDev,
+					&dbfactory.AppModelDeployRecordOpts{
+						Status:   appmodeldeploy.StatusDeploying,
+						ImageTag: "trpc-v2",
+					},
+				)
+				dbfactory.AppModelDeployRecord(
+					ctx,
+					appModelDeployRecordStore,
+					trpcApp2,
+					envStaging,
+					&dbfactory.AppModelDeployRecordOpts{
+						Status:   appmodeldeploy.StatusFailed,
+						ImageTag: "trpc2-v1",
+					},
+				)
+				dbfactory.HelmDeployRecord(
+					ctx,
+					helmDeployRecordStore,
+					helmApp,
+					envStaging,
+					&dbfactory.HelmDeployRecordOpts{
+						Status:   helmrelease.StatusDeployed,
+						ImageTag: "helm-v3",
+					},
+				)
+
+				out, err := svc.ListForAppsInWorkspace(
+					ctx,
+					workspaceID,
+					[]*bkmsapp.Application{trpcApp, trpcApp2, helmApp},
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(out).To(HaveLen(3))
+				Expect(out[trpcApp.ID]).To(ConsistOf(
+					MatchFields(IgnoreExtras, Fields{
+						"EnvName":         Equal(envStaging.Name),
+						"TrafficLaneName": Equal(""),
+						"DeployStatus":    Equal(string(appmodeldeploy.StatusDeployed)),
+						"ImageTag":        Equal("trpc-v1"),
+					}),
+					MatchFields(IgnoreExtras, Fields{
+						"EnvName":         Equal(envDev.Name),
+						"TrafficLaneName": Equal(""),
+						"DeployStatus":    Equal(string(appmodeldeploy.StatusDeploying)),
+						"ImageTag":        Equal("trpc-v2"),
+					}),
+				))
+				Expect(out[trpcApp2.ID]).To(ConsistOf(
+					MatchFields(IgnoreExtras, Fields{
+						"EnvName":      Equal(envStaging.Name),
+						"DeployStatus": Equal(string(appmodeldeploy.StatusFailed)),
+						"ImageTag":     Equal("trpc2-v1"),
+					}),
+				))
+				Expect(out[helmApp.ID]).To(ConsistOf(
+					MatchFields(IgnoreExtras, Fields{
+						"EnvName":      Equal(envStaging.Name),
+						"AppType":      Equal(bkmsapp.AppTypeHelm),
+						"DeployStatus": Equal(string(helmrelease.StatusDeployed)),
+						"ImageTag":     Equal("helm-v3"),
+					}),
+				))
+			})
+		})
+
 		Context("when only one environment contains the filtered apps", func() {
 			BeforeEach(func() {
 				Expect(envStore.AddApp(ctx, envStaging.ID, trpcApp.ID)).To(Succeed())
