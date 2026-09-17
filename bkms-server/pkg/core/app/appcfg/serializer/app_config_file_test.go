@@ -58,6 +58,21 @@ var _ = Describe("App config file serializers", func() {
 			"CreateAppConfigFileInput.Name",
 			"failed on the 'app_config_file_name' tag",
 		}),
+		Entry("feature env overlay name", serializer.CreateAppConfigFileInput{
+			Name:              "feat-visual-processor-zo1b02-2",
+			Type:              "overlay",
+			ContentSourceType: "local",
+			FileFormat:        "yaml",
+		}, nil),
+		Entry("name longer than 64", serializer.CreateAppConfigFileInput{
+			Name:              "feat-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghij-1",
+			Type:              "overlay",
+			ContentSourceType: "local",
+			FileFormat:        "yaml",
+		}, []string{
+			"CreateAppConfigFileInput.Name",
+			"failed on the 'max' tag",
+		}),
 	)
 
 	It("accepts numeric int64 currentVersion", func() {
