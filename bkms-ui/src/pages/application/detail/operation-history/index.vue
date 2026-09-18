@@ -179,46 +179,19 @@
         </Table>
       </Loading>
     </Skeleton>
-    <!-- 操作详情 -->
-    <Sideslider
+    <OperationDetailSideslider
       v-model:is-show="isShow"
-      class="record-detail"
-      :title="$t('操作详情')"
-      :width="960"
-    >
-      <template #default>
-        <!-- 代码编辑器 -->
-        <MsEditor
-          class="w-[100%] !h-[calc(100vh-52px)] p-[20px]"
-          is-diff
-          :model-value="curRow?.yamlAfter"
-          :options="{
-            enableSplitViewResizing: false,
-            lineNumbersMinChars: 2,
-          }"
-          :original="curRow?.yamlBefore"
-          readonly
-        >
-          <template #title>
-            <div class="grid grid-cols-2 gap-[18px] text-[12px] text-center leading-[22px]">
-              <div class="w-[52px] h-[22px] bg-[#1E3567] rounded-[2px]">
-                {{ $t('操作前') }}
-              </div>
-              <div class="w-[52px] h-[22px] bg-[#144628] rounded-[2px] text-[#3FC362]">
-                {{ $t('操作后') }}
-              </div>
-            </div>
-          </template>
-        </MsEditor>
-      </template>
-    </Sideslider>
+      :env-name-mapping="envNameMapping"
+      :record="curRow"
+      :result-display-name="getResultDisplayName(curRow?.result || '')"
+    />
   </div>
 </template>
 <script lang="ts" setup>
   import { computed, ComputedRef, ref, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
-  import { Button, DatePicker, Loading, SearchSelect, Sideslider } from 'bkui-vue';
+  import { Button, DatePicker, Loading, SearchSelect } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import {
     ListOperationRecordsRequest,
@@ -226,8 +199,7 @@
     OperationRecordOutputObj,
   } from '~/@types/v1/operation-audit';
   import { OperationAuditService } from '~/api/modules/v1';
-  import { convertToYaml, formatTimeByTimezone, mapKeys } from '~/common/util';
-  import MsEditor from '~/components/monaco-editor/ms-editor.vue';
+  import { formatTimeByTimezone, mapKeys } from '~/common/util';
   import Layout from '~/components/skeleton/skeleton-layout';
   import useEnvManager from '~/composables/use-env-manager';
   import useSearchFilter from '~/composables/use-search-filter';
@@ -237,14 +209,10 @@
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
 
+  import OperationDetailSideslider from './operation-detail-sideslider.vue';
+
   import type { DatePickerValueType } from 'bkui-vue/lib/date-picker/interface';
   import type { ICommonItem, ISearchItem, ISearchValue } from 'bkui-vue/lib/search-select/utils';
-
-  // 扩展类型，添加 YAML 格式数据
-  interface ExtendedOperationRecord extends OperationRecordOutputObj {
-    yamlAfter?: string;
-    yamlBefore?: string;
-  }
 
   // 引入国际化
   const { t } = useI18n();
@@ -264,7 +232,7 @@
     current: 1,
     remote: true,
   });
-  const curRow = ref<ExtendedOperationRecord>();
+  const curRow = ref<OperationRecordOutputObj>();
   // 日期范围
   const dateRange = ref<DatePickerValueType>(['', '']);
   // 操作详情
@@ -376,11 +344,7 @@
 
   // 查看操作详情
   function handleShowLog(row: OperationRecordOutputObj) {
-    curRow.value = {
-      ...row,
-      yamlBefore: convertToYaml(row.data?.before || ''),
-      yamlAfter: convertToYaml(row.data?.after || ''),
-    };
+    curRow.value = row;
     isShow.value = true;
   }
 

@@ -430,6 +430,111 @@
           </template>
         </TableColumn>
 
+        <!-- 最近一次二进制更新 -->
+        <TableColumn
+          field="latestPublish"
+          :label="$t('二进制更新')"
+          min-width="120"
+        >
+          <template #default="{ row }: { row: AppInstanceOutputObj }">
+            <Popover
+              v-if="row.latestPublish"
+              placement="top"
+              :popover-delay="[100, 0]"
+              theme="light"
+              :width="720"
+            >
+              <span class="inline-flex items-center cursor-default border-b border-dashed border-[#979BA5]">
+                <StatusDotIcon
+                  v-if="row.latestPublish.status === 'success' || row.latestPublish.status === 'failed'"
+                  :icon="row.latestPublish.status === 'success' ? 'normal' : 'abnormal'"
+                  :size="12"
+                />
+                {{ getPublishStatusLabel(row.latestPublish.status) }}
+              </span>
+              <template #content>
+                <div class="w-full min-w-0 px-[4px]">
+                  <div class="mb-[12px] flex items-center text-[14px] whitespace-nowrap">
+                    <span class="font-bold text-[#313238] shrink-0">{{ $t('二进制更新') }}</span>
+                    <span
+                      class="text-[#979BA5] text-[12px] ml-[10px] truncate"
+                      :title="row.id"
+                      >{{ row.id }}</span
+                    >
+                  </div>
+                  <div class="text-[12px] text-[#4D4F56] mb-[12px]">
+                    <i class="bkms-icon bkms-icon-circle-info text-[14px] mr-[4px]"></i>
+                    {{ $t('展示该实例最近一次通过 bkms-cli 发布的二进制，更新过程不会重启容器') }}
+                  </div>
+                  <Table
+                    class="w-full"
+                    :data="[row.latestPublish]"
+                    :max-height="280"
+                  >
+                    <TableColumn
+                      :label="$t('二进制')"
+                      min-width="110"
+                      show-overflow="tooltip"
+                    >
+                      <template #default="{ row: publishRow }">{{ publishRow.binaryName || '--' }}</template>
+                    </TableColumn>
+                    <TableColumn
+                      label="MD5"
+                      min-width="140"
+                    >
+                      <template #default="{ row: publishRow }">
+                        <HoverCopy
+                          :copy-value="publishRow.md5 || ''"
+                          :text="publishRow.md5 || '--'"
+                          :tooltip="publishRow.md5"
+                        />
+                      </template>
+                    </TableColumn>
+                    <TableColumn
+                      :label="$t('操作人')"
+                      min-width="100"
+                      show-overflow="tooltip"
+                    >
+                      <template #default="{ row: publishRow }">{{ publishRow.operator || '--' }}</template>
+                    </TableColumn>
+                    <TableColumn
+                      :label="$t('更新时间')"
+                      min-width="140"
+                      show-overflow="tooltip"
+                    >
+                      <template #default="{ row: publishRow }">
+                        {{ publishRow.updatedAt ? formatTimeByTimezone(publishRow.updatedAt) : '--' }}
+                      </template>
+                    </TableColumn>
+                    <TableColumn
+                      :label="$t('状态')"
+                      min-width="100"
+                    >
+                      <template #default="{ row: publishRow }">
+                        <div
+                          v-bk-tooltips="{
+                            content: publishRow.message,
+                            disabled: publishRow.status !== 'failed' || !publishRow.message,
+                          }"
+                          class="flex items-center"
+                        >
+                          <StatusDotIcon
+                            v-if="publishRow.status === 'success' || publishRow.status === 'failed'"
+                            :icon="publishRow.status === 'success' ? 'normal' : 'abnormal'"
+                            :size="12"
+                          />
+                          {{ getPublishResultLabel(publishRow.status) }}
+                        </div>
+                      </template>
+                    </TableColumn>
+                  </Table>
+                </div>
+              </template>
+            </Popover>
+            <span v-else>--</span>
+          </template>
+        </TableColumn>
+
         <!-- Restart 列 -->
         <TableColumn
           field="restartCount"
@@ -572,6 +677,7 @@
   import { Button, Checkbox, Dropdown, Popover, Tag } from 'bkui-vue';
   import { AngleDownLine, RightShape } from 'bkui-vue/lib/icon';
   import { AppInstanceOutputObj } from '~/@types/v1/instance';
+  import { formatTimeByTimezone } from '~/common/util';
   import CustomFilter from '~/components/custom-filter.vue';
   import HoverCopy from '~/components/hover-copy.vue';
   import StatusDotIcon from '~/components/status-dot-icon.vue';
@@ -658,10 +764,32 @@
   // 多环境模式下按环境名区分列设置，v-for 渲染的多个表格互不共享。
   const tableSettingsId = computed(() => `instance-table-${props.envName || 'default'}`);
   const { settings, handleSettingChange } = useTableSettings(tableSettingsId, {
-    defaultChecked: ['id', 'image', 'ip', 'nodeIP', 'status', 'isHealthy', 'polarisStatus', 'restartCount', 'age'],
+    defaultChecked: [
+      'id',
+      'image',
+      'ip',
+      'nodeIP',
+      'status',
+      'isHealthy',
+      'polarisStatus',
+      'latestPublish',
+      'restartCount',
+      'age',
+    ],
     disabled: ['id'],
   });
 
+  function getPublishResultLabel(status?: string) {
+    if (status === 'success') return window.i18n.t('成功');
+    if (status === 'failed') return window.i18n.t('失败');
+    return status || '--';
+  }
+
+  function getPublishStatusLabel(status?: string) {
+    if (status === 'success') return window.i18n.t('已更新');
+    if (status === 'failed') return window.i18n.t('更新失败');
+    return status || '--';
+  }
   // 特性环境
   const isFeatureEnv = computed(() => props.envKind === 'feature');
 
