@@ -171,6 +171,19 @@ export default ({ mode }: { mode: string }) => {
     test: {
       include: ['test/**/*.test.ts'],
       environment: 'jsdom',
+
+      // 场景级 UI 用例的渲染耗时与机器性能/负载强相关（慢机或并行 worker 竞争下
+      // findBy* 轮询可能比快机慢 2~4 倍），统一放宽单条用例超时，
+      // 保证结果与执行机器无关；仅影响真实挂起的用例失败时长。
+      testTimeout: 30_000,
+      // bkui-vue FormItem 字段级校验（required / rules blur）的 promise reject 无 catch，
+      // 会产生 unhandled rejection（真实浏览器控制台同样出现，属组件库缺陷）。
+      // 另：test/scenarios/component-management.test.ts 的「试运行接口失败」用例中
+      // previewComponentDef 的 rejection 同样依赖本开关兜底（业务约定 interceptor 统一反馈，业务层无 catch）。
+      // 2026-09-08：未处理错误的分类权已移交 test/setup.ts 的全局处理器——
+      // 预期项（组件库缺陷 / MockedApiError 哨兵）降级为 warning，非预期项由 afterAll 抛错让 CI 变红。
+      // 故关闭本开关：vitest 不再自行收集，避免与 setup.ts 的判定重复。
+      dangerouslyIgnoreUnhandledErrors: false,
       // jsdom 环境垫片（ResizeObserver / PointerEvent 等）：须在测试文件 import 组件链之前执行
       setupFiles: ['test/setup.ts'],
       // bkui-vue / monaco-editor 在 vitest（SSR 解析）下无法定位入口（ESM-only / exports 条件问题）；

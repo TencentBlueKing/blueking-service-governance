@@ -1,8 +1,0 @@
-// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
-
-exports[`component TheFooter.vue > should render 1`] = `
-"<div class="flex items-center place-content-between">
-  <div></div>
-  <div></div>
-</div>"
-`;

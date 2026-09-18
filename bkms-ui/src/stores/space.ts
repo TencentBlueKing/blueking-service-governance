@@ -20,8 +20,8 @@ import { ref, shallowRef } from 'vue';
 
 import { random } from 'bkui-vue/lib/shared';
 import { defineStore } from 'pinia';
-import { useI18n } from 'vue-i18n';
 import { WorkspaceService } from '~/api/modules/v1/workspace';
+import { i18n } from '~/modules/i18n';
 
 import type {
   CreateWorkspaceRequest,
@@ -39,7 +39,6 @@ export const useSpaceStore = defineStore('space', () => {
   const workspaceDetail = ref<null | WorkspaceInfoOutputObj>(null);
   const isBoundExistedBKCIProject = ref<boolean>(false);
   const isLoading = ref<boolean>(false);
-  const { t } = useI18n();
 
   // 空间状态
   enum spaceState {
@@ -50,8 +49,9 @@ export const useSpaceStore = defineStore('space', () => {
   // 空间分类
   const statusTab = ref('');
 
+  // 使用全局 i18n 实例（store setup 内不可调用组件级 useI18n，vue-i18n ≥11.1.12 会抛错）
   const repositoryTypeMap: Record<string, string> = {
-    system: t('系统内置'),
+    system: i18n.global.t('系统内置'),
   };
 
   function getRepositoryTypeName(type?: string) {
