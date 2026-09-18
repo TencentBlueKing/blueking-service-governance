@@ -1829,6 +1829,26 @@ definitions:
         items:
           $ref: '#/definitions/serializer.VariableInput'
         type: array
+      framework:
+        description: 编程框架，只影响差异能力；blank 表示无预设框架
+        enum:
+        - blank
+        - taf
+        - trpc-go
+        - trpc-cpp
+        - trpc-java
+        - trpc-python
+        - trpc-nodejs
+        type: string
+      language:
+        description: 编程语言，只影响构建
+        enum:
+        - go
+        - cpp
+        - java
+        - python
+        - nodejs
+        type: string
       tafSpec:
         allOf:
         - $ref: '#/definitions/serializer.TafSpecInput'
@@ -3158,6 +3178,7 @@ definitions:
         - taf
         - helm
         - agones
+        - standard
         type: string
     required:
     - buildConfig
@@ -15765,6 +15786,284 @@ paths:
       summary: 获取节点 Manifest
       tags:
       - topology
+  /apps/{appID}/envs/{envName}/standard-deploys:
+    delete:
+      operationId: DeleteStandardDeploy
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 部署的泳道名称（空字符串表示不使用泳道）
+        in: query
+        name: trafficLaneName
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除 Standard 应用部署（下架当前环境最新版本）
+      tags:
+      - deploy
+    get:
+      operationId: ListStandardDeployRecords
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 部署的泳道名称（空字符串表示不使用泳道）
+        in: query
+        name: trafficLaneName
+        type: string
+      - description: 搜索关键字
+        in: query
+        name: keyword
+        type: string
+      - description: 分页页码（从 1 开始）
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: 分页大小
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListAppModelDeployRecordsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取 Standard 应用部署记录列表
+      tags:
+      - deploy
+    post:
+      consumes:
+      - application/json
+      operationId: CreateStandardDeploy
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 创建 Standard 部署请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CreateAppModelDeployInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 创建 Standard 应用部署
+      tags:
+      - deploy
+  /apps/{appID}/envs/{envName}/standard-deploys/{deployID}/resource-snapshots:
+    get:
+      operationId: ListStandardResourceSnapshots
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 部署记录 ID
+        in: path
+        name: deployID
+        required: true
+        type: string
+      - description: 分页页码（从 1 开始）
+        in: query
+        name: page
+        required: true
+        type: integer
+      - description: 分页大小
+        in: query
+        name: pageSize
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListAppModelResourceSnapshotsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取 Standard 应用资源快照列表
+      tags:
+      - deploy
+  /apps/{appID}/envs/{envName}/standard-deploys/{deployID}/resource-snapshots/{snapshotID}:
+    get:
+      operationId: GetStandardResourceSnapshot
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 部署记录 ID
+        in: path
+        name: deployID
+        required: true
+        type: string
+      - description: 资源清单快照 ID
+        in: path
+        name: snapshotID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.GetAppModelResourceSnapshotOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取 Standard 类型应用部署记录下某个资源的快照详情（具体 k8s 资源的 Manifest 等）
+      tags:
+      - deploy
+  /apps/{appID}/envs/{envName}/standard-deploys/latest-status:
+    get:
+      operationId: GetLatestStandardDeployStatus
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 部署的泳道名称（空字符串表示不使用泳道）
+        in: query
+        name: trafficLaneName
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.GetLatestAppModelDeployStatusOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取 Standard 应用最新一次部署的状态
+      tags:
+      - deploy
+  /apps/{appID}/envs/{envName}/standard-deploys/precheck:
+    get:
+      operationId: PreCheckStandardDeploy
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.DeployPreCheckOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: Standard 部署前检查
+      tags:
+      - deploy
   /apps/{appID}/envs/{envName}/taf-build-deploys:
     post:
       consumes:

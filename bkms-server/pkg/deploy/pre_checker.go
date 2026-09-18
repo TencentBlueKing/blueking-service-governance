@@ -145,7 +145,7 @@ func (c *PreDeployChecker) checkIfBaselineLaneDeployed(ctx context.Context, para
 	switch params.AppType {
 	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:
 		return helmdeploy.CheckIfTrafficLaneDeployed(ctx, params.AppID, params.EnvName, baselineLane.LaneName)
-	case bkmsapp.AppTypeTRPC, bkmsapp.AppTypeTAF:
+	case bkmsapp.AppTypeTRPC, bkmsapp.AppTypeTAF, bkmsapp.AppTypeStandard:
 		return appmodeldeploy.CheckIfTrafficLaneDeployed(ctx, params.AppID, params.EnvName, baselineLane.LaneName)
 	default:
 		return errors.Errorf("pre deploy checker not support app type %s", params.AppType)

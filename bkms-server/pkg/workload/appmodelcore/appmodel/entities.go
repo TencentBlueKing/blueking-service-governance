@@ -47,7 +47,6 @@ const (
 	// WorkloadTypeTaf indicates a TAF workload type.
 	WorkloadTypeTaf = "taf"
 	// WorkloadTypeStandard indicates a standard workload type.
-	// standard 目前仅作为一个内部类型存在，提供通用渲染能力，可以用来测试。
 	WorkloadTypeStandard = "standard"
 )
 

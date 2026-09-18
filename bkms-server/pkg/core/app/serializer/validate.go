@@ -102,6 +102,16 @@ func validateCreateAppInputStruct(sl validator.StructLevel) {
 			return
 		}
 		validateAppModelSpecEnvVarsUnique(sl, input.AppModelSpec)
+	case bkmsapp.AppTypeStandard:
+		if input.AppModelSpec == nil {
+			sl.ReportError(nil, "AppModelSpec", "AppModelSpec", "required", "")
+			return
+		}
+		if input.AppModelSpec.Language == "" {
+			sl.ReportError(nil, "AppModelSpec.Language", "Language", "required", "")
+			return
+		}
+		validateAppModelSpecEnvVarsUnique(sl, input.AppModelSpec)
 	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:
 		if input.HelmSpec == nil {
 			sl.ReportError(nil, "HelmSpec", "HelmSpec", "required", "")

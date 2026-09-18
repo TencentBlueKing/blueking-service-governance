@@ -58,8 +58,8 @@ const (
 	languageGo     = "go"
 	languageCpp    = "cpp"
 	languageJava   = "java"
-	languageNode   = "node"
 	languagePython = "python"
+	languageNode   = "nodejs"
 )
 
 // getTrpcAdminCmdsResponse trpc admin cmds 接口响应结构

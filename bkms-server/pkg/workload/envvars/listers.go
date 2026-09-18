@@ -136,8 +136,8 @@ func getAppBuiltinVars(app bkmsapp.Application) envvartypes.EnvVariableList {
 		IsBuiltin:   true,
 	})
 
-	// NOTE: 目前只有 trpc 和 taf 应用需要注入容器名称变量
-	if app.Type == bkmsapp.AppTypeTRPC || app.Type == bkmsapp.AppTypeTAF {
+	// NOTE: appmodel 类型应用（trpc/taf/standard）需要注入容器名称变量
+	if bkmsapp.IsAppModelType(app.Type) {
 		envVars = append(envVars, envvartypes.EnvVariableObj{
 			Key:         EnvVarNameContainerName,
 			Value:       defaults.WorkloadMainContainerName,

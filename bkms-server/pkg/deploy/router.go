@@ -70,6 +70,20 @@ type HelmDeployHandler interface {
 	GetTafResourceSnapshot(c *gin.Context)
 	// GetLatestTafDeployStatus 获取 TAF 应用最新一次部署的状态
 	GetLatestTafDeployStatus(c *gin.Context)
+	// ListStandardDeployRecords 获取 Standard 应用部署记录列表
+	ListStandardDeployRecords(c *gin.Context)
+	// PreCheckStandardDeploy Standard 部署前检查
+	PreCheckStandardDeploy(c *gin.Context)
+	// CreateStandardDeploy 部署 Standard 应用
+	CreateStandardDeploy(c *gin.Context)
+	// DeleteStandardDeploy 删除 Standard 应用部署
+	DeleteStandardDeploy(c *gin.Context)
+	// ListStandardResourceSnapshots 获取 Standard 应用资源快照列表
+	ListStandardResourceSnapshots(c *gin.Context)
+	// GetStandardResourceSnapshot 获取 Standard 类型应用部署记录下某个资源的快照详情
+	GetStandardResourceSnapshot(c *gin.Context)
+	// GetLatestStandardDeployStatus 获取 Standard 应用最新一次部署的状态
+	GetLatestStandardDeployStatus(c *gin.Context)
 }
 
 // Register 注册 Helm 应用部署 Gin v2 路由
@@ -127,4 +141,25 @@ func Register(rg *gin.RouterGroup, h HelmDeployHandler) {
 	rg.GET("/apps/:appID/envs/:envName/taf-deploys/:deployID/resource-snapshots/:snapshotID", h.GetTafResourceSnapshot)
 	// 获取 TAF 应用最新一次部署的状态
 	rg.GET("/apps/:appID/envs/:envName/taf-deploys/latest-status", h.GetLatestTafDeployStatus)
+
+	// 获取 Standard 应用部署记录列表
+	// [bkms-cli 使用] 避免破坏性修改
+	rg.GET("/apps/:appID/envs/:envName/standard-deploys", h.ListStandardDeployRecords)
+	// Standard 部署前检查
+	// [bkms-cli 使用]
+	rg.GET("/apps/:appID/envs/:envName/standard-deploys/precheck", h.PreCheckStandardDeploy)
+	// 创建 Standard 应用部署
+	// [bkms-cli 使用] 避免破坏性修改
+	rg.POST("/apps/:appID/envs/:envName/standard-deploys", h.CreateStandardDeploy)
+	// 删除 Standard 应用部署（下架当前环境最新版本）
+	rg.DELETE("/apps/:appID/envs/:envName/standard-deploys", h.DeleteStandardDeploy)
+	// 列出 Standard 应用某次部署下发的资源清单快照（元数据）
+	rg.GET("/apps/:appID/envs/:envName/standard-deploys/:deployID/resource-snapshots", h.ListStandardResourceSnapshots)
+	// 获取 Standard 类型应用部署记录下某个资源的快照详情（具体 k8s 资源的 Manifest 等）
+	rg.GET(
+		"/apps/:appID/envs/:envName/standard-deploys/:deployID/resource-snapshots/:snapshotID",
+		h.GetStandardResourceSnapshot,
+	)
+	// 获取 Standard 应用最新一次部署的状态
+	rg.GET("/apps/:appID/envs/:envName/standard-deploys/latest-status", h.GetLatestStandardDeployStatus)
 }

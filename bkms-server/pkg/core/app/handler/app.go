@@ -152,6 +152,15 @@ func (h *Handler) CreateApp(c *gin.Context) {
 			}
 		}
 		app.HelmSpec = helmSpec
+	} else if input.Type == bkmsapp.AppTypeStandard {
+		// Language 由 struct-level validator 保证非空；Framework 为空时默认 blank。
+		if input.AppModelSpec != nil {
+			app.Language = bkmsapp.Language(input.AppModelSpec.Language)
+			app.Framework = bkmsapp.Framework(input.AppModelSpec.Framework)
+			if app.Framework == "" {
+				app.Framework = bkmsapp.FrameworkBlank
+			}
+		}
 	}
 
 	// 创建构建配置
@@ -755,6 +764,10 @@ func (h *Handler) createAppByType(
 	case bkmsapp.AppTypeTAF:
 		if err := h.createTafApp(ctx, app, input.AppModelSpec); err != nil {
 			return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create taf app resources")
+		}
+	case bkmsapp.AppTypeStandard:
+		if err := h.createStandardApp(ctx, app, input.AppModelSpec); err != nil {
+			return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create standard app resources")
 		}
 	// Helm，Agones 底层实现都是基于 Helm Chart
 	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:

@@ -66,7 +66,7 @@ type CreateAppInput struct {
 	// 长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
 	ID string `json:"id" binding:"required,app_id"`
 	// 应用类型
-	Type string `json:"type" binding:"required,oneof=trpc taf helm agones"`
+	Type string `json:"type" binding:"required,oneof=trpc taf helm agones standard"`
 	// 构建配置
 	BuildConfig *BuildConfigInput `json:"buildConfig" binding:"required"`
 	// Helm 应用描述规范（type 为 helm/agones 时需要）
@@ -174,7 +174,7 @@ func (o *AppDetailOutputObj) FromModel(
 // AppModelSpec (shared between trpc/taf)
 // -----------------------------------------------------------------------------
 
-// AppModelSpecInput is the app model spec input (for trpc/taf apps).
+// AppModelSpecInput is the app model spec input (for trpc/taf/standard apps).
 type AppModelSpecInput struct {
 	// 容器启动命令
 	Command []string `json:"command"`
@@ -182,6 +182,10 @@ type AppModelSpecInput struct {
 	Args []string `json:"args"`
 	// 容器环境变量，仅创建应用时生效；更新 tRPC/TAF Spec 时为兼容旧客户端接收但忽略
 	EnvVars []VariableInput `json:"envVars"`
+	// 编程语言，只影响构建
+	Language string `json:"language" binding:"omitempty,oneof=go cpp java python nodejs"`
+	// 编程框架，只影响差异能力；blank 表示无预设框架
+	Framework string `json:"framework" binding:"omitempty,oneof=blank taf trpc-go trpc-cpp trpc-java trpc-python trpc-nodejs"`
 	// tRPC 框架配置
 	TrpcSpec *TrpcSpecInput `json:"trpcSpec"`
 	// TAF 框架配置

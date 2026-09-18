@@ -16,8 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package standard is an internal app type which does not have any special or extra effects; its main
-// purpose is to help testing the workload plugin system.
+// Package standard is the workload plugin for standard applications. A standard application is
+// language-agnostic and does not need any framework-specific extra resources or configuration
+// (unlike trpc which injects polaris patching and a config rendering init container).
 package standard
 
 import (

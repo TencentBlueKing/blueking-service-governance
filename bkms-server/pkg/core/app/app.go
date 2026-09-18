@@ -35,6 +35,46 @@ const (
 	AppTypeTRPC = "trpc"
 	// AppTypeTAF taf 应用
 	AppTypeTAF = "taf"
+	// AppTypeStandard standard 应用：语言无关的通用应用
+	AppTypeStandard = "standard"
+)
+
+// Framework 框架预设值
+type Framework string
+
+// 框架预设值
+const (
+	// FrameworkBlank 无预设框架
+	FrameworkBlank Framework = "blank"
+	// FrameworkTaf taf 框架
+	FrameworkTaf Framework = "taf"
+	// FrameworkTrpcGo trpc-go 框架
+	FrameworkTrpcGo Framework = "trpc-go"
+	// FrameworkTrpcCpp trpc-cpp 框架
+	FrameworkTrpcCpp Framework = "trpc-cpp"
+	// FrameworkTrpcJava trpc-java 框架
+	FrameworkTrpcJava Framework = "trpc-java"
+	// FrameworkTrpcPython trpc-python 框架
+	FrameworkTrpcPython Framework = "trpc-python"
+	// FrameworkTrpcNodejs trpc-nodejs 框架
+	FrameworkTrpcNodejs Framework = "trpc-nodejs"
+)
+
+// Language 编程语言
+type Language string
+
+// 编程语言
+const (
+	// LanguageGo go 语言
+	LanguageGo Language = "go"
+	// LanguageCpp cpp 语言
+	LanguageCpp Language = "cpp"
+	// LanguageJava java 语言
+	LanguageJava Language = "java"
+	// LanguagePython python 语言
+	LanguagePython Language = "python"
+	// LanguageNodejs nodejs 语言
+	LanguageNodejs Language = "nodejs"
 )
 
 // Application is the main type for the project. An application is a deployable unit which can be defined in various
@@ -52,6 +92,12 @@ type Application struct {
 	DisplayName string `json:"displayName" bson:"displayName"`
 	// Type is the type of the application
 	Type string `json:"type" bson:"type"`
+
+	// Language is the programming language of the application, only used for build.
+	Language Language `json:"language" bson:"language,omitempty"`
+	// Framework is the programming framework of the application, only used for differential capabilities.
+	// blank 表示无预设框架。
+	Framework Framework `json:"framework" bson:"framework,omitempty"`
 
 	Creator   string    `json:"creator" bson:"creator"`
 	CreatedAt time.Time `json:"createdAt" bson:"createdAt"`
@@ -161,7 +207,7 @@ type BCSRepoConfig struct {
 // IsAppModelType checks if the given app type is an appmodel type
 // Appmodel type use appmodel to manage and render the application
 func IsAppModelType(appType string) bool {
-	return appType == AppTypeTRPC || appType == AppTypeTAF
+	return appType == AppTypeTRPC || appType == AppTypeTAF || appType == AppTypeStandard
 }
 
 // IsHelmBasedType checks if the given app type is a helm-based type

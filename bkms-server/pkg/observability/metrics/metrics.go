@@ -30,6 +30,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/samber/lo"
+
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 )
 
 const (
@@ -507,7 +509,7 @@ func normalizeDeployKind(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case DeployKindHelm:
 		return DeployKindHelm
-	case DeployKindAppModel, "trpc", "taf":
+	case DeployKindAppModel, bkmsapp.AppTypeTRPC, bkmsapp.AppTypeTAF, bkmsapp.AppTypeStandard:
 		return DeployKindAppModel
 	default:
 		return DeployKindUnknown
