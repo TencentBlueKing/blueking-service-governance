@@ -169,7 +169,7 @@ export const InstanceService = {
    * SSE 同一条流上推送两类事件，信封不同：
    * 1) Pod 事件 ADDED/MODIFIED/DELETED/ENDED，object 为实例投影；
    * DELETED 只保证 id，ENDED 时 object 为 null；Pod 事件不承载附属数据，polarisInfos 恒为空数组。
-   * 2) 附属数据事件 PLUGIN，带 plugin 标识来源（当前仅 polaris），object 为 {id, data}；
+   * 2) 附属数据事件 PLUGIN，带 plugin 标识来源（如 polaris、devmodePublish），object 为 {id, data}；
    * 约 15s 一轮，仅该实例的附属数据有变化时推送。它不是实例的增删改，前端按 id 覆盖对应行的插件数据即可。
    * 3）附属数据首包取自 List 响应内嵌的 polarisInfos，增量只看 PLUGIN 事件。
    * 4）插件拉取失败时跳过本轮、不推事件也不拆流，页面保留上次已知状态。

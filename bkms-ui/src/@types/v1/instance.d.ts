@@ -455,6 +455,10 @@ export interface AppInstanceOutputObj {
    */
   isHealthy?: boolean;
   /**
+   * 最近一次开发模式发布状态
+   */
+  latestPublish?: PublishStatusOutputObj;
+  /**
    * 状态详情，一般为 pod.status.reason
    */
   message?: string;
@@ -478,6 +482,33 @@ export interface AppInstanceOutputObj {
    * 状态，由 pod.status.phase 等解析获得
    */
   status?: string;
+}
+
+export interface PublishStatusOutputObj {
+  /**
+   * 发布的二进制名称
+   */
+  binaryName?: string;
+  /**
+   * 文件 MD5
+   */
+  md5?: string;
+  /**
+   * 失败原因等附加信息
+   */
+  message?: string;
+  /**
+   * 操作人
+   */
+  operator?: string;
+  /**
+   * 发布状态：success / failed
+   */
+  status?: string;
+  /**
+   * 更新时间
+   */
+  updatedAt?: string;
 }
 
 export interface PolarisInstanceInfoOutputObj {

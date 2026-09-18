@@ -48,10 +48,6 @@ export interface ListDashboardsResp {
 
 export interface AppDashboardCreateInput {
   /**
-   * Title 仪表盘标题
-   */
-  title: string;
-  /**
    * UID 仪表盘 uid
    */
   uid: string;
@@ -62,11 +58,7 @@ export interface EmptyOutput {
 
 export interface AppDashboardUpdateInput {
   /**
-   * Title 仪表盘标题（可选）
-   */
-  title?: string;
-  /**
-   * UID 仪表盘 uid（可选，变更绑定的仪表盘）
+   * UID 新的仪表盘 uid（仅支持变更绑定的仪表盘）
    */
   uid?: string;
 }

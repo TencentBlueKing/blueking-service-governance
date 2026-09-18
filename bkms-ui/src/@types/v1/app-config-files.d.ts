@@ -3,17 +3,6 @@
 // 来源：apps/bkms-server/docs/apis/swagger.json
 // 模块：app-config-files
 
-export type AppConfigFileDefUpdateRequest = AppConfigFileDefUpdateInput & {
-  /**
-   * 应用 ID
-   */
-  appID: string;
-  /**
-   * 应用配置文件 Def ID
-   */
-  id: string;
-};
-
 export interface ListAppConfigFileVersionsRequest {
   /**
    * 应用 ID
@@ -181,25 +170,6 @@ export type PreviewOverlayMergeRequest = PreviewOverlayMergeInput & {
   id: string;
 };
 
-export interface AppConfigFileDefUpdateInput {
-  /**
-   * 是否统一配置；不传表示不修改。true = 统一配置；false = 按环境独立配置。
-   */
-  isUnifiedConfig?: boolean;
-  /**
-   * 容器内挂载目录；不传表示不修改。
-   */
-  mountDir?: string;
-  /**
-   * 应用配置文件名称；不传表示不修改，传时不能为空。
-   */
-  name?: string;
-}
-
-export interface AppConfigFileDefUpdateOutput {
-  item?: AppConfigFileDefOutputObj;
-}
-
 export interface ListAppConfigFileVersionsOutput {
   data?: PaginatedAppConfigFileVersionOutputObjs;
 }
@@ -281,7 +251,8 @@ export interface CreateAppConfigFileInput {
    */
   fileFormat: "yaml" | "taf";
   /**
-   * 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间
+   * 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间。
+   * todo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。
    */
   name: string;
   /**
@@ -315,7 +286,7 @@ export interface UpdateAppConfigFileInput {
    */
   description?: string;
   /**
-   * 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-20 之间
+   * 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间
    */
   name: string;
 }
@@ -614,59 +585,4 @@ export interface PaginatedAppConfigFileVersionOutputObjs {
    * 查询结果
    */
   results?: AppConfigFileVersionOutputObj[];
-}
-
-export interface AppConfigFileDefOutputObj {
-  /**
-   * 基础应用配置文件 ID
-   */
-  baseAppConfigFileID?: string;
-  /**
-   * 配置种类
-   */
-  configKind?: string;
-  /**
-   * 文件内容来源
-   */
-  contentSourceType?: string;
-  /**
-   * 当前生效版本号
-   */
-  currentVersion?: number;
-  /**
-   * 环境名称
-   */
-  envName?: string;
-  /**
-   * 文件格式
-   */
-  fileFormat?: string;
-  /**
-   * Def ID
-   */
-  id?: string;
-  /**
-   * 是否统一配置
-   */
-  isUnifiedConfig?: boolean;
-  /**
-   * 容器内挂载目录
-   */
-  mountDir?: string;
-  /**
-   * 文件名称
-   */
-  name?: string;
-  /**
-   * 文件类型
-   */
-  type?: string;
-  /**
-   * 最后修改时间
-   */
-  updatedAt?: string;
-  /**
-   * 最后修改人
-   */
-  updater?: string;
 }

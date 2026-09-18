@@ -1,4 +1,5 @@
 export * from './app';
+export * from './app-config-file-defs';
 export * from './app-config-files';
 export * from './app-spec';
 export * from './bkmonitor-dashboard';
