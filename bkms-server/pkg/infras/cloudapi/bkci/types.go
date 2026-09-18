@@ -37,6 +37,22 @@ const (
 	PageSizeForAllItems = 1000
 )
 
+// 蓝盾代码库类型
+const (
+	// RepoTypeCodeGit git 代码库
+	RepoTypeCodeGit = "codeGit"
+	// RepoTypeCodeSvn 通用 SVN 代码库
+	RepoTypeCodeSvn = "codeSvn"
+	// RepoTypeCodeGitlab 通用 GitLab 代码库
+	RepoTypeCodeGitlab = "codeGitLab"
+	// RepoTypeGithub GitHub 代码库
+	RepoTypeGithub = "github"
+	// RepoTypeCodeTGit 工蜂 TGit 代码库
+	RepoTypeCodeTGit = "codeTGit"
+	// RepoTypeCodeP4 Perforce 代码库
+	RepoTypeCodeP4 = "codeP4"
+)
+
 // Project 蓝盾项目
 type Project struct {
 	ID            string

@@ -42,9 +42,12 @@ type Client interface {
 
 	// ------------------------------------------ 蓝盾代码库 & OAuth API ------------------------------------------
 
-	// ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表
+	// ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表。
+	// 注意：社区版 devops 无 OAuth 能力（无 v2_user_git_get_project 接口），此方法仅内部版可用；
+	// 社区版下代码库来源改为用户手动填写 git/svn 仓库 URL。
 	ListOAuthGitProjects(ctx context.Context, projectCode, keyword string) ([]GitProject, error)
-	// GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址
+	// GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址。
+	// 注意：社区版 devops 无 OAuth 能力，此方法仅内部版可用。
 	GetOAuthUrl(ctx context.Context, projectCode string) (string, error)
 
 	// ------------------------------------------ 蓝盾凭证管理 API ------------------------------------------
@@ -90,15 +93,22 @@ type Client interface {
 	ListRepository(
 		ctx context.Context, projectCode, repoType string, page, pageSize int64,
 	) (int64, []Repository, error)
-	// GetRepository 获取蓝盾代码库详情
+	// GetRepository 获取蓝盾代码库详情。
+	// 注意：社区版 devops 无 v4_user_repository_get 接口，此方法仅内部版可用。
 	GetRepository(ctx context.Context, projectCode, repoHashID string) (*Repository, error)
-	// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID（目前只支持 codeGit + OAuth）
-	CreateRepository(ctx context.Context, projectCode, repoURL, repoAlias string) (string, error)
-	// ListRepositoryBranches 获取代码库分支列表
+	// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID。
+	// repoType 为代码库类型，内部版支持 "codeGit"（OAuth 授权）；
+	// 社区版扩展支持 "codeSvn"（svn 直连，@type 值待实测校准）。
+	CreateRepository(ctx context.Context, projectCode, repoURL, repoAlias, repoType string) (string, error)
+	// ListRepositoryBranches 获取代码库分支列表。
+	// 注意：社区版 devops 无 v4_user_repository_branches 接口，此方法仅内部版可用；
+	// 社区版下构建时分支由用户手动填写。
 	ListRepositoryBranches(
 		ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
 	) ([]RepositoryRef, error)
-	// ListRepositoryTags 获取代码库标签列表
+	// ListRepositoryTags 获取代码库标签列表。
+	// 注意：社区版 devops 无 v4_user_repository_tags 接口，此方法仅内部版可用；
+	// 社区版下构建时标签由用户手动填写。
 	ListRepositoryTags(
 		ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
 	) ([]RepositoryRef, error)

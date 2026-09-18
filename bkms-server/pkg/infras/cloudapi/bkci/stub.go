@@ -428,14 +428,16 @@ func (s *StubApiClient) GetRepository(ctx context.Context, projectCode, repoHash
 }
 
 // CreateRepository 模拟创建代码库，返回模拟的代码库 Hash ID
-func (s *StubApiClient) CreateRepository(ctx context.Context, projectCode, repoUrl, repoAlias string) (string, error) {
-	log.Infof(ctx, "Stub: CreateRepository request: %s, %s, %s", projectCode, repoUrl, repoAlias)
+func (s *StubApiClient) CreateRepository(
+	ctx context.Context, projectCode, repoUrl, repoAlias, repoType string,
+) (string, error) {
+	log.Infof(ctx, "Stub: CreateRepository request: %s, %s, %s, %s", projectCode, repoUrl, repoAlias, repoType)
 	repoID := stubRepositoryID(projectCode, repoUrl, repoAlias)
 	stubCreatedRepositories.Store(repoID, Repository{
 		ID:        repoID,
 		Alias:     repoAlias,
 		Url:       repoUrl,
-		Type:      "CODE_GIT",
+		Type:      repoType,
 		UpdatedAt: time.Now(),
 	})
 	return repoID, nil

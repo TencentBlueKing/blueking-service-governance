@@ -232,6 +232,10 @@ taskPoller:
     timeout: 1200
     # 轮询间隔（单位：秒）
     interval: 15
+# 社区版平台开关
+community:
+  # 是否对接蓝盾（devops）社区版；true 走社区版，false 走内部版
+  devops: false
 # ------------------------------ 开发环境专用 ------------------------------
 # 开发环境专用配置
 development:

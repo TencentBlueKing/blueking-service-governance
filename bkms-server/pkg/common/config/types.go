@@ -365,6 +365,12 @@ type TaskPollerConfig struct {
 	DeployStatus PollConfig
 }
 
+// CommunityConfig 社区版平台开关：true 表示该平台走社区版，false 走内部版
+type CommunityConfig struct {
+	// Devops 是否对接蓝盾（devops）社区版
+	Devops bool
+}
+
 // --------------------------- 开发环境专用 ---------------------------
 
 // DevConfig 包含开发相关的配置项
@@ -457,6 +463,8 @@ type Config struct {
 	ImageBuild ImageBuildConfig
 	// 任务轮询器
 	TaskPoller TaskPollerConfig
+	// 社区版平台开关
+	Community CommunityConfig
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用
