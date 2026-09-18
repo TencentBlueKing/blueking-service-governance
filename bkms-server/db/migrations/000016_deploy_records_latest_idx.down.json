@@ -1,0 +1,22 @@
+[
+  {
+    "dropIndexes": "app_model_deploy_records",
+    "index": [
+      "appID_1_envName_1_trafficLaneName_1_createdAt_-1",
+      "appID_1_trafficLaneName_1_createdAt_-1"
+    ]
+  },
+  {
+    "dropIndexes": "helm_deploy_records",
+    "index": [
+      "appID_1_envName_1_trafficLaneName_1_createdAt_-1",
+      "appID_1_trafficLaneName_1_createdAt_-1"
+    ]
+  },
+  {
+    "dropIndexes": "build_auto_deploy_records",
+    "index": [
+      "appID_1_trafficLaneName_1_createdAt_-1"
+    ]
+  }
+]

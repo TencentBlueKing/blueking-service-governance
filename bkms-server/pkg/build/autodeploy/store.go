@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -38,7 +39,14 @@ type RecordStore interface {
 	Create(ctx context.Context, record *Record) error
 	Update(ctx context.Context, record *Record) error
 	GetLatest(ctx context.Context, appID, envName, trafficLaneName string) (*Record, error)
+	// ListLatestByApp 返回该应用在指定泳道下各环境最新的一条记录。
+	// 返回 map 的 key 为 envName；某环境无记录时不出现在 map 中。
 	ListLatestByApp(ctx context.Context, appID, trafficLaneName string) (map[string]*Record, error)
+	// ListLatestByApps 返回一批应用在指定泳道下各环境最新的一条记录。
+	// 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
+	ListLatestByApps(
+		ctx context.Context, appIDs []string, trafficLaneName string,
+	) (map[string]map[string]*Record, error)
 	GetByBuildID(ctx context.Context, appID, buildID string) (*Record, error)
 	GetByDeployID(ctx context.Context, appID, deployID string) (*Record, error)
 }
@@ -152,6 +160,53 @@ func (s *RecordStoreMongo) ListLatestByApp(
 	}
 	if err := cursor.Err(); err != nil {
 		return nil, errors.Wrapf(err, "iterate latest build auto deploy records for app %s", appID)
+	}
+	return out, nil
+}
+
+// ListLatestByApps 返回一批 app 在指定泳道下各环境最新记录（按 createdAt 倒序取每组第一条）。
+// 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
+func (s *RecordStoreMongo) ListLatestByApps(
+	ctx context.Context,
+	appIDs []string, trafficLaneName string,
+) (map[string]map[string]*Record, error) {
+	out := make(map[string]map[string]*Record, len(appIDs))
+	if len(appIDs) == 0 {
+		return out, nil
+	}
+
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{
+			"appID":           bson.M{"$in": lo.Uniq(appIDs)},
+			"trafficLaneName": trafficLaneName,
+		}},
+		bson.M{"$sort": bson.M{"createdAt": -1}},
+		bson.M{"$group": bson.M{
+			"_id": bson.M{"appID": "$appID", "envName": "$envName"},
+			"doc": bson.M{"$first": "$$ROOT"},
+		}},
+		bson.M{"$replaceRoot": bson.M{"newRoot": "$doc"}},
+	}
+
+	cursor, err := s.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, errors.Wrap(err, "aggregate latest build auto deploy records for apps")
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var record Record
+		if err := cursor.Decode(&record); err != nil {
+			return nil, errors.Wrap(err, "decode latest build auto deploy record for apps")
+		}
+		rec := record
+		if _, ok := out[rec.AppID]; !ok {
+			out[rec.AppID] = make(map[string]*Record)
+		}
+		out[rec.AppID][rec.EnvName] = &rec
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterate latest build auto deploy records for apps")
 	}
 	return out, nil
 }

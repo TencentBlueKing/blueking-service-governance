@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -73,6 +74,11 @@ type RecordStore interface {
 		appID, envName, trafficLaneName string,
 		statuses []helmrelease.Status,
 	) (*Record, error)
+
+	// ListLatestByApps 按应用、环境返回一批应用在指定泳道下各环境最新的一条部署记录
+	ListLatestByApps(
+		ctx context.Context, appIDs []string, trafficLaneName string,
+	) (map[string]map[string]*Record, error)
 
 	// ListImageTagDeployedEnvs 获取指定应用各镜像标签的已部署环境列表（去重，仅统计部署成功的记录，默认查询所有环境）
 	ListImageTagDeployedEnvs(ctx context.Context, appID string) ([]deploytypes.ImageTagEnvPair, error)
@@ -268,6 +274,54 @@ func (s *RecordStoreMongo) GetLatestByStatuses(
 		"trafficLaneName": trafficLaneName,
 		"status":          bson.M{"$in": statuses},
 	})
+}
+
+// ListLatestByApps 返回一批 app 在指定泳道下各环境最新部署记录（按 createdAt 倒序取每组第一条）。
+// 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
+// 用于批量聚合部署状态，往返次数与应用数、环境数无关。
+func (s *RecordStoreMongo) ListLatestByApps(
+	ctx context.Context,
+	appIDs []string, trafficLaneName string,
+) (map[string]map[string]*Record, error) {
+	out := make(map[string]map[string]*Record, len(appIDs))
+	if len(appIDs) == 0 {
+		return out, nil
+	}
+
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{
+			"appID":           bson.M{"$in": lo.Uniq(appIDs)},
+			"trafficLaneName": trafficLaneName,
+		}},
+		bson.M{"$sort": bson.M{"createdAt": -1}},
+		bson.M{"$group": bson.M{
+			"_id": bson.M{"appID": "$appID", "envName": "$envName"},
+			"doc": bson.M{"$first": "$$ROOT"},
+		}},
+		bson.M{"$replaceRoot": bson.M{"newRoot": "$doc"}},
+	}
+
+	cursor, err := s.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, errors.Wrap(err, "aggregate latest helm deploy records for apps")
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var record Record
+		if err := cursor.Decode(&record); err != nil {
+			return nil, errors.Wrap(err, "decode latest helm deploy record for apps")
+		}
+		rec := record
+		if _, ok := out[rec.AppID]; !ok {
+			out[rec.AppID] = make(map[string]*Record)
+		}
+		out[rec.AppID][rec.EnvName] = &rec
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterate latest helm deploy records for apps")
+	}
+	return out, nil
 }
 
 func (s *RecordStoreMongo) getLatestByFilter(ctx context.Context, filter bson.M) (*Record, error) {

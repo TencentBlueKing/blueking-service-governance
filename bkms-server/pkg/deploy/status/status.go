@@ -120,39 +120,28 @@ func (s *DeployStatusService) ListForAppsInWorkspace(
 
 	appMap := lo.SliceToMap(apps, func(app *app.Application) (string, *app.Application) { return app.ID, app })
 	appIDs := lo.Keys(appMap)
-	stdEnvs := make([]envmodel.Environment, 0)
-	featEnvs := make([]envmodel.Environment, 0)
 
 	envs, err := s.EnvStore.ListBatchAppEnvs(ctx, workspaceID, appIDs)
 	if err != nil {
 		return nil, errors.Wrap(err, "list batch app environments")
 	}
 
-	// 将环境区分为两类：标准和特性
-	for i := range envs {
-		env := envs[i]
-		if env.IsFeatureEnv() {
-			featEnvs = append(featEnvs, env)
-		} else {
-			stdEnvs = append(stdEnvs, env)
-		}
+	scopes, err := s.resolveEnvStatusScopes(ctx, envs, apps, appMap)
+	if err != nil {
+		return nil, err
 	}
 
-	for i := range stdEnvs {
-		deployStatuses, err := s.listForEnvironment(ctx, &stdEnvs[i], apps)
-		if err != nil {
-			return nil, errors.Wrapf(err, "list deploy statuses for standard environment %s", stdEnvs[i].Name)
-		}
-		for _, deployStatus := range deployStatuses {
-			out[deployStatus.AppID] = append(out[deployStatus.AppID], deployStatus)
-		}
+	// 进入环境循环前一次性聚合部署记录，避免按「环境 × 应用 × 泳道」逐条查库
+	cache, err := s.prefetchLatestStatuses(ctx, scopes)
+	if err != nil {
+		return nil, err
 	}
 
-	for i := range featEnvs {
-		ownerApp := appMap[featEnvs[i].OwnerAppID]
-		deployStatuses, err := s.listForEnvironment(ctx, &featEnvs[i], []*app.Application{ownerApp})
-		if err != nil {
-			return nil, errors.Wrapf(err, "list deploy statuses for feature environment %s", featEnvs[i].Name)
+	for i := range scopes {
+		scope := &scopes[i]
+		deployStatuses, buildErr := s.buildEnvDeployStatuses(scope, cache)
+		if buildErr != nil {
+			return nil, errors.Wrapf(buildErr, "list deploy statuses for environment %s", scope.env.Name)
 		}
 		for _, deployStatus := range deployStatuses {
 			out[deployStatus.AppID] = append(out[deployStatus.AppID], deployStatus)
@@ -160,6 +149,51 @@ func (s *DeployStatusService) ListForAppsInWorkspace(
 	}
 
 	return out, nil
+}
+
+// resolveEnvStatusScopes 按「先标准环境、后特性环境」解析每个环境的查询范围。
+// 标准环境面向传入的全部应用，特性环境只面向其归属应用；没有待查应用的环境不产出 scope。
+func (s *DeployStatusService) resolveEnvStatusScopes(
+	ctx context.Context,
+	envs []envmodel.Environment,
+	apps []*app.Application,
+	appMap map[string]*app.Application,
+) ([]envStatusScope, error) {
+	// 将环境区分为两类：标准和特性
+	stdEnvs := make([]*envmodel.Environment, 0, len(envs))
+	featEnvs := make([]*envmodel.Environment, 0, len(envs))
+	for i := range envs {
+		if envs[i].IsFeatureEnv() {
+			featEnvs = append(featEnvs, &envs[i])
+		} else {
+			stdEnvs = append(stdEnvs, &envs[i])
+		}
+	}
+
+	scopes := make([]envStatusScope, 0, len(envs))
+	for _, env := range stdEnvs {
+		scope, err := s.resolveEnvStatusScope(ctx, env, apps)
+		if err != nil {
+			return nil, errors.Wrapf(err, "resolve deploy status scope for standard environment %s", env.Name)
+		}
+		if scope != nil {
+			scopes = append(scopes, *scope)
+		}
+	}
+	for _, env := range featEnvs {
+		ownerApp, ok := appMap[env.OwnerAppID]
+		if !ok {
+			continue
+		}
+		scope, err := s.resolveEnvStatusScope(ctx, env, []*app.Application{ownerApp})
+		if err != nil {
+			return nil, errors.Wrapf(err, "resolve deploy status scope for feature environment %s", env.Name)
+		}
+		if scope != nil {
+			scopes = append(scopes, *scope)
+		}
+	}
+	return scopes, nil
 }
 
 // ListFeatureEnvsForApp 获取单个应用在一批特性环境下的汇总部署状态。
@@ -196,14 +230,26 @@ func (s *DeployStatusService) ListFeatureEnvsForApp(
 	return out, nil
 }
 
-// listForEnvironment 查询提供的 apps 在提供环境上的部署状态
-func (s *DeployStatusService) listForEnvironment(
+// envStatusScope 是单个环境上「要去查部署状态」的范围，不是已经发生的部署。
+//
+// 格子是 apps × laneNames：应用来自「已挂到该环境且在本次查询列表中」，
+// 泳道来自 TrafficManager（并始终包含基线 ""）。某条 (app, env, lane) 没有记录是正常的，
+// 真正有没有部署要等 prefetch 查库之后才知道。
+type envStatusScope struct {
+	env       *envmodel.Environment
+	apps      []*app.Application // 已挂到该环境、且属于本次查询列表的应用
+	laneNames []string           // 该环境下可能存在的泳道（含基线 ""），不代表都有部署
+}
+
+// resolveEnvStatusScope 解析单个环境的查询范围。
+// 环境上没有任何待查应用时返回 nil，表示无需为该环境查部署记录（也不用问泳道）。
+func (s *DeployStatusService) resolveEnvStatusScope(
 	ctx context.Context,
 	environment *envmodel.Environment,
 	apps []*app.Application,
-) ([]AppDeployStatus, error) {
-	// 仅环境的 AppIDs 中的应用 ID 才需要进一步查询部署状态，首先通过其过滤给定的 apps 列表。
-	// 当查询无任何已部署应用的环境/特性环境时，提前使用这一层过滤可以避免之后再继查询 traffic lane，优化性能。
+) (*envStatusScope, error) {
+	// 仅环境的 AppIDs 中的应用才需要查部署状态。
+	// 环境上没有任何待查应用时提前返回，避免无意义的泳道查询。
 	envAppIDSet := set.From(environment.AppIDs)
 	matchedApps := lo.Filter(apps, func(application *app.Application, _ int) bool {
 		return envAppIDSet.Contains(application.ID)
@@ -212,16 +258,44 @@ func (s *DeployStatusService) listForEnvironment(
 		return nil, nil
 	}
 
-	// 查询泳道
 	trafficLaneNames, err := s.listEnvTrafficLaneNames(ctx, environment)
 	if err != nil {
 		return nil, err
 	}
 
-	statuses := make([]AppDeployStatus, 0, len(matchedApps))
-	for _, application := range matchedApps {
-		deployStatuses, err := s.buildDeployStatuses(
-			ctx,
+	return &envStatusScope{env: environment, apps: matchedApps, laneNames: trafficLaneNames}, nil
+}
+
+// listForEnvironment 查询提供的 apps 在提供环境上的部署状态
+func (s *DeployStatusService) listForEnvironment(
+	ctx context.Context,
+	environment *envmodel.Environment,
+	apps []*app.Application,
+) ([]AppDeployStatus, error) {
+	scope, err := s.resolveEnvStatusScope(ctx, environment, apps)
+	if err != nil {
+		return nil, err
+	}
+	if scope == nil {
+		return nil, nil
+	}
+
+	cache, err := s.prefetchLatestStatuses(ctx, []envStatusScope{*scope})
+	if err != nil {
+		return nil, err
+	}
+	return s.buildEnvDeployStatuses(scope, cache)
+}
+
+// buildEnvDeployStatuses 依据预取的部署状态缓存，构建某个环境上各应用、各泳道的部署状态
+func (s *DeployStatusService) buildEnvDeployStatuses(
+	scope *envStatusScope,
+	cache latestStatusCache,
+) ([]AppDeployStatus, error) {
+	environment := scope.env
+	statuses := make([]AppDeployStatus, 0, len(scope.apps))
+	for _, application := range scope.apps {
+		deployStatuses, err := buildDeployStatuses(
 			environment.ID.Hex(),
 			environment.Name,
 			environment.DisplayName,
@@ -230,7 +304,8 @@ func (s *DeployStatusService) listForEnvironment(
 			application.ID,
 			application.Name,
 			application.Type,
-			trafficLaneNames,
+			scope.laneNames,
+			cache,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "build deploy statuses")
@@ -262,30 +337,21 @@ func (s *DeployStatusService) listEnvTrafficLaneNames(
 }
 
 // buildDeployStatuses 根据提供的环境、应用、应用类型和泳道列表，构建部署状态
+// 部署状态取自 cache，由调用方在进入循环前批量预取
 // 如果没有找到部署状态，返回默认的未知状态
-func (s *DeployStatusService) buildDeployStatuses(
-	ctx context.Context,
+func buildDeployStatuses(
 	envID, envName, envDisplayName, envType, envKind, appID, appName, appType string,
 	laneNames []string,
+	cache latestStatusCache,
 ) ([]AppDeployStatus, error) {
 	statuses := make([]AppDeployStatus, 0, len(laneNames))
 
 	// 遍历每个泳道，获取部署状态
 	for _, laneName := range laneNames {
-		deployStatus, err := s.GetLatestDeployStatus(ctx, appID, appType, envName, laneName)
-		if err != nil {
-			// 如果部署记录不存在，可以忽略错误，继续下一个泳道
-			if errors.Is(err, ErrDeployRecordNotFound) {
-				continue
-			}
-			return nil, errors.Wrapf(
-				err,
-				"get latest deploy status for app %s app type %s env %s lane %s",
-				appID,
-				appType,
-				envName,
-				laneName,
-			)
+		deployStatus, ok := cache[latestStatusKey{laneName: laneName, appID: appID, envName: envName}]
+		// 部署记录不存在，跳过该泳道
+		if !ok {
+			continue
 		}
 		statuses = append(statuses, AppDeployStatus{
 			EnvID:           envID,
@@ -320,6 +386,106 @@ func (s *DeployStatusService) buildDeployStatuses(
 		TrafficLaneName: "",
 		DeployStatus:    StatusUnknown,
 	}}, nil
+}
+
+// latestStatusKey 定位一条最新部署状态：同一应用在不同环境、不同泳道上互相独立。
+type latestStatusKey struct {
+	laneName string
+	appID    string
+	envName  string
+}
+
+// latestStatusCache 缓存一批应用在各泳道、各环境下的最新部署状态。
+// 查不到的键表示该应用在该环境、该泳道上没有部署记录。
+type latestStatusCache map[latestStatusKey]*LatestDeployStatus
+
+// prefetchLatestStatuses 一次性聚合各 scope 中应用在各泳道、各环境上的最新部署状态。
+//
+// 按应用类型分流：AppModel 类应用查构建部署与 AppModel 部署两张表，Helm 类应用查 Helm 部署表。
+// 每个泳道最多三次聚合查询，往返次数与环境数、应用数无关。
+func (s *DeployStatusService) prefetchLatestStatuses(
+	ctx context.Context, scopes []envStatusScope,
+) (latestStatusCache, error) {
+	// 同一应用可能出现在多个环境上，按泳道汇总待查应用，交由存储层去重后批量聚合
+	appModelIDsByLane := make(map[string][]string)
+	helmIDsByLane := make(map[string][]string)
+	for i := range scopes {
+		for _, laneName := range scopes[i].laneNames {
+			for _, application := range scopes[i].apps {
+				switch {
+				case app.IsAppModelType(application.Type):
+					appModelIDsByLane[laneName] = append(appModelIDsByLane[laneName], application.ID)
+				case app.IsHelmBasedType(application.Type):
+					helmIDsByLane[laneName] = append(helmIDsByLane[laneName], application.ID)
+				default:
+					return nil, errors.Wrapf(
+						ErrUnsupportedAppType, "app %s app type %s", application.ID, application.Type,
+					)
+				}
+			}
+		}
+	}
+
+	cache := make(latestStatusCache)
+
+	for laneName, appIDs := range appModelIDsByLane {
+		// AppModel 应用可能存在一键构建部署记录；优先根据记录关联关系和创建时间选择真正最新的状态。
+		buildByApp, err := s.BuildAutoDeployRecordStore.ListLatestByApps(ctx, appIDs, laneName)
+		if err != nil {
+			return nil, errors.Wrapf(err, "list latest build auto deploy records for lane %s", laneName)
+		}
+		deployByApp, err := s.AppModelDeployRecordStore.ListLatestByApps(ctx, appIDs, laneName)
+		if err != nil {
+			return nil, errors.Wrapf(err, "list latest appmodel deploy records for lane %s", laneName)
+		}
+		for _, appID := range appIDs {
+			for envName, status := range mergeAppModelStatuses(buildByApp[appID], deployByApp[appID]) {
+				cache[latestStatusKey{laneName: laneName, appID: appID, envName: envName}] = status
+			}
+		}
+	}
+
+	for laneName, appIDs := range helmIDsByLane {
+		// Helm 应用没有一键构建部署记录，直接读取 Helm 部署记录即可。
+		recordsByApp, err := s.HelmDeployRecordStore.ListLatestByApps(ctx, appIDs, laneName)
+		if err != nil {
+			return nil, errors.Wrapf(err, "list latest helm deploy records for lane %s", laneName)
+		}
+		for appID, byEnv := range recordsByApp {
+			for envName, record := range byEnv {
+				cache[latestStatusKey{laneName: laneName, appID: appID, envName: envName}] = &LatestDeployStatus{
+					Status:    string(record.Status),
+					ImageTag:  record.ImageTag,
+					StartedAt: record.StartedAt,
+				}
+			}
+		}
+	}
+
+	return cache, nil
+}
+
+// mergeAppModelStatuses 按环境合并 AppModel 应用的一键构建部署记录与 AppModel 部署记录，
+// 取两者中真正最新的状态。两类记录覆盖的环境取并集，某环境可能只有其中一类记录。
+func mergeAppModelStatuses(
+	buildByEnv map[string]*autodeploy.Record,
+	deployByEnv map[string]*appmodel.Record,
+) map[string]*LatestDeployStatus {
+	envNames := make(map[string]struct{}, len(buildByEnv)+len(deployByEnv))
+	for envName := range buildByEnv {
+		envNames[envName] = struct{}{}
+	}
+	for envName := range deployByEnv {
+		envNames[envName] = struct{}{}
+	}
+
+	statuses := make(map[string]*LatestDeployStatus, len(envNames))
+	for envName := range envNames {
+		if status := selectLatestStatus(buildByEnv[envName], deployByEnv[envName]); status != nil {
+			statuses[envName] = status
+		}
+	}
+	return statuses
 }
 
 // GetLatestDeployStatus 获取应用在指定环境、泳道下的最新部署状态。
@@ -402,24 +568,8 @@ func (s *DeployStatusService) ListLatestByAppLane(
 		return nil, nil, errors.Wrap(err, "list latest appmodel deploy records")
 	}
 
-	// 两类记录覆盖的环境并集；某环境可能只有其中一类记录。
-	envNames := make(map[string]struct{}, len(buildByEnv)+len(deployByEnv))
-	for envName := range buildByEnv {
-		envNames[envName] = struct{}{}
-	}
-	for envName := range deployByEnv {
-		envNames[envName] = struct{}{}
-	}
-
 	// 按环境比较两类记录的关联关系与时间，选出真正最新的状态。
-	statuses := make(map[string]*LatestDeployStatus, len(envNames))
-	for envName := range envNames {
-		status := selectLatestStatus(buildByEnv[envName], deployByEnv[envName])
-		if status != nil {
-			statuses[envName] = status
-		}
-	}
-	return statuses, deployByEnv, nil
+	return mergeAppModelStatuses(buildByEnv, deployByEnv), deployByEnv, nil
 }
 
 func (s *DeployStatusService) getLatestBuildAutoDeployRecord(

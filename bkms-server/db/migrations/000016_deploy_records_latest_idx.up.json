@@ -1,0 +1,59 @@
+[
+  {
+    "createIndexes": "app_model_deploy_records",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "envName": 1,
+          "trafficLaneName": 1,
+          "createdAt": -1
+        },
+        "name": "appID_1_envName_1_trafficLaneName_1_createdAt_-1"
+      },
+      {
+        "key": {
+          "appID": 1,
+          "trafficLaneName": 1,
+          "createdAt": -1
+        },
+        "name": "appID_1_trafficLaneName_1_createdAt_-1"
+      }
+    ]
+  },
+  {
+    "createIndexes": "helm_deploy_records",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "envName": 1,
+          "trafficLaneName": 1,
+          "createdAt": -1
+        },
+        "name": "appID_1_envName_1_trafficLaneName_1_createdAt_-1"
+      },
+      {
+        "key": {
+          "appID": 1,
+          "trafficLaneName": 1,
+          "createdAt": -1
+        },
+        "name": "appID_1_trafficLaneName_1_createdAt_-1"
+      }
+    ]
+  },
+  {
+    "createIndexes": "build_auto_deploy_records",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "trafficLaneName": 1,
+          "createdAt": -1
+        },
+        "name": "appID_1_trafficLaneName_1_createdAt_-1"
+      }
+    ]
+  }
+]

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -63,6 +64,11 @@ type RecordStore interface {
 
 	// ListLatestByApp 按环境返回该应用在指定泳道下各环境最新的一条部署记录
 	ListLatestByApp(ctx context.Context, appID, trafficLaneName string) (map[string]*Record, error)
+
+	// ListLatestByApps 按应用、环境返回一批应用在指定泳道下各环境最新的一条部署记录
+	ListLatestByApps(
+		ctx context.Context, appIDs []string, trafficLaneName string,
+	) (map[string]map[string]*Record, error)
 
 	// GetLatestByStatuses 获取指定状态集合中的最新应用部署记录
 	GetLatestByStatuses(
@@ -285,6 +291,54 @@ func (s *RecordStoreMongo) ListLatestByApp(
 	}
 	if err := cursor.Err(); err != nil {
 		return nil, errors.Wrapf(err, "iterate latest deploy records for app %s", appID)
+	}
+	return out, nil
+}
+
+// ListLatestByApps 返回一批 app 在指定泳道下各环境最新部署记录（按 createdAt 倒序取每组第一条）。
+// 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
+// 与逐个应用调用 ListLatestByApp 相比，本方法只需一次聚合，往返次数与应用数无关。
+func (s *RecordStoreMongo) ListLatestByApps(
+	ctx context.Context,
+	appIDs []string, trafficLaneName string,
+) (map[string]map[string]*Record, error) {
+	out := make(map[string]map[string]*Record, len(appIDs))
+	if len(appIDs) == 0 {
+		return out, nil
+	}
+
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{
+			"appID":           bson.M{"$in": lo.Uniq(appIDs)},
+			"trafficLaneName": trafficLaneName,
+		}},
+		bson.M{"$sort": bson.M{"createdAt": -1}},
+		bson.M{"$group": bson.M{
+			"_id": bson.M{"appID": "$appID", "envName": "$envName"},
+			"doc": bson.M{"$first": "$$ROOT"},
+		}},
+		bson.M{"$replaceRoot": bson.M{"newRoot": "$doc"}},
+	}
+
+	cursor, err := s.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, errors.Wrap(err, "aggregate latest deploy records for apps")
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var record Record
+		if err := cursor.Decode(&record); err != nil {
+			return nil, errors.Wrap(err, "decode latest deploy record for apps")
+		}
+		rec := record
+		if _, ok := out[rec.AppID]; !ok {
+			out[rec.AppID] = make(map[string]*Record)
+		}
+		out[rec.AppID][rec.EnvName] = &rec
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterate latest deploy records for apps")
 	}
 	return out, nil
 }
