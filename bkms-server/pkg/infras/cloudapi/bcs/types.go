@@ -21,6 +21,18 @@ package bcs
 // UserTokenStatusActive 有效的 Token 状态
 const UserTokenStatusActive = 1
 
+// ProjectKindK8s BCS 容器项目类型
+const ProjectKindK8s = "k8s"
+
+// CreateProjectInput 创建 BCS 项目请求
+type CreateProjectInput struct {
+	Name        string
+	ProjectCode string
+	Kind        string
+	// BusinessID 可选，仅在已有 bkCC 业务 ID 时传入
+	BusinessID string
+}
+
 // Project BCS 项目信息
 type Project struct {
 	// ID 项目 id, 如: 01234560123456e3acc1024d6bcs44b5

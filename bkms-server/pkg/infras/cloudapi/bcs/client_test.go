@@ -100,6 +100,42 @@ var _ = Describe("BCS API Client", func() {
 		})
 	})
 
+	It("create project", func() {
+		PatchConvey("test", GinkgoT(), func() {
+			projectID := uuid.New().String()
+			projectCode := stringx.Random(6)
+			projectName := stringx.Random(6)
+			bizID := stringx.Random(6)
+
+			resultJson := fmt.Sprintf(
+				`{"data": {"projectID": "%s","projectCode": "%s","name": "%s","kind": "k8s","businessID": "%s","isOffline": false}}`,
+				projectID,
+				projectCode,
+				projectName,
+				bizID,
+			)
+			result := make(map[string]any)
+			Expect(json.Unmarshal([]byte(resultJson), &result)).To(BeNil())
+			Mock((*ApiClient).handleOperation).Return(result, nil).Build()
+
+			project, err := cli.CreateProject(ctx, CreateProjectInput{
+				Name:        projectName,
+				ProjectCode: projectCode,
+				Kind:        "k8s",
+				BusinessID:  bizID,
+			})
+			Expect(err).To(BeNil())
+			Expect(*project).To(Equal(Project{
+				ID:        projectID,
+				Code:      projectCode,
+				Name:      projectName,
+				Kind:      "k8s",
+				BizID:     bizID,
+				IsOffline: false,
+			}))
+		})
+	})
+
 	It("get project", func() {
 		PatchConvey("test", GinkgoT(), func() {
 			projectID := uuid.New().String()
