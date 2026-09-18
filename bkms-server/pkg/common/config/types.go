@@ -174,6 +174,10 @@ type BkMonitorConfig struct {
 type BSCPConfig struct {
 	// FeedAddr BSCP 服务订阅地址（Feed Server 地址）
 	FeedAddr string
+	// InitImage bscp-init 容器镜像
+	InitImage string
+	// SidecarImage bscp-sidecar 容器镜像
+	SidecarImage string
 }
 
 // TxCMDBConfig Tx CMDB 配置

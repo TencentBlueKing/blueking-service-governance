@@ -22,7 +22,6 @@ package bscp
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"time"
 
@@ -90,42 +89,6 @@ func (c *ApiClient) GetBiz(ctx context.Context, bizID string) (*Biz, error) {
 		}
 	}
 	return nil, errors.Errorf("biz not found, bizID: %s", bizID)
-}
-
-// CreateService 在业务下创建 BSCP 服务
-func (c *ApiClient) CreateService(ctx context.Context, req *CreateServiceReq) (*Service, error) {
-	if err := req.Validate(); err != nil {
-		return nil, errors.Wrap(err, "validate create service req")
-	}
-
-	op := c.NewOperation(
-		bkapi.OperationConfig{
-			Name:   "create_app",
-			Method: "POST",
-			Path:   "/api/v1/config/create/app/app/biz_id/{biz_id}",
-		},
-		bkapi.OptSetRequestPathParams(map[string]string{"biz_id": req.BizID}),
-		bkapi.OptSetRequestBody(req),
-	)
-
-	result, err := c.handleOperation(ctx, op)
-	if err != nil {
-		return nil, errors.Wrapf(err, "call bscp create service api, bizID: %s, name: %s", req.BizID, req.Name)
-	}
-
-	id := cast.ToString(mapx.Get(result, "data.id", 0))
-	if id == "" || id == "0" {
-		return nil, errors.Errorf("create service returned empty id, bizID: %s, name: %s", req.BizID, req.Name)
-	}
-
-	return &Service{
-		ID:         id,
-		Name:       req.Name,
-		Alias:      req.Alias,
-		Desc:       req.Memo,
-		ConfigType: req.ConfigType,
-		DataType:   req.DataType,
-	}, nil
 }
 
 // ListBizServices 获取业务下的服务列表
@@ -261,40 +224,6 @@ func (c *ApiClient) GetServiceConfig(ctx context.Context, bizID, svcID, versionI
 	return nil, errors.Errorf("config %s in biz %s, svc %s, ver %s not found", id, bizID, svcID, versionID)
 }
 
-// GetConfigContent 获取配置项的内容（文件内容 / 键值对的值）
-func (c *ApiClient) GetConfigContent(
-	ctx context.Context, bizID, svcID, versionID, id string,
-) (string, error) {
-	svc, err := c.GetBizService(ctx, bizID, svcID)
-	if err != nil {
-		return "", errors.Wrap(err, "get service")
-	}
-
-	var cfg Config
-	switch svc.ConfigType {
-	case ConfigTypeFile:
-		cfg, err = c.getServiceFile(ctx, bizID, svcID, versionID, id)
-	case ConfigTypeKV:
-		cfg, err = c.getServiceKeyValue(ctx, bizID, svcID, versionID, id)
-	default:
-		return "", errors.Errorf("unsupported config type: %s", svc.ConfigType)
-	}
-
-	cfgInfo := fmt.Sprintf(
-		"<type: %s, bizID: %s, svcID: %s, verID: %s, id: %s>",
-		svc.ConfigType, bizID, svcID, versionID, id,
-	)
-	if err != nil {
-		return "", errors.Wrapf(err, "get config %s", cfgInfo)
-	}
-
-	content, err := cfg.Content(ctx)
-	if err != nil {
-		return "", errors.Wrapf(err, "get config %s content", cfgInfo)
-	}
-	return content, nil
-}
-
 // listServiceFiles 获取服务下文件列表
 func (c *ApiClient) listServiceFiles(ctx context.Context, bizID, svcID, versionID string) ([]File, error) {
 	op := c.NewOperation(
@@ -332,23 +261,6 @@ func (c *ApiClient) listServiceFiles(ctx context.Context, bizID, svcID, versionI
 	}
 
 	return files, nil
-}
-
-// getServiceFile 获取服务下指定文件
-func (c *ApiClient) getServiceFile(ctx context.Context, bizID, svcID, versionID, id string) (*File, error) {
-	files, err := c.listServiceFiles(ctx, bizID, svcID, versionID)
-	if err != nil {
-		return nil, errors.Wrap(err, "list service files")
-	}
-
-	// 按 id 查找
-	for _, file := range files {
-		if file.ID() == id {
-			return &file, nil
-		}
-	}
-
-	return nil, errors.New("file not found")
 }
 
 // getFileContent 获取 BSCP 上指定文件的内容（仅对文件型服务配置有效）
@@ -436,43 +348,4 @@ func (c *ApiClient) listServiceKeyValues(ctx context.Context, bizID, svcID, vers
 	}
 
 	return kvs, nil
-}
-
-// getServiceKeyValue 获取服务下指定键值对的值
-func (c *ApiClient) getServiceKeyValue(ctx context.Context, bizID, svcID, versionID, id string) (*KeyValue, error) {
-	kvs, err := c.listServiceKeyValues(ctx, bizID, svcID, versionID)
-	if err != nil {
-		return nil, errors.Wrap(err, "list service key-values")
-	}
-
-	// 按 id 查找
-	for _, kv := range kvs {
-		if kv.ID() == id {
-			return &kv, nil
-		}
-	}
-
-	return nil, errors.New("key-value not found")
-}
-
-// GetOrCreateService 获取或创建 BSCP 服务
-func (c *ApiClient) GetOrCreateService(ctx context.Context, req *CreateServiceReq) (*Service, error) {
-	services, err := c.ListBizServices(ctx, req.BizID)
-	if err != nil {
-		return nil, err
-	}
-
-	// bscp 侧要求名称唯一，因此，可以通过名称判断
-	for _, svc := range services {
-		if svc.Name == req.Name {
-			return &svc, nil
-		}
-	}
-
-	svc, err := c.CreateService(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return svc, nil
 }

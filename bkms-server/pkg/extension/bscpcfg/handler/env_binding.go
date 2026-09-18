@@ -56,7 +56,7 @@ func (h *Handler) CreateEnvBinding(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uri.AppID, uri.EnvName, perm.TypeEdit)
+	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uri.AppID, uri.EnvName, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -82,6 +82,7 @@ func (h *Handler) CreateEnvBinding(c *gin.Context) {
 		AppID:     app.ID,
 		AppName:   app.Name,
 		EnvName:   strings.TrimSpace(uri.EnvName),
+		EnvType:   env.Type,
 		Workspace: ws,
 		BscpBizID: ws.BkSystems.BkCCBizID,
 		Operator:  auth.MustGetUser(ctx).ID,
@@ -141,88 +142,6 @@ func (h *Handler) DeleteEnvBinding(c *gin.Context) {
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete bscpcfg env binding"))
-		return
-	}
-
-	ginutils.OK(c, slz.EmptyOutput{})
-}
-
-// PatchEnvBinding 更新环境绑定的下发服务列表。
-//
-//	@ID			PatchBscpCfgEnvBinding
-//	@Summary	更新环境绑定（更新绑定的服务列表）
-//	@Tags		bscpcfg
-//	@Accept		json
-//	@Produce	json
-//	@Security	BkUserInfo
-//	@Security	BkUserCredential
-//	@Param		appID		path		string						true	"应用 ID"
-//	@Param		envName		path		string						true	"环境名称"
-//	@Param		body		body		slz.PatchEnvBindingInput	true	"更新配置请求体"
-//	@Success	200
-//	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
-//	@Router		/apps/{appID}/bscpcfg/envs/{envName}/binding [patch]
-func (h *Handler) PatchEnvBinding(c *gin.Context) {
-	var uri slz.AppEnvURI
-	var input slz.PatchEnvBindingInput
-	if err := ginutils.BindURIJSON(c, &uri, &input); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	if input.Services == nil {
-		ginutils.OK(c, slz.EmptyOutput{})
-		return
-	}
-
-	newApps := lo.UniqBy(
-		lo.FilterMap(input.Services, func(obj slz.ServiceRefInput, _ int) (cfgmodel.ServiceRef, bool) {
-			id := strings.TrimSpace(obj.ID)
-			name := strings.TrimSpace(obj.Name)
-			if id == "" || name == "" {
-				return cfgmodel.ServiceRef{}, false
-			}
-			return cfgmodel.ServiceRef{ID: id, Name: name}, true
-		}),
-		func(app cfgmodel.ServiceRef) string { return app.ID },
-	)
-	if len(newApps) == 0 {
-		ginutils.OK(c, slz.EmptyOutput{})
-		return
-	}
-
-	ctx := c.Request.Context()
-	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uri.AppID, uri.EnvName, perm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	ws, err := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
-		return
-	}
-	if ws.BkSystems.BkCCBizID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotFound, "workspace missing bizID"))
-		return
-	}
-
-	mgr, err := h.newManager(c)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	if err = mgr.BindServices(ctx, app.ID, uri.EnvName, ws.BkSystems.BkCCBizID, newApps); err != nil {
-		if errors.Is(err, cfgmodel.ErrEnvBindingNotFound) {
-			bkerrs.AbortWithErr(
-				c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "bscpcfg env binding not found for env %s", uri.EnvName),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update bscpcfg env binding"))
 		return
 	}
 

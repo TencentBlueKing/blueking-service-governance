@@ -85,7 +85,7 @@ spec:
 				InitContainers: []corev1.Container{
 					{
 						Name:  wlbscpcfg.InitContainerName,
-						Image: wlbscpcfg.InitImage,
+						Image: "test-bscp-init:latest",
 						Args:  []string{"--file-cache-enabled=false"},
 						Env: []corev1.EnvVar{
 							{Name: "biz", Value: "100"},
@@ -99,7 +99,7 @@ spec:
 				Containers: []corev1.Container{
 					{
 						Name:  wlbscpcfg.SidecarContainerName,
-						Image: wlbscpcfg.SidecarImage,
+						Image: "test-bscp-sidecar:latest",
 						Args:  []string{"--file-cache-enabled=false"},
 						Env: []corev1.EnvVar{
 							{Name: "biz", Value: "100"},
@@ -131,8 +131,8 @@ spec:
 			output := result.String()
 
 			By("should contain correct images")
-			Expect(output).To(ContainSubstring(wlbscpcfg.InitImage))
-			Expect(output).To(ContainSubstring(wlbscpcfg.SidecarImage))
+			Expect(output).To(ContainSubstring("test-bscp-init:latest"))
+			Expect(output).To(ContainSubstring("test-bscp-sidecar:latest"))
 
 			By("should contain env vars")
 			Expect(output).To(ContainSubstring("biz"))

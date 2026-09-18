@@ -59,6 +59,8 @@ var _ = Describe("MetadataStore", func() {
 				meta := &model.Metadata{
 					AppID:          testAppID,
 					BscpBizID:      "12345",
+					ProjectID:      "12345",
+					ProjectKey:     "BK-BSCP-12345",
 					MountPath:      "/data/bscp",
 					CredentialID:   "cred-1",
 					CredentialName: "bkms-credential",
@@ -87,17 +89,29 @@ var _ = Describe("MetadataStore", func() {
 		Context("when creating duplicate metadata", func() {
 			It("should return ErrMetadataAlreadyExists", func() {
 				meta := &model.Metadata{
-					AppID:     testAppID,
-					BscpBizID: "12345",
-					MountPath: "/data/bscp",
+					AppID:          testAppID,
+					BscpBizID:      "12345",
+					ProjectID:      "12345",
+					ProjectKey:     "BK-BSCP-12345",
+					MountPath:      "/data/bscp",
+					CredentialID:   "cred-1",
+					CredentialName: "bkms-credential",
+					Token:          "test-token",
+					FeedAddr:       "bscp-feed.example.com:9500",
 				}
 				err := store.Create(ctx, meta)
 				Expect(err).NotTo(HaveOccurred())
 
 				meta2 := &model.Metadata{
-					AppID:     testAppID,
-					BscpBizID: "12345",
-					MountPath: "/data/bscp2",
+					AppID:          testAppID,
+					BscpBizID:      "12345",
+					ProjectID:      "12345",
+					ProjectKey:     "BK-BSCP-12345",
+					MountPath:      "/data/bscp2",
+					CredentialID:   "cred-1",
+					CredentialName: "bkms-credential",
+					Token:          "test-token",
+					FeedAddr:       "bscp-feed.example.com:9500",
 				}
 				err = store.Create(ctx, meta2)
 				Expect(err).To(MatchError(model.ErrMetadataAlreadyExists))
@@ -130,10 +144,16 @@ var _ = Describe("MetadataStore", func() {
 	Describe("Get", func() {
 		BeforeEach(func() {
 			meta := &model.Metadata{
-				AppID:     testAppID,
-				BscpBizID: "99",
-				MountPath: "/etc/bscp",
-				Operator:  "admin",
+				AppID:          testAppID,
+				BscpBizID:      "99",
+				ProjectID:      "99",
+				ProjectKey:     "BK-BSCP-99",
+				MountPath:      "/etc/bscp",
+				CredentialID:   "cred-1",
+				CredentialName: "bkms-credential",
+				Token:          "test-token",
+				FeedAddr:       "bscp-feed.example.com:9500",
+				Operator:       "admin",
 			}
 			err := store.Create(ctx, meta)
 			Expect(err).NotTo(HaveOccurred())
@@ -160,11 +180,16 @@ var _ = Describe("MetadataStore", func() {
 	Describe("Update", func() {
 		BeforeEach(func() {
 			meta := &model.Metadata{
-				AppID:     testAppID,
-				BscpBizID: "100",
-				MountPath: "/old/path",
-				Token:     "old-token",
-				Operator:  "user1",
+				AppID:          testAppID,
+				BscpBizID:      "100",
+				ProjectID:      "100",
+				ProjectKey:     "BK-BSCP-100",
+				MountPath:      "/old/path",
+				CredentialID:   "cred-1",
+				CredentialName: "bkms-credential",
+				Token:          "old-token",
+				FeedAddr:       "bscp-feed.example.com:9500",
+				Operator:       "user1",
 			}
 			err := store.Create(ctx, meta)
 			Expect(err).NotTo(HaveOccurred())
@@ -265,9 +290,15 @@ var _ = Describe("MetadataStore", func() {
 	Describe("Delete", func() {
 		BeforeEach(func() {
 			meta := &model.Metadata{
-				AppID:     testAppID,
-				BscpBizID: "200",
-				MountPath: "/tmp",
+				AppID:          testAppID,
+				BscpBizID:      "200",
+				ProjectID:      "200",
+				ProjectKey:     "BK-BSCP-200",
+				MountPath:      "/tmp",
+				CredentialID:   "cred-1",
+				CredentialName: "bkms-credential",
+				Token:          "test-token",
+				FeedAddr:       "bscp-feed.example.com:9500",
 			}
 			err := store.Create(ctx, meta)
 			Expect(err).NotTo(HaveOccurred())
@@ -294,10 +325,16 @@ var _ = Describe("MetadataStore", func() {
 	Describe("Update WorkloadKind", func() {
 		BeforeEach(func() {
 			meta := &model.Metadata{
-				AppID:     testAppID,
-				BscpBizID: "100",
-				MountPath: "/data/bscp",
-				Operator:  "user1",
+				AppID:          testAppID,
+				BscpBizID:      "100",
+				ProjectID:      "100",
+				ProjectKey:     "BK-BSCP-100",
+				MountPath:      "/data/bscp",
+				CredentialID:   "cred-1",
+				CredentialName: "bkms-credential",
+				Token:          "test-token",
+				FeedAddr:       "bscp-feed.example.com:9500",
+				Operator:       "user1",
 			}
 			err := store.Create(ctx, meta)
 			Expect(err).NotTo(HaveOccurred())
@@ -369,12 +406,18 @@ var _ = Describe("MetadataStore", func() {
 				defer func() { _ = store.Delete(ctx, anotherAppID) }()
 
 				meta := &model.Metadata{
-					AppID:        anotherAppID,
-					BscpBizID:    "100",
-					MountPath:    "/data/bscp",
-					WorkloadKind: "Deployment",
-					WorkloadName: "my-deploy",
-					Operator:     "user1",
+					AppID:          anotherAppID,
+					BscpBizID:      "100",
+					ProjectID:      "100",
+					ProjectKey:     "BK-BSCP-100",
+					MountPath:      "/data/bscp",
+					CredentialID:   "cred-1",
+					CredentialName: "bkms-credential",
+					Token:          "test-token",
+					FeedAddr:       "bscp-feed.example.com:9500",
+					WorkloadKind:   "Deployment",
+					WorkloadName:   "my-deploy",
+					Operator:       "user1",
 				}
 				err := store.Create(ctx, meta)
 				Expect(err).NotTo(HaveOccurred())
