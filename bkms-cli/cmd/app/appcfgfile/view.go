@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	handler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/appcfgfile"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/output"
 )
 
@@ -60,6 +61,10 @@ When an application has multiple config files in the same environment, use --nam
 				return errors.Wrap(err, "view app config file")
 			}
 
+			if result.IsFallback {
+				console.Tips("Environment %s has no dedicated config, showing default config", envName)
+			}
+
 			viewOutput, err := result.Output()
 			if err != nil {
 				return errors.Wrap(err, "format app config file")
@@ -74,12 +79,13 @@ When an application has multiple config files in the same environment, use --nam
 	}
 
 	cmdutil.AddAppFlags(cmd, &appID)
-	cmd.Flags().StringVar(&envName, "env", "", "environment name")
+	cmd.Flags().
+		StringVar(&envName, "env", "", "environment name; trpc/TAF apps only (Helm apps have no per-environment config)")
 	cmd.Flags().StringVar(
 		&cfgFileName,
 		"name",
 		"",
-		"config file name; useful for Helm apps with multiple app-level config files",
+		"config file name; for Helm apps with multiple app-level files. trpc/TAF env files are named by environment",
 	)
 	output.AddFormatFlag(cmd, &outputFormat)
 

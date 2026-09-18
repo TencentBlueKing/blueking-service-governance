@@ -68,12 +68,13 @@ When an application has multiple config files in the same environment, use --nam
 	}
 
 	cmdutil.AddAppFlags(cmd, &appID)
-	cmd.Flags().StringVar(&envName, "env", "", "environment name")
+	cmd.Flags().
+		StringVar(&envName, "env", "", "environment name; trpc/TAF apps only (Helm apps have no per-environment config)")
 	cmd.Flags().StringVar(
 		&cfgFileName,
 		"name",
 		"",
-		"config file name; useful for Helm apps with multiple app-level config files",
+		"config file name; for Helm apps with multiple app-level files. trpc/TAF env files are named by environment",
 	)
 	registerVersionRefFlags(cmd, &version, &versionID)
 

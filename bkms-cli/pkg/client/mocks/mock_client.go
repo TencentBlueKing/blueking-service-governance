@@ -474,6 +474,80 @@ func (_c *MockClient_CreateAppComponent_Call) RunAndReturn(run func(ctx context.
 	return _c
 }
 
+// CreateAppConfigFile provides a mock function for the type MockClient
+func (_mock *MockClient) CreateAppConfigFile(ctx context.Context, appID string, opts client.CreateAppConfigFileOptions) (*client.AppConfigFile, error) {
+	ret := _mock.Called(ctx, appID, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateAppConfigFile")
+	}
+
+	var r0 *client.AppConfigFile
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateAppConfigFileOptions) (*client.AppConfigFile, error)); ok {
+		return returnFunc(ctx, appID, opts)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateAppConfigFileOptions) *client.AppConfigFile); ok {
+		r0 = returnFunc(ctx, appID, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.AppConfigFile)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, client.CreateAppConfigFileOptions) error); ok {
+		r1 = returnFunc(ctx, appID, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_CreateAppConfigFile_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAppConfigFile'
+type MockClient_CreateAppConfigFile_Call struct {
+	*mock.Call
+}
+
+// CreateAppConfigFile is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - opts client.CreateAppConfigFileOptions
+func (_e *MockClient_Expecter) CreateAppConfigFile(ctx any, appID any, opts any) *MockClient_CreateAppConfigFile_Call {
+	return &MockClient_CreateAppConfigFile_Call{Call: _e.mock.On("CreateAppConfigFile", ctx, appID, opts)}
+}
+
+func (_c *MockClient_CreateAppConfigFile_Call) Run(run func(ctx context.Context, appID string, opts client.CreateAppConfigFileOptions)) *MockClient_CreateAppConfigFile_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 client.CreateAppConfigFileOptions
+		if args[2] != nil {
+			arg2 = args[2].(client.CreateAppConfigFileOptions)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_CreateAppConfigFile_Call) Return(appConfigFile *client.AppConfigFile, err error) *MockClient_CreateAppConfigFile_Call {
+	_c.Call.Return(appConfigFile, err)
+	return _c
+}
+
+func (_c *MockClient_CreateAppConfigFile_Call) RunAndReturn(run func(ctx context.Context, appID string, opts client.CreateAppConfigFileOptions) (*client.AppConfigFile, error)) *MockClient_CreateAppConfigFile_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateAppDashboard provides a mock function for the type MockClient
 func (_mock *MockClient) CreateAppDashboard(ctx context.Context, appID string, uid string) error {
 	ret := _mock.Called(ctx, appID, uid)

@@ -90,6 +90,24 @@ type AppConfigFileContentOptions struct {
 	CurrentVersion *int64
 }
 
+// CreateAppConfigFileOptions 创建应用配置文件的参数。
+type CreateAppConfigFileOptions struct {
+	// Name 文件名称。
+	Name string
+	// Type 文件类型，例如 normal 或 overlay。
+	Type string
+	// BaseAppConfigFileID overlay 文件关联的基础文件 ID。
+	BaseAppConfigFileID string
+	// ContentSourceType 内容来源，例如 local 或 bscp。
+	ContentSourceType string
+	// EnvName 环境名称，空字符串表示默认应用级配置。
+	EnvName string
+	// FileFormat 文件格式，例如 yaml 或 taf。
+	FileFormat string
+	// Description 版本描述。
+	Description string
+}
+
 // AppConfigFileContentUpdateResult 更新应用配置文件内容后的返回结果。
 type AppConfigFileContentUpdateResult struct {
 	// CompiledContent 应用配置文件合并后的完整内容。

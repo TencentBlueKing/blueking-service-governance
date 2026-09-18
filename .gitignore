@@ -82,3 +82,5 @@ go.work.sum
 
 ### PreCI ###
 .codecc
+/.agents/
+/.agents/skills/

@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	handler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/appcfgfile"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // NewEditCmd returns a Command instance for 'app app-cfg-file edit' sub command.
@@ -79,6 +80,10 @@ When an application has multiple config files in the same environment, use --nam
 				return errors.Wrap(err, "edit app config file")
 			}
 
+			if result.Created {
+				console.Tips("Created overlay config for environment %s", envName)
+			}
+
 			if viewCompiledContent {
 				fmt.Print(result.UpdateResult.CompiledContent)
 				return nil
@@ -89,12 +94,13 @@ When an application has multiple config files in the same environment, use --nam
 	}
 
 	cmdutil.AddAppFlags(cmd, &appID)
-	cmd.Flags().StringVar(&envName, "env", "", "environment name")
+	cmd.Flags().
+		StringVar(&envName, "env", "", "environment name; trpc/TAF apps only (Helm apps have no per-environment config)")
 	cmd.Flags().StringVar(
 		&cfgFileName,
 		"name",
 		"",
-		"config file name; useful for Helm apps with multiple app-level config files",
+		"config file name; for Helm apps with multiple app-level files. trpc/TAF env files are named by environment",
 	)
 	cmd.Flags().StringVarP(&filePath, "file", "f", "", "config file content path")
 	cmd.Flags().StringVar(&fileContent, "file-content", "", "config file content literal")

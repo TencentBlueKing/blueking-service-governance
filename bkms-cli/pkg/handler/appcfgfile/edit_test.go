@@ -85,14 +85,12 @@ var _ = Describe("Edit", func() {
 	It("updates OverlayContent for an environment overlay config file", func() {
 		newContent := "replicas: 5\n"
 		compiledContent := "server:\n  replicas: 5\n"
-		files := []client.AppConfigFile{{
-			ID:      "prod-file",
-			Name:    "default",
-			EnvName: "prod",
-			Type:    appConfigFileTypeOverlay,
-		}}
+		files := []client.AppConfigFile{
+			{ID: "default-file", Name: "default", EnvName: "", Type: appConfigFileTypeNormal, FileFormat: "yaml"},
+			{ID: "prod-file", Name: "prod", EnvName: "prod", Type: appConfigFileTypeOverlay, FileFormat: "yaml"},
+		}
 		cli.EXPECT().
-			ListAppConfigFiles(mock.Anything, appID, "prod").
+			ListAppConfigFiles(mock.Anything, appID, "").
 			Return(files, nil)
 		cli.EXPECT().
 			GetAppConfigFileDetails(mock.Anything, appID, "prod-file").
@@ -119,6 +117,7 @@ var _ = Describe("Edit", func() {
 		Expect(result.EnvName).To(Equal("prod"))
 		Expect(result.Details.CurrentVersion).To(Equal(int64(7)))
 		Expect(result.UpdateResult.CompiledContent).To(Equal(compiledContent))
+		Expect(result.Created).To(BeFalse())
 	})
 
 	It("updates OverlayContent when details marks a normal BSCP file overlay-editable", func() {
@@ -178,19 +177,110 @@ var _ = Describe("Edit", func() {
 		Expect(err.Error()).To(ContainSubstring("not editable"))
 	})
 
-	It("returns an error when no config file matches the requested environment", func() {
+	It("creates an overlay env instance when the environment has no config file yet", func() {
+		newContent := "replicas: 5\n"
+		compiledContent := "server:\n  replicas: 5\n"
+		files := []client.AppConfigFile{{
+			ID:         "default-file",
+			Name:       "default",
+			EnvName:    "",
+			Type:       appConfigFileTypeNormal,
+			FileFormat: "yaml",
+		}}
 		cli.EXPECT().
-			ListAppConfigFiles(mock.Anything, appID, "prod").
-			Return(nil, nil)
+			ListAppConfigFiles(mock.Anything, appID, "").
+			Return(files, nil)
+		cli.EXPECT().
+			CreateAppConfigFile(mock.Anything, appID, matchCreateOptions("prod", "default-file", "yaml", "update prod")).
+			Return(&client.AppConfigFile{
+				ID:      "prod-file",
+				Name:    "prod",
+				EnvName: "prod",
+				Type:    appConfigFileTypeOverlay,
+			}, nil)
+		cli.EXPECT().
+			GetAppConfigFileDetails(mock.Anything, appID, "prod-file").
+			Return(&client.AppConfigFileDetails{
+				EditableContentField: editableContentFieldOverlayContent,
+				CurrentVersion:       1,
+			}, nil)
+		cli.EXPECT().
+			UpdateAppConfigFileOverlayContent(
+				mock.Anything,
+				appID,
+				"prod-file",
+				matchContentOptions(newContent, "update prod", 1),
+			).
+			Return(&client.AppConfigFileContentUpdateResult{CompiledContent: compiledContent}, nil)
 
-		result, err := Edit(ctx, cli, appID, "prod", "", EditOptions{Content: "replicas: 5\n"})
+		result, err := Edit(ctx, cli, appID, "prod", "", EditOptions{
+			Content:     newContent,
+			Description: "update prod",
+		})
 
-		Expect(result).To(BeNil())
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("no app config file found"))
-		Expect(err.Error()).To(ContainSubstring("prod"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.File.ID).To(Equal("prod-file"))
+		Expect(result.EnvName).To(Equal("prod"))
+		Expect(result.UpdateResult.CompiledContent).To(Equal(compiledContent))
+		Expect(result.Created).To(BeTrue())
+	})
+
+	It("creates an overlay env instance for another environment without touching existing instances", func() {
+		newContent := "replicas: 5\n"
+		compiledContent := "server:\n  replicas: 5\n"
+		files := []client.AppConfigFile{
+			{ID: "default-file", Name: "default", EnvName: "", Type: appConfigFileTypeNormal, FileFormat: "yaml"},
+			{ID: "prod-file", Name: "prod", EnvName: "prod", Type: appConfigFileTypeOverlay, FileFormat: "yaml"},
+		}
+		cli.EXPECT().
+			ListAppConfigFiles(mock.Anything, appID, "").
+			Return(files, nil)
+		cli.EXPECT().
+			CreateAppConfigFile(mock.Anything, appID, matchCreateOptions("staging", "default-file", "yaml", "update staging")).
+			Return(&client.AppConfigFile{
+				ID:      "staging-file",
+				Name:    "staging",
+				EnvName: "staging",
+				Type:    appConfigFileTypeOverlay,
+			}, nil)
+		cli.EXPECT().
+			GetAppConfigFileDetails(mock.Anything, appID, "staging-file").
+			Return(&client.AppConfigFileDetails{
+				EditableContentField: editableContentFieldOverlayContent,
+				CurrentVersion:       1,
+			}, nil)
+		cli.EXPECT().
+			UpdateAppConfigFileOverlayContent(
+				mock.Anything,
+				appID,
+				"staging-file",
+				matchContentOptions(newContent, "update staging", 1),
+			).
+			Return(&client.AppConfigFileContentUpdateResult{CompiledContent: compiledContent}, nil)
+
+		result, err := Edit(ctx, cli, appID, "staging", "", EditOptions{
+			Content:     newContent,
+			Description: "update staging",
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.File.ID).To(Equal("staging-file"))
+		Expect(result.EnvName).To(Equal("staging"))
+		Expect(result.Created).To(BeTrue())
 	})
 })
+
+func matchCreateOptions(name, baseID, fileFormat, description string) interface{} {
+	return mock.MatchedBy(func(opts client.CreateAppConfigFileOptions) bool {
+		return opts.Name == name &&
+			opts.Type == appConfigFileTypeOverlay &&
+			opts.BaseAppConfigFileID == baseID &&
+			opts.ContentSourceType == appConfigFileContentSourceTypeLocal &&
+			opts.EnvName == name &&
+			opts.FileFormat == fileFormat &&
+			opts.Description == description
+	})
+}
 
 func matchContentOptions(content, description string, currentVersion int64) interface{} {
 	return mock.MatchedBy(func(opts client.AppConfigFileContentOptions) bool {
