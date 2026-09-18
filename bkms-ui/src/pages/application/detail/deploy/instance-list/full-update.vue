@@ -45,6 +45,33 @@
         :model="formModel"
       >
         <Form.FormItem
+          :label="$t('更新内容')"
+          required
+        >
+          <Radio.Group
+            v-model="formModel.updateContent"
+            @change="handleUpdateContentChange"
+          >
+            <Radio label="both">{{ $t('镜像+配置') }}</Radio>
+            <Radio label="config">{{ $t('仅配置') }}</Radio>
+            <Radio
+              :disabled="isFederationEnv"
+              label="image"
+            >
+              <span
+                v-bk-tooltips="{
+                  content: $t('联邦集群不支持原地重启'),
+                  disabled: !isFederationEnv,
+                }"
+              >
+                {{ $t('仅镜像（原地重启）') }}
+              </span>
+            </Radio>
+          </Radio.Group>
+        </Form.FormItem>
+
+        <Form.FormItem
+          v-if="formModel.updateContent !== 'image'"
           :label="$t('实例数')"
           property="replicas"
           required
@@ -65,16 +92,15 @@
         </Form.FormItem>
 
         <Form.FormItem
-          :label="$t('更新内容')"
+          v-if="formModel.updateContent === 'image'"
+          :label="$t('镜像 Tag')"
+          property="imageTag"
           required
         >
-          <Radio.Group
-            v-model="formModel.updateContent"
-            @change="handleUpdateContentChange"
-          >
-            <Radio label="both">{{ $t('镜像+配置') }}</Radio>
-            <Radio label="config">{{ $t('仅配置') }}</Radio>
-          </Radio.Group>
+          <ImageSelect
+            ref="imageSelectRef"
+            v-model:value="formModel.imageTag"
+          />
         </Form.FormItem>
 
         <template v-if="formModel.updateContent === 'both'">
@@ -142,36 +168,6 @@
         >
           {{ alertContent }}
         </Alert>
-        <!-- 目前只能选滚动更新，因此先隐藏更新类型 -->
-        <!-- <Form.FormItem
-        :label="$t('更新类型')"
-        required
-      >
-        <Radio.Group
-          v-model="formModel.deployType"
-          class="flex flex-col"
-        >
-          <Radio label="RollingUpdate">{{ $t('滚动更新') }} ( RollingUpdate )</Radio>
-          <Radio
-            class="!ml-[0px]"
-            :disabled="formModel.updateContent !== 'image'"
-            label="InplaceUpdate"
-          >
-            <span
-              v-bk-tooltips="{
-                content: $t('更新内容包含配置时，不支持原地更新'),
-                placement: 'top',
-                disabled: formModel.updateContent === 'image',
-              }"
-              >{{ $t('原地更新') }} ( InplaceUpdate )</span
-            >
-            <span class="text-[#bbbdc3]">
-              <i class="bkms-icon bkms-icon-circle-info"></i>
-              {{ $t('仅更新容器镜像，不重建 Pod，更新速度更快') }}
-            </span>
-          </Radio>
-        </Radio.Group>
-      </Form.FormItem> -->
       </Form>
     </template>
     <template v-else>
@@ -210,6 +206,7 @@
   import { useI18n } from 'vue-i18n';
   import { InstanceService } from '~/api/modules/v1';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
+  import useIsFederationEnv from '~/composables/use-is-federation-env';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
   import ImageSelect from '~/pages/application/components/image-select.vue';
@@ -220,6 +217,7 @@
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from '../use-deploy';
 
   import type { AppModelDeployRecordOutputObj } from '~/@types/v1/deploy';
+  import type { UpdateAppInstancesRequest } from '~/@types/v1/instance';
   import type { BuildInfo, BuildStatus } from '~/pages/application/detail/components/view-build-log/type';
 
   type ImageSourceType = 'code' | 'image';
@@ -238,6 +236,7 @@
   const { t } = useI18n();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
+  const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
 
   const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
     () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
@@ -248,13 +247,11 @@
   const imageSelectRef = ref();
   const formModel = reactive<{
     branch: string;
-    deployType: 'InplaceUpdate' | 'RollingUpdate';
     imageTag: string;
     replicas?: number;
     updateContent: 'both' | 'config' | 'image';
   }>({
     branch: '',
-    deployType: 'RollingUpdate',
     imageTag: '',
     updateContent: 'both',
   });
@@ -294,7 +291,9 @@
     if (formModel.updateContent === 'config') {
       return t('本次更新仅变更应用的配置信息（包括环境变量等），镜像 Tag 保持不变');
     }
-    return t('本次更新仅变更镜像 Tag，应用的配置信息（包括环境变量等）保持不变');
+    return t(
+      '本次更新仅变更镜像 Tag，应用的配置信息（包括环境变量等）保持不变。仅更新容器镜像，不重建 Pod，更新速度更快',
+    );
   });
   const loading = ref(false);
   const curImageTag = ref('');
@@ -431,14 +430,17 @@
    * 仅镜像
    */
   async function handleImage() {
+    if (isFederationEnv.value) return false;
     try {
-      await InstanceService.updateAppInstances({
+      const params: UpdateAppInstancesRequest = {
         appID: appDetailStore.appID,
         envName: trpcDeployStore.curEnvItem?.name ?? '',
         imageTag: formModel.imageTag,
-        updateStrategy: formModel.deployType,
+        updateStrategy: 'InplaceUpdate',
+        // 全量更新传空数组
         instanceIDs: [],
-      });
+      };
+      await InstanceService.updateAppInstances(params);
       return true;
     } catch (error) {
       console.warn(error);
@@ -453,18 +455,12 @@
   function handleUpdateContentChange(val: 'both' | 'config' | 'image') {
     // 仅配置时,使用当前镜像 Tag;其他情况清空让用户选择
     formModel.imageTag = val === 'config' ? curImageTag.value : '';
-
-    // 非仅镜像时,重置为滚动更新(原地更新仅支持镜像更新)
-    if (val !== 'image') {
-      formModel.deployType = 'RollingUpdate';
-    }
   }
 
   watch(isShow, async val => {
     if (!val) {
       withPausedWatch(() => {
         formModel.branch = '';
-        formModel.deployType = 'RollingUpdate';
         formModel.updateContent = 'both';
         formModel.imageTag = '';
         formModel.replicas = undefined;
