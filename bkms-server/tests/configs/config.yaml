@@ -10,7 +10,7 @@ bkApp:
 account:
   # AuthBaseURL 是 auth 服务的基础 URL，通常由蓝鲸网关服务提供，usertoken 令牌相关功能使用
   authBaseURL: http://auth.example.com
-  # LoginURL 是蓝鲸登录服务的基础 URL，auth 令牌认证、usertoken 拼接登录地址时会用到
+  # LoginURL 是登录页根地址（不含路径），用于拼接 /plain/
   loginURL: http://login.example.com
 # 蓝鲸平台地址配置
 bkPlatUrls:

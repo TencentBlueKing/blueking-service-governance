@@ -212,15 +212,55 @@ var _ = Describe("User authentication middleware", func() {
 		})
 	})
 
-	DescribeTable("选择用户认证后端",
+	DescribeTable(
+		"selects the auth backend",
 		func(cfg Config, expectedType string) {
 			_, backendType := getBackend(cfg)
 			Expect(backendType).To(Equal(expectedType))
 		},
 		Entry("bk_ticket", Config{BackendType: BackendBkTicket}, BackendBkTicket),
 		Entry("bk_token", Config{BackendType: BackendBkToken}, BackendBkToken),
-		Entry("默认使用 bk_token", Config{}, BackendBkToken),
+		Entry("defaults to bk_token", Config{}, BackendBkToken),
+		Entry(
+			"keeps bk_ticket when loginApigwURL is set",
+			Config{
+				BackendType:   BackendBkTicket,
+				LoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login",
+			},
+			BackendBkTicket,
+		),
+		Entry(
+			"uses bk-login apigw when backend is bk_token",
+			Config{
+				BackendType:   BackendBkToken,
+				LoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login",
+				BkAppCode:     "bkms",
+				BkAppSecret:   "secret",
+			},
+			BackendBkToken,
+		),
 	)
+
+	It("constructs the bk-login apigw backend when loginApigwURL is set", func() {
+		backend, backendType := getBackend(Config{
+			BackendType:   BackendBkToken,
+			LoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login",
+			BkAppCode:     "bkms",
+			BkAppSecret:   "secret",
+		})
+		Expect(backendType).To(Equal(BackendBkToken))
+		_, ok := backend.(*backends.BkTokenApigwAuthBackend)
+		Expect(ok).To(BeTrue())
+	})
+
+	It("panics when loginApigwURL is set without app credentials", func() {
+		Expect(func() {
+			getBackend(Config{
+				BackendType:   BackendBkToken,
+				LoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login",
+			})
+		}).To(Panic())
+	})
 })
 
 func serveWithMiddleware(middlewares ...gin.HandlerFunc) *httptest.ResponseRecorder {

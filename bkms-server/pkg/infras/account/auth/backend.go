@@ -43,7 +43,15 @@ func getBackend(cfg Config) (AuthBackend, string) {
 	switch cfg.BackendType {
 	case BackendBkTicket:
 		return backends.NewBkTicketAuthBackend(cfg.LoginURL), BackendBkTicket
-	case BackendBkToken:
+	case BackendBkToken, "":
+		if cfg.LoginApigwURL != "" {
+			if cfg.BkAppCode == "" || cfg.BkAppSecret == "" {
+				panic("bkApp.code and bkApp.secret are required when account.loginApigwURL is set")
+			}
+			return backends.NewBkTokenApigwAuthBackend(
+				cfg.LoginApigwURL, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
+			), BackendBkToken
+		}
 		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken
 	default:
 		// Default to bk_token

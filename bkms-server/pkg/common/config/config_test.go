@@ -144,6 +144,7 @@ development:
 			Expect(cfg.BkApiStages.BCS).To(Equal("prod"))
 			Expect(cfg.Account.AuthBaseURL).To(Equal("http://auth.example.com"))
 			Expect(cfg.Account.LoginURL).To(Equal("http://login.example.com"))
+			Expect(cfg.Account.LoginApigwURL).To(BeEmpty())
 			Expect(cfg.Account.AuthEnvName).To(Equal("test"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
@@ -366,6 +367,63 @@ httpServer:
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("validate HTTPServerConfig"))
 			Expect(err.Error()).To(ContainSubstring("'Address' failed on the 'required' tag"))
+		})
+
+		It("should load loginApigwURL under account", func() {
+			configContent := `
+bkApp:
+  code: test-app
+  secret: test-secret
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: https://paas.example.com/login
+  loginApigwURL: https://bkapi.example.com/api/bk-login/prod/login
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg, err := config.Load(ctx, configFile)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Account.LoginURL).To(Equal("https://paas.example.com/login"))
+			Expect(cfg.Account.LoginApigwURL).To(Equal("https://bkapi.example.com/api/bk-login/prod/login"))
+		})
+
+		It("should fail when loginApigwURL is set without bkApp credentials", func() {
+			configContent := `
+bkApp:
+  code: ""
+  secret: ""
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: https://paas.example.com/login
+  loginApigwURL: https://bkapi.example.com/api/bk-login/prod/login
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = config.Load(ctx, configFile)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("bkApp.code and bkApp.secret are required"))
 		})
 
 		It("should fail when http server port is missing", func() {

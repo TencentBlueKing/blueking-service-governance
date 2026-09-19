@@ -38,8 +38,11 @@ type BkAppConfig struct {
 type AccountConfig struct {
 	// AuthBaseURL 是 auth 服务的基础 URL，通常由蓝鲸网关服务提供，usertoken 令牌相关功能使用
 	AuthBaseURL string `validate:"required,url"`
-	// LoginURL 是蓝鲸登录服务的基础 URL，auth 令牌认证、usertoken 拼接登录地址时会用到
+	// LoginURL 是登录页根地址，不含路径，用于拼接 /plain/ 跳转
 	LoginURL string `validate:"required,url"`
+	// LoginApigwURL 是 bk-login 网关前缀，不含接口路径。
+	// backendType 为 bk_token 且本字段非空时，通过网关 userinfo 校验 bk_token；留空则直连 LoginURL。
+	LoginApigwURL string `validate:"omitempty,url"`
 	// AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
 	AuthEnvName string
 	// BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
