@@ -29,7 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/httpcli"
 )
 
-// BkTokenAuthBackend 用于社区开源版本的用户登录和信息获取。
+// BkTokenAuthBackend 通过登录服务直连校验 bk_token 并获取用户信息。
 type BkTokenAuthBackend struct {
 	// BkLoginURL 是蓝鲸统一登录服务地址，不包含任何路径信息。
 	BkLoginURL string

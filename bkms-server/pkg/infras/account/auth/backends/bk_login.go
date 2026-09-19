@@ -127,6 +127,7 @@ func (b *BkTokenApigwAuthBackend) GetUserInfo(ctx context.Context, userCred stri
 			url, result.Error.Code, result.Error.Message,
 		)
 	}
+	// bk-login userinfo 以 data.bk_username 作为登录用户标识。
 	if result.Data.BkUsername == "" {
 		return nil, errors.Errorf("apigw %s returned empty bk_username", url)
 	}

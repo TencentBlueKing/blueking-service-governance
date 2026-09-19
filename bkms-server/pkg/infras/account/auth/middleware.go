@@ -49,12 +49,10 @@ const (
 type Config struct {
 	// BackendType 是用于认证的后端类型，例如 bk_ticket 或 bk_token。
 	BackendType string
-	// LoginURL 是登录页根地址（已解析：社区版为 featureCommunity.bkLoginURL，否则 account.loginURL）。
-	// 未配网关时也作为直连 get_user / get_info 的 host。
+	// LoginURL 是登录页根地址，用于拼接 /plain/；未配网关时也作为直连校验的 host。
 	LoginURL string
-	// BkLoginApigwURL 是 featureCommunity.bkLoginApigwURL，bk-login 网关前缀。
-	// 非空时拼接 userinfo 路径校验 bk_token。
-	BkLoginApigwURL string
+	// LoginApigwURL 是 bk-login 网关前缀。backendType 为 bk_token 且本字段非空时走网关 userinfo。
+	LoginApigwURL string
 	// BkAppCode 应用 ID，走 API 网关时需要。
 	BkAppCode string
 	// BkAppSecret 应用密钥，走 API 网关时需要。

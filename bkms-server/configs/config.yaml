@@ -9,8 +9,10 @@ bkApp:
 account:
   # AuthBaseURL 是 auth 服务的基础 URL，通常由蓝鲸网关服务提供，usertoken 令牌相关功能使用
   authBaseURL: http://apigw.example.com
-  # LoginURL 是内网默认蓝鲸登录地址（不含路径）。未配 featureCommunity 时既用于跳 /plain/，也用于直连校验。
-  loginURL: http://login.example.com
+  # LoginURL 是登录页根地址（不含路径），用于拼接 /plain/
+  loginURL: https://paas.example.com/login
+  # LoginApigwURL 是 bk-login 网关前缀（不含接口路径）；backendType 为 bk_token 时用于校验 bk_token
+  loginApigwURL: https://bkapi.example.com/api/bk-login/prod/login
   # AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
   # authEnvName: prod
   # BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
@@ -232,14 +234,6 @@ taskPoller:
     timeout: 1200
     # 轮询间隔（单位：秒）
     interval: 15
-# ------------------------------ 社区版差异化配置 ------------------------------
-# 社区版相对内网版的差异项集中在此；字段留空时行为与内网版一致，走内网版处理逻辑
-featureCommunity:
-  # 社区版登录页根地址（PaaS 统一登录），拼接 /plain/
-  # 示例：https://paas.example.com/login
-  bkLoginURL: ""
-  # bk-login 网关地址
-  bkLoginApigwURL: ""
 # ------------------------------ 开发环境专用 ------------------------------
 # 开发环境专用配置
 development:

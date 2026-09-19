@@ -37,7 +37,7 @@ type userCredentialBackend interface {
 }
 
 var _ = Describe("Auth backends", func() {
-	DescribeTable("从请求中获取用户票据",
+	DescribeTable("reads the user credential from the request",
 		func(backend userCredentialBackend, header, cookieName string) {
 			request := httptest.NewRequest(http.MethodGet, "/", nil)
 			request.AddCookie(&http.Cookie{Name: cookieName, Value: "cookie-credential"})
@@ -52,7 +52,7 @@ var _ = Describe("Auth backends", func() {
 		Entry("bk_token_apigw", NewBkTokenApigwAuthBackend("", "", "", ""), "X-User-Bk-Token", "bk_token"),
 	)
 
-	It("使用 bk_ticket 获取用户信息", func() {
+	It("gets user info with bk_ticket", func() {
 		server := newUserInfoServer(
 			"/user/get_info/", "bk_ticket", "ticket", `{"ret":0,"data":{"username":"blueking"}}`,
 		)
@@ -64,7 +64,7 @@ var _ = Describe("Auth backends", func() {
 		Expect(user).To(Equal(&UserInfo{ID: "blueking"}))
 	})
 
-	It("通过 API 网关 get_bk_token_userinfo 获取用户信息", func() {
+	It("gets user info from the bk-login apigw userinfo API", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 			Expect(request.URL.Path).To(Equal("/login/api/v3/open/bk-tokens/userinfo/"))
 			Expect(request.URL.Query().Get("bk_token")).To(Equal("token"))
@@ -83,7 +83,7 @@ var _ = Describe("Auth backends", func() {
 		Expect(user).To(Equal(&UserInfo{ID: "admin"}))
 	})
 
-	It("API 网关返回登录态过期", func() {
+	It("returns the apigw login-expired error", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":{"code":"VALIDATION_ERROR","message":"登录态已过期"}}`))
@@ -95,7 +95,18 @@ var _ = Describe("Auth backends", func() {
 		Expect(err).To(MatchError(ContainSubstring("登录态已过期")))
 	})
 
-	DescribeTable("返回用户信息接口错误",
+	It("returns an error when apigw userinfo has an empty bk_username", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"data":{"bk_username":""}}`))
+		}))
+		defer server.Close()
+
+		_, err := NewBkTokenApigwAuthBackend(server.URL, "bkms", "secret", "").
+			GetUserInfo(context.Background(), "token")
+		Expect(err).To(MatchError(ContainSubstring("empty bk_username")))
+	})
+
+	DescribeTable("returns userinfo API errors",
 		func(response, expectedError string, buildBackend func(string) userInfoBackend) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte(response))
