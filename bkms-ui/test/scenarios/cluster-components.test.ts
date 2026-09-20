@@ -100,23 +100,21 @@ describe('集群组件列表（S17）', () => {
   });
 
   it('当列表有组件时，分组默认收起；点击分组头部可展开显示组件名与「安装」入口', async () => {
-    const { container, getByText, queryByText } = renderPage(oneAddon);
+    const { getByText, queryByText } = renderPage(oneAddon);
     // 等待列表加载完成后再定位分组头部
     await screen.findByText(/必选组件/);
-    const header = container.querySelector('.cursor-pointer') as HTMLElement;
-    expect(header).toBeTruthy();
     // 收起态：组件名不渲染
     expect(queryByText('监控插件')).toBeNull();
-    await userEvent.click(header);
+    // 以头部行的语义文本为锚点点击（事件冒泡至头部行 @click），避免依赖 cursor-pointer 样式类
+    await userEvent.click(getByText(/必选组件/));
     expect(await screen.findByText('监控插件')).toBeTruthy();
     expect(getByText('安装')).toBeTruthy();
   });
 
   it('当用户点击「安装」时，应弹出安装组件侧滑', async () => {
-    const { container, getByText } = renderPage(oneAddon);
+    const { getByText } = renderPage(oneAddon);
     await screen.findByText(/必选组件/);
-    const header = container.querySelector('.cursor-pointer') as HTMLElement;
-    await userEvent.click(header);
+    await userEvent.click(getByText(/必选组件/));
     const installBtn = await screen.findByText('安装');
     await userEvent.click(installBtn);
     expect(await screen.findByText('安装组件侧滑')).toBeTruthy();

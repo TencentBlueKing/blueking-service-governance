@@ -31,7 +31,12 @@
 
 import { Comment, defineComponent, h } from 'vue';
 
-/** 安装 vxe 依赖的 jsdom 垫片（在测试文件 beforeAll 中调用一次） */
+/**
+ * 安装 vxe 依赖的 jsdom 垫片（在测试文件 beforeAll 中调用一次）。
+ * 作用域说明：vitest 默认 isolate 下每个测试文件独享 worker + 全新 jsdom 实例，
+ * 本函数的 prototype 补丁只影响本文件，文件结束随实例废弃，故无需恢复机制；
+ * 亦刻意不放进全局 setup.ts（2026-09-07 决策：避免影响非列表类测试）。
+ */
 export function installVxeShims() {
   // vxe-table 的 DOM 工具会引用 HTMLDocument 判断文档类型，jsdom 未暴露该全局
   (globalThis as Record<string, unknown>).HTMLDocument = Document;

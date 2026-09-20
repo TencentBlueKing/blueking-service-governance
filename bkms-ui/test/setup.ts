@@ -27,15 +27,16 @@
 //   ① 显式哨兵：MockedApiError（测试主动抛的接口失败，生产由 interceptor 接管）
 //   ② 调用链归属：栈里出现 test/ 或 src/ 的帧 → 是我们的锅（如传错 props 把组件库干崩）→ 非预期；
 //      纯组件库栈或无栈（如 bkui-vue 校验 promise reject、modal 卸载后定时器回调）→ 预期。
-// 默认 fail-closed：无法归为「预期」的一律计入非预期，由 afterAll 抛错让 CI 变红。
+// 策略取舍：仅按栈帧形态放行已知组件库缺陷（fail-open），带我们栈帧的错误一律不放过；
+// 非预期项由 afterAll 抛错让 CI 变红。若要收紧为全 fail-closed，需先盘点组件库缺陷签名建白名单。
 import { cleanup } from '@testing-library/vue';
-import { afterAll, afterEach } from 'vitest';
+import { afterAll, afterEach, expect } from 'vitest';
 
 import { MockedApiError } from './helpers/mocked-api-error';
 // jest-dom 语义化 DOM 断言匹配器（toBeInTheDocument / toBeDisabled 等）全局注册
 import '@testing-library/jest-dom/vitest';
 
-const unexpectedErrors: unknown[] = [];
+const unexpectedErrors: { err: unknown; test: string }[] = [];
 /** 栈帧路径中出现 test/ 或 src/ 下的源码文件 */
 const OUR_FRAME = /[\\/](test|src)[\\/][\w.\\/-]+\.(ts|tsx|vue|js|mts)/;
 
@@ -50,20 +51,27 @@ const USE_COLOR = !process.env.NO_COLOR && !process.env.CI;
 const paint = (color: string, text: string) => (USE_COLOR ? `\u001b[${color}m${text}\u001b[0m` : text);
 
 function classifyUnhandled(err: unknown): void {
+  const testName = expect.getState().currentTestName ?? '(文件级/用例外)';
   if (isExpectedUnhandled(err)) {
     console.warn(`${paint('33', '[expected unhandled]')} ${describeError(err)}`);
     return;
   }
-  unexpectedErrors.push(err);
-  console.error(`${paint('31', '[UNEXPECTED unhandled]')} ${err instanceof Error ? err.stack : err}`);
+  unexpectedErrors.push({ test: testName, err });
+  console.error(`${paint('31', '[UNEXPECTED unhandled]')} [${testName}] ${err instanceof Error ? err.stack : err}`);
 }
 
 function isExpectedUnhandled(err: unknown): boolean {
   // ① 显式哨兵：测试主动模拟的接口失败
   if (err instanceof MockedApiError) return true;
-  // ② 调用链经过我们的代码 → 非预期（典型：用例传错 props 导致组件库崩溃）
+  // ② 调用链经过我们的代码 → 非预期（典型：用例传错 props 导致组件库崩溃）。
+  //    先剔除 node_modules 帧（pnpm 目录树可能含 src/ 段，如 .pnpm/<pkg>/node_modules/<pkg>/src/），
+  //    避免三方包源码路径被 OUR_FRAME 误判为我们的代码
   const stack = (err as null | { stack?: string })?.stack ?? '';
-  if (stack && OUR_FRAME.test(stack)) return false;
+  const appFrames = stack
+    .split('\n')
+    .filter(line => !line.includes('node_modules'))
+    .join('\n');
+  if (appFrames && OUR_FRAME.test(appFrames)) return false;
   // ③ 纯组件库内部栈 / 无栈（组件库已知缺陷形态）→ 预期
   return true;
 }
@@ -81,9 +89,10 @@ window.addEventListener('error', event => {
 
 afterAll(() => {
   if (unexpectedErrors.length) {
+    const detail = unexpectedErrors.map(({ test, err }) => `  - [${test}] ${describeError(err)}`).join('\n');
     throw new Error(
       `出现 ${unexpectedErrors.length} 个非预期未处理错误（见上方 [UNEXPECTED unhandled] 输出）。` +
-        '若为已知情况，请用 MockedApiError 或在 setup.ts 补充判定规则。',
+        `涉及用例：\n${detail}\n若为已知情况，请用 MockedApiError 或在 setup.ts 补充判定规则。`,
     );
   }
 });

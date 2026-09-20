@@ -37,6 +37,8 @@ import { vi } from 'vitest';
 export function createAnyServiceMock(serviceName = 'UnnamedService', defaultReturn: unknown = { list: [], total: 0 }) {
   /** 记录已调用过的方法名，同名方法只 warn 一次 */
   const calledMethods = new Set<string>();
+  /** 按属性名缓存 mock 实例：同名方法稳定可断言调用次数（每次访问新建 spy 则永远断言到 0） */
+  const methodMocks = new Map<string, ReturnType<typeof vi.fn>>();
   return new Proxy({} as Record<string, unknown>, {
     get: (_target, prop: string | symbol) => {
       // 过滤 Symbol prop（如 Symbol.toPrimitive / then），防止被当作 thenable 误触发
@@ -45,7 +47,13 @@ export function createAnyServiceMock(serviceName = 'UnnamedService', defaultRetu
         calledMethods.add(prop);
         console.warn(`[anyService] ${serviceName}.${prop}() 被 Proxy 兜底调用`);
       }
-      return vi.fn().mockResolvedValue(defaultReturn);
+      let fn = methodMocks.get(prop);
+      if (!fn) {
+        // 每次调用 resolve 独立副本（structuredClone 在调用时执行），防用例 mutate 串染
+        fn = vi.fn(() => Promise.resolve(structuredClone(defaultReturn)));
+        methodMocks.set(prop, fn);
+      }
+      return fn;
     },
   });
 }

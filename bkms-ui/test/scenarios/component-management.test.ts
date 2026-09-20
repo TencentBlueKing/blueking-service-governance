@@ -291,9 +291,12 @@ describe('组件管理：新建/编辑向导', () => {
 
       await userEvent.click(screen.getByRole('button', { name: '试运行' }));
 
-      await waitFor(() => expect(mocks.previewComponentDef).not.toHaveBeenCalled());
       // 空值时 bkui-vue 依次执行 required 与自定义 rules，最终展示的错误文案为 rules 末条的格式提示
-      await waitFor(() => expect(screen.getByText(/请输入组件ID|组件 ID不能为空|以字母开头/)).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getByText(/以字母开头，可包含字母、数字、中划线，长度2-20位/)).toBeInTheDocument(),
+      );
+      // 校验文案（正向信号）就位后再做消极断言，避免 waitFor(not) 空转即过的假绿
+      await waitFor(() => expect(mocks.previewComponentDef).not.toHaveBeenCalled());
       expect(screen.queryByText('试运行结果预览')).not.toBeInTheDocument();
     });
 

@@ -2,18 +2,23 @@ name: bkms-ui unit tests
 
 on:
   pull_request:
-    paths:
-      - 'bkms-ui/**'
-      - '.github/workflows/bkms-ui-test.yml'
   push:
     branches: [main, develop]
-    paths:
-      - 'bkms-ui/**'
-      - '.github/workflows/bkms-ui-test.yml'
+    # 不设 paths 过滤：若用 bkms-ui/** 过滤，修改仓库根共享配置时 check 会缺席；
+    # 若该 check 被设为 required，将直接卡死合并。全量仅约 2 分钟，常驻触发可接受
+
+concurrency:
+  # 同一分支/PR 的新推送自动取消仍在跑的旧任务，省 runner 时长
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # 固定 runner 版本，避免 ubuntu-latest 被官方迁移导致环境漂移
+    runs-on: ubuntu-24.04
+    # 全量测试实测约 15s + 依赖安装，10 分钟已留足余量；
+    # 防止用例挂起（如 waitFor 死等）默认挂满 360 分钟烧 runner
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4

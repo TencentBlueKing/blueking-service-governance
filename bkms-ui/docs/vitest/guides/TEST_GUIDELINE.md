@@ -46,7 +46,7 @@
 1. 场景必须来自评分表入选对象；新增先补评分再立项。
 2. 写用例前先产出路径清单（含校准 V）交审批。
 3. `it` 标题：**「当用户____时，应____」**；`describe`：**「模块：交互主题」**。
-4. 查询以 `getByRole` / `getByText` / `findBy*` 为主；允许 placeholder / displayValue / `getByTestId`（仅 stub 契约）；禁止依赖 CSS 类名与内部 DOM 结构。
+4. 查询以 `getByRole` / `getByText` / `findBy*` 为主；允许 placeholder / displayValue / `getByTestId`（仅 stub 契约）；禁止依赖 CSS 类名与内部 DOM 结构。**唯一例外**：目标信号在 jsdom 不可达时（如 bkui tooltip 文案、`is-error` 态、无 role 的组件库控件），允许以组件库内部类名为最后手段，用例须注释原因。
 5. 交互用 `@testing-library/user-event`；断言用户可见行为（组件契约单测可用 VTU emit，见 PLAYBOOK）。
 6. API 一律 `vi.mock`，禁止真实请求；复用 `test/setup.ts`。
 7. **共享 helpers（禁止重复造轮子）**：`vi.mock` 内须动态 `import()`，避免 hoisting TDZ。
@@ -59,6 +59,8 @@
    | `test/helpers/mock-service.ts` | Proxy anyService          |
    | `test/stubs/monaco-editor.ts`  | monaco alias              |
    | `test/stubs/bkui-vue-lite.ts`  | 轻量 bkui（按需 vi.mock） |
+
+   目录约定：**helpers/ 放“生成 mock 的工厂函数”（如 `tableMockFactory()`），stubs/ 放“整包替身模块本体”（被 alias 或被 vi.mock 直接 import）**。
 
 8. 全局 `afterEach(cleanup)` 已在 `test/setup.ts`；勿重复手写。VTU 场景须自行 `unmount`（见 PLAYBOOK）。
 9. P0/P1 须正向 + 反向 + 边界/异常。

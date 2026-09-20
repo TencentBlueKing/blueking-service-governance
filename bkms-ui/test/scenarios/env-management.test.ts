@@ -224,6 +224,9 @@ describe('环境管理：删除二次确认', () => {
     await waitFor(() => expect(confirmBtn).toBeEnabled());
     await userEvent.click(confirmBtn);
     await waitFor(() => expect(mocks.deleteEnv).toHaveBeenCalledWith({ envID: 'env-id-1' }));
+    // 失败链路走完的稳定信号：确认按钮 loading 复位（handleConfirm 的 finally），
+    // 保证断言时 rejection 已传播完毕，不因「弹窗本就开着」而假绿
+    await waitFor(() => expect(confirmBtn).toBeEnabled());
     // 现状行为：失败不关闭弹窗（错误由 interceptor 统一反馈），用户可修正后重试
     expect(screen.getByText(/确定删除环境/)).toBeInTheDocument();
     expect(mocks.message).not.toHaveBeenCalledWith({ message: '删除成功', theme: 'success' });

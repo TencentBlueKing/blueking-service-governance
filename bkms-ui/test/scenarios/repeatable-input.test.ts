@@ -76,10 +76,11 @@ describe('重复输入项：增删与校验', () => {
   });
 
   it('当用户删除某项时，仅该项被移除', async () => {
-    const { container } = render(Harness, { global: { mocks: i18nGlobalMocks } as never });
-    // Del 为 bkui-vue 图标组件，渲染为 svg 且无 role，只能按标签查询
-    const delIcons = container.querySelectorAll('svg');
-    await userEvent.click(delIcons[0]);
+    render(Harness, { global: { mocks: i18nGlobalMocks } as never });
+    // Del 为 bkui-vue 图标组件，渲染为 svg 且无 role：按行锚定（首个输入框所在行）定位，
+    // 避免全局 svg 顺序耦合（页内新增无关图标即错位）
+    const firstRow = screen.getAllByPlaceholderText('请输入值')[0].closest('.flex') as HTMLElement;
+    await userEvent.click(firstRow.querySelector('svg') as HTMLElement);
     expect(screen.getAllByPlaceholderText('请输入值')).toHaveLength(1);
   });
 

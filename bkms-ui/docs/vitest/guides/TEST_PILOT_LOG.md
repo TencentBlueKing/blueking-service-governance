@@ -24,6 +24,7 @@
 | 页面经 ref 调用 `getVxeTableInstance().scrollTo()` 逃逸成 unhandled error | TableStub 未暴露该契约 | TableStub 已 `expose({ getVxeTableInstance })`；列表页 stub 后缺 ref 方法先查页面 watch/回调 | mock-table |
 | getEnv mock 返回 `undefined` 走「获取详情失败」分支 | 组件直接解引用 `detail.appDeployStatuses` | mock 接口返回值须按真实 shape 给对象（空对象即可） | delete-env-action.vue:81 |
 | bkui Dialog 关闭后 `getByText` 仍查得到、waitFor 消失断言超时 | 未传 `render-directive="if"` 时默认 'show' 模式，关闭仅 v-show 隐藏不销毁 DOM（modal/index.js:473-476）；getByText 不筛隐藏元素 | 断言关闭用 `not.toBeVisible()`；需「消失」语义则组件显式传 `render-directive="if"` | PLAYBOOK §6 / delete-comfirm.vue:25 |
+| 全局 `restoreMocks: true` 会红 2 条（height-chain） | mock 工厂里一次性 `mockResolvedValue`、beforeEach 不重设的 vi.fn 被 mockRestore 清空实现，await 后 `undefined.then` | 禁开全局 restoreMocks；spyOn 泄漏目前仅 router-guards 一处且被每文件 jsdom 隔离兜住，新写 spyOn 请文件内自行 restore | height-chain.test.ts:43-52 |
 
 ## 环境事实（前置）
 

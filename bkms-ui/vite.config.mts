@@ -176,13 +176,11 @@ export default ({ mode }: { mode: string }) => {
       // findBy* 轮询可能比快机慢 2~4 倍），统一放宽单条用例超时，
       // 保证结果与执行机器无关；仅影响真实挂起的用例失败时长。
       testTimeout: 30_000,
-      // bkui-vue FormItem 字段级校验（required / rules blur）的 promise reject 无 catch，
-      // 会产生 unhandled rejection（真实浏览器控制台同样出现，属组件库缺陷）。
-      // 另：test/scenarios/component-management.test.ts 的「试运行接口失败」用例中
-      // previewComponentDef 的 rejection 同样依赖本开关兜底（业务约定 interceptor 统一反馈，业务层无 catch）。
-      // 2026-09-08：未处理错误的分类权已移交 test/setup.ts 的全局处理器——
-      // 预期项（组件库缺陷 / MockedApiError 哨兵）降级为 warning，非预期项由 afterAll 抛错让 CI 变红。
-      // 故关闭本开关：vitest 不再自行收集，避免与 setup.ts 的判定重复。
+      // 刻意不开 restoreMocks：全局 restore 会清空 mock 工厂里一次性 mockResolvedValue
+      // 的实现（height-chain 即被清挂），spyOn 泄漏由每文件 jsdom 隔离兜底，见 TEST_PILOT_LOG
+      // 未处理错误（bkui FormItem 校验 reject 等组件库缺陷）由 setup.ts 全局处理器
+      // 分类：预期降为 warning，非预期由 afterAll 抛错变红——vitest 不再报告它们是因为
+      // setup.ts 的处理器接管，与本开关无关；保持默认 false 作兜底，防错误绕过拦截后漏报。
       dangerouslyIgnoreUnhandledErrors: false,
       // jsdom 环境垫片（ResizeObserver / PointerEvent 等）：须在测试文件 import 组件链之前执行
       setupFiles: ['test/setup.ts'],
