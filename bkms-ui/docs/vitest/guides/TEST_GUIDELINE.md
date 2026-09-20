@@ -43,7 +43,7 @@
 
 ## 3. 规范约束（违反即打回）
 
-1. 场景必须来自评分表入选对象；新增先补评分再立项。
+1. 存量场景必须来自评分表入选对象。**ROUTES 已冻结（S1~S19 不再增补）**：新模块/新页面按 `bkms-scenario-test-authoring` skill 走轻量流程——路径清单写测试文件头，不进册（日后是否补录由维护者决定）。
 2. 写用例前先产出路径清单（含校准 V）交审批。
 3. `it` 标题：**「当用户____时，应____」**；`describe`：**「模块：交互主题」**。
 4. 查询以 `getByRole` / `getByText` / `findBy*` 为主；允许 placeholder / displayValue / `getByTestId`（仅 stub 契约）；禁止依赖 CSS 类名与内部 DOM 结构。**唯一例外**：目标信号在 jsdom 不可达时（如 bkui tooltip 文案、`is-error` 态、无 role 的组件库控件），允许以组件库内部类名为最后手段，用例须注释原因。
@@ -87,7 +87,7 @@
 - [ ] 符合 §3
 - [ ] `vitest run` 全绿且连跑 3 次无 flaky（watch 结果不作全绿依据）
 - [ ] tests 段耗时符合条款 12
-- [ ] 变异 ≥2 处注入后对应用例变红，并立即恢复业务代码
+- [ ] 变异 ≥3 处注入后对应用例变红，并立即恢复业务代码
 - [ ] 文档性验收：不熟模块的同事能从 `it` 标题复述交互（可人工）
 
 **不要求**撰写独立六维评审 md 或多轮复审报告；验收字段写入台账场景卡即可。
@@ -101,7 +101,9 @@
 
 ```typescript
 /**
- * 场景级测试：<模块>（路径清单见 docs/vitest/guides/TEST_SCENARIOS_ROUTES.md Sxx）
+ * 场景级测试：<模块>
+ * （存量场景：路径清单见 docs/vitest/guides/TEST_SCENARIOS_ROUTES.md Sxx；
+ *   ROUTES 未收录的新模块：本头即场景说明，V 与路径清单直接写于下方）
  *
  * 覆盖：… → V = n
  * stub/mock：…
