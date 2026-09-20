@@ -25,6 +25,7 @@
 | getEnv mock 返回 `undefined` 走「获取详情失败」分支 | 组件直接解引用 `detail.appDeployStatuses` | mock 接口返回值须按真实 shape 给对象（空对象即可） | delete-env-action.vue:81 |
 | bkui Dialog 关闭后 `getByText` 仍查得到、waitFor 消失断言超时 | 未传 `render-directive="if"` 时默认 'show' 模式，关闭仅 v-show 隐藏不销毁 DOM（modal/index.js:473-476）；getByText 不筛隐藏元素 | 断言关闭用 `not.toBeVisible()`；需「消失」语义则组件显式传 `render-directive="if"` | PLAYBOOK §6 / delete-comfirm.vue:25 |
 | 全局 `restoreMocks: true` 会红 2 条（height-chain） | mock 工厂里一次性 `mockResolvedValue`、beforeEach 不重设的 vi.fn 被 mockRestore 清空实现，await 后 `undefined.then` | 禁开全局 restoreMocks；spyOn 泄漏目前仅 router-guards 一处且被每文件 jsdom 隔离兜住，新写 spyOn 请文件内自行 restore | height-chain.test.ts:43-52 |
+| 告警逐条打印曾把单次日志刷到 5300+ 行（Vue warn 携带组件堆栈），真信号被淹没 | worker 内逐条 console 输出无汇总 | setup.ts 全部告警按签名聚合计数、文件结束输出摘要；非预期未处理错误在 afterAll 一次性给出次数+用例名+堆栈 | setup.ts |
 
 ## 环境事实（前置）
 
