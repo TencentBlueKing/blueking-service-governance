@@ -98,7 +98,10 @@ func NewWebServerCmd() *cobra.Command {
 			// 初始化所有 store 实例（必须在 database 初始化之后）
 			storereg.Init(ctx)
 			reg := storereg.G()
-			router := server.RegisterRouter(ctx, *cfg, cmd.Name())
+			router, err := server.RegisterRouter(ctx, *cfg, cmd.Name())
+			if err != nil {
+				return err
+			}
 			workload.InitPlugin(
 				appcfg.NewMountableFileProvider(
 					reg.AppConfigFileStore,

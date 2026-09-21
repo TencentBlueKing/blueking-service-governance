@@ -51,8 +51,8 @@ type Config struct {
 	BackendType string
 	// LoginURL 是登录页根地址，用于拼接 /plain/；未配网关时也作为直连校验的 host。
 	LoginURL string
-	// LoginApigwURL 是 bk-login 网关前缀。backendType 为 bk_token 且本字段非空时走网关 userinfo。
-	LoginApigwURL string
+	// BkLoginGatewayURL 是已解析完成的 bk-login 网关地址；非空时 bk_token 认证走网关 userinfo。
+	BkLoginGatewayURL string
 	// BkAppCode 应用 ID，走 API 网关时需要。
 	BkAppCode string
 	// BkAppSecret 应用密钥，走 API 网关时需要。

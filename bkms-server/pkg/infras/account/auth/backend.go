@@ -44,12 +44,9 @@ func getBackend(cfg Config) (AuthBackend, string) {
 	case BackendBkTicket:
 		return backends.NewBkTicketAuthBackend(cfg.LoginURL), BackendBkTicket
 	case BackendBkToken, "":
-		if cfg.LoginApigwURL != "" {
-			if cfg.BkAppCode == "" || cfg.BkAppSecret == "" {
-				panic("bkApp.code and bkApp.secret are required when account.loginApigwURL is set")
-			}
+		if cfg.BkLoginGatewayURL != "" {
 			return backends.NewBkTokenApigwAuthBackend(
-				cfg.LoginApigwURL, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
+				cfg.BkLoginGatewayURL, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
 			), BackendBkToken
 		}
 		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken

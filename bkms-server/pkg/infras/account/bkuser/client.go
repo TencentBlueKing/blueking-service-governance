@@ -21,14 +21,14 @@ package bkuser
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
-	"net/url"
-	"strings"
+	"time"
 
+	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
+	"github.com/TencentBlueKing/bk-apigateway-sdks/core/define"
 	"github.com/pkg/errors"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/httpcli"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
 )
 
 // UserClient is the minimal client contract required by tenant verification.
@@ -36,103 +36,71 @@ type UserClient interface {
 	GetUser(ctx context.Context, bkUsername string) (*User, error)
 }
 
-// Client requests bk-user APIs using application authorization.
+// defaultRequestTimeout bounds the synchronous request-path bk-user lookup.
+// Keep it aligned with auth/token timeouts instead of the longer 30s-60s
+// budgets commonly used by background cloudapi integrations.
+const defaultRequestTimeout = 10 * time.Second
+
+// Client requests bk-user APIs using application authorization through bk-apigateway SDK.
 type Client struct {
-	baseURL     string
-	bkAppCode   string
-	bkAppSecret string
+	apiClient define.BkApiClient
 }
 
-// User is the subset of bk-user user fields currently consumed by BKMS.
-type User struct {
-	TenantID    string `json:"tenant_id"`
-	BkUsername  string `json:"bk_username"`
-	LoginName   string `json:"login_name"`
-	DisplayName string `json:"display_name"`
-	TimeZone    string `json:"time_zone"`
-	Language    string `json:"language"`
-	Status      string `json:"status"`
-}
-
-type getUserResponse struct {
-	Data  User `json:"data"`
-	Error *struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
-type appAuthorizationHeader struct {
-	BkAppCode   string `json:"bk_app_code"`
-	BkAppSecret string `json:"bk_app_secret"`
-}
-
-// NewClient builds a bk-user client from the gateway base URL and app credentials.
-func NewClient(baseURL, bkAppCode, bkAppSecret string) *Client {
-	return &Client{
-		baseURL:     strings.TrimRight(baseURL, "/"),
-		bkAppCode:   bkAppCode,
-		bkAppSecret: bkAppSecret,
-	}
-}
-
-func (c *Client) authHeader() (string, error) {
-	authHeader, err := json.Marshal(appAuthorizationHeader{
-		BkAppCode:   c.bkAppCode,
-		BkAppSecret: c.bkAppSecret,
+// NewClient builds a bk-user client from the gateway URL template, stage and app credentials.
+func NewClient(apiURLTmpl, stage, bkAppCode, bkAppSecret string) (*Client, error) {
+	apiClient, err := bkapi.NewBkApiClient(bkUserGatewayName, bkapi.ClientConfig{
+		BkApiUrlTmpl: apiURLTmpl,
+		Stage:        stage,
+		AppCode:      bkAppCode,
+		AppSecret:    bkAppSecret,
+		ClientOptions: []define.BkApiClientOption{
+			bkapi.OptJsonResultProvider(),
+			bkapi.OptTimeout(defaultRequestTimeout),
+		},
 	})
 	if err != nil {
-		return "", errors.Wrap(err, "marshal bk-user auth header")
+		return nil, errors.Wrap(err, "new bk-user client")
 	}
-	return string(authHeader), nil
+	return &Client{apiClient: apiClient}, nil
 }
 
 // GetUser gets the tenant-aware user info for the given bk_username.
 func (c *Client) GetUser(ctx context.Context, bkUsername string) (*User, error) {
-	authHeader, err := c.authHeader()
-	if err != nil {
-		return nil, errors.Wrap(err, "build bk-user auth header")
-	}
+	op := c.apiClient.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "get_user",
+			Method: http.MethodGet,
+			Path:   "/api/v3/open/tenant/users/{bk_username}/",
+		},
+		bkapi.OptSetRequestPathParams(map[string]string{"bk_username": bkUsername}),
+	)
 
-	requestURL, err := url.JoinPath(c.baseURL, "/api/v3/open/tenant/users/"+url.PathEscape(bkUsername)+"/")
-	if err != nil {
-		return nil, errors.Wrapf(err, "build bk-user user url for %s", bkUsername)
-	}
-
-	client := httpcli.NewRestyClient(ctx)
-	resp, err := client.R().
-		SetContext(ctx).
-		SetHeader("X-Bkapi-Authorization", authHeader).
-		ForceContentType("application/json").
-		Get(requestURL)
+	var result getUserResponse
+	resp, err := op.SetContext(ctx).SetResult(&result).Request()
 	if err != nil {
 		return nil, errors.Wrapf(err, "get bk-user user %s", bkUsername)
 	}
-
-	if resp.StatusCode() != http.StatusOK {
-		var failed getUserResponse
-		if unmarshalErr := json.Unmarshal(resp.Body(), &failed); unmarshalErr == nil && failed.Error != nil {
-			return nil, errors.Errorf(
-				"bk-user %s returned status %d: code=%s, message=%s",
-				requestURL,
-				resp.StatusCode(),
-				failed.Error.Code,
-				failed.Error.Message,
-			)
-		}
-		return nil, errors.Errorf("bk-user %s returned status %d: %s", requestURL, resp.StatusCode(), resp.String())
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
 	}
 
-	var result getUserResponse
-	if err = json.Unmarshal(resp.Body(), &result); err != nil {
-		return nil, errors.Wrapf(err, "unmarshal bk-user response from %s", requestURL)
+	requestURL := bkUserGatewayName
+	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
+		requestURL = resp.Request.URL.String()
+	}
+	if !httpresp.IsSuccess(resp) {
+		if result.Error != nil {
+			return nil, errors.Errorf(
+				"bk-user %s returned status %d: code=%s, message=%s",
+				requestURL, resp.StatusCode, result.Error.Code, result.Error.Message,
+			)
+		}
+		return nil, errors.Errorf("bk-user %s returned status %d", requestURL, resp.StatusCode)
 	}
 	if result.Error != nil {
 		return nil, errors.Errorf(
 			"bk-user %s returned error: code=%s, message=%s",
-			requestURL,
-			result.Error.Code,
-			result.Error.Message,
+			requestURL, result.Error.Code, result.Error.Message,
 		)
 	}
 	if result.Data.TenantID == "" {

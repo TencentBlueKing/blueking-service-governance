@@ -28,10 +28,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 )
 
-// Required resolves tenant ID and optionally verifies tenant membership.
+// Required resolves the tenant header for every authenticated business request.
+//
+// 单租模式下仅接受空 tenant 或 default，并统一写回 default 到上下文；
+// 多租模式下要求显式传入 tenant header，并在写入上下文前校验用户是否属于该租户。
 func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID, err := ResolveTenantID(c.Request, enableMultiTenantMode)
+		tenantID, err := ValidateTenantMode(c.Request.Header.Get(HeaderTenantID), enableMultiTenantMode)
 		if err != nil {
 			abortWithStatus(c, tenantStatusCode(err), err.Error())
 			return
@@ -56,8 +59,8 @@ func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 }
 
 func verifyTenantAccess(ctx context.Context, user auth.User, tenantID string, verifier Verifier) error {
-	if user.TenantID != "" {
-		if user.TenantID != tenantID {
+	if user.GetTenantID() != "" {
+		if user.GetTenantID() != tenantID {
 			return ErrTenantAccessDenied
 		}
 		return nil

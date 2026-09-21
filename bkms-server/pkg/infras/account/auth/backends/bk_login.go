@@ -23,11 +23,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/httpcli"
+)
+
+const (
+	bkLoginGatewayName     = "bk-login"
+	bkApiNamePlaceholder   = "{api_name}"
+	defaultBkLoginAPIStage = "prod"
 )
 
 // BkTokenApigwAuthBackend 通过蓝鲸 API 网关校验 bk_token 并获取用户信息。
@@ -45,6 +52,25 @@ type BkTokenApigwAuthBackend struct {
 // GetLoginUrl 获取登录地址。
 func (b *BkTokenApigwAuthBackend) GetLoginUrl() string {
 	return fmt.Sprintf("%s/plain/", b.LoginPageURL)
+}
+
+// BuildBkLoginGatewayURL renders the bk-login API gateway base URL from template and stage.
+func BuildBkLoginGatewayURL(apiURLTmpl, stage string) (string, error) {
+	gatewayURL := strings.ReplaceAll(apiURLTmpl, bkApiNamePlaceholder, bkLoginGatewayName)
+	stage = strings.TrimSpace(stage)
+	if stage == "" {
+		stage = defaultBkLoginAPIStage
+	}
+
+	parsedURL, err := url.Parse(gatewayURL)
+	if err != nil {
+		return "", errors.Wrap(err, "parse bk-login gateway url")
+	}
+	parsedURL.Path, err = url.JoinPath(parsedURL.Path, stage)
+	if err != nil {
+		return "", errors.Wrap(err, "join bk-login gateway stage")
+	}
+	return parsedURL.String(), nil
 }
 
 // GetUserCredential 获取用户票据

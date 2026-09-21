@@ -11,8 +11,6 @@ account:
   authBaseURL: http://apigw.example.com
   # LoginURL 是登录页根地址（不含路径），用于拼接 /plain/
   loginURL: https://paas.example.com/login
-  # LoginApigwURL 是 bk-login 网关前缀（不含接口路径）；backendType 为 bk_token 时用于校验 bk_token
-  loginApigwURL: https://bkapi.example.com/api/bk-login/prod/login
   # AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
   # authEnvName: prod
   # BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
@@ -23,6 +21,12 @@ bkPlatUrls:
   bkApiUrlTmpl: https://{api_name}.apigw.example.com
   # 组件 API 基础地址
   compApiBaseUrl: https://api.example.com
+# 可选功能开关
+featureFlags:
+  # 是否启用 bk-login 网关 userinfo 链路；关闭时 bk_token 认证走 loginURL 直连
+  enableBkLogin: false
+  # 是否启用 bk-user 网关成员校验；多租户模式开启时需要同时打开
+  enableBkUser: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP
@@ -41,6 +45,10 @@ bkApiStages:
   bkiam: prod
   # DBM 数据库管理平台
   bkdbm: prod
+  # bk-login 蓝鲸登陆
+  bkLogin: prod
+  # bk-user 用户管理
+  bkUser: prod
 # IAM 中业务系统 ID 配置
 bkIAMSystemIDs:
   bkms: bkms
@@ -112,10 +120,6 @@ cmdb:
   baseUrl: https://cmdb.example.com
   appID: <masked>
   appKey: <masked>
-# bk-user 配置
-bkUser:
-  # bk-user 网关基础地址，不含接口路径；多租户必填
-  baseUrl: https://bkapi.example.com/api/bk-user/prod
 # ------------------------------ 基础设施依赖 ------------------------------
 # 数据库相关配置
 mongo:

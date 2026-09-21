@@ -83,6 +83,18 @@ var _ = Describe("Auth backends", func() {
 		Expect(user).To(Equal(&UserInfo{ID: "admin", TenantID: "system"}))
 	})
 
+	It("builds the bk-login gateway url with stage", func() {
+		gatewayURL, err := BuildBkLoginGatewayURL("https://{api_name}.example.com", "test")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gatewayURL).To(Equal("https://bk-login.example.com/test"))
+	})
+
+	It("uses default prod stage when building the bk-login gateway url", func() {
+		gatewayURL, err := BuildBkLoginGatewayURL("https://{api_name}.example.com", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gatewayURL).To(Equal("https://bk-login.example.com/prod"))
+	})
+
 	It("returns the apigw login-expired error", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)

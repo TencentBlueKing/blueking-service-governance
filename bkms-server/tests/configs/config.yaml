@@ -18,6 +18,10 @@ bkPlatUrls:
   bkApiUrlTmpl: https://{api_name}.apigw.example.com
   # 组件 API 基础地址
   compApiBaseUrl: https://api.example.com
+# 可选功能开关
+featureFlags:
+  enableBkLogin: false
+  enableBkUser: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   kubeinsight: prod
@@ -27,6 +31,9 @@ bkApiStages:
   bkiam: prod
   # DBM 数据库管理平台
   bkdbm: prod
+  # API 测试默认不走 bk-login / bk-user 网关链路，stage 留空即可
+  bkLogin: ""
+  bkUser: ""
 # IAM 中业务系统 ID 配置
 bkIAMSystemIDs:
   bkms: bkms
@@ -89,9 +96,6 @@ cmdb:
   baseUrl: https://cmdb.example.com
   appID: <masked>
   appKey: <masked>
-# bk-user 配置
-bkUser:
-  baseUrl: https://bkapi.example.com/api/bk-user/prod
 # 北极星 SDK 配置
 polaris:
   # API 测试栈不启动真实 Polaris 服务，此地址仅用于满足 SDK 初始化校验

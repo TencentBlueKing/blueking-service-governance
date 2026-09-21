@@ -49,7 +49,7 @@ func (v *bkUserVerifier) Verify(ctx context.Context, bkUsername, tenantID string
 	if user.TenantID != tenantID {
 		return ErrTenantAccessDenied
 	}
-	if user.Status != "enabled" {
+	if user.Status != bkuser.UserStatusEnabled {
 		return ErrTenantUserDisabled
 	}
 	return nil

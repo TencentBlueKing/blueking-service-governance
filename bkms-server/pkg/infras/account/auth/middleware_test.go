@@ -112,6 +112,7 @@ var _ = Describe("User authentication middleware", func() {
 			Expect(
 				user,
 			).To(Equal(User{ID: "blueking", TenantID: "default", Cred: UserCredential{BkTicket: "valid-ticket"}}))
+			Expect(result.RequestUser.GetTenantID()).To(Equal("default"))
 
 			By("Get result back from the context")
 			stored, ok := GetResult(ctx)
@@ -224,44 +225,35 @@ var _ = Describe("User authentication middleware", func() {
 		Entry("bk_token", Config{BackendType: BackendBkToken}, BackendBkToken),
 		Entry("defaults to bk_token", Config{}, BackendBkToken),
 		Entry(
-			"keeps bk_ticket when loginApigwURL is set",
+			"keeps bk_ticket when bk-login gateway url is set",
 			Config{
-				BackendType:   BackendBkTicket,
-				LoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login",
+				BackendType:       BackendBkTicket,
+				BkLoginGatewayURL: "https://bk-login.example.com/prod",
 			},
 			BackendBkTicket,
 		),
 		Entry(
-			"uses bk-login apigw when backend is bk_token",
+			"uses bk-login apigw when gateway url is set",
 			Config{
-				BackendType:   BackendBkToken,
-				LoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login",
-				BkAppCode:     "bkms",
-				BkAppSecret:   "secret",
+				BackendType:       BackendBkToken,
+				BkLoginGatewayURL: "https://bk-login.example.com/prod",
+				BkAppCode:         "bkms",
+				BkAppSecret:       "secret",
 			},
 			BackendBkToken,
 		),
 	)
 
-	It("constructs the bk-login apigw backend when loginApigwURL is set", func() {
+	It("constructs the bk-login apigw backend when gateway url is set", func() {
 		backend, backendType := getBackend(Config{
-			BackendType:   BackendBkToken,
-			LoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login",
-			BkAppCode:     "bkms",
-			BkAppSecret:   "secret",
+			BackendType:       BackendBkToken,
+			BkLoginGatewayURL: "https://bk-login.example.com/prod",
+			BkAppCode:         "bkms",
+			BkAppSecret:       "secret",
 		})
 		Expect(backendType).To(Equal(BackendBkToken))
 		_, ok := backend.(*backends.BkTokenApigwAuthBackend)
 		Expect(ok).To(BeTrue())
-	})
-
-	It("panics when loginApigwURL is set without app credentials", func() {
-		Expect(func() {
-			getBackend(Config{
-				BackendType:   BackendBkToken,
-				LoginApigwURL: "https://bkapi.example.com/api/bk-login/prod/login",
-			})
-		}).To(Panic())
 	})
 })
 

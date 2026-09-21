@@ -16,20 +16,30 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package tenant
+package bkuser
 
-// ValidateTenantMode normalizes and validates the tenant ID against the current mode.
-func ValidateTenantMode(tenantID string, enableMultiTenantMode bool) (string, error) {
-	if !enableMultiTenantMode {
-		switch tenantID {
-		case "", DefaultTenantID:
-			return DefaultTenantID, nil
-		default:
-			return "", ErrTenantIDInvalid
-		}
-	}
-	if tenantID == "" {
-		return "", ErrTenantIDRequired
-	}
-	return tenantID, nil
+const (
+	bkUserGatewayName = "bk-user"
+
+	// UserStatusEnabled means the bk-user account is active for tenant access.
+	UserStatusEnabled = "enabled"
+)
+
+// User is the subset of bk-user user fields currently consumed by BKMS.
+type User struct {
+	TenantID    string `json:"tenant_id"`
+	BkUsername  string `json:"bk_username"`
+	LoginName   string `json:"login_name"`
+	DisplayName string `json:"display_name"`
+	TimeZone    string `json:"time_zone"`
+	Language    string `json:"language"`
+	Status      string `json:"status"`
+}
+
+type getUserResponse struct {
+	Data  User `json:"data"`
+	Error *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
 }

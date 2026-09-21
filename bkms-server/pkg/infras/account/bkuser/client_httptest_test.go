@@ -20,6 +20,7 @@ package bkuser
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 
@@ -31,10 +32,10 @@ var _ = Describe("Client with httptest server", func() {
 	It("gets a user using app authorization header", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			Expect(r.Method).To(Equal(http.MethodGet))
-			Expect(r.URL.Path).To(Equal("/api/v3/open/tenant/users/alice/"))
-			Expect(r.Header.Get("X-Bkapi-Authorization")).To(Equal(
-				`{"bk_app_code":"bkms","bk_app_secret":"secret"}`,
-			))
+			Expect(r.URL.Path).To(Equal("/test/api/v3/open/tenant/users/alice/"))
+			var authHeader map[string]string
+			Expect(json.Unmarshal([]byte(r.Header.Get("X-Bkapi-Authorization")), &authHeader)).To(Succeed())
+			Expect(authHeader).To(Equal(map[string]string{"bk_app_code": "bkms", "bk_app_secret": "secret"}))
 			_, _ = w.Write([]byte(`{
 				"data": {
 					"tenant_id": "default",
@@ -49,7 +50,8 @@ var _ = Describe("Client with httptest server", func() {
 		}))
 		defer server.Close()
 
-		client := NewClient(server.URL, "bkms", "secret")
+		client, err := NewClient(server.URL, "test", "bkms", "secret")
+		Expect(err).NotTo(HaveOccurred())
 
 		user, err := client.GetUser(context.Background(), "alice")
 		Expect(err).NotTo(HaveOccurred())
@@ -76,9 +78,10 @@ var _ = Describe("Client with httptest server", func() {
 		}))
 		defer server.Close()
 
-		client := NewClient(server.URL, "bkms", "secret")
+		client, err := NewClient(server.URL, "test", "bkms", "secret")
+		Expect(err).NotTo(HaveOccurred())
 
-		_, err := client.GetUser(context.Background(), "alice")
+		_, err = client.GetUser(context.Background(), "alice")
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("tenant_id"))
 	})
@@ -95,9 +98,10 @@ var _ = Describe("Client with httptest server", func() {
 		}))
 		defer server.Close()
 
-		client := NewClient(server.URL, "bkms", "secret")
+		client, err := NewClient(server.URL, "test", "bkms", "secret")
+		Expect(err).NotTo(HaveOccurred())
 
-		_, err := client.GetUser(context.Background(), "alice")
+		_, err = client.GetUser(context.Background(), "alice")
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("NO_PERMISSION"))
 		Expect(err.Error()).To(ContainSubstring("forbidden"))
