@@ -11,6 +11,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -79,7 +80,7 @@ var _ = Describe("TAF application service", func() {
 			_, _ = appConfigFileStore.DeleteByApp(ctx, application.ID)
 			_ = appStore.DeleteAppByName(ctx, application.WorkspaceID, application.Name)
 		}
-		Expect(ruleStore.Drop(ctx)).To(Succeed())
+		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
 		Expect(envStore.DeleteAll(ctx)).To(Succeed())
 		Expect(workspaceStore.Delete(ctx, workspace.ID)).To(Succeed())
 		diApp.RequireStop()

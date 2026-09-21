@@ -28,6 +28,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
@@ -44,10 +45,19 @@ var _ = Describe("ApmService", func() {
 		store             ApmInstConfigStore
 		scopedEnvVarStore envvars.ScopedEnvVarStore
 		svc               *ApmService
+		// oldAPMEndpoint/oldAPMHttpEndpoint 保存配置原值，AfterEach 恢复，避免污染其他用例
+		oldAPMEndpoint     string
+		oldAPMHttpEndpoint string
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+
+		// 显式设置 APM 采集地址，避免用例结果依赖本地配置文件中是否配置了该地址
+		oldAPMEndpoint = config.G.BkMonitor.APMEndpoint
+		oldAPMHttpEndpoint = config.G.BkMonitor.APMHttpEndpoint
+		config.G.BkMonitor.APMEndpoint = "apm.example.com:4317"
+		config.G.BkMonitor.APMHttpEndpoint = "http://apm.example.com:4318"
 
 		// 清理测试数据
 		err := testutil.CleanupCollection("bkmonitor_apm_inst_config")
@@ -70,6 +80,8 @@ var _ = Describe("ApmService", func() {
 	})
 
 	AfterEach(func() {
+		config.G.BkMonitor.APMEndpoint = oldAPMEndpoint
+		config.G.BkMonitor.APMHttpEndpoint = oldAPMHttpEndpoint
 		diApp.RequireStop()
 	})
 
