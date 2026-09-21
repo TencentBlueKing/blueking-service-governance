@@ -144,7 +144,10 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 	authConfig := auth.Config{
 		BackendType:          cfg.Account.BackendType,
 		LoginURL:             cfg.Account.LoginURL,
+		LoginApigwURL:        cfg.Account.LoginApigwURL,
 		AllowSetUserInHeader: cfg.Development.AllowSetUserInHeader,
+		BkAppCode:            cfg.BkApp.Code,
+		BkAppSecret:          cfg.BkApp.Secret,
 	}
 	account.Register(r.Group(""), accountHandler, auth.Optional(authConfig, tokenClient))
 
