@@ -1315,7 +1315,8 @@ spec:
 			Expect(err).NotTo(HaveOccurred())
 
 			if enableRender {
-				def, err := stores.AppConfigFileDefStore.GetByID(ctx, created.DefID)
+				var def *appcfg.AppConfigFileDef
+				def, err = stores.AppConfigFileDefStore.GetByID(ctx, created.DefID)
 				Expect(err).NotTo(HaveOccurred())
 				err = cfgSvc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
 					EnableEnvVarRender: lo.ToPtr(true),

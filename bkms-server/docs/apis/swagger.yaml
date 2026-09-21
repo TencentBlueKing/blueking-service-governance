@@ -2303,6 +2303,40 @@ definitions:
         description: 基础文件是否是另一个文件
         type: boolean
     type: object
+  serializer.BatchCreateAppModelDeployInput:
+    properties:
+      imageTag:
+        description: 部署的镜像版本
+        type: string
+      targets:
+        description: 各环境的部署目标列表
+        items:
+          $ref: '#/definitions/serializer.BatchDeployTarget'
+        minItems: 1
+        type: array
+    required:
+    - imageTag
+    - targets
+    type: object
+  serializer.BatchCreateAppModelDeployOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.BatchCreateAppModelDeployOutputObjs'
+        description: 各环境的部署结果
+    type: object
+  serializer.BatchCreateAppModelDeployOutputObjs:
+    properties:
+      count:
+        description: 结果数量
+        example: "0"
+        type: string
+      results:
+        description: 各环境的部署结果
+        items:
+          $ref: '#/definitions/serializer.BatchDeployEnvResultObj'
+        type: array
+    type: object
   serializer.BatchDeleteAppInstancesInput:
     properties:
       instanceIDs:
@@ -2316,6 +2350,31 @@ definitions:
         type: string
     required:
     - instanceIDs
+    type: object
+  serializer.BatchDeployEnvResultObj:
+    properties:
+      detail:
+        description: 失败原因（成功时为空）
+        type: string
+      envName:
+        description: 部署环境名称
+        type: string
+      success:
+        description: 是否成功
+        type: boolean
+    type: object
+  serializer.BatchDeployTarget:
+    properties:
+      envName:
+        description: 部署环境名称
+        type: string
+      replicas:
+        description: 副本数量
+        minimum: 1
+        type: integer
+    required:
+    - envName
+    - replicas
     type: object
   serializer.BgEnvVarOutputObj:
     properties:
@@ -10973,6 +11032,40 @@ paths:
       summary: 获取应用 AppSpec 配置概况
       tags:
       - app-spec
+  /apps/{appID}/appmodel-deploys/batch:
+    post:
+      consumes:
+      - application/json
+      operationId: BatchCreateAppModelDeploy
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 跨环境批量部署请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.BatchCreateAppModelDeployInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.BatchCreateAppModelDeployOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 跨环境批量部署 AppModel 应用
+      tags:
+      - deploy
   /apps/{appID}/bkmonitor/dashboards:
     get:
       operationId: ListAppDashboards

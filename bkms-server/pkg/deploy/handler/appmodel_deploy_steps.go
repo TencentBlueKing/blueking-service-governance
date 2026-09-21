@@ -214,6 +214,87 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 	ginutils.OK(c, serializer.EmptyOutput{})
 }
 
+// BatchCreateAppModelDeploy 跨环境批量部署 AppModel 应用。
+//
+//	@ID			BatchCreateAppModelDeploy
+//	@Summary	跨环境批量部署 AppModel 应用
+//	@Tags		deploy
+//	@Accept		json
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID	path		string									true	"应用 ID"
+//	@Param		body	body		serializer.BatchCreateAppModelDeployInput	true	"跨环境批量部署请求"
+//	@Success	200		{object}	serializer.BatchCreateAppModelDeployOutput
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/appmodel-deploys/batch [post]
+func (h *Handler) BatchCreateAppModelDeploy(c *gin.Context) {
+	var uriInput serializer.AppURIInput
+	var input serializer.BatchCreateAppModelDeployInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	deployService, err := h.newAppModelDeployService()
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init appmodel deploy service"))
+		return
+	}
+
+	// 逐环境执行部署；单个环境失败不影响其它环境
+	results := make([]*serializer.BatchDeployEnvResultObj, 0, len(input.Targets))
+	for _, target := range input.Targets {
+		result := &serializer.BatchDeployEnvResultObj{EnvName: target.EnvName}
+
+		app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, target.EnvName, perm.TypeEdit, true)
+		if err != nil {
+			result.Detail = err.Error()
+			results = append(results, result)
+			continue
+		}
+
+		deploypkg.TrackEnvAddApp(ctx, h.registry.EnvStore, app.WorkspaceID, target.EnvName, app.ID)
+		deployID, err := deployService.Deploy(ctx, app, appmodeldeploysvc.DeployParams{
+			EnvName:  target.EnvName,
+			Replicas: target.Replicas,
+			ImageTag: input.ImageTag,
+		})
+		if err != nil {
+			result.Detail = err.Error()
+			results = append(results, result)
+			continue
+		}
+
+		// 轮询部署状态 & 更新部署记录
+		if err = taskq.Enqueue(
+			ctx,
+			appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
+				WorkspaceID: app.WorkspaceID,
+				AppID:       app.ID,
+				EnvName:     target.EnvName,
+				DeployID:    deployID,
+			}),
+			asynq.ProcessIn(appmodeldeploypoll.PollingInterval()),
+		); err != nil {
+			result.Detail = err.Error()
+			results = append(results, result)
+			continue
+		}
+
+		result.Success = true
+		results = append(results, result)
+	}
+
+	ginutils.OK(c, serializer.BatchCreateAppModelDeployOutput{
+		Data: &serializer.BatchCreateAppModelDeployOutputObjs{
+			Count:   int64(len(results)),
+			Results: results,
+		},
+	})
+}
+
 // deleteAppModelDeploy 删除 AppModel 应用部署
 func (h *Handler) deleteAppModelDeploy(c *gin.Context) {
 	startedAt := time.Now()

@@ -138,6 +138,52 @@ type CreateAppModelDeployInput struct {
 	Replicas int32 `json:"replicas" binding:"required,gte=1"`
 }
 
+// AppURIInput contains app path parameters.
+type AppURIInput struct {
+	// 应用 ID
+	AppID string `uri:"appID" binding:"required,uri_slug"`
+}
+
+// BatchDeployTarget 跨环境批量部署中单个环境的部署目标。
+type BatchDeployTarget struct {
+	// 部署环境名称
+	EnvName string `json:"envName" binding:"required,uri_slug"`
+	// 副本数量
+	Replicas int32 `json:"replicas" binding:"required,gte=1"`
+}
+
+// BatchCreateAppModelDeployInput 跨环境批量部署 AppModel 应用的请求体。
+type BatchCreateAppModelDeployInput struct {
+	// 部署的镜像版本
+	ImageTag string `json:"imageTag" binding:"required"`
+	// 各环境的部署目标列表
+	Targets []BatchDeployTarget `json:"targets" binding:"required,min=1,dive"`
+}
+
+// BatchDeployEnvResultObj 单个环境的批量部署结果。
+type BatchDeployEnvResultObj struct {
+	// 部署环境名称
+	EnvName string `json:"envName"`
+	// 是否成功
+	Success bool `json:"success"`
+	// 失败原因（成功时为空）
+	Detail string `json:"detail"`
+}
+
+// BatchCreateAppModelDeployOutputObjs 跨环境批量部署的输出载荷。
+type BatchCreateAppModelDeployOutputObjs struct {
+	// 结果数量
+	Count int64 `json:"count,string"`
+	// 各环境的部署结果
+	Results []*BatchDeployEnvResultObj `json:"results"`
+}
+
+// BatchCreateAppModelDeployOutput 跨环境批量部署的响应。
+type BatchCreateAppModelDeployOutput struct {
+	// 各环境的部署结果
+	Data *BatchCreateAppModelDeployOutputObjs `json:"data"`
+}
+
 // DeleteAppModelDeployInput contains query parameters for deleting a deploy.
 type DeleteAppModelDeployInput struct {
 	// 部署的泳道名称（空字符串表示不使用泳道）

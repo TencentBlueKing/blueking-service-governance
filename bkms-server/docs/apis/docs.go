@@ -2131,6 +2131,61 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/appmodel-deploys/batch": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deploy"
+                ],
+                "summary": "跨环境批量部署 AppModel 应用",
+                "operationId": "BatchCreateAppModelDeploy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "跨环境批量部署请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.BatchCreateAppModelDeployInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.BatchCreateAppModelDeployOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/bkmonitor/dashboards": {
             "get": {
                 "security": [
@@ -22298,6 +22353,57 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.BatchCreateAppModelDeployInput": {
+            "type": "object",
+            "required": [
+                "imageTag",
+                "targets"
+            ],
+            "properties": {
+                "imageTag": {
+                    "description": "部署的镜像版本",
+                    "type": "string"
+                },
+                "targets": {
+                    "description": "各环境的部署目标列表",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/serializer.BatchDeployTarget"
+                    }
+                }
+            }
+        },
+        "serializer.BatchCreateAppModelDeployOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "各环境的部署结果",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.BatchCreateAppModelDeployOutputObjs"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.BatchCreateAppModelDeployOutputObjs": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "description": "结果数量",
+                    "type": "string",
+                    "example": "0"
+                },
+                "results": {
+                    "description": "各环境的部署结果",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BatchDeployEnvResultObj"
+                    }
+                }
+            }
+        },
         "serializer.BatchDeleteAppInstancesInput": {
             "type": "object",
             "required": [
@@ -22315,6 +22421,41 @@ const docTemplate = `{
                 "trafficLaneName": {
                     "description": "部署的泳道名称（空字符串表示不使用泳道）",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.BatchDeployEnvResultObj": {
+            "type": "object",
+            "properties": {
+                "detail": {
+                    "description": "失败原因（成功时为空）",
+                    "type": "string"
+                },
+                "envName": {
+                    "description": "部署环境名称",
+                    "type": "string"
+                },
+                "success": {
+                    "description": "是否成功",
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.BatchDeployTarget": {
+            "type": "object",
+            "required": [
+                "envName",
+                "replicas"
+            ],
+            "properties": {
+                "envName": {
+                    "description": "部署环境名称",
+                    "type": "string"
+                },
+                "replicas": {
+                    "description": "副本数量",
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },
