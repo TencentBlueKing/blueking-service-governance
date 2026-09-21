@@ -16,12 +16,29 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package backends
+package tenant_test
 
-// UserInfo 表示一个通过认证后的用户信息。
-type UserInfo struct {
-	// ID 为用户的唯一标记。
-	ID string
-	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
-	TenantID string
-}
+import (
+	"context"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
+)
+
+var _ = Describe("Tenant context helpers", func() {
+	It("stores and loads tenant id from context", func() {
+		ctx := tenant.WithTenantID(context.Background(), "tenant-a")
+
+		tenantID, ok := tenant.GetTenantID(ctx)
+		Expect(ok).To(BeTrue())
+		Expect(tenantID).To(Equal("tenant-a"))
+	})
+
+	It("returns false when tenant id is not present", func() {
+		tenantID, ok := tenant.GetTenantID(context.Background())
+		Expect(ok).To(BeFalse())
+		Expect(tenantID).To(BeEmpty())
+	})
+})

@@ -132,7 +132,7 @@ func (b *BkTokenApigwAuthBackend) GetUserInfo(ctx context.Context, userCred stri
 		return nil, errors.Errorf("apigw %s returned empty bk_username", url)
 	}
 
-	return &UserInfo{ID: result.Data.BkUsername}, nil
+	return &UserInfo{ID: result.Data.BkUsername, TenantID: result.Data.TenantID}, nil
 }
 
 // NewBkTokenApigwAuthBackend 创建 BkTokenApigwAuthBackend 实例。

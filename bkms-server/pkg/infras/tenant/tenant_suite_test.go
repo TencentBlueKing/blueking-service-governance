@@ -16,12 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package backends
+package tenant_test
 
-// UserInfo 表示一个通过认证后的用户信息。
-type UserInfo struct {
-	// ID 为用户的唯一标记。
-	ID string
-	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
-	TenantID string
+import (
+	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+func TestTenant(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Tenant Suite")
 }

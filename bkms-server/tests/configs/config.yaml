@@ -37,6 +37,9 @@ bkIAMSystemIDs:
   bkrepo: bkrepo
   bscp: bk_bscp
   bkcc: bkcc
+# 多租户配置
+tenant:
+  enableMultiTenantMode: false
 # ------------------------------ 外部依赖服务（蓝鲸 SaaS & 公司系统） ------------------------------
 # 蓝盾配置，用于项目初始化 & 流水线模板加载
 bkci:
@@ -86,6 +89,9 @@ cmdb:
   baseUrl: https://cmdb.example.com
   appID: <masked>
   appKey: <masked>
+# bk-user 配置
+bkUser:
+  baseUrl: https://bkapi.example.com/api/bk-user/prod
 # 北极星 SDK 配置
 polaris:
   # API 测试栈不启动真实 Polaris 服务，此地址仅用于满足 SDK 初始化校验

@@ -71,7 +71,9 @@ import (
 	depservicehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bkuser"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	audithandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
@@ -149,6 +151,12 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 		BkAppCode:            cfg.BkApp.Code,
 		BkAppSecret:          cfg.BkApp.Secret,
 	}
+	var tenantVerifier tenant.Verifier
+	if cfg.Tenant.EnableMultiTenantMode {
+		tenantVerifier = tenant.NewBKUserVerifier(
+			bkuser.NewClient(cfg.BKUser.BaseURL, cfg.BkApp.Code, cfg.BkApp.Secret),
+		)
+	}
 	account.Register(r.Group(""), accountHandler, auth.Optional(authConfig, tokenClient))
 
 	// 构建触发回调由蓝盾触发专用流水线调用，携带应用独享凭证而非用户票据，
@@ -162,7 +170,11 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 	// Register authenticated business APIs under /v1.
 	// 以下 Group 的所有 API 均要求请求必须携带有效身份信息
 	v1 := r.Group("/bkms/v1/bkms-server")
-	v1.Use(bkerrs.ErrorHandler(), auth.Required(authConfig, tokenClient))
+	v1.Use(
+		bkerrs.ErrorHandler(),
+		auth.Required(authConfig, tokenClient),
+		tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier),
+	)
 	app.Register(v1, apphandler.New(storereg.G()))
 	deploy.Register(v1, deployhandler.New(storereg.G()))
 	workspace.Register(v1, workspacehandler.New(storereg.G()))

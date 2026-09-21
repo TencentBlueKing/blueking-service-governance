@@ -43,6 +43,8 @@ type RequestUser interface {
 type User struct {
 	// ID 是用户 ID。
 	ID string `json:"id"`
+	// TenantID 是认证上游返回的登录态所属租户，部分认证路径可能为空。
+	TenantID string `json:"tenantId,omitempty"`
 
 	// Cred 是用户认证凭据。
 	Cred UserCredential `json:"credential,omitempty"`

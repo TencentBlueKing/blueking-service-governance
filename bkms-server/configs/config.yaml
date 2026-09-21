@@ -51,6 +51,10 @@ bkIAMSystemIDs:
   bkrepo: bkrepo
   bscp: bk_bscp
   bkcc: bkcc
+# 多租户配置
+tenant:
+  # 是否开启多租户模式；关闭时仅接受空 tenant 或 default
+  enableMultiTenantMode: false
 # ------------------------------ 外部依赖服务（蓝鲸 SaaS & 公司系统） ------------------------------
 # BCS 配置，由于管理 BCS 集群内的资源
 bcs:
@@ -108,6 +112,10 @@ cmdb:
   baseUrl: https://cmdb.example.com
   appID: <masked>
   appKey: <masked>
+# bk-user 配置
+bkUser:
+  # bk-user 网关基础地址，不含接口路径；多租户必填
+  baseUrl: https://bkapi.example.com/api/bk-user/prod
 # ------------------------------ 基础设施依赖 ------------------------------
 # 数据库相关配置
 mongo:

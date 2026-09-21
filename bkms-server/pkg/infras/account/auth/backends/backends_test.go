@@ -80,7 +80,7 @@ var _ = Describe("Auth backends", func() {
 		backend := NewBkTokenApigwAuthBackend(server.URL+"/login", "bkms", "secret", "")
 		user, err := backend.GetUserInfo(context.Background(), "token")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(user).To(Equal(&UserInfo{ID: "admin"}))
+		Expect(user).To(Equal(&UserInfo{ID: "admin", TenantID: "system"}))
 	})
 
 	It("returns the apigw login-expired error", func() {

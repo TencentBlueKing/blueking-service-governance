@@ -191,6 +191,12 @@ type TxCMDBConfig struct {
 	AppKey string
 }
 
+// BKUserConfig bk-user 配置。
+type BKUserConfig struct {
+	// BaseURL bk-user 网关基础地址，不包含接口路径。
+	BaseURL string
+}
+
 // PolarisConfig 北极星 SDK 配置
 type PolarisConfig struct {
 	// 当两者都配置时优先使用 JoinPoint, 两者都空置时使用 SDK 的内置接入点
@@ -199,6 +205,12 @@ type PolarisConfig struct {
 	Address string
 	// JoinPoint 北极星接入点(如 default)，与 Address 二选一
 	JoinPoint string
+}
+
+// TenantConfig 多租户相关配置。
+type TenantConfig struct {
+	// EnableMultiTenantMode 控制是否启用多租户模式。
+	EnableMultiTenantMode bool
 }
 
 // --------------------------- 基础设施依赖 ---------------------------
@@ -430,6 +442,8 @@ type Config struct {
 	BkMonitor BkMonitorConfig
 	// Tx CMDB 配置
 	CMDB TxCMDBConfig
+	// BKUser 配置
+	BKUser BKUserConfig
 	// 北极星 SDK 配置
 	Polaris PolarisConfig
 
@@ -460,6 +474,8 @@ type Config struct {
 	ImageBuild ImageBuildConfig
 	// 任务轮询器
 	TaskPoller TaskPollerConfig
+	// Tenant 多租户配置
+	Tenant TenantConfig
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用

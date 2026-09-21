@@ -183,7 +183,7 @@ func authenticate(
 		return result
 	}
 
-	result.RequestUser = User{ID: userInfo.ID, Cred: cred}
+	result.RequestUser = User{ID: userInfo.ID, TenantID: userInfo.TenantID, Cred: cred}
 	return result
 }
 

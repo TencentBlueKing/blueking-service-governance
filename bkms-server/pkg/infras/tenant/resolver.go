@@ -16,12 +16,25 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package backends
+package tenant
 
-// UserInfo 表示一个通过认证后的用户信息。
-type UserInfo struct {
-	// ID 为用户的唯一标记。
-	ID string
-	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
-	TenantID string
+import (
+	"net/http"
+)
+
+// ResolveTenantID derives the tenant ID from request and tenant mode configuration.
+func ResolveTenantID(request *http.Request, enableMultiTenantMode bool) (string, error) {
+	tenantID := request.Header.Get(HeaderTenantID)
+	if !enableMultiTenantMode {
+		switch tenantID {
+		case "", DefaultTenantID:
+			return DefaultTenantID, nil
+		default:
+			return "", ErrTenantIDInvalid
+		}
+	}
+	if tenantID == "" {
+		return "", ErrTenantIDRequired
+	}
+	return tenantID, nil
 }

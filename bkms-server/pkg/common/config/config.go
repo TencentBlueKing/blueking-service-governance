@@ -116,6 +116,9 @@ func Load(ctx context.Context, cfgFile string) (*Config, error) {
 			return nil, errors.New("bkApp.code and bkApp.secret are required when account.loginApigwURL is set")
 		}
 	}
+	if cfg.Tenant.EnableMultiTenantMode && cfg.BKUser.BaseURL == "" {
+		return nil, errors.New("bkUser.baseURL is required when tenant.enableMultiTenantMode is enabled")
+	}
 
 	// 设置全局环境变量
 	G = &cfg
