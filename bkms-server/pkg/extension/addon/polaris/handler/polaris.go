@@ -493,6 +493,48 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 	ginutils.OK(c, serializer.ValidateAppPolarisConfigOutput{Warnings: warnings})
 }
 
+// GetImportedPolarisService 查询从现有引入的北极星服务信息。
+// Token 无效、服务不存在或北极星不可达时返回 400。
+//
+//	@ID			GetImportedPolarisService
+//	@Summary	查询从现有引入的北极星服务信息
+//	@Tags		polaris-config
+//	@Accept		json
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID	path		string										true	"应用 ID"
+//	@Param		body	body		serializer.GetImportedPolarisServiceInput	true	"请求体"
+//	@Success	200		{object}	serializer.GetImportedPolarisServiceOutput
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/deps/polaris-configs/imported-service [post]
+func (h *Handler) GetImportedPolarisService(c *gin.Context) {
+	var uriInput serializer.AppURIInput
+	var jsonInput serializer.GetImportedPolarisServiceInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &jsonInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	if _, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	info, err := h.polarisConfigService().GetImportedService(
+		ctx, jsonInput.PolarisName, jsonInput.PolarisNamespace, jsonInput.PolarisToken,
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get imported polaris service"))
+		return
+	}
+
+	ginutils.OK(c, serializer.GetImportedPolarisServiceOutput{
+		Service: serializer.ImportedPolarisServiceFromModel(info),
+	})
+}
+
 // PutEnvWeight 更新指定环境的北极星实例权重。
 //
 //	@ID			PutEnvWeight

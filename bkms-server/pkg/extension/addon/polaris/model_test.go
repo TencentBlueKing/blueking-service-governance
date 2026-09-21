@@ -121,3 +121,16 @@ var _ = Describe("PolarisConfig", func() {
 		})
 	})
 })
+
+var _ = Describe("enableWeightFactorFromMetadata", func() {
+	It("should be true only when polaris metadata enables dynamic weight", func() {
+		Expect(polaris.EnableWeightFactorFromMetadata(nil)).To(BeFalse())
+		Expect(polaris.EnableWeightFactorFromMetadata(map[string]string{})).To(BeFalse())
+		Expect(polaris.EnableWeightFactorFromMetadata(map[string]string{
+			"internal-enable-dynamic-weight": "false",
+		})).To(BeFalse())
+		Expect(polaris.EnableWeightFactorFromMetadata(map[string]string{
+			"internal-enable-dynamic-weight": "true",
+		})).To(BeTrue())
+	})
+})

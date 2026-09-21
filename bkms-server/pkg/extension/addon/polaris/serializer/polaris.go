@@ -277,9 +277,10 @@ type CreateAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查，默认 false
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
-	// 是否启用权重因子，默认 false。仅 createNewService 为 true 时写入北极星；
+	// 是否启用权重因子，默认 false。
 	// 开启后北极星按实例机型标记权重因子，
-	// 各环境还需单独开启动态权重才会真正按机型分流
+	// 各环境还需单独开启动态权重才会真正按机型分流。
+	// 平台自动生成时随创建服务写入；从现有引入时用 Token 写回已有服务。
 	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
@@ -317,7 +318,8 @@ type PatchAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查（可选更新）
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
-	// 是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值
+	// 是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值。
+	// 从现有引入的服务同样会把开关同步到北极星。
 	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签（可选更新，传入时全量替换）
 	ServiceLabels map[string]string `json:"serviceLabels"`
@@ -376,6 +378,70 @@ func (o *PolarisConfigVarOutput) FromModel(v polaris.ConfigVar) *PolarisConfigVa
 type ValidateAppPolarisConfigOutput struct {
 	// 校验警告信息
 	Warnings []string `json:"warnings"`
+}
+
+// -----------------------------------------------------------------------------
+// Check imported polaris service
+// -----------------------------------------------------------------------------
+
+// GetImportedPolarisServiceInput is the JSON input for fetching an imported polaris service.
+type GetImportedPolarisServiceInput struct {
+	// 北极星实例名称
+	PolarisName string `json:"polarisName" binding:"required,min=1"`
+	// 北极星环境（命名空间）
+	PolarisNamespace string `json:"polarisNamespace" binding:"required,oneof=Test Production Development Pre-release"`
+	// 北极星 Token
+	PolarisToken string `json:"polarisToken" binding:"required,min=1"`
+}
+
+// GetImportedPolarisServiceOutput is the JSON response for an imported polaris service lookup.
+type GetImportedPolarisServiceOutput struct {
+	// 北极星线上服务信息（不含 token）
+	Service *ImportedPolarisServiceOutput `json:"service"`
+}
+
+// ImportedPolarisServiceOutput 北极星 GET /naming/v1/services 的服务字段。
+type ImportedPolarisServiceOutput struct {
+	// 服务名
+	Name string `json:"name"`
+	// 命名空间
+	Namespace string `json:"namespace"`
+	// 负责人，逗号分隔
+	Owners string `json:"owners"`
+	// 服务 metadata
+	Metadata map[string]string `json:"metadata"`
+	// 创建时间
+	Ctime string `json:"ctime"`
+	// 修改时间
+	Mtime string `json:"mtime"`
+	// 版本号
+	Revision string `json:"revision"`
+	// 所属平台 ID
+	PlatformID string `json:"platformId"`
+	// 北极星服务当前是否开启权重因子
+	EnableWeightFactor bool `json:"enableWeightFactor"`
+}
+
+// ImportedPolarisServiceFromModel 把线上北极星服务转成接口输出，不包含 token。
+func ImportedPolarisServiceFromModel(svc *polaris.RemotePolarisService) *ImportedPolarisServiceOutput {
+	if svc == nil {
+		return nil
+	}
+	metadata := svc.Metadata
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	return &ImportedPolarisServiceOutput{
+		Name:               svc.Name,
+		Namespace:          svc.Namespace,
+		Owners:             svc.Owners,
+		Metadata:           metadata,
+		Ctime:              svc.Ctime,
+		Mtime:              svc.Mtime,
+		Revision:           svc.Revision,
+		PlatformID:         svc.PlatformID,
+		EnableWeightFactor: svc.EnableWeightFactor,
+	}
 }
 
 // -----------------------------------------------------------------------------

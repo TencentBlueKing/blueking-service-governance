@@ -3230,9 +3230,10 @@ definitions:
         type: boolean
       enableWeightFactor:
         description: |-
-          是否启用权重因子，默认 false。仅 createNewService 为 true 时写入北极星；
+          是否启用权重因子，默认 false。
           开启后北极星按实例机型标记权重因子，
-          各环境还需单独开启动态权重才会真正按机型分流
+          各环境还需单独开启动态权重才会真正按机型分流。
+          平台自动生成时随创建服务写入；从现有引入时用 Token 写回已有服务。
         type: boolean
       instanceKey:
         description: 组件实例标识，用于环境变量拼接，只能包含字母、数字、下划线
@@ -5033,6 +5034,36 @@ definitions:
         - $ref: '#/definitions/serializer.SemverOutputObj'
         description: 按 bumpType 递增后的下一个 semver 值（仅当请求中 bumpType 非空时返回）
     type: object
+  serializer.GetImportedPolarisServiceInput:
+    properties:
+      polarisName:
+        description: 北极星实例名称
+        minLength: 1
+        type: string
+      polarisNamespace:
+        description: 北极星环境（命名空间）
+        enum:
+        - Test
+        - Production
+        - Development
+        - Pre-release
+        type: string
+      polarisToken:
+        description: 北极星 Token
+        minLength: 1
+        type: string
+    required:
+    - polarisName
+    - polarisNamespace
+    - polarisToken
+    type: object
+  serializer.GetImportedPolarisServiceOutput:
+    properties:
+      service:
+        allOf:
+        - $ref: '#/definitions/serializer.ImportedPolarisServiceOutput'
+        description: 北极星线上服务信息（不含 token）
+    type: object
   serializer.GetLatestAppModelDeployStatusOutput:
     properties:
       data:
@@ -5499,6 +5530,38 @@ definitions:
         allOf:
         - $ref: '#/definitions/serializer.EnvVarImportPreviewSummaryOutputObj'
         description: 导入结果汇总
+    type: object
+  serializer.ImportedPolarisServiceOutput:
+    properties:
+      ctime:
+        description: 创建时间
+        type: string
+      enableWeightFactor:
+        description: 北极星服务当前是否开启权重因子
+        type: boolean
+      metadata:
+        additionalProperties:
+          type: string
+        description: 服务 metadata
+        type: object
+      mtime:
+        description: 修改时间
+        type: string
+      name:
+        description: 服务名
+        type: string
+      namespace:
+        description: 命名空间
+        type: string
+      owners:
+        description: 负责人，逗号分隔
+        type: string
+      platformId:
+        description: 所属平台 ID
+        type: string
+      revision:
+        description: 版本号
+        type: string
     type: object
   serializer.InstanceExecuteTafAdminCmdResultOutputObj:
     properties:
@@ -6677,7 +6740,9 @@ definitions:
         description: 是否启用健康检查（可选更新）
         type: boolean
       enableWeightFactor:
-        description: 是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值
+        description: |-
+          是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值。
+          从现有引入的服务同样会把开关同步到北极星。
         type: boolean
       instanceKey:
         description: 组件实例标识（可选更新）
@@ -12807,6 +12872,40 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 获取北极星配置变量列表
+      tags:
+      - polaris-config
+  /apps/{appID}/deps/polaris-configs/imported-service:
+    post:
+      consumes:
+      - application/json
+      operationId: GetImportedPolarisService
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.GetImportedPolarisServiceInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.GetImportedPolarisServiceOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询从现有引入的北极星服务信息
       tags:
       - polaris-config
   /apps/{appID}/deps/polaris-configs/validate:

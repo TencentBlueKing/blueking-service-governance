@@ -311,6 +311,117 @@ var _ = Describe("Test polaris provider", func() {
 		})
 	})
 
+	It("test get remote service succeeds", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				MatchParam("name", "test-service").
+				MatchParam("namespace", "test-namespace").
+				Reply(200).
+				JSON(map[string]any{
+					"services": []map[string]any{{
+						"name":      "test-service",
+						"namespace": "test-namespace",
+						"owners":    "alice,bob",
+						"ports":     "8080",
+						"comment":   "imported",
+						"token":     "secret-should-not-return",
+						"metadata":  map[string]string{},
+					}},
+				})
+			gock.New(testURL).
+				Put("/naming/v1/services").
+				JSON([]map[string]any{{
+					"name":      "test-service",
+					"namespace": "test-namespace",
+					"token":     "test-token",
+				}}).
+				Reply(200).
+				JSON(map[string]any{})
+
+			svc, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(svc.Name).To(Equal("test-service"))
+			Expect(svc.Namespace).To(Equal("test-namespace"))
+			Expect(svc.Owners).To(Equal("alice,bob"))
+			Expect(svc.Ports).To(Equal("8080"))
+			Expect(svc.Comment).To(Equal("imported"))
+			Expect(svc.Token).To(BeEmpty())
+		})
+	})
+
+	It("test get remote service when service is missing", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				Reply(200).
+				JSON(map[string]any{"services": []map[string]any{}})
+
+			_, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("polaris service not found"))
+		})
+	})
+
+	It("test get remote service when token is rejected", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				Reply(200).
+				JSON(map[string]any{
+					"services": []map[string]any{{
+						"name":      "test-service",
+						"namespace": "test-namespace",
+						"metadata":  map[string]string{},
+					}},
+				})
+			gock.New(testURL).
+				Put("/naming/v1/services").
+				Reply(401).
+				JSON(map[string]any{"info": "invalid token"})
+
+			_, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "bad-token")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid token"))
+		})
+	})
+
+	It("test get remote service returns weight factor metadata", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				MatchParam("name", "test-service").
+				MatchParam("namespace", "test-namespace").
+				Reply(200).
+				JSON(map[string]any{
+					"services": []map[string]any{{
+						"name":      "test-service",
+						"namespace": "test-namespace",
+						"metadata": map[string]string{
+							"internal-enable-dynamic-weight": "true",
+							"internal-dynamic-weight-config": `{"func":"linear"}`,
+						},
+					}},
+				})
+			gock.New(testURL).
+				Put("/naming/v1/services").
+				Reply(200).
+				JSON(map[string]any{})
+
+			svc, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(svc.Metadata).To(HaveKeyWithValue("internal-enable-dynamic-weight", "true"))
+		})
+	})
+
 	It("test update instance omits owners when not provided", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
 			defer gock.Off()

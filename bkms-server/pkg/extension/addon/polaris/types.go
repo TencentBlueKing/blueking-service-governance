@@ -18,7 +18,15 @@
 
 package polaris
 
-var (
-	WeightFactorMetadata           = weightFactorMetadata
-	EnableWeightFactorFromMetadata = enableWeightFactorFromMetadata
-)
+// RemotePolarisService 北极星线上服务信息，供导入路径回填前端。不含 token。
+type RemotePolarisService struct {
+	Name               string
+	Namespace          string
+	Owners             string
+	Metadata           map[string]string
+	Ctime              string
+	Mtime              string
+	Revision           string
+	PlatformID         string
+	EnableWeightFactor bool
+}

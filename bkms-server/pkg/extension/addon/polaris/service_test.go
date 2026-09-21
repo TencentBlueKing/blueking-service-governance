@@ -150,6 +150,60 @@ var _ = Describe("PolarisConfigService", func() {
 			Expect(stored.EnvWeights).To(BeEmpty())
 		})
 
+		It("should sync weight factor when importing with the switch on", func() {
+			mockey.PatchConvey("import polaris with weight factor", GinkgoT(), func() {
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).To(func(
+					_ *polaris.PolarisPlatformManager,
+					_ context.Context,
+					name, namespace, token string,
+					params *polaris.UpdateServiceParams,
+				) error {
+					Expect(name).To(Equal("imported-service"))
+					Expect(namespace).To(Equal("Test"))
+					Expect(token).To(Equal("imported-token"))
+					Expect(params.EnableWeightFactor).NotTo(BeNil())
+					Expect(*params.EnableWeightFactor).To(BeTrue())
+					return nil
+				}).Build()
+
+				config := &polaris.PolarisConfig{
+					AppID: app.ID,
+					Properties: polaris.Properties{
+						InstanceKey: "imported", PolarisName: "imported-service",
+						PolarisNamespace: "Test", PolarisToken: "imported-token",
+						ServicePort: 8080, EnableWeightFactor: true,
+					},
+				}
+				Expect(service.Create(ctx, app, config, false)).To(Succeed())
+
+				stored, err := store.Get(ctx, app.ID, config.Name)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(stored.EnableWeightFactor).To(BeTrue())
+				Expect(stored.DepSvcInstID.IsZero()).To(BeTrue())
+			})
+		})
+
+		It("should not persist an imported config when weight factor sync fails", func() {
+			mockey.PatchConvey("import polaris weight factor sync fails", GinkgoT(), func() {
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).
+					Return(errors.New("polaris rejected token")).Build()
+
+				config := &polaris.PolarisConfig{
+					AppID: app.ID,
+					Name:  "cfg-imported-sync-fail",
+					Properties: polaris.Properties{
+						InstanceKey: "imported-fail", PolarisName: "imported-fail",
+						PolarisNamespace: "Test", PolarisToken: "bad-token",
+						ServicePort: 8080, EnableWeightFactor: true,
+					},
+				}
+				err := service.Create(ctx, app, config, false)
+				Expect(err).To(MatchError(ContainSubstring("polaris rejected token")))
+				_, getErr := store.Get(ctx, app.ID, config.Name)
+				Expect(getErr).To(MatchError(polaris.ErrConfigNotFound))
+			})
+		})
+
 		It("should create and link a managed Polaris service", func() {
 			mockey.PatchConvey("create managed Polaris service", GinkgoT(), func() {
 				serviceInstanceID := bson.NewObjectID()
@@ -183,6 +237,48 @@ var _ = Describe("PolarisConfigService", func() {
 				Expect(stored.PolarisToken).To(Equal("managed-token"))
 				Expect(stored.GetEnvState(environment.Name).AppliedFields).To(BeNil())
 				Expect(stored.EnvWeights[environment.Name]).To(Equal(polaris.DefaultEnvWeight))
+			})
+		})
+	})
+
+	Describe("GetImportedService", func() {
+		It("should return the online weight factor after token verification succeeds", func() {
+			mockey.PatchConvey("describe imported polaris", GinkgoT(), func() {
+				mockey.Mock((*polaris.PolarisPlatformManager).GetImportedService).To(func(
+					_ *polaris.PolarisPlatformManager,
+					_ context.Context,
+					name, namespace, token string,
+				) (*polaris.RemotePolarisService, error) {
+					Expect(name).To(Equal("imported-service"))
+					Expect(namespace).To(Equal("Test"))
+					Expect(token).To(Equal("imported-token"))
+					return &polaris.RemotePolarisService{
+						Name:               "imported-service",
+						Namespace:          "Test",
+						Owners:             "alice",
+						EnableWeightFactor: true,
+						Metadata: map[string]string{
+							"internal-enable-dynamic-weight": "true",
+						},
+					}, nil
+				}).Build()
+
+				info, err := service.GetImportedService(ctx, "imported-service", "Test", "imported-token")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(info.EnableWeightFactor).To(BeTrue())
+				Expect(info.Name).To(Equal("imported-service"))
+				Expect(info.Owners).To(Equal("alice"))
+			})
+		})
+
+		It("should return an error when the polaris token is rejected", func() {
+			mockey.PatchConvey("imported polaris token rejected", GinkgoT(), func() {
+				mockey.Mock((*polaris.PolarisPlatformManager).GetImportedService).Return(
+					nil, errors.New("verify polaris token: polaris api error: invalid token"),
+				).Build()
+
+				_, err := service.GetImportedService(ctx, "imported-service", "Test", "bad-token")
+				Expect(err).To(MatchError(ContainSubstring("invalid token")))
 			})
 		})
 	})
@@ -227,6 +323,85 @@ var _ = Describe("PolarisConfigService", func() {
 			stored, getErr := store.Get(ctx, app.ID, config.Name)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.Operator).To(Equal("zhangsan"))
+		})
+
+		It("should skip polaris writes when imported weight factor is unchanged", func() {
+			mockey.PatchConvey("update imported polaris without weight factor change", GinkgoT(), func() {
+				config := newTestConfig(app.ID, "cfg-weight-factor-imported-unchanged", nil, nil)
+				Expect(store.Create(ctx, config)).To(Succeed())
+
+				enabled := false
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).To(func(
+					*polaris.PolarisPlatformManager,
+					context.Context,
+					string, string, string,
+					*polaris.UpdateServiceParams,
+				) error {
+					Fail("imported polaris should not be written when weight factor is unchanged")
+					return nil
+				}).Build()
+
+				updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+					EnableWeightFactor: &enabled,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnableWeightFactor).To(BeFalse())
+			})
+		})
+
+		It("should sync imported weight factor updates via token", func() {
+			mockey.PatchConvey("update imported polaris weight factor", GinkgoT(), func() {
+				config := newTestConfig(app.ID, "cfg-weight-factor-imported", nil, nil)
+				Expect(store.Create(ctx, config)).To(Succeed())
+
+				enabled := true
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).To(func(
+					_ *polaris.PolarisPlatformManager,
+					_ context.Context,
+					name, namespace, token string,
+					params *polaris.UpdateServiceParams,
+				) error {
+					Expect(name).To(Equal(config.PolarisName))
+					Expect(namespace).To(Equal(config.PolarisNamespace))
+					Expect(token).To(Equal(config.PolarisToken))
+					Expect(params.Owners).To(BeNil())
+					Expect(*params.EnableWeightFactor).To(BeTrue())
+					return nil
+				}).Build()
+
+				updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+					EnableWeightFactor: &enabled,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnableWeightFactor).To(BeTrue())
+			})
+		})
+
+		It("should use the patched token when syncing imported weight factor", func() {
+			mockey.PatchConvey("update imported polaris weight factor with new token", GinkgoT(), func() {
+				config := newTestConfig(app.ID, "cfg-weight-factor-imported-token", nil, nil)
+				Expect(store.Create(ctx, config)).To(Succeed())
+
+				enabled := true
+				newToken := "new-imported-token"
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).To(func(
+					_ *polaris.PolarisPlatformManager,
+					_ context.Context,
+					_, _, token string,
+					_ *polaris.UpdateServiceParams,
+				) error {
+					Expect(token).To(Equal(newToken))
+					return nil
+				}).Build()
+
+				updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+					EnableWeightFactor: &enabled,
+					PolarisToken:       &newToken,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.EnableWeightFactor).To(BeTrue())
+				Expect(updated.PolarisToken).To(Equal(newToken))
+			})
 		})
 
 		It("should sync polaris owners then persist operator for managed configs", func() {
@@ -317,17 +492,31 @@ var _ = Describe("PolarisConfigService", func() {
 	})
 
 	Describe("Weight factor", func() {
-		It("should persist the switch on import without writing polaris metadata", func() {
-			config := newTestConfig(app.ID, "cfg-weight-factor-import", []string{environment.Name}, nil)
-			config.EnableWeightFactor = true
-			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+		It("should persist the switch on import and write polaris metadata", func() {
+			mockey.PatchConvey("import polaris with weight factor on", GinkgoT(), func() {
+				config := newTestConfig(app.ID, "cfg-weight-factor-import", []string{environment.Name}, nil)
+				config.EnableWeightFactor = true
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).To(func(
+					_ *polaris.PolarisPlatformManager,
+					_ context.Context,
+					name, namespace, token string,
+					params *polaris.UpdateServiceParams,
+				) error {
+					Expect(name).To(Equal(config.PolarisName))
+					Expect(namespace).To(Equal(config.PolarisNamespace))
+					Expect(token).To(Equal(config.PolarisToken))
+					Expect(*params.EnableWeightFactor).To(BeTrue())
+					return nil
+				}).Build()
+				Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
-			stored, err := store.Get(ctx, app.ID, config.Name)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(stored.EnableWeightFactor).To(BeTrue())
-			Expect(stored.DepSvcInstID.IsZero()).To(BeTrue())
-			// 动态权重开关不随环境加入 scope 预建，缺省即关闭
-			Expect(stored.EnvDynamicWeights).To(BeEmpty())
+				stored, err := store.Get(ctx, app.ID, config.Name)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(stored.EnableWeightFactor).To(BeTrue())
+				Expect(stored.DepSvcInstID.IsZero()).To(BeTrue())
+				// 动态权重开关不随环境加入 scope 预建，缺省即关闭
+				Expect(stored.EnvDynamicWeights).To(BeEmpty())
+			})
 		})
 
 		It("should persist the switch when creating a managed polaris service", func() {

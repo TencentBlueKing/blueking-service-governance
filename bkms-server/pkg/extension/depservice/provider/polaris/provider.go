@@ -47,6 +47,27 @@ type Config struct {
 	BaseURL string `mapstructure:"baseUrl"`
 }
 
+// RemoteService 北极星 GET /naming/v1/services 返回的服务对象。
+// Token 仅用于解析，调用方不得再向下传递。
+type RemoteService struct {
+	Name       string            `json:"name"`
+	Namespace  string            `json:"namespace"`
+	Metadata   map[string]string `json:"metadata"`
+	Ports      string            `json:"ports"`
+	Business   string            `json:"business"`
+	Department string            `json:"department"`
+	Comment    string            `json:"comment"`
+	Owners     string            `json:"owners"`
+	Ctime      string            `json:"ctime"`
+	Mtime      string            `json:"mtime"`
+	Revision   string            `json:"revision"`
+	PlatformID string            `json:"platform_id"`
+	CmdbMod1   string            `json:"cmdb_mod1"`
+	CmdbMod2   string            `json:"cmdb_mod2"`
+	CmdbMod3   string            `json:"cmdb_mod3"`
+	Token      string            `json:"token"`
+}
+
 // parseConfig parses the plan config into Polaris Config
 func parseConfig(planConfig map[string]any) (*Config, error) {
 	cfg := new(Config)
@@ -253,8 +274,25 @@ func (p *Provider) updateService(
 	return err
 }
 
-// getServiceMetadata 查询北极星服务当前 metadata，供更新时合并。
-func (p *Provider) getServiceMetadata(ctx context.Context, name, namespace string) (map[string]string, error) {
+// GetRemoteService 拉取北极星线上服务。先 GET 确认服务存在，再以 Token 做空 PUT
+// 校验可写（不改 owners/metadata）。成功时返回服务对象（去掉 token）。
+func (p *Provider) GetRemoteService(ctx context.Context, name, namespace, token string) (*RemoteService, error) {
+	if name == "" || namespace == "" || token == "" {
+		return nil, errors.New("name, namespace and token are required")
+	}
+	svc, err := p.getService(ctx, name, namespace)
+	if err != nil {
+		return nil, err
+	}
+	if err = p.updateService(ctx, name, namespace, token, "", nil, false); err != nil {
+		return nil, errors.Wrap(err, "verify polaris token")
+	}
+	svc.Token = ""
+	return svc, nil
+}
+
+// getService 查询北极星服务完整对象。
+func (p *Provider) getService(ctx context.Context, name, namespace string) (*RemoteService, error) {
 	query := url.Values{}
 	query.Set("name", name)
 	query.Set("namespace", namespace)
@@ -265,7 +303,19 @@ func (p *Provider) getServiceMetadata(ctx context.Context, name, namespace strin
 	if err != nil {
 		return nil, err
 	}
-	return parseServiceMetadata(respBody, name, namespace)
+	return parseMatchingService(respBody, name, namespace)
+}
+
+// getServiceMetadata 查询北极星服务当前 metadata，供更新时合并。
+func (p *Provider) getServiceMetadata(ctx context.Context, name, namespace string) (map[string]string, error) {
+	svc, err := p.getService(ctx, name, namespace)
+	if err != nil {
+		return nil, err
+	}
+	if svc.Metadata == nil {
+		return map[string]string{}, nil
+	}
+	return svc.Metadata, nil
 }
 
 // deleteService calls Polaris API to delete a service
@@ -323,7 +373,7 @@ func (p *Provider) doRequest(ctx context.Context, method, path string, body any)
 	return respBody, nil
 }
 
-func parseServiceMetadata(respBody []byte, name, namespace string) (map[string]string, error) {
+func parseMatchingService(respBody []byte, name, namespace string) (*RemoteService, error) {
 	services := gjson.GetBytes(respBody, "services")
 	if !services.IsArray() {
 		return nil, errors.New("invalid polaris services response")
@@ -332,21 +382,16 @@ func parseServiceMetadata(respBody []byte, name, namespace string) (map[string]s
 		if svc.Get("name").String() != name || svc.Get("namespace").String() != namespace {
 			continue
 		}
-		return gjsonObjectToStringMap(svc.Get("metadata")), nil
+		var parsed RemoteService
+		if err := json.Unmarshal([]byte(svc.Raw), &parsed); err != nil {
+			return nil, errors.Wrap(err, "decode polaris service")
+		}
+		if parsed.Metadata == nil {
+			parsed.Metadata = map[string]string{}
+		}
+		return &parsed, nil
 	}
 	return nil, errors.New("polaris service not found")
-}
-
-func gjsonObjectToStringMap(obj gjson.Result) map[string]string {
-	result := make(map[string]string)
-	if !obj.IsObject() {
-		return result
-	}
-	obj.ForEach(func(key, value gjson.Result) bool {
-		result[key.String()] = value.String()
-		return true
-	})
-	return result
 }
 
 // mergeServiceMetadata 以 existing 为底，先写入 overlay，再删除指定键。

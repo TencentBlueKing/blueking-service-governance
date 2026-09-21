@@ -32,13 +32,19 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice"
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	depprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider"
 	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 )
 
-// 默认等待服务就绪的超时时间
-const defaultWaitReadyTimeout = 60 * time.Second
+const (
+	// 默认等待服务就绪的超时时间
+	defaultWaitReadyTimeout = 60 * time.Second
+	// 导入服务联通性校验超时：需求要求 10s 内返回成功或失败
+	importedServiceCheckTimeout = 10 * time.Second
+	polarisDepServicePlan       = "default"
+)
 
 // CreatePolarisServiceParams 创建北极星服务的参数
 type CreatePolarisServiceParams struct {
@@ -142,7 +148,123 @@ func (m *PolarisPlatformManager) CreateService(
 	}, nil
 }
 
-// waitForInstanceReady 等待服务实例就绪
+// DeleteServiceParams 删除北极星服务的参数
+type DeleteServiceParams struct {
+	ServiceInstanceID bson.ObjectID
+	AppID             string
+}
+
+// DeleteService 删除由平台创建的北极星服务
+func (m *PolarisPlatformManager) DeleteService(
+	ctx context.Context,
+	params *DeleteServiceParams,
+) error {
+	if params.ServiceInstanceID.IsZero() {
+		return nil // 没有关联的服务实例，无需删除
+	}
+
+	// 按需创建 ServiceManager
+	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
+
+	if err := svcMgr.DeleteServiceInstance(ctx, params.ServiceInstanceID); err != nil {
+		return errors.Wrap(err, "delete polaris service instance")
+	}
+
+	return nil
+}
+
+// UpdateService 将平台创建的北极星服务字段同步到北极星侧，一次 PUT。
+func (m *PolarisPlatformManager) UpdateService(
+	ctx context.Context,
+	config *PolarisConfig,
+	params *UpdateServiceParams,
+) error {
+	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
+	if err := svcMgr.UpdateServiceInstance(ctx, config.DepSvcInstID, toPolarisUpdateParams(params)); err != nil {
+		return errors.Wrap(err, "update polaris service")
+	}
+	return nil
+}
+
+// GetImportedService 查询导入北极星服务：服务存在且 Token 可写，并返回线上服务信息。
+func (m *PolarisPlatformManager) GetImportedService(
+	ctx context.Context,
+	name, namespace, token string,
+) (*RemotePolarisService, error) {
+	ctx, cancel := context.WithTimeout(ctx, importedServiceCheckTimeout)
+	defer cancel()
+
+	p, err := m.importedProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
+	svc, err := p.GetRemoteService(ctx, name, namespace, token)
+	if err != nil {
+		return nil, errors.Wrap(err, "get imported polaris service")
+	}
+	return toRemotePolarisService(svc), nil
+}
+
+// UpdateImportedService 用用户 Token 把权重因子等字段写回已有北极星服务。
+func (m *PolarisPlatformManager) UpdateImportedService(
+	ctx context.Context,
+	name, namespace, token string,
+	params *UpdateServiceParams,
+) error {
+	p, err := m.importedProvider(ctx)
+	if err != nil {
+		return err
+	}
+	if err = p.UpdateInstance(
+		ctx,
+		"",
+		nil,
+		map[string]any{
+			"polarisName":      name,
+			"polarisNamespace": namespace,
+			"token":            token,
+		},
+		toPolarisUpdateParams(params),
+	); err != nil {
+		return errors.Wrap(err, "update imported polaris service")
+	}
+	return nil
+}
+
+// ListPolarisServiceInstances 根据应用和环境获取所有生效北极星服务的实例。
+func (m *PolarisPlatformManager) ListPolarisServiceInstances(
+	ctx context.Context,
+	appID, envName string,
+) ([]*PolarisServiceInstances, error) {
+	activeConfigs, err := m.polarisConfigStore.ListByEnv(ctx, appID, envName)
+	if err != nil {
+		return nil, errors.Wrap(err, "list polaris configs")
+	}
+
+	result := make([]*PolarisServiceInstances, 0, len(activeConfigs))
+	for _, config := range activeConfigs {
+		instances, err := polarisInfra.GetInstances(ctx, config.PolarisNamespace, config.PolarisName)
+		if err != nil {
+			return nil, errors.Wrapf(
+				err,
+				"get polaris instances for service %s/%s",
+				config.PolarisNamespace,
+				config.PolarisName,
+			)
+		}
+		if len(instances) == 0 {
+			continue
+		}
+		result = append(result, &PolarisServiceInstances{
+			ServiceNamespace: config.PolarisNamespace,
+			ServiceName:      config.PolarisName,
+			ServicePort:      config.ServicePort,
+			Instances:        instances,
+		})
+	}
+	return result, nil
+}
+
 func (m *PolarisPlatformManager) waitForInstanceReady(
 	ctx context.Context,
 	svcMgr *depservice.ServiceManager,
@@ -183,7 +305,6 @@ func (m *PolarisPlatformManager) waitForInstanceReady(
 	}
 }
 
-// extractToken 从服务实例中提取 token
 func (m *PolarisPlatformManager) extractToken(inst *depsvcmodel.ServiceInstance) string {
 	if token, ok := inst.Credentials["token"].(string); ok && token != "" {
 		return token
@@ -191,38 +312,48 @@ func (m *PolarisPlatformManager) extractToken(inst *depsvcmodel.ServiceInstance)
 	return ""
 }
 
-// DeleteServiceParams 删除北极星服务的参数
-type DeleteServiceParams struct {
-	ServiceInstanceID bson.ObjectID
-	AppID             string
+func (m *PolarisPlatformManager) importedProvider(ctx context.Context) (*polarisprovider.Provider, error) {
+	svc, err := m.svcStore.Get(ctx, depprovider.ServiceNamePolaris)
+	if err != nil {
+		return nil, errors.Wrap(err, "get polaris dependency service")
+	}
+	plan, err := svc.GetPlanByName(polarisDepServicePlan)
+	if err != nil {
+		return nil, errors.Wrap(err, "get polaris dependency service plan")
+	}
+	p, err := polarisprovider.NewProvider(plan.Config)
+	if err != nil {
+		return nil, errors.Wrap(err, "create polaris provider")
+	}
+	return p, nil
 }
 
-// DeleteService 删除由平台创建的北极星服务
-func (m *PolarisPlatformManager) DeleteService(
-	ctx context.Context,
-	params *DeleteServiceParams,
-) error {
-	if params.ServiceInstanceID.IsZero() {
-		return nil // 没有关联的服务实例，无需删除
+func toRemotePolarisService(svc *polarisprovider.RemoteService) *RemotePolarisService {
+	if svc == nil {
+		return nil
 	}
-
-	// 按需创建 ServiceManager
-	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
-
-	if err := svcMgr.DeleteServiceInstance(ctx, params.ServiceInstanceID); err != nil {
-		return errors.Wrap(err, "delete polaris service instance")
+	metadata := svc.Metadata
+	if metadata == nil {
+		metadata = map[string]string{}
 	}
-
-	return nil
+	return &RemotePolarisService{
+		Name:               svc.Name,
+		Namespace:          svc.Namespace,
+		Owners:             svc.Owners,
+		Metadata:           metadata,
+		Ctime:              svc.Ctime,
+		Mtime:              svc.Mtime,
+		Revision:           svc.Revision,
+		PlatformID:         svc.PlatformID,
+		EnableWeightFactor: enableWeightFactorFromMetadata(metadata),
+	}
 }
 
-// UpdateService 将平台创建的北极星服务字段同步到北极星侧，一次 PUT。
-func (m *PolarisPlatformManager) UpdateService(
-	ctx context.Context,
-	config *PolarisConfig,
-	params *UpdateServiceParams,
-) error {
+func toPolarisUpdateParams(params *UpdateServiceParams) *polarisprovider.UpdateParams {
 	update := &polarisprovider.UpdateParams{}
+	if params == nil {
+		return update
+	}
 	if params.Owners != nil {
 		update.Owners = *params.Owners
 	}
@@ -233,44 +364,5 @@ func (m *PolarisPlatformManager) UpdateService(
 			update.MetadataKeysToDelete = weightFactorMetadataKeys()
 		}
 	}
-
-	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
-	if err := svcMgr.UpdateServiceInstance(ctx, config.DepSvcInstID, update); err != nil {
-		return errors.Wrap(err, "update polaris service")
-	}
-	return nil
-}
-
-// ListPolarisServiceInstances 根据应用和环境获取所有生效北极星服务的实例。
-func (m *PolarisPlatformManager) ListPolarisServiceInstances(
-	ctx context.Context,
-	appID, envName string,
-) ([]*PolarisServiceInstances, error) {
-	activeConfigs, err := m.polarisConfigStore.ListByEnv(ctx, appID, envName)
-	if err != nil {
-		return nil, errors.Wrap(err, "list polaris configs")
-	}
-
-	result := make([]*PolarisServiceInstances, 0, len(activeConfigs))
-	for _, config := range activeConfigs {
-		instances, err := polarisInfra.GetInstances(ctx, config.PolarisNamespace, config.PolarisName)
-		if err != nil {
-			return nil, errors.Wrapf(
-				err,
-				"get polaris instances for service %s/%s",
-				config.PolarisNamespace,
-				config.PolarisName,
-			)
-		}
-		if len(instances) == 0 {
-			continue
-		}
-		result = append(result, &PolarisServiceInstances{
-			ServiceNamespace: config.PolarisNamespace,
-			ServiceName:      config.PolarisName,
-			ServicePort:      config.ServicePort,
-			Instances:        instances,
-		})
-	}
-	return result, nil
+	return update
 }

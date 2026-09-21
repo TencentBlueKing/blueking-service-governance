@@ -377,3 +377,28 @@ var _ = Describe("GetEnvInstanceStatsOutput", func() {
 		Expect(output.Data.TotalHealthyInstanceWeight).To(Equal(int32(520)))
 	})
 })
+
+var _ = Describe("ImportedPolarisServiceFromModel", func() {
+	It("should copy polaris service fields and omit token", func() {
+		out := serializer.ImportedPolarisServiceFromModel(&polaris.RemotePolarisService{
+			Name:               "porterlin-test",
+			Namespace:          "Test",
+			Owners:             "porterlin",
+			PlatformID:         "tkex-ieg-polaris-operator",
+			EnableWeightFactor: true,
+			Metadata: map[string]string{
+				"internal-min-healthy-ratio": "0.25",
+			},
+		})
+		Expect(out.Name).To(Equal("porterlin-test"))
+		Expect(out.Namespace).To(Equal("Test"))
+		Expect(out.Owners).To(Equal("porterlin"))
+		Expect(out.PlatformID).To(Equal("tkex-ieg-polaris-operator"))
+		Expect(out.EnableWeightFactor).To(BeTrue())
+		Expect(out.Metadata).To(HaveKeyWithValue("internal-min-healthy-ratio", "0.25"))
+	})
+
+	It("should return nil when the remote service is missing", func() {
+		Expect(serializer.ImportedPolarisServiceFromModel(nil)).To(BeNil())
+	})
+})

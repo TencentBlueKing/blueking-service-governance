@@ -37,3 +37,8 @@ func weightFactorMetadata() map[string]string {
 func weightFactorMetadataKeys() []string {
 	return []string{polarisMetaEnableDynamicWeight, polarisMetaDynamicWeightConfig}
 }
+
+// enableWeightFactorFromMetadata 根据北极星服务 metadata 判断权重因子是否开启。
+func enableWeightFactorFromMetadata(metadata map[string]string) bool {
+	return metadata[polarisMetaEnableDynamicWeight] == "true"
+}
