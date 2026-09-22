@@ -31,9 +31,10 @@ bkApiStages:
   bkiam: prod
   # DBM 数据库管理平台
   bkdbm: prod
-  # API 测试默认不走 bk-login / bk-user 网关链路，stage 留空即可
-  bkLogin: ""
-  bkUser: ""
+  # bk-login 蓝鲸登陆
+  bkLogin: prod
+  # bk-user 用户管理
+  bkUser: prod
 # IAM 中业务系统 ID 配置
 bkIAMSystemIDs:
   bkms: bkms

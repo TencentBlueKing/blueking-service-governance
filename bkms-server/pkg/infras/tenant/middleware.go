@@ -34,12 +34,14 @@ import (
 // 多租模式下要求显式传入 tenant header，并在写入上下文前校验用户是否属于该租户。
 func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 先按模式规范化 header：单租只接受空/default，多租必须显式传入。
 		tenantID, err := ValidateTenantMode(c.Request.Header.Get(HeaderTenantID), enableMultiTenantMode)
 		if err != nil {
 			abortWithStatus(c, tenantStatusCode(err), err.Error())
 			return
 		}
 
+		// 多租模式下还要确认当前登录用户属于该租户，避免只靠 header 越权。
 		if enableMultiTenantMode {
 			user, userErr := auth.GetUser(c.Request.Context())
 			if userErr != nil || user.ID == "" {
@@ -52,6 +54,7 @@ func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 			}
 		}
 
+		// 校验通过后再写入上下文，后续业务只消费 context 中的 tenantID。
 		ctx := WithTenantID(c.Request.Context(), tenantID)
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
@@ -59,6 +62,7 @@ func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 }
 
 func verifyTenantAccess(ctx context.Context, user auth.User, tenantID string, verifier Verifier) error {
+	// 认证结果已带租户时，直接和请求租户比对，不再回源 bk-user。
 	if user.GetTenantID() != "" {
 		if user.GetTenantID() != tenantID {
 			return ErrTenantAccessDenied
@@ -68,6 +72,7 @@ func verifyTenantAccess(ctx context.Context, user auth.User, tenantID string, ve
 	if verifier == nil {
 		return errors.New("tenant verifier is not configured")
 	}
+	// 登录态未带租户时，回源 bk-user 校验用户归属和账号状态。
 	return verifier.Verify(ctx, user.ID, tenantID)
 }
 

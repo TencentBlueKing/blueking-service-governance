@@ -218,39 +218,44 @@ var _ = Describe("User authentication middleware", func() {
 	DescribeTable(
 		"selects the auth backend",
 		func(cfg Config, expectedType string) {
-			_, backendType := getBackend(cfg)
+			_, backendType, err := getBackend(cfg)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(backendType).To(Equal(expectedType))
 		},
 		Entry("bk_ticket", Config{BackendType: BackendBkTicket}, BackendBkTicket),
 		Entry("bk_token", Config{BackendType: BackendBkToken}, BackendBkToken),
 		Entry("defaults to bk_token", Config{}, BackendBkToken),
 		Entry(
-			"keeps bk_ticket when bk-login gateway url is set",
+			"keeps bk_ticket when bk-login is enabled",
 			Config{
-				BackendType:       BackendBkTicket,
-				BkLoginGatewayURL: "https://bk-login.example.com/prod",
+				BackendType:   BackendBkTicket,
+				EnableBkLogin: true,
+				BkApiUrlTmpl:  "https://{api_name}.example.com",
 			},
 			BackendBkTicket,
 		),
 		Entry(
-			"uses bk-login apigw when gateway url is set",
+			"uses bk-login apigw when backend is bk_token",
 			Config{
-				BackendType:       BackendBkToken,
-				BkLoginGatewayURL: "https://bk-login.example.com/prod",
-				BkAppCode:         "bkms",
-				BkAppSecret:       "secret",
+				BackendType:   BackendBkToken,
+				EnableBkLogin: true,
+				BkApiUrlTmpl:  "https://{api_name}.example.com",
+				BkAppCode:     "bkms",
+				BkAppSecret:   "secret",
 			},
 			BackendBkToken,
 		),
 	)
 
-	It("constructs the bk-login apigw backend when gateway url is set", func() {
-		backend, backendType := getBackend(Config{
-			BackendType:       BackendBkToken,
-			BkLoginGatewayURL: "https://bk-login.example.com/prod",
-			BkAppCode:         "bkms",
-			BkAppSecret:       "secret",
+	It("constructs the bk-login apigw backend when bk-login is enabled", func() {
+		backend, backendType, err := getBackend(Config{
+			BackendType:   BackendBkToken,
+			EnableBkLogin: true,
+			BkApiUrlTmpl:  "https://{api_name}.example.com",
+			BkAppCode:     "bkms",
+			BkAppSecret:   "secret",
 		})
+		Expect(err).NotTo(HaveOccurred())
 		Expect(backendType).To(Equal(BackendBkToken))
 		_, ok := backend.(*backends.BkTokenApigwAuthBackend)
 		Expect(ok).To(BeTrue())

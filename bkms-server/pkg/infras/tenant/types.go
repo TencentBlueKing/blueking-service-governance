@@ -23,12 +23,15 @@ import (
 )
 
 const (
-	// HeaderTenantID is the request header used by multi-tenant requests.
+	// HeaderTenantID 多租户请求头，对齐 ConfigCenter TenantHeader。
 	HeaderTenantID = "X-Bk-Tenant-Id"
-	// DefaultTenantID is the reserved tenant used by single-tenant compatibility mode.
+
+	// DefaultTenantID 单租兼容模式下的保留租户，对齐 ConfigCenter BKSingleTenantID。
 	DefaultTenantID = "default"
-	// SystemTenantID is the reserved system tenant used by BKMS local rules.
+	// SystemTenantID 平台/系统保留租户，对齐 ConfigCenter BKDefaultTenantID。
 	SystemTenantID = "system"
+	// SuperTenantID 超级租户保留值，对齐 ConfigCenter BKSuperTenantID。
+	SuperTenantID = "superadmin"
 )
 
 var (

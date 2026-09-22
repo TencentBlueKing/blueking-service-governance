@@ -20,31 +20,26 @@ package backends
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
+	"time"
 
+	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
+	"github.com/TencentBlueKing/bk-apigateway-sdks/core/define"
 	"github.com/pkg/errors"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/httpcli"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
 )
 
 const (
-	bkLoginGatewayName     = "bk-login"
-	bkApiNamePlaceholder   = "{api_name}"
-	defaultBkLoginAPIStage = "prod"
+	bkLoginGatewayName = "bk-login"
+	// defaultRequestTimeout 与认证中间件超时保持一致，这是请求入口同步校验，不是后台集成调用。
+	defaultRequestTimeout = 10 * time.Second
 )
 
 // BkTokenApigwAuthBackend 通过蓝鲸 API 网关校验 bk_token 并获取用户信息。
 type BkTokenApigwAuthBackend struct {
-	// ApigwBaseURL 是 bk-login 网关前缀，不含接口路径。
-	ApigwBaseURL string
-	// BkAppCode 应用 ID，用于 API 网关应用认证
-	BkAppCode string
-	// BkAppSecret 应用密钥，用于 API 网关应用认证
-	BkAppSecret string
+	define.BkApiClient
 	// LoginPageURL 是已解析的登录页根地址，仅用于 GetLoginUrl。
 	LoginPageURL string
 }
@@ -52,25 +47,6 @@ type BkTokenApigwAuthBackend struct {
 // GetLoginUrl 获取登录地址。
 func (b *BkTokenApigwAuthBackend) GetLoginUrl() string {
 	return fmt.Sprintf("%s/plain/", b.LoginPageURL)
-}
-
-// BuildBkLoginGatewayURL renders the bk-login API gateway base URL from template and stage.
-func BuildBkLoginGatewayURL(apiURLTmpl, stage string) (string, error) {
-	gatewayURL := strings.ReplaceAll(apiURLTmpl, bkApiNamePlaceholder, bkLoginGatewayName)
-	stage = strings.TrimSpace(stage)
-	if stage == "" {
-		stage = defaultBkLoginAPIStage
-	}
-
-	parsedURL, err := url.Parse(gatewayURL)
-	if err != nil {
-		return "", errors.Wrap(err, "parse bk-login gateway url")
-	}
-	parsedURL.Path, err = url.JoinPath(parsedURL.Path, stage)
-	if err != nil {
-		return "", errors.Wrap(err, "join bk-login gateway stage")
-	}
-	return parsedURL.String(), nil
 }
 
 // GetUserCredential 获取用户票据
@@ -85,88 +61,56 @@ func (b *BkTokenApigwAuthBackend) GetUserCredential(request *http.Request) strin
 	return cookie.Value
 }
 
-// apigwAuthHeader 构造 API 网关要求的应用认证请求头 X-Bkapi-Authorization。
-func (b *BkTokenApigwAuthBackend) apigwAuthHeader() (string, error) {
-	auth := map[string]string{
-		"bk_app_code":   b.BkAppCode,
-		"bk_app_secret": b.BkAppSecret,
-	}
-	data, err := json.Marshal(auth)
-	if err != nil {
-		return "", errors.Wrap(err, "marshal apigw auth header")
-	}
-	return string(data), nil
-}
-
-// apigwUserInfoResponse 是 API 网关 bk-login userinfo 接口的响应结构。
-type apigwUserInfoResponse struct {
-	Data struct {
-		BkUsername  string `json:"bk_username"`
-		TenantID    string `json:"tenant_id"`
-		DisplayName string `json:"display_name"`
-	} `json:"data"`
-	Error *struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
 // GetUserInfo 通过 API 网关校验 bk_token 并获取用户信息。
 func (b *BkTokenApigwAuthBackend) GetUserInfo(ctx context.Context, userCred string) (*UserInfo, error) {
-	authHeader, err := b.apigwAuthHeader()
-	if err != nil {
-		return nil, errors.Wrap(err, "build apigw auth header")
-	}
-
-	url := strings.TrimRight(b.ApigwBaseURL, "/") + "/api/v3/open/bk-tokens/userinfo/"
-	client := httpcli.NewRestyClient(ctx)
-	resp, err := client.R().
-		SetContext(ctx).
-		SetHeader("X-Bkapi-Authorization", authHeader).
-		SetQueryParams(map[string]string{"bk_token": userCred}).
-		ForceContentType("application/json").
-		Get(url)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get user info from apigw %s", url)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		var failed apigwUserInfoResponse
-		if unmarshalErr := json.Unmarshal(resp.Body(), &failed); unmarshalErr == nil && failed.Error != nil {
-			return nil, errors.Errorf(
-				"apigw %s returned status %d: code=%s, message=%s",
-				url, resp.StatusCode(), failed.Error.Code, failed.Error.Message,
-			)
-		}
-		return nil, errors.Errorf(
-			"apigw %s returned status %d: %s", url, resp.StatusCode(), resp.String(),
-		)
-	}
+	op := b.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "get_userinfo",
+			Method: http.MethodGet,
+			Path:   "/api/v3/open/bk-tokens/userinfo/",
+		},
+		bkapi.OptSetRequestQueryParams(map[string]string{"bk_token": userCred}),
+	)
 
 	var result apigwUserInfoResponse
-	if err = json.Unmarshal(resp.Body(), &result); err != nil {
-		return nil, errors.Wrapf(err, "unmarshal apigw response from %s", url)
+	resp, err := op.SetContext(ctx).SetResult(&result).Request()
+	if err != nil {
+		return nil, errors.Wrap(err, "get user info from bk-login")
 	}
-	if result.Error != nil {
-		return nil, errors.Errorf(
-			"apigw %s returned error: code=%s, message=%s",
-			url, result.Error.Code, result.Error.Message,
-		)
+	defer resp.Body.Close()
+
+	if !httpresp.IsSuccess(resp) {
+		if result.Error != nil {
+			return nil, errors.New(result.Error.Message)
+		}
+		return nil, errors.Errorf("call bk-login get_userinfo failed, http code: %d", resp.StatusCode)
 	}
-	// bk-login userinfo 以 data.bk_username 作为登录用户标识。
 	if result.Data.BkUsername == "" {
-		return nil, errors.Errorf("apigw %s returned empty bk_username", url)
+		return nil, errors.New("bk-login returned empty bk_username")
 	}
 
 	return &UserInfo{ID: result.Data.BkUsername, TenantID: result.Data.TenantID}, nil
 }
 
-// NewBkTokenApigwAuthBackend 创建 BkTokenApigwAuthBackend 实例。
-func NewBkTokenApigwAuthBackend(apigwBaseURL, bkAppCode, bkAppSecret, loginPageURL string) *BkTokenApigwAuthBackend {
-	return &BkTokenApigwAuthBackend{
-		ApigwBaseURL: apigwBaseURL,
-		BkAppCode:    bkAppCode,
-		BkAppSecret:  bkAppSecret,
-		LoginPageURL: loginPageURL,
+// NewBkTokenApigwAuthBackend 创建通过 bk-login 网关校验 bk_token 的认证后端。
+func NewBkTokenApigwAuthBackend(
+	apiURLTmpl, stage, bkAppCode, bkAppSecret, loginPageURL string,
+) (*BkTokenApigwAuthBackend, error) {
+	apiClient, err := bkapi.NewBkApiClient(bkLoginGatewayName, bkapi.ClientConfig{
+		BkApiUrlTmpl: apiURLTmpl,
+		Stage:        stage,
+		AppCode:      bkAppCode,
+		AppSecret:    bkAppSecret,
+		ClientOptions: []define.BkApiClientOption{
+			bkapi.OptJsonResultProvider(),
+			bkapi.OptTimeout(defaultRequestTimeout),
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "new bk-login client")
 	}
+	return &BkTokenApigwAuthBackend{
+		BkApiClient:  apiClient,
+		LoginPageURL: loginPageURL,
+	}, nil
 }

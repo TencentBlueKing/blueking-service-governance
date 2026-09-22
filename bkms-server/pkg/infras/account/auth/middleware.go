@@ -51,8 +51,12 @@ type Config struct {
 	BackendType string
 	// LoginURL 是登录页根地址，用于拼接 /plain/；未配网关时也作为直连校验的 host。
 	LoginURL string
-	// BkLoginGatewayURL 是已解析完成的 bk-login 网关地址；非空时 bk_token 认证走网关 userinfo。
-	BkLoginGatewayURL string
+	// EnableBkLogin 为 true 时，bk_token 认证走 bk-login 网关 userinfo。
+	EnableBkLogin bool
+	// BkApiUrlTmpl 是蓝鲸网关地址模板，仅在 EnableBkLogin 时用于构造 bk-login 客户端。
+	BkApiUrlTmpl string
+	// BkLoginStage 是 bk-login 网关 stage；为空时由 sdk 默认使用 prod。
+	BkLoginStage string
 	// BkAppCode 应用 ID，走 API 网关时需要。
 	BkAppCode string
 	// BkAppSecret 应用密钥，走 API 网关时需要。
@@ -83,16 +87,22 @@ func GetResult(ctx context.Context) (Result, bool) {
 
 // Optional 尝试认证当前用户，无论认证是否成功都会继续处理请求。
 // 在一些特殊的不强制要求用户认证的 API 中使用。
-func Optional(cfg Config, tokenClient usertoken.TokenClient) gin.HandlerFunc {
-	authBackend, backendType := getBackend(cfg)
-	return middleware(authBackend, backendType, tokenClient, cfg.AllowSetUserInHeader, false)
+func Optional(cfg Config, tokenClient usertoken.TokenClient) (gin.HandlerFunc, error) {
+	authBackend, backendType, err := getBackend(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return middleware(authBackend, backendType, tokenClient, cfg.AllowSetUserInHeader, false), nil
 }
 
 // Required 认证当前用户，认证失败时中止请求。
 // 应该作为项目最主要的默认认证中间件使用。
-func Required(cfg Config, tokenClient usertoken.TokenClient) gin.HandlerFunc {
-	authBackend, backendType := getBackend(cfg)
-	return middleware(authBackend, backendType, tokenClient, cfg.AllowSetUserInHeader, true)
+func Required(cfg Config, tokenClient usertoken.TokenClient) (gin.HandlerFunc, error) {
+	authBackend, backendType, err := getBackend(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return middleware(authBackend, backendType, tokenClient, cfg.AllowSetUserInHeader, true), nil
 }
 
 // 制造中间件函数的工厂函数。

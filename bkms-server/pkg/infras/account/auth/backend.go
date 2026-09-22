@@ -39,19 +39,22 @@ type AuthBackend interface {
 }
 
 // getBackend 根据配置创建认证后端实例。
-func getBackend(cfg Config) (AuthBackend, string) {
+func getBackend(cfg Config) (AuthBackend, string, error) {
 	switch cfg.BackendType {
 	case BackendBkTicket:
-		return backends.NewBkTicketAuthBackend(cfg.LoginURL), BackendBkTicket
+		return backends.NewBkTicketAuthBackend(cfg.LoginURL), BackendBkTicket, nil
 	case BackendBkToken, "":
-		if cfg.BkLoginGatewayURL != "" {
-			return backends.NewBkTokenApigwAuthBackend(
-				cfg.BkLoginGatewayURL, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
-			), BackendBkToken
+		if cfg.EnableBkLogin {
+			backend, err := backends.NewBkTokenApigwAuthBackend(
+				cfg.BkApiUrlTmpl, cfg.BkLoginStage, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
+			)
+			if err != nil {
+				return nil, "", err
+			}
+			return backend, BackendBkToken, nil
 		}
-		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken
+		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken, nil
 	default:
-		// Default to bk_token
-		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken
+		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken, nil
 	}
 }

@@ -72,7 +72,6 @@ import (
 	depservicehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth/backends"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bkuser"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
@@ -145,20 +144,12 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		AuthEnvName: cfg.Account.AuthEnvName,
 		LoginURL:    cfg.Account.LoginURL,
 	}, tokenClient)
-	bkLoginGatewayURL := ""
-	if cfg.FeatureFlags.EnableBkLogin {
-		var err error
-		bkLoginGatewayURL, err = backends.BuildBkLoginGatewayURL(
-			cfg.BkPlatUrls.BkApiUrlTmpl, cfg.BkApiStages.BkLogin,
-		)
-		if err != nil {
-			return nil, errors.Wrap(err, "build bk-login gateway url")
-		}
-	}
 	authConfig := auth.Config{
 		BackendType:          cfg.Account.BackendType,
 		LoginURL:             cfg.Account.LoginURL,
-		BkLoginGatewayURL:    bkLoginGatewayURL,
+		EnableBkLogin:        cfg.FeatureFlags.EnableBkLogin,
+		BkApiUrlTmpl:         cfg.BkPlatUrls.BkApiUrlTmpl,
+		BkLoginStage:         cfg.BkApiStages.BkLogin,
 		AllowSetUserInHeader: cfg.Development.AllowSetUserInHeader,
 		BkAppCode:            cfg.BkApp.Code,
 		BkAppSecret:          cfg.BkApp.Secret,
@@ -178,7 +169,11 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 			bkUserClient,
 		)
 	}
-	account.Register(r.Group(""), accountHandler, auth.Optional(authConfig, tokenClient))
+	optionalAuth, err := auth.Optional(authConfig, tokenClient)
+	if err != nil {
+		return nil, errors.Wrap(err, "new optional auth middleware")
+	}
+	account.Register(r.Group(""), accountHandler, optionalAuth)
 
 	// 构建触发回调由蓝盾触发专用流水线调用，携带应用独享凭证而非用户票据，
 	// 因此单独挂在不带 auth.Required 的路由组上。
@@ -191,9 +186,13 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	// Register authenticated business APIs under /v1.
 	// 以下 Group 的所有 API 均要求请求必须携带有效身份信息
 	v1 := r.Group("/bkms/v1/bkms-server")
+	requiredAuth, err := auth.Required(authConfig, tokenClient)
+	if err != nil {
+		return nil, errors.Wrap(err, "new required auth middleware")
+	}
 	v1.Use(
 		bkerrs.ErrorHandler(),
-		auth.Required(authConfig, tokenClient),
+		requiredAuth,
 		tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier),
 	)
 	app.Register(v1, apphandler.New(storereg.G()))

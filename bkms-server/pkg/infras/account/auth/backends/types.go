@@ -25,3 +25,16 @@ type UserInfo struct {
 	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
 	TenantID string
 }
+
+// apigwUserInfoResponse 是 bk-login 网关 userinfo 接口的响应结构。
+type apigwUserInfoResponse struct {
+	Data struct {
+		BkUsername  string `json:"bk_username"`
+		TenantID    string `json:"tenant_id"`
+		DisplayName string `json:"display_name"`
+	} `json:"data"`
+	Error *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
