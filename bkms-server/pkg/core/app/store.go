@@ -32,6 +32,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
 // The name of the MongoDB collection for storing application data.
@@ -48,8 +49,13 @@ type ListOpts struct {
 	WorkspaceID string
 	// AppName filters applications by name
 	AppName string
-	// AppType filters applications by type (e.g., "trpc", "helm")
+	// AppType filters applications by type (e.g., "trpc", "helm").
+	// type=trpc/taf also matches type=bkmsApp rows with the corresponding framework.
 	AppType string
+	// Framework filters by Application.Framework. Old records without the field do not match.
+	Framework string
+	// Language filters by Application.Language. Old records without the field do not match.
+	Language string
 }
 
 // ApplicationStore is the interface for storing application data
@@ -267,7 +273,13 @@ func (s *ApplicationStoreMongo) ListApps(ctx context.Context, opts *ListOpts) ([
 			filter["name"] = opts.AppName
 		}
 		if opts.AppType != "" {
-			filter["type"] = opts.AppType
+			applyAppTypeFilter(filter, opts.AppType)
+		}
+		if opts.Framework != "" {
+			filter["framework"] = opts.Framework
+		}
+		if opts.Language != "" {
+			filter["language"] = opts.Language
 		}
 	}
 
@@ -362,6 +374,18 @@ func (s *ApplicationStoreMongo) handleSensitiveFields(
 	app.HelmSpec.HelmSource.HelmRepoConfig.Password = password
 
 	return nil
+}
+
+func applyAppTypeFilter(filter bson.M, appType string) {
+	query := appruntime.ListTypeQuery(appType)
+	if !query.Expand {
+		filter["type"] = query.ExactType
+		return
+	}
+	filter["$or"] = bson.A{
+		bson.M{"type": query.LegacyType},
+		bson.M{"type": appruntime.AppTypeBKMSApp, "framework": query.Framework},
+	}
 }
 
 func (s *ApplicationStoreMongo) collUpdateOne(ctx context.Context, filter, update bson.M) error {

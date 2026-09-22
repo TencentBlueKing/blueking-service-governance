@@ -282,8 +282,10 @@ type AppInfoOutputObj struct {
 	DisplayName string `json:"displayName"`
 	// 创建人
 	Creator string `json:"creator"`
-	// 应用使用的编程语言（如 go、cpp），仅 trpc 类型应用有值
+	// 应用使用的编程语言（如 go、cpp）
 	Language string `json:"language"`
+	// 应用框架（trpc/taf/blank）；Helm/Agones 为空
+	Framework string `json:"framework,omitempty"`
 	// 应用部署的环境列表
 	DeployedEnvs []*AppDeployedEnvOutputObj `json:"deployedEnvs"`
 	// 应用最近操作时间（来自审计日志）
