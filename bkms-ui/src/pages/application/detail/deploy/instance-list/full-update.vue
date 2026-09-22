@@ -45,6 +45,7 @@
         :model="formModel"
       >
         <Form.FormItem
+          class="!mb-[14px]"
           :label="$t('更新内容')"
           required
         >
@@ -69,6 +70,15 @@
             </Radio>
           </Radio.Group>
         </Form.FormItem>
+
+        <Alert
+          v-if="formModel.updateContent !== 'both'"
+          class="mb-[24px]"
+          closable
+          theme="info"
+        >
+          {{ alertContent }}
+        </Alert>
 
         <Form.FormItem
           v-if="formModel.updateContent !== 'image'"
@@ -160,14 +170,6 @@
             />
           </Form.FormItem>
         </template>
-        <Alert
-          v-if="formModel.updateContent !== 'both'"
-          class="mb-[24px]"
-          closable
-          theme="warning"
-        >
-          {{ alertContent }}
-        </Alert>
       </Form>
     </template>
     <template v-else>
