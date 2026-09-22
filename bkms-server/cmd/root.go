@@ -43,6 +43,7 @@ func init() {
 	rootCmd.AddCommand(migration.NewMigrateIAMSystemModelCmd())
 	rootCmd.AddCommand(migration.NewCleanupExpiredWorkspaceTempAdminsCmd())
 	rootCmd.AddCommand(migration.NewCleanupOrphanAppConfigFileVersionsCmd())
+	rootCmd.AddCommand(migration.NewRepairTrpcTafFrameworkDefsCmd())
 	rootCmd.AddCommand(migration.NewUpsertRuntimeImageCmd())
 	rootCmd.AddCommand(migration.NewRefreshWorkspaceBkmonitorPermsCmd())
 }

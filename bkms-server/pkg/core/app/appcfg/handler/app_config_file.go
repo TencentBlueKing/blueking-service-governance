@@ -124,6 +124,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 			Creator:             creator,
 			Description:         input.Description,
 			ConfigKind:          appcfg.ConfigKindFramework,
+			AppType:             app.Type,
 		},
 	)
 	if err != nil {

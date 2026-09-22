@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -67,12 +68,22 @@ func (s *AppCfgFileDefService) Create(
 		return nil, err
 	}
 
-	var contentToValidate string
-	if params.Content != nil {
-		contentToValidate = *params.Content
+	contentToValidate := lo.FromPtr(params.Content)
+	if contentToValidate == "" {
+		contentToValidate = lo.FromPtr(params.OverlayContent)
 	}
 	if err = policy.ValidateContent(contentToValidate, params.Format); err != nil {
 		return nil, errors.Wrap(err, "kind-specific content validation")
+	}
+
+	// 框架页按环境保存仍走旧 Create 接口。tRPC/TAF 的环境 overlay 必须挂在
+	// 已有 framework def 下，否则部署按 def 配对会丢掉环境内容。
+	if isFrameworkEnvOverlayCreate(params) {
+		return s.attachFrameworkEnvOverlay(ctx, params)
+	}
+
+	if err = s.ensureSingleFrameworkDef(ctx, params.AppID, params.AppType, kind); err != nil {
+		return nil, err
 	}
 
 	def, err := s.createDef(ctx, params, kind, policy)
@@ -211,4 +222,84 @@ func (s *AppCfgFileDefService) deleteEnvInstances(ctx context.Context, defID bso
 		}
 	}
 	return nil
+}
+
+func (s *AppCfgFileDefService) ensureSingleFrameworkDef(
+	ctx context.Context,
+	appID, appType string,
+	kind ConfigKind,
+) error {
+	if kind != ConfigKindFramework {
+		return nil
+	}
+	// 与 app.AppTypeTRPC / AppTypeTAF 对齐，避免 appcfg 反向依赖 app 包。
+	if appType != "trpc" && appType != "taf" {
+		return nil
+	}
+	defs, err := s.DefStore.ListByApp(ctx, appID, DefFilterConfigKind(ConfigKindFramework))
+	if err != nil {
+		return errors.Wrap(err, "listing framework defs")
+	}
+	if len(defs) > 0 {
+		return errors.Wrap(ErrInvalidConfigSpec, "trpc/taf application allows only one framework config file")
+	}
+	return nil
+}
+
+func isFrameworkEnvOverlayCreate(params CreateCfgFileParams) bool {
+	return params.ConfigKind == ConfigKindFramework &&
+		params.EnvName != EnvNameDefault &&
+		params.Type == AppConfigFileTypeOverlay &&
+		params.BaseAppConfigFileID != nil
+}
+
+// attachFrameworkEnvOverlay 把环境 overlay 挂到 base 文件所属的 framework def 上，
+// 而不是再新建一条 def。旧 POST /app-config-files 按环境保存时走这条路径。
+func (s *AppCfgFileDefService) attachFrameworkEnvOverlay(
+	ctx context.Context,
+	params CreateCfgFileParams,
+) (*AppConfigFileWithDef, error) {
+	baseFile, err := s.FileStore.GetByID(ctx, *params.BaseAppConfigFileID)
+	if err != nil {
+		return nil, errors.Wrap(err, "loading base app config file")
+	}
+	if baseFile.AppID != params.AppID {
+		return nil, errors.Wrap(ErrInvalidConfigSpec, "base app config file does not belong to the app")
+	}
+
+	defaultFile, err := s.GetDefaultFileWithDef(ctx, baseFile.DefID)
+	if err != nil {
+		return nil, errors.Wrap(err, "loading default file for framework overlay")
+	}
+	def := defaultFile.Def
+
+	// 若是第一次开启按环境配置，需要修改配置项
+	if !def.EnvConfigMode.IsIndependent() {
+		if err = s.UpdateAppCfgFileDef(ctx, def, FileDefUpdate{
+			IsUnifiedConfig: lo.ToPtr(false),
+			Operator:        params.Creator,
+		}); err != nil {
+			return nil, errors.Wrap(err, "switching framework def to independent config")
+		}
+	}
+
+	existing, err := s.FindEnvInstance(ctx, def.ID, params.EnvName)
+	if err != nil {
+		return nil, errors.Wrap(err, "finding existing framework env overlay")
+	}
+	if existing != nil {
+		return &AppConfigFileWithDef{AppConfigFile: *existing, Def: def}, nil
+	}
+
+	overlay := lo.FromPtr(params.OverlayContent)
+	created, err := s.CreateEnvInstance(ctx, *defaultFile, CreateEnvInstanceParams{
+		EnvName:        params.EnvName,
+		OverlayContent: &overlay,
+		Operator:       params.Creator,
+		Description:    params.Description,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "creating framework env overlay on existing def")
+	}
+	return &AppConfigFileWithDef{AppConfigFile: *created, Def: def}, nil
 }

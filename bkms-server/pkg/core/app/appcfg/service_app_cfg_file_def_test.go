@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
@@ -56,6 +57,116 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			gotFile, err := f.FileStore.GetByID(f.Ctx, result.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gotFile.DefID).To(Equal(result.Def.ID))
+		})
+
+		It("should attach framework env overlay to the base file def", func() {
+			base := f.createFrameworkFile("default")
+			overlay := "server:\n  app: test\n"
+			created, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:               f.AppID,
+				EnvName:             "test",
+				Name:                "test",
+				Type:                appcfg.AppConfigFileTypeOverlay,
+				ContentSourceType:   appcfg.ContentSourceTypeLocal,
+				Format:              appcfg.FileFormatYAML,
+				BaseAppConfigFileID: &base.ID,
+				OverlayContent:      &overlay,
+				Creator:             "tester",
+				Description:         "env overlay",
+				ConfigKind:          appcfg.ConfigKindFramework,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.DefID).To(Equal(base.DefID))
+			Expect(created.EnvName).To(Equal("test"))
+			Expect(created.Type).To(Equal(appcfg.AppConfigFileTypeOverlay))
+			Expect(created.BaseAppConfigFileID).NotTo(BeNil())
+			Expect(*created.BaseAppConfigFileID).To(Equal(base.ID))
+			Expect(lo.FromPtr(created.OverlayContent)).To(Equal(overlay))
+
+			defs, err := f.DefStore.ListByApp(f.Ctx, f.AppID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defs).To(HaveLen(1))
+			Expect(defs[0].EnvConfigMode.IsUnifiedConfig).To(BeFalse())
+		})
+
+		It("should reuse existing framework env overlay instead of creating another def", func() {
+			base := f.createFrameworkFile("default")
+			overlay := "a: 1\n"
+			first, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:               f.AppID,
+				EnvName:             "test",
+				Name:                "test",
+				Type:                appcfg.AppConfigFileTypeOverlay,
+				ContentSourceType:   appcfg.ContentSourceTypeLocal,
+				Format:              appcfg.FileFormatYAML,
+				BaseAppConfigFileID: &base.ID,
+				OverlayContent:      &overlay,
+				Creator:             "tester",
+				ConfigKind:          appcfg.ConfigKindFramework,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			second, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:               f.AppID,
+				EnvName:             "test",
+				Name:                "test",
+				Type:                appcfg.AppConfigFileTypeOverlay,
+				ContentSourceType:   appcfg.ContentSourceTypeLocal,
+				Format:              appcfg.FileFormatYAML,
+				BaseAppConfigFileID: &base.ID,
+				Creator:             "tester",
+				ConfigKind:          appcfg.ConfigKindFramework,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(second.ID).To(Equal(first.ID))
+			Expect(second.DefID).To(Equal(base.DefID))
+
+			defs, err := f.DefStore.ListByApp(f.Ctx, f.AppID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defs).To(HaveLen(1))
+		})
+
+		It("should reject a second framework def for trpc apps", func() {
+			f.createFrameworkFile("default")
+			content := "key: other"
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "another.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "trpc",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("only one framework config file"))
+		})
+
+		It("should allow multiple framework defs for helm apps", func() {
+			f.createFrameworkFile("values.yaml")
+			content := "replicaCount: 2"
+			second, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "prod-values.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "helm",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(second.Def.Name).To(Equal("prod-values.yaml"))
+
+			defs, err := f.DefStore.ListByApp(f.Ctx, f.AppID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defs).To(HaveLen(2))
 		})
 
 		It("should reject empty config kind", func() {

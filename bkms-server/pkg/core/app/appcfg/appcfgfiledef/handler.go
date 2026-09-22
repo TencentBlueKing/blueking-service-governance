@@ -177,6 +177,7 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 		Creator:             creator,
 		Description:         input.Description,
 		ConfigKind:          appcfg.ConfigKind(input.ConfigKind),
+		AppType:             app.Type,
 	})
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "creating def"))

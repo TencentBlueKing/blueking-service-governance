@@ -141,6 +141,8 @@ type CreateCfgFileParams struct {
 	Description         string
 	// ConfigKind 决定适用的策略集，默认 ConfigKindFramework。
 	ConfigKind ConfigKind
+	// AppType 应用类型（trpc/taf/helm/agones）。tRPC/TAF 的 framework 限制为每个应用一条 def。
+	AppType string
 }
 
 // FileDefUpdate 描述应用配置文件 def 级字段的更新请求。
