@@ -2085,8 +2085,8 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 环境未配置集群资源，无法部署应用: Configure cluster resources before deploying applications
 导入: Import
 导出: Export
-二进制更新: Binary Update
-展示该实例最近一次通过 bkms-cli 发布的二进制，更新过程不会重启容器: Shows the most recently published binary for this instance via bkms-cli. Updating does not restart the container
+热更新: Hot update
+展示该实例最近一次通过 bkms-cli 的热更新概要: Display the summary of the most recent hot update for this instance via bkms-cli
 二进制: Binary
 已更新: Updated
 更新失败: Update Failed

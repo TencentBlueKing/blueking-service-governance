@@ -430,19 +430,18 @@
           </template>
         </TableColumn>
 
-        <!-- 最近一次二进制更新 -->
         <TableColumn
           field="latestPublish"
-          :label="$t('二进制更新')"
+          :label="$t('热更新')"
           min-width="120"
         >
           <template #default="{ row }: { row: AppInstanceOutputObj }">
             <Popover
               v-if="row.latestPublish"
               placement="top"
-              :popover-delay="[100, 0]"
+              :popover-delay="[80, 80]"
               theme="light"
-              :width="720"
+              :width="560"
             >
               <span class="inline-flex items-center cursor-default border-b border-dashed border-[#979BA5]">
                 <StatusDotIcon
@@ -455,7 +454,7 @@
               <template #content>
                 <div class="w-full min-w-0 px-[4px]">
                   <div class="mb-[12px] flex items-center text-[14px] whitespace-nowrap">
-                    <span class="font-bold text-[#313238] shrink-0">{{ $t('二进制更新') }}</span>
+                    <span class="font-bold text-[#313238] shrink-0">{{ $t('热更新') }}</span>
                     <span
                       class="text-[#979BA5] text-[12px] ml-[10px] truncate"
                       :title="row.id"
@@ -464,70 +463,80 @@
                   </div>
                   <div class="text-[12px] text-[#4D4F56] mb-[12px]">
                     <i class="bkms-icon bkms-icon-circle-info text-[14px] mr-[4px]"></i>
-                    {{ $t('展示该实例最近一次通过 bkms-cli 发布的二进制，更新过程不会重启容器') }}
+                    {{ $t('展示该实例最近一次通过 bkms-cli 的热更新概要') }}
                   </div>
-                  <Table
-                    class="w-full"
-                    :data="[row.latestPublish]"
-                    :max-height="280"
-                  >
-                    <TableColumn
+                  <div class="py-[4px]">
+                    <DetailItem
                       :label="$t('二进制')"
-                      min-width="110"
-                      show-overflow="tooltip"
+                      :label-width="70"
                     >
-                      <template #default="{ row: publishRow }">{{ publishRow.binaryName || '--' }}</template>
-                    </TableColumn>
-                    <TableColumn
-                      label="MD5"
-                      min-width="140"
+                      {{ row.latestPublish.binaryName || '--' }}
+                    </DetailItem>
+                    <DetailItem
+                      :label="$t('摘要')"
+                      :label-width="70"
                     >
-                      <template #default="{ row: publishRow }">
-                        <HoverCopy
-                          :copy-value="publishRow.md5 || ''"
-                          :text="publishRow.md5 || '--'"
-                          :tooltip="publishRow.md5"
-                        />
-                      </template>
-                    </TableColumn>
-                    <TableColumn
+                      <Popover
+                        v-if="row.latestPublish.md5"
+                        disable-teleport
+                        ext-cls="publish-nested-popover"
+                        placement="top"
+                        theme="dark"
+                      >
+                        <span class="inline-block cursor-pointer border-b border-dashed border-[#979ba5]">
+                          {{ row.latestPublish.md5.slice(0, 8) }}
+                        </span>
+                        <template #content>
+                          <div class="break-all leading-[20px]">{{ row.latestPublish.md5 }}</div>
+                        </template>
+                      </Popover>
+                      <span v-else>--</span>
+                    </DetailItem>
+                    <DetailItem
                       :label="$t('操作人')"
-                      min-width="100"
-                      show-overflow="tooltip"
+                      :label-width="70"
                     >
-                      <template #default="{ row: publishRow }">{{ publishRow.operator || '--' }}</template>
-                    </TableColumn>
-                    <TableColumn
+                      {{ row.latestPublish.operator || '--' }}
+                    </DetailItem>
+                    <DetailItem
                       :label="$t('更新时间')"
-                      min-width="140"
-                      show-overflow="tooltip"
+                      :label-width="70"
                     >
-                      <template #default="{ row: publishRow }">
-                        {{ publishRow.updatedAt ? formatTimeByTimezone(publishRow.updatedAt) : '--' }}
-                      </template>
-                    </TableColumn>
-                    <TableColumn
+                      {{ row.latestPublish.updatedAt ? formatTimeByTimezone(row.latestPublish.updatedAt) : '--' }}
+                    </DetailItem>
+                    <DetailItem
                       :label="$t('状态')"
-                      min-width="100"
+                      :label-width="70"
                     >
-                      <template #default="{ row: publishRow }">
-                        <div
-                          v-bk-tooltips="{
-                            content: publishRow.message,
-                            disabled: publishRow.status !== 'failed' || !publishRow.message,
-                          }"
-                          class="flex items-center"
-                        >
-                          <StatusDotIcon
-                            v-if="publishRow.status === 'success' || publishRow.status === 'failed'"
-                            :icon="publishRow.status === 'success' ? 'normal' : 'abnormal'"
-                            :size="12"
-                          />
-                          {{ getPublishResultLabel(publishRow.status) }}
-                        </div>
-                      </template>
-                    </TableColumn>
-                  </Table>
+                      <span class="inline-flex items-center">
+                        <StatusDotIcon
+                          v-if="row.latestPublish.status === 'success' || row.latestPublish.status === 'failed'"
+                          :icon="row.latestPublish.status === 'success' ? 'normal' : 'abnormal'"
+                          :size="12"
+                        />
+                        {{ getPublishResultLabel(row.latestPublish.status) }}
+                      </span>
+                    </DetailItem>
+                    <DetailItem
+                      v-if="row.latestPublish.status === 'failed' && row.latestPublish.message"
+                      class="fail-reason-item"
+                      :label="$t('失败原因')"
+                      :label-width="70"
+                    >
+                      <Popover
+                        disable-teleport
+                        ext-cls="publish-nested-popover"
+                        placement="top"
+                        theme="dark"
+                        :width="400"
+                      >
+                        <span class="block truncate">{{ row.latestPublish.message }}</span>
+                        <template #content>
+                          <div class="break-all leading-[20px]">{{ row.latestPublish.message }}</div>
+                        </template>
+                      </Popover>
+                    </DetailItem>
+                  </div>
                 </div>
               </template>
             </Popover>
@@ -759,23 +768,12 @@
 
   const { getResourceText, getResourceTips } = useResourceSpecDisplay();
 
-  // 列设置：资源规格等新增列默认不勾选，用户可在表格右上角列设置中开启。
+  // 列设置：热更新、资源规格列默认不勾选，用户可在表格右上角列设置中主动开启。
   // 列勾选与行高（size）偏好均持久化，刷新后恢复。
   // 多环境模式下按环境名区分列设置，v-for 渲染的多个表格互不共享。
   const tableSettingsId = computed(() => `instance-table-${props.envName || 'default'}`);
   const { settings, handleSettingChange } = useTableSettings(tableSettingsId, {
-    defaultChecked: [
-      'id',
-      'image',
-      'ip',
-      'nodeIP',
-      'status',
-      'isHealthy',
-      'polarisStatus',
-      'latestPublish',
-      'restartCount',
-      'age',
-    ],
+    defaultChecked: ['id', 'image', 'ip', 'nodeIP', 'status', 'isHealthy', 'polarisStatus', 'restartCount', 'age'],
     disabled: ['id'],
   });
 
@@ -1054,6 +1052,14 @@
 </script>
 
 <style lang="postcss" scoped>
+  :deep(.publish-nested-popover.bk-popover.bk-pop2-content .bk-pop2-arrow) {
+    background-color: #26323d !important;
+  }
+
+  .fail-reason-item :deep(> div:last-child) {
+    min-width: 0;
+  }
+
   .env-instance-table:first-child {
     .env-header {
       border-top: 1px solid #e8eaec;
