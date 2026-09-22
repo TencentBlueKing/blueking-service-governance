@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -301,6 +302,57 @@ var _ = Describe("Application store", func() {
 				Name:        app3Name,
 				Type:        bkmsapp.AppTypeHelm,
 			})).To(Succeed())
+		})
+
+		It("should keep old fields and new language/framework on round trip", func() {
+			testApp := &bkmsapp.Application{
+				ID:          appID,
+				WorkspaceID: workspaceID,
+				Name:        appName,
+				Type:        bkmsapp.AppTypeTRPC,
+				Language:    "go",
+				Framework:   "trpc",
+				TrpcSpec:    &bkmsapp.TrpcSpec{Language: "go"},
+			}
+			Expect(bkmsapp.CreateApp(ctx, db, testApp)).To(Succeed())
+
+			got, err := apps.Get(ctx, bkmsapp.ByID(appID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Type).To(Equal(bkmsapp.AppTypeTRPC))
+			Expect(got.Language).To(Equal("go"))
+			Expect(got.Framework).To(Equal("trpc"))
+			Expect(got.TrpcSpec).NotTo(BeNil())
+			Expect(got.TrpcSpec.Language).To(Equal("go"))
+		})
+
+		It("should treat type=trpc as matching future bkmsApp+trpc rows", func() {
+			legacyID := "legacy-" + stringx.Random(6)
+			modernID := "modern-" + stringx.Random(6)
+			Expect(bkmsapp.CreateApp(ctx, db, &bkmsapp.Application{
+				ID:          legacyID,
+				WorkspaceID: workspaceID,
+				Name:        "legacy-" + stringx.Random(6),
+				Type:        bkmsapp.AppTypeTRPC,
+			})).To(Succeed())
+			Expect(bkmsapp.CreateApp(ctx, db, &bkmsapp.Application{
+				ID:          modernID,
+				WorkspaceID: workspaceID,
+				Name:        "modern-" + stringx.Random(6),
+				Type:        bkmsapp.AppTypeBKMSApp,
+				Framework:   "trpc",
+				Language:    "go",
+			})).To(Succeed())
+
+			result, err := apps.List(ctx, bkmsapp.InWorkspace(workspaceID), bkmsapp.OfType(bkmsapp.AppTypeTRPC))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lo.Map(result, func(a bkmsapp.Application, _ int) string { return a.ID })).
+				To(ConsistOf(legacyID, modernID))
+		})
+
+		It("should recognize bkmsApp as an appmodel type", func() {
+			Expect(bkmsapp.IsAppModelType(bkmsapp.AppTypeBKMSApp)).To(BeTrue())
+			Expect(bkmsapp.IsAppModelType(bkmsapp.AppTypeTRPC)).To(BeTrue())
+			Expect(bkmsapp.IsAppModelType(bkmsapp.AppTypeHelm)).To(BeFalse())
 		})
 
 		It("should filter applications by multiple criteria", func() {

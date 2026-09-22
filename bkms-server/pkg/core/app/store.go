@@ -31,6 +31,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -74,8 +75,18 @@ func ByName(workspaceID, name string) store.Opt {
 	return store.Combine(InWorkspace(workspaceID), store.Where("name", name))
 }
 
-// OfType 按应用类型匹配，如 AppTypeTRPC、AppTypeHelm
-func OfType(appType string) store.Opt { return store.Where("type", appType) }
+// OfType 按应用类型匹配，如 AppTypeTRPC、AppTypeHelm。
+// type=trpc/taf 同时匹配 framework 对应的 type=bkmsApp 应用
+func OfType(appType string) store.Opt {
+	query := appruntime.ListTypeQuery(appType)
+	if !query.Expand {
+		return store.Where("type", query.ExactType)
+	}
+	return store.Where("$or", bson.A{
+		bson.M{"type": query.LegacyType},
+		bson.M{"type": appruntime.AppTypeBKMSApp, "framework": query.Framework},
+	})
+}
 
 // CreateApp 创建应用。与已有应用冲突时返回的错误满足 errors.Is(err, ErrAppAlreadyExists)，
 // 错误信息中指明冲突的是 id 还是名称

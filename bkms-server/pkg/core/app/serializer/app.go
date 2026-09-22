@@ -139,6 +139,10 @@ type AppDetailOutputObj struct {
 	Type string `json:"type"`
 	// 应用显示名称
 	DisplayName string `json:"displayName"`
+	// 编程语言（兼容投影：优先 Application.Language，否则 TrpcSpec）
+	Language string `json:"language,omitempty"`
+	// 框架（兼容投影：优先 Application.Framework，否则由旧 type 推导）
+	Framework string `json:"framework,omitempty"`
 	// 可见标准环境名称；未配置时为空数组
 	VisibleEnvNames []string `json:"visibleEnvNames"`
 	// 创建人
@@ -164,6 +168,8 @@ func (o *AppDetailOutputObj) FromModel(
 		Name:            app.Name,
 		Type:            app.Type,
 		DisplayName:     app.DisplayName,
+		Language:        app.DisplayLanguage(),
+		Framework:       app.DisplayFramework(),
 		VisibleEnvNames: lo.Ternary(app.VisibleEnvNames == nil, []string{}, app.VisibleEnvNames),
 		Creator:         app.Creator,
 		BuildConfig:     new(BuildConfigOutputObj).FromModel(buildConfig),
@@ -361,6 +367,8 @@ type AppInfoOutputObj struct {
 	CreatedAt time.Time `json:"createdAt"`
 	// 应用使用的编程语言
 	Language string `json:"language"`
+	// 应用框架（trpc/taf/blank）；Helm/Agones 为空
+	Framework string `json:"framework,omitempty"`
 	// 应用部署的环境列表
 	DeployedEnvs []*AppDeployedEnvOutputObj `json:"deployedEnvs"`
 	// 应用最近操作时间（当前调用者视角）
@@ -373,10 +381,6 @@ func (o *AppInfoOutputObj) FromModel(
 	deployedEnvs []deploystatus.AppDeployStatus,
 	lastOperatedAt time.Time,
 ) *AppInfoOutputObj {
-	language := ""
-	if app.TrpcSpec != nil {
-		language = app.TrpcSpec.Language
-	}
 	o.ID = app.ID
 	o.WorkspaceID = app.WorkspaceID
 	o.Name = app.Name
@@ -384,7 +388,8 @@ func (o *AppInfoOutputObj) FromModel(
 	o.DisplayName = app.DisplayName
 	o.Creator = app.Creator
 	o.CreatedAt = app.CreatedAt
-	o.Language = language
+	o.Language = app.DisplayLanguage()
+	o.Framework = app.DisplayFramework()
 	o.DeployedEnvs = make([]*AppDeployedEnvOutputObj, 0, len(deployedEnvs))
 	for i := range deployedEnvs {
 		o.DeployedEnvs = append(o.DeployedEnvs, new(AppDeployedEnvOutputObj).FromModel(deployedEnvs[i]))
