@@ -103,7 +103,6 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	if input.EnvName != nil {
 		envName = *input.EnvName
 	}
-
 	creator := auth.MustGetUser(ctx).ID
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
@@ -124,8 +123,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 		ConfigKind:          appcfg.ConfigKindFramework,
 		AppType:             app.Type,
 	}
-	// 框架页按环境保存会带 overlay + envName。这里改挂到已有 def，
-	// 避免 Create 再建一条孤儿 framework def。
+	// 框架页按环境保存会带 overlay + envName。这里改挂到已有 def，避免 Create 再建一条孤儿 framework def。
 	var obj *appcfg.AppConfigFile
 	if appcfg.IsFrameworkEnvOverlayCreate(params) {
 		attached, attachErr := acfService.AttachFrameworkEnvOverlay(ctx, params)
@@ -145,14 +143,8 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 		}
 	}
 
-	h.addAppConfigFileAudit(
-		ctx,
-		app,
-		obj.EnvName,
-		audit.OperationTypeCreate,
-		nil,
-		buildAppConfigFileAuditData(obj, input.Name),
-	)
+	h.addAppConfigFileAudit(ctx, app, obj.EnvName, audit.OperationTypeCreate, nil,
+		buildAppConfigFileAuditData(obj, input.Name))
 	ginutils.OK(c, slz.CreateAppConfigFileOutput{
 		Item: new(slz.AppConfigFileOutputObj).FromModel(*obj, input.Name),
 	})

@@ -121,69 +121,26 @@ func planRepairTrpcTafFrameworkDefs(
 	plan.PrimaryDefName = primary.Name
 
 	occupiedEnvs := occupiedEnvNames(filesByDef[primary.ID])
-	claimedEnvs := map[string]string{}
-
 	defByID := make(map[bson.ObjectID]appcfg.AppConfigFileDef, len(defs))
 	for _, def := range defs {
 		defByID[def.ID] = def
 	}
-
-	remainingAfterMove := make(map[bson.ObjectID]int, len(defs))
+	remainingAfterMove := make(map[bson.ObjectID]int, len(filesByDef))
 	for defID, defFiles := range filesByDef {
 		remainingAfterMove[defID] = len(defFiles)
 	}
-
+	planner := orphanFilePlanner{
+		plan:      plan,
+		primaryID: primary.ID,
+		occupied:  occupiedEnvs,
+		claimed:   map[string]string{},
+		remaining: remainingAfterMove,
+	}
 	for _, file := range files {
-		if file.DefID == primary.ID {
+		if file.DefID == primary.ID || file.DefID == bson.NilObjectID {
 			continue
 		}
-		if file.DefID == bson.NilObjectID {
-			continue
-		}
-		fromDef := defByID[file.DefID]
-		if isDefaultEnvName(file.EnvName) {
-			plan.Leftovers = append(plan.Leftovers, repairFrameworkDefLeftover{
-				FileID:  file.ID.Hex(),
-				DefID:   file.DefID.Hex(),
-				EnvName: file.EnvName,
-				Reason:  leftoverReasonDefaultOnOrphan,
-			})
-			continue
-		}
-
-		if occupiedEnvs[file.EnvName] {
-			plan.Conflicts = append(plan.Conflicts, repairFrameworkDefConflict{
-				FileID:      file.ID.Hex(),
-				EnvName:     file.EnvName,
-				FromDefID:   file.DefID.Hex(),
-				FromDefName: fromDef.Name,
-				Reason:      "primary def already has this envName",
-			})
-			continue
-		}
-		if firstFileID, taken := claimedEnvs[file.EnvName]; taken {
-			plan.Conflicts = append(plan.Conflicts, repairFrameworkDefConflict{
-				FileID:      file.ID.Hex(),
-				EnvName:     file.EnvName,
-				FromDefID:   file.DefID.Hex(),
-				FromDefName: fromDef.Name,
-				Reason:      "another orphan file already claims envName (file " + firstFileID + ")",
-			})
-			continue
-		}
-
-		claimedEnvs[file.EnvName] = file.ID.Hex()
-		plan.Moves = append(plan.Moves, repairFrameworkDefMove{
-			FileID:      file.ID.Hex(),
-			EnvName:     file.EnvName,
-			Type:        string(file.Type),
-			FromDefID:   file.DefID.Hex(),
-			FromDefName: fromDef.Name,
-			ToDefID:     primary.ID.Hex(),
-			ContentLen:  fileContentLen(file.Content),
-			OverlayLen:  fileContentLen(file.OverlayContent),
-		})
-		remainingAfterMove[file.DefID]--
+		planner.add(file, defByID[file.DefID])
 	}
 
 	for _, def := range defs {
@@ -211,6 +168,60 @@ func planRepairTrpcTafFrameworkDefs(
 		plan.SkipReason = skipReasonAlreadyHealthy
 	}
 	return plan
+}
+
+// orphanFilePlanner 分类孤儿文件时的中间状态：主 def 已占用的环境、本次已认领的环境、各 def 剩余文件数。
+type orphanFilePlanner struct {
+	plan      *repairTrpcTafFrameworkDefsAppPlan
+	primaryID bson.ObjectID
+	occupied  map[string]bool
+	claimed   map[string]string
+	remaining map[bson.ObjectID]int
+}
+
+// add 判断一条孤儿 file：默认文件留下人工看，环境冲突不改挂，否则改挂到主 def。
+func (p *orphanFilePlanner) add(file appcfg.AppConfigFile, fromDef appcfg.AppConfigFileDef) {
+	if isDefaultEnvName(file.EnvName) {
+		p.plan.Leftovers = append(p.plan.Leftovers, repairFrameworkDefLeftover{
+			FileID:  file.ID.Hex(),
+			DefID:   file.DefID.Hex(),
+			EnvName: file.EnvName,
+			Reason:  leftoverReasonDefaultOnOrphan,
+		})
+		return
+	}
+	if p.occupied[file.EnvName] {
+		p.plan.Conflicts = append(p.plan.Conflicts, repairFrameworkDefConflict{
+			FileID:      file.ID.Hex(),
+			EnvName:     file.EnvName,
+			FromDefID:   file.DefID.Hex(),
+			FromDefName: fromDef.Name,
+			Reason:      "primary def already has this envName",
+		})
+		return
+	}
+	if firstFileID, taken := p.claimed[file.EnvName]; taken {
+		p.plan.Conflicts = append(p.plan.Conflicts, repairFrameworkDefConflict{
+			FileID:      file.ID.Hex(),
+			EnvName:     file.EnvName,
+			FromDefID:   file.DefID.Hex(),
+			FromDefName: fromDef.Name,
+			Reason:      "another orphan file already claims envName (file " + firstFileID + ")",
+		})
+		return
+	}
+	p.claimed[file.EnvName] = file.ID.Hex()
+	p.plan.Moves = append(p.plan.Moves, repairFrameworkDefMove{
+		FileID:      file.ID.Hex(),
+		EnvName:     file.EnvName,
+		Type:        string(file.Type),
+		FromDefID:   file.DefID.Hex(),
+		FromDefName: fromDef.Name,
+		ToDefID:     p.primaryID.Hex(),
+		ContentLen:  fileContentLen(file.Content),
+		OverlayLen:  fileContentLen(file.OverlayContent),
+	})
+	p.remaining[file.DefID]--
 }
 
 func groupFilesByDefID(files []appcfg.AppConfigFile) map[bson.ObjectID][]appcfg.AppConfigFile {
