@@ -16,7 +16,11 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { type AppInstanceOutputObj, type PolarisInstanceInfoOutputObj } from '~/@types/v1/instance';
+import {
+  type AppInstanceOutputObj,
+  type PolarisInstanceInfoOutputObj,
+  type PublishStatusOutputObj,
+} from '~/@types/v1/instance';
 
 /** 实例操作上下文（各 Action 组件共享） */
 export interface InstanceActionContext {
@@ -36,15 +40,24 @@ export interface InstanceDataLoadedPayload {
 /** 实例列表数据源模式：普通环境走 Watch，联邦环境临时回退轮询。 */
 export type InstanceListSourceMode = 'polling' | 'watch';
 
-/** 实例附属插件数据事件。 */
-export interface InstancePluginWatchEvent {
-  plugin?: string;
-  type: 'PLUGIN';
-  object?: null | {
-    data?: PolarisInstanceInfoOutputObj[];
-    id?: string;
-  };
-}
+/** 实例附属插件数据事件；plugin 同时判定 data 的载荷类型。 */
+export type InstancePluginWatchEvent =
+  | {
+      object?: null | {
+        data?: PolarisInstanceInfoOutputObj[];
+        id?: string;
+      };
+      plugin: 'polaris';
+      type: 'PLUGIN';
+    }
+  | {
+      object?: null | {
+        data?: PublishStatusOutputObj;
+        id?: string;
+      };
+      plugin: 'devmodePublish';
+      type: 'PLUGIN';
+    };
 
 /** 实例 Pod 增量事件。 */
 export interface InstancePodWatchEvent {

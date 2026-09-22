@@ -110,9 +110,15 @@ describe('instance watch event reducer', () => {
       weight: '100',
     },
   ];
+  const latestPublish = {
+    binaryName: 'demo',
+    md5: '0123456789abcdef',
+    operator: 'admin',
+    status: 'success',
+  };
 
   function createInstances(): AppInstanceOutputObj[] {
-    return [{ id: 'pod-a', status: 'Pending', polarisInfos }];
+    return [{ id: 'pod-a', status: 'Pending', latestPublish, polarisInfos }];
   }
 
   it('adds a new instance with empty plugin data', () => {
@@ -125,7 +131,7 @@ describe('instance watch event reducer', () => {
     expect(result[1]).toMatchObject({ id: 'pod-b', status: 'Running', polarisInfos: [] });
   });
 
-  it('preserves Polaris data on duplicate ADDED and MODIFIED events', () => {
+  it('preserves plugin data on duplicate ADDED and MODIFIED events', () => {
     const added = reduceInstanceWatchEvent(createInstances(), {
       type: 'ADDED',
       object: { id: 'pod-a', status: 'Running', polarisInfos: [] },
@@ -135,7 +141,7 @@ describe('instance watch event reducer', () => {
       object: { id: 'pod-a', restartCount: '2', status: 'Running', polarisInfos: [] },
     });
 
-    expect(modified[0]).toMatchObject({ restartCount: '2', status: 'Running', polarisInfos });
+    expect(modified[0]).toMatchObject({ latestPublish, restartCount: '2', status: 'Running', polarisInfos });
   });
 
   it('applies Polaris PLUGIN data including a real empty array', () => {
@@ -148,13 +154,29 @@ describe('instance watch event reducer', () => {
     expect(result[0].polarisInfos).toEqual([]);
   });
 
+  it('applies devmodePublish PLUGIN data to the matching instance', () => {
+    const nextLatestPublish = {
+      binaryName: 'demo-v2',
+      md5: 'fedcba9876543210',
+      operator: 'developer',
+      status: 'failed',
+    };
+    const result = reduceInstanceWatchEvent(createInstances(), {
+      type: 'PLUGIN',
+      plugin: 'devmodePublish',
+      object: { id: 'pod-a', data: nextLatestPublish },
+    });
+
+    expect(result[0]).toMatchObject({ latestPublish: nextLatestPublish, polarisInfos });
+  });
+
   it('ignores unknown plugins and plugin events for missing instances', () => {
     const instances = createInstances();
-    const unknownPlugin = reduceInstanceWatchEvent(instances, {
-      type: 'PLUGIN',
-      plugin: 'future-plugin',
-      object: { id: 'pod-a', data: [] },
-    });
+    const unknownEvent = parseInstanceSseBlock(
+      'data: {"type":"PLUGIN","plugin":"future-plugin","object":{"id":"pod-a","data":[]}}',
+    ).event;
+    if (!unknownEvent) throw new Error('expected an unknown plugin event');
+    const unknownPlugin = reduceInstanceWatchEvent(instances, unknownEvent);
     const missingInstance = reduceInstanceWatchEvent(instances, {
       type: 'PLUGIN',
       plugin: 'polaris',

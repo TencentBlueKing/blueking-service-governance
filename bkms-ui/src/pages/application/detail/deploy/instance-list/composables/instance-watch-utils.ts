@@ -78,17 +78,35 @@ export function reduceInstanceWatchEvent(
   event: InstanceWatchEvent,
 ): AppInstanceOutputObj[] {
   if (event.type === 'PLUGIN') {
-    // 插件事件不能创建实例；当前只认识 polaris，真实空数组也必须覆盖旧值。
-    if (event.plugin !== 'polaris' || !event.object?.id || !Array.isArray(event.object.data)) return instances;
-    const index = instances.findIndex(item => item.id === event.object?.id);
+    // 插件事件不能创建实例，只按 id 覆盖已有行对应的附属数据。
+    const instanceID = event.object?.id;
+    if (!instanceID) return instances;
+    const index = instances.findIndex(item => item.id === instanceID);
     if (index < 0) return instances;
 
-    const next = [...instances];
-    next[index] = {
-      ...next[index],
-      polarisInfos: event.object.data,
-    };
-    return next;
+    if (event.plugin === 'polaris') {
+      // 北极星的真实空数组也必须覆盖旧值。
+      if (!Array.isArray(event.object?.data)) return instances;
+      const next = [...instances];
+      next[index] = {
+        ...next[index],
+        polarisInfos: event.object.data,
+      };
+      return next;
+    }
+
+    if (event.plugin === 'devmodePublish') {
+      const latestPublish = event.object?.data;
+      if (!latestPublish || typeof latestPublish !== 'object' || Array.isArray(latestPublish)) return instances;
+      const next = [...instances];
+      next[index] = {
+        ...next[index],
+        latestPublish,
+      };
+      return next;
+    }
+
+    return instances;
   }
 
   // ENDED 只负责驱动连接生命周期，不改变页面已有快照。
@@ -105,26 +123,28 @@ export function reduceInstanceWatchEvent(
   const index = instances.findIndex(item => item.id === instanceID);
   if (event.type === 'ADDED') {
     if (index < 0) {
-      // Pod 事件的 polarisInfos 不可信，新行等待后续 PLUGIN 事件补齐北极星数据。
+      // Pod 事件不承载附属数据，新行等待后续 PLUGIN 事件补齐。
       return [...instances, { ...event.object, polarisInfos: [] }];
     }
 
-    // 重复 ADDED 按防御性更新处理，但保留已经由 PLUGIN 写入的北极星信息。
+    // 重复 ADDED 按防御性更新处理，但保留已经由 PLUGIN 写入的附属数据。
     const next = [...instances];
     next[index] = {
       ...next[index],
       ...event.object,
+      latestPublish: next[index].latestPublish,
       polarisInfos: next[index].polarisInfos || [],
     };
     return next;
   }
 
   if (event.type === 'MODIFIED' && index >= 0) {
-    // MODIFIED 只更新 K8s 投影，禁止用事件中的空 polarisInfos 覆盖插件数据。
+    // MODIFIED 只更新 K8s 投影，禁止覆盖插件数据。
     const next = [...instances];
     next[index] = {
       ...next[index],
       ...event.object,
+      latestPublish: next[index].latestPublish,
       polarisInfos: next[index].polarisInfos || [],
     };
     return next;
