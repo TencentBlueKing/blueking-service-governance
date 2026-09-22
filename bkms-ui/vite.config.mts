@@ -171,6 +171,17 @@ export default ({ mode }: { mode: string }) => {
     test: {
       include: ['test/**/*.test.ts'],
       environment: 'jsdom',
+
+      // 场景级 UI 用例的渲染耗时与机器性能/负载强相关（慢机或并行 worker 竞争下
+      // findBy* 轮询可能比快机慢 2~4 倍），统一放宽单条用例超时，
+      // 保证结果与执行机器无关；仅影响真实挂起的用例失败时长。
+      testTimeout: 30_000,
+      // 刻意不开 restoreMocks：全局 restore 会清空 mock 工厂里一次性 mockResolvedValue
+      // 的实现（height-chain 即被清挂），spyOn 泄漏由每文件 jsdom 隔离兜底，见 TEST_PILOT_LOG
+      // 未处理错误（bkui FormItem 校验 reject 等组件库缺陷）由 setup.ts 全局处理器
+      // 分类：预期降为 warning，非预期由 afterAll 抛错变红——vitest 不再报告它们是因为
+      // setup.ts 的处理器接管，与本开关无关；保持默认 false 作兜底，防错误绕过拦截后漏报。
+      dangerouslyIgnoreUnhandledErrors: false,
       // jsdom 环境垫片（ResizeObserver / PointerEvent 等）：须在测试文件 import 组件链之前执行
       setupFiles: ['test/setup.ts'],
       // bkui-vue / monaco-editor 在 vitest（SSR 解析）下无法定位入口（ESM-only / exports 条件问题）；

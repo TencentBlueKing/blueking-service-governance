@@ -16,6 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { nextTick } from 'vue';
+
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,13 +73,15 @@ describe('deploy-env store', () => {
     });
   });
 
-  it('restores selections from localStorage after the store is recreated', () => {
+  it('restores selections from localStorage after the store is recreated', async () => {
     const store = useDeployEnvStore();
 
     store.updateAppEnvSelection('space-a:app-a', {
       mode: 'multi',
       selectedEnvs: ['dev', 'test'],
     });
+    // useLocalStorage 经 pre-flush watch 落盘，需等一次 flush 再断言持久化
+    await nextTick();
 
     setActivePinia(createPinia());
     const restoredStore = useDeployEnvStore();
