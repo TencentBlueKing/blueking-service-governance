@@ -62,7 +62,9 @@ func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 }
 
 func verifyTenantAccess(ctx context.Context, user auth.User, tenantID string, verifier Verifier) error {
-	// 认证结果已带租户时，直接和请求租户比对，不再回源 bk-user。
+	// TODO: 认证中间件应一次设置好当前用户（id/租户/名字/状态），并做登录态级缓存，
+	// 避免每个请求重复打 bk-login/bk-user。tenant 校验应只读取已有 request.user，
+	// 不再回源外部接口。后续用户认证链路需要整体优化
 	if user.GetTenantID() != "" {
 		if user.GetTenantID() != tenantID {
 			return ErrTenantAccessDenied

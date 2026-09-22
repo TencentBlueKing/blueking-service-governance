@@ -148,6 +148,8 @@ func middleware(
 }
 
 // 完成用户认证的核心函数，供中间件调用。
+// TODO: 这里应一次产出完整当前用户（id/租户/名字/状态）并按登录态缓存，供 tenant
+// 等后置校验只读 request.user，不再各自回源。见 tenant.verifyTenantAccess。
 func authenticate(
 	ctx context.Context,
 	request *http.Request,
