@@ -232,10 +232,10 @@ svcConf:
     bkiam: prod
     # DBM 数据库管理平台
     bkdbm: prod
-    # bk-login 网关 stage；留空时由 sdk 默认使用 prod
-    bkLogin: ""
-    # bk-user 网关 stage；留空时由 sdk 默认使用 prod
-    bkUser: ""
+    # bk-login 蓝鲸登陆
+    bkLogin: prod
+    # bk-user 用户管理
+    bkUser: prod
   # IAM 中业务系统 ID 配置
   bkIAMSystemIDs:
     bkms: bkms
