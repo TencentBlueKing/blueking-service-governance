@@ -99,25 +99,18 @@ export function useAppDashboards() {
   }
 
   /** 新建绑定，成功后回拉最新列表 */
-  async function createDashboard(appID: string, payload: { title: string; uid: string }) {
+  async function createDashboard(appID: string, uid: string) {
     await BkmonitorDashboardService.createAppDashboard({
       appID,
-      title: payload.title,
-      uid: payload.uid,
+      uid,
     });
     return fetchDashboards(appID);
   }
 
-  /** 更新绑定：uid 未变更时只改标题，否则需走 body 传新 uid */
-  async function updateDashboard(appID: string, uid: string, payload: { title: string; uid: string }) {
-    if (payload.uid === uid) {
-      await BkmonitorDashboardService.updateAppDashboard({
-        appID,
-        title: payload.title,
-        uid,
-      });
-    } else {
-      await updateAppDashboardWithBodyUid(appID, uid, payload);
+  /** 更新绑定：标题由监控平台维护，仅在 uid 变更时请求更新。 */
+  async function updateDashboard(appID: string, uid: string, nextUID: string) {
+    if (nextUID !== uid) {
+      await updateAppDashboardWithBodyUid(appID, uid, nextUID);
     }
     return fetchDashboards(appID);
   }
@@ -179,12 +172,11 @@ function normalizeMonitorDashboard(item: MonitorDashboardOutput, folderTitle: st
   };
 }
 
-/** 直连底层请求：SDK 生成的更新接口不支持在 body 中传新 uid，故手动组装 PUT */
-function updateAppDashboardWithBodyUid(appID: string, uid: string, payload: { title: string; uid: string }) {
-  return v1Fetch.put<{ title: string; uid: string }, EmptyOutput>(
+/** 直连底层请求：SDK 的 uid 同时用于路径和 body，无法表达待替换的 uid。 */
+function updateAppDashboardWithBodyUid(appID: string, uid: string, nextUID: string) {
+  return v1Fetch.put<{ uid: string }, EmptyOutput>(
     `/apps/${encodeURIComponent(appID)}/bkmonitor/dashboards/${encodeURIComponent(uid)}`,
   )({
-    title: payload.title,
-    uid: payload.uid,
+    uid: nextUID,
   });
 }

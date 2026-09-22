@@ -121,7 +121,6 @@
             filterable
             :loading="monitorDashboardsLoading"
             :placeholder="$t('请选择监控平台中的仪表盘')"
-            @change="handleUidChange"
           >
             <Select.Option
               v-for="item in catalogOptions"
@@ -242,10 +241,7 @@
   const submitting = ref(false);
   const editingRow = ref<AppDashboardBinding>();
   const formRef = ref<InstanceType<typeof Form> | null>(null);
-  const formData = ref({
-    title: '',
-    uid: '',
-  });
+  const formData = ref({ uid: '' });
 
   const isEdit = computed(() => Boolean(editingRow.value));
   /** 可选仪表盘：补齐当前选中项（可能已不在监控列表中），并把已绑定的排到末尾 */
@@ -255,7 +251,7 @@
     if (currentUid && !items.some(item => item.uid === currentUid)) {
       items.unshift({
         folderTitle: '',
-        title: formData.value.title || currentUid,
+        title: editingRow.value?.title || currentUid,
         uid: currentUid,
         url: '',
       });
@@ -312,7 +308,6 @@
   function handleEdit(row: AppDashboardBinding) {
     editingRow.value = row;
     formData.value = {
-      title: row.title || '',
       uid: row.uid || '',
     };
     dialogVisible.value = true;
@@ -324,39 +319,26 @@
     Message({ message: t('仪表盘列表已刷新'), theme: 'success' });
   }
 
-  /** 提交：展示名称留空时依次回退为监控平台标题、仪表盘 uid */
+  /** 提交：仅使用选中的仪表盘 uid。 */
   async function handleSubmit() {
     const valid = await formRef.value?.validate().catch(() => false);
     if (!valid || !appDetailStore.appID || !formData.value.uid) return;
 
     submitting.value = true;
     try {
-      const payload = {
-        title:
-          formData.value.title ||
-          catalogOptions.value.find(item => item.uid === formData.value.uid)?.title ||
-          formData.value.uid,
-        uid: formData.value.uid,
-      };
       if (editingRow.value?.uid) {
-        await updateDashboard(appDetailStore.appID, editingRow.value.uid, payload);
+        await updateDashboard(appDetailStore.appID, editingRow.value.uid, formData.value.uid);
         Message({ message: t('更新成功'), theme: 'success' });
       } else {
-        await createDashboard(appDetailStore.appID, payload);
+        await createDashboard(appDetailStore.appID, formData.value.uid);
         Message({ message: t('创建成功'), theme: 'success' });
         handleResetPage();
       }
       dialogVisible.value = false;
-      emit('updated', payload.uid);
+      emit('updated', formData.value.uid);
     } finally {
       submitting.value = false;
     }
-  }
-
-  /** 切换仪表盘时同步展示名称，接口仍需传 title */
-  function handleUidChange(uid: string) {
-    const selected = catalogOptions.value.find(item => item.uid === uid);
-    formData.value.title = selected?.title || uid;
   }
 
   /** 该仪表盘是否已被本应用绑定（编辑时排除自身） */
@@ -372,7 +354,7 @@
   }
 
   function resetForm() {
-    formData.value = { title: '', uid: '' };
+    formData.value = { uid: '' };
     formRef.value?.clearValidate();
   }
 
