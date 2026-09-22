@@ -113,7 +113,6 @@ func NewWebServerCmd() *cobra.Command {
 
 			// 加载流水线模板
 			// FIXME 建议该 Reload 逻辑放在 migration 中完成
-			//
 			// 使用 Errorf + return 而不是 log.Fatalf → os.Exit，确保上方注册的 shutdownAPM defer 能够被执行，
 			// 从而把已缓冲的 span 完整刷到蓝鲸监控采集端
 			if err = bkci.ReloadPipelineTemplates(cmd.Context()); err != nil {
@@ -122,7 +121,6 @@ func NewWebServerCmd() *cobra.Command {
 			}
 
 			// 加载内置集群 Addon 定义
-			//
 			// 与 ReloadPipelineTemplates 保持一致，避免绕过 shutdownAPM defer
 			if err = clusteraddon.ReloadBuiltinClusterAddons(cmd.Context()); err != nil {
 				log.Errorf(ctx, "failed to reload builtin cluster addons: %v", err)
@@ -137,7 +135,6 @@ func NewWebServerCmd() *cobra.Command {
 
 	// 配置文件路径
 	wsCmd.Flags().StringVar(&srvCfg, "srvCfg", "", "server config file")
-
 	return &wsCmd
 }
 
