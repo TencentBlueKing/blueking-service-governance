@@ -2317,6 +2317,60 @@ definitions:
     required:
     - instanceIDs
     type: object
+  serializer.BatchRestartAppInstancesInput:
+    properties:
+      envNames:
+        description: 部署环境名称列表
+        items:
+          type: string
+        minItems: 1
+        type: array
+      imageTag:
+        description: 部署使用的镜像 Tag
+        minLength: 1
+        type: string
+      updateStrategy:
+        description: 更新策略，可选值：RollingUpdate, InplaceUpdate
+        enum:
+        - RollingUpdate
+        - InplaceUpdate
+        type: string
+    required:
+    - envNames
+    - imageTag
+    - updateStrategy
+    type: object
+  serializer.BatchRestartAppInstancesOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.BatchRestartAppInstancesOutputObjs'
+        description: 各环境的重启结果
+    type: object
+  serializer.BatchRestartAppInstancesOutputObjs:
+    properties:
+      count:
+        description: 结果数量
+        example: "0"
+        type: string
+      results:
+        description: 各环境的重启结果
+        items:
+          $ref: '#/definitions/serializer.BatchRestartEnvResultObj'
+        type: array
+    type: object
+  serializer.BatchRestartEnvResultObj:
+    properties:
+      detail:
+        description: 失败原因（成功时为空）
+        type: string
+      envName:
+        description: 部署环境名称
+        type: string
+      success:
+        description: 是否成功
+        type: boolean
+    type: object
   serializer.BgEnvVarOutputObj:
     properties:
       description:
@@ -16828,6 +16882,40 @@ paths:
       summary: 手动刷新应用镜像快照
       tags:
       - images
+  /apps/{appID}/instances/operations/batch_restart:
+    post:
+      consumes:
+      - application/json
+      operationId: BatchRestartAppInstances
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 跨环境批量重启请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.BatchRestartAppInstancesInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.BatchRestartAppInstancesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 跨环境批量重启应用实例
+      tags:
+      - instance
   /apps/{appID}/mount-preview:
     get:
       operationId: GetMountPreview

@@ -25,6 +25,7 @@ type Handler interface {
 	ListAppInstances(c *gin.Context)
 	WatchAppInstances(c *gin.Context)
 	UpdateAppInstances(c *gin.Context)
+	BatchRestartAppInstances(c *gin.Context)
 	ScaleAppInstances(c *gin.Context)
 	BatchDeleteAppInstances(c *gin.Context)
 	UpdateAppInstancePolaris(c *gin.Context)
@@ -45,6 +46,8 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.GET("/apps/:appID/envs/:envName/instances/watch", h.WatchAppInstances)
 	// 更新应用实例（支持单/多/全量实例更新）
 	rg.PUT("/apps/:appID/envs/:envName/instances", h.UpdateAppInstances)
+	// 跨环境批量重启应用实例
+	rg.POST("/apps/:appID/instances/operations/batch_restart", h.BatchRestartAppInstances)
 	// 扩缩容应用实例数量
 	rg.PUT("/apps/:appID/envs/:envName/instances/operations/scale", h.ScaleAppInstances)
 	// 批量删除指定的应用实例，同时缩容副本数量
