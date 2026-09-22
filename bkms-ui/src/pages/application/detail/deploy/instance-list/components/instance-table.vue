@@ -470,7 +470,18 @@
                       :label="$t('二进制')"
                       :label-width="70"
                     >
-                      {{ row.latestPublish.binaryName || '--' }}
+                      <div
+                        v-if="row.latestPublish.binaryName"
+                        class="group inline-flex items-center gap-[4px]"
+                      >
+                        <span>{{ row.latestPublish.binaryName }}</span>
+                        <Copy
+                          class="shrink-0 cursor-pointer text-[#3A84FF] opacity-0 transition group-hover:opacity-100"
+                          :title="$t('复制')"
+                          @click.stop="copyText(row.latestPublish.binaryName)"
+                        />
+                      </div>
+                      <span v-else>--</span>
                     </DetailItem>
                     <DetailItem
                       :label="$t('摘要')"
@@ -483,9 +494,16 @@
                         placement="top"
                         theme="dark"
                       >
-                        <span class="inline-block cursor-pointer border-b border-dashed border-[#979ba5]">
-                          {{ row.latestPublish.md5.slice(0, 8) }}
-                        </span>
+                        <div class="group inline-flex items-center gap-[4px]">
+                          <span class="cursor-pointer border-b border-dashed border-[#979ba5]">
+                            {{ row.latestPublish.md5.slice(0, 8) }}
+                          </span>
+                          <Copy
+                            class="shrink-0 cursor-pointer text-[#3A84FF] opacity-0 transition group-hover:opacity-100"
+                            :title="$t('复制')"
+                            @click.stop="copyText(row.latestPublish.md5)"
+                          />
+                        </div>
                         <template #content>
                           <div class="break-all leading-[20px]">{{ row.latestPublish.md5 }}</div>
                         </template>
@@ -530,7 +548,14 @@
                         theme="dark"
                         :width="400"
                       >
-                        <span class="block truncate">{{ row.latestPublish.message }}</span>
+                        <div class="group flex min-w-0 items-center gap-[4px]">
+                          <span class="block min-w-0 truncate">{{ row.latestPublish.message }}</span>
+                          <Copy
+                            class="shrink-0 cursor-pointer text-[#3A84FF] opacity-0 transition group-hover:opacity-100"
+                            :title="$t('复制')"
+                            @click.stop="copyText(row.latestPublish.message)"
+                          />
+                        </div>
                         <template #content>
                           <div class="break-all leading-[20px]">{{ row.latestPublish.message }}</div>
                         </template>
@@ -684,9 +709,9 @@
 
   import { Table, TableColumn } from '@blueking/table';
   import { Button, Checkbox, Dropdown, Popover, Tag } from 'bkui-vue';
-  import { AngleDownLine, RightShape } from 'bkui-vue/lib/icon';
+  import { AngleDownLine, Copy, RightShape } from 'bkui-vue/lib/icon';
   import { AppInstanceOutputObj } from '~/@types/v1/instance';
-  import { formatTimeByTimezone } from '~/common/util';
+  import { copyText, formatTimeByTimezone } from '~/common/util';
   import CustomFilter from '~/components/custom-filter.vue';
   import HoverCopy from '~/components/hover-copy.vue';
   import StatusDotIcon from '~/components/status-dot-icon.vue';
@@ -770,8 +795,8 @@
 
   // 列设置：热更新、资源规格列默认不勾选，用户可在表格右上角列设置中主动开启。
   // 列勾选与行高（size）偏好均持久化，刷新后恢复。
-  // 多环境模式下按环境名区分列设置，v-for 渲染的多个表格互不共享。
-  const tableSettingsId = computed(() => `instance-table-${props.envName || 'default'}`);
+  // 所有环境共用列设置，任一环境的配置调整都会同步到其他环境表格。
+  const tableSettingsId = 'instance-table';
   const { settings, handleSettingChange } = useTableSettings(tableSettingsId, {
     defaultChecked: ['id', 'image', 'ip', 'nodeIP', 'status', 'isHealthy', 'polarisStatus', 'restartCount', 'age'],
     disabled: ['id'],
