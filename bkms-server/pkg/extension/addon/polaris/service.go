@@ -99,20 +99,6 @@ func (s *PolarisConfigService) Create(
 		}
 		config.PolarisToken = result.Token
 		config.DepSvcInstID = result.ServiceInstanceID
-	} else {
-		// 引入北极星服务时，允许用户手动开启权重因子
-		if config.EnableWeightFactor {
-			enabled := true
-			if err := s.platformManager.UpdateImportedService(
-				ctx,
-				config.PolarisName,
-				config.PolarisNamespace,
-				config.PolarisToken,
-				&UpdateServiceParams{EnableWeightFactor: &enabled},
-			); err != nil {
-				return errors.Wrap(err, "sync imported polaris service")
-			}
-		}
 	}
 
 	// 过滤掉 scope 外且未部署的环境级设置，并为 scope 内未设置权重的环境补充默认值
@@ -122,6 +108,24 @@ func (s *PolarisConfigService) Create(
 
 	if err := s.polarisConfigStore.Create(ctx, config); err != nil {
 		return err
+	}
+
+	// 先落库再写远端：名称冲突等失败不会改到线上。远端失败则回滚本地，便于用户重试。
+	if !createNewService && config.EnableWeightFactor {
+		enabled := true
+		if err := s.platformManager.UpdateImportedService(
+			ctx,
+			config.PolarisName,
+			config.PolarisNamespace,
+			config.PolarisToken,
+			&UpdateServiceParams{EnableWeightFactor: &enabled},
+		); err != nil {
+			if delErr := s.polarisConfigStore.Delete(ctx, config.AppID, config.Name); delErr != nil {
+				log.Errorf(ctx, "rollback imported polaris config after remote sync failed, app=%s config=%s: %v",
+					config.AppID, config.Name, delErr)
+			}
+			return errors.Wrap(err, "sync imported polaris service")
+		}
 	}
 
 	// immediate 配置绑定即注册，在请求内同步下发；配置已经落库，失败时由调用方决定是否重试
@@ -481,7 +485,7 @@ func (s *PolarisConfigService) syncImportedPolarisService(
 		token = *updateData.PolarisToken
 	}
 	if token == "" {
-		return errors.New("polarisToken is required to update imported polaris weight factor")
+		return ErrUnauthorized
 	}
 	if err := s.platformManager.UpdateImportedService(
 		ctx,

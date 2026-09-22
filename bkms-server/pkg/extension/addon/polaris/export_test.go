@@ -21,4 +21,5 @@ package polaris
 var (
 	WeightFactorMetadata           = weightFactorMetadata
 	EnableWeightFactorFromMetadata = enableWeightFactorFromMetadata
+	WrapImportedPolarisErr         = wrapImportedPolarisErr
 )

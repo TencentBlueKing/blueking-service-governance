@@ -21,8 +21,10 @@ package polaris_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
 )
 
 var _ = Describe("PolarisConfig", func() {
@@ -132,5 +134,42 @@ var _ = Describe("enableWeightFactorFromMetadata", func() {
 		Expect(polaris.EnableWeightFactorFromMetadata(map[string]string{
 			"internal-enable-dynamic-weight": "true",
 		})).To(BeTrue())
+	})
+})
+
+var _ = Describe("IsClientRequestError", func() {
+	DescribeTable("classifies imported client errors",
+		func(err error, want bool) {
+			Expect(polaris.IsClientRequestError(err)).To(Equal(want))
+		},
+		Entry("unauthorized", polaris.ErrUnauthorized, true),
+		Entry("service not found", polaris.ErrServiceNotFound, true),
+		Entry("operator empty", polaris.ErrOperatorEmpty, true),
+		Entry("not managed", polaris.ErrNotManaged, true),
+		Entry("wrapped unauthorized", errors.Wrap(polaris.ErrUnauthorized, "update imported"), true),
+		Entry("timeout is not a client error", errors.New("context deadline exceeded"), false),
+		Entry("generic polaris failure", errors.New("polaris api error: status 500"), false),
+	)
+})
+
+var _ = Describe("wrapImportedPolarisErr", func() {
+	It("maps provider unauthorized to imported unauthorized", func() {
+		err := polaris.WrapImportedPolarisErr(
+			errors.Wrap(polarisprovider.ErrUnauthorized, "polaris api error: invalid token"),
+			"update imported polaris service",
+		)
+		Expect(err).To(MatchError(polaris.ErrUnauthorized))
+		Expect(err.Error()).To(ContainSubstring("invalid token"))
+	})
+
+	It("maps provider service not found", func() {
+		err := polaris.WrapImportedPolarisErr(polarisprovider.ErrServiceNotFound, "get imported polaris service")
+		Expect(err).To(MatchError(polaris.ErrServiceNotFound))
+	})
+
+	It("keeps upstream failures as wrapped server errors", func() {
+		err := polaris.WrapImportedPolarisErr(errors.New("connection refused"), "get imported polaris service")
+		Expect(polaris.IsClientRequestError(err)).To(BeFalse())
+		Expect(err.Error()).To(ContainSubstring("connection refused"))
 	})
 })

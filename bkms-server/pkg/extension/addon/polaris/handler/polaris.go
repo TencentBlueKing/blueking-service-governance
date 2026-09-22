@@ -158,24 +158,7 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 		return
 	}
 
-	config := &polaris.PolarisConfig{
-		AppID: app.ID,
-		Properties: polaris.Properties{
-			InstanceKey:        jsonInput.InstanceKey,
-			PolarisName:        jsonInput.PolarisName,
-			PolarisNamespace:   jsonInput.PolarisNamespace,
-			PolarisToken:       polarisToken,
-			ServicePort:        jsonInput.ServicePort,
-			Direct:             lo.FromPtrOr(jsonInput.Direct, true),
-			KeepNotReadyPod:    lo.FromPtrOr(jsonInput.KeepNotReadyPod, true),
-			EnableHealthCheck:  lo.FromPtrOr(jsonInput.EnableHealthCheck, false),
-			EnableWeightFactor: lo.FromPtrOr(jsonInput.EnableWeightFactor, false),
-			ServiceLabels:      jsonInput.ServiceLabels,
-			Operator:           lo.FromPtrOr(jsonInput.Operator, ""),
-			RegisterMode:       lo.FromPtrOr(jsonInput.RegisterMode, polaris.RegisterModeOnDeploy),
-		},
-		ScopeEnvNames: jsonInput.ScopeEnvNames,
-	}
+	config := jsonInput.ToConfig(app.ID)
 
 	createErr := h.polarisConfigService().Create(ctx, app, config, jsonInput.CreateNewService)
 	// 集群同步失败时配置已经落库，仍需记录审计并把失败原因返回给调用方
@@ -183,8 +166,13 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 		if errors.Is(createErr, polaris.ErrConfigNameExists) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
 				bkerrs.ErrCodeInvalidRequest,
-				"polaris config name already exists in app(%s)", uriInput.AppID,
+				"polaris config name already exists in app(%s)",
+				uriInput.AppID,
 			))
+			return
+		}
+		if polaris.IsClientRequestError(createErr) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(createErr, bkerrs.ErrCodeInvalidRequest, createErr.Error()))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(createErr, bkerrs.ErrCodeInternalServerError, "create polaris config"))
@@ -281,8 +269,7 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 			))
 			return
 		}
-		if errors.Is(updateErr, polaris.ErrOperatorEmpty) ||
-			errors.Is(updateErr, polaris.ErrNotManaged) {
+		if polaris.IsClientRequestError(updateErr) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(updateErr, bkerrs.ErrCodeInvalidRequest, updateErr.Error()))
 			return
 		}
@@ -469,15 +456,7 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 		return
 	}
 
-	config := &polaris.PolarisConfig{
-		AppID: app.ID,
-		Properties: polaris.Properties{
-			PolarisName:      jsonInput.PolarisName,
-			PolarisNamespace: jsonInput.PolarisNamespace,
-			RegisterMode:     lo.FromPtrOr(jsonInput.RegisterMode, polaris.RegisterModeOnDeploy),
-		},
-		ScopeEnvNames: jsonInput.ScopeEnvNames,
-	}
+	config := jsonInput.ToConfig(app.ID)
 
 	warnings := polaris.CollectConfigWarnings(
 		ctx,
@@ -526,7 +505,11 @@ func (h *Handler) GetImportedPolarisService(c *gin.Context) {
 		ctx, jsonInput.PolarisName, jsonInput.PolarisNamespace, jsonInput.PolarisToken,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get imported polaris service"))
+		if polaris.IsClientRequestError(err) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, err.Error()))
+			return
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get imported polaris service"))
 		return
 	}
 

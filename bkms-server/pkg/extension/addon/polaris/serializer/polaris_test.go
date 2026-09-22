@@ -324,6 +324,58 @@ var _ = Describe("CreateAppPolarisConfigInput", func() {
 		Entry("rejects an unknown mode", lo.ToPtr("whenever"), true),
 		Entry("rejects an explicit empty mode", lo.ToPtr(""), true),
 	)
+
+	Describe("ToConfig", func() {
+		It("applies pointer defaults when optional fields are omitted", func() {
+			config := inputWithMode(nil).ToConfig("app-1")
+
+			Expect(config).To(Equal(&polaris.PolarisConfig{
+				AppID: "app-1",
+				Properties: polaris.Properties{
+					InstanceKey:      "k1",
+					PolarisName:      "polaris-1",
+					PolarisNamespace: "Test",
+					ServicePort:      8080,
+					Direct:           true,
+					KeepNotReadyPod:  true,
+					RegisterMode:     polaris.RegisterModeOnDeploy,
+				},
+			}))
+		})
+
+		It("keeps explicitly provided optional fields", func() {
+			input := inputWithMode(lo.ToPtr(polaris.RegisterModeImmediate))
+			input.PolarisToken = lo.ToPtr("token-1")
+			input.Direct = lo.ToPtr(false)
+			input.KeepNotReadyPod = lo.ToPtr(false)
+			input.EnableHealthCheck = lo.ToPtr(true)
+			input.EnableWeightFactor = lo.ToPtr(true)
+			input.ServiceLabels = map[string]string{"tier": "backend"}
+			input.Operator = lo.ToPtr("alice")
+			input.ScopeEnvNames = []string{"dev"}
+
+			config := input.ToConfig("app-1")
+
+			Expect(config).To(Equal(&polaris.PolarisConfig{
+				AppID: "app-1",
+				Properties: polaris.Properties{
+					InstanceKey:        "k1",
+					PolarisName:        "polaris-1",
+					PolarisNamespace:   "Test",
+					PolarisToken:       "token-1",
+					ServicePort:        8080,
+					Direct:             false,
+					KeepNotReadyPod:    false,
+					EnableHealthCheck:  true,
+					EnableWeightFactor: true,
+					ServiceLabels:      map[string]string{"tier": "backend"},
+					Operator:           "alice",
+					RegisterMode:       polaris.RegisterModeImmediate,
+				},
+				ScopeEnvNames: []string{"dev"},
+			}))
+		})
+	})
 })
 
 var _ = Describe("AppConfigEnvNameURIInput", func() {

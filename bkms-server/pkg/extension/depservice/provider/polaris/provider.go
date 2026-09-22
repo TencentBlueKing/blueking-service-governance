@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -34,6 +35,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/httpcli"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
+)
+
+var (
+	// ErrUnauthorized Token 无效或没有写权限。
+	ErrUnauthorized = errors.New("polaris token is invalid or has no write permission")
+	// ErrServiceNotFound 北极星上不存在对应服务。
+	ErrServiceNotFound = errors.New("polaris service not found")
 )
 
 // Provider implements ServiceProvider for Polaris
@@ -362,15 +370,20 @@ func (p *Provider) doRequest(ctx context.Context, method, path string, body any)
 		return nil, errors.Wrap(err, "read response body")
 	}
 
-	// 非 200 状态码，尝试从 info 字段获取错误信息
-	if resp.StatusCode != http.StatusOK {
-		if info := gjson.GetBytes(respBody, "info"); info.Exists() && info.String() != "" {
-			return nil, errors.Errorf("polaris api error: %s", info.String())
-		}
-		return nil, errors.Errorf("polaris api error: status %d, body: %s", resp.StatusCode, string(respBody))
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, errors.Wrap(ErrUnauthorized, polarisAPIErrorText(resp.StatusCode, respBody))
 	}
-
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(polarisAPIErrorText(resp.StatusCode, respBody))
+	}
 	return respBody, nil
+}
+
+func polarisAPIErrorText(status int, body []byte) string {
+	if info := gjson.GetBytes(body, "info"); info.Exists() && info.String() != "" {
+		return "polaris api error: " + info.String()
+	}
+	return fmt.Sprintf("polaris api error: status %d, body: %s", status, string(body))
 }
 
 func parseMatchingService(respBody []byte, name, namespace string) (*RemoteService, error) {
@@ -391,7 +404,7 @@ func parseMatchingService(respBody []byte, name, namespace string) (*RemoteServi
 		}
 		return &parsed, nil
 	}
-	return nil, errors.New("polaris service not found")
+	return nil, ErrServiceNotFound
 }
 
 // mergeServiceMetadata 以 existing 为底，先写入 overlay，再删除指定键。

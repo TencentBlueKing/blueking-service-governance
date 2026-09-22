@@ -183,6 +183,43 @@ var _ = Describe("PolarisConfigService", func() {
 			})
 		})
 
+		It("should not write polaris when imported create hits a duplicate name", func() {
+			mockey.PatchConvey("import polaris with duplicate name", GinkgoT(), func() {
+				existing := &polaris.PolarisConfig{
+					AppID: app.ID,
+					Name:  "cfg-imported-dup",
+					Properties: polaris.Properties{
+						InstanceKey: "existing", PolarisName: "existing-service",
+						PolarisNamespace: "Test", PolarisToken: "token",
+						ServicePort: 8080,
+					},
+				}
+				Expect(store.Create(ctx, existing)).To(Succeed())
+
+				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).To(func(
+					*polaris.PolarisPlatformManager,
+					context.Context,
+					string, string, string,
+					*polaris.UpdateServiceParams,
+				) error {
+					Fail("imported polaris should not be written when local create fails")
+					return nil
+				}).Build()
+
+				dup := &polaris.PolarisConfig{
+					AppID: app.ID,
+					Name:  "cfg-imported-dup",
+					Properties: polaris.Properties{
+						InstanceKey: "imported-dup", PolarisName: "imported-dup",
+						PolarisNamespace: "Test", PolarisToken: "imported-token",
+						ServicePort: 8080, EnableWeightFactor: true,
+					},
+				}
+				err := service.Create(ctx, app, dup, false)
+				Expect(err).To(MatchError(polaris.ErrConfigNameExists))
+			})
+		})
+
 		It("should not persist an imported config when weight factor sync fails", func() {
 			mockey.PatchConvey("import polaris weight factor sync fails", GinkgoT(), func() {
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).
@@ -323,6 +360,18 @@ var _ = Describe("PolarisConfigService", func() {
 			stored, getErr := store.Get(ctx, app.ID, config.Name)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.Operator).To(Equal("zhangsan"))
+		})
+
+		It("should require token when updating imported weight factor", func() {
+			config := newTestConfig(app.ID, "cfg-imported-token-required", nil, nil)
+			config.PolarisToken = ""
+			Expect(store.Create(ctx, config)).To(Succeed())
+
+			enabled := true
+			_, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				EnableWeightFactor: &enabled,
+			})
+			Expect(err).To(MatchError(polaris.ErrUnauthorized))
 		})
 
 		It("should skip polaris writes when imported weight factor is unchanged", func() {

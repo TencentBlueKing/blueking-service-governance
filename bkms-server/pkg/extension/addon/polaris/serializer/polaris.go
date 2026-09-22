@@ -25,6 +25,7 @@ import (
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -290,6 +291,28 @@ type CreateAppPolarisConfigInput struct {
 	// immediate 表示绑定环境后立即下发 PolarisConfig CR 与配套 Service 完成注册，
 	// 该配置不再注入环境变量和 tRPC 框架配置。创建后不可修改
 	RegisterMode *string `json:"registerMode" binding:"omitempty,oneof=immediate on_deploy"`
+}
+
+// ToConfig builds a domain config from the create request, applying pointer defaults.
+func (in CreateAppPolarisConfigInput) ToConfig(appID string) *polaris.PolarisConfig {
+	return &polaris.PolarisConfig{
+		AppID: appID,
+		Properties: polaris.Properties{
+			InstanceKey:        in.InstanceKey,
+			PolarisName:        in.PolarisName,
+			PolarisNamespace:   in.PolarisNamespace,
+			PolarisToken:       lo.FromPtr(in.PolarisToken),
+			ServicePort:        in.ServicePort,
+			Direct:             lo.FromPtrOr(in.Direct, true),
+			KeepNotReadyPod:    lo.FromPtrOr(in.KeepNotReadyPod, true),
+			EnableHealthCheck:  lo.FromPtrOr(in.EnableHealthCheck, false),
+			EnableWeightFactor: lo.FromPtrOr(in.EnableWeightFactor, false),
+			ServiceLabels:      in.ServiceLabels,
+			Operator:           lo.FromPtrOr(in.Operator, ""),
+			RegisterMode:       lo.FromPtrOr(in.RegisterMode, polaris.RegisterModeOnDeploy),
+		},
+		ScopeEnvNames: in.ScopeEnvNames,
+	}
 }
 
 // CreateAppPolarisConfigOutput is the JSON response for creating a polaris config.

@@ -26,6 +26,7 @@ import (
 	"github.com/h2non/gock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
 )
@@ -362,8 +363,7 @@ var _ = Describe("Test polaris provider", func() {
 				JSON(map[string]any{"services": []map[string]any{}})
 
 			_, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("polaris service not found"))
+			Expect(err).To(MatchError(ErrServiceNotFound))
 		})
 	})
 
@@ -387,8 +387,24 @@ var _ = Describe("Test polaris provider", func() {
 				JSON(map[string]any{"info": "invalid token"})
 
 			_, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "bad-token")
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ErrUnauthorized))
 			Expect(err.Error()).To(ContainSubstring("invalid token"))
+		})
+	})
+
+	It("test get remote service when polaris is unavailable", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			defer gock.Off()
+
+			gock.New(testURL).
+				Get("/naming/v1/services").
+				Reply(500).
+				JSON(map[string]any{"info": "internal error"})
+
+			_, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, ErrUnauthorized)).To(BeFalse())
+			Expect(err.Error()).To(ContainSubstring("internal error"))
 		})
 	})
 
