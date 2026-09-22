@@ -62,6 +62,10 @@ type ApplicationOpts struct {
 	Name string
 	// Type 应用类型；为空时保持默认空值
 	Type string
+	// Language 应用语言；为空时不写
+	Language string
+	// Framework 应用框架；为空时不写
+	Framework string
 }
 
 // Application 创建一个已持久化的测试用 Application 对象。
@@ -97,6 +101,8 @@ func ApplicationWithOpts(
 	if opts.Type != "" {
 		app.Type = opts.Type
 	}
+	app.Language = opts.Language
+	app.Framework = opts.Framework
 	err := store.CreateApp(ctx, app)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	return app

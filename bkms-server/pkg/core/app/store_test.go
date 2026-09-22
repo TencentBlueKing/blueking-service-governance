@@ -323,6 +323,64 @@ var _ = Describe("ApplicationStoreMongo", func() {
 			Expect(apps[0].Name).To(Equal(app1Name))
 		})
 
+		It("should keep old fields and new language/framework on round trip", func() {
+			testApp := &bkmsapp.Application{
+				ID:          appID,
+				WorkspaceID: workspaceID,
+				Name:        appName,
+				Type:        bkmsapp.AppTypeTRPC,
+				Language:    "go",
+				Framework:   "trpc",
+				TrpcSpec:    &bkmsapp.TrpcSpec{Language: "go"},
+			}
+			err := appStore.CreateApp(ctx, testApp)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := appStore.GetApp(ctx, appID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Type).To(Equal(bkmsapp.AppTypeTRPC))
+			Expect(got.Language).To(Equal("go"))
+			Expect(got.Framework).To(Equal("trpc"))
+			Expect(got.TrpcSpec).NotTo(BeNil())
+			Expect(got.TrpcSpec.Language).To(Equal("go"))
+		})
+
+		It("should treat type=trpc as matching future bkmsApp+trpc rows", func() {
+			legacyID := "legacy-" + stringx.Random(6)
+			modernID := "modern-" + stringx.Random(6)
+			err := appStore.CreateApp(ctx, &bkmsapp.Application{
+				ID:          legacyID,
+				WorkspaceID: workspaceID,
+				Name:        "legacy-" + stringx.Random(6),
+				Type:        bkmsapp.AppTypeTRPC,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			err = appStore.CreateApp(ctx, &bkmsapp.Application{
+				ID:          modernID,
+				WorkspaceID: workspaceID,
+				Name:        "modern-" + stringx.Random(6),
+				Type:        bkmsapp.AppTypeBKMSApp,
+				Framework:   "trpc",
+				Language:    "go",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			apps, err := appStore.ListApps(ctx, &bkmsapp.ListOpts{
+				WorkspaceID: workspaceID,
+				AppType:     bkmsapp.AppTypeTRPC,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(apps).To(HaveLen(2))
+			ids := []string{apps[0].ID, apps[1].ID}
+			Expect(ids).To(ConsistOf(legacyID, modernID))
+		})
+
+		It("should recognize bkmsApp as an appmodel type", func() {
+			Expect(bkmsapp.IsAppModelType(bkmsapp.AppTypeBKMSApp)).To(BeTrue())
+			Expect(bkmsapp.IsAppModelType(bkmsapp.AppTypeTRPC)).To(BeTrue())
+			Expect(bkmsapp.IsAppModelType(bkmsapp.AppTypeHelm)).To(BeFalse())
+		})
+
 		It("should filter applications by appType", func() {
 			apps, err := appStore.ListApps(ctx, &bkmsapp.ListOpts{AppType: bkmsapp.AppTypeHelm})
 			Expect(err).NotTo(HaveOccurred())

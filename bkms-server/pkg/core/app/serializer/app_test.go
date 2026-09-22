@@ -100,6 +100,22 @@ var _ = Describe("App deploy status serializers", func() {
 		Expect(output.LastDeployStartedAt).To(HaveValue(Equal(startedAt)))
 	})
 
+	It("projects list language and framework from new fields first", func() {
+		output := new(serializer.AppInfoOutputObj).FromModel(&bkmsapp.Application{
+			ID:          "app-id",
+			WorkspaceID: "workspace-id",
+			Name:        "app-name",
+			Type:        bkmsapp.AppTypeTRPC,
+			Language:    "cpp",
+			Framework:   "trpc",
+			TrpcSpec:    &bkmsapp.TrpcSpec{Language: "go"},
+		}, nil, time.Time{})
+
+		Expect(output.Type).To(Equal("trpc"))
+		Expect(output.Language).To(Equal("cpp"))
+		Expect(output.Framework).To(Equal("trpc"))
+	})
+
 	It("includes application timestamps in list output", func() {
 		createdAt := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 		lastOperatedAt := createdAt.Add(time.Hour)
@@ -200,6 +216,7 @@ var _ = Describe("App serializers", func() {
 			Name:        "demo-app",
 			Type:        "trpc",
 			DisplayName: "Demo App",
+			Framework:   "trpc",
 			Creator:     "tester",
 			BuildConfig: &serializer.BuildConfigOutputObj{
 				SourceType: "pipeline",

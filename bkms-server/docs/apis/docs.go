@@ -20320,6 +20320,10 @@ const docTemplate = `{
                     "description": "应用显示名称",
                     "type": "string"
                 },
+                "framework": {
+                    "description": "应用框架（trpc/taf/blank）；Helm/Agones 为空",
+                    "type": "string"
+                },
                 "id": {
                     "description": "应用 ID",
                     "type": "string"
@@ -20563,12 +20567,16 @@ const docTemplate = `{
                     "description": "展示用名称",
                     "type": "string"
                 },
+                "framework": {
+                    "description": "应用框架（trpc/taf/blank）；Helm/Agones 为空",
+                    "type": "string"
+                },
                 "id": {
                     "description": "应用 ID",
                     "type": "string"
                 },
                 "language": {
-                    "description": "应用使用的编程语言（如 go、cpp），仅 trpc 类型应用有值",
+                    "description": "应用使用的编程语言（如 go、cpp）",
                     "type": "string"
                 },
                 "lastOperatedAt": {
@@ -21181,6 +21189,10 @@ const docTemplate = `{
                     "description": "应用显示名称",
                     "type": "string"
                 },
+                "framework": {
+                    "description": "框架（兼容投影：优先 Application.Framework，否则由旧 type 推导）",
+                    "type": "string"
+                },
                 "helmSpec": {
                     "description": "Helm 应用描述规范",
                     "allOf": [
@@ -21191,6 +21203,10 @@ const docTemplate = `{
                 },
                 "id": {
                     "description": "应用 ID",
+                    "type": "string"
+                },
+                "language": {
+                    "description": "编程语言（兼容投影：优先 Application.Language，否则 TrpcSpec）",
                     "type": "string"
                 },
                 "name": {

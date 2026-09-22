@@ -45,6 +45,7 @@ func init() {
 	rootCmd.AddCommand(migration.NewCleanupOrphanAppConfigFileVersionsCmd())
 	rootCmd.AddCommand(migration.NewUpsertRuntimeImageCmd())
 	rootCmd.AddCommand(migration.NewRefreshWorkspaceBkmonitorPermsCmd())
+	rootCmd.AddCommand(migration.NewScanAppRuntimeModelCmd())
 }
 
 // Execute ...

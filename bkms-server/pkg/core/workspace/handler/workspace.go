@@ -415,10 +415,6 @@ func (h *Handler) ListWorkspacesOverview(c *gin.Context) {
 
 		appList := make([]*serializer.AppInfoOutputObj, 0, len(filteredAppDetails))
 		for _, ad := range filteredAppDetails {
-			language := ""
-			if ad.TrpcSpec != nil {
-				language = ad.TrpcSpec.Language
-			}
 			appInfo := &serializer.AppInfoOutputObj{
 				ID:          ad.ID,
 				WorkspaceID: ad.WorkspaceID,
@@ -426,7 +422,8 @@ func (h *Handler) ListWorkspacesOverview(c *gin.Context) {
 				Type:        ad.Type,
 				DisplayName: ad.DisplayName,
 				Creator:     ad.Creator,
-				Language:    language,
+				Language:    ad.DisplayLanguage(),
+				Framework:   ad.DisplayFramework(),
 				DeployedEnvs: lo.Map(deployStatusMap[ad.ID], func(
 					row deploystatus.AppDeployStatus, _ int,
 				) *serializer.AppDeployedEnvOutputObj {

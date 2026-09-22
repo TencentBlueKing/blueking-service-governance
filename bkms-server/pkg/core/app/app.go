@@ -24,17 +24,20 @@ import (
 	"time"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
 const (
 	// AppTypeHelm helm 应用：https://helm.sh/
-	AppTypeHelm = "helm"
+	AppTypeHelm = appruntime.AppTypeHelm
 	// AppTypeAgones agones 应用：https://agones.dev
-	AppTypeAgones = "agones"
-	// AppTypeTRPC trpc 应用
-	AppTypeTRPC = "trpc"
-	// AppTypeTAF taf 应用
-	AppTypeTAF = "taf"
+	AppTypeAgones = appruntime.AppTypeAgones
+	// AppTypeBKMSApp 使用 AppModel 管理的默认应用类型，底层使用 AppModel 应用模型。
+	AppTypeBKMSApp = appruntime.AppTypeBKMSApp
+	// AppTypeTRPC trpc 应用（桥接期旧持久化值）
+	AppTypeTRPC = appruntime.AppTypeTRPC
+	// AppTypeTAF taf 应用（桥接期旧持久化值）
+	AppTypeTAF = appruntime.AppTypeTAF
 )
 
 // Application is the main type for the project. An application is a deployable unit which can be defined in various
@@ -52,12 +55,16 @@ type Application struct {
 	DisplayName string `json:"displayName" bson:"displayName"`
 	// Type is the type of the application
 	Type string `json:"type" bson:"type"`
+	// Language is the programming language of a BKMSApp. Helm/Agones leave this empty.
+	Language string `json:"language" bson:"language,omitempty"`
+	// Framework is the application framework of a BKMSApp: trpc, taf or blank.
+	Framework string `json:"framework" bson:"framework,omitempty"`
 
 	Creator   string    `json:"creator" bson:"creator"`
 	CreatedAt time.Time `json:"createdAt" bson:"createdAt"`
 
-	// **This field is only present for trpc applications.**
-	// TrpcSpec is the spec of the trpc application
+	// **This field is only present for legacy trpc applications.**
+	// TrpcSpec is the compatibility DTO of the old trpc application spec.
 	TrpcSpec *TrpcSpec `json:"trpcSpec" bson:"trpcSpec,omitempty"`
 
 	// **This field is only present for helm applications.**
@@ -158,16 +165,57 @@ type BCSRepoConfig struct {
 	ChartName   string `json:"chartName" bson:"chartName"`
 }
 
-// IsAppModelType checks if the given app type is an appmodel type
-// Appmodel type use appmodel to manage and render the application
+// IsAppModelType checks if the given app type is an appmodel type.
+// During the bridge period this includes legacy trpc/taf and bkmsApp.
 func IsAppModelType(appType string) bool {
-	return appType == AppTypeTRPC || appType == AppTypeTAF
+	return appruntime.IsAppModelType(appType)
 }
 
 // IsHelmBasedType checks if the given app type is a helm-based type
 // Helm-based types include Helm and Agones, which are both based on Helm charts
 func IsHelmBasedType(appType string) bool {
-	return appType == AppTypeHelm || appType == AppTypeAgones
+	return appruntime.IsHelmBasedType(appType)
+}
+
+// DisplayLanguage returns the list-safe language without reading AppModel.
+func (a *Application) DisplayLanguage() string {
+	language, _ := a.displayStack()
+	return language
+}
+
+// DisplayFramework returns the list-safe framework without reading AppModel.
+func (a *Application) DisplayFramework() string {
+	_, framework := a.displayStack()
+	return framework
+}
+
+// RuntimeSnapshot copies Application-level tech-stack fields into a compatibility DTO.
+func (a *Application) RuntimeSnapshot() appruntime.Snapshot {
+	if a == nil {
+		return appruntime.Snapshot{}
+	}
+	trpcSpecLanguage := ""
+	if a.TrpcSpec != nil {
+		trpcSpecLanguage = a.TrpcSpec.Language
+	}
+	return appruntime.Snapshot{
+		AppID:            a.ID,
+		AppType:          a.Type,
+		Language:         a.Language,
+		Framework:        a.Framework,
+		TrpcSpecLanguage: trpcSpecLanguage,
+	}
+}
+
+func (a *Application) displayStack() (language, framework string) {
+	if a == nil {
+		return "", ""
+	}
+	trpcSpecLanguage := ""
+	if a.TrpcSpec != nil {
+		trpcSpecLanguage = a.TrpcSpec.Language
+	}
+	return appruntime.ProjectDisplay(a.Type, a.Language, a.Framework, trpcSpecLanguage)
 }
 
 // SetUserPass 设置 HelmRepoConfig 的 username 和 password，值为空时用 existingConfig 的值
