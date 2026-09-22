@@ -66,7 +66,7 @@ var _ = Describe("Auth backends", func() {
 
 	It("gets user info from the bk-login apigw userinfo API", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-			Expect(request.URL.Path).To(Equal("/test/api/v3/open/bk-tokens/userinfo/"))
+			Expect(request.URL.Path).To(Equal("/api/bk-login/test/login/api/v3/open/bk-tokens/userinfo/"))
 			Expect(request.URL.Query().Get("bk_token")).To(Equal("token"))
 
 			var authHeader map[string]string

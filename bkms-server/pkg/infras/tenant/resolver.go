@@ -18,8 +18,9 @@
 
 package tenant
 
-// ValidateTenantMode normalizes and validates the tenant ID against the current mode.
+// ValidateTenantMode 验证租户模式
 func ValidateTenantMode(tenantID string, enableMultiTenantMode bool) (string, error) {
+	// 未开启多租户时仅允许租户为 "" 或 default
 	if !enableMultiTenantMode {
 		switch tenantID {
 		case "", DefaultTenantID:
@@ -28,6 +29,7 @@ func ValidateTenantMode(tenantID string, enableMultiTenantMode bool) (string, er
 			return "", ErrTenantIDInvalid
 		}
 	}
+	// 开启多租户时，不允许租户为空
 	if tenantID == "" {
 		return "", ErrTenantIDRequired
 	}

@@ -32,7 +32,7 @@ var _ = Describe("Client with httptest server", func() {
 	It("gets a user using app authorization header", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			Expect(r.Method).To(Equal(http.MethodGet))
-			Expect(r.URL.Path).To(Equal("/test/api/v3/open/tenant/users/alice/"))
+			Expect(r.URL.Path).To(Equal("/api/bk-user/test/api/v3/open/tenant/users/alice/"))
 			var authHeader map[string]string
 			Expect(json.Unmarshal([]byte(r.Header.Get("X-Bkapi-Authorization")), &authHeader)).To(Succeed())
 			Expect(authHeader).To(Equal(map[string]string{"bk_app_code": "bkms", "bk_app_secret": "secret"}))

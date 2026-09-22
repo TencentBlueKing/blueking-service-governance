@@ -22,6 +22,7 @@ package bkuser
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -31,25 +32,28 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
 )
 
+const (
+	// defaultRequestTimeout bounds the synchronous request-path bk-user lookup.
+	// Keep it aligned with auth/token timeouts instead of the longer 30s-60s
+	// budgets commonly used by background cloudapi integrations.
+	defaultRequestTimeout = 10 * time.Second
+	apiNamePlaceholder    = "{api_name}"
+)
+
 // UserClient is the minimal client contract required by tenant verification.
 type UserClient interface {
 	GetUser(ctx context.Context, bkUsername string) (*User, error)
 }
 
-// defaultRequestTimeout bounds the synchronous request-path bk-user lookup.
-// Keep it aligned with auth/token timeouts instead of the longer 30s-60s
-// budgets commonly used by background cloudapi integrations.
-const defaultRequestTimeout = 10 * time.Second
-
 // Client requests bk-user APIs using application authorization through bk-apigateway SDK.
 type Client struct {
-	apiClient define.BkApiClient
+	define.BkApiClient
 }
 
 // NewClient builds a bk-user client from the gateway URL template, stage and app credentials.
 func NewClient(apiURLTmpl, stage, bkAppCode, bkAppSecret string) (*Client, error) {
 	apiClient, err := bkapi.NewBkApiClient(bkUserGatewayName, bkapi.ClientConfig{
-		BkApiUrlTmpl: apiURLTmpl,
+		BkApiUrlTmpl: normalizeBkApiURLTmpl(apiURLTmpl),
 		Stage:        stage,
 		AppCode:      bkAppCode,
 		AppSecret:    bkAppSecret,
@@ -61,14 +65,14 @@ func NewClient(apiURLTmpl, stage, bkAppCode, bkAppSecret string) (*Client, error
 	if err != nil {
 		return nil, errors.Wrap(err, "new bk-user client")
 	}
-	return &Client{apiClient: apiClient}, nil
+	return &Client{BkApiClient: apiClient}, nil
 }
 
-// GetUser gets the tenant-aware user info for the given bk_username.
+// GetUser 按 bk_username 获取租户用户信息。
 func (c *Client) GetUser(ctx context.Context, bkUsername string) (*User, error) {
-	op := c.apiClient.NewOperation(
+	op := c.NewOperation(
 		bkapi.OperationConfig{
-			Name:   "get_user",
+			Name:   "retrieve_user",
 			Method: http.MethodGet,
 			Path:   "/api/v3/open/tenant/users/{bk_username}/",
 		},
@@ -80,31 +84,25 @@ func (c *Client) GetUser(ctx context.Context, bkUsername string) (*User, error) 
 	if err != nil {
 		return nil, errors.Wrapf(err, "get bk-user user %s", bkUsername)
 	}
-	if resp != nil && resp.Body != nil {
-		defer resp.Body.Close()
-	}
+	defer resp.Body.Close()
 
-	requestURL := bkUserGatewayName
-	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
-		requestURL = resp.Request.URL.String()
-	}
 	if !httpresp.IsSuccess(resp) {
 		if result.Error != nil {
-			return nil, errors.Errorf(
-				"bk-user %s returned status %d: code=%s, message=%s",
-				requestURL, resp.StatusCode, result.Error.Code, result.Error.Message,
-			)
+			return nil, errors.Errorf("%s: %s", result.Error.Code, result.Error.Message)
 		}
-		return nil, errors.Errorf("bk-user %s returned status %d", requestURL, resp.StatusCode)
-	}
-	if result.Error != nil {
-		return nil, errors.Errorf(
-			"bk-user %s returned error: code=%s, message=%s",
-			requestURL, result.Error.Code, result.Error.Message,
-		)
+		return nil, errors.Errorf("call bk-user get_user failed, http code: %d", resp.StatusCode)
 	}
 	if result.Data.TenantID == "" {
-		return nil, errors.Errorf("bk-user user %s has empty tenant_id", bkUsername)
+		return nil, errors.New("bk-user returned empty tenant_id")
 	}
 	return &result.Data, nil
+}
+
+func normalizeBkApiURLTmpl(apiURLTmpl string) string {
+	apiURLTmpl = strings.TrimSpace(apiURLTmpl)
+	if apiURLTmpl == "" || strings.Contains(apiURLTmpl, apiNamePlaceholder) {
+		return apiURLTmpl
+	}
+
+	return strings.TrimRight(apiURLTmpl, "/") + "/api/" + apiNamePlaceholder
 }

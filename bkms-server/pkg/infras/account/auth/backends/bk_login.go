@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -33,6 +34,7 @@ import (
 
 const (
 	bkLoginGatewayName = "bk-login"
+	apiNamePlaceholder = "{api_name}"
 	// defaultRequestTimeout 与认证中间件超时保持一致，这是请求入口同步校验，不是后台集成调用。
 	defaultRequestTimeout = 10 * time.Second
 )
@@ -67,7 +69,7 @@ func (b *BkTokenApigwAuthBackend) GetUserInfo(ctx context.Context, userCred stri
 		bkapi.OperationConfig{
 			Name:   "get_userinfo",
 			Method: http.MethodGet,
-			Path:   "/api/v3/open/bk-tokens/userinfo/",
+			Path:   "/login/api/v3/open/bk-tokens/userinfo/",
 		},
 		bkapi.OptSetRequestQueryParams(map[string]string{"bk_token": userCred}),
 	)
@@ -97,7 +99,7 @@ func NewBkTokenApigwAuthBackend(
 	apiURLTmpl, stage, bkAppCode, bkAppSecret, loginPageURL string,
 ) (*BkTokenApigwAuthBackend, error) {
 	apiClient, err := bkapi.NewBkApiClient(bkLoginGatewayName, bkapi.ClientConfig{
-		BkApiUrlTmpl: apiURLTmpl,
+		BkApiUrlTmpl: normalizeBkApiURLTmpl(apiURLTmpl),
 		Stage:        stage,
 		AppCode:      bkAppCode,
 		AppSecret:    bkAppSecret,
@@ -113,4 +115,13 @@ func NewBkTokenApigwAuthBackend(
 		BkApiClient:  apiClient,
 		LoginPageURL: loginPageURL,
 	}, nil
+}
+
+func normalizeBkApiURLTmpl(apiURLTmpl string) string {
+	apiURLTmpl = strings.TrimSpace(apiURLTmpl)
+	if apiURLTmpl == "" || strings.Contains(apiURLTmpl, apiNamePlaceholder) {
+		return apiURLTmpl
+	}
+
+	return strings.TrimRight(apiURLTmpl, "/") + "/api/" + apiNamePlaceholder
 }
