@@ -228,20 +228,20 @@ var _ = Describe("User authentication middleware", func() {
 		Entry(
 			"keeps bk_ticket when bk-login is enabled",
 			Config{
-				BackendType:   BackendBkTicket,
-				EnableBkLogin: true,
-				BkApiUrlTmpl:  "https://{api_name}.example.com",
+				BackendType:               BackendBkTicket,
+				EnableBkLoginUserinfoAuth: true,
+				BkApiUrlTmpl:              "https://{api_name}.example.com",
 			},
 			BackendBkTicket,
 		),
 		Entry(
 			"uses bk-login apigw when backend is bk_token",
 			Config{
-				BackendType:   BackendBkToken,
-				EnableBkLogin: true,
-				BkApiUrlTmpl:  "https://{api_name}.example.com",
-				BkAppCode:     "bkms",
-				BkAppSecret:   "secret",
+				BackendType:               BackendBkToken,
+				EnableBkLoginUserinfoAuth: true,
+				BkApiUrlTmpl:              "https://{api_name}.example.com",
+				BkAppCode:                 "bkms",
+				BkAppSecret:               "secret",
 			},
 			BackendBkToken,
 		),
@@ -249,11 +249,11 @@ var _ = Describe("User authentication middleware", func() {
 
 	It("constructs the bk-login apigw backend when bk-login is enabled", func() {
 		backend, backendType, err := getBackend(Config{
-			BackendType:   BackendBkToken,
-			EnableBkLogin: true,
-			BkApiUrlTmpl:  "https://{api_name}.example.com",
-			BkAppCode:     "bkms",
-			BkAppSecret:   "secret",
+			BackendType:               BackendBkToken,
+			EnableBkLoginUserinfoAuth: true,
+			BkApiUrlTmpl:              "https://{api_name}.example.com",
+			BkAppCode:                 "bkms",
+			BkAppSecret:               "secret",
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(backendType).To(Equal(BackendBkToken))

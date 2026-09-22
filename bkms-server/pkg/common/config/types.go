@@ -58,10 +58,10 @@ type BkPlatUrlsConfig struct {
 
 // FeatureFlagsConfig 控制可选功能链路是否启用。
 type FeatureFlagsConfig struct {
-	// EnableBkLogin 控制 bk_token 认证是否通过 bk-login 网关 userinfo 链路完成。
-	EnableBkLogin bool
-	// EnableBkUser 控制是否通过 bk-user 网关完成成员校验。
-	EnableBkUser bool
+	// EnableBkLoginUserinfoAuth 控制 bk_token 认证是否通过 bk-login 网关 userinfo 链路完成。
+	EnableBkLoginUserinfoAuth bool
+	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
+	EnableBkUserTenantVerify bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"

@@ -20,8 +20,8 @@ bkPlatUrls:
   compApiBaseUrl: https://api.example.com
 # 可选功能开关
 featureFlags:
-  enableBkLogin: false
-  enableBkUser: false
+  enableBkLoginUserinfoAuth: false   # bk_token 走 bk-login 网关 userinfo
+  enableBkUserTenantVerify: false    # 用 bk-user 校验用户所属租户/状态
 # 蓝鲸 API 环境配置
 bkApiStages:
   kubeinsight: prod

@@ -145,14 +145,14 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		LoginURL:    cfg.Account.LoginURL,
 	}, tokenClient)
 	authConfig := auth.Config{
-		BackendType:          cfg.Account.BackendType,
-		LoginURL:             cfg.Account.LoginURL,
-		EnableBkLogin:        cfg.FeatureFlags.EnableBkLogin,
-		BkApiUrlTmpl:         cfg.BkPlatUrls.BkApiUrlTmpl,
-		BkLoginStage:         cfg.BkApiStages.BkLogin,
-		AllowSetUserInHeader: cfg.Development.AllowSetUserInHeader,
-		BkAppCode:            cfg.BkApp.Code,
-		BkAppSecret:          cfg.BkApp.Secret,
+		BackendType:               cfg.Account.BackendType,
+		LoginURL:                  cfg.Account.LoginURL,
+		EnableBkLoginUserinfoAuth: cfg.FeatureFlags.EnableBkLoginUserinfoAuth,
+		BkApiUrlTmpl:              cfg.BkPlatUrls.BkApiUrlTmpl,
+		BkLoginStage:              cfg.BkApiStages.BkLogin,
+		AllowSetUserInHeader:      cfg.Development.AllowSetUserInHeader,
+		BkAppCode:                 cfg.BkApp.Code,
+		BkAppSecret:               cfg.BkApp.Secret,
 	}
 	var tenantVerifier tenant.Verifier
 	if cfg.Tenant.EnableMultiTenantMode {

@@ -134,14 +134,16 @@ func setDefaultConfigValues(vp *viper.Viper) {
 }
 
 func validateBkLoginDependencies(cfg *Config) error {
-	if !cfg.FeatureFlags.EnableBkLogin || cfg.Account.BackendType != "bk_token" {
+	if !cfg.FeatureFlags.EnableBkLoginUserinfoAuth || cfg.Account.BackendType != "bk_token" {
 		return nil
 	}
 	if cfg.BkPlatUrls.BkApiUrlTmpl == "" {
-		return errors.New("bkPlatUrls.bkApiUrlTmpl is required when featureFlags.enableBkLogin is enabled")
+		return errors.New("bkPlatUrls.bkApiUrlTmpl is required when featureFlags.enableBkLoginUserinfoAuth is enabled")
 	}
 	if cfg.BkApp.Code == "" || cfg.BkApp.Secret == "" {
-		return errors.New("bkApp.code and bkApp.secret are required when featureFlags.enableBkLogin is enabled")
+		return errors.New(
+			"bkApp.code and bkApp.secret are required when featureFlags.enableBkLoginUserinfoAuth is enabled",
+		)
 	}
 	return nil
 }
@@ -150,8 +152,10 @@ func validateTenantDependencies(cfg *Config) error {
 	if !cfg.Tenant.EnableMultiTenantMode {
 		return nil
 	}
-	if !cfg.FeatureFlags.EnableBkUser {
-		return errors.New("featureFlags.enableBkUser is required when tenant.enableMultiTenantMode is enabled")
+	if !cfg.FeatureFlags.EnableBkUserTenantVerify {
+		return errors.New(
+			"featureFlags.enableBkUserTenantVerify is required when tenant.enableMultiTenantMode is enabled",
+		)
 	}
 	if cfg.BkPlatUrls.BkApiUrlTmpl == "" {
 		return errors.New("bkPlatUrls.bkApiUrlTmpl is required when tenant.enableMultiTenantMode is enabled")

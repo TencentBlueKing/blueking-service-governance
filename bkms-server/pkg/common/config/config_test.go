@@ -253,7 +253,7 @@ bkApp:
 bkPlatUrls:
   bkApiUrlTmpl: https://{api_name}.example.com
 featureFlags:
-  enableBkUser: true
+  enableBkUserTenantVerify: true
 account:
   authBaseURL: http://auth.example.com
   loginURL: http://login.example.com
@@ -277,10 +277,10 @@ asynq:
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg).NotTo(BeNil())
 			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeTrue())
-			Expect(cfg.FeatureFlags.EnableBkUser).To(BeTrue())
+			Expect(cfg.FeatureFlags.EnableBkUserTenantVerify).To(BeTrue())
 		})
 
-		It("should fail when multi-tenant mode is enabled without enableBkUser", func() {
+		It("should fail when multi-tenant mode is enabled without enableBkUserTenantVerify", func() {
 			configContent := `
 bkApp:
   code: test-app
@@ -309,7 +309,7 @@ asynq:
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(
-				"featureFlags.enableBkUser is required when tenant.enableMultiTenantMode is enabled",
+				"featureFlags.enableBkUserTenantVerify is required when tenant.enableMultiTenantMode is enabled",
 			))
 		})
 
@@ -446,8 +446,8 @@ bkApp:
 bkPlatUrls:
   bkApiUrlTmpl: https://{api_name}.example.com
 featureFlags:
-  enableBkLogin: true
-  enableBkUser: true
+  enableBkLoginUserinfoAuth: true
+  enableBkUserTenantVerify: true
 bkApiStages:
   bkLogin: prod
   bkUser: test
@@ -471,8 +471,8 @@ asynq:
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Account.LoginURL).To(Equal("https://paas.example.com/login"))
-			Expect(cfg.FeatureFlags.EnableBkLogin).To(BeTrue())
-			Expect(cfg.FeatureFlags.EnableBkUser).To(BeTrue())
+			Expect(cfg.FeatureFlags.EnableBkLoginUserinfoAuth).To(BeTrue())
+			Expect(cfg.FeatureFlags.EnableBkUserTenantVerify).To(BeTrue())
 			Expect(cfg.BkApiStages.BkLogin).To(Equal("prod"))
 			Expect(cfg.BkApiStages.BkUser).To(Equal("test"))
 		})
@@ -483,7 +483,7 @@ bkApp:
   code: test-app
   secret: test-secret
 featureFlags:
-  enableBkLogin: true
+  enableBkLoginUserinfoAuth: true
 account:
   authBaseURL: http://auth.example.com
   loginURL: https://paas.example.com/login
@@ -505,10 +505,10 @@ asynq:
 			Expect(err).To(HaveOccurred())
 			Expect(
 				err.Error(),
-			).To(ContainSubstring("bkPlatUrls.bkApiUrlTmpl is required when featureFlags.enableBkLogin is enabled"))
+			).To(ContainSubstring("bkPlatUrls.bkApiUrlTmpl is required when featureFlags.enableBkLoginUserinfoAuth is enabled"))
 		})
 
-		It("should fail when multi-tenant mode is enabled without enableBkUser", func() {
+		It("should fail when multi-tenant mode is enabled without enableBkUserTenantVerify", func() {
 			configContent := `
 bkApp:
   code: test-app
@@ -538,7 +538,7 @@ asynq:
 			Expect(err).To(HaveOccurred())
 			Expect(
 				err.Error(),
-			).To(ContainSubstring("featureFlags.enableBkUser is required when tenant.enableMultiTenantMode is enabled"))
+			).To(ContainSubstring("featureFlags.enableBkUserTenantVerify is required when tenant.enableMultiTenantMode is enabled"))
 		})
 
 		It("should fail when http server port is missing", func() {

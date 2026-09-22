@@ -51,9 +51,9 @@ type Config struct {
 	BackendType string
 	// LoginURL 是登录页根地址，用于拼接 /plain/；未配网关时也作为直连校验的 host。
 	LoginURL string
-	// EnableBkLogin 为 true 时，bk_token 认证走 bk-login 网关 userinfo。
-	EnableBkLogin bool
-	// BkApiUrlTmpl 是蓝鲸网关地址模板，仅在 EnableBkLogin 时用于构造 bk-login 客户端。
+	// EnableBkLoginUserinfoAuth 为 true 时，bk_token 认证走 bk-login 网关 userinfo。
+	EnableBkLoginUserinfoAuth bool
+	// BkApiUrlTmpl 是蓝鲸网关地址模板，仅在 EnableBkLoginUserinfoAuth 时用于构造 bk-login 客户端。
 	BkApiUrlTmpl string
 	// BkLoginStage 是 bk-login 网关 stage；为空时由 sdk 默认使用 prod。
 	BkLoginStage string

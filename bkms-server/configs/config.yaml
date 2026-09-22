@@ -23,10 +23,10 @@ bkPlatUrls:
   compApiBaseUrl: https://api.example.com
 # 可选功能开关
 featureFlags:
-  # 是否启用 bk-login 网关 userinfo 链路；关闭时 bk_token 认证走 loginURL 直连
-  enableBkLogin: false
-  # 是否启用 bk-user 网关成员校验；多租户模式开启时需要同时打开
-  enableBkUser: false
+  # bk_token 走 bk-login 网关 userinfo
+  enableBkLoginUserinfoAuth: false
+  # 用 bk-user 校验用户所属租户/状态
+  enableBkUserTenantVerify: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP

@@ -44,7 +44,7 @@ func getBackend(cfg Config) (AuthBackend, string, error) {
 	case BackendBkTicket:
 		return backends.NewBkTicketAuthBackend(cfg.LoginURL), BackendBkTicket, nil
 	case BackendBkToken, "":
-		if cfg.EnableBkLogin {
+		if cfg.EnableBkLoginUserinfoAuth {
 			backend, err := backends.NewBkTokenApigwAuthBackend(
 				cfg.BkApiUrlTmpl, cfg.BkLoginStage, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
 			)
