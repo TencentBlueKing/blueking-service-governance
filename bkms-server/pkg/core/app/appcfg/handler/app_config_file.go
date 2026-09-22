@@ -110,26 +110,39 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 		h.registry.AppConfigFileDefStore,
 		h.registry.AppConfigFileVersionStore,
 	)
-	obj, err := acfService.Create(
-		ctx,
-		appcfg.CreateCfgFileParams{
-			AppID:               app.ID,
-			EnvName:             envName,
-			Name:                input.Name,
-			Type:                appcfg.AppConfigFileType(input.Type),
-			ContentSourceType:   sourceType,
-			Format:              fileFormat,
-			BaseAppConfigFileID: baseID,
-			BSCPConfig:          bscpCfg,
-			Creator:             creator,
-			Description:         input.Description,
-			ConfigKind:          appcfg.ConfigKindFramework,
-			AppType:             app.Type,
-		},
-	)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating app config file"))
-		return
+	params := appcfg.CreateCfgFileParams{
+		AppID:               app.ID,
+		EnvName:             envName,
+		Name:                input.Name,
+		Type:                appcfg.AppConfigFileType(input.Type),
+		ContentSourceType:   sourceType,
+		Format:              fileFormat,
+		BaseAppConfigFileID: baseID,
+		BSCPConfig:          bscpCfg,
+		Creator:             creator,
+		Description:         input.Description,
+		ConfigKind:          appcfg.ConfigKindFramework,
+		AppType:             app.Type,
+	}
+	// 框架页按环境保存会带 overlay + envName。这里改挂到已有 def，
+	// 避免 Create 再建一条孤儿 framework def。
+	var obj *appcfg.AppConfigFile
+	if appcfg.IsFrameworkEnvOverlayCreate(params) {
+		attached, attachErr := acfService.AttachFrameworkEnvOverlay(ctx, params)
+		if attachErr != nil {
+			bkerrs.AbortWithErr(
+				c,
+				bkerrs.Wrap(attachErr, bkerrs.ErrCodeInvalidArgument, "attaching framework env overlay"),
+			)
+			return
+		}
+		obj = &attached.AppConfigFile
+	} else {
+		obj, err = acfService.Create(ctx, params)
+		if err != nil {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating app config file"))
+			return
+		}
 	}
 
 	h.addAppConfigFileAudit(

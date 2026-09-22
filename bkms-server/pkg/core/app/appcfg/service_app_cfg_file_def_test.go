@@ -62,7 +62,7 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 		It("should attach framework env overlay to the base file def", func() {
 			base := f.createFrameworkFile("default")
 			overlay := "server:\n  app: test\n"
-			created, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+			created, err := f.Svc.AttachFrameworkEnvOverlay(f.Ctx, appcfg.CreateCfgFileParams{
 				AppID:               f.AppID,
 				EnvName:             "test",
 				Name:                "test",
@@ -92,7 +92,7 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 		It("should reuse existing framework env overlay instead of creating another def", func() {
 			base := f.createFrameworkFile("default")
 			overlay := "a: 1\n"
-			first, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+			first, err := f.Svc.AttachFrameworkEnvOverlay(f.Ctx, appcfg.CreateCfgFileParams{
 				AppID:               f.AppID,
 				EnvName:             "test",
 				Name:                "test",
@@ -106,7 +106,7 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			second, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+			second, err := f.Svc.AttachFrameworkEnvOverlay(f.Ctx, appcfg.CreateCfgFileParams{
 				AppID:               f.AppID,
 				EnvName:             "test",
 				Name:                "test",

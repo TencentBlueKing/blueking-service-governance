@@ -48,6 +48,7 @@ const (
 	leftoverReasonMissingDefID    = "file missing defID"
 )
 
+// repairTrpcTafFrameworkDefsOptions 描述本次治理任务的执行参数。
 type repairTrpcTafFrameworkDefsOptions struct {
 	AppID          string
 	WorkspaceID    string
@@ -55,6 +56,8 @@ type repairTrpcTafFrameworkDefsOptions struct {
 	FailOnConflict bool
 }
 
+// repairFrameworkDefMove 一条可安全改挂的环境 file：从孤儿 def 挪到主 def。
+// 只改 defID，不改 content / overlayContent。
 type repairFrameworkDefMove struct {
 	FileID      string `json:"fileId"`
 	EnvName     string `json:"envName"`
@@ -66,6 +69,8 @@ type repairFrameworkDefMove struct {
 	OverlayLen  int    `json:"overlayLen"`
 }
 
+// repairFrameworkDefConflict 无法自动改挂：主 def（或另一条孤儿）已占用同一 envName。
+// 有 conflict 的应用整单不落库，避免撞 defID+envName 唯一索引。
 type repairFrameworkDefConflict struct {
 	FileID      string `json:"fileId"`
 	EnvName     string `json:"envName"`
@@ -74,6 +79,8 @@ type repairFrameworkDefConflict struct {
 	Reason      string `json:"reason"`
 }
 
+// repairFrameworkDefLeftover 需要人工看、命令不会自动处理的 file。
+// 典型：孤儿 def 上还有默认文件（可能是第二条真文件），或 file 缺 defID。
 type repairFrameworkDefLeftover struct {
 	FileID  string `json:"fileId"`
 	DefID   string `json:"defId"`
@@ -81,6 +88,7 @@ type repairFrameworkDefLeftover struct {
 	Reason  string `json:"reason"`
 }
 
+// repairTrpcTafFrameworkDefsAppPlan 单个应用的预览 / 执行计划。
 type repairTrpcTafFrameworkDefsAppPlan struct {
 	AppID          string                       `json:"appId"`
 	AppName        string                       `json:"appName"`
@@ -98,6 +106,7 @@ type repairTrpcTafFrameworkDefsAppPlan struct {
 	Applied        bool                         `json:"applied"`
 }
 
+// repairTrpcTafFrameworkDefsSummary 全量预览 / 执行结果，命令 stdout 打成 JSON。
 type repairTrpcTafFrameworkDefsSummary struct {
 	Execute      bool                                `json:"execute"`
 	AppCount     int                                 `json:"appCount"`
@@ -108,22 +117,32 @@ type repairTrpcTafFrameworkDefsSummary struct {
 	Plans        []repairTrpcTafFrameworkDefsAppPlan `json:"plans"`
 }
 
+// repairTrpcTafFrameworkDefsDeps 命令依赖的 store，便于单测注入。
 type repairTrpcTafFrameworkDefsDeps struct {
 	appStore  bkmsapp.ApplicationStore
 	defStore  appcfg.AppConfigFileDefStore
 	fileStore appcfg.AppConfigFileStore
 }
 
-// NewRepairTrpcTafFrameworkDefsCmd 预览或修复 tRPC/TAF 上被拆成多条的 framework def。
+// NewRepairTrpcTafFrameworkDefsCmd 创建一个一次性 Mongo 数据治理命令，
+// 把 tRPC/TAF 上被旧接口拆散的 framework 环境 overlay 收回到主 def。
 //
-// 背景：框架页按环境保存曾走旧 POST /app-config-files，每次新建一条 name=环境名 的
-// framework def。部署只认「带默认文件的那条 def + 同 def 环境实例」，环境 overlay 会被丢掉。
+// 这不是 db/migrations 里的 JSON migrate：golang-migrate 无法按应用选型、处理冲突，
+// 也不会在发版时自动执行。必须人工 dry-run 确认后再加 --execute。
+//
+// 背景：
+//   - 框架页第一次按环境保存曾走旧 POST /apps/{appID}/app-config-files
+//   - Create 每次新建一条 def，name 用环境名，环境 overlay 成了独立 framework def
+//   - 部署 GetFrameworkMountableFile 只认「带默认文件的 def + 同 def 环境实例」
+//   - 孤儿 overlay def 没有 envName="" 的默认文件，整组被跳过，ConfigMap 只剩默认 {} + 北极星注入
 //
 // 处理策略：
-//   - 默认 dry-run：输出每个应用的 plan（moves / conflicts / leftovers）
-//   - --execute 才改库：改挂 file.defID、主 def 设独立配置、删除迁空的孤儿 def
-//   - 只处理 trpc/taf；Helm 多 values 是正常多 def
-//   - 目标环境已有同 envName 实例时记 conflict，该应用不落库
+//   - 默认仅预览：输出每个应用的 plan（moves / conflicts / leftovers / deleteDefIds）
+//   - --execute 才改库：改挂 file.defID、必要时把主 def 设为独立配置、删除迁空的孤儿 def
+//   - 只处理 applications.type=trpc/taf；Helm 多 values / overlay values 是正常多 def，一律跳过
+//   - 不改 file 正文，不更新集群 ConfigMap；刷完需对该环境重新部署才会生效
+//   - 主 def 已有同 envName、或两条孤儿抢同一环境 → conflict，该应用整单不落库
+//   - 不要重跑 000011 / 000014：那两次不会删除 name=环境名 的后建 def
 //
 // 示例：
 //
@@ -176,6 +195,7 @@ func NewRepairTrpcTafFrameworkDefsCmd() *cobra.Command {
 	return cmd
 }
 
+// runRepairTrpcTafFrameworkDefs 先为每个目标应用生成 plan，再按开关决定是否落库。
 func runRepairTrpcTafFrameworkDefs(
 	ctx context.Context,
 	deps repairTrpcTafFrameworkDefsDeps,
@@ -211,6 +231,9 @@ func runRepairTrpcTafFrameworkDefs(
 	return summary, nil
 }
 
+// listTrpcTafAppsForRepair 解析要处理的应用列表。
+// 未指定 --app-id 时只扫 trpc/taf，Helm 不会进入后续 plan。
+// 指定了 --app-id 时仍会装载该应用，由 build 阶段按 type 跳过非 trpc/taf。
 func listTrpcTafAppsForRepair(
 	ctx context.Context,
 	appStore bkmsapp.ApplicationStore,
@@ -250,6 +273,7 @@ func listTrpcTafAppsForRepair(
 	return apps, nil
 }
 
+// buildRepairTrpcTafFrameworkDefsAppPlan 读取该应用的 framework def / file，交给纯函数算 plan。
 func buildRepairTrpcTafFrameworkDefsAppPlan(
 	ctx context.Context,
 	deps repairTrpcTafFrameworkDefsDeps,
@@ -294,6 +318,9 @@ func buildRepairTrpcTafFrameworkDefsAppPlan(
 	return planRepairTrpcTafFrameworkDefs(plan, defs, files), nil
 }
 
+// applyRepairTrpcTafFrameworkDefsAppPlan 按已确认的 plan 写库。
+// 调用方必须先保证 isApplyable()：无 conflict、有实际变更。
+// 删除孤儿 def 前再查一次剩余 file，避免 leftover 默认文件被误删。
 func applyRepairTrpcTafFrameworkDefsAppPlan(
 	ctx context.Context,
 	deps repairTrpcTafFrameworkDefsDeps,
@@ -349,6 +376,7 @@ func applyRepairTrpcTafFrameworkDefsAppPlan(
 	return nil
 }
 
+// isApplyable 表示 --execute 时可以安全落库：未跳过、无 conflict，且确有 move / 切模式 / 删空 def。
 func (p *repairTrpcTafFrameworkDefsAppPlan) isApplyable() bool {
 	return !p.Skipped && len(p.Conflicts) == 0 && (len(p.Moves) > 0 || p.SetIndependent || len(p.DeleteDefIDs) > 0)
 }
@@ -395,6 +423,7 @@ func loMapDefIDs(defs []appcfg.AppConfigFileDef) []bson.ObjectID {
 	return ids
 }
 
+// appendMissingDefIDLeftovers 把缺 defID 的 file 记入 leftovers，供人工补 000014 类回填，本命令不改挂。
 func appendMissingDefIDLeftovers(plan *repairTrpcTafFrameworkDefsAppPlan, files []appcfg.AppConfigFile) {
 	for _, file := range files {
 		if file.DefID != bson.NilObjectID {

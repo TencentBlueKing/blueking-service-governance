@@ -76,12 +76,6 @@ func (s *AppCfgFileDefService) Create(
 		return nil, errors.Wrap(err, "kind-specific content validation")
 	}
 
-	// 框架页按环境保存仍走旧 Create 接口。tRPC/TAF 的环境 overlay 必须挂在
-	// 已有 framework def 下，否则部署按 def 配对会丢掉环境内容。
-	if isFrameworkEnvOverlayCreate(params) {
-		return s.attachFrameworkEnvOverlay(ctx, params)
-	}
-
 	if err = s.ensureSingleFrameworkDef(ctx, params.AppID, params.AppType, kind); err != nil {
 		return nil, err
 	}
@@ -246,16 +240,20 @@ func (s *AppCfgFileDefService) ensureSingleFrameworkDef(
 	return nil
 }
 
-func isFrameworkEnvOverlayCreate(params CreateCfgFileParams) bool {
+// IsFrameworkEnvOverlayCreate 判断旧创建接口是否在「按环境写 framework overlay」。
+// 该语义只属于旧 POST /app-config-files，由 handler 分流，不进入 Create。
+// todo 旧创建文件实例接口下掉后可删除
+func IsFrameworkEnvOverlayCreate(params CreateCfgFileParams) bool {
 	return params.ConfigKind == ConfigKindFramework &&
 		params.EnvName != EnvNameDefault &&
 		params.Type == AppConfigFileTypeOverlay &&
 		params.BaseAppConfigFileID != nil
 }
 
-// attachFrameworkEnvOverlay 把环境 overlay 挂到 base 文件所属的 framework def 上，
-// 而不是再新建一条 def。旧 POST /app-config-files 按环境保存时走这条路径。
-func (s *AppCfgFileDefService) attachFrameworkEnvOverlay(
+// AttachFrameworkEnvOverlay 把环境 overlay 挂到 base 文件所属的 framework def 上，
+// 而不是再新建一条 def。供旧 POST /app-config-files handler 调用。
+// todo 旧创建文件实例接口下掉后可删除
+func (s *AppCfgFileDefService) AttachFrameworkEnvOverlay(
 	ctx context.Context,
 	params CreateCfgFileParams,
 ) (*AppConfigFileWithDef, error) {

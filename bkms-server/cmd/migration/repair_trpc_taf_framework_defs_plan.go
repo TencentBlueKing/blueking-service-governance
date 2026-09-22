@@ -28,6 +28,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
 
+// preferredFrameworkDefNames 选主 def 时优先认这些名字。
+// default 是历史默认文件名；trpc_go.yaml / taf.conf 是创建应用时写入的真实框架文件名。
 var preferredFrameworkDefNames = map[string]struct{}{
 	appcfg.DefaultAppConfigFileName: {},
 	"trpc_go.yaml":                  {},
@@ -42,6 +44,10 @@ func fileContentLen(s *string) int {
 	return len(lo.FromPtr(s))
 }
 
+// pickPrimaryFrameworkDef 选出「真正的框架文件」那条 def，后续环境 overlay 都改挂到它下面。
+//
+// 只从带默认文件（envName=""）的 def 里选，避免把只有 overlay、部署会跳过的孤儿当主 def。
+// 排序：preferred 名字 > 更早 createdAt > 更小 _id。没有默认文件则返回 nil。
 func pickPrimaryFrameworkDef(
 	defs []appcfg.AppConfigFileDef,
 	filesByDef map[bson.ObjectID][]appcfg.AppConfigFile,
@@ -91,6 +97,13 @@ func defHasDefaultFile(files []appcfg.AppConfigFile) bool {
 	return false
 }
 
+// planRepairTrpcTafFrameworkDefs 根据已加载的 defs / files 填写 plan，不访问数据库。
+//
+//   - 非主 def 上 envName 非空的 file → moves（可改挂）或 conflicts（同环境已占用）
+//   - 非主 def 上的默认文件 → leftovers，不挪也不把该 def 列入删除
+//   - 迁完后文件数为 0 的孤儿 def → deleteDefIds
+//   - 修完后主 def 会有环境实例且仍是统一配置 → setIndependent
+//   - 出现 conflict 时清空删除列表，整单视为不可 apply
 func planRepairTrpcTafFrameworkDefs(
 	plan *repairTrpcTafFrameworkDefsAppPlan,
 	defs []appcfg.AppConfigFileDef,
