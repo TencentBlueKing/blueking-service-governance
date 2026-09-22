@@ -281,7 +281,8 @@ type CreateAppPolarisConfigInput struct {
 	// 是否启用权重因子，默认 false。
 	// 开启后北极星按实例机型标记权重因子，
 	// 各环境还需单独开启动态权重才会真正按机型分流。
-	// 平台自动生成时随创建服务写入；从现有引入时用 Token 写回已有服务。
+	// 平台自动生成时随创建服务写入；从现有引入时该值仅记录线上状态，
+	// 实际开关请调用 PUT imported-service 接口修改。
 	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
@@ -342,7 +343,7 @@ type PatchAppPolarisConfigInput struct {
 	// 是否启用健康检查（可选更新）
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
 	// 是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值。
-	// 从现有引入的服务同样会把开关同步到北极星。
+	// 未传表示不改。平台创建的服务随配置写回；从现有引入的服务用 Token 写回已有北极星服务。
 	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签（可选更新，传入时全量替换）
 	ServiceLabels map[string]string `json:"serviceLabels"`
@@ -465,6 +466,23 @@ func ImportedPolarisServiceFromModel(svc *polaris.RemotePolarisService) *Importe
 		PlatformID:         svc.PlatformID,
 		EnableWeightFactor: svc.EnableWeightFactor,
 	}
+}
+
+// -----------------------------------------------------------------------------
+// Update imported polaris weight factor
+// -----------------------------------------------------------------------------
+
+// UpdateImportedPolarisInput is the JSON input for updating an existing polaris service.
+// 目前只支持权重因子开关。
+type UpdateImportedPolarisInput struct {
+	// 北极星实例名称
+	PolarisName string `json:"polarisName" binding:"required,min=1"`
+	// 北极星环境（命名空间）
+	PolarisNamespace string `json:"polarisNamespace" binding:"required,oneof=Test Production Development Pre-release"`
+	// 北极星 Token
+	PolarisToken string `json:"polarisToken" binding:"required,min=1"`
+	// 是否开启权重因子
+	EnableWeightFactor *bool `json:"enableWeightFactor" binding:"required"`
 }
 
 // -----------------------------------------------------------------------------

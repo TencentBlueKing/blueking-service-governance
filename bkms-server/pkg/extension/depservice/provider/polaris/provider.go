@@ -56,7 +56,6 @@ type Config struct {
 }
 
 // RemoteService 北极星 GET /naming/v1/services 返回的服务对象。
-// Token 仅用于解析，调用方不得再向下传递。
 type RemoteService struct {
 	Name       string            `json:"name"`
 	Namespace  string            `json:"namespace"`
@@ -73,7 +72,6 @@ type RemoteService struct {
 	CmdbMod1   string            `json:"cmdb_mod1"`
 	CmdbMod2   string            `json:"cmdb_mod2"`
 	CmdbMod3   string            `json:"cmdb_mod3"`
-	Token      string            `json:"token"`
 }
 
 // parseConfig parses the plan config into Polaris Config
@@ -283,7 +281,7 @@ func (p *Provider) updateService(
 }
 
 // GetRemoteService 拉取北极星线上服务。先 GET 确认服务存在，再以 Token 做空 PUT
-// 校验可写（不改 owners/metadata）。成功时返回服务对象（去掉 token）。
+// 校验可写（不改 owners/metadata）。
 func (p *Provider) GetRemoteService(ctx context.Context, name, namespace, token string) (*RemoteService, error) {
 	if name == "" || namespace == "" || token == "" {
 		return nil, errors.New("name, namespace and token are required")
@@ -295,7 +293,6 @@ func (p *Provider) GetRemoteService(ctx context.Context, name, namespace, token 
 	if err = p.updateService(ctx, name, namespace, token, "", nil, false); err != nil {
 		return nil, errors.Wrap(err, "verify polaris token")
 	}
-	svc.Token = ""
 	return svc, nil
 }
 

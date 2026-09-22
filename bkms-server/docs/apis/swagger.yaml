@@ -3233,7 +3233,8 @@ definitions:
           是否启用权重因子，默认 false。
           开启后北极星按实例机型标记权重因子，
           各环境还需单独开启动态权重才会真正按机型分流。
-          平台自动生成时随创建服务写入；从现有引入时用 Token 写回已有服务。
+          平台自动生成时随创建服务写入；从现有引入时该值仅记录线上状态，
+          实际开关请调用 PUT imported-service 接口修改。
         type: boolean
       instanceKey:
         description: 组件实例标识，用于环境变量拼接，只能包含字母、数字、下划线
@@ -6742,7 +6743,7 @@ definitions:
       enableWeightFactor:
         description: |-
           是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值。
-          从现有引入的服务同样会把开关同步到北极星。
+          未传表示不改。平台创建的服务随配置写回；从现有引入的服务用 Token 写回已有北极星服务。
         type: boolean
       instanceKey:
         description: 组件实例标识（可选更新）
@@ -9227,6 +9228,33 @@ definitions:
         description: 待更新的 Helm Chart 配置
     required:
     - helmSpec
+    type: object
+  serializer.UpdateImportedPolarisInput:
+    properties:
+      enableWeightFactor:
+        description: 是否开启权重因子
+        type: boolean
+      polarisName:
+        description: 北极星实例名称
+        minLength: 1
+        type: string
+      polarisNamespace:
+        description: 北极星环境（命名空间）
+        enum:
+        - Test
+        - Production
+        - Development
+        - Pre-release
+        type: string
+      polarisToken:
+        description: 北极星 Token
+        minLength: 1
+        type: string
+    required:
+    - enableWeightFactor
+    - polarisName
+    - polarisNamespace
+    - polarisToken
     type: object
   serializer.UpdatePortPoolInput:
     properties:
@@ -12906,6 +12934,37 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 查询从现有引入的北极星服务信息
+      tags:
+      - polaris-config
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateImportedPolaris
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateImportedPolarisInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 修改从现有引入的北极星服务
       tags:
       - polaris-config
   /apps/{appID}/deps/polaris-configs/validate:

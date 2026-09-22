@@ -349,7 +349,6 @@ var _ = Describe("Test polaris provider", func() {
 			Expect(svc.Owners).To(Equal("alice,bob"))
 			Expect(svc.Ports).To(Equal("8080"))
 			Expect(svc.Comment).To(Equal("imported"))
-			Expect(svc.Token).To(BeEmpty())
 		})
 	})
 

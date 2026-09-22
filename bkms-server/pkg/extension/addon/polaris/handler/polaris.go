@@ -518,6 +518,66 @@ func (h *Handler) GetImportedPolarisService(c *gin.Context) {
 	})
 }
 
+// UpdateImportedPolaris 修改从现有引入的北极星服务。目前只支持权重因子开关。
+// Token 无效、服务不存在时返回 400；北极星不可达等上游故障返回 500。
+//
+//	@ID			UpdateImportedPolaris
+//	@Summary	修改从现有引入的北极星服务
+//	@Tags		polaris-config
+//	@Accept		json
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID	path		string										true	"应用 ID"
+//	@Param		body	body		serializer.UpdateImportedPolarisInput	true	"请求体"
+//	@Success	200		{object}	nil
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/deps/polaris-configs/imported-service [put]
+func (h *Handler) UpdateImportedPolaris(c *gin.Context) {
+	var uriInput serializer.AppURIInput
+	var jsonInput serializer.UpdateImportedPolarisInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &jsonInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	enabled := *jsonInput.EnableWeightFactor
+	if err = h.polarisConfigService().UpdateImportedPolaris(
+		ctx, app.ID, jsonInput.PolarisName, jsonInput.PolarisNamespace, jsonInput.PolarisToken, enabled,
+	); err != nil {
+		if polaris.IsClientRequestError(err) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, err.Error()))
+			return
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update polaris weight factor"))
+		return
+	}
+
+	go audit.AddOperationRecordAsync(
+		c.Request.Context(),
+		audit.OperationTypeUpdate,
+		audit.ResourceTypeApp,
+		app.ID,
+		audit.WithAttribute(audit.AttributePolaris),
+		audit.WithDataAfter(map[string]any{
+			"polarisName":        jsonInput.PolarisName,
+			"polarisNamespace":   jsonInput.PolarisNamespace,
+			"enableWeightFactor": enabled,
+		}),
+		audit.WithWorkspaceID(app.WorkspaceID),
+		audit.WithAppID(app.ID),
+	)
+
+	ginutils.OK(c, nil)
+}
+
 // PutEnvWeight 更新指定环境的北极星实例权重。
 //
 //	@ID			PutEnvWeight
