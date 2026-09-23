@@ -280,13 +280,12 @@ func (p *Provider) updateService(
 	return err
 }
 
-// GetRemoteService 拉取北极星线上服务。先 GET 确认服务存在，再以 Token 做空 PUT
-// 校验可写（不改 owners/metadata）。
-func (p *Provider) GetRemoteService(ctx context.Context, name, namespace, token string) (*RemoteService, error) {
-	if name == "" || namespace == "" || token == "" {
-		return nil, errors.New("name, namespace and token are required")
+// GetAndValidateService 拉取北极星线上服务并验证 Token 是否合法，不会实际修改服务内容
+func (p *Provider) GetAndValidateService(ctx context.Context, name, namespace, token string) (*RemoteService, error) {
+	if token == "" {
+		return nil, errors.New("token is required")
 	}
-	svc, err := p.getService(ctx, name, namespace)
+	svc, err := p.GetService(ctx, name, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -296,8 +295,11 @@ func (p *Provider) GetRemoteService(ctx context.Context, name, namespace, token 
 	return svc, nil
 }
 
-// getService 查询北极星服务完整对象。
-func (p *Provider) getService(ctx context.Context, name, namespace string) (*RemoteService, error) {
+// GetService 只读查询北极星服务完整对象，不校验 Token。
+func (p *Provider) GetService(ctx context.Context, name, namespace string) (*RemoteService, error) {
+	if name == "" || namespace == "" {
+		return nil, errors.New("name and namespace are required")
+	}
 	query := url.Values{}
 	query.Set("name", name)
 	query.Set("namespace", namespace)
@@ -313,7 +315,7 @@ func (p *Provider) getService(ctx context.Context, name, namespace string) (*Rem
 
 // getServiceMetadata 查询北极星服务当前 metadata，供更新时合并。
 func (p *Provider) getServiceMetadata(ctx context.Context, name, namespace string) (map[string]string, error) {
-	svc, err := p.getService(ctx, name, namespace)
+	svc, err := p.GetService(ctx, name, namespace)
 	if err != nil {
 		return nil, err
 	}

@@ -23783,7 +23783,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "enableWeightFactor": {
-                    "description": "是否启用权重因子，默认 false。\n开启后北极星按实例机型标记权重因子，\n各环境还需单独开启动态权重才会真正按机型分流。\n平台自动生成时随创建服务写入；从现有引入时该值仅记录线上状态，\n实际开关请调用 PUT imported-service 接口修改。",
+                    "description": "是否启用权重因子。仅 createNewService 为 true 时写入新建的北极星服务，不落本地。\n从现有引入时忽略该字段，当前值向北极星读取。",
                     "type": "boolean"
                 },
                 "instanceKey": {
@@ -28947,7 +28947,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "enableWeightFactor": {
-                    "description": "是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值。\n未传表示不改。平台创建的服务随配置写回；从现有引入的服务用 Token 写回已有北极星服务。",
+                    "description": "是否启用权重因子。传入时写回北极星，不落本地；未传表示不改。\n平台创建的服务走依赖服务实例，从现有引入的服务用 Token 写回。",
                     "type": "boolean"
                 },
                 "instanceKey": {
@@ -29183,7 +29183,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "enableWeightFactor": {
-                    "description": "是否启用权重因子（开启后才能为单个环境开启动态权重）",
+                    "description": "是否启用权重因子。向北极星实时读取，读不到时为 null。\n开启后才能为单个环境开启动态权重；该值不参与 CR 组装。",
                     "type": "boolean"
                 },
                 "envDynamicWeights": {

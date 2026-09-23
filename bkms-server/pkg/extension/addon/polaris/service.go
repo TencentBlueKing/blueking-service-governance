@@ -106,8 +106,8 @@ func (s *PolarisConfigService) Create(
 		config.ScopeEnvNames, config.EnvWeights, config.EnvDynamicWeights, nil, config.RegisterMode,
 	)
 
-	// 导入路径不写北极星：EnableWeightFactor 只是线上 metadata 的镜像，
-	// 实际开关由 UpdateImportedPolaris 显式修改。
+	// 权重因子只存在于北极星。平台创建已在上面写入；导入路径忽略请求里的值。
+	config.EnableWeightFactor = false
 	if err := s.polarisConfigStore.Create(ctx, config); err != nil {
 		return err
 	}
@@ -127,50 +127,48 @@ func (s *PolarisConfigService) GetImportedService(
 	return s.platformManager.GetImportedService(ctx, name, namespace, token)
 }
 
-// UpdateImportedPolaris 修改已有北极星服务。目前只写权重因子开关，成功后刷新本地镜像。
-// 本地镜像仅用于展示，刷新失败不影响北极星侧的结果。
+// UpdateImportedPolaris 修改已有北极星服务。目前只写权重因子开关，不回写本地配置。
 func (s *PolarisConfigService) UpdateImportedPolaris(
 	ctx context.Context,
-	appID, name, namespace, token string,
+	name, namespace, token string,
 	enabled bool,
 ) error {
-	if err := s.platformManager.UpdateImportedService(
+	return s.platformManager.UpdateImportedService(
 		ctx, name, namespace, token, &UpdateServiceParams{EnableWeightFactor: &enabled},
-	); err != nil {
-		return err
-	}
-	if err := s.refreshImportedWeightFactor(ctx, appID, name, namespace, enabled); err != nil {
-		log.Errorf(ctx, "refresh local weight factor mirror failed, app=%s polaris=%s/%s: %v",
-			appID, namespace, name, err)
-	}
-	return nil
+	)
 }
 
-// refreshImportedWeightFactor 把线上开关同步到应用下所有引用该北极星服务的导入配置。
-func (s *PolarisConfigService) refreshImportedWeightFactor(
+// GetRemoteServices 按配置名返回对应的北极星线上服务，同一 namespace/name 只查一次。
+// 查不到的配置对应值为 nil，不中断其余配置。
+func (s *PolarisConfigService) GetRemoteServices(
 	ctx context.Context,
-	appID, name, namespace string,
-	enabled bool,
-) error {
-	configs, err := s.polarisConfigStore.ListByApp(ctx, appID)
-	if err != nil {
-		return errors.Wrap(err, "list polaris configs")
+	configs []*PolarisConfig,
+) map[string]*RemotePolarisService {
+	type serviceKey struct {
+		namespace string
+		name      string
 	}
-	var errs []error
+	cached := make(map[serviceKey]*RemotePolarisService, len(configs))
+	out := make(map[string]*RemotePolarisService, len(configs))
 	for _, config := range configs {
-		if !config.DepSvcInstID.IsZero() ||
-			config.PolarisName != name ||
-			config.PolarisNamespace != namespace ||
-			config.EnableWeightFactor == enabled {
+		if config == nil || config.Name == "" {
 			continue
 		}
-		if err = s.polarisConfigStore.Update(ctx, appID, config.Name, &ConfigUpdateData{
-			EnableWeightFactor: &enabled,
-		}); err != nil {
-			errs = append(errs, errors.Wrapf(err, "config %s", config.Name))
+		key := serviceKey{namespace: config.PolarisNamespace, name: config.PolarisName}
+		svc, ok := cached[key]
+		if !ok {
+			var err error
+			svc, err = s.platformManager.GetService(ctx, config.PolarisName, config.PolarisNamespace)
+			if err != nil {
+				log.Errorf(ctx, "get polaris service failed, polaris=%s/%s: %v",
+					config.PolarisNamespace, config.PolarisName, err)
+				svc = nil
+			}
+			cached[key] = svc
 		}
+		out[config.Name] = svc
 	}
-	return stderrors.Join(errs...)
+	return out
 }
 
 // Update 更新北极星配置
@@ -485,7 +483,6 @@ func (s *PolarisConfigService) syncPolarisService(
 		}
 		return s.UpdateImportedPolaris(
 			ctx,
-			oldConfig.AppID,
 			oldConfig.PolarisName,
 			oldConfig.PolarisNamespace,
 			token,

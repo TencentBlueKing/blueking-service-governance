@@ -342,7 +342,7 @@ var _ = Describe("Test polaris provider", func() {
 				Reply(200).
 				JSON(map[string]any{})
 
-			svc, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
+			svc, err := p.GetAndValidateService(ctx, "test-service", "test-namespace", "test-token")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(svc.Name).To(Equal("test-service"))
 			Expect(svc.Namespace).To(Equal("test-namespace"))
@@ -361,7 +361,7 @@ var _ = Describe("Test polaris provider", func() {
 				Reply(200).
 				JSON(map[string]any{"services": []map[string]any{}})
 
-			_, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
+			_, err := p.GetAndValidateService(ctx, "test-service", "test-namespace", "test-token")
 			Expect(err).To(MatchError(ErrServiceNotFound))
 		})
 	})
@@ -385,7 +385,7 @@ var _ = Describe("Test polaris provider", func() {
 				Reply(401).
 				JSON(map[string]any{"info": "invalid token"})
 
-			_, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "bad-token")
+			_, err := p.GetAndValidateService(ctx, "test-service", "test-namespace", "bad-token")
 			Expect(err).To(MatchError(ErrUnauthorized))
 			Expect(err.Error()).To(ContainSubstring("invalid token"))
 		})
@@ -400,7 +400,7 @@ var _ = Describe("Test polaris provider", func() {
 				Reply(500).
 				JSON(map[string]any{"info": "internal error"})
 
-			_, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
+			_, err := p.GetAndValidateService(ctx, "test-service", "test-namespace", "test-token")
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, ErrUnauthorized)).To(BeFalse())
 			Expect(err.Error()).To(ContainSubstring("internal error"))
@@ -431,7 +431,7 @@ var _ = Describe("Test polaris provider", func() {
 				Reply(200).
 				JSON(map[string]any{})
 
-			svc, err := p.GetRemoteService(ctx, "test-service", "test-namespace", "test-token")
+			svc, err := p.GetAndValidateService(ctx, "test-service", "test-namespace", "test-token")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(svc.Metadata).To(HaveKeyWithValue("internal-enable-dynamic-weight", "true"))
 		})

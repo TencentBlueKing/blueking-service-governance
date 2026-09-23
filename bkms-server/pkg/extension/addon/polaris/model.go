@@ -83,9 +83,9 @@ type Properties struct {
 	KeepNotReadyPod bool `bson:"keepNotReadyPod"`
 	// EnableHealthCheck 是否启用健康检查
 	EnableHealthCheck bool `bson:"enableHealthCheck"`
-	// EnableWeightFactor 该北极星配置是否启用权重因子，决定用户能否为单个环境开启动态权重。
-	// 具体哪些环境开由 EnvDynamicWeights 记录，CR 上的开关直接取后者
-	EnableWeightFactor bool `bson:"enableWeightFactor"`
+	// EnableWeightFactor 仅在平台创建北极星服务时随请求带入，用来写服务 metadata。
+	// 不落库：线上开关以北极星为准，接口返回时实时查询。
+	EnableWeightFactor bool `bson:"-"`
 	// ServiceLabels 服务标签
 	ServiceLabels map[string]string `bson:"serviceLabels"`
 	// Operator 操作人
@@ -194,11 +194,12 @@ func (c *PolarisConfig) GetVars() []ConfigVar {
 
 // ConfigUpdateData 定义了更新 PolarisConfig 时允许修改的数据
 type ConfigUpdateData struct {
-	InstanceKey        *string
-	ServicePort        *int32
-	Direct             *bool
-	KeepNotReadyPod    *bool
-	EnableHealthCheck  *bool
+	InstanceKey       *string
+	ServicePort       *int32
+	Direct            *bool
+	KeepNotReadyPod   *bool
+	EnableHealthCheck *bool
+	// EnableWeightFactor 非 nil 时写回北极星，不写入本地配置。
 	EnableWeightFactor *bool
 	ServiceLabels      map[string]string
 	// ScopeEnvNames 生效环境列表；nil 表示不更新，非 nil（含空切片）表示覆盖

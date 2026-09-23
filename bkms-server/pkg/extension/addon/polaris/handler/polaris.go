@@ -20,6 +20,7 @@
 package handler
 
 import (
+	"context"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -116,6 +117,7 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 		)
 		return new(serializer.PolarisConfigOutputObj).FromModel(*config, warnings)
 	})
+	h.fillWithRemote(ctx, configs, outputList)
 
 	ginutils.OK(c, serializer.ListAppPolarisConfigsOutput{Data: outputList})
 }
@@ -225,7 +227,6 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-
 	ctx := c.Request.Context()
 	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
 	if err != nil {
@@ -246,7 +247,7 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		return
 	}
 
-	updateData := &polaris.ConfigUpdateData{
+	updatedConfig, updateErr := h.polarisConfigService().Update(ctx, app, existingConfig, &polaris.ConfigUpdateData{
 		InstanceKey:        jsonInput.InstanceKey,
 		ServicePort:        jsonInput.ServicePort,
 		Direct:             jsonInput.Direct,
@@ -257,9 +258,7 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		ScopeEnvNames:      jsonInput.ScopeEnvNames,
 		PolarisToken:       jsonInput.PolarisToken,
 		Operator:           jsonInput.Operator,
-	}
-
-	updatedConfig, updateErr := h.polarisConfigService().Update(ctx, app, existingConfig, updateData)
+	})
 	// 集群同步失败时配置已经落库，仍需记录审计并把失败原因返回给调用方
 	if updateErr != nil && !errors.Is(updateErr, polaris.ErrClusterSyncFailed) {
 		if errors.Is(updateErr, polaris.ErrConfigNotFound) {
@@ -288,7 +287,6 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
 	)
-
 	if updateErr != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
 			updateErr, bkerrs.ErrCodeInternalServerError,
@@ -296,8 +294,11 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		))
 		return
 	}
-
-	ginutils.OK(c, new(serializer.PatchAppPolarisConfigOutput).FromModel(updatedConfig))
+	output := new(serializer.PatchAppPolarisConfigOutput).FromModel(updatedConfig)
+	h.fillWithRemote(
+		ctx, []*polaris.PolarisConfig{updatedConfig}, []*serializer.PolarisConfigOutputObj{output.Data},
+	)
+	ginutils.OK(c, output)
 }
 
 // DeleteAppPolarisConfig 删除北极星配置。
@@ -550,7 +551,7 @@ func (h *Handler) UpdateImportedPolaris(c *gin.Context) {
 
 	enabled := *jsonInput.EnableWeightFactor
 	if err = h.polarisConfigService().UpdateImportedPolaris(
-		ctx, app.ID, jsonInput.PolarisName, jsonInput.PolarisNamespace, jsonInput.PolarisToken, enabled,
+		ctx, jsonInput.PolarisName, jsonInput.PolarisNamespace, jsonInput.PolarisToken, enabled,
 	); err != nil {
 		if polaris.IsClientRequestError(err) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, err.Error()))
@@ -657,7 +658,11 @@ func (h *Handler) PutEnvWeight(c *gin.Context) {
 		audit.WithAppID(app.ID),
 	)
 
-	ginutils.OK(c, new(serializer.PutEnvWeightOutput).FromModel(updatedConfig))
+	output := new(serializer.PutEnvWeightOutput).FromModel(updatedConfig)
+	h.fillWithRemote(
+		ctx, []*polaris.PolarisConfig{updatedConfig}, []*serializer.PolarisConfigOutputObj{output.Data},
+	)
+	ginutils.OK(c, output)
 }
 
 // GetEnvInstanceStats 获取北极星配置在各环境下的实例统计。
@@ -710,4 +715,23 @@ func (h *Handler) GetEnvInstanceStats(c *gin.Context) {
 	}
 
 	ginutils.OK(c, new(serializer.GetEnvInstanceStatsOutput).FromModel(stats))
+}
+
+// fillWithRemote 用北极星线上服务填充以北极星为准的字段，查不到时保持为空。
+func (h *Handler) fillWithRemote(
+	ctx context.Context,
+	configs []*polaris.PolarisConfig,
+	outputs []*serializer.PolarisConfigOutputObj,
+) {
+	services := h.polarisConfigService().GetRemoteServices(ctx, configs)
+	for _, out := range outputs {
+		if out == nil {
+			continue
+		}
+		svc := services[out.Name]
+		if svc == nil {
+			continue
+		}
+		out.EnableWeightFactor = lo.ToPtr(svc.EnableWeightFactor)
+	}
 }

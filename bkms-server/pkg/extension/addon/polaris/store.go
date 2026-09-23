@@ -191,10 +191,6 @@ func (s *PolarisConfigStoreMongo) Update(
 		updateSet["enableHealthCheck"] = *updateData.EnableHealthCheck
 		needUpdate = true
 	}
-	if updateData.EnableWeightFactor != nil {
-		updateSet["enableWeightFactor"] = *updateData.EnableWeightFactor
-		needUpdate = true
-	}
 	if updateData.ServiceLabels != nil {
 		updateSet["serviceLabels"] = updateData.ServiceLabels
 		needUpdate = true

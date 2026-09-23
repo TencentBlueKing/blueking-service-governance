@@ -87,15 +87,14 @@ var _ = Describe("PolarisConfigOutputObj", func() {
 			Expect(out.EnvDynamicWeights).To(BeEmpty())
 		})
 
-		It("should echo both levels of the dynamic weight switches", func() {
+		It("should echo environment dynamic weight switches", func() {
 			config := polaris.PolarisConfig{
 				ScopeEnvNames:     []string{"dev", "staging"},
-				Properties:        polaris.Properties{EnableWeightFactor: true},
 				EnvDynamicWeights: map[string]bool{"dev": true, "staging": false},
 			}
 
 			out := new(serializer.PolarisConfigOutputObj).FromModel(config, nil)
-			Expect(out.EnableWeightFactor).To(BeTrue())
+			Expect(out.EnableWeightFactor).To(BeNil())
 			Expect(out.EnvDynamicWeights).To(Equal(map[string]bool{"dev": true, "staging": false}))
 		})
 

@@ -34,7 +34,7 @@ tests {
   });
 
   test("should persist the dynamic weight switch alongside the weight", () => {
-    expect(res.body.data.enableWeightFactor).to.equal(false);
+    expect(res.body.data.enableWeightFactor).to.equal(null);
     expect(res.body.data.envDynamicWeights).to.deep.equal({ test: false });
   });
 }

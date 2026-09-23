@@ -186,6 +186,25 @@ func (m *PolarisPlatformManager) UpdateService(
 	return nil
 }
 
+// GetService 只读查询北极星线上服务信息，不校验 Token。
+func (m *PolarisPlatformManager) GetService(
+	ctx context.Context,
+	name, namespace string,
+) (*RemotePolarisService, error) {
+	ctx, cancel := context.WithTimeout(ctx, importedServiceCheckTimeout)
+	defer cancel()
+
+	p, err := m.importedProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
+	svc, err := p.GetService(ctx, name, namespace)
+	if err != nil {
+		return nil, wrapImportedPolarisErr(err, "get polaris service")
+	}
+	return toRemotePolarisService(svc), nil
+}
+
 // GetImportedService 查询导入北极星服务：服务存在且 Token 可写，并返回线上服务信息。
 func (m *PolarisPlatformManager) GetImportedService(
 	ctx context.Context,
@@ -198,7 +217,7 @@ func (m *PolarisPlatformManager) GetImportedService(
 	if err != nil {
 		return nil, err
 	}
-	svc, err := p.GetRemoteService(ctx, name, namespace, token)
+	svc, err := p.GetAndValidateService(ctx, name, namespace, token)
 	if err != nil {
 		return nil, wrapImportedPolarisErr(err, "get imported polaris service")
 	}

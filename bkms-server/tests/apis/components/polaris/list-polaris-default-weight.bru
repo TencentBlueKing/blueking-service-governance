@@ -22,10 +22,10 @@ tests {
     expect(config.envWeights).to.deep.equal({"env-1": 100});
   });
 
-  test("should echo the weight factor switch without pre-creating env switches", () => {
+  test("should leave the weight factor empty when polaris cannot be read", () => {
     const config = res.body.data.find(c => c.name === bru.getVar('testPolarisConfigName'));
     expect(config).to.not.be.undefined;
-    expect(config.enableWeightFactor).to.equal(false);
+    expect(config.enableWeightFactor).to.equal(null);
     expect(config.envDynamicWeights).to.deep.equal({});
   });
 }

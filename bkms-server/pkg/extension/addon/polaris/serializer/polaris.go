@@ -117,8 +117,9 @@ type PolarisConfigOutputObj struct {
 	KeepNotReadyPod bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查
 	EnableHealthCheck bool `json:"enableHealthCheck"`
-	// 是否启用权重因子（开启后才能为单个环境开启动态权重）
-	EnableWeightFactor bool `json:"enableWeightFactor"`
+	// 是否启用权重因子。向北极星实时读取，读不到时为 null。
+	// 开启后才能为单个环境开启动态权重；该值不参与 CR 组装。
+	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
 	// 注册模式：immediate（绑定后立即注册）| on_deploy（等部署后注册）
@@ -178,28 +179,27 @@ func (o *PolarisConfigOutputObj) FromModel(config polaris.PolarisConfig, warning
 		envDynamicWeights = map[string]bool{}
 	}
 	*o = PolarisConfigOutputObj{
-		AppID:              config.AppID,
-		Name:               config.Name,
-		DepSvcInstID:       depSvcInstIDToString(config.DepSvcInstID),
-		InstanceKey:        config.InstanceKey,
-		PolarisName:        config.PolarisName,
-		PolarisNamespace:   config.PolarisNamespace,
-		PolarisToken:       config.PolarisToken,
-		ServicePort:        config.ServicePort,
-		Direct:             config.Direct,
-		KeepNotReadyPod:    config.KeepNotReadyPod,
-		EnableHealthCheck:  config.EnableHealthCheck,
-		EnableWeightFactor: config.EnableWeightFactor,
-		ServiceLabels:      config.ServiceLabels,
-		RegisterMode:       registerModeOutput(config.RegisterMode),
-		ScopeEnvNames:      config.ScopeEnvNames,
-		Operator:           config.Operator,
-		CreatedAt:          config.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:          config.UpdatedAt.Format(time.RFC3339),
-		Warnings:           warnings,
-		EnvStates:          toEnvStateOutputs(&config),
-		EnvWeights:         envWeights,
-		EnvDynamicWeights:  envDynamicWeights,
+		AppID:             config.AppID,
+		Name:              config.Name,
+		DepSvcInstID:      depSvcInstIDToString(config.DepSvcInstID),
+		InstanceKey:       config.InstanceKey,
+		PolarisName:       config.PolarisName,
+		PolarisNamespace:  config.PolarisNamespace,
+		PolarisToken:      config.PolarisToken,
+		ServicePort:       config.ServicePort,
+		Direct:            config.Direct,
+		KeepNotReadyPod:   config.KeepNotReadyPod,
+		EnableHealthCheck: config.EnableHealthCheck,
+		ServiceLabels:     config.ServiceLabels,
+		RegisterMode:      registerModeOutput(config.RegisterMode),
+		ScopeEnvNames:     config.ScopeEnvNames,
+		Operator:          config.Operator,
+		CreatedAt:         config.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:         config.UpdatedAt.Format(time.RFC3339),
+		Warnings:          warnings,
+		EnvStates:         toEnvStateOutputs(&config),
+		EnvWeights:        envWeights,
+		EnvDynamicWeights: envDynamicWeights,
 	}
 	return o
 }
@@ -278,11 +278,8 @@ type CreateAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查，默认 false
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
-	// 是否启用权重因子，默认 false。
-	// 开启后北极星按实例机型标记权重因子，
-	// 各环境还需单独开启动态权重才会真正按机型分流。
-	// 平台自动生成时随创建服务写入；从现有引入时该值仅记录线上状态，
-	// 实际开关请调用 PUT imported-service 接口修改。
+	// 是否启用权重因子。仅 createNewService 为 true 时写入新建的北极星服务，不落本地。
+	// 从现有引入时忽略该字段，当前值向北极星读取。
 	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签
 	ServiceLabels map[string]string `json:"serviceLabels"`
@@ -342,8 +339,8 @@ type PatchAppPolarisConfigInput struct {
 	KeepNotReadyPod *bool `json:"keepNotReadyPod"`
 	// 是否启用健康检查（可选更新）
 	EnableHealthCheck *bool `json:"enableHealthCheck"`
-	// 是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值。
-	// 未传表示不改。平台创建的服务随配置写回；从现有引入的服务用 Token 写回已有北极星服务。
+	// 是否启用权重因子。传入时写回北极星，不落本地；未传表示不改。
+	// 平台创建的服务走依赖服务实例，从现有引入的服务用 Token 写回。
 	EnableWeightFactor *bool `json:"enableWeightFactor"`
 	// 服务标签（可选更新，传入时全量替换）
 	ServiceLabels map[string]string `json:"serviceLabels"`
