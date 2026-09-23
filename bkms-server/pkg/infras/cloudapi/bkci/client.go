@@ -42,9 +42,9 @@ type Client interface {
 
 	// ------------------------------------------ 蓝盾代码库 & OAuth API ------------------------------------------
 
-	// ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表
+	// ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表。
 	ListOAuthGitProjects(ctx context.Context, projectCode, keyword string) ([]GitProject, error)
-	// GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址
+	// GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址。
 	GetOAuthUrl(ctx context.Context, projectCode string) (string, error)
 
 	// ------------------------------------------ 蓝盾凭证管理 API ------------------------------------------
@@ -90,15 +90,15 @@ type Client interface {
 	ListRepository(
 		ctx context.Context, projectCode, repoType string, page, pageSize int64,
 	) (int64, []Repository, error)
-	// GetRepository 获取蓝盾代码库详情
+	// GetRepository 获取蓝盾代码库详情。
 	GetRepository(ctx context.Context, projectCode, repoHashID string) (*Repository, error)
-	// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID（目前只支持 codeGit + OAuth）
-	CreateRepository(ctx context.Context, projectCode, repoURL, repoAlias string) (string, error)
-	// ListRepositoryBranches 获取代码库分支列表
+	// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID。
+	CreateRepository(ctx context.Context, projectCode string, opts CreateRepositoryOptions) (string, error)
+	// ListRepositoryBranches 获取代码库分支列表。
 	ListRepositoryBranches(
 		ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
 	) ([]RepositoryRef, error)
-	// ListRepositoryTags 获取代码库标签列表
+	// ListRepositoryTags 获取代码库标签列表。
 	ListRepositoryTags(
 		ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
 	) ([]RepositoryRef, error)

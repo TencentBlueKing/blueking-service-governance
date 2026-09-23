@@ -99,6 +99,10 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 		return
 	}
 
+	// Debug: 定位 apm service name 解析问题，记录编译后的框架配置内容。
+	log.Infof(ctx, "apm-service-name debug: app=%s env=%s app-type=%s compiled-content=%s",
+		app.ID, env.Name, app.Type, frameworkFile.Content)
+
 	serviceName, svcErr := bkmmodel.GetApmServiceName(app.Type, frameworkFile.Content, appEnvVars.ToMap())
 	if svcErr != nil {
 		log.Errorf(ctx, "get apm service name error for app %s env %s: %v", app.ID, env.Name, svcErr)

@@ -37,6 +37,52 @@ const (
 	PageSizeForAllItems = 1000
 )
 
+// 蓝盾代码库类型
+const (
+	// RepoTypeCodeGit git 代码库
+	RepoTypeCodeGit = "codeGit"
+	// RepoTypeCodeSvn 通用 SVN 代码库
+	RepoTypeCodeSvn = "codeSvn"
+	// RepoTypeCodeGitlab 通用 GitLab 代码库
+	RepoTypeCodeGitlab = "codeGitLab"
+	// RepoTypeGithub GitHub 代码库
+	RepoTypeGithub = "github"
+	// RepoTypeCodeTGit TGit 代码库
+	RepoTypeCodeTGit = "codeTGit"
+	// RepoTypeCodeP4 Perforce 代码库
+	RepoTypeCodeP4 = "codeP4"
+	// RepoTypeScmGit scm git 代码库
+	RepoTypeScmGit = "scmGit"
+	// RepoTypeScmSvn scm svn 代码库
+	RepoTypeScmSvn = "scmSvn"
+)
+
+// 蓝盾代码库授权方式
+const (
+	// AuthTypeOAuth OAuth 授权
+	AuthTypeOAuth = "OAUTH"
+	// AuthTypeSSH SSH 凭证
+	AuthTypeSSH = "SSH"
+	// AuthTypeHTTP HTTP 凭证
+	AuthTypeHTTP = "HTTP"
+	// AuthTypeHTTPS HTTPS 凭证
+	AuthTypeHTTPS = "HTTPS"
+)
+
+// CreateRepositoryOptions 创建蓝盾代码库的参数
+type CreateRepositoryOptions struct {
+	// RepoType 代码库类型（请求体 @type 字段）
+	RepoType string
+	// URL 代码库地址
+	URL string
+	// Alias 代码库别名
+	Alias string
+	// AuthType 授权方式，留空默认 OAuth
+	AuthType string
+	// CredentialID 访问凭据 ID，凭证方式使用
+	CredentialID string
+}
+
 // Project 蓝盾项目
 type Project struct {
 	ID            string

@@ -368,6 +368,16 @@ type TaskPollerConfig struct {
 	DeployStatus PollConfig
 }
 
+// Edition 版本形态差异控制配置
+type Edition struct {
+	// BkciPipelineSearchByName 蓝盾（bkci）流水线搜索使用 search_by_name 接口
+	BkciPipelineSearchByName bool
+	// BkciOAuthGitDisabled 蓝盾（bkci）禁用 OAuth 授权 Git 项目
+	BkciOAuthGitDisabled bool
+	// BkciRepositoryQueryDisabled 蓝盾（bkci）禁用代码库详情/分支/标签查询
+	BkciRepositoryQueryDisabled bool
+}
+
 // --------------------------- 开发环境专用 ---------------------------
 
 // DevConfig 包含开发相关的配置项
@@ -460,6 +470,8 @@ type Config struct {
 	ImageBuild ImageBuildConfig
 	// 任务轮询器
 	TaskPoller TaskPollerConfig
+	// 平台特性开关
+	Edition Edition
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用

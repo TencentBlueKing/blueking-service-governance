@@ -370,3 +370,11 @@ svcConf:
       timeout: 1200
       # 轮询间隔（单位：秒）
       interval: 15
+  # 版本形态差异控制配置
+  edition:
+    # 蓝盾（bkci）流水线搜索使用 search_by_name 接口
+    bkciPipelineSearchByName: false
+    # 蓝盾（bkci）禁用 OAuth 授权 Git 项目
+    bkciOAuthGitDisabled: false
+    # 蓝盾（bkci）禁用代码库详情/分支/标签查询
+    bkciRepositoryQueryDisabled: false
