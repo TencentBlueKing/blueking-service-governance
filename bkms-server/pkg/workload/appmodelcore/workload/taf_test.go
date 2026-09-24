@@ -57,7 +57,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 	var buildConfigStore build.ConfigStore
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = dbfactory.WithDefaultTenant(context.Background())
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsapp.FxModule,

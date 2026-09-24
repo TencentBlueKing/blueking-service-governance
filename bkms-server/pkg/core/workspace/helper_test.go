@@ -32,6 +32,7 @@ import (
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 )
 
@@ -42,7 +43,7 @@ var _ = Describe("ListSortByOpTime", func() {
 
 	BeforeEach(func() {
 		var err error
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 
 		wsStore, err = bkmsworkspace.NewWorkspaceStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())

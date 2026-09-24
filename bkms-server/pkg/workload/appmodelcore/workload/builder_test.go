@@ -57,7 +57,7 @@ var _ = Describe("Builder", func() {
 	var builderSvc *workload.BuilderService
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = dbfactory.WithDefaultTenant(context.Background())
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsapp.FxModule,

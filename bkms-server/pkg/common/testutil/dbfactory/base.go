@@ -34,12 +34,21 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
 var validate = validator.New()
 
-// Workspace 创建一个已持久化的测试用 Workspace，其名称和 ID 使用随机后缀避免冲突
+// WithDefaultTenant 给测试 ctx 补上默认租户，已有租户则原样返回
+func WithDefaultTenant(ctx context.Context) context.Context {
+	if _, ok := tenant.GetTenantID(ctx); ok {
+		return ctx
+	}
+	return tenant.WithTenantID(ctx, tenant.DefaultTenantID)
+}
+
+// Workspace 创建一个已持久化的测试用 Workspace，其名称和 ID 使用随机后缀避免冲突。
 func Workspace(ctx context.Context, store bkmsworkspace.WorkspaceStore) *bkmsworkspace.Workspace {
 	workspaceName := "test-workspace-" + stringx.Random(6)
 	ws := &bkmsworkspace.Workspace{

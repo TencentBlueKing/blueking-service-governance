@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	dbtenant "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	workspaceadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin/serializer"
@@ -145,7 +146,8 @@ func (h *Handler) RevokeWorkspaceAdmin(c *gin.Context) {
 
 func (h *Handler) workspaceAdminService() *workspaceadmin.Service {
 	return workspaceadmin.NewService(
-		h.registry.WorkspaceStore,
+		// 平台管理跨租户使用
+		h.registry.WorkspaceStore.Scopes(dbtenant.AllTenants()),
 		h.registry.TempAdminRecordStore,
 		perm.NewManager(),
 	)

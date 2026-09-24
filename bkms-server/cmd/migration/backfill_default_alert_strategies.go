@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	dbtenant "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
@@ -91,7 +92,7 @@ func NewBackfillDefaultAlertStrategiesCmd() *cobra.Command {
 			operator := auth.MustGetUser(ctx).ID
 			summary, err := runBackfillDefaultAlertStrategies(ctx, backfillDefaultAlertStrategiesDeps{
 				appStore:       storereg.G().AppStore,
-				workspaceStore: storereg.G().WorkspaceStore,
+				workspaceStore: storereg.G().WorkspaceStore.Scopes(dbtenant.AllTenants()),
 				strategyStore:  storereg.G().AlertStrategyStore,
 				resolveNoticeGroupIDs: func(ctx context.Context, ws *workspace.Workspace) ([]int64, error) {
 					return usergroup.ResolveDefaultAlertNoticeGroupIDs(

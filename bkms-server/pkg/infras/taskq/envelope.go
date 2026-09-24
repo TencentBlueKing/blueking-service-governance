@@ -24,12 +24,14 @@ import (
 	"errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 // payloadEnvelope 把身份与业务 Args 分开放进 asynq payload
 // 字段名前缀 `_` 避免与业务 Args 字段冲突；身份禁止放进业务 Args
 type payloadEnvelope struct {
 	AuthUser auth.User       `json:"_authUser"`
+	TenantID string          `json:"_tenantId,omitempty"`
 	Args     json.RawMessage `json:"_args"`
 }
 
@@ -42,9 +44,18 @@ func userFromContext(ctx context.Context) (auth.User, error) {
 	return user, nil
 }
 
-// wrapEnvelope 把用户身份与业务 Args JSON 打成 envelope，身份不进入业务 Args
-func wrapEnvelope(user auth.User, argsPayload []byte) ([]byte, error) {
-	return json.Marshal(payloadEnvelope{AuthUser: user, Args: argsPayload})
+// wrapEnvelope 把用户身份、租户上下文与业务 Args JSON 打成 envelope，身份不进入业务 Args。
+// ctx 没有租户时直接失败，避免任务入队后到 worker 里才暴露缺租户。
+func wrapEnvelope(ctx context.Context, user auth.User, argsPayload []byte) ([]byte, error) {
+	tenantID, ok := tenant.GetTenantID(ctx)
+	if !ok || tenantID == "" {
+		return nil, errors.New("taskq: tenant id not found in context")
+	}
+	return json.Marshal(payloadEnvelope{
+		AuthUser: user,
+		TenantID: tenantID,
+		Args:     argsPayload,
+	})
 }
 
 // restoreEnvelope 从 envelope 恢复用户到 ctx，并抽出业务 Args JSON
@@ -57,5 +68,11 @@ func restoreEnvelope(ctx context.Context, payload []byte) (context.Context, []by
 	if env.AuthUser.ID != "" {
 		ctx = auth.WithUser(ctx, env.AuthUser)
 	}
+	// 升级前已入队的任务没有 _tenantId。存量空间已回填为 default，这里回落，避免重试耗尽。
+	tenantID := env.TenantID
+	if tenantID == "" {
+		tenantID = tenant.DefaultTenantID
+	}
+	ctx = tenant.WithTenantID(ctx, tenantID)
 	return ctx, env.Args
 }

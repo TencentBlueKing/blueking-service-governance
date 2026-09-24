@@ -63,7 +63,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 	var polarisConfigStore polaris.PolarisConfigStore
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = dbfactory.WithDefaultTenant(context.Background())
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsapp.FxModule,

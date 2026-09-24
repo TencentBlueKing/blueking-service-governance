@@ -34,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bscpapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	dbtenant "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/tenant"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
@@ -87,7 +88,7 @@ func runListBscpProjects(ctx context.Context, srvCfg, workspaceID, operator stri
 	storereg.Init(ctx)
 	reg := storereg.G()
 
-	ws, err := reg.WorkspaceStore.Get(ctx, workspaceID)
+	ws, err := reg.WorkspaceStore.Scopes(dbtenant.AllTenants()).Get(ctx, workspaceID)
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", workspaceID)
 	}

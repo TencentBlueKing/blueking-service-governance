@@ -99,7 +99,7 @@ type Task struct {
 //  2. Task 自带默认(来自 TaskType 定义时传入的 asynq.Option);
 //  3. 本次调用 opts —— 最后, 覆盖以上。
 //
-// ctx 必须带已认证用户；身份写入 payload envelope，不进入业务 Args。
+// ctx 必须带已认证用户和租户；身份与租户写入 payload envelope，不进入业务 Args。
 // 去重冲突(同名 + 同负载在途)视为正常, 返回 nil。
 func Enqueue(ctx context.Context, t *Task, opts ...asynq.Option) error {
 	if t == nil {
@@ -111,7 +111,7 @@ func Enqueue(ctx context.Context, t *Task, opts ...asynq.Option) error {
 		return err
 	}
 
-	payload, err := wrapEnvelope(user, t.payload)
+	payload, err := wrapEnvelope(ctx, user, t.payload)
 	if err != nil {
 		return err
 	}

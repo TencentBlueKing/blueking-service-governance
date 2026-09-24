@@ -28,6 +28,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	dbtenant "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/tenant"
 )
 
 // 存储工作空间数据的 MongoDB 集合名称
@@ -56,6 +58,10 @@ type ListPageOptions struct {
 
 // WorkspaceStore 是用于管理工作空间的存储接口
 type WorkspaceStore interface {
+	// Scopes 返回按给定范围派生的 store，不修改当前 store。
+	// 默认 store 从 ctx 读取租户；WithTenant 派生出只访问指定租户的 store，AllTenants 跨租户访问。
+	Scopes(scopes ...dbtenant.Scope) WorkspaceStore
+
 	// List 获取工作空间列表，由于每个用户的工作空间数量有限，不设分页
 	List(ctx context.Context, opts *ListOptions) ([]Workspace, error)
 
@@ -82,7 +88,7 @@ var _ WorkspaceStore = &WorkspaceStoreMongo{}
 
 // WorkspaceStoreMongo 是 WorkspaceStore 接口的 MongoDB 实现
 type WorkspaceStoreMongo struct {
-	collection *mongo.Collection
+	collection *dbtenant.Collection
 }
 
 func (s *WorkspaceStoreMongo) buildListFilter(opts *ListOptions) bson.M {
@@ -107,9 +113,7 @@ func (s *WorkspaceStoreMongo) buildListFilter(opts *ListOptions) bson.M {
 // NewWorkspaceStoreMongo ...
 func NewWorkspaceStoreMongo(client *mongo.Client, dbName string) (*WorkspaceStoreMongo, error) {
 	coll := client.Database(dbName).Collection(workspaceCollectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：id
-	return &WorkspaceStoreMongo{collection: coll}, nil
+	return newWorkspaceStoreMongo(dbtenant.WrapTenant(coll)), nil
 }
 
 // List 获取工作空间列表
@@ -191,6 +195,11 @@ func (s *WorkspaceStoreMongo) Create(ctx context.Context, workspace *Workspace) 
 		workspace.CreatedAt = timeNow
 	}
 	workspace.UpdatedAt = timeNow
+	// 回写 tenant_id
+	// TODO: 如果后续多个 store 都出现同类需求，再抽一个显式回写的公共 helper；
+	if tenantID, ok := s.collection.TenantID(ctx); ok {
+		workspace.TenantID = tenantID
+	}
 
 	if _, err := s.collection.InsertOne(ctx, workspace); err != nil {
 		return err
@@ -227,6 +236,18 @@ func (s *WorkspaceStoreMongo) Delete(ctx context.Context, id string) error {
 	return err
 }
 
+// Scopes 按传入范围派生 store。后传入的范围覆盖先传入的范围。
+func (s *WorkspaceStoreMongo) Scopes(scopes ...dbtenant.Scope) WorkspaceStore {
+	collection := s.collection
+	for _, scope := range scopes {
+		if scope == nil {
+			continue
+		}
+		collection = scope(collection)
+	}
+	return newWorkspaceStoreMongo(collection)
+}
+
 // workspaceCountByState is the decoded row from MongoDB $group aggregation by state.
 type workspaceCountByState struct {
 	// State decodes MongoDB $group output field "_id", which holds the grouping key "$state".
@@ -260,4 +281,11 @@ func (s *WorkspaceStoreMongo) CountByState(ctx context.Context, opts *ListOption
 		return item.State, item.Count
 	})
 	return counts, nil
+}
+
+func newWorkspaceStoreMongo(collection *dbtenant.Collection) *WorkspaceStoreMongo {
+	// 索引（由 golang-migrate 维护）：
+	// - 唯一：id
+	// - 普通：tenant_id
+	return &WorkspaceStoreMongo{collection: collection}
 }
