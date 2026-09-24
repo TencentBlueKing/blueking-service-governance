@@ -51,6 +51,11 @@ bkIAMSystemIDs:
   bkrepo: bkrepo
   bscp: bk_bscp
   bkcc: bkcc
+# ------------------------------ 平台能力开关 ------------------------------
+featureFlags:
+  # 为 true 时蓝盾始终新建，新建容器则 Create BCS、绑定已有容器则绑定已有 BCS；
+  # 为 false 时新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目
+  createBCSProject: true
 # ------------------------------ 外部依赖服务（蓝鲸 SaaS & 公司系统） ------------------------------
 # BCS 配置，由于管理 BCS 集群内的资源
 bcs:

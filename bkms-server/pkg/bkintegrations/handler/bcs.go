@@ -58,22 +58,26 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 		return
 	}
 
-	bkciClient, err := bkci.New(auth.MustGetUser(ctx))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
-		return
+	requireBKCIManage := !workspace.CreateBCSProjectEnabled()
+	bkciProjectsMap := map[string]bool{}
+	if requireBKCIManage {
+		bkciClient, err := bkci.New(auth.MustGetUser(ctx))
+		if err != nil {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
+			return
+		}
+		bkciProjects, err := bkciClient.ListProjects(ctx)
+		if err != nil {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci managed projects"))
+			return
+		}
+		bkciProjects = lo.Filter(bkciProjects, func(item bkci.Project, _ int) bool {
+			return item.HasManagePerm
+		})
+		bkciProjectsMap = lo.SliceToMap(bkciProjects, func(item bkci.Project) (string, bool) {
+			return item.Code, true
+		})
 	}
-	bkciProjects, err := bkciClient.ListProjects(ctx)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci managed projects"))
-		return
-	}
-	bkciProjects = lo.Filter(bkciProjects, func(item bkci.Project, _ int) bool {
-		return item.HasManagePerm
-	})
-	bkciProjectsMap := lo.SliceToMap(bkciProjects, func(item bkci.Project) (string, bool) {
-		return item.Code, true
-	})
 
 	workspaces, err := h.registry.WorkspaceStore.List(ctx, &workspace.ListOptions{})
 	if err != nil {
@@ -85,7 +89,13 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 	})
 
 	projects := lo.Filter(bcsProjects, func(item bcs.Project, _ int) bool {
-		return item.Kind == "k8s" && bkciProjectsMap[item.Code]
+		if item.Kind != "k8s" {
+			return false
+		}
+		if requireBKCIManage {
+			return bkciProjectsMap[item.Code]
+		}
+		return true
 	})
 
 	ginutils.OK(

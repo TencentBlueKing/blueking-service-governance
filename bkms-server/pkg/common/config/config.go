@@ -130,4 +130,5 @@ func setDefaultConfigValues(vp *viper.Viper) {
 	vp.SetDefault("httpServer.writeTimeout", DefaultHTTPServerWriteTimeout)
 	vp.SetDefault("httpServer.idleTimeout", DefaultHTTPServerIdleTimeout)
 	vp.SetDefault("httpServer.shutdownTimeout", DefaultHTTPServerShutdownTimeout)
+	vp.SetDefault("featureFlags.createBCSProject", true)
 }
