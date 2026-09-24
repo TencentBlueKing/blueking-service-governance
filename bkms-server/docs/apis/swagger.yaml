@@ -2542,6 +2542,12 @@ definitions:
       bkBCSProjectID:
         description: 蓝鲸容器服务（BCS）项目 ID
         type: string
+      bkBSCPProjectID:
+        description: BSCP 项目 ID
+        type: string
+      bkBSCPProjectKey:
+        description: BSCP 项目 Key（如 BK-BSCP-00012）
+        type: string
       bkCCBizID:
         description: bkcc 业务 ID
         type: string
@@ -4230,15 +4236,15 @@ definitions:
     properties:
       appID:
         type: string
-      apps:
-        items:
-          $ref: '#/definitions/serializer.ServiceRefOutput'
-        type: array
+      bscpAppID:
+        type: string
       bscpBizID:
         type: string
-      createdAt:
+      bscpEnvID:
         type: string
-      defaultFileAppID:
+      bscpEnvName:
+        type: string
+      createdAt:
         type: string
       envName:
         type: string
@@ -4684,6 +4690,17 @@ definitions:
       name:
         description: 来源环境名称，来源环境已删除时为空
         type: string
+    type: object
+  serializer.FeatureFlagOutput:
+    properties:
+      enabled:
+        description: Enabled 是否启用新版 BSCP 配置管理
+        type: boolean
+    type: object
+  serializer.FeatureFlagResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.FeatureFlagOutput'
     type: object
   serializer.FilterOptionOutputObj:
     properties:
@@ -6316,6 +6333,10 @@ definitions:
         type: string
       postHookID:
         type: string
+      projectID:
+        type: string
+      projectKey:
+        type: string
       token:
         type: string
       updatedAt:
@@ -6816,14 +6837,6 @@ definitions:
         description: 额外 Kubernetes 资源 YAML 模板列表（传入时全量替换）
         items:
           type: string
-        type: array
-    type: object
-  serializer.PatchEnvBindingInput:
-    properties:
-      apps:
-        description: Services 绑定的下发服务列表（全量替换）
-        items:
-          $ref: '#/definitions/serializer.ServiceRefInput'
         type: array
     type: object
   serializer.PatchMetadataInput:
@@ -8345,23 +8358,6 @@ definitions:
       protocol:
         type: string
       targetPort:
-        type: string
-    type: object
-  serializer.ServiceRefInput:
-    properties:
-      id:
-        type: string
-      name:
-        type: string
-    required:
-    - id
-    - name
-    type: object
-  serializer.ServiceRefOutput:
-    properties:
-      id:
-        type: string
-      name:
         type: string
     type: object
   serializer.SetAppDefaultAppSpecLifecycleInput:
@@ -11298,46 +11294,6 @@ paths:
       summary: 获取指定环境的绑定详情
       tags:
       - bscpcfg
-    patch:
-      consumes:
-      - application/json
-      operationId: PatchBscpCfgEnvBinding
-      parameters:
-      - description: 应用 ID
-        in: path
-        name: appID
-        required: true
-        type: string
-      - description: 环境名称
-        in: path
-        name: envName
-        required: true
-        type: string
-      - description: 更新配置请求体
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/serializer.PatchEnvBindingInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 更新环境绑定（更新绑定的服务列表）
-      tags:
-      - bscpcfg
     post:
       operationId: CreateBscpCfgEnvBinding
       parameters:
@@ -11370,6 +11326,32 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 创建环境绑定
+      tags:
+      - bscpcfg
+  /apps/{appID}/bscpcfg/feature-flag:
+    get:
+      operationId: GetBscpCfgFeatureFlag
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.FeatureFlagResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取应用的 bscpcfg FeatureFlag
       tags:
       - bscpcfg
   /apps/{appID}/bscpcfg/metadata:

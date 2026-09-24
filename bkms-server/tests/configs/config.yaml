@@ -81,6 +81,10 @@ bkMonitor:
 bscp:
   # BSCP sidecar watch 地址
   feedAddr: bscp.example.com
+  # bscp-init 镜像
+  initImage: mirrors.example.com/bscp/bscp-init:latest
+  # bscp-sidecar 镜像
+  sidecarImage: mirrors.example.com/bscp/bscp-sidecar:latest
 # Tx CMDB
 cmdb:
   baseUrl: https://cmdb.example.com

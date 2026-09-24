@@ -48,7 +48,7 @@ func InjectFromStore(
 ) error {
 	fragment, err := BuildFromStore(ctx, store, appID, envName)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "build bscp fragment for app %s, env %s", appID, envName)
 	}
 	return MergePodSpec(podSpec, fragment, mainContainerName)
 }

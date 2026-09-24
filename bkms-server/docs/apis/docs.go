@@ -2557,8 +2557,10 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "patch": {
+            }
+        },
+        "/apps/{appID}/bscpcfg/feature-flag": {
+            "get": {
                 "security": [
                     {
                         "BkUserInfo": []
@@ -2567,17 +2569,14 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "bscpcfg"
                 ],
-                "summary": "更新环境绑定（更新绑定的服务列表）",
-                "operationId": "PatchBscpCfgEnvBinding",
+                "summary": "获取应用的 bscpcfg FeatureFlag",
+                "operationId": "GetBscpCfgFeatureFlag",
                 "parameters": [
                     {
                         "type": "string",
@@ -2585,36 +2584,17 @@ const docTemplate = `{
                         "name": "appID",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "环境名称",
-                        "name": "envName",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "更新配置请求体",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/serializer.PatchEnvBindingInput"
-                        }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK"
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.FeatureFlagResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -22759,6 +22739,14 @@ const docTemplate = `{
                     "description": "蓝鲸容器服务（BCS）项目 ID",
                     "type": "string"
                 },
+                "bkBSCPProjectID": {
+                    "description": "BSCP 项目 ID",
+                    "type": "string"
+                },
+                "bkBSCPProjectKey": {
+                    "description": "BSCP 项目 Key（如 BK-BSCP-00012）",
+                    "type": "string"
+                },
                 "bkCCBizID": {
                     "description": "bkcc 业务 ID",
                     "type": "string"
@@ -25198,19 +25186,19 @@ const docTemplate = `{
                 "appID": {
                     "type": "string"
                 },
-                "apps": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.ServiceRefOutput"
-                    }
+                "bscpAppID": {
+                    "type": "string"
                 },
                 "bscpBizID": {
                     "type": "string"
                 },
-                "createdAt": {
+                "bscpEnvID": {
                     "type": "string"
                 },
-                "defaultFileAppID": {
+                "bscpEnvName": {
+                    "type": "string"
+                },
+                "createdAt": {
                     "type": "string"
                 },
                 "envName": {
@@ -25853,6 +25841,23 @@ const docTemplate = `{
                 "name": {
                     "description": "来源环境名称，来源环境已删除时为空",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.FeatureFlagOutput": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "description": "Enabled 是否启用新版 BSCP 配置管理",
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.FeatureFlagResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.FeatureFlagOutput"
                 }
             }
         },
@@ -28327,6 +28332,12 @@ const docTemplate = `{
                 "postHookID": {
                     "type": "string"
                 },
+                "projectID": {
+                    "type": "string"
+                },
+                "projectKey": {
+                    "type": "string"
+                },
                 "token": {
                     "type": "string"
                 },
@@ -29056,18 +29067,6 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
-                }
-            }
-        },
-        "serializer.PatchEnvBindingInput": {
-            "type": "object",
-            "properties": {
-                "apps": {
-                    "description": "Services 绑定的下发服务列表（全量替换）",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.ServiceRefInput"
                     }
                 }
             }
@@ -31228,32 +31227,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "targetPort": {
-                    "type": "string"
-                }
-            }
-        },
-        "serializer.ServiceRefInput": {
-            "type": "object",
-            "required": [
-                "id",
-                "name"
-            ],
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "serializer.ServiceRefOutput": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "name": {
                     "type": "string"
                 }
             }

@@ -1,0 +1,14 @@
+[
+  {
+    "createIndexes": "bscpcfg_feature_flags",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1
+        },
+        "name": "appID_1",
+        "unique": true
+      }
+    ]
+  }
+]

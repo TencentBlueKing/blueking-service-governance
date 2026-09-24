@@ -29,23 +29,28 @@ type Metadata struct {
 	AppID string `bson:"appID" validate:"required"`
 	// BscpBizID BSCP 业务 ID
 	BscpBizID string `bson:"bscpBizID" validate:"required"`
-	// WorkloadName 指定被注入 bscp 配置的目标 workload 名称
-	WorkloadName string `bson:"workloadName"`
-	// WorkloadKind 目标工作负载类型
-	WorkloadKind string `bson:"workloadKind"`
-	// MountPath 配置文件在容器中的挂载路径（所有环境共享同一路径）
-	MountPath string `bson:"mountPath"`
+	// ProjectID BSCP 项目 ID（数字，以 string 存储）
+	ProjectID string `bson:"projectID" validate:"required"`
+	// ProjectKey BSCP 项目 Key（如 BK-BSCP-12345）
+	ProjectKey string `bson:"projectKey" validate:"required"`
 
 	// CredentialID BSCP Credential ID（每个业务下唯一，名称固定为 bkms-credential）
-	CredentialID string `bson:"credentialID"`
+	CredentialID string `bson:"credentialID" validate:"required"`
 	// CredentialName BSCP Credential 名称
-	CredentialName string `bson:"credentialName"`
+	CredentialName string `bson:"credentialName" validate:"required"`
 	// Token BSCP Credential 的访问令牌（用于 sidecar 拉取配置）
-	Token string `bson:"token"`
+	Token string `bson:"token" validate:"required"`
 	// FeedAddr BSCP 服务订阅地址（sidecar 连接的 feed server 地址）
-	FeedAddr string `bson:"feedAddr"`
+	FeedAddr string `bson:"feedAddr" validate:"required"`
 	// PostHookID BSCP 后置脚本 ID
 	PostHookID string `bson:"postHookID,omitempty"`
+
+	// WorkloadKind 目标工作负载类型
+	WorkloadKind string `bson:"workloadKind"`
+	// WorkloadName 指定被注入 bscp 配置的目标 workload 名称
+	WorkloadName string `bson:"workloadName"`
+	// MountPath 配置文件在容器中的挂载路径（所有环境共享同一路径）
+	MountPath string `bson:"mountPath"`
 
 	// Operator 最近操作人
 	Operator string `bson:"operator"`
