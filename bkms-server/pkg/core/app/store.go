@@ -80,6 +80,12 @@ type ApplicationStore interface {
 	// UpdateDisplayName updates the display name of an application
 	UpdateDisplayName(ctx context.Context, app *Application, displayName string) error
 
+	// UpdateVisibleEnvNames replaces the application's visible standard environment names.
+	UpdateVisibleEnvNames(ctx context.Context, app *Application, visibleEnvNames []string) error
+
+	// RemoveVisibleEnvName pulls envName from visibleEnvNames of all apps in the workspace.
+	RemoveVisibleEnvName(ctx context.Context, workspaceID, envName string) error
+
 	// UpdateHelmSource updates the helm source of an application
 	UpdateHelmSource(ctx context.Context, app *Application, helmSource *HelmSource) error
 }
@@ -225,6 +231,33 @@ func (s *ApplicationStoreMongo) UpdateDisplayName(
 	filter := bson.M{"id": app.ID}
 	update := bson.M{"$set": bson.M{"displayName": displayName}}
 	return s.collUpdateOne(ctx, filter, update)
+}
+
+// UpdateVisibleEnvNames replaces the application's visible standard environment names.
+func (s *ApplicationStoreMongo) UpdateVisibleEnvNames(
+	ctx context.Context,
+	app *Application,
+	visibleEnvNames []string,
+) error {
+	if visibleEnvNames == nil {
+		visibleEnvNames = []string{}
+	}
+	filter := bson.M{"id": app.ID}
+	update := bson.M{"$set": bson.M{"visibleEnvNames": visibleEnvNames}}
+	return s.collUpdateOne(ctx, filter, update)
+}
+
+// RemoveVisibleEnvName pulls envName from visibleEnvNames of all apps in the workspace.
+func (s *ApplicationStoreMongo) RemoveVisibleEnvName(ctx context.Context, workspaceID, envName string) error {
+	_, err := s.collection.UpdateMany(
+		ctx,
+		bson.M{"workspaceID": workspaceID, "visibleEnvNames": envName},
+		bson.M{"$pull": bson.M{"visibleEnvNames": envName}},
+	)
+	if err != nil {
+		return errors.Wrapf(err, "remove visible env %s from workspace %s apps", envName, workspaceID)
+	}
+	return nil
 }
 
 // UpdateHelmSource updates the helm source of an application

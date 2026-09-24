@@ -37,6 +37,8 @@ type AppHandler interface {
 	DeleteApp(c *gin.Context)
 	// 更新应用显示名称
 	UpdateAppDisplayName(c *gin.Context)
+	// 更新应用可见环境名单
+	UpdateAppVisibleEnvs(c *gin.Context)
 	// 更新应用 Helm Chart 配置
 	UpdateHelmSpec(c *gin.Context)
 	// 更新应用 Trpc 配置
@@ -74,6 +76,8 @@ func Register(rg *gin.RouterGroup, h AppHandler) {
 	rg.DELETE("/apps/:appID", h.DeleteApp)
 	// 更新应用显示名称
 	rg.PUT("/apps/:appID/display-name", h.UpdateAppDisplayName)
+	// 更新应用可见环境名单
+	rg.PUT("/apps/:appID/visible-envs", h.UpdateAppVisibleEnvs)
 	// 更新应用 Helm Chart 配置
 	rg.PUT("/apps/:appID/helm-spec", h.UpdateHelmSpec)
 	// 更新应用 Trpc 配置

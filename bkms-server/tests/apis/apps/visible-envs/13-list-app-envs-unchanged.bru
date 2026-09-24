@@ -1,0 +1,33 @@
+meta {
+  name: 13-list-app-envs-unchanged
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/envs
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  // AC-011：本需求不改 listAppEnvs 的返回集合，名单外的标准环境仍要出现在列表里，
+  // 过滤交给前端按 visibleEnvNames 自己做
+  test("should still list the unlisted standard env", () => {
+    const names = res.body.data.map((env) => env.name);
+
+    expect(names).to.include(bru.getVar("visEnvUnlistedEnvName"));
+    expect(names).to.include(bru.getVar("visEnvListedEnvName"));
+    expect(names).to.include(bru.getVar("visEnvFeatureEnvName"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

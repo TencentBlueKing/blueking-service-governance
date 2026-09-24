@@ -218,6 +218,8 @@ const (
 	AttributeGPA Attribute = "gpa"
 	// AttributeHostPort 随机 HostPort 端口映射
 	AttributeHostPort Attribute = "hostport"
+	// AttributeVisibleEnvNames 应用可见环境名单
+	AttributeVisibleEnvNames Attribute = "visibleEnvNames"
 )
 
 // DisplayName 属性展示用名称 TODO 国际化
@@ -261,6 +263,8 @@ func (t Attribute) DisplayName() string {
 		return "自动扩缩容配置"
 	case AttributeHostPort:
 		return "HostPort 端口映射"
+	case AttributeVisibleEnvNames:
+		return "可见环境"
 	default:
 		// 默认返回原始值
 		return string(t)

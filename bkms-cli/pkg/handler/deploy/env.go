@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 )
@@ -56,24 +57,68 @@ func validateEnvNames(ctx context.Context, cli client.Client, appID string, envN
 	if err != nil {
 		return errors.Wrapf(err, "failed to list envs for app %s", appID)
 	}
-	// 构建已存在的环境名称集合
-	envSet := make(map[string]bool, len(envs))
+	return checkEnvsExist(envs, envNames)
+}
 
-	for _, env := range envs {
-		envSet[env.Name] = true
+// validateDeployEnvs 校验部署目标环境：先确认环境存在，再按应用可见环境名单拦截。
+// 两项校验共用同一份环境列表；返回拉取到的应用详情，precheck 用它做类型路由。
+// 环境不存在时直接返回，不再退化成可见环境错误；拉取应用详情失败时不得跳过可见环境校验。
+func validateDeployEnvs(
+	ctx context.Context,
+	cli client.Client,
+	appID string,
+	envNames []string,
+) (*client.AppFull, error) {
+	envs, err := cli.ListAppEnvs(ctx, appID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to list envs for app %s", appID)
+	}
+	if err = checkEnvsExist(envs, envNames); err != nil {
+		return nil, err
 	}
 
-	// 校验所有输入的环境名称
-	var notFound []string
-	for _, name := range envNames {
-		if _, ok := envSet[name]; !ok {
-			notFound = append(notFound, name)
-		}
+	app, err := cli.GetApp(ctx, appID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get app %s", appID)
 	}
+	if err = checkVisibleEnvs(app, envs, envNames); err != nil {
+		return nil, err
+	}
+	return app, nil
+}
 
+// checkEnvsExist 汇总不在应用可用环境列表中的名称。
+func checkEnvsExist(envs []client.Env, envNames []string) error {
+	envSet := lo.SliceToMap(envs, func(env client.Env) (string, struct{}) {
+		return env.Name, struct{}{}
+	})
+	notFound := lo.Filter(envNames, func(name string, _ int) bool {
+		_, ok := envSet[name]
+		return !ok
+	})
 	if len(notFound) > 0 {
 		return errors.Errorf("env(s) not found: %v", notFound)
 	}
-
 	return nil
+}
+
+// checkVisibleEnvs 按应用可见标准环境名单拦截目标环境。
+// 名单为空表示未配置，不做限制；应用自己的特性环境无需写入名单，始终允许。
+func checkVisibleEnvs(app *client.AppFull, envs []client.Env, envNames []string) error {
+	if len(app.VisibleEnvNames) == 0 {
+		return nil
+	}
+
+	envByName := lo.SliceToMap(envs, func(env client.Env) (string, client.Env) {
+		return env.Name, env
+	})
+	denied := lo.Filter(envNames, func(name string, _ int) bool {
+		env := envByName[name]
+		isOwnFeatureEnv := env.Kind == client.EnvKindFeature && env.OwnerAppID == app.ID
+		return !isOwnFeatureEnv && !lo.Contains(app.VisibleEnvNames, name)
+	})
+	if len(denied) == 0 {
+		return nil
+	}
+	return errors.Errorf("env(s) not in the application's visible environments: %v", denied)
 }

@@ -1,0 +1,31 @@
+meta {
+  name: 05-verify-visible-envs
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  // AC-005 / AC-012：应用详情带回的名单与 PUT 的落库结果一致，前端据此本地过滤下拉
+  test("should return the configured visible env names on app detail", () => {
+    expect(res.body.data.visibleEnvNames).to.deep.equal([
+      bru.getVar("visEnvListedEnvName"),
+      bru.getVar("visEnvListedEnvName2")
+    ]);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
@@ -222,6 +223,66 @@ var _ = Describe("ApplicationStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 			app, _ = appStore.GetApp(ctx, appID)
 			Expect(app.DisplayName).To(Equal(newDisplayName))
+		})
+	})
+
+	Context("UpdateVisibleEnvNames", func() {
+		It("should persist and then clear visible env names", func() {
+			app := dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{
+				WorkspaceID: workspaceID,
+			})
+
+			err := appStore.UpdateVisibleEnvNames(ctx, app, []string{"test", "stag"})
+			Expect(err).NotTo(HaveOccurred())
+			app, err = appStore.GetApp(ctx, app.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(app.VisibleEnvNames).To(Equal([]string{"test", "stag"}))
+
+			err = appStore.UpdateVisibleEnvNames(ctx, app, []string{})
+			Expect(err).NotTo(HaveOccurred())
+			app, err = appStore.GetApp(ctx, app.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(app.VisibleEnvNames).To(BeEmpty())
+		})
+	})
+
+	Context("RemoveVisibleEnvName", func() {
+		It("should pull the env name only from apps in that workspace", func() {
+			app := dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{
+				WorkspaceID: workspaceID,
+			})
+			Expect(appStore.UpdateVisibleEnvNames(ctx, app, []string{"test", "stag"})).To(Succeed())
+
+			otherWorkspaceID := "test-workspace-" + stringx.Random(6)
+			otherApp := dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{
+				WorkspaceID: otherWorkspaceID,
+			})
+			Expect(appStore.UpdateVisibleEnvNames(ctx, otherApp, []string{"test", "stag"})).To(Succeed())
+
+			err := appStore.RemoveVisibleEnvName(ctx, workspaceID, "test")
+			Expect(err).NotTo(HaveOccurred())
+
+			app, err = appStore.GetApp(ctx, app.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(app.VisibleEnvNames).To(Equal([]string{"stag"}))
+
+			otherApp, err = appStore.GetApp(ctx, otherApp.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(otherApp.VisibleEnvNames).To(Equal([]string{"test", "stag"}))
+		})
+
+		It("should be a no-op when no app lists the env name", func() {
+			app := dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{
+				WorkspaceID: workspaceID,
+			})
+			Expect(appStore.UpdateVisibleEnvNames(ctx, app, []string{"stag"})).To(Succeed())
+
+			err := appStore.RemoveVisibleEnvName(ctx, workspaceID, "test")
+			Expect(err).NotTo(HaveOccurred())
+
+			app, err = appStore.GetApp(ctx, app.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(app.VisibleEnvNames).To(Equal([]string{"stag"}))
 		})
 	})
 

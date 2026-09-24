@@ -135,13 +135,14 @@ type DevModePublishRecordsResp struct {
 
 // AppFull 应用完整定义
 type AppFull struct {
-	ID           string        `json:"id" yaml:"id"`
-	Name         string        `json:"name" yaml:"name"`
-	DisplayName  string        `json:"displayName" yaml:"displayName"`
-	Type         string        `json:"type" yaml:"type"`
-	BuildConfig  *BuildConfig  `json:"buildConfig" yaml:"buildConfig"`
-	AppModelSpec *AppModelSpec `json:"appModelSpec,omitempty" yaml:"appModelSpec,omitempty"`
-	HelmSpec     any           `json:"helmSpec,omitempty" yaml:"helmSpec,omitempty"`
+	ID              string        `json:"id" yaml:"id"`
+	Name            string        `json:"name" yaml:"name"`
+	DisplayName     string        `json:"displayName" yaml:"displayName"`
+	Type            string        `json:"type" yaml:"type"`
+	VisibleEnvNames []string      `json:"visibleEnvNames" yaml:"visibleEnvNames"`
+	BuildConfig     *BuildConfig  `json:"buildConfig" yaml:"buildConfig"`
+	AppModelSpec    *AppModelSpec `json:"appModelSpec,omitempty" yaml:"appModelSpec,omitempty"`
+	HelmSpec        any           `json:"helmSpec,omitempty" yaml:"helmSpec,omitempty"`
 }
 
 // BuildConfig 构建配置

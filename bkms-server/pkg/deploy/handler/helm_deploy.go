@@ -205,6 +205,10 @@ func (h *Handler) CreateHelmDeploy(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+	if err = app.CheckVisibleEnv(env); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 
 	// 进行锁检查防止并发部署，如果出错则需要及时释放
 	deployLock := helmdeploy.NewDeployLock(app.ID, env.Name, input.TrafficLaneName)

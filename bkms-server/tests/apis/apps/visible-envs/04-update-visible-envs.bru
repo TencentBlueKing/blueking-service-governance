@@ -1,0 +1,37 @@
+meta {
+  name: 04-update-visible-envs
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/visible-envs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "visibleEnvNames": [
+      "{{visEnvListedEnvName}}",
+      "{{visEnvListedEnvName2}}"
+    ]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  // 成功响应不回显名单，落库结果由 05 号 GET 应用详情确认
+  test("should accept a list of workspace standard env names", () => {
+    expect(res.status).to.equal(200);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

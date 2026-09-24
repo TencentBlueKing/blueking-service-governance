@@ -1,0 +1,73 @@
+meta {
+  name: visible-envs
+  seq: 12
+}
+
+auth {
+  mode: inherit
+}
+
+script:pre-request {
+  // 可见环境名单（visibleEnvNames）接口与部署拦截的 API 测试。
+  // 需要一个工作空间 + 三个标准环境 + 一个 trpc 应用，特性环境由 01 号用例创建。
+  // visEnvReady 让 folder 被重放时不会重复建资源。
+  const common = require("./common");
+
+  if (!bru.getVar("visEnvReady")) {
+    const suffix = bru.getVar("randomSuffix");
+    const workspaceID = `vis-env-ws-${suffix}`;
+    const appID = `vis-env-app-${suffix}`;
+    const listedEnvName = `vis-test-${suffix}`;
+    const listedEnvName2 = `vis-stag-${suffix}`;
+    const unlistedEnvName = `vis-prod-${suffix}`;
+
+    const ws = await common.createWorkspace({id: workspaceID});
+
+    // listedEnv 同时充当特性环境的来源环境
+    const listedEnv = await common.createEnvironment({
+      name: listedEnvName,
+      workspaceID: ws.id,
+      type: "test",
+      description: "visible envs suite - listed env",
+      cluster: {
+        clusterID: "BCS-K8S-00001",
+        clusterType: "single",
+        namespace: `vis-test-ns-${suffix}`
+      }
+    });
+
+    await common.createEnvironment({
+      name: listedEnvName2,
+      workspaceID: ws.id,
+      type: "staging",
+      description: "visible envs suite - second listed env",
+      cluster: {
+        clusterID: "BCS-K8S-00001",
+        clusterType: "single",
+        namespace: `vis-stag-ns-${suffix}`
+      }
+    });
+
+    await common.createEnvironment({
+      name: unlistedEnvName,
+      workspaceID: ws.id,
+      type: "production",
+      description: "visible envs suite - env kept out of the list",
+      cluster: {
+        clusterID: "BCS-K8S-00001",
+        clusterType: "single",
+        namespace: `vis-prod-ns-${suffix}`
+      }
+    });
+
+    const app = await common.createTrpcApp({id: appID, workspaceID: ws.id});
+
+    bru.setVar("visEnvWorkspaceID", ws.id);
+    bru.setVar("visEnvAppID", app.id);
+    bru.setVar("visEnvListedEnvName", listedEnvName);
+    bru.setVar("visEnvListedEnvName2", listedEnvName2);
+    bru.setVar("visEnvUnlistedEnvName", unlistedEnvName);
+    bru.setVar("visEnvSourceEnvID", listedEnv.id);
+    bru.setVar("visEnvReady", "true");
+  }
+}

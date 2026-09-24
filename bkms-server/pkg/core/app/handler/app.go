@@ -37,6 +37,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/overview"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
@@ -628,6 +629,84 @@ func (h *Handler) UpdateAppDisplayName(c *gin.Context) {
 		audit.WithAttribute(audit.AttributeDisplayName),
 		audit.WithDataBefore(app.DisplayName),
 		audit.WithDataAfter(input.DisplayName),
+		audit.WithWorkspaceID(app.WorkspaceID),
+		audit.WithAppID(app.ID),
+	)
+
+	ginutils.OK(c, serializer.EmptyOutput{})
+}
+
+// UpdateAppVisibleEnvs 更新应用可见标准环境名单。
+//
+//	@ID			UpdateAppVisibleEnvs
+//	@Summary	更新应用可见环境名单
+//	@Tags		app
+//	@Accept		json
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID	path		string								true	"应用 ID"
+//	@Param		body	body		serializer.UpdateAppVisibleEnvsInput	true	"更新可见环境请求"
+//	@Success	200		{object}	serializer.EmptyOutput
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Failure	403		{object}	bkerrs.GinErrorOutput
+//	@Failure	404		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/visible-envs [put]
+func (h *Handler) UpdateAppVisibleEnvs(c *gin.Context) {
+	var uriInput serializer.AppURIInput
+	var input serializer.UpdateAppVisibleEnvsInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	app, err := ginperm.ValidateAppByID(ctx, h.registry, uriInput.AppID, ginperm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	stdEnvs, err := h.registry.EnvStore.ListStdEnvs(ctx, app.WorkspaceID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list standard envs"))
+		return
+	}
+	stdNames := lo.SliceToMap(stdEnvs, func(env envmodel.Environment) (string, struct{}) {
+		return env.Name, struct{}{}
+	})
+	names := *input.VisibleEnvNames
+	invalid := lo.Filter(names, func(name string, _ int) bool {
+		_, ok := stdNames[name]
+		return !ok
+	})
+	if len(invalid) > 0 {
+		bkerrs.AbortWithErr(c, bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidRequest,
+			"invalid visible environment name(s): %s",
+			strings.Join(invalid, ", "),
+		))
+		return
+	}
+
+	if err = h.registry.AppStore.UpdateVisibleEnvNames(ctx, app, names); err != nil {
+		if errors.Is(err, bkmsapp.ErrAppNotFound) {
+			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", uriInput.AppID))
+			return
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update app visible envs"))
+		return
+	}
+
+	// 添加操作审计：可见环境名单直接决定应用能部署到哪些标准环境，变更需可追溯
+	go audit.AddOperationRecordAsync(
+		ctx,
+		audit.OperationTypeUpdate,
+		audit.ResourceTypeApp,
+		app.ID,
+		audit.WithAttribute(audit.AttributeVisibleEnvNames),
+		audit.WithDataBefore(app.VisibleEnvNames),
+		audit.WithDataAfter(names),
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
 	)

@@ -1574,6 +1574,11 @@ definitions:
       type:
         description: 应用类型
         type: string
+      visibleEnvNames:
+        description: 可见标准环境名称；未配置时为空数组
+        items:
+          type: string
+        type: array
       workspaceID:
         description: 工作空间 ID
         type: string
@@ -9139,6 +9144,16 @@ definitions:
         type: object
       trafficLaneEnabled:
         type: boolean
+    type: object
+  serializer.UpdateAppVisibleEnvsInput:
+    properties:
+      visibleEnvNames:
+        description: 可见标准环境名称，必填；显式传空数组表示清空配置
+        items:
+          type: string
+        type: array
+    required:
+    - visibleEnvNames
     type: object
   serializer.UpdateBindingInput:
     properties:
@@ -17263,6 +17278,48 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 更新应用 Trpc 配置
+      tags:
+      - app
+  /apps/{appID}/visible-envs:
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateAppVisibleEnvs
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 更新可见环境请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateAppVisibleEnvsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新应用可见环境名单
       tags:
       - app
   /apps/auto-id-suffix:

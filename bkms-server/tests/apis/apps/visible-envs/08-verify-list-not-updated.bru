@@ -1,0 +1,31 @@
+meta {
+  name: 08-verify-list-not-updated
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  // AC-006：被拒的两次 PUT 都不能改动名单，再次 GET 与更新前一致
+  test("should keep the visible env names unchanged after rejected updates", () => {
+    expect(res.body.data.visibleEnvNames).to.deep.equal([
+      bru.getVar("visEnvListedEnvName"),
+      bru.getVar("visEnvListedEnvName2")
+    ]);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

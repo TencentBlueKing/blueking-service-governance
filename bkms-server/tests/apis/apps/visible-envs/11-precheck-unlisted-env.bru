@@ -1,0 +1,32 @@
+meta {
+  name: 11-precheck-unlisted-env
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/envs/{{visEnvUnlistedEnvName}}/trpc-deploys/precheck
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  // AC-008 / R-005：precheck 也要拦，错误信息同时含目标环境 name 和「可见环境」语义
+  test("should reject a precheck on an unlisted standard env", () => {
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+    expect(res.body.error.message).to.contain(bru.getVar("visEnvUnlistedEnvName"));
+    expect(res.body.error.message).to.contain("visible environment");
+    expect(res.body.error.system).to.equal("bkms");
+    expect(res.body.error.module).to.equal("bkms-server");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

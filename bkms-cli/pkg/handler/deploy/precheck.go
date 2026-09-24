@@ -32,9 +32,10 @@ import (
 func Precheck(ctx context.Context, appID, envName string) (*client.DeployPrecheckResult, error) {
 	cli := client.New()
 
-	app, err := cli.GetApp(ctx, appID)
+	// 校验环境合法性并按可见环境名单拦截，同时复用返回的应用详情做类型路由
+	app, err := validateDeployEnvs(ctx, cli, appID, []string{envName})
 	if err != nil {
-		return nil, errors.Wrap(err, "get app")
+		return nil, err
 	}
 
 	switch app.Type {

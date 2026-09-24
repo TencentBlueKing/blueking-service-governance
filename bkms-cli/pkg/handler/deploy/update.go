@@ -51,6 +51,11 @@ const (
 	grayscaleUpdateMode updateMode = "Grayscale"
 )
 
+// redeploys 表示该更新模式是否走发布接口重新发布
+func (m updateMode) redeploys() bool {
+	return m == fullUpdateMode || m == configUpdateMode
+}
+
 type strategy string
 
 const (
@@ -96,11 +101,6 @@ func UpdateDeploy(ctx context.Context, workspaceID, appID, envName, updateSpecFi
 
 	cli := client.New()
 
-	// 校验所有环境名称合法性
-	if err := validateEnvNames(ctx, cli, appID, envNames); err != nil {
-		return err
-	}
-
 	// 获取应用信息（只需一次）
 	app, err := cli.GetAppMinimal(ctx, workspaceID, appID)
 	if err != nil {
@@ -128,6 +128,16 @@ func UpdateDeploy(ctx context.Context, workspaceID, appID, envName, updateSpecFi
 		}
 		spec.appType = app.Type
 		if err = spec.Validate(); err != nil {
+			return err
+		}
+
+		// 全量/配置更新走发布接口，与服务端一致按可见环境名单拦截；镜像/灰度更新走实例更新接口，不受名单限制
+		if spec.UpdateMode.redeploys() {
+			_, err = validateDeployEnvs(ctx, cli, appID, envNames)
+		} else {
+			err = validateEnvNames(ctx, cli, appID, envNames)
+		}
+		if err != nil {
 			return err
 		}
 

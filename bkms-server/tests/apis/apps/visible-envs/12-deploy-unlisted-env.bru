@@ -1,0 +1,60 @@
+meta {
+  name: 12-deploy-unlisted-env
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/envs/{{visEnvUnlistedEnvName}}/trpc-deploys
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "imageTag": "1.0.0",
+    "replicas": 1
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+script:post-response {
+  // AC-002 要求「不产生新的部署记录」：拦截发生在创建记录和触达集群之前，
+  // 这里顺带查一次列表确认没有残留。
+  const axios = require("axios");
+  const {AUTH_HEADERS} = require("./common");
+
+  const serviceURL = bru.getEnvVar("serviceURL");
+  const appID = bru.getVar("visEnvAppID");
+  const envName = bru.getVar("visEnvUnlistedEnvName");
+  const resp = await axios.get(
+    `${serviceURL}/apps/${appID}/envs/${envName}/trpc-deploys`,
+    {headers: AUTH_HEADERS, params: {page: 1, pageSize: 10}}
+  );
+  bru.setVar("visEnvDeniedDeployRecords", JSON.stringify(resp.data?.data?.results ?? null));
+}
+
+tests {
+  // AC-002：已配置时部署到名单外标准环境返回 400，信息含环境名与「可见环境」
+  test("should reject a deploy to an unlisted standard env", () => {
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+    expect(res.body.error.message).to.contain(bru.getVar("visEnvUnlistedEnvName"));
+    expect(res.body.error.message).to.contain("visible environment");
+  });
+
+  test("should not create a deploy record for the rejected env", () => {
+    const records = JSON.parse(bru.getVar("visEnvDeniedDeployRecords"));
+
+    expect(records, "trpc-deploys list").to.be.an("array");
+    expect(records).to.be.empty;
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

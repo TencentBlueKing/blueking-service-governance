@@ -1,0 +1,29 @@
+meta {
+  name: 03-precheck-unconfigured-any-env
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/envs/{{visEnvUnlistedEnvName}}/trpc-deploys/precheck
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.body: isJson
+}
+
+tests {
+  // AC-001：未配置的存量应用不因可见环境被拒。按验收标准的口径断言「不出现含可见环境的 400」，
+  // 而不是断言 200，以免 precheck 自身的结果变化误伤这条规则的用例。
+  test("should not reject an unconfigured app on any standard env", () => {
+    const message = res.body?.error?.message || "";
+    expect(message).to.not.contain("visible environment");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

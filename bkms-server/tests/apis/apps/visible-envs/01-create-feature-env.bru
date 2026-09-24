@@ -1,0 +1,42 @@
+meta {
+  name: 01-create-feature-env
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/feat-envs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "displayName": "可见环境用例特性环境",
+    "sourceEnvID": "{{visEnvSourceEnvID}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+script:post-response {
+  bru.setVar("visEnvFeatureEnvName", res.body.data.name);
+}
+
+tests {
+  test("should create the app's own feature env used by later specs", () => {
+    const data = res.body.data;
+
+    expect(data.name).to.be.a("string").and.not.empty;
+    expect(data.kind).to.equal("feature");
+    expect(data.ownerAppID).to.equal(bru.getVar("visEnvAppID"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

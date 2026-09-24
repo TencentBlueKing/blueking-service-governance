@@ -1,0 +1,28 @@
+meta {
+  name: 02-get-app-unconfigured
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  // F-003：未配置时该字段必须存在且为空数组，而不是缺失或 null
+  test("should expose an empty visibleEnvNames before the list is configured", () => {
+    expect(res.body.data.visibleEnvNames).to.deep.equal([]);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

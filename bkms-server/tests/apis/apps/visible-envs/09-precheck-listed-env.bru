@@ -1,0 +1,28 @@
+meta {
+  name: 09-precheck-listed-env
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/envs/{{visEnvListedEnvName}}/trpc-deploys/precheck
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.body: isJson
+}
+
+tests {
+  // AC-003：名单内的标准环境仍可做 precheck
+  test("should not reject a listed standard env", () => {
+    const message = res.body?.error?.message || "";
+    expect(message).to.not.contain("visible environment");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -155,6 +155,10 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		)
 		return
 	}
+	if err = app.CheckVisibleEnv(env); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 
 	buildService, err := h.newBuildService()
 	if err != nil {

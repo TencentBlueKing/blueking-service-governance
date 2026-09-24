@@ -1,0 +1,28 @@
+meta {
+  name: 15-precheck-after-clear
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/envs/{{visEnvUnlistedEnvName}}/trpc-deploys/precheck
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.body: isJson
+}
+
+tests {
+  // R-001：清空后等同未配置，11 号用例还在拒的那个环境现在必须放行
+  test("should stop rejecting once the list is cleared", () => {
+    const message = res.body?.error?.message || "";
+    expect(message).to.not.contain("visible environment");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

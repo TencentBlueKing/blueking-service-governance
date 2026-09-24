@@ -18,6 +18,13 @@
 
 package client
 
+const (
+	// EnvKindStandard 标准环境类别
+	EnvKindStandard = "standard"
+	// EnvKindFeature 特性环境类别
+	EnvKindFeature = "feature"
+)
+
 // Env 环境。表格仅展示核心字段，JSON/YAML/JQ 保留完整信息。
 type Env struct {
 	ID          string          `json:"id" yaml:"id" table:"-"`

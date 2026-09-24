@@ -1,0 +1,35 @@
+meta {
+  name: 07-reject-feature-env-name
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/visible-envs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "visibleEnvNames": ["{{visEnvFeatureEnvName}}"]
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  // R-003 / AC-006：名单只接受标准环境，特性环境 name 不能写入，哪怕它属于本应用
+  test("should reject a feature env name even when the app owns it", () => {
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+    expect(res.body.error.message).to.contain(bru.getVar("visEnvFeatureEnvName"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

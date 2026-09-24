@@ -52,6 +52,9 @@ type Application struct {
 	DisplayName string `json:"displayName" bson:"displayName"`
 	// Type is the type of the application
 	Type string `json:"type" bson:"type"`
+	// VisibleEnvNames is the list of standard environment names this app may deploy to.
+	// Missing or empty means unrestricted.
+	VisibleEnvNames []string `json:"visibleEnvNames,omitempty" bson:"visibleEnvNames,omitempty"`
 
 	Creator   string    `json:"creator" bson:"creator"`
 	CreatedAt time.Time `json:"createdAt" bson:"createdAt"`

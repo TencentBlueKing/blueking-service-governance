@@ -1,0 +1,28 @@
+meta {
+  name: 10-precheck-own-feature-env
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{serviceURL}}/apps/{{visEnvAppID}}/envs/{{visEnvFeatureEnvName}}/trpc-deploys/precheck
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.body: isJson
+}
+
+tests {
+  // AC-003 / F-005：特性环境不写进名单，配置名单后仍必须能部署到本应用自己的特性环境
+  test("should not reject the app's own feature env while the list is configured", () => {
+    const message = res.body?.error?.message || "";
+    expect(message).to.not.contain("visible environment");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

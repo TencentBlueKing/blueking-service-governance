@@ -34,7 +34,7 @@ func ListFeatureEnvs(ctx context.Context, cli client.Client, appID string) ([]cl
 		return nil, errors.Wrap(err, "list app envs")
 	}
 	return lo.Filter(envs, func(env client.Env, _ int) bool {
-		return env.Kind == "feature"
+		return env.Kind == client.EnvKindFeature
 	}), nil
 }
 
@@ -52,7 +52,7 @@ func ResolveFeatureEnv(ctx context.Context, cli client.Client, appID, nameOrID s
 	if !found {
 		return nil, errors.Errorf("feature environment %q not found for app %q", nameOrID, appID)
 	}
-	if env.Kind != "feature" || env.OwnerAppID != appID {
+	if env.Kind != client.EnvKindFeature || env.OwnerAppID != appID {
 		return nil, errors.New("only feature environments owned by this app can be deleted")
 	}
 	return &env, nil
@@ -71,7 +71,7 @@ func CreateFeatureEnv(ctx context.Context, cli client.Client, appID, source, dis
 	if !found {
 		return nil, errors.Errorf("source environment %q not found for app %q", source, appID)
 	}
-	if sourceEnv.Kind == "feature" || sourceEnv.OwnerAppID != "" {
+	if sourceEnv.Kind == client.EnvKindFeature || sourceEnv.OwnerAppID != "" {
 		return nil, errors.New("source environment must be a standard environment")
 	}
 

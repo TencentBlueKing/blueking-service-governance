@@ -131,4 +131,130 @@ var _ = Describe("Env", func() {
 				&envListResult{envs: []client.Env{}}, []string{"prod"}, true, []string{"prod"}),
 		)
 	})
+
+	// ==================== validateDeployEnvs ====================
+	Describe("validateDeployEnvs", func() {
+		defaultEnvs := []client.Env{
+			{Name: "prod", Kind: "standard"},
+			{Name: "staging", Kind: "standard"},
+			{Name: "feat-1", Kind: "feature", OwnerAppID: "app-1"},
+		}
+
+		type visibleEnvCase struct {
+			envs          []client.Env
+			envsErr       error
+			app           *client.AppFull
+			appErr        error
+			expectGetApp  bool
+			envNames      []string
+			expectErr     bool
+			errSubstrings []string
+		}
+
+		DescribeTable("validate deploy target envs against existence and visible env names",
+			func(tc visibleEnvCase) {
+				ctx := context.Background()
+				cli := mocks.NewMockClient(GinkgoT())
+				cli.EXPECT().ListAppEnvs(ctx, "app-1").Return(tc.envs, tc.envsErr).Once()
+				if tc.expectGetApp {
+					cli.EXPECT().GetApp(ctx, "app-1").Return(tc.app, tc.appErr).Once()
+				}
+				app, err := validateDeployEnvs(ctx, cli, "app-1", tc.envNames)
+				if !tc.expectErr {
+					Expect(err).NotTo(HaveOccurred())
+					// 校验通过时返回应用详情，调用方无需再拉一次
+					Expect(app).To(Equal(tc.app))
+					return
+				}
+				Expect(err).To(HaveOccurred())
+				Expect(app).To(BeNil())
+				for _, sub := range tc.errSubstrings {
+					Expect(err.Error()).To(ContainSubstring(sub))
+				}
+			},
+			Entry("allows all envs when visibleEnvNames is empty",
+				visibleEnvCase{
+					envs:         defaultEnvs,
+					app:          &client.AppFull{ID: "app-1", VisibleEnvNames: []string{}},
+					expectGetApp: true,
+					envNames:     []string{"prod", "feat-1"},
+				}),
+			Entry("allows all envs when visibleEnvNames is nil",
+				visibleEnvCase{
+					envs:         defaultEnvs,
+					app:          &client.AppFull{ID: "app-1"},
+					expectGetApp: true,
+					envNames:     []string{"prod"},
+				}),
+			Entry("allows a listed standard env",
+				visibleEnvCase{
+					envs:         defaultEnvs,
+					app:          &client.AppFull{ID: "app-1", VisibleEnvNames: []string{"staging"}},
+					expectGetApp: true,
+					envNames:     []string{"staging"},
+				}),
+			Entry("rejects an unlisted standard env",
+				visibleEnvCase{
+					envs:          defaultEnvs,
+					app:           &client.AppFull{ID: "app-1", VisibleEnvNames: []string{"staging"}},
+					expectGetApp:  true,
+					envNames:      []string{"prod"},
+					expectErr:     true,
+					errSubstrings: []string{"prod", "visible environment"},
+				}),
+			Entry("lists every denied env when several are rejected",
+				visibleEnvCase{
+					envs:          defaultEnvs,
+					app:           &client.AppFull{ID: "app-1", VisibleEnvNames: []string{"feat-1"}},
+					expectGetApp:  true,
+					envNames:      []string{"prod", "staging"},
+					expectErr:     true,
+					errSubstrings: []string{"prod", "staging", "visible environment"},
+				}),
+			Entry("allows the app's own feature env when the list is configured",
+				visibleEnvCase{
+					envs:         defaultEnvs,
+					app:          &client.AppFull{ID: "app-1", VisibleEnvNames: []string{"staging"}},
+					expectGetApp: true,
+					envNames:     []string{"feat-1"},
+				}),
+			Entry("rejects another app's feature env when the list is configured",
+				visibleEnvCase{
+					envs: []client.Env{
+						{Name: "staging", Kind: "standard"},
+						{Name: "feat-b", Kind: "feature", OwnerAppID: "app-2"},
+					},
+					app:           &client.AppFull{ID: "app-1", VisibleEnvNames: []string{"staging"}},
+					expectGetApp:  true,
+					envNames:      []string{"feat-b"},
+					expectErr:     true,
+					errSubstrings: []string{"feat-b", "visible environment"},
+				}),
+			// 环境不存在时报 not found，不退化成可见环境错误，也不必再拉应用详情
+			Entry("reports a missing env before checking visible env names",
+				visibleEnvCase{
+					envs:          defaultEnvs,
+					envNames:      []string{"nonexistent"},
+					expectErr:     true,
+					errSubstrings: []string{"nonexistent", "env(s) not found"},
+				}),
+			Entry("propagates ListAppEnvs errors",
+				visibleEnvCase{
+					envsErr:       context.DeadlineExceeded,
+					envNames:      []string{"prod"},
+					expectErr:     true,
+					errSubstrings: []string{"failed to list envs"},
+				}),
+			// 拉取应用详情失败时必须报错，不能跳过可见环境校验
+			Entry("does not skip the check when GetApp fails",
+				visibleEnvCase{
+					envs:          defaultEnvs,
+					appErr:        context.DeadlineExceeded,
+					expectGetApp:  true,
+					envNames:      []string{"prod"},
+					expectErr:     true,
+					errSubstrings: []string{"failed to get app"},
+				}),
+		)
+	})
 })

@@ -11958,6 +11958,73 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/visible-envs": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app"
+                ],
+                "summary": "更新应用可见环境名单",
+                "operationId": "UpdateAppVisibleEnvs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新可见环境请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateAppVisibleEnvsInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/bcs/projects/authorized": {
             "get": {
                 "security": [
@@ -21305,6 +21372,13 @@ const docTemplate = `{
                 "type": {
                     "description": "应用类型",
                     "type": "string"
+                },
+                "visibleEnvNames": {
+                    "description": "可见标准环境名称；未配置时为空数组",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "workspaceID": {
                     "description": "工作空间 ID",
@@ -32411,6 +32485,21 @@ const docTemplate = `{
                 },
                 "trafficLaneEnabled": {
                     "type": "boolean"
+                }
+            }
+        },
+        "serializer.UpdateAppVisibleEnvsInput": {
+            "type": "object",
+            "required": [
+                "visibleEnvNames"
+            ],
+            "properties": {
+                "visibleEnvNames": {
+                    "description": "可见标准环境名称，必填；显式传空数组表示清空配置",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
