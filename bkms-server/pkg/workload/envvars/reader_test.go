@@ -97,6 +97,26 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 		}
 	}
 
+	It("keeps standard and feature environment variable scopes isolated", func() {
+		seedScopedEnvVars(ctx, store, workspaceID)
+		featureEnv := environment
+		featureEnv.Name = "feat-env"
+		featureEnv.Kind = envmodel.EnvironmentKindFeature
+		featureEnv.OwnerAppID = "feature-app"
+		app := &bkmsapp.Application{ID: featureEnv.OwnerAppID, WorkspaceID: workspaceID, Type: bkmsapp.AppTypeTRPC}
+
+		_, err := store.CreateSimpleEnvScopeVar(ctx, featureEnv, "SHARED_KEY", "feature-value", "")
+		Expect(err).NotTo(HaveOccurred())
+		vars, err := envvars.BuildAppEnvVars(ctx, app, nil, &featureEnv, reader)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vars.ToMap()).To(HaveKeyWithValue("SHARED_KEY", "feature-value"))
+		Expect(vars.ToMap()).NotTo(HaveKey("ENV_ONLY_KEY"))
+
+		sourceVars, err := envvars.BuildAppEnvVars(ctx, app, nil, &environment, reader)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sourceVars.ToMap()).To(HaveKeyWithValue("SHARED_KEY", "env-value"))
+	})
+
 	It("should list env background vars sorted by source priority", func() {
 		seedScopedEnvVars(ctx, store, workspaceID)
 

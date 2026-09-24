@@ -38,7 +38,7 @@ func NewEnvCmd() *cobra.Command {
 		Short: "Delete an environment-scoped environment variable",
 		Long: `Delete an existing environment-scoped environment variable by environment name and key.
 
-The --env flag specifies the target environment name.
+The --env flag accepts a standard or feature environment name in the selected workspace.
 The --key flag specifies the variable key to delete.`,
 		Example: `  # Delete an env-scoped env var
   bkms-cli envvar delete env --env <env-name> --key MY_VAR

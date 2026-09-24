@@ -106,6 +106,8 @@ type ScopedEnvVarStore interface {
 	ListPublic(ctx context.Context, workspaceID string) ([]ScopedEnvVar, error)
 	// Create creates a scoped env var.
 	Create(ctx context.Context, envVar ScopedEnvVar) (bson.ObjectID, error)
+	// CopyEnvVars copies custom variables into another environment, including sensitive values.
+	CopyEnvVars(ctx context.Context, source, target envmodel.Environment) error
 	// CreateSimpleEnvScopeVar creates a non-builtin, non-sensitive env-scoped var.
 	CreateSimpleEnvScopeVar(
 		ctx context.Context,
@@ -321,6 +323,51 @@ func (s *ScopedEnvVarStoreMongo) Create(ctx context.Context, envVar ScopedEnvVar
 		return bson.NilObjectID, errors.New("failed to get inserted ID")
 	}
 	return oid, nil
+}
+
+// CopyEnvVars copies only variables directly defined in the source environment.
+// Public and built-in variables keep their existing resolution rules. The copies
+// are new records, so later edits on either side stay independent. A failed copy
+// may leave partial inserts; the caller must clean up through environment delete hooks.
+func (s *ScopedEnvVarStoreMongo) CopyEnvVars(ctx context.Context, source, target envmodel.Environment) error {
+	if source.WorkspaceID != target.WorkspaceID || source.Name == target.Name {
+		return errors.New("env var copy requires distinct environments in the same workspace")
+	}
+	vars, err := s.List(ctx, source.WorkspaceID, WithScopes(envvartypes.ScopeEnv(source.Name)))
+	if err != nil {
+		return errors.Wrapf(err, "read custom variables from environment %s", source.Name)
+	}
+	if len(vars) == 0 {
+		return nil
+	}
+	// Insert new records so a concurrently created key causes a conflict instead
+	// of receiving a source secret while retaining a non-sensitive target flag.
+	now := time.Now()
+	docs := make([]any, 0, len(vars))
+	for _, item := range vars {
+		encryptedValue, encryptErr := s.encryptEnvVar(item.Value)
+		if encryptErr != nil {
+			return errors.Wrapf(encryptErr, "encrypt copied variable %s for environment %s", item.Key, target.Name)
+		}
+		docs = append(docs, ScopedEnvVar{
+			WorkspaceID: target.WorkspaceID,
+			ScopeType:   envvartypes.ScopeTypeEnv,
+			ScopeValue:  target.Name,
+			Key:         item.Key,
+			Value:       encryptedValue,
+			Description: item.Description,
+			IsSensitive: item.IsSensitive,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		})
+	}
+	if _, err = s.collection.InsertMany(ctx, docs); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			err = ErrScopedEnvVarKeyConflict
+		}
+		return errors.Wrapf(err, "copy custom variables to environment %s", target.Name)
+	}
+	return nil
 }
 
 // CreateSimpleEnvScopeVar creates a non-builtin, non-sensitive env-scoped var.

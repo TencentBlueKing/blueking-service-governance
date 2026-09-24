@@ -86,6 +86,9 @@ type EnvironmentStore interface {
 
 	// Get gets an environment by environment id.
 	Get(ctx context.Context, envID bson.ObjectID) (*Environment, error)
+	// GetByWorkspaceAndName gets either environment kind for workspace-level management.
+	// Callers must check workspace permissions; app-scoped access must use GetByName.
+	GetByWorkspaceAndName(ctx context.Context, workspaceID, name string) (*Environment, error)
 	// Update updates an existing environment.
 	Update(ctx context.Context, envID bson.ObjectID, updateData *EnvironmentUpdateData) error
 	// Delete deletes an environment by environment id.
@@ -379,6 +382,18 @@ func (s *EnvironmentStoreMongo) Get(ctx context.Context, envID bson.ObjectID) (*
 		return nil, err
 	}
 
+	env.Status = getEnvStatusByCluster(env.Cluster)
+	return env, nil
+}
+
+// GetByWorkspaceAndName gets either environment kind within the specified workspace.
+func (s *EnvironmentStoreMongo) GetByWorkspaceAndName(
+	ctx context.Context, workspaceID, name string,
+) (*Environment, error) {
+	env, err := s.findOne(ctx, bson.M{"workspaceID": workspaceID, "name": name})
+	if err != nil {
+		return nil, errors.Wrapf(err, "get environment %s in workspace %s", name, workspaceID)
+	}
 	env.Status = getEnvStatusByCluster(env.Cluster)
 	return env, nil
 }

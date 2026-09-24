@@ -40,7 +40,7 @@ func NewEnvCmd() *cobra.Command {
 		Short: "Import environment-scoped environment variables",
 		Long: `Import environment-scoped environment variables from a local .env file.
 
-The --env flag accepts an environment name (e.g. prod, stag, teamdev).
+The --env flag accepts a standard or feature environment name in the selected workspace.
 The file will be uploaded to the server and parsed as env-level scoped
 environment variables for the specified environment.
 

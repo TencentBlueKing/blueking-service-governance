@@ -801,11 +801,13 @@ func (h *Handler) validateScopedEnvVarScopeValue(
 		return nil
 	}
 
-	if _, err := h.registry.EnvStore.GetStdEnvByName(ctx, workspaceID, scope.ScopeValue); err != nil {
+	// The caller has already checked workspace edit permission, so both standard
+	// and feature environments in this workspace are valid targets.
+	if _, err := h.registry.EnvStore.GetByWorkspaceAndName(ctx, workspaceID, scope.ScopeValue); err != nil {
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", scope.ScopeValue)
 		}
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get standard environment by name")
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get environment by workspace and name")
 	}
 	return nil
 }

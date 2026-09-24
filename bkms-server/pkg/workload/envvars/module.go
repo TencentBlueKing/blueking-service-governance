@@ -21,6 +21,7 @@ package envvars
 import (
 	"go.uber.org/fx"
 
+	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
@@ -30,5 +31,6 @@ var FxModule = fx.Module("envvars",
 	fx.Provide(
 		NewScopedEnvVarStoreMongo,
 		NewUnifiedEnvVarsReader,
+		func(store ScopedEnvVarStore) bkmsenv.FeatureEnvVarStore { return store },
 	),
 )

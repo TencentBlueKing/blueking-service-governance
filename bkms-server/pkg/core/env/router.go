@@ -30,6 +30,7 @@ type EnvHandler interface {
 	ListAppEnvs(c *gin.Context)
 	ListFeatureEnvs(c *gin.Context)
 	GetEnv(c *gin.Context)
+	GetEnvByName(c *gin.Context)
 	UpdateEnvBasicInfo(c *gin.Context)
 	UpdateEnvCluster(c *gin.Context)
 	DeleteEnv(c *gin.Context)
@@ -42,6 +43,8 @@ func Register(rg *gin.RouterGroup, h EnvHandler) {
 	rg.POST("/workspaces/:workspaceID/envs", h.CreateEnv)
 	// 获取空间下的环境列表
 	rg.GET("/workspaces/:workspaceID/envs", h.ListEnvs)
+	// 按工作空间和名称获取标准环境或特性环境
+	rg.GET("/workspaces/:workspaceID/envs/:envName", h.GetEnvByName)
 	// 创建应用特性环境
 	rg.POST("/apps/:appID/feat-envs", h.CreateFeatureEnv)
 	// 获取应用特性环境管理列表

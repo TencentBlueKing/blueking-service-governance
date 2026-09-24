@@ -37,7 +37,7 @@ func NewEnvCmd() *cobra.Command {
 		Short: "Export environment-scoped environment variables",
 		Long: `Export environment-scoped environment variables from the server.
 
-The --env flag accepts an environment name (e.g. prod, stag, teamdev).
+The --env flag accepts a standard or feature environment name in the selected workspace.
 The exported content is in dotenv format. By default it is printed to stdout.
 Use -f to write it to a file.`,
 		Example: `  # Export env-scoped env vars to stdout

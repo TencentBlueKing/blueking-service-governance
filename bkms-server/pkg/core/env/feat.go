@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"maps"
 	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
@@ -42,6 +43,12 @@ import (
 
 const featureEnvNamePrefix = "feat"
 
+// ErrInvalidFeatureEnvInput 表示创建特性环境的入参不符合业务约束。
+var ErrInvalidFeatureEnvInput = errors.New("invalid feature environment input")
+
+// featureEnvCleanupTimeout 限制创建失败后的清理耗时，清理运行在与请求解绑的 context 上。
+const featureEnvCleanupTimeout = 10 * time.Second
+
 // 特性环境托管 namespace 使用的 labels，与 GPA / PortPool 等资源保持同一套命名约定。
 const (
 	FeatureEnvNSLabelWorkspaceID = "io.tencent.bkms.workspace-id"
@@ -55,7 +62,15 @@ const (
 type FeatureEnvService struct {
 	environmentStore       model.EnvironmentStore
 	featureEnvCounterStore model.FeatureEnvCounterStore
+	envVarStore            FeatureEnvVarStore
 	namespaceInitializer   FeatureEnvNamespaceInitializer
+}
+
+// FeatureEnvVarStore 提供创建特性环境时的变量复制，避免环境模块依赖变量模块。
+type FeatureEnvVarStore interface {
+	// CopyEnvVars 将来源环境的自定义变量复制到新环境，保留描述与敏感标记。
+	// 复制失败时可能留下部分副本，由调用方执行环境删除 Hook 清理。
+	CopyEnvVars(ctx context.Context, source, target model.Environment) error
 }
 
 // FeatureEnvNamespaceInitializer 负责初始化特性环境使用的 Kubernetes namespace。
@@ -121,17 +136,21 @@ type CreateFeatureEnvInput struct {
 	DisplayName string `validate:"trim_not_blank"`
 	// Creator 是特性环境的创建者
 	Creator string
+	// CopyEnvVars 决定是否在创建时复制来源环境的自定义变量；默认不复制
+	CopyEnvVars bool
 }
 
 // NewFeatureEnvService 创建特性环境服务。
 func NewFeatureEnvService(
 	environmentStore model.EnvironmentStore,
 	featureEnvCounterStore model.FeatureEnvCounterStore,
+	envVarStore FeatureEnvVarStore,
 	namespaceInitializer FeatureEnvNamespaceInitializer,
 ) *FeatureEnvService {
 	return &FeatureEnvService{
 		environmentStore:       environmentStore,
 		featureEnvCounterStore: featureEnvCounterStore,
+		envVarStore:            envVarStore,
 		namespaceInitializer:   namespaceInitializer,
 	}
 }
@@ -179,9 +198,14 @@ func ListAppFeatEnvs(
 // - sourceEnv 必须是标准环境，且与应用属于同一个 workspace；
 // - name / namespace 由平台按 feat-<appID>-<index> 自动生成，调用方不能指定；
 // - 集群的 namespace 也是自动生成，将由后台自动完成初始化；
+// - 按需复制来源环境的自定义变量；之后双方独立修改，不持续同步；
 func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvInput) (*model.Environment, error) {
 	if err := validate.Struct(input); err != nil {
-		return nil, errors.Wrap(formatError(err), "validate create feature environment input")
+		return nil, errors.Wrapf(
+			ErrInvalidFeatureEnvInput,
+			"validate create feature environment input: %v",
+			formatError(err),
+		)
 	}
 
 	index, err := s.featureEnvCounterStore.Next(ctx, input.App.ID)
@@ -222,6 +246,12 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	}
 	env.ID = envID
 
+	if input.CopyEnvVars {
+		if err = s.copyEnvVars(ctx, *input.SourceEnv, *env); err != nil {
+			return nil, err
+		}
+	}
+
 	// 先落库再创建 namespace：避免 K8s 成功而 Mongo 失败时留下无法通过环境记录回收的孤儿 namespace。
 	// namespace 初始化失败时仍返回已创建的环境记录，仅记录错误日志。
 	if err = s.namespaceInitializer.Initialize(
@@ -241,6 +271,37 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	}
 
 	return env, nil
+}
+
+// copyEnvVars 复制来源环境的变量，失败时通过删除 Hook 清理目标环境。
+func (s *FeatureEnvService) copyEnvVars(ctx context.Context, source, target model.Environment) error {
+	err := s.envVarStore.CopyEnvVars(ctx, source, target)
+	if err == nil {
+		return nil
+	}
+
+	// 请求取消后仍尝试清理；Hook 失败时保留环境，便于通过正常删除流程重试。
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), featureEnvCleanupTimeout)
+	defer cancel()
+	if cleanupErr := runDeleteHooks(cleanupCtx, target); cleanupErr != nil {
+		return errors.Wrapf(
+			cleanupErr,
+			"copy variables failed (%v); clean up dependencies for feature environment %s (id: %s); delete this environment before retrying",
+			err,
+			target.Name,
+			target.ID.Hex(),
+		)
+	}
+	if cleanupErr := s.environmentStore.Delete(cleanupCtx, target.ID); cleanupErr != nil {
+		return errors.Wrapf(
+			cleanupErr,
+			"copy variables failed (%v); delete feature environment %s (id: %s); delete this environment before retrying",
+			err,
+			target.Name,
+			target.ID.Hex(),
+		)
+	}
+	return errors.Wrapf(err, "copy variables from environment %s to feature environment %s", source.Name, target.Name)
 }
 
 func validateCreateFeatureEnvInputStruct(sl validator.StructLevel) {

@@ -42,7 +42,7 @@ func NewEnvCmd() *cobra.Command {
 		Short: "Update an environment-scoped environment variable",
 		Long: `Update an existing environment-scoped environment variable.
 
-The --env flag specifies the target environment name.
+The --env flag accepts a standard or feature environment name in the selected workspace.
 The --key flag specifies the variable key to update.
 The --updated-key flag allows renaming the variable key (optional, defaults to --key).
 Use --sensitive to mark as sensitive, or --no-sensitive to unmark.

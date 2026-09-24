@@ -313,6 +313,21 @@ func (c *SvcBasedClient) GetEnv(ctx context.Context, envID string) (*Env, error)
 	return &respData.Data, nil
 }
 
+// GetEnvByName 按工作空间和环境名称查询环境，支持特性环境。
+func (c *SvcBasedClient) GetEnvByName(ctx context.Context, workspaceID, envName string) (*Env, error) {
+	var respData GetEnvRespData
+	path := fmt.Sprintf("/bkms/v1/bkms-server/workspaces/%s/envs/%s",
+		url.PathEscape(workspaceID), url.PathEscape(envName))
+	resp, err := c.cli.R().SetContext(ctx).SetResult(&respData).Get(path)
+	if err != nil {
+		return nil, errors.Wrap(err, "get env by name")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, formatAPIError(resp, "get env by name")
+	}
+	return &respData.Data, nil
+}
+
 // CreateEnv 创建环境
 func (c *SvcBasedClient) CreateEnv(ctx context.Context, workspaceID string, body CreateEnvBody) (string, error) {
 	var respData CreateEnvRespData

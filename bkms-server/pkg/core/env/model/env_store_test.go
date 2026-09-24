@@ -352,6 +352,12 @@ var _ = Describe("Test EnvironmentStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(featureEnv.OwnerAppID).To(Equal(ownerApp.ID))
 			Expect(featureEnv.GetKind()).To(Equal(envmodel.EnvironmentKindFeature))
+			workspaceEnv, err := store.GetByWorkspaceAndName(ctx, workspaceID1, ownedFeatureEnv.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspaceEnv.ID).To(Equal(ownedFeatureEnv.ID))
+			Expect(workspaceEnv.Status).To(Equal(envmodel.EnvStatusReady))
+			_, err = store.GetByWorkspaceAndName(ctx, workspaceID2, ownedFeatureEnv.Name)
+			Expect(err).To(MatchError(envmodel.ErrEnvNotFound))
 
 			_, err = store.GetStdEnvByName(ctx, workspaceID1, ownedFeatureEnv.Name)
 			Expect(err).To(MatchError(envmodel.ErrEnvNotFound))

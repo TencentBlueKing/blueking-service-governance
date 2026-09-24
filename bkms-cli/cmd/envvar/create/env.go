@@ -41,7 +41,7 @@ func NewEnvCmd() *cobra.Command {
 		Long: `Create a new environment-scoped environment variable.
 
 The variable will be scoped to a specific environment (scopeType=env).
-The --env flag specifies the target environment name.`,
+The --env flag accepts a standard or feature environment name in the selected workspace.`,
 		Example: `  # Create an env-scoped env var
   bkms-cli envvar create env --env <env-name> --key MY_VAR --value my-value
 

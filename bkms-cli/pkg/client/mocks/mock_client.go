@@ -3235,6 +3235,80 @@ func (_c *MockClient_GetEnv_Call) RunAndReturn(run func(ctx context.Context, env
 	return _c
 }
 
+// GetEnvByName provides a mock function for the type MockClient
+func (_mock *MockClient) GetEnvByName(ctx context.Context, workspaceID string, envName string) (*client.Env, error) {
+	ret := _mock.Called(ctx, workspaceID, envName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetEnvByName")
+	}
+
+	var r0 *client.Env
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*client.Env, error)); ok {
+		return returnFunc(ctx, workspaceID, envName)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.Env); ok {
+		r0 = returnFunc(ctx, workspaceID, envName)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.Env)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, workspaceID, envName)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_GetEnvByName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetEnvByName'
+type MockClient_GetEnvByName_Call struct {
+	*mock.Call
+}
+
+// GetEnvByName is a helper method to define mock.On call
+//   - ctx context.Context
+//   - workspaceID string
+//   - envName string
+func (_e *MockClient_Expecter) GetEnvByName(ctx any, workspaceID any, envName any) *MockClient_GetEnvByName_Call {
+	return &MockClient_GetEnvByName_Call{Call: _e.mock.On("GetEnvByName", ctx, workspaceID, envName)}
+}
+
+func (_c *MockClient_GetEnvByName_Call) Run(run func(ctx context.Context, workspaceID string, envName string)) *MockClient_GetEnvByName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_GetEnvByName_Call) Return(env *client.Env, err error) *MockClient_GetEnvByName_Call {
+	_c.Call.Return(env, err)
+	return _c
+}
+
+func (_c *MockClient_GetEnvByName_Call) RunAndReturn(run func(ctx context.Context, workspaceID string, envName string) (*client.Env, error)) *MockClient_GetEnvByName_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetWorkspace provides a mock function for the type MockClient
 func (_mock *MockClient) GetWorkspace(ctx context.Context, id string) (*client.Workspace, error) {
 	ret := _mock.Called(ctx, id)

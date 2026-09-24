@@ -21,6 +21,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
 
@@ -196,6 +197,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 //	@Param			body	body		serializer.CreateFeatureEnvInput		true	"创建特性环境请求"
 //	@Success		200		{object}	serializer.CreateFeatureEnvOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
+//	@Failure		500		{object}	bkerrs.GinErrorOutput
 //	@Router			/apps/{appID}/feat-envs [post]
 func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 	var uriInput serializer.AppURIInput
@@ -223,6 +225,7 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 	svc := bkmsenv.NewFeatureEnvService(
 		h.registry.EnvStore,
 		h.registry.FeatureEnvCounterStore,
+		h.registry.ScopedEnvVarStore,
 		bkmsenv.NewFeatureEnvNamespaceInitializer(),
 	)
 	featureEnv, err := svc.Create(ctx, bkmsenv.CreateFeatureEnvInput{
@@ -230,12 +233,17 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		SourceEnv:   sourceEnv,
 		DisplayName: input.DisplayName,
 		Creator:     auth.MustGetUser(ctx).ID,
+		CopyEnvVars: input.CopyEnvVars,
 	})
 	if err != nil {
 		if abortIfEnvClusterNamespaceOccupied(c, err) {
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "create feature environment"))
+		code := bkerrs.ErrCodeInternalServerError
+		if errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput) {
+			code = bkerrs.ErrCodeInvalidRequest
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "create feature environment"))
 		return
 	}
 
@@ -424,6 +432,43 @@ func (h *Handler) GetEnv(c *gin.Context) {
 
 	ginutils.OK(c, serializer.GetEnvOutput{
 		Data: new(serializer.EnvDetailOutput).FromModel(*env, deployStatuses),
+	})
+}
+
+// GetEnvByName 按工作空间和名称获取标准环境或特性环境信息。
+//
+// @ID GetEnvByName
+// @Summary 按工作空间和名称获取环境信息
+// @Tags env
+// @Produce json
+// @Security BkUserInfo
+// @Security BkUserCredential
+// @Param workspaceID path string true "工作空间 ID"
+// @Param envName path string true "环境名称，支持标准环境和特性环境"
+// @Success 200 {object} serializer.GetEnvByNameOutput
+// @Failure 400 {object} bkerrs.GinErrorOutput
+// @Router /workspaces/{workspaceID}/envs/{envName} [get]
+func (h *Handler) GetEnvByName(c *gin.Context) {
+	var uriInput serializer.WorkspaceEnvNameURIInput
+	if err := ginutils.BindURI(c, &uriInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	env, err := h.registry.EnvStore.GetByWorkspaceAndName(ctx, uriInput.WorkspaceID, uriInput.EnvName)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get env by workspace and name"))
+		return
+	}
+
+	ginutils.OK(c, serializer.GetEnvByNameOutput{
+		Data: new(serializer.EnvOutput).FromModel(*env),
 	})
 }
 

@@ -10956,6 +10956,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
                     }
                 }
             }
@@ -18194,6 +18200,56 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/envs/{envName}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "env"
+                ],
+                "summary": "按工作空间和名称获取环境信息",
+                "operationId": "GetEnvByName",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称，支持标准环境和特性环境",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetEnvByNameOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/envs/{envName}/traffic-lanes": {
             "get": {
                 "security": [
@@ -24103,6 +24159,10 @@ const docTemplate = `{
                 "sourceEnvID"
             ],
             "properties": {
+                "copyEnvVars": {
+                    "description": "是否复制来源环境的环境变量；未传时不复制",
+                    "type": "boolean"
+                },
                 "displayName": {
                     "description": "特性环境展示名称",
                     "type": "string"
@@ -26245,6 +26305,14 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.GetEnvApmOutput"
+                }
+            }
+        },
+        "serializer.GetEnvByNameOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.EnvOutput"
                 }
             }
         },

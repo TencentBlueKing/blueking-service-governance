@@ -66,6 +66,8 @@ type Client interface {
 	ListAppEnvs(ctx context.Context, appID string) ([]Env, error)
 	// GetEnv 获取环境详情
 	GetEnv(ctx context.Context, envID string) (*Env, error)
+	// GetEnvByName 按工作空间和名称查询标准环境或特性环境
+	GetEnvByName(ctx context.Context, workspaceID, envName string) (*Env, error)
 	// CreateEnv 创建环境
 	CreateEnv(ctx context.Context, workspaceID string, body CreateEnvBody) (string, error)
 	// CreateFeatureEnv 从标准环境创建应用特性环境

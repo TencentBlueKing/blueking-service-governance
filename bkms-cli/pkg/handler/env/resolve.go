@@ -29,20 +29,13 @@ import (
 )
 
 // ResolveEnvIDByName 通过环境名称解析出环境 ID。
-// 该函数通过 ListEnvs 获取工作空间下的环境列表，按 name 匹配找到目标环境并返回其 ID。
+// 直接按工作空间和名称查询，避免普通环境列表排除特性环境。
 func ResolveEnvIDByName(ctx context.Context, cli client.Client, workspaceID, envName string) (string, error) {
-	envs, err := cli.ListEnvs(ctx, workspaceID)
+	environment, err := cli.GetEnvByName(ctx, workspaceID, envName)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to list envs for workspace %s", workspaceID)
+		return "", errors.Wrapf(err, "resolve environment %q in workspace %q", envName, workspaceID)
 	}
-
-	for i := range envs {
-		if envs[i].Name == envName {
-			return envs[i].ID, nil
-		}
-	}
-
-	return "", errors.Errorf("environment '%s' not found in workspace", envName)
+	return environment.ID, nil
 }
 
 // ResolveEnvByName 通过环境名称获取完整 Env 对象（含 ID、集群信息等）。

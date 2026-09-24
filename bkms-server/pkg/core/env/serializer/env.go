@@ -133,6 +133,8 @@ type CreateFeatureEnvInput struct {
 	DisplayName string `json:"displayName" binding:"required"`
 	// 来源标准环境 ID
 	SourceEnvID string `json:"sourceEnvID" binding:"required,mongodb"`
+	// 是否复制来源环境的环境变量；未传时不复制
+	CopyEnvVars bool `json:"copyEnvVars"`
 }
 
 // CreateFeatureEnvOutput is the JSON response for creating a feature environment.
@@ -454,6 +456,11 @@ func (o *EnvDetailOutput) FromModel(
 // GetEnvOutput is the JSON response for getting an environment.
 type GetEnvOutput struct {
 	Data *EnvDetailOutput `json:"data"`
+}
+
+// GetEnvByNameOutput is the JSON response for looking up an environment by name.
+type GetEnvByNameOutput struct {
+	Data *EnvOutput `json:"data"`
 }
 
 // -----------------------------------------------------------------------------

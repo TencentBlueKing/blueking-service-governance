@@ -5,7 +5,7 @@
 | 作用域子命令 | 说明 | 定位方式 |
 |---|---|---|
 | `scoped` | 工作空间级、envType 级或 env 级 | `--scope`（默认 workspace）|
-| `env` | 单个环境级，按环境名定位 | `--env <env-name>` |
+| `env` | 单个标准环境或特性环境，按工作空间内的环境名定位 | `--env <env-name>` |
 | `app` | 应用级，仅在该应用下生效 | `--app <appID>` |
 
 ## list
@@ -164,3 +164,17 @@ bkms-cli envvar import scoped -f scoped.env
 | `envType:staging` | 仅 staging 类型环境生效 |
 | `envType:test` | 仅 test 类型环境生效 |
 | `envType:development` | 仅 development 类型环境生效 |
+
+## 特性环境
+
+特性环境直接使用完整环境名（例如 `feat-myapp-1`），不需要 `--app`。以下操作使用当前默认工作空间，也可以通过 `--workspace` 显式指定。
+
+```bash
+bkms-cli envvar create env --env feat-myapp-1 --key TEST_MODE --value on
+bkms-cli envvar list env --env feat-myapp-1
+bkms-cli envvar update env --env feat-myapp-1 --key TEST_MODE --value off
+bkms-cli envvar import env --env feat-myapp-1 -f vars.env --preview
+bkms-cli envvar import env --env feat-myapp-1 -f vars.env
+bkms-cli envvar export env --env feat-myapp-1 -f vars.env
+bkms-cli envvar delete env --env feat-myapp-1 --key TEST_MODE
+```

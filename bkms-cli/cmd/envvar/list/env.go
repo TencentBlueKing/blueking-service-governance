@@ -40,7 +40,7 @@ func NewEnvCmd() *cobra.Command {
 		Short: "List environment-scoped environment variables",
 		Long: `List all environment-scoped environment variables for a specific environment.
 
-The --env flag accepts an environment name (e.g. prod, stag, teamdev).
+The --env flag accepts a standard or feature environment name in the selected workspace.
 Displays detailed information including conflict info.`,
 		Example: `  # List env-scoped env vars
   bkms-cli envvar list env --env <env-name>

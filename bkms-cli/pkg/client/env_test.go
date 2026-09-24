@@ -68,6 +68,23 @@ var _ = Describe("Environment APIs", func() {
 		Expect(envs[1].Kind).To(Equal("feature"))
 	})
 
+	It("resolves a feature environment by workspace and name", func() {
+		response = `{"data":{"id":"feature-id","name":"feat-app-1-2","kind":"feature","ownerAppID":"app-1"}}`
+		env, err := cli.GetEnvByName(context.Background(), "workspace-1", "feat-app-1-2")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(requestPath).To(Equal("/bkms/v1/bkms-server/workspaces/workspace-1/envs/feat-app-1-2"))
+		Expect(requestMethod).To(Equal(http.MethodGet))
+		Expect(env.ID).To(Equal("feature-id"))
+		Expect(env.OwnerAppID).To(Equal("app-1"))
+	})
+
+	It("preserves lookup errors for an unknown environment name", func() {
+		status = http.StatusBadRequest
+		response = `{"message":"environment not found"}`
+		_, err := cli.GetEnvByName(context.Background(), "workspace-1", "feat-app-1-2")
+		Expect(err).To(MatchError(ContainSubstring("[400]")))
+	})
+
 	DescribeTable("creates a feature environment using the backend contract",
 		func(code int) {
 			status = code
@@ -113,6 +130,8 @@ var _ = Describe("Environment APIs", func() {
 			switch operation {
 			case "app-list":
 				_, err = cli.ListAppEnvs(context.Background(), "app-1")
+			case "name-lookup":
+				_, err = cli.GetEnvByName(context.Background(), "workspace-1", "feat-app-1-2")
 			case "create":
 				_, err = cli.CreateFeatureEnv(context.Background(), "app-1", CreateFeatureEnvBody{})
 			case "delete":
@@ -122,6 +141,7 @@ var _ = Describe("Environment APIs", func() {
 			Expect(err).To(MatchError(ContainSubstring("permission denied")))
 		},
 		Entry("app environments", "app-list"),
+		Entry("environment name lookup", "name-lookup"),
 		Entry("create", "create"),
 		Entry("delete", "delete"),
 	)
