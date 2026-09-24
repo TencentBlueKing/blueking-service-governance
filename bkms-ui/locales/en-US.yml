@@ -1841,6 +1841,7 @@ runner 阶段: Runner Stage
 环境尚未部署实例，应用配置为默认值。如需调整配置，请先去配置再部署。: The environment has no running instances yet and uses the default application configuration. To adjust the configuration, configure it before deploying.
 "该操作不可恢复，请输入特性环境命名空间：{0} 进行确认": "This operation is irreversible. Please enter the feature environment namespace: {0} to confirm"
 特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。: A feature environment belongs to the current application only and cannot be used by other applications. The source environment is just a snapshot taken at creation time; the two are independent afterwards.
+"环境变量不会从来源环境复制，可在列表中单独配置。": "Environment variables are not copied from the source environment. Configure them separately from the list."
 "环境创建后不会自动部署，需要单独执行部署；销毁前需先移除部署。": "Creating an environment does not deploy it; deployment is a separate action. Remove the deployment before destroying the environment."
 无法销毁特性环境: Cannot Destroy Feature Environment
 该特性环境有部署实例，请先移除部署后再销毁环境: This feature environment has deployment instances. Please remove the deployment before destroying the environment.

@@ -108,7 +108,7 @@
 
   import { Button, Loading, Select } from 'bkui-vue';
   import { AngleDownFill, Plus } from 'bkui-vue/lib/icon';
-  import { useRoute, useRouter } from 'vue-router';
+  import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
   import { AppService } from '~/api/modules/v1/app';
   import { isHelmLikeAppType } from '~/composables/app-type';
   import { getMenuList } from '~/composables/use-router-menu';
@@ -129,6 +129,26 @@
   function getRouteParam(value: string | string[] | undefined, fallback = ''): string {
     return (Array.isArray(value) ? value[0] : value) || fallback;
   }
+
+  // 切换应用时，在新路由生效前离开特性环境子页面，并清除旧应用的所有查询参数。
+  onBeforeRouteUpdate((to, from) => {
+    const isSwitchingFeatureEnvApp =
+      from.name === 'detail' &&
+      to.name === 'detail' &&
+      from.query.view === 'feature-envs' &&
+      getRouteParam(from.params.menuName) === 'deployment' &&
+      getRouteParam(to.params.menuName) === 'deployment' &&
+      getRouteParam(from.params.name) !== getRouteParam(to.params.name);
+    const isCleanInstanceList = to.query.activeTab === 'instance' && Object.keys(to.query).length === 1;
+    if (!isSwitchingFeatureEnvApp || isCleanInstanceList) return;
+
+    return {
+      name: 'detail',
+      params: to.params,
+      query: { activeTab: 'instance' },
+      replace: true,
+    };
+  });
 
   const currentApplicationName = ref(getRouteParam(route.params.name));
   const applicationList = ref<AppInfoOutputObj[]>([]);
@@ -272,10 +292,9 @@
         if (alreadyOnTarget) {
           return;
         }
-        // 同菜单内切换应用沿用 query：让新应用继承当前 Tab 等页面状态；跨菜单切换则重置为默认
+        // 同菜单切换应用沿用 query；特性环境子页面的切换由路由守卫统一处理。
         const isMenuSwitch = oldKey && oldKey !== key;
-        // 快照当前 query 供新页 hook（useUrlQuerySync）接管：watch 同步阶段已固化进导航参数（快照），
-        // 旧页卸载时 hook 会清理自身字段，新页挂载时按该快照写回恢复，保证状态正确继承且不残留旧页字段
+        // 快照当前 query 供新页 hook（useUrlQuerySync）接管。
         const snapshotQuery = router.currentRoute.value.query;
         pendingRouteSync = router
           .push({

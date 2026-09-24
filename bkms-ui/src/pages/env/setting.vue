@@ -73,6 +73,7 @@
             {{ $t('导出') }}
           </Button>
           <Button
+            v-if="!hidePublicEnvVars"
             outline
             theme="primary"
             @click="showPublicEnvVarsSlider = true"
@@ -112,6 +113,7 @@
         :title="$t('内置与公共环境变量')"
       />
       <PublicEnvVarsSideslider
+        v-if="!hidePublicEnvVars"
         v-model:visible="showPublicEnvVarsSlider"
         :space="workspace"
       />
@@ -152,13 +154,44 @@
 
   import type { DownloadSingleEnvVarTemplateRequest, ExportEnvScopedEnvVarsRequest } from '~/@types/v1/envvars';
 
+  interface EnvVarTarget {
+    displayName: string;
+    id: string;
+    name: string;
+    type: string;
+    workspaceId: string;
+  }
+
+  const props = withDefaults(
+    defineProps<{
+      // 是否隐藏公共环境变量
+      hidePublicEnvVars?: boolean;
+      // 内嵌使用时传入完整目标环境，避免环境信息来自多个不一致的 props。
+      target?: EnvVarTarget;
+    }>(),
+    { hidePublicEnvVars: false },
+  );
+
   const { t } = useI18n();
   const route = useRoute();
   const envDetailStore = useEnvDetailStore();
-  const env = String(route.params.envId);
-  const workspace = String(route.params.space);
-  const envName = computed(() => envDetailStore.currentEnv?.name || '');
-  const envDisplayName = computed(() => envDetailStore.currentEnv?.displayName || envName.value);
+  // 内嵌在特性环境页时环境信息由 target 提供，独立环境页则回落到路由与 store。
+  const currentTarget = computed<EnvVarTarget>(() => {
+    if (props.target) return props.target;
+
+    const name = envDetailStore.currentEnv?.name || '';
+    return {
+      id: String(route.params.envId || ''),
+      workspaceId: String(route.params.space || ''),
+      name,
+      displayName: envDetailStore.currentEnv?.displayName || name,
+      type: envDetailStore.currentEnv?.type || '',
+    };
+  });
+  const env = computed(() => currentTarget.value.id);
+  const workspace = computed(() => currentTarget.value.workspaceId);
+  const envName = computed(() => currentTarget.value.name);
+  const envDisplayName = computed(() => currentTarget.value.displayName || envName.value);
 
   // 环境变量列表
   const variableList = ref<EnvVariableConfig[]>([]);
@@ -167,7 +200,7 @@
   const showPublicEnvVarsSlider = ref(false);
   const showImportSlider = ref(false);
   const { exportFile, isExporting } = useFileExport();
-  const envTypeConfig = computed(() => envTypeMap[envDetailStore.currentEnv?.type || '']);
+  const envTypeConfig = computed(() => envTypeMap[currentTarget.value.type]);
 
   /** 搜索配置 */
   const searchKeys = ref<IInputKey[]>([
@@ -184,11 +217,13 @@
 
   // 获取环境变量列表
   async function getEnvConfigList() {
-    if (!env) return;
+    const requestedEnvId = env.value;
+    if (!requestedEnvId) return;
     isLoading.value = true;
     const list = await EnvvarsService.listDetailedEnvScopedEnvVars({
-      envID: env,
+      envID: requestedEnvId,
     }).catch(() => []);
+    if (requestedEnvId !== env.value) return;
     sortByDate(list, item => item.scopedEnvVar?.createdAt);
     // 维护 key → scopedEnvVarID 映射
     const idMap = new Map<string, string>();
@@ -217,7 +252,7 @@
     handleEnvVarOperation(
       () =>
         EnvvarsService.createScopedEnvVar({
-          workspaceID: workspace,
+          workspaceID: workspace.value,
           scopeType: 'env',
           scopeValue: envName.value,
           key: item.key,
@@ -237,11 +272,11 @@
   // 删除
   function handleDeleteItem(item: EnvVariableConfig) {
     const scopedEnvVarID = scopedEnvVarIdMap.value.get(item.key);
-    if (!scopedEnvVarID) return;
+    if (!scopedEnvVarID || !workspace.value) return;
     handleEnvVarOperation(
       () =>
         EnvvarsService.deleteScopedEnvVar({
-          workspaceID: workspace,
+          workspaceID: workspace.value,
           scopedEnvVarID,
         }),
       t('删除成功'),
@@ -257,15 +292,15 @@
   // 编辑 - 当前版本 key 不可修改
   function handleEditItem(newItem: EnvVariableConfig, originalItem: EnvVariableConfig) {
     const scopedEnvVarID = scopedEnvVarIdMap.value.get(originalItem.key);
-    if (!scopedEnvVarID) return;
+    if (!scopedEnvVarID || !workspace.value) return;
 
     handleEnvVarOperation(
       () =>
         EnvvarsService.updateScopedEnvVar({
-          workspaceID: workspace,
+          workspaceID: workspace.value,
           scopedEnvVarID,
           key: newItem.key,
-          value: newItem.value,
+          ...(newItem.value !== undefined ? { value: newItem.value } : {}),
           description: newItem.description,
           isSensitive: newItem.isSensitive,
         }),
@@ -295,11 +330,11 @@
 
   // 环境变量导出
   function handleExport() {
-    if (!env) return;
+    if (!env.value) return;
     return exportFile({
       request: () =>
         EnvvarsService.exportEnvScopedEnvVars<ExportEnvScopedEnvVarsRequest, Response>(
-          { envID: env },
+          { envID: env.value },
           { originalResponse: true },
         ),
       fallbackFilename: `env-${envName.value}-scoped-env-vars.env`,
@@ -307,16 +342,19 @@
   }
 
   function handleImportRequest(file: File) {
-    return EnvvarsService.importEnvScopedEnvVar({ envID: env, file }, { interceptorErr: false, multipart: true });
+    return EnvvarsService.importEnvScopedEnvVar({ envID: env.value, file }, { interceptorErr: false, multipart: true });
   }
 
   function handlePreviewRequest(file: File) {
-    return EnvvarsService.previewEnvScopedEnvVar({ envID: env, file }, { interceptorErr: false, multipart: true });
+    return EnvvarsService.previewEnvScopedEnvVar(
+      { envID: env.value, file },
+      { interceptorErr: false, multipart: true },
+    );
   }
 
   // 初始化
   watch(
-    [() => env],
+    env,
     async () => {
       await getEnvConfigList();
     },

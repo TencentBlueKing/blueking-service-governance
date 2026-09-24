@@ -18,7 +18,20 @@
 
 <template>
   <div class="flex flex-col h-full overflow-hidden">
+    <FeatureEnv
+      v-if="isFeatureEnvPage"
+      :error="featureEnvError"
+      :list="featureEnvList"
+      :loading="featureEnvLoading"
+      @back="leaveFeatureEnvPage"
+      @create="handleShowCreateFeatureEnv"
+      @deleted="handleFeatureEnvDeleted"
+      @deploy="handleDeployFeatureEnvFromList"
+      @deploy-removed="refreshFeatureEnvData"
+      @refresh="fetchFeatureEnvList"
+    />
     <TabHeader
+      v-else
       v-model:active-tab="activeTab"
       :tabs="tabList"
       :title="$t('部署管理')"
@@ -29,7 +42,7 @@
           class="feature-env-entry float-right"
           text
           theme="primary"
-          @click="isShowFeatureEnvSideslider = true"
+          @click="goFeatureEnvPage"
         >
           <i18n-t keypath="应用关联的特性环境：{0} 个">
             <span class="font-bold">{{ featureEnvCount || '--' }}&nbsp;</span>
@@ -39,7 +52,10 @@
     </TabHeader>
 
     <!-- 与构建管理一致：内容区透出导航容器灰色底，仅 TabHeader 为白底 -->
-    <div class="flex flex-1 min-h-0 flex-col overflow-hidden">
+    <div
+      v-if="!isFeatureEnvPage"
+      class="flex flex-1 min-h-0 flex-col overflow-hidden"
+    >
       <!-- 部署总览是跨环境视角，事件与部署历史只需要环境选择器，两者都不出现顶部栏；用 v-show 保留环境列表请求 -->
       <FlexRow
         v-show="isTopBarVisible"
@@ -338,20 +354,6 @@
       v-model:visible="showBuildLog"
       :build-info="buildLogInfo"
     />
-    <!-- 应用关联的特性环境侧栏 -->
-    <FeatureEnvSideslider
-      v-model:is-show="isShowFeatureEnvSideslider"
-      :error="featureEnvError"
-      :list="featureEnvList"
-      :loading="featureEnvLoading"
-      @create="handleShowCreateFeatureEnv"
-      @deleted="handleFeatureEnvDeleted"
-      @deploy="handleDeployFeatureEnvFromList"
-      @deploy-removed="refreshFeatureEnvData"
-      @refresh="fetchFeatureEnvList"
-    />
-
-    <!-- 从特性环境列表打开时保留底层列表侧栏 -->
     <CreateFeatureEnv
       v-model:is-show="isShowCreateFeatureEnv"
       @created="refreshFeatureEnvData"
@@ -394,7 +396,7 @@
   import DeployEvent from './deploy-event.vue';
   import DeployHistory from './deploy-history.vue';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
-  import FeatureEnvSideslider from './feature-env-sideslider.vue';
+  import FeatureEnv from './feature-env.vue';
   import FullUpdate from './instance-list/full-update.vue';
   import InstanceList from './instance-list/instance-list.vue';
   import MultiEnvInstanceTable from './instance-list/multi-env-instance-table.vue';
@@ -551,8 +553,9 @@
   const initLoading = ref(true);
   const precheckLoading = ref(false);
   const isShowQuicklyDeploy = ref(false);
-  const isShowFeatureEnvSideslider = ref(false);
   const isShowRemoveDeploy = ref(false);
+  const FEATURE_ENV_PAGE_QUERY = 'feature-envs';
+  const isFeatureEnvPage = computed(() => canManageFeatureEnvs.value && route.query.view === FEATURE_ENV_PAGE_QUERY);
   const isMultiEnvMode = ref(initialEnvSelection.value?.mode === 'multi');
 
   const TAB_NAMES = {
@@ -967,10 +970,12 @@
   const featureEnvList = ref<FeatureEnvOutput[]>([]);
   const featureEnvLoading = ref(false);
   const featureEnvError = ref(false);
+  let featureEnvRequestId = 0;
   const featureEnvCount = computed(() => featureEnvList.value.length);
 
   /** 获取应用关联的特性环境，并防止应用切换后的迟到响应污染新应用。 */
   async function fetchFeatureEnvList() {
+    const requestId = ++featureEnvRequestId;
     const appID = appDetailStore.appID;
     const requestCanManageFeatureEnvs = canManageFeatureEnvs.value;
     if (!requestCanManageFeatureEnvs || !appID) {
@@ -981,24 +986,29 @@
     }
 
     featureEnvLoading.value = true;
+
+    // 请求发起后，应用、应用类型或请求代际任一变化都视为过期响应，直接丢弃。
+    const isStale = () =>
+      requestId !== featureEnvRequestId ||
+      appID !== appDetailStore.appID ||
+      requestCanManageFeatureEnvs !== canManageFeatureEnvs.value;
+
     try {
       const list = await EnvService.listFeatureEnvs({
         appID,
         with_deploy_status: true,
       });
-      // 应用类型或应用本身切换后，旧列表请求结果不再写入当前页面。
-      if (appID !== appDetailStore.appID || requestCanManageFeatureEnvs !== canManageFeatureEnvs.value) return;
+      if (isStale()) return;
       featureEnvList.value = list;
       featureEnvError.value = false;
     } catch (err) {
-      if (appID !== appDetailStore.appID || requestCanManageFeatureEnvs !== canManageFeatureEnvs.value) return;
+      if (isStale()) return;
       console.error(err);
       featureEnvList.value = [];
       featureEnvError.value = true;
     } finally {
-      if (appID === appDetailStore.appID && requestCanManageFeatureEnvs === canManageFeatureEnvs.value) {
-        featureEnvLoading.value = false;
-      }
+      // 过期响应不写回，避免覆盖新一轮请求的 loading 状态。
+      if (!isStale()) featureEnvLoading.value = false;
     }
   }
 
@@ -1013,6 +1023,13 @@
     return envList.value.find(env => env.name !== payload.envName && env.status !== 'NotReady');
   }
 
+  /** Open the feature environment page. */
+  function goFeatureEnvPage() {
+    if (!canManageFeatureEnvs.value) return;
+    const { envVars: _envVars, ...query } = route.query;
+    router.push({ query: { ...query, view: FEATURE_ENV_PAGE_QUERY } });
+  }
+
   /** 首次部署特性环境：完成环境变量预检查后切到实例页并打开快速部署侧栏。 */
   async function handleDeployFeatureEnv(env: EnvOutput) {
     if (!env.name || precheckLoading.value) return;
@@ -1022,7 +1039,7 @@
       const precheckPassed = await precheck(env.name, env);
       if (!precheckPassed) return;
 
-      isShowFeatureEnvSideslider.value = false;
+      if (isFeatureEnvPage.value) await leaveFeatureEnvPage();
       envSelectRefreshKey.value += 1;
       envStore.updateCurrentEnv(env.name);
       trpcDeployStore.updateCurEnvItem(env);
@@ -1091,10 +1108,15 @@
     refreshFeatureEnvData();
   }
 
-  /** 应用类型允许时打开新建环境侧栏；列表侧栏保持打开以支持双层侧栏。 */
   function handleShowCreateFeatureEnv() {
     if (!canManageFeatureEnvs.value) return;
     isShowCreateFeatureEnv.value = true;
+  }
+
+  function leaveFeatureEnvPage() {
+    const { view, envVars: _envVars, ...query } = route.query;
+    if (view !== FEATURE_ENV_PAGE_QUERY) return;
+    return router.push({ query });
   }
 
   /** 重新拉取环境列表和部署状态，避免部署侧栏使用 EnvSelect 的旧缓存。 */
@@ -1169,11 +1191,17 @@
     { immediate: true },
   );
 
-  watch([() => appDetailStore.appID, () => appDetailStore.appType], fetchFeatureEnvList, { immediate: true });
+  watch(
+    [() => appDetailStore.appID, () => appDetailStore.appType],
+    () => {
+      featureEnvList.value = [];
+      fetchFeatureEnvList();
+    },
+    { immediate: true },
+  );
 
-  watch(isShowFeatureEnvSideslider, show => {
+  watch(isFeatureEnvPage, show => {
     if (show) {
-      // 侧栏每次打开都重新拉取带部署状态的列表，避免使用上一次打开时的缓存状态。
       fetchFeatureEnvList();
     }
   });
