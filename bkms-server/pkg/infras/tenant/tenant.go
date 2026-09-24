@@ -22,7 +22,6 @@ package tenant
 import (
 	"context"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/ctxkey"
 )
 
@@ -42,12 +41,4 @@ func GetTenantID(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	return tenantID, true
-}
-
-// IsEnabled 返回是否开启多租户模式。全局配置未初始化时视为关闭。
-func IsEnabled() bool {
-	if config.G == nil {
-		return false
-	}
-	return config.G.Tenant.EnableMultiTenantMode
 }

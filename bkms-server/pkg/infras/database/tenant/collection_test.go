@@ -36,6 +36,76 @@ func newTestCollection(name string) *Collection {
 var _ = Describe("TenantAwareCollection", func() {
 	const tenantA = "tenant-a"
 
+	Describe("setTenantField", func() {
+		It("returns tenant-only filter for nil input", func() {
+			got, err := setTenantField(nil, tenantA)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(Equal(bson.M{reqtenant.FieldTenantID: tenantA}))
+		})
+
+		It("keeps map[string]any type without mutating caller", func() {
+			in := map[string]any{"id": "ws-1"}
+
+			got, err := setTenantField(in, tenantA)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(in).To(Equal(map[string]any{"id": "ws-1"}))
+			typed, ok := got.(map[string]any)
+			Expect(ok).To(BeTrue(), "expected map[string]any, got %T", got)
+			Expect(typed).To(Equal(map[string]any{
+				"id":                    "ws-1",
+				reqtenant.FieldTenantID: tenantA,
+			}))
+		})
+
+		It("deduplicates tenant_id in bson.D and appends injected field at tail", func() {
+			in := bson.D{
+				{Key: reqtenant.FieldTenantID, Value: "old"},
+				{Key: "id", Value: "ws-1"},
+			}
+
+			got, err := setTenantField(in, tenantA)
+			Expect(err).NotTo(HaveOccurred())
+			out, ok := got.(bson.D)
+			Expect(ok).To(BeTrue(), "expected bson.D, got %T", got)
+			Expect(out).To(HaveLen(2))
+
+			count := 0
+			for _, elem := range out {
+				if elem.Key == reqtenant.FieldTenantID {
+					count++
+				}
+			}
+			Expect(count).To(Equal(1))
+			Expect(out[len(out)-1]).To(Equal(bson.E{Key: reqtenant.FieldTenantID, Value: tenantA}))
+		})
+
+		It("does not mutate struct pointer caller", func() {
+			in := &struct {
+				TenantID string `bson:"tenant_id"`
+				Name     string `bson:"name"`
+			}{
+				Name: "x",
+			}
+
+			got, err := setTenantField(in, tenantA)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(in.TenantID).To(BeEmpty())
+			Expect(got).To(Equal(bson.D{
+				{Key: "name", Value: "x"},
+				{Key: reqtenant.FieldTenantID, Value: tenantA},
+			}))
+		})
+
+		It("returns error for typed nil pointer", func() {
+			var in *struct {
+				Name string `bson:"name"`
+			}
+
+			_, err := setTenantField(in, tenantA)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 	Describe("applyFilterWithTenant", func() {
 		It("injects tenant_id from context and overwrites caller-supplied tenant_id", func() {
 			c := newTestCollection("workspaces")
@@ -136,6 +206,14 @@ var _ = Describe("TenantAwareCollection", func() {
 				bson.M{"$match": bson.M{"state": "Ready"}},
 				bson.M{"$sort": bson.M{"createdAt": -1}},
 			}))
+		})
+
+		It("returns error for unsupported pipeline type", func() {
+			c := newTestCollection("workspaces")
+			ctx := reqtenant.WithTenantID(context.Background(), tenantA)
+
+			_, err := c.applyPipelineWithTenant(ctx, "not a pipeline")
+			Expect(err).To(HaveOccurred())
 		})
 	})
 

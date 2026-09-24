@@ -2,7 +2,7 @@
 
 ## 背景
 
-多租户试点在同一 `workspaces` 集合上增加 `tenant_id` 字段，由 Collection Wrapper 在开启 `enableMultiTenantMode` 时注入过滤与写入。存量工作空间没有该字段。单租兼容保留租户 ID 为 `default`（对齐 `pkg/infras/tenant.DefaultTenantID`）。
+多租户试点在同一 `workspaces` 集合上增加 `tenant_id` 字段，由请求入口先把租户写入 ctx，再由 Collection Wrapper 注入过滤与写入。存量工作空间没有该字段。单租兼容保留租户 ID 为 `default`（对齐 `pkg/infras/tenant.DefaultTenantID`）。
 
 本轮不改 `id` 全局唯一索引，只补 `tenant_id` 普通索引，方便按租户扫描。
 

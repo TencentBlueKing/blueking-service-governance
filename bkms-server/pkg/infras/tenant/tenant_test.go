@@ -24,7 +24,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
@@ -41,23 +40,5 @@ var _ = Describe("Tenant context helpers", func() {
 		tenantID, ok := tenant.GetTenantID(context.Background())
 		Expect(ok).To(BeFalse())
 		Expect(tenantID).To(BeEmpty())
-	})
-})
-
-var _ = Describe("IsEnabled", func() {
-	It("returns false when global config is nil", func() {
-		prev := svccfg.G
-		svccfg.G = nil
-		DeferCleanup(func() { svccfg.G = prev })
-
-		Expect(tenant.IsEnabled()).To(BeFalse())
-	})
-
-	It("follows tenant.enableMultiTenantMode", func() {
-		prev := svccfg.G
-		svccfg.G = &svccfg.Config{Tenant: svccfg.TenantConfig{EnableMultiTenantMode: true}}
-		DeferCleanup(func() { svccfg.G = prev })
-
-		Expect(tenant.IsEnabled()).To(BeTrue())
 	})
 })
