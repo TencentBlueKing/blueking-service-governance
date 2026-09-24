@@ -28,6 +28,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	dbtenant "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/tenant"
 )
 
 // 存储工作空间数据的 MongoDB 集合名称
@@ -82,7 +84,7 @@ var _ WorkspaceStore = &WorkspaceStoreMongo{}
 
 // WorkspaceStoreMongo 是 WorkspaceStore 接口的 MongoDB 实现
 type WorkspaceStoreMongo struct {
-	collection *mongo.Collection
+	collection *dbtenant.Collection
 }
 
 func (s *WorkspaceStoreMongo) buildListFilter(opts *ListOptions) bson.M {
@@ -109,7 +111,8 @@ func NewWorkspaceStoreMongo(client *mongo.Client, dbName string) (*WorkspaceStor
 	coll := client.Database(dbName).Collection(workspaceCollectionName)
 	// 索引（由 golang-migrate 维护）：
 	// - 唯一：id
-	return &WorkspaceStoreMongo{collection: coll}, nil
+	// - 普通：tenant_id
+	return &WorkspaceStoreMongo{collection: dbtenant.Wrap(coll)}, nil
 }
 
 // List 获取工作空间列表

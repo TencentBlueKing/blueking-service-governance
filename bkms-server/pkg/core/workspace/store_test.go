@@ -30,6 +30,7 @@ import (
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	reqtenant "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -45,7 +46,7 @@ var _ = Describe("WorkspaceStore", func() {
 		store, err = NewWorkspaceStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 
-		ctx = context.Background()
+		ctx = reqtenant.WithTenantID(context.Background(), reqtenant.DefaultTenantID)
 		Expect(cleanupWorkspaceCollection(ctx)).To(Succeed())
 
 		workspaceA = Workspace{
@@ -362,6 +363,39 @@ var _ = Describe("WorkspaceStore", func() {
 			Expect(counts[StateReady]).To(Equal(int64(1)))
 			Expect(counts[StateDisabled]).To(Equal(int64(1)))
 			Expect(counts[StateProcessing]).To(Equal(int64(0)))
+		})
+	})
+
+	Describe("tenant isolation", func() {
+		It("isolates list/get/count by context tenant", func() {
+			ctxA := reqtenant.WithTenantID(context.Background(), "tenant-a")
+			ctxB := reqtenant.WithTenantID(context.Background(), "tenant-b")
+			workspaceA.State = StateReady
+			workspaceB.State = StateReady
+
+			Expect(store.Create(ctxA, &workspaceA)).To(Succeed())
+			Expect(store.Create(ctxB, &workspaceB)).To(Succeed())
+
+			listA, err := store.List(ctxA, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(listA).To(HaveLen(1))
+			Expect(listA[0].ID).To(Equal(workspaceA.ID))
+			Expect(listA[0].TenantID).To(Equal("tenant-a"))
+
+			got, err := store.Get(ctxA, workspaceA.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.TenantID).To(Equal("tenant-a"))
+
+			_, err = store.Get(ctxA, workspaceB.ID)
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+
+			counts, err := store.CountByState(ctxA, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(counts[StateReady]).To(Equal(int64(1)))
+		})
+
+		It("rejects write when context has no tenant", func() {
+			Expect(store.Create(context.Background(), &workspaceA)).To(MatchError(reqtenant.ErrTenantIDRequired))
 		})
 	})
 })
