@@ -49,7 +49,7 @@ var _ = Describe("Auth backends", func() {
 
 		Entry("bk_ticket", NewBkTicketAuthBackend(""), "X-User-Bk-Ticket", "bk_ticket"),
 		Entry("bk_token", NewBkTokenAuthBackend(""), "X-User-Bk-Token", "bk_token"),
-		Entry("bk_token_apigw", NewBkTokenApigwAuthBackend("", "", "", ""), "X-User-Bk-Token", "bk_token"),
+		Entry("bk_token_apigw", &BkTokenApigwAuthBackend{}, "X-User-Bk-Token", "bk_token"),
 	)
 
 	It("gets user info with bk_ticket", func() {
@@ -66,7 +66,7 @@ var _ = Describe("Auth backends", func() {
 
 	It("gets user info from the bk-login apigw userinfo API", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-			Expect(request.URL.Path).To(Equal("/login/api/v3/open/bk-tokens/userinfo/"))
+			Expect(request.URL.Path).To(Equal("/api/bk-login/test/login/api/v3/open/bk-tokens/userinfo/"))
 			Expect(request.URL.Query().Get("bk_token")).To(Equal("token"))
 
 			var authHeader map[string]string
@@ -77,10 +77,11 @@ var _ = Describe("Auth backends", func() {
 		}))
 		defer server.Close()
 
-		backend := NewBkTokenApigwAuthBackend(server.URL+"/login", "bkms", "secret", "")
+		backend, err := NewBkTokenApigwAuthBackend(server.URL, "test", "bkms", "secret", "")
+		Expect(err).NotTo(HaveOccurred())
 		user, err := backend.GetUserInfo(context.Background(), "token")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(user).To(Equal(&UserInfo{ID: "admin"}))
+		Expect(user).To(Equal(&UserInfo{ID: "admin", TenantID: "system"}))
 	})
 
 	It("returns the apigw login-expired error", func() {
@@ -90,8 +91,9 @@ var _ = Describe("Auth backends", func() {
 		}))
 		defer server.Close()
 
-		_, err := NewBkTokenApigwAuthBackend(server.URL, "bkms", "secret", "").
-			GetUserInfo(context.Background(), "token")
+		backend, err := NewBkTokenApigwAuthBackend(server.URL, "test", "bkms", "secret", "")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = backend.GetUserInfo(context.Background(), "token")
 		Expect(err).To(MatchError(ContainSubstring("登录态已过期")))
 	})
 
@@ -101,8 +103,9 @@ var _ = Describe("Auth backends", func() {
 		}))
 		defer server.Close()
 
-		_, err := NewBkTokenApigwAuthBackend(server.URL, "bkms", "secret", "").
-			GetUserInfo(context.Background(), "token")
+		backend, err := NewBkTokenApigwAuthBackend(server.URL, "test", "bkms", "secret", "")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = backend.GetUserInfo(context.Background(), "token")
 		Expect(err).To(MatchError(ContainSubstring("empty bk_username")))
 	})
 

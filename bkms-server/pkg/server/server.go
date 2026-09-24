@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
@@ -71,7 +72,9 @@ import (
 	depservicehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bkuser"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	audithandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
@@ -112,10 +115,10 @@ import (
 	topologyhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology/handler"
 )
 
-// RegisterRouter 创建 Gin router，并注册 bkms-server 的所有 HTTP 路由
+// RegisterRouter 创建 Gin router，并注册 bkms-server 的所有 HTTP 路由。
 //
-// serverRole 用于区分调用方进程角色（如 "webserver"），供 APM Middleware 生成默认服务名使用
-func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *gin.Engine {
+// serverRole 用于区分调用方进程角色（如 "webserver"），供 APM Middleware 生成默认服务名使用。
+func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (*gin.Engine, error) {
 	gin.SetMode(cfg.HTTPServer.Mode)
 	r := gin.New()
 	r.Use(
@@ -142,14 +145,35 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 		LoginURL:    cfg.Account.LoginURL,
 	}, tokenClient)
 	authConfig := auth.Config{
-		BackendType:          cfg.Account.BackendType,
-		LoginURL:             cfg.Account.LoginURL,
-		LoginApigwURL:        cfg.Account.LoginApigwURL,
-		AllowSetUserInHeader: cfg.Development.AllowSetUserInHeader,
-		BkAppCode:            cfg.BkApp.Code,
-		BkAppSecret:          cfg.BkApp.Secret,
+		BackendType:               cfg.Account.BackendType,
+		LoginURL:                  cfg.Account.LoginURL,
+		EnableBkLoginUserinfoAuth: cfg.FeatureIntegrations.EnableBkLoginUserinfoAuth,
+		BkApiUrlTmpl:              cfg.BkPlatUrls.BkApiUrlTmpl,
+		BkLoginStage:              cfg.BkApiStages.BkLogin,
+		AllowSetUserInHeader:      cfg.Development.AllowSetUserInHeader,
+		BkAppCode:                 cfg.BkApp.Code,
+		BkAppSecret:               cfg.BkApp.Secret,
 	}
-	account.Register(r.Group(""), accountHandler, auth.Optional(authConfig, tokenClient))
+	var tenantVerifier tenant.Verifier
+	if cfg.Tenant.EnableMultiTenantMode {
+		bkUserClient, err := bkuser.NewClient(
+			cfg.BkPlatUrls.BkApiUrlTmpl,
+			cfg.BkApiStages.BkUser,
+			cfg.BkApp.Code,
+			cfg.BkApp.Secret,
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "new bk-user client")
+		}
+		tenantVerifier = tenant.NewBKUserVerifier(
+			bkUserClient,
+		)
+	}
+	optionalAuth, err := auth.Optional(authConfig, tokenClient)
+	if err != nil {
+		return nil, errors.Wrap(err, "new optional auth middleware")
+	}
+	account.Register(r.Group(""), accountHandler, optionalAuth)
 
 	// 构建触发回调由蓝盾触发专用流水线调用，携带应用独享凭证而非用户票据，
 	// 因此单独挂在不带 auth.Required 的路由组上。
@@ -162,7 +186,15 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 	// Register authenticated business APIs under /v1.
 	// 以下 Group 的所有 API 均要求请求必须携带有效身份信息
 	v1 := r.Group("/bkms/v1/bkms-server")
-	v1.Use(bkerrs.ErrorHandler(), auth.Required(authConfig, tokenClient))
+	requiredAuth, err := auth.Required(authConfig, tokenClient)
+	if err != nil {
+		return nil, errors.Wrap(err, "new required auth middleware")
+	}
+	v1.Use(
+		bkerrs.ErrorHandler(),
+		requiredAuth,
+		tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier),
+	)
 	app.Register(v1, apphandler.New(storereg.G()))
 	deploy.Register(v1, deployhandler.New(storereg.G()))
 	workspace.Register(v1, workspacehandler.New(storereg.G()))
@@ -219,5 +251,5 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) *
 		platmgt.RequirePlatformRole(storereg.G().PlatAdminStore, admin.RoleCodeAdmin),
 	)
 
-	return r
+	return r, nil
 }

@@ -16,25 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package backends
+package bkuser
 
-// UserInfo 表示一个通过认证后的用户信息。
-type UserInfo struct {
-	// ID 为用户的唯一标记。
-	ID string
-	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
-	TenantID string
-}
+import (
+	"testing"
 
-// apigwUserInfoResponse 是 bk-login 网关 userinfo 接口的响应结构。
-type apigwUserInfoResponse struct {
-	Data struct {
-		BkUsername  string `json:"bk_username"`
-		TenantID    string `json:"tenant_id"`
-		DisplayName string `json:"display_name"`
-	} `json:"data"`
-	Error *struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+func TestBkUser(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "BkUser Suite")
 }

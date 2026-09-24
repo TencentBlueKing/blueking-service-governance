@@ -39,22 +39,22 @@ type AuthBackend interface {
 }
 
 // getBackend 根据配置创建认证后端实例。
-func getBackend(cfg Config) (AuthBackend, string) {
+func getBackend(cfg Config) (AuthBackend, string, error) {
 	switch cfg.BackendType {
 	case BackendBkTicket:
-		return backends.NewBkTicketAuthBackend(cfg.LoginURL), BackendBkTicket
+		return backends.NewBkTicketAuthBackend(cfg.LoginURL), BackendBkTicket, nil
 	case BackendBkToken, "":
-		if cfg.LoginApigwURL != "" {
-			if cfg.BkAppCode == "" || cfg.BkAppSecret == "" {
-				panic("bkApp.code and bkApp.secret are required when account.loginApigwURL is set")
+		if cfg.EnableBkLoginUserinfoAuth {
+			backend, err := backends.NewBkTokenApigwAuthBackend(
+				cfg.BkApiUrlTmpl, cfg.BkLoginStage, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
+			)
+			if err != nil {
+				return nil, "", err
 			}
-			return backends.NewBkTokenApigwAuthBackend(
-				cfg.LoginApigwURL, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
-			), BackendBkToken
+			return backend, BackendBkToken, nil
 		}
-		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken
+		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken, nil
 	default:
-		// Default to bk_token
-		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken
+		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken, nil
 	}
 }

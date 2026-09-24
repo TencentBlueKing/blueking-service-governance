@@ -144,9 +144,9 @@ development:
 			Expect(cfg.BkApiStages.BCS).To(Equal("prod"))
 			Expect(cfg.Account.AuthBaseURL).To(Equal("http://auth.example.com"))
 			Expect(cfg.Account.LoginURL).To(Equal("http://login.example.com"))
-			Expect(cfg.Account.LoginApigwURL).To(BeEmpty())
 			Expect(cfg.Account.AuthEnvName).To(Equal("test"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
+			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeFalse())
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(config.G.Encrypt.Secret).To(Equal(originalSecret))
 			Expect(cfg.Mongo.Username).To(Equal("testuser"))
@@ -239,9 +239,78 @@ asynq:
 			Expect(cfg.HTTPServer.ShutdownTimeout).To(Equal(config.DefaultHTTPServerShutdownTimeout))
 			Expect(cfg.Account.AuthEnvName).To(Equal("prod"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
+			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeFalse())
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageCode).To(BeEmpty())
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageVersion).To(BeEmpty())
+		})
+
+		It("should successfully load explicit tenant config values", func() {
+			configContent := `
+bkApp:
+  code: test-app
+  secret: test-secret
+bkPlatUrls:
+  bkApiUrlTmpl: https://{api_name}.example.com
+featureIntegrations:
+  enableBkUserTenantVerify: true
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: http://login.example.com
+tenant:
+  enableMultiTenantMode: true
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg, err := config.Load(ctx, configFile)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg).NotTo(BeNil())
+			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeTrue())
+			Expect(cfg.FeatureIntegrations.EnableBkUserTenantVerify).To(BeTrue())
+		})
+
+		It("should fail when multi-tenant mode is enabled without enableBkUserTenantVerify", func() {
+			configContent := `
+bkApp:
+  code: test-app
+  secret: test-secret
+bkPlatUrls:
+  bkApiUrlTmpl: https://{api_name}.example.com
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: http://login.example.com
+tenant:
+  enableMultiTenantMode: true
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = config.Load(ctx, configFile)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(
+				"featureIntegrations.enableBkUserTenantVerify is required when tenant.enableMultiTenantMode is enabled",
+			))
 		})
 
 		It("should successfully load config without bkMonitor section", func() {
@@ -369,15 +438,22 @@ httpServer:
 			Expect(err.Error()).To(ContainSubstring("'Address' failed on the 'required' tag"))
 		})
 
-		It("should load loginApigwURL under account", func() {
+		It("should load feature integrations and bkapi stages", func() {
 			configContent := `
 bkApp:
   code: test-app
   secret: test-secret
+bkPlatUrls:
+  bkApiUrlTmpl: https://{api_name}.example.com
+featureIntegrations:
+  enableBkLoginUserinfoAuth: true
+  enableBkUserTenantVerify: true
+bkApiStages:
+  bkLogin: prod
+  bkUser: test
 account:
   authBaseURL: http://auth.example.com
   loginURL: https://paas.example.com/login
-  loginApigwURL: https://bkapi.example.com/api/bk-login/prod/login
 metrics:
   port: 8081
 httpServer:
@@ -395,18 +471,22 @@ asynq:
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Account.LoginURL).To(Equal("https://paas.example.com/login"))
-			Expect(cfg.Account.LoginApigwURL).To(Equal("https://bkapi.example.com/api/bk-login/prod/login"))
+			Expect(cfg.FeatureIntegrations.EnableBkLoginUserinfoAuth).To(BeTrue())
+			Expect(cfg.FeatureIntegrations.EnableBkUserTenantVerify).To(BeTrue())
+			Expect(cfg.BkApiStages.BkLogin).To(Equal("prod"))
+			Expect(cfg.BkApiStages.BkUser).To(Equal("test"))
 		})
 
-		It("should fail when loginApigwURL is set without bkApp credentials", func() {
+		It("should fail when bk-login feature is enabled without bkApiUrlTmpl", func() {
 			configContent := `
 bkApp:
-  code: ""
-  secret: ""
+  code: test-app
+  secret: test-secret
+featureIntegrations:
+  enableBkLoginUserinfoAuth: true
 account:
   authBaseURL: http://auth.example.com
   loginURL: https://paas.example.com/login
-  loginApigwURL: https://bkapi.example.com/api/bk-login/prod/login
 metrics:
   port: 8081
 httpServer:
@@ -423,7 +503,42 @@ asynq:
 			_, err = config.Load(ctx, configFile)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("bkApp.code and bkApp.secret are required"))
+			Expect(err.Error()).To(ContainSubstring(
+				"bkPlatUrls.bkApiUrlTmpl is required when featureIntegrations.enableBkLoginUserinfoAuth is enabled",
+			))
+		})
+
+		It("should fail when multi-tenant mode is enabled without enableBkUserTenantVerify", func() {
+			configContent := `
+bkApp:
+  code: test-app
+  secret: test-secret
+bkPlatUrls:
+  bkApiUrlTmpl: https://{api_name}.example.com
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: https://paas.example.com/login
+tenant:
+  enableMultiTenantMode: true
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = config.Load(ctx, configFile)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(
+				"featureIntegrations.enableBkUserTenantVerify is required when tenant.enableMultiTenantMode is enabled",
+			))
 		})
 
 		It("should fail when http server port is missing", func() {

@@ -16,23 +16,28 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package backends
+package bkuser
 
-// UserInfo 表示一个通过认证后的用户信息。
-type UserInfo struct {
-	// ID 为用户的唯一标记。
-	ID string
-	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
-	TenantID string
+const (
+	bkUserGatewayName = "bk-user"
+
+	// UserStatusEnabled means the bk-user account is active for tenant access.
+	UserStatusEnabled = "enabled"
+)
+
+// User is the subset of bk-user user fields currently consumed by BKMS.
+type User struct {
+	TenantID    string `json:"tenant_id"`
+	BkUsername  string `json:"bk_username"`
+	LoginName   string `json:"login_name"`
+	DisplayName string `json:"display_name"`
+	TimeZone    string `json:"time_zone"`
+	Language    string `json:"language"`
+	Status      string `json:"status"`
 }
 
-// apigwUserInfoResponse 是 bk-login 网关 userinfo 接口的响应结构。
-type apigwUserInfoResponse struct {
-	Data struct {
-		BkUsername  string `json:"bk_username"`
-		TenantID    string `json:"tenant_id"`
-		DisplayName string `json:"display_name"`
-	} `json:"data"`
+type getUserResponse struct {
+	Data  User `json:"data"`
 	Error *struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`

@@ -51,8 +51,12 @@ type Config struct {
 	BackendType string
 	// LoginURL 是登录页根地址，用于拼接 /plain/；未配网关时也作为直连校验的 host。
 	LoginURL string
-	// LoginApigwURL 是 bk-login 网关前缀。backendType 为 bk_token 且本字段非空时走网关 userinfo。
-	LoginApigwURL string
+	// EnableBkLoginUserinfoAuth 为 true 时，bk_token 认证走 bk-login 网关 userinfo。
+	EnableBkLoginUserinfoAuth bool
+	// BkApiUrlTmpl 是蓝鲸网关地址模板，仅在 EnableBkLoginUserinfoAuth 时用于构造 bk-login 客户端。
+	BkApiUrlTmpl string
+	// BkLoginStage 是 bk-login 网关 stage；为空时由 sdk 默认使用 prod。
+	BkLoginStage string
 	// BkAppCode 应用 ID，走 API 网关时需要。
 	BkAppCode string
 	// BkAppSecret 应用密钥，走 API 网关时需要。
@@ -83,16 +87,22 @@ func GetResult(ctx context.Context) (Result, bool) {
 
 // Optional 尝试认证当前用户，无论认证是否成功都会继续处理请求。
 // 在一些特殊的不强制要求用户认证的 API 中使用。
-func Optional(cfg Config, tokenClient usertoken.TokenClient) gin.HandlerFunc {
-	authBackend, backendType := getBackend(cfg)
-	return middleware(authBackend, backendType, tokenClient, cfg.AllowSetUserInHeader, false)
+func Optional(cfg Config, tokenClient usertoken.TokenClient) (gin.HandlerFunc, error) {
+	authBackend, backendType, err := getBackend(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return middleware(authBackend, backendType, tokenClient, cfg.AllowSetUserInHeader, false), nil
 }
 
 // Required 认证当前用户，认证失败时中止请求。
 // 应该作为项目最主要的默认认证中间件使用。
-func Required(cfg Config, tokenClient usertoken.TokenClient) gin.HandlerFunc {
-	authBackend, backendType := getBackend(cfg)
-	return middleware(authBackend, backendType, tokenClient, cfg.AllowSetUserInHeader, true)
+func Required(cfg Config, tokenClient usertoken.TokenClient) (gin.HandlerFunc, error) {
+	authBackend, backendType, err := getBackend(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return middleware(authBackend, backendType, tokenClient, cfg.AllowSetUserInHeader, true), nil
 }
 
 // 制造中间件函数的工厂函数。
@@ -138,6 +148,8 @@ func middleware(
 }
 
 // 完成用户认证的核心函数，供中间件调用。
+// TODO: 这里应一次产出完整当前用户（id/租户/名字/状态）并按登录态缓存，供 tenant
+// 等后置校验只读 request.user，不再各自回源。见 tenant.verifyTenantAccess。
 func authenticate(
 	ctx context.Context,
 	request *http.Request,
@@ -183,7 +195,7 @@ func authenticate(
 		return result
 	}
 
-	result.RequestUser = User{ID: userInfo.ID, Cred: cred}
+	result.RequestUser = User{ID: userInfo.ID, TenantID: userInfo.TenantID, Cred: cred}
 	return result
 }
 

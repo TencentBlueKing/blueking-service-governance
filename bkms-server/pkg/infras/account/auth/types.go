@@ -35,6 +35,7 @@ const (
 // RequestUser 表示请求上下文中的用户身份。
 type RequestUser interface {
 	GetID() string
+	GetTenantID() string
 	Credential() UserCredential
 	IsAuthenticated() bool
 }
@@ -43,6 +44,8 @@ type RequestUser interface {
 type User struct {
 	// ID 是用户 ID。
 	ID string `json:"id"`
+	// TenantID 是认证上游返回的登录态所属租户，部分认证路径可能为空。
+	TenantID string `json:"tenantId,omitempty"`
 
 	// Cred 是用户认证凭据。
 	Cred UserCredential `json:"credential,omitempty"`
@@ -50,6 +53,9 @@ type User struct {
 
 // GetID 返回用户 ID。
 func (u User) GetID() string { return u.ID }
+
+// GetTenantID 返回认证结果中的租户 ID。
+func (u User) GetTenantID() string { return u.TenantID }
 
 // Credential 返回用户认证凭据。
 func (u User) Credential() UserCredential { return u.Cred }
@@ -64,6 +70,9 @@ type AnonymousUser struct {
 
 // GetID 返回空用户 ID。
 func (u AnonymousUser) GetID() string { return "" }
+
+// GetTenantID 对匿名用户恒为空。
+func (u AnonymousUser) GetTenantID() string { return "" }
 
 // Credential 返回已捕获但尚未通过认证的凭据。
 func (u AnonymousUser) Credential() UserCredential { return u.Cred }

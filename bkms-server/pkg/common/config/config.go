@@ -111,10 +111,11 @@ func Load(ctx context.Context, cfgFile string) (*Config, error) {
 		return nil, errors.Wrap(err, "validate AccountConfig")
 	}
 
-	if cfg.Account.LoginApigwURL != "" && cfg.Account.BackendType == "bk_token" {
-		if cfg.BkApp.Code == "" || cfg.BkApp.Secret == "" {
-			return nil, errors.New("bkApp.code and bkApp.secret are required when account.loginApigwURL is set")
-		}
+	if err := validateBkLoginDependencies(&cfg); err != nil {
+		return nil, err
+	}
+	if err := validateTenantDependencies(&cfg); err != nil {
+		return nil, err
 	}
 
 	// 设置全局环境变量
@@ -130,4 +131,36 @@ func setDefaultConfigValues(vp *viper.Viper) {
 	vp.SetDefault("httpServer.writeTimeout", DefaultHTTPServerWriteTimeout)
 	vp.SetDefault("httpServer.idleTimeout", DefaultHTTPServerIdleTimeout)
 	vp.SetDefault("httpServer.shutdownTimeout", DefaultHTTPServerShutdownTimeout)
+}
+
+func validateBkLoginDependencies(cfg *Config) error {
+	if !cfg.FeatureIntegrations.EnableBkLoginUserinfoAuth || cfg.Account.BackendType != "bk_token" {
+		return nil
+	}
+	if cfg.BkPlatUrls.BkApiUrlTmpl == "" {
+		return errors.New(
+			"bkPlatUrls.bkApiUrlTmpl is required when featureIntegrations.enableBkLoginUserinfoAuth is enabled",
+		)
+	}
+	if cfg.BkApp.Code == "" || cfg.BkApp.Secret == "" {
+		return errors.New(
+			"bkApp.code and bkApp.secret are required when featureIntegrations.enableBkLoginUserinfoAuth is enabled",
+		)
+	}
+	return nil
+}
+
+func validateTenantDependencies(cfg *Config) error {
+	if !cfg.Tenant.EnableMultiTenantMode {
+		return nil
+	}
+	if !cfg.FeatureIntegrations.EnableBkUserTenantVerify {
+		return errors.New(
+			"featureIntegrations.enableBkUserTenantVerify is required when tenant.enableMultiTenantMode is enabled",
+		)
+	}
+	if cfg.BkPlatUrls.BkApiUrlTmpl == "" {
+		return errors.New("bkPlatUrls.bkApiUrlTmpl is required when tenant.enableMultiTenantMode is enabled")
+	}
+	return nil
 }

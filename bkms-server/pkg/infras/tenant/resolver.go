@@ -16,25 +16,22 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package backends
+package tenant
 
-// UserInfo 表示一个通过认证后的用户信息。
-type UserInfo struct {
-	// ID 为用户的唯一标记。
-	ID string
-	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
-	TenantID string
-}
-
-// apigwUserInfoResponse 是 bk-login 网关 userinfo 接口的响应结构。
-type apigwUserInfoResponse struct {
-	Data struct {
-		BkUsername  string `json:"bk_username"`
-		TenantID    string `json:"tenant_id"`
-		DisplayName string `json:"display_name"`
-	} `json:"data"`
-	Error *struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
+// ValidateTenantMode 验证租户模式
+func ValidateTenantMode(tenantID string, enableMultiTenantMode bool) (string, error) {
+	// 未开启多租户时仅允许租户为 "" 或 default
+	if !enableMultiTenantMode {
+		switch tenantID {
+		case "", DefaultTenantID:
+			return DefaultTenantID, nil
+		default:
+			return "", ErrTenantIDInvalid
+		}
+	}
+	// 开启多租户时，不允许租户为空
+	if tenantID == "" {
+		return "", ErrTenantIDRequired
+	}
+	return tenantID, nil
 }

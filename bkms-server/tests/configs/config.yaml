@@ -18,6 +18,10 @@ bkPlatUrls:
   bkApiUrlTmpl: https://{api_name}.apigw.example.com
   # 组件 API 基础地址
   compApiBaseUrl: https://api.example.com
+# 可选平台集成开关
+featureIntegrations:
+  enableBkLoginUserinfoAuth: false   # bk_token 走 bk-login 网关 userinfo
+  enableBkUserTenantVerify: false    # 用 bk-user 校验用户所属租户/状态
 # 蓝鲸 API 环境配置
 bkApiStages:
   kubeinsight: prod
@@ -27,6 +31,10 @@ bkApiStages:
   bkiam: prod
   # DBM 数据库管理平台
   bkdbm: prod
+  # bk-login 蓝鲸登陆
+  bkLogin: prod
+  # bk-user 用户管理
+  bkUser: prod
 # IAM 中业务系统 ID 配置
 bkIAMSystemIDs:
   bkms: bkms
@@ -37,6 +45,9 @@ bkIAMSystemIDs:
   bkrepo: bkrepo
   bscp: bk_bscp
   bkcc: bkcc
+# 多租户配置
+tenant:
+  enableMultiTenantMode: false
 # ------------------------------ 外部依赖服务（蓝鲸 SaaS & 公司系统） ------------------------------
 # 蓝盾配置，用于项目初始化 & 流水线模板加载
 bkci:

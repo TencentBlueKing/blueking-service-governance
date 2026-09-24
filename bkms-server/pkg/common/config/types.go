@@ -40,9 +40,6 @@ type AccountConfig struct {
 	AuthBaseURL string `validate:"required,url"`
 	// LoginURL 是登录页根地址，不含路径，用于拼接 /plain/ 跳转
 	LoginURL string `validate:"required,url"`
-	// LoginApigwURL 是 bk-login 网关前缀，不含接口路径。
-	// backendType 为 bk_token 且本字段非空时，通过网关 userinfo 校验 bk_token；留空则直连 LoginURL。
-	LoginApigwURL string `validate:"omitempty,url"`
 	// AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
 	AuthEnvName string
 	// BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
@@ -59,6 +56,14 @@ type BkPlatUrlsConfig struct {
 	CompApiBaseUrl string
 }
 
+// FeatureIntegrationsConfig 控制可选平台集成链路是否启用。
+type FeatureIntegrationsConfig struct {
+	// EnableBkLoginUserinfoAuth 控制 bk_token 认证是否通过 bk-login 网关 userinfo 链路完成。
+	EnableBkLoginUserinfoAuth bool
+	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
+	EnableBkUserTenantVerify bool
+}
+
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"
 type BkApiStagesConfig struct {
 	BSCP        string
@@ -69,6 +74,8 @@ type BkApiStagesConfig struct {
 	BkHCM       string
 	BkIAM       string
 	BkDBM       string
+	BkLogin     string
+	BkUser      string
 }
 
 // BkIAMSystemIDsConfig 接入蓝鲸权限中心（IAM）时使用的各业务系统 ID 配置
@@ -199,6 +206,12 @@ type PolarisConfig struct {
 	Address string
 	// JoinPoint 北极星接入点(如 default)，与 Address 二选一
 	JoinPoint string
+}
+
+// TenantConfig 多租户相关配置。
+type TenantConfig struct {
+	// EnableMultiTenantMode 控制是否启用多租户模式。
+	EnableMultiTenantMode bool
 }
 
 // --------------------------- 基础设施依赖 ---------------------------
@@ -412,6 +425,8 @@ type Config struct {
 	Account AccountConfig
 	// 蓝鲸平台地址配置
 	BkPlatUrls BkPlatUrlsConfig
+	// FeatureIntegrations 可选平台集成开关
+	FeatureIntegrations FeatureIntegrationsConfig
 	// 蓝鲸 API 版本信息
 	BkApiStages BkApiStagesConfig
 	// BkIAMSystemIDs 接入蓝鲸权限中心（IAM）时使用的各业务系统 ID
@@ -460,6 +475,8 @@ type Config struct {
 	ImageBuild ImageBuildConfig
 	// 任务轮询器
 	TaskPoller TaskPollerConfig
+	// Tenant 多租户配置
+	Tenant TenantConfig
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用

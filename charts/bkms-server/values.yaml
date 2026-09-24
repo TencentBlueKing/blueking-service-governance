@@ -198,8 +198,6 @@ svcConf:
     authBaseURL: http://apigw.example.com
     # LoginURL 是登录页根地址（不含路径），用于拼接 /plain/
     loginURL: https://paas.example.com/login
-    # LoginApigwURL 是 bk-login 网关前缀（不含接口路径）；backendType 为 bk_token 时用于校验 bk_token
-    loginApigwURL: https://bkapi.example.com/api/bk-login/prod/login
     # AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
     # authEnvName: prod
     # BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
@@ -210,6 +208,12 @@ svcConf:
     bkApiUrlTmpl: https://{api_name}.apigw.example.com
     # 组件 API 基础地址
     compApiBaseUrl: https://api.example.com
+  # 可选平台集成开关
+  featureIntegrations:
+    # bk_token 走 bk-login 网关 userinfo
+    enableBkLoginUserinfoAuth: false
+    # 用 bk-user 校验用户所属租户/状态
+    enableBkUserTenantVerify: false
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP
@@ -226,6 +230,12 @@ svcConf:
     bkhcm: prod
     # IAM 蓝鲸权限中心
     bkiam: prod
+    # DBM 数据库管理平台
+    bkdbm: prod
+    # bk-login 蓝鲸登陆
+    bkLogin: prod
+    # bk-user 用户管理
+    bkUser: prod
   # IAM 中业务系统 ID 配置
   bkIAMSystemIDs:
     bkms: bkms

@@ -24,4 +24,6 @@ type ctxKey string
 const (
 	// AuthUser 用户信息
 	AuthUser ctxKey = "authUser"
+	// TenantID 当前请求对应的租户 ID
+	TenantID ctxKey = "tenantID"
 )

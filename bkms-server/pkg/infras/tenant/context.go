@@ -16,25 +16,29 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package backends
+// Package tenant provides tenant-aware request context helpers and middleware.
+package tenant
 
-// UserInfo 表示一个通过认证后的用户信息。
-type UserInfo struct {
-	// ID 为用户的唯一标记。
-	ID string
-	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
-	TenantID string
+import (
+	"context"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/ctxkey"
+)
+
+// WithTenantID stores the resolved tenant ID into context.
+func WithTenantID(ctx context.Context, tenantID string) context.Context {
+	return context.WithValue(ctx, ctxkey.TenantID, tenantID)
 }
 
-// apigwUserInfoResponse 是 bk-login 网关 userinfo 接口的响应结构。
-type apigwUserInfoResponse struct {
-	Data struct {
-		BkUsername  string `json:"bk_username"`
-		TenantID    string `json:"tenant_id"`
-		DisplayName string `json:"display_name"`
-	} `json:"data"`
-	Error *struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
+// GetTenantID returns the tenant ID from context.
+func GetTenantID(ctx context.Context) (string, bool) {
+	val := ctx.Value(ctxkey.TenantID)
+	if val == nil {
+		return "", false
+	}
+	tenantID, ok := val.(string)
+	if !ok || tenantID == "" {
+		return "", false
+	}
+	return tenantID, true
 }
