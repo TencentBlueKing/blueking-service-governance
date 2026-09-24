@@ -200,7 +200,7 @@ func (m *PolarisPlatformManager) GetService(
 	}
 	svc, err := p.GetService(ctx, name, namespace)
 	if err != nil {
-		return nil, wrapImportedPolarisErr(err, "get polaris service")
+		return nil, errors.Wrap(err, "get polaris service")
 	}
 	return toRemotePolarisService(svc), nil
 }
@@ -219,7 +219,7 @@ func (m *PolarisPlatformManager) GetImportedService(
 	}
 	svc, err := p.GetAndValidateService(ctx, name, namespace, token)
 	if err != nil {
-		return nil, wrapImportedPolarisErr(err, "get imported polaris service")
+		return nil, errors.Wrap(err, "get imported polaris service")
 	}
 	return toRemotePolarisService(svc), nil
 }
@@ -245,7 +245,7 @@ func (m *PolarisPlatformManager) UpdateImportedService(
 		},
 		toPolarisUpdateParams(params),
 	); err != nil {
-		return wrapImportedPolarisErr(err, "update imported polaris service")
+		return errors.Wrap(err, "update imported polaris service")
 	}
 	return nil
 }
@@ -384,18 +384,4 @@ func toPolarisUpdateParams(params *UpdateServiceParams) *polarisprovider.UpdateP
 		}
 	}
 	return update
-}
-
-func wrapImportedPolarisErr(err error, msg string) error {
-	if err == nil {
-		return nil
-	}
-	switch {
-	case errors.Is(err, polarisprovider.ErrUnauthorized):
-		return errors.Wrap(ErrUnauthorized, err.Error())
-	case errors.Is(err, polarisprovider.ErrServiceNotFound):
-		return errors.Wrap(ErrServiceNotFound, err.Error())
-	default:
-		return errors.Wrap(err, msg)
-	}
 }

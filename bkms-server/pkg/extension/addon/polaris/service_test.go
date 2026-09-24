@@ -39,6 +39,7 @@ import (
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
@@ -284,12 +285,12 @@ var _ = Describe("PolarisConfigService", func() {
 		It("should return the polaris error when the token is rejected", func() {
 			mockey.PatchConvey("switch imported weight factor with bad token", GinkgoT(), func() {
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).
-					Return(polaris.ErrUnauthorized).Build()
+					Return(polarisprovider.ErrUnauthorized).Build()
 
 				err := service.UpdateImportedPolaris(
 					ctx, "imported-service", "Test", "bad-token", true,
 				)
-				Expect(err).To(MatchError(polaris.ErrUnauthorized))
+				Expect(err).To(MatchError(polarisprovider.ErrUnauthorized))
 			})
 		})
 	})

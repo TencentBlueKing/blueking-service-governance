@@ -18,7 +18,11 @@
 
 package polaris
 
-import "github.com/pkg/errors"
+import (
+	"github.com/pkg/errors"
+
+	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
+)
 
 var (
 	// ErrConfigNotFound 北极星配置不存在
@@ -29,16 +33,12 @@ var (
 	ErrOperatorEmpty = errors.New("operator cannot be empty")
 	// ErrNotManaged 部分字段仅平台创建的北极星服务允许修改
 	ErrNotManaged = errors.New("field can only be set for platform-created polaris services")
-	// ErrUnauthorized Token 无效、缺失或没有写权限
-	ErrUnauthorized = errors.New("polaris token is invalid or has no write permission")
-	// ErrServiceNotFound 北极星上不存在对应服务
-	ErrServiceNotFound = errors.New("polaris service not found")
 )
 
 // IsClientRequestError 调用方输入问题（Token、权限、服务不存在、不允许改的字段），handler 映射为 400。
 func IsClientRequestError(err error) bool {
-	return errors.Is(err, ErrUnauthorized) ||
-		errors.Is(err, ErrServiceNotFound) ||
+	return errors.Is(err, polarisprovider.ErrUnauthorized) ||
+		errors.Is(err, polarisprovider.ErrServiceNotFound) ||
 		errors.Is(err, ErrOperatorEmpty) ||
 		errors.Is(err, ErrNotManaged)
 }

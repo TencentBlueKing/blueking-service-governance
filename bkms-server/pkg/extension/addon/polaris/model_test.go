@@ -142,34 +142,12 @@ var _ = Describe("IsClientRequestError", func() {
 		func(err error, want bool) {
 			Expect(polaris.IsClientRequestError(err)).To(Equal(want))
 		},
-		Entry("unauthorized", polaris.ErrUnauthorized, true),
-		Entry("service not found", polaris.ErrServiceNotFound, true),
+		Entry("unauthorized", polarisprovider.ErrUnauthorized, true),
+		Entry("service not found", polarisprovider.ErrServiceNotFound, true),
 		Entry("operator empty", polaris.ErrOperatorEmpty, true),
 		Entry("not managed", polaris.ErrNotManaged, true),
-		Entry("wrapped unauthorized", errors.Wrap(polaris.ErrUnauthorized, "update imported"), true),
+		Entry("wrapped unauthorized", errors.Wrap(polarisprovider.ErrUnauthorized, "update imported"), true),
 		Entry("timeout is not a client error", errors.New("context deadline exceeded"), false),
 		Entry("generic polaris failure", errors.New("polaris api error: status 500"), false),
 	)
-})
-
-var _ = Describe("wrapImportedPolarisErr", func() {
-	It("maps provider unauthorized to imported unauthorized", func() {
-		err := polaris.WrapImportedPolarisErr(
-			errors.Wrap(polarisprovider.ErrUnauthorized, "polaris api error: invalid token"),
-			"update imported polaris service",
-		)
-		Expect(err).To(MatchError(polaris.ErrUnauthorized))
-		Expect(err.Error()).To(ContainSubstring("invalid token"))
-	})
-
-	It("maps provider service not found", func() {
-		err := polaris.WrapImportedPolarisErr(polarisprovider.ErrServiceNotFound, "get imported polaris service")
-		Expect(err).To(MatchError(polaris.ErrServiceNotFound))
-	})
-
-	It("keeps upstream failures as wrapped server errors", func() {
-		err := polaris.WrapImportedPolarisErr(errors.New("connection refused"), "get imported polaris service")
-		Expect(polaris.IsClientRequestError(err)).To(BeFalse())
-		Expect(err.Error()).To(ContainSubstring("connection refused"))
-	})
 })
