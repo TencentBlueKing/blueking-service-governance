@@ -25,6 +25,8 @@ import (
 const (
 	// HeaderTenantID 多租户请求头，对齐 ConfigCenter TenantHeader。
 	HeaderTenantID = "X-Bk-Tenant-Id"
+	// FieldTenantID 业务集合上的租户隔离字段名。
+	FieldTenantID = "tenant_id"
 
 	// DefaultTenantID 单租兼容模式下的保留租户，对齐 ConfigCenter BKSingleTenantID。
 	DefaultTenantID = "default"

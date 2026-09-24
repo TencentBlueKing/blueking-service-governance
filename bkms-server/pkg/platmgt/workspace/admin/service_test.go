@@ -34,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 var _ = Describe("WorkspaceAdminService", func() {
@@ -48,7 +49,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 		roleMgr = &stubRoleManager{roleID: "fake-admin-role"}
 
 		diApp = fxtest.New(

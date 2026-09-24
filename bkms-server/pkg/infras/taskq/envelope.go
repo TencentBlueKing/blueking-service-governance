@@ -24,12 +24,14 @@ import (
 	"errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 // payloadEnvelope 把身份与业务 Args 分开放进 asynq payload
 // 字段名前缀 `_` 避免与业务 Args 字段冲突；身份禁止放进业务 Args
 type payloadEnvelope struct {
 	AuthUser auth.User       `json:"_authUser"`
+	TenantID string          `json:"_tenantId,omitempty"`
 	Args     json.RawMessage `json:"_args"`
 }
 
@@ -42,9 +44,14 @@ func userFromContext(ctx context.Context) (auth.User, error) {
 	return user, nil
 }
 
-// wrapEnvelope 把用户身份与业务 Args JSON 打成 envelope，身份不进入业务 Args
-func wrapEnvelope(user auth.User, argsPayload []byte) ([]byte, error) {
-	return json.Marshal(payloadEnvelope{AuthUser: user, Args: argsPayload})
+// wrapEnvelope 把用户身份、租户上下文与业务 Args JSON 打成 envelope，身份不进入业务 Args。
+func wrapEnvelope(ctx context.Context, user auth.User, argsPayload []byte) ([]byte, error) {
+	tenantID, _ := tenant.GetTenantID(ctx)
+	return json.Marshal(payloadEnvelope{
+		AuthUser: user,
+		TenantID: tenantID,
+		Args:     argsPayload,
+	})
 }
 
 // restoreEnvelope 从 envelope 恢复用户到 ctx，并抽出业务 Args JSON
@@ -56,6 +63,9 @@ func restoreEnvelope(ctx context.Context, payload []byte) (context.Context, []by
 	}
 	if env.AuthUser.ID != "" {
 		ctx = auth.WithUser(ctx, env.AuthUser)
+	}
+	if env.TenantID != "" {
+		ctx = tenant.WithTenantID(ctx, env.TenantID)
 	}
 	return ctx, env.Args
 }
