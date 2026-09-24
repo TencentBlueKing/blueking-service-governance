@@ -114,7 +114,6 @@
   import { EnvService, EnvvarsService } from '~/api/modules/v1';
   import HoverCopy from '~/components/hover-copy.vue';
   import { type IInputKey, useTableSearchInput } from '~/composables/use-search';
-  import { useSpaceStore } from '~/stores/space';
 
   const props = withDefaults(
     defineProps<{
@@ -130,8 +129,6 @@
     },
   );
   const emit = defineEmits<{ (e: 'update:visible', value: boolean): void }>();
-
-  const spaceStore = useSpaceStore();
 
   const visible = computed({
     get: () => props.visible,
@@ -153,7 +150,8 @@
 
   /** 获取环境列表 */
   async function fetchEnvList() {
-    const data = await EnvService.listEnvs({ workspaceID: spaceStore.currentSpace }).catch(() => []);
+    if (!props.appId) return;
+    const data = await EnvService.listAppEnvs({ appID: props.appId }).catch(() => []);
     envList.value = data;
     curEnvID.value = envList.value?.[0]?.id || '';
   }
@@ -220,7 +218,13 @@
   watch(
     () => props.appId,
     val => {
-      if (props.visible && props.source === 'app' && curEnvID.value && val) fetchList();
+      if (props.visible && props.source === 'app' && val) {
+        if (!props.envId) {
+          fetchEnvList();
+        } else if (curEnvID.value) {
+          fetchList();
+        }
+      }
     },
   );
 </script>
