@@ -31,6 +31,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 // MongoDB DateTime 精度为毫秒，测试更新时间排序时需要等待时间戳进入下一个精度窗口。
@@ -47,7 +48,7 @@ var _ = Describe("PlatWorkspaceService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsworkspace.FxModule,

@@ -30,7 +30,7 @@ import (
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
-	reqtenant "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -46,7 +46,7 @@ var _ = Describe("WorkspaceStore", func() {
 		store, err = NewWorkspaceStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 
-		ctx = reqtenant.WithTenantID(context.Background(), reqtenant.DefaultTenantID)
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 		Expect(cleanupWorkspaceCollection(ctx)).To(Succeed())
 
 		workspaceA = Workspace{
@@ -368,8 +368,8 @@ var _ = Describe("WorkspaceStore", func() {
 
 	Describe("tenant isolation", func() {
 		It("isolates list/get/count by context tenant", func() {
-			ctxA := reqtenant.WithTenantID(context.Background(), "tenant-a")
-			ctxB := reqtenant.WithTenantID(context.Background(), "tenant-b")
+			ctxA := tenant.WithTenantID(context.Background(), "tenant-a")
+			ctxB := tenant.WithTenantID(context.Background(), "tenant-b")
 			workspaceA.State = StateReady
 			workspaceB.State = StateReady
 
@@ -395,7 +395,7 @@ var _ = Describe("WorkspaceStore", func() {
 		})
 
 		It("rejects write when context has no tenant", func() {
-			Expect(store.Create(context.Background(), &workspaceA)).To(MatchError(reqtenant.ErrTenantIDRequired))
+			Expect(store.Create(context.Background(), &workspaceA)).To(MatchError(tenant.ErrTenantIDRequired))
 		})
 	})
 })
