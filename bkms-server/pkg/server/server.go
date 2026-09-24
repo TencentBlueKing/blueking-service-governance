@@ -147,7 +147,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	authConfig := auth.Config{
 		BackendType:               cfg.Account.BackendType,
 		LoginURL:                  cfg.Account.LoginURL,
-		EnableBkLoginUserinfoAuth: cfg.FeatureFlags.EnableBkLoginUserinfoAuth,
+		EnableBkLoginUserinfoAuth: cfg.FeatureIntegrations.EnableBkLoginUserinfoAuth,
 		BkApiUrlTmpl:              cfg.BkPlatUrls.BkApiUrlTmpl,
 		BkLoginStage:              cfg.BkApiStages.BkLogin,
 		AllowSetUserInHeader:      cfg.Development.AllowSetUserInHeader,

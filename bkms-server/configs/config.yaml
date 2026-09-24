@@ -21,8 +21,8 @@ bkPlatUrls:
   bkApiUrlTmpl: https://{api_name}.apigw.example.com
   # 组件 API 基础地址
   compApiBaseUrl: https://api.example.com
-# 可选功能开关
-featureFlags:
+# 可选平台集成开关
+featureIntegrations:
   # bk_token 走 bk-login 网关 userinfo
   enableBkLoginUserinfoAuth: false
   # 用 bk-user 校验用户所属租户/状态

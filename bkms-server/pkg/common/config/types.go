@@ -56,8 +56,8 @@ type BkPlatUrlsConfig struct {
 	CompApiBaseUrl string
 }
 
-// FeatureFlagsConfig 控制可选功能链路是否启用。
-type FeatureFlagsConfig struct {
+// FeatureIntegrationsConfig 控制可选平台集成链路是否启用。
+type FeatureIntegrationsConfig struct {
 	// EnableBkLoginUserinfoAuth 控制 bk_token 认证是否通过 bk-login 网关 userinfo 链路完成。
 	EnableBkLoginUserinfoAuth bool
 	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
@@ -425,8 +425,8 @@ type Config struct {
 	Account AccountConfig
 	// 蓝鲸平台地址配置
 	BkPlatUrls BkPlatUrlsConfig
-	// FeatureFlags 可选功能开关
-	FeatureFlags FeatureFlagsConfig
+	// FeatureIntegrations 可选平台集成开关
+	FeatureIntegrations FeatureIntegrationsConfig
 	// 蓝鲸 API 版本信息
 	BkApiStages BkApiStagesConfig
 	// BkIAMSystemIDs 接入蓝鲸权限中心（IAM）时使用的各业务系统 ID
