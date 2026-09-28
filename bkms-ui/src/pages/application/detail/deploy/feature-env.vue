@@ -108,13 +108,29 @@
 
           <TableColumn
             field="displayName"
-            fixed="left"
-            :label="$t('环境展示名称')"
-            min-width="140"
+            :label="$t('环境展示名')"
+            min-width="120"
             show-overflow-tooltip
           >
             <template #default="{ row }: { row: FeatureEnvRow }">
-              {{ row.displayName }}
+              <HoverCopy
+                :copy-value="row.displayName"
+                :text="row.displayName"
+              />
+            </template>
+          </TableColumn>
+
+          <TableColumn
+            field="name"
+            :label="$t('环境名称')"
+            min-width="180"
+            show-overflow-tooltip
+          >
+            <template #default="{ row }: { row: FeatureEnvRow }">
+              <HoverCopy
+                :copy-value="row.name"
+                :text="row.name"
+              />
             </template>
           </TableColumn>
 
@@ -163,13 +179,6 @@
           </TableColumn>
 
           <TableColumn
-            field="namespace"
-            :label="$t('命名空间')"
-            min-width="180"
-            show-overflow-tooltip
-          />
-
-          <TableColumn
             field="createdAtText"
             :label="$t('创建时间')"
             min-width="170"
@@ -180,7 +189,7 @@
           <TableColumn
             fixed="right"
             :label="$t('操作')"
-            min-width="240"
+            min-width="220"
           >
             <template #default="{ row }: { row: FeatureEnvRow }">
               <div class="flex items-center gap-[12px]">
@@ -251,7 +260,7 @@
       v-model:is-show="isShowDestroyDialog"
       render-directive="if"
       :width="580"
-      @closed="resetDestroyDialog"
+      @hidden="resetDestroyDialog"
     >
       <template #header>
         <div class="flex flex-col items-center">
@@ -386,6 +395,7 @@
   import { copyText } from '~/common/util';
   import ColorIcon from '~/components/color-icon.vue';
   import CustomFilter from '~/components/custom-filter.vue';
+  import HoverCopy from '~/components/hover-copy.vue';
   import MsHeader from '~/components/ms-header.vue';
   import TableException from '~/components/table-exception.vue';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';

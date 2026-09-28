@@ -1641,6 +1641,7 @@ Key 不能重复: Key 不能重复
 镜像 Tag 删除失败: Image tag deletion failed
 "删除需要具备写权限的凭证。跳转到：{0} 配置凭证后重试。": "Delete requires write permission credentials. Please go to {0} to configure credentials and try again."
 去配置: Configure
+调整配置: Adjust Configuration
 "部署预检发现{0}类问题": "Pre-deployment check found {0} type(s) of issues"
 联邦集群资源规格不一致: Federated cluster resource spec mismatch
 当前环境已绑定联邦集群。联邦集群要求 CPU、内存的 Requests 与 Limits 必须一致，否则无法部署。: This environment is bound to a federated cluster. CPU and memory Requests must match Limits, otherwise the environment cannot be deployed.
@@ -1838,7 +1839,7 @@ runner 阶段: Runner Stage
 "这里创建的是当前应用的特性环境：只属于本应用，其他应用无法使用，适合灰度验证、联调等场景，用完可以销毁。": "This creates a feature environment for the current application: it belongs to this application only and cannot be used by other applications. It suits scenarios such as grayscale verification and joint debugging, and can be destroyed when no longer needed."
 沿用来源环境的集群和环境分类。应用配置不会复制，新环境使用应用的默认配置。: The cluster and environment category are taken from the source environment. Application configuration is not copied; the new environment uses the application's default configuration.
 环境创建成功: Environment Created
-环境尚未部署实例，应用配置为默认值。如需调整配置，请先去配置再部署。: The environment has no running instances yet and uses the default application configuration. To adjust the configuration, configure it before deploying.
+当前使用应用默认配置，未配置环境级变量。可直接部署，也可先调整配置。: The application is currently using default configurations; no environment-level variables have been set. You can deploy immediately or adjust the configuration first.
 "该操作不可恢复，请输入特性环境命名空间：{0} 进行确认": "This operation is irreversible. Please enter the feature environment namespace: {0} to confirm"
 特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。: A feature environment belongs to the current application only and cannot be used by other applications. The source environment is just a snapshot taken at creation time; the two are independent afterwards.
 "环境变量不会从来源环境复制，可在列表中单独配置。": "Environment variables are not copied from the source environment. Configure them separately from the list."

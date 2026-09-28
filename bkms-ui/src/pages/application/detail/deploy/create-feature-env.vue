@@ -50,7 +50,7 @@
         {{ $t('环境创建成功') }}
       </span>
       <p class="mb-[28px] max-w-[480px] text-center text-[14px] leading-[22px] text-[#4D4F56]">
-        {{ $t('环境尚未部署实例，应用配置为默认值。如需调整配置，请先去配置再部署。') }}
+        {{ $t('当前使用应用默认配置，未配置环境级变量。可直接部署，也可先调整配置。') }}
       </p>
       <div class="mb-[28px] w-full max-w-[480px] bg-[#F5F7FA] px-[16px] py-[12px] text-left text-[14px] leading-[22px]">
         <div>
@@ -70,12 +70,27 @@
         >
           {{ $t('立即部署') }}
         </Button>
-        <Button
+        <Dropdown
           class="mr-[8px]"
-          @click="handleGoConfig"
+          placement="bottom-start"
+          :popover-options="{ clickContentAutoHide: true, width: 104 }"
+          trigger="click"
         >
-          {{ $t('去配置') }}
-        </Button>
+          <Button>
+            {{ $t('调整配置') }}
+            <AngleDownLine class="ml-[6px] text-[12px]" />
+          </Button>
+          <template #content>
+            <Dropdown.DropdownMenu>
+              <Dropdown.DropdownItem @click="handleGoConfig">
+                {{ $t('应用配置') }}
+              </Dropdown.DropdownItem>
+              <Dropdown.DropdownItem @click="handleGoEnvVars">
+                {{ $t('环境变量') }}
+              </Dropdown.DropdownItem>
+            </Dropdown.DropdownMenu>
+          </template>
+        </Dropdown>
         <Button @click="isShow = false">
           {{ $t('关闭') }}
         </Button>
@@ -155,8 +170,8 @@
 <script lang="ts" setup>
   import { computed, nextTick, reactive, ref, watch } from 'vue';
 
-  import { Alert, Button, Form, Input, Message, Sideslider } from 'bkui-vue';
-  import { Success } from 'bkui-vue/lib/icon';
+  import { Alert, Button, Dropdown, Form, Input, Message, Sideslider } from 'bkui-vue';
+  import { AngleDownLine, Success } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { EnvOutput } from '~/@types/v1/env';
@@ -293,6 +308,23 @@
         ...route.query,
         activeTab: 'deploy-config',
         envName: createdEnv.value.name,
+      },
+    });
+    window.open(resolved.href, '_blank');
+  }
+
+  // 特性环境有独立的环境变量配置视图，使用环境 ID 打开新标签页并保留当前部署页。
+  function handleGoEnvVars() {
+    if (!createdEnv.value?.id) return;
+    const resolved = router.resolve({
+      name: 'detail',
+      params: {
+        ...route.params,
+      },
+      query: {
+        ...route.query,
+        view: 'feature-envs',
+        envVars: createdEnv.value.id,
       },
     });
     window.open(resolved.href, '_blank');
