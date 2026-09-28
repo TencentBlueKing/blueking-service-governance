@@ -334,6 +334,77 @@ func (h *Handler) BatchDeleteAppInstances(c *gin.Context) {
 	ginutils.OK(c, serializer.EmptyOutput{})
 }
 
+// BatchRestartAppInstances 跨环境批量重启应用实例（整环境滚动重启）。
+//
+//	@ID			BatchRestartAppInstances
+//	@Summary	跨环境批量重启应用实例
+//	@Tags		instance
+//	@Accept		json
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID	path		string									true	"应用 ID"
+//	@Param		body	body		serializer.BatchRestartAppInstancesInput	true	"跨环境批量重启请求"
+//	@Success	200		{object}	serializer.BatchRestartAppInstancesOutput
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/instances/operations/batch_restart [post]
+func (h *Handler) BatchRestartAppInstances(c *gin.Context) {
+	var uriInput serializer.AppURIInput
+	var input serializer.BatchRestartAppInstancesInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	app, err := h.validateEditableAppModel(ctx, uriInput.AppID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	// 获取应用部署器，逐环境执行滚动重启；单个环境失败不影响其它环境
+	deployer := h.newDeployer(app)
+	results := make([]*serializer.BatchRestartEnvResultObj, 0, len(input.EnvNames))
+	for _, envName := range input.EnvNames {
+		result := &serializer.BatchRestartEnvResultObj{EnvName: envName}
+		if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, envName); err != nil {
+			result.Detail = err.Error()
+			results = append(results, result)
+			continue
+		}
+
+		// 整环境滚动重启
+		if err = deployer.UpdateInstances(ctx, envName, "", input.ImageTag, input.UpdateStrategy, nil); err != nil {
+			result.Detail = err.Error()
+			results = append(results, result)
+			continue
+		}
+		result.Success = true
+		results = append(results, result)
+
+		// 实例更新操作记录
+		go audit.AddOperationRecordAsync(
+			context.WithoutCancel(ctx),
+			audit.OperationTypeGray,
+			audit.ResourceTypeInstance,
+			"",
+			audit.WithAttribute(audit.AttributeInstance),
+			audit.WithWorkspaceID(app.WorkspaceID),
+			audit.WithAppID(app.ID),
+			audit.WithEnvName(envName),
+			audit.WithDataAfter(map[string]any{"imageTag": input.ImageTag}),
+		)
+	}
+
+	ginutils.OK(c, serializer.BatchRestartAppInstancesOutput{
+		Data: &serializer.BatchRestartAppInstancesOutputObjs{
+			Count:   int64(len(results)),
+			Results: results,
+		},
+	})
+}
+
 // UpdateAppInstancePolaris 更新应用实例的北极星注解（权重 / 隔离）。
 //
 //	@ID			UpdateAppInstancePolaris

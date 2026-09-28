@@ -61,6 +61,12 @@ type AppInstanceURIInput struct {
 	InstanceID string `uri:"instanceID" binding:"required,min=1"`
 }
 
+// AppURIInput 按应用限定的路径参数。
+type AppURIInput struct {
+	// 应用 ID
+	AppID string `uri:"appID" binding:"required,uri_slug"`
+}
+
 // -----------------------------------------------------------------------------
 // 实例管理
 
@@ -471,6 +477,40 @@ type UpdateAppInstancesInput struct {
 	UpdateStrategy string `json:"updateStrategy" binding:"required,oneof=RollingUpdate InplaceUpdate"`
 	// 实例 ID 列表
 	InstanceIDs []string `json:"instanceIDs" binding:"dive,required"`
+}
+
+// BatchRestartAppInstancesInput 跨环境批量重启应用实例的输入参数。
+type BatchRestartAppInstancesInput struct {
+	// 部署使用的镜像 Tag
+	ImageTag string `json:"imageTag" binding:"required,min=1"`
+	// 更新策略，可选值：RollingUpdate, InplaceUpdate
+	UpdateStrategy string `json:"updateStrategy" binding:"required,oneof=RollingUpdate InplaceUpdate"`
+	// 部署环境名称列表
+	EnvNames []string `json:"envNames" binding:"required,min=1,dive,required"`
+}
+
+// BatchRestartEnvResultObj 单个环境的重启结果。
+type BatchRestartEnvResultObj struct {
+	// 部署环境名称
+	EnvName string `json:"envName"`
+	// 是否成功
+	Success bool `json:"success"`
+	// 失败原因（成功时为空）
+	Detail string `json:"detail"`
+}
+
+// BatchRestartAppInstancesOutputObjs 跨环境批量重启的输出载荷。
+type BatchRestartAppInstancesOutputObjs struct {
+	// 结果数量
+	Count int64 `json:"count,string"`
+	// 各环境的重启结果
+	Results []*BatchRestartEnvResultObj `json:"results"`
+}
+
+// BatchRestartAppInstancesOutput 跨环境批量重启的响应。
+type BatchRestartAppInstancesOutput struct {
+	// 各环境的重启结果
+	Data *BatchRestartAppInstancesOutputObjs `json:"data"`
 }
 
 // ScaleAppInstancesInput 扩缩容应用实例的输入参数。
