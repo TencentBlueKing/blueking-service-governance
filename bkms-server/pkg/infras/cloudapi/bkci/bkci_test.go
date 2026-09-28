@@ -171,17 +171,29 @@ var _ = Describe("StubApiClient repository refs", func() {
 		client := NewStub(auth.User{ID: "tester"})
 
 		repoID1, err := client.CreateRepository(
-			context.Background(), "demo", "https://example.com/team/repo-1.git", "repo-1",
+			context.Background(), "demo", CreateRepositoryOptions{
+				RepoType: RepoTypeCodeGit,
+				URL:      "https://example.com/team/repo-1.git",
+				Alias:    "repo-1",
+			},
 		)
 		Expect(err).NotTo(HaveOccurred())
 
 		repoID2, err := client.CreateRepository(
-			context.Background(), "demo", "https://example.com/team/repo-2.git", "repo-2",
+			context.Background(), "demo", CreateRepositoryOptions{
+				RepoType: RepoTypeCodeGit,
+				URL:      "https://example.com/team/repo-2.git",
+				Alias:    "repo-2",
+			},
 		)
 		Expect(err).NotTo(HaveOccurred())
 
 		repoID1Again, err := client.CreateRepository(
-			context.Background(), "demo", "https://example.com/team/repo-1.git", "repo-1",
+			context.Background(), "demo", CreateRepositoryOptions{
+				RepoType: RepoTypeCodeGit,
+				URL:      "https://example.com/team/repo-1.git",
+				Alias:    "repo-1",
+			},
 		)
 		Expect(err).NotTo(HaveOccurred())
 

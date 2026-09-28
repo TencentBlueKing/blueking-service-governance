@@ -469,7 +469,12 @@ func (m *RepositoryManager) createRepository(ctx context.Context, url, alias str
 	}
 
 	// 调用 bkci API 创建代码库
-	repoID, err := client.CreateRepository(ctx, project.Code, url, alias)
+	// repoType 目前固定为 git（OAuth）；如需支持其他类型，按实际代码库类型传入对应常量
+	repoID, err := client.CreateRepository(ctx, project.Code, bkci.CreateRepositoryOptions{
+		RepoType: bkci.RepoTypeCodeGit,
+		URL:      url,
+		Alias:    alias,
+	})
 	if err != nil {
 		// 如果代码库已存在，尝试从蓝盾获取已有的代码库信息
 		if errors.Is(err, bkci.RepoAlreadyExist) {
