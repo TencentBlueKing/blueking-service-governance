@@ -151,6 +151,29 @@ pnpm test:spec -- build-management-execute-build
 
 `./run.sh --tags '<expr>'` 优先级高于 `--profile`，适合临时组合标签。
 
+### 构建配置侧栏 Spec（普通 Playwright）
+
+`tests/build-config-sidebar.spec.ts` 按源码仓库、流水线两种来源组织为两个独立用例。
+覆盖仓库选择和切换、必填校验、来源联动、不同流水线参数集合及无参数流水线，
+并检查真实保存请求、服务端配置、重新打开侧栏和刷新后的回显。
+仓库用例还会从已保存的仓库配置切回应用原有流水线，检查仓库配置确实被清空。
+
+```bash
+cd bkms-ui/e2e
+pnpm test:spec -- build-config-sidebar --list
+pnpm test:spec -- build-config-sidebar --workers=1
+```
+
+- 复用 AccessToken、默认测试空间及 `BKMS_TEST_BUILD_PIPELINE_APP`（默认 `e2e-build-pipeline`），
+  应用需预置有效的流水线构建配置。每个用例备份配置，结束后恢复并核对原配置。
+- 源码仓库用例需要当前测试身份授权至少两个不同仓库，仓库具备 URL、别名和可用分支。
+  数据发现跳过无分支仓库，找到两个可用仓库后停止；应用原有流水线需可访问。
+- 流水线用例需要一条有必填参数的流水线、一条有不同参数集合的流水线，以及一条无参数流水线。
+  测试通过真实接口发现数据，不硬编码仓库地址或流水线 ID。
+- 缺少前置数据时明确报错，各用例独立执行。本 spec 使用真实接口，不依赖 BDD 的 `mocks.json`。
+- 用例显式按顺序执行，启动时校验单 worker；即使开启全局并行，也必须传入 `--workers=1`。
+  运行期间避免其他任务修改同一应用配置，以免与配置恢复冲突。
+
 ## 环境变量
 
 `.env.test` 中维护，必填变量缺一即报错。
