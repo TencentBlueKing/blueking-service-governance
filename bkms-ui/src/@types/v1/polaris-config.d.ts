@@ -17,6 +17,20 @@ export type CreateAppPolarisConfigRequest = CreateAppPolarisConfigInput & {
   appID: string;
 };
 
+export type UpdateImportedPolarisRequest = UpdateImportedPolarisInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+};
+
+export type GetImportedPolarisServiceRequest = GetImportedPolarisServiceInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+};
+
 export type ValidateAppPolarisConfigRequest = CreateAppPolarisConfigInput & {
   /**
    * 应用 ID
@@ -104,9 +118,8 @@ export interface CreateAppPolarisConfigInput {
    */
   enableHealthCheck?: boolean;
   /**
-   * 是否启用权重因子，默认 false。仅 createNewService 为 true 时写入北极星；
-   * 开启后北极星按实例机型标记权重因子，
-   * 各环境还需单独开启动态权重才会真正按机型分流
+   * 是否启用权重因子。仅 createNewService 为 true 时写入新建的北极星服务，不落本地。
+   * 从现有引入时忽略该字段，当前值向北极星读取。
    */
   enableWeightFactor?: boolean;
   /**
@@ -160,6 +173,47 @@ export interface CreateAppPolarisConfigOutput {
   data?: PolarisNameOutputObj;
 }
 
+export interface UpdateImportedPolarisInput {
+  /**
+   * 是否开启权重因子
+   */
+  enableWeightFactor: boolean;
+  /**
+   * 北极星实例名称
+   */
+  polarisName: string;
+  /**
+   * 北极星环境（命名空间）
+   */
+  polarisNamespace: "Test" | "Production" | "Development" | "Pre-release";
+  /**
+   * 北极星 Token
+   */
+  polarisToken: string;
+}
+
+export interface GetImportedPolarisServiceInput {
+  /**
+   * 北极星实例名称
+   */
+  polarisName: string;
+  /**
+   * 北极星环境（命名空间）
+   */
+  polarisNamespace: "Test" | "Production" | "Development" | "Pre-release";
+  /**
+   * 北极星 Token
+   */
+  polarisToken: string;
+}
+
+export interface GetImportedPolarisServiceOutput {
+  /**
+   * 北极星线上服务信息（不含 token）
+   */
+  service?: ImportedPolarisServiceOutput;
+}
+
 export interface ValidateAppPolarisConfigOutput {
   /**
    * 校验警告信息
@@ -177,7 +231,8 @@ export interface PatchAppPolarisConfigInput {
    */
   enableHealthCheck?: boolean;
   /**
-   * 是否启用权重因子（可选更新）；关闭只屏蔽各环境的动态权重，不清除各环境的开关取值
+   * 是否启用权重因子。传入时写回北极星，不落本地；未传表示不改。
+   * 平台创建的服务走依赖服务实例，从现有引入的服务用 Token 写回。
    */
   enableWeightFactor?: boolean;
   /**
@@ -280,7 +335,8 @@ export interface PolarisConfigOutputObj {
    */
   enableHealthCheck?: boolean;
   /**
-   * 是否启用权重因子（开启后才能为单个环境开启动态权重）
+   * 是否启用权重因子。向北极星实时读取，读不到时为 null。
+   * 开启后才能为单个环境开启动态权重；该值不参与 CR 组装。
    */
   enableWeightFactor?: boolean;
   /**
@@ -424,6 +480,45 @@ export interface EnvInstanceStatsOutput {
    * 本环境被单独设置过权重的实例数，其实际权重可能与配置的单实例权重不一致
    */
   weightOverriddenInstanceCount?: number;
+}
+
+export interface ImportedPolarisServiceOutput {
+  /**
+   * 创建时间
+   */
+  ctime?: string;
+  /**
+   * 北极星服务当前是否开启权重因子
+   */
+  enableWeightFactor?: boolean;
+  /**
+   * 服务 metadata
+   */
+  metadata?: Record<string, string>;
+  /**
+   * 修改时间
+   */
+  mtime?: string;
+  /**
+   * 服务名
+   */
+  name?: string;
+  /**
+   * 命名空间
+   */
+  namespace?: string;
+  /**
+   * 负责人，逗号分隔
+   */
+  owners?: string;
+  /**
+   * 所属平台 ID
+   */
+  platformId?: string;
+  /**
+   * 版本号
+   */
+  revision?: string;
 }
 
 export interface PolarisNameOutputObj {

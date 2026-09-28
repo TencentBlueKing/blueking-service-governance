@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetAppIDAutoSuffixRequest, GetAppIDAutoSuffixOutput, GetAppRequest, AppDetailOutputObj, DeleteAppRequest, EmptyOutput, GetAppDeployOverviewRequest, AppDeployOverviewEnvObj, GetAppDeployStatusesRequest, AppDeployedEnvOutputObj, UpdateAppDisplayNameRequest, UpdateHelmSpecRequest, UpdateAppTafSpecRequest, UpdateAppTrpcSpecRequest, ListAppsRequest, AppInfoOutputObj, CreateAppRequest, AppOutputObj, ResolveAppRequest, ResolveAppOutputObj } from '~/@types/v1/app';
+import type { GetAppIDAutoSuffixRequest, GetAppIDAutoSuffixOutput, GetAppRequest, AppDetailOutputObj, DeleteAppRequest, EmptyOutput, GetAppDeployOverviewRequest, AppDeployOverviewEnvObj, GetAppDeployStatusesRequest, AppDeployedEnvOutputObj, UpdateAppDisplayNameRequest, UpdateHelmSpecRequest, UpdateAppTafSpecRequest, UpdateAppTrpcSpecRequest, UpdateAppVisibleEnvsRequest, ListAppsRequest, AppInfoOutputObj, CreateAppRequest, AppOutputObj, ResolveAppRequest, ResolveAppOutputObj } from '~/@types/v1/app';
 
 export const AppService = {
   /**
@@ -137,6 +137,23 @@ export const AppService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/trpc-spec')(params, config),
+  /**
+   * 更新应用可见环境名单
+   *
+   * @method PUT
+   * @path /apps/{appID}/visible-envs
+   * @tag app
+   * @param appID path string required 应用 ID
+   * @param body body UpdateAppVisibleEnvsInput required 更新可见环境请求
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 403 GinErrorOutput Forbidden
+   * @response 404 GinErrorOutput Not Found
+   */
+  updateAppVisibleEnvs: async <Request extends UpdateAppVisibleEnvsRequest = UpdateAppVisibleEnvsRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/visible-envs')(params, config),
   /**
    * 查询 app 列表
    *

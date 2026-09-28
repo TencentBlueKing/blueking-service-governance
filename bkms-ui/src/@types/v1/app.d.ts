@@ -62,6 +62,13 @@ export type UpdateAppTrpcSpecRequest = UpdateAppModelSpecInput & {
   appID: string;
 };
 
+export type UpdateAppVisibleEnvsRequest = UpdateAppVisibleEnvsInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+};
+
 export interface ListAppsRequest {
   /**
    * 工作空间 ID
@@ -138,6 +145,13 @@ export interface UpdateAppModelSpecInput {
    * 应用模型规范
    */
   appModelSpec: AppModelSpecInput;
+}
+
+export interface UpdateAppVisibleEnvsInput {
+  /**
+   * 可见标准环境名称，必填；显式传空数组表示清空配置
+   */
+  visibleEnvNames: string[];
 }
 
 export interface ListAppsOutput {
@@ -773,6 +787,10 @@ export interface AppDetailOutputObj {
    * 应用类型
    */
   type?: string;
+  /**
+   * 可见标准环境名称；未配置时为空数组
+   */
+  visibleEnvNames?: string[];
   /**
    * 工作空间 ID
    */

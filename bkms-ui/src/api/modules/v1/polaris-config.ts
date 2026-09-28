@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListAppPolarisConfigsRequest, PolarisConfigOutputObj, CreateAppPolarisConfigRequest, PolarisNameOutputObj, ValidateAppPolarisConfigRequest, ValidateAppPolarisConfigOutput, DeleteAppPolarisConfigRequest, PatchAppPolarisConfigRequest, GetEnvInstanceStatsRequest, GetEnvInstanceStatsOutputObj, PutEnvWeightRequest, ListAppPolarisConfigVarsRequest, PolarisConfigVarOutput } from '~/@types/v1/polaris-config';
+import type { ListAppPolarisConfigsRequest, PolarisConfigOutputObj, CreateAppPolarisConfigRequest, PolarisNameOutputObj, UpdateImportedPolarisRequest, GetImportedPolarisServiceRequest, GetImportedPolarisServiceOutput, ValidateAppPolarisConfigRequest, ValidateAppPolarisConfigOutput, DeleteAppPolarisConfigRequest, PatchAppPolarisConfigRequest, GetEnvInstanceStatsRequest, GetEnvInstanceStatsOutputObj, PutEnvWeightRequest, ListAppPolarisConfigVarsRequest, PolarisConfigVarOutput } from '~/@types/v1/polaris-config';
 
 export const PolarisConfigService = {
   /**
@@ -38,6 +38,36 @@ export const PolarisConfigService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/deps/polaris-configs')(params, config),
+  /**
+   * 修改从现有引入的北极星服务
+   *
+   * @method PUT
+   * @path /apps/{appID}/deps/polaris-configs/imported-service
+   * @tag polaris-config
+   * @param appID path string required 应用 ID
+   * @param body body UpdateImportedPolarisInput required 请求体
+   * @response 200 unknown OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  updateImportedPolaris: async <Request extends UpdateImportedPolarisRequest = UpdateImportedPolarisRequest, ResponseData = unknown>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/deps/polaris-configs/imported-service')(params, config),
+  /**
+   * 查询从现有引入的北极星服务信息
+   *
+   * @method POST
+   * @path /apps/{appID}/deps/polaris-configs/imported-service
+   * @tag polaris-config
+   * @param appID path string required 应用 ID
+   * @param body body GetImportedPolarisServiceInput required 请求体
+   * @response 200 GetImportedPolarisServiceOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getImportedPolarisService: async <Request extends GetImportedPolarisServiceRequest = GetImportedPolarisServiceRequest, ResponseData = GetImportedPolarisServiceOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/deps/polaris-configs/imported-service')(params, config),
   /**
    * 校验北极星配置（创建前预校验）
    *

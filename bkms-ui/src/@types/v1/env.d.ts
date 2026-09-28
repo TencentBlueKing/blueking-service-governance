@@ -70,6 +70,17 @@ export type CreateEnvRequest = CreateEnvInput & {
   workspaceID: string;
 };
 
+export interface GetEnvByNameRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 环境名称，支持标准环境和特性环境
+   */
+  envName: string;
+}
+
 export interface ListEnvTrafficLanesRequest {
   /**
    * 工作空间 ID
@@ -90,6 +101,10 @@ export interface ListFeatureEnvsOutput {
 }
 
 export interface CreateFeatureEnvInput {
+  /**
+   * 是否复制来源环境的环境变量；未传时不复制
+   */
+  copyEnvVars?: boolean;
   /**
    * 特性环境展示名称
    */
@@ -168,6 +183,10 @@ export interface CreateEnvOutput {
   data?: EnvIDOutput;
 }
 
+export interface GetEnvByNameOutput {
+  data?: EnvOutput;
+}
+
 export interface ListEnvTrafficLanesOutput {
   data?: TrafficLaneOutput[];
 }
@@ -209,6 +228,80 @@ export interface TrafficLaneOutput {
    * 更新时间
    */
   updatedAt?: string;
+}
+
+export interface EnvOutput {
+  /**
+   * 已部署的应用 ID 列表
+   */
+  appIDs?: string[];
+  /**
+   * 业务集群信息
+   */
+  cluster?: EnvClusterOutput;
+  /**
+   * 创建时间
+   */
+  createdAt?: string;
+  /**
+   * 环境显示名称
+   */
+  displayName?: string;
+  /**
+   * 环境 ID
+   */
+  id?: string;
+  /**
+   * 环境类别，standard 或 feature
+   */
+  kind?: string;
+  /**
+   * 环境名称
+   */
+  name?: string;
+  /**
+   * 特性环境所属应用 ID，仅特性环境返回
+   */
+  ownerAppID?: string;
+  /**
+   * 特性环境来源环境 ID，仅特性环境返回
+   */
+  sourceEnvID?: string;
+  /**
+   * 环境状态, 取值: Ready(就绪), NotReady(未就绪)
+   */
+  status?: string;
+  /**
+   * 环境类型
+   */
+  type?: string;
+  /**
+   * 更新时间
+   */
+  updatedAt?: string;
+}
+
+export interface EnvClusterOutput {
+  /**
+   * 集群 ID
+   */
+  clusterID?: string;
+  /**
+   * 集群类型
+   */
+  clusterType?: string;
+  /**
+   * 是否为 BCS 联邦 Host 集群
+   */
+  isFederation?: boolean;
+  /**
+   * 集群命名空间
+   */
+  namespace?: string;
+  /**
+   * 项目 code
+   */
+  projectCode?: string;
 }
 
 export interface EnvIDOutput {
@@ -305,80 +398,6 @@ export interface EnvAppDeployStatusOutput {
    * 泳道名称
    */
   trafficLaneName?: string;
-}
-
-export interface EnvClusterOutput {
-  /**
-   * 集群 ID
-   */
-  clusterID?: string;
-  /**
-   * 集群类型
-   */
-  clusterType?: string;
-  /**
-   * 是否为 BCS 联邦 Host 集群
-   */
-  isFederation?: boolean;
-  /**
-   * 集群命名空间
-   */
-  namespace?: string;
-  /**
-   * 项目 code
-   */
-  projectCode?: string;
-}
-
-export interface EnvOutput {
-  /**
-   * 已部署的应用 ID 列表
-   */
-  appIDs?: string[];
-  /**
-   * 业务集群信息
-   */
-  cluster?: EnvClusterOutput;
-  /**
-   * 创建时间
-   */
-  createdAt?: string;
-  /**
-   * 环境显示名称
-   */
-  displayName?: string;
-  /**
-   * 环境 ID
-   */
-  id?: string;
-  /**
-   * 环境类别，standard 或 feature
-   */
-  kind?: string;
-  /**
-   * 环境名称
-   */
-  name?: string;
-  /**
-   * 特性环境所属应用 ID，仅特性环境返回
-   */
-  ownerAppID?: string;
-  /**
-   * 特性环境来源环境 ID，仅特性环境返回
-   */
-  sourceEnvID?: string;
-  /**
-   * 环境状态, 取值: Ready(就绪), NotReady(未就绪)
-   */
-  status?: string;
-  /**
-   * 环境类型
-   */
-  type?: string;
-  /**
-   * 更新时间
-   */
-  updatedAt?: string;
 }
 
 export interface FeatureEnvOutput {

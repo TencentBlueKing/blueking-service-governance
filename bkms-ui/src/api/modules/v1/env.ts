@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListAppEnvsRequest, EnvOutput, ListFeatureEnvsRequest, FeatureEnvOutput, CreateFeatureEnvRequest, GetEnvRequest, EnvDetailOutput, DeleteEnvRequest, EmptyOutput, UpdateEnvBasicInfoRequest, UpdateEnvClusterRequest, ListEnvsRequest, CreateEnvRequest, EnvIDOutput, ListEnvTrafficLanesRequest, TrafficLaneOutput } from '~/@types/v1/env';
+import type { ListAppEnvsRequest, EnvOutput, ListFeatureEnvsRequest, FeatureEnvOutput, CreateFeatureEnvRequest, GetEnvRequest, EnvDetailOutput, DeleteEnvRequest, EmptyOutput, UpdateEnvBasicInfoRequest, UpdateEnvClusterRequest, ListEnvsRequest, CreateEnvRequest, EnvIDOutput, GetEnvByNameRequest, ListEnvTrafficLanesRequest, TrafficLaneOutput } from '~/@types/v1/env';
 
 export const EnvService = {
   /**
@@ -51,6 +51,7 @@ export const EnvService = {
    * @param body body CreateFeatureEnvInput required 创建特性环境请求
    * @response 200 CreateFeatureEnvOutput OK
    * @response 400 GinErrorOutput Bad Request
+   * @response 500 GinErrorOutput Internal Server Error
    */
   createFeatureEnv: async <Request extends CreateFeatureEnvRequest = CreateFeatureEnvRequest, ResponseData = EnvOutput>(
     params?: NoInfer<Request>,
@@ -145,6 +146,21 @@ export const EnvService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/envs')(params, config),
+  /**
+   * 按工作空间和名称获取环境信息
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/envs/{envName}
+   * @tag env
+   * @param workspaceID path string required 工作空间 ID
+   * @param envName path string required 环境名称，支持标准环境和特性环境
+   * @response 200 GetEnvByNameOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getEnvByName: async <Request extends GetEnvByNameRequest = GetEnvByNameRequest, ResponseData = EnvOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/envs/{envName}')(params, config),
   /**
    * 获取指定环境下的泳道列表
    *
