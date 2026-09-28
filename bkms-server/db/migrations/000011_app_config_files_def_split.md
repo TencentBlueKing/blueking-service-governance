@@ -6,7 +6,7 @@
 
 ### 新增集合 `app_config_file_defs`
 
-存储配置文件的逻辑身份信息（name, configKind, envConfigMode）。
+存储配置文件的逻辑身份信息（name, configKind, isUnifiedConfig, mountedEnvNames）。
 
 - 唯一索引 `appID_1_name_1`：同一应用下配置文件名唯一。
 - 普通索引 `appID_1_configKind_1`：按 configKind 过滤查询。

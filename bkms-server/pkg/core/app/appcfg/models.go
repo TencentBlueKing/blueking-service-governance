@@ -42,7 +42,7 @@ type AppConfigFileDef struct {
 	// 容器内完整路径 = filepath.Join(MountDir, Name)。
 	MountDir string `bson:"mountDir,omitempty"`
 	// EnvConfigMode 环境配置模式（统一配置 / 按环境独立配置）。
-	EnvConfigMode EnvConfigMode `bson:"envConfigMode"`
+	EnvConfigMode EnvConfigMode `bson:",inline"`
 	// EnableEnvVarRender 是否启用环境变量渲染（编译期 ${{ env.KEY }} 替换 + 运行时占位符替换）。
 	// framework 始终为 true 且不可修改；plain 默认为 false，可通过 def 更新接口修改。
 	EnableEnvVarRender bool      `bson:"enableEnvVarRender"`

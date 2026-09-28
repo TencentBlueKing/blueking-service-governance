@@ -1,0 +1,183 @@
+[
+  {
+    "aggregate": "app_config_files",
+    "pipeline": [
+      {
+        "$match": {
+          "envName": { "$exists": true, "$nin": ["", null] },
+          "baseAppConfigFileID": { "$exists": true, "$type": "objectId" }
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_config_file_defs",
+          "localField": "defID",
+          "foreignField": "_id",
+          "as": "currentDefs"
+        }
+      },
+      {
+        "$match": {
+          "currentDefs": { "$size": 0 }
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_config_files",
+          "localField": "baseAppConfigFileID",
+          "foreignField": "_id",
+          "as": "baseFiles"
+        }
+      },
+      {
+        "$set": {
+          "candidateDefID": {
+            "$ifNull": [
+              { "$arrayElemAt": ["$baseFiles.defID", 0] },
+              "$baseAppConfigFileID"
+            ]
+          }
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_config_file_defs",
+          "localField": "candidateDefID",
+          "foreignField": "_id",
+          "as": "candidateDefs"
+        }
+      },
+      {
+        "$match": {
+          "candidateDefs": { "$ne": [] }
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_config_files",
+          "let": {
+            "selfID": "$_id",
+            "candidateDefID": "$candidateDefID",
+            "envName": "$envName"
+          },
+          "pipeline": [
+            {
+              "$match": {
+                "$expr": {
+                  "$and": [
+                    { "$ne": ["$_id", "$$selfID"] },
+                    { "$eq": ["$defID", "$$candidateDefID"] },
+                    { "$eq": ["$envName", "$$envName"] }
+                  ]
+                }
+              }
+            },
+            { "$limit": 1 }
+          ],
+          "as": "conflictFiles"
+        }
+      },
+      {
+        "$match": {
+          "conflictFiles": { "$size": 0 }
+        }
+      },
+      {
+        "$set": {
+          "defID": "$candidateDefID"
+        }
+      },
+      {
+        "$unset": [
+          "currentDefs",
+          "baseFiles",
+          "candidateDefID",
+          "candidateDefs",
+          "conflictFiles"
+        ]
+      },
+      {
+        "$merge": {
+          "into": "app_config_files",
+          "on": "_id",
+          "whenMatched": [
+            { "$set": { "defID": "$$new.defID" } }
+          ],
+          "whenNotMatched": "discard"
+        }
+      }
+    ],
+    "cursor": {}
+  },
+  {
+    "aggregate": "app_config_file_defs",
+    "pipeline": [
+      {
+        "$match": {
+          "envConfigMode": { "$exists": false }
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_config_files",
+          "let": { "defID": "$_id" },
+          "pipeline": [
+            {
+              "$match": {
+                "$expr": {
+                  "$and": [
+                    { "$eq": ["$defID", "$$defID"] },
+                    { "$gt": [{ "$strLenCP": { "$ifNull": ["$envName", ""] } }, 0] }
+                  ]
+                }
+              }
+            },
+            { "$limit": 1 }
+          ],
+          "as": "envInstances"
+        }
+      },
+      {
+        "$set": {
+          "isUnifiedConfig": { "$eq": [{ "$size": "$envInstances" }, 0] }
+        }
+      },
+      {
+        "$unset": "envInstances"
+      },
+      {
+        "$merge": {
+          "into": "app_config_file_defs",
+          "on": "_id",
+          "whenMatched": [
+            { "$set": { "isUnifiedConfig": "$$new.isUnifiedConfig" } }
+          ],
+          "whenNotMatched": "discard"
+        }
+      }
+    ],
+    "cursor": {}
+  },
+  {
+    "update": "app_config_file_defs",
+    "updates": [
+      {
+        "q": {
+          "envConfigMode": { "$exists": true }
+        },
+        "u": [
+          {
+            "$set": {
+              "isUnifiedConfig": "$envConfigMode.isUnifiedConfig",
+              "mountedEnvNames": "$envConfigMode.mountedEnvNames"
+            }
+          },
+          {
+            "$unset": "envConfigMode"
+          }
+        ],
+        "multi": true
+      }
+    ]
+  }
+]
