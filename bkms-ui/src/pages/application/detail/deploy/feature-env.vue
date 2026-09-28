@@ -123,7 +123,7 @@
           <TableColumn
             field="name"
             :label="$t('环境名称')"
-            min-width="180"
+            min-width="200"
             show-overflow-tooltip
           >
             <template #default="{ row }: { row: FeatureEnvRow }">
@@ -137,7 +137,7 @@
           <TableColumn
             field="deployStatus"
             :filters="deployStatusFilterOptions"
-            min-width="110"
+            min-width="100"
           >
             <template #header>
               <CustomFilter

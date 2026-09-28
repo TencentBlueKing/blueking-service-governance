@@ -68,7 +68,7 @@
               :placeholder="
                 createPlaceholder({
                   type: 'searchSelect',
-                  labels: ['环境名称', '环境ID', '环境分类'],
+                  labels: ['环境展示名', '环境名称', '环境分类'],
                 })
               "
               unique-select
@@ -136,7 +136,7 @@
         </template>
         <TableColumn
           field="name"
-          :label="$t('环境名称/ID')"
+          :label="$t('环境展示名/环境名称')"
           :min-width="200"
           show-overflow="tooltip"
         >
@@ -323,18 +323,18 @@
   // 环境列表
   const envSearchData = shallowRef([
     {
-      name: t('环境名称'),
+      name: t('环境展示名'),
       id: 'displayName',
       multiple: false,
-      placeholder: t('环境名称'),
+      placeholder: t('环境展示名'),
       field: 'displayName',
       fuzzy: true,
     },
     {
-      name: t('环境ID'),
+      name: t('环境名称'),
       id: 'name',
       multiple: false,
-      placeholder: t('环境ID'),
+      placeholder: t('环境名称'),
       field: 'name',
       fuzzy: true,
     },
