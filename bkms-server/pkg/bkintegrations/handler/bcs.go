@@ -61,12 +61,14 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 	// 未开启独立 BCS 时，BCS 与蓝盾共用 project code，列表要再和蓝盾可管理项目求交。
 	var sharedBKCICodes map[string]bool
 	if !workspace.IndependentBCSProjectEnabled() {
-		bkciClient, err := bkci.New(auth.MustGetUser(ctx))
+		var bkciClient bkci.Client
+		bkciClient, err = bkci.New(auth.MustGetUser(ctx))
 		if err != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
 			return
 		}
-		bkciProjects, err := bkciClient.ListProjects(ctx)
+		var bkciProjects []bkci.Project
+		bkciProjects, err = bkciClient.ListProjects(ctx)
 		if err != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci managed projects"))
 			return

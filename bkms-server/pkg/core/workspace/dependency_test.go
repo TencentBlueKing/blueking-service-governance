@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package workspace
+package workspace_test
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 )
@@ -42,7 +43,7 @@ var _ = Describe("getExistingBCSProject", func() {
 	})
 
 	It("returns existing project", func() {
-		proj, err := getExistingBCSProject(ctx, stub, "bkms-ws")
+		proj, err := GetExistingBCSProject(ctx, stub, "bkms-ws")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proj).NotTo(BeNil())
 		Expect(proj.ID).NotTo(BeEmpty())
@@ -53,8 +54,21 @@ var _ = Describe("getExistingBCSProject", func() {
 		mockey.PatchConvey("project not found", GinkgoT(), func() {
 			mockey.Mock((*bcs.StubApiClient).GetProject).Return(nil, bcs.ErrProjectNotFound).Build()
 
-			_, err := getExistingBCSProject(ctx, stub, "bkms-ws")
+			_, err := GetExistingBCSProject(ctx, stub, "bkms-ws")
 			Expect(err).To(MatchError(bcs.ErrProjectNotFound))
+		})
+	})
+
+	It("rejects non-k8s projects when binding an existing BCS project", func() {
+		mockey.PatchConvey("non-k8s project", GinkgoT(), func() {
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(&bcs.Project{
+				ID:   "exist-uid",
+				Code: "bkms-ws",
+				Kind: "mesos",
+			}, nil).Build()
+
+			_, err := GetExistingBCSProject(ctx, stub, "bkms-ws")
+			Expect(err).To(MatchError(ContainSubstring("is not a k8s project")))
 		})
 	})
 })
@@ -71,7 +85,7 @@ var _ = Describe("createBCSProject", func() {
 	})
 
 	It("creates project from display name and biz id", func() {
-		proj, err := createBCSProject(ctx, stub, "workspace-name", "bkms-ws", 100)
+		proj, err := CreateBCSProject(ctx, stub, "workspace-name", "bkms-ws", 100)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proj.Code).To(Equal("bkms-ws"))
 		Expect(proj.Name).To(Equal("workspace-name"))
@@ -80,7 +94,7 @@ var _ = Describe("createBCSProject", func() {
 	})
 
 	It("falls back to project code as name", func() {
-		proj, err := createBCSProject(ctx, stub, "", "bkms-ws", 0)
+		proj, err := CreateBCSProject(ctx, stub, "", "bkms-ws", 0)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proj.Name).To(Equal("bkms-ws"))
 		Expect(proj.BizID).To(BeEmpty())
@@ -93,7 +107,7 @@ var _ = Describe("createBCSProject", func() {
 				Return(nil, errors.New("project code already exists")).
 				Build()
 
-			_, err := createBCSProject(ctx, stub, "workspace-name", "bkms-ws", 100)
+			_, err := CreateBCSProject(ctx, stub, "workspace-name", "bkms-ws", 100)
 			Expect(err).To(MatchError(ContainSubstring("already exists")))
 		})
 	})
@@ -111,7 +125,7 @@ var _ = Describe("getBCSProjectBizID", func() {
 	})
 
 	It("uses the request biz id when creating a new project", func() {
-		bizID, err := getBCSProjectBizID(ctx, "", 398)
+		bizID, err := GetBCSProjectBizID(ctx, "", 398)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(bizID).To(Equal("398"))
 	})
@@ -126,7 +140,7 @@ var _ = Describe("getBCSProjectBizID", func() {
 				BizID: "398",
 			}, nil).Build()
 
-			bizID, err := getBCSProjectBizID(ctx, "existing-bcs", 0)
+			bizID, err := GetBCSProjectBizID(ctx, "existing-bcs", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(bizID).To(Equal("398"))
 		})
@@ -141,8 +155,61 @@ var _ = Describe("getBCSProjectBizID", func() {
 				Code: "existing-bcs",
 			}, nil).Build()
 
-			_, err := getBCSProjectBizID(ctx, "existing-bcs", 0)
+			_, err := GetBCSProjectBizID(ctx, "existing-bcs", 0)
 			Expect(err).To(MatchError(ContainSubstring("has no associated bizID")))
+		})
+	})
+})
+
+var _ = Describe("resolveIndependentBCSProject", func() {
+	var (
+		ctx  context.Context
+		user auth.User
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		user = auth.User{ID: "tester"}
+	})
+
+	It("reuses the existing deterministic BCS project before creating a new one", func() {
+		mockey.PatchConvey("reuse existing project", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(&bcs.Project{
+				ID:    "bcs-uid",
+				Code:  "bkms-ws",
+				BizID: "398",
+			}, nil).Build()
+			mockey.Mock((*bcs.StubApiClient).CreateProject).
+				Return(nil, errors.New("should not create when project already exists")).
+				Build()
+
+			project, err := ResolveIndependentBCSProject(ctx, "workspace-name", "", "bkms-ws", 398)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(project.ID).To(Equal("bcs-uid"))
+			Expect(project.Code).To(Equal("bkms-ws"))
+		})
+	})
+
+	It("creates the BCS project when the deterministic code is not found", func() {
+		mockey.PatchConvey("create after not found", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(nil, bcs.ErrProjectNotFound).Build()
+			mockey.Mock((*bcs.StubApiClient).CreateProject).Return(&bcs.Project{
+				ID:    "new-bcs-uid",
+				Code:  "bkms-ws",
+				Name:  "workspace-name",
+				Kind:  bcs.ProjectKindK8s,
+				BizID: "398",
+			}, nil).Build()
+
+			project, err := ResolveIndependentBCSProject(ctx, "workspace-name", "", "bkms-ws", 398)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(project.ID).To(Equal("new-bcs-uid"))
+			Expect(project.Code).To(Equal("bkms-ws"))
+			Expect(project.BizID).To(Equal("398"))
 		})
 	})
 })

@@ -92,13 +92,36 @@ func ensureBkSystemsWithSharedProjectIdentity(
 func ensureBkSystemsWithIndependentBCSProject(
 	ctx context.Context, workspaceID, displayName, bkciProjectID string, bizID int64,
 ) (*BkSystems, error) {
+	// 独立 BCS 模式下，这里始终新建蓝盾项目；请求里的 bkciProjectID 若有值，
+	// 表示待绑定的 BCS project code，否则会基于新建出的蓝盾 project code 创建独立 BCS 项目。
+	// 最终只回填业务 ID，不补齐二级业务和运营产品信息。
 	// 独立 BCS 模式下，请求里的 bkciProjectID 承载的是待绑定的 BCS project code。
 	boundBCSProjectCode := bkciProjectID
-	// 独立 BCS 模式只补齐业务 ID，不再回填二级业务/运营产品。
-	resolvedBizID, err := getBCSProjectBizID(ctx, boundBCSProjectCode, bizID)
-	if err != nil {
-		return nil, errors.Wrap(err, "get bcs bizID")
+	var (
+		boundBCSProject *bcs.Project
+		resolvedBizID   string
+	)
+	if boundBCSProjectCode != "" {
+		user := auth.MustGetUser(ctx)
+		bcsClient, err := bcs.New(user)
+		if err != nil {
+			return nil, errors.Wrap(err, "initial bcs client")
+		}
+		boundBCSProject, err = getExistingBCSProject(ctx, bcsClient, boundBCSProjectCode)
+		if err != nil {
+			return nil, errors.Wrap(err, "get existing bcs project")
+		}
+		resolvedBizID = boundBCSProject.BizID
+		if cast.ToInt64(resolvedBizID) <= 0 {
+			return nil, errors.Errorf("bcs project(%s) has no associated bizID", boundBCSProjectCode)
+		}
+	} else {
+		if bizID <= 0 {
+			return nil, errors.New("bizID is required when creating an independent bcs project")
+		}
+		resolvedBizID = cast.ToString(bizID)
 	}
+	// 独立 BCS 模式只补齐业务 ID，不再回填二级业务/运营产品。
 	cmdbInfo := &cmdb.BusinessDetail{BizID: resolvedBizID}
 
 	bkciProjMgr := bkci.NewProjectManager(workspaceID)
@@ -116,9 +139,19 @@ func ensureBkSystemsWithIndependentBCSProject(
 		return nil, errors.Wrap(err, "init bkrepo project")
 	}
 
-	bcsProject, err := resolveIndependentBCSProject(ctx, displayName, boundBCSProjectCode, createProjResp.Code, bizID)
-	if err != nil {
-		return nil, errors.Wrap(err, "resolve bcs project")
+	// 绑定已有 BCS 项目时直接复用前面已解析出的对象；只有未传绑定 code 时才创建独立 BCS 项目。
+	bcsProject := boundBCSProject
+	if boundBCSProjectCode == "" {
+		bcsProject, err = resolveIndependentBCSProject(
+			ctx,
+			displayName,
+			boundBCSProjectCode,
+			createProjResp.Code,
+			bizID,
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "resolve bcs project")
+		}
 	}
 
 	return buildBkSystems(createProjResp, bcsProject.ID, bcsProject.Code, bkciProjectID, false, cmdbInfo), nil
@@ -175,6 +208,14 @@ func resolveIndependentBCSProject(
 	// 有绑定 code 表示复用已有 BCS 项目；空值则为当前新蓝盾项目创建新的 BCS 项目。
 	if boundBCSProjectCode != "" {
 		return getExistingBCSProject(ctx, bcsClient, boundBCSProjectCode)
+	}
+
+	project, err := getExistingBCSProject(ctx, bcsClient, projectCode)
+	if err == nil {
+		return project, nil
+	}
+	if !errors.Is(err, bcs.ErrProjectNotFound) {
+		return nil, errors.Wrapf(err, "get bcs project %s before create", projectCode)
 	}
 	return createBCSProject(ctx, bcsClient, displayName, projectCode, bizID)
 }
@@ -251,6 +292,9 @@ func getExistingBCSProject(ctx context.Context, client bcs.Client, projectCode s
 	}
 	if project == nil || project.ID == "" {
 		return nil, errors.New("get bcs project returned empty id")
+	}
+	if project.Kind != bcs.ProjectKindK8s {
+		return nil, errors.Errorf("bcs project(%s) is not a k8s project", projectCode)
 	}
 	log.Infof(ctx, "bind existing bcs project: code=%s id=%s", project.Code, project.ID)
 	return project, nil

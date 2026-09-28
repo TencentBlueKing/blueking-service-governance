@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package workspace
+package workspace_test
 
 import (
 	"context"
@@ -28,6 +28,7 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
