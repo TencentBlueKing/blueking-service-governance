@@ -16,21 +16,25 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { RepoBuilderFormSchema } from '../data/build-config-data';
 import { ResourceSpecSchema } from '../data/resource-spec-data';
 import { TrpcFormSchema } from '../data/trpc-data';
 
+import type { RepoBuilderFormData } from '../data/build-config-data';
 import type { ResourceSpecFormData } from '../data/resource-spec-data';
 import type { TrpcFormData } from '../data/trpc-data';
 import type BasePage from '../pages/base.page';
 import type { Schema } from '../utils/form';
 
-export type FormType = 'ResourceSpec' | 'TRPC';
+export type FormType = 'RepoBuilder' | 'ResourceSpec' | 'TRPC';
 type FormDataMap = {
+  RepoBuilder: RepoBuilderFormData;
   ResourceSpec: ResourceSpecFormData;
   TRPC: TrpcFormData;
 };
 
 const schemaMap: { [K in FormType]: Schema<FormDataMap[K]> } = {
+  RepoBuilder: RepoBuilderFormSchema,
   TRPC: TrpcFormSchema,
   ResourceSpec: ResourceSpecSchema,
 };
