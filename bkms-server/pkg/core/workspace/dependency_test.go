@@ -21,147 +21,128 @@ package workspace
 import (
 	"context"
 	"errors"
-	"strings"
-	"testing"
 
+	"github.com/bytedance/mockey"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 )
 
-type fakeBCSProjectClient struct {
-	*bcs.StubApiClient
-	existing     *bcs.Project
-	getErr       error
-	created      *bcs.Project
-	createErr    error
-	lastCreate   bcs.CreateProjectInput
-	createCalled bool
-	getCalled    bool
-}
+var _ = Describe("getExistingBCSProject", func() {
+	var (
+		ctx  context.Context
+		stub *bcs.StubApiClient
+	)
 
-func (f *fakeBCSProjectClient) GetProject(_ context.Context, _ string) (*bcs.Project, error) {
-	f.getCalled = true
-	if f.getErr != nil {
-		return nil, f.getErr
-	}
-	return f.existing, nil
-}
-
-func (f *fakeBCSProjectClient) CreateProject(_ context.Context, in bcs.CreateProjectInput) (*bcs.Project, error) {
-	f.createCalled = true
-	f.lastCreate = in
-	if f.createErr != nil {
-		return nil, f.createErr
-	}
-	return f.created, nil
-}
-
-func TestGetExistingBCSProject(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("returns existing project and does not create", func(t *testing.T) {
-		client := &fakeBCSProjectClient{
-			StubApiClient: &bcs.StubApiClient{},
-			existing:      &bcs.Project{ID: "exist-uid", Code: "bkms-ws", Name: "existing"},
-		}
-
-		proj, err := getExistingBCSProject(ctx, client, "bkms-ws")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if proj.ID != "exist-uid" {
-			t.Fatalf("ID = %q, want exist-uid", proj.ID)
-		}
-		if client.createCalled {
-			t.Fatal("CreateProject should not be called")
-		}
+	BeforeEach(func() {
+		ctx = context.Background()
+		stub = bcs.NewStub(auth.User{ID: "tester"})
 	})
 
-	t.Run("returns get error including not found", func(t *testing.T) {
-		client := &fakeBCSProjectClient{
-			StubApiClient: &bcs.StubApiClient{},
-			getErr:        bcs.ErrProjectNotFound,
-		}
-
-		_, err := getExistingBCSProject(ctx, client, "bkms-ws")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !errors.Is(err, bcs.ErrProjectNotFound) {
-			t.Fatalf("error = %v, want ErrProjectNotFound", err)
-		}
-		if client.createCalled {
-			t.Fatal("CreateProject should not be called")
-		}
-	})
-}
-
-func TestCreateBCSProject(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("creates without looking up existing project", func(t *testing.T) {
-		client := &fakeBCSProjectClient{
-			StubApiClient: &bcs.StubApiClient{},
-			created: &bcs.Project{
-				ID:   "new-uid",
-				Code: "bkms-ws",
-				Name: "workspace-name",
-				Kind: "k8s",
-			},
-		}
-
-		proj, err := createBCSProject(ctx, client, "workspace-name", "bkms-ws", 100)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if proj.ID != "new-uid" {
-			t.Fatalf("ID = %q, want new-uid", proj.ID)
-		}
-		if client.getCalled {
-			t.Fatal("GetProject should not be called")
-		}
-		want := bcs.CreateProjectInput{
-			Name:        "workspace-name",
-			ProjectCode: "bkms-ws",
-			Kind:        "k8s",
-			BusinessID:  "100",
-		}
-		if client.lastCreate != want {
-			t.Fatalf("CreateProjectInput = %+v, want %+v", client.lastCreate, want)
-		}
+	It("returns existing project", func() {
+		proj, err := getExistingBCSProject(ctx, stub, "bkms-ws")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proj).NotTo(BeNil())
+		Expect(proj.ID).NotTo(BeEmpty())
+		Expect(proj.Code).To(Equal("bkms-ws"))
 	})
 
-	t.Run("falls back to project code as name", func(t *testing.T) {
-		client := &fakeBCSProjectClient{
-			StubApiClient: &bcs.StubApiClient{},
-			created:       &bcs.Project{ID: "new-uid", Code: "bkms-ws"},
-		}
+	It("returns get error including not found", func() {
+		mockey.PatchConvey("project not found", GinkgoT(), func() {
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(nil, bcs.ErrProjectNotFound).Build()
 
-		if _, err := createBCSProject(ctx, client, "", "bkms-ws", 0); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if client.lastCreate.Name != "bkms-ws" {
-			t.Fatalf("Name = %q, want bkms-ws", client.lastCreate.Name)
-		}
-		if client.lastCreate.BusinessID != "" {
-			t.Fatalf("BusinessID = %q, want empty", client.lastCreate.BusinessID)
-		}
-		if client.lastCreate.Kind != "k8s" {
-			t.Fatalf("Kind = %q, want k8s", client.lastCreate.Kind)
-		}
+			_, err := getExistingBCSProject(ctx, stub, "bkms-ws")
+			Expect(err).To(MatchError(bcs.ErrProjectNotFound))
+		})
+	})
+})
+
+var _ = Describe("createBCSProject", func() {
+	var (
+		ctx  context.Context
+		stub *bcs.StubApiClient
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		stub = bcs.NewStub(auth.User{ID: "tester"})
 	})
 
-	t.Run("surfaces create errors such as duplicate project code", func(t *testing.T) {
-		client := &fakeBCSProjectClient{
-			StubApiClient: &bcs.StubApiClient{},
-			createErr:     errors.New("project code already exists"),
-		}
-
-		_, err := createBCSProject(ctx, client, "workspace-name", "bkms-ws", 100)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "already exists") {
-			t.Fatalf("error = %v", err)
-		}
+	It("creates project from display name and biz id", func() {
+		proj, err := createBCSProject(ctx, stub, "workspace-name", "bkms-ws", 100)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proj.Code).To(Equal("bkms-ws"))
+		Expect(proj.Name).To(Equal("workspace-name"))
+		Expect(proj.Kind).To(Equal(bcs.ProjectKindK8s))
+		Expect(proj.BizID).To(Equal("100"))
 	})
-}
+
+	It("falls back to project code as name", func() {
+		proj, err := createBCSProject(ctx, stub, "", "bkms-ws", 0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proj.Name).To(Equal("bkms-ws"))
+		Expect(proj.BizID).To(BeEmpty())
+		Expect(proj.Kind).To(Equal(bcs.ProjectKindK8s))
+	})
+
+	It("surfaces create errors such as duplicate project code", func() {
+		mockey.PatchConvey("create failed", GinkgoT(), func() {
+			mockey.Mock((*bcs.StubApiClient).CreateProject).
+				Return(nil, errors.New("project code already exists")).
+				Build()
+
+			_, err := createBCSProject(ctx, stub, "workspace-name", "bkms-ws", 100)
+			Expect(err).To(MatchError(ContainSubstring("already exists")))
+		})
+	})
+})
+
+var _ = Describe("getBCSProjectBizID", func() {
+	var (
+		ctx  context.Context
+		user auth.User
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		user = auth.User{ID: "tester"}
+	})
+
+	It("uses the request biz id when creating a new project", func() {
+		bizID, err := getBCSProjectBizID(ctx, "", 398)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(bizID).To(Equal("398"))
+	})
+
+	It("loads biz id from the BCS project when binding an existing project", func() {
+		mockey.PatchConvey("bind path", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(&bcs.Project{
+				ID:    "bcs-uid",
+				Code:  "existing-bcs",
+				BizID: "398",
+			}, nil).Build()
+
+			bizID, err := getBCSProjectBizID(ctx, "existing-bcs", 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(bizID).To(Equal("398"))
+		})
+	})
+
+	It("fails when the bound BCS project has no biz id", func() {
+		mockey.PatchConvey("missing biz", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(&bcs.Project{
+				ID:   "bcs-uid",
+				Code: "existing-bcs",
+			}, nil).Build()
+
+			_, err := getBCSProjectBizID(ctx, "existing-bcs", 0)
+			Expect(err).To(MatchError(ContainSubstring("has no associated bizID")))
+		})
+	})
+})

@@ -43,7 +43,7 @@ import (
 func EnsureBkSystems(
 	ctx context.Context, workspaceID, displayName, bkciProjectID string, bizID int64,
 ) (*BkSystems, error) {
-	if CreateBCSProjectEnabled() {
+	if IndependentBCSProjectEnabled() {
 		// bcs project 与 bkci 无关联，额外创建 bcs 项目
 		return ensureBkSystemsWithIndependentBCSProject(ctx, workspaceID, displayName, bkciProjectID, bizID)
 	}
@@ -92,18 +92,18 @@ func ensureBkSystemsWithSharedProjectIdentity(
 func ensureBkSystemsWithIndependentBCSProject(
 	ctx context.Context, workspaceID, displayName, bkciProjectID string, bizID int64,
 ) (*BkSystems, error) {
-	// 无需绑定 ObsProductID/ObsProductName
-	cmdbInfo := &cmdb.BusinessDetail{}
-	if bizID > 0 {
-		cmdbInfo.BizID = cast.ToString(bizID)
-	}
-
 	// 独立 BCS 模式下，请求里的 bkciProjectID 承载的是待绑定的 BCS project code。
 	boundBCSProjectCode := bkciProjectID
+	// 独立 BCS 模式只补齐业务 ID，不再回填二级业务/运营产品。
+	resolvedBizID, err := getBCSProjectBizID(ctx, boundBCSProjectCode, bizID)
+	if err != nil {
+		return nil, errors.Wrap(err, "get bcs bizID")
+	}
+	cmdbInfo := &cmdb.BusinessDetail{BizID: resolvedBizID}
 
 	bkciProjMgr := bkci.NewProjectManager(workspaceID)
 	// 独立 BCS 模式下蓝盾项目始终新建，传空强制走创建逻辑。
-	createProjResp, err := bkciProjMgr.Initialize(ctx, "", cmdbInfo.ObsProductID, cmdbInfo.ObsProductName)
+	createProjResp, err := bkciProjMgr.Initialize(ctx, "", "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -135,9 +135,9 @@ func buildBkSystems(
 		BkCIProjectUID: createProjResp.ID,
 		// BkRepo 项目 ID 使用蓝盾项目可读 code (如 bkce)
 		BkRepoProjectID: createProjResp.Code,
-		// BCS 项目 ID：关闭 createBCSProject 时复用蓝盾 UID，开启时用 BCS 返回值
+		// BCS 项目 ID：关闭独立 BCS 项目时复用蓝盾 UID，开启时用 BCS 返回值
 		BkBCSProjectID: bcsProjectID,
-		// BCS 项目 Code：关闭 createBCSProject 时复用蓝盾 code，开启时用 BCS 返回值
+		// BCS 项目 Code：关闭独立 BCS 项目时复用蓝盾 code，开启时用 BCS 返回值
 		BkBCSProjectCode: bcsProjectCode,
 		// 表明用户创建项目时是否绑定了已有的蓝盾项目
 		IsBoundExistedBKCIProject: isBoundExistedBKCIProject,
@@ -239,9 +239,9 @@ func InitWorkspaceUser(ctx context.Context, id, displayName string, managers []s
 	return nil
 }
 
-// CreateBCSProjectEnabled 为 true 时由 BKMS 独立创建/绑定 BCS 项目，不再复用蓝盾项目标识。
-func CreateBCSProjectEnabled() bool {
-	return config.G != nil && config.G.FeatureFlags.CreateBCSProject
+// IndependentBCSProjectEnabled 为 true 时由 BKMS 独立创建/绑定 BCS 项目，不再复用蓝盾项目标识。
+func IndependentBCSProjectEnabled() bool {
+	return config.G != nil && config.G.FeatureIntegrations.EnableIndependentBCSProject
 }
 
 func getExistingBCSProject(ctx context.Context, client bcs.Client, projectCode string) (*bcs.Project, error) {
@@ -279,24 +279,42 @@ func createBCSProject(
 	return created, nil
 }
 
+func getBCSProjectBizID(ctx context.Context, projectCode string, bizID int64) (string, error) {
+	if bizID > 0 {
+		return cast.ToString(bizID), nil
+	}
+	if projectCode == "" {
+		return "", nil
+	}
+
+	user := auth.MustGetUser(ctx)
+	bcsClient, err := bcs.New(user)
+	if err != nil {
+		return "", errors.Wrap(err, "initial bcs client")
+	}
+	project, err := bcsClient.GetProject(ctx, projectCode)
+	if err != nil {
+		return "", errors.Wrapf(err, "get bcs project by code: %s", projectCode)
+	}
+
+	resolvedBizID := cast.ToInt64(project.BizID)
+	if resolvedBizID <= 0 {
+		return "", errors.Errorf("bcs project(%s) has no associated bizID", projectCode)
+	}
+	return cast.ToString(resolvedBizID), nil
+}
+
 // fetchCMDBInfo 查询 CMDB 相关字段（二级业务 ID、运营产品 ID/名称）
 func fetchCMDBInfo(ctx context.Context, bkciProjectID string, bizID int64) (*cmdb.BusinessDetail, error) {
 	user := auth.MustGetUser(ctx)
 
-	// 当 bizID 未传入时，通过 bkciProjectID 从 BCS 获取项目关联的业务 ID
-	if bizID <= 0 && bkciProjectID != "" {
-		bcsClient, err := bcs.New(user)
+	// 当 bizID 未传入时，通过 BCS 项目获取其关联的业务 ID。
+	if bizID <= 0 {
+		resolvedBizID, err := getBCSProjectBizID(ctx, bkciProjectID, bizID)
 		if err != nil {
-			return nil, errors.Wrap(err, "initial bcs client")
+			return nil, errors.Wrap(err, "get bcs bizID")
 		}
-		project, err := bcsClient.GetProject(ctx, bkciProjectID)
-		if err != nil {
-			return nil, errors.Wrapf(err, "get bcs project by bkciProjectID: %s", bkciProjectID)
-		}
-		bizID = cast.ToInt64(project.BizID)
-		if bizID <= 0 {
-			return nil, errors.Errorf("bcs project(%s) has no associated bizID", bkciProjectID)
-		}
+		bizID = cast.ToInt64(resolvedBizID)
 	}
 
 	cmdbSvc, err := cmdb.NewService(user)
