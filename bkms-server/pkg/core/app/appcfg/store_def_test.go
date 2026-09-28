@@ -72,6 +72,15 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 			Expect(got.AppID).To(Equal(appID))
 			Expect(got.MountDir).To(Equal("/data/conf"))
 			Expect(got.EnvConfigMode.IsUnifiedConfig).To(BeTrue())
+
+			var raw bson.M
+			err = database.Client().Database(database.Name()).
+				Collection("app_config_file_defs").
+				FindOne(ctx, bson.M{"_id": id}).
+				Decode(&raw)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(raw).To(HaveKeyWithValue("isUnifiedConfig", true))
+			Expect(raw).NotTo(HaveKey("envConfigMode"))
 		})
 
 		It("should preserve explicit empty mounted env names", func() {
@@ -89,7 +98,7 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 	})
 
 	Context("Update", func() {
-		It("should update name, envConfigMode and enableEnvVarRender", func() {
+		It("should update name, flat env config fields and enableEnvVarRender", func() {
 			def := newDef()
 			id, err := store.Add(ctx, def)
 			Expect(err).NotTo(HaveOccurred())
@@ -109,6 +118,15 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 			Expect(updated.Name).To(Equal("new-values.yaml"))
 			Expect(updated.EnvConfigMode.IsUnifiedConfig).To(BeFalse())
 			Expect(updated.EnableEnvVarRender).To(BeTrue())
+
+			var raw bson.M
+			err = database.Client().Database(database.Name()).
+				Collection("app_config_file_defs").
+				FindOne(ctx, bson.M{"_id": id}).
+				Decode(&raw)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(raw).To(HaveKeyWithValue("isUnifiedConfig", false))
+			Expect(raw).NotTo(HaveKey("envConfigMode"))
 		})
 	})
 

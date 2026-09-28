@@ -204,6 +204,31 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("should keep independent mode after deleting the last env instance", func() {
+			result := f.createFrameworkFile("values.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "prod", "env: prod\n", "editor")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "prod overlay", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			err = f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
+			Expect(err).NotTo(HaveOccurred())
+
+			updatedDef, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updatedDef.EnvConfigMode.IsUnifiedConfig).To(BeFalse())
+		})
+
 		It("should reject reset when config is unified", func() {
 			result := f.createFrameworkFile("values.yaml")
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
