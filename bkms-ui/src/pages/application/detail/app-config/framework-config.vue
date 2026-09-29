@@ -479,15 +479,8 @@
   import { useI18n } from 'vue-i18n';
   import { parse as parseYaml } from 'yaml';
   import { AppDetailOutputObj, AppModelSpecInput, TafSpecOutputObj, TrpcSpecOutputObj } from '~/@types/v1/app';
-  import {
-    AppConfigFileOutputObj,
-    CreateAppConfigFileOutput,
-    GetAppConfigFileDetailsOutput,
-    ListAppConfigFilesOutput,
-    UpdateAppConfigFileContentOutput,
-  } from '~/@types/v1/app-config-files';
   import { EnvOutput } from '~/@types/v1/env';
-  import { AppConfigFilesService, EnvService, EnvvarsService } from '~/api/modules/v1';
+  import { AppConfigFileDefsService, AppConfigFilesService, EnvService, EnvvarsService } from '~/api/modules/v1';
   import { convertToYaml, hasErrorCode } from '~/common/util';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
@@ -501,6 +494,7 @@
   import EnvPerspectiveSelect from './env-perspective-select.vue';
   import VersionListSideslider from './version-list-sideslider.vue';
 
+  import type { DefDetailObj, EnvInstanceObj } from '~/@types/v1/app-config-file-defs';
   import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
 
   type ClearFileContentAction = 'deleteFile' | 'saveEmpty';
@@ -655,13 +649,26 @@
   // 当前环境的原始内容（用于判断是否修改）
   const currentEnvOriginalContent = ref('');
 
-  // 配置文件列表
-  const configFileList = ref<AppConfigFileOutputObj[]>([]);
+  const configFileDef = ref<DefDetailObj | null>(null);
+  const currentFileDetail = ref<DefDetailObj | null>(null);
+  const envInstances = ref<EnvInstanceObj[]>([]);
+  // 版本接口仍按实例文件 ID 查询，保留版本侧栏所需的环境视图。
+  const configFileList = computed(() => {
+    const file = configFileDef.value;
+    if (!file) return [];
+    return [
+      { id: file.fileId, name: file.name, envName: '', currentVersion: file.currentVersion },
+      ...envInstances.value.map(instance => ({
+        id: instance.fileId,
+        name: file.name,
+        envName: instance.envName,
+        currentVersion: instance.currentVersion,
+      })),
+    ];
+  });
 
   /** 已修改的环境名称列表（基于 configFileList，排除默认配置） */
-  const modifiedEnvNames = computed((): string[] =>
-    configFileList.value.filter(item => item.envName !== '').map(item => item.envName!),
-  );
+  const modifiedEnvNames = computed((): string[] => envInstances.value.map(item => item.envName || '').filter(Boolean));
 
   // 编辑器引用
   const msEditorRef = ref<InstanceType<typeof MsEditor> | null>(null);
@@ -780,22 +787,25 @@
 
   // 获取配置文件详情
   async function fetchConfigFileDetail(envName: string = ''): Promise<string> {
-    const configFileId = findConfigFileByEnvName(envName)?.id || '';
+    const configFileId = configFileDef.value?.id || '';
     if (!configFileId) return '';
     try {
       isEditorLoading.value = true;
-      const fileDetail: GetAppConfigFileDetailsOutput = await AppConfigFilesService.getAppConfigFileDetails(
+      const result = await AppConfigFileDefsService.getAppConfigFileDefDetail(
         {
           appID: appDetailStore.appID,
           id: configFileId,
+          envName,
         },
         { needRes: true },
       );
+      const fileDetail = result.item;
+      currentFileDetail.value = fileDetail || null;
 
       let content = '';
-      if (fileDetail.editableContentField === 'content') {
+      if (fileDetail?.editableContentField === 'content') {
         content = fileDetail.content || '';
-      } else if (fileDetail.editableContentField === 'overlayContent') {
+      } else if (fileDetail?.editableContentField === 'overlayContent') {
         content = fileDetail.overlayContent || '';
       }
 
@@ -811,26 +821,32 @@
   // 获取配置文件列表
   async function fetchConfigFileList() {
     try {
-      const ret: ListAppConfigFilesOutput = await AppConfigFilesService.listAppConfigFiles(
+      const ret = await AppConfigFileDefsService.listDefaultFilesWithDef(
         {
           appID: appDetailStore.appID,
         },
         { needRes: true },
       );
-      configFileList.value = ret.items || [];
-      if (ret?.items?.length === 1 && ret.items[0].envName === '') {
-        isEnableEnvConfig.value = false;
+      configFileDef.value = ret.items?.find(item => item.configKind === 'framework') || null;
+      isEnableEnvConfig.value = configFileDef.value?.isUnifiedConfig === false;
+      if (configFileDef.value?.id) {
+        const instances = await AppConfigFileDefsService.listAppConfigFileDefEnvInstances(
+          { appID: appDetailStore.appID, id: configFileDef.value.id },
+          { needRes: true },
+        );
+        envInstances.value = instances.items || [];
       } else {
-        isEnableEnvConfig.value = true;
+        envInstances.value = [];
       }
     } catch (error) {
       console.error(error);
-      configFileList.value = [];
+      configFileDef.value = null;
+      envInstances.value = [];
       isEnableEnvConfig.value = false;
     }
   }
 
-  function findConfigFileByEnvName(envName: string): AppConfigFileOutputObj | undefined {
+  function findConfigFileByEnvName(envName: string) {
     return configFileList.value.find(item => item.envName === envName);
   }
 
@@ -887,16 +903,21 @@
   }
 
   // 确认开启环境配置
-  function handleEnableEnvConfig() {
-    isEnableEnvConfig.value = true;
-    nextTick(() => {
-      isOpenEnvConfigLoading.value = true;
-      setTimeout(async () => {
-        closeAside();
-        msEditorRef.value?.setValue(currentEnvOriginalContent.value);
-        isOpenEnvConfigLoading.value = false;
-      }, 300);
-    });
+  async function handleEnableEnvConfig() {
+    if (!configFileDef.value?.id) return;
+    isOpenEnvConfigLoading.value = true;
+    try {
+      await AppConfigFileDefsService.updateAppConfigFileDef({
+        appID: appDetailStore.appID,
+        id: configFileDef.value.id,
+        isUnifiedConfig: false,
+      });
+      await fetchConfigFileList();
+      closeAside();
+      msEditorRef.value?.setValue(currentEnvOriginalContent.value);
+    } finally {
+      isOpenEnvConfigLoading.value = false;
+    }
   }
 
   // 环境切换
@@ -964,69 +985,30 @@
       const content = msEditorRef.value?.getValue() || '';
       const isSaveEmptyContent = emptyContentAction === 'saveEmpty' && content.trim() === '';
       const submitContent = isSaveEmptyContent ? '' : content;
-      let savedContent = submitContent;
-
-      if (isEnvModified(currentEnv.value?.name ?? '')) {
-        const configId = findConfigFileByEnvName(currentEnv.value?.name ?? '')?.id || '';
-        if (currentEnv.value.name === '') {
-          await AppConfigFilesService.updateAppConfigFileContent(
-            {
-              appID: appDetailStore.appID,
-              id: configId,
-              content: submitContent,
-              description,
-              currentVersion: findConfigFileByEnvName('')?.currentVersion,
-            },
-            { needRes: true, interceptorErr: false },
-          );
-        } else if (content.trim() === '' && emptyContentAction === 'deleteFile') {
-          // 非默认环境下配置内容为空时，删除该环境的覆盖配置
-          await AppConfigFilesService.deleteAppConfigFile({
-            appID: appDetailStore.appID,
-            id: configId,
-          });
-          await fetchConfigFileList();
-          // 删除后如果关闭了环境配置（只剩默认配置），填充默认配置内容
-          if (!isEnableEnvConfig.value) {
-            savedContent = (await fetchConfigFileDetail('')) || '';
-          } else {
-            savedContent = '';
-          }
-        } else {
-          await updateOverlayContent(
-            configId,
-            submitContent,
-            description,
-            findConfigFileByEnvName(currentEnv.value?.name ?? '')?.currentVersion,
-          );
-        }
+      const defID = configFileDef.value?.id;
+      if (!defID) return;
+      const envName = currentEnv.value.name || '';
+      if (envName && content.trim() === '' && emptyContentAction === 'deleteFile') {
+        await AppConfigFileDefsService.resetAppConfigFileDefEnvToDefault({
+          appID: appDetailStore.appID,
+          id: defID,
+          envName,
+        });
       } else {
-        const defaultConfigId = findConfigFileByEnvName('')?.id || '';
-        const createResult = (await AppConfigFilesService.createAppConfigFile(
+        await AppConfigFileDefsService.updateAppConfigFileDefContent(
           {
             appID: appDetailStore.appID,
-            name: currentEnv.value?.name ?? '',
-            type: 'overlay',
-            baseAppConfigFileID: defaultConfigId,
-            contentSourceType: 'local',
-            envName: currentEnv.value.name,
-            fileFormat: appDetailStore.appType === 'taf' ? 'taf' : 'yaml',
+            id: defID,
+            content: submitContent,
             description,
+            currentVersion:
+              envName && !currentFileDetail.value?.hasEnvInstance ? 0 : currentFileDetail.value?.currentVersion,
           },
-          { needRes: true },
-        )) as CreateAppConfigFileOutput;
-        await fetchConfigFileList();
-
-        if (createResult?.item?.id) {
-          await updateOverlayContent(
-            createResult.item.id,
-            submitContent,
-            description,
-            findConfigFileByEnvName(currentEnv.value?.name ?? '')?.currentVersion,
-          );
-        }
+          { needRes: true, interceptorErr: false, queryParams: envName ? { envName } : undefined },
+        );
       }
       await fetchConfigFileList();
+      const savedContent = await fetchConfigFileDetail(envName);
       Message({
         theme: 'success',
         message: t('操作成功'),
@@ -1084,24 +1066,6 @@
     const content = msEditorRef.value?.getValue() || '';
     const envName = currentEnv.value?.name ?? '';
     return isEnableEnvConfig.value && !isDefaultConfig(envName) && content.trim() === '' && isEnvModified(envName);
-  }
-
-  async function updateOverlayContent(
-    configFileId: string,
-    overlayContent: string,
-    description = '',
-    currentVersion = 0,
-  ) {
-    return (await AppConfigFilesService.updateAppConfigFileOverlayContent(
-      {
-        appID: appDetailStore.appID,
-        id: configFileId,
-        overlayContent,
-        description,
-        currentVersion,
-      },
-      { needRes: true, interceptorErr: false },
-    )) as UpdateAppConfigFileContentOutput;
   }
 
   // ========== 数据获取 ==========
@@ -1184,7 +1148,9 @@
   function resetAppScopedState() {
     appData.value = {} as AppDetailOutputObj;
     envList.value = [];
-    configFileList.value = [];
+    configFileDef.value = null;
+    currentFileDetail.value = null;
+    envInstances.value = [];
     currentEnv.value = { ...defaultEnv };
     currentEnvOriginalContent.value = '';
     isEnableEnvConfig.value = false;

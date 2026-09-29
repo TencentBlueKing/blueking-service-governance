@@ -55,13 +55,14 @@
 
   import { Button, Message } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
-  import { AppConfigFileOutputObj, UpdateAppConfigFileContentOutput } from '~/@types/v1/app-config-files';
-  import { AppConfigFilesService } from '~/api/modules/v1';
+  import { AppConfigFileDefsService } from '~/api/modules/v1';
   import { hasErrorCode } from '~/common/util';
   import SaveVersionConfirmDialog from '~/pages/application/detail/app-config/components/save-version-confirm-dialog.vue';
   import Orchestrate from '~/pages/application/template/helm-chart/orchestrate.vue';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
+
+  import type { DefDetailObj } from '~/@types/v1/app-config-file-defs';
 
   const { t } = useI18n();
   const spaceStore = useSpaceStore();
@@ -69,13 +70,13 @@
 
   const editable = ref<boolean>(true);
   const editorRef = ref<InstanceType<typeof Orchestrate>>();
-  const curFileInfo = ref<AppConfigFileOutputObj | null>(null);
+  const curFileInfo = ref<DefDetailObj | null>(null);
 
   // 保存版本确认弹窗
   const showSaveVersionDialog = ref(false);
   const saveVersionDialogRef = ref<InstanceType<typeof SaveVersionConfirmDialog> | null>(null);
 
-  function handleCurFileInfoChange(fileInfo: AppConfigFileOutputObj | null) {
+  function handleCurFileInfoChange(fileInfo: DefDetailObj | null) {
     curFileInfo.value = fileInfo;
   }
 
@@ -86,15 +87,20 @@
 
   async function handleSave(description: string = '') {
     const value = editorRef.value?.getValue() || '';
-    // 本地编辑覆盖层
-    if (curFileInfo.value?.type === 'overlay') {
-      await updateValuesFileOverlayContent(curFileInfo.value?.id ?? '', value, description);
-    } else if (curFileInfo.value?.contentSourceType === 'bscp' && curFileInfo.value?.type === 'normal') {
-      // BSCP 覆盖层
-      await updateValuesFileOverlayContent(curFileInfo.value?.id ?? '', value, description);
-    } else {
-      await updateValuesFileContent(curFileInfo.value!.id ?? '', value, description);
-    }
+    if (!curFileInfo.value?.id) return;
+    await AppConfigFileDefsService.updateAppConfigFileDefContent(
+      {
+        appID: appDetailStore.appID,
+        id: curFileInfo.value.id,
+        content: value,
+        currentVersion: curFileInfo.value.currentVersion ?? 0,
+        description,
+      },
+      { needRes: true, interceptorErr: false },
+    );
+    editorRef.value?.markAsSaved();
+    await editorRef.value?.refreshFileList();
+    Message({ theme: 'success', message: t('文件内容更新成功') });
   }
 
   /** 保存版本确认回调 */
@@ -111,53 +117,6 @@
         });
       }
     }
-  }
-
-  // 更新 values 文件
-  async function updateValuesFile(
-    fileId: string,
-    updateData: { content?: string; overlayContent?: string },
-    description = '',
-  ) {
-    const isOverlayUpdate = 'overlayContent' in updateData;
-    // 普通、覆盖层
-    const apiMethod: typeof AppConfigFilesService.updateAppConfigFileContent = isOverlayUpdate
-      ? AppConfigFilesService.updateAppConfigFileOverlayContent
-      : AppConfigFilesService.updateAppConfigFileContent;
-
-    const curFileInfoRef = curFileInfo.value;
-    const requestParams = {
-      appID: appDetailStore.appID,
-      id: fileId,
-      currentVersion: curFileInfoRef?.currentVersion ?? 0,
-      description,
-      ...updateData,
-    };
-
-    const res = (await apiMethod(requestParams, {
-      needRes: true,
-      interceptorErr: false,
-    })) as UpdateAppConfigFileContentOutput;
-    Message({
-      theme: 'success',
-      message: t('文件内容更新成功'),
-    });
-    editorRef.value?.markAsSaved();
-    // 刷新文件列表以更新 currentVersion
-    await editorRef.value?.refreshFileList();
-    if (res?.arrgData) {
-      editorRef.value?.updateValidationData(res.arrgData);
-    }
-  }
-
-  // 修改文件 values 的 Content
-  async function updateValuesFileContent(fileId: string, content: string, description = '') {
-    return updateValuesFile(fileId, { content }, description);
-  }
-
-  // 修改文件 values 的 overlayContent
-  async function updateValuesFileOverlayContent(fileId: string, overlayContent: string, description = '') {
-    return updateValuesFile(fileId, { overlayContent }, description);
   }
 
   // 校验

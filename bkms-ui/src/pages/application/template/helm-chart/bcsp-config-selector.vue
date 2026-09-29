@@ -129,12 +129,12 @@
   import { ApiServerService } from '~/api/modules/bkmsserver';
   import { hasErrorCode } from '~/common/util';
 
-  import type { AppConfigFileOutputObj, BSCPAppConfigFileConfig } from '~/@types/v1/app-config-files';
+  import type { BSCPConfigInput, DefDetailObj } from '~/@types/v1/app-config-file-defs';
   import type { BSCPBizOutput, BSCPConfigOutput, BSCPServiceOutput } from '~/@types/v1/bkintegrations-bscp';
 
   interface Emits {
-    (e: 'update:modelValue', value: BSCPAppConfigFileConfig): void;
-    (e: 'change', value: BSCPAppConfigFileConfig): void;
+    (e: 'update:modelValue', value: BSCPConfigInput): void;
+    (e: 'change', value: BSCPConfigInput): void;
     (e: 'validate', isValid: boolean): void;
     (e: 'yaml-validate', isValid: boolean): void;
     (e: 'service-not-fully-released', isNotFullyReleased: boolean): void;
@@ -142,9 +142,9 @@
   }
 
   interface Props {
-    currentFile?: AppConfigFileOutputObj | null;
+    currentFile?: DefDetailObj | null;
     isEdit?: boolean;
-    modelValue: BSCPAppConfigFileConfig;
+    modelValue: BSCPConfigInput;
   }
 
   const props = withDefaults(defineProps<Props>(), {

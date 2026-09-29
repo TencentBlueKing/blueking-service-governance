@@ -88,13 +88,13 @@
             >
               <div
                 class="flex-1 flex items-center ellipsis"
-                :class="{ 'font-bold': activeFileId === node.id }"
+                :class="{ 'font-bold': activeDefID === node.id }"
               >
                 <i
                   class="bkms-icon mr-[12px] text-[14px]"
                   :class="[
-                    !node.baseAppConfigFileID ? 'bkms-icon-file' : 'bkms-icon-shezhi',
-                    activeFileId === node.id ? 'text-[#3A84FF]' : 'text-[#979BA5]',
+                    !node.baseAppConfigFileId ? 'bkms-icon-file' : 'bkms-icon-shezhi',
+                    activeDefID === node.id ? 'text-[#3A84FF]' : 'text-[#979BA5]',
                   ]"
                 ></i>
                 <span class="ellipsis">
@@ -173,37 +173,28 @@
   import { Button, Exception, Loading, Message, OverflowTitle, PopConfirm, Tag, Tree } from 'bkui-vue';
   import { Del, EditLine, InfoLine, Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import {
-    AppConfigFileOutputObj,
-    CreateAppConfigFileRequest,
-    GetAppConfigFileDetailsOutput,
-    ListAppConfigFilesOutput,
-    UpdateAppConfigFileRequest,
-  } from '~/@types/v1/app-config-files';
   import { ApiServerService } from '~/api/modules/bkmsserver';
+  import { AppConfigFileDefsService, AppConfigFilesService } from '~/api/modules/v1';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
 
   import FileFormSideslider from './file-form-sideslider.vue';
 
+  import type { CreateDefInput, DefDetailObj } from '~/@types/v1/app-config-file-defs';
+
   interface FileDetailChangeEvent {
-    fileDetail: GetAppConfigFileDetailsOutput | null;
-    fileInfo: AppConfigFileOutputObj;
+    fileDetail: DefDetailObj | null;
+    fileInfo: DefDetailObj;
   }
 
-  interface FileFormData {
-    baseAppConfigFileID?: string;
-    contentSourceType: 'bscp' | 'local';
-    name: string;
-    type: 'normal' | 'overlay';
-  }
+  type FileFormData = Omit<CreateDefInput, 'configKind'>;
 
   interface Props {
     hasUnsavedChanges?: boolean;
   }
 
-  interface TreeFileNode extends AppConfigFileOutputObj {
+  interface TreeFileNode extends DefDetailObj {
     children: TreeFileNode[];
   }
 
@@ -213,7 +204,7 @@
 
   const emits = defineEmits<{
     'file-detail-change': [data: FileDetailChangeEvent];
-    'file-list-change': [fileList: AppConfigFileOutputObj[]];
+    'file-list-change': [fileList: DefDetailObj[]];
     'loading-change': [loading: boolean];
   }>();
 
@@ -224,43 +215,45 @@
 
   // 响应式数据
   const loading = ref(false);
-  const fileList = ref<AppConfigFileOutputObj[]>([]);
+  const fileList = ref<DefDetailObj[]>([]);
   const fileDialogVisible = ref(false);
   const submitLoading = ref(false);
   const isEdit = ref(false);
-  const currentFile = ref<AppConfigFileOutputObj | null>(null);
-  const activeFileId = ref<null | string>(null); // 当前激活的文件ID
+  const currentFile = ref<DefDetailObj | null>(null);
+  const activeDefID = ref<null | string>(null); // 当前激活的定义 ID
   const activePopConfirmId = ref<string>(''); // 当前显示PopConfirm的文件ID
   // 文件展示树数据
   const treeFileList = ref<TreeFileNode[]>([]);
   const defaultActiveFileIds = ref<string[]>([]);
   // fetchFileList的key，用于强制更新树形结构
-  const treeUpdateKey = ref();
+  const treeUpdateKey = ref(0);
 
   // 基础values选项
   const baseFileOptions = computed(() =>
-    fileList.value.filter(file => file.type === 'normal').map(file => ({ id: file.id || '', name: file.name || '' })),
+    fileList.value
+      .filter(file => file.fileType === 'normal' && file.fileId)
+      .map(file => ({ id: file.fileId || '', name: file.name || '' })),
   );
 
-  const getPrefixIcon = (item: AppConfigFileOutputObj, renderType: string) => {
+  const getPrefixIcon = (item: DefDetailObj, renderType: string) => {
     return renderType === 'node_action' ? 'default' : item;
   };
 
   // 将文件列表转换为树形结构
-  function convertToTreeStructure(files: AppConfigFileOutputObj[]): TreeFileNode[] {
+  function convertToTreeStructure(files: DefDetailObj[]): TreeFileNode[] {
     const fileMap = new Map<string, TreeFileNode>();
 
     files.forEach(file => {
-      fileMap.set(file.id || '', { ...file, children: [] });
+      fileMap.set(file.fileId || '', { ...file, children: [] });
     });
 
     // 区分基础层和覆盖层
     const rootFiles: TreeFileNode[] = [];
 
     files.forEach(file => {
-      const fileWithChildren = fileMap.get(file.id || '')!;
-      if (file.type === 'overlay' && file.baseAppConfigFileID) {
-        const parentFile = fileMap.get(file.baseAppConfigFileID);
+      const fileWithChildren = fileMap.get(file.fileId || '')!;
+      if (file.fileType === 'overlay' && file.baseAppConfigFileId) {
+        const parentFile = fileMap.get(file.baseAppConfigFileId);
         if (parentFile) {
           // 将覆盖层文件添加到基础层的 children 中
           parentFile.children.push(fileWithChildren);
@@ -275,23 +268,27 @@
   }
 
   // 获取文件详情
-  async function fetchFileDetail(fileId: string) {
-    const fileInfo = fileList.value.find(
-      (item: AppConfigFileOutputObj) => item.id === fileId,
-    ) as AppConfigFileOutputObj;
+  async function fetchFileDetail(defID: string) {
+    const fileInfo = fileList.value.find(item => item.id === defID);
+    if (!fileInfo) return;
     try {
-      const fileDetail: GetAppConfigFileDetailsOutput = await ApiServerService.GetAppConfigFileDetails(
+      const result = await AppConfigFileDefsService.getAppConfigFileDefDetail(
         {
           appID: appDetailStore.appID,
-          id: fileId,
+          id: defID,
         },
         { needRes: true },
       );
+      const fileDetail = result.item || null;
+      if (fileDetail?.contentSourceType === 'bscp' && fileDetail.bscpConfig) {
+        await loadConfigContent(fileDetail);
+        return fileDetail;
+      }
 
       // 发送数据给父组件
       emits('file-detail-change', {
         fileDetail,
-        fileInfo,
+        fileInfo: fileDetail || fileInfo,
       });
       return fileDetail;
     } catch {
@@ -308,19 +305,20 @@
   async function fetchFileList() {
     try {
       loading.value = true;
-      const ret: ListAppConfigFilesOutput = await ApiServerService.ListAppConfigFiles(
+      const ret = await AppConfigFileDefsService.listDefaultFilesWithDef(
         { appID: appDetailStore.appID },
         { needRes: true },
       );
-      fileList.value = ret?.items || [];
+      fileList.value = (ret.items || []).filter(file => file.configKind === 'framework' && file.id && file.fileId);
       treeFileList.value = convertToTreeStructure(fileList.value);
       emits('file-list-change', fileList.value);
       // 默认激活第一项
-      if (!activeFileId.value && fileList.value?.length) {
-        handleSelectFile(fileList.value[0]);
+      if (!fileList.value.some(file => file.id === activeDefID.value) && fileList.value.length) {
+        await handleSelectFile(fileList.value[0]);
         defaultActiveFileIds.value = [fileList.value[0]?.id || ''];
       } else {
-        defaultActiveFileIds.value = activeFileId.value ? [activeFileId.value] : [];
+        if (!fileList.value.length) activeDefID.value = null;
+        defaultActiveFileIds.value = activeDefID.value ? [activeDefID.value] : [];
       }
       treeUpdateKey.value += 1;
     } finally {
@@ -336,14 +334,17 @@
   }
 
   // 添加文件
-  async function handleAddFileSubmit(params: Partial<CreateAppConfigFileRequest>, formData: FileFormData) {
-    const result = await ApiServerService.CreateAppConfigFile({
-      ...params,
-      type: formData.type,
-    } as CreateAppConfigFileRequest)
-      .then(() => true)
-      .catch(() => false);
-    if (result) {
+  async function handleAddFileSubmit(formData: FileFormData) {
+    const result = await AppConfigFileDefsService.createAppConfigFileDef(
+      {
+        ...formData,
+        appID: appDetailStore.appID,
+        configKind: 'framework',
+        fileFormat: appDetailStore.appType === 'taf' ? 'taf' : 'yaml',
+      },
+      { needRes: true },
+    ).catch(() => null);
+    if (result?.item) {
       Message({
         theme: 'success',
         message: t('添加成功'),
@@ -351,9 +352,9 @@
       fileDialogVisible.value = false;
       await fetchFileList();
       // 高亮新添加的文件
-      const newFile = fileList.value.find(file => file.name === formData.name);
+      const newFile = fileList.value.find(file => file.id === result.item?.id);
       if (newFile) {
-        handleSelectFile(newFile);
+        await handleSelectFile(newFile);
       }
     }
   }
@@ -366,16 +367,16 @@
   }
 
   // 删除文件
-  async function handleDeleteFile(file: AppConfigFileOutputObj) {
+  async function handleDeleteFile(file: DefDetailObj) {
     try {
       submitLoading.value = true;
-      await ApiServerService.DeleteAppConfigFile({
+      await AppConfigFileDefsService.deleteAppConfigFileDef({
         appID: appDetailStore.appID,
         id: file.id || '',
       });
       // 如果删除的是当前激活文件，清除激活状态
-      if (activeFileId.value === file.id) {
-        activeFileId.value = null;
+      if (activeDefID.value === file.id) {
+        activeDefID.value = null;
       }
       Message({
         theme: 'success',
@@ -391,18 +392,23 @@
   }
 
   // 编辑文件
-  function handleEditFile(file: AppConfigFileOutputObj) {
+  function handleEditFile(file: DefDetailObj) {
     currentFile.value = file;
     isEdit.value = true;
     fileDialogVisible.value = true;
   }
 
   // 编辑文件
-  async function handleEditFileSubmit(params: Partial<CreateAppConfigFileRequest>) {
-    const result = await ApiServerService.UpdateAppConfigFile({
-      ...params,
-      id: currentFile.value?.id || '',
-    } as UpdateAppConfigFileRequest)
+  async function handleEditFileSubmit(formData: FileFormData) {
+    const result = await AppConfigFilesService.updateAppConfigFile({
+      appID: appDetailStore.appID,
+      id: currentFile.value?.fileId || '',
+      name: formData.name,
+      baseAppConfigFileID: formData.baseAppConfigFileId,
+      bscpConfig: formData.bscpConfig,
+      currentVersion: currentFile.value?.currentVersion,
+      description: formData.description,
+    })
       .then(() => true)
       .catch(() => false);
     if (result) {
@@ -412,26 +418,18 @@
       });
       fileDialogVisible.value = false;
       await fetchFileList();
-      await fetchFileDetail(currentFile.value?.id || '');
+      if (currentFile.value?.id === activeDefID.value) await refetchCurrentFile();
     }
   }
 
   // 表单提交处理
   async function handleFormSubmit(formData: FileFormData) {
     submitLoading.value = true;
-    const baseAppConfigFileID = formData.type === 'overlay' ? formData.baseAppConfigFileID || '' : '';
-    const params: Partial<CreateAppConfigFileRequest> = {
-      appID: appDetailStore.appID,
-      baseAppConfigFileID,
-      fileFormat: appDetailStore.appType === 'taf' ? 'taf' : 'yaml',
-      ...formData,
-    };
-
     try {
       if (isEdit.value) {
-        await handleEditFileSubmit(params);
+        await handleEditFileSubmit(formData);
       } else {
-        await handleAddFileSubmit(params, formData);
+        await handleAddFileSubmit(formData);
       }
     } finally {
       submitLoading.value = false;
@@ -439,42 +437,39 @@
   }
 
   // 选择文件（激活状态）
-  async function handleSelectFile(file: AppConfigFileOutputObj) {
+  async function handleSelectFile(file: DefDetailObj) {
     // 当前文件有未保存的更改，显示确认对话框
-    if (props.hasUnsavedChanges && activeFileId.value !== file.id) {
+    if (props.hasUnsavedChanges && activeDefID.value !== file.id) {
       const shouldLeave = await confirmBox();
       if (!shouldLeave) return;
     }
 
-    activeFileId.value = file.id || null;
+    activeDefID.value = file.id || null;
     emits('loading-change', true);
     try {
-      // BSCP-来源文件
-      if (file.contentSourceType === 'bscp' && file.bscpConfig) {
-        await loadConfigContent(file.bscpConfig);
-      } else {
-        await fetchFileDetail(file.id || '');
-      }
+      await fetchFileDetail(file.id || '');
     } finally {
       emits('loading-change', false);
     }
   }
 
   // 加载覆盖层-bcsp配置项内容
-  async function loadConfigContent(config: NonNullable<AppConfigFileOutputObj['bscpConfig']>) {
-    const fileInfo = fileList.value.find(item => item.id === activeFileId.value) as AppConfigFileOutputObj;
+  async function loadConfigContent(fileInfo: DefDetailObj) {
+    const config = fileInfo.bscpConfig;
+    if (!config) return;
     try {
       const res = await ApiServerService.GetBSCPConfig({
-        bizID: config.bizID,
-        serviceID: config.serviceID,
-        configID: config.id,
+        bizID: config.bizID || '',
+        serviceID: config.serviceID || '',
+        configID: config.id || '',
       });
       const fileDetail = {
+        ...fileInfo,
         editableContentField: 'overlayContent',
         content: res?.content || '',
         overlayContent: res?.content || '',
         baseContentInfo: {
-          holderID: config.id,
+          holderId: config.id,
           holderName: res?.name || '',
           holderContentSourceType: 'bscp',
           content: res?.content || '',
@@ -518,11 +513,9 @@
     { immediate: true },
   );
 
-  /** 刷新当前选中文件的详情（供外部调用，如版本回滚后） */
+  /** 保存或回滚后刷新当前详情；仅刷新列表时保留编辑中的内容。 */
   function refetchCurrentFile() {
-    if (activeFileId.value) {
-      fetchFileDetail(activeFileId.value);
-    }
+    if (activeDefID.value) return fetchFileDetail(activeDefID.value);
   }
 
   defineExpose({

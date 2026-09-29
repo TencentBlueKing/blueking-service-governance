@@ -80,7 +80,7 @@
         </template>
         <template #right>
           <!-- 覆盖层展示 -->
-          <template v-if="curFileInfo?.type === 'overlay'">
+          <template v-if="curFileInfo?.fileType === 'overlay'">
             <IconTextButton
               :active="showType === 'completeValues'"
               icon="bkms-icon bkms-icon-yanjing-kejian"
@@ -202,7 +202,7 @@
                   <template #title>
                     {{ curFileInfo?.name || '' }}
                     <Popover
-                      v-if="curFileInfo?.type === 'overlay'"
+                      v-if="curFileInfo?.fileType === 'overlay'"
                       allow-html
                       ext-cls="multi-values-tag-popover"
                       placement="top"
@@ -272,9 +272,7 @@
               </Loading>
             </div>
             <HelmErrorStatus
-              v-if="editable && (!!validateData?.length || !!yamlErrorLines.length)"
-              ref="errorStatusRef"
-              :data="validateData"
+              v-if="editable && !!yamlErrorLines.length"
               :error-lines="yamlErrorLines"
             />
           </div>
@@ -295,8 +293,10 @@
   <!-- 版本列表侧边栏 -->
   <VersionListSideslider
     v-model:visible="showVersionListSideslider"
-    :config-file-list="fileList"
-    :current-file="latestFileInfo"
+    :config-file-list="[]"
+    :current-file-id="latestFileInfo?.fileId"
+    :current-file-name="latestFileInfo?.name"
+    :current-version="latestFileInfo?.currentVersion"
     @refresh="handleVersionRefresh"
     @rollback="handleVersionRollback"
   />
@@ -318,12 +318,7 @@
   import HelmFileList from './helm-file-list.vue';
   import Variables from './variables.vue';
 
-  import type {
-    AppConfigFileOutputObj,
-    ArrgResultItemOutputObj,
-    GetAppConfigFileDetailsOutput,
-    ValidateArrgValuesYAMLOutputObj,
-  } from '~/@types/v1/app-config-files';
+  import type { DefDetailObj } from '~/@types/v1/app-config-file-defs';
   import type { ChartVersionOutputObj } from '~/@types/v1/helm-charts';
   import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
 
@@ -335,13 +330,13 @@
   }
 
   interface FileDetailChangeEvent {
-    fileDetail: GetAppConfigFileDetailsOutput | null;
-    fileInfo: AppConfigFileOutputObj;
+    fileDetail: DefDetailObj | null;
+    fileInfo: DefDetailObj;
   }
 
   interface IEmit {
     (e: 'validate-change', isValidate: boolean): void;
-    (e: 'current-file-change', fileInfo: AppConfigFileOutputObj | null): void;
+    (e: 'current-file-change', fileInfo: DefDetailObj | null): void;
   }
 
   const props = defineProps({
@@ -359,7 +354,6 @@
   const { t } = useI18n();
 
   const isLoading = ref<boolean>(false);
-  const errorStatusRef = ref<InstanceType<typeof HelmErrorStatus>>();
   const editorLayoutRef = ref<InstanceType<typeof ResizeLayout> | null>(null);
   const helmFileListRef = ref<InstanceType<typeof HelmFileList> | null>(null);
   const showType = ref<'completeValues' | 'history' | 'values' | 'variables'>();
@@ -373,7 +367,7 @@
 
   // 覆盖层 Popover
   const overlayPopoverData = computed(() => {
-    const baseFile = fileList.value.find(file => file.id === curFileInfo.value?.baseAppConfigFileID);
+    const baseFile = fileList.value.find(file => file.fileId === curFileInfo.value?.baseAppConfigFileId);
     return [
       {
         label: t('基础 values'),
@@ -480,15 +474,11 @@
     return overrideValues.value !== originalOverrideValues.value;
   });
 
-  // 点击校验
-  const validateData = ref<ArrgResultItemOutputObj[]>([]);
-
   // yaml校验
   const yamlErrorLines = ref<IMonacoEditorErrorMarkerItem[]>([]);
   const isValidate = computed(() => !yamlErrorLines.value?.length);
   // 清空校验异常信息
   function clearValidationMessage() {
-    validateData.value = [];
     yamlErrorLines.value = [];
   }
 
@@ -500,20 +490,11 @@
     yamlErrorLines.value = data;
   }
 
-  // 滚动到异常信息组件
-  function scrollErrorView() {
-    nextTick(() => {
-      if (!!validateData.value?.length || !!yamlErrorLines.value.length) {
-        errorStatusRef.value?.$el?.scrollIntoView();
-      }
-    });
-  }
-
   // 文件列表
-  const fileList = ref<AppConfigFileOutputObj[]>([]);
+  const fileList = ref<DefDetailObj[]>([]);
   // 文件信息
-  const curFileInfo = ref<AppConfigFileOutputObj | null>(null);
-  const curFileDetail = ref({} as GetAppConfigFileDetailsOutput | null);
+  const curFileInfo = ref<DefDetailObj | null>(null);
+  const curFileDetail = ref<DefDetailObj | null>(null);
 
   /** 从 fileList 实时获取当前文件最新数据（保证 currentVersion 等字段始终最新，用于版本列表等需要乐观锁的场景） */
   const latestFileInfo = computed(() => {
@@ -528,7 +509,7 @@
     clearValidationMessage();
 
     if (showType.value === 'completeValues') {
-      if (data.fileInfo?.type === 'overlay') {
+      if (data.fileInfo?.fileType === 'overlay') {
         getCompleteValues();
       } else {
         showType.value = undefined;
@@ -540,7 +521,7 @@
   }
 
   // 文件列表变化
-  function handleFileListChange(list: AppConfigFileOutputObj[]) {
+  function handleFileListChange(list: DefDetailObj[]) {
     fileList.value = list;
     if (!list.length) {
       curFileInfo.value = null;
@@ -553,7 +534,7 @@
   }
 
   // 更新 values 内容
-  function updateEditorContent(fileDetail: GetAppConfigFileDetailsOutput | null) {
+  function updateEditorContent(fileDetail: DefDetailObj | null) {
     overrideValues.value = '';
     if (fileDetail) {
       const { editableContentField, content, overlayContent } = fileDetail;
@@ -579,7 +560,7 @@
     try {
       const res = await ApiServerService.PreviewOverlayMerge({
         appID: appDetailStore.appID,
-        id: curFileInfo.value?.baseAppConfigFileID || '',
+        id: curFileInfo.value?.baseAppConfigFileId || '',
         overlayContent: curFileInfo.value?.bscpConfig ? '' : overrideValues.value,
       });
       if (res) {
@@ -630,9 +611,8 @@
   }
 
   /** 版本回滚成功回调，刷新当前文件内容 */
-  function handleVersionRollback() {
-    helmFileListRef.value?.fetchFileList();
-    helmFileListRef.value?.refetchCurrentFile();
+  async function handleVersionRollback() {
+    await refreshFileList();
   }
 
   watch(
@@ -672,21 +652,14 @@
   }
 
   /** 刷新文件列表（供外部调用，如保存后） */
-  function refreshFileList() {
-    return helmFileListRef.value?.fetchFileList();
-  }
-
-  function updateValidationData(data: ValidateArrgValuesYAMLOutputObj) {
-    validateData.value = (Object.keys(data) as Array<keyof typeof data>)
-      .map(key => data[key])
-      .filter((item): item is ArrgResultItemOutputObj => !!item?.skippedReason);
-    scrollErrorView();
+  async function refreshFileList() {
+    await helmFileListRef.value?.fetchFileList();
+    await helmFileListRef.value?.refetchCurrentFile();
   }
 
   defineExpose({
     getValue,
     markAsSaved,
-    updateValidationData,
     refreshFileList,
   });
 </script>

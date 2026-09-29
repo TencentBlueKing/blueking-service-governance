@@ -178,10 +178,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
     await Promise.all([fetchDetail(envName), fetchEnvInstances()]);
   }
 
-  /**
-   * 创建 plain 文件。
-   * 创建接口不接收渲染开关与挂载环境，故创建成功后再补一次更新。
-   */
+  /** 创建 plain 文件，同时设置渲染开关与挂载环境。 */
   async function createPlain(input: PlainFileCreateInput) {
     const id = toValue(appID);
     const result = await AppConfigFileDefsService.createAppConfigFileDef(
@@ -190,27 +187,17 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
         configKind: 'plain',
         content: input.content || '',
         contentSourceType: 'local',
+        enableEnvVarRender: input.enableEnvVarRender,
         fileFormat: 'yaml',
         fileType: 'normal',
         mountDir: input.mountDir,
+        mountedEnvNames: input.mountedEnvNames,
         name: input.name,
       },
       { needRes: true },
     );
     const createdID = result.item?.id || '';
-    try {
-      if (createdID && (input.enableEnvVarRender || input.mountedEnvNames !== undefined)) {
-        await AppConfigFileDefsService.updateAppConfigFileDef({
-          appID: id,
-          id: createdID,
-          ...(input.enableEnvVarRender ? { enableEnvVarRender: true } : {}),
-          ...(input.mountedEnvNames !== undefined ? { mountedEnvNames: input.mountedEnvNames } : {}),
-        });
-      }
-    } finally {
-      // 无论补更新成功与否都刷新列表，保证新建项出现在列表中
-      await fetchDefs(createdID);
-    }
+    await fetchDefs(createdID);
     return createdID;
   }
 
@@ -230,7 +217,10 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
         appID: toValue(appID),
         id: activeDefID.value,
         content,
-        currentVersion: detail.value?.currentVersion,
+        currentVersion:
+          envName && !detail.value?.hasEnvInstance && detail.value?.isUnifiedConfig === false
+            ? 0
+            : detail.value?.currentVersion,
         description,
       },
       {

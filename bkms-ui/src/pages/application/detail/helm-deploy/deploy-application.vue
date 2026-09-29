@@ -68,7 +68,7 @@
             :clearable="false"
             display-key="name"
             filterable
-            id-key="id"
+            id-key="fileId"
             :list="valuesFileState.list"
             :loading="valuesFileState.loading"
           >
@@ -185,11 +185,10 @@
   import { cloneDeep, debounce } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
-  import { AppConfigFileOutputObj, ListAppConfigFilesOutput } from '~/@types/v1/app-config-files';
   import { CreateHelmDeployRequest, PreviewHelmDeployOutput, PreviewHelmDeployRequest } from '~/@types/v1/deploy';
   import { EnvOutput } from '~/@types/v1/env';
   import { DeployableImageTagOutputObj } from '~/@types/v1/images';
-  import { AppConfigFilesService, DeployService, ImagesService } from '~/api/modules/v1';
+  import { AppConfigFileDefsService, DeployService, ImagesService } from '~/api/modules/v1';
   import { envDetailLocation } from '~/composables/use-env-manager';
   import { useErrorHandler } from '~/composables/use-error-handler';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
@@ -197,6 +196,8 @@
 
   import EnvUndefinedTips from './env-undefined-tips.vue';
   import { useHelmDeploy } from './use-helm-deploy';
+
+  import type { DefDetailObj } from '~/@types/v1/app-config-file-defs';
   type HelmDeployType = 'Recreate' | 'RollingUpdate';
   interface IProps {
     deployType: HelmDeployType;
@@ -274,7 +275,7 @@
     target: '',
   });
   const valuesFileState = ref({
-    list: [] as AppConfigFileOutputObj[],
+    list: [] as DefDetailObj[],
     loading: false,
   });
 
@@ -319,11 +320,11 @@
   async function getValuesFileList() {
     try {
       valuesFileState.value.loading = true;
-      const ret: ListAppConfigFilesOutput = await AppConfigFilesService.listAppConfigFiles(
+      const ret = await AppConfigFileDefsService.listDefaultFilesWithDef(
         { appID: appDetailStore.appID },
         { needRes: true },
       );
-      valuesFileState.value.list = ret?.items || [];
+      valuesFileState.value.list = (ret.items || []).filter(file => file.configKind === 'framework' && file.fileId);
     } finally {
       valuesFileState.value.loading = false;
     }

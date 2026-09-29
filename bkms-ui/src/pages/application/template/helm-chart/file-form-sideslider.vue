@@ -45,13 +45,13 @@
           />
         </Form.FormItem>
         <Form.FormItem
-          :class="formData.type === 'overlay' ? 'mb-0' : ''"
+          :class="formData.fileType === 'overlay' ? 'mb-0' : ''"
           :label="$t('类型')"
-          property="type"
+          property="fileType"
           required
         >
           <Radio.Group
-            v-model="formData.type"
+            v-model="formData.fileType"
             class="flex flex-col"
             :disabled="isEdit"
           >
@@ -76,15 +76,15 @@
         </Form.FormItem>
         <!-- 覆盖层 - 基础 values -->
         <Form.FormItem
-          v-if="formData.type === 'overlay'"
+          v-if="formData.fileType === 'overlay'"
           class="bg-[#F5F7FA] px-[24px] py-[16px]"
           :label="$t('基础 values')"
-          property="baseAppConfigFileID"
+          property="baseAppConfigFileId"
           required
         >
           <Select
             filterable
-            :model-value="formData.baseAppConfigFileID"
+            :model-value="formData.baseAppConfigFileId"
             @change="handleBaseFileChange"
           >
             <Select.Option
@@ -164,15 +164,12 @@
   import { InfoLine } from 'bkui-vue/lib/icon';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
-  import {
-    AppConfigFileOutputObj,
-    BSCPAppConfigFileConfig,
-    CreateAppConfigFileRequest,
-  } from '~/@types/v1/app-config-files';
   import { BKMS_REGEX } from '~/common/const';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
 
   import BcspConfigSelector from './bcsp-config-selector.vue';
+
+  import type { BSCPConfigInput, CreateDefInput, DefDetailObj } from '~/@types/v1/app-config-file-defs';
 
   interface Emits {
     (e: 'update:visible', value: boolean): void;
@@ -180,12 +177,11 @@
     (e: 'cancel'): void;
   }
 
-  // 使用 CreateAppConfigFileRequest 类型，排除 envName 字段，并让部分字段可选
-  type FileFormData = Omit<CreateAppConfigFileRequest, 'appID' | 'envName'> & { bscpConfig: BSCPAppConfigFileConfig };
+  type FileFormData = Omit<CreateDefInput, 'configKind'> & { bscpConfig: BSCPConfigInput };
 
   interface Props {
     baseFileOptions: Array<{ id: string; name: string }>;
-    currentFile?: AppConfigFileOutputObj | null;
+    currentFile?: DefDetailObj | null;
     isEdit: boolean;
     loading?: boolean;
     visible: boolean;
@@ -207,9 +203,9 @@
   // 表单数据
   const defaultFormData: FileFormData = {
     name: '',
-    type: 'normal',
+    fileType: 'normal',
     contentSourceType: 'local',
-    baseAppConfigFileID: '',
+    baseAppConfigFileId: '',
     fileFormat: 'yaml',
     description: '',
     bscpConfig: {
@@ -237,7 +233,7 @@
         trigger: 'blur',
       },
     ],
-    type: [
+    fileType: [
       {
         required: true,
         message: t('请选择文件类型'),
@@ -306,11 +302,11 @@
       changes.push(`${t('修改名称')} (${props.currentFile.name} -> ${formData.name})`);
     }
 
-    if (formData.type === 'overlay' && props.currentFile.baseAppConfigFileID !== formData.baseAppConfigFileID) {
-      const oldBase = props.baseFileOptions.find(item => item.id === props.currentFile!.baseAppConfigFileID);
-      const newBase = props.baseFileOptions.find(item => item.id === formData.baseAppConfigFileID);
-      const oldName = oldBase?.name || props.currentFile.baseAppConfigFileID;
-      const newName = newBase?.name || formData.baseAppConfigFileID;
+    if (formData.fileType === 'overlay' && props.currentFile.baseAppConfigFileId !== formData.baseAppConfigFileId) {
+      const oldBase = props.baseFileOptions.find(item => item.id === props.currentFile!.baseAppConfigFileId);
+      const newBase = props.baseFileOptions.find(item => item.id === formData.baseAppConfigFileId);
+      const oldName = oldBase?.name || props.currentFile.baseAppConfigFileId;
+      const newName = newBase?.name || formData.baseAppConfigFileId;
       changes.push(`${t('覆盖层')} (${oldName} -> ${newName})`);
     }
 
@@ -319,7 +315,7 @@
 
   // 基础 values 选择变化
   function handleBaseFileChange(val: string) {
-    formData.baseAppConfigFileID = val;
+    formData.baseAppConfigFileId = val;
   }
 
   // 侧边栏关闭前确认
@@ -364,23 +360,23 @@
     if (props.currentFile && props.isEdit) {
       const {
         name = '',
-        type = 'normal' as const,
+        fileType = 'normal' as const,
         contentSourceType = 'local' as const,
-        baseAppConfigFileID = '',
+        baseAppConfigFileId = '',
         fileFormat = 'yaml' as const,
         bscpConfig,
       } = props.currentFile;
       const fileData: FileFormData = {
         name,
-        type: type as FileFormData['type'],
+        fileType: fileType as FileFormData['fileType'],
         contentSourceType: contentSourceType as FileFormData['contentSourceType'],
-        baseAppConfigFileID,
+        baseAppConfigFileId,
         fileFormat: fileFormat as FileFormData['fileFormat'],
         description: '',
-        bscpConfig: bscpConfig || {
-          bizID: '',
-          id: '',
-          serviceID: '',
+        bscpConfig: {
+          bizID: bscpConfig?.bizID || '',
+          id: bscpConfig?.id || '',
+          serviceID: bscpConfig?.serviceID || '',
         },
       };
       withPausedWatch(() => {
