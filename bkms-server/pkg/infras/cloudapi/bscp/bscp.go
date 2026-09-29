@@ -133,7 +133,7 @@ func (c *ApiClient) ListBizServices(ctx context.Context, bizID string) ([]Servic
 	op := c.NewOperation(
 		bkapi.OperationConfig{
 			Name:   "list_app",
-			Method: "GET",
+			Method: "POST",
 			Path:   "/api/v1/config/list/app/app/biz_id/{biz_id}",
 		},
 		bkapi.OptSetRequestPathParams(map[string]string{"biz_id": bizID}),
