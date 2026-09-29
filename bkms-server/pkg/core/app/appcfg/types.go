@@ -137,6 +137,8 @@ type CreateCfgFileParams struct {
 	BSCPConfig          *BSCPConfig
 	Content             *string
 	OverlayContent      *string
+	MountedEnvNames     *[]string
+	EnableEnvVarRender  *bool
 	Creator             string
 	Description         string
 	// ConfigKind 决定适用的策略集，默认 ConfigKindFramework。

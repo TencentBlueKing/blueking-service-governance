@@ -96,16 +96,26 @@ func (s *AppCfgFileDefService) Create(
 func (s *AppCfgFileDefService) createDef(
 	ctx context.Context, params CreateCfgFileParams, kind ConfigKind, policy ConfigKindPolicy,
 ) (*AppConfigFileDef, error) {
+	enableEnvVarRender := policy.DefaultEnableEnvVarRender()
+	if params.EnableEnvVarRender != nil {
+		enableEnvVarRender = *params.EnableEnvVarRender
+	}
+
+	envConfigMode := EnvConfigMode{
+		// 初始创建默认为统一配置
+		IsUnifiedConfig: true,
+	}
+	if params.MountedEnvNames != nil {
+		envConfigMode.MountedEnvNames = *params.MountedEnvNames
+	}
+
 	def := AppConfigFileDef{
-		AppID:      params.AppID,
-		Name:       params.Name,
-		ConfigKind: kind,
-		MountDir:   params.MountDir,
-		EnvConfigMode: EnvConfigMode{
-			// 初始创建默认为统一配置
-			IsUnifiedConfig: true,
-		},
-		EnableEnvVarRender: policy.DefaultEnableEnvVarRender(),
+		AppID:              params.AppID,
+		Name:               params.Name,
+		ConfigKind:         kind,
+		MountDir:           params.MountDir,
+		EnvConfigMode:      envConfigMode,
+		EnableEnvVarRender: enableEnvVarRender,
 		Creator:            params.Creator,
 	}
 	defID, err := s.DefStore.Add(ctx, def)

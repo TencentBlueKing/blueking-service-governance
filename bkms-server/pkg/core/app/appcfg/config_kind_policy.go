@@ -64,8 +64,14 @@ type FrameworkPolicy struct{}
 
 var _ ConfigKindPolicy = FrameworkPolicy{}
 
-// ValidateCreateParams framework 创建无额外约束。
-func (FrameworkPolicy) ValidateCreateParams(_ CreateCfgFileParams) error {
+// ValidateCreateParams framework 创建时不允许关闭环境变量渲染。
+func (FrameworkPolicy) ValidateCreateParams(params CreateCfgFileParams) error {
+	if params.EnableEnvVarRender != nil && !*params.EnableEnvVarRender {
+		return errors.Wrap(ErrInvalidConfigSpec, "framework config file does not allow disable enableEnvVarRender")
+	}
+	if params.MountedEnvNames != nil {
+		return errors.Wrap(ErrInvalidConfigSpec, "framework config file does not support mountedEnvNames")
+	}
 	return nil
 }
 

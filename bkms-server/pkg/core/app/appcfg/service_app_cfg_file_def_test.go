@@ -240,6 +240,70 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gotDef.EnableEnvVarRender).To(BeFalse())
 		})
+
+		It("should allow plain kind create with mountedEnvNames and EnableEnvVarRender", func() {
+			content := "plain content"
+			mounted := []string{"prod", "staging"}
+			enableRender := true
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:              f.AppID,
+				EnvName:            appcfg.EnvNameDefault,
+				Name:               "plain-render.conf",
+				MountDir:           "/etc/app",
+				Type:               appcfg.AppConfigFileTypeNormal,
+				ContentSourceType:  appcfg.ContentSourceTypeLocal,
+				Format:             appcfg.FileFormatYAML,
+				Content:            &content,
+				Creator:            "tester",
+				ConfigKind:         appcfg.ConfigKindPlain,
+				MountedEnvNames:    &mounted,
+				EnableEnvVarRender: &enableRender,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Def.EnvConfigMode.IsUnifiedConfig).To(BeTrue())
+			Expect(result.Def.EnvConfigMode.MountedEnvNames).To(Equal(mounted))
+			Expect(result.Def.EnableEnvVarRender).To(BeTrue())
+		})
+
+		It("should reject framework kind create with EnableEnvVarRender=false", func() {
+			content := "key: value"
+			disableRender := false
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:              f.AppID,
+				EnvName:            appcfg.EnvNameDefault,
+				Name:               "fw.yaml",
+				Type:               appcfg.AppConfigFileTypeNormal,
+				ContentSourceType:  appcfg.ContentSourceTypeLocal,
+				Format:             appcfg.FileFormatYAML,
+				Content:            &content,
+				Creator:            "tester",
+				ConfigKind:         appcfg.ConfigKindFramework,
+				EnableEnvVarRender: &disableRender,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("enableEnvVarRender"))
+		})
+
+		It("should reject framework kind create with mountedEnvNames", func() {
+			content := "key: value"
+			mountedEnvNames := []string{"prod"}
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "fw-mounted.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				MountedEnvNames:   &mountedEnvNames,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("mountedEnvNames"))
+		})
 	})
 
 	Context("UpdateAppCfgFileDef", func() {

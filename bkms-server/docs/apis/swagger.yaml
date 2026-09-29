@@ -19,6 +19,15 @@ definitions:
     - id
     - serviceID
     type: object
+  appcfgfiledef.BSCPConfigObj:
+    properties:
+      bizID:
+        type: string
+      id:
+        type: string
+      serviceID:
+        type: string
+    type: object
   appcfgfiledef.BaseContentInfoObj:
     properties:
       content:
@@ -59,6 +68,9 @@ definitions:
       description:
         description: 版本描述
         type: string
+      enableEnvVarRender:
+        description: 创建时可选设置环境变量渲染开关；不传时使用 ConfigKind 默认值
+        type: boolean
       fileFormat:
         description: 文件格式
         enum:
@@ -75,6 +87,11 @@ definitions:
         description: 容器内挂载目录（plain 必填）
         maxLength: 255
         type: string
+      mountedEnvNames:
+        description: 创建时可选设置挂载环境范围；nil = 全环境生效
+        items:
+          type: string
+        type: array
       name:
         description: 文件名称
         maxLength: 64
@@ -98,6 +115,8 @@ definitions:
         type: string
       baseContentInfo:
         $ref: '#/definitions/appcfgfiledef.BaseContentInfoObj'
+      bscpConfig:
+        $ref: '#/definitions/appcfgfiledef.BSCPConfigObj'
       configKind:
         type: string
       content:

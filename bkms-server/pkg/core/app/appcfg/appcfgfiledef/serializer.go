@@ -71,6 +71,10 @@ type CreateDefInput struct {
 	BSCPConfig *BSCPConfigInput `json:"bscpConfig,omitempty"`
 	// 初始内容（可选，仅 local 来源）
 	Content *string `json:"content,omitempty"`
+	// 创建时可选设置挂载环境范围；nil = 全环境生效
+	MountedEnvNames *[]string `json:"mountedEnvNames,omitempty"`
+	// 创建时可选设置环境变量渲染开关；不传时使用 ConfigKind 默认值
+	EnableEnvVarRender *bool `json:"enableEnvVarRender,omitempty"`
 	// 版本描述
 	Description string `json:"description"`
 }
@@ -80,6 +84,13 @@ type BSCPConfigInput struct {
 	BizID     string `json:"bizID" binding:"required"`
 	ServiceID string `json:"serviceID" binding:"required"`
 	ID        string `json:"id" binding:"required"`
+}
+
+// BSCPConfigObj BSCP 来源配置输出。
+type BSCPConfigObj struct {
+	BizID     string `json:"bizID"`
+	ServiceID string `json:"serviceID"`
+	ID        string `json:"id"`
 }
 
 // CreateDefOutput 创建成功响应。
@@ -132,21 +143,22 @@ type GetDefDetailOutput struct {
 
 // DefDetailObj def 详情，包含默认文件的内容信息。
 type DefDetailObj struct {
-	ID                  string   `json:"id"`
-	FileID              string   `json:"fileId,omitempty"`
-	Name                string   `json:"name"`
-	ConfigKind          string   `json:"configKind"`
-	MountDir            string   `json:"mountDir,omitempty"`
-	IsUnifiedConfig     bool     `json:"isUnifiedConfig"`
-	MountedEnvNames     []string `json:"mountedEnvNames,omitempty"`
-	EnableEnvVarRender  bool     `json:"enableEnvVarRender"`
-	FileType            string   `json:"fileType,omitempty"`
-	ContentSourceType   string   `json:"contentSourceType"`
-	BaseAppConfigFileID string   `json:"baseAppConfigFileId,omitempty"`
-	FileFormat          string   `json:"fileFormat"`
-	CurrentVersion      int64    `json:"currentVersion"`
-	Content             *string  `json:"content,omitempty"`
-	OverlayContent      *string  `json:"overlayContent,omitempty"`
+	ID                  string         `json:"id"`
+	FileID              string         `json:"fileId,omitempty"`
+	Name                string         `json:"name"`
+	ConfigKind          string         `json:"configKind"`
+	MountDir            string         `json:"mountDir,omitempty"`
+	IsUnifiedConfig     bool           `json:"isUnifiedConfig"`
+	MountedEnvNames     []string       `json:"mountedEnvNames,omitempty"`
+	EnableEnvVarRender  bool           `json:"enableEnvVarRender"`
+	FileType            string         `json:"fileType,omitempty"`
+	ContentSourceType   string         `json:"contentSourceType"`
+	BaseAppConfigFileID string         `json:"baseAppConfigFileId,omitempty"`
+	BSCPConfig          *BSCPConfigObj `json:"bscpConfig,omitempty"`
+	FileFormat          string         `json:"fileFormat"`
+	CurrentVersion      int64          `json:"currentVersion"`
+	Content             *string        `json:"content,omitempty"`
+	OverlayContent      *string        `json:"overlayContent,omitempty"`
 	// HasEnvInstance 指定环境是否有独立实例（仅按环境查询时有意义）。
 	HasEnvInstance *bool `json:"hasEnvInstance,omitempty"`
 	// EditableContentField 前端可编辑的字段（"content" / "overlayContent" / "none"）。
@@ -183,12 +195,7 @@ func (o *DefDetailObj) FromEnvFileDetail(result *appcfg.EnvFileDetailResult) *De
 
 	// 始终填充默认文件的基础元信息（格式、来源类型等）
 	if result.DefaultFile != nil {
-		o.FileID = result.DefaultFile.ID.Hex()
-		o.ContentSourceType = string(result.DefaultFile.ContentSourceType)
-		o.FileFormat = string(result.DefaultFile.GetConfigFormat())
-		o.CurrentVersion = result.DefaultFile.CurrentVersion
-		o.Updater = result.DefaultFile.Updater
-		o.UpdatedAt = result.DefaultFile.UpdatedAt.Format(time.RFC3339)
+		o.fillFileMeta(result.DefaultFile)
 	}
 
 	o.HasEnvInstance = &result.HasEnvInstance
@@ -211,6 +218,26 @@ func (o *DefDetailObj) FromEnvFileDetail(result *appcfg.EnvFileDetailResult) *De
 	return o
 }
 
+func (o *DefDetailObj) fillFileMeta(file *appcfg.AppConfigFile) {
+	o.FileID = file.ID.Hex()
+	o.FileType = string(file.Type)
+	o.ContentSourceType = string(file.ContentSourceType)
+	o.FileFormat = string(file.GetConfigFormat())
+	o.CurrentVersion = file.CurrentVersion
+	if file.BaseAppConfigFileID != nil {
+		o.BaseAppConfigFileID = file.BaseAppConfigFileID.Hex()
+	}
+	if file.BSCPConfig != nil {
+		o.BSCPConfig = &BSCPConfigObj{
+			BizID:     file.BSCPConfig.BizID,
+			ServiceID: file.BSCPConfig.ServiceID,
+			ID:        file.BSCPConfig.ConfigID,
+		}
+	}
+	o.Updater = file.Updater
+	o.UpdatedAt = file.UpdatedAt.Format(time.RFC3339)
+}
+
 func (o *DefDetailObj) fillDef(def appcfg.AppConfigFileDef) {
 	o.ID = def.ID.Hex()
 	o.Name = def.Name
@@ -224,18 +251,9 @@ func (o *DefDetailObj) fillDef(def appcfg.AppConfigFileDef) {
 }
 
 func (o *DefDetailObj) fillFile(file *appcfg.AppConfigFile) {
-	o.FileID = file.ID.Hex()
-	o.FileType = string(file.Type)
-	o.ContentSourceType = string(file.ContentSourceType)
-	o.FileFormat = string(file.GetConfigFormat())
-	o.CurrentVersion = file.CurrentVersion
+	o.fillFileMeta(file)
 	o.Content = file.Content
 	o.OverlayContent = file.OverlayContent
-	if file.BaseAppConfigFileID != nil {
-		o.BaseAppConfigFileID = file.BaseAppConfigFileID.Hex()
-	}
-	o.Updater = file.Updater
-	o.UpdatedAt = file.UpdatedAt.Format(time.RFC3339)
 }
 
 // --- 更新 def ---
