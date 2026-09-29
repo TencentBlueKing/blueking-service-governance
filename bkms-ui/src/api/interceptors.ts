@@ -29,6 +29,7 @@ export type Config = {
   needStatus?: boolean; // 是否需要返回 status 等响应信息
   originalResponse?: boolean; // 返回原始res对象
   prefix?: string;
+  queryParams?: Record<string, unknown>; // PUT/POST 等请求需要额外携带的 query 参数
   responseType?: 'blob' | 'json' | 'text';
   validateCode?: boolean; // 校验code是否正确，默认true
 } & RequestInit;

@@ -306,6 +306,8 @@ export default class ConsoleFetch {
       },
       config || {},
     );
+    const queryParams = fetchConfig.queryParams;
+    delete fetchConfig.queryParams;
     let body: BodyInit | null | undefined;
     // 路径解析会删除路径参数，使用副本避免影响后续复用同一参数对象的请求。
     const requestParams: RequestParams = isObject(params) ? clone(params as RequestParams) : {};
@@ -329,6 +331,10 @@ export default class ConsoleFetch {
       fetchConfig.headers = multipartHeaders;
     } else {
       body = isObject(params) ? JSON.stringify(parseData.params || {}) : (params as BodyInit | null | undefined);
+    }
+    const query = objectToQueryParams(queryParams || {});
+    if (query) {
+      parseData.url += `${parseData.url.includes('?') ? '&' : '?'}${query}`;
     }
 
     const requestConfig: Partial<Config> = {

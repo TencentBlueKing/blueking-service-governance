@@ -32,15 +32,30 @@
     <div
       v-bind="$attrs"
       :class="[
-        'flex items-center min-w-[280px] h-[32px] border border-[#c4c6cc] rounded-[2px] bg-[#FFF] cursor-pointer overflow-hidden transition-border-color duration-200 hover:border-[#979BA5]',
-        { '!border-[#3a84ff] shadow-[0_0_3px_0_#a3c5fd]': isPopoverVisible },
+        'flex items-center min-w-[280px] h-[32px] rounded-[2px] cursor-pointer overflow-hidden transition-all duration-200',
+        isDarkTheme
+          ? 'h-full bg-[#4A4A4A] hover:bg-[#545454]'
+          : 'border border-[#c4c6cc] bg-[#FFF] transition-border-color hover:border-[#979BA5]',
+        {
+          'border-[#3a84ff] shadow-[0_0_3px_0_#a3c5fd]': isPopoverVisible && !isDarkTheme,
+        },
       ]"
     >
-      <div class="flex items-center h-full px-[10px] border-r-[1px] border-[#c4c6cc]">{{ $t('环境视角') }}</div>
+      <div
+        :class="[
+          'flex items-center h-full px-[10px] border-r-[1px] text-[12px]',
+          isDarkTheme ? 'text-[#979BA5] border-[#63656E]' : 'border-[#c4c6cc]',
+        ]"
+      >
+        {{ displayLabel }}
+      </div>
       <div class="flex items-center flex-1 min-w-0 px-[8px]">
         <span
           v-if="selectedEnvItem"
-          class="inline-flex items-center gap-[4px] min-w-0 text-[12px] leading-[22px] text-[#4D4F56]"
+          :class="[
+            'inline-flex items-center gap-[4px] min-w-0 text-[12px] leading-[22px]',
+            isDarkTheme ? 'text-[#DCDEE5]' : 'text-[#4D4F56]',
+          ]"
         >
           <span class="truncate">{{ selectedEnvItem.displayName }}</span>
           <Tag
@@ -60,19 +75,23 @@
         </span>
         <span
           v-else-if="isDefaultSelected"
-          class="text-[12px] leading-[22px] text-[#4D4F56]"
+          :class="['text-[12px] leading-[22px]', isDarkTheme ? 'text-[#DCDEE5]' : 'text-[#4D4F56]']"
         >
           {{ $t('默认配置') }}
         </span>
         <span
           v-else
-          class="text-[14px] leading-[22px] text-[#C4C6CC]"
+          :class="['text-[14px] leading-[22px]', isDarkTheme ? 'text-[#74767E]' : 'text-[#C4C6CC]']"
         >
           {{ $t('请选择') }}
         </span>
       </div>
       <AngleDownLine
-        :class="['text-[#979BA5] mr-[10px] transition-transform duration-200', { 'rotate-180': isPopoverVisible }]"
+        :class="[
+          'mr-[10px] transition-transform duration-200',
+          isDarkTheme ? 'text-[#C4C6CC]' : 'text-[#979BA5]',
+          { 'rotate-180': isPopoverVisible },
+        ]"
       />
     </div>
 
@@ -188,6 +207,7 @@
 
   import { Checkbox, Input, OverflowTitle, Popover, Tag } from 'bkui-vue';
   import { AngleDownLine, Search } from 'bkui-vue/lib/icon';
+  import { useI18n } from 'vue-i18n';
   import {
     buildStandardEnvMap,
     envTypeMap,
@@ -204,19 +224,31 @@
   interface IProps {
     /** 环境列表（不含默认配置） */
     envList: EnvOutput[];
+    /** 左侧文案，默认为「环境视角」 */
+    label?: string;
     /** 选中的值（环境 name，默认配置传 '__default__' 或空字符串） */
     modelValue?: string;
     /** 已修改的环境 name 列表 */
     modifiedEnvNames?: string[];
+    /** 主题：light 浅色（默认），dark 深色（用于编辑器标题栏等深色背景） */
+    theme?: 'dark' | 'light';
   }
 
   defineOptions({ inheritAttrs: false });
 
+  const { t } = useI18n();
+
   const props = withDefaults(defineProps<IProps>(), {
     modelValue: '__default__',
     modifiedEnvNames: () => [],
+    theme: 'light',
   });
   const emits = defineEmits<Emits>();
+
+  /** 左侧文案，未传入时默认为「环境视角」 */
+  const displayLabel = computed(() => props.label ?? t('环境视角'));
+
+  const isDarkTheme = computed(() => props.theme === 'dark');
 
   const popoverRef = ref<InstanceType<typeof Popover> | null>(null);
   const isPopoverVisible = ref(false);
@@ -385,21 +417,26 @@
   :deep(.bk-input.is-simplicity) {
     border-bottom-color: #dcdee5 !important;
     border-radius: 0 !important;
+
     &:hover {
       background-color: transparent !important;
     }
-    .bk-input--text {
+
+    [class~='bk-input--text'] {
       background-color: transparent !important;
     }
   }
+
   /* 覆盖 Popover 面板样式 */
   :deep(.bk-popover-reference) {
     outline: none;
   }
+
   .feature-env-child {
     position: relative;
     padding-left: 28px;
   }
+
   .feature-env-branch {
     position: absolute;
     top: 0;
@@ -414,18 +451,18 @@
       left: -12px;
       width: 16px;
       height: 16px;
-      border-left: 1px solid #dcdee5;
-      border-bottom: 1px solid #dcdee5;
-      border-bottom-left-radius: 8px;
       content: '';
+      border-bottom: 1px solid #dcdee5;
+      border-left: 1px solid #dcdee5;
+      border-bottom-left-radius: 8px;
     }
   }
 </style>
 <style lang="postcss">
   .c-env-select-v2-popover {
-    padding: 0 8px 8px 8px !important;
-    border-radius: 2px !important;
+    padding: 0 8px 8px !important;
     border: none;
+    border-radius: 2px !important;
     box-shadow: 0 2px 4px 0 #1919290d !important;
 
     .env-list-scroll {

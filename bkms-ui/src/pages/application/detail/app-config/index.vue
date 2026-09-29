@@ -23,7 +23,20 @@
       v-model:active-tab="activeTab"
       :tabs="tabList"
       :title="$t('应用配置')"
-    />
+    >
+      <template #title-extra>
+        <Button
+          v-if="activeTab === 'framework-config'"
+          class="float-right"
+          text
+          theme="primary"
+          @click="mountPreviewVisible = true"
+        >
+          <i class="bkms-icon bkms-icon-yanjing-kejian mr-[4px] text-[14px]"></i>
+          {{ $t('挂载预览') }}
+        </Button>
+      </template>
+    </TabHeader>
 
     <div class="min-h-0 flex-1 overflow-hidden">
       <component :is="currentComponent" />
@@ -33,19 +46,22 @@
 
 <script setup lang="ts">
   import type { Component } from 'vue';
-  import { computed } from 'vue';
+  import { computed, provide, ref } from 'vue';
 
+  import { Button } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import TabHeader from '~/components/tab-header.vue';
   import { useUrlQuerySync } from '~/composables/use-url-query-sync';
-
-  import DeployConfig from './deploy-config.vue';
-  import EnvVariable from './env-variable.vue';
-  import FrameworkConfig from './framework-config.vue';
+  import ConfigFiles from '~/pages/application/detail/app-config/config-files.vue';
+  import DeployConfig from '~/pages/application/detail/app-config/deploy-config.vue';
+  import EnvVariable from '~/pages/application/detail/app-config/env-variable.vue';
+  import { MOUNT_PREVIEW_VISIBLE_KEY } from '~/pages/application/detail/app-config/use-config-file-defs';
 
   import type { TabItem } from '~/components/tab-header.vue';
 
   const { t } = useI18n();
+  const mountPreviewVisible = ref(false);
+  provide(MOUNT_PREVIEW_VISIBLE_KEY, mountPreviewVisible);
 
   // Tab 配置（扩展 TabItem，添加组件字段）
   interface TabConfig extends TabItem {
@@ -54,7 +70,7 @@
 
   const tabList: TabConfig[] = [
     { label: t('部署配置'), name: 'deploy-config', component: DeployConfig },
-    { label: t('框架配置文件'), name: 'framework-config', component: FrameworkConfig },
+    { label: t('配置文件'), name: 'framework-config', component: ConfigFiles },
     { label: t('环境变量'), name: 'env-variable', component: EnvVariable },
   ];
 

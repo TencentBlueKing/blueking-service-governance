@@ -28,7 +28,7 @@
       <div class="flex items-center">
         <span class="mr-[16px]">{{ $t('版本列表') }}</span>
         <div
-          v-if="isFileMode && currentFile"
+          v-if="isFileMode"
           class="mr-[12px] flex items-center"
         >
           <Divider
@@ -37,7 +37,7 @@
             direction="vertical"
             type="solid"
           />
-          <span class="text-[14px] ml-[16px] text-[#979BA5]">{{ currentFile.name }}</span>
+          <span class="text-[14px] ml-[16px] text-[#979BA5]">{{ activeFileName }}</span>
         </div>
       </div>
     </template>
@@ -232,7 +232,7 @@
   <!-- 版本对比弹窗 -->
   <VersionCompareDialog
     v-model:is-show="compareDialogVisible"
-    :app-config-file-i-d="currentFile?.id"
+    :app-config-file-i-d="activeFileID"
     :app-i-d="appDetailStore.appID"
     :current-version-num="currentVersionNum"
     :env-name="curEnvName"
@@ -274,6 +274,12 @@
     currentEnvName?: string;
     /** 当前选中的文件（Helm 按文件模式时使用） */
     currentFile?: AppConfigFileOutputObj | null;
+    /** 当前实例文件 ID（Def 配置文件模式时使用） */
+    currentFileId?: string;
+    /** 当前文件显示名（Def 配置文件模式时使用） */
+    currentFileName?: string;
+    /** 当前实例版本（Def 配置文件模式时使用） */
+    currentVersion?: number;
     /** 是否启用环境配置（按环境模式时使用） */
     enableEnvConfig?: boolean;
     /** 环境列表（按环境模式时使用） */
@@ -297,8 +303,12 @@
     set: (val: boolean) => emit('update:visible', val),
   });
 
-  /** 是否为按文件模式（Helm 应用场景） */
-  const isFileMode = computed(() => !!props.currentFile);
+  /** 当前实例信息：兼容 Helm 的 currentFile 与 Def 页面直接传入实例标识 */
+  const activeFileID = computed(() => props.currentFileId || props.currentFile?.id || '');
+  const activeFileName = computed(() => props.currentFileName || props.currentFile?.name || '');
+
+  /** 是否为按文件模式 */
+  const isFileMode = computed(() => !!activeFileID.value);
 
   /** 当前选中的环境 ID */
   const curEnvID = ref(DEFAULT_ENV_ID);
@@ -359,7 +369,7 @@
   /** 当前生效版本号（按文件模式从 currentFile 获取，按环境模式从 configFileList 获取） */
   const currentVersionNum = computed(() => {
     if (isFileMode.value) {
-      return props.currentFile?.currentVersion ?? 0;
+      return props.currentVersion ?? props.currentFile?.currentVersion ?? 0;
     }
     const configFile = props.configFileList.find(item => item.envName === curEnvName.value);
     return configFile?.currentVersion ?? 0;
@@ -374,14 +384,14 @@
 
   /** 获取版本列表 */
   async function fetchVersionList() {
-    if (!appDetailStore.appID || (isFileMode.value && !props.currentFile?.id)) return;
+    if (!appDetailStore.appID || (isFileMode.value && !activeFileID.value)) return;
 
     versionListLoading.value = true;
     try {
       const res = await AppConfigFilesService.listAppConfigFileVersions({
         appID: appDetailStore.appID,
         // 按文件模式使用 appConfigFileID，按环境模式使用 envName
-        ...(isFileMode.value ? { appConfigFileID: props.currentFile!.id } : { envName: curEnvName.value }),
+        ...(isFileMode.value ? { appConfigFileID: activeFileID.value } : { envName: curEnvName.value }),
         page: pageConf.current,
         pageSize: pageConf.limit,
         ...getSearchParams(),
@@ -508,6 +518,14 @@
   /** 监听环境切换 */
   watch(curEnvID, () => {
     if (props.visible && curEnvID.value) {
+      handleResetPage();
+      fetchVersionList();
+    }
+  });
+
+  /** 监听 Def 页面切换实例 */
+  watch(activeFileID, () => {
+    if (props.visible && isFileMode.value) {
       handleResetPage();
       fetchVersionList();
     }

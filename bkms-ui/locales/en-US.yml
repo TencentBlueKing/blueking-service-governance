@@ -1144,6 +1144,7 @@ Pod 中的管理脚本将在重新部署后移除: Management scripts in the Pod
 仅定义差异项，与默认配置合并后生成完整配置。:
   Only define differential items and merge them with the
   default configuration to generate a complete configuration.
+合并后的完整内容，仅供查看: Merged full content, for viewing only
 值会通过变量 {0} 传给流水线: The value will be passed to the pipeline via variable {0}
 查看操作指引: View Operation Guide
 需要保证流水线会将构建的镜像推送到当前空间的镜像仓库下:
@@ -2129,3 +2130,49 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 未能读取北极星服务信息，请重试: Failed to retrieve Polaris service information. Please retry
 北极星线上配置已变化，请重新确认后保存: The live Polaris configuration has changed. Please confirm again before saving
 北极星权重因子已修改，但平台配置保存失败，请重试保存: The Polaris weight factor was updated, but the platform configuration could not be saved. Please retry saving
+按环境查看容器内最终挂载的配置文件: Preview the final mounted configuration files by environment
+按环境配置: Configure by environment
+版本列表: Version history
+保存为空文件: Save as empty file
+本环境独立内容: Environment-specific content
+差异内容: Differences
+当前配置已被他人更新。为避免数据被覆盖，请刷新页面获取最新版本后重新编辑。: The configuration was updated elsewhere. Refresh it before editing again to avoid overwriting the latest version.
+该环境的单独配置及历史版本将被删除，之后使用默认配置。: The environment-specific configuration and its version history will be deleted, and the default configuration will be used.
+"共 {0} 个文件；未挂载到该环境的配置文件不会出现在容器内。": "{0} files in total. Files not mounted to this environment will not appear in the container."
+挂载环境: Mounted environments
+挂载预览: Mount preview
+环境独立实例: Environment-specific instance
+恢复为默认配置: Restore default configuration
+恢复为默认配置？: Restore the default configuration?
+开启后，环境变量占位符会在下发前被替换: When enabled, environment variable placeholders are rendered before delivery.
+默认配置 + 本环境差异项: Default configuration + environment differences
+内容来源: Content source
+配置文件: Configuration files
+配置文件路径必须以 / 开头，且不能为 / 或以 / 结尾: The configuration path must start with / and cannot be / or end with /.
+其他配置文件: Other configuration files
+切换后各环境单独配置及其历史版本将被删除，所有环境使用当前默认配置。: Switching deletes all environment-specific configurations and their version history. Every environment will use the current default configuration.
+请输入容器内目录，例如 /data/conf: Enter a directory in the container, such as /data/conf
+请输入由字母、数字、短横线或下划线组成的文件名: Enter a file name containing only letters, numbers, hyphens, or underscores
+请至少选择一个挂载环境: Select at least one mounted environment
+全部环境: All environments
+环境列表加载失败，挂载范围相关操作暂不可用。: Failed to load environments. Mount scope actions are temporarily unavailable.
+确认改为统一配置？: Switch to unified configuration?
+确认切换: Confirm switch
+确认删除该配置文件？: Delete this configuration file?
+容器内路径: Container path
+删除后不再挂载到容器内，文件内容与历史版本一并删除，需要重新部署后生效。: The file will no longer be mounted. Its content and version history will be deleted, and the application must be redeployed for the change to take effect.
+使用默认配置: Use default configuration
+完整内容: Full content
+文件列表: File list
+文件名: File name
+文件名仅支持字母、数字、短横线和下划线，长度 1-64: The file name must be 1–64 characters and contain only letters, numbers, hyphens, or underscores.
+文件名与配置文件路径不能为空: File name and configuration path are required
+保存失败，请稍后重试: Save failed. Please try again later.
+"文件最终挂载到 {0}": "The file will be mounted at {0}"
+新建配置文件: Create configuration file
+渲染环境变量: Render environment variables
+已创建: Created
+已创建，请填写文件内容: Created. Enter the file content.
+暂无其他配置文件，可点击新建: No other configuration files. Click Create to add one.
+"指定 {0} 个": "{0} selected"
+指定环境: Specific environments
