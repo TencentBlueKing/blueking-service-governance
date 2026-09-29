@@ -18,6 +18,13 @@
 
 export const STORAGE_VERSION = '0.0.1';
 export const STORAGE_KEY = '_pinia_storage';
+
+/** 与后端开启权重因子时写入的公式保持一致，用于比较和展示平台设置。 */
+export const PLATFORM_WEIGHT_FACTOR_CONFIG = {
+  func: 'linear',
+  params: { a: 1, b: 1, min: -1, max: 1.5 },
+};
+
 export const BKMS_REGEX = {
   // 名称类型正则校验
   nameRegex: /^[a-z]+[-a-z0-9]*[a-z0-9]$/,

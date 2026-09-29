@@ -58,7 +58,10 @@
       @after-resize="handleRefreshEnvVar"
     >
       <template #main>
-        <div class="p-[24px] pb-0">
+        <div
+          class="p-[24px] pb-0"
+          :inert="confirmLoading"
+        >
           <Form
             ref="formRef"
             form-type="vertical"
@@ -133,67 +136,115 @@
               >
                 <Radio.Group
                   v-model="formModel.createNewService"
+                  class="polaris-type-radio flex w-full"
                   :disabled="isEditMode"
                 >
-                  <Radio :label="true">
+                  <Radio.Button
+                    class="flex-1"
+                    :label="true"
+                  >
                     {{ $t('平台自动生成') }}
-                  </Radio>
-                  <Radio :label="false">
+                  </Radio.Button>
+                  <Radio.Button
+                    class="flex-1"
+                    :label="false"
+                  >
                     {{ $t('从现有引入') }}
-                  </Radio>
+                  </Radio.Button>
                 </Radio.Group>
               </Form.FormItem>
 
-              <!-- 北极星环境类型 -->
-              <Form.FormItem
-                :label="$t('北极星环境类型')"
-                property="polarisNamespace"
-                required
+              <!-- 连接信息与连通测试 -->
+              <div
+                ref="connectionBlockRef"
+                class="mb-[24px] rounded-[2px] bg-[#F5F7FA] p-[16px]"
               >
-                <Radio.Group
-                  v-model="formModel.polarisNamespace"
-                  :disabled="isEditMode"
+                <Form.FormItem
+                  :label="$t('北极星环境类型')"
+                  property="polarisNamespace"
+                  required
                 >
-                  <Radio
-                    v-for="env in polarisEnvTypes"
-                    :key="env"
-                    :label="env"
-                  />
-                </Radio.Group>
-              </Form.FormItem>
+                  <Radio.Group
+                    v-model="formModel.polarisNamespace"
+                    :disabled="isEditMode"
+                  >
+                    <Radio
+                      v-for="env in polarisEnvTypes"
+                      :key="env"
+                      :label="env"
+                    />
+                  </Radio.Group>
+                </Form.FormItem>
 
-              <!-- 北极星服务名 -->
-              <Form.FormItem
-                :label="$t('北极星服务名')"
-                property="polarisName"
-                required
-              >
-                <Input
-                  v-model.trim="formModel.polarisName"
-                  :placeholder="$t('请输入数字、英文字母、.、-、_，长度不超过128个字符')"
-                  :readonly="isEditMode"
-                />
-              </Form.FormItem>
-
-              <!-- 北极星Token (仅在从现有引入时显示) -->
-              <Form.FormItem
-                v-if="!formModel.createNewService"
-                :label="$t('北极星Token')"
-                property="polarisToken"
-                required
-              >
-                <Input
-                  v-model.trim="formModel.polarisToken"
-                  :placeholder="$t('请输入北极星Token')"
-                />
-                <Alert
-                  v-if="showPolarisTokenChangeAlert"
-                  class="mt-[12px]"
-                  closable
-                  theme="warning"
-                  :title="$t('{0}已修改，保存后需重新部署才会生效。', [$t('北极星Token')])"
-                />
-              </Form.FormItem>
+                <div class="flex items-start gap-[16px]">
+                  <Form.FormItem
+                    class="polaris-connection-item min-w-0 flex-1 !mb-0"
+                    :label="$t('北极星服务名')"
+                    property="polarisName"
+                    required
+                  >
+                    <Input
+                      v-model.trim="formModel.polarisName"
+                      :placeholder="$t('请输入数字、英文字母、.、-、_，长度不超过128个字符')"
+                      :readonly="isEditMode"
+                    />
+                  </Form.FormItem>
+                  <Form.FormItem
+                    v-if="isImportedService"
+                    class="polaris-connection-item min-w-0 flex-1 !mb-0"
+                    :label="$t('北极星Token')"
+                    property="polarisToken"
+                    required
+                  >
+                    <Input
+                      v-model.trim="formModel.polarisToken"
+                      :placeholder="$t('请输入北极星Token')"
+                    />
+                    <Alert
+                      v-if="showPolarisTokenChangeAlert"
+                      class="mt-[12px]"
+                      closable
+                      theme="warning"
+                      :title="$t('{0}已修改，保存后需重新部署才会生效。', [$t('北极星Token')])"
+                    />
+                  </Form.FormItem>
+                </div>
+                <template v-if="isImportedService">
+                  <Button
+                    class="mt-[8px]"
+                    :loading="connectionStatus === 'loading'"
+                    text
+                    theme="primary"
+                    @click="handleConnectivityTest"
+                  >
+                    {{ $t('连通测试') }}
+                  </Button>
+                  <p
+                    v-if="connectionRequired && !connected"
+                    class="mt-[4px] text-[12px] text-[#EA3636]"
+                  >
+                    {{ $t('请先完成连通测试并通过后再提交') }}
+                  </p>
+                  <Alert
+                    v-if="connected || connectionStatus === 'error'"
+                    class="mt-[8px]"
+                    :theme="connected ? 'success' : 'error'"
+                  >
+                    <template #title>
+                      <span v-if="connected">
+                        {{ $t('连接成功') }}，
+                        <i18n-t
+                          keypath="已成功连接到北极星服务 {0}"
+                          tag="span"
+                        >
+                          <strong>{{ formModel.polarisNamespace }}/{{ formModel.polarisName }}</strong>
+                        </i18n-t>
+                      </span>
+                      <span v-else>{{ $t('连接失败') }}，{{ connectionError }}</span>
+                    </template>
+                  </Alert>
+                </template>
+              </div>
 
               <Form.FormItem
                 v-if="formModel.createNewService"
@@ -350,18 +401,27 @@
               </Form.FormItem>
 
               <!-- 权重因子：开启后关联环境才可配置动态权重 -->
-              <Form.FormItem
-                v-if="showWeightFactor"
-                :label="$t('权重因子')"
-              >
+              <Form.FormItem :label="$t('权重因子')">
                 <div class="flex items-center gap-[10px]">
-                  <Switcher
-                    v-model="formModel.enableWeightFactor"
-                    class="shrink-0"
-                    theme="primary"
-                  />
+                  <span
+                    v-bk-tooltips="{
+                      content: $t('请先完成连通测试后再修改权重因子'),
+                      disabled: !isImportedService || connected,
+                    }"
+                    class="inline-flex shrink-0"
+                  >
+                    <Switcher
+                      v-model="formModel.enableWeightFactor"
+                      :disabled="isImportedService && !connected"
+                      theme="primary"
+                    />
+                  </span>
                   <div class="text-[12px] leading-[20px] text-[#979BA5]">
-                    <span>{{ $t('按实例机型动态分配流量。开启后，可在关联环境中打开「动态权重」') }}</span>
+                    <span>{{
+                      isImportedService && isEditMode
+                        ? $t('连通测试后展示北极星实时状态，修改并保存后将写入北极星。')
+                        : $t('按实例机型动态分配流量。开启后，可在关联环境中打开「动态权重」')
+                    }}</span>
                     <a
                       class="ml-[8px] text-[#3A84FF]"
                       :href="weightFactorDocUrl"
@@ -372,6 +432,50 @@
                       <Share class="ml-[2px] align-[-2px]" />
                     </a>
                   </div>
+                </div>
+                <div ref="mismatchBlockRef">
+                  <Alert
+                    v-if="weightFactorMismatch"
+                    class="mt-[8px]"
+                    theme="warning"
+                  >
+                    <template #title>
+                      {{ $t('权重因子与北极星线上配置不一致') }}
+                      <Button
+                        class="ml-[8px]"
+                        text
+                        theme="primary"
+                        @click="openWeightFactorDialog"
+                      >
+                        {{ $t('立即处理') }}
+                      </Button>
+                    </template>
+                  </Alert>
+                  <Alert
+                    v-else-if="isImportedService && weightFactorResolution"
+                    class="mt-[8px]"
+                    theme="success"
+                  >
+                    <template #title>
+                      {{ $t('处理方式') }}：{{
+                        weightFactorResolution === 'keep' ? $t('使用北极星配置') : $t('使用平台配置，并覆盖北极星')
+                      }}
+                      <Button
+                        class="ml-[8px]"
+                        text
+                        theme="primary"
+                        @click="openWeightFactorDialog"
+                      >
+                        {{ $t('更改') }}
+                      </Button>
+                    </template>
+                  </Alert>
+                  <p
+                    v-if="resolutionRequired && weightFactorRequiresResolution"
+                    class="mt-[4px] text-[12px] text-[#EA3636]"
+                  >
+                    {{ $t('请先处理权重因子与北极星线上配置的不一致') }}
+                  </p>
                 </div>
               </Form.FormItem>
 
@@ -437,6 +541,12 @@
               </Form.FormItem>
             </ToggleCard>
           </Form>
+          <Alert
+            v-if="saveError"
+            class="mb-[16px]"
+            theme="error"
+            :title="saveError"
+          />
         </div>
       </template>
       <template #aside>
@@ -473,6 +583,7 @@
         </Button>
         <Button
           class="min-w-[88px] ml-[8px]"
+          :disabled="confirmLoading"
           @click="handleClose"
         >
           {{ $t('取消') }}
@@ -480,10 +591,22 @@
       </div>
     </template>
   </Sideslider>
+  <PolarisWeightFactorDialog
+    v-if="weightFactorRemote"
+    v-model:is-show="weightFactorDialogVisible"
+    :enabled="!!formModel.enableWeightFactor"
+    :mode="weightFactorDialogMode"
+    :namespace="formModel.polarisNamespace"
+    :remote="weightFactorRemote"
+    :resolution="weightFactorResolution"
+    :service-name="formModel.polarisName"
+    @cancel="handleWeightFactorDialogCancel"
+    @confirm="handleWeightFactorDialogConfirm"
+  />
 </template>
 
-<script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+<script setup lang="ts">
+  import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
 
   import { Alert, Button, Form, Input, Message, Radio, Sideslider, Switcher } from 'bkui-vue';
   import { Copy, Share } from 'bkui-vue/lib/icon';
@@ -508,7 +631,11 @@
   import { useUserStore } from '~/stores/user';
 
   import PolarisRedeployTip from './polaris-redeploy-tip.vue';
+  import PolarisWeightFactorDialog from './polaris-weight-factor-dialog.vue';
   import { isImmediateRegister } from './redeploy-utils';
+  import { useImportedPolaris } from './use-imported-polaris';
+
+  import type { WeightFactorResolution } from './use-imported-polaris';
 
   const expressTemplate = '${{ env.<Key> }}';
 
@@ -569,7 +696,7 @@
     formModel.value.operator = [...members];
   }
   const formRef = ref();
-  const confirmLoading = ref(false);
+  const validating = ref(false);
   const isEditMode = computed(() => !!props.editData);
   const isEditSaved = ref(false);
   const needsRedeployTipAfterSave = ref(false);
@@ -606,7 +733,7 @@
   const showHealthCheckTip = computed(
     () => formModel.value.registerMode !== undefined && !!formModel.value.enableHealthCheck,
   );
-  const showWeightFactor = computed(() => !!formModel.value.createNewService);
+  const isImportedService = computed(() => !formModel.value.createNewService);
 
   const servicePortHint = computed(() =>
     isImmediateRegister(formModel.value)
@@ -630,10 +757,104 @@
 
   const hasRedeployFieldChanged = computed(() => showServicePortChangeAlert.value || showPolarisTokenChangeAlert.value);
 
-  // 使用 useLeaveConfirm hook 管理表单变化检测
-  const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formModel);
+  const importedPolaris = useImportedPolaris({
+    active: () => !!isShow.value,
+    editMode: () => isEditMode.value,
+    imported: () => isImportedService.value,
+    enabled: computed({
+      get: () => formModel.value.enableWeightFactor,
+      set: value => {
+        formModel.value.enableWeightFactor = value;
+      },
+    }),
+    // 回填线上状态不计入用户修改。
+    hydrate: enabled =>
+      withPausedWatch(() => {
+        formModel.value.enableWeightFactor = enabled;
+      }),
+    target: () => ({
+      appID: appDetailStore.appID,
+      polarisName: formModel.value.polarisName || '',
+      polarisNamespace: formModel.value.polarisNamespace!,
+      polarisToken: formModel.value.polarisToken || '',
+    }),
+  });
+  // 覆盖公式时开关可能不变，覆盖意图也须纳入未保存检测。
+  const overwriteWeightFactor = computed(() => importedPolaris.resolution.value === 'overwrite');
+  const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(
+    computed(() => ({
+      ...formModel.value,
+      overwriteWeightFactor: overwriteWeightFactor.value,
+    })),
+  );
+  const {
+    connected,
+    connectionError,
+    mismatch: weightFactorMismatch,
+    remote: weightFactorRemote,
+    requiresResolution: weightFactorRequiresResolution,
+    resolution: weightFactorResolution,
+    saveError,
+    status: connectionStatus,
+  } = importedPolaris;
+  const confirmLoading = computed(() => validating.value || importedPolaris.submitting.value);
+  const connectionRequired = ref(false);
+  const resolutionRequired = ref(false);
+  const connectionBlockRef = ref<HTMLElement>();
+  const mismatchBlockRef = ref<HTMLElement>();
+  const weightFactorDialogVisible = ref(false);
+  const weightFactorDialogMode = ref<'change' | 'conflict'>('conflict');
+  let resolveWeightFactorChange: ((confirmed: boolean) => void) | undefined;
+
+  // 用 Promise 将弹窗接入保存流程；取消时中止本次保存。
+  function confirmWeightFactorChange() {
+    weightFactorDialogMode.value = 'change';
+    weightFactorDialogVisible.value = true;
+    return new Promise<boolean>(resolve => {
+      resolveWeightFactorChange = resolve;
+    });
+  }
+
+  function handleWeightFactorDialogCancel() {
+    resolveWeightFactorChange?.(false);
+    resolveWeightFactorChange = undefined;
+    weightFactorDialogVisible.value = false;
+  }
+
+  onScopeDispose(handleWeightFactorDialogCancel);
+
+  // 差异处理只记录选择，修改确认只放行当前保存。
+  function handleWeightFactorDialogConfirm(action: WeightFactorResolution) {
+    if (weightFactorDialogMode.value === 'change') resolveWeightFactorChange?.(true);
+    else importedPolaris.resolve(action);
+    resolveWeightFactorChange = undefined;
+    weightFactorDialogVisible.value = false;
+  }
+
+  function openWeightFactorDialog() {
+    weightFactorDialogMode.value = 'conflict';
+    weightFactorDialogVisible.value = true;
+  }
+
+  // 连接目标失效时同时关闭弹窗，防止旧确认用于另一个服务或 Token。
+  watch(connectionStatus, status => {
+    if (status !== 'success') handleWeightFactorDialogCancel();
+  });
+
+  async function handleConnectivityTest() {
+    if (confirmLoading.value || connectionStatus.value === 'loading') return;
+    // 测试只校验连接字段，保存时再校验完整表单。
+    const valid = await formRef.value.validate(['polarisNamespace', 'polarisName', 'polarisToken']).catch(() => false);
+    if (!valid) {
+      focusOnErrorField();
+      return;
+    }
+    await importedPolaris.testConnection();
+  }
+
   // 表单验证规则
   const rules = {
+    polarisNamespace: [{ required: true, message: t('请先选择北极星环境类型'), trigger: 'change' }],
     instanceKey: [
       {
         validator: (value: string) => BKMS_REGEX.instanceKeyNoLimitRegex.test(value),
@@ -664,7 +885,7 @@
       {
         validator: (value: string) => {
           if (!formModel.value.createNewService) {
-            return value.length > 0;
+            return !!value?.trim();
           }
           return true;
         },
@@ -694,6 +915,7 @@
   }
 
   function handleBeforeClose() {
+    if (confirmLoading.value) return false;
     return confirmBox();
   }
 
@@ -705,6 +927,7 @@
       formRef.value?.clearValidate?.();
       inputMode.value = 'keyvalue';
       textContent.value = '';
+      handleWeightFactorDialogCancel();
     }
   }
 
@@ -837,112 +1060,94 @@
     copyText(textContent.value);
   }
 
-  // 创建北极星配置
+  // 创建平台配置；引入服务省略权重因子，避免重复写入北极星。
   async function handleCreate() {
-    try {
-      confirmLoading.value = true;
-
-      if (inputMode.value === 'text') {
-        formModel.value.serviceLabels = textToRecord(textContent.value);
-      }
-      const servicePort = normalizeServicePort();
-
-      // 处理 operator：如果是 createNewService，将数组转为逗号分隔的字符串
-      const createNewService = !!formModel.value.createNewService;
-      const operator = createNewService && formModel.value.operator ? formModel.value.operator.join(',') : '';
-      const { enableWeightFactor, ...formData } = formModel.value;
-
-      // 构建请求参数，确保类型正确
-      const requestParams: CreateAppPolarisConfigRequest = {
-        appID: appDetailStore.appID,
-        ...(formData as FormModelType),
-        ...(createNewService ? { enableWeightFactor } : {}),
-        servicePort,
-        operator,
-      } as CreateAppPolarisConfigRequest;
-
-      await PolarisConfigService.createAppPolarisConfig(requestParams);
-      forceCleanDirtyTag(() => {
-        Message({
-          message: t('操作成功'),
-          theme: 'success',
-        });
-        emit('confirm', { mode: 'create' });
-        handleClose();
-      });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      confirmLoading.value = false;
-    }
+    const createNewService = !!formModel.value.createNewService;
+    const operator = createNewService && formModel.value.operator ? formModel.value.operator.join(',') : '';
+    const { enableWeightFactor, ...formData } = formModel.value;
+    const requestParams: CreateAppPolarisConfigRequest = {
+      appID: appDetailStore.appID,
+      ...(formData as FormModelType),
+      ...(createNewService ? { enableWeightFactor } : {}),
+      servicePort: normalizeServicePort(),
+      operator,
+    } as CreateAppPolarisConfigRequest;
+    await PolarisConfigService.createAppPolarisConfig(requestParams, { interceptorErr: false });
   }
 
-  // 保存（根据模式调用对应方法）
+  // 校验失败时优先定位表单错误，其次定位连通或差异提示。
   async function handleSave() {
-    const valid = await formRef.value.validate().catch(() => false);
-    if (!valid) {
-      focusOnErrorField();
+    if (confirmLoading.value || connectionStatus.value === 'loading') return;
+    validating.value = true;
+    let valid = false;
+    try {
+      valid = !!(await formRef.value.validate().catch(() => false));
+    } finally {
+      validating.value = false;
+    }
+    connectionRequired.value = isImportedService.value && !connected.value;
+    resolutionRequired.value = weightFactorRequiresResolution.value;
+    if (!valid || connectionRequired.value || resolutionRequired.value) {
+      await nextTick();
+      if (!valid) focusOnErrorField();
+      else
+        (connectionRequired.value ? connectionBlockRef.value : mismatchBlockRef.value)?.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
       return;
     }
-    if (isEditMode.value) {
-      await handleUpdate();
-    } else {
-      await handleCreate();
+    if (inputMode.value === 'text') {
+      formModel.value.serviceLabels = textToRecord(textContent.value);
     }
-  }
-
-  // 更新北极星配置
-  async function handleUpdate() {
-    try {
-      confirmLoading.value = true;
-
-      if (inputMode.value === 'text') {
-        formModel.value.serviceLabels = textToRecord(textContent.value);
-      }
-      const servicePort = normalizeServicePort();
-      const needsRedeployTip = hasRedeployFieldChanged.value;
-      const operator = formModel.value.operator?.join(',');
-      const createNewService = !!formModel.value.createNewService;
-      // 构建更新参数，确保必需字段存在
-      const params: PatchAppPolarisConfigRequest = {
-        appID: appDetailStore.appID,
-        configName: props.editData?.name || '',
-        servicePort,
-        enableHealthCheck: formModel.value.enableHealthCheck,
-        ...(createNewService ? { enableWeightFactor: formModel.value.enableWeightFactor } : {}),
-        serviceLabels: formModel.value.serviceLabels,
-        instanceKey: formModel.value.instanceKey || '',
-        polarisToken: formModel.value.polarisToken,
-        scopeEnvNames: formModel.value.scopeEnvNames as string[],
-        ...(createNewService && operator !== props.editData?.operator ? { operator } : {}),
-      };
-      await PolarisConfigService.patchAppPolarisConfig(params);
-      forceCleanDirtyTag(() => {
-        confirmLoading.value = false;
+    const needsRedeployTip = isEditMode.value && hasRedeployFieldChanged.value;
+    // 需要修改远端时先写北极星，平台保存成功后才进入完成流程。
+    const result = await importedPolaris.save(
+      isEditMode.value ? handleUpdate : handleCreate,
+      confirmWeightFactorChange,
+    );
+    if (result === 'remote-changed' && weightFactorRequiresResolution.value) openWeightFactorDialog();
+    if (result !== 'saved') return;
+    forceCleanDirtyTag(() => {
+      if (isEditMode.value) {
         needsRedeployTipAfterSave.value = needsRedeployTip;
-        if (needsRedeployTip) {
-          isEditSaved.value = true;
-          emit('confirm', { mode: 'edit', configName: props.editData?.name || '', needsRedeployTip });
-          return;
-        }
-
-        Message({
-          message: t('操作成功'),
-          theme: 'success',
-        });
+        isEditSaved.value = needsRedeployTip;
         emit('confirm', { mode: 'edit', configName: props.editData?.name || '', needsRedeployTip });
-        handleClose();
-      });
-    } catch (err) {
-      console.error(err);
-      confirmLoading.value = false;
-    }
+        if (needsRedeployTip) return;
+      } else {
+        emit('confirm', { mode: 'create' });
+      }
+      Message({ message: t('操作成功'), theme: 'success' });
+      void handleClose();
+    });
   }
 
-  // 监听 isShow 变化，当对话框打开时初始化表单
+  // 更新平台配置；引入服务的权重因子由独立接口处理。
+  async function handleUpdate() {
+    const operator = formModel.value.operator?.join(',');
+    const createNewService = !!formModel.value.createNewService;
+    const params: PatchAppPolarisConfigRequest = {
+      appID: appDetailStore.appID,
+      configName: props.editData?.name || '',
+      servicePort: normalizeServicePort(),
+      enableHealthCheck: formModel.value.enableHealthCheck,
+      ...(createNewService ? { enableWeightFactor: formModel.value.enableWeightFactor } : {}),
+      serviceLabels: formModel.value.serviceLabels,
+      instanceKey: formModel.value.instanceKey || '',
+      polarisToken: formModel.value.polarisToken,
+      scopeEnvNames: formModel.value.scopeEnvNames as string[],
+      ...(createNewService && operator !== props.editData?.operator ? { operator } : {}),
+    };
+    await PolarisConfigService.patchAppPolarisConfig(params, { interceptorErr: false });
+  }
+
+  // 侧栏打开或关闭时清理测试结果和待确认选择，打开时重新初始化表单。
   watch(
     () => isShow.value,
     newVal => {
+      connectionRequired.value = false;
+      resolutionRequired.value = false;
+      handleWeightFactorDialogCancel();
       if (newVal) {
         isEditSaved.value = false;
         needsRedeployTipAfterSave.value = false;
@@ -953,6 +1158,9 @@
         if (!isEditMode.value) {
           fetchRoleMemberGroups();
         }
+      } else {
+        // 关闭时处理意图会重置，清除由此触发的 dirty 标记。
+        forceCleanDirtyTag();
       }
     },
     { immediate: true },
@@ -960,6 +1168,15 @@
 </script>
 
 <style lang="postcss" scoped>
+  .polaris-type-radio :deep(.bk-radio-button) {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .polaris-connection-item :deep(.bk-form-error) {
+    position: static;
+  }
+
   :deep(.bk-form-label) {
     color: #4d4f56;
   }
