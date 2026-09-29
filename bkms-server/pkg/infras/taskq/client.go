@@ -111,7 +111,7 @@ func Enqueue(ctx context.Context, t *Task, opts ...asynq.Option) error {
 		return err
 	}
 
-	payload, err := wrapEnvelope(user, t.payload)
+	payload, err := wrapEnvelope(ctx, user, t.payload)
 	if err != nil {
 		return err
 	}

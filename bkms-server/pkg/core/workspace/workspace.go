@@ -45,6 +45,8 @@ type Workspace struct {
 	// ID 工作空间唯一标识
 	// 1-27 字符的空间 ID，由小写字母、数字、中划线组成，以小写字母开头
 	ID string `bson:"id"`
+	// TenantID 所属租户
+	TenantID string `bson:"tenant_id"`
 	// DisplayName 展示用名称，一般为中文名（1-64 字符）
 	DisplayName string `bson:"displayName"`
 	// Description 描述信息（0-512 字符）

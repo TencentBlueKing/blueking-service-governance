@@ -1,0 +1,31 @@
+[
+  {
+    "update": "workspaces",
+    "updates": [
+      {
+        "q": {
+          "tenant_id": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenant_id": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "workspaces",
+    "indexes": [
+      {
+        "key": {
+          "tenant_id": 1
+        },
+        "name": "tenant_id_1"
+      }
+    ]
+  }
+]
