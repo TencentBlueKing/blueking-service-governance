@@ -58,7 +58,10 @@
       @after-resize="handleRefreshEnvVar"
     >
       <template #main>
-        <div class="p-[24px] pb-0">
+        <div
+          v-test="'polaris-config-editor'"
+          class="p-[24px] pb-0"
+        >
           <Form
             ref="formRef"
             form-type="vertical"
@@ -127,6 +130,7 @@
             >
               <!-- 类型 -->
               <Form.FormItem
+                v-test="'polaris-config-type-options'"
                 :label="$t('类型')"
                 property="createNewService"
                 required
@@ -146,6 +150,7 @@
 
               <!-- 北极星环境类型 -->
               <Form.FormItem
+                v-test="'polaris-config-namespace-options'"
                 :label="$t('北极星环境类型')"
                 property="polarisNamespace"
                 required
@@ -164,6 +169,7 @@
 
               <!-- 北极星服务名 -->
               <Form.FormItem
+                v-test="'polaris-config-service-name-field'"
                 :label="$t('北极星服务名')"
                 property="polarisName"
                 required
@@ -178,6 +184,7 @@
               <!-- 北极星Token (仅在从现有引入时显示) -->
               <Form.FormItem
                 v-if="!formModel.createNewService"
+                v-test="'polaris-config-import-token-field'"
                 :label="$t('北极星Token')"
                 property="polarisToken"
                 required
@@ -197,6 +204,7 @@
 
               <Form.FormItem
                 v-if="formModel.createNewService"
+                v-test="'polaris-config-auto-owner-field'"
                 :label="$t('北极星负责人')"
                 property="operator"
                 required
@@ -352,6 +360,7 @@
               <!-- 权重因子：开启后关联环境才可配置动态权重 -->
               <Form.FormItem
                 v-if="showWeightFactor"
+                v-test="'polaris-config-auto-weight-factor-field'"
                 :label="$t('权重因子')"
               >
                 <div class="flex items-center gap-[10px]">
@@ -847,18 +856,15 @@
       }
       const servicePort = normalizeServicePort();
 
-      // 处理 operator：如果是 createNewService，将数组转为逗号分隔的字符串
       const createNewService = !!formModel.value.createNewService;
-      const operator = createNewService && formModel.value.operator ? formModel.value.operator.join(',') : '';
-      const { enableWeightFactor, ...formData } = formModel.value;
+      const { enableWeightFactor, operator, polarisToken, ...formData } = formModel.value;
 
       // 构建请求参数，确保类型正确
       const requestParams: CreateAppPolarisConfigRequest = {
         appID: appDetailStore.appID,
         ...(formData as FormModelType),
-        ...(createNewService ? { enableWeightFactor } : {}),
+        ...(createNewService ? { enableWeightFactor, operator: operator?.join(',') || '' } : { polarisToken }),
         servicePort,
-        operator,
       } as CreateAppPolarisConfigRequest;
 
       await PolarisConfigService.createAppPolarisConfig(requestParams);
@@ -909,10 +915,11 @@
         configName: props.editData?.name || '',
         servicePort,
         enableHealthCheck: formModel.value.enableHealthCheck,
-        ...(createNewService ? { enableWeightFactor: formModel.value.enableWeightFactor } : {}),
+        ...(createNewService
+          ? { enableWeightFactor: formModel.value.enableWeightFactor }
+          : { polarisToken: formModel.value.polarisToken }),
         serviceLabels: formModel.value.serviceLabels,
         instanceKey: formModel.value.instanceKey || '',
-        polarisToken: formModel.value.polarisToken,
         scopeEnvNames: formModel.value.scopeEnvNames as string[],
         ...(createNewService && operator !== props.editData?.operator ? { operator } : {}),
       };

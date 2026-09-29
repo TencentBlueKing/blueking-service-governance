@@ -15,9 +15,11 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
-import { type Locator, expect } from '@playwright/test';
+import { type Locator, type Request, errors, expect } from '@playwright/test';
 
 import AppDetailBase from './app-detail-base.page';
+
+import type { BuilderPipeline, BuilderRepository, BuilderSaveRequest } from '../../data/build-config-data';
 
 type BuilderConfigSourceName = '代码仓库' | '流水线' | '源码仓库' | '镜像仓库';
 
@@ -107,6 +109,14 @@ export default class BuildConfigPage extends AppDetailBase {
       .first();
   }
 
+  private getPipelineParameterField(id: string) {
+    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return this.getBuilderConfigFormItem('流水线参数配置')
+      .locator('.bk-form-item')
+      .filter({ has: this.page.locator('.bk-form-label').filter({ hasText: new RegExp(`^${escapedId}(?:（|\\(|$)`) }) })
+      .first();
+  }
+
   private async isBuilderConfigSourceDisabled(name: BuilderConfigSourceName) {
     const slider = this.getBuilderConfigSideslider();
     const radio = slider.getByRole('radio', { name }).first();
@@ -120,6 +130,30 @@ export default class BuildConfigPage extends AppDetailBase {
     }
 
     return false;
+  }
+
+  private isBuilderSaveRequest(url: string, method: string, appID: string) {
+    return method === 'PUT' && new URL(url).pathname.endsWith(`/apps/${encodeURIComponent(appID)}/build-configs`);
+  }
+
+  /** 远程搜索完成后再点选，避免选项重绘与点击重叠。 */
+  private async selectRemoteBuilderOption(label: string, name: string, endpoint: string) {
+    await this.getBuilderConfigFormItem(label).locator('.bk-select').click();
+    const popover = this.getVisibleSelectPopover();
+    await expect(popover).toBeVisible();
+    const [response] = await Promise.all([
+      this.page.waitForResponse(result => {
+        const url = new URL(result.url());
+        return (
+          result.request().method() === 'GET' &&
+          url.pathname.endsWith(endpoint) &&
+          url.searchParams.get('keyword') === name
+        );
+      }),
+      popover.locator('.bk-select-search-input').fill(name),
+    ]);
+    await this.assertApiResponseOk(response, '搜索构建来源');
+    await this.selectOption(name);
   }
 
   private waitForBuilderConfigSaveResponse() {
@@ -142,6 +176,17 @@ export default class BuildConfigPage extends AppDetailBase {
       await leaveButton.click();
     }
     await this.expectBuilderConfigSidesliderClosed();
+  }
+
+  async clearBuilderPipeline() {
+    const select = this.getBuilderConfigFormItem('流水线').locator('.bk-select');
+    await select.hover();
+    await select.locator('.clear-icon').click();
+    await expect(this.getBuilderConfigSideslider().getByText('请先选择流水线', { exact: true })).toBeVisible();
+  }
+
+  async expectBuilderBranch(value: string) {
+    await expect(this.getBuilderConfigDefaultBranchInput()).toHaveValue(value);
   }
 
   /** 断言构建配置侧栏展示当前来源对应表单 */
@@ -226,6 +271,79 @@ export default class BuildConfigPage extends AppDetailBase {
     await this.expectBuilderConfigCurrentSourceFormVisible();
   }
 
+  /** 从点击前开始记录，并在校验完成后观察请求，确认无效提交未保存。 */
+  async expectBuilderValidationWithoutSave(appID: string, field: string, pipelineParameter = false) {
+    let saveRequests = 0;
+    const recordSaveRequest = (request: Request) => {
+      if (this.isBuilderSaveRequest(request.url(), request.method(), appID)) saveRequests++;
+    };
+    const formItem = pipelineParameter ? this.getPipelineParameterField(field) : this.getBuilderConfigFormItem(field);
+    const validation = formItem
+      .getByText(/必填|不能为空|required/i)
+      .or(formItem.locator('.bk-form-error, .bk-form-error-tips, .bk-form-error-text'))
+      .first();
+    this.page.on('request', recordSaveRequest);
+    try {
+      await this.getBuilderConfigSubmitButton().click();
+      await expect(validation).toBeVisible();
+      await expect(this.getBuilderConfigSideslider()).toBeVisible();
+      await this.page
+        .waitForRequest(request => this.isBuilderSaveRequest(request.url(), request.method(), appID), { timeout: 750 })
+        .catch(error => {
+          if (!(error instanceof errors.TimeoutError)) throw error;
+        });
+      expect(saveRequests, '无效构建配置不应发送保存请求').toBe(0);
+    } finally {
+      this.page.off('request', recordSaveRequest);
+    }
+  }
+
+  async expectPipelineFieldsHidden(ids: string[]) {
+    for (const id of ids) {
+      await expect(this.getPipelineParameterField(id)).toBeHidden();
+    }
+  }
+
+  async expectPipelineValues(pipeline: BuilderPipeline, params: Record<string, string>) {
+    if (!pipeline.variables.length) {
+      await expect(this.getBuilderConfigFormItem('流水线参数配置')).toBeHidden();
+      await expect(this.getBuilderConfigSideslider().getByText('流水线无参数配置', { exact: true })).toBeVisible();
+      return;
+    }
+    for (const variable of pipeline.variables) {
+      await expect(this.getPipelineParameterField(variable.id).getByRole('textbox')).toHaveValue(params[variable.id]);
+    }
+  }
+
+  async expectSavedBuilderValues(expected: BuilderSaveRequest, pipeline?: BuilderPipeline) {
+    expect(await this.getBuilderConfigSourceType()).toBe(expected.sourceType);
+    if (expected.sourceType === 'pipeline') {
+      if (!pipeline) throw new Error('流水线回显检查缺少参数定义');
+      await expect(this.getBuilderConfigFormItem('流水线').locator('.bk-select')).toContainText(pipeline.name);
+      await this.expectPipelineValues(pipeline, expected.pipeline!.params ?? {});
+      return;
+    }
+    const repository = expected.codeRepo!;
+    await expect(this.getBuilderConfigFormItem('代码库')).toContainText(repository.repoURL!);
+    for (const [label, value] of [
+      ['默认分支', repository.defaultBranch],
+      ['构建目录', repository.sourceDir],
+      ['Dockerfile 路径', repository.dockerfile],
+    ]) {
+      await expect(this.getBuilderConfigFormItem(label!).getByRole('textbox')).toHaveValue(value!);
+    }
+  }
+
+  async fillPipelineValue(id: string, value: string) {
+    await this.getPipelineParameterField(id).getByRole('textbox').fill(value);
+  }
+
+  async fillPipelineValues(params: Record<string, string>) {
+    for (const [id, value] of Object.entries(params)) {
+      await this.fillPipelineValue(id, value);
+    }
+  }
+
   /** 获取构建配置卡片（BkmsContent 包裹块） */
   getBuildConfigSection(): Locator {
     return this.page.locator('.bkms-content').filter({ hasText: '构建配置' }).first();
@@ -246,6 +364,25 @@ export default class BuildConfigPage extends AppDetailBase {
     await this.getBuildConfigSection().getByRole('button', { name: '编辑' }).click();
     await this.waitForSideslider();
     await this.expectBuilderConfigSidesliderVisible();
+  }
+
+  async reloadBaseInfo() {
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
+    await this.expectBuilderConfigSectionVisible();
+  }
+
+  async saveBuilderConfigAndExpectRequest(appID: string, expected: BuilderSaveRequest) {
+    const [response] = await Promise.all([
+      this.page.waitForResponse(result => this.isBuilderSaveRequest(result.url(), result.request().method(), appID)),
+      this.getBuilderConfigSubmitButton().click(),
+    ]);
+    const body = response.request().postDataJSON();
+    expect(body, '构建配置保存请求与表单不一致').toMatchObject(expected);
+    if (expected.pipeline) {
+      expect(body.pipeline.params, '流水线参数不能残留旧字段').toEqual(expected.pipeline.params);
+    }
+    await this.assertApiResponseOk(response, '保存构建配置');
+    await this.expectBuilderConfigSaveCompleted();
   }
 
   /** 保存当前有效构建配置，并等待保存接口成功 */
@@ -270,6 +407,32 @@ export default class BuildConfigPage extends AppDetailBase {
     await this.assertApiResponseOk(await responsePromise, '保存构建配置');
     await this.expectBuilderConfigSidesliderClosed();
     await this.expectBuilderConfigSectionVisible();
+  }
+
+  async selectBuilderPipeline(pipeline: BuilderPipeline) {
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        response.request().method() === 'GET' &&
+        new URL(response.url()).pathname.endsWith(`/bkci-pipelines/${encodeURIComponent(pipeline.id)}/variables`),
+    );
+    const [response] = await Promise.all([
+      responsePromise,
+      this.selectRemoteBuilderOption('流水线', pipeline.name, '/bkci-pipelines'),
+    ]);
+    await this.assertApiResponseOk(response, '获取流水线参数');
+    await expect(this.getBuilderConfigFormItem('流水线').locator('.bk-select')).toContainText(pipeline.name);
+  }
+
+  async selectBuilderRepository(repository: BuilderRepository) {
+    await this.selectRemoteBuilderOption('代码库', repository.url, '/bkci-git-projects');
+    await expect(this.getBuilderConfigFormItem('代码库')).toContainText(repository.url);
+  }
+
+  /** 明确选择来源，同时检查非当前来源的表单已经卸载。 */
+  async selectBuilderSource(source: 'codeRepository' | 'pipeline') {
+    await this.getBuilderConfigSourceButton(source === 'pipeline' ? '流水线' : '源码仓库').click();
+    await this.expectBuilderConfigCurrentSourceFormVisible();
+    await expect(this.getBuilderConfigFormItem(source === 'pipeline' ? '代码库' : '流水线')).toBeHidden();
   }
 
   /** 提交无效构建配置。按当前来源清空一个必填字段；无可清空字段的来源保持当前有效表单 */
