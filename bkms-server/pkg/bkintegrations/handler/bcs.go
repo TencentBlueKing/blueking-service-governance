@@ -58,22 +58,28 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 		return
 	}
 
-	bkciClient, err := bkci.New(auth.MustGetUser(ctx))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
-		return
+	// 未开启独立 BCS 时，BCS 与蓝盾共用 project code，列表要再和蓝盾可管理项目求交。
+	var sharedBKCICodes map[string]bool
+	if !workspace.IndependentBCSProjectEnabled() {
+		var bkciClient bkci.Client
+		bkciClient, err = bkci.New(auth.MustGetUser(ctx))
+		if err != nil {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
+			return
+		}
+		var bkciProjects []bkci.Project
+		bkciProjects, err = bkciClient.ListProjects(ctx)
+		if err != nil {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci managed projects"))
+			return
+		}
+		bkciProjects = lo.Filter(bkciProjects, func(item bkci.Project, _ int) bool {
+			return item.HasManagePerm
+		})
+		sharedBKCICodes = lo.SliceToMap(bkciProjects, func(item bkci.Project) (string, bool) {
+			return item.Code, true
+		})
 	}
-	bkciProjects, err := bkciClient.ListProjects(ctx)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci managed projects"))
-		return
-	}
-	bkciProjects = lo.Filter(bkciProjects, func(item bkci.Project, _ int) bool {
-		return item.HasManagePerm
-	})
-	bkciProjectsMap := lo.SliceToMap(bkciProjects, func(item bkci.Project) (string, bool) {
-		return item.Code, true
-	})
 
 	workspaces, err := h.registry.WorkspaceStore.List(ctx, &workspace.ListOptions{})
 	if err != nil {
@@ -84,9 +90,7 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 		return item.BkSystems.BkBCSProjectCode, true
 	})
 
-	projects := lo.Filter(bcsProjects, func(item bcs.Project, _ int) bool {
-		return item.Kind == "k8s" && bkciProjectsMap[item.Code]
-	})
+	projects := keepK8sProjects(bcsProjects, sharedBKCICodes)
 
 	ginutils.OK(
 		c,
@@ -283,4 +287,18 @@ func (h *Handler) GetBCSUserToken(c *gin.Context) {
 	}
 
 	ginutils.OK(c, &slz.GetBCSUserTokenOutput{Data: activeToken.Token})
+}
+
+// keepK8sProjects 从 BCS 已授权项目中筛出 k8s 项目。
+// sharedBKCICodes 非 nil 时，表示当前 BCS project code 还必须同时存在于这组共用的 BKCI project code 中。
+func keepK8sProjects(projects []bcs.Project, sharedBKCICodes map[string]bool) []bcs.Project {
+	return lo.Filter(projects, func(item bcs.Project, _ int) bool {
+		if item.Kind != bcs.ProjectKindK8s {
+			return false
+		}
+		if sharedBKCICodes != nil {
+			return sharedBKCICodes[item.Code]
+		}
+		return true
+	})
 }

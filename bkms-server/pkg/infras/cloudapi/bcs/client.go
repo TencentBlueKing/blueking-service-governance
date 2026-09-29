@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -45,6 +46,8 @@ type Client interface {
 	ListAuthorizedProjects(ctx context.Context) ([]Project, error)
 	// GetProject 根据项目 id, 获取项目详情
 	GetProject(ctx context.Context, id string) (*Project, error)
+	// CreateProject 创建 BCS 项目
+	CreateProject(ctx context.Context, in CreateProjectInput) (*Project, error)
 	// ListClustersByProject 获取项目下的集群列表
 	ListClustersByProject(ctx context.Context, projectID string) ([]Cluster, error)
 	// ListNamespacesByCluster 获取集群下的命名空间列表
@@ -174,19 +177,48 @@ func (c *ApiClient) GetProject(ctx context.Context, id string) (*Project, error)
 
 	result, err := c.handleOperation(ctx, op)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, ErrNotFound) {
+			return nil, errors.Wrapf(ErrProjectNotFound, "get project %s", id)
+		}
+		return nil, errors.Wrapf(err, "get project %s", id)
 	}
 
-	data := mapx.GetMap(result, "data")
-	return &Project{
-		ID:          mapx.GetStr(data, "projectID"),
-		Code:        mapx.GetStr(data, "projectCode"),
-		Name:        mapx.GetStr(data, "name"),
-		Kind:        mapx.GetStr(data, "kind"),
-		Description: mapx.GetStr(data, "description"),
-		BizID:       mapx.GetStr(data, "businessID"),
-		IsOffline:   mapx.GetBool(data, "isOffline"),
-	}, nil
+	project, err := parseProject(mapx.GetMap(result, "data"))
+	if err != nil {
+		return nil, errors.Wrapf(err, "parse project %s", id)
+	}
+	return project, nil
+}
+
+// CreateProject 创建 BCS 项目
+func (c *ApiClient) CreateProject(ctx context.Context, in CreateProjectInput) (*Project, error) {
+	body := map[string]any{
+		"name":        in.Name,
+		"projectCode": in.ProjectCode,
+		"kind":        in.Kind,
+	}
+	if in.BusinessID != "" {
+		body["businessID"] = in.BusinessID
+	}
+
+	op := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "create_project",
+			Method: "POST",
+			Path:   "/bcsproject/v1/projects",
+		},
+		bkapi.OptSetRequestBody(body),
+	)
+
+	result, err := c.handleOperation(ctx, op)
+	if err != nil {
+		return nil, errors.Wrap(err, "create bcs project")
+	}
+	project, err := parseProject(mapx.GetMap(result, "data"))
+	if err != nil {
+		return nil, errors.Wrap(err, "parse created bcs project")
+	}
+	return project, nil
 }
 
 // ListClustersByProject 获取项目下的集群列表
@@ -314,8 +346,12 @@ func (c *ApiClient) handleOperation(
 		if len(errMsg) == 0 {
 			errMsg, _ = json.Marshal(result)
 		}
-		return nil, errors.Errorf("call bcs api %s failed, http code: %d, err: %s",
+		apiErr := errors.Errorf("call bcs api %s failed, http code: %d, err: %s",
 			apiOperation.FullName(), resp.StatusCode, errMsg)
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, errors.Wrap(ErrNotFound, apiErr.Error())
+		}
+		return nil, apiErr
 	}
 
 	if cast.ToInt(result["code"]) != 0 {
@@ -354,4 +390,23 @@ func (c *ApiClient) ListUserTokens(ctx context.Context) ([]UserToken, error) {
 		}
 	}
 	return tokens, nil
+}
+
+func parseProject(data map[string]any) (*Project, error) {
+	if len(data) == 0 {
+		return nil, errors.New("bcs project data is empty")
+	}
+	project := &Project{
+		ID:          mapx.GetStr(data, "projectID"),
+		Code:        mapx.GetStr(data, "projectCode"),
+		Name:        mapx.GetStr(data, "name"),
+		Kind:        mapx.GetStr(data, "kind"),
+		Description: mapx.GetStr(data, "description"),
+		BizID:       mapx.GetStr(data, "businessID"),
+		IsOffline:   mapx.GetBool(data, "isOffline"),
+	}
+	if project.ID == "" {
+		return nil, errors.New("bcs project id is empty")
+	}
+	return project, nil
 }

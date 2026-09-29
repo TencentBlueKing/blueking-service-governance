@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package workspace
+package workspace_test
 
 import (
 	"context"
@@ -29,6 +29,7 @@ import (
 
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
@@ -367,7 +368,7 @@ var _ = Describe("WorkspaceStore", func() {
 })
 
 func cleanupWorkspaceCollection(ctx context.Context) error {
-	_, err := database.Client().Database(database.Name()).Collection(workspaceCollectionName).
+	_, err := database.Client().Database(database.Name()).Collection("workspaces").
 		DeleteMany(ctx, bson.M{})
 	return err
 }

@@ -126,6 +126,8 @@ logging:
 development:
   useStubPerm: true
   allowSetUserInHeader: true
+featureIntegrations:
+  enableIndependentBCSProject: true
 `
 			err := os.WriteFile(configFile, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
@@ -147,6 +149,7 @@ development:
 			Expect(cfg.Account.AuthEnvName).To(Equal("test"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
 			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeFalse())
+			Expect(cfg.FeatureIntegrations.EnableIndependentBCSProject).To(BeTrue())
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(config.G.Encrypt.Secret).To(Equal(originalSecret))
 			Expect(cfg.Mongo.Username).To(Equal("testuser"))
@@ -240,6 +243,7 @@ asynq:
 			Expect(cfg.Account.AuthEnvName).To(Equal("prod"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
 			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeFalse())
+			Expect(cfg.FeatureIntegrations.EnableIndependentBCSProject).To(BeTrue())
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageCode).To(BeEmpty())
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageVersion).To(BeEmpty())
@@ -473,6 +477,7 @@ asynq:
 			Expect(cfg.Account.LoginURL).To(Equal("https://paas.example.com/login"))
 			Expect(cfg.FeatureIntegrations.EnableBkLoginUserinfoAuth).To(BeTrue())
 			Expect(cfg.FeatureIntegrations.EnableBkUserTenantVerify).To(BeTrue())
+			Expect(cfg.FeatureIntegrations.EnableIndependentBCSProject).To(BeTrue())
 			Expect(cfg.BkApiStages.BkLogin).To(Equal("prod"))
 			Expect(cfg.BkApiStages.BkUser).To(Equal("test"))
 		})
