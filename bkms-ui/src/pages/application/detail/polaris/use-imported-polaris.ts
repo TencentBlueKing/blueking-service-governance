@@ -32,7 +32,7 @@ export type SaveResult =
 /** 公式可展示字段：func 为函数名，其余为线性函数的数值参数。 */
 export type WeightFactorKey = 'a' | 'b' | 'func' | 'max' | 'min';
 
-/** keep 保留线上配置；overwrite 保存时开启权重因子并覆盖为平台默认公式。 */
+/** keep 保留线上配置；overwrite 保存时采用表单开关，开启时覆盖为平台默认公式。 */
 export type WeightFactorResolution = 'keep' | 'overwrite';
 
 export interface WeightFactorState {
@@ -198,7 +198,7 @@ export function useImportedPolaris(options: ImportedPolarisOptions) {
   /** 表单同步为弹窗所选列的开关并记录处理意图；两种选择都不立即写远端。 */
   function resolve(action: WeightFactorResolution) {
     if (!connected.value || !remote.value || submitting.value) return;
-    options.enabled.value = action === 'keep' ? remote.value.enabled : true;
+    if (action === 'keep') options.enabled.value = remote.value.enabled;
     // 开关变更会清除旧选择，因此在回填开关后记录本次确认。
     resolution.value = action;
   }
@@ -285,8 +285,9 @@ export function useImportedPolaris(options: ImportedPolarisOptions) {
   };
 }
 
-/** 展示配置中实际存在的参数（不受开关影响）；未知字段显示占位，不补默认值。 */
+/** 关闭时显示占位；开启时展示配置中实际存在的参数，未知字段不补默认值。 */
 export function weightFactorValue(state: WeightFactorState, key: WeightFactorKey) {
+  if (!state.enabled) return '--';
   const { config } = state;
   if (!isRecord(config)) return '--';
   if (key === 'func') return typeof config.func === 'string' ? config.func : '--';

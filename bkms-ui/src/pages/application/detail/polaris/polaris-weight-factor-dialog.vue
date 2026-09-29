@@ -170,7 +170,9 @@
     {
       value: 'overwrite' as const,
       title: t('使用平台配置，并覆盖北极星'),
-      description: t('保存时开启北极星权重因子，并使用平台默认公式覆盖线上配置。'),
+      description: props.enabled
+        ? t('保存时开启北极星权重因子，并使用平台默认公式覆盖线上配置。')
+        : t('保存时关闭北极星权重因子。'),
     },
   ]);
   const serviceUrl = computed(
@@ -178,8 +180,7 @@
       `${import.meta.env.BK_POLARIS_URL}/#/services/info/detail/${encodeURIComponent(props.namespace || '')}/${encodeURIComponent(props.serviceName || '')}`,
   );
   const rows = computed(() => {
-    // 差异处理提供平台开启配置；修改确认展示本次保存的实际开关。
-    const enabled = props.mode === 'conflict' || props.enabled;
+    const enabled = props.enabled;
     const platform = { enabled, config: enabled ? PLATFORM_WEIGHT_FACTOR_CONFIG : undefined };
     return [
       {

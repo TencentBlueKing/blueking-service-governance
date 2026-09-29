@@ -17,7 +17,7 @@
  */
 
 import { Message } from 'bkui-vue';
-import { isObject, merge } from 'lodash-es';
+import { clone, isObject, merge } from 'lodash-es';
 import { objectToQueryParams } from '~/common/util';
 
 import { type Config, fetch, interceptors } from './interceptors';
@@ -307,7 +307,8 @@ export default class ConsoleFetch {
       config || {},
     );
     let body: BodyInit | null | undefined;
-    const requestParams: RequestParams = isObject(params) ? (params as RequestParams) : {};
+    // 路径解析会删除路径参数，使用副本避免影响后续复用同一参数对象的请求。
+    const requestParams: RequestParams = isObject(params) ? clone(params as RequestParams) : {};
     const parseData = this.parseUrlAndParams(`${fetchConfig.prefix}${url}`, requestParams);
     // GET 和 DELETE 请求参数放URL，其余请求放在body里面
     if ((method === 'GET' || method === 'DELETE') && !fetchConfig.isBodyParam) {
