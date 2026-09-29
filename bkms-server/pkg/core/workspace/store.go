@@ -182,6 +182,34 @@ func (s *WorkspaceStoreMongo) Get(ctx context.Context, id string) (*Workspace, e
 	return &workspace, nil
 }
 
+// GetByBCSProject 根据 BCS 项目 ID / code 获取已绑定的工作空间。
+func (s *WorkspaceStoreMongo) GetByBCSProject(ctx context.Context, projectID, projectCode string) (*Workspace, error) {
+	filters := make([]bson.M, 0, 2)
+	if projectID != "" {
+		filters = append(filters, bson.M{"bkSystems.bkBcsProjectID": projectID})
+	}
+	if projectCode != "" {
+		filters = append(filters, bson.M{"bkSystems.bkBcsProjectCode": projectCode})
+	}
+	if len(filters) == 0 {
+		return nil, ErrWorkspaceNotFound
+	}
+
+	filter := filters[0]
+	if len(filters) > 1 {
+		filter = bson.M{"$or": filters}
+	}
+
+	var workspace Workspace
+	if err := s.collection.FindOne(ctx, filter).Decode(&workspace); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrWorkspaceNotFound
+		}
+		return nil, err
+	}
+	return &workspace, nil
+}
+
 // Create 创建新的工作空间
 func (s *WorkspaceStoreMongo) Create(ctx context.Context, workspace *Workspace) error {
 	// 设置创建 / 更新时间

@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
@@ -115,6 +116,10 @@ func ensureBkSystemsWithIndependentBCSProject(
 		if cast.ToInt64(resolvedBizID) <= 0 {
 			return nil, errors.Errorf("bcs project(%s) has no associated bizID", boundBCSProjectCode)
 		}
+		// 绑定已有 BCS 项目时，先校验是否已被其他 workspace 占用，避免后续先创建外部资源再失败。
+		if err = ensureBCSProjectNotBound(ctx, workspaceID, boundBCSProject); err != nil {
+			return nil, errors.Wrap(err, "ensure bcs project not bound")
+		}
 	} else {
 		if bizID <= 0 {
 			return nil, errors.New("bizID is required when creating an independent bcs project")
@@ -142,15 +147,14 @@ func ensureBkSystemsWithIndependentBCSProject(
 	// 绑定已有 BCS 项目时直接复用前面已解析出的对象；只有未传绑定 code 时才创建独立 BCS 项目。
 	bcsProject := boundBCSProject
 	if boundBCSProjectCode == "" {
-		bcsProject, err = resolveIndependentBCSProject(
+		bcsProject, err = ensureIndependentBCSProject(
 			ctx,
 			displayName,
-			boundBCSProjectCode,
 			createProjResp.Code,
 			bizID,
 		)
 		if err != nil {
-			return nil, errors.Wrap(err, "resolve bcs project")
+			return nil, errors.Wrap(err, "ensure independent bcs project")
 		}
 	}
 
@@ -197,21 +201,24 @@ func initializeDefaultBKCIPipelines(ctx context.Context, workspaceID string) err
 	return nil
 }
 
-func resolveIndependentBCSProject(
-	ctx context.Context, displayName, boundBCSProjectCode, projectCode string, bizID int64,
+func ensureIndependentBCSProject(
+	ctx context.Context, displayName, projectCode string, bizID int64,
 ) (*bcs.Project, error) {
 	user := auth.MustGetUser(ctx)
 	bcsClient, err := bcs.New(user)
 	if err != nil {
 		return nil, errors.Wrap(err, "initial bcs client")
 	}
-	// 有绑定 code 表示复用已有 BCS 项目；空值则为当前新蓝盾项目创建新的 BCS 项目。
-	if boundBCSProjectCode != "" {
-		return getExistingBCSProject(ctx, bcsClient, boundBCSProjectCode)
-	}
-
 	project, err := getExistingBCSProject(ctx, bcsClient, projectCode)
 	if err == nil {
+		if bizID > 0 && cast.ToInt64(project.BizID) != bizID {
+			return nil, errors.Errorf(
+				"existing bcs project(%s) belongs to biz %s, not requested biz %d",
+				projectCode,
+				project.BizID,
+				bizID,
+			)
+		}
 		return project, nil
 	}
 	if !errors.Is(err, bcs.ErrProjectNotFound) {
@@ -283,6 +290,28 @@ func InitWorkspaceUser(ctx context.Context, id, displayName string, managers []s
 // IndependentBCSProjectEnabled 为 true 时由 BKMS 独立创建/绑定 BCS 项目，不再复用蓝盾项目标识。
 func IndependentBCSProjectEnabled() bool {
 	return config.G != nil && config.G.FeatureIntegrations.EnableIndependentBCSProject
+}
+
+func ensureBCSProjectNotBound(ctx context.Context, workspaceID string, project *bcs.Project) error {
+	if project == nil {
+		return errors.New("bcs project is nil")
+	}
+
+	store, err := NewWorkspaceStoreMongo(database.Client(), database.Name())
+	if err != nil {
+		return errors.Wrap(err, "create workspace store")
+	}
+	boundWorkspace, err := store.GetByBCSProject(ctx, project.ID, project.Code)
+	if err != nil {
+		if errors.Is(err, ErrWorkspaceNotFound) {
+			return nil
+		}
+		return errors.Wrapf(err, "find workspace by bcs project %s", project.Code)
+	}
+	if boundWorkspace.ID == workspaceID {
+		return nil
+	}
+	return errors.Errorf("bcs project(%s) already bound by workspace %s", project.Code, boundWorkspace.ID)
 }
 
 func getExistingBCSProject(ctx context.Context, client bcs.Client, projectCode string) (*bcs.Project, error) {

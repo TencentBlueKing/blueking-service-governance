@@ -19,9 +19,10 @@
 package workspace
 
 var (
-	GetExistingBCSProject        = getExistingBCSProject
-	CreateBCSProject             = createBCSProject
-	GetBCSProjectBizID           = getBCSProjectBizID
-	ResolveIndependentBCSProject = resolveIndependentBCSProject
-	RunPreDeleteHooks            = runPreDeleteHooks
+	GetExistingBCSProject       = getExistingBCSProject
+	CreateBCSProject            = createBCSProject
+	GetBCSProjectBizID          = getBCSProjectBizID
+	EnsureIndependentBCSProject = ensureIndependentBCSProject
+	EnsureBCSProjectNotBound    = ensureBCSProjectNotBound
+	RunPreDeleteHooks           = runPreDeleteHooks
 )

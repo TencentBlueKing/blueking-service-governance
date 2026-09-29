@@ -25,10 +25,12 @@ import (
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 var _ = Describe("getExistingBCSProject", func() {
@@ -161,7 +163,7 @@ var _ = Describe("getBCSProjectBizID", func() {
 	})
 })
 
-var _ = Describe("resolveIndependentBCSProject", func() {
+var _ = Describe("ensureIndependentBCSProject", func() {
 	var (
 		ctx  context.Context
 		user auth.User
@@ -179,16 +181,36 @@ var _ = Describe("resolveIndependentBCSProject", func() {
 			mockey.Mock((*bcs.StubApiClient).GetProject).Return(&bcs.Project{
 				ID:    "bcs-uid",
 				Code:  "bkms-ws",
+				Kind:  bcs.ProjectKindK8s,
 				BizID: "398",
 			}, nil).Build()
 			mockey.Mock((*bcs.StubApiClient).CreateProject).
 				Return(nil, errors.New("should not create when project already exists")).
 				Build()
 
-			project, err := ResolveIndependentBCSProject(ctx, "workspace-name", "", "bkms-ws", 398)
+			project, err := EnsureIndependentBCSProject(ctx, "workspace-name", "bkms-ws", 398)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(project.ID).To(Equal("bcs-uid"))
 			Expect(project.Code).To(Equal("bkms-ws"))
+		})
+	})
+
+	It("rejects reusing an existing deterministic BCS project from another biz", func() {
+		mockey.PatchConvey("biz id mismatch", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(&bcs.Project{
+				ID:    "bcs-uid",
+				Code:  "bkms-ws",
+				Kind:  bcs.ProjectKindK8s,
+				BizID: "399",
+			}, nil).Build()
+			mockey.Mock((*bcs.StubApiClient).CreateProject).
+				Return(nil, errors.New("should not create when conflicting project already exists")).
+				Build()
+
+			_, err := EnsureIndependentBCSProject(ctx, "workspace-name", "bkms-ws", 398)
+			Expect(err).To(MatchError(ContainSubstring("belongs to biz 399, not requested biz 398")))
 		})
 	})
 
@@ -205,11 +227,51 @@ var _ = Describe("resolveIndependentBCSProject", func() {
 				BizID: "398",
 			}, nil).Build()
 
-			project, err := ResolveIndependentBCSProject(ctx, "workspace-name", "", "bkms-ws", 398)
+			project, err := EnsureIndependentBCSProject(ctx, "workspace-name", "bkms-ws", 398)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(project.ID).To(Equal("new-bcs-uid"))
 			Expect(project.Code).To(Equal("bkms-ws"))
 			Expect(project.BizID).To(Equal("398"))
+		})
+	})
+})
+
+var _ = Describe("ensureBCSProjectNotBound", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	It("rejects binding a BCS project that is already occupied by another workspace", func() {
+		mockey.PatchConvey("occupied bcs project", GinkgoT(), func() {
+			mockStore := &WorkspaceStoreMongo{}
+			mockey.Mock(database.Client).Return(&mongo.Client{}).Build()
+			mockey.Mock(database.Name).Return("test-db").Build()
+			mockey.Mock(NewWorkspaceStoreMongo).Return(mockStore, nil).Build()
+			mockey.Mock((*WorkspaceStoreMongo).GetByBCSProject).Return(&Workspace{ID: "other-workspace"}, nil).Build()
+
+			err := EnsureBCSProjectNotBound(ctx, "current-workspace", &bcs.Project{
+				ID:   "bcs-uid",
+				Code: "existing-bcs",
+			})
+			Expect(err).To(MatchError(ContainSubstring("already bound by workspace other-workspace")))
+		})
+	})
+
+	It("allows binding when the BCS project is not occupied by any workspace", func() {
+		mockey.PatchConvey("free bcs project", GinkgoT(), func() {
+			mockStore := &WorkspaceStoreMongo{}
+			mockey.Mock(database.Client).Return(&mongo.Client{}).Build()
+			mockey.Mock(database.Name).Return("test-db").Build()
+			mockey.Mock(NewWorkspaceStoreMongo).Return(mockStore, nil).Build()
+			mockey.Mock((*WorkspaceStoreMongo).GetByBCSProject).Return(nil, ErrWorkspaceNotFound).Build()
+
+			err := EnsureBCSProjectNotBound(ctx, "current-workspace", &bcs.Project{
+				ID:   "bcs-uid",
+				Code: "existing-bcs",
+			})
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })
