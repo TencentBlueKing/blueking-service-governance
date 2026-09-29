@@ -173,6 +173,8 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 		BSCPConfig:          bscpConfig,
 		Format:              fileFormat,
 		Content:             input.Content,
+		MountedEnvNames:     input.MountedEnvNames,
+		EnableEnvVarRender:  input.EnableEnvVarRender,
 		MountDir:            input.MountDir,
 		Creator:             creator,
 		Description:         input.Description,
