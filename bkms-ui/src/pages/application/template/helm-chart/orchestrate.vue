@@ -561,7 +561,7 @@
       const res = await ApiServerService.PreviewOverlayMerge({
         appID: appDetailStore.appID,
         id: curFileInfo.value?.baseAppConfigFileId || '',
-        overlayContent: curFileInfo.value?.bscpConfig ? '' : overrideValues.value,
+        overlayContent: overrideValues.value,
       });
       if (res) {
         completeValues.value = res;
