@@ -336,11 +336,16 @@ func (c *Client) applyFederationThreeWay(
 	return c.Patch(ctx, namespace, name, types.MergePatchType, patch, opts)
 }
 
-// Patch 更新资源
+// Patch 更新资源；指定 subresources（如 "status"）时更新对应子资源
 func (c *Client) Patch(
-	ctx context.Context, namespace, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions,
+	ctx context.Context,
+	namespace, name string,
+	pt types.PatchType,
+	data []byte,
+	opts metav1.PatchOptions,
+	subresources ...string,
 ) (*unstructured.Unstructured, error) {
-	ret, err := c.cli.Resource(c.gvr).Namespace(namespace).Patch(ctx, name, pt, data, opts)
+	ret, err := c.cli.Resource(c.gvr).Namespace(namespace).Patch(ctx, name, pt, data, opts, subresources...)
 	if err != nil {
 		return nil, errors.Wrap(err, c.genResActionDesc("patch", c.gvr, namespace, name))
 	}

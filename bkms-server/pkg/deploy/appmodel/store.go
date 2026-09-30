@@ -115,14 +115,15 @@ func (s *RecordStoreMongo) Create(ctx context.Context, record *Record) (string, 
 func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
 	filter := bson.M{"_id": record.ID}
 	updateDoc := bson.M{"$set": bson.M{
-		"replicas":     record.Replicas,
-		"deletionCost": record.DeletionCost,
-		"message":      record.Message,
-		"status":       record.Status,
-		"extras":       record.Extras,
-		"endedAt":      record.EndedAt,
-		"updater":      record.Updater,
-		"updatedAt":    time.Now(),
+		"replicas":      record.Replicas,
+		"deletionCost":  record.DeletionCost,
+		"message":       record.Message,
+		"status":        record.Status,
+		"extras":        record.Extras,
+		"batchProgress": record.BatchProgress,
+		"endedAt":       record.EndedAt,
+		"updater":       record.Updater,
+		"updatedAt":     time.Now(),
 	}}
 	ret, err := s.collection.UpdateOne(ctx, filter, updateDoc)
 	if err != nil {
@@ -368,13 +369,15 @@ func (s *RecordStoreMongo) ListImageTagDeployedEnvs(
 	return results, nil
 }
 
-// HasActiveDeployments 检查是否存在活跃的部署（已部署、部署中或卸载中）
+// HasActiveDeployments 检查是否存在活跃的部署（已部署、部署中、卸载中或分批发布已回滚）
 // 判断逻辑：按环境+泳道分组，获取每组最新记录，检查最新记录是否为活跃状态
 func (s *RecordStoreMongo) HasActiveDeployments(ctx context.Context, appID string) (bool, error) {
 	activeStatuses := bson.A{
 		string(StatusDeployed),
 		string(StatusDeploying),
 		string(StatusUninstalling),
+		// 回滚后工作负载仍在运行（Pod 为旧版本）
+		string(StatusRolledBack),
 	}
 
 	// 使用聚合查询：按 (envName, trafficLaneName) 分组，获取每组最新记录

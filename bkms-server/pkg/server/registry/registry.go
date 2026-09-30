@@ -42,6 +42,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -120,6 +121,7 @@ type Registry struct {
 	HelmDeployRecordStore               helmdeploy.RecordStore
 	AppModelDeployRecordStore           appmodeldeploy.RecordStore
 	AppModelDeployResourceSnapshotStore appmodeldeploy.ResourceSnapshotStore
+	ReleaseStrategyStore                releasestrategy.Store
 	// 开发模式类
 	PublishRecordStore devmode.PublishRecordStore
 	// Helm Chart 构建类
@@ -237,6 +239,7 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	r.BuildAutoDeployRecordStore = mustInit(autodeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.AppModelDeployRecordStore = mustInit(appmodeldeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.AppModelDeployResourceSnapshotStore = mustInit(appmodeldeploy.NewResourceSnapshotStoreMongo(mongoClient, dbName))
+	r.ReleaseStrategyStore = mustInit(releasestrategy.NewStoreMongo(mongoClient, dbName))
 	r.PublishRecordStore = mustInit(devmode.NewPublishRecordStoreMongo(mongoClient, dbName))
 	r.HelmDeployRecordStore = mustInit(helmdeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.HelmChartBuildRecordStore = mustInit(helmchartbuild.NewRecordStoreMongo(mongoClient, dbName))
