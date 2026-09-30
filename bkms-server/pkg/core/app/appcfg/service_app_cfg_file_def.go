@@ -20,6 +20,7 @@ package appcfg
 
 import (
 	"context"
+	"slices"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -31,6 +32,12 @@ import (
 type AppCfgFileDefService struct {
 	*BaseAppCfgFileService
 	policies map[ConfigKind]ConfigKindPolicy
+}
+
+// DefUpdateImpact 描述一次 def 更新会影响到的文件范围。
+type DefUpdateImpact struct {
+	DefaultFile     *AppConfigFile
+	DeletedEnvFiles []AppConfigFile
 }
 
 // NewAppCfgFileDefService 创建场景层服务。
@@ -96,16 +103,26 @@ func (s *AppCfgFileDefService) Create(
 func (s *AppCfgFileDefService) createDef(
 	ctx context.Context, params CreateCfgFileParams, kind ConfigKind, policy ConfigKindPolicy,
 ) (*AppConfigFileDef, error) {
+	enableEnvVarRender := policy.DefaultEnableEnvVarRender()
+	if params.EnableEnvVarRender != nil {
+		enableEnvVarRender = *params.EnableEnvVarRender
+	}
+
+	envConfigMode := EnvConfigMode{
+		// 初始创建默认为统一配置
+		IsUnifiedConfig: true,
+	}
+	if params.MountedEnvNames != nil {
+		envConfigMode.MountedEnvNames = *params.MountedEnvNames
+	}
+
 	def := AppConfigFileDef{
-		AppID:      params.AppID,
-		Name:       params.Name,
-		ConfigKind: kind,
-		MountDir:   params.MountDir,
-		EnvConfigMode: EnvConfigMode{
-			// 初始创建默认为统一配置
-			IsUnifiedConfig: true,
-		},
-		EnableEnvVarRender: policy.DefaultEnableEnvVarRender(),
+		AppID:              params.AppID,
+		Name:               params.Name,
+		ConfigKind:         kind,
+		MountDir:           params.MountDir,
+		EnvConfigMode:      envConfigMode,
+		EnableEnvVarRender: enableEnvVarRender,
 		Creator:            params.Creator,
 	}
 	defID, err := s.DefStore.Add(ctx, def)
@@ -148,6 +165,32 @@ func (s *AppCfgFileDefService) createFileAndVersion(
 	}
 
 	return s.CreateFileWithVersion(ctx, acf, params.Name, params.Description, params.Creator)
+}
+
+// PreviewDefUpdateImpact 预判一次 def 更新会影响到的文件实例，供上层做审计/确认等用途。
+func (s *AppCfgFileDefService) PreviewDefUpdateImpact(
+	ctx context.Context,
+	def *AppConfigFileDef,
+	update FileDefUpdate,
+) (*DefUpdateImpact, error) {
+	if def == nil {
+		return nil, errors.New("def is required")
+	}
+
+	defaultFile, err := s.FileStore.GetByDefIDAndEnv(ctx, def.ID, EnvNameDefault)
+	if err != nil {
+		return nil, errors.Wrap(err, "loading default file")
+	}
+
+	filesBeforeUpdate, err := s.FileStore.ListByDefID(ctx, def.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "listing files")
+	}
+
+	return &DefUpdateImpact{
+		DefaultFile:     defaultFile,
+		DeletedEnvFiles: collectDeletedEnvFilesForDefUpdate(def, filesBeforeUpdate, update),
+	}, nil
 }
 
 // UpdateAppCfgFileDef 更新逻辑文件的 def 信息（name、isUnifiedConfig 等），不产生版本记录。
@@ -196,6 +239,39 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 		return errors.Wrap(err, "updating def record")
 	}
 	return nil
+}
+
+func collectDeletedEnvFilesForDefUpdate(
+	def *AppConfigFileDef,
+	files []AppConfigFile,
+	update FileDefUpdate,
+) []AppConfigFile {
+	if def == nil {
+		return nil
+	}
+
+	shouldDeleteAllEnvFiles := update.IsUnifiedConfig != nil &&
+		!def.EnvConfigMode.IsUnifiedConfig &&
+		*update.IsUnifiedConfig
+
+	deleted := make([]AppConfigFile, 0)
+	for _, file := range files {
+		if file.EnvName == EnvNameDefault {
+			continue
+		}
+		if shouldDeleteAllEnvFiles {
+			deleted = append(deleted, file)
+			continue
+		}
+		envWasMounted := def.EnvConfigMode.MountedEnvNames == nil ||
+			def.EnvConfigMode.ContainsEnv(file.EnvName)
+		if update.MountedEnvNames != nil &&
+			envWasMounted &&
+			!slices.Contains(*update.MountedEnvNames, file.EnvName) {
+			deleted = append(deleted, file)
+		}
+	}
+	return deleted
 }
 
 // deleteEnvInstances 删除指定 def 下所有非默认的环境实例及其版本记录。

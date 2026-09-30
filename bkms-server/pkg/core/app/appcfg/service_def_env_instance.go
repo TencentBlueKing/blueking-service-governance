@@ -149,6 +149,22 @@ func (s *AppCfgFileDefService) applyMountedEnvNamesChange(
 	oldEnvNames := def.EnvConfigMode.MountedEnvNames
 	def.EnvConfigMode.MountedEnvNames = newEnvNames
 
+	if oldEnvNames == nil {
+		files, err := s.FileStore.ListByDefID(ctx, def.ID)
+		if err != nil {
+			return errors.Wrap(err, "listing env instances for mountedEnvNames cleanup")
+		}
+		for _, file := range files {
+			if file.EnvName == EnvNameDefault || slices.Contains(newEnvNames, file.EnvName) {
+				continue
+			}
+			if err = s.deleteEnvInstanceByName(ctx, def.ID, def.AppID, file.EnvName); err != nil {
+				return errors.Wrapf(err, "cleanup env instance for removed env %s", file.EnvName)
+			}
+		}
+		return nil
+	}
+
 	// 找出被移除的环境，清理对应实例
 	for _, oldEnv := range oldEnvNames {
 		if !slices.Contains(newEnvNames, oldEnv) {

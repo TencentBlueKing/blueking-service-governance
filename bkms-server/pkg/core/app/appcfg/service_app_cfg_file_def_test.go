@@ -240,9 +240,178 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gotDef.EnableEnvVarRender).To(BeFalse())
 		})
+
+		It("should allow plain kind create with mountedEnvNames and EnableEnvVarRender", func() {
+			content := "plain content"
+			mounted := []string{"prod", "staging"}
+			enableRender := true
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:              f.AppID,
+				EnvName:            appcfg.EnvNameDefault,
+				Name:               "plain-render.conf",
+				MountDir:           "/etc/app",
+				Type:               appcfg.AppConfigFileTypeNormal,
+				ContentSourceType:  appcfg.ContentSourceTypeLocal,
+				Format:             appcfg.FileFormatYAML,
+				Content:            &content,
+				Creator:            "tester",
+				ConfigKind:         appcfg.ConfigKindPlain,
+				MountedEnvNames:    &mounted,
+				EnableEnvVarRender: &enableRender,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Def.EnvConfigMode.IsUnifiedConfig).To(BeTrue())
+			Expect(result.Def.EnvConfigMode.MountedEnvNames).To(Equal(mounted))
+			Expect(result.Def.EnableEnvVarRender).To(BeTrue())
+		})
+
+		It("should reject framework kind create with EnableEnvVarRender=false", func() {
+			content := "key: value"
+			disableRender := false
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:              f.AppID,
+				EnvName:            appcfg.EnvNameDefault,
+				Name:               "fw.yaml",
+				Type:               appcfg.AppConfigFileTypeNormal,
+				ContentSourceType:  appcfg.ContentSourceTypeLocal,
+				Format:             appcfg.FileFormatYAML,
+				Content:            &content,
+				Creator:            "tester",
+				ConfigKind:         appcfg.ConfigKindFramework,
+				EnableEnvVarRender: &disableRender,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("enableEnvVarRender"))
+		})
+
+		It("should reject framework kind create with mountedEnvNames", func() {
+			content := "key: value"
+			mountedEnvNames := []string{"prod"}
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "fw-mounted.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				MountedEnvNames:   &mountedEnvNames,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("mountedEnvNames"))
+		})
 	})
 
 	Context("UpdateAppCfgFileDef", func() {
+		It("should preview deleted env instances before switching back to unified config", func() {
+			result := f.createFrameworkFile("preview-unified.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			envContent := "env: prod"
+			envFile := appcfg.AppConfigFile{
+				DefID:   def.ID,
+				AppID:   f.AppID,
+				EnvName: "prod",
+				Type:    appcfg.AppConfigFileTypeOverlay,
+				VersionedContent: appcfg.VersionedContent{
+					ContentSourceType:   appcfg.ContentSourceTypeLocal,
+					Format:              appcfg.FileFormatYAML,
+					OverlayContent:      &envContent,
+					BaseAppConfigFileID: &result.ID,
+				},
+				Creator:        "tester",
+				Updater:        "tester",
+				CurrentVersion: 1,
+			}
+			_, err = f.FileStore.Add(f.Ctx, envFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err = f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			isUnified = true
+			preview, err := f.Svc.PreviewDefUpdateImpact(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(preview.DefaultFile).NotTo(BeNil())
+			Expect(preview.DefaultFile.EnvName).To(Equal(appcfg.EnvNameDefault))
+			Expect(preview.DeletedEnvFiles).To(HaveLen(1))
+			Expect(preview.DeletedEnvFiles[0].EnvName).To(Equal("prod"))
+		})
+
+		It("should preview deleted env instances before shrinking mounted env names", func() {
+			result := f.createPlainFile("preview-mounted.conf", "/data", "k=v")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			mounted := []string{"prod", "staging"}
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				MountedEnvNames: &mounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "staging", "key=staging", "editor")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "staging file", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err = f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			newMounted := []string{"prod"}
+			preview, err := f.Svc.PreviewDefUpdateImpact(f.Ctx, def, appcfg.FileDefUpdate{
+				MountedEnvNames: &newMounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(preview.DeletedEnvFiles).To(HaveLen(1))
+			Expect(preview.DeletedEnvFiles[0].EnvName).To(Equal("staging"))
+		})
+
+		It("should preview deleted env instances when mounted env names shrink from nil", func() {
+			result := f.createPlainFile("preview-mounted-nil.conf", "/data", "k=v")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "staging", "key=staging", "editor")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "staging file", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err = f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			newMounted := []string{"prod"}
+			preview, err := f.Svc.PreviewDefUpdateImpact(f.Ctx, def, appcfg.FileDefUpdate{
+				MountedEnvNames: &newMounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(preview.DeletedEnvFiles).To(HaveLen(1))
+			Expect(preview.DeletedEnvFiles[0].EnvName).To(Equal("staging"))
+		})
+
 		It("should update name", func() {
 			result := f.createFrameworkFile("old-name.yaml")
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
@@ -403,6 +572,36 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("should clean up removed env instances when shrinking mountedEnvNames from nil", func() {
+			result := f.createPlainFile("shrink-nil.conf", "/data", "k=v")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "staging", "key=staging", "editor")
+			Expect(err).NotTo(HaveOccurred())
+			stagingFile, err := f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "staging file", "editor")
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err = f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			newMounted := []string{"prod"}
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				MountedEnvNames: &newMounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = f.FileStore.GetByID(f.Ctx, stagingFile.ID)
+			Expect(err).To(HaveOccurred())
+		})
+
 		It("should clean up env instances when switching to unified config", func() {
 			result := f.createFrameworkFile("env-test.yaml")
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
@@ -453,6 +652,42 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			defaultFile, err := f.FileStore.GetByID(f.Ctx, result.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defaultFile.EnvName).To(Equal(appcfg.EnvNameDefault))
+		})
+	})
+
+	Context("ResolveContentUpdateTarget", func() {
+		It("should resolve to default file in unified mode", func() {
+			result := f.createPlainFile("resolve-default.conf", "/etc/app", "k=v")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			target, isNewFile, err := f.Svc.ResolveContentUpdateTarget(f.Ctx, def, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(isNewFile).To(BeFalse())
+			Expect(target).NotTo(BeNil())
+			Expect(target.ID).To(Equal(result.ID))
+		})
+
+		It("should report new file when env instance does not exist in independent mode", func() {
+			result := f.createPlainFile("resolve-env.conf", "/etc/app", "k=v")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			mounted := []string{"prod"}
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				MountedEnvNames: &mounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err = f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			target, isNewFile, err := f.Svc.ResolveContentUpdateTarget(f.Ctx, def, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(isNewFile).To(BeTrue())
+			Expect(target).To(BeNil())
 		})
 	})
 
