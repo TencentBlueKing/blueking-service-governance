@@ -20,6 +20,7 @@ package appcfg
 
 import (
 	"context"
+	"slices"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -31,6 +32,12 @@ import (
 type AppCfgFileDefService struct {
 	*BaseAppCfgFileService
 	policies map[ConfigKind]ConfigKindPolicy
+}
+
+// DefUpdateImpact 描述一次 def 更新会影响到的文件范围。
+type DefUpdateImpact struct {
+	DefaultFile     *AppConfigFile
+	DeletedEnvFiles []AppConfigFile
 }
 
 // NewAppCfgFileDefService 创建场景层服务。
@@ -158,6 +165,32 @@ func (s *AppCfgFileDefService) createFileAndVersion(
 	}
 
 	return s.CreateFileWithVersion(ctx, acf, params.Name, params.Description, params.Creator)
+}
+
+// PreviewDefUpdateImpact 预判一次 def 更新会影响到的文件实例，供上层做审计/确认等用途。
+func (s *AppCfgFileDefService) PreviewDefUpdateImpact(
+	ctx context.Context,
+	def *AppConfigFileDef,
+	update FileDefUpdate,
+) (*DefUpdateImpact, error) {
+	if def == nil {
+		return nil, errors.New("def is required")
+	}
+
+	defaultFile, err := s.FileStore.GetByDefIDAndEnv(ctx, def.ID, EnvNameDefault)
+	if err != nil {
+		return nil, errors.Wrap(err, "loading default file")
+	}
+
+	filesBeforeUpdate, err := s.FileStore.ListByDefID(ctx, def.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "listing files")
+	}
+
+	return &DefUpdateImpact{
+		DefaultFile:     defaultFile,
+		DeletedEnvFiles: collectDeletedEnvFilesForDefUpdate(def, filesBeforeUpdate, update),
+	}, nil
 }
 
 // UpdateAppCfgFileDef 更新逻辑文件的 def 信息（name、isUnifiedConfig 等），不产生版本记录。
@@ -310,4 +343,44 @@ func (s *AppCfgFileDefService) AttachFrameworkEnvOverlay(
 		return nil, errors.Wrap(err, "creating framework env overlay on existing def")
 	}
 	return &AppConfigFileWithDef{AppConfigFile: *created, Def: def}, nil
+}
+
+// collectDeletedEnvFilesForDefUpdate 根据即将生效的 FileDefUpdate，从当前文件列表中挑出会被级联删除的环境实例。
+//
+// 规则：
+//   - 默认文件不会被删除
+//   - 从按环境独立配置切回统一配置时，删除全部环境实例
+//   - 缩减 mountedEnvNames 时，删除“原先在挂载范围内、更新后不再挂载”的环境实例
+//     （MountedEnvNames == nil 视为原先对所有环境生效）
+func collectDeletedEnvFilesForDefUpdate(
+	def *AppConfigFileDef,
+	files []AppConfigFile,
+	update FileDefUpdate,
+) []AppConfigFile {
+	if def == nil {
+		return nil
+	}
+
+	shouldDeleteAllEnvFiles := update.IsUnifiedConfig != nil &&
+		!def.EnvConfigMode.IsUnifiedConfig &&
+		*update.IsUnifiedConfig
+
+	deleted := make([]AppConfigFile, 0)
+	for _, file := range files {
+		if file.EnvName == EnvNameDefault {
+			continue
+		}
+		if shouldDeleteAllEnvFiles {
+			deleted = append(deleted, file)
+			continue
+		}
+		envWasMounted := def.EnvConfigMode.MountedEnvNames == nil ||
+			def.EnvConfigMode.ContainsEnv(file.EnvName)
+		if update.MountedEnvNames != nil &&
+			envWasMounted &&
+			!slices.Contains(*update.MountedEnvNames, file.EnvName) {
+			deleted = append(deleted, file)
+		}
+	}
+	return deleted
 }

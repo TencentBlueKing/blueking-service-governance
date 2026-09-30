@@ -90,11 +90,17 @@ func (s *AppCfgFileDefService) PrepareEnvContentUpdate(
 		return nil, "", false, errors.Wrap(err, "kind-specific content validation")
 	}
 
-	targetFile, isNewFile, err := s.prepareUpsertFileForContentUpdate(
-		ctx, def, envName, content, operator, policy, *defaultFileWithDef,
+	targetFile, isNewFile, err := s.resolveContentUpdateTarget(
+		ctx, def, envName, policy, *defaultFileWithDef,
 	)
 	if err != nil {
 		return nil, "", false, err
+	}
+	if isNewFile {
+		targetFile, err = s.buildContentUpdateNewFile(defaultFileWithDef, content, operator, policy, envName)
+		if err != nil {
+			return nil, "", false, err
+		}
 	}
 
 	compiledContent, err := s.applyContentUpdate(ctx, targetFile, content)
@@ -104,12 +110,34 @@ func (s *AppCfgFileDefService) PrepareEnvContentUpdate(
 	return targetFile, compiledContent, isNewFile, nil
 }
 
-func (s *AppCfgFileDefService) prepareUpsertFileForContentUpdate(
+// FindContentUpdateTarget 查找一次内容更新最终会落到哪个文件。
+// 返回 isNewFile=true 表示后续需要创建新的环境实例。
+func (s *AppCfgFileDefService) FindContentUpdateTarget(
 	ctx context.Context,
 	def *AppConfigFileDef,
 	envName string,
-	content string,
-	operator string,
+) (*AppConfigFile, bool, error) {
+	if def == nil {
+		return nil, false, errors.New("def is required")
+	}
+
+	policy, err := s.policyFor(def.ConfigKind)
+	if err != nil {
+		return nil, false, err
+	}
+
+	defaultFileWithDef, err := s.GetDefaultFileWithDef(ctx, def.ID)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return s.resolveContentUpdateTarget(ctx, def, envName, policy, *defaultFileWithDef)
+}
+
+func (s *AppCfgFileDefService) resolveContentUpdateTarget(
+	ctx context.Context,
+	def *AppConfigFileDef,
+	envName string,
 	policy ConfigKindPolicy,
 	defaultFile AppConfigFileWithDef,
 ) (*AppConfigFile, bool, error) {
@@ -135,6 +163,16 @@ func (s *AppCfgFileDefService) prepareUpsertFileForContentUpdate(
 		return existing, false, nil
 	}
 
+	return nil, true, nil
+}
+
+func (s *AppCfgFileDefService) buildContentUpdateNewFile(
+	defaultFile *AppConfigFileWithDef,
+	content string,
+	operator string,
+	policy ConfigKindPolicy,
+	envName string,
+) (*AppConfigFile, error) {
 	params := CreateEnvInstanceParams{
 		EnvName:  envName,
 		Operator: operator,
@@ -145,11 +183,11 @@ func (s *AppCfgFileDefService) prepareUpsertFileForContentUpdate(
 		params.OverlayContent = &content
 	}
 
-	acf, err := s.buildEnvInstance(defaultFile, params)
+	acf, err := s.buildEnvInstance(*defaultFile, params)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	return acf, true, nil
+	return acf, nil
 }
 
 func (s *AppCfgFileDefService) applyContentUpdate(
