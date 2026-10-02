@@ -33,11 +33,17 @@ jobs:
           ver="${GITHUB_REF_NAME##*/}"
           echo "VERSION=${ver#v}" >> "$GITHUB_ENV"
 
-      - name: Verify npm package version matches tag
+      - name: Verify release versions match tag
         run: |
           pkg_ver="$(node -p "require('./bkms-cli/npm/package.json').version")"
           if [ "${pkg_ver}" != "${VERSION}" ]; then
             echo "package.json version (${pkg_ver}) does not match tag (${VERSION})" >&2
+            exit 1
+          fi
+
+          latest_ver="$(cat bkms-cli/latest.txt)"
+          if [ "${latest_ver}" != "${VERSION}" ]; then
+            echo "latest.txt version (${latest_ver}) does not match tag (${VERSION})" >&2
             exit 1
           fi
 
@@ -58,7 +64,6 @@ jobs:
           args: release --clean --skip=validate --config bkms-cli/.goreleaser.yaml --release-notes ${{ runner.temp }}/RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          UPDATE_SOURCE: ${{ github.repository }}
 
       - name: Set up Node
         uses: actions/setup-node@v4

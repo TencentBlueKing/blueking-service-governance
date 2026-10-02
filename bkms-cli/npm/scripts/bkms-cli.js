@@ -79,7 +79,10 @@ if (!fs.existsSync(bin)) {
 }
 
 try {
-  execFileSync(bin, process.argv.slice(2), { stdio: "inherit" });
+  execFileSync(bin, process.argv.slice(2), {
+    stdio: "inherit",
+    env: { ...process.env, BKMS_CLI_INSTALL_SOURCE: "npm" },
+  });
 } catch (e) {
   process.exit(e.status || 1);
 }

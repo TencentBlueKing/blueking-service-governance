@@ -20,10 +20,15 @@
 package version
 
 import (
+	"cmp"
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"strings"
 )
+
+// DevelopmentVersion identifies source builds without a release version.
+const DevelopmentVersion = "dev"
 
 var (
 	// Version 版本号
@@ -36,11 +41,35 @@ var (
 	GoVersion = runtime.Version()
 )
 
+func init() {
+	info, _ := debug.ReadBuildInfo()
+	resolveBuildInfo(info)
+}
+
+func resolveBuildInfo(info *debug.BuildInfo) {
+	moduleVersion, revision := DevelopmentVersion, "unknown"
+	if info != nil {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			moduleVersion = strings.TrimPrefix(info.Main.Version, "v")
+		}
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" {
+				revision = cmp.Or(setting.Value, revision)
+			}
+		}
+	}
+
+	// Explicit build flags take precedence over Go module metadata.
+	Version = cmp.Or(Version, moduleVersion)
+	GitHash = cmp.Or(GitHash, revision)
+	BuildTime = cmp.Or(BuildTime, "unknown")
+}
+
 // UserAgent 返回访问 bkms-server 时使用的 User-Agent。
 func UserAgent() string {
 	v := strings.TrimPrefix(Version, "v")
 	if v == "" {
-		v = "dev"
+		v = DevelopmentVersion
 	}
 	return fmt.Sprintf("bkms-cli/%s (%s/%s)", v, runtime.GOOS, runtime.GOARCH)
 }

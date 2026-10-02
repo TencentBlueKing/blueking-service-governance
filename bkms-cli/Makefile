@@ -19,18 +19,12 @@ $(LOCALBIN):
 
 BUILD_TIME=${shell date +%Y-%m-%dT%H:%M:%S%z}
 
-# 更新源：GitHub Releases 的 owner/repository
-UPDATE_SOURCE ?= TencentBlueKing/blueking-service-governance
-
 LDFLAGS="-s -w \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.Version=${VERSION} \
 	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.GitHash=${GIT_HASH} \
-	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime=${BUILD_TIME} \
-	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.updateSource=${UPDATE_SOURCE}"
+	-X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime=${BUILD_TIME}"
 
-GORELEASER_ENV = \
-	VERSION=$(VERSION) \
-	UPDATE_SOURCE=$(UPDATE_SOURCE)
+GORELEASER_ENV = VERSION=$(VERSION)
 
 .PHONY: help
 help: ## 展示可用 make 命令及说明
@@ -70,7 +64,7 @@ tidy: ## 执行 go mod tidy
 
 .PHONY: test
 test: ginkgo ## 执行 ginkgo 单元测试
-	$(GINKGO) --cover --coverprofile cover.out ./pkg/...
+	$(GINKGO) --cover --coverprofile cover.out ./pkg/... ./cmd/...
 
 .PHONY: fmt
 fmt: install-golangci-lint  ## 执行代码格式化

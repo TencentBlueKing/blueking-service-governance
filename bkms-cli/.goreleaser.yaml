@@ -31,8 +31,7 @@ builds:
       - -s -w
       - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.Version={{ .Env.VERSION }}
       - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.GitHash={{ .FullCommit }}
-      - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime={{ .CommitDate }}
-      - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/updater.updateSource={{ .Env.UPDATE_SOURCE }}
+      - -X github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version.BuildTime={{ .Date }}
 
 archives:
   - formats:

@@ -61,13 +61,15 @@ type Config struct {
 	AccessToken string `yaml:"accessToken"`
 	// Defaults 默认参数
 	Defaults Defaults `yaml:"defaults"`
+	// Update overrides the official update source when both URLs are configured.
+	Update UpdateSource `yaml:"update,omitempty"`
 }
 
 // String 返回配置的字符串表示
 func (c *Config) String() string {
 	return fmt.Sprintf(
-		"configFilePath: %s\n\nbkmsBaseUrl: %s\nusername: %s\naccessToken: [REDACTED]\n%s",
-		cfgFilePath, G.BkmsBaseURL, G.Username, c.Defaults.String(),
+		"configFilePath: %s\n\nbkmsBaseUrl: %s\nusername: %s\naccessToken: [REDACTED]\n%s%s",
+		cfgFilePath, c.BkmsBaseURL, c.Username, c.Defaults.String(), c.Update.String(),
 	)
 }
 
@@ -147,13 +149,34 @@ func (c *Config) SetBkmsBaseURL(bkmsBaseURL string, ifUnset bool) (updated bool,
 	if bkmsBaseURL == "" {
 		return false, errors.New("bkmsBaseUrl is required")
 	}
-	if ifUnset && strings.TrimSpace(c.BkmsBaseURL) != "" {
+	return c.SetEndpoints(bkmsBaseURL, UpdateSource{}, ifUnset)
+}
+
+// SetEndpoints saves the selected endpoints together, without partially changing in-memory config on failure.
+// ifUnset treats the update source as a pair: either existing field prevents replacement of both.
+func (c *Config) SetEndpoints(bkmsBaseURL string, source UpdateSource, ifUnset bool) (bool, error) {
+	bkmsBaseURL = strings.TrimSpace(bkmsBaseURL)
+	source.LatestVersionURL = strings.TrimSpace(source.LatestVersionURL)
+	source.DownloadURLTemplate = strings.TrimSpace(source.DownloadURLTemplate)
+	if !source.IsZero() {
+		if err := source.Validate(); err != nil {
+			return false, err
+		}
+	}
+	pending := *c
+	if bkmsBaseURL != "" && (!ifUnset || strings.TrimSpace(c.BkmsBaseURL) == "") {
+		pending.BkmsBaseURL = strings.TrimSuffix(bkmsBaseURL, "/")
+	}
+	if !source.IsZero() && (!ifUnset || c.Update.IsZero()) {
+		pending.Update = source
+	}
+	if pending == *c {
 		return false, nil
 	}
-	c.BkmsBaseURL = strings.TrimSuffix(bkmsBaseURL, "/")
-	if err := c.Dump(); err != nil {
+	if err := pending.Dump(); err != nil {
 		return false, errors.Wrap(err, "save config")
 	}
+	*c = pending
 	return true, nil
 }
 

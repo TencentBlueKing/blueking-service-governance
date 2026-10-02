@@ -19,267 +19,215 @@
 package updater
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
-	selfupdate "github.com/creativeprojects/go-selfupdate"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
 
-func useCurrentVersion(value string) {
-	original := version.Version
-	version.Version = value
-	DeferCleanup(func() { version.Version = original })
-}
-
-func useUpdateSource(value string) {
-	original := updateSource
-	updateSource = value
-	DeferCleanup(func() { updateSource = original })
-}
-
-func testAssetName(semver string) string {
-	ext := "tar.gz"
-	if runtime.GOOS == "windows" {
-		ext = "zip"
-	}
-	return fmt.Sprintf("bkms-cli_%s_%s_%s.%s", semver, runtime.GOOS, runtime.GOARCH, ext)
-}
-
-func clientWithSource(source selfupdate.Source) *client {
-	instance, err := selfupdate.NewUpdater(selfupdate.Config{
-		Source:    source,
-		Validator: &selfupdate.ChecksumValidator{UniqueFilename: checksumFilename},
-		Filters:   []string{assetFilter()},
-	})
-	Expect(err).NotTo(HaveOccurred())
-	return &client{updater: instance, repository: selfupdate.ParseSlug("example/bkms-cli")}
-}
-
-func clientWithRelease(tag string, assets ...selfupdate.SourceAsset) *client {
-	return clientWithSource(githubTestSource{
-		releases: []selfupdate.SourceRelease{githubTestRelease{tag: tag, assets: assets}},
-	})
-}
-
 var _ = Describe("Updater", func() {
-	Describe("configuration", func() {
-		It("rejects builds without an update source", func() {
-			useUpdateSource("")
-			_, err := newClient()
-			Expect(errors.Is(err, ErrUpdateNotConfigured)).To(BeTrue())
-		})
-
-		It("accepts an owner/repository slug", func() {
-			useUpdateSource("example/bkms-cli")
-			c, err := newClient()
-			Expect(err).NotTo(HaveOccurred())
-			owner, repository, err := c.repository.GetSlug()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(owner).To(Equal("example"))
-			Expect(repository).To(Equal("bkms-cli"))
-		})
-
-		DescribeTable(
-			"detects npm install paths",
-			func(p string, want bool) {
-				Expect(pathLooksLikeNPMInstall(p)).To(Equal(want))
-			},
-			Entry("node_modules binary", "/usr/local/lib/node_modules/@blueking/bkms-cli/bin/bkms-cli", true),
-			Entry(
-				"windows node_modules",
-				`C:\Users\me\AppData\Roaming\npm\node_modules\@blueking\bkms-cli\bin\bkms-cli.exe`,
-				true,
-			),
-			Entry("plain install", "/usr/local/bin/bkms-cli", false),
-		)
+	BeforeEach(func() {
+		GinkgoT().Setenv("BKMS_CLI_INSTALL_SOURCE", "")
+		oldVersion, oldConfig := version.Version, config.G
+		DeferCleanup(func() { version.Version, config.G = oldVersion, oldConfig })
+		version.Version = "1.2.0"
+		config.G = &config.Config{}
 	})
 
-	Describe("version parsing", func() {
-		DescribeTable("compares SemVer",
-			func(currentValue, latestValue string, available bool) {
-				current, err := parseVersion(currentValue)
-				Expect(err).NotTo(HaveOccurred())
-				latest, err := parseVersion(latestValue)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(latest.GreaterThan(current)).To(Equal(available))
-			},
-			Entry("newer", "1.2.3", "1.3.0", true),
-			Entry("same", "1.2.3", "v1.2.3", false),
-			Entry("older", "1.3.0", "1.2.3", false),
-			Entry("prerelease of current", "1.2.3", "1.2.3-fix.1", false),
-		)
+	DescribeTable("parses current versions",
+		func(value, expected string) {
+			v, err := parseVersion(value)
+			if expected == "" {
+				Expect(errors.Is(err, ErrInvalidVersion)).To(BeTrue())
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v.String()).To(Equal(expected))
+		},
+		Entry("tag", " bkms-cli/v1.2.3\n", "1.2.3"),
+		Entry("pseudo", "v1.2.4-0.20260910000000-abcdef123456", "1.2.4-0.20260910000000-abcdef123456"),
+		Entry("other product", "bkms-server/v1.2.3", ""),
+	)
 
-		It("rejects an empty version", func() {
-			_, err := parseVersion("")
-			Expect(errors.Is(err, ErrInvalidVersion)).To(BeTrue())
+	Describe("static version and release downloads", func() {
+		var c *client
+		var server *httptest.Server
+		var responses map[string][]byte
+		var requests []string
+		const latestPath = "/bkms-cli/latest.txt"
+		const releasePath = "/generic/bkms/public-assets/bkms-cli/releases/v1.3.0/"
+
+		BeforeEach(func() {
+			requests = nil
+			responses = map[string][]byte{latestPath: []byte("1.3.0\n")}
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests = append(requests, r.URL.RequestURI())
+				if r.URL.Path == "/oversize" {
+					w.(http.Flusher).Flush()
+					_, _ = w.Write([]byte("too large"))
+					return
+				}
+				data, ok := responses[r.URL.Path]
+				if !ok {
+					http.NotFound(w, r)
+					return
+				}
+				_, _ = w.Write(data)
+			}))
+			DeferCleanup(server.Close)
+			config.G.Update = config.UpdateSource{
+				LatestVersionURL:    server.URL + latestPath,
+				DownloadURLTemplate: server.URL + "/generic/bkms/public-assets/bkms-cli/releases/v{version}/{archive}",
+			}
+			var err error
+			c, err = newClient()
+			Expect(err).NotTo(HaveOccurred())
 		})
 
-		DescribeTable("rejects non-SemVer",
-			func(value string) {
-				_, err := parseVersion(value)
+		It("guides npm installations without downloading release assets", func() {
+			GinkgoT().Setenv("BKMS_CLI_INSTALL_SOURCE", "npm")
+			responses[latestPath] = []byte("1.4.2\n")
+			info, err := Update(context.Background(), false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(info.LatestVersion).To(Equal("1.4.2"))
+			Expect(info.UpgradeCommand).To(Equal("npm i -g " + npmPackageName + "@latest"))
+			Expect(requests).To(Equal([]string{latestPath}))
+		})
+
+		It("offers a Go install for development builds without replacing them", func() {
+			version.Version = version.DevelopmentVersion
+			info, err := Update(context.Background(), false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(info.CurrentVersion).To(Equal("dev"))
+			Expect(info.Available).To(BeTrue())
+			Expect(info.UpgradeCommand).To(Equal(
+				"go install " + goModulePath + "@latest"))
+			Expect(requests).To(Equal([]string{latestPath}))
+		})
+
+		It("allows force to install a release over a development build", func() {
+			version.Version = version.DevelopmentVersion
+			_, err := Update(context.Background(), true)
+			Expect(errors.Is(err, ErrNoRelease)).To(BeTrue())
+			Expect(requests).To(Equal([]string{latestPath, releasePath + "checksums.txt"}))
+		})
+
+		DescribeTable("compares stable versions",
+			func(latest string, available bool) {
+				responses[latestPath] = []byte(latest)
+				info, err := c.check(context.Background())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(info).To(Equal(Info{
+					CurrentVersion: "1.2.0",
+					LatestVersion:  strings.TrimSpace(latest),
+					Available:      available,
+				}))
+				Expect(requests).To(Equal([]string{latestPath}))
+			},
+			Entry("same", "1.2.0", false),
+			Entry("older", "1.1.0", false),
+			Entry("newer with CRLF", "1.3.0\r\n", true),
+		)
+
+		DescribeTable("rejects invalid stable pointers",
+			func(latest string) {
+				responses[latestPath] = []byte(latest)
+				_, err := c.check(context.Background())
 				Expect(errors.Is(err, ErrInvalidVersion)).To(BeTrue())
 			},
-			Entry("date tag", "v20260101"),
-			Entry("partial", "v1.2"),
-			Entry("leading zero", "v01.2.3"),
-			Entry("other product", "bkms-server/v1.2.3"),
+			Entry("prerelease", "1.3.0-rc.1"),
+			Entry("metadata", "1.3.0+build"),
+			Entry("HTML", "<html>error</html>"),
 		)
 
-		It("accepts bkms-cli tags and trims whitespace", func() {
-			v, err := parseVersion("  bkms-cli/v1.2.3\n")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(v.String()).To(Equal("1.2.3"))
-		})
-	})
-
-	Describe("binary size", func() {
-		It("accepts unknown or max size", func() {
-			Expect(validateBinarySize(-1)).To(Succeed())
-			Expect(validateBinarySize(maxBinarySize)).To(Succeed())
-		})
-
-		It("rejects oversized assets", func() {
-			Expect(errors.Is(validateBinarySize(maxBinarySize+1), ErrBinaryTooLarge)).To(BeTrue())
-		})
-
-		It("normalizes MaxBytesError", func() {
-			err := normalizeBinarySizeError(&http.MaxBytesError{Limit: maxBinarySize})
-			Expect(errors.Is(err, ErrBinaryTooLarge)).To(BeTrue())
-		})
-	})
-
-	Describe("GitHub releases", func() {
-		BeforeEach(func() {
-			useCurrentVersion("1.2.0")
-		})
-
-		It("selects the platform archive and requires checksums.txt", func() {
-			asset := testAssetName("1.3.0")
-			c := clientWithRelease("bkms-cli/v1.3.0",
-				githubTestAsset{id: 1, name: strings.Replace(asset, "bkms-cli", "bkms-server", 1)},
-				githubTestAsset{id: 2, name: asset, size: 1024},
-				githubTestAsset{id: 3, name: checksumFilename},
-			)
-			info, release, err := c.detect(context.Background())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(info).To(Equal(Info{
-				CurrentVersion: "1.2.0",
-				LatestVersion:  "1.3.0",
-				Available:      true,
-			}))
-			Expect(release.AssetName).To(Equal(asset))
-		})
-
-		It("rejects a release without checksums.txt", func() {
-			c := clientWithRelease("v1.3.0",
-				githubTestAsset{id: 1, name: testAssetName("1.3.0"), size: 1024},
-			)
-			_, _, err := c.detect(context.Background())
-			Expect(errors.Is(err, selfupdate.ErrValidationAssetNotFound)).To(BeTrue())
-		})
-
-		It("ignores non-SemVer tags", func() {
-			c := clientWithRelease("v20260101",
-				githubTestAsset{id: 1, name: testAssetName("1.3.0"), size: 1024},
-				githubTestAsset{id: 2, name: checksumFilename},
-			)
-			_, _, err := c.detect(context.Background())
+		It("reports a missing version file without falling back to another source", func() {
+			delete(responses, latestPath)
+			_, err := c.check(context.Background())
 			Expect(errors.Is(err, ErrNoRelease)).To(BeTrue())
 		})
 
-		It("rejects an oversized release before download", func() {
-			c := clientWithRelease("v1.3.0",
-				githubTestAsset{id: 1, name: testAssetName("1.3.0"), size: int(maxBinarySize + 1)},
-				githubTestAsset{id: 2, name: checksumFilename},
-			)
-			info, release, err := c.detect(context.Background())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(info.Available).To(BeTrue())
-			Expect(errors.Is(validateBinarySize(int64(release.AssetByteSize)), ErrBinaryTooLarge)).To(BeTrue())
+		It("limits downloads without Content-Length", func() {
+			_, err := c.download(context.Background(), server.URL+"/oversize", 4)
+			Expect(errors.Is(err, ErrDownloadTooLarge)).To(BeTrue())
 		})
 
-		It("limits the downloaded asset body", func() {
-			asset := testAssetName("1.3.0")
-			c := clientWithSource(maxBytesSource{
-				Source: githubTestSource{
-					releases: []selfupdate.SourceRelease{githubTestRelease{
-						tag: "v1.3.0",
-						assets: []selfupdate.SourceAsset{
-							githubTestAsset{id: 1, name: asset, size: 4},
-							githubTestAsset{id: 2, name: checksumFilename},
-						},
-					}},
-					downloads: map[int64]string{1: "oversized"},
-				},
-				limit: 4,
-			})
-			info, release, err := c.detect(context.Background())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(info.Available).To(BeTrue())
-			executable, err := selfupdate.ExecutablePath()
-			Expect(err).NotTo(HaveOccurred())
-			err = normalizeBinarySizeError(c.updater.UpdateTo(context.Background(), release, executable))
-			Expect(errors.Is(err, ErrBinaryTooLarge)).To(BeTrue())
+		It("limits the version file size", func() {
+			responses[latestPath] = []byte(strings.Repeat("1", maxVersionSize+1))
+			_, err := c.check(context.Background())
+			Expect(errors.Is(err, ErrDownloadTooLarge)).To(BeTrue())
 		})
+
+		DescribeTable("validates configured distribution assets before replacing the executable",
+			func(scenario string, succeeds bool) {
+				binary := []byte("new executable")
+				archive := releaseArchive(binary)
+				asset := archiveName("1.3.0")
+				checksum := fmt.Sprintf("%x  %s\n", sha256.Sum256(archive), asset)
+				if scenario == "wrong hash" {
+					checksum = fmt.Sprintf("%064d  %s\n", 0, asset)
+				}
+				responses[releasePath+"checksums.txt"] = []byte(checksum)
+				if scenario != "missing archive" {
+					responses[releasePath+asset] = archive
+				}
+				executable := filepath.Join(GinkgoT().TempDir(), "bkms-cli")
+				Expect(os.WriteFile(executable, []byte("old executable"), 0o755)).To(Succeed())
+
+				err := c.install(context.Background(), "1.3.0", executable)
+				installed, readErr := os.ReadFile(executable)
+				Expect(readErr).NotTo(HaveOccurred())
+				if succeeds {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(installed).To(Equal(binary))
+					Expect(requests).To(Equal([]string{
+						"/generic/bkms/public-assets/bkms-cli/releases/v1.3.0/checksums.txt",
+						"/generic/bkms/public-assets/bkms-cli/releases/v1.3.0/" + asset,
+					}))
+				} else {
+					Expect(err).To(HaveOccurred())
+					Expect(string(installed)).To(Equal("old executable"))
+				}
+			},
+			Entry("verified asset", "valid", true),
+			Entry("mismatched hash", "wrong hash", false),
+			Entry("missing archive", "missing archive", false),
+		)
 	})
 })
 
-type githubTestSource struct {
-	releases  []selfupdate.SourceRelease
-	downloads map[int64]string
-}
-
-func (s githubTestSource) ListReleases(
-	context.Context,
-	selfupdate.Repository,
-) ([]selfupdate.SourceRelease, error) {
-	return s.releases, nil
-}
-
-func (s githubTestSource) DownloadReleaseAsset(
-	_ context.Context,
-	_ *selfupdate.Release,
-	assetID int64,
-) (io.ReadCloser, error) {
-	content, ok := s.downloads[assetID]
-	if !ok {
-		return nil, errors.New("unexpected asset download")
+func releaseArchive(binary []byte) []byte {
+	var buf bytes.Buffer
+	if runtime.GOOS == "windows" {
+		archive := zip.NewWriter(&buf)
+		file, err := archive.Create("bkms-cli.exe")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = file.Write(binary)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(archive.Close()).To(Succeed())
+	} else {
+		compressed := gzip.NewWriter(&buf)
+		archive := tar.NewWriter(compressed)
+		Expect(archive.WriteHeader(&tar.Header{Name: "bkms-cli", Mode: 0o755, Size: int64(len(binary))})).To(Succeed())
+		_, err := archive.Write(binary)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(archive.Close()).To(Succeed())
+		Expect(compressed.Close()).To(Succeed())
 	}
-	return io.NopCloser(strings.NewReader(content)), nil
+	return buf.Bytes()
 }
-
-type githubTestRelease struct {
-	tag    string
-	assets []selfupdate.SourceAsset
-}
-
-func (githubTestRelease) GetID() int64                          { return 1 }
-func (r githubTestRelease) GetTagName() string                  { return r.tag }
-func (githubTestRelease) GetDraft() bool                        { return false }
-func (githubTestRelease) GetPrerelease() bool                   { return false }
-func (githubTestRelease) GetPublishedAt() time.Time             { return time.Time{} }
-func (githubTestRelease) GetReleaseNotes() string               { return "" }
-func (githubTestRelease) GetName() string                       { return "bkms-cli" }
-func (githubTestRelease) GetURL() string                        { return "https://example.com/release" }
-func (r githubTestRelease) GetAssets() []selfupdate.SourceAsset { return r.assets }
-
-type githubTestAsset struct {
-	id   int64
-	name string
-	size int
-}
-
-func (a githubTestAsset) GetID() int64                  { return a.id }
-func (a githubTestAsset) GetName() string               { return a.name }
-func (a githubTestAsset) GetSize() int                  { return a.size }
-func (a githubTestAsset) GetBrowserDownloadURL() string { return "https://example.com/" + a.name }

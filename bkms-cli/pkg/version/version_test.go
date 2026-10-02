@@ -21,6 +21,7 @@ package version
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -45,4 +46,45 @@ var _ = Describe("UserAgent", func() {
 		Entry("strips leading v", "v1.2.3", "1.2.3"),
 		Entry("empty version uses dev", "", "dev"),
 	)
+})
+
+var _ = Describe("Build metadata", func() {
+	BeforeEach(func() {
+		oldVersion, oldHash, oldTime := Version, GitHash, BuildTime
+		DeferCleanup(func() {
+			Version, GitHash, BuildTime = oldVersion, oldHash, oldTime
+		})
+		Version, GitHash, BuildTime = "", "", ""
+	})
+
+	It("uses the Go module version when build flags are absent", func() {
+		resolveBuildInfo(&debug.BuildInfo{Main: debug.Module{Version: "v1.2.3"}})
+		Expect(Version).To(Equal("1.2.3"))
+		Expect(GitHash).To(Equal("unknown"))
+		Expect(BuildTime).To(Equal("unknown"))
+	})
+
+	It("preserves all explicitly injected release metadata", func() {
+		Version, GitHash, BuildTime = "2.0.0", "release-hash", "build-time"
+		resolveBuildInfo(&debug.BuildInfo{
+			Main:     debug.Module{Version: "v1.2.3"},
+			Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "source-hash"}},
+		})
+		Expect(Version).To(Equal("2.0.0"))
+		Expect(GitHash).To(Equal("release-hash"))
+		Expect(BuildTime).To(Equal("build-time"))
+	})
+
+	It("uses local VCS revision without mistaking commit time for build time", func() {
+		resolveBuildInfo(&debug.BuildInfo{
+			Main: debug.Module{Version: "(devel)"},
+			Settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: "source-hash"},
+				{Key: "vcs.time", Value: "2026-09-10T00:00:00Z"},
+			},
+		})
+		Expect(Version).To(Equal("dev"))
+		Expect(GitHash).To(Equal("source-hash"))
+		Expect(BuildTime).To(Equal("unknown"))
+	})
 })
