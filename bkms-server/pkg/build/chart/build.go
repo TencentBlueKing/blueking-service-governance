@@ -28,12 +28,16 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/semver"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 )
+
+// ErrRevisionRequired Helm Chart 构建未指定代码修订
+var ErrRevisionRequired = errors.New("revision or branch is required for helm chart build")
 
 // ChartBuildResult 触发构建的结果
 type ChartBuildResult struct {
@@ -135,7 +139,7 @@ func (s *ChartBuildService) prepare(ctx context.Context, app *bkmsapp.Applicatio
 
 // buildPipelineParams 生成 semver 版本号并构建蓝盾流水线参数
 func (s *ChartBuildService) buildPipelineParams(
-	ctx context.Context, app *bkmsapp.Application, bumpType, branch, helmRepoURL string,
+	ctx context.Context, app *bkmsapp.Application, bumpType string, rev revision.CodeRevision, helmRepoURL string,
 ) (map[string]string, string, error) {
 	// 生成 semver 版本号（原子操作，并发安全；尽量延后，避免前序失败浪费版本号）
 	chartVersion, err := s.semverStore.Next(ctx, app.ID, semver.BumpType(bumpType))
@@ -145,8 +149,8 @@ func (s *ChartBuildService) buildPipelineParams(
 
 	gitRepoConfig := app.HelmSpec.HelmSource.GitRepoConfig
 	params := map[string]string{
-		pipelineparam.RepoCheckoutBy:       "BRANCH",
-		pipelineparam.RepoRevision:         branch,
+		pipelineparam.RepoCheckoutBy:       rev.CheckoutBy(),
+		pipelineparam.RepoRevision:         rev.Value,
 		pipelineparam.RepoAlias:            gitRepoConfig.RepoAlias,
 		pipelineparam.HelmRepoURL:          helmRepoURL,
 		pipelineparam.HelmChartName:        app.Name,
@@ -160,7 +164,7 @@ func (s *ChartBuildService) buildPipelineParams(
 // execute 执行阶段：获取构建信息、生成版本号、触发蓝盾流水线构建、创建构建记录
 // 注意：semver 生成尽量延后，确保前序 IO 操作成功后才消费版本号，避免浪费
 func (s *ChartBuildService) execute(
-	ctx context.Context, app *bkmsapp.Application, bumpType, branch string,
+	ctx context.Context, app *bkmsapp.Application, bumpType string, rev revision.CodeRevision,
 ) (*ChartBuildResult, error) {
 	appInfo := app.String()
 
@@ -183,7 +187,7 @@ func (s *ChartBuildService) execute(
 	}
 
 	// 3. 生成 semver 版本号并构建流水线参数
-	params, chartVersion, err := s.buildPipelineParams(ctx, app, bumpType, branch, helmRepoURL)
+	params, chartVersion, err := s.buildPipelineParams(ctx, app, bumpType, rev, helmRepoURL)
 	if err != nil {
 		return nil, err
 	}
@@ -222,10 +226,15 @@ func (s *ChartBuildService) execute(
 
 // ExecuteChartBuild 触发 Helm Chart 构建
 // 流程：校验 → 准备（确保流水线 / 代码库 / 凭证就绪）→ 执行（获取信息 → 生成 semver → 触发构建 → 创建记录）
-// 注意：异步轮询任务由调用方（Handler）负责启动
+// 注意：异步轮询任务由调用方（Handler）负责启动；rev 的格式由调用方经 revision.Resolve 校验
 func (s *ChartBuildService) ExecuteChartBuild(
-	ctx context.Context, app *bkmsapp.Application, bumpType, branch string,
+	ctx context.Context, app *bkmsapp.Application, bumpType string, rev revision.CodeRevision,
 ) (*ChartBuildResult, error) {
+	// Helm Chart 始终从 Git 源码构建，必须指定修订；放在最前面，保证在消耗语义化版本号之前拦下
+	if rev.Value == "" {
+		return nil, errors.Wrapf(ErrRevisionRequired, "execute chart build for app %s", app.String())
+	}
+
 	// 1. 校验
 	if err := s.validate(app); err != nil {
 		return nil, err
@@ -237,5 +246,5 @@ func (s *ChartBuildService) ExecuteChartBuild(
 	}
 
 	// 3. 执行（生成版本号 + 触发构建 + 创建记录）
-	return s.execute(ctx, app, bumpType, branch)
+	return s.execute(ctx, app, bumpType, rev)
 }

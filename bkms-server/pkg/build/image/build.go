@@ -32,6 +32,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -58,7 +59,8 @@ func ExecuteBKCIPipelineBuild(
 	ctx context.Context,
 	app *bkmsapp.Application,
 	cfg *Config,
-	branch, imageTag string,
+	rev revision.CodeRevision,
+	imageTag string,
 ) (*bkciapi.PipelineBuildState, map[string]string, error) {
 	appInfo := fmt.Sprintf("<workspace: %s, appID: %s>", app.WorkspaceID, app.ID)
 
@@ -82,7 +84,7 @@ func ExecuteBKCIPipelineBuild(
 			return nil, nil, errors.Wrap(err, "init builtin dockerfile pipeline")
 		}
 		// 根据配置生成流水线参数
-		params, err = genPipelineBuildParams(ctx, app, cfg, branch, imageTag)
+		params, err = genPipelineBuildParams(ctx, app, cfg, rev, imageTag)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "generate pipeline build params for %s", appInfo)
 		}
@@ -97,7 +99,7 @@ func ExecuteBKCIPipelineBuild(
 			return nil, nil, errors.Wrapf(err, "init pipeline")
 		}
 		// 根据配置生成流水线参数（镜像相关）
-		params, err = genPipelineBuildRepoAndImageParams(ctx, app, branch, imageTag)
+		params, err = genPipelineBuildRepoAndImageParams(ctx, app, rev, imageTag)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "generate pipeline build image params for %s", appInfo)
 		}
@@ -141,7 +143,7 @@ func ExecuteBKCIPipelineBuild(
 
 // genPipelineBuildParams 生成蓝盾流水线构建参数
 func genPipelineBuildParams(
-	ctx context.Context, app *bkmsapp.Application, cfg *Config, branch, imageTag string,
+	ctx context.Context, app *bkmsapp.Application, cfg *Config, rev revision.CodeRevision, imageTag string,
 ) (map[string]string, error) {
 	// 如果没有代码仓库配置，则无法生成蓝盾流水线参数
 	if cfg.CodeRepo == nil {
@@ -170,7 +172,7 @@ func genPipelineBuildParams(
 	}
 
 	// 镜像相关参数
-	params, err := genPipelineBuildRepoAndImageParams(ctx, app, branch, imageTag)
+	params, err := genPipelineBuildRepoAndImageParams(ctx, app, rev, imageTag)
 	if err != nil {
 		return nil, errors.Wrapf(err, "generate pipeline build image params for %s", app.ID)
 	}
@@ -306,7 +308,7 @@ func getPlatformDockerfileLanguage(app *bkmsapp.Application) (string, error) {
 
 // genPipelineBuildRepoAndImageParams 生成蓝盾流水线构建参数（镜像和仓库版本信息相关）
 func genPipelineBuildRepoAndImageParams(
-	ctx context.Context, app *bkmsapp.Application, branch, imageTag string,
+	ctx context.Context, app *bkmsapp.Application, rev revision.CodeRevision, imageTag string,
 ) (map[string]string, error) {
 	registry, err := workspace.GetWorkspaceImageRegistry(ctx, app.WorkspaceID)
 	if err != nil {
@@ -314,9 +316,9 @@ func genPipelineBuildRepoAndImageParams(
 	}
 
 	return map[string]string{
-		// 代码库相关参数（仅版本部分）TODO 目前仅支持 git 分支构建
-		pipelineparam.RepoCheckoutBy: "BRANCH",
-		pipelineparam.RepoRevision:   branch,
+		// 代码库相关参数（仅版本部分），修订按用户填写原样传递，CommitID 不截断
+		pipelineparam.RepoCheckoutBy: rev.CheckoutBy(),
+		pipelineparam.RepoRevision:   rev.Value,
 		// 镜像仓库相关参数
 		pipelineparam.ImageRegistry:     registry.Registry,
 		pipelineparam.ImageRegistryHost: sourceImageRegistryHost(registry),

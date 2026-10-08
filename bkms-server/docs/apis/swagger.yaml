@@ -708,6 +708,9 @@ definitions:
       revision:
         description: 代码版本
         type: string
+      revisionType:
+        description: 代码来源类型（branch / tag / commit），与构建记录列表同一推导口径
+        type: string
       startedAt:
         description: 开始时间
         type: string
@@ -833,6 +836,9 @@ definitions:
         type: string
       revision:
         description: 代码版本
+        type: string
+      revisionType:
+        description: 代码来源类型（branch / tag / commit），本功能上线前的记录为 branch
         type: string
       startedAt:
         description: 开始时间
@@ -3193,7 +3199,7 @@ definitions:
   serializer.CreateAppModelBuildDeployInput:
     properties:
       branch:
-        description: 代码分支或标签，留空时由构建服务按默认逻辑处理
+        description: 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
         type: string
       imageTag:
         description: 本次构建使用的镜像 Tag
@@ -3203,6 +3209,16 @@ definitions:
         description: 自动部署时的副本数
         minimum: 1
         type: integer
+      revision:
+        description: 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制）
+        type: string
+      revisionType:
+        description: 代码来源类型（branch / tag / commit），缺省为 branch
+        enum:
+        - branch
+        - tag
+        - commit
+        type: string
       trafficLaneName:
         description: 泳道名称，空字符串表示默认泳道
         type: string
@@ -3361,10 +3377,20 @@ definitions:
   serializer.CreateBuildInput:
     properties:
       branch:
-        description: 构建分支或标签
+        description: 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
         type: string
       imageTag:
         description: 本次构建使用的镜像 Tag
+        type: string
+      revision:
+        description: 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制）
+        type: string
+      revisionType:
+        description: 代码来源类型（branch / tag / commit），缺省为 branch
+        enum:
+        - branch
+        - tag
+        - commit
         type: string
     type: object
   serializer.CreateComponentDefInput:
@@ -3497,8 +3523,7 @@ definitions:
   serializer.CreateHelmChartBuildInput:
     properties:
       branch:
-        description: Git 分支名称
-        minLength: 1
+        description: 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
         type: string
       bumpType:
         description: |-
@@ -3509,8 +3534,17 @@ definitions:
         - minor
         - major
         type: string
+      revision:
+        description: 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制），与 branch 至少填一个
+        type: string
+      revisionType:
+        description: 代码来源类型（branch / tag / commit），缺省为 branch
+        enum:
+        - branch
+        - tag
+        - commit
+        type: string
     required:
-    - branch
     - bumpType
     type: object
   serializer.CreateHelmChartBuildOutput:
@@ -16984,7 +17018,15 @@ paths:
         name: appID
         required: true
         type: string
-      - description: 分支/Tag（仅 custom 类型使用）
+      - description: 代码来源类型 branch / tag / commit（仅 custom 类型使用）
+        in: query
+        name: revisionType
+        type: string
+      - description: 分支名 / Tag 名 / CommitID（仅 custom 类型使用）
+        in: query
+        name: revision
+        type: string
+      - description: 兼容字段：按分支检出，revision 为空时生效
         in: query
         name: branch
         type: string

@@ -28,6 +28,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
@@ -47,10 +48,11 @@ func StartAndScheduleBuild(
 	ctx context.Context,
 	buildService *Service,
 	app *bkmsapp.Application,
-	branch, imageTag string,
+	rev revision.CodeRevision,
+	imageTag string,
 	opts StartOptions,
 ) (*imagebuild.Record, error) {
-	result, err := buildService.Build(ctx, app, branch, imageTag)
+	result, err := buildService.Build(ctx, app, rev, imageTag)
 	if err != nil {
 		return nil, errors.Wrapf(err, "start build for %s", app.ID)
 	}
@@ -76,7 +78,7 @@ func StartAndScheduleBuild(
 			EnvName:         opts.AutoDeploy.EnvName,
 			TrafficLaneName: opts.AutoDeploy.TrafficLaneName,
 			BuildID:         result.Record.BuildID,
-			Branch:          branch,
+			Branch:          rev.Value,
 			ImageTag:        imageTag,
 			PipelineID:      result.Record.PipelineID,
 			Stage:           autodeploy.StageBuild,

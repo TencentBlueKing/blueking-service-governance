@@ -26,6 +26,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -123,6 +124,11 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
+		return
+	}
 
 	ctx := c.Request.Context()
 	app, err := ginperm.ValidateAppByID(ctx, h.registry, uriInput.AppID, ginperm.TypeEdit)
@@ -170,7 +176,7 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		ctx,
 		buildService,
 		app,
-		input.Branch,
+		rev,
 		input.ImageTag,
 		build.StartOptions{
 			AutoDeploy: &buildpoll.AutoDeployArgs{
@@ -186,8 +192,11 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
 		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
 		errCode := bkerrs.ErrCodeInternalServerError
-		if build.IsImageReferenceInvalid(err) || errors.Is(err, build.ErrWorkspaceImageCredentialMissing) {
+		switch {
+		case build.IsImageReferenceInvalid(err) || errors.Is(err, build.ErrWorkspaceImageCredentialMissing):
 			errCode = bkerrs.ErrCodeInvalidArgument
+		case errors.Is(err, build.ErrRevisionRequired):
+			errCode = bkerrs.ErrCodeInvalidRequest
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start build auto deploy"))
 		return

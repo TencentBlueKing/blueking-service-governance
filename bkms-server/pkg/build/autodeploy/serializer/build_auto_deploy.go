@@ -25,6 +25,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 )
 
@@ -40,7 +41,11 @@ type AppEnvURIInput struct {
 type CreateAppModelBuildDeployInput struct {
 	// 泳道名称，空字符串表示默认泳道
 	TrafficLaneName string `json:"trafficLaneName"`
-	// 代码分支或标签，留空时由构建服务按默认逻辑处理
+	// 代码来源类型（branch / tag / commit），缺省为 branch
+	RevisionType string `json:"revisionType" binding:"omitempty,oneof=branch tag commit"`
+	// 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制）
+	Revision string `json:"revision"`
+	// 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
 	Branch string `json:"branch"`
 	// 本次构建使用的镜像 Tag
 	ImageTag string `json:"imageTag" binding:"required,min=1"`
@@ -62,6 +67,8 @@ type BuildRecordOutputObj struct {
 	Status string `json:"status"`
 	// 代码仓库地址
 	RepoURL string `json:"repoURL"`
+	// 代码来源类型（branch / tag / commit），与构建记录列表同一推导口径
+	RevisionType string `json:"revisionType"`
 	// 代码版本
 	Revision string `json:"revision"`
 	// 提交哈希
@@ -81,19 +88,20 @@ type BuildRecordOutputObj struct {
 // FromModel fills output fields from a build record model.
 func (o *BuildRecordOutputObj) FromModel(r imagebuild.Record) *BuildRecordOutputObj {
 	*o = BuildRecordOutputObj{
-		PipelineID: r.PipelineID,
-		BuildID:    r.BuildID,
-		Num:        r.Num,
-		Params:     r.Params,
-		Status:     string(r.Status),
-		RepoURL:    r.Params[pipelineparam.RepoURL],
-		Revision:   r.Params[pipelineparam.RepoRevision],
-		CommitID:   r.Extras[pipelinevar.GitRepoHeadCommitID],
-		Artifact:   r.Artifact,
-		Operator:   r.Operator,
-		Extras:     r.Extras,
-		StartedAt:  r.StartedAt,
-		EndedAt:    r.EndedAt,
+		PipelineID:   r.PipelineID,
+		BuildID:      r.BuildID,
+		Num:          r.Num,
+		Params:       r.Params,
+		Status:       string(r.Status),
+		RepoURL:      r.Params[pipelineparam.RepoURL],
+		RevisionType: string(revision.TypeFromCheckoutBy(r.Params[pipelineparam.RepoCheckoutBy])),
+		Revision:     r.Params[pipelineparam.RepoRevision],
+		CommitID:     r.Extras[pipelinevar.GitRepoHeadCommitID],
+		Artifact:     r.Artifact,
+		Operator:     r.Operator,
+		Extras:       r.Extras,
+		StartedAt:    r.StartedAt,
+		EndedAt:      r.EndedAt,
 	}
 	return o
 }

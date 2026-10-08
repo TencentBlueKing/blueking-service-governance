@@ -68,8 +68,12 @@ type CreateHelmChartBuildInput struct {
 	// semver 递增段类型（默认 patch）
 	// 经典归零语义：递增 major 时 minor+patch 归零，递增 minor 时 patch 归零
 	BumpType string `json:"bumpType" binding:"required,oneof=patch minor major"`
-	// Git 分支名称
-	Branch string `json:"branch" binding:"required,min=1"`
+	// 代码来源类型（branch / tag / commit），缺省为 branch
+	RevisionType string `json:"revisionType" binding:"omitempty,oneof=branch tag commit"`
+	// 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制），与 branch 至少填一个
+	Revision string `json:"revision"`
+	// 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
+	Branch string `json:"branch"`
 }
 
 // GetHelmChartSemverQueryInput 是查询 Helm Chart semver 和预览下一个版本的 query 输入。

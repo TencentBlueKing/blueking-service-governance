@@ -20,7 +20,11 @@ package serializer
 
 // GetRecommendedImageTagQueryInput is the query input for getting recommended image tag.
 type GetRecommendedImageTagQueryInput struct {
-	// 分支或标签名，仅 custom 类型时使用
+	// 代码来源类型（branch / tag / commit），缺省为 branch，仅 custom 类型时使用
+	RevisionType string `form:"revisionType" binding:"omitempty,oneof=branch tag commit"`
+	// 代码修订：分支名、Tag 名或 CommitID，仅 custom 类型时使用；CommitID 只取前 7 位拼进版本号
+	Revision string `form:"revision"`
+	// 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
 	Branch string `form:"branch"`
 }
 

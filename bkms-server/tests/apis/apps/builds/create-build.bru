@@ -60,6 +60,11 @@ tests {
     expect(buildRecord.params.BKMS_IMAGE_TAG).to.equal('v1.0.0')
     expect(buildRecord.revision).to.equal('main');
   });
+
+  test("should treat legacy branch field as branch checkout", () => {
+    expect(res.body.data.revisionType).to.equal('branch');
+    expect(res.body.data.params.BKMS_REPO_CHECKOUT_BY).to.equal('BRANCH');
+  });
 }
 
 settings {

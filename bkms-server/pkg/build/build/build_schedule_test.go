@@ -29,11 +29,14 @@ import (
 	"github.com/pkg/errors"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 )
 
 var _ = Describe("StartAndScheduleBuild", func() {
+	masterRev := revision.CodeRevision{Type: revision.TypeBranch, Value: "master"}
+
 	var (
 		ctx          context.Context
 		app          *bkmsapp.Application
@@ -74,7 +77,7 @@ var _ = Describe("StartAndScheduleBuild", func() {
 			return nil
 		}).Build()
 
-		record, err := StartAndScheduleBuild(ctx, buildService, app, "master", "v1", StartOptions{})
+		record, err := StartAndScheduleBuild(ctx, buildService, app, masterRev, "v1", StartOptions{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(record.BuildID).To(Equal("b-1"))
 		Expect(enqueued).To(BeTrue())
@@ -92,7 +95,7 @@ var _ = Describe("StartAndScheduleBuild", func() {
 		}, nil).Build()
 		mockey.Mock(taskq.Enqueue).Return(errors.New("redis down")).Build()
 
-		_, err := StartAndScheduleBuild(ctx, buildService, app, "master", "v1", StartOptions{})
+		_, err := StartAndScheduleBuild(ctx, buildService, app, masterRev, "v1", StartOptions{})
 		Expect(err).To(MatchError(ContainSubstring("enqueue polling build status task")))
 	})
 })

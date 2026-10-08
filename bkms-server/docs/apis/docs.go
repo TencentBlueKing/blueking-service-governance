@@ -11528,7 +11528,19 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "分支/Tag（仅 custom 类型使用）",
+                        "description": "代码来源类型 branch / tag / commit（仅 custom 类型使用）",
+                        "name": "revisionType",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "分支名 / Tag 名 / CommitID（仅 custom 类型使用）",
+                        "name": "revision",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "兼容字段：按分支检出，revision 为空时生效",
                         "name": "branch",
                         "in": "query"
                     }
@@ -20096,6 +20108,10 @@ const docTemplate = `{
                     "description": "代码版本",
                     "type": "string"
                 },
+                "revisionType": {
+                    "description": "代码来源类型（branch / tag / commit），与构建记录列表同一推导口径",
+                    "type": "string"
+                },
                 "startedAt": {
                     "description": "开始时间",
                     "type": "string"
@@ -20280,6 +20296,10 @@ const docTemplate = `{
                 },
                 "revision": {
                     "description": "代码版本",
+                    "type": "string"
+                },
+                "revisionType": {
+                    "description": "代码来源类型（branch / tag / commit），本功能上线前的记录为 branch",
                     "type": "string"
                 },
                 "startedAt": {
@@ -23791,7 +23811,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "branch": {
-                    "description": "代码分支或标签，留空时由构建服务按默认逻辑处理",
+                    "description": "兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效",
                     "type": "string"
                 },
                 "imageTag": {
@@ -23803,6 +23823,19 @@ const docTemplate = `{
                     "description": "自动部署时的副本数",
                     "type": "integer",
                     "minimum": 1
+                },
+                "revision": {
+                    "description": "代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制）",
+                    "type": "string"
+                },
+                "revisionType": {
+                    "description": "代码来源类型（branch / tag / commit），缺省为 branch",
+                    "type": "string",
+                    "enum": [
+                        "branch",
+                        "tag",
+                        "commit"
+                    ]
                 },
                 "trafficLaneName": {
                     "description": "泳道名称，空字符串表示默认泳道",
@@ -24017,12 +24050,25 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "branch": {
-                    "description": "构建分支或标签",
+                    "description": "兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效",
                     "type": "string"
                 },
                 "imageTag": {
                     "description": "本次构建使用的镜像 Tag",
                     "type": "string"
+                },
+                "revision": {
+                    "description": "代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制）",
+                    "type": "string"
+                },
+                "revisionType": {
+                    "description": "代码来源类型（branch / tag / commit），缺省为 branch",
+                    "type": "string",
+                    "enum": [
+                        "branch",
+                        "tag",
+                        "commit"
+                    ]
                 }
             }
         },
@@ -24207,14 +24253,12 @@ const docTemplate = `{
         "serializer.CreateHelmChartBuildInput": {
             "type": "object",
             "required": [
-                "branch",
                 "bumpType"
             ],
             "properties": {
                 "branch": {
-                    "description": "Git 分支名称",
-                    "type": "string",
-                    "minLength": 1
+                    "description": "兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效",
+                    "type": "string"
                 },
                 "bumpType": {
                     "description": "semver 递增段类型（默认 patch）\n经典归零语义：递增 major 时 minor+patch 归零，递增 minor 时 patch 归零",
@@ -24223,6 +24267,19 @@ const docTemplate = `{
                         "patch",
                         "minor",
                         "major"
+                    ]
+                },
+                "revision": {
+                    "description": "代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制），与 branch 至少填一个",
+                    "type": "string"
+                },
+                "revisionType": {
+                    "description": "代码来源类型（branch / tag / commit），缺省为 branch",
+                    "type": "string",
+                    "enum": [
+                        "branch",
+                        "tag",
+                        "commit"
                     ]
                 }
             }

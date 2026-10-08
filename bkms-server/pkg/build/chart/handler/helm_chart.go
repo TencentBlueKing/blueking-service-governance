@@ -30,6 +30,7 @@ import (
 	helmchartbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/semver"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -72,6 +73,12 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+	// 在调用构建服务前校验格式：服务内会消耗语义化版本号，参数错误时不应浪费版本号
+	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
+		return
+	}
 
 	ctx := c.Request.Context()
 	app, err := h.validateHelmApp(ctx, uriInput.AppID, perm.TypeEdit)
@@ -88,9 +95,14 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 		h.registry.BkRepoProjectStore,
 		h.registry.BkCIPipelineStore,
 	)
-	result, err := buildSvc.ExecuteChartBuild(ctx, app, input.BumpType, input.Branch)
+	result, err := buildSvc.ExecuteChartBuild(ctx, app, input.BumpType, rev)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "trigger helm chart build"))
+		errCode := lo.Ternary(
+			errors.Is(err, helmchartbuild.ErrRevisionRequired),
+			bkerrs.ErrCodeInvalidRequest,
+			bkerrs.ErrCodeInternalServerError,
+		)
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "trigger helm chart build"))
 		return
 	}
 

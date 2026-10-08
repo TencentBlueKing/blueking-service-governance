@@ -1,0 +1,40 @@
+meta {
+  name: create-build-by-commit
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{serviceURL}}/apps/{{testBuildTrpcAppID}}/builds
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "revisionType": "commit",
+    "revision": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "branch": "main",
+    "imageTag": "v1.0.1"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should checkout by commit id and ignore legacy branch", () => {
+    const buildRecord = res.body.data;
+    expect(buildRecord.revisionType).to.equal('commit');
+    expect(buildRecord.revision).to.equal('a1b2c3d4e5f60718293a4b5c6d7e8f9012345678');
+    expect(buildRecord.params.BKMS_REPO_CHECKOUT_BY).to.equal('COMMIT_ID');
+    expect(buildRecord.params.BKMS_REPO_REVISION).to.equal('a1b2c3d4e5f60718293a4b5c6d7e8f9012345678');
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

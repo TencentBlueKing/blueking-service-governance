@@ -12,7 +12,8 @@ post {
 
 body:json {
   {
-    "branch": "main",
+    "revisionType": "tag",
+    "revision": "v1.0.0",
     "imageTag": "v1.0.0-build-deploy",
     "replicas": 2
   }
@@ -44,6 +45,13 @@ tests {
     expect(buildData.pipelineID).to.be.a('string');
     expect(buildData.status).to.be.a('string');
     expect(buildData.params.BKMS_IMAGE_TAG).to.equal('v1.0.0-build-deploy');
+  });
+
+  test("should checkout by tag", () => {
+    const buildData = res.body.data;
+    expect(buildData.revisionType).to.equal('tag');
+    expect(buildData.revision).to.equal('v1.0.0');
+    expect(buildData.params.BKMS_REPO_CHECKOUT_BY).to.equal('TAG');
   });
 }
 

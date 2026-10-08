@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -44,6 +45,9 @@ import (
 var ErrWorkspaceImageCredentialMissing = errors.New(
 	"workspace image registry credential is not configured",
 )
+
+// ErrRevisionRequired 代码仓库构建模式下未指定代码修订
+var ErrRevisionRequired = errors.New("code revision is required when building from code repository")
 
 // BuildResult 构建执行结果
 type BuildResult struct {
@@ -174,17 +178,25 @@ func (s *Service) usesCustomBuildImage(ctx context.Context, workspaceID string, 
 }
 
 // Build 执行构建并落库，返回构建结果
-func (s *Service) Build(ctx context.Context, app *bkmsapp.Application, branch, imageTag string) (*BuildResult, error) {
+func (s *Service) Build(
+	ctx context.Context, app *bkmsapp.Application, rev revision.CodeRevision, imageTag string,
+) (*BuildResult, error) {
 	cfg, err := s.buildConfigStore.Get(ctx, app.ID)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app %s build config", app.ID)
+	}
+
+	// 代码仓库构建必须知道检出哪份代码；自定义流水线由用户流水线自行决定，维持允许为空
+	// 放在 validateBeforeBuild 之前，避免参数错误时还去请求镜像源等外部依赖
+	if cfg.SourceType == imgbuild.SourceTypeCodeRepository && rev.Value == "" {
+		return nil, errors.Wrapf(ErrRevisionRequired, "build app %s", app.ID)
 	}
 
 	if err = s.validateBeforeBuild(ctx, app, cfg); err != nil {
 		return nil, errors.Wrapf(err, "validate app %s build before start", app.ID)
 	}
 
-	buildState, params, err := imgbuild.ExecuteBKCIPipelineBuild(ctx, app, cfg, branch, imageTag)
+	buildState, params, err := imgbuild.ExecuteBKCIPipelineBuild(ctx, app, cfg, rev, imageTag)
 	if err != nil {
 		return nil, errors.Wrapf(err, "execute bkci pipeline build for %s", app.ID)
 	}

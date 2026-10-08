@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 )
 
 // ListBuildRecordsQueryInput is the query input for listing build records.
@@ -38,7 +39,11 @@ type ListBuildRecordsQueryInput struct {
 
 // CreateBuildInput is the JSON body for creating a build.
 type CreateBuildInput struct {
-	// 构建分支或标签
+	// 代码来源类型（branch / tag / commit），缺省为 branch
+	RevisionType string `json:"revisionType" binding:"omitempty,oneof=branch tag commit"`
+	// 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制）
+	Revision string `json:"revision"`
+	// 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
 	Branch string `json:"branch"`
 	// 本次构建使用的镜像 Tag
 	ImageTag string `json:"imageTag"`
@@ -58,6 +63,8 @@ type BuildRecordOutputObj struct {
 	Status string `json:"status"`
 	// 代码仓库地址
 	RepoURL string `json:"repoURL"`
+	// 代码来源类型（branch / tag / commit），本功能上线前的记录为 branch
+	RevisionType string `json:"revisionType"`
 	// 代码版本
 	Revision string `json:"revision"`
 	// 提交哈希
@@ -87,6 +94,7 @@ func (o *BuildRecordOutputObj) FromModel(r imagebuild.Record) *BuildRecordOutput
 		Params:          r.Params,
 		Status:          string(r.Status),
 		RepoURL:         r.Params[pipelineparam.RepoURL],
+		RevisionType:    string(revision.TypeFromCheckoutBy(r.Params[pipelineparam.RepoCheckoutBy])),
 		Revision:        r.Params[pipelineparam.RepoRevision],
 		CommitID:        r.Extras[pipelinevar.GitRepoHeadCommitID],
 		Artifact:        r.Artifact,

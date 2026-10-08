@@ -1,0 +1,36 @@
+meta {
+  name: create-build-should-fail-when-revision-empty
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{serviceURL}}/apps/{{testBuildTrpcAppID}}/builds
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "revisionType": "tag",
+    "branch": "main",
+    "imageTag": "v1.0.3"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  // 代码仓库构建模式必须指定修订；显式选了 Tag 时不能拿兼容字段 branch 顶替
+  test("should reject empty revision for code repository build", () => {
+    expect(res.body.error.message).to.contains("code revision is required");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
