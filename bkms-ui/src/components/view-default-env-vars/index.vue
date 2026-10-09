@@ -63,7 +63,7 @@
       >
         <Table
           ref="tableRef"
-          :auto-resize="false"
+          auto-resize
           :data="tableDataMatchSearch"
           :height="tableHeight"
           row-class-name="group"
