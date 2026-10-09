@@ -82,7 +82,7 @@ export function useImportedPolaris(options: ImportedPolarisOptions) {
   const remote = ref<null | WeightFactorState>(null);
   // 连接字段、开关或测试结果变化后，已有选择必须重新确认。
   const resolution = ref<null | WeightFactorResolution>(null);
-  // 连通错误在服务信息区展示，保存错误由侧栏统一展示。
+  // 连通失败，保存错误由侧栏统一展示。
   const connectionError = ref('');
   const saveError = ref('');
   // 覆盖复查、确认、写远端和平台保存全过程，防止重复提交。
@@ -188,9 +188,9 @@ export function useImportedPolaris(options: ImportedPolarisOptions) {
       // 仅编辑回填实时开关；新建保留默认关闭。
       if (options.editMode()) options.hydrate(result.enabled);
       status.value = 'success';
-    } catch (error) {
+    } catch {
       if (!isCurrent(requestVersion)) return;
-      connectionError.value = errorMessage(error);
+      connectionError.value = connectionFailureMessage();
       status.value = 'error';
     }
   }
@@ -256,7 +256,7 @@ export function useImportedPolaris(options: ImportedPolarisOptions) {
       if (!isCurrent(requestVersion)) return 'cancelled';
       if (verifyingRemote) {
         status.value = 'error';
-        connectionError.value = errorMessage(error);
+        connectionError.value = connectionFailureMessage();
         resolution.value = null;
       }
       saveError.value = remoteSaved.value
@@ -293,6 +293,11 @@ export function weightFactorValue(state: WeightFactorState, key: WeightFactorKey
   if (key === 'func') return typeof config.func === 'string' ? config.func : '--';
   const value = isRecord(config.params) ? config.params[key] : undefined;
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '--';
+}
+
+/** 连通失败的托底文案 */
+function connectionFailureMessage() {
+  return window.i18n.t('无法连通北极星，请检查服务名、环境类型和 Token 后重试');
 }
 
 function errorMessage(error: unknown) {

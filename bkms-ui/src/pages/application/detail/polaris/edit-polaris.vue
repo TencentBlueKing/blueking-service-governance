@@ -1173,6 +1173,12 @@
     text-align: center;
   }
 
+  .polaris-type-radio :deep(.bk-radio-button.is-checked .bk-radio-button-label) {
+    color: #3a84ff;
+    background: #e1ecff;
+    border-color: #3a84ff;
+  }
+
   .polaris-connection-item :deep(.bk-form-error) {
     position: static;
   }

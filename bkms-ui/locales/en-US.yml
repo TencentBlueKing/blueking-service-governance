@@ -2100,6 +2100,7 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 连通测试: Connectivity Test
 连接成功: Connection succeeded
 连接失败: Connection failed
+无法连通北极星，请检查服务名、环境类型和 Token 后重试: Failed to connect to Polaris. Please check the service name, environment type and Token, then retry
 已成功连接到北极星服务 {0}: Successfully connected to Polaris service {0}
 请先选择北极星环境类型: Please select a Polaris environment
 请先完成连通测试并通过后再提交: Please complete the connectivity test successfully before submitting
