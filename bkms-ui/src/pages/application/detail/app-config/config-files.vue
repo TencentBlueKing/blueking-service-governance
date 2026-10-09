@@ -109,7 +109,7 @@
                       <FieldItem
                         class="min-h-[30px]"
                         :container-height="20"
-                        :field-value="$t('配置文件路径')"
+                        :field-value="$t('挂载路径')"
                       >
                         <template #value>
                           <OverflowTitle
@@ -179,7 +179,7 @@
                         />
                       </Form.FormItem>
                       <Form.FormItem
-                        :label="$t('配置文件路径')"
+                        :label="$t('挂载路径')"
                         property="mountDir"
                         required
                       >
@@ -187,16 +187,24 @@
                           v-model.trim="fileInfoFormData.mountDir"
                           clearable
                         />
+                        <div class="mt-[4px] text-[12px] text-[#979BA5]">
+                          {{
+                            $t('文件最终挂载到 {0}', [
+                              `${fileInfoFormData.mountDir || '/[路径]'}/${fileInfoFormData.name || '[文件名]'}`,
+                            ])
+                          }}
+                        </div>
                       </Form.FormItem>
                       <Form.FormItem
-                        v-if="!isFrameworkFile"
+                        class="mount-env-form-item"
                         :label="$t('挂载环境')"
                         property="mountedEnvNames"
-                        :required="fileInfoFormData.scope === 'envs'"
+                        :required="!isFrameworkFile && fileInfoFormData.scope === 'envs'"
                       >
                         <MountScopeField
                           v-model:env-names="fileInfoFormData.mountedEnvNames"
                           v-model:scope="fileInfoFormData.scope"
+                          :disabled="isFrameworkFile"
                           :env-list="envList"
                           @update:scope="handleFileInfoScopeChange"
                         />
@@ -205,11 +213,16 @@
                         v-if="!isFrameworkFile"
                         :label="$t('渲染环境变量')"
                       >
-                        <Switcher
-                          v-model="fileInfoFormData.enableEnvVarRender"
-                          size="small"
-                          theme="primary"
-                        />
+                        <div class="flex items-center">
+                          <Switcher
+                            v-model="fileInfoFormData.enableEnvVarRender"
+                            size="small"
+                            theme="primary"
+                          />
+                          <span class="ml-[10px] text-[12px] text-[#979BA5]">
+                            {{ $t('开启后，文件内容中的 {0} 会在下发前被渲染为实际值。', [envVarPlaceholder]) }}
+                          </span>
+                        </div>
                       </Form.FormItem>
                       <Form.FormItem class="!mb-0">
                         <Button
@@ -448,6 +461,7 @@
     <MountPreviewSideslider
       v-model:is-show="mountPreviewVisible"
       :app-id="appDetailStore.appID"
+      :def-order="mountPreviewDefOrder"
       :env-list="envList"
       :framework-file-name="currentFileSpec?.fileName || ''"
       :framework-file-path="currentFileSpec?.filePath || ''"
@@ -639,6 +653,15 @@
           : file.mountScope,
     })),
   );
+  // 挂载预览表格排序依据：与左侧文件列表保持一致，框架配置文件置顶
+  const mountPreviewDefOrder = computed(() =>
+    [
+      ...defs.value.filter(file => file.configKind === 'framework'),
+      ...defs.value.filter(file => file.configKind !== 'framework'),
+    ]
+      .map(file => file.id)
+      .filter(Boolean),
+  );
   // 框架文件 + 按环境配置 + 已选环境时才支持「差异内容/完整内容」切换
   const canShowFullContent = computed(
     () => isFrameworkFile.value && isIndependentConfig.value && !!currentEnv.value.name,
@@ -693,6 +716,8 @@
     set: value => void handleEnvConfigChange(value),
   });
 
+  const envVarPlaceholder = '${{ env.<Key> }}';
+
   const fileInfoFormData = reactive({
     enableEnvVarRender: false,
     mountDir: '',
@@ -704,7 +729,7 @@
   const fileInfoFormRules = {
     name: [
       {
-        message: t('文件名仅支持字母、数字、短横线和下划线，长度 1-64'),
+        message: t('文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.)'),
         trigger: 'blur',
         validator: (value: string) =>
           isFrameworkFile.value ||
@@ -734,7 +759,7 @@
   const adminIpWarning = ref<{ message: string; type: '' | 'invalid' | 'pod_ip' }>({ message: '', type: '' }); // admin.ip 校验告警（仅 trpc 框架文件）
 
   const viewDefaultEnvVarsProps = computed(() => {
-    if (isTafApp.value) return {};
+    if (!isFrameworkFile.value || isTafApp.value) return {};
     return {
       'copy-format': (key: string) => `\${${key}}`,
       ...(isTrpcApp.value
@@ -973,13 +998,13 @@
     editorErrMessages.value = errors.map(item => item.message);
   }
 
-  // 切换统一/按环境配置；改为统一配置会删除各环境单独配置，需二次确认
+  // 切换统一/按环境配置；关闭按环境配置会删除各环境单独配置，需二次确认
   async function handleEnvConfigChange(enabled: boolean) {
     if (enabled === isIndependentConfig.value || isModeSaving.value) return;
     if (!(await confirmDiscardChanges())) return;
-    discardCurrentEdits();
-    // 切为按环境配置直接生效；切回统一配置会删除各环境单独配置及其历史版本，需二次确认
+    // 退出编辑态放到确认之后：关闭按环境配置的二次确认弹窗被取消时，需保留当前编辑态与草稿
     const applyChange = async () => {
+      discardCurrentEdits();
       isModeSaving.value = true;
       try {
         await updateDef({ isUnifiedConfig: !enabled });
@@ -996,9 +1021,9 @@
       return;
     }
     InfoBox({
-      title: t('确认改为统一配置？'),
-      content: t('切换后各环境单独配置及其历史版本将被删除，所有环境使用当前默认配置。'),
-      confirmText: t('确认切换'),
+      title: t('确认关闭按环境配置？'),
+      content: t('关闭后，各环境单独修改的配置及历史版本将被删除，所有环境使用默认配置。'),
+      confirmText: t('确认关闭'),
       cancelText: t('取消'),
       onConfirm: applyChange,
     });
@@ -1108,13 +1133,14 @@
     const envName = currentEnv.value.name;
     if (!envName) return;
     if (!(await confirmDiscardChanges())) return;
-    discardCurrentEdits();
     InfoBox({
       title: t('恢复为默认配置？'),
       content: t('该环境的单独配置及历史版本将被删除，之后使用默认配置。'),
       confirmText: t('确定'),
       cancelText: t('取消'),
+      // 确认后才退出编辑态，取消时保留当前编辑态与草稿
       onConfirm: async () => {
+        discardCurrentEdits();
         await resetEnv(envName);
         await loadCurrentDetail(envName);
         Message({ theme: 'success', message: t('操作成功') });
@@ -1300,6 +1326,24 @@
 </script>
 
 <style lang="postcss" scoped>
+  .mount-env-form-item :deep(.bk-form-content) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mount-env-form-item :deep(.bk-radio-group) {
+    display: contents;
+  }
+
+  .mount-env-form-item :deep(.bk-form-error) {
+    position: static;
+    order: 1;
+  }
+
+  .mount-env-form-item :deep(.bk-radio-group > :last-child) {
+    order: 2;
+  }
+
   .editor-aside-layout > :deep(.bk-resize-layout-main) {
     padding-right: 16px;
   }

@@ -52,11 +52,11 @@
           <Input
             v-model.trim="formData.name"
             :maxlength="64"
-            :placeholder="$t('请输入由字母、数字、短横线或下划线组成的文件名')"
+            :placeholder="$t('请输入由数字、字母、下划线(_)、中划线(-)、点(.) 组成的文件名')"
           />
         </Form.FormItem>
         <Form.FormItem
-          :label="$t('配置文件路径')"
+          :label="$t('挂载路径')"
           property="mountDir"
           required
         >
@@ -88,7 +88,9 @@
               size="small"
               theme="primary"
             />
-            <span class="ml-[10px] text-[12px] text-[#979BA5]">{{ $t('开启后，环境变量占位符会在下发前被替换') }}</span>
+            <span class="ml-[10px] text-[12px] text-[#979BA5]">
+              {{ $t('开启后，文件内容中的 {0} 会在下发前被渲染为实际值。', [envVarPlaceholder]) }}
+            </span>
           </div>
         </Form.FormItem>
       </Form>
@@ -138,6 +140,8 @@
   }>();
   const { t } = useI18n();
 
+  const envVarPlaceholder = '${{ env.<Key> }}';
+
   const visible = computed({
     get: () => props.isShow,
     set: value => emit('update:isShow', value),
@@ -163,7 +167,7 @@
   const rules = {
     name: [
       {
-        message: t('文件名仅支持字母、数字、短横线和下划线，长度 1-64'),
+        message: t('文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.)'),
         trigger: 'blur',
         validator: (val: string) => BKMS_REGEX.appConfigFileNameRegex.test(val),
       },

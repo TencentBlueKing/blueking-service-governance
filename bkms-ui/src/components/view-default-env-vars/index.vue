@@ -83,7 +83,7 @@
           <TableColumn
             field="name"
             label="Key"
-            min-width="80"
+            min-width="140"
           >
             <template #default="{ row }">
               <div class="text-[12px] flex items-center gap-[5px]">

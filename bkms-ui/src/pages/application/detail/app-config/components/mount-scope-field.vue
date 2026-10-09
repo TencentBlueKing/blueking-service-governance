@@ -20,6 +20,7 @@
   <Radio.Group
     v-model="scopeModel"
     class="flex w-full flex-col"
+    :disabled="disabled"
   >
     <Radio label="all">{{ $t('全部环境') }}</Radio>
     <Radio
@@ -31,6 +32,7 @@
       v-show="scopeModel === 'envs'"
       v-model="envNamesModel"
       class="mt-[12px] w-full"
+      :disabled="disabled"
       :env-list="envList"
     />
   </Radio.Group>
@@ -48,14 +50,21 @@
   /** 挂载范围类型：全部环境 / 指定环境 */
   export type MountScope = ConfigFileMountScope;
 
-  const props = defineProps<{
-    /** 可选环境列表 */
-    envList: EnvOutput[];
-    /** 指定环境下已选中的环境名集合 */
-    envNames: string[];
-    /** 挂载范围 */
-    scope: MountScope;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      /** 是否禁用（如框架配置文件固定挂载全部环境） */
+      disabled?: boolean;
+      /** 可选环境列表 */
+      envList: EnvOutput[];
+      /** 指定环境下已选中的环境名集合 */
+      envNames: string[];
+      /** 挂载范围 */
+      scope: MountScope;
+    }>(),
+    {
+      disabled: false,
+    },
+  );
 
   const emit = defineEmits<{
     'update:envNames': [value: string[]];

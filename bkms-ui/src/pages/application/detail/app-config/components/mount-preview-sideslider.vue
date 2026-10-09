@@ -122,6 +122,8 @@
     defineProps<{
       /** 应用 ID */
       appId: string;
+      /** 文件列表顺序（def ID 数组，框架配置在前），用于对齐预览表格排序 */
+      defOrder?: string[];
       /** 可切换预览的环境列表 */
       envList: EnvOutput[];
       /** 框架配置文件名（用于展示兜底） */
@@ -130,7 +132,7 @@
       frameworkFilePath?: string;
       isShow: boolean;
     }>(),
-    { frameworkFileName: '', frameworkFilePath: '' },
+    { defOrder: () => [], frameworkFileName: '', frameworkFilePath: '' },
   );
   const emit = defineEmits<{ 'update:isShow': [value: boolean] }>();
   const { t } = useI18n();
@@ -143,8 +145,10 @@
   const loading = ref(false);
   /** 当前预览的环境名 */
   const previewEnvName = ref('');
-  /** 预览数据行 */
-  const rows = ref<PreviewRow[]>([]);
+  /** 接口返回的预览数据行（保持接口顺序） */
+  const rawRows = ref<PreviewRow[]>([]);
+  /** 预览数据行：与文件列表顺序保持一致，框架配置置顶 */
+  const rows = computed(() => sortRowsByListOrder(rawRows.value, props.defOrder));
   let previewRequestID = 0;
 
   /** 按环境拉取挂载预览数据；框架配置使用外部传入的路径/文件名兜底 */
@@ -154,7 +158,7 @@
     const requestedEnvName = previewEnvName.value;
     if (!requestedAppID || !visible.value) return;
     if (!previewEnvName.value) {
-      rows.value = [];
+      rawRows.value = [];
       return;
     }
     loading.value = true;
@@ -171,14 +175,14 @@
       ) {
         return;
       }
-      rows.value = (result.items || []).map(item => ({
+      rawRows.value = (result.items || []).map(item => ({
         ...item,
         mountDir:
           item.configKind === 'framework' ? props.frameworkFilePath || item.mountDir || '' : item.mountDir || '',
         name: item.configKind === 'framework' ? props.frameworkFileName || item.name || '' : item.name || '',
       }));
     } catch {
-      if (requestID === previewRequestID) rows.value = [];
+      if (requestID === previewRequestID) rawRows.value = [];
     } finally {
       if (requestID === previewRequestID) loading.value = false;
     }
@@ -214,6 +218,28 @@
   );
   // 切换环境时重新拉取预览
   watch(previewEnvName, fetchPreview);
+
+  /** 框架配置的排序优先级：framework 始终在 plain 之前，与文件列表分组一致 */
+  function kindRank(row: PreviewRow) {
+    return row.configKind === 'framework' ? 0 : 1;
+  }
+
+  /**
+   * 按文件列表顺序重排预览行：先按 defOrder 分桶再顺序拼接，单次遍历即可，无需在比较器里反复查表。
+   * defOrder 未覆盖的行保持接口返回顺序并排在末尾，此时按框架配置优先兜底。
+   */
+  function sortRowsByListOrder(items: PreviewRow[], defOrder: string[]) {
+    const buckets = new Map(defOrder.map(id => [id, [] as PreviewRow[]]));
+    const rest: PreviewRow[] = [];
+    items.forEach(row => {
+      const bucket = buckets.get(row.defId || '');
+      if (bucket) bucket.push(row);
+      else rest.push(row);
+    });
+    rest.sort((a, b) => kindRank(a) - kindRank(b));
+
+    return [...defOrder.flatMap(id => buckets.get(id) || []), ...rest];
+  }
 </script>
 
 <style lang="postcss" scoped>

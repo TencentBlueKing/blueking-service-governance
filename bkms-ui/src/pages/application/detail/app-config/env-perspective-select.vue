@@ -180,13 +180,6 @@
                   {{ isModified(env.name) ? $t('已修改') : $t('未修改') }}
                 </span>
               </div>
-              <!-- 空状态 -->
-              <div
-                v-if="group.envs.length === 0"
-                class="py-[16px] px-[12px] text-[12px] text-[#c4c6cc] text-center"
-              >
-                {{ searchKeyword.trim() ? $t('无匹配数据') : $t('暂无数据') }}
-              </div>
             </div>
           </div>
         </div>
@@ -267,7 +260,6 @@
 
   interface GroupItem {
     envs: GroupEnvItem[];
-    isDefault?: boolean;
     label: string;
     type: string;
   }
@@ -306,7 +298,6 @@
         type: 'default',
         label: '默认',
         envs: [{ name: '__default__', displayName: '默认配置', type: 'default' }],
-        isDefault: true,
       });
     }
 
@@ -382,8 +373,8 @@
       });
     });
 
-    // 过滤空分组（仅显示已修改环境时）
-    return groups.filter(group => group.isDefault || !onlyModified.value || group.envs.length > 0);
+    // 没有环境的分类不展示
+    return groups.filter(group => group.envs.length > 0);
   });
 
   function handlePopoverHidden() {

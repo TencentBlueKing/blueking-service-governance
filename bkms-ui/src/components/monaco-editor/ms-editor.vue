@@ -251,6 +251,9 @@
         enabled: false,
       },
       readOnly: props.readonly,
+      // 只读时同时给隐藏 textarea 加 DOM readonly 属性：仅靠 readOnly 时中文等输入法
+      // 仍会进入组合输入态，把未上屏的候选内容临时渲染到编辑器里（monaco 的已知行为）
+      domReadOnly: props.readonly,
       automaticLayout: true,
       scrollbar: {
         alwaysConsumeMouseWheel: false,
@@ -433,7 +436,8 @@
   watch(
     () => props.readonly,
     val => {
-      editor?.updateOptions({ readOnly: val });
+      // domReadOnly 需与 readOnly 同步，否则切换只读后输入法组合内容仍可能被临时展示
+      editor?.updateOptions({ readOnly: val, domReadOnly: val });
     },
   );
 
