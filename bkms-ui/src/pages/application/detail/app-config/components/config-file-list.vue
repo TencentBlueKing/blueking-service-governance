@@ -20,6 +20,16 @@
   <div class="flex h-full w-full flex-col bg-[#fff]">
     <div class="flex shrink-0 items-center border-b border-[#EAEBF0] px-[12px] py-[16px]">
       <span class="text-[14px] font-bold leading-[22px] text-[#313238]">{{ $t('文件列表') }}</span>
+      <a
+        v-bk-tooltips="$t('点击查看配置文件说明')"
+        :aria-label="$t('点击查看配置文件说明')"
+        class="ml-[6px] flex items-center text-[16px] text-[#3A84FF]"
+        :href="configFileDocUrl"
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        <InfoLine />
+      </a>
     </div>
     <div class="flex flex-1 flex-col overflow-auto py-[8px]">
       <div class="px-[12px] py-[6px] text-[12px] text-[#979BA5]">{{ $t('框架配置文件') }}</div>
@@ -78,7 +88,8 @@
   import { computed } from 'vue';
 
   import { Button, Exception } from 'bkui-vue';
-  import { Plus } from 'bkui-vue/lib/icon';
+  import { InfoLine, Plus } from 'bkui-vue/lib/icon';
+  import { DOC_LINKS } from '~/common/const';
   import FileItem from '~/pages/application/detail/app-config/components/config-file-list-item.vue';
 
   import type { ConfigFileListItem } from '~/pages/application/detail/app-config/use-config-file-defs';
@@ -100,4 +111,5 @@
 
   const frameworkFiles = computed(() => props.files.filter(file => file.configKind === 'framework'));
   const plainFiles = computed(() => props.files.filter(file => file.configKind === 'plain'));
+  const configFileDocUrl = `${import.meta.env.BK_DOC_URL}${DOC_LINKS.CONFIG_FILE_GUIDE}`;
 </script>

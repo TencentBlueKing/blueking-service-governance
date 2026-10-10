@@ -19,7 +19,9 @@
 <template>
   <Sideslider
     v-model:is-show="visible"
-    :width="720"
+    :before-close="handleBeforeClose"
+    render-directive="if"
+    :width="960"
   >
     <template #header>
       <DividerHeader
@@ -70,6 +72,7 @@
           </div>
         </Form.FormItem>
         <Form.FormItem
+          class="mount-env-form-item"
           :label="$t('挂载环境')"
           property="mountedEnvNames"
           :required="formData.scope === 'envs'"
@@ -104,7 +107,7 @@
       >
       <Button
         class="ml-[8px]"
-        @click="visible = false"
+        @click="handleCancel"
         >{{ $t('取消') }}</Button
       >
     </template>
@@ -117,6 +120,7 @@
   import { Button, Form, Input, Sideslider, Switcher } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { BKMS_REGEX } from '~/common/const';
+  import useLeaveConfirm from '~/composables/use-leave-confirm';
   import MountScopeField from '~/pages/application/detail/app-config/components/mount-scope-field.vue';
 
   import type { EnvOutput } from '~/@types/v1/env';
@@ -159,6 +163,17 @@
     /** 挂载范围 */
     scope: 'all' as MountScope,
   });
+  const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formData);
+
+  function handleBeforeClose() {
+    return confirmBox();
+  }
+
+  defineExpose({ confirmLeave: handleBeforeClose });
+
+  async function handleCancel() {
+    if (await handleBeforeClose()) visible.value = false;
+  }
 
   /** 表单 ref */
   const formRef = ref<InstanceType<typeof Form> | null>(null);
@@ -174,15 +189,16 @@
     ],
     mountDir: [
       {
-        message: t('配置文件路径必须以 / 开头，且不能为 / 或以 / 结尾'),
+        message: t('挂载路径必须以 / 开头，且不能为 / 或以 / 结尾'),
         trigger: 'blur',
         validator: (val: string) => BKMS_REGEX.appConfigMountDirRegex.test(val),
       },
     ],
     mountedEnvNames: [
       {
-        message: t('请至少选择一个挂载环境'),
-        trigger: 'change',
+        required: true,
+        message: t('挂载环境不能为空'),
+        trigger: 'blur',
         validator: () => formData.scope !== 'envs' || formData.mountedEnvNames.length > 0,
       },
     ],
@@ -214,19 +230,39 @@
     () => props.isShow,
     value => {
       if (!value) return;
-      Object.assign(formData, {
-        enableEnvVarRender: false,
-        mountDir: '',
-        mountedEnvNames: [],
-        name: '',
-        scope: 'all',
+      withPausedWatch(() => {
+        Object.assign(formData, {
+          enableEnvVarRender: false,
+          mountDir: '',
+          mountedEnvNames: [],
+          name: '',
+          scope: 'all',
+        });
       });
-      formRef.value?.clearValidate();
+      forceCleanDirtyTag();
     },
   );
 </script>
 
 <style lang="postcss" scoped>
+  .mount-env-form-item :deep(.bk-form-content) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mount-env-form-item :deep(.bk-radio-group) {
+    display: contents;
+  }
+
+  .mount-env-form-item :deep(.bk-form-error) {
+    position: static;
+    order: 1;
+  }
+
+  .mount-env-form-item :deep(.bk-radio-group > :last-child) {
+    order: 2;
+  }
+
   :deep(.bk-sideslider-footer) {
     margin-top: 0;
   }

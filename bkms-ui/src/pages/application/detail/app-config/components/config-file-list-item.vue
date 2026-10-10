@@ -63,7 +63,31 @@
       {{ file.displayPath || '--' }}
     </OverflowTitle>
     <div class="mt-[4px] flex flex-wrap items-center gap-[4px]">
-      <Tag size="small">{{ scopeLabel }}</Tag>
+      <Popover
+        :disabled="isAllScope"
+        placement="top"
+        :popover-delay="[100, 0]"
+        theme="dark"
+      >
+        <Tag
+          size="small"
+          :theme="isAllScope ? 'default' : 'warning'"
+          >{{ scopeLabel }}</Tag
+        >
+        <template #content>
+          <div class="max-w-[420px] text-[12px] text-[#313238]">
+            <div class="flex flex-wrap gap-[4px]">
+              <Tag
+                v-for="(envName, index) in file.mountedEnvNames"
+                :key="envName"
+                size="small"
+              >
+                {{ file.mountedEnvDisplayNames[index] || envName }}
+              </Tag>
+            </div>
+          </div>
+        </template>
+      </Popover>
       <Tag
         v-if="!file.isUnifiedConfig"
         size="small"
@@ -77,7 +101,7 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
 
-  import { OverflowTitle, PopConfirm, Tag } from 'bkui-vue';
+  import { OverflowTitle, PopConfirm, Popover, Tag } from 'bkui-vue';
   import { Del } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
 
@@ -102,8 +126,9 @@
 
   const { t } = useI18n();
   const deleting = ref(false);
+  const isAllScope = computed(() => props.file.configKind === 'framework' || props.file.mountScope === 'all');
   const scopeLabel = computed(() => {
-    if (props.file.configKind === 'framework' || props.file.mountScope === 'all') return t('全部环境');
+    if (isAllScope.value) return t('所有环境');
     return t('指定 {0} 个', [props.file.mountedEnvNames.length]);
   });
 

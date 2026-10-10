@@ -61,6 +61,8 @@ export type ConfigFileKind = 'framework' | 'plain';
 export interface ConfigFileListItem extends ConfigFileDefView {
   displayName: string;
   displayPath: string;
+  /** 挂载环境的展示名称，与 mountedEnvNames 一一对应，仅用于界面展示 */
+  mountedEnvDisplayNames: string[];
 }
 export type ConfigFileMountScope = 'all' | 'envs';
 

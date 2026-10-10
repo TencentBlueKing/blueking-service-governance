@@ -102,9 +102,11 @@
                         :container-height="20"
                         :field-value="isFrameworkFile ? $t('框架配置文件') : $t('文件名')"
                       >
-                        <template #value
-                          ><span class="text-[12px]">{{ activeDisplayName || '--' }}</span></template
-                        >
+                        <template #value>
+                          <span class="text-[12px] text-[#313238]">
+                            {{ activeDisplayName || '--' }}
+                          </span>
+                        </template>
                       </FieldItem>
                       <FieldItem
                         class="min-h-[30px]"
@@ -113,7 +115,7 @@
                       >
                         <template #value>
                           <OverflowTitle
-                            class="max-w-[300px] text-[12px]"
+                            class="max-w-[300px] text-[12px] text-[#313238]"
                             type="tips"
                           >
                             {{ activeDisplayPath || '--' }}
@@ -128,9 +130,9 @@
                         <template #value>
                           <span
                             v-if="isFrameworkFile || activeMountScope === 'all'"
-                            class="text-[12px]"
+                            class="text-[12px] text-[#313238]"
                           >
-                            {{ $t('全部环境') }}
+                            {{ $t('所有环境') }}
                           </span>
                           <div
                             v-else
@@ -234,7 +236,7 @@
                         </Button>
                         <Button
                           class="ml-[8px]"
-                          @click="handleFileInfoCancel"
+                          @click="handleFileInfoCancelWithConfirm"
                           >{{ $t('取消') }}</Button
                         >
                       </Form.FormItem>
@@ -249,7 +251,9 @@
                   :show-edit-icon="!isEditing && !isFileInfoEditing && effectiveEditableContentField !== 'none'"
                   @edit="handleStartEdit"
                 >
-                  <template #title>{{ $t('文件内容') }}</template>
+                  <template #title>
+                    <span class="text-[#313238]">{{ $t('文件内容') }}</span>
+                  </template>
                   <template #action>
                     <div class="flex items-center">
                       <IconTextButton
@@ -299,9 +303,12 @@
                     <ResizeLayout
                       :border="false"
                       class="editor-aside-layout min-h-0 flex-1"
-                      :initial-divide="showVariables ? '50%' : 0"
+                      collapsible
+                      initial-divide="50%"
+                      :is-collapsed="!showVariables"
                       placement="right"
                     >
+                      <template #collapse-trigger />
                       <template #aside>
                         <ViewDefaultEnvVars
                           v-if="showVariables"
@@ -356,25 +363,33 @@
                                       <EnvPerspectiveSelect
                                         class="!h-[26px] !min-w-[240px] shrink-0"
                                         :env-list="perspectiveEnvList"
+                                        :filter-label="
+                                          isFrameworkFile ? $t('仅显示有差异项的环境') : $t('仅显示已单独配置的环境')
+                                        "
                                         :label="$t('环境')"
                                         :model-value="currentEnv.name || '__default__'"
                                         :modified-env-names="modifiedEnvNames"
+                                        :status-labels="
+                                          isFrameworkFile
+                                            ? { active: $t('有差异项'), inactive: $t('无差异项') }
+                                            : { active: $t('已单独配置'), inactive: $t('跟随默认') }
+                                        "
                                         theme="dark"
                                         @change="handleEnvSelectChange"
                                       />
-                                      <OverflowTitle
-                                        v-if="editorContentHint"
-                                        :key="editorContentHint"
-                                        class="ml-[8px] min-w-0 text-[12px] text-[#979ba5]"
-                                        resizeable
-                                        type="tips"
-                                      >
-                                        {{ editorContentHint }}
-                                      </OverflowTitle>
                                     </template>
+                                    <OverflowTitle
+                                      v-if="editorContentHint"
+                                      :key="editorContentHint"
+                                      class="ml-[8px] min-w-0 text-[12px] text-[#979ba5]"
+                                      resizeable
+                                      type="tips"
+                                    >
+                                      {{ editorContentHint }}
+                                    </OverflowTitle>
                                     <Button
-                                      v-if="canResetCurrentEnv"
-                                      class="ml-[8px] shrink-0 !text-[12px]"
+                                      v-if="isEditing && canResetCurrentEnv"
+                                      class="ml-[12px] shrink-0 !text-[12px]"
                                       text
                                       theme="primary"
                                       @click="handleResetCurrentEnv"
@@ -441,7 +456,7 @@
                       >
                         {{ $t('保存') }}
                       </Button>
-                      <Button @click="handleCancelEdit">{{ $t('取消') }}</Button>
+                      <Button @click="handleCancelEditWithConfirm">{{ $t('取消') }}</Button>
                     </div>
                   </div>
                 </BkmsContent>
@@ -453,6 +468,7 @@
     </ResizeLayout>
 
     <CreateConfigFileSideslider
+      ref="createSidesliderRef"
       v-model:is-show="showCreateSideslider"
       :env-list="envList"
       :loading="isCreateSubmitting"
@@ -463,6 +479,7 @@
       :app-id="appDetailStore.appID"
       :def-order="mountPreviewDefOrder"
       :env-list="envList"
+      :files="fileListItems"
       :framework-file-name="currentFileSpec?.fileName || ''"
       :framework-file-path="currentFileSpec?.filePath || ''"
     />
@@ -508,6 +525,7 @@
   } from 'bkui-vue';
   import { cloneDeep, set } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
+  import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import { parse as parseYaml } from 'yaml';
   import { AppConfigFilesService, EnvService, EnvvarsService } from '~/api/modules/v1';
   import { BKMS_REGEX } from '~/common/const';
@@ -588,6 +606,7 @@
 
   // ---- 弹层与面板显隐 ----
   const showCreateSideslider = ref(false); // 新建配置文件侧滑
+  const createSidesliderRef = ref<InstanceType<typeof CreateConfigFileSideslider> | null>(null);
   const showVersionListSideslider = ref(false); // 版本列表侧滑
   const showSaveVersionDialog = ref(false);
   const showClearFileContentDialog = ref(false); // 保存空内容确认弹窗
@@ -638,12 +657,21 @@
     if (isFrameworkFile.value || activeMountScope.value === 'all') return envList.value;
     return mountedEnvList.value;
   });
+  // 环境名 -> 展示名映射，供仅持有环境名的场景（如文件列表）渲染可读名称
+  const envDisplayNameMap = computed(() => {
+    const map: Record<string, string> = {};
+    envList.value.forEach(env => {
+      if (env.name) map[env.name] = env.displayName || env.name;
+    });
+    return map;
+  });
   // 文件列表展示项：框架文件用 spec 的文件名/路径
   const fileListItems = computed<ConfigFileListItem[]>(() =>
     defs.value.map(file => ({
       ...file,
       displayName: file.configKind === 'framework' ? currentFileSpec.value?.fileName || file.name : file.name,
       displayPath: file.configKind === 'framework' ? currentFileSpec.value?.filePath || file.mountDir : file.mountDir,
+      mountedEnvDisplayNames: file.mountedEnvNames.map(name => envDisplayNameMap.value[name] || name),
       mountScope:
         file.configKind === 'framework' ||
         (file.mountScope === 'envs' &&
@@ -672,10 +700,18 @@
   );
   // 编辑器顶部提示文案
   const editorContentHint = computed(() => {
-    if (!isFrameworkFile.value || !isIndependentConfig.value) return '';
-    if (!currentEnv.value.name) return t('所有环境的基准配置，修改后对所有环境生效。');
-    if (showFullContent.value) return t('合并后的完整内容，仅供查看');
-    return t('仅定义差异项，与默认配置合并后生成完整配置。');
+    if (!isIndependentConfig.value) return '';
+    if (!currentEnv.value.name) {
+      return isFrameworkFile.value
+        ? t('所有环境的基准配置，修改后对所有环境生效。')
+        : t('默认配置，仅对未单独配置的环境生效');
+    }
+    if (!isFrameworkFile.value) {
+      return detail.value?.hasEnvInstance
+        ? t('该环境已单独配置，不随默认配置更新')
+        : t('修改后该环境将独立配置，需填写完整内容');
+    }
+    return showFullContent.value ? t('合并后的完整内容，仅供查看') : t('仅定义差异项，与默认配置合并后生成完整配置。');
   });
   // 框架文件 + 按环境配置 + 已选环境且无独立实例时，编辑的是 overlayContent（差异内容）
   const isFrameworkEnvWithoutInstance = computed(
@@ -740,7 +776,7 @@
     ],
     mountDir: [
       {
-        message: t('配置文件路径必须以 / 开头，且不能为 / 或以 / 结尾'),
+        message: t('挂载路径必须以 / 开头，且不能为 / 或以 / 结尾'),
         trigger: 'blur',
         validator: (value: string) => isFrameworkFile.value || BKMS_REGEX.appConfigMountDirRegex.test(value),
       },
@@ -827,6 +863,19 @@
     return await confirmBox(false, { validates: [() => false] });
   }
 
+  async function confirmPageLeave() {
+    if (showCreateSideslider.value && createSidesliderRef.value && !(await createSidesliderRef.value.confirmLeave())) {
+      return false;
+    }
+    return confirmDiscardChanges();
+  }
+
+  onBeforeRouteLeave(confirmPageLeave);
+  onBeforeRouteUpdate((to, from) => {
+    if (to.path !== from.path || to.query.activeTab !== from.query.activeTab) return confirmPageLeave();
+    return true;
+  });
+
   function discardCurrentEdits() {
     if (isEditing.value) handleCancelEdit();
     isFileInfoEditing.value = false;
@@ -903,6 +952,10 @@
     showVariables.value = false;
     msEditorRef.value?.setValue(originalContent.value);
     checkAdminIp(originalContent.value);
+  }
+
+  async function handleCancelEditWithConfirm() {
+    if (await confirmDiscardChanges()) handleCancelEdit();
   }
 
   function handleClearFileContentConfirm(action: ClearFileContentAction) {
@@ -1033,17 +1086,25 @@
   async function handleEnvSelectChange(envName: string) {
     const realName = envName === '__default__' ? '' : envName;
     if (realName === currentEnv.value.name || !(await confirmDiscardChanges())) return;
+    // 切换环境时保留文件内容的编辑态：仅丢弃当前环境草稿，不退出编辑
+    const wasEditing = isEditing.value;
     discardCurrentEdits();
     currentEnv.value = realName
       ? perspectiveEnvList.value.find(env => env.name === realName) || { ...defaultEnv.value }
       : { ...defaultEnv.value };
     await loadCurrentDetail(realName);
+    // 目标环境存在可编辑内容时保持编辑态，否则回落到查看态
+    isEditing.value = wasEditing && effectiveEditableContentField.value !== 'none';
     if (showVariables.value && realName) viewDefaultEnvVarsRef.value?.setCurEnv(realName);
   }
 
   function handleFileInfoCancel() {
     isFileInfoEditing.value = false;
     fileInfoFormRef.value?.clearValidate();
+  }
+
+  async function handleFileInfoCancelWithConfirm() {
+    if (await confirmDiscardChanges()) handleFileInfoCancel();
   }
 
   // 进入「文件信息」编辑态并回填表单
@@ -1344,8 +1405,12 @@
     order: 2;
   }
 
-  .editor-aside-layout > :deep(.bk-resize-layout-main) {
+  .editor-aside-layout:not(.bk-resize-layout-collapsed) > :deep(.bk-resize-layout-main) {
     padding-right: 16px;
+  }
+
+  .editor-aside-layout.bk-resize-layout-collapsed > :deep(.bk-resize-layout-aside) {
+    border-left: 0;
   }
 
   .editor-aside-layout :deep(.bk-resize-layout-aside-content) {

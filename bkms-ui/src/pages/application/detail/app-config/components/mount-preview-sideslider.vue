@@ -40,7 +40,7 @@
         type="capsule"
       >
         <Radio.Button
-          v-for="env in envList"
+          v-for="env in sortedEnvList"
           :key="env.name"
           :label="env.name"
         >
@@ -80,17 +80,17 @@
           min-width="180"
         >
           <template #default="{ row }">
-            {{ getContentSourceLabel(row) }}
+            <span :class="{ 'text-[#F59500]': row.contentSource === 'overlay' || row.contentSource === 'overwrite' }">
+              {{ getContentSourceLabel(row) }}
+            </span>
           </template>
         </TableColumn>
         <TableColumn
-          :label="$t('环境独立实例')"
+          :label="$t('挂载环境')"
           :width="150"
         >
           <template #default="{ row }">
-            <Tag :theme="row.hasEnvFile ? 'warning' : 'default'">
-              {{ row.hasEnvFile ? $t('已创建') : $t('使用默认配置') }}
-            </Tag>
+            {{ getMountScopeLabel(row) }}
           </template>
         </TableColumn>
       </Table>
@@ -108,9 +108,11 @@
   import { Radio, Sideslider, Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { AppConfigFileDefsService } from '~/api/modules/v1';
+  import { sortEnvsByType } from '~/composables/use-env-manager';
 
   import type { MountPreviewItemObj } from '~/@types/v1/app-config-file-defs';
   import type { EnvOutput } from '~/@types/v1/env';
+  import type { ConfigFileListItem } from '~/pages/application/detail/app-config/use-config-file-defs';
 
   /** 预览表格行：补充框架配置的展示字段 */
   interface PreviewRow extends MountPreviewItemObj {
@@ -126,6 +128,8 @@
       defOrder?: string[];
       /** 可切换预览的环境列表 */
       envList: EnvOutput[];
+      /** 文件列表中的挂载范围 */
+      files: ConfigFileListItem[];
       /** 框架配置文件名（用于展示兜底） */
       frameworkFileName?: string;
       /** 框架配置挂载路径 */
@@ -145,6 +149,7 @@
   const loading = ref(false);
   /** 当前预览的环境名 */
   const previewEnvName = ref('');
+  const sortedEnvList = computed(() => sortEnvsByType(props.envList));
   /** 接口返回的预览数据行（保持接口顺序） */
   const rawRows = ref<PreviewRow[]>([]);
   /** 预览数据行：与文件列表顺序保持一致，框架配置置顶 */
@@ -191,9 +196,16 @@
   /** 根据内容来源类型返回展示文案 */
   function getContentSourceLabel(row: PreviewRow) {
     if (row.contentSource === 'overlay') return t('默认配置 + 本环境差异项');
-    if (row.contentSource === 'overwrite') return t('本环境独立内容');
+    if (row.contentSource === 'overwrite') return t('本环境单独配置');
     if (row.contentSource === 'normal') return t('默认配置');
     return row.contentSource || '--';
+  }
+
+  function getMountScopeLabel(row: PreviewRow) {
+    const scope = props.files.find(file => file.id === row.defId)?.mountScope;
+    if (scope === 'all') return t('全部环境');
+    if (scope === 'envs') return t('指定环境');
+    return '--';
   }
 
   // 打开抽屉或环境列表变化时，若当前环境已不在列表中则回退到第一个环境，并重新拉取数据。
@@ -205,8 +217,8 @@
         loading.value = false;
         return;
       }
-      if (!props.envList.some(env => env.name === previewEnvName.value)) {
-        const nextEnvName = props.envList[0]?.name || '';
+      if (!sortedEnvList.value.some(env => env.name === previewEnvName.value)) {
+        const nextEnvName = sortedEnvList.value[0]?.name || '';
         if (nextEnvName !== previewEnvName.value) {
           previewEnvName.value = nextEnvName;
           return;

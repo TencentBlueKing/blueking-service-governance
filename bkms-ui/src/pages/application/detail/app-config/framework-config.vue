@@ -185,8 +185,10 @@
                   <!-- 环境配置下拉列表 -->
                   <EnvPerspectiveSelect
                     :env-list="envList"
+                    :filter-label="$t('仅显示有差异项的环境')"
                     :model-value="currentEnv.name || '__default__'"
                     :modified-env-names="modifiedEnvNames"
+                    :status-labels="{ active: $t('有差异项'), inactive: $t('无差异项') }"
                     @change="handleEnvSelectChange"
                   />
                 </div>

@@ -88,7 +88,7 @@
       </div>
       <AngleDownLine
         :class="[
-          'mr-[10px] transition-transform duration-200',
+          'text-[10px] mr-[10px] transition-transform duration-200',
           isDarkTheme ? 'text-[#C4C6CC]' : 'text-[#979BA5]',
           { 'rotate-180': isPopoverVisible },
         ]"
@@ -119,7 +119,7 @@
               v-model="onlyModified"
               class="shrink-0"
             >
-              <span class="text-[12px] text-[#63656E]">{{ $t('仅显示已修改环境') }}</span>
+              <span class="text-[12px] text-[#63656E]">{{ displayFilterLabel }}</span>
             </Checkbox>
           </div>
         </div>
@@ -135,13 +135,14 @@
             class="flex-1 min-w-0"
           >
             <!-- 分组标题 -->
-            <div class="h-[32px] flex items-center px-[8px] bg-[#f5f7fa]">
-              <Tag :class="envTypeTagClassMap[group.type] || ''">
-                {{ group.label }}
-              </Tag>
+            <div
+              class="h-[32px] flex items-center px-[8px] bg-[#f5f7fa] text-[12px] font-bold text-[#63656E]"
+              :class="envTypeTagClassMap[group.type] || ''"
+            >
+              {{ group.label }}
             </div>
             <!-- 环境项列表 -->
-            <div class="env-list-scroll max-h-[224px] overflow-y-auto">
+            <div class="env-list-scroll max-h-[420px] overflow-y-auto">
               <div
                 v-for="env in group.envs"
                 :key="env.name"
@@ -172,18 +173,18 @@
                     {{ $t('特性') }}
                   </Tag>
                 </div>
-                <!-- 已修改/未修改状态（默认配置不显示） -->
+                <!-- 环境状态（默认配置不显示） -->
                 <span
                   v-if="env.type !== 'default'"
                   :class="['text-[10px] shrink-0', isModified(env.name) ? 'text-[#F8B64F]' : 'text-[#C4C6CC]']"
                 >
-                  {{ isModified(env.name) ? $t('已修改') : $t('未修改') }}
+                  {{ isModified(env.name) ? displayStatusLabels.active : displayStatusLabels.inactive }}
                 </span>
               </div>
             </div>
           </div>
         </div>
-        <!-- 全局空状态：仅显示已修改环境但无匹配数据 -->
+        <!-- 全局空状态：筛选后无匹配数据 -->
         <div
           v-else
           class="py-[16px] px-[12px] text-[12px] text-[#c4c6cc] text-center"
@@ -217,12 +218,16 @@
   interface IProps {
     /** 环境列表（不含默认配置） */
     envList: EnvOutput[];
+    /** 右上角筛选文案 */
+    filterLabel?: string;
     /** 左侧文案，默认为「环境视角」 */
     label?: string;
     /** 选中的值（环境 name，默认配置传 '__default__' 或空字符串） */
     modelValue?: string;
     /** 已修改的环境 name 列表 */
     modifiedEnvNames?: string[];
+    /** 环境状态文案 */
+    statusLabels?: { active: string; inactive: string };
     /** 主题：light 浅色（默认），dark 深色（用于编辑器标题栏等深色背景） */
     theme?: 'dark' | 'light';
   }
@@ -239,7 +244,9 @@
   const emits = defineEmits<Emits>();
 
   /** 左侧文案，未传入时默认为「环境视角」 */
-  const displayLabel = computed(() => props.label ?? t('环境视角'));
+  const displayLabel = computed(() => props.label ?? t('环境'));
+  const displayFilterLabel = computed(() => props.filterLabel ?? t('仅显示已修改环境'));
+  const displayStatusLabels = computed(() => props.statusLabels ?? { active: t('已修改'), inactive: t('未修改') });
 
   const isDarkTheme = computed(() => props.theme === 'dark');
 

@@ -30,6 +30,8 @@ export const ENV_DETAIL_MENUS = ['basicInfo', 'observability', 'setting'] as con
 export type EnvDetailMenu = (typeof ENV_DETAIL_MENUS)[number];
 export const DEFAULT_ENV_DETAIL_MENU: EnvDetailMenu = 'basicInfo';
 
+const envTypeDisplayOrder = ['production', 'staging', 'gray', 'canary', 'test', 'qa', 'development'];
+
 /** listAppEnvs 可能携带来源环境对象，用于兼容不同空间的特性环境返回结构。 */
 export type EnvWithSource = EnvOutput & {
   sourceEnv?: FeatureEnvSourceOutput;
@@ -131,6 +133,16 @@ export function getFeatureSourceEnv(env: EnvOutput, standardEnvMap: StandardEnvM
   if (featureEnv.sourceEnv?.displayName) {
     return standardEnvMap.byDisplayName.get(featureEnv.sourceEnv.displayName);
   }
+}
+
+/** 按环境类型排列现有环境；特性环境排在最后，同类型保持原顺序。 */
+export function sortEnvsByType(envs: EnvOutput[]): EnvOutput[] {
+  const rank = (env: EnvOutput) => {
+    if (env.kind === 'feature') return envTypeDisplayOrder.length + 1;
+    const index = envTypeDisplayOrder.indexOf(env.type?.toLowerCase() || '');
+    return index === -1 ? envTypeDisplayOrder.length : index;
+  };
+  return [...envs].sort((a, b) => rank(a) - rank(b));
 }
 
 export default function useEnvManager() {
