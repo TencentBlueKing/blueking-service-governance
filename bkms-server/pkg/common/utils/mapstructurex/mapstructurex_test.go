@@ -59,4 +59,79 @@ var _ = Describe("Test Decode", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(output.ID).To(Equal(bonsID.Hex()))
 	})
+
+	It("test BsonDocToMapHook with nested documents", func() {
+		type contact struct {
+			Email string `mapstructure:"email"`
+			Phone string `mapstructure:"phone"`
+		}
+		type owner struct {
+			Name    string  `mapstructure:"name"`
+			Contact contact `mapstructure:"contact"`
+		}
+		type service struct {
+			Name string   `mapstructure:"name"`
+			Port int      `mapstructure:"port"`
+			Tags []string `mapstructure:"tags"`
+		}
+		type app struct {
+			Name     string            `mapstructure:"name"`
+			Owner    *owner            `mapstructure:"owner"`
+			Services []service         `mapstructure:"services"`
+			Labels   map[string]string `mapstructure:"labels"`
+			Extra    map[string]any    `mapstructure:"extra"`
+		}
+
+		// 模拟从 MongoDB 读回的 map[string]any：嵌套文档为 bson.D，数组为 bson.A
+		input := map[string]any{
+			"name": "demo",
+			"owner": bson.D{
+				{Key: "name", Value: "alice"},
+				{Key: "contact", Value: bson.D{
+					{Key: "email", Value: "alice@example.com"},
+					{Key: "phone", Value: "123456"},
+				}},
+			},
+			"services": bson.A{
+				bson.D{
+					{Key: "name", Value: "api"},
+					{Key: "port", Value: int32(8080)},
+					{Key: "tags", Value: bson.A{"web", "http"}},
+				},
+				bson.D{
+					{Key: "name", Value: "worker"},
+					{Key: "port", Value: int32(9090)},
+				},
+			},
+			"labels": bson.D{
+				{Key: "env", Value: "prod"},
+				{Key: "team", Value: "infra"},
+			},
+			"extra": bson.D{
+				{Key: "replicas", Value: int32(3)},
+				{Key: "debug", Value: true},
+			},
+		}
+
+		var output app
+		err := DecodeWithHooks(input, &output, BsonDocToMapHook())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(output).To(Equal(app{
+			Name: "demo",
+			Owner: &owner{
+				Name:    "alice",
+				Contact: contact{Email: "alice@example.com", Phone: "123456"},
+			},
+			Services: []service{
+				{Name: "api", Port: 8080, Tags: []string{"web", "http"}},
+				{Name: "worker", Port: 9090},
+			},
+			Labels: map[string]string{"env": "prod", "team": "infra"},
+			Extra:  map[string]any{"replicas": int32(3), "debug": true},
+		}))
+
+		// 不使用 hook 时，bson.D 会被当作 slice，无法写入 struct 字段
+		err = DecodeWithHooks(input, &app{})
+		Expect(err).To(HaveOccurred())
+	})
 })
