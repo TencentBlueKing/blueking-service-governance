@@ -56,9 +56,13 @@ export function revisionRequestFields(showSource: boolean, type: RevisionType, v
   };
 }
 
-/** 溢出提示与单元格一致：修订（分支名 / Tag / CommitID）加短哈希 */
+/** CommitID 构建只保留一次短哈希，分支 / Tag 仍是「修订 + 短哈希」 */
 export function sourceMaterialText(material: SourceRevision) {
-  // commit 还没回写时不要用修订名顶短哈希，否则提示会变成 "main main"
+  if (material.revisionType === 'commit') {
+    return (material.commitID || material.revision).slice(0, 8);
+  }
+
+  // commit 还没回写时不要用分支名顶短哈希，否则提示会变成 "main main"
   if (!material.commitID) {
     return material.revision;
   }

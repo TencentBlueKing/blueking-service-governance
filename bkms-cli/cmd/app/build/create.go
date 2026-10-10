@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/build"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 )
 
@@ -51,13 +50,13 @@ Provide exactly one of --branch, --tag, or --commit, plus --image-tag.`,
   bkms-cli app build create --app demo --commit a1b2c3d --image-tag v1.0.0`,
 		// 先校验代码来源，再解析应用。非法 CommitID 或不满足三选一时不发任何请求
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if _, _, err := build.ResolveCodeRevision(branch, tag, commit); err != nil {
+			if _, _, err := ResolveCodeRevision(branch, tag, commit); err != nil {
 				return err
 			}
 			return cmdutil.ResolveAppPreRunE(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			revisionType, revision, err := build.ResolveCodeRevision(branch, tag, commit)
+			revisionType, revision, err := ResolveCodeRevision(branch, tag, commit)
 			if err != nil {
 				return err
 			}

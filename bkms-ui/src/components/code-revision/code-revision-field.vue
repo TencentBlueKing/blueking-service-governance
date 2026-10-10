@@ -33,7 +33,6 @@
     </Radio.Group>
   </Form.FormItem>
   <Form.FormItem
-    ref="revisionFormItemRef"
     :description="description"
     :label="t(fieldLabelKey)"
     :property="property"
@@ -44,15 +43,14 @@
     <Input
       v-if="showSource && revisionType === 'commit'"
       ref="commitInputRef"
-      v-model.trim="commitModel"
       :class="controlClass"
       clearable
       :disabled="disabled"
+      :model-value="modelValue"
+      @update:model-value="handleCommitInput"
     />
-    <!-- 按来源重建下拉，避免切到 Tag 后还拿着上一次分支名做过滤，列表被滤空 -->
     <RepoRefSelect
       v-else
-      :key="repoGroup || 'mixed'"
       ref="repoRef"
       :class="controlClass"
       :disabled="disabled"
@@ -118,8 +116,6 @@
   const { t } = useI18n();
   const repoRef = ref<InstanceType<typeof RepoRefSelect>>();
   const commitInputRef = ref<InstanceType<typeof Input>>();
-  /** 修订表单项：来源切换后清掉带着旧字段名的错误，例如切回分支仍显示「代码 Tag不能为空」 */
-  const revisionFormItemRef = ref<{ clearValidate: () => void }>();
 
   const fieldLabelKey = computed(() => (props.showSource ? revisionFieldLabel(props.revisionType) : '代码分支'));
   // 流水线模式不收窄列表，仍是原来的分支 / Tag 混合下拉
@@ -160,24 +156,6 @@
     emit('confirm');
   }, 500);
 
-  // 模板使用 v-model.trim。bkui Input 不读取 modelModifiers，首尾空白在这里再去掉一次
-  const commitModel = computed({
-    get: () => props.modelValue,
-    set: (value: string) => {
-      const next = value.trim();
-      emit('update:modelValue', next);
-
-      // 清空后立刻按「不含修订」重算，不等 0.5 秒
-      if (!next) {
-        debouncedCommitConfirm.cancel();
-        emit('confirm');
-        return;
-      }
-
-      debouncedCommitConfirm();
-    },
-  });
-
   onBeforeUnmount(() => {
     debouncedCommitConfirm.cancel();
   });
@@ -196,7 +174,7 @@
 
   /**
    * 切到 Tag / CommitID 时清空，避免把上一个分支名带过去。
-   * 切回分支时重新带出默认修订，并清掉切换过程中失焦留下的旧校验。
+   * 切回分支时重新带出默认修订。
    */
   function handleTypeChange(type: RevisionType) {
     if (type === props.revisionType) return;
@@ -206,15 +184,27 @@
     emit('update:revisionType', type);
     emit('update:modelValue', next);
 
-    // 单选会让下拉先失焦，空值校验发生在来源改完之前，错误文案会停在旧字段名上
-    nextTick(() => {
-      if (type !== 'commit') {
+    if (type === 'branch') {
+      nextTick(() => {
         repoRef.value?.prepare(next);
-      }
-      revisionFormItemRef.value?.clearValidate?.();
-    });
+      });
+    }
 
     emit('confirm');
+  }
+
+  function handleCommitInput(value: string) {
+    const next = value.trim();
+    emit('update:modelValue', next);
+
+    // 清空后立刻按「不含修订」重算，不等 0.5 秒
+    if (!next) {
+      debouncedCommitConfirm.cancel();
+      emit('confirm');
+      return;
+    }
+
+    debouncedCommitConfirm();
   }
 
   function hidePopover() {

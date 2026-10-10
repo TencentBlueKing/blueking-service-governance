@@ -65,7 +65,6 @@ export function useRecommendTag(
     }
 
     const serial = ++requestSerial;
-    const requestedKey = sourceKey(source);
     const rawTag = await ApiServerService.GetRecommendedImageTag({
       appID: appDetailStore.appID,
       revisionType: source.revisionType,
@@ -74,9 +73,7 @@ export function useRecommendTag(
       ...(source.revisionType === 'branch' ? { branch: source.revision } : {}),
     }).catch(() => '');
 
-    // 序号挡后发先至；再对一下当前修订，避免防抖窗口里旧响应写回新输入
-    const current = sourceGetter();
-    if (serial !== requestSerial || sourceKey(current) !== requestedKey) return '';
+    if (serial !== requestSerial) return '';
 
     const tag = rawTag || filterTimeFormat(new Date(), 'YYYYmmddHHMM');
     options?.onRecommend?.(tag);
@@ -104,18 +101,7 @@ export function useRecommendTag(
     return get(appDetailStore, 'appDetail.buildConfig.repoBuildConfig.defaultBranch') || '';
   }
 
-  const liveSource = computed(sourceGetter);
-  // 修订一变就作废在飞请求，不等 500ms。防抖只推迟下一次发起，manualFetchOnly 和空分支也不会跳过这次作废
-  watch(
-    liveSource,
-    (next, prev) => {
-      if (!prev || sourceKey(next) === sourceKey(prev)) return;
-      dropInFlight();
-    },
-    { flush: 'sync' },
-  );
-
-  const debouncedSource = useDebounce(liveSource, 500);
+  const debouncedSource = useDebounce(computed(sourceGetter), 500);
   watch(debouncedSource, async source => {
     if (toValue(options?.manualFetchOnly)) return;
     if (shouldSkip(source)) {
