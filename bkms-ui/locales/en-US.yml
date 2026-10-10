@@ -155,6 +155,10 @@ yaml 文件: YAML File
 路径: Path
 values 文件: Values File
 分支/Tag: Branch/Tag
+分支/Tag/CommitID: Branch/Tag/CommitID
+代码来源: Code source
+代码 Tag: Code tag
+格式错误: Invalid format
 镜像来源: Image Source
 构建目录: Build Directory
 构建参数: Build Parameters

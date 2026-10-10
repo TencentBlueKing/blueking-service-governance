@@ -68,6 +68,10 @@ export interface DeployParams {
   appID: string;
   /** 构建分支（构建部署时必填，直接部署时忽略） */
   branch?: string;
+  /** 代码修订：分支名、Tag 名或 CommitID */
+  revision?: string;
+  /** 代码来源类型 */
+  revisionType?: 'branch' | 'commit' | 'tag';
   envName: string;
   imageTag: string;
   replicas: number;

@@ -546,7 +546,15 @@ func (c *SvcBasedClient) CreateApp(ctx context.Context, workspaceID string, body
 
 // CreateAppBuild 执行应用构建
 func (c *SvcBasedClient) CreateAppBuild(ctx context.Context, appID string, opts BuildOptions) error {
-	body := map[string]any{"branch": opts.Branch, "imageTag": opts.ImageTag}
+	body := map[string]any{
+		"imageTag":     opts.ImageTag,
+		"revisionType": opts.RevisionType,
+		"revision":     opts.Revision,
+	}
+	// 按分支构建时同时带上兼容字段，已有只认 branch 的服务仍能检出
+	if opts.RevisionType == "" || opts.RevisionType == "branch" {
+		body["branch"] = opts.Revision
+	}
 	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/builds", url.PathEscape(appID))
 
 	resp, err := c.cli.R().SetContext(ctx).SetBody(body).Post(path)

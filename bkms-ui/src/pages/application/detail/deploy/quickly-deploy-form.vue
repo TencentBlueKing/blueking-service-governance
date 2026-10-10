@@ -62,19 +62,17 @@
       </Button.ButtonGroup>
     </Form.FormItem>
     <template v-if="imageSource === 'code'">
-      <Form.FormItem
-        :label="$t('代码分支')"
-        property="branch"
+      <CodeRevisionField
+        ref="branchSelectRef"
+        v-model="formModel.revision"
+        v-model:revision-type="formModel.revisionType"
+        :default-revision="defaultRevision"
+        :repository-id="repoAlias"
         required
-      >
-        <RepoRefSelect
-          ref="branchSelectRef"
-          v-model="formModel.branch"
-          :repository-id="repoAlias"
-          :workspace-id="workspaceId"
-          @branch-commit="handleBranchSelect"
-        />
-      </Form.FormItem>
+        :show-source="showCodeSource"
+        :workspace-id="workspaceId"
+        @confirm="handleRevisionConfirm"
+      />
     </template>
     <Form.FormItem
       :label="$t('镜像 Tag')"
@@ -120,6 +118,7 @@
   import { computed, reactive, ref } from 'vue';
 
   import { Button, Form, Input, Select } from 'bkui-vue';
+  import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
@@ -175,14 +174,18 @@
   const formRef = ref();
   const imageSelectRef = ref();
   // 表单数据模型
+  const showCodeSource = computed(() => appDetailStore.appDetail?.buildConfig?.sourceType !== 'pipeline');
+  const defaultRevision = ref('');
   const formModel = reactive<{
-    branch: string;
     imageTag: string;
     replicas: number;
+    revision: string;
+    revisionType: RevisionType;
   }>({
     replicas: 1,
     imageTag: '',
-    branch: '',
+    revision: '',
+    revisionType: 'branch',
   });
 
   // 实例列表入口沿用 store 当前环境；总览入口只认侧栏选中的目标环境，即使暂时为空也不回退。
@@ -196,18 +199,21 @@
   const isProdEnv = computed(() => props.isProdEnv ?? envType.value === 'production');
 
   // 推荐镜像 Tag：源码构建模式下自动推荐
-  const { getDefaultBranch, fetchRecommendTag } = useRecommendTag(() => formModel.branch, {
-    manualFetchOnly: computed(() => !repoAlias.value),
-    onRecommend: tag => {
-      if (imageSource.value === 'code') {
-        formModel.imageTag = tag;
-      }
+  const { getDefaultBranch, fetchRecommendTag } = useRecommendTag(
+    () => ({ revisionType: formModel.revisionType, revision: formModel.revision }),
+    {
+      manualFetchOnly: computed(() => !repoAlias.value),
+      onRecommend: tag => {
+        if (imageSource.value === 'code') {
+          formModel.imageTag = tag;
+        }
+      },
     },
-  });
+  );
 
-  /** 分支确认后拉取推荐镜像 Tag */
-  function handleBranchSelect(branch: string) {
-    if (branch) fetchRecommendTag(branch);
+  /** 来源或修订确认后重算推荐版本号，包括用户改过的版本号 */
+  function handleRevisionConfirm() {
+    fetchRecommendTag();
   }
   // 离开确认：表单有变更时提示用户
   const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formModel);
@@ -238,7 +244,10 @@
     if (imageSource.value === 'image') {
       await deployAPIs.createDeployDirectly!(params);
     } else {
-      params.branch = formModel.branch;
+      Object.assign(
+        params,
+        revisionRequestFields(showCodeSource.value, formModel.revisionType, formModel.revision),
+      );
       await deployAPIs.buildAndCreateDeploy!(params);
     }
   }
@@ -247,9 +256,16 @@
   async function handleChangeImageSource(source: ImageSourceType) {
     imageSource.value = source;
     if (source === 'code') {
-      await prepareBranchAfterMount(getDefaultBranch());
+      defaultRevision.value = getDefaultBranch();
+      formModel.revisionType = 'branch';
+      await prepareBranchAfterMount(defaultRevision.value);
+      // 无仓库别名时 prepare 不会发出确认，需要主动拉一次推荐版本号
+      if (!repoAlias.value) {
+        await fetchRecommendTag();
+      }
     } else {
-      formModel.branch = '';
+      formModel.revision = '';
+      formModel.revisionType = 'branch';
       formModel.imageTag = '';
     }
   }
@@ -259,7 +275,8 @@
     withPausedWatch(() => {
       formModel.replicas = replicas;
       formModel.imageTag = '';
-      formModel.branch = '';
+      formModel.revision = '';
+      formModel.revisionType = 'branch';
       imageSource.value = 'image';
     });
     forceCleanDirtyTag(() => {

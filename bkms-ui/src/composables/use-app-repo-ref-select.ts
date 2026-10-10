@@ -20,7 +20,14 @@ import { computed, nextTick, ref } from 'vue';
 
 import { useSpaceStore } from '~/stores/space';
 
-import type RepoRefSelect from '~/components/repo-ref-select/repo-ref-select.vue';
+/** RepoRefSelect 与代码来源组件共同暴露的操作 */
+export type RepoRefHandle = {
+  containsTarget?: (target: Node | null) => boolean;
+  dismissIfOutside?: (target: Node | null) => void;
+  hidePopover?: () => void;
+  prepare: (preferred?: string) => string;
+  reset?: () => void;
+};
 
 /**
  * 应用详情页内 RepoRefSelect 的通用 wiring：
@@ -33,7 +40,7 @@ export function useAppRepoRefSelect(getRepoAlias: () => string) {
   const workspaceId = computed(() => spaceStore.currentSpace || '');
   /** 代码仓库别名，作为 repositoryID（repositoryType 固定 NAME） */
   const repoAlias = computed(getRepoAlias);
-  const branchSelectRef = ref<InstanceType<typeof RepoRefSelect>>();
+  const branchSelectRef = ref<RepoRefHandle>();
 
   /**
    * 回填默认分支并预拉 branches/tags。

@@ -33,7 +33,9 @@ export function getTagConfigDisplayText(tagConfig: null | TagConfig | undefined,
 
   if (tagConfig.type === 'custom') {
     const { prefix, withRevision, withBuildTime } = tagConfig.customOpts || {};
-    const parts = [prefix, withRevision && `{${t('分支/Tag')}}`, withBuildTime && t('构建时间')].filter(Boolean);
+    const parts = [prefix, withRevision && `{${t('分支/Tag/CommitID')}}`, withBuildTime && t('构建时间')].filter(
+      Boolean,
+    );
     return parts.join('-') || t('自定义版本');
   }
 

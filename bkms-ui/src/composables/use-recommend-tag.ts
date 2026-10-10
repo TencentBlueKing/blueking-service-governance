@@ -22,39 +22,78 @@ import { useDebounce } from '@vueuse/core';
 import { get } from 'lodash-es';
 import { ApiServerService } from '~/api/modules/bkmsserver';
 import { filterTimeFormat } from '~/common/util';
+import { type RevisionType, isCommitID } from '~/components/code-revision/revision';
 import { useAppDetail } from '~/stores/app-detail';
 
+export type RecommendSource = {
+  revision: string;
+  revisionType: RevisionType;
+};
+
 /**
- * 推荐镜像 Tag 相关逻辑
- * - onRecommend: 获取到推荐 Tag 后的回调
- * - getDefaultBranch: 获取应用默认构建分支
- *
- * @param branchGetter 获取当前分支的函数
- * @param options.onRecommend 获取到推荐 Tag 后的回调
- * @param options.manualFetchOnly 为 true 时不监听分支变化自动拉取，仅通过 fetchRecommendTag 手动触发
+ * 推荐镜像 Tag。
+ * 查询带上代码来源；CommitID 未填完或不合法时不发请求，避免把「不含修订」的版本号刷掉。
  */
 export function useRecommendTag(
-  branchGetter: () => string,
+  sourceGetter: () => RecommendSource,
   options?: { manualFetchOnly?: MaybeRefOrGetter<boolean>; onRecommend?: (tag: string) => void },
 ) {
   const appDetailStore = useAppDetail();
-  let skipNextWatch = false;
+  /** 手动确认和防抖 watch 会碰到同一次修订，记下 key 吃掉紧接着的那一次 */
+  let echoedKey = '';
+  /** 后返回的旧请求不能覆盖更新的修订 */
+  let requestSerial = 0;
 
-  /** 纯请求逻辑，不碰标志位 */
-  async function doFetch(branch: string): Promise<string> {
+  function sourceKey(source: RecommendSource) {
+    return `${source.revisionType}\0${source.revision}`;
+  }
+
+  /** 半截 CommitID 不是一次有效修订 */
+  function shouldSkip(source: RecommendSource) {
+    return source.revisionType === 'commit' && source.revision !== '' && !isCommitID(source.revision);
+  }
+
+  /** 来源已不再有效时，丢掉还在飞的推荐请求，避免它事后覆盖版本号 */
+  function dropInFlight() {
+    requestSerial += 1;
+  }
+
+  async function doFetch(source: RecommendSource): Promise<string> {
+    if (shouldSkip(source)) {
+      dropInFlight();
+      return '';
+    }
+
+    const serial = ++requestSerial;
     const rawTag = await ApiServerService.GetRecommendedImageTag({
       appID: appDetailStore.appID,
-      branch,
+      revisionType: source.revisionType,
+      revision: source.revision,
+      // 分支仍带上兼容字段，旧服务只认 branch
+      ...(source.revisionType === 'branch' ? { branch: source.revision } : {}),
     }).catch(() => '');
+
+    if (serial !== requestSerial) return '';
+
     const tag = rawTag || filterTimeFormat(new Date(), 'YYYYmmddHHMM');
     options?.onRecommend?.(tag);
     return tag;
   }
 
-  /** 手动调用：设 skipNextWatch 跳过接下来的 watch 触发，避免重复请求 */
-  async function fetchRecommendTag(branch: string): Promise<string> {
-    skipNextWatch = true;
-    return doFetch(branch);
+  /**
+   * 手动调用：切换来源、打开弹层、选中下拉时立刻重算。
+   * 不拿 echoedKey 短路，否则同一默认分支再次打开弹层会跳过请求。
+   * echoedKey 只留给紧接着的防抖 watch，避免同一次修订打两次。
+   */
+  async function fetchRecommendTag(): Promise<string> {
+    const source = sourceGetter();
+    if (shouldSkip(source)) {
+      dropInFlight();
+      return '';
+    }
+
+    echoedKey = sourceKey(source);
+    return doFetch(source);
   }
 
   /** 获取应用默认构建分支（来自 buildConfig.repoBuildConfig.defaultBranch） */
@@ -62,17 +101,24 @@ export function useRecommendTag(
     return get(appDetailStore, 'appDetail.buildConfig.repoBuildConfig.defaultBranch') || '';
   }
 
-  // debounce watch：分支变化时自动获取推荐 Tag
-  const debounceBranch = useDebounce(computed(branchGetter), 500);
-  watch(debounceBranch, async newBranch => {
+  const debouncedSource = useDebounce(computed(sourceGetter), 500);
+  watch(debouncedSource, async source => {
     if (toValue(options?.manualFetchOnly)) return;
-    if (skipNextWatch) {
-      skipNextWatch = false;
+    if (shouldSkip(source)) {
+      dropInFlight();
       return;
     }
-    if (newBranch) {
-      await doFetch(newBranch);
+    // 分支为空时没有修订可拼，打开弹层的那次请求由调用方显式发起
+    if (!source.revision && source.revisionType === 'branch') return;
+
+    const key = sourceKey(source);
+    if (key === echoedKey) {
+      echoedKey = '';
+      return;
     }
+
+    echoedKey = key;
+    await doFetch(source);
   });
 
   return { getDefaultBranch, fetchRecommendTag };

@@ -67,7 +67,7 @@
           :false-label="false"
           :true-label="true"
         >
-          {{ $t('分支/Tag') }}
+          {{ $t('分支/Tag/CommitID') }}
         </Checkbox>
         +
         <Checkbox

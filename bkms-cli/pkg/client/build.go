@@ -21,8 +21,10 @@ package client
 
 // BuildOptions 构建选项参数
 type BuildOptions struct {
-	// Branch 代码分支
-	Branch string
+	// RevisionType 代码来源：branch / tag / commit
+	RevisionType string
+	// Revision 分支名、Tag 名或 CommitID
+	Revision string
 	// ImageTag 镜像 Tag
 	ImageTag string
 }

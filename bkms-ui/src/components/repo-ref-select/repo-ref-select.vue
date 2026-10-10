@@ -16,9 +16,9 @@
  - to the current version of the project delivered to anyone in the future.
 -->
 <template>
-  <!-- 无代码仓库标识时降级为手动输入 -->
+  <!-- 无仓库，或指定来源的列表拿不到时，降级为手动输入 -->
   <Input
-    v-if="!repositoryId"
+    v-if="useManualInput"
     ref="inputRef"
     clearable
     :disabled="disabled"
@@ -75,7 +75,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { onBeforeUnmount, ref, toRef, useId } from 'vue';
+  import { computed, onBeforeUnmount, ref, toRef, useId, watch } from 'vue';
 
   import { Button, Input, Select } from 'bkui-vue';
   import { debounce } from 'lodash-es';
@@ -89,6 +89,8 @@
     defineProps<{
       /** 是否禁用 */
       disabled?: boolean;
+      /** 只展示这一类；缺省为分支和 Tag 混在一个下拉里 */
+      group?: RepoRefGroupId;
       /** 选中值（短分支名 / Tag 名） */
       modelValue?: string;
       /** 代码仓库标识（repoBuildConfig.repoAlias）；空字符串表示流水线手动输入模式 */
@@ -117,18 +119,34 @@
   /** 每个实例独立 extCls，避免 document.querySelector 命中其它下拉 */
   const popoverExtCls = `repo-ref-select-popover-${useId().replace(/:/g, '')}`;
 
-  const { groups, optionsLoading, handleSearch, refresh, reset, onDropdownOpen, onDropdownClose, ensureOptionsLoaded } =
-    useRepoRefSelect({
-      workspaceID: toRef(props, 'workspaceId'),
-      repositoryID: toRef(props, 'repositoryId'),
-    });
+  const {
+    groups,
+    fullGroups,
+    loaded,
+    optionsLoading,
+    handleSearch,
+    refresh,
+    reset,
+    onDropdownOpen,
+    onDropdownClose,
+    ensureOptionsLoaded,
+  } = useRepoRefSelect({
+    workspaceID: toRef(props, 'workspaceId'),
+    repositoryID: toRef(props, 'repositoryId'),
+    onlyGroup: () => props.group,
+  });
+
+  // 只看无搜索的完整列表。搜索无命中会清空当前展示，不能据此把下拉换成输入框
+  const listUnavailable = computed(
+    () => Boolean(props.group) && loaded.value && !optionsLoading.value && fullGroups.value.length === 0,
+  );
+  const useManualInput = computed(() => !props.repositoryId || listUnavailable.value);
 
   /** 判断节点是否落在输入框、Select 触发器或本实例的下拉面板上 */
   function containsTarget(target: Node | null) {
     if (!target) return false;
 
-    // 无仓库时仅 Input 模式
-    if (!props.repositoryId) {
+    if (useManualInput.value) {
       const inputEl = (inputRef.value as undefined | { $el?: HTMLElement })?.$el;
       return inputEl?.contains(target) ?? false;
     }
@@ -171,6 +189,13 @@
       return;
     }
 
+    // 清空后立刻按「不含修订」重算，不等 0.5 秒
+    if (!branch) {
+      debouncedInputConfirm.cancel();
+      emit('branchCommit', '');
+      return;
+    }
+
     debouncedInputConfirm(branch);
   }
 
@@ -188,6 +213,16 @@
   onBeforeUnmount(() => {
     debouncedInputConfirm.cancel();
   });
+
+  // 来源切换会清空缓存，这里补一次预拉，避免下拉要等用户点开才有数据
+  watch(
+    () => props.group,
+    () => {
+      if (props.repositoryId) {
+        ensureOptionsLoaded();
+      }
+    },
+  );
 
   /** 远程搜索：关闭 Select 内置 searchLoading，交由 hook 防抖处理 */
   function handleRemoteSearch(keyword: string) {
@@ -210,7 +245,7 @@
 
   /** 关闭下拉面板（嵌套 Popover 场景下父级可主动调用；Input 模式无操作） */
   function hidePopover() {
-    if (!props.repositoryId) return;
+    if (useManualInput.value) return;
     selectRef.value?.hidePopover?.();
   }
 
@@ -221,7 +256,7 @@
     emit('update:modelValue', preferred);
     emit('prepared', preferred);
     emitBranchCommit(preferred);
-    // 有仓库标识时才预拉 branches/tags
+    // 有仓库标识时才预拉；指定来源时只拉那一类
     if (props.repositoryId) {
       ensureOptionsLoaded();
     }

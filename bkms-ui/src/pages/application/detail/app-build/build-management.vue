@@ -81,22 +81,19 @@
                       :model="formData"
                       :rules="rules"
                     >
-                      <Form.FormItem
+                      <CodeRevisionField
+                        ref="branchSelectRef"
+                        v-model="formData.revision"
+                        v-model:revision-type="formData.revisionType"
+                        control-class="w-[400px]"
+                        :default-revision="defaultRevision"
                         :description="$t('值会通过变量 {0} 传给流水线', ['BKMS_REPO_REVISION'])"
-                        :label="$t('代码分支')"
-                        property="branch"
+                        :repository-id="repoAlias"
                         :required="isBuildFieldRequired"
-                      >
-                        <!-- 代码分支 -->
-                        <RepoRefSelect
-                          ref="branchSelectRef"
-                          v-model="formData.branch"
-                          class="w-[400px]"
-                          :repository-id="repoAlias"
-                          :workspace-id="workspaceId"
-                          @branch-commit="handleBranchSelect"
-                        />
-                      </Form.FormItem>
+                        :show-source="showCodeSource"
+                        :workspace-id="workspaceId"
+                        @confirm="handleRevisionConfirm"
+                      />
                       <Form.FormItem
                         :description="$t('值会通过变量 {0} 传给流水线', ['BKMS_IMAGE_TAG'])"
                         :label="$t('版本号（镜像 Tag）')"
@@ -217,17 +214,30 @@
                 v-if="row.sourceMaterial"
                 class="flex items-center"
               >
-                <span class="bkms-icon bkms-icon-branchs mr-[5px]"></span>
-                <span>{{ row.sourceMaterial.revision }}</span>
-                <span class="bkms-icon bkms-icon-commit mx-[5px] text-[18px]"></span>
-                <Button
-                  :disabled="!row.sourceMaterial.commitID"
-                  text
-                  theme="primary"
-                  @click.stop="handleToCommit(row.sourceMaterial.commitUrl)"
-                >
-                  {{ row.sourceMaterial.commitID.slice(0, 8) }}
-                </Button>
+                <template v-if="row.sourceMaterial.revisionType === 'commit'">
+                  <span class="bkms-icon bkms-icon-commit mr-[5px] text-[18px]"></span>
+                  <Button
+                    :disabled="!row.sourceMaterial.commitID"
+                    text
+                    theme="primary"
+                    @click.stop="handleToCommit(row.sourceMaterial.commitUrl)"
+                  >
+                    {{ sourceMaterialText(row.sourceMaterial) }}
+                  </Button>
+                </template>
+                <template v-else>
+                  <span class="bkms-icon bkms-icon-branchs mr-[5px]"></span>
+                  <span>{{ row.sourceMaterial.revision }}</span>
+                  <span class="bkms-icon bkms-icon-commit mx-[5px] text-[18px]"></span>
+                  <Button
+                    :disabled="!row.sourceMaterial.commitID"
+                    text
+                    theme="primary"
+                    @click.stop="handleToCommit(row.sourceMaterial.commitUrl)"
+                  >
+                    {{ row.sourceMaterial.commitID.slice(0, 8) }}
+                  </Button>
+                </template>
               </div>
               <span v-else>--</span>
             </template>
@@ -322,6 +332,7 @@
   import { type BuildConfigOutputObj } from '~/@types/v1/app';
   import { type BuildRecordOutputObj, type UpdateBuildConfigRequest } from '~/@types/v1/builds';
   import { BuildsService } from '~/api/modules/v1';
+  import { type RevisionType, revisionRequestFields, sourceMaterialText } from '~/components/code-revision/revision';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { isHelmLikeAppType } from '~/composables/app-type';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
@@ -385,6 +396,7 @@
       commitID: string;
       commitUrl: string;
       revision: string;
+      revisionType?: string;
     };
     status: string;
     updatedAt: string;
@@ -440,7 +452,7 @@
         return undefined;
       }
       // 返回自定义 tooltip 内容：版本号 + commitID 前 8 位
-      return `${row.sourceMaterial.revision} ${row.sourceMaterial.commitID.slice(0, 8)}`;
+      return sourceMaterialText(row.sourceMaterial);
     },
   };
 
@@ -480,21 +492,19 @@
 
   // 执行操作相关的表单数据
   const isBuildFieldRequired = computed(() => appDetailStore.appDetail?.buildConfig?.pipelineBuildConfig === null);
+  // 自定义蓝盾流水线不展示代码来源，表单保持原来的代码分支
+  const showCodeSource = computed(() => appDetailStore.appDetail?.buildConfig?.sourceType !== 'pipeline');
+  const defaultRevision = ref('');
   const formData = ref<{
-    branch: string;
+    revision: string;
+    revisionType: RevisionType;
     tag: string;
   }>({
-    branch: '',
+    revision: '',
+    revisionType: 'branch',
     tag: '',
   });
   const rules = {
-    branch: [
-      {
-        validator: (value: string) => value.length,
-        message: t('分支不能为空'),
-        trigger: ['blur', 'change'],
-      },
-    ],
     tag: [
       {
         validator: (value: string) => value.length,
@@ -524,18 +534,21 @@
   // 推荐版本号（模板展示用）
   const recommendTag = ref('');
   // 获取推荐版本号
-  const { getDefaultBranch, fetchRecommendTag } = useRecommendTag(() => formData.value.branch, {
-    manualFetchOnly: computed(() => !repoAlias.value),
-    onRecommend: tag => {
-      if (!showPopConfirm.value) return;
-      formData.value.tag = tag;
-      recommendTag.value = tag;
+  const { getDefaultBranch, fetchRecommendTag } = useRecommendTag(
+    () => ({ revisionType: formData.value.revisionType, revision: formData.value.revision }),
+    {
+      manualFetchOnly: computed(() => !repoAlias.value),
+      onRecommend: tag => {
+        if (!showPopConfirm.value) return;
+        formData.value.tag = tag;
+        recommendTag.value = tag;
+      },
     },
-  });
+  );
 
-  /** 分支确认后拉取推荐 Tag（Select 选中 / Input change 防抖后 / prepare 回填） */
-  function handleBranchSelect(branch: string) {
-    if (branch) fetchRecommendTag(branch);
+  /** 来源或修订确认后重算推荐版本号，包括用户改过的版本号 */
+  function handleRevisionConfirm() {
+    fetchRecommendTag();
   }
 
   // 打开：复位表单并回填默认分支；关闭：收起分支下拉
@@ -544,12 +557,13 @@
       resetBranchSelect();
       return;
     }
-    formData.value = { branch: '', tag: '' };
+    defaultRevision.value = getDefaultBranch();
+    formData.value = { revision: '', revisionType: 'branch', tag: '' };
     recommendTag.value = '';
-    await prepareBranchAfterMount(getDefaultBranch());
+    await prepareBranchAfterMount(defaultRevision.value);
     // 流水线模式无 repoAlias，prepare 不会触发 branch-commit，需主动拉取推荐版本号
     if (!repoAlias.value) {
-      await fetchRecommendTag('');
+      await fetchRecommendTag();
     }
     executeFormRef.value?.clearValidate?.();
   });
@@ -584,6 +598,7 @@
       sourceMaterial: item.extras?.BK_CI_GIT_REPO_URL
         ? {
             revision: item.revision || '',
+            revisionType: item.revisionType || 'branch',
             commitID: item.commitID || '',
             commitUrl: `${item.extras.BK_CI_GIT_REPO_URL.replace(/\.git$/, '')}/commit/${item.extras?.BK_CI_GIT_REPO_HEAD_COMMIT_ID}`,
           }
@@ -611,8 +626,8 @@
     const result = await BuildsService.createBuild(
       {
         appID: appDetailStore.appID,
-        branch: formData.value.branch,
         imageTag: formData.value.tag,
+        ...revisionRequestFields(showCodeSource.value, formData.value.revisionType, formData.value.revision),
       },
       { interceptorErr: false },
     )

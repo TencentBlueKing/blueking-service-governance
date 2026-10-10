@@ -31,22 +31,40 @@ import (
 
 // NewCreateCmd returns a Command instance for 'app build create' sub command
 func NewCreateCmd() *cobra.Command {
-	var appID, branch, imageTag string
+	var appID, branch, tag, commit, imageTag string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new application build",
 		Long: `Create a new build for an application.
 
-This command triggers a new build process for the specified application using
-the provided branch and image tag.`,
-		Example: `  # Create a build for an application
-  bkms-cli app build create --app demo --branch main --image-tag v1.0.0`,
-		PreRunE: cmdutil.ResolveAppPreRunE,
+This command triggers a new build for the specified application.
+Provide exactly one of --branch, --tag, or --commit, plus --image-tag.`,
+		Example: `  # Build from a branch
+  bkms-cli app build create --app demo --branch main --image-tag v1.0.0
+
+  # Build from a tag
+  bkms-cli app build create --app demo --tag v1.0.0 --image-tag v1.0.0
+
+  # Build from a commit
+  bkms-cli app build create --app demo --commit a1b2c3d --image-tag v1.0.0`,
+		// 先校验代码来源，再解析应用。非法 CommitID 或不满足三选一时不发任何请求
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if _, _, err := ResolveCodeRevision(branch, tag, commit); err != nil {
+				return err
+			}
+			return cmdutil.ResolveAppPreRunE(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			revisionType, revision, err := ResolveCodeRevision(branch, tag, commit)
+			if err != nil {
+				return err
+			}
+
 			opts := client.BuildOptions{
-				Branch:   branch,
-				ImageTag: imageTag,
+				RevisionType: revisionType,
+				Revision:     revision,
+				ImageTag:     imageTag,
 			}
 
 			if err := client.New().CreateAppBuild(cmd.Context(), appID, opts); err != nil {
@@ -59,11 +77,17 @@ the provided branch and image tag.`,
 	}
 
 	cmdutil.AddAppFlags(cmd, &appID)
-	cmd.Flags().StringVar(&branch, "branch", "", "code branch to build")
+	cmd.Flags().StringVar(&branch, "branch", "", "code branch to build (mutually exclusive with --tag and --commit)")
+	cmd.Flags().StringVar(&tag, "tag", "", "code tag to build (mutually exclusive with --branch and --commit)")
+	cmd.Flags().StringVar(
+		&commit,
+		"commit",
+		"",
+		"commit id to build, 7-40 hex characters (mutually exclusive with --branch and --tag)",
+	)
 	cmd.Flags().StringVar(&imageTag, "image-tag", "", "image tag to build")
 
 	_ = cmd.MarkFlagRequired("app")
-	_ = cmd.MarkFlagRequired("branch")
 	_ = cmd.MarkFlagRequired("image-tag")
 
 	return cmd

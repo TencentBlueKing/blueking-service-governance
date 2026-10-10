@@ -28,18 +28,15 @@
       form-type="vertical"
       :model="formData"
     >
-      <Form.FormItem
-        :label="t('分支')"
-        property="branch"
+      <CodeRevisionField
+        ref="branchSelectRef"
+        v-model="formData.revision"
+        v-model:revision-type="formData.revisionType"
+        :default-revision="defaultRevision"
+        :repository-id="repoAlias"
         required
-      >
-        <RepoRefSelect
-          ref="branchSelectRef"
-          v-model="formData.branch"
-          :repository-id="repoAlias"
-          :workspace-id="workspaceId"
-        />
-      </Form.FormItem>
+        :workspace-id="workspaceId"
+      />
       <Form.FormItem
         :label="t('版本类型')"
         property="bumpType"
@@ -99,6 +96,7 @@
   import { Button, Dialog, Form, Input, Message, Radio } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { HelmChartsService } from '~/api/modules/v1';
+  import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import { useAppDetail } from '~/stores/app-detail';
 
@@ -125,11 +123,14 @@
 
   const isShow = defineModel<boolean>({ required: true });
 
+  const defaultRevision = ref('');
   const formData = ref<{
-    branch: string;
     bumpType: BumpType;
+    revision: string;
+    revisionType: RevisionType;
   }>({
-    branch: '',
+    revision: '',
+    revisionType: 'branch',
     bumpType: 'patch',
   });
 
@@ -168,7 +169,7 @@
       const res = await HelmChartsService.createHelmChartBuild({
         appID: props.appId,
         bumpType: formData.value.bumpType,
-        branch: formData.value.branch,
+        ...revisionRequestFields(true, formData.value.revisionType, formData.value.revision),
       });
       Message({ theme: 'success', message: t('创建构建成功') });
       emit('success', nextVersion.value, res.buildID || '');
@@ -183,7 +184,8 @@
   /** 重置表单 */
   function resetForm() {
     formData.value = {
-      branch: '',
+      revision: '',
+      revisionType: 'branch',
       bumpType: 'patch',
     };
     nextVersion.value = '';
@@ -209,8 +211,9 @@
         formRef.value?.clearValidate?.();
         // resetForm 将 bumpType 重置为 'patch'，若之前已是 'patch' 则 watcher 不会触发，需手动调用
         fetchNextVersion(formData.value.bumpType);
-        const defaultBranch = appDetailStore?.appDetail?.helmSpec?.helmSource?.gitRepoConfig?.revision || '';
-        await prepareBranchAfterMount(defaultBranch);
+        defaultRevision.value = appDetailStore?.appDetail?.helmSpec?.helmSource?.gitRepoConfig?.revision || '';
+        formData.value.revisionType = 'branch';
+        await prepareBranchAfterMount(defaultRevision.value);
       });
     }
   });

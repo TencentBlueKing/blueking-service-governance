@@ -150,6 +150,10 @@ yaml 文件: yaml 文件
 路径: 路径
 values 文件: values 文件
 分支/Tag: 分支/Tag
+分支/Tag/CommitID: 分支/Tag/CommitID
+代码来源: 代码来源
+代码 Tag: 代码 Tag
+格式错误: 格式错误
 镜像来源: 镜像来源
 构建目录: 构建目录
 构建参数: 构建参数

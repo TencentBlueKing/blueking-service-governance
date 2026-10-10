@@ -56,6 +56,8 @@ export type RepoRefOption = {
 };
 
 type UseRepoRefSelectOptions = {
+  /** 只拉取这一类；缺省同时拉取分支和 Tag */
+  onlyGroup?: MaybeRefOrGetter<RepoRefGroupId | undefined>;
   /** 代码仓库标识，通常为 buildConfig.repoBuildConfig.repoAlias */
   repositoryID: MaybeRefOrGetter<string>;
   /** 工作空间 ID */
@@ -90,6 +92,8 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
   const dropdownOpen = ref(false);
   /** 是否已成功拉过完整列表（空仓库也算已加载，避免反复请求） */
   const loaded = ref(false);
+  /** 当前只要某一类时，另一类接口不再请求 */
+  const onlyGroup = computed(() => toValue(options.onlyGroup));
 
   /** 请求世代：仓库切换 / reset / refresh 后丢弃过期响应 */
   let requestId = 0;
@@ -151,8 +155,8 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
   }
 
   /**
-   * 并行拉取分支与 Tag。
-   * search 为空时写入 fullGroups；非空时只更新当前展示，不覆盖缓存。
+   * 拉取当前需要的列表。
+   * 指定 onlyGroup 时只请求那一类；search 为空时写入 fullGroups，非空时只更新当前展示。
    */
   async function fetchAll(search = '') {
     if (!canQuery()) {
@@ -163,10 +167,10 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
     const id = ++requestId;
     optionsLoading.value = true;
     try {
-      const [branches, tags] = await Promise.all([fetchGroup('branch', search), fetchGroup('tag', search)]);
-      if (id !== requestId) return;
-
-      const next = toGroups(branches, tags);
+      const next = onlyGroup.value
+        ? await fetchOnlyGroup(onlyGroup.value, search, id)
+        : await fetchBothGroups(search, id);
+      if (id !== requestId || !next) return;
       groups.value = next;
       loaded.value = true;
       if (!search) {
@@ -177,6 +181,20 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
         optionsLoading.value = false;
       }
     }
+  }
+
+  /** 只请求当前来源对应的列表，空结果不占一个分组 */
+  async function fetchOnlyGroup(groupId: RepoRefGroupId, search: string, id: number): Promise<RepoRefGroup[] | null> {
+    const children = await fetchGroup(groupId, search);
+    if (id !== requestId) return null;
+    return children.length ? [{ id: groupId, children }] : [];
+  }
+
+  /** 并行拉取分支与 Tag，供未指定来源的旧下拉使用 */
+  async function fetchBothGroups(search: string, id: number): Promise<RepoRefGroup[] | null> {
+    const [branches, tags] = await Promise.all([fetchGroup('branch', search), fetchGroup('tag', search)]);
+    if (id !== requestId) return null;
+    return toGroups(branches, tags);
   }
 
   /** 完整列表未加载时请求一次；多次调用复用同一 Promise */
@@ -250,8 +268,8 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
     showFullList();
   }
 
-  // 仓库变化时仅清空本地状态；列表在 prepare / 展开下拉时懒加载
-  watch([workspaceID, repositoryID], () => {
+  // 仓库或来源类型变化时清空缓存；列表在 prepare / 展开下拉时重新懒加载
+  watch([workspaceID, repositoryID, onlyGroup], () => {
     reset();
   });
 
@@ -267,6 +285,8 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
 
   return {
     groups,
+    fullGroups,
+    loaded,
     optionsLoading,
     handleSearch,
     refresh,
