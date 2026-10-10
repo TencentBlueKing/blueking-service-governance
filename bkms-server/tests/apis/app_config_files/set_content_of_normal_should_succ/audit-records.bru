@@ -25,7 +25,7 @@ tests {
   test("should contain app config file create audit record", () => {
     const candidates = records.filter((item) =>
       item.operationType === "create" &&
-      item.attribute === "appModel"
+      item.attribute === "appConfigFile"
     );
 
     const record = candidates.find((item) => {
@@ -41,7 +41,7 @@ tests {
   test("should contain app config file content update audit record", () => {
     const candidates = records.filter((item) =>
       item.operationType === "update" &&
-      item.attribute === "appModel"
+      item.attribute === "appConfigFile"
     );
 
     const record = candidates.find((item) => {
@@ -58,7 +58,7 @@ tests {
   test("should not create audit record for preview-only content", () => {
     const candidates = records.filter((item) =>
       item.operationType === "update" &&
-      item.attribute === "appModel"
+      item.attribute === "appConfigFile"
     );
 
     const record = candidates.find((item) => {

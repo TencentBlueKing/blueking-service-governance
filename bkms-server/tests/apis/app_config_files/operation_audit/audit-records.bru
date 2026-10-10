@@ -25,7 +25,7 @@ tests {
   test("should contain normal file create audit record", () => {
     const candidates = records.filter((item) =>
       item.operationType === "create" &&
-      item.attribute === "appModel"
+      item.attribute === "appConfigFile"
     );
 
     const record = candidates.find((item) => {
@@ -41,7 +41,7 @@ tests {
   test("should contain normal file metadata update audit record", () => {
     const candidates = records.filter((item) =>
       item.operationType === "update" &&
-      item.attribute === "appModel"
+      item.attribute === "appConfigFile"
     );
 
     const record = candidates.find((item) => {
@@ -60,7 +60,7 @@ tests {
   test("should contain normal file delete audit record", () => {
     const candidates = records.filter((item) =>
       item.operationType === "delete" &&
-      item.attribute === "appModel"
+      item.attribute === "appConfigFile"
     );
 
     const record = candidates.find((item) => {
@@ -77,7 +77,7 @@ tests {
   test("should contain overlay file create audit record", () => {
     const candidates = records.filter((item) =>
       item.operationType === "create" &&
-      item.attribute === "appModel"
+      item.attribute === "appConfigFile"
     );
 
     const record = candidates.find((item) => {
@@ -95,7 +95,7 @@ tests {
   test("should contain overlay content update audit record", () => {
     const candidates = records.filter((item) =>
       item.operationType === "update" &&
-      item.attribute === "appModel"
+      item.attribute === "appConfigFile"
     );
 
     const record = candidates.find((item) => {

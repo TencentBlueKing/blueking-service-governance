@@ -53,7 +53,7 @@ type EnvNameQuery struct {
 
 // CreateDefInput 创建配置文件 def + 默认文件的请求体。
 type CreateDefInput struct {
-	// 文件名称
+	// 文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。
 	Name string `json:"name" binding:"required,min=1,max=64,app_config_file_name"`
 	// 配置种类：framework / plain
 	ConfigKind string `json:"configKind" binding:"required,oneof=framework plain"`
@@ -71,8 +71,9 @@ type CreateDefInput struct {
 	BSCPConfig *BSCPConfigInput `json:"bscpConfig,omitempty"`
 	// 初始内容（可选，仅 local 来源）
 	Content *string `json:"content,omitempty"`
-	// 创建时可选设置挂载环境范围；nil = 全环境生效
-	MountedEnvNames *[]string `json:"mountedEnvNames,omitempty"`
+	// 创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。
+	// 环境名格式与路径参数 envName 相同。
+	MountedEnvNames *[]string `json:"mountedEnvNames,omitempty" binding:"omitempty,dive,uri_slug"`
 	// 创建时可选设置环境变量渲染开关；不传时使用 ConfigKind 默认值
 	EnableEnvVarRender *bool `json:"enableEnvVarRender,omitempty"`
 	// 版本描述
@@ -224,9 +225,11 @@ func (o *DefDetailObj) fillFileMeta(file *appcfg.AppConfigFile) {
 	o.ContentSourceType = string(file.ContentSourceType)
 	o.FileFormat = string(file.GetConfigFormat())
 	o.CurrentVersion = file.CurrentVersion
+	o.BaseAppConfigFileID = ""
 	if file.BaseAppConfigFileID != nil {
 		o.BaseAppConfigFileID = file.BaseAppConfigFileID.Hex()
 	}
+	o.BSCPConfig = nil
 	if file.BSCPConfig != nil {
 		o.BSCPConfig = &BSCPConfigObj{
 			BizID:     file.BSCPConfig.BizID,
@@ -260,10 +263,11 @@ func (o *DefDetailObj) fillFile(file *appcfg.AppConfigFile) {
 
 // UpdateDefInput 更新 def 信息请求体。
 type UpdateDefInput struct {
+	// 文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。
 	Name               *string   `json:"name,omitempty" binding:"omitempty,min=1,max=64,app_config_file_name"`
 	MountDir           *string   `json:"mountDir,omitempty" binding:"omitempty,max=255,mount_dir"`
 	IsUnifiedConfig    *bool     `json:"isUnifiedConfig,omitempty"`
-	MountedEnvNames    *[]string `json:"mountedEnvNames,omitempty"`
+	MountedEnvNames    *[]string `json:"mountedEnvNames,omitempty" binding:"omitempty,dive,uri_slug"`
 	EnableEnvVarRender *bool     `json:"enableEnvVarRender,omitempty"`
 }
 

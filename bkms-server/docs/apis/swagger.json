@@ -19228,14 +19228,14 @@
                     "maxLength": 255
                 },
                 "mountedEnvNames": {
-                    "description": "创建时可选设置挂载环境范围；nil = 全环境生效",
+                    "description": "创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。环境名格式与路径参数 envName 相同。",
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
                 "name": {
-                    "description": "文件名称",
+                    "description": "文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。",
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1
@@ -19511,6 +19511,7 @@
                     }
                 },
                 "name": {
+                    "description": "文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。",
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1
@@ -23673,7 +23674,7 @@
                     ]
                 },
                 "name": {
-                    "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间。\ntodo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。",
+                    "description": "应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。\ntodo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。",
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1
@@ -32290,7 +32291,7 @@
                     "type": "string"
                 },
                 "name": {
-                    "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间",
+                    "description": "应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间",
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1

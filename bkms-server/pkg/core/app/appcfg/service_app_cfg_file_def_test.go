@@ -429,6 +429,25 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(updated.Name).To(Equal("new-name.yaml"))
 		})
 
+		It("should reject mountedEnvNames update for framework kind", func() {
+			result := f.createFrameworkFile("fw-mounted.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			mounted := []string{"prod"}
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				MountedEnvNames: &mounted,
+				Operator:        "editor",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("mountedEnvNames"))
+
+			unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unchanged.EnvConfigMode.MountedEnvNames).To(BeNil())
+		})
+
 		It("should reject mountDir update for framework kind", func() {
 			result := f.createFrameworkFile("fw.yaml")
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)

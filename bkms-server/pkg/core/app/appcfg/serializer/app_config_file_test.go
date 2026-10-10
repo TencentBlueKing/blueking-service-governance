@@ -58,6 +58,21 @@ var _ = Describe("App config file serializers", func() {
 			"CreateAppConfigFileInput.Name",
 			"failed on the 'app_config_file_name' tag",
 		}),
+		Entry("plain file name with extension", serializer.CreateAppConfigFileInput{
+			Name:              "aaaaa.conf",
+			Type:              "normal",
+			ContentSourceType: "local",
+			FileFormat:        "yaml",
+		}, nil),
+		Entry("name with unsupported character", serializer.CreateAppConfigFileInput{
+			Name:              "aaaaa/conf",
+			Type:              "normal",
+			ContentSourceType: "local",
+			FileFormat:        "yaml",
+		}, []string{
+			"CreateAppConfigFileInput.Name",
+			"failed on the 'app_config_file_name' tag",
+		}),
 		Entry("feature env overlay name", serializer.CreateAppConfigFileInput{
 			Name:              "feat-visual-processor-zo1b02-2",
 			Type:              "overlay",

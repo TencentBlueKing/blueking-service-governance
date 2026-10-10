@@ -113,11 +113,6 @@
     "aggregate": "app_config_file_defs",
     "pipeline": [
       {
-        "$match": {
-          "envConfigMode": { "$exists": false }
-        }
-      },
-      {
         "$lookup": {
           "from": "app_config_files",
           "let": { "defID": "$_id" },
@@ -168,8 +163,9 @@
         "u": [
           {
             "$set": {
-              "isUnifiedConfig": "$envConfigMode.isUnifiedConfig",
-              "mountedEnvNames": "$envConfigMode.mountedEnvNames"
+              "mountedEnvNames": {
+                "$ifNull": ["$envConfigMode.mountedEnvNames", "$mountedEnvNames"]
+              }
             }
           },
           {

@@ -19,11 +19,13 @@
 package appcfgfiledef
 
 import (
+	"github.com/gin-gonic/gin/binding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/serializer" // register validators
 )
 
 var _ = Describe("DefDetailObj", func() {
@@ -94,5 +96,78 @@ var _ = Describe("DefDetailObj", func() {
 			ServiceID: "30",
 			ID:        "40",
 		}))
+	})
+
+	It("should not leak default file bscp config onto a local env instance", func() {
+		defID := bson.NewObjectID()
+		defaultFileID := bson.NewObjectID()
+		envFileID := bson.NewObjectID()
+		baseFileID := bson.NewObjectID()
+		def := &appcfg.AppConfigFileDef{
+			ID:         defID,
+			Name:       "trpc_go.yaml",
+			ConfigKind: appcfg.ConfigKindFramework,
+		}
+		defaultFile := &appcfg.AppConfigFile{
+			ID:    defaultFileID,
+			DefID: defID,
+			Type:  appcfg.AppConfigFileTypeNormal,
+			VersionedContent: appcfg.VersionedContent{
+				ContentSourceType:   appcfg.ContentSourceTypeBSCP,
+				BaseAppConfigFileID: &baseFileID,
+				BSCPConfig: &appcfg.BSCPConfig{
+					BizID:     "2",
+					ServiceID: "3",
+					ConfigID:  "4",
+				},
+			},
+		}
+		envFile := &appcfg.AppConfigFile{
+			ID:      envFileID,
+			DefID:   defID,
+			EnvName: "prod",
+			Type:    appcfg.AppConfigFileTypeOverlay,
+			VersionedContent: appcfg.VersionedContent{
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+			},
+		}
+
+		obj := new(DefDetailObj).FromEnvFileDetail(&appcfg.EnvFileDetailResult{
+			Def:            def,
+			DefaultFile:    defaultFile,
+			DisplayFile:    envFile,
+			HasEnvInstance: true,
+		})
+
+		Expect(obj.FileID).To(Equal(envFileID.Hex()))
+		Expect(obj.ContentSourceType).To(Equal("local"))
+		Expect(obj.BSCPConfig).To(BeNil())
+		Expect(obj.BaseAppConfigFileID).To(BeEmpty())
+	})
+})
+
+var _ = Describe("mountedEnvNames binding", func() {
+	It("should accept env names and an empty list", func() {
+		mounted := []string{"prod", "stag-1"}
+		err := binding.Validator.ValidateStruct(CreateDefInput{
+			Name:              "app.conf",
+			ConfigKind:        "plain",
+			FileFormat:        "yaml",
+			FileType:          "normal",
+			ContentSourceType: "local",
+			MountedEnvNames:   &mounted,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		empty := []string{}
+		err = binding.Validator.ValidateStruct(UpdateDefInput{MountedEnvNames: &empty})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should reject mounted env names that are not uri slugs", func() {
+		mounted := []string{"bad env"}
+		err := binding.Validator.ValidateStruct(UpdateDefInput{MountedEnvNames: &mounted})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("uri_slug"))
 	})
 })

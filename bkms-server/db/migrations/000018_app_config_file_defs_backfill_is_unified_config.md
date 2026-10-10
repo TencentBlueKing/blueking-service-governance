@@ -32,6 +32,10 @@
 > 运行时语义仍以服务逻辑为准；若用户在新接口中进入按环境模式后又删除了最后一个环境实例，
 > 当前实现不会自动把 `isUnifiedConfig` 改回 `true`。
 
+## 执行顺序
+
+先执行完本 migration，再让读取顶层字段的新二进制接流量。新代码使用 `bson:",inline"`，读不到嵌套的 `envConfigMode`；若新二进制先接流量，这些 def 会被当成按环境独立配置。
+
 ## 迁移动作
 
 迁移按以下顺序执行：
@@ -42,17 +46,22 @@
    - 优先取默认文件上的 `defID` 作为候选值；若默认文件本身没有 `defID`，再退化使用 `baseAppConfigFileID`
    - 当候选值能对应到现存 def，且目标 `(candidateDefID, envName)` 还没有其他实例占用时，将该文件的 `defID` 回写为候选值
 
-2. 对**没有** `envConfigMode` 的 def，以 `app_config_file_defs` 为主表按 def `_id` 回查 `app_config_files`：
+   同一批里如果有两条失效环境文件的 `envName` 和 `baseAppConfigFileID` 都相同，第二条写入会撞上 `defID + envName` 唯一索引，migration 中断并标记为 dirty。已改过的 `defID` 不会自动回滚。处理方式：按下面「验证」第 2 节查出仍失效的文件，确认没有两条要改挂到同一个 `(defID, envName)` 后，再重新执行。这种重复数据很少见。
+
+2. 对全部 def，以 `app_config_file_defs` 为主表按 def `_id` 回查 `app_config_files`：
    - 若存在任意一条 `defID = 当前 def._id` 且 `envName` 非空的记录，则顶层 `isUnifiedConfig` 刷为 `false`
    - 否则顶层 `isUnifiedConfig` 刷为 `true`
 
 3. 对仍存在 `envConfigMode` 的 def：
-   - 将 `envConfigMode.isUnifiedConfig` 覆盖到顶层 `isUnifiedConfig`
-   - 将 `envConfigMode.mountedEnvNames` 覆盖到顶层 `mountedEnvNames`
+   - 将 `envConfigMode.mountedEnvNames` 写到顶层 `mountedEnvNames`；嵌套里没有该字段时保留顶层原值
    - 删除嵌套字段 `envConfigMode`
+   - 不使用 `envConfigMode.isUnifiedConfig`。旧代码把顶层文档解码成零值后再 Update，会把凭空的 `false` 写进嵌套字段
 
-其中第 3 步用于统一历史 mixed-shape 文档，并以旧代码实际写入的 nested 值作为存量真值；
-第 2 步只处理没有 nested 字段的文档，避免把第 3 步要保留的历史值提前覆盖掉。
+`isUnifiedConfig` 只由第 2 步按环境实例是否存在决定。嵌套字段只提供 `mountedEnvNames`。
+
+## 已执行过旧版本时
+
+`schema_migrations` 已经是 18 的库不会再次执行修改后的 `up`。这些库需要先 `migrate force 17`，再 `migrate up`。`down` 是空操作，不能靠 down 恢复旧值。
 
 ## down
 
@@ -117,13 +126,8 @@ db.app_config_files.aggregate([
   }
 ])
 
-// 3. 对没有 nested envConfigMode 的 def，顶层 isUnifiedConfig 应与 defID 关联的环境实例数量一致
+// 3. 全部 def 的顶层 isUnifiedConfig 应与 defID 关联的环境实例数量一致
 db.app_config_file_defs.aggregate([
-  {
-    $match: {
-      envConfigMode: { $exists: false }
-    }
-  },
   {
     $lookup: {
       from: "app_config_files",

@@ -94,6 +94,12 @@ var _ = Describe("FrameworkPolicy", func() {
 		})
 	})
 
+	Describe("AllowMountedEnvNamesUpdate", func() {
+		It("should not allow mountedEnvNames update", func() {
+			Expect(policy.AllowMountedEnvNamesUpdate()).To(BeFalse())
+		})
+	})
+
 	Describe("AllowEnableEnvVarRenderUpdate", func() {
 		It("should not allow enableEnvVarRender update", func() {
 			Expect(policy.AllowEnableEnvVarRenderUpdate()).To(BeFalse())
@@ -206,6 +212,12 @@ var _ = Describe("PlainPolicy", func() {
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("overlay"))
+		})
+	})
+
+	Describe("AllowMountedEnvNamesUpdate", func() {
+		It("should allow mountedEnvNames update", func() {
+			Expect(policy.AllowMountedEnvNamesUpdate()).To(BeTrue())
 		})
 	})
 

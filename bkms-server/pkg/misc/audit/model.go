@@ -186,6 +186,8 @@ const (
 	AttributeHelmSpec Attribute = "helmSpec"
 	// AttributeAppModel 应用模型
 	AttributeAppModel Attribute = "appModel"
+	// AttributeAppConfigFile 应用配置文件
+	AttributeAppConfigFile Attribute = "appConfigFile"
 	// AttributeAppComponents 应用组件
 	AttributeAppComponents Attribute = "appComponents"
 	// AttributeBuildConfig 构建配置
@@ -231,6 +233,8 @@ func (t Attribute) DisplayName() string {
 		return "Helm 配置"
 	case AttributeAppModel:
 		return "应用模型"
+	case AttributeAppConfigFile:
+		return "配置文件"
 	case AttributeBuildConfig:
 		return "构建配置"
 	case AttributeUserRole:

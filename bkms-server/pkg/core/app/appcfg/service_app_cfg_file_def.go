@@ -205,13 +205,16 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 	}
 
 	// 按策略区分
-	if update.MountDir != nil || update.EnableEnvVarRender != nil {
+	if update.MountDir != nil || update.EnableEnvVarRender != nil || update.MountedEnvNames != nil {
 		policy, err := s.policyFor(def.ConfigKind)
 		if err != nil {
 			return errors.Wrap(err, "loading config kind policy for def update")
 		}
 		if update.MountDir != nil && !policy.AllowMountDirUpdate() {
 			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not support modifying mountDir via def")
+		}
+		if update.MountedEnvNames != nil && !policy.AllowMountedEnvNamesUpdate() {
+			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not support mountedEnvNames")
 		}
 		if update.EnableEnvVarRender != nil && !policy.AllowEnableEnvVarRenderUpdate() {
 			return errors.Wrap(ErrInvalidConfigSpec,

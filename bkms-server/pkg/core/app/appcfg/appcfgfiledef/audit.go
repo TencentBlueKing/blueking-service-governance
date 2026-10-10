@@ -107,7 +107,7 @@ func (h *Handler) addAppConfigFileDefAudit(
 	after any,
 ) {
 	opts := []audit.Option{
-		audit.WithAttribute(audit.AttributeAppModel),
+		audit.WithAttribute(audit.AttributeAppConfigFile),
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
 	}

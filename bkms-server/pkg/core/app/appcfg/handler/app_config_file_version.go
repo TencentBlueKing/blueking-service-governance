@@ -343,14 +343,13 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 		return
 	}
 
-	go audit.AddOperationRecordAsync(
+	h.addAppConfigFileAudit(
 		ctx,
+		app,
+		version.EnvName,
 		audit.OperationTypeDelete,
-		audit.ResourceTypeApp,
-		app.ID,
-		audit.WithWorkspaceID(app.WorkspaceID),
-		audit.WithAppID(app.ID),
-		audit.WithDataBefore(new(serializer.AppConfigFileVersionOutputObj).FromModel(*version)),
+		new(serializer.AppConfigFileVersionOutputObj).FromModel(*version),
+		nil,
 	)
 	ginutils.OK(c, serializer.AppConfigFileEmptyOutput{})
 }

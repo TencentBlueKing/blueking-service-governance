@@ -56,7 +56,7 @@ func validateAppConfigFileName(fl validator.FieldLevel) bool {
 	return appConfigFileNamePattern.MatchString(fl.Field().String())
 }
 
-var appConfigFileNamePattern = regexp.MustCompile("^[a-zA-Z0-9-_]+$")
+var appConfigFileNamePattern = regexp.MustCompile("^[a-zA-Z0-9_.-]+$")
 
 // AppURIInput is the path input for APIs scoped by application.
 type AppURIInput struct {
@@ -110,7 +110,7 @@ type BSCPAppConfigFileConfig struct {
 
 // CreateAppConfigFileInput is the JSON body for creating an app config file.
 type CreateAppConfigFileInput struct {
-	// 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间。
+	// 应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。
 	// todo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。
 	Name string `json:"name" binding:"required,min=1,max=64,app_config_file_name"`
 	// 应用配置文件类型，普通或覆盖层
@@ -131,7 +131,7 @@ type CreateAppConfigFileInput struct {
 
 // UpdateAppConfigFileInput is the JSON body for updating app config file metadata.
 type UpdateAppConfigFileInput struct {
-	// 应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间
+	// 应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间
 	Name string `json:"name" binding:"required,min=1,max=64,app_config_file_name"`
 	// 基础应用配置文件 ID，仅当 type 是 overlay 时生效
 	BaseAppConfigFileID string `json:"baseAppConfigFileID"`

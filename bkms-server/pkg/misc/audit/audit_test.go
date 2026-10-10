@@ -35,6 +35,11 @@ var _ = Describe("Audit", func() {
 		It("displays port-forward attribute name", func() {
 			Expect(AttributePortForward.DisplayName()).To(Equal("端口转发"))
 		})
+
+		It("displays app config file attribute name", func() {
+			Expect(AttributeAppConfigFile).To(Equal(Attribute("appConfigFile")))
+			Expect(AttributeAppConfigFile.DisplayName()).To(Equal("配置文件"))
+		})
 	})
 
 	var store OperationRecordStore
