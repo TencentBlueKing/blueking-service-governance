@@ -406,22 +406,18 @@
                   <span
                     v-bk-tooltips="{
                       content: $t('请先完成连通测试后再修改权重因子'),
-                      disabled: !isImportedService || connected,
+                      disabled: !isImportedService || !connectionTestRequired || connected,
                     }"
                     class="inline-flex shrink-0"
                   >
                     <Switcher
                       v-model="formModel.enableWeightFactor"
-                      :disabled="isImportedService && !connected"
+                      :disabled="isImportedService && connectionTestRequired && !connected"
                       theme="primary"
                     />
                   </span>
                   <div class="text-[12px] leading-[20px] text-[#979BA5]">
-                    <span>{{
-                      isImportedService && isEditMode
-                        ? $t('连通测试后展示北极星实时状态，修改并保存后将写入北极星。')
-                        : $t('按实例机型动态分配流量。开启后，可在关联环境中打开「动态权重」')
-                    }}</span>
+                    <span>{{ $t('按实例机型动态分配流量。开启后，可在关联环境中打开「动态权重」') }}</span>
                     <a
                       class="ml-[8px] text-[#3A84FF]"
                       :href="weightFactorDocUrl"
@@ -734,6 +730,20 @@
     () => formModel.value.registerMode !== undefined && !!formModel.value.enableHealthCheck,
   );
   const isImportedService = computed(() => !formModel.value.createNewService);
+  // 与连通测试校验、useImportedPolaris 的失效字段保持一致，避免漏判连接目标变化。
+  const connectionFieldsChanged = computed(
+    () =>
+      isEditMode.value &&
+      (formModel.value.polarisName !== props.editData?.polarisName ||
+        formModel.value.polarisNamespace !== props.editData?.polarisNamespace ||
+        formModel.value.polarisToken !== props.editData?.polarisToken),
+  );
+  const connectionTestRequired = computed(() => !isEditMode.value || connectionFieldsChanged.value);
+  // 开关比对基线：表单初始化与连通测试回填都会同步，使 weightFactorChanged 只反映用户手动调整。
+  const weightFactorBaseline = ref(false);
+  const weightFactorChanged = computed(
+    () => isEditMode.value && formModel.value.enableWeightFactor !== weightFactorBaseline.value,
+  );
 
   const servicePortHint = computed(() =>
     isImmediateRegister(formModel.value)
@@ -767,10 +777,11 @@
         formModel.value.enableWeightFactor = value;
       },
     }),
-    // 回填线上状态不计入用户修改。
+    // 回填线上状态不计入用户修改；基线同步回填值，避免后续把回填当成用户调整。
     hydrate: enabled =>
       withPausedWatch(() => {
         formModel.value.enableWeightFactor = enabled;
+        weightFactorBaseline.value = enabled;
       }),
     target: () => ({
       appID: appDetailStore.appID,
@@ -849,7 +860,9 @@
       focusOnErrorField();
       return;
     }
-    await importedPolaris.testConnection();
+    await importedPolaris.testConnection({
+      preserveEnabled: weightFactorChanged.value && !connectionFieldsChanged.value,
+    });
   }
 
   // 表单验证规则
@@ -989,6 +1002,8 @@
     } else {
       formModel.value = { ...defaultFormValue.value };
     }
+    // 基线随表单初始化同步，保证 weightFactorChanged 只表示用户手动调整过开关。
+    weightFactorBaseline.value = formModel.value.enableWeightFactor ?? false;
   }
 
   // 服务标签输入模式
@@ -1084,6 +1099,10 @@
       valid = !!(await formRef.value.validate().catch(() => false));
     } finally {
       validating.value = false;
+    }
+    // 未修改连接信息的编辑页可先调整权重因子，保存时再读取线上快照。
+    if (valid && isImportedService.value && isEditMode.value && !connectionTestRequired.value && !connected.value) {
+      await importedPolaris.testConnection({ preserveEnabled: weightFactorChanged.value });
     }
     connectionRequired.value = isImportedService.value && !connected.value;
     resolutionRequired.value = weightFactorRequiresResolution.value;

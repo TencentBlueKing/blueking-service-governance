@@ -2105,7 +2105,7 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 请先选择北极星环境类型: Please select a Polaris environment
 请先完成连通测试并通过后再提交: Please complete the connectivity test successfully before submitting
 请先完成连通测试后再修改权重因子: Please complete the connectivity test before changing the weight factor
-连通测试后展示北极星实时状态，修改并保存后将写入北极星。: The connectivity test retrieves the live Polaris state. Changes are written to Polaris when saved.
+可直接修改权重因子；修改北极星 Token 后需重新完成连通测试。: You can change the weight factor directly. If the Polaris Token changes, complete the connectivity test again first.
 权重因子参数: Weight Factor Parameters
 权重因子与北极星线上配置不一致: Weight factor differs from the live Polaris configuration
 权重因子与北极星线上配置不一致，请选择处理方式: Weight factor differs from the live Polaris configuration. Please choose how to proceed

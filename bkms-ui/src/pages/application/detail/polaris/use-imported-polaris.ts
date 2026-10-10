@@ -44,7 +44,7 @@ export interface WeightFactorState {
 }
 
 interface ImportedPolarisOptions {
-  /** 表单开关；新建默认关闭，编辑连通测试后回填线上值。 */
+  /** 表单开关；新建默认关闭，编辑连通测试可按需回填线上值。 */
   enabled: Ref<boolean | undefined>;
   /** 侧栏是否打开；关闭后的异步结果不得更新状态。 */
   active: () => boolean;
@@ -169,8 +169,8 @@ export function useImportedPolaris(options: ImportedPolarisOptions) {
     return readWeightFactor(result.service.metadata);
   }
 
-  /** 一次查询同时给出连通结果与权重因子快照；连接字段校验由调用方完成。 */
-  async function testConnection() {
+  /** 一次查询同时给出连通结果与权重因子快照；用户已修改开关时可保留表单值。 */
+  async function testConnection({ preserveEnabled = false }: { preserveEnabled?: boolean } = {}) {
     if (!options.active() || !options.imported() || status.value === 'loading' || submitting.value) return;
     const requestVersion = ++version;
     // 固定本次请求参数；表单后续变化由 version 判定响应是否有效。
@@ -185,8 +185,8 @@ export function useImportedPolaris(options: ImportedPolarisOptions) {
       const result = await readRemote(target);
       if (!isCurrent(requestVersion)) return;
       remote.value = result;
-      // 仅编辑回填实时开关；新建保留默认关闭。
-      if (options.editMode()) options.hydrate(result.enabled);
+      // 未修改开关时回填线上状态；已修改则保留用户选择。
+      if (options.editMode() && !preserveEnabled) options.hydrate(result.enabled);
       status.value = 'success';
     } catch {
       if (!isCurrent(requestVersion)) return;
