@@ -75,7 +75,8 @@ func NewCollector(deployRecordStore appmodeldeploy.RecordStore) *Collector {
 }
 
 // Collect 返回配置关联各环境的实例统计，以及北极星服务全量健康实例数 / 权重。
-// 未部署环境直接返回全 0；部署记录 / Pod / 北极星查询失败则整体报错。
+// 未部署、或已标记部署但没有主部署记录的环境返回全 0；
+// Pod / 北极星查询失败，以及部署记录查询的其它错误则整体报错。
 func (c *Collector) Collect(
 	ctx context.Context,
 	appID string,
@@ -97,9 +98,15 @@ func (c *Collector) Collect(
 			continue
 		}
 
-		// 仅统计主部署（空泳道），与实例列表默认视图一致
+		// 仅统计主部署（空泳道），与实例列表默认视图一致。
+		// 配置已记为部署、但主部署记录不存在时（环境已清理或记录缺失），该环境按 0 返回，
 		record, err := c.deployRecordStore.GetLatest(ctx, appID, envName, "")
 		if err != nil {
+			// immediate 模式下，如果用户绑定了未部署的环境，会导致配置标记为已部署，但实际没有主部署记录，
+			if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
+				envStats[envName] = Stats{}
+				continue
+			}
 			return nil, errors.Wrapf(err, "get latest deploy record for env %s", envName)
 		}
 		pods, err := listEnvPods(ctx, record)

@@ -275,11 +275,70 @@ var _ = Describe("Collector", func() {
 		}))
 	})
 
-	It("returns an error when the deployed environment has no deploy record", func() {
-		_, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
+	It("returns zeros when the deployed environment has no deploy record", func() {
+		result, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
 
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("get latest deploy record for env stable"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.EnvStats["stable"]).To(Equal(instancestats.Stats{}))
+		Expect(result.EnvStats["test"]).To(Equal(instancestats.Stats{}))
+		Expect(result.TotalHealthyInstanceCount).To(BeZero())
+		Expect(result.TotalHealthyInstanceWeight).To(BeZero())
+	})
+
+	It("keeps stats for other environments when one deployed environment has no deploy record", func() {
+		config.EnvStates["missing"] = polaris.PolarisEnvState{
+			AppliedFields: &polaris.RedeployRequiredFields{
+				InstanceKey:  "demo",
+				PolarisToken: "token",
+				ServicePort:  8080,
+			},
+		}
+
+		_, err := store.Create(ctx, &appmodeldeploy.Record{
+			AppID:           appID,
+			EnvName:         "stable",
+			TrafficLaneName: "",
+			ClusterID:       "BCS-K8S-1",
+			Namespace:       "default",
+			LabelSelector:   map[string]string{"app": "demo"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		mockers = append(mockers, mockey.Mock(cluster.NewConfig).Return(&cluster.Config{}).Build())
+		mockers = append(mockers, mockey.Mock(k8sclient.NewWithGVR).
+			To(func(*cluster.Config, schema.GroupVersionResource) *k8sclient.Client {
+				return &k8sclient.Client{}
+			}).
+			Build())
+		mockers = append(mockers, mockey.Mock((*k8sclient.Client).List).
+			To(func(
+				*k8sclient.Client,
+				context.Context,
+				string,
+				metav1.ListOptions,
+			) (*unstructured.UnstructuredList, error) {
+				return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{
+					{Object: map[string]any{"status": map[string]any{"podIP": "127.0.0.1"}}},
+				}}, nil
+			}).
+			Build())
+		mockers = append(mockers, mockey.Mock(polarisInfra.GetInstances).
+			Return([]*polarisInfra.Instance{
+				{IP: "127.0.0.1", Port: 8080, Weight: 100, IsHealthy: true},
+			}, nil).
+			Build())
+
+		result, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.EnvStats["stable"]).To(Equal(instancestats.Stats{
+			HealthyInstanceCount:  1,
+			HealthyInstanceWeight: 100,
+			TotalInstanceCount:    1,
+		}))
+		Expect(result.EnvStats["missing"]).To(Equal(instancestats.Stats{}))
+		Expect(result.TotalHealthyInstanceCount).To(Equal(1))
+		Expect(result.TotalHealthyInstanceWeight).To(Equal(100))
 	})
 
 	It("returns an error when listing pods fails", func() {
