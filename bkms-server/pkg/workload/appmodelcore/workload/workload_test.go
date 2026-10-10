@@ -303,6 +303,13 @@ var _ = Describe("Builder Shared Tests", func() {
 			Expect(container.Resources.Requests.Cpu().String()).To(Equal("1"))
 			Expect(container.Resources.Limits.Cpu().String()).To(Equal("2"))
 
+			envMap := make(map[string]string)
+			for _, envVar := range container.Env {
+				envMap[envVar.Name] = envVar.Value
+			}
+			Expect(envMap).To(HaveKeyWithValue(envvars.EnvVarNameCPULimit, "2"))
+			Expect(envMap).To(HaveKeyWithValue(envvars.EnvVarNameMemoryLimit, "4Gi"))
+
 			// Check another env that has no override
 			env2 := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 			result2, err := builder.Build(ctx, env2)

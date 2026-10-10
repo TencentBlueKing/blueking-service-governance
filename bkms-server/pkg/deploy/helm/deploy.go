@@ -582,6 +582,8 @@ func buildEnvContext(
 	env *bkmsenv.Environment,
 	maskSensitive bool,
 ) (map[string]string, error) {
+	// Helm-based apps have no AppModel; their resources come from chart values. So the
+	// resource limit builtins (BKMS_CPU_LIMIT, BKMS_MEMORY_LIMIT) are not in this context.
 	envList, err := envVarsReader.ListVars(ctx, *env, app, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "list env vars")

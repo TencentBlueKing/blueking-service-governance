@@ -20,15 +20,17 @@
 package handler
 
 import (
-	"errors"
+	"context"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/serializer"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
@@ -61,17 +63,10 @@ func (h *Handler) ListAppEnvVars(c *gin.Context) {
 		return
 	}
 
-	var am *appmodel.AppModel
-	am, err = h.registry.AppModelStore.GetAppModel(ctx, app.ID)
+	am, err := h.getEnvEffectiveAppModel(ctx, app.ID, env.Name)
 	if err != nil {
-		if !errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get app model for app id=%s", app.ID),
-			)
-			return
-		}
-		am = nil
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get env effective app model"))
+		return
 	}
 
 	reader := envvars.NewUnifiedEnvVarsReader(
@@ -179,12 +174,18 @@ func (h *Handler) ListAppBgEnvVars(c *gin.Context) {
 		return
 	}
 
+	am, err := h.getEnvEffectiveAppModel(ctx, app.ID, env.Name)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get env effective app model"))
+		return
+	}
+
 	reader := envvars.NewUnifiedEnvVarsReader(
 		h.registry.ScopedEnvVarStore,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
-	bgVars, err := reader.ListAppBgVars(ctx, *env, app)
+	bgVars, err := reader.ListAppBgVars(ctx, *env, app, am)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app background env vars"))
 		return
@@ -198,4 +199,25 @@ func (h *Handler) ListAppBgEnvVars(c *gin.Context) {
 			},
 		),
 	})
+}
+
+// getEnvEffectiveAppModel returns the AppModel with the env app spec applied, the same
+// model the workload builder uses, so resource limit builtins match the container.
+// It returns nil when the app has no AppModel, e.g. Helm-based apps.
+func (h *Handler) getEnvEffectiveAppModel(
+	ctx context.Context, appID, envName string,
+) (*appmodel.AppModel, error) {
+	am, err := h.registry.AppModelStore.GetAppModel(ctx, appID)
+	if err != nil {
+		if errors.Is(err, appmodel.ErrAppModelNotFound) {
+			return nil, nil
+		}
+		return nil, errors.Wrapf(err, "get app model for app id=%s", appID)
+	}
+
+	spec, err := appspec.GetEnvEffective(ctx, h.registry.AppSpecStore, h.registry.AppModelStore, appID, envName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get effective app spec for app id=%s env=%s", appID, envName)
+	}
+	return appspec.ApplyToAppModel(spec, am), nil
 }

@@ -19,12 +19,11 @@
 package workload
 
 import (
-	"strings"
-
 	"github.com/hashicorp/go-set/v3"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/resourcevalue"
 )
 
 // buildResourceRequirements constructs Kubernetes ResourceRequirements from a map of resource specifications.
@@ -51,39 +50,14 @@ func buildResourceRequirements(resources map[string]string) (*corev1.ResourceReq
 		if !validNames.Contains(name) {
 			return nil, errors.Errorf("invalid resource name %q", name)
 		}
-		parts := strings.Split(strings.TrimSpace(rawValue), "-")
-		if len(parts) == 0 || len(parts) > 2 {
-			return nil, errors.Errorf(
-				"invalid resource %q value %q: expected {requests} or {requests}-{limits}",
-				name,
-				rawValue,
-			)
-		}
-
-		// Get the request and limit strings
-		reqStr := parts[0]
-		limStr := reqStr
-		if len(parts) == 2 {
-			limStr = parts[1]
-		}
-
-		// Parse the quantities
-		reqQty, err := resource.ParseQuantity(reqStr)
+		bounds, err := resourcevalue.ParseResourceBounds(rawValue)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parsing resource %q requests %q", name, reqStr)
-		}
-		limQty, err := resource.ParseQuantity(limStr)
-		if err != nil {
-			return nil, errors.Wrapf(err, "parsing resource %q limits %q", name, limStr)
-		}
-
-		if reqQty.Cmp(limQty) > 0 {
-			return nil, errors.Errorf("resource %q requests %q must be <= limits %q", name, reqStr, limStr)
+			return nil, errors.Wrapf(err, "resource %q", name)
 		}
 
 		resName := corev1.ResourceName(name)
-		requests[resName] = reqQty
-		limits[resName] = limQty
+		requests[resName] = bounds.RequestQuantity
+		limits[resName] = bounds.LimitQuantity
 	}
 
 	return &corev1.ResourceRequirements{

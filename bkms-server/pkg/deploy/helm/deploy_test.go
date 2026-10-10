@@ -39,6 +39,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	bkmshelm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/arrangement"
@@ -905,6 +906,31 @@ var _ = Describe("buildEnvContext", func() {
 			raw, err := buildEnvContext(ctx, reader, app, env, false)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(raw["SECRET"]).To(Equal("s"))
+		})
+	})
+
+	It("should read env vars without an AppModel, so resource limit builtins are absent", func() {
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			var gotAM *appmodel.AppModel
+			called := false
+			mockey.Mock((*envvars.UnifiedEnvVarsReader).ListVars).To(func(
+				_ *envvars.UnifiedEnvVarsReader,
+				_ context.Context,
+				_ bkmsenv.Environment,
+				_ *bkmsapp.Application,
+				am *appmodel.AppModel,
+			) (envvartypes.EnvVariableList, error) {
+				called = true
+				gotAM = am
+				return envvartypes.EnvVariableList{{Key: envvars.EnvVarNameAppName, Value: "app"}}, nil
+			}).Build()
+
+			vars, err := buildEnvContext(ctx, reader, app, env, false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(called).To(BeTrue())
+			Expect(gotAM).To(BeNil())
+			Expect(vars).NotTo(HaveKey(envvars.EnvVarNameCPULimit))
+			Expect(vars).NotTo(HaveKey(envvars.EnvVarNameMemoryLimit))
 		})
 	})
 

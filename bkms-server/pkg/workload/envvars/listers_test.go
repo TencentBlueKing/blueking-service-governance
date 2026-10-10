@@ -32,6 +32,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
@@ -107,7 +108,7 @@ var _ = Describe("ListBuiltinVars", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		builtinVars, err := envvars.ListBuiltinVars(ctx, store, environment, nil)
+		builtinVars, err := envvars.ListBuiltinVars(ctx, store, environment, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(envVarKeyValues(builtinVars)).To(Equal([]envVarKeyValue{
 			{Key: envvars.EnvVarNameEnvType, Value: "production"},
@@ -135,7 +136,7 @@ var _ = Describe("ListBuiltinVars", func() {
 			Type: bkmsapp.AppTypeTRPC,
 		}
 
-		builtinVars, err := envvars.ListBuiltinVars(ctx, store, environment, app)
+		builtinVars, err := envvars.ListBuiltinVars(ctx, store, environment, app, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(envVarKeyValues(builtinVars)).To(Equal([]envVarKeyValue{
 			{Key: envvars.EnvVarNameEnvType, Value: "production"},
@@ -148,6 +149,21 @@ var _ = Describe("ListBuiltinVars", func() {
 			{Key: envvars.EnvVarNameAppName, Value: "demo-app"},
 			{Key: envvars.EnvVarNameContainerName, Value: defaults.WorkloadMainContainerName},
 		}))
+	})
+
+	It("should append resource limit built-in vars when app model is provided", func() {
+		app := &bkmsapp.Application{Name: "demo-app", Type: bkmsapp.AppTypeTRPC}
+		am := &appmodel.AppModel{Workload: appmodel.Workload{
+			Resources: map[string]string{"cpu": "100m-200m", "memory": "2048Mi"},
+		}}
+
+		builtinVars, err := envvars.ListBuiltinVars(ctx, store, environment, app, am)
+		Expect(err).NotTo(HaveOccurred())
+		varsByKey := envVarByKey(builtinVars)
+		Expect(varsByKey[envvars.EnvVarNameCPULimit].Value).To(Equal("200m"))
+		Expect(varsByKey[envvars.EnvVarNameCPULimit].IsBuiltin).To(BeTrue())
+		Expect(varsByKey[envvars.EnvVarNameMemoryLimit].Value).To(Equal("2048Mi"))
+		Expect(varsByKey[envvars.EnvVarNameMemoryLimit].IsBuiltin).To(BeTrue())
 	})
 })
 

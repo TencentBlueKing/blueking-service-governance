@@ -129,7 +129,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	It("should list app background vars and include env scoped vars", func() {
 		seedScopedEnvVars(ctx, store, workspaceID)
 
-		bgVars, err := reader.ListAppBgVars(ctx, environment, nil)
+		bgVars, err := reader.ListAppBgVars(ctx, environment, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		expectedValues := append(
@@ -148,7 +148,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 		seedScopedEnvVars(ctx, store, workspaceID)
 
 		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
-		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp)
+		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		// App-level builtin vars (BKMS_APP_NAME, BKMS_CONTAINER_NAME) are sorted
@@ -166,6 +166,21 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 			append(expectedEnvBgVarSourceKeyValues(), envScopedVars...)...,
 		)
 		Expect(envVarSourceKeyValues(bgVars)).To(Equal(expectedValues))
+	})
+
+	It("should list resource limit builtins in app background vars when app model is provided", func() {
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		am := &appmodel.AppModel{Workload: appmodel.Workload{
+			Resources: map[string]string{"cpu": "100m-200m", "memory": "2Gi"},
+		}}
+
+		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp, am)
+		Expect(err).NotTo(HaveOccurred())
+		builtin := envvartypes.EnvVarSourceBuiltin
+		Expect(envVarSourceKeyValues(bgVars)).To(ContainElements(
+			envVarSourceKeyValue{Source: builtin, Key: envvars.EnvVarNameCPULimit, Value: "200m"},
+			envVarSourceKeyValue{Source: builtin, Key: envvars.EnvVarNameMemoryLimit, Value: "2Gi"},
+		))
 	})
 
 	It("should list available env vars with duplicate keys deduplicated by priority", func() {
@@ -224,6 +239,110 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 			{Key: "APP_ONLY_KEY", Value: "app-only-value"},
 		}))
 		Expect(vars.ToMap()["SHARED_KEY"]).To(Equal("app-value"))
+	})
+
+	DescribeTable("should inject CPU and memory limits as builtin env vars",
+		func(resources map[string]string, appEnvVars []appmodel.Variable, want map[string]string, absent []string) {
+			testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+			am := &appmodel.AppModel{
+				Workload: appmodel.Workload{
+					Resources: resources,
+					EnvVars:   appEnvVars,
+				},
+			}
+
+			vars, err := reader.ListVars(ctx, environment, testApp, am)
+			Expect(err).NotTo(HaveOccurred())
+
+			effective := vars.ToMap()
+			for key, value := range want {
+				Expect(effective).To(HaveKeyWithValue(key, value))
+			}
+			for _, key := range absent {
+				Expect(effective).NotTo(HaveKey(key))
+			}
+
+			overridden := lo.SliceToMap(appEnvVars, func(item appmodel.Variable) (string, struct{}) {
+				return item.Key, struct{}{}
+			})
+			byKey := envVarByKey(vars.ToDeduplicatedList())
+			for key := range want {
+				if _, ok := overridden[key]; ok {
+					continue
+				}
+				Expect(byKey[key].IsBuiltin).To(BeTrue())
+				Expect(byKey[key].ValueFrom).To(BeNil())
+				Expect(byKey[key].Placeholder).To(BeEmpty())
+			}
+		},
+		Entry("keeps the configured limit unit",
+			map[string]string{"cpu": "100m-200m", "memory": "512Mi-2Gi"},
+			nil,
+			map[string]string{"BKMS_CPU_LIMIT": "200m", "BKMS_MEMORY_LIMIT": "2Gi"},
+			nil,
+		),
+		Entry("preserves a single quantity as both request and limit",
+			map[string]string{"cpu": "0.2", "memory": "2048Mi"},
+			nil,
+			map[string]string{"BKMS_CPU_LIMIT": "0.2", "BKMS_MEMORY_LIMIT": "2048Mi"},
+			nil,
+		),
+		Entry("injects only the resource that is configured",
+			map[string]string{"memory": "256Mi"},
+			nil,
+			map[string]string{"BKMS_MEMORY_LIMIT": "256Mi"},
+			[]string{"BKMS_CPU_LIMIT"},
+		),
+		Entry("omits both variables when resources are unset",
+			nil,
+			nil,
+			nil,
+			[]string{"BKMS_CPU_LIMIT", "BKMS_MEMORY_LIMIT"},
+		),
+		Entry("skips a limit that is not a kubernetes quantity",
+			map[string]string{"cpu": "100m-bad", "memory": "2Gi"},
+			nil,
+			map[string]string{"BKMS_MEMORY_LIMIT": "2Gi"},
+			[]string{"BKMS_CPU_LIMIT"},
+		),
+		Entry("lets an app env var override the builtin limit",
+			map[string]string{"cpu": "100m-200m", "memory": "2Gi"},
+			[]appmodel.Variable{{Key: "BKMS_CPU_LIMIT", Value: "custom"}},
+			map[string]string{"BKMS_CPU_LIMIT": "custom", "BKMS_MEMORY_LIMIT": "2Gi"},
+			nil,
+		),
+	)
+
+	It("lets scoped public vars and app vars override builtin resource limits", func() {
+		seedScopedEnvVars(ctx, store, workspaceID)
+		_, err := store.Create(ctx, envvars.ScopedEnvVar{
+			WorkspaceID: workspaceID,
+			ScopeType:   envvartypes.ScopeTypeWorkspace,
+			Key:         "BKMS_CPU_LIMIT",
+			Value:       "from-workspace",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = store.CreateSimpleEnvScopeVar(
+			ctx,
+			environment,
+			"BKMS_MEMORY_LIMIT",
+			"from-env",
+			"",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		am := &appmodel.AppModel{
+			Workload: appmodel.Workload{
+				Resources: map[string]string{"cpu": "100m-200m", "memory": "512Mi-2Gi"},
+				EnvVars:   []appmodel.Variable{{Key: "BKMS_CPU_LIMIT", Value: "from-app"}},
+			},
+		}
+
+		vars, err := reader.ListVars(ctx, environment, testApp, am)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vars.ToMap()).To(HaveKeyWithValue("BKMS_CPU_LIMIT", "from-app"))
+		Expect(vars.ToMap()).To(HaveKeyWithValue("BKMS_MEMORY_LIMIT", "from-env"))
 	})
 })
 
@@ -375,7 +494,7 @@ var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 	})
 
 	It("should build conflict info against all scoped vars in the workspace", func() {
-		conflicts, err := reader.BuildAppConflictedInfoByKeys(ctx, []string{"SHARED_KEY"}, workspaceID, testApp)
+		conflicts, err := reader.BuildAppConflictedInfoByKeys(ctx, []string{"SHARED_KEY"}, workspaceID, testApp, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conflicts).To(HaveLen(1))
 
@@ -399,7 +518,9 @@ var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 	})
 
 	It("should include scoped vars from other environments in the same workspace", func() {
-		conflicts, err := reader.BuildAppConflictedInfoByKeys(ctx, []string{"OTHER_ENV_KEY"}, workspaceID, testApp)
+		conflicts, err := reader.BuildAppConflictedInfoByKeys(
+			ctx, []string{"OTHER_ENV_KEY"}, workspaceID, testApp, nil,
+		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conflicts).To(HaveLen(1))
 
@@ -420,6 +541,7 @@ var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 			[]string{envvars.EnvVarNameAppName},
 			workspaceID,
 			testApp,
+			nil,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conflicts).To(HaveLen(1))
@@ -430,6 +552,27 @@ var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 			{Source: envvartypes.EnvVarSourceBuiltin},
 		}))
 		Expect(info.ConflictedDetail).To(Equal("冲突值为：test-app"))
+	})
+
+	It("should include resource limit builtin vars when app model is provided", func() {
+		am := &appmodel.AppModel{Workload: appmodel.Workload{
+			Resources: map[string]string{"cpu": "100m-200m"},
+		}}
+		conflicts, err := reader.BuildAppConflictedInfoByKeys(
+			ctx,
+			[]string{envvars.EnvVarNameCPULimit},
+			workspaceID,
+			testApp,
+			am,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		info := conflicts[envvars.EnvVarNameCPULimit]
+		Expect(info.OverrideConflicted).To(BeTrue())
+		Expect(info.ConflictedSources).To(Equal([]envvartypes.ConflictedSource{
+			{Source: envvartypes.EnvVarSourceBuiltin},
+		}))
+		Expect(info.ConflictedDetail).To(Equal("冲突值为：200m"))
 	})
 })
 
@@ -604,7 +747,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 			nil,
 		)
 
-		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp)
+		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		items := envVarSourceKeyValues(bgVars)
@@ -644,7 +787,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 			nil,
 		)
 
-		bgVars, err := reader.ListAppBgVars(ctx, environment, nil)
+		bgVars, err := reader.ListAppBgVars(ctx, environment, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		items := envVarSourceKeyValues(bgVars)
@@ -670,7 +813,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 			nil,
 		)
 
-		bgVars, err := reader.ListAppBgVars(ctx, environment, app1)
+		bgVars, err := reader.ListAppBgVars(ctx, environment, app1, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		items := envVarSourceKeyValues(bgVars)
@@ -717,7 +860,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 			nil,
 		)
 
-		conflicts, err := reader.BuildAppConflictedInfoByKeys(ctx, []string{"SHARED_KEY"}, workspaceID, testApp)
+		conflicts, err := reader.BuildAppConflictedInfoByKeys(ctx, []string{"SHARED_KEY"}, workspaceID, testApp, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conflicts).To(HaveLen(1))
 
@@ -739,13 +882,13 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 		)
 
 		// production 环境未出现在 EnvInstanceMap 中，不应注入
-		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp)
+		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(envVarSourceKeyValues(bgVars)).NotTo(ContainElement(envVarSourceKeyValue{Key: "TEST_ONLY_VAR"}))
 
 		// test 环境已映射，应注入
 		testEnv := envmodel.Environment{WorkspaceID: workspaceID, Name: "test-env", Type: "test"}
-		bgVars, err = reader.ListAppBgVars(ctx, testEnv, testApp)
+		bgVars, err = reader.ListAppBgVars(ctx, testEnv, testApp, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(envVarSourceKeyValues(bgVars)).To(ContainElement(envVarSourceKeyValue{
 			Source: envvartypes.EnvVarSourceAppDeps, Key: "TEST_ONLY_VAR", Value: "test-env-value",

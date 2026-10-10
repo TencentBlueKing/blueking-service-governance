@@ -50,6 +50,10 @@ const (
 	EnvVarNamePodName = "BKMS_POD_NAME"
 	// EnvVarNameNodeIP is the env variable name for the node IP
 	EnvVarNameNodeIP = "BKMS_NODE_IP"
+	// EnvVarNameCPULimit is the env variable name for the workload CPU limit.
+	EnvVarNameCPULimit = "BKMS_CPU_LIMIT"
+	// EnvVarNameMemoryLimit is the env variable name for the workload memory limit.
+	EnvVarNameMemoryLimit = "BKMS_MEMORY_LIMIT"
 )
 
 // RuntimeVarPlaceholder returns the placeholder string for a runtime variable.

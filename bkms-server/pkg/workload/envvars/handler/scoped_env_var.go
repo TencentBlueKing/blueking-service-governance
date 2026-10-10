@@ -473,7 +473,7 @@ func (h *Handler) ListDetailedAppEnvVars(c *gin.Context) {
 		return item.Key
 	})
 
-	conflictedInfos, err := reader.BuildAppConflictedInfoByKeys(ctx, keys, app.WorkspaceID, app)
+	conflictedInfos, err := reader.BuildAppConflictedInfoByKeys(ctx, keys, app.WorkspaceID, app, am)
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,

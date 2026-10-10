@@ -26,17 +26,20 @@ import (
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
 // ListBuiltinVars returns built-in env variables available in the given environment.
 // If app is not nil, app-related built-in variables are appended at the end.
+// If am is not nil, workload resource limit variables are appended after them.
 func ListBuiltinVars(
 	ctx context.Context,
 	store ScopedEnvVarStore,
 	environment envmodel.Environment,
 	app *bkmsapp.Application,
+	am *appmodel.AppModel,
 ) (envvartypes.EnvVariableList, error) {
 	envVars := make(envvartypes.EnvVariableList, 0)
 	envVars = append(envVars, getEnvBuiltinVars(environment)...)
@@ -59,6 +62,9 @@ func ListBuiltinVars(
 
 	if app != nil {
 		envVars = append(envVars, getAppBuiltinVars(*app)...)
+	}
+	if am != nil {
+		envVars = append(envVars, resourceLimitBuiltinVars(am.Workload.Resources)...)
 	}
 	return envVars, nil
 }
