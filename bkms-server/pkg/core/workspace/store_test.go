@@ -30,6 +30,8 @@ import (
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/dal"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -42,10 +44,10 @@ var _ = Describe("WorkspaceStore", func() {
 	BeforeEach(func() {
 		var err error
 
-		store, err = NewWorkspaceStoreMongo(database.Client(), database.Name())
+		store, err = NewWorkspaceStoreMongo(database.DB())
 		Expect(err).NotTo(HaveOccurred())
 
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 		Expect(cleanupWorkspaceCollection(ctx)).To(Succeed())
 
 		workspaceA = Workspace{
@@ -362,6 +364,59 @@ var _ = Describe("WorkspaceStore", func() {
 			Expect(counts[StateReady]).To(Equal(int64(1)))
 			Expect(counts[StateDisabled]).To(Equal(int64(1)))
 			Expect(counts[StateProcessing]).To(Equal(int64(0)))
+		})
+
+		It("does not read a workspace that belongs to another tenant", func() {
+			workspaceA.ID = "ws-tenant-a-" + stringx.Random(4)
+			other := workspaceA
+			other.ID = "ws-tenant-b-" + stringx.Random(4)
+			Expect(store.Create(ctx, &workspaceA)).To(Succeed())
+
+			otherCtx := tenant.WithTenantID(context.Background(), "tenant-b")
+			Expect(store.Create(otherCtx, &other)).To(Succeed())
+			defer func() {
+				_ = store.Delete(ctx, workspaceA.ID)
+				_ = store.Delete(otherCtx, other.ID)
+			}()
+
+			_, err := store.Get(ctx, other.ID)
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+
+			got, err := store.Get(otherCtx, other.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.TenantID).To(Equal("tenant-b"))
+		})
+
+		It("rejects workspace access when the context has no tenant", func() {
+			err := store.Create(context.Background(), &workspaceA)
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
+		})
+
+		It("reads the tenant from context with FromContext", func() {
+			workspaceA.ID = "ws-tenant-a-" + stringx.Random(4)
+			other := workspaceA
+			other.ID = "ws-tenant-b-" + stringx.Random(4)
+			otherCtx := tenant.WithTenantID(context.Background(), "tenant-b")
+			Expect(store.Create(ctx, &workspaceA)).To(Succeed())
+			Expect(store.Create(otherCtx, &other)).To(Succeed())
+			defer func() {
+				_ = store.Delete(ctx, workspaceA.ID)
+				_ = store.Delete(otherCtx, other.ID)
+			}()
+
+			scoped := store.Scopes(dal.FromContext())
+			_, err := scoped.Scopes(dal.AllTenants()).Get(otherCtx, other.ID)
+			Expect(err).To(MatchError(dal.ErrScopeAlreadySet))
+
+			_, err = scoped.Get(otherCtx, workspaceA.ID)
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+
+			got, err := scoped.Get(otherCtx, other.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.TenantID).To(Equal("tenant-b"))
+
+			_, err = scoped.Get(context.Background(), other.ID)
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
 		})
 	})
 })

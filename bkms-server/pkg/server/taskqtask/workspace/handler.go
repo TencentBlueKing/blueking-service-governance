@@ -51,8 +51,7 @@ const maxWaitDuration = 10 * time.Minute
 func initHandler(ctx context.Context, args InitializationArgs) error {
 	log.Infof(ctx, "polling workspace status for workspace %s", args.WorkspaceID)
 
-	mongoCli, dbName := database.Client(), database.Name()
-	workspaceStore, err := workspace.NewWorkspaceStoreMongo(mongoCli, dbName)
+	workspaceStore, err := workspace.NewWorkspaceStoreMongo(database.DB())
 	if err != nil {
 		return errors.Wrapf(err, "create workspace store")
 	}
@@ -179,7 +178,7 @@ func activateWorkspace(
 func onExhausted(ctx context.Context, workspaceID string, lastErr error) {
 	log.Errorf(ctx, "workspace init task exhausted for %s: %v", workspaceID, lastErr)
 
-	workspaceStore, err := workspace.NewWorkspaceStoreMongo(database.Client(), database.Name())
+	workspaceStore, err := workspace.NewWorkspaceStoreMongo(database.DB())
 	if err != nil {
 		log.Errorf(ctx, "workspace init exhausted: create store for %s: %v", workspaceID, err)
 		return

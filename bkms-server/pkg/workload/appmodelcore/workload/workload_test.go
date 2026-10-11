@@ -48,6 +48,7 @@ import (
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model/initdata"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -171,7 +172,7 @@ var _ = Describe("Builder Shared Tests", func() {
 	var builderSvc *workload.BuilderService
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 		stores = &SharedTestStores{}
 		diApp = fxtest.New(
 			GinkgoT(),

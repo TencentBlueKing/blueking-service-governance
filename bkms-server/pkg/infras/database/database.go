@@ -30,6 +30,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/dal"
 )
 
 var (
@@ -56,6 +57,12 @@ func Name() string {
 		log.Fatal("mongodb database not initialized")
 	}
 	return dbName
+}
+
+// DB 获取基于全局 mongodb client 和数据库名构造的 dal.DB。
+// 它是对共享连接池的轻量包装，不会新建网络连接。
+func DB() dal.DB {
+	return dal.New(Client(), Name())
 }
 
 // InitClient 初始化

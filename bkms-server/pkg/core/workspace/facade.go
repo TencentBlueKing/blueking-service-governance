@@ -30,7 +30,7 @@ import (
 // GetWorkspaceImageRegistry 获取工作区当前使用的镜像仓库
 func GetWorkspaceImageRegistry(ctx context.Context, workspaceID string) (*bkmsreg.ImageRegistry, error) {
 	// 先获取工作空间，以知晓当前使用的镜像仓库类型
-	wsStore, err := NewWorkspaceStoreMongo(database.Client(), database.Name())
+	wsStore, err := NewWorkspaceStoreMongo(database.DB())
 	if err != nil {
 		return nil, err
 	}

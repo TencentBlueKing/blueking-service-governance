@@ -1,0 +1,20 @@
+[
+  {
+    "dropIndexes": "workspaces",
+    "index": "tenant_id_1"
+  },
+  {
+    "update": "workspaces",
+    "updates": [
+      {
+        "q": {},
+        "u": {
+          "$unset": {
+            "tenant_id": ""
+          }
+        },
+        "multi": true
+      }
+    ]
+  }
+]

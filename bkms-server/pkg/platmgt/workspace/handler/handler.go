@@ -27,6 +27,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/dal"
 	platmgtworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -47,7 +48,7 @@ func New(registry *storereg.Registry) *GinHandler {
 
 func (h *GinHandler) service() *platmgtworkspace.Service {
 	return platmgtworkspace.NewService(
-		h.registry.WorkspaceStore,
+		h.registry.WorkspaceStore.Scopes(dal.AllTenants()),
 		h.registry.AppStore,
 		h.registry.EnvStore,
 	)

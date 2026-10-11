@@ -37,6 +37,7 @@ import (
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -57,7 +58,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 	var buildConfigStore build.ConfigStore
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsapp.FxModule,

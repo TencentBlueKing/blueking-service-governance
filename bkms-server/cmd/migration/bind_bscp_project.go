@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/dal"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
@@ -92,9 +93,9 @@ func runBindBscpProject(
 
 	database.InitClient(ctx, cfg.Mongo)
 	storereg.Init(ctx)
-	reg := storereg.G()
+	wsStore := storereg.G().WorkspaceStore.Scopes(dal.AllTenants())
 
-	ws, err := reg.WorkspaceStore.Get(ctx, workspaceID)
+	ws, err := wsStore.Get(ctx, workspaceID)
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", workspaceID)
 	}
@@ -117,7 +118,7 @@ func runBindBscpProject(
 	ws.BkSystems.BkBSCPProjectKey = strings.TrimSpace(binding.ProjectKey)
 	ws.BkSystems.BscpCredentialID = binding.CredentialID
 	ws.BkSystems.BscpToken = binding.Token
-	if err = reg.WorkspaceStore.Update(ctx, ws); err != nil {
+	if err = wsStore.Update(ctx, ws); err != nil {
 		return errors.Wrap(err, "update workspace bk systems")
 	}
 

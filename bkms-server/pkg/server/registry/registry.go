@@ -54,6 +54,7 @@ import (
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	depinit "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model/initdata"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/dal"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
@@ -202,10 +203,11 @@ func Reset() {
 }
 
 func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
+	db := dal.New(mongoClient, dbName)
 	// 组件定义
 	r.ComponentDefStore = mustInit(component.NewComponentDefStoreMongo(mongoClient, dbName))
-	// 工作空间类
-	r.WorkspaceStore = mustInit(workspace.NewWorkspaceStoreMongo(mongoClient, dbName))
+	// 工作空间类。已迁到 dal.Table 的 Store 只传 db，后续同样只传 db，不再传 mongoClient 和 dbName。
+	r.WorkspaceStore = mustInit(workspace.NewWorkspaceStoreMongo(db))
 	r.ImageRegistryStore = mustInit(registry.NewImageRegistryStoreMongo(mongoClient, dbName))
 	r.WorkspaceCompsStore = mustInit(workspace.NewWorkspaceCompsStoreMongo(mongoClient, dbName))
 	// 环境类

@@ -34,6 +34,7 @@ import (
 	svc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/service"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/dal"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
@@ -183,7 +184,7 @@ func enableBscpCfgForApp(
 		return errors.Wrapf(err, "get app %s", appID)
 	}
 
-	ws, err := reg.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := reg.WorkspaceStore.Scopes(dal.AllTenants()).Get(ctx, app.WorkspaceID)
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", app.WorkspaceID)
 	}

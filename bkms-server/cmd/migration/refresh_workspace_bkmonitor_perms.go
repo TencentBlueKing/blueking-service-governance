@@ -34,6 +34,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/dal"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
@@ -62,7 +63,7 @@ func NewRefreshWorkspaceBkmonitorPermsCmd() *cobra.Command {
 			database.InitClient(ctx, cfg.Mongo)
 			storereg.Init(ctx)
 
-			wsStore := storereg.G().WorkspaceStore
+			wsStore := storereg.G().WorkspaceStore.Scopes(dal.AllTenants())
 
 			if dryRun {
 				dryRunRefreshWorkspaceBkmonitorPerms(ctx, wsStore, workspaceIDs)

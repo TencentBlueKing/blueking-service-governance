@@ -226,7 +226,7 @@ func buildBscpPostRenderer(
 		return nil, errors.Wrap(err, "create bscp config store")
 	}
 
-	wsStore, err := workspace.NewWorkspaceStoreMongo(database.Client(), database.Name())
+	wsStore, err := workspace.NewWorkspaceStoreMongo(database.DB())
 	if err != nil {
 		return nil, errors.Wrap(err, "create workspace store")
 	}

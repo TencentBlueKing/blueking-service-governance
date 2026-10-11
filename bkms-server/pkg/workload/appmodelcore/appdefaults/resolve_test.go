@@ -14,6 +14,7 @@ import (
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
@@ -28,7 +29,7 @@ var _ = Describe("Application default resolution", func() {
 	var workspace *bkmsworkspace.Workspace
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 		bkmsworkspace.ResetLifecycleHooksForTest()
 		bkmsenv.ResetHooksForTest()
 

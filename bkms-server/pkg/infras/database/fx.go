@@ -21,6 +21,8 @@ package database
 import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/dal"
 )
 
 // PrivateFxModule exposes the shared database client only inside the enclosing fx.Module.
@@ -28,6 +30,7 @@ var PrivateFxModule = fx.Options(
 	fx.Provide(
 		func() *mongo.Client { return Client() },
 		func() string { return Name() },
+		func() dal.DB { return DB() },
 		fx.Private,
 	),
 )
