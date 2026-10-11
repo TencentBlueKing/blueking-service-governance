@@ -28,6 +28,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/datascope"
 )
 
 // 存储工作空间数据的 MongoDB 集合名称
@@ -56,6 +58,9 @@ type ListPageOptions struct {
 
 // WorkspaceStore 是用于管理工作空间的存储接口
 type WorkspaceStore interface {
+	// Scopes 返回指定租户范围的 Store，例如 Scopes(datascope.AllTenants())。不调用时从 ctx 读租户。只能调用一次。
+	Scopes(opt datascope.Option) WorkspaceStore
+
 	// List 获取工作空间列表，由于每个用户的工作空间数量有限，不设分页
 	List(ctx context.Context, opts *ListOptions) ([]Workspace, error)
 
@@ -83,6 +88,7 @@ var _ WorkspaceStore = &WorkspaceStoreMongo{}
 // WorkspaceStoreMongo 是 WorkspaceStore 接口的 MongoDB 实现
 type WorkspaceStoreMongo struct {
 	collection *mongo.Collection
+	scope      datascope.Scope
 }
 
 func (s *WorkspaceStoreMongo) buildListFilter(opts *ListOptions) bson.M {
@@ -109,12 +115,23 @@ func NewWorkspaceStoreMongo(client *mongo.Client, dbName string) (*WorkspaceStor
 	coll := client.Database(dbName).Collection(workspaceCollectionName)
 	// 索引（由 golang-migrate 维护）：
 	// - 唯一：id
+	// - 普通：tenant_id
 	return &WorkspaceStoreMongo{collection: coll}, nil
+}
+
+// Scopes 按传入范围派生 Store。
+func (s *WorkspaceStoreMongo) Scopes(opt datascope.Option) WorkspaceStore {
+	next := *s
+	next.scope = datascope.ApplyScope(s.scope, opt)
+	return &next
 }
 
 // List 获取工作空间列表
 func (s *WorkspaceStoreMongo) List(ctx context.Context, opts *ListOptions) ([]Workspace, error) {
-	filter := s.buildListFilter(opts)
+	filter, err := s.scope.TenantFilter(ctx, s.buildListFilter(opts))
+	if err != nil {
+		return nil, errors.Wrap(err, "scope list workspaces")
+	}
 	cursor, err := s.collection.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.Wrap(err, "find workspaces")
@@ -136,7 +153,10 @@ func (s *WorkspaceStoreMongo) ListWithPagination(
 	if opts == nil {
 		opts = &ListPageOptions{}
 	}
-	filter := s.buildListFilter(&opts.ListOptions)
+	filter, err := s.scope.TenantFilter(ctx, s.buildListFilter(&opts.ListOptions))
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "scope list workspaces with pagination")
+	}
 
 	total, err := s.collection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -172,8 +192,12 @@ func (s *WorkspaceStoreMongo) ListWithPagination(
 
 // Get 通过 ID 获取工作空间
 func (s *WorkspaceStoreMongo) Get(ctx context.Context, id string) (*Workspace, error) {
+	filter, err := s.scope.TenantFilter(ctx, bson.M{"id": id})
+	if err != nil {
+		return nil, errors.Wrapf(err, "scope get workspace %s", id)
+	}
 	var workspace Workspace
-	if err := s.collection.FindOne(ctx, bson.M{"id": id}).Decode(&workspace); err != nil {
+	if err := s.collection.FindOne(ctx, filter).Decode(&workspace); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrWorkspaceNotFound
 		}
@@ -184,6 +208,12 @@ func (s *WorkspaceStoreMongo) Get(ctx context.Context, id string) (*Workspace, e
 
 // Create 创建新的工作空间
 func (s *WorkspaceStoreMongo) Create(ctx context.Context, workspace *Workspace) error {
+	tenantID, err := s.scope.TenantForWrite(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "scope create workspace %s", workspace.ID)
+	}
+	workspace.TenantID = tenantID
+
 	// 设置创建 / 更新时间
 	timeNow := time.Now()
 	// FIXME: 完成数据迁移后，可以移除该兼容逻辑，即创建时候直接设置 CreatedAt = timeNow
@@ -200,9 +230,14 @@ func (s *WorkspaceStoreMongo) Create(ctx context.Context, workspace *Workspace) 
 
 // Update 更新已经存在的工作空间
 func (s *WorkspaceStoreMongo) Update(ctx context.Context, workspace *Workspace) error {
+	filter, err := s.scope.TenantFilter(ctx, bson.M{"id": workspace.ID})
+	if err != nil {
+		return errors.Wrapf(err, "scope update workspace %s", workspace.ID)
+	}
+	// $set 不包含 tenant_id，更新不会改变工作空间所属租户
 	if _, err := s.collection.UpdateOne(
 		ctx,
-		bson.M{"id": workspace.ID},
+		filter,
 		bson.M{"$set": bson.M{
 			"displayName":       workspace.DisplayName,
 			"description":       workspace.Description,
@@ -220,10 +255,14 @@ func (s *WorkspaceStoreMongo) Update(ctx context.Context, workspace *Workspace) 
 
 // Delete 删除一个工作空间
 func (s *WorkspaceStoreMongo) Delete(ctx context.Context, id string) error {
-	if err := runPreDeleteHooks(ctx, id); err != nil {
+	filter, err := s.scope.TenantFilter(ctx, bson.M{"id": id})
+	if err != nil {
+		return errors.Wrapf(err, "scope delete workspace %s", id)
+	}
+	if err = runPreDeleteHooks(ctx, id); err != nil {
 		return err
 	}
-	_, err := s.collection.DeleteOne(ctx, bson.M{"id": id})
+	_, err = s.collection.DeleteOne(ctx, filter)
 	return err
 }
 
@@ -237,7 +276,10 @@ type workspaceCountByState struct {
 
 // CountByState returns workspace counts grouped by lifecycle state for the matched filter.
 func (s *WorkspaceStoreMongo) CountByState(ctx context.Context, opts *ListOptions) (map[State]int64, error) {
-	filter := s.buildListFilter(opts)
+	filter, err := s.scope.TenantFilter(ctx, s.buildListFilter(opts))
+	if err != nil {
+		return nil, errors.Wrap(err, "scope count workspaces by state")
+	}
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: filter}},
 		{{Key: "$group", Value: bson.M{

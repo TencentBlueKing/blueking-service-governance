@@ -32,6 +32,9 @@ const (
 	SystemTenantID = "system"
 	// SuperTenantID 超级租户保留值，对齐 ConfigCenter BKSuperTenantID。
 	SuperTenantID = "superadmin"
+
+	// FieldTenantID 业务表上的租户字段名。
+	FieldTenantID = "tenant_id"
 )
 
 var (

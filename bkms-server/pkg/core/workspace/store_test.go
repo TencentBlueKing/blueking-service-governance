@@ -30,6 +30,8 @@ import (
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database/datascope"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -45,7 +47,7 @@ var _ = Describe("WorkspaceStore", func() {
 		store, err = NewWorkspaceStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 		Expect(cleanupWorkspaceCollection(ctx)).To(Succeed())
 
 		workspaceA = Workspace{
@@ -362,6 +364,126 @@ var _ = Describe("WorkspaceStore", func() {
 			Expect(counts[StateReady]).To(Equal(int64(1)))
 			Expect(counts[StateDisabled]).To(Equal(int64(1)))
 			Expect(counts[StateProcessing]).To(Equal(int64(0)))
+		})
+	})
+
+	Context("Tenant Scope", func() {
+		var otherCtx context.Context
+
+		BeforeEach(func() {
+			otherCtx = tenant.WithTenantID(context.Background(), "tenant-b")
+			workspaceA.State = StateReady
+			Expect(store.Create(ctx, &workspaceA)).To(Succeed())
+			Expect(store.Create(otherCtx, &workspaceB)).To(Succeed())
+		})
+
+		It("writes the resolved tenant and ignores the tenant set by the caller", func() {
+			workspaceC := workspaceA
+			workspaceC.ID = "workspace-" + stringx.Random(6)
+			workspaceC.TenantID = "forged"
+			Expect(store.Create(ctx, &workspaceC)).To(Succeed())
+
+			got, err := store.Get(ctx, workspaceC.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.TenantID).To(Equal(tenant.DefaultTenantID))
+		})
+
+		It("keeps every method inside the tenant from context", func() {
+			_, err := store.Get(otherCtx, workspaceA.ID)
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+
+			list, err := store.List(otherCtx, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list).To(HaveLen(1))
+			Expect(list[0].ID).To(Equal(workspaceB.ID))
+
+			page, total, err := store.ListWithPagination(otherCtx, &ListPageOptions{Page: 1, PageSize: 10})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(total).To(Equal(int64(1)))
+			Expect(page).To(HaveLen(1))
+
+			counts, err := store.CountByState(otherCtx, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(counts[StateReady]).To(Equal(int64(0)))
+
+			forged := workspaceA
+			forged.DisplayName = "changed by tenant-b"
+			Expect(store.Update(otherCtx, &forged)).To(Succeed())
+			Expect(store.Delete(otherCtx, workspaceA.ID)).To(Succeed())
+
+			got, err := store.Get(ctx, workspaceA.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.DisplayName).To(Equal(workspaceA.DisplayName))
+		})
+
+		It("rejects every method when the context has no tenant", func() {
+			bg := context.Background()
+			workspaceC := workspaceA
+			workspaceC.ID = "workspace-" + stringx.Random(6)
+
+			Expect(store.Create(bg, &workspaceC)).To(MatchError(tenant.ErrTenantIDRequired))
+			_, err := store.Get(bg, workspaceA.ID)
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
+			_, err = store.List(bg, nil)
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
+			_, _, err = store.ListWithPagination(bg, &ListPageOptions{Page: 1, PageSize: 10})
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
+			_, err = store.CountByState(bg, nil)
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
+			Expect(store.Update(bg, &workspaceA)).To(MatchError(tenant.ErrTenantIDRequired))
+			Expect(store.Delete(bg, workspaceA.ID)).To(MatchError(tenant.ErrTenantIDRequired))
+		})
+
+		It("uses the tenant given by ForTenant instead of context", func() {
+			scoped := store.Scopes(datascope.ForTenant("tenant-b"))
+
+			got, err := scoped.Get(ctx, workspaceB.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.TenantID).To(Equal("tenant-b"))
+
+			_, err = scoped.Get(ctx, workspaceA.ID)
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+
+			_, err = store.Get(ctx, workspaceB.ID)
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+		})
+
+		It("reads across tenants with AllTenants and refuses to create", func() {
+			scoped := store.Scopes(datascope.AllTenants())
+
+			list, err := scoped.List(ctx, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list).To(HaveLen(2))
+
+			got, err := scoped.Get(ctx, workspaceB.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.TenantID).To(Equal("tenant-b"))
+
+			workspaceC := workspaceA
+			workspaceC.ID = "workspace-" + stringx.Random(6)
+			Expect(scoped.Create(ctx, &workspaceC)).To(MatchError(datascope.ErrWriteAllTenants))
+		})
+
+		It("reads the tenant from context with FromContext", func() {
+			scoped := store.Scopes(datascope.FromContext())
+			_, err := scoped.Scopes(datascope.AllTenants()).List(otherCtx, nil)
+			Expect(err).To(MatchError(datascope.ErrScopeAlreadySet))
+
+			list, err := scoped.List(otherCtx, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list).To(HaveLen(1))
+			Expect(list[0].ID).To(Equal(workspaceB.ID))
+
+			_, err = scoped.Get(otherCtx, workspaceA.ID)
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+
+			workspaceC := workspaceA
+			workspaceC.ID = "workspace-" + stringx.Random(6)
+			Expect(scoped.Create(otherCtx, &workspaceC)).To(Succeed())
+			Expect(workspaceC.TenantID).To(Equal("tenant-b"))
+
+			_, err = scoped.List(context.Background(), nil)
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
 		})
 	})
 })

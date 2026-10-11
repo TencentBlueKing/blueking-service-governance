@@ -19,6 +19,7 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * API definitions and request/response types are located in each feature package's router, handler, and serializer packages.
 * Unit tests are placed in each package's directory, following Go conventions.
 * Some design notes can be found in `design_notes/`.
+* Tenant-aware stores hold a `datascope.Scope` field, implement `Scopes` by copying the store and calling `datascope.ApplyScope`, and call `s.scope.TenantFilter` / `s.scope.TenantForWrite` explicitly in every method. See `design_notes/datascope.md`. `workspaces` is the first table on that path.
 * When writing tests, always refer to `pkg/extension/component/evaluate_test.go` for guidance on code structure and the usage of common utils and db factories.
 * Test context descriptions (`Describe`, `Context`, `It`, etc.) MUST be written in English. Comments inside test bodies may use Chinese.
 * When a unit test needs a store, service, or other FX-provided dependency, construct and inject it via the fx framework: use the package's `FxModule` with `fxtest.New` + `fx.Populate`. Do **not** call constructors like `NewStoreMongo(...)` / `NewService(...)` directly in tests. See `pkg/extension/bscpcfg/model/store_test.go` for the pattern.
