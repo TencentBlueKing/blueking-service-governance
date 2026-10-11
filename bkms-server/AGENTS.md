@@ -68,7 +68,7 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * When adding new migrations, read the guide in `README.md`, specifically the "数据库迁移" section
 * ALWAYS add a comment for extra indexes in the store source file
 * Tenant-scoped Mongo collections go through `pkg/infras/database/tenant` (`dbtenant`). Details live in [`design_notes/tenant_collection.md`](design_notes/tenant_collection.md); current reference is `pkg/core/workspace/store.go`.
-  - New tenant-scoped stores wrap the collection with `dbtenant.WrapTenant(coll)`. Do not hand-write `tenant_id` filters, and do not take tenant from request params or the caller's document.
+  - New tenant-scoped stores wrap the collection with `dbtenant.WrapTenant(coll)`, embed `dbtenant.Scopable[Store]` in the interface and `dbtenant.Base[Store]` in the implementation; do not hand-write `Scopes`. Do not hand-write `tenant_id` filters, and do not take tenant from request params or the caller's document.
   - Tenant comes from `ctx` by default. Missing tenant is `ErrTenantIDRequired`; do not silently fall back. `Scopes(dbtenant.WithTenant(id))` returns a store bound to that tenant; the original store still reads `ctx`.
   - Global tables (no `tenant_id`) go into `globalTables` so wrap skips injection.
   - Same table, all-tenant reads (platmgt / CLI by workspace id or full scan) use `Store.Scopes(dbtenant.AllTenants())`. Do not add `SkipTenant` flags on `List` / `Get`.

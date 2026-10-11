@@ -77,7 +77,7 @@
 这个当前也已经实现，但实现方式不是改 ctx，而是走同一个 Store 的跨租户视图：
 
 - `WorkspaceStore` 暴露 `Scopes(...)`。`WithTenant(id)` 绑死租户，`AllTenants()` 跨租户访问
-- `WorkspaceStoreMongo.Scopes` 只替换内部 `Collection`，Store 方法本身不拼 `tenant_id`
+- `Scopes` 由公共的 `dbtenant.Base` 实现：接口嵌入 `dbtenant.Scopable[WorkspaceStore]`，实现嵌入 `dbtenant.Base[WorkspaceStore]`。`Scopes` 只替换内部 `Collection`，再经构造时传入的 `wrap` 组装成新 Store；Store 方法通过 `s.Collection()` 访问集合，本身不拼 `tenant_id`
 - `Collection` 内部用 `scopeCrossTenant` 标记这个视图；只有默认 `scopeTenant` 才会注入 `tenant_id`
 - platmgt workspace / platmgt workspace admin 已经显式使用 `h.registry.WorkspaceStore.Scopes(dbtenant.AllTenants())`
 
