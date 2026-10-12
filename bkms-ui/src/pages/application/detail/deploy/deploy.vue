@@ -809,7 +809,10 @@
     const appID = appDetailStore.appID;
     const envName = trpcDeployStore.curEnvItem?.name;
     if (activeTab.value === TAB_NAMES.overview) return;
-    if (!appID || !envName) return;
+    if (!appID || !envName) {
+      initLoading.value = false;
+      return;
+    }
     try {
       const prevDeployStatus = latestDeployStatus.value?.status;
       // 根据应用类型获取对应的部署 API
@@ -1185,6 +1188,9 @@
   watch(
     [() => appDetailStore.appID, () => trpcDeployStore.curEnvItem?.name, activeTab],
     async () => {
+      if (activeTab.value === TAB_NAMES.instance) {
+        initLoading.value = true;
+      }
       latestDeployStatus.value = null;
       if (activeTab.value === TAB_NAMES.overview) {
         effectiveDeploySpec.value = undefined;

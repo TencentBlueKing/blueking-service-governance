@@ -53,6 +53,7 @@ declare module 'vue' {
     LaneSelect: typeof import('./components/lane-select.vue')['default']
     MarkdownViewer: typeof import('./components/markdown-viewer.vue')['default']
     MemberSelector: typeof import('./components/member-selector.vue')['default']
+    MiddleEllipsis: typeof import('./components/middle-ellipsis.vue')['default']
     ModuleItem: typeof import('./components/modules/module-item.vue')['default']
     MonitorIframe: typeof import('./components/monitor-iframe.vue')['default']
     MoreTag: typeof import('./components/more-tag.vue')['default']

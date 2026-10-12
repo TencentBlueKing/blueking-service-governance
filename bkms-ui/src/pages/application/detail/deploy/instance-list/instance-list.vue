@@ -55,7 +55,7 @@
         :placeholder="
           createPlaceholder({
             type: 'searchSelect',
-            labels: ['实例', '镜像 Tag', '实例状态', '健康状态', '北极星状态'],
+            labels: ['实例', '镜像 Tag', '实例状态', '就绪状态', '北极星状态'],
           })
         "
         unique-select
@@ -66,7 +66,6 @@
     <InstanceTable
       ref="instanceTableRef"
       :data="tableDataMatchSearch"
-      :enable-max-height="false"
       :env-name="trpcDeployStore.curEnvItem?.name || ''"
       :filter-options="filterOptions"
       :is-federation="isFederationEnv"
@@ -222,7 +221,7 @@
       if (instance.image) {
         imageSet.add(instance.image);
       }
-      // 健康状态
+      // 就绪状态：仍按 isHealthy 归类，不区分具体 phase
       healthySet.add(String(instance.isHealthy));
       // 北极星状态
       if (!instance.polarisInfos?.length) {
@@ -232,7 +231,7 @@
       }
     }
 
-    const healthyLabelMap: Record<string, string> = { true: 'Healthy', false: 'UnHealthy' };
+    const healthyLabelMap: Record<string, string> = { true: t('是'), false: t('否') };
     const polarisLabelMap: Record<string, string> = {
       healthy: 'Healthy',
       [EMPTY_FILTER_ID]: '--',
@@ -296,7 +295,7 @@
       children: statusOptions,
     },
     {
-      name: t('健康状态'),
+      name: t('就绪状态'),
       id: 'isHealthy',
       multiple: true,
       children: [] as { id: string; name: string }[],
@@ -344,7 +343,7 @@
           filteredList = filteredList.filter(item => selectedValues.includes(item?.status ?? ''));
           break;
         case 'isHealthy':
-          // 健康状态：布尔值转字符串匹配
+          // 就绪状态：仍按 isHealthy 过滤，未就绪包含所有不接流量的实例
           filteredList = filteredList.filter(item => selectedValues.includes(String(item.isHealthy)));
           break;
         case 'polarisStatus':

@@ -59,8 +59,6 @@
       <Table
         ref="tableRef"
         :data="instanceList"
-        :filter-config="filterConfig"
-        :max-height="maxHeight"
         :pagination="displayPagination"
         :row-config="{
           keyField: 'id',
@@ -68,9 +66,9 @@
           isCurrent: true,
         }"
         :settings="settings"
+        :show-overflow="false"
         :show-settings="true"
         :sort-config="{ remote: true }"
-        @filter-change="handleFilterChange"
         @page-limit-change="handlePageSizeChange"
         @page-value-change="handlePageChange"
         @setting-change="handleSettingChange"
@@ -128,7 +126,7 @@
         <!-- 复选框列：跨页全选 -->
         <TableColumn
           fixed="left"
-          :width="80"
+          :width="64"
         >
           <template #header>
             <div class="flex items-center justify-start">
@@ -187,250 +185,214 @@
 
         <!-- 实例列 -->
         <TableColumn
+          class-name="instance-name-col"
           field="id"
           :label="$t('实例')"
-          min-width="150"
-          show-overflow="tooltip"
+          min-width="120"
         >
           <template #default="{ row }: { row: AppInstanceOutputObj }">
-            {{ row.id }}
-          </template>
-        </TableColumn>
-
-        <!-- 镜像 Tag 列（条件筛选头） -->
-        <TableColumn
-          field="image"
-          :filters="showFilter ? filterOptions.image : undefined"
-          :label="$t('镜像 Tag')"
-          min-width="100"
-          :show-overflow="false"
-        >
-          <template #header>
-            <CustomFilter
-              v-if="showFilter"
-              :field="'image'"
-              :filters="filterOptions.image || []"
-              :label="$t('镜像 Tag')"
-              :table-ref="tableRef"
-            />
-            <span v-else>{{ $t('镜像 Tag') }}</span>
-          </template>
-          <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <span
-              v-bk-tooltips="row.image"
-              class="inline-block max-w-full truncate align-middle"
-            >
-              {{ row.image?.split(':')?.pop() }}
-            </span>
-          </template>
-        </TableColumn>
-
-        <!-- Pod IP 列 -->
-        <TableColumn
-          field="ip"
-          label="Pod IP"
-          min-width="100"
-          show-overflow="tooltip"
-        >
-          <template #default="{ row }: { row: AppInstanceOutputObj }">
-            {{ row.ip || '--' }}
-          </template>
-        </TableColumn>
-
-        <!-- Node IP 列 -->
-        <TableColumn
-          field="nodeIP"
-          label="Node IP"
-          min-width="100"
-          show-overflow="tooltip"
-        >
-          <template #default="{ row }: { row: AppInstanceOutputObj }">
-            {{ row.nodeIP || '--' }}
-          </template>
-        </TableColumn>
-
-        <!-- 实例状态列（条件筛选头） -->
-        <TableColumn
-          field="status"
-          :filters="showFilter ? filterOptions.status : undefined"
-          :label="$t('实例状态')"
-          min-width="100"
-          show-overflow="tooltip"
-        >
-          <template #header>
-            <CustomFilter
-              v-if="showFilter"
-              :field="'status'"
-              :filters="filterOptions.status || []"
-              :label="$t('实例状态')"
-              :table-ref="tableRef"
-            />
-            <span v-else>{{ $t('实例状态') }}</span>
-          </template>
-          <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <StatusIcon
-              emphasized
-              :message="row.status !== 'Running' ? row.message : ''"
-              :size="12"
-              :status="row.status"
-            />
-          </template>
-        </TableColumn>
-
-        <!-- 健康状态列（条件筛选头） -->
-        <TableColumn
-          field="isHealthy"
-          :filters="showFilter ? filterOptions.isHealthy : undefined"
-          :label="$t('健康状态')"
-          min-width="100"
-          show-overflow="tooltip"
-        >
-          <template #header>
-            <CustomFilter
-              v-if="showFilter"
-              :field="'isHealthy'"
-              :filters="filterOptions.isHealthy || []"
-              :label="$t('健康状态')"
-              :table-ref="tableRef"
-            />
-            <span v-else>{{ $t('健康状态') }}</span>
-          </template>
-          <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <div class="flex items-center">
-              <StatusDotIcon
-                :icon="row.isHealthy ? 'normal' : 'abnormal'"
-                :size="12"
+            <div class="instance-name">
+              {{ row.id || '--' }}
+              <Copy
+                v-if="row.id"
+                class="instance-name-copy"
+                :title="$t('复制')"
+                @click.stop="copyText(row.id)"
               />
-              {{ row.isHealthy ? 'Healthy' : 'UnHealthy' }}
             </div>
           </template>
         </TableColumn>
 
-        <!-- 北极星状态列（条件筛选头） -->
+        <!-- 状态列：实例运行状态、北极星注册状态 -->
         <TableColumn
-          field="polarisStatus"
-          :filters="showFilter ? filterOptions.polarisStatus : undefined"
-          :label="$t('北极星状态')"
+          class-name="instance-status-col"
+          field="status"
+          :label="$t('状态')"
+          min-width="200"
+        >
+          <template #header>
+            <InstanceGroupFilter
+              v-if="showFilter"
+              :groups="statusFilterGroups"
+              :label="$t('状态')"
+              @change="handleFilterChange"
+            />
+            <span v-else>{{ $t('状态') }}</span>
+          </template>
+          <template #default="{ row }: { row: AppInstanceOutputObj }">
+            <div class="multi-line-cell">
+              <span class="cell-label">{{ $t('实例') }}</span>
+              <StatusIcon
+                class="instance-status"
+                emphasized
+                :message="row.status !== 'Running' ? row.message : ''"
+                :size="12"
+                :status="row.status"
+              />
+              <span class="cell-label">{{ $t('北极星') }}</span>
+              <span>
+                <Popover
+                  v-if="row.polarisInfos?.length"
+                  hide-ignore-reference
+                  :offset="{
+                    mainAxis: 0,
+                    crossAxis: -10,
+                  }"
+                  :popover-delay="[100, 0]"
+                  theme="light"
+                  :width="770"
+                >
+                  <div class="polaris-status">
+                    <StatusDotIcon
+                      :icon="isPolarisHealthy(row) ? 'normal' : 'abnormal'"
+                      :size="12"
+                    />
+                    <span class="!border-b-[1px] !border-[#AFAFAF] !border-dashed">
+                      {{ isPolarisHealthy(row) ? 'Healthy' : 'UnHealthy' }}
+                    </span>
+                  </div>
+                  <template #content>
+                    <div class="px-[4px] min-w-[500px]">
+                      <div class="mb-[12px] flex items-center text-[14px] whitespace-nowrap">
+                        <span class="font-bold text-[#313238] shrink-0">{{ $t('北极星健康状态') }}</span>
+                        <span
+                          class="text-[#979BA5] ml-[12px] truncate"
+                          :title="row.id"
+                        >
+                          {{ row.id }}
+                        </span>
+                      </div>
+                      <div class="text-[12px] text-[#4D4F56] mb-[12px]">
+                        <i class="bkms-icon bkms-icon-circle-info text-[14px] mr-[4px]"></i>
+                        {{ $t('数据有 15s 左右延迟') }}
+                      </div>
+                      <Table
+                        :data="row.polarisInfos"
+                        :max-height="280"
+                      >
+                        <TableColumn
+                          :label="$t('健康状态')"
+                          min-width="80"
+                        >
+                          <template #default="{ row: polarisRow }">
+                            <div class="flex items-center">
+                              <StatusDotIcon
+                                :icon="polarisRow.isHealthy ? 'normal' : 'abnormal'"
+                                :size="12"
+                              />
+                              {{ polarisRow.isHealthy ? 'Healthy' : 'UnHealthy' }}
+                            </div>
+                          </template>
+                        </TableColumn>
+                        <TableColumn
+                          label="ServiceName"
+                          min-width="120"
+                          show-overflow="tooltip"
+                        >
+                          <template #default="{ row: polarisRow }">
+                            <HoverCopy
+                              :copy-value="polarisRow.serviceName"
+                              :text="polarisRow.serviceName"
+                            />
+                          </template>
+                        </TableColumn>
+                        <TableColumn
+                          label="IP Port"
+                          min-width="160"
+                          show-overflow="tooltip"
+                        >
+                          <template #default="{ row: polarisRow }">
+                            <HoverCopy
+                              :copy-value="`${polarisRow.ip}:${polarisRow.port}`"
+                              :text="`${polarisRow.ip}:${polarisRow.port}`"
+                            />
+                          </template>
+                        </TableColumn>
+                        <TableColumn
+                          v-if="hasDynamicWeight(row.polarisInfos)"
+                          :label="$t('动态权重')"
+                          min-width="60"
+                        >
+                          <template #default="{ row: polarisRow }">
+                            {{ polarisRow.weight }}
+                          </template>
+                        </TableColumn>
+                        <TableColumn
+                          :label="$t('流量权重')"
+                          min-width="60"
+                        >
+                          <template #default="{ row: polarisRow }">
+                            {{
+                              hasDynamicWeight(row.polarisInfos)
+                                ? polarisRow.staticWeight || polarisRow.weight
+                                : polarisRow.weight
+                            }}
+                          </template>
+                        </TableColumn>
+                      </Table>
+                    </div>
+                  </template>
+                </Popover>
+                <span v-else>--</span>
+              </span>
+            </div>
+          </template>
+        </TableColumn>
+
+        <!-- 就绪状态 -->
+        <TableColumn
+          field="isHealthy"
+          :label="$t('就绪')"
+          min-width="68"
+        >
+          <template #header>
+            <InstanceGroupFilter
+              v-if="showFilter"
+              :groups="readinessFilterGroups"
+              :label="$t('就绪')"
+              :tooltip="$t('实例是否可以接收流量')"
+              @change="handleFilterChange"
+            />
+            <span
+              v-else
+              v-bk-tooltips="$t('实例是否可以接收流量')"
+              class="border-b border-dashed border-[#979ba5]"
+            >
+              {{ $t('就绪') }}
+            </span>
+          </template>
+          <template #default="{ row }: { row: AppInstanceOutputObj }">
+            <span :class="row.isHealthy ? 'text-[#2DCB56]' : 'text-[#FF9C01]'">
+              {{ row.isHealthy ? $t('是') : $t('否') }}
+            </span>
+          </template>
+        </TableColumn>
+
+        <!-- 镜像 Tag -->
+        <TableColumn
+          field="image"
+          :label="$t('镜像 Tag')"
           min-width="120"
         >
           <template #header>
-            <CustomFilter
+            <InstanceGroupFilter
               v-if="showFilter"
-              :field="'polarisStatus'"
-              :filters="filterOptions.polarisStatus || []"
-              :label="$t('北极星状态')"
-              :table-ref="tableRef"
+              :groups="imageFilterGroups"
+              :label="$t('镜像 Tag')"
+              @change="handleFilterChange"
             />
-            <span v-else>{{ $t('北极星状态') }}</span>
+            <span v-else>{{ $t('镜像 Tag') }}</span>
           </template>
           <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <Popover
-              v-if="row.polarisInfos?.length"
-              hide-ignore-reference
-              :offset="{
-                mainAxis: 0,
-                crossAxis: -10,
-              }"
-              :popover-delay="[100, 0]"
-              theme="light"
-              :width="770"
-            >
-              <div class="inline-flex cursor-pointer items-center">
-                <StatusDotIcon
-                  :icon="isPolarisHealthy(row) ? 'normal' : 'abnormal'"
-                  :size="12"
-                />
-                <span class="!border-b-[1px] !border-[#AFAFAF] !border-dashed">
-                  {{ isPolarisHealthy(row) ? 'Healthy' : 'UnHealthy' }}
-                </span>
-              </div>
-              <template #content>
-                <div class="px-[4px] min-w-[500px]">
-                  <div class="mb-[12px] flex items-center text-[14px] whitespace-nowrap">
-                    <span class="font-bold text-[#313238] shrink-0">{{ $t('北极星健康状态') }}</span>
-                    <span
-                      class="text-[#979BA5] ml-[12px] truncate"
-                      :title="row.id"
-                    >
-                      {{ row.id }}
-                    </span>
-                  </div>
-                  <div class="text-[12px] text-[#4D4F56] mb-[12px]">
-                    <i class="bkms-icon bkms-icon-circle-info text-[14px] mr-[4px]"></i>
-                    {{ $t('数据有 15s 左右延迟') }}
-                  </div>
-                  <Table
-                    :data="row.polarisInfos"
-                    :max-height="280"
-                  >
-                    <TableColumn
-                      :label="$t('健康状态')"
-                      min-width="80"
-                    >
-                      <template #default="{ row: polarisRow }">
-                        <div class="flex items-center">
-                          <StatusDotIcon
-                            :icon="polarisRow.isHealthy ? 'normal' : 'abnormal'"
-                            :size="12"
-                          />
-                          {{ polarisRow.isHealthy ? 'Healthy' : 'UnHealthy' }}
-                        </div>
-                      </template>
-                    </TableColumn>
-                    <TableColumn
-                      label="ServiceName"
-                      min-width="120"
-                      show-overflow="tooltip"
-                    >
-                      <template #default="{ row: polarisRow }">
-                        <HoverCopy
-                          :copy-value="polarisRow.serviceName"
-                          :text="polarisRow.serviceName"
-                        />
-                      </template>
-                    </TableColumn>
-                    <TableColumn
-                      label="IP Port"
-                      min-width="160"
-                      show-overflow="tooltip"
-                    >
-                      <template #default="{ row: polarisRow }">
-                        <HoverCopy
-                          :copy-value="`${polarisRow.ip}:${polarisRow.port}`"
-                          :text="`${polarisRow.ip}:${polarisRow.port}`"
-                        />
-                      </template>
-                    </TableColumn>
-                    <TableColumn
-                      v-if="hasDynamicWeight(row.polarisInfos)"
-                      :label="$t('动态权重')"
-                      min-width="60"
-                    >
-                      <template #default="{ row: polarisRow }">
-                        {{ polarisRow.weight }}
-                      </template>
-                    </TableColumn>
-                    <TableColumn
-                      :label="$t('流量权重')"
-                      min-width="60"
-                    >
-                      <template #default="{ row: polarisRow }">
-                        {{
-                          hasDynamicWeight(row.polarisInfos)
-                            ? polarisRow.staticWeight || polarisRow.weight
-                            : polarisRow.weight
-                        }}
-                      </template>
-                    </TableColumn>
-                  </Table>
-                </div>
-              </template>
-            </Popover>
-            <span v-else>--</span>
+            <MiddleEllipsis
+              v-bk-tooltips="row.image"
+              :text="row.image?.split(':')?.pop() || '--'"
+            />
           </template>
         </TableColumn>
 
         <TableColumn
+          class-name="instance-publish-col"
           field="latestPublish"
           :label="$t('热更新')"
           min-width="120"
@@ -443,13 +405,13 @@
               theme="light"
               :width="560"
             >
-              <span class="inline-flex items-center cursor-default border-b border-dashed border-[#979BA5]">
+              <span class="publish-status">
                 <StatusDotIcon
                   v-if="row.latestPublish.status === 'success' || row.latestPublish.status === 'failed'"
                   :icon="row.latestPublish.status === 'success' ? 'normal' : 'abnormal'"
                   :size="12"
                 />
-                {{ getPublishStatusLabel(row.latestPublish.status) }}
+                <span class="publish-status-text">{{ getPublishStatusLabel(row.latestPublish.status) }}</span>
               </span>
               <template #content>
                 <div class="w-full min-w-0 px-[4px]">
@@ -569,36 +531,11 @@
           </template>
         </TableColumn>
 
-        <!-- Restart 列 -->
-        <TableColumn
-          field="restartCount"
-          label="Restart"
-          min-width="100"
-          show-overflow="tooltip"
-          sortable
-        >
-          <template #default="{ row }: { row: AppInstanceOutputObj }">
-            {{ row.restartCount ?? '--' }}
-          </template>
-        </TableColumn>
-
-        <!-- Age 列 -->
-        <TableColumn
-          field="age"
-          label="Age"
-          min-width="100"
-          show-overflow="tooltip"
-        >
-          <template #default="{ row }: { row: AppInstanceOutputObj }">
-            {{ row.age || '--' }}
-          </template>
-        </TableColumn>
-
         <!-- 资源规格列：主容器 CPU / 内存规格，悬浮展示完整的 Requests/Limits -->
         <TableColumn
           field="resources"
           :label="$t('资源规格')"
-          min-width="120"
+          min-width="100"
         >
           <template #default="{ row }: { row: AppInstanceOutputObj }">
             <Popover
@@ -622,29 +559,65 @@
           </template>
         </TableColumn>
 
-        <!-- 操作列 -->
+        <!-- 网络列：Pod IP 与所在节点 IP -->
         <TableColumn
-          fixed="right"
-          :label="$t('操作')"
-          min-width="240"
+          field="ip"
+          :label="$t('网络')"
+          min-width="150"
+        >
+          <template #default="{ row }: { row: AppInstanceOutputObj }">
+            <div class="multi-line-cell">
+              <span class="cell-label">Pod IP</span>
+              <HoverCopy
+                class="network-hover-copy"
+                :copy-value="row.ip || ''"
+                :text="row.ip || '--'"
+                :tooltip="getNetworkTooltip(row)"
+              />
+              <span class="cell-label">Node IP</span>
+              <HoverCopy
+                class="network-hover-copy"
+                :copy-value="row.nodeIP || ''"
+                :text="row.nodeIP || '--'"
+                :tooltip="getNetworkTooltip(row)"
+              />
+            </div>
+          </template>
+        </TableColumn>
+
+        <!-- 重启次数、运行时长分列：数值短，合并后反而看不清 -->
+        <TableColumn
+          field="restartCount"
+          label="Restart"
+          min-width="104"
+          show-overflow="tooltip"
+          sortable
+        >
+          <template #default="{ row }: { row: AppInstanceOutputObj }">
+            {{ row.restartCount ?? '--' }}
+          </template>
+        </TableColumn>
+        <TableColumn
+          field="age"
+          label="Age"
+          min-width="80"
           show-overflow="tooltip"
         >
           <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <div class="flex items-center gap-[10px]">
-              <Button
-                v-bk-tooltips="{
-                  content: isFederation ? $t('联邦集群不支持灰度操作') : $t('仅支持实例状态为 Running、Pending 的实例'),
-                  disabled: !isFederation && canInstanceGrayDeploy(row),
-                }"
-                :disabled="isFederation || !canInstanceGrayDeploy(row)"
-                text
-                theme="primary"
-                @click.stop="
-                  emit('row-action', { action: 'gray' as InstanceRowAction, envName: props.envName, instance: row })
-                "
-              >
-                {{ $t('灰度') }}
-              </Button>
+            {{ row.age || '--' }}
+          </template>
+        </TableColumn>
+
+        <!-- 右侧固定，页面变窄出现横向滚动时操作列仍留在视口内 -->
+        <TableColumn
+          class-name="instance-actions-col"
+          fixed="right"
+          header-class-name="instance-actions-col"
+          :label="$t('操作')"
+          :width="108"
+        >
+          <template #default="{ row }: { row: AppInstanceOutputObj }">
+            <div class="flex items-center gap-[4px]">
               <Button
                 v-bk-tooltips="{
                   content: $t('实例尚未创建成功或宿主机异常，暂无法获取日志'),
@@ -658,15 +631,6 @@
                 "
               >
                 {{ $t('日志') }}
-              </Button>
-              <Button
-                text
-                theme="primary"
-                @click.stop="
-                  emit('row-action', { action: 'monitor' as InstanceRowAction, envName: props.envName, instance: row })
-                "
-              >
-                {{ $t('监控') }}
               </Button>
               <Button
                 v-bk-tooltips="{
@@ -683,19 +647,58 @@
                 {{ $t('登录') }}
               </Button>
               <Button
+                v-if="!isEnglish"
                 v-bk-tooltips="{
                   content: $t('未获取到北极星信息，无法调整权重'),
-                  disabled: (row.polarisInfos?.length ?? 0) > 0,
+                  disabled: canAdjustWeight(row),
                 }"
-                :disabled="!((row.polarisInfos?.length ?? 0) > 0)"
+                :disabled="!canAdjustWeight(row)"
                 text
                 theme="primary"
-                @click.stop="
-                  emit('row-action', { action: 'weight' as InstanceRowAction, envName: props.envName, instance: row })
-                "
+                @click.stop="emitRowAction('weight', row)"
               >
                 {{ $t('调整权重') }}
               </Button>
+              <!-- 不共用 is-show：固定列会再渲染一份单元格，共用状态会同时弹出两个菜单 -->
+              <Dropdown
+                placement="bottom-end"
+                :popover-options="{ clickContentAutoHide: true }"
+                trigger="click"
+              >
+                <i class="row-more-trigger bkms-icon bkms-icon-more-fill"></i>
+                <template #content>
+                  <Dropdown.DropdownMenu>
+                    <Dropdown.DropdownItem
+                      v-bk-tooltips="{
+                        content: isFederation
+                          ? $t('联邦集群不支持灰度操作')
+                          : $t('仅支持实例状态为 Running、Pending 的实例'),
+                        disabled: canRowGray(row),
+                        placement: 'left',
+                      }"
+                      :class="{ 'is-disabled': !canRowGray(row) }"
+                      @click="canRowGray(row) && emitRowAction('gray', row)"
+                    >
+                      {{ $t('灰度') }}
+                    </Dropdown.DropdownItem>
+                    <Dropdown.DropdownItem @click="emitRowAction('monitor', row)">
+                      {{ $t('监控') }}
+                    </Dropdown.DropdownItem>
+                    <Dropdown.DropdownItem
+                      v-if="isEnglish"
+                      v-bk-tooltips="{
+                        content: $t('未获取到北极星信息，无法调整权重'),
+                        disabled: canAdjustWeight(row),
+                        placement: 'left',
+                      }"
+                      :class="{ 'is-disabled': !canAdjustWeight(row) }"
+                      @click="canAdjustWeight(row) && emitRowAction('weight', row)"
+                    >
+                      {{ $t('调整权重') }}
+                    </Dropdown.DropdownItem>
+                  </Dropdown.DropdownMenu>
+                </template>
+              </Dropdown>
             </div>
           </template>
         </TableColumn>
@@ -712,13 +715,14 @@
   import { AngleDownLine, Copy, RightShape } from 'bkui-vue/lib/icon';
   import { AppInstanceOutputObj } from '~/@types/v1/instance';
   import { copyText, formatTimeByTimezone } from '~/common/util';
-  import CustomFilter from '~/components/custom-filter.vue';
   import HoverCopy from '~/components/hover-copy.vue';
+  import MiddleEllipsis from '~/components/middle-ellipsis.vue';
   import StatusDotIcon from '~/components/status-dot-icon.vue';
   import StatusIcon from '~/components/status-icon.vue';
   import TableException from '~/components/table-exception.vue';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import { useGPAConfigPolling } from '~/composables/use-gpa-config-polling';
+  import { useLanguage } from '~/composables/use-language';
   import { useResourceSpecDisplay } from '~/composables/use-resource-spec-display';
   import useTableCheckbox from '~/composables/use-table-checkbox';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -734,6 +738,7 @@
   } from '../composables/instance-watch-utils';
   import { useInstanceListWatch } from '../composables/use-instance-list-watch';
   import { canInstanceGrayDeploy, canLogin, canViewLog, isPolarisHealthy } from '../instance-utils';
+  import InstanceGroupFilter, { type FilterGroup } from './instance-group-filter.vue';
 
   import type {
     InstanceDataLoadedPayload,
@@ -748,8 +753,6 @@
   interface Props {
     /** 外部传入数据（单环境模式），提供后跳过内部 loadInstances */
     data?: AppInstanceOutputObj[];
-    /** 是否限制表格最大高度 */
-    enableMaxHeight?: boolean;
     envDisplayName?: string;
     envKind?: string;
     envName: string;
@@ -776,7 +779,6 @@
     data: undefined,
     showFilter: false,
     filterOptions: () => ({}),
-    enableMaxHeight: true,
   });
   const emit = defineEmits<{
     (e: 'selection-change', payload: InstanceSelectionChangePayload): void;
@@ -790,17 +792,46 @@
 
   const appDetailStore = useAppDetail();
   const tableRef = ref();
+  const { isEnglish } = useLanguage();
 
   const { getResourceText, getResourceTips } = useResourceSpecDisplay();
 
-  // 列设置：热更新、资源规格列默认不勾选，用户可在表格右上角列设置中主动开启。
+  // 列设置：资源规格、热更新列默认不勾选，用户可在表格右上角列设置中主动开启。
   // 列勾选与行高（size）偏好均持久化，刷新后恢复。
   // 所有环境共用列设置，任一环境的配置调整都会同步到其他环境表格。
-  const tableSettingsId = 'instance-table';
+  // 列合并后字段含义已变，换新 id 避免旧的隐藏/显示偏好错配到合并列上。
+  const tableSettingsId = 'instance-table-v2';
   const { settings, handleSettingChange } = useTableSettings(tableSettingsId, {
-    defaultChecked: ['id', 'image', 'ip', 'nodeIP', 'status', 'isHealthy', 'polarisStatus', 'restartCount', 'age'],
+    defaultChecked: ['id', 'status', 'isHealthy', 'image', 'ip', 'restartCount', 'age'],
     disabled: ['id'],
   });
+
+  const statusFilterGroups = computed<FilterGroup[]>(() => [
+    { field: 'status', label: window.i18n.t('实例状态'), options: props.filterOptions.status ?? [] },
+    { field: 'polarisStatus', label: window.i18n.t('北极星状态'), options: props.filterOptions.polarisStatus ?? [] },
+  ]);
+  const readinessFilterGroups = computed<FilterGroup[]>(() => [
+    { field: 'isHealthy', label: window.i18n.t('就绪'), options: props.filterOptions.isHealthy ?? [] },
+  ]);
+  function canAdjustWeight(row: AppInstanceOutputObj) {
+    return (row.polarisInfos?.length ?? 0) > 0;
+  }
+
+  function canRowGray(row: AppInstanceOutputObj) {
+    return !props.isFederation && canInstanceGrayDeploy(row);
+  }
+
+  function emitRowAction(action: InstanceRowAction, instance: AppInstanceOutputObj) {
+    emit('row-action', { action, envName: props.envName, instance });
+  }
+
+  const imageFilterGroups = computed<FilterGroup[]>(() => [
+    { field: 'image', label: window.i18n.t('镜像 Tag'), options: props.filterOptions.image ?? [] },
+  ]);
+
+  function getNetworkTooltip(row: AppInstanceOutputObj) {
+    return `Pod IP: ${row.ip || '--'}\nNode IP: ${row.nodeIP || '--'}`;
+  }
 
   function getPublishResultLabel(status?: string) {
     if (status === 'success') return window.i18n.t('成功');
@@ -813,6 +844,7 @@
     if (status === 'failed') return window.i18n.t('更新失败');
     return status || '--';
   }
+
   // 特性环境
   const isFeatureEnv = computed(() => props.envKind === 'feature');
 
@@ -889,13 +921,6 @@
     envName: () => props.envName,
   });
 
-  // Table 最大高度
-  const maxHeight = computed(() => {
-    if (!props.enableMaxHeight) return undefined;
-    if (instanceList.value.length <= 5) return undefined;
-    return 320;
-  });
-
   const displayPagination = computed(() => ({
     current: paginationInternal.value.current,
     count: displayTotal.value,
@@ -906,8 +931,6 @@
     showTotalCount: true,
     align: 'right' as const,
   }));
-
-  const filterConfig = computed(() => (props.showFilter ? { remote: true } : undefined));
 
   // 空状态处理
   const emptyFilters = ref([]);
@@ -1085,6 +1108,94 @@
     min-width: 0;
   }
 
+  .row-more-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    color: #979ba5;
+    cursor: pointer;
+    border-radius: 2px;
+
+    &:hover {
+      color: #3a84ff;
+      background-color: #f0f1f5;
+    }
+  }
+
+  .is-disabled {
+    color: #c4c6cc;
+    cursor: not-allowed;
+  }
+
+  .instance-name {
+    padding: 8px 0;
+    line-height: 20px;
+    word-break: break-all;
+    white-space: normal;
+  }
+
+  .instance-name-copy {
+    display: none !important;
+    margin-left: 4px;
+    vertical-align: -3px;
+    color: #3a84ff;
+    cursor: pointer;
+  }
+
+  .instance-name:hover .instance-name-copy {
+    display: inline-flex !important;
+  }
+
+  :deep(.network-hover-copy > div) {
+    border-bottom: none !important;
+  }
+
+  .multi-line-cell {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 2px 8px;
+    align-items: center;
+    padding: 8px 0;
+    line-height: 20px;
+
+    .cell-label {
+      color: #979ba5;
+      text-align: right;
+    }
+
+    > :nth-child(even) {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    > .instance-status {
+      min-width: max-content;
+      overflow: visible;
+    }
+
+    .polaris-status {
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+  }
+
+  .publish-status {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    cursor: default;
+  }
+
+  .publish-status-text {
+    line-height: 16px;
+    border-bottom: 1px dashed #979ba5;
+  }
+
   .env-instance-table:first-child {
     .env-header {
       border-top: 1px solid #e8eaec;
@@ -1105,6 +1216,29 @@
   }
 
   .env-table-body {
+    /* 列宽不够时在单元格内省略，避免把表格撑出横向滚动条 */
+    :deep([class~='vxe-body--column'] .vxe-cell) {
+      overflow: hidden;
+    }
+
+    :deep([class~='vxe-header--column'][class~='col--sortable'] .vxe-cell) {
+      white-space: nowrap;
+    }
+
+    :deep(.instance-name-col .vxe-cell) {
+      overflow: visible;
+      white-space: normal;
+    }
+
+    :deep(.instance-status-col .vxe-cell) {
+      overflow: visible;
+    }
+
+    :deep(.instance-actions-col .vxe-cell) {
+      padding-right: 8px !important;
+      padding-left: 8px !important;
+    }
+
     :deep(.bk-table) {
       border: none;
       border-radius: 0;
@@ -1117,7 +1251,7 @@
     :deep(.bk-vxe-table-pagination-wrapper) {
       padding: 5px 16px;
     }
-    :deep(.vxe-table--body-prepend-wrapper) {
+    :deep([class~='vxe-table--body-prepend-wrapper']) {
       border: none;
     }
   }
