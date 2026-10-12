@@ -268,9 +268,13 @@ export function useRepoRefSelect(options: UseRepoRefSelectOptions) {
     showFullList();
   }
 
-  // 仓库或来源类型变化时清空缓存；列表在 prepare / 展开下拉时重新懒加载
+  // 仓库或来源变化时先丢掉上一类的缓存再重拉
+  // 只清空的话，同一次更新里更早的预拉会看见旧 loaded 直接返回，下拉一直是空的
   watch([workspaceID, repositoryID, onlyGroup], () => {
     reset();
+    if (canQuery()) {
+      ensureOptionsLoaded();
+    }
   });
 
   // 仅在下拉展开时搜索；清空关键字还原缓存，不发请求

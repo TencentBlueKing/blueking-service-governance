@@ -212,32 +212,21 @@
             <template #default="{ row }">
               <div
                 v-if="row.sourceMaterial"
-                class="flex items-center"
+                class="flex min-w-0 max-w-full items-center"
               >
-                <template v-if="row.sourceMaterial.revisionType === 'commit'">
-                  <span class="bkms-icon bkms-icon-commit mr-[5px] text-[18px]"></span>
-                  <Button
-                    :disabled="!row.sourceMaterial.commitID"
-                    text
-                    theme="primary"
-                    @click.stop="handleToCommit(row.sourceMaterial.commitUrl)"
-                  >
-                    {{ sourceMaterialText(row.sourceMaterial) }}
-                  </Button>
-                </template>
-                <template v-else>
-                  <span class="bkms-icon bkms-icon-branchs mr-[5px]"></span>
-                  <span>{{ row.sourceMaterial.revision }}</span>
-                  <span class="bkms-icon bkms-icon-commit mx-[5px] text-[18px]"></span>
-                  <Button
-                    :disabled="!row.sourceMaterial.commitID"
-                    text
-                    theme="primary"
-                    @click.stop="handleToCommit(row.sourceMaterial.commitUrl)"
-                  >
-                    {{ row.sourceMaterial.commitID.slice(0, 8) }}
-                  </Button>
-                </template>
+                <!-- 与蓝盾一致：分支 / Tag / CommitID 都用分支图标标修订，短哈希另用 commit 图标 -->
+                <span class="bkms-icon bkms-icon-branchs mr-[5px] shrink-0"></span>
+                <span class="truncate">{{ row.sourceMaterial.revision }}</span>
+                <span class="bkms-icon bkms-icon-commit mx-[5px] shrink-0 text-[18px]"></span>
+                <Button
+                  class="shrink-0"
+                  :disabled="!row.sourceMaterial.commitID"
+                  text
+                  theme="primary"
+                  @click.stop="handleToCommit(row.sourceMaterial.commitUrl)"
+                >
+                  {{ row.sourceMaterial.commitID.slice(0, 8) }}
+                </Button>
               </div>
               <span v-else>--</span>
             </template>
