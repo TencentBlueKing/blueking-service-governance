@@ -433,6 +433,28 @@ var _ = Describe("WorkspaceStore", func() {
 			Expect(got.TenantID).To(Equal("tenant-a"))
 		})
 
+		It("reads the tenant from context with FromContext", func() {
+			ctxA := tenant.WithTenantID(context.Background(), "tenant-a")
+			ctxB := tenant.WithTenantID(context.Background(), "tenant-b")
+			Expect(store.Create(ctxA, &workspaceA)).To(Succeed())
+			Expect(store.Create(ctxB, &workspaceB)).To(Succeed())
+
+			scoped := store.Scopes(dbtenant.FromContext())
+			_, err := scoped.Scopes(dbtenant.AllTenants()).List(ctxB, nil)
+			Expect(err).To(MatchError(dbtenant.ErrScopeAlreadySet))
+
+			workspaces, err := scoped.List(ctxB, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspaces).To(HaveLen(1))
+			Expect(workspaces[0].ID).To(Equal(workspaceB.ID))
+
+			_, err = scoped.Get(ctxB, workspaceA.ID)
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+
+			_, err = scoped.List(context.Background(), nil)
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
+		})
+
 		It("lists every tenant through AllTenants", func() {
 			ctxA := tenant.WithTenantID(context.Background(), "tenant-a")
 			ctxB := tenant.WithTenantID(context.Background(), "tenant-b")

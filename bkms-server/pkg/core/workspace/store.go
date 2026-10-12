@@ -58,9 +58,9 @@ type ListPageOptions struct {
 
 // WorkspaceStore 是用于管理工作空间的存储接口
 type WorkspaceStore interface {
-	// Scopes 返回按给定范围派生的 store，不修改当前 store。
-	// 默认 store 从 ctx 读取租户；WithTenant 派生出只访问指定租户的 store，AllTenants 跨租户访问。
-	dbtenant.Scopable[WorkspaceStore]
+	// Scopes 返回按给定范围派生的 store，不修改当前 store。只能调用一次。
+	// 默认 store 从 ctx 读取租户；WithTenant 只访问指定租户，AllTenants 跨租户访问，FromContext 显式从 ctx 读取。
+	Scopes(scope dbtenant.Scope) WorkspaceStore
 
 	// List 获取工作空间列表，由于每个用户的工作空间数量有限，不设分页
 	List(ctx context.Context, opts *ListOptions) ([]Workspace, error)
@@ -88,7 +88,7 @@ var _ WorkspaceStore = &WorkspaceStoreMongo{}
 
 // WorkspaceStoreMongo 是 WorkspaceStore 接口的 MongoDB 实现
 type WorkspaceStoreMongo struct {
-	dbtenant.Base[WorkspaceStore]
+	collection *dbtenant.Collection
 }
 
 func (s *WorkspaceStoreMongo) buildListFilter(opts *ListOptions) bson.M {
@@ -115,17 +115,21 @@ func NewWorkspaceStoreMongo(client *mongo.Client, dbName string) (*WorkspaceStor
 	// 索引（由 golang-migrate 维护）：
 	// - 唯一：id
 	// - 普通：tenant_id
-	coll := dbtenant.WrapTenant(client.Database(dbName).Collection(workspaceCollectionName))
-	wrap := func(b dbtenant.Base[WorkspaceStore]) WorkspaceStore {
-		return &WorkspaceStoreMongo{Base: b}
-	}
-	return &WorkspaceStoreMongo{Base: dbtenant.NewBase(coll, wrap)}, nil
+	coll := client.Database(dbName).Collection(workspaceCollectionName)
+	return &WorkspaceStoreMongo{collection: dbtenant.WrapTenant(coll)}, nil
+}
+
+// Scopes 按传入范围派生 store。
+func (s *WorkspaceStoreMongo) Scopes(scope dbtenant.Scope) WorkspaceStore {
+	next := *s
+	next.collection = dbtenant.ApplyScope(s.collection, scope)
+	return &next
 }
 
 // List 获取工作空间列表
 func (s *WorkspaceStoreMongo) List(ctx context.Context, opts *ListOptions) ([]Workspace, error) {
 	filter := s.buildListFilter(opts)
-	cursor, err := s.Collection().Find(ctx, filter)
+	cursor, err := s.collection.Find(ctx, filter)
 	if err != nil {
 		return nil, errors.Wrap(err, "find workspaces")
 	}
@@ -148,7 +152,7 @@ func (s *WorkspaceStoreMongo) ListWithPagination(
 	}
 	filter := s.buildListFilter(&opts.ListOptions)
 
-	total, err := s.Collection().CountDocuments(ctx, filter)
+	total, err := s.collection.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "count workspaces")
 	}
@@ -167,7 +171,7 @@ func (s *WorkspaceStoreMongo) ListWithPagination(
 		SetSort(sort).
 		SetSkip((opts.Page - 1) * opts.PageSize).
 		SetLimit(opts.PageSize)
-	cursor, err := s.Collection().Find(ctx, filter, findOpts)
+	cursor, err := s.collection.Find(ctx, filter, findOpts)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "find workspaces with pagination")
 	}
@@ -183,7 +187,7 @@ func (s *WorkspaceStoreMongo) ListWithPagination(
 // Get 通过 ID 获取工作空间
 func (s *WorkspaceStoreMongo) Get(ctx context.Context, id string) (*Workspace, error) {
 	var workspace Workspace
-	if err := s.Collection().FindOne(ctx, bson.M{"id": id}).Decode(&workspace); err != nil {
+	if err := s.collection.FindOne(ctx, bson.M{"id": id}).Decode(&workspace); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrWorkspaceNotFound
 		}
@@ -203,11 +207,11 @@ func (s *WorkspaceStoreMongo) Create(ctx context.Context, workspace *Workspace) 
 	workspace.UpdatedAt = timeNow
 	// 回写 tenant_id
 	// TODO: 如果后续多个 store 都出现同类需求，再抽一个显式回写的公共 helper；
-	if tenantID, ok := s.Collection().TenantID(ctx); ok {
+	if tenantID, ok := s.collection.TenantID(ctx); ok {
 		workspace.TenantID = tenantID
 	}
 
-	if _, err := s.Collection().InsertOne(ctx, workspace); err != nil {
+	if _, err := s.collection.InsertOne(ctx, workspace); err != nil {
 		return err
 	}
 	return nil
@@ -215,7 +219,7 @@ func (s *WorkspaceStoreMongo) Create(ctx context.Context, workspace *Workspace) 
 
 // Update 更新已经存在的工作空间
 func (s *WorkspaceStoreMongo) Update(ctx context.Context, workspace *Workspace) error {
-	if _, err := s.Collection().UpdateOne(
+	if _, err := s.collection.UpdateOne(
 		ctx,
 		bson.M{"id": workspace.ID},
 		bson.M{"$set": bson.M{
@@ -238,7 +242,7 @@ func (s *WorkspaceStoreMongo) Delete(ctx context.Context, id string) error {
 	if err := runPreDeleteHooks(ctx, id); err != nil {
 		return err
 	}
-	_, err := s.Collection().DeleteOne(ctx, bson.M{"id": id})
+	_, err := s.collection.DeleteOne(ctx, bson.M{"id": id})
 	return err
 }
 
@@ -260,7 +264,7 @@ func (s *WorkspaceStoreMongo) CountByState(ctx context.Context, opts *ListOption
 			"count": bson.M{"$sum": 1},
 		}}},
 	}
-	cursor, err := s.Collection().Aggregate(ctx, pipeline)
+	cursor, err := s.collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, errors.Wrap(err, "aggregate workspace counts by state")
 	}

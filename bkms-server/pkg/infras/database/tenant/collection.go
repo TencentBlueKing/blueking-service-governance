@@ -33,23 +33,53 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
+// ErrScopeRequired 表示调用 Scopes 时没有传入范围。
+var ErrScopeRequired = errors.New("scope is required")
+
+// ErrScopeAlreadySet 表示对已经设置过范围的访问再次设置范围。
+var ErrScopeAlreadySet = errors.New("scope can only be set once")
+
 // Scope 调整 Collection 的租户访问范围，返回新实例，不修改入参。
+// 一个 Collection 只能设置一次范围。重复设置或传入 nil 时，错误在后续操作返回。
 type Scope func(*Collection) *Collection
 
-// WithTenant 返回只访问指定租户的 Scope，不再从 ctx 读取租户。
+// ApplyScope 返回应用了 scope 的新 Collection，供 Store 实现 Scopes 时调用。
+// scope 为 nil，或 Collection 已经设置过范围时，不在这里报错，错误会在后续操作返回。
+func ApplyScope(c *Collection, scope Scope) *Collection {
+	if scope == nil {
+		return c.withScopeErr(ErrScopeRequired)
+	}
+	return scope(c)
+}
+
+// WithTenant 返回只访问指定租户的 Scope，不再从 ctx 读取租户。全局表保持不注入。
 func WithTenant(id string) Scope {
 	return func(c *Collection) *Collection {
-		return c.withSpecifiedTenant(id)
+		next := c.rescope()
+		if !isGlobal(next.name) {
+			next.scope = scopeTenant
+			next.specifiedTenantID = &id
+		}
+		return next
+	}
+}
+
+// FromContext 返回从 ctx 读取租户的 Scope，与不调用 Scopes 时的默认行为相同。全局表保持不注入。
+func FromContext() Scope {
+	return func(c *Collection) *Collection {
+		next := c.rescope()
+		if !isGlobal(next.name) {
+			next.scope = scopeTenant
+			next.specifiedTenantID = nil
+		}
+		return next
 	}
 }
 
 // AllTenants 返回跨租户视图，读写都不注入 tenant_id。
 func AllTenants() Scope {
 	return func(c *Collection) *Collection {
-		next := c.clone()
-		if next == nil {
-			return nil
-		}
+		next := c.rescope()
 		next.scope = scopeCrossTenant
 		next.specifiedTenantID = nil
 		return next
@@ -64,6 +94,10 @@ type Collection struct {
 	scope scopeMode
 	// specifiedTenantID 非 nil 时使用该值，不再从 ctx 读取。nil 表示未指定。
 	specifiedTenantID *string
+	// scoped 表示已经设置过范围
+	scoped bool
+	// err 是设置范围时记下的错误，在后续操作返回。
+	err error
 }
 
 // scopeMode 定义 Collection 的租户访问视角。
@@ -88,23 +122,35 @@ func WrapTenant(coll *mongo.Collection) *Collection {
 	}
 }
 
-// withSpecifiedTenant 返回指定租户的视图。全局表没有 tenant_id，保持原范围。
-func (c *Collection) withSpecifiedTenant(id string) *Collection {
-	next := c.clone()
-	if next == nil || isGlobal(next.name) {
-		return next
+// rescope 返回标记为已设置范围的副本。已经设置过范围时记下 ErrScopeAlreadySet。
+func (c *Collection) rescope() *Collection {
+	next := *c
+	if c.scoped {
+		if next.err == nil {
+			next.err = ErrScopeAlreadySet
+		}
+		return &next
 	}
-	next.scope = scopeTenant
-	next.specifiedTenantID = &id
-	return next
+	next.scoped = true
+	return &next
 }
 
-func (c *Collection) clone() *Collection {
+func (c *Collection) withScopeErr(err error) *Collection {
 	if c == nil {
-		return nil
+		return &Collection{err: err}
 	}
 	next := *c
+	if next.err == nil {
+		next.err = err
+	}
 	return &next
+}
+
+func (c *Collection) scopeErr() error {
+	if c == nil || c.err == nil {
+		return nil
+	}
+	return c.wrapErr(c.err)
 }
 
 // Find 按租户注入后查询。
@@ -326,6 +372,9 @@ func (c *Collection) applyDocumentWithTenant(ctx context.Context, document any) 
 
 // withTenant 是 applyFilterWithTenant / applyDocumentWithTenant 的公共实现。
 func (c *Collection) withTenant(ctx context.Context, in any) (any, error) {
+	if err := c.scopeErr(); err != nil {
+		return nil, err
+	}
 	if !c.shouldInjectTenant() {
 		return in, nil
 	}
@@ -341,6 +390,9 @@ func (c *Collection) withTenant(ctx context.Context, in any) (any, error) {
 }
 
 func (c *Collection) applyPipelineWithTenant(ctx context.Context, pipeline any) (any, error) {
+	if err := c.scopeErr(); err != nil {
+		return nil, err
+	}
 	if !c.shouldInjectTenant() {
 		return pipeline, nil
 	}
@@ -392,6 +444,9 @@ func (c *Collection) applyPipelineWithTenant(ctx context.Context, pipeline any) 
 }
 
 func (c *Collection) applyDocumentsWithTenant(ctx context.Context, documents any) (any, error) {
+	if err := c.scopeErr(); err != nil {
+		return nil, err
+	}
 	if !c.shouldInjectTenant() {
 		return documents, nil
 	}
@@ -458,6 +513,9 @@ func (c *Collection) applyWriteModelsWithTenant(
 	ctx context.Context,
 	models []mongo.WriteModel,
 ) ([]mongo.WriteModel, error) {
+	if err := c.scopeErr(); err != nil {
+		return nil, err
+	}
 	if !c.shouldInjectTenant() {
 		return models, nil
 	}

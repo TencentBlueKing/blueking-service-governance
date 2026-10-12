@@ -5,7 +5,7 @@
 ## 要点
 
 - 默认租户只认 `ctx`，不认请求参数、不认调用方传入的 `tenant_id`（防伪造，注入时覆盖）。
-- `Scopes(WithTenant(id))` 把这次访问绑到指定租户，不再读 `ctx`。`Scopes(AllTenants())` 跳过注入。
+- `Scopes(WithTenant(id))` 把这次访问绑到指定租户，不再读 `ctx`。`Scopes(AllTenants())` 跳过注入。`Scopes(FromContext())` 显式从 `ctx` 读租户，与不调用 `Scopes` 相同。`Scopes` 只接受一个范围，同一个 Store 只能调用一次。再次调用或传入 nil 时，后续操作返回 `ErrScopeAlreadySet` 或 `ErrScopeRequired`。
 - HTTP 入口由 `tenant.Required` 写入 ctx：单租统一为 `default`，多租校验 header 与用户归属。
 - 异步任务由 taskq envelope 携带 `_tenantId`，worker 恢复到 ctx。入队时 ctx 没有租户直接失败。升级前已在队列里、没有 `_tenantId` 的任务，恢复时回落 `default`。
 - 缺租户直接失败（`ErrTenantIDRequired`），数据层不静默回落，避免漏中间件变成错数据。
@@ -77,7 +77,7 @@
 这个当前也已经实现，但实现方式不是改 ctx，而是走同一个 Store 的跨租户视图：
 
 - `WorkspaceStore` 暴露 `Scopes(...)`。`WithTenant(id)` 绑死租户，`AllTenants()` 跨租户访问
-- `Scopes` 由公共的 `dbtenant.Base` 实现：接口嵌入 `dbtenant.Scopable[WorkspaceStore]`，实现嵌入 `dbtenant.Base[WorkspaceStore]`。`Scopes` 只替换内部 `Collection`，再经构造时传入的 `wrap` 组装成新 Store；Store 方法通过 `s.Collection()` 访问集合，本身不拼 `tenant_id`
+- `WorkspaceStoreMongo.Scopes` 复制自身，用 `dbtenant.ApplyScope` 替换内部 `Collection`，Store 方法本身不拼 `tenant_id`。范围是否已设置记录在 `Collection` 上。重复设置或传入 nil 时把错误记在副本上，后续操作再返回
 - `Collection` 内部用 `scopeCrossTenant` 标记这个视图；只有默认 `scopeTenant` 才会注入 `tenant_id`
 - platmgt workspace / platmgt workspace admin 已经显式使用 `h.registry.WorkspaceStore.Scopes(dbtenant.AllTenants())`
 

@@ -251,18 +251,66 @@ var _ = Describe("TenantAwareCollection", func() {
 			Expect(ok).To(BeFalse())
 		})
 
-		It("lets the last scope win", func() {
+		It("reads the tenant from context with FromContext", func() {
+			c := FromContext()(newTestCollection("workspaces"))
+			ctx := reqtenant.WithTenantID(context.Background(), tenantA)
+
+			got, err := c.applyFilterWithTenant(ctx, bson.M{"id": "ws-1"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(Equal(bson.M{"id": "ws-1", reqtenant.FieldTenantID: tenantA}))
+
+			_, err = c.applyFilterWithTenant(context.Background(), bson.M{"id": "ws-1"})
+			Expect(err).To(MatchError(reqtenant.ErrTenantIDRequired))
+		})
+
+		It("keeps global collections free of tenant injection with FromContext", func() {
+			c := FromContext()(newTestCollection("cluster_addon_defs"))
+			ctx := reqtenant.WithTenantID(context.Background(), tenantA)
+
+			got, err := c.applyFilterWithTenant(ctx, bson.M{"key": "x"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(Equal(bson.M{"key": "x"}))
+		})
+
+		It("returns a new collection and leaves the original unchanged", func() {
 			base := newTestCollection("workspaces")
 
-			cleared := AllTenants()(WithTenant("tenant-fixed")(base))
-			got, err := cleared.applyFilterWithTenant(context.Background(), bson.M{"id": "ws-1"})
+			scoped := ApplyScope(base, AllTenants())
+
+			Expect(scoped.scope).To(Equal(scopeCrossTenant))
+			Expect(base.scope).To(Equal(scopeTenant))
+			Expect(base.scoped).To(BeFalse())
+		})
+
+		It("returns the scope error on the next operation when the scope is set twice", func() {
+			base := newTestCollection("workspaces")
+			scoped := ApplyScope(base, WithTenant("tenant-fixed"))
+
+			_, err := ApplyScope(
+				scoped,
+				AllTenants(),
+			).applyFilterWithTenant(context.Background(), bson.M{"id": "ws-1"})
+			Expect(err).To(MatchError(ErrScopeAlreadySet))
+			_, err = ApplyScope(
+				scoped,
+				FromContext(),
+			).applyFilterWithTenant(context.Background(), bson.M{"id": "ws-1"})
+			Expect(err).To(MatchError(ErrScopeAlreadySet))
+
+			got, err := ApplyScope(
+				base,
+				AllTenants(),
+			).applyFilterWithTenant(context.Background(), bson.M{"id": "ws-1"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(Equal(bson.M{"id": "ws-1"}))
+		})
 
-			rebound := WithTenant("tenant-fixed")(AllTenants()(base))
-			got, err = rebound.applyFilterWithTenant(context.Background(), bson.M{"id": "ws-1"})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got).To(Equal(bson.M{"id": "ws-1", reqtenant.FieldTenantID: "tenant-fixed"}))
+		It("returns the scope error on the next operation when the scope is nil", func() {
+			_, err := ApplyScope(newTestCollection("workspaces"), nil).applyFilterWithTenant(
+				context.Background(),
+				bson.M{"id": "ws-1"},
+			)
+			Expect(err).To(MatchError(ErrScopeRequired))
 		})
 
 		It("keeps global collections free of tenant injection", func() {
