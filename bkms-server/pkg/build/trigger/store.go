@@ -20,8 +20,12 @@ package trigger
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // PolicyCollName 触发策略表名
@@ -48,8 +52,7 @@ var (
 	ErrPolicyNameDuplicated = errors.New("build trigger policy name already exists in the app")
 )
 
-// PolicyStore 触发策略存储接口。
-// Mongo 实现由「触发策略后端管理与冲突检测」子需求落地
+// PolicyStore 触发策略存储接口
 type PolicyStore interface {
 	// Create 创建触发策略，名称在应用内重复时返回 ErrPolicyNameDuplicated
 	Create(ctx context.Context, policy *Policy) error
@@ -86,4 +89,121 @@ type RecordStore interface {
 	// ExistsBuiltByCommit 判断该策略下指定 commit 是否已成功发起过构建，用于回调去重。
 	// 只统计 result 为 ResultBuilt 的记录
 	ExistsBuiltByCommit(ctx context.Context, policyID, commitID string) (bool, error)
+}
+
+var _ PolicyStore = &PolicyStoreMongo{}
+
+// PolicyStoreMongo 基于 MongoDB 的触发策略存储
+type PolicyStoreMongo struct {
+	collection *mongo.Collection
+}
+
+// NewPolicyStoreMongo 创建 PolicyStore Mongo 实现，索引由迁移维护，此处不建
+func NewPolicyStoreMongo(client *mongo.Client, dbName string) (*PolicyStoreMongo, error) {
+	coll := client.Database(dbName).Collection(PolicyCollName)
+	// 索引（由 golang-migrate 维护）：
+	// - 唯一：appID + name
+	// - 普通：appID
+	return &PolicyStoreMongo{collection: coll}, nil
+}
+
+// Create 创建触发策略，名称在应用内重复时返回 ErrPolicyNameDuplicated
+func (s *PolicyStoreMongo) Create(ctx context.Context, policy *Policy) error {
+	now := time.Now()
+	policy.CreatedAt = now
+	policy.UpdatedAt = now
+	if _, err := s.collection.InsertOne(ctx, policy); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return ErrPolicyNameDuplicated
+		}
+		return errors.Wrap(err, "create build trigger policy")
+	}
+	return nil
+}
+
+// Update 更新触发策略表单字段与蓝盾关联标识，不改动 appID / creator / createdAt
+func (s *PolicyStoreMongo) Update(ctx context.Context, policy *Policy) error {
+	filter := bson.M{"appID": policy.AppID, "id": policy.ID}
+	updateDoc := bson.M{"$set": bson.M{
+		"name":             policy.Name,
+		"event":            policy.Event,
+		"branchMatchMode":  policy.BranchMatchMode,
+		"branchMatchValue": policy.BranchMatchValue,
+		"pathFilter":       policy.PathFilter,
+		"pipelineID":       policy.PipelineID,
+		"triggerID":        policy.TriggerID,
+		"updatedAt":        time.Now(),
+	}}
+	ret, err := s.collection.UpdateOne(ctx, filter, updateDoc)
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return ErrPolicyNameDuplicated
+		}
+		return errors.Wrapf(err, "update build trigger policy %s", policy.ID)
+	}
+	if ret.MatchedCount == 0 {
+		return ErrPolicyNotFound
+	}
+	return nil
+}
+
+// UpdateStatus 更新策略启停状态，策略不存在时返回 ErrPolicyNotFound
+func (s *PolicyStoreMongo) UpdateStatus(ctx context.Context, appID, policyID string, status Status) error {
+	filter := bson.M{"appID": appID, "id": policyID}
+	ret, err := s.collection.UpdateOne(ctx, filter, bson.M{"$set": bson.M{
+		"status":    status,
+		"updatedAt": time.Now(),
+	}})
+	if err != nil {
+		return errors.Wrapf(err, "update build trigger policy %s status", policyID)
+	}
+	if ret.MatchedCount == 0 {
+		return ErrPolicyNotFound
+	}
+	return nil
+}
+
+// Get 获取单条触发策略，不存在时返回 ErrPolicyNotFound
+func (s *PolicyStoreMongo) Get(ctx context.Context, appID, policyID string) (*Policy, error) {
+	var policy Policy
+	err := s.collection.FindOne(ctx, bson.M{"appID": appID, "id": policyID}).Decode(&policy)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrPolicyNotFound
+		}
+		return nil, errors.Wrapf(err, "get build trigger policy %s", policyID)
+	}
+	return &policy, nil
+}
+
+// List 获取应用下全部触发策略，按创建时间升序
+func (s *PolicyStoreMongo) List(ctx context.Context, appID string) ([]Policy, error) {
+	cursor, err := s.collection.Find(
+		ctx,
+		bson.M{"appID": appID},
+		options.Find().SetSort(bson.D{{Key: "createdAt", Value: 1}}),
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list build trigger policies of app %s", appID)
+	}
+	defer cursor.Close(ctx)
+
+	// 无策略时返回空切片，避免调用方把 nil 与「未查到」混淆
+	policies := make([]Policy, 0)
+	if err = cursor.All(ctx, &policies); err != nil {
+		return nil, errors.Wrapf(err, "decode build trigger policies of app %s", appID)
+	}
+	return policies, nil
+}
+
+// Delete 删除触发策略，不级联删除触发记录与构建记录
+func (s *PolicyStoreMongo) Delete(ctx context.Context, appID, policyID string) error {
+	ret, err := s.collection.DeleteOne(ctx, bson.M{"appID": appID, "id": policyID})
+	if err != nil {
+		return errors.Wrapf(err, "delete build trigger policy %s", policyID)
+	}
+	if ret.DeletedCount == 0 {
+		return ErrPolicyNotFound
+	}
+	return nil
 }

@@ -55,6 +55,17 @@ type PolicyFormInput struct {
 	PathFilter string `json:"pathFilter" binding:"max=512"`
 }
 
+// ToModel 只做 HTTP 表单到领域表单的字段映射，跨字段校验由 PolicyManager.validateForm 完成
+func (i PolicyFormInput) ToModel() trigger.PolicyForm {
+	return trigger.PolicyForm{
+		Name:             i.Name,
+		Event:            trigger.Event(i.Event),
+		BranchMatchMode:  trigger.BranchMatchMode(i.BranchMatchMode),
+		BranchMatchValue: i.BranchMatchValue,
+		PathFilter:       i.PathFilter,
+	}
+}
+
 // PatchPolicyStatusInput is the JSON body for enabling or disabling a policy.
 type PatchPolicyStatusInput struct {
 	// 是否启用；用指针以区分「未传」与「显式传 false」

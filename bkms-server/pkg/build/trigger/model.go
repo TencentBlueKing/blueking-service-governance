@@ -71,6 +71,8 @@ const (
 	PolicyNameMaxLen = 32
 	// MaxPoliciesPerApp 单应用策略数量上限，生效中与已停用合并计数
 	MaxPoliciesPerApp = 5
+	// PolicyIDPrefix 策略 ID 前缀，完整格式为 btp- + 16 位随机串
+	PolicyIDPrefix = "btp-"
 )
 
 // Policy 触发策略。

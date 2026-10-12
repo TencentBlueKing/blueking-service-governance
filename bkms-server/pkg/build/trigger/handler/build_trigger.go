@@ -16,42 +16,98 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package handler contains Gin handlers for build trigger APIs.
-//
-// 本包目前是 W1 契约基线的空实现：只做请求参数绑定校验，随后返回契约结构的零值，
-// 不做权限校验、不访问存储、不调用蓝盾。各接口的真实实现归属见
-// design_notes/build_trigger_contract.md，实现时应在此处补齐依赖注入与业务逻辑
+// Package handler 提供自动触发策略的 Gin 接口
+// 本期已落地策略 CRUD / 启停 / 冲突预检；触发记录查询与构建回调仍为空实现
 package handler
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger"
 	triggerserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
 var _ trigger.Handler = (*Handler)(nil)
 
 // Handler handles Gin build trigger API requests.
-type Handler struct{}
-
-// New creates a Handler.
-func New() *Handler {
-	return &Handler{}
+type Handler struct {
+	registry      *storereg.Registry
+	policyManager *trigger.PolicyManager
 }
 
-// emptyPolicyList 返回空的策略列表，Results 保持空数组而非 null，避免前端判空分支
-func emptyPolicyList() *triggerserializer.PolicyListOutputObjs {
-	return &triggerserializer.PolicyListOutputObjs{
-		Count:   0,
-		Results: []*triggerserializer.PolicyOutputObj{},
+// New 创建 Handler；pipelineOps 传 nil，走默认蓝盾 TriggerPipelineManager
+func New(registry *storereg.Registry) *Handler {
+	return &Handler{
+		registry: registry,
+		policyManager: trigger.NewPolicyManager(
+			registry.BuildTriggerPolicyStore, registry.BuildConfigStore, nil,
+		),
 	}
 }
 
-// ListBuildTriggerPolicies 获取应用的触发策略列表。
-//
+// policyOutput 将策略实体包成单条接口响应，Health 在 FromModel 中固定为 unknown
+func policyOutput(p *trigger.Policy) triggerserializer.PolicyOutput {
+	return triggerserializer.PolicyOutput{
+		Data: new(triggerserializer.PolicyOutputObj).FromModel(*p),
+	}
+}
+
+// conflictCheckOutput 组装预检响应：无命中为 none 且两个列表为空数组，有命中一律 error
+// 预检接口始终 HTTP 200，用 level 区分，本期不写 warn
+func conflictCheckOutput(hits []trigger.ConflictHit) *triggerserializer.ConflictCheckOutputObj {
+	names := make([]string, 0, len(hits))
+	reasons := make([]triggerserializer.ConflictReasonObj, 0, len(hits))
+	for _, hit := range hits {
+		names = append(names, hit.PolicyName)
+		reasons = append(reasons, triggerserializer.ConflictReasonObj{
+			PolicyName:  hit.PolicyName,
+			OverlapType: string(hit.OverlapType),
+			Message:     hit.Message,
+		})
+	}
+	level := string(triggerserializer.ConflictLevelNone)
+	if len(hits) > 0 {
+		level = string(triggerserializer.ConflictLevelError)
+	}
+	return &triggerserializer.ConflictCheckOutputObj{
+		Level:               level,
+		ConflictPolicyNames: names,
+		ConflictReasons:     reasons,
+	}
+}
+
+// mapPolicyErr 将策略领域错误映射为 HTTP ErrCode
+// 硬冲突 / 重名 / 数量上限 / 准入失败等业务规则为 INVALID_ARGUMENT；未找到为 NOT_FOUND；其余为 500
+// 重名单独给中文文案，避免把英文哨兵透出
+func mapPolicyErr(err error) error {
+	var conflictErr *trigger.PolicyConflictError
+	if errors.As(err, &conflictErr) {
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, conflictErr.Error())
+	}
+	switch {
+	case errors.Is(err, trigger.ErrPolicyNotFound):
+		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, err.Error())
+	case errors.Is(err, trigger.ErrPolicyNameDuplicated):
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "同应用下已存在同名触发策略")
+	case errors.Is(err, trigger.ErrTooManyPolicies),
+		errors.Is(err, trigger.ErrAutoGenerateTagDisabled),
+		errors.Is(err, trigger.ErrUnsupportedAppType),
+		errors.Is(err, trigger.ErrInvalidBranchMatch),
+		errors.Is(err, trigger.ErrBuildConfigLocked):
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error())
+	default:
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, err.Error())
+	}
+}
+
+// ListBuildTriggerPolicies 获取应用的触发策略列表，需查看权限
 // 单应用策略上限为 MaxPoliciesPerApp，一次返回全部，不支持分页
 //
 //	@ID				ListBuildTriggerPolicies
@@ -72,10 +128,31 @@ func (h *Handler) ListBuildTriggerPolicies(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, triggerserializer.ListPoliciesOutput{Data: emptyPolicyList()})
+	ctx := c.Request.Context()
+	if _, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	policies, err := h.policyManager.List(ctx, uriInput.AppID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, mapPolicyErr(err))
+		return
+	}
+	// 用空切片而非 nil，避免 JSON 把 results 编成 null
+	results := make([]*triggerserializer.PolicyOutputObj, 0, len(policies))
+	for i := range policies {
+		results = append(results, new(triggerserializer.PolicyOutputObj).FromModel(policies[i]))
+	}
+	ginutils.OK(c, triggerserializer.ListPoliciesOutput{
+		Data: &triggerserializer.PolicyListOutputObjs{
+			Count:   int64(len(results)),
+			Results: results,
+		},
+	})
 }
 
-// CreateBuildTriggerPolicy 新增触发策略。
+// CreateBuildTriggerPolicy 新增触发策略，需构建权限；首条会 Ensure 触发专用流水线
 //
 //	@ID				CreateBuildTriggerPolicy
 //	@Summary		新增触发策略
@@ -98,10 +175,19 @@ func (h *Handler) CreateBuildTriggerPolicy(c *gin.Context) {
 		return
 	}
 
-	// FIXME(策略管理子需求): 校验应用 buildConfig.tagConfig.IsAutoGenerateEnabled()，
-	// 未开启自动生成 tag 时返回 INVALID_ARGUMENT，拒绝创建
+	ctx := c.Request.Context()
+	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 
-	ginutils.OK(c, triggerserializer.PolicyOutput{Data: &triggerserializer.PolicyOutputObj{}})
+	policy, err := h.policyManager.Create(ctx, app, auth.MustGetUser(ctx).ID, input.ToModel())
+	if err != nil {
+		bkerrs.AbortWithErr(c, mapPolicyErr(err))
+		return
+	}
+	ginutils.OK(c, policyOutput(policy))
 }
 
 // UpdateBuildTriggerPolicy 更新触发策略。
@@ -128,10 +214,18 @@ func (h *Handler) UpdateBuildTriggerPolicy(c *gin.Context) {
 		return
 	}
 
-	// FIXME(策略管理子需求): 校验应用 buildConfig.tagConfig.IsAutoGenerateEnabled()，
-	// 未开启自动生成 tag 时返回 INVALID_ARGUMENT，拒绝更新
+	ctx := c.Request.Context()
+	if _, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 
-	ginutils.OK(c, triggerserializer.PolicyOutput{Data: &triggerserializer.PolicyOutputObj{}})
+	policy, err := h.policyManager.Update(ctx, uriInput.AppID, uriInput.PolicyID, input.ToModel())
+	if err != nil {
+		bkerrs.AbortWithErr(c, mapPolicyErr(err))
+		return
+	}
+	ginutils.OK(c, policyOutput(policy))
 }
 
 // PatchBuildTriggerPolicyStatus 启用或停用触发策略。
@@ -158,10 +252,21 @@ func (h *Handler) PatchBuildTriggerPolicyStatus(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, triggerserializer.PolicyOutput{Data: &triggerserializer.PolicyOutputObj{}})
+	ctx := c.Request.Context()
+	if _, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	policy, err := h.policyManager.PatchStatus(ctx, uriInput.AppID, uriInput.PolicyID, input.Status())
+	if err != nil {
+		bkerrs.AbortWithErr(c, mapPolicyErr(err))
+		return
+	}
+	ginutils.OK(c, policyOutput(policy))
 }
 
-// DeleteBuildTriggerPolicy 删除触发策略。
+// DeleteBuildTriggerPolicy 删除触发策略，需构建权限；末条会先 Cleanup 流水线，失败则策略仍在
 //
 //	@ID				DeleteBuildTriggerPolicy
 //	@Summary		删除触发策略
@@ -182,10 +287,21 @@ func (h *Handler) DeleteBuildTriggerPolicy(c *gin.Context) {
 		return
 	}
 
+	ctx := c.Request.Context()
+	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	if err = h.policyManager.Delete(ctx, app.WorkspaceID, uriInput.AppID, uriInput.PolicyID); err != nil {
+		bkerrs.AbortWithErr(c, mapPolicyErr(err))
+		return
+	}
 	ginutils.NoContent(c)
 }
 
-// CheckBuildTriggerPolicyConflict 预检触发策略的重叠冲突。
+// CheckBuildTriggerPolicyConflict 预检触发策略的重叠冲突，始终 HTTP 200，用 level 区分 none / error
 //
 //	@ID				CheckBuildTriggerPolicyConflict
 //	@Summary		预检触发策略的重叠冲突
@@ -208,12 +324,21 @@ func (h *Handler) CheckBuildTriggerPolicyConflict(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, triggerserializer.ConflictCheckOutput{
-		Data: &triggerserializer.ConflictCheckOutputObj{
-			Level:               string(triggerserializer.ConflictLevelNone),
-			ConflictPolicyNames: []string{},
-		},
-	})
+	ctx := c.Request.Context()
+	if _, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	// 编辑时排除自身：JSON 字段 excludeTriggerID 传的是策略 ID，不是蓝盾 triggerID
+	hits, err := h.policyManager.CheckConflict(
+		ctx, uriInput.AppID, input.ExcludeTriggerID, input.Policy.ToModel(),
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, mapPolicyErr(err))
+		return
+	}
+	ginutils.OK(c, triggerserializer.ConflictCheckOutput{Data: conflictCheckOutput(hits)})
 }
 
 // ListBuildTriggerPolicyRecords 获取触发策略的触发记录列表。

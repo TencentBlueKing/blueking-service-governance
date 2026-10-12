@@ -24,8 +24,7 @@ type ConflictLevel string
 const (
 	// ConflictLevelNone 无冲突
 	ConflictLevelNone ConflictLevel = "none"
-	// ConflictLevelWarn 软冲突：匹配范围重叠但版本号规则不同，允许保存但需告警。
-	// 命中时每条策略各触发一次构建、产出多个镜像
+	// ConflictLevelWarn 软冲突枚举，仅作前向兼容；镜像 tag 已上收到应用配置后本期不返回
 	ConflictLevelWarn ConflictLevel = "warn"
 	// ConflictLevelError 硬冲突：匹配范围重叠且版本号规则完全相同，禁止保存。
 	// 同一次推送会产出同名镜像并互相覆盖
@@ -36,16 +35,28 @@ const (
 type ConflictCheckInput struct {
 	// 待检测的策略表单
 	Policy *PolicyFormInput `json:"policy" binding:"required"`
-	// 排除的策略 ID，编辑场景下用于排除自身；新建场景留空
+	// 编辑时排除自身的策略 ID，新建留空；JSON 字段名为 excludeTriggerID，值不是蓝盾 triggerID
 	ExcludeTriggerID string `json:"excludeTriggerID"`
 }
 
 // ConflictCheckOutputObj is the JSON representation of a conflict check result.
 type ConflictCheckOutputObj struct {
-	// 冲突级别：none 无冲突，warn 软冲突（可保存），error 硬冲突（禁止保存）
+	// 冲突级别：none 无冲突，error 硬冲突（禁止保存）；本期不返回 warn
 	Level string `json:"level"`
 	// 发生冲突的已有策略名列表，无冲突时为空数组
 	ConflictPolicyNames []string `json:"conflictPolicyNames"`
+	// 每条冲突的策略名、重叠类型与原因，无冲突时为空数组
+	ConflictReasons []ConflictReasonObj `json:"conflictReasons"`
+}
+
+// ConflictReasonObj 单条硬冲突原因
+type ConflictReasonObj struct {
+	// 冲突的已有策略名
+	PolicyName string `json:"policyName"`
+	// 重叠类型：all / eq_eq / prefix_prefix / eq_hits_prefix
+	OverlapType string `json:"overlapType"`
+	// 人类可读冲突原因
+	Message string `json:"message"`
 }
 
 // ConflictCheckOutput is the JSON response for pre-checking policy overlap conflicts.
