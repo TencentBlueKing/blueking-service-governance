@@ -33,6 +33,7 @@
     </Radio.Group>
   </Form.FormItem>
   <Form.FormItem
+    ref="revisionFormItemRef"
     :description="description"
     :label="t(fieldLabelKey)"
     :property="property"
@@ -49,8 +50,10 @@
       :model-value="modelValue"
       @update:model-value="handleCommitInput"
     />
+    <!-- 按来源重建下拉，避免切到 Tag 后还拿着上一次分支名做过滤，列表被滤空 -->
     <RepoRefSelect
       v-else
+      :key="repoGroup || 'mixed'"
       ref="repoRef"
       :class="controlClass"
       :disabled="disabled"
@@ -116,6 +119,8 @@
   const { t } = useI18n();
   const repoRef = ref<InstanceType<typeof RepoRefSelect>>();
   const commitInputRef = ref<InstanceType<typeof Input>>();
+  /** 修订表单项：来源切换后清掉带着旧字段名的错误，例如切回分支仍显示「代码 Tag不能为空」 */
+  const revisionFormItemRef = ref<{ clearValidate: () => void }>();
 
   const fieldLabelKey = computed(() => (props.showSource ? revisionFieldLabel(props.revisionType) : '代码分支'));
   // 流水线模式不收窄列表，仍是原来的分支 / Tag 混合下拉
@@ -174,7 +179,7 @@
 
   /**
    * 切到 Tag / CommitID 时清空，避免把上一个分支名带过去。
-   * 切回分支时重新带出默认修订。
+   * 切回分支时重新带出默认修订，并清掉切换过程中失焦留下的旧校验。
    */
   function handleTypeChange(type: RevisionType) {
     if (type === props.revisionType) return;
@@ -184,11 +189,13 @@
     emit('update:revisionType', type);
     emit('update:modelValue', next);
 
-    if (type === 'branch') {
-      nextTick(() => {
+    // 单选会让下拉先失焦，空值校验发生在来源改完之前，错误文案会停在旧字段名上
+    nextTick(() => {
+      if (type !== 'commit') {
         repoRef.value?.prepare(next);
-      });
-    }
+      }
+      revisionFormItemRef.value?.clearValidate?.();
+    });
 
     emit('confirm');
   }
