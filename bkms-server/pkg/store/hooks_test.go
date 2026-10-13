@@ -80,9 +80,12 @@ var _ = Describe("GenericStore hooks", func() {
 			Expect(rawPassword("w1")).To(Equal(encPrefix + "plain"))
 		})
 
-		It("should encode on CreateMany, Upsert, Replace and UpdateFields", func() {
+		It("should encode on CreateMany, CreateManyIfAbsent, Upsert, Replace and UpdateFields", func() {
 			Expect(f.widgets.CreateMany(f.ctx, []*Widget{newSecretWidget("many")})).To(Succeed())
 			Expect(rawPassword("many")).To(Equal(encPrefix + "plain"))
+
+			Expect(f.widgets.CreateManyIfAbsent(f.ctx, []*Widget{newSecretWidget("if-absent")})).To(Succeed())
+			Expect(rawPassword("if-absent")).To(Equal(encPrefix + "plain"))
 
 			_, err := f.widgets.Upsert(f.ctx, newSecretWidget("upsert"), f.byName("upsert"))
 			Expect(err).NotTo(HaveOccurred())

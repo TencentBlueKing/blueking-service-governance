@@ -27,8 +27,9 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -88,27 +89,74 @@ var _ = Describe("ProjectStore", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, store.ErrDuplicate)).To(BeTrue())
 		})
+	})
 
-		It("should encrypt password before storing", func() {
-			project := &Project{
-				ID:          "test-project",
-				WorkspaceID: "workspace-001",
-				Username:    "admin",
-				Password:    "password123",
-				Creator:     "test-user",
-			}
+	Describe("password encryption", func() {
+		var secret string
 
-			err := s.Create(ctx, project)
+		BeforeEach(func() {
+			var err error
+			secret, err = crypto.GenerateKey(32)
 			Expect(err).NotTo(HaveOccurred())
+			overrideConfig(func(cfg *config.Config) { cfg.Encrypt.Secret = secret })
+		})
 
-			// 直接从数据库读取，验证密码已加密
-			var rawProject Project
-			err = database.DB().Collection(ProjectMeta.Collection).
-				FindOne(ctx, bson.M{"id": "test-project"}).Decode(&rawProject)
+		rawPassword := func(id string) string {
+			raw, err := s.Collection().FindOne(ctx, bson.M{"id": id}).Raw()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(rawProject.Password).NotTo(Equal("password123"))
-			// 加密只作用于落库的副本，调用方对象保持明文
+			return raw.Lookup("password").StringValue()
+		}
+
+		// insertRaw 绕过 Store 直接写入原始文档，用于验证读取路径的解密
+		insertRaw := func(id, password string) {
+			_, err := s.Collection().InsertOne(ctx, bson.M{
+				"id": id, "workspaceID": "ws-" + id, "username": "admin", "password": password,
+			})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		It("should store the AES ciphertext of the password without touching the caller's object", func() {
+			project := &Project{ID: "p1", WorkspaceID: "ws-p1", Username: "admin", Password: "password123"}
+			Expect(s.Create(ctx, project)).To(Succeed())
 			Expect(project.Password).To(Equal("password123"))
+
+			stored := rawPassword("p1")
+			Expect(stored).NotTo(Equal("password123"))
+			Expect(crypto.AESDecrypt(secret, stored)).To(Equal("password123"))
+		})
+
+		It("should decrypt the stored ciphertext on Get and List", func() {
+			ciphertext, err := crypto.AESEncrypt(secret, "password123")
+			Expect(err).NotTo(HaveOccurred())
+			insertRaw("p1", ciphertext)
+
+			got, err := s.Get(ctx, store.Where("id", "p1"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Password).To(Equal("password123"))
+
+			list, err := s.List(ctx, ByWorkspace("ws-p1"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list).To(HaveLen(1))
+			Expect(list[0].Password).To(Equal("password123"))
+		})
+
+		It("should keep an empty password empty in the database", func() {
+			Expect(s.Create(ctx, &Project{ID: "p1", WorkspaceID: "ws-p1", Username: "admin"})).To(Succeed())
+			Expect(rawPassword("p1")).To(BeEmpty())
+
+			got, err := s.Get(ctx, store.Where("id", "p1"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Password).To(BeEmpty())
+		})
+
+		It("should fail to read a password that is not valid ciphertext", func() {
+			insertRaw("p1", "plain-password")
+
+			_, err := s.Get(ctx, store.Where("id", "p1"))
+			Expect(err).To(MatchError(ContainSubstring("decrypt password")))
+
+			_, err = s.List(ctx, ByWorkspace("ws-p1"))
+			Expect(err).To(MatchError(ContainSubstring("decrypt password")))
 		})
 	})
 

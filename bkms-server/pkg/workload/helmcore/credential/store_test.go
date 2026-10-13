@@ -88,9 +88,26 @@ var _ = Describe("HelmRepoCredential store", func() {
 		Expect(errors.Is(err, store.ErrDuplicate)).To(BeTrue())
 	})
 
+	rawPassword := func(workspaceID string) string {
+		raw, err := credStore.Collection().FindOne(ctx, bson.M{"workspaceID": workspaceID}).Raw()
+		Expect(err).NotTo(HaveOccurred())
+		return raw.Lookup("password").StringValue()
+	}
+
+	// insertRaw 绕过 Store 直接写入原始文档，用于验证读取路径的解密
+	insertRaw := func(prefix, password string) string {
+		workspaceID := prefix + stringx.Random(8)
+		_, err := credStore.Collection().InsertOne(ctx, bson.M{
+			"workspaceID": workspaceID, "credentialID": helmRepoCredentialID, "username": "admin", "password": password,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return workspaceID
+	}
+
 	It("should create and retrieve credential with empty password", func() {
 		cred := newCred("ws-empty-pwd-", "")
 		Expect(credStore.Create(ctx, cred)).To(Succeed())
+		Expect(rawPassword(cred.WorkspaceID)).To(BeEmpty())
 
 		got, err := credStore.Get(ctx, ByWorkspace(cred.WorkspaceID))
 		Expect(err).NotTo(HaveOccurred())
@@ -105,12 +122,35 @@ var _ = Describe("HelmRepoCredential store", func() {
 		Expect(cred.Password).To(Equal(plainPassword))
 
 		// 直接读取库中原始文档，密码应为密文
-		raw, err := credStore.Collection().FindOne(ctx, bson.M{"workspaceID": cred.WorkspaceID}).Raw()
-		Expect(err).NotTo(HaveOccurred())
-		stored := raw.Lookup("password").StringValue()
+		stored := rawPassword(cred.WorkspaceID)
 		Expect(stored).NotTo(Equal(plainPassword))
 		decrypted, err := crypto.AESDecrypt(svccfg.G.Encrypt.Secret, stored)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(decrypted).To(Equal(plainPassword))
+	})
+
+	It("should decrypt the stored ciphertext on Get and List", func() {
+		ciphertext, err := crypto.AESEncrypt(svccfg.G.Encrypt.Secret, "my-secret-password")
+		Expect(err).NotTo(HaveOccurred())
+		workspaceID := insertRaw("ws-decrypt-test-", ciphertext)
+
+		got, err := credStore.Get(ctx, ByWorkspace(workspaceID))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Password).To(Equal("my-secret-password"))
+
+		list, err := credStore.List(ctx, ByWorkspace(workspaceID))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(list).To(HaveLen(1))
+		Expect(list[0].Password).To(Equal("my-secret-password"))
+	})
+
+	It("should fail to read a password that is not valid ciphertext", func() {
+		workspaceID := insertRaw("ws-bad-cipher-", "plain-password")
+
+		_, err := credStore.Get(ctx, ByWorkspace(workspaceID))
+		Expect(err).To(MatchError(ContainSubstring("decrypt password")))
+
+		_, err = credStore.List(ctx, ByWorkspace(workspaceID))
+		Expect(err).To(MatchError(ContainSubstring("decrypt password")))
 	})
 })
