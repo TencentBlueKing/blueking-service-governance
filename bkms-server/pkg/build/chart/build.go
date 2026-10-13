@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
@@ -33,6 +34,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 )
 
@@ -48,31 +50,18 @@ type ChartBuildResult struct {
 
 // ChartBuildService Helm Chart 构建服务，收敛所有外部依赖
 type ChartBuildService struct {
-	semverStore     semver.CounterStore
-	credStore       credential.HelmRepoCredentialStore
-	recordStore     RecordStore
-	bkciProjStore   bkci.ProjectStore
-	bkrepoProjStore bkrepo.ProjectStore
-	pipelineStore   bkci.PipelineStore
+	db          *mongo.Database
+	semverStore semver.CounterStore
+	recordStore RecordStore
 }
 
 // NewChartBuildService 创建 ChartBuildService 实例
 func NewChartBuildService(
+	db *mongo.Database,
 	semverStore semver.CounterStore,
-	credStore credential.HelmRepoCredentialStore,
 	recordStore RecordStore,
-	bkciProjStore bkci.ProjectStore,
-	bkrepoProjStore bkrepo.ProjectStore,
-	pipelineStore bkci.PipelineStore,
 ) *ChartBuildService {
-	return &ChartBuildService{
-		semverStore:     semverStore,
-		credStore:       credStore,
-		recordStore:     recordStore,
-		bkciProjStore:   bkciProjStore,
-		bkrepoProjStore: bkrepoProjStore,
-		pipelineStore:   pipelineStore,
-	}
+	return &ChartBuildService{db: db, semverStore: semverStore, recordStore: recordStore}
 }
 
 // validate 校验阶段：纯检查，无副作用
@@ -103,30 +92,30 @@ func (s *ChartBuildService) prepare(ctx context.Context, app *bkmsapp.Applicatio
 	gitRepoConfig := app.HelmSpec.HelmSource.GitRepoConfig
 
 	// 1. 确保 Helm Git Build 流水线已初始化
-	if _, err := bkci.NewPipelineManager(app.WorkspaceID).Initialize(
+	if _, err := bkci.NewPipelineManager(s.db, app.WorkspaceID).Initialize(
 		ctx, string(bkci.PipelineTypeHelmGitBuild),
 	); err != nil {
 		return errors.Wrapf(err, "ensure helm-git-build pipeline for workspace %s", app.WorkspaceID)
 	}
 
 	// 2. 确保代码库已关联到蓝盾
-	if _, err := bkci.NewRepositoryManager(app.WorkspaceID).Initialize(
+	if _, err := bkci.NewRepositoryManager(s.db, app.WorkspaceID).Initialize(
 		ctx, gitRepoConfig.RepoURL, gitRepoConfig.RepoAlias,
 	); err != nil {
 		return errors.Wrapf(err, "ensure bkci repository for app %s", appInfo)
 	}
 
 	// 3. 确保 Helm 仓库凭证已初始化（兜底检查）
-	bkciProj, err := s.bkciProjStore.GetByWorkspace(ctx, app.WorkspaceID)
+	bkciProj, err := store.Of(s.db, bkci.ProjectMeta).Get(ctx, bkci.ByWorkspace(app.WorkspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get bkci project for workspace %s", app.WorkspaceID)
 	}
-	bkrepoProj, err := s.bkrepoProjStore.GetByWorkspace(ctx, app.WorkspaceID)
+	bkrepoProj, err := store.Of(s.db, bkrepo.ProjectMeta).Get(ctx, bkrepo.ByWorkspace(app.WorkspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get bkrepo project for workspace %s", app.WorkspaceID)
 	}
 	if err = credential.EnsureCredential(
-		ctx, s.credStore, app.WorkspaceID, bkciProj.Code, bkrepoProj.Username, bkrepoProj.Password,
+		ctx, s.db, app.WorkspaceID, bkciProj.Code, bkrepoProj.Username, bkrepoProj.Password,
 	); err != nil {
 		return errors.Wrapf(err, "ensure helm repo credential for workspace %s", app.WorkspaceID)
 	}
@@ -166,7 +155,7 @@ func (s *ChartBuildService) execute(
 	appInfo := app.String()
 
 	// 1. 获取 bkrepo HELM 仓库地址
-	bkciProj, err := s.bkciProjStore.GetByWorkspace(ctx, app.WorkspaceID)
+	bkciProj, err := store.Of(s.db, bkci.ProjectMeta).Get(ctx, bkci.ByWorkspace(app.WorkspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get bkci project for workspace %s", app.WorkspaceID)
 	}
@@ -176,8 +165,8 @@ func (s *ChartBuildService) execute(
 	}
 
 	// 2. 获取流水线信息
-	pipeline, err := s.pipelineStore.GetByWorkspaceAndType(
-		ctx, app.WorkspaceID, string(bkci.PipelineTypeHelmGitBuild),
+	pipeline, err := store.Of(s.db, bkci.PipelineMeta).Get(
+		ctx, bkci.ByWorkspaceAndType(app.WorkspaceID, string(bkci.PipelineTypeHelmGitBuild)),
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get workspace %s helm-git-build pipeline", app.WorkspaceID)

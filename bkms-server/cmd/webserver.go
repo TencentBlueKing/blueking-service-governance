@@ -115,7 +115,7 @@ func NewWebServerCmd() *cobra.Command {
 			// FIXME 建议该 Reload 逻辑放在 migration 中完成
 			// 使用 Errorf + return 而不是 log.Fatalf → os.Exit，确保上方注册的 shutdownAPM defer 能够被执行，
 			// 从而把已缓冲的 span 完整刷到蓝鲸监控采集端
-			if err = bkci.ReloadPipelineTemplates(cmd.Context()); err != nil {
+			if err = bkci.ReloadPipelineTemplates(cmd.Context(), reg.DB); err != nil {
 				log.Errorf(ctx, "failed to reload pipeline templates: %v", err)
 				return err
 			}

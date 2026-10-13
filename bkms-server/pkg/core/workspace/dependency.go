@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
@@ -38,13 +39,15 @@ import (
 )
 
 // EnsureBkSystems 保证依赖的蓝鲸项目存在
-func EnsureBkSystems(ctx context.Context, workspaceID, bkciProjectID string, bizID int64) (*BkSystems, error) {
+func EnsureBkSystems(
+	ctx context.Context, db *mongo.Database, workspaceID, bkciProjectID string, bizID int64,
+) (*BkSystems, error) {
 	cmdbInfo, err := fetchCMDBInfo(ctx, bkciProjectID, bizID)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch cmdb cmdbInfo")
 	}
 
-	bkciProjMgr := bkci.NewProjectManager(workspaceID)
+	bkciProjMgr := bkci.NewProjectManager(db, workspaceID)
 	// 创建/绑定蓝盾项目
 	createProjResp, err := bkciProjMgr.Initialize(ctx, bkciProjectID, cmdbInfo.ObsProductID, cmdbInfo.ObsProductName)
 	if err != nil {
@@ -57,12 +60,12 @@ func EnsureBkSystems(ctx context.Context, workspaceID, bkciProjectID string, biz
 		isBoundExistedBKCIProject = false
 		// 新建项目时会创建一条默认的镜像构建流水线
 		// ps: 这里目前产品上没有对应说明, 用户可能不知晓有这个操作
-		_, err = bkci.NewPipelineManager(workspaceID).Initialize(ctx, string(bkci.PipelineTypeDockerfile))
+		_, err = bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeDockerfile))
 		if err != nil {
 			return nil, errors.Wrap(err, "create builtin dockerfile pipeline")
 		}
 		// 同时初始化 Helm Git Build 流水线
-		_, err = bkci.NewPipelineManager(workspaceID).Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild))
+		_, err = bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild))
 		if err != nil {
 			return nil, errors.Wrap(err, "create builtin helm-git-build pipeline")
 		}
@@ -71,7 +74,7 @@ func EnsureBkSystems(ctx context.Context, workspaceID, bkciProjectID string, biz
 	}
 
 	// 初始化蓝盾制品库仓库
-	if err = bkrepo.NewProjectManager(workspaceID, auth.MustGetUser(ctx).ID).Initialize(ctx); err != nil {
+	if err = bkrepo.NewProjectManager(db, workspaceID, auth.MustGetUser(ctx).ID).Initialize(ctx); err != nil {
 		return nil, errors.Wrap(err, "init bkrepo project")
 	}
 

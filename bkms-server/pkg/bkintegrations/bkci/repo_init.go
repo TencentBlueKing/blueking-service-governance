@@ -18,7 +18,11 @@
 
 package bkci
 
-import "context"
+import (
+	"context"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
+)
 
 // RepositoryInitSpec carries the repository URL/alias pair required to
 // initialize a BKCI repository binding.
@@ -29,8 +33,10 @@ type RepositoryInitSpec struct {
 
 // EnsureWorkspaceRepositories initializes each distinct repository binding for
 // a workspace at most once per request.
-func EnsureWorkspaceRepositories(ctx context.Context, workspaceID string, specs []RepositoryInitSpec) error {
-	initializer := NewRepositoryManager(workspaceID)
+func EnsureWorkspaceRepositories(
+	ctx context.Context, db *mongo.Database, workspaceID string, specs []RepositoryInitSpec,
+) error {
+	initializer := NewRepositoryManager(db, workspaceID)
 	seen := make(map[RepositoryInitSpec]struct{}, len(specs))
 	for _, spec := range specs {
 		if spec.URL == "" || spec.Alias == "" {

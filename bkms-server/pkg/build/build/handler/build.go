@@ -75,6 +75,7 @@ func (h *Handler) newBuildService() (*build.Service, error) {
 		h.registry.SnapshotStore,
 	)
 	return build.NewService(
+		h.registry.DB,
 		h.registry.BuildConfigStore,
 		h.registry.BuildRecordStore,
 		imageReferenceValidator,
@@ -179,7 +180,7 @@ func (h *Handler) ensureCodeRepositoryRegistered(
 	if cfg == nil || cfg.SourceType != imagebuild.SourceTypeCodeRepository || cfg.CodeRepo == nil {
 		return nil
 	}
-	if err := bkci.EnsureWorkspaceRepositories(ctx, workspaceID, []bkci.RepositoryInitSpec{{
+	if err := bkci.EnsureWorkspaceRepositories(ctx, h.registry.DB, workspaceID, []bkci.RepositoryInitSpec{{
 		URL:   cfg.CodeRepo.RepoURL,
 		Alias: cfg.CodeRepo.RepoAlias,
 	}}); err != nil {

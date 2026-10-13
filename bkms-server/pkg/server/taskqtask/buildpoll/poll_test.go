@@ -33,11 +33,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func newRunningRecord(workspaceID, appID, buildID string) *build.Record {
@@ -71,7 +73,7 @@ var _ = Describe("Poller RunTick", func() {
 		args            Args
 		rec             *build.Record
 		recordStore     build.RecordStore
-		pipelineStore   bkci.PipelineStore
+		pipelineStore   *bkci.PipelineStore
 		autoDeployStore autodeploy.RecordStore
 		enqCount        int
 		enqDelay        time.Duration
@@ -96,8 +98,8 @@ var _ = Describe("Poller RunTick", func() {
 		ctx = auth.WithUser(context.Background(), auth.User{ID: "alice"})
 		recordStore, err = build.NewRecordStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
-		pipelineStore, err = bkci.NewPipelineStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db := testutil.NewDB(GinkgoT())
+		pipelineStore = store.Of(db, bkci.PipelineMeta)
 		autoDeployStore, err = autodeploy.NewRecordStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 
@@ -108,7 +110,7 @@ var _ = Describe("Poller RunTick", func() {
 		args = Args{WorkspaceID: workspaceID, PipelineType: "build", AppID: appID, BuildID: buildID}
 		enqCount = 0
 		enqDelay = 0
-		plr = newPoller(recordStore, pipelineStore, autoDeployStore)
+		plr = newPoller(recordStore, db, autoDeployStore)
 		deployHook = nil
 		snapshotHook = nil
 

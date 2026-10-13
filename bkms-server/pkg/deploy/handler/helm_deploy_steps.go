@@ -129,9 +129,7 @@ func (h *Handler) execHelmAppDeploySteps(
 	)
 	release, err := helmdeploy.UpgradeOrInstallHelmChart(
 		ctx,
-		h.registry.BkCIProjectStore,
-		h.registry.BkRepoProjectStore,
-		h.registry.HelmRepoCredentialStore,
+		h.registry.DB,
 		envVarsReader,
 		app,
 		env,

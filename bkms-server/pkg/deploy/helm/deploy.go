@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gopkg.in/yaml.v3"
 	"helm.sh/helm/v3/pkg/action"
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -38,8 +39,6 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage/driver"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -53,7 +52,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/arrangement"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 )
 
 // helmReleaseNameMaxLen Helm Release 名称最大长度
@@ -68,16 +66,14 @@ const MaxHelmHistoryCount = 10
 // PreviewHelmRelease 预览 Helm Release
 func PreviewHelmRelease(
 	ctx context.Context,
-	bkciProjectStore bkci.ProjectStore,
-	bkrepoProjectStore bkrepo.ProjectStore,
-	credentialStore credential.HelmRepoCredentialStore,
+	db *mongo.Database,
 	envVarsReader *envvars.UnifiedEnvVarsReader,
 	app *bkmsapp.Application,
 	env *bkmsenv.Environment,
 	trafficLaneName, chartVersion, valuesFileID, imageTag string,
 ) (*PreviewResult, error) {
 	// 解析 Helm 仓库配置
-	sourceRepo, err := resolveRepoConfig(ctx, bkciProjectStore, bkrepoProjectStore, credentialStore, app)
+	sourceRepo, err := resolveRepoConfig(ctx, db, app)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve helm repo config")
 	}
@@ -154,16 +150,14 @@ func PreviewHelmRelease(
 // UpgradeOrInstallHelmChart 更新/安装 Helm Chart
 func UpgradeOrInstallHelmChart(
 	ctx context.Context,
-	bkciProjectStore bkci.ProjectStore,
-	bkrepoProjectStore bkrepo.ProjectStore,
-	credentialStore credential.HelmRepoCredentialStore,
+	db *mongo.Database,
 	envVarsReader *envvars.UnifiedEnvVarsReader,
 	app *bkmsapp.Application,
 	env *bkmsenv.Environment,
 	trafficLaneName, chartVersion, valuesFileID, imageTag string,
 ) (*DeployResult, error) {
 	// 解析 Helm 仓库配置
-	sourceRepo, err := resolveRepoConfig(ctx, bkciProjectStore, bkrepoProjectStore, credentialStore, app)
+	sourceRepo, err := resolveRepoConfig(ctx, db, app)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve helm repo config")
 	}

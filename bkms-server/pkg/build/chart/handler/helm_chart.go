@@ -37,7 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/chartbuildpoll"
 	helmrepo "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/source"
 )
@@ -88,12 +88,7 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 	}
 
 	buildSvc := helmchartbuild.NewChartBuildService(
-		h.registry.HelmChartSemverCounterStore,
-		h.registry.HelmRepoCredentialStore,
-		h.registry.HelmChartBuildRecordStore,
-		h.registry.BkCIProjectStore,
-		h.registry.BkRepoProjectStore,
-		h.registry.BkCIPipelineStore,
+		h.registry.DB, h.registry.HelmChartSemverCounterStore, h.registry.HelmChartBuildRecordStore,
 	)
 	result, err := buildSvc.ExecuteChartBuild(ctx, app, input.BumpType, rev)
 	if err != nil {
@@ -477,13 +472,7 @@ func (h *Handler) resolveRepoConfig(
 	ctx context.Context,
 	app *bkmsapp.Application,
 ) (*bkmsapp.HelmRepoConfig, error) {
-	return helmrepo.ResolveConfig(
-		ctx,
-		h.registry.BkCIProjectStore,
-		h.registry.BkRepoProjectStore,
-		h.registry.HelmRepoCredentialStore,
-		app,
-	)
+	return helmrepo.ResolveConfig(ctx, h.registry.DB, app)
 }
 
 // buildHelmChartDeployedEnvsMap 构建 chartVersion 到已部署环境列表的映射。

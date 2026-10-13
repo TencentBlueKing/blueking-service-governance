@@ -25,109 +25,92 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("HelmRepoCredentialStoreMongo", func() {
+// setUpCredStore 初始化加密 secret，并通过 fx 构造凭证 Store
+func setUpCredStore() *Store {
+	secret, err := crypto.GenerateKey(32)
+	Expect(err).NotTo(HaveOccurred())
+	svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
+
+	return testutil.NewStore(GinkgoT(), Meta)
+}
+
+var _ = Describe("HelmRepoCredential store", func() {
 	var (
-		ctx   context.Context
-		store HelmRepoCredentialStore
+		ctx       context.Context
+		credStore *Store
 	)
 
 	BeforeEach(func() {
-		var err error
 		ctx = context.Background()
-
-		// 初始化加密 secret
-		secret, err := crypto.GenerateKey(32)
-		Expect(err).NotTo(HaveOccurred())
-		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
-
-		store, err = NewHelmRepoCredentialStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		credStore = setUpCredStore()
 	})
 
-	Describe("Create and GetByWorkspace", func() {
-		It("should create and retrieve credential successfully", func() {
-			workspaceID := "ws-cred-test-" + stringx.Random(8)
-			cred := &HelmRepoCredential{
-				WorkspaceID:  workspaceID,
-				CredentialID: helmRepoCredentialID,
-				Username:     "admin",
-				Password:     "secret-password",
-			}
+	newCred := func(prefix, password string) *HelmRepoCredential {
+		return &HelmRepoCredential{
+			WorkspaceID:  prefix + stringx.Random(8),
+			CredentialID: helmRepoCredentialID,
+			Username:     "admin",
+			Password:     password,
+		}
+	}
 
-			err := store.Create(ctx, cred)
-			Expect(err).NotTo(HaveOccurred())
+	It("should create and retrieve credential successfully", func() {
+		cred := newCred("ws-cred-test-", "secret-password")
+		Expect(credStore.Create(ctx, cred)).To(Succeed())
 
-			got, err := store.GetByWorkspace(ctx, workspaceID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.WorkspaceID).To(Equal(workspaceID))
-			Expect(got.CredentialID).To(Equal(helmRepoCredentialID))
-			Expect(got.Username).To(Equal("admin"))
-			Expect(got.Password).To(Equal("secret-password"))
-		})
+		got, err := credStore.Get(ctx, ByWorkspace(cred.WorkspaceID))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.WorkspaceID).To(Equal(cred.WorkspaceID))
+		Expect(got.CredentialID).To(Equal(helmRepoCredentialID))
+		Expect(got.Username).To(Equal("admin"))
+		Expect(got.Password).To(Equal("secret-password"))
+	})
 
-		It("should return ErrHelmRepoCredentialNotFound for non-existent workspace", func() {
-			_, err := store.GetByWorkspace(ctx, "non-existent-ws-"+stringx.Random(8))
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrHelmRepoCredentialNotFound)).To(BeTrue())
-		})
+	It("should return ErrHelmRepoCredentialNotFound for non-existent workspace", func() {
+		_, err := credStore.Get(ctx, ByWorkspace("non-existent-ws-"+stringx.Random(8)))
+		Expect(errors.Is(err, ErrHelmRepoCredentialNotFound)).To(BeTrue())
+	})
 
-		It("should return error when creating duplicate credential for same workspace", func() {
-			workspaceID := "ws-dup-test-" + stringx.Random(8)
-			cred := &HelmRepoCredential{
-				WorkspaceID:  workspaceID,
-				CredentialID: helmRepoCredentialID,
-				Username:     "admin",
-				Password:     "password",
-			}
+	It("should return a duplicate error when creating credential for the same workspace twice", func() {
+		cred := newCred("ws-dup-test-", "password")
+		Expect(credStore.Create(ctx, cred)).To(Succeed())
 
-			err := store.Create(ctx, cred)
-			Expect(err).NotTo(HaveOccurred())
+		dup := *cred
+		err := credStore.Create(ctx, &dup)
+		Expect(errors.Is(err, store.ErrDuplicate)).To(BeTrue())
+	})
 
-			err = store.Create(ctx, cred)
-			Expect(err).To(HaveOccurred())
-		})
+	It("should create and retrieve credential with empty password", func() {
+		cred := newCred("ws-empty-pwd-", "")
+		Expect(credStore.Create(ctx, cred)).To(Succeed())
 
-		It("should create and retrieve credential with empty password", func() {
-			workspaceID := "ws-empty-pwd-" + stringx.Random(8)
-			cred := &HelmRepoCredential{
-				WorkspaceID:  workspaceID,
-				CredentialID: helmRepoCredentialID,
-				Username:     "admin",
-				Password:     "",
-			}
+		got, err := credStore.Get(ctx, ByWorkspace(cred.WorkspaceID))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Username).To(Equal("admin"))
+		Expect(got.Password).To(BeEmpty())
+	})
 
-			err := store.Create(ctx, cred)
-			Expect(err).NotTo(HaveOccurred())
+	It("should store encrypted password in DB without touching the caller's object", func() {
+		plainPassword := "my-secret-password"
+		cred := newCred("ws-encrypt-test-", plainPassword)
+		Expect(credStore.Create(ctx, cred)).To(Succeed())
+		Expect(cred.Password).To(Equal(plainPassword))
 
-			got, err := store.GetByWorkspace(ctx, workspaceID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Username).To(Equal("admin"))
-			Expect(got.Password).To(BeEmpty())
-		})
-
-		It("should store encrypted password in DB", func() {
-			workspaceID := "ws-encrypt-test-" + stringx.Random(8)
-			plainPassword := "my-secret-password"
-			cred := &HelmRepoCredential{
-				WorkspaceID:  workspaceID,
-				CredentialID: helmRepoCredentialID,
-				Username:     "admin",
-				Password:     plainPassword,
-			}
-
-			err := store.Create(ctx, cred)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 通过 GetByWorkspace 查询，应该能解密回明文
-			got, err := store.GetByWorkspace(ctx, workspaceID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Password).To(Equal(plainPassword))
-		})
+		// 直接读取库中原始文档，密码应为密文
+		raw, err := credStore.Collection().FindOne(ctx, bson.M{"workspaceID": cred.WorkspaceID}).Raw()
+		Expect(err).NotTo(HaveOccurred())
+		stored := raw.Lookup("password").StringValue()
+		Expect(stored).NotTo(Equal(plainPassword))
+		decrypted, err := crypto.AESDecrypt(svccfg.G.Encrypt.Secret, stored)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(decrypted).To(Equal(plainPassword))
 	})
 })

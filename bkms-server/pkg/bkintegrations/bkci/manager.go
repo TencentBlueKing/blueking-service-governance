@@ -23,12 +23,13 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/tof"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ErrProjectCodeAlreadyUsed 项目 Code 已存在但不属于指定工作空间（项目与工作空间是一对一绑定的关系）
@@ -42,12 +43,13 @@ var ErrBuildTriggerPipelineRequireEnsure = errors.New(
 
 // ProjectManager 蓝盾项目管理
 type ProjectManager struct {
+	db          *mongo.Database
 	workspaceID string
 }
 
 // NewProjectManager ...
-func NewProjectManager(workspaceID string) *ProjectManager {
-	return &ProjectManager{workspaceID: workspaceID}
+func NewProjectManager(db *mongo.Database, workspaceID string) *ProjectManager {
+	return &ProjectManager{db: db, workspaceID: workspaceID}
 }
 
 // Initialize 为工作空间新建 / 绑定蓝盾项目
@@ -63,13 +65,11 @@ func (m *ProjectManager) Initialize(
 		projectCode = m.genDefaultProjectCode(m.workspaceID)
 	}
 
-	store, err := NewProjectStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrapf(err, "get project store")
-	}
+	projStore := store.Of(m.db, ProjectMeta)
 
 	// 1. 检查指定的工作空间是否有关联记录
-	if proj, gErr := store.GetByWorkspace(ctx, m.workspaceID); gErr != nil && !errors.Is(gErr, ErrProjectNotFound) {
+	if proj, gErr := projStore.Get(ctx, ByWorkspace(m.workspaceID)); gErr != nil &&
+		!errors.Is(gErr, ErrProjectNotFound) {
 		// DB 查询失败（非记录不存在）需要返回异常
 		return nil, errors.Wrapf(gErr, "find workspace %s project", m.workspaceID)
 	} else if proj != nil {
@@ -82,7 +82,7 @@ func (m *ProjectManager) Initialize(
 	}
 
 	// 2. 检查 projectCode 是否已经被占用
-	if proj, gErr := store.GetByCode(ctx, projectCode); gErr != nil && !errors.Is(gErr, ErrProjectNotFound) {
+	if proj, gErr := projStore.Get(ctx, ByCode(projectCode)); gErr != nil && !errors.Is(gErr, ErrProjectNotFound) {
 		return nil, errors.Wrapf(gErr, "get project %s", projectCode)
 	} else if proj != nil {
 		return nil, errors.Wrapf(
@@ -133,11 +133,7 @@ func (m *ProjectManager) createProject(
 	}
 
 	// 2. 使用 Store 关联工作空间 - 蓝盾项目记录
-	store, err := NewProjectStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create project store")
-	}
-	if err = store.Create(ctx, proj); err != nil {
+	if err = store.Of(m.db, ProjectMeta).Create(ctx, proj); err != nil {
 		return nil, errors.Wrap(err, "insert bkci project")
 	}
 	return proj, nil
@@ -184,12 +180,13 @@ func (m *ProjectManager) genDefaultProjectCode(workspaceID string) string {
 
 // PipelineManager 蓝盾流水线管理
 type PipelineManager struct {
+	db          *mongo.Database
 	workspaceID string
 }
 
 // NewPipelineManager ...
-func NewPipelineManager(workspaceID string) *PipelineManager {
-	return &PipelineManager{workspaceID: workspaceID}
+func NewPipelineManager(db *mongo.Database, workspaceID string) *PipelineManager {
+	return &PipelineManager{db: db, workspaceID: workspaceID}
 }
 
 // Initialize 初始化流水线：不存在则创建，已存在的共享内置类型按模板 semver 升级
@@ -201,11 +198,8 @@ func NewPipelineManager(workspaceID string) *PipelineManager {
 //     UpdatePipeline，会冲掉实例上的显示名、已注入的回调脚本，以及触发器同步子需求写入的
 //     Git 事件条件；模板变更若需滚动，应另做保留上述字段的合并式 Sync，而不是套用本函数
 func (m *PipelineManager) Initialize(ctx context.Context, pipelineType string) (*Pipeline, error) {
-	store, err := NewPipelineStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create pipeline store")
-	}
-	pipeline, err := store.GetByWorkspaceAndType(ctx, m.workspaceID, pipelineType)
+	pipelineStore := store.Of(m.db, PipelineMeta)
+	pipeline, err := pipelineStore.Get(ctx, ByWorkspaceAndType(m.workspaceID, pipelineType))
 	if err != nil {
 		if errors.Is(err, ErrPipelineNotFound) {
 			if _, ok := ParseBuildTriggerPipelineType(pipelineType); ok {
@@ -223,7 +217,7 @@ func (m *PipelineManager) Initialize(ctx context.Context, pipelineType string) (
 		return pipeline, nil
 	}
 
-	return m.ensureBuiltinPipelineTemplateVersion(ctx, store, pipeline)
+	return m.ensureBuiltinPipelineTemplateVersion(ctx, pipelineStore, pipeline)
 }
 
 // isBuiltinPipelineType 是否为内置流水线类型（精确匹配共享类型，或触发专用前缀匹配）
@@ -252,7 +246,7 @@ func shouldUpdateBuiltinPipelineFromTemplate(currentVersion, templateVersion str
 // 不适用于触发专用流水线：其实例含 Ensure 注入与触发器同步写入的内容，见 Initialize 注释
 func (m *PipelineManager) ensureBuiltinPipelineTemplateVersion(
 	ctx context.Context,
-	store PipelineStore,
+	pipelineStore *PipelineStore,
 	pipeline *Pipeline,
 ) (*Pipeline, error) {
 	tmpl, err := m.getPipelineTemplateByPipelineType(ctx, pipeline.Type)
@@ -267,7 +261,7 @@ func (m *PipelineManager) ensureBuiltinPipelineTemplateVersion(
 	if !shouldUpdate {
 		return pipeline, nil
 	}
-	return m.updateBuiltinPipelineFromTemplate(ctx, store, pipeline, tmpl)
+	return m.updateBuiltinPipelineFromTemplate(ctx, pipelineStore, pipeline, tmpl)
 }
 
 // createPipeline 在数据库中添加流水线
@@ -301,11 +295,7 @@ func (m *PipelineManager) createPipeline(ctx context.Context, pipelineType strin
 	}
 
 	// 获取项目信息
-	projectStore, err := NewProjectStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create project store")
-	}
-	project, err := projectStore.GetByWorkspace(ctx, m.workspaceID)
+	project, err := store.Of(m.db, ProjectMeta).Get(ctx, ByWorkspace(m.workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get project by workspace %s", m.workspaceID)
 	}
@@ -328,11 +318,7 @@ func (m *PipelineManager) createPipeline(ctx context.Context, pipelineType strin
 	}
 
 	// 入库
-	store, err := NewPipelineStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create pipeline store")
-	}
-	if err = store.Create(ctx, pipeline); err != nil {
+	if err = store.Of(m.db, PipelineMeta).Create(ctx, pipeline); err != nil {
 		return nil, errors.Wrap(err, "insert pipeline to db")
 	}
 
@@ -353,11 +339,7 @@ func (m *PipelineManager) getPipelineTemplateByPipelineType(
 
 // getPipelineTemplate 根据模板类型从模板存储中获取对应的流水线模板。
 func (m *PipelineManager) getPipelineTemplate(ctx context.Context, templateType string) (*PipelineTemplate, error) {
-	tmplStore, err := NewDBPipelineTemplateStore(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create pipeline template store")
-	}
-	tmpl, err := tmplStore.GetByType(ctx, templateType)
+	tmpl, err := store.Of(m.db, PipelineTemplateMeta).Get(ctx, ByType(templateType))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pipeline template by type %s", templateType)
 	}
@@ -368,7 +350,7 @@ func (m *PipelineManager) getPipelineTemplate(ctx context.Context, templateType 
 // 并更新本地存储中的名称、描述及模板版本。
 func (m *PipelineManager) updateBuiltinPipelineFromTemplate(
 	ctx context.Context,
-	store PipelineStore,
+	pipelineStore *PipelineStore,
 	pipeline *Pipeline,
 	tmpl *PipelineTemplate,
 ) (*Pipeline, error) {
@@ -388,7 +370,7 @@ func (m *PipelineManager) updateBuiltinPipelineFromTemplate(
 	pipeline.Name = tmpl.Name
 	pipeline.Description = tmpl.Description
 	pipeline.TemplateVersion = tmpl.Version
-	if err = store.UpdateBuiltinTemplateVersion(ctx, pipeline); err != nil {
+	if err = UpdateBuiltinTemplateVersion(ctx, pipelineStore, pipeline); err != nil {
 		return nil, errors.Wrapf(
 			err, "update workspace %s pipeline %s template version to %s",
 			m.workspaceID, pipeline.Type, tmpl.Version,
@@ -400,11 +382,7 @@ func (m *PipelineManager) updateBuiltinPipelineFromTemplate(
 // createBKCIPipeline 在蓝盾上创建流水线（通过蓝盾 API 创建），返回 pipelineID & error
 func (m *PipelineManager) createBKCIPipeline(ctx context.Context, tmpl *PipelineTemplate) (string, error) {
 	// 1. 获取工作空间对应的项目 Code
-	projectStore, err := NewProjectStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return "", errors.Wrap(err, "create project store")
-	}
-	project, err := projectStore.GetByWorkspace(ctx, m.workspaceID)
+	project, err := store.Of(m.db, ProjectMeta).Get(ctx, ByWorkspace(m.workspaceID))
 	if err != nil {
 		return "", errors.Wrapf(err, "get project by workspace %s", m.workspaceID)
 	}
@@ -424,21 +402,18 @@ func (m *PipelineManager) createBKCIPipeline(ctx context.Context, tmpl *Pipeline
 
 // RepositoryManager 蓝盾代码库管理
 type RepositoryManager struct {
+	db          *mongo.Database
 	workspaceID string
 }
 
 // NewRepositoryManager ...
-func NewRepositoryManager(workspaceID string) *RepositoryManager {
-	return &RepositoryManager{workspaceID: workspaceID}
+func NewRepositoryManager(db *mongo.Database, workspaceID string) *RepositoryManager {
+	return &RepositoryManager{db: db, workspaceID: workspaceID}
 }
 
 // Initialize 初始化代码库，如果已存在则跳过
 func (m *RepositoryManager) Initialize(ctx context.Context, url, alias string) (*Repository, error) {
-	store, err := NewRepositoryStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create repository store")
-	}
-	repository, err := store.GetByWorkspaceAndAlias(ctx, m.workspaceID, alias)
+	repository, err := store.Of(m.db, RepositoryMeta).Get(ctx, ByWorkspaceAndAlias(m.workspaceID, alias))
 	if err != nil {
 		if errors.Is(err, ErrRepositoryNotFound) {
 			// 不存在，需要创建
@@ -459,11 +434,7 @@ func (m *RepositoryManager) createRepository(ctx context.Context, url, alias str
 	}
 
 	// 获取项目信息
-	projectStore, err := NewProjectStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create project store")
-	}
-	project, err := projectStore.GetByWorkspace(ctx, m.workspaceID)
+	project, err := store.Of(m.db, ProjectMeta).Get(ctx, ByWorkspace(m.workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get project by workspace %s", m.workspaceID)
 	}
@@ -500,11 +471,7 @@ func (m *RepositoryManager) createRepository(ctx context.Context, url, alias str
 	}
 
 	// 入库
-	store, err := NewRepositoryStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create bkci repository store")
-	}
-	if err = store.Create(ctx, repository); err != nil {
+	if err = store.Of(m.db, RepositoryMeta).Create(ctx, repository); err != nil {
 		return nil, errors.Wrap(err, "insert bkci repository to db")
 	}
 	return repository, nil

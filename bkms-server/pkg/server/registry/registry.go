@@ -25,8 +25,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	helmchartbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/semver"
@@ -68,7 +66,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	scopedenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
@@ -85,6 +82,8 @@ import (
 // 除 handler（application/controller）层外，各领域核心层不应该直接依赖 Registry
 // 或 GlobalRegistry，而应该通过构造函数显式依赖自身需要的 Store 接口。
 type Registry struct {
+	// DB 供基于 GenericStore 的模型使用：通过 store.Of(DB, Meta) 获取对应模型的 Store
+	DB *mongo.Database
 	// 工作空间类
 	WorkspaceStore      workspace.WorkspaceStore
 	WorkspaceCompsStore workspace.WorkspaceCompsStore
@@ -108,11 +107,6 @@ type Registry struct {
 	GPAConfigStore            gpa.GPAConfigStore
 	BscpCfgStore              bscpcfg.Store
 	HelmAppComponentStore     helmcomp.HelmAppComponentStore
-	// bkci & bkrepo
-	BkCIProjectStore      bkci.ProjectStore
-	BkCIPipelineStore     bkci.PipelineStore
-	BkRepoProjectStore    bkrepo.ProjectStore
-	BkRepoRepositoryStore bkrepo.RepositoryStore
 	// 构建 & 部署类
 	BuildConfigStore                    build.ConfigStore
 	BuildRecordStore                    build.RecordStore
@@ -125,7 +119,6 @@ type Registry struct {
 	// Helm Chart 构建类
 	HelmChartBuildRecordStore   helmchartbuild.RecordStore
 	HelmChartSemverCounterStore semver.CounterStore
-	HelmRepoCredentialStore     credential.HelmRepoCredentialStore
 	// 集群插件
 	ClusterAddonDefStore clusteraddon.ClusterAddonDefStore
 	// 服务类
@@ -202,6 +195,8 @@ func Reset() {
 }
 
 func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
+	r.DB = mongoClient.Database(dbName)
+
 	// 组件定义
 	r.ComponentDefStore = mustInit(component.NewComponentDefStoreMongo(mongoClient, dbName))
 	// 工作空间类
@@ -226,11 +221,6 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	r.BscpCfgStore = mustInit(bscpcfg.NewStoreMongo(mongoClient, dbName))
 	r.AppServiceStore = mustInit(appnetworking.NewServiceStoreMongo(mongoClient, dbName))
 	r.HelmAppComponentStore = mustInit(helmcomp.NewDbHelmAppComponentStore(mongoClient, dbName))
-	// bkci & bkrepo
-	r.BkCIProjectStore = mustInit(bkci.NewProjectStoreMongo(mongoClient, dbName))
-	r.BkCIPipelineStore = mustInit(bkci.NewPipelineStoreMongo(mongoClient, dbName))
-	r.BkRepoProjectStore = mustInit(bkrepo.NewProjectStoreMongo(mongoClient, dbName))
-	r.BkRepoRepositoryStore = mustInit(bkrepo.NewRepositoryStoreMongo(mongoClient, dbName))
 	// 构建 & 部署类
 	r.BuildConfigStore = mustInit(build.NewConfigStoreMongo(mongoClient, dbName))
 	r.BuildRecordStore = mustInit(build.NewRecordStoreMongo(mongoClient, dbName))
@@ -241,7 +231,6 @@ func (r *Registry) initStores(mongoClient *mongo.Client, dbName string) {
 	r.HelmDeployRecordStore = mustInit(helmdeploy.NewRecordStoreMongo(mongoClient, dbName))
 	r.HelmChartBuildRecordStore = mustInit(helmchartbuild.NewRecordStoreMongo(mongoClient, dbName))
 	r.HelmChartSemverCounterStore = mustInit(semver.NewCounterStoreMongo(mongoClient, dbName))
-	r.HelmRepoCredentialStore = mustInit(credential.NewHelmRepoCredentialStoreMongo(mongoClient, dbName))
 	// 集群 Addon 类
 	r.ClusterAddonDefStore = mustInit(clusteraddon.NewClusterAddonDefStoreMongo(mongoClient, dbName))
 	// 服务类

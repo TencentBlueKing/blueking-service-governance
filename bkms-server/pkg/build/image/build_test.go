@@ -22,19 +22,23 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
@@ -42,6 +46,7 @@ import (
 var _ = Describe("Build Functions", func() {
 	var (
 		ctx       context.Context
+		db        *mongo.Database
 		testApp   *bkmsapp.Application
 		testCfg   *Config
 		rev       revision.CodeRevision
@@ -52,6 +57,7 @@ var _ = Describe("Build Functions", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		rev = revision.CodeRevision{Type: revision.TypeBranch, Value: "main"}
+		db = testutil.NewDB(GinkgoT())
 		imageTag = "v1.0.0"
 		oldConfig = config.G
 		config.G = &config.Config{}
@@ -64,7 +70,7 @@ var _ = Describe("Build Functions", func() {
 		testApp = &bkmsapp.Application{
 			ID:          "test-app-id",
 			Name:        "bkms-server",
-			WorkspaceID: "test-workspace-id",
+			WorkspaceID: "ws-" + stringx.Random(8),
 			TrpcSpec:    &bkmsapp.TrpcSpec{Language: appmodel.LanguageGo},
 		}
 
@@ -88,6 +94,16 @@ var _ = Describe("Build Functions", func() {
 		}
 	})
 
+	// seedPipeline 在测试库中写入流水线记录，供 ExecuteBKCIPipelineBuild 查询
+	seedPipeline := func(pipelineType string) {
+		Expect(store.Of(db, bkci.PipelineMeta).Create(ctx, &bkci.Pipeline{
+			ID:          "p-" + stringx.Random(16),
+			Type:        pipelineType,
+			WorkspaceID: testApp.WorkspaceID,
+			ProjectCode: "project-code",
+		})).To(Succeed())
+	}
+
 	AfterEach(func() {
 		// 清理所有 Mock
 		mockey.UnPatchAll()
@@ -107,16 +123,7 @@ var _ = Describe("Build Functions", func() {
 				&bkci.Pipeline{ID: "pipeline-123", Type: testCfg.PipelineType}, nil,
 			).Build()
 
-			// Mock PipelineStore
-			mockStore := &bkci.PipelineStoreMongo{}
-			mockey.Mock(bkci.NewPipelineStoreMongo).Return(mockStore, nil).Build()
-			mockey.Mock(
-				(*bkci.PipelineStoreMongo).GetByWorkspaceAndType,
-			).Return(&bkci.Pipeline{
-				ID:          "pipeline-123",
-				ProjectCode: "project-code",
-				Type:        testCfg.PipelineType,
-			}, nil).Build()
+			seedPipeline(testCfg.PipelineType)
 
 			// Mock bkciapi.New
 			mockey.Mock(bkciapi.New).Return(&bkciapi.ApiClient{}, nil).Build()
@@ -136,7 +143,7 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 执行构建
-			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 
 			// 验证结果
 			Expect(err).NotTo(HaveOccurred())
@@ -163,16 +170,7 @@ var _ = Describe("Build Functions", func() {
 				&bkci.Pipeline{ID: "p-123456", Name: "test-pipeline"}, nil,
 			).Build()
 
-			// Mock PipelineStore
-			mockStore := &bkci.PipelineStoreMongo{}
-			mockey.Mock(bkci.NewPipelineStoreMongo).Return(mockStore, nil).Build()
-			mockey.Mock(
-				(*bkci.PipelineStoreMongo).GetByWorkspaceAndType,
-			).Return(&bkci.Pipeline{
-				ID:          "pipeline-456",
-				ProjectCode: "project-code",
-				Type:        testCfg.PipelineType,
-			}, nil).Build()
+			seedPipeline(testCfg.PipelineType)
 
 			// Mock bkciapi.New 返回一个非 nil 的 ApiClient
 			mockey.Mock(bkciapi.New).Return(&bkciapi.ApiClient{}, nil).Build()
@@ -192,7 +190,7 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 执行构建
-			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 
 			// 验证结果
 			Expect(err).NotTo(HaveOccurred())
@@ -210,7 +208,7 @@ var _ = Describe("Build Functions", func() {
 			testCfg.SourceType = SourceTypeCodeRepository
 			testCfg.CodeRepo = nil
 
-			_, _, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			_, _, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("code repo config not found"))
 		})
@@ -221,7 +219,7 @@ var _ = Describe("Build Functions", func() {
 			testCfg.CodeRepo = nil
 			testCfg.Pipeline = nil
 
-			_, _, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			_, _, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("pipeline config not found"))
 		})
@@ -237,16 +235,7 @@ var _ = Describe("Build Functions", func() {
 				&bkci.Pipeline{ID: "pipeline-789", Type: testCfg.PipelineType}, nil,
 			).Build()
 
-			// Mock PipelineStore
-			mockStore := &bkci.PipelineStoreMongo{}
-			mockey.Mock(bkci.NewPipelineStoreMongo).Return(mockStore, nil).Build()
-			mockey.Mock(
-				(*bkci.PipelineStoreMongo).GetByWorkspaceAndType,
-			).Return(&bkci.Pipeline{
-				ID:          "pipeline-789",
-				ProjectCode: "project-code",
-				Type:        testCfg.PipelineType,
-			}, nil).Build()
+			seedPipeline(testCfg.PipelineType)
 
 			// Mock BKCI 客户端
 			mockey.Mock(bkciapi.New).Return(&bkciapi.ApiClient{}, nil).Build()
@@ -262,7 +251,7 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 执行构建
-			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 
 			// 验证错误
 			Expect(err).To(HaveOccurred())

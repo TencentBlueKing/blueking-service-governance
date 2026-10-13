@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
@@ -54,6 +55,7 @@ type BuildResult struct {
 
 // Service 负责构建相关业务编排
 type Service struct {
+	db                      *mongo.Database
 	buildConfigStore        imgbuild.ConfigStore
 	buildRecordStore        imgbuild.RecordStore
 	imageReferenceValidator ImageReferenceValidator
@@ -64,12 +66,13 @@ type Service struct {
 // 依赖参数按"先依赖后数据"顺序传入，且所有依赖均为必选：任何一个为 nil 都会直接返回错误，
 // 避免运行时才发现依赖缺失。
 func NewService(
+	db *mongo.Database,
 	buildConfigStore imgbuild.ConfigStore,
 	buildRecordStore imgbuild.RecordStore,
 	imageReferenceValidator ImageReferenceValidator,
 	customImageChecker CustomImageChecker,
 ) (*Service, error) {
-	if buildConfigStore == nil || buildRecordStore == nil {
+	if db == nil || buildConfigStore == nil || buildRecordStore == nil {
 		return nil, errors.New("build service dependencies not initialized")
 	}
 	if imageReferenceValidator == nil {
@@ -79,6 +82,7 @@ func NewService(
 		return nil, errors.New("customImageChecker must not be nil")
 	}
 	return &Service{
+		db:                      db,
 		buildConfigStore:        buildConfigStore,
 		buildRecordStore:        buildRecordStore,
 		imageReferenceValidator: imageReferenceValidator,
@@ -193,7 +197,7 @@ func (s *Service) Build(
 		return nil, errors.Wrapf(err, "validate app %s build before start", app.ID)
 	}
 
-	buildState, params, err := imgbuild.ExecuteBKCIPipelineBuild(ctx, app, cfg, rev, imageTag)
+	buildState, params, err := imgbuild.ExecuteBKCIPipelineBuild(ctx, s.db, app, cfg, rev, imageTag)
 	if err != nil {
 		return nil, errors.Wrapf(err, "execute bkci pipeline build for %s", app.ID)
 	}

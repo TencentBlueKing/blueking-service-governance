@@ -30,10 +30,11 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const (
@@ -52,13 +53,13 @@ const (
 
 // PipelineTemplatesReloader 负责将本地目录下的流水线模板重新加载到数据库
 type PipelineTemplatesReloader struct {
-	cfg   *config.Config
-	store PipelineTemplateStore
+	cfg       *config.Config
+	tmplStore *PipelineTemplateStore
 }
 
 // newPipelineTemplatesReloader 创建 PipelineTemplatesReloader
-func newPipelineTemplatesReloader(cfg *config.Config, store PipelineTemplateStore) *PipelineTemplatesReloader {
-	return &PipelineTemplatesReloader{cfg: cfg, store: store}
+func newPipelineTemplatesReloader(cfg *config.Config, tmplStore *PipelineTemplateStore) *PipelineTemplatesReloader {
+	return &PipelineTemplatesReloader{cfg: cfg, tmplStore: tmplStore}
 }
 
 // Reload 重新加载流水线模板到数据库
@@ -130,7 +131,7 @@ func (r *PipelineTemplatesReloader) reloadOne(
 	}
 
 	pipelineTmplInfo := fmt.Sprintf("pipeline template %s (id: %s, type: %s)", tmpl.Name, tmpl.ID, tmpl.Type)
-	if err = r.store.Upsert(ctx, &tmpl); err != nil {
+	if _, err = r.tmplStore.Upsert(ctx, &tmpl, ByType(tmpl.Type)); err != nil {
 		return errors.Wrapf(err, "upsert %s", pipelineTmplInfo)
 	}
 	log.Infof(ctx, "load %s success", pipelineTmplInfo)
@@ -169,10 +170,6 @@ func renderPipelineTemplate(name string, rawData []byte, renderContext map[strin
 }
 
 // ReloadPipelineTemplates 重新加载流水线模板到数据库
-func ReloadPipelineTemplates(ctx context.Context) error {
-	store, err := NewDBPipelineTemplateStore(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrapf(err, "new db pipeline template store")
-	}
-	return newPipelineTemplatesReloader(config.G, store).Reload(ctx)
+func ReloadPipelineTemplates(ctx context.Context, db *mongo.Database) error {
+	return newPipelineTemplatesReloader(config.G, store.Of(db, PipelineTemplateMeta)).Reload(ctx)
 }

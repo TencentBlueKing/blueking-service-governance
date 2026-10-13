@@ -32,11 +32,13 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	helmchartbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func newRunningRecord(workspaceID, appID, buildID string) *helmchartbuild.Record {
@@ -77,7 +79,7 @@ var _ = Describe("Poller RunTick", func() {
 		args          Args
 		rec           *helmchartbuild.Record
 		recordStore   helmchartbuild.RecordStore
-		pipelineStore bkci.PipelineStore
+		pipelineStore *bkci.PipelineStore
 		enqCount      int
 		enqDelay      time.Duration
 		plr           *poller
@@ -108,8 +110,8 @@ var _ = Describe("Poller RunTick", func() {
 		ctx = auth.WithUser(context.Background(), auth.User{ID: "alice"})
 		recordStore, err = helmchartbuild.NewRecordStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
-		pipelineStore, err = bkci.NewPipelineStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db := testutil.NewDB(GinkgoT())
+		pipelineStore = store.Of(db, bkci.PipelineMeta)
 
 		workspaceID := "ws-" + stringx.Random(8)
 		appID := "app-" + stringx.Random(8)
@@ -118,7 +120,7 @@ var _ = Describe("Poller RunTick", func() {
 		args = Args{WorkspaceID: workspaceID, AppID: appID, BuildID: buildID}
 		enqCount = 0
 		enqDelay = 0
-		plr = newPoller(recordStore, pipelineStore)
+		plr = newPoller(recordStore, db)
 
 		Expect(pipelineStore.Create(ctx, &bkci.Pipeline{
 			ID:          "p-" + stringx.Random(8),
