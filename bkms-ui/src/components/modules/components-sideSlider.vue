@@ -495,6 +495,7 @@
       <template #aside>
         <ViewDefaultEnvVars
           ref="envVarRef"
+          :border="false"
           :custom-request-fn="handleGetVarEnv"
           :env-list="envList"
         />
