@@ -71,6 +71,9 @@ url("fonts/iconcool.eot?#iefix") format("embedded-opentype");
 .bkms-icon-cc-home:before {
 	content: "\e132";
 }
+.bkms-icon-cc-model2:before {
+	content: "\e1c0";
+}
 .bkms-icon-return-small:before {
 	content: "\e10b";
 }

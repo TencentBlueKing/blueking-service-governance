@@ -29,7 +29,7 @@ export const PLUGIN_NAVIGATION: NavigationItem[] = [
   {
     key: 'component',
     name: i18n.global.t('组件配置'),
-    icon: 'single-column',
+    icon: 'cc-model2',
     component: componentConfig,
     meta: {
       // 无需默认 Header
