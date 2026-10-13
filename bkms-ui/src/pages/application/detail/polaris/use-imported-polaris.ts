@@ -221,21 +221,30 @@ export function useImportedPolaris(options: ImportedPolarisOptions) {
     const enabled = formEnabled.value;
     // 复查阶段失败意味着旧连通结果不可靠，须重新测试；写入或平台保存失败不清空快照。
     let verifyingRemote = false;
+    async function verifyRemoteUnchanged(): Promise<'cancelled' | 'remote-changed' | undefined> {
+      const latest = await readRemote(target);
+      if (!isCurrent(requestVersion)) return 'cancelled';
+      if (!isEqual(latest, remote.value)) {
+        remote.value = latest;
+        resolution.value = null;
+        saveError.value = window.i18n.t('北极星线上配置已变化，请重新确认后保存');
+        return 'remote-changed';
+      }
+    }
     try {
       if (needsWrite.value) {
         verifyingRemote = true;
-        const latest = await readRemote(target);
-        if (!isCurrent(requestVersion)) return 'cancelled';
-        // 确认依据已变化，撤销选择并要求重新确认。
-        if (!isEqual(latest, remote.value)) {
-          remote.value = latest;
-          resolution.value = null;
-          saveError.value = window.i18n.t('北极星线上配置已变化，请重新确认后保存');
-          return 'remote-changed';
-        }
+        // 确认前先核对弹窗依据是否仍为最新线上配置。
+        const initialCheck = await verifyRemoteUnchanged();
+        if (initialCheck) return initialCheck;
         // 已确认覆盖无需再次确认；编辑关闭需弹窗确认。
-        if (resolution.value !== 'overwrite' && !(await confirmChange())) return 'cancelled';
-        if (!isCurrent(requestVersion)) return 'cancelled';
+        if (resolution.value !== 'overwrite') {
+          if (!(await confirmChange())) return 'cancelled';
+          if (!isCurrent(requestVersion)) return 'cancelled';
+          // 弹窗等待期间线上配置可能被其他人修改，写入前需再次核对。
+          const confirmedCheck = await verifyRemoteUnchanged();
+          if (confirmedCheck) return confirmedCheck;
+        }
         verifyingRemote = false;
         await PolarisConfigService.updateImportedPolaris(
           { ...target, enableWeightFactor: enabled },

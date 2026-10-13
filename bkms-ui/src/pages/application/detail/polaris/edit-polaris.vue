@@ -406,13 +406,16 @@
                   <span
                     v-bk-tooltips="{
                       content: $t('请先完成连通测试后再修改权重因子'),
-                      disabled: !isImportedService || !connectionTestRequired || connected,
+                      disabled:
+                        !isImportedService || (!connectionTestRequired && connectionStatus !== 'loading') || connected,
                     }"
                     class="inline-flex shrink-0"
                   >
                     <Switcher
                       v-model="formModel.enableWeightFactor"
-                      :disabled="isImportedService && connectionTestRequired && !connected"
+                      :disabled="
+                        isImportedService && ((connectionTestRequired && !connected) || connectionStatus === 'loading')
+                      "
                       theme="primary"
                     />
                   </span>
@@ -1097,12 +1100,12 @@
     let valid = false;
     try {
       valid = !!(await formRef.value.validate().catch(() => false));
+      // 自动连通测试属于本次保存，测试期间保持表单锁定，避免提交混入后续编辑。
+      if (valid && isImportedService.value && isEditMode.value && !connectionTestRequired.value && !connected.value) {
+        await importedPolaris.testConnection({ preserveEnabled: weightFactorChanged.value });
+      }
     } finally {
       validating.value = false;
-    }
-    // 未修改连接信息的编辑页可先调整权重因子，保存时再读取线上快照。
-    if (valid && isImportedService.value && isEditMode.value && !connectionTestRequired.value && !connected.value) {
-      await importedPolaris.testConnection({ preserveEnabled: weightFactorChanged.value });
     }
     connectionRequired.value = isImportedService.value && !connected.value;
     resolutionRequired.value = weightFactorRequiresResolution.value;
