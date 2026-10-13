@@ -68,7 +68,11 @@
             :placeholder="$t('请输入容器内目录，例如 /data/conf')"
           />
           <div class="mt-[4px] text-[12px] text-[#979BA5]">
-            {{ $t('文件最终挂载到 {0}', [`${formData.mountDir || '/[路径]'}/${formData.name || '[文件名]'}`]) }}
+            {{
+              $t('文件最终挂载到 {0}', [
+                `${(formData.mountDir || '/[路径]').replace(/\/$/, '')}/${formData.name || '[文件名]'}`,
+              ])
+            }}
           </div>
         </Form.FormItem>
         <Form.FormItem
@@ -189,9 +193,14 @@
     ],
     mountDir: [
       {
-        message: t('挂载路径必须以 / 开头，且不能为 / 或以 / 结尾'),
+        message: t('挂载路径不能为根目录 /'),
         trigger: 'blur',
-        validator: (val: string) => BKMS_REGEX.appConfigMountDirRegex.test(val),
+        validator: (val: string) => val !== '/',
+      },
+      {
+        message: t('挂载路径需以 / 开头，例如 /data/config'),
+        trigger: 'blur',
+        validator: (val: string) => val === '/' || BKMS_REGEX.appConfigMountDirRegex.test(val),
       },
     ],
     mountedEnvNames: [

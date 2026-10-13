@@ -193,7 +193,7 @@
                         <div class="mt-[4px] text-[12px] text-[#979BA5]">
                           {{
                             $t('文件最终挂载到 {0}', [
-                              `${fileInfoFormData.mountDir || '/[路径]'}/${fileInfoFormData.name || '[文件名]'}`,
+                              `${(fileInfoFormData.mountDir || '/[路径]').replace(/\/$/, '')}/${fileInfoFormData.name || '[文件名]'}`,
                             ])
                           }}
                         </div>
@@ -782,15 +782,22 @@
     ],
     mountDir: [
       {
-        message: t('挂载路径必须以 / 开头，且不能为 / 或以 / 结尾'),
+        message: t('挂载路径不能为根目录 /'),
         trigger: 'blur',
-        validator: (value: string) => isFrameworkFile.value || BKMS_REGEX.appConfigMountDirRegex.test(value),
+        validator: (value: string) => isFrameworkFile.value || value !== '/',
+      },
+      {
+        message: t('挂载路径需以 / 开头，例如 /data/config'),
+        trigger: 'blur',
+        validator: (value: string) =>
+          isFrameworkFile.value || value === '/' || BKMS_REGEX.appConfigMountDirRegex.test(value),
       },
     ],
     mountedEnvNames: [
       {
-        message: t('请至少选择一个挂载环境'),
-        trigger: 'change',
+        required: true,
+        message: t('挂载环境不能为空'),
+        trigger: 'blur',
         validator: () => fileInfoFormData.scope !== 'envs' || fileInfoFormData.mountedEnvNames.length > 0,
       },
     ],
@@ -1190,6 +1197,15 @@
   function handleFileInfoScopeChange(scope: MountScope) {
     if (scope === 'all') fileInfoFormRef.value?.clearValidate('mountedEnvNames');
   }
+
+  // 挂载环境由自定义组件承载，bkui Form 无法感知其变更触发校验，
+  // 这里在满足校验条件时手动清除错误提示，避免勾选后错误信息不消失。
+  watch(
+    () => [fileInfoFormData.scope, fileInfoFormData.mountedEnvNames.length] as const,
+    ([scope, envCount]) => {
+      if (scope === 'envs' && envCount > 0) fileInfoFormRef.value?.clearValidate('mountedEnvNames');
+    },
+  );
 
   // 环境变量面板按环境查询变量列表
   function handleGetVarEnv(envName: string) {

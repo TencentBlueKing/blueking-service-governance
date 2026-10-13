@@ -34,7 +34,7 @@ export const BKMS_REGEX = {
   envDisplayNameRegex: /^.{1,32}$/,
   fileNameRegex: /^[a-zA-Z0-9_-]{1,20}$/,
   appConfigFileNameRegex: /^[a-zA-Z0-9_.-]{1,64}$/,
-  appConfigMountDirRegex: /^\/(?!\/)[^/]+(?:\/[^/]+)*$/,
+  appConfigMountDirRegex: /^\/(?!\/)[^/]+(?:\/[^/]+)*\/?$/,
   spaceNameRegex: /^[a-z][a-z0-9-]{0,26}[a-z0-9]$/,
   spaceDisplayNameRegex: /^.{1,32}$/,
   instanceNameRegex: /^[a-z][a-z0-9-]{0,18}[a-z0-9]$/,
