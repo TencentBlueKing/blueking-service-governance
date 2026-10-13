@@ -19,6 +19,8 @@
 package appcfgfiledef
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin/binding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -143,6 +145,36 @@ var _ = Describe("DefDetailObj", func() {
 		Expect(obj.ContentSourceType).To(Equal("local"))
 		Expect(obj.BSCPConfig).To(BeNil())
 		Expect(obj.BaseAppConfigFileID).To(BeEmpty())
+	})
+})
+
+var _ = Describe("mountDir binding", func() {
+	It("should accept an absolute directory that is not root", func() {
+		longDir := "/" + strings.Repeat("a", 255)
+		err := binding.Validator.ValidateStruct(CreateDefInput{
+			Name:              "app.conf",
+			ConfigKind:        "plain",
+			MountDir:          "/usr/local/trpc/bin/",
+			FileFormat:        "yaml",
+			FileType:          "normal",
+			ContentSourceType: "local",
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		err = binding.Validator.ValidateStruct(UpdateDefInput{MountDir: &longDir})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should reject a directory that does not start with slash or is root", func() {
+		relative := "etc/app"
+		err := binding.Validator.ValidateStruct(UpdateDefInput{MountDir: &relative})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mount_dir"))
+
+		root := "/"
+		err = binding.Validator.ValidateStruct(UpdateDefInput{MountDir: &root})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mount_dir"))
 	})
 })
 

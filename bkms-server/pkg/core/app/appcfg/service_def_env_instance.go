@@ -137,7 +137,12 @@ func (s *AppCfgFileDefService) buildFrameworkEnvOverlay(
 // --- 环境实例变更 ---
 
 // applyMountedEnvNamesChange 处理 plain 文件 mountedEnvNames 变更的副作用：
-// 被移除的环境需要清理对应的环境实例。
+// 被移出挂载范围的环境需要删除其环境实例，避免残留定制内容。
+//
+// mountedEnvNames 语义（与 EnvConfigMode 一致）：
+//   - nil：对所有环境生效（不是「未挂载」）
+//   - 空切片：不挂载任何环境
+//   - 非空：仅对列出的环境生效
 //
 // TODO(non-atomic): 当前先删除环境实例，再由上层 UpdateAppCfgFileDef 持久化 def。
 // 后续应引入 MongoDB 事务或补偿机制保证操作原子性。
@@ -149,6 +154,8 @@ func (s *AppCfgFileDefService) applyMountedEnvNamesChange(
 	oldEnvNames := def.EnvConfigMode.MountedEnvNames
 	def.EnvConfigMode.MountedEnvNames = newEnvNames
 
+	// 旧值为 nil：原先全环境生效，没有白名单可做差集。
+	// 只能扫该 def 下已有文件，删掉不在 newEnvNames 里的环境实例（默认文件保留）。
 	if oldEnvNames == nil {
 		files, err := s.FileStore.ListByDefID(ctx, def.ID)
 		if err != nil {
@@ -165,7 +172,7 @@ func (s *AppCfgFileDefService) applyMountedEnvNamesChange(
 		return nil
 	}
 
-	// 找出被移除的环境，清理对应实例
+	// 旧值已是明确列表：按 old − new 删除被移出范围的环境实例。
 	for _, oldEnv := range oldEnvNames {
 		if !slices.Contains(newEnvNames, oldEnv) {
 			if err := s.deleteEnvInstanceByName(ctx, def.ID, def.AppID, oldEnv); err != nil {

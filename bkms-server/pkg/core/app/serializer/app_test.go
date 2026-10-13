@@ -529,6 +529,40 @@ var _ = Describe("App serializers", func() {
 	)
 
 	DescribeTable(
+		"framework FilePath mount_dir validation",
+		func(input any, wantErr bool) {
+			err := binding.Validator.ValidateStruct(input)
+			if wantErr {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("mount_dir"))
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+		},
+		Entry("trpc accepts absolute directory", serializer.TrpcSpecInput{
+			Language: "go", FileName: "trpc_go.yaml", FilePath: "/usr/local/trpc/bin",
+		}, false),
+		Entry("trpc accepts trailing slash", serializer.TrpcSpecInput{
+			Language: "go", FileName: "trpc_go.yaml", FilePath: "/usr/local/trpc/bin/",
+		}, false),
+		Entry("trpc rejects root", serializer.TrpcSpecInput{
+			Language: "go", FileName: "trpc_go.yaml", FilePath: "/",
+		}, true),
+		Entry("trpc rejects relative path", serializer.TrpcSpecInput{
+			Language: "go", FileName: "trpc_go.yaml", FilePath: "./application/resource/storage/conf/cn/test/",
+		}, true),
+		Entry("taf accepts absolute directory", serializer.TafSpecInput{
+			FileName: "taf.conf", FilePath: "/usr/local/taf/conf",
+		}, false),
+		Entry("taf rejects root", serializer.TafSpecInput{
+			FileName: "taf.conf", FilePath: "/",
+		}, true),
+		Entry("taf rejects relative path", serializer.TafSpecInput{
+			FileName: "taf.conf", FilePath: "etc/taf",
+		}, true),
+	)
+
+	DescribeTable(
 		"CreateAppInput validation",
 		func(input serializer.CreateAppInput, expectedErrSubstrings []string) {
 			err := binding.Validator.ValidateStruct(input)

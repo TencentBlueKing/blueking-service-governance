@@ -30,7 +30,7 @@ type AppConfigFileDefUpdateInput struct {
 	// 应用配置文件名称；不传表示不修改，传时不能为空。
 	Name *string `json:"name,omitempty" binding:"omitempty,min=1,max=64,app_config_file_name"`
 	// 容器内挂载目录；不传表示不修改。
-	MountDir *string `json:"mountDir,omitempty" binding:"omitempty,max=255,mount_dir"`
+	MountDir *string `json:"mountDir,omitempty" binding:"omitempty,mount_dir"`
 	// 是否统一配置；不传表示不修改。true = 统一配置；false = 按环境独立配置。
 	IsUnifiedConfig *bool `json:"isUnifiedConfig,omitempty"`
 }

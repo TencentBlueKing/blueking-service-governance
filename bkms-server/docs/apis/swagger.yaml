@@ -85,7 +85,6 @@ definitions:
         type: string
       mountDir:
         description: 容器内挂载目录（plain 必填）
-        maxLength: 255
         type: string
       mountedEnvNames:
         description: 创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。环境名格式与路径参数 envName 相同。
@@ -275,7 +274,6 @@ definitions:
       isUnifiedConfig:
         type: boolean
       mountDir:
-        maxLength: 255
         type: string
       mountedEnvNames:
         items:

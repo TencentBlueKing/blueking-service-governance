@@ -28,7 +28,7 @@ type TafSpecInput struct {
 	// 配置文件名
 	FileName string `json:"fileName" binding:"required"`
 	// 配置文件路径
-	FilePath string `json:"filePath" binding:"required"`
+	FilePath string `json:"filePath" binding:"required,mount_dir"`
 	// 配置文件内容
 	FileContent string `json:"fileContent"`
 }

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register mount_dir
 )
 
 // --- URI / Query 输入 ---
@@ -58,7 +59,7 @@ type CreateDefInput struct {
 	// 配置种类：framework / plain
 	ConfigKind string `json:"configKind" binding:"required,oneof=framework plain"`
 	// 容器内挂载目录（plain 必填）
-	MountDir string `json:"mountDir,omitempty" binding:"omitempty,max=255,mount_dir"`
+	MountDir string `json:"mountDir,omitempty" binding:"omitempty,mount_dir"`
 	// 文件格式
 	FileFormat string `json:"fileFormat" binding:"required,oneof=yaml taf"`
 	// 文件类型：normal / overlay
@@ -265,7 +266,7 @@ func (o *DefDetailObj) fillFile(file *appcfg.AppConfigFile) {
 type UpdateDefInput struct {
 	// 文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。
 	Name               *string   `json:"name,omitempty" binding:"omitempty,min=1,max=64,app_config_file_name"`
-	MountDir           *string   `json:"mountDir,omitempty" binding:"omitempty,max=255,mount_dir"`
+	MountDir           *string   `json:"mountDir,omitempty" binding:"omitempty,mount_dir"`
 	IsUnifiedConfig    *bool     `json:"isUnifiedConfig,omitempty"`
 	MountedEnvNames    *[]string `json:"mountedEnvNames,omitempty" binding:"omitempty,dive,uri_slug"`
 	EnableEnvVarRender *bool     `json:"enableEnvVarRender,omitempty"`
