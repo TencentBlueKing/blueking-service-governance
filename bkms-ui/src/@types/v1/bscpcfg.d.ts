@@ -43,17 +43,6 @@ export interface DeleteBscpCfgEnvBindingRequest {
   envName: string;
 }
 
-export type PatchBscpCfgEnvBindingRequest = PatchEnvBindingInput & {
-  /**
-   * 应用 ID
-   */
-  appID: string;
-  /**
-   * 环境名称
-   */
-  envName: string;
-};
-
 export interface GetBscpCfgMetadataRequest {
   /**
    * 应用 ID
@@ -90,13 +79,6 @@ export interface EnvBindingResponse {
   data?: EnvBindingOutput;
 }
 
-export interface PatchEnvBindingInput {
-  /**
-   * Services 绑定的下发服务列表（全量替换）
-   */
-  apps?: ServiceRefInput[];
-}
-
 export interface MetadataResponse {
   data?: MetadataOutput;
 }
@@ -118,41 +100,26 @@ export interface PatchMetadataInput {
 
 export interface MetadataOutput {
   appID?: string;
-  bscpBizID?: string;
   createdAt?: string;
-  credentialName?: string;
-  feedAddr?: string;
+  enable?: boolean;
   mountPath?: string;
   operator?: string;
   postHookID?: string;
-  token?: string;
   updatedAt?: string;
   workloadKind?: string;
   workloadName?: string;
-}
-
-export interface ServiceRefInput {
-  id: string;
-  name: string;
 }
 
 export interface EnvBindingOutput {
   appID?: string;
-  apps?: ServiceRefOutput[];
-  bscpBizID?: string;
+  bscpAppID?: string;
+  bscpEnvID?: string;
+  bscpEnvName?: string;
   createdAt?: string;
-  defaultFileAppID?: string;
   envName?: string;
-  feedAddr?: string;
   mountPath?: string;
   operator?: string;
-  token?: string;
   updatedAt?: string;
   workloadKind?: string;
   workloadName?: string;
-}
-
-export interface ServiceRefOutput {
-  id?: string;
-  name?: string;
 }

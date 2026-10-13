@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListBscpCfgEnvBindingsRequest, EnvBindingOutput, GetBscpCfgEnvBindingRequest, CreateBscpCfgEnvBindingRequest, DeleteBscpCfgEnvBindingRequest, PatchBscpCfgEnvBindingRequest, GetBscpCfgMetadataRequest, MetadataOutput, InitBscpCfgMetadataRequest, DeleteBscpCfgMetadataRequest, PatchBscpCfgMetadataRequest } from '~/@types/v1/bscpcfg';
+import type { ListBscpCfgEnvBindingsRequest, EnvBindingOutput, GetBscpCfgEnvBindingRequest, CreateBscpCfgEnvBindingRequest, DeleteBscpCfgEnvBindingRequest, GetBscpCfgMetadataRequest, MetadataOutput, InitBscpCfgMetadataRequest, DeleteBscpCfgMetadataRequest, PatchBscpCfgMetadataRequest } from '~/@types/v1/bscpcfg';
 
 export const BscpcfgService = {
   /**
@@ -71,23 +71,6 @@ export const BscpcfgService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.delete<Request, ResponseData>('/apps/{appID}/bscpcfg/envs/{envName}/binding')(params, config),
-  /**
-   * 更新环境绑定（更新绑定的服务列表）
-   *
-   * @method PATCH
-   * @path /apps/{appID}/bscpcfg/envs/{envName}/binding
-   * @tag bscpcfg
-   * @param appID path string required 应用 ID
-   * @param envName path string required 环境名称
-   * @param body body PatchEnvBindingInput required 更新配置请求体
-   * @response 200 unknown OK
-   * @response 400 GinErrorOutput Bad Request
-   * @response 404 GinErrorOutput Not Found
-   */
-  patchBscpCfgEnvBinding: async <Request extends PatchBscpCfgEnvBindingRequest = PatchBscpCfgEnvBindingRequest, ResponseData = unknown>(
-    params?: NoInfer<Request>,
-    config?: Config,
-  ) => await v1Fetch.patch<Request, ResponseData>('/apps/{appID}/bscpcfg/envs/{envName}/binding')(params, config),
   /**
    * 获取配置管理元信息
    *

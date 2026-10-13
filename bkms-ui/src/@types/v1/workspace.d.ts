@@ -246,6 +246,14 @@ export interface BkSystemsOutputObj {
    */
   bkBCSProjectID?: string;
   /**
+   * BSCP 项目 ID
+   */
+  bkBSCPProjectID?: string;
+  /**
+   * BSCP 项目 Key（如 BK-BSCP-00012）
+   */
+  bkBSCPProjectKey?: string;
+  /**
    * bkcc 业务 ID
    */
   bkCCBizID?: string;
@@ -269,6 +277,10 @@ export interface BkSystemsOutputObj {
    * 蓝盾制品库项目 ID
    */
   bkRepoProjectID?: string;
+  /**
+   * BSCP Credential ID
+   */
+  bscpCredentialID?: string;
   /**
    * 是否绑定已有蓝盾项目
    */
