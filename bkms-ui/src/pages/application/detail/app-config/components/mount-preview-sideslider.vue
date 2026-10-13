@@ -203,7 +203,7 @@
 
   function getMountScopeLabel(row: PreviewRow) {
     const scope = props.files.find(file => file.id === row.defId)?.mountScope;
-    if (scope === 'all') return t('全部环境');
+    if (scope === 'all') return t('所有环境');
     if (scope === 'envs') return t('指定环境');
     return '--';
   }

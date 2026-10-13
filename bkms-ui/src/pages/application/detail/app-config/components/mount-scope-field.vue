@@ -22,7 +22,7 @@
     class="flex w-full flex-col"
     :disabled="disabled"
   >
-    <Radio label="all">{{ $t('全部环境') }}</Radio>
+    <Radio label="all">{{ $t('所有环境') }}</Radio>
     <Radio
       class="!ml-0 mt-[10px]"
       label="envs"
@@ -47,7 +47,7 @@
   import type { EnvOutput } from '~/@types/v1/env';
   import type { ConfigFileMountScope } from '~/pages/application/detail/app-config/use-config-file-defs';
 
-  /** 挂载范围类型：全部环境 / 指定环境 */
+  /** 挂载范围类型：所有环境 / 指定环境 */
   export type MountScope = ConfigFileMountScope;
 
   const props = withDefaults(

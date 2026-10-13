@@ -247,6 +247,7 @@
   import { Button, Divider, PopConfirm, Popover, Radio, SearchSelect, Sideslider, Tag } from 'bkui-vue';
   import dayjs from 'dayjs';
   import { useI18n } from 'vue-i18n';
+  import { EnvInstanceObj } from '~/@types/v1/app-config-file-defs';
   import { AppConfigFileOutputObj, AppConfigFileVersionOutputObj } from '~/@types/v1/app-config-files';
   import { EnvOutput } from '~/@types/v1/env';
   import { AppConfigFilesService } from '~/api/modules/v1';
@@ -269,19 +270,26 @@
   type VersionItem = AppConfigFileVersionOutputObj & { isCurrent: boolean };
 
   const props = defineProps<{
+    /** 配置文件定义 ID（Def 页面按环境切换版本时使用） */
+    configFileDefId?: string;
     configFileList: AppConfigFileOutputObj[];
     /** 当前环境名（按环境模式时使用） */
     currentEnvName?: string;
     /** 当前选中的文件（Helm 按文件模式时使用） */
     currentFile?: AppConfigFileOutputObj | null;
-    /** 当前实例文件 ID（Def 配置文件模式时使用） */
+    /** 当前实例文件 ID（按文件模式时使用） */
     currentFileId?: string;
-    /** 当前文件显示名（Def 配置文件模式时使用） */
+    /** 当前文件显示名（按文件模式时使用） */
     currentFileName?: string;
-    /** 当前实例版本（Def 配置文件模式时使用） */
+    /** 当前实例版本（按文件模式时使用） */
     currentVersion?: number;
+    /** 定义的默认文件 ID 与当前版本 */
+    defaultFileId?: string;
+    defaultVersion?: number;
     /** 是否启用环境配置（按环境模式时使用） */
     enableEnvConfig?: boolean;
+    /** 定义下的环境实例 */
+    envInstances?: EnvInstanceObj[];
     /** 环境列表（按环境模式时使用） */
     envList?: EnvOutput[];
     visible: boolean;
@@ -303,12 +311,19 @@
     set: (val: boolean) => emit('update:visible', val),
   });
 
-  /** 当前实例信息：兼容 Helm 的 currentFile 与 Def 页面直接传入实例标识 */
-  const activeFileID = computed(() => props.currentFileId || props.currentFile?.id || '');
+  /** 当前查询的文件 ID：环境尚无独立实例时使用定义的默认文件 ID */
+  const activeFileID = computed(() => {
+    if (props.configFileDefId) {
+      if (!props.enableEnvConfig || curEnvID.value === DEFAULT_ENV_ID) return props.defaultFileId || '';
+      if (!curEnvName.value) return '';
+      return props.envInstances?.find(item => item.envName === curEnvName.value)?.fileId || props.defaultFileId || '';
+    }
+    return props.currentFileId || props.currentFile?.id || '';
+  });
   const activeFileName = computed(() => props.currentFileName || props.currentFile?.name || '');
 
   /** 是否为按文件模式 */
-  const isFileMode = computed(() => !!activeFileID.value);
+  const isFileMode = computed(() => !props.configFileDefId && !!activeFileID.value);
 
   /** 当前选中的环境 ID */
   const curEnvID = ref(DEFAULT_ENV_ID);
@@ -332,6 +347,7 @@
 
   /** 版本列表加载状态 */
   const versionListLoading = ref(false);
+  let versionListRequestID = 0;
 
   /** 版本列表数据 */
   const versionList = ref<AppConfigFileVersionOutputObj[]>([]);
@@ -368,6 +384,11 @@
 
   /** 当前生效版本号（按文件模式从 currentFile 获取，按环境模式从 configFileList 获取） */
   const currentVersionNum = computed(() => {
+    if (props.configFileDefId) {
+      if (!props.enableEnvConfig || curEnvID.value === DEFAULT_ENV_ID) return props.defaultVersion ?? 0;
+      if (!curEnvName.value) return 0;
+      return props.envInstances?.find(item => item.envName === curEnvName.value)?.currentVersion ?? 0;
+    }
     if (isFileMode.value) {
       return props.currentVersion ?? props.currentFile?.currentVersion ?? 0;
     }
@@ -384,26 +405,38 @@
 
   /** 获取版本列表 */
   async function fetchVersionList() {
-    if (!appDetailStore.appID || (isFileMode.value && !activeFileID.value)) return;
+    const requestID = ++versionListRequestID;
+    if (!appDetailStore.appID || (props.configFileDefId && !activeFileID.value)) {
+      versionList.value = [];
+      total.value = 0;
+      versionListLoading.value = false;
+      return;
+    }
 
     versionListLoading.value = true;
     try {
       const res = await AppConfigFilesService.listAppConfigFileVersions({
         appID: appDetailStore.appID,
-        // 按文件模式使用 appConfigFileID，按环境模式使用 envName
-        ...(isFileMode.value ? { appConfigFileID: activeFileID.value } : { envName: curEnvName.value }),
+        // 定义模式同时按文件与环境过滤，避免同一环境下其他文件的版本混入
+        ...(props.configFileDefId
+          ? { envName: curEnvName.value, appConfigFileID: activeFileID.value }
+          : isFileMode.value
+            ? { appConfigFileID: activeFileID.value }
+            : { envName: curEnvName.value }),
         page: pageConf.current,
         pageSize: pageConf.limit,
         ...getSearchParams(),
       });
+      if (requestID !== versionListRequestID) return;
       versionList.value = res.results ?? [];
       total.value = res.count ?? 0;
       clearErrorType();
     } catch {
+      if (requestID !== versionListRequestID) return;
       versionList.value = [];
       setTypeToError();
     } finally {
-      versionListLoading.value = false;
+      if (requestID === versionListRequestID) versionListLoading.value = false;
     }
   }
 
@@ -448,6 +481,7 @@
 
   /** 面板关闭时重置状态 */
   function handleHidden() {
+    versionListRequestID += 1;
     if (hasRollback.value) {
       emit('rollback');
       hasRollback.value = false;
@@ -530,6 +564,14 @@
       fetchVersionList();
     }
   });
+
+  /** 定义的环境实例刷新后，同步当前环境版本列表 */
+  watch(
+    () => props.envInstances,
+    () => {
+      if (props.visible && props.configFileDefId) fetchVersionList();
+    },
+  );
 
   /** 监听搜索条件变化，重新请求数据 */
   watch(searchValue, () => {

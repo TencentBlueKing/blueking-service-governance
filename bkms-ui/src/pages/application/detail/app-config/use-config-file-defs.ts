@@ -269,6 +269,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
     deleteDef,
     detail,
     detailLoading,
+    envInstances,
     fetchDefs,
     listLoading,
     modifiedEnvNames,

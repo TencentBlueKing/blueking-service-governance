@@ -34,6 +34,7 @@
           :active-id="activeDefID"
           :create-disabled="envListLoadFailed"
           :files="fileListItems"
+          :loading="isLoading || listLoading || appDetailStore.loading"
           @create="handleOpenCreateFile"
           @delete="handleDeleteFile"
           @select="handleSelectFile"
@@ -222,7 +223,7 @@
                             theme="primary"
                           />
                           <span class="ml-[10px] text-[12px] text-[#979BA5]">
-                            {{ $t('开启后，文件内容中的 {0} 会在下发前被渲染为实际值。', [envVarPlaceholder]) }}
+                            {{ $t('开启后，文件内容中的 {0} 会在下发前被渲染为实际值', [envVarPlaceholder]) }}
                           </span>
                         </div>
                       </Form.FormItem>
@@ -269,7 +270,7 @@
                         type="solid"
                       />
                       <Button
-                        :disabled="!currentInstanceFileID"
+                        :disabled="!activeDef?.fileId"
                         text
                         theme="primary"
                         @click="showVersionListSideslider = true"
@@ -485,10 +486,14 @@
     />
     <VersionListSideslider
       v-model:visible="showVersionListSideslider"
+      :config-file-def-id="activeDefID"
       :config-file-list="[]"
-      :current-file-id="currentInstanceFileID"
-      :current-file-name="activeDisplayName"
-      :current-version="currentInstanceVersion"
+      :current-env-name="currentEnv.name"
+      :default-file-id="activeDef?.fileId"
+      :default-version="activeDef?.currentVersion"
+      :enable-env-config="isIndependentConfig"
+      :env-instances="envInstances"
+      :env-list="perspectiveEnvList"
       @refresh="handleRollbackRefresh"
       @rollback="handleRollbackRefresh"
     />
@@ -576,6 +581,7 @@
     deleteDef,
     detail,
     detailLoading,
+    envInstances,
     fetchDefs,
     listLoading,
     modifiedEnvNames,
@@ -795,7 +801,15 @@
   const adminIpWarning = ref<{ message: string; type: '' | 'invalid' | 'pod_ip' }>({ message: '', type: '' }); // admin.ip 校验告警（仅 trpc 框架文件）
 
   const viewDefaultEnvVarsProps = computed(() => {
-    if (!isFrameworkFile.value || isTafApp.value) return {};
+    // 非框架文件，根据是否开启环境变量渲染展示不同提示
+    if (!isFrameworkFile.value) {
+      return {
+        'alert-title': activeDef.value?.enableEnvVarRender
+          ? t('可通过表达式 {0} 引用。平台会在下发前将变量渲染为实际值', [envVarPlaceholder])
+          : t('当前未开启环境变量渲染，文件中的 {0} 不会被渲染', [envVarPlaceholder]),
+      };
+    }
+    if (isTafApp.value) return {};
     return {
       'copy-format': (key: string) => `\${${key}}`,
       ...(isTrpcApp.value

@@ -92,7 +92,7 @@
               theme="primary"
             />
             <span class="ml-[10px] text-[12px] text-[#979BA5]">
-              {{ $t('开启后，文件内容中的 {0} 会在下发前被渲染为实际值。', [envVarPlaceholder]) }}
+              {{ $t('开启后，文件内容中的 {0} 会在下发前被渲染为实际值', [envVarPlaceholder]) }}
             </span>
           </div>
         </Form.FormItem>
@@ -207,6 +207,14 @@
   function handleScopeChange(scope: MountScope) {
     if (scope === 'all') formRef.value?.clearValidate('mountedEnvNames');
   }
+
+  // 挂载环境由自定义组件承载，bkui Form 无法感知其变更触发校验，满足校验条件时手动清除错误提示
+  watch(
+    () => [formData.scope, formData.mountedEnvNames.length] as const,
+    ([scope, envCount]) => {
+      if (scope === 'envs' && envCount > 0) formRef.value?.clearValidate('mountedEnvNames');
+    },
+  );
 
   /** 校验表单并触发 submit 事件 */
   async function handleSubmit() {

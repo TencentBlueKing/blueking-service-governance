@@ -67,7 +67,7 @@
         :disabled="isAllScope"
         placement="top"
         :popover-delay="[100, 0]"
-        theme="dark"
+        theme="light"
       >
         <Tag
           size="small"
@@ -75,17 +75,7 @@
           >{{ scopeLabel }}</Tag
         >
         <template #content>
-          <div class="max-w-[420px] text-[12px] text-[#313238]">
-            <div class="flex flex-wrap gap-[4px]">
-              <Tag
-                v-for="(envName, index) in file.mountedEnvNames"
-                :key="envName"
-                size="small"
-              >
-                {{ file.mountedEnvDisplayNames[index] || envName }}
-              </Tag>
-            </div>
-          </div>
+          <div class="max-w-[420px] whitespace-pre-line text-[12px] text-[#313238]">{{ envTooltip }}</div>
         </template>
       </Popover>
       <Tag
@@ -131,6 +121,11 @@
     if (isAllScope.value) return t('所有环境');
     return t('指定 {0} 个', [props.file.mountedEnvNames.length]);
   });
+  const envTooltip = computed(() =>
+    props.file.mountedEnvNames
+      .map((envName, index) => `• ${props.file.mountedEnvDisplayNames[index] || envName}`)
+      .join('\n'),
+  );
 
   function handleDelete() {
     deleting.value = false;

@@ -32,54 +32,117 @@
       </a>
     </div>
     <div class="flex flex-1 flex-col overflow-auto py-[8px]">
-      <div class="px-[12px] py-[6px] text-[12px] text-[#979BA5]">{{ $t('框架配置文件') }}</div>
-      <FileItem
-        v-for="file in frameworkFiles"
-        :key="file.id"
-        :active="file.id === activeId"
-        :file="file"
-        @click="emit('select', file.id)"
-      />
-
-      <div class="mt-[8px] flex items-center justify-between px-[12px] py-[6px]">
-        <span class="text-[12px] text-[#979BA5]">{{ $t('其他配置文件') }}（{{ plainFiles.length }}）</span>
-        <Button
-          :disabled="createDisabled"
-          text
-          theme="primary"
-          @click="emit('create')"
-        >
-          <Plus
-            :height="20"
-            :width="20"
-          />
-          {{ $t('新建') }}
-        </Button>
-      </div>
-      <FileItem
-        v-for="file in plainFiles"
-        :key="file.id"
-        :active="file.id === activeId"
-        deletable
-        :file="file"
-        @click="emit('select', file.id)"
-        @delete="emit('delete', file)"
-      />
-      <div
-        v-if="!plainFiles.length"
-        class="flex flex-1 items-center justify-center px-[12px] py-[24px]"
+      <Skeleton
+        :full-height="false"
+        :loading="loading"
       >
-        <Exception
-          class="!h-auto"
-          scene="part"
-          type="empty"
+        <template #loading>
+          <div class="px-[12px] py-[6px]">
+            <Layout.shape
+              :height="16"
+              :width="88"
+            />
+          </div>
+          <div class="px-[12px] py-[8px]">
+            <Layout.shape
+              :height="18"
+              :width="120"
+            />
+            <div class="mt-[6px]">
+              <Layout.shape
+                :height="16"
+                :width="160"
+              />
+            </div>
+            <div class="mt-[6px]">
+              <Layout.shape
+                :height="18"
+                :width="68"
+              />
+            </div>
+          </div>
+          <div class="mt-[8px] flex items-center justify-between px-[12px] py-[6px]">
+            <Layout.shape
+              :height="16"
+              :width="108"
+            />
+            <Layout.shape
+              :height="16"
+              :width="48"
+            />
+          </div>
+          <div
+            v-for="index in 5"
+            :key="index"
+            class="px-[12px] py-[8px]"
+          >
+            <Layout.shape
+              :height="18"
+              :width="120"
+            />
+            <div class="mt-[6px]">
+              <Layout.shape
+                :height="16"
+                :width="160"
+              />
+            </div>
+            <div class="mt-[6px]">
+              <Layout.shape
+                :height="18"
+                :width="68"
+              />
+            </div>
+          </div>
+        </template>
+        <div class="px-[12px] py-[6px] text-[12px] text-[#979BA5]">{{ $t('框架配置文件') }}</div>
+        <FileItem
+          v-for="file in frameworkFiles"
+          :key="file.id"
+          :active="file.id === activeId"
+          :file="file"
+          @click="emit('select', file.id)"
+        />
+
+        <div class="mt-[8px] flex items-center justify-between px-[12px] py-[6px]">
+          <span class="text-[12px] text-[#979BA5]">{{ $t('其他配置文件') }}（{{ plainFiles.length }}）</span>
+          <Button
+            :disabled="createDisabled"
+            text
+            theme="primary"
+            @click="emit('create')"
+          >
+            <Plus
+              :height="20"
+              :width="20"
+            />
+            {{ $t('新建') }}
+          </Button>
+        </div>
+        <FileItem
+          v-for="file in plainFiles"
+          :key="file.id"
+          :active="file.id === activeId"
+          deletable
+          :file="file"
+          @click="emit('select', file.id)"
+          @delete="emit('delete', file)"
+        />
+        <div
+          v-if="!plainFiles.length"
+          class="flex flex-1 items-center justify-center px-[12px] py-[24px]"
         >
-          <template #title><span /></template>
-          <template #description>
-            <span class="text-[12px] leading-[20px] text-[#979BA5]">{{ $t('暂无其他配置文件，可点击新建') }}</span>
-          </template>
-        </Exception>
-      </div>
+          <Exception
+            class="!h-auto"
+            scene="part"
+            type="empty"
+          >
+            <template #title><span /></template>
+            <template #description>
+              <span class="text-[12px] leading-[20px] text-[#979BA5]">{{ $t('暂无其他配置文件，可点击新建') }}</span>
+            </template>
+          </Exception>
+        </div>
+      </Skeleton>
     </div>
   </div>
 </template>
@@ -90,6 +153,8 @@
   import { Button, Exception } from 'bkui-vue';
   import { InfoLine, Plus } from 'bkui-vue/lib/icon';
   import { DOC_LINKS } from '~/common/const';
+  import Layout from '~/components/skeleton/skeleton-layout';
+  import Skeleton from '~/components/skeleton/skeleton.vue';
   import FileItem from '~/pages/application/detail/app-config/components/config-file-list-item.vue';
 
   import type { ConfigFileListItem } from '~/pages/application/detail/app-config/use-config-file-defs';
@@ -99,8 +164,9 @@
       activeId?: string;
       createDisabled?: boolean;
       files: ConfigFileListItem[];
+      loading?: boolean;
     }>(),
-    { activeId: '', createDisabled: false },
+    { activeId: '', createDisabled: false, loading: false },
   );
 
   const emit = defineEmits<{

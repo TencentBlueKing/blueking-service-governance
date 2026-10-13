@@ -20,6 +20,7 @@
   <div
     ref="editorRef"
     class="w-full h-full"
+    :class="{ 'ms-editor-readonly': readonly }"
   >
     <!-- 工具栏 -->
     <div :class="['h-[40px] px-[16px] rounded-t-sm ms-editor', lightTheme ? 'bg-[#DCDEE5]' : 'bg-[#2E2E2E]']">
@@ -494,3 +495,12 @@
     validate,
   });
 </script>
+
+<style lang="postcss" scoped>
+  /* 只读态不展示输入光标(caret)：monaco 的 readOnly 不会隐藏光标，点击时仍会出现闪烁的插入符，造成"内容可编辑"的误导 */
+  .ms-editor-readonly {
+    :deep(.monaco-editor .cursors-layer) {
+      display: none !important;
+    }
+  }
+</style>
