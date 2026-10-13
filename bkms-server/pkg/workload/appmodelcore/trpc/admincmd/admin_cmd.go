@@ -45,6 +45,7 @@ import (
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -160,6 +161,7 @@ func NewAdminService(
 	envStore envmodel.EnvironmentStore,
 	appStore bkmsapp.ApplicationStore,
 	appModelStore appmodel.AppModelStore,
+	appSpecStore appspec.AppSpecStore,
 	scopedEnvVarStore envvars.ScopedEnvVarStore,
 	appDepsVarReader *depenvvars.Reader,
 	polarisVarReader *polarisenvvars.Reader,
@@ -190,6 +192,10 @@ func NewAdminService(
 	appModel, err := s.AppModelStore.GetAppModel(ctx, s.App.ID)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app model by id '%s'", app.ID)
+	}
+	appModel, _, err = appspec.ModelForEnv(ctx, appSpecStore, s.AppModelStore, s.App.ID, env.Name, appModel)
+	if err != nil {
+		return nil, errors.Wrapf(err, "apply env app spec for app '%s' env '%s'", app.ID, env.Name)
 	}
 	s.Env = env
 	s.AppModel = appModel

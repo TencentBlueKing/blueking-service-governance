@@ -39,6 +39,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 	k8smanifest "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/manifest"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
@@ -48,6 +49,7 @@ type Service struct {
 	store             ResourceSnapshotStore
 	builder           *Builder
 	appModelStore     appmodel.AppModelStore
+	appSpecStore      appspec.AppSpecStore
 	scopedEnvVarStore envvars.ScopedEnvVarStore
 	appDepsVarReader  *depenvvars.Reader
 	polarisVarReader  *polarisenvvars.Reader
@@ -58,6 +60,7 @@ func NewService(
 	store ResourceSnapshotStore,
 	builder *Builder,
 	appModelStore appmodel.AppModelStore,
+	appSpecStore appspec.AppSpecStore,
 	scopedEnvVarStore envvars.ScopedEnvVarStore,
 	appDepsVarReader *depenvvars.Reader,
 	polarisVarReader *polarisenvvars.Reader,
@@ -66,6 +69,7 @@ func NewService(
 		store:             store,
 		builder:           builder,
 		appModelStore:     appModelStore,
+		appSpecStore:      appSpecStore,
 		scopedEnvVarStore: scopedEnvVarStore,
 		appDepsVarReader:  appDepsVarReader,
 		polarisVarReader:  polarisVarReader,
@@ -245,6 +249,10 @@ func (s *Service) maskManifestSensitiveValues(
 	appModel, err := s.appModelStore.GetAppModel(ctx, app.ID)
 	if err != nil {
 		return errors.Wrap(err, "get app model")
+	}
+	appModel, _, err = appspec.ModelForEnv(ctx, s.appSpecStore, s.appModelStore, app.ID, env.Name, appModel)
+	if err != nil {
+		return errors.Wrap(err, "apply env app spec")
 	}
 
 	appEnvVars, err := envvars.BuildAppEnvVars(

@@ -28,7 +28,6 @@ import (
 	"strings"
 
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
-	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
@@ -829,22 +828,17 @@ func (b *Builder) ComputeAppModel(
 	ctx context.Context,
 	env *envmodel.Environment,
 ) (*appmodel.AppModel, error) {
-	// Make a deep copy of the original AppModel to avoid modifying it directly
-	var appModel appmodel.AppModel
-	if err := copier.CopyWithOption(&appModel, b.appModel, copier.Option{DeepCopy: true}); err != nil {
-		return nil, errors.Wrap(err, "copying app model")
-	}
-
-	effectiveAppSpec, err := appspec.GetEnvEffective(ctx, b.appSpecStore, b.appModelStore, b.app.ID, env.Name)
+	appModel, effectiveAppSpec, err := appspec.ModelForEnv(
+		ctx, b.appSpecStore, b.appModelStore, b.app.ID, env.Name, b.appModel,
+	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting effective app spec for app %s env %s", b.app.ID, env.Name)
+		return nil, errors.Wrapf(err, "applying env app spec for app %s env %s", b.app.ID, env.Name)
 	}
-	appspec.ApplyToAppModel(effectiveAppSpec, &appModel)
 
 	// 检查：不是生产环境，且启用了开发模式
 	b.devModeConfig = nil
 	if shouldEnableDevModeInEnv(env.Type, effectiveAppSpec) {
-		b.devModeConfig = devmode.CreateDevModeConfig(&appModel, env.Type, true)
+		b.devModeConfig = devmode.CreateDevModeConfig(appModel, env.Type, true)
 		if effectiveAppSpec.DevMode.WorkPath != nil {
 			b.devModeConfig.WorkPath = *effectiveAppSpec.DevMode.WorkPath
 		}
@@ -853,5 +847,5 @@ func (b *Builder) ComputeAppModel(
 		}
 	}
 
-	return &appModel, nil
+	return appModel, nil
 }

@@ -215,9 +215,11 @@ func (h *Handler) getEnvEffectiveAppModel(
 		return nil, errors.Wrapf(err, "get app model for app id=%s", appID)
 	}
 
-	spec, err := appspec.GetEnvEffective(ctx, h.registry.AppSpecStore, h.registry.AppModelStore, appID, envName)
+	effective, _, err := appspec.ModelForEnv(
+		ctx, h.registry.AppSpecStore, h.registry.AppModelStore, appID, envName, am,
+	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get effective app spec for app id=%s env=%s", appID, envName)
+		return nil, errors.Wrapf(err, "apply env app spec for app id=%s env=%s", appID, envName)
 	}
-	return appspec.ApplyToAppModel(spec, am), nil
+	return effective, nil
 }

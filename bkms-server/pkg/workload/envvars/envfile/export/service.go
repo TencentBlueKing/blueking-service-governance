@@ -28,6 +28,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
@@ -36,6 +37,7 @@ import (
 type Service struct {
 	scopedEnvVarStore envvars.ScopedEnvVarStore
 	appModelStore     appmodel.AppModelStore
+	appSpecStore      appspec.AppSpecStore
 	reader            *envvars.UnifiedEnvVarsReader
 }
 
@@ -43,11 +45,13 @@ type Service struct {
 func NewService(
 	scopedEnvVarStore envvars.ScopedEnvVarStore,
 	appModelStore appmodel.AppModelStore,
+	appSpecStore appspec.AppSpecStore,
 	reader *envvars.UnifiedEnvVarsReader,
 ) *Service {
 	return &Service{
 		scopedEnvVarStore: scopedEnvVarStore,
 		appModelStore:     appModelStore,
+		appSpecStore:      appSpecStore,
 		reader:            reader,
 	}
 }
@@ -135,6 +139,10 @@ func (s *Service) ExportEffectiveAppEnv(
 	}
 	if errors.Is(err, appmodel.ErrAppModelNotFound) {
 		am = nil
+	}
+	am, _, err = appspec.ModelForEnv(ctx, s.appSpecStore, s.appModelStore, app.ID, environment.Name, am)
+	if err != nil {
+		return "", err
 	}
 
 	vars, err := envvars.BuildAppEnvVars(ctx, app, am, environment, s.reader)

@@ -49,6 +49,7 @@ import (
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	k8sstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
@@ -73,6 +74,7 @@ var _ = Describe("Service", func() {
 			GinkgoT(),
 			FxModule,
 			appmodel.FxModule,
+			appspec.FxModule,
 			bkmsenv.FxModule,
 			envvars.FxModule,
 			depmodel.FxModule,

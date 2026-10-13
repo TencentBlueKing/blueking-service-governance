@@ -37,6 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking/serializer"
 )
@@ -72,6 +73,13 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 	appModel, err := h.registry.AppModelStore.GetAppModel(ctx, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting app model"))
+		return
+	}
+	appModel, _, err = appspec.ModelForEnv(
+		ctx, h.registry.AppSpecStore, h.registry.AppModelStore, app.ID, env.Name, appModel,
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "applying env app spec"))
 		return
 	}
 

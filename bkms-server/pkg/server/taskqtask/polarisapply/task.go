@@ -92,6 +92,7 @@ func newApplier(reg *storereg.Registry) *applier {
 			reg.PolarisConfigStore,
 			reg.EnvStore,
 			reg.AppModelStore,
+			reg.AppSpecStore,
 			envvars.NewUnifiedEnvVarsReader(
 				reg.ScopedEnvVarStore,
 				reg.AppDepsVarReader,

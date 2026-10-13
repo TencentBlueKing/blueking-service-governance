@@ -44,6 +44,7 @@ import (
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -79,6 +80,7 @@ type AdminServiceStores struct {
 	EnvStore              envmodel.EnvironmentStore
 	AppStore              bkmsapp.ApplicationStore
 	AppModelStore         appmodel.AppModelStore
+	AppSpecStore          appspec.AppSpecStore
 	EnvVarsReader         *envvars.UnifiedEnvVarsReader
 }
 
@@ -144,6 +146,12 @@ func (s *TafAdminService) Init(ctx context.Context) error {
 	appModel, err := s.Stores.AppModelStore.GetAppModel(ctx, s.App.ID)
 	if err != nil {
 		return errors.Wrapf(err, "get app model by id '%s'", s.App.ID)
+	}
+	appModel, _, err = appspec.ModelForEnv(
+		ctx, s.Stores.AppSpecStore, s.Stores.AppModelStore, s.App.ID, env.Name, appModel,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "apply env app spec for app '%s' env '%s'", s.App.ID, env.Name)
 	}
 	s.Env = env
 	s.AppModel = appModel

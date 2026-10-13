@@ -44,6 +44,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -56,6 +57,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 		envService        *env.EnvService
 		store             polaris.PolarisConfigStore
 		appModelStore     appmodel.AppModelStore
+		appSpecStore      appspec.AppSpecStore
 		scopedEnvVarStore envvars.ScopedEnvVarStore
 		depSvcStore       depsvcmodel.ServiceStore
 		depSvcInstStore   depsvcmodel.ServiceInstanceStore
@@ -74,6 +76,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 			bkmsapp.FxModule,
 			env.FxModule,
 			appmodel.FxModule,
+			appspec.FxModule,
 			envvars.FxModule,
 			depsvcmodel.FxModule,
 			polaris.FxModule,
@@ -83,6 +86,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 				&envService,
 				&store,
 				&appModelStore,
+				&appSpecStore,
 				&scopedEnvVarStore,
 				&depSvcStore,
 				&depSvcInstStore,
@@ -96,6 +100,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 			AppStore:           appStore,
 			EnvStore:           envStore,
 			AppModelStore:      appModelStore,
+			AppSpecStore:       appSpecStore,
 			ScopedEnvVarStore:  scopedEnvVarStore,
 			PolarisConfigStore: store,
 			AppDepsVarReader:   depenvvars.NewReader(depSvcInstStore, depSvcBindStore),
@@ -110,6 +115,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 			envStateManager,
 			envStore,
 			appModelStore,
+			appSpecStore,
 			envvars.NewUnifiedEnvVarsReader(
 				scopedEnvVarStore,
 				depenvvars.NewReader(depSvcInstStore, depSvcBindStore),

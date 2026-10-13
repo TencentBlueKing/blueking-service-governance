@@ -21,6 +21,7 @@ package appspec
 import (
 	"context"
 
+	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -61,6 +62,32 @@ func GetEnvEffective(
 		return nil, errors.Wrapf(err, "getting env app spec for app %s env %s", appID, envName)
 	}
 	return Merge(defaultSpec, envSpec), nil
+}
+
+// ModelForEnv returns a deep copy of base with the environment's effective app spec applied.
+// base is not modified, so callers can reuse it across environments.
+// A nil base returns nil, nil, nil. The returned spec is the one applied to the copy.
+func ModelForEnv(
+	ctx context.Context,
+	store AppSpecStore,
+	appModelStore appmodel.AppModelStore,
+	appID, envName string,
+	base *appmodel.AppModel,
+) (*appmodel.AppModel, *AppSpec, error) {
+	if base == nil {
+		return nil, nil, nil
+	}
+
+	var copied appmodel.AppModel
+	if err := copier.CopyWithOption(&copied, base, copier.Option{DeepCopy: true}); err != nil {
+		return nil, nil, errors.Wrap(err, "copying app model")
+	}
+	spec, err := GetEnvEffective(ctx, store, appModelStore, appID, envName)
+	if err != nil {
+		return nil, nil, err
+	}
+	ApplyToAppModel(spec, &copied)
+	return &copied, spec, nil
 }
 
 // SetEnv stores app spec for a specific environment.

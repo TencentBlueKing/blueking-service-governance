@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -34,6 +35,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	envvarsstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
@@ -47,6 +49,7 @@ var _ = Describe("ExportService", func() {
 		scopedEnvVarStore     envvarsstore.ScopedEnvVarStore
 		appStore              coreapp.ApplicationStore
 		appModelStore         appmodel.AppModelStore
+		appSpecStore          appspec.AppSpecStore
 		appConfigFileStore    appcfg.AppConfigFileStore
 		appConfigFileDefStore appcfg.AppConfigFileDefStore
 		appConfigVersionStore appcfg.AppConfigFileVersionStore
@@ -62,12 +65,14 @@ var _ = Describe("ExportService", func() {
 			depmodel.FxModule,
 			coreapp.FxModule,
 			appmodel.FxModule,
+			appspec.FxModule,
 			appcfg.FxModule,
 			build.FxModule,
 			fx.Populate(
 				&scopedEnvVarStore,
 				&appStore,
 				&appModelStore,
+				&appSpecStore,
 				&appConfigFileStore,
 				&appConfigFileDefStore,
 				&appConfigVersionStore,
@@ -91,6 +96,7 @@ var _ = Describe("ExportService", func() {
 		service = NewService(
 			scopedEnvVarStore,
 			appModelStore,
+			appSpecStore,
 			envvarsstore.NewUnifiedEnvVarsReader(scopedEnvVarStore, nil, nil),
 		)
 	})
@@ -204,5 +210,36 @@ var _ = Describe("ExportService", func() {
 		Expect(content).To(ContainSubstring("PUBLIC_KEY=workspace-value"))
 		Expect(content).To(ContainSubstring("APP_MODE=prod"))
 		Expect(content).To(ContainSubstring("BKMS_APP_NAME="))
+	})
+
+	It("exports the env-overridden resource limit instead of the stored default", func() {
+		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
+			AppStore:                  appStore,
+			AppModelStore:             appModelStore,
+			AppConfigFileStore:        appConfigFileStore,
+			AppConfigFileDefStore:     appConfigFileDefStore,
+			AppConfigFileVersionStore: appConfigVersionStore,
+			BuildConfigStore:          buildConfigStore,
+		}, &dbfactory.TrpcApplicationOpts{WorkspaceID: workspaceID})
+
+		am, err := appModelStore.GetAppModel(ctx, app.ID)
+		Expect(err).NotTo(HaveOccurred())
+		am.Workload.Resources = map[string]string{"cpu": "1-2", "memory": "2Gi-4Gi"}
+		Expect(appModelStore.UpdateAppModel(ctx, am)).To(Succeed())
+		Expect(appspec.SetEnv(ctx, appSpecStore, &appspec.AppSpec{
+			AppID:   app.ID,
+			EnvName: environment.Name,
+			Resources: &appspec.ResourcesSpec{
+				CPURequests:    lo.ToPtr("1"),
+				CPULimits:      lo.ToPtr("4"),
+				MemoryRequests: lo.ToPtr("2Gi"),
+				MemoryLimits:   lo.ToPtr("4Gi"),
+			},
+		})).To(Succeed())
+
+		content, err := service.ExportEffectiveAppEnv(ctx, app, &environment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(content).To(ContainSubstring("BKMS_CPU_LIMIT=4"))
+		Expect(content).To(ContainSubstring("BKMS_MEMORY_LIMIT=4Gi"))
 	})
 })

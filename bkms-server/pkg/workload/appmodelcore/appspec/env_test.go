@@ -201,6 +201,42 @@ var _ = Describe("Env AppSpec", func() {
 		Expect(*effective.DevMode.Enabled).To(BeTrue())
 	})
 
+	It("applies an env resource override onto a copy and keeps the base model", func() {
+		app := dbfactory.Application(ctx, appStore)
+		base := &appmodel.AppModel{
+			AppID: app.ID,
+			Workload: appmodel.Workload{
+				Resources: map[string]string{"cpu": "1-2", "memory": "2Gi-4Gi"},
+			},
+		}
+		Expect(appModelStore.CreateAppModel(ctx, base)).To(Succeed())
+
+		Expect(SetEnv(ctx, appSpecStore, &AppSpec{
+			AppID:   app.ID,
+			EnvName: "stag",
+			Resources: &ResourcesSpec{
+				CPULimits: lo.ToPtr("4"),
+			},
+		})).To(Succeed())
+		Expect(SetEnv(ctx, appSpecStore, &AppSpec{
+			AppID:   app.ID,
+			EnvName: "prod",
+			Resources: &ResourcesSpec{
+				CPULimits: lo.ToPtr("8"),
+			},
+		})).To(Succeed())
+
+		stag, _, err := ModelForEnv(ctx, appSpecStore, appModelStore, app.ID, "stag", base)
+		Expect(err).NotTo(HaveOccurred())
+		prod, _, err := ModelForEnv(ctx, appSpecStore, appModelStore, app.ID, "prod", base)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(base.Workload.Resources["cpu"]).To(Equal("1-2"))
+		Expect(stag.Workload.Resources["cpu"]).To(Equal("1-4"))
+		Expect(prod.Workload.Resources["cpu"]).To(Equal("1-8"))
+		Expect(stag.Workload.Resources["memory"]).To(Equal("2Gi-4Gi"))
+	})
+
 	It("returns a validation sentinel on invalid env spec", func() {
 		err := SetEnv(context.Background(), nil, &AppSpec{
 			AppID:   "app-id",

@@ -41,6 +41,7 @@ import (
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -53,6 +54,7 @@ var _ = Describe("PolarisConfigService", func() {
 		envService        *env.EnvService
 		store             polaris.PolarisConfigStore
 		appModelStore     appmodel.AppModelStore
+		appSpecStore      appspec.AppSpecStore
 		scopedEnvVarStore envvars.ScopedEnvVarStore
 		appDepsVarReader  *depenvvars.Reader
 		polarisVarReader  *polarisenvvars.Reader
@@ -72,6 +74,7 @@ var _ = Describe("PolarisConfigService", func() {
 			bkmsapp.FxModule,
 			env.FxModule,
 			appmodel.FxModule,
+			appspec.FxModule,
 			envvars.FxModule,
 			depsvcmodel.FxModule,
 			depenvvars.FxModule,
@@ -83,6 +86,7 @@ var _ = Describe("PolarisConfigService", func() {
 				&envService,
 				&store,
 				&appModelStore,
+				&appSpecStore,
 				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
@@ -99,6 +103,7 @@ var _ = Describe("PolarisConfigService", func() {
 			envStateManager,
 			envStore,
 			appModelStore,
+			appSpecStore,
 			envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
 			nil,
 		)
@@ -460,6 +465,7 @@ var _ = Describe("PolarisConfigService", func() {
 					envStateManager,
 					envStore,
 					appModelStore,
+					appSpecStore,
 					envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
 					func(_ context.Context, _, _, _ string) error {
 						enqueued++
@@ -582,6 +588,7 @@ var _ = Describe("PolarisConfigService", func() {
 					envStateManager,
 					envStore,
 					appModelStore,
+					appSpecStore,
 					envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
 					func(_ context.Context, _, _, _ string) error {
 						enqueued++

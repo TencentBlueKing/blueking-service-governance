@@ -27,6 +27,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
@@ -58,6 +59,7 @@ type DynamicApplyService struct {
 	configStore     PolarisConfigStore
 	envStore        bkmsenv.EnvironmentStore
 	appModelStore   appmodel.AppModelStore
+	appSpecStore    appspec.AppSpecStore
 	envVarsReader   dynamicApplyEnvVarsReader
 	envStateManager *PolarisEnvStateManager
 	applier         *CRApplier
@@ -69,6 +71,7 @@ func NewDynamicApplyService(
 	configStore PolarisConfigStore,
 	envStore bkmsenv.EnvironmentStore,
 	appModelStore appmodel.AppModelStore,
+	appSpecStore appspec.AppSpecStore,
 	envVarsReader dynamicApplyEnvVarsReader,
 	envStateManager *PolarisEnvStateManager,
 ) *DynamicApplyService {
@@ -77,6 +80,7 @@ func NewDynamicApplyService(
 		configStore:     configStore,
 		envStore:        envStore,
 		appModelStore:   appModelStore,
+		appSpecStore:    appSpecStore,
 		envVarsReader:   envVarsReader,
 		envStateManager: envStateManager,
 		applier:         NewCRApplier(),
@@ -116,7 +120,11 @@ func (s *DynamicApplyService) Apply(
 	if err != nil {
 		return configUpdatedAt, errors.Wrapf(err, "get env %s", envName)
 	}
-	vars, err := s.envVarsReader.ListVars(ctx, *env, app, appModel)
+	effective, _, err := appspec.ModelForEnv(ctx, s.appSpecStore, s.appModelStore, app.ID, env.Name, appModel)
+	if err != nil {
+		return configUpdatedAt, errors.Wrapf(err, "apply env app spec for %s", envName)
+	}
+	vars, err := s.envVarsReader.ListVars(ctx, *env, app, effective)
 	if err != nil {
 		return configUpdatedAt, errors.Wrapf(err, "build env vars for %s", envName)
 	}

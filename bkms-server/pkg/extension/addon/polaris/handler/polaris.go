@@ -61,6 +61,7 @@ func (h *Handler) polarisConfigService() *polaris.PolarisConfigService {
 		polaris.NewPolarisEnvStateManager(h.registry.PolarisConfigStore),
 		h.registry.EnvStore,
 		h.registry.AppModelStore,
+		h.registry.AppSpecStore,
 		envvars.NewUnifiedEnvVarsReader(
 			h.registry.ScopedEnvVarStore,
 			h.registry.AppDepsVarReader,

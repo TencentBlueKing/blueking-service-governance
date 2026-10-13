@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
@@ -231,6 +232,11 @@ func resolveApmServiceName(
 	appModel, err := reg.AppModelStore.GetAppModel(ctx, app.ID)
 	if err != nil {
 		log.Errorf(ctx, "sync apm service config: get app model failed, app=%s env=%s: %v", app.ID, env.Name, err)
+		return ""
+	}
+	appModel, _, err = appspec.ModelForEnv(ctx, reg.AppSpecStore, reg.AppModelStore, app.ID, env.Name, appModel)
+	if err != nil {
+		log.Errorf(ctx, "sync apm service config: apply env app spec failed, app=%s env=%s: %v", app.ID, env.Name, err)
 		return ""
 	}
 	cfgProvider := appcfg.NewMountableFileProvider(

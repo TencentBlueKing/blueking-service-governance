@@ -217,6 +217,7 @@ func (h *Handler) ExecuteTafAdminCmd(c *gin.Context) {
 			EnvStore:      h.registry.EnvStore,
 			AppStore:      h.registry.AppStore,
 			AppModelStore: h.registry.AppModelStore,
+			AppSpecStore:  h.registry.AppSpecStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
 				h.registry.ScopedEnvVarStore,
 				h.registry.AppDepsVarReader,
@@ -289,6 +290,7 @@ func (h *Handler) newTrpcAdminService(
 		h.registry.EnvStore,
 		h.registry.AppStore,
 		h.registry.AppModelStore,
+		h.registry.AppSpecStore,
 		h.registry.ScopedEnvVarStore,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,

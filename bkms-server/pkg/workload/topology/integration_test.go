@@ -257,7 +257,7 @@ var _ = Describe("Integration - HelmRelease Topology", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		builder := NewBuilder()
-		topologySvc = NewService(store, builder, nil, nil, nil, nil)
+		topologySvc = NewService(store, builder, nil, nil, nil, nil, nil)
 	})
 
 	AfterEach(func() {

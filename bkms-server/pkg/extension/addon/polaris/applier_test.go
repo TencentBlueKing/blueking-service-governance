@@ -45,6 +45,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -57,6 +58,7 @@ var _ = Describe("Polaris CR applier", func() {
 		envService        *env.EnvService
 		store             polaris.PolarisConfigStore
 		appModelStore     appmodel.AppModelStore
+		appSpecStore      appspec.AppSpecStore
 		scopedEnvVarStore envvars.ScopedEnvVarStore
 		appDepsVarReader  *depenvvars.Reader
 		polarisVarReader  *polarisenvvars.Reader
@@ -75,6 +77,7 @@ var _ = Describe("Polaris CR applier", func() {
 			bkmsapp.FxModule,
 			env.FxModule,
 			appmodel.FxModule,
+			appspec.FxModule,
 			envvars.FxModule,
 			depsvcmodel.FxModule,
 			depenvvars.FxModule,
@@ -86,6 +89,7 @@ var _ = Describe("Polaris CR applier", func() {
 				&envService,
 				&store,
 				&appModelStore,
+				&appSpecStore,
 				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
@@ -102,6 +106,7 @@ var _ = Describe("Polaris CR applier", func() {
 			envStateManager,
 			envStore,
 			appModelStore,
+			appSpecStore,
 			envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
 			nil,
 		)
