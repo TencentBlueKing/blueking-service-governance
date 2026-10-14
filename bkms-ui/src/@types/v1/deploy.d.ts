@@ -488,6 +488,9 @@ export interface EnvVarReferenceSourceOutput {
 }
 
 export interface LatestDeployStatus {
+  /**
+   * 兼容字段：仅 revisionType 为 branch 时返回
+   */
   branch?: string;
   buildID?: string;
   deployID?: string;
@@ -502,6 +505,14 @@ export interface LatestDeployStatus {
   message?: string;
   operator?: string;
   pipelineID?: string;
+  /**
+   * 分支名、Tag 名或 CommitID
+   */
+  revision?: string;
+  /**
+   * 代码来源类型 branch / tag / commit；历史记录为 branch
+   */
+  revisionType?: string;
   stage?: string;
   startedAt?: string;
   status?: string;
@@ -514,7 +525,7 @@ export interface PaginatedAppModelDeployRecordsOutputObjs {
 
 export interface AppModelDeployRecordOutputObj {
   /**
-   * 代码分支（仅构建+部署记录返回）
+   * 兼容字段：仅 revisionType 为 branch 时返回
    */
   branch?: string;
   clusterID?: string;
@@ -537,6 +548,14 @@ export interface AppModelDeployRecordOutputObj {
   namespace?: string;
   operator?: string;
   replicas?: number;
+  /**
+   * 分支名、Tag 名或 CommitID（仅构建+部署记录返回）
+   */
+  revision?: string;
+  /**
+   * 代码来源类型 branch / tag / commit；历史记录为 branch
+   */
+  revisionType?: string;
   status?: string;
   updatedAt?: string;
   /**

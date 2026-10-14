@@ -110,6 +110,8 @@ var _ = Describe("AppModel deploy serializers", func() {
 			Expect(buildStatus.DeploySource).To(Equal(appmodeldeploy.DeploySourceBuildAutoDeploy))
 			Expect(buildStatus.BuildID).To(Equal("build-1"))
 			Expect(buildStatus.DeployID).To(Equal("deploy-1"))
+			Expect(buildStatus.RevisionType).To(Equal("branch"))
+			Expect(buildStatus.Revision).To(Equal("main"))
 			Expect(buildStatus.Branch).To(Equal("main"))
 			Expect(buildStatus.ImageTag).To(Equal("v2.0.0"))
 			Expect(buildStatus.Operator).To(Equal("builder"))
@@ -130,6 +132,18 @@ var _ = Describe("AppModel deploy serializers", func() {
 			Expect(directStatus.DeployID).To(Equal(recordID.Hex()))
 			Expect(directStatus.BuildID).To(BeEmpty())
 			Expect(directStatus.ImageTag).To(BeEmpty())
+		})
+
+		It("keeps tag and commit out of the legacy branch field", func() {
+			status := new(serializer.LatestDeployStatus).FromBuildAutoDeployRecord(&autodeploy.Record{
+				RevisionType: "tag",
+				Revision:     "v1.2.0",
+				Branch:       "v1.2.0",
+			})
+
+			Expect(status.RevisionType).To(Equal("tag"))
+			Expect(status.Revision).To(Equal("v1.2.0"))
+			Expect(status.Branch).To(BeEmpty())
 		})
 	})
 
@@ -154,10 +168,29 @@ var _ = Describe("AppModel deploy serializers", func() {
 
 			Expect(output.IsBuildAutoDeploy).To(BeTrue())
 			Expect(output.DeploySource).To(Equal(appmodeldeploy.DeploySourceBuildAutoDeploy))
+			Expect(output.RevisionType).To(Equal("branch"))
+			Expect(output.Revision).To(Equal("release"))
 			Expect(output.Branch).To(Equal("release"))
 			Expect(output.Replicas).To(Equal(int32(3)))
 			Expect(output.WorkloadKind).To(Equal("Deployment"))
 			Expect(output.CommitID).To(Equal("commit-123"))
+		})
+
+		It("reads commit revision without presenting it as a branch", func() {
+			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
+				ID: bson.NewObjectID(),
+				Extras: map[string]string{
+					appmodeldeploy.ExtraKeyDeploySource:      appmodeldeploy.DeploySourceBuildAutoDeploy,
+					appmodeldeploy.ExtraKeyBuildRevisionType: "commit",
+					appmodeldeploy.ExtraKeyBuildRevision:     "a1b2c3d4e5f6",
+					appmodeldeploy.ExtraKeyBuildCommitID:     "a1b2c3d4e5f6",
+				},
+			})
+
+			Expect(output.RevisionType).To(Equal("commit"))
+			Expect(output.Revision).To(Equal("a1b2c3d4e5f6"))
+			Expect(output.Branch).To(BeEmpty())
+			Expect(output.CommitID).To(Equal("a1b2c3d4e5f6"))
 		})
 
 		It("infers WorkloadKind from ResourceKeys when the field is empty", func() {

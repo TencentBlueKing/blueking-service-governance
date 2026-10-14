@@ -53,6 +53,10 @@ var commitIDRegexp = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
 // ErrInvalidCommitID CommitID 格式不合法
 var ErrInvalidCommitID = errors.New("commit id must be 7-40 hexadecimal characters")
 
+// ErrRequired 构建未指定代码修订
+// 镜像构建只在代码仓库模式下返回；Helm Chart 构建始终要求有修订
+var ErrRequired = errors.New("code revision is required")
+
 // CodeRevision 一次构建使用的代码修订
 type CodeRevision struct {
 	// Type 代码来源类型
@@ -86,8 +90,42 @@ func Resolve(typ, value, legacyBranch string) (CodeRevision, error) {
 	return rev, nil
 }
 
+// ResolveForPreview 解析推荐镜像 Tag 用的修订
+// CommitID 还没填完时按空修订返回，格式校验留给真正提交构建
+func ResolveForPreview(typ, value, legacyBranch string) CodeRevision {
+	rev, err := Resolve(typ, value, legacyBranch)
+	if err == nil {
+		return rev
+	}
+
+	// Resolve 目前只会对未填完的 CommitID 报错，预览不能因此整段失败
+	return CodeRevision{Type: Type(typ)}
+}
+
+// Presented 把已落库的类型和值还原成对外展示的修订
+// 类型为空的历史记录按分支处理；分支值为空时回退到旧的 branch 字段
+func Presented(storedType, storedValue, legacyBranch string) CodeRevision {
+	rev := CodeRevision{
+		Type:  Type(storedType),
+		Value: storedValue,
+	}
+	if rev.Type == "" {
+		rev.Type = TypeBranch
+	}
+
+	if rev.Value == "" && rev.Type == TypeBranch {
+		rev.Value = legacyBranch
+	}
+	return rev
+}
+
 // CheckoutBy 返回传给流水线变量 BKMS_REPO_CHECKOUT_BY 的检出方式
+// 修订为空时回落 BRANCH：自定义流水线允许不填修订，不能传 COMMIT_ID / TAG 配空值
 func (r CodeRevision) CheckoutBy() string {
+	if r.Value == "" {
+		return checkoutByBranch
+	}
+
 	switch r.Type {
 	case TypeTag:
 		return checkoutByTag
@@ -96,6 +134,14 @@ func (r CodeRevision) CheckoutBy() string {
 	default:
 		return checkoutByBranch
 	}
+}
+
+// LegacyBranch 仅在按分支检出时返回修订值，供仍读取 branch 的记录和接口兼容
+func (r CodeRevision) LegacyBranch() string {
+	if r.Type != TypeBranch {
+		return ""
+	}
+	return r.Value
 }
 
 // ImageTagSegment 返回拼进推荐镜像 Tag 的修订片段，CommitID 只保留前 7 位

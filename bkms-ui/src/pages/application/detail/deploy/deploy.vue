@@ -242,7 +242,7 @@
             </template>
             <template #default>
               <div class="flex px-[24px] gap-[36px] text-[12px] h-[18px] leading-[18px]">
-                <span>{{ $t('代码分支') }}: {{ latestDeployStatus?.branch || '--' }}</span>
+                <span>{{ latestRevisionLabel }}: {{ latestRevisionText }}</span>
                 <span>{{ $t('镜像 Tag') }}: {{ latestDeployStatus?.imageTag || '--' }}</span>
                 <span>{{ $t('操作人') }}: {{ latestDeployStatus?.operator || '--' }}</span>
                 <Button
@@ -769,13 +769,25 @@
     return { status: 'success', theme: 'success', closable: true, statusText: t('构建成功') };
   });
 
+  // 历史记录只有 branch；新记录用 revision，Tag / Commit 不再标成代码分支
+  const latestRevisionText = computed(
+    () => latestDeployStatus.value?.revision || latestDeployStatus.value?.branch || '--',
+  );
+  const latestRevisionLabel = computed(() => {
+    const revisionType = latestDeployStatus.value?.revisionType;
+    if (revisionType === 'tag') return 'Tag';
+    if (revisionType === 'commit') return 'Commit';
+    return t('代码分支');
+  });
+
   /** 统一组装构建日志信息，供日志侧滑和全量更新状态同步使用。 */
   const buildLogInfo = computed<BuildInfo>(() => ({
     buildID: latestDeployStatus.value?.buildID || '',
     imageTag: latestDeployStatus.value?.imageTag || '',
     operator: latestDeployStatus.value?.operator || '',
     pipelineID: latestDeployStatus.value?.pipelineID || '',
-    revision: latestDeployStatus.value?.branch || '',
+    revision: latestDeployStatus.value?.revision || latestDeployStatus.value?.branch || '',
+    revisionType: latestDeployStatus.value?.revisionType,
     status: buildAlertInfo.value?.status || 'failed',
   }));
 

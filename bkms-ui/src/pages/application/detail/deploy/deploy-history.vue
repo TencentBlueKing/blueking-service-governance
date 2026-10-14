@@ -78,12 +78,12 @@
           </template>
         </TableColumn>
         <TableColumn
-          :label="$t('代码分支')"
+          :label="$t('代码版本')"
           min-width="140"
           show-overflow="tooltip"
         >
           <template #default="{ row }">
-            {{ row.branch || '--' }}
+            {{ row.revision || row.branch || '--' }}
           </template>
         </TableColumn>
         <TableColumn

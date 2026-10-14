@@ -177,6 +177,10 @@ export interface BuildRecordOutputObj {
    */
   revision?: string;
   /**
+   * 代码来源类型 branch / tag / commit
+   */
+  revisionType?: string;
+  /**
    * 开始时间
    */
   startedAt?: string;

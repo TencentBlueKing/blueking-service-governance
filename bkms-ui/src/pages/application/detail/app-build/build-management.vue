@@ -409,6 +409,7 @@
       operator: record.operator || fallback.operator || '',
       pipelineID: record.pipelineID || fallback.pipelineID || '',
       revision: record.revision || fallback.revision || '',
+      revisionType: record.revisionType || fallback.revisionType,
       status: record.status ? normalizeBuildStatus(record.status) : fallback.status || 'warning',
     };
   }

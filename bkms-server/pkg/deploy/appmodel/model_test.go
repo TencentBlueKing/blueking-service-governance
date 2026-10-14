@@ -131,13 +131,29 @@ var _ = Describe("BuildAutoDeployExtras", func() {
 	Describe("NewBuildAutoDeployExtras", func() {
 		It("should encode build auto deploy info into deploy record extras", func() {
 			extras := appmodel.NewBuildAutoDeployExtras(&appmodel.BuildAutoDeployInfo{
-				Branch:   "release/v1.2.3",
-				CommitID: "abc123def456",
+				Branch:       "release/v1.2.3",
+				RevisionType: "branch",
+				Revision:     "release/v1.2.3",
+				CommitID:     "abc123def456",
 			})
 
 			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyDeploySource, appmodel.DeploySourceBuildAutoDeploy))
+			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyBuildRevisionType, "branch"))
+			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyBuildRevision, "release/v1.2.3"))
 			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyBuildBranch, "release/v1.2.3"))
 			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyBuildCommitID, "abc123def456"))
+		})
+
+		It("should not store a commit revision in the legacy branch extra", func() {
+			extras := appmodel.NewBuildAutoDeployExtras(&appmodel.BuildAutoDeployInfo{
+				RevisionType: "commit",
+				Revision:     "a1b2c3d4e5f6",
+				CommitID:     "a1b2c3d4e5f6",
+			})
+
+			Expect(extras).NotTo(HaveKey(appmodel.ExtraKeyBuildBranch))
+			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyBuildRevisionType, "commit"))
+			Expect(extras).To(HaveKeyWithValue(appmodel.ExtraKeyBuildRevision, "a1b2c3d4e5f6"))
 		})
 
 		It("should return nil when build auto deploy info is absent", func() {

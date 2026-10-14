@@ -50,7 +50,7 @@
     </template>
     <template #default>
       <div class="flex px-[24px] gap-[36px] text-[12px] text-[#4D4F56] h-[18px] leading-[18px]">
-        <span>{{ $t('代码分支') }}: {{ buildInfo.revision || '--' }}</span>
+        <span>{{ revisionLabel }}: {{ buildInfo.revision || '--' }}</span>
         <span>{{ $t('镜像 Tag') }}: {{ buildInfo.imageTag || '--' }}</span>
         <span>{{ $t('操作人') }}: {{ buildInfo.operator || '--' }}</span>
         <Button
@@ -72,6 +72,7 @@
 
   import { Alert, Button } from 'bkui-vue';
   import { Close, Share, Success, Warn } from 'bkui-vue/lib/icon';
+  import { useI18n } from 'vue-i18n';
   import ColorIcon from '~/components/color-icon.vue';
 
   import type { BuildAlertTheme, BuildStatus, BuildTipsProps } from './type';
@@ -79,6 +80,14 @@
   const props = withDefaults(defineProps<BuildTipsProps>(), {
     /** 是否显示 Alert 关闭按钮，默认不显示。 */
     needClose: false,
+  });
+  const { t } = useI18n();
+
+  // 历史记录没有类型时仍按分支展示；Tag / Commit 不再标成代码分支
+  const revisionLabel = computed(() => {
+    if (props.buildInfo.revisionType === 'tag') return 'Tag';
+    if (props.buildInfo.revisionType === 'commit') return 'Commit';
+    return t('代码分支');
   });
 
   /** 不同构建状态对应的提示主题。 */

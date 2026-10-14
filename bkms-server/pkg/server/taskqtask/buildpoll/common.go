@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
@@ -168,6 +169,12 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args)
 	if err != nil {
 		return "", errors.Wrap(err, "init appmodel deploy service")
 	}
+	// 以流水线实际检出方式为准；空修订在 CheckoutBy 已回落成 BRANCH
+	rev := revision.CodeRevision{
+		Type:  revision.TypeFromCheckoutBy(record.Params[pipelineparam.RepoCheckoutBy]),
+		Value: record.Params[pipelineparam.RepoRevision],
+	}
+
 	deployID, err := deployService.DeployByAppID(ctx, args.AppID, appmodeldeploysvc.DeployParams{
 		EnvName:         args.AutoDeploy.EnvName,
 		TrafficLaneName: args.AutoDeploy.TrafficLaneName,
@@ -175,8 +182,10 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args)
 		UpdateStrategy:  string(tkex.RollingGameDeploymentUpdateStrategyType),
 		Replicas:        args.AutoDeploy.Replicas,
 		BuildAutoDeployInfo: &appmodeldeploy.BuildAutoDeployInfo{
-			Branch:   record.Params[pipelineparam.RepoRevision],
-			CommitID: record.Extras[pipelinevar.GitRepoHeadCommitID],
+			Branch:       rev.LegacyBranch(),
+			RevisionType: string(rev.Type),
+			Revision:     rev.Value,
+			CommitID:     record.Extras[pipelinevar.GitRepoHeadCommitID],
 		},
 	})
 	if err != nil {

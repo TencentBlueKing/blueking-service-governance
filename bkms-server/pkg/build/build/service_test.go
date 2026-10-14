@@ -263,7 +263,7 @@ var _ = Describe("Service build revision check", func() {
 
 		_, err := buildService.Build(ctx, app, revision.CodeRevision{Type: revision.TypeBranch}, "v1")
 
-		Expect(errors.Is(err, ErrRevisionRequired)).To(BeTrue())
+		Expect(errors.Is(err, revision.ErrRequired)).To(BeTrue())
 		Expect(executed).To(BeFalse())
 	})
 
@@ -276,7 +276,7 @@ var _ = Describe("Service build revision check", func() {
 
 		_, err := buildService.Build(ctx, app, revision.CodeRevision{Type: revision.TypeBranch}, "v1")
 
-		Expect(errors.Is(err, ErrRevisionRequired)).To(BeFalse())
+		Expect(errors.Is(err, revision.ErrRequired)).To(BeFalse())
 		Expect(err).To(MatchError(ContainSubstring("stop at bkci")))
 		Expect(executed).To(BeTrue())
 	})

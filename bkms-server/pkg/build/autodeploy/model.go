@@ -44,9 +44,14 @@ type Record struct {
 	EnvName         string `bson:"envName"`
 	TrafficLaneName string `bson:"trafficLaneName"`
 
-	BuildID    string `bson:"buildID"`
-	DeployID   string `bson:"deployID,omitempty"`
-	Branch     string `bson:"branch,omitempty"`
+	BuildID  string `bson:"buildID"`
+	DeployID string `bson:"deployID,omitempty"`
+	// Branch 兼容字段：仅 revisionType 为 branch 时写入；本功能上线前的记录只有该字段
+	Branch string `bson:"branch,omitempty"`
+	// RevisionType 代码来源类型 branch / tag / commit；空值表示历史记录，按分支理解
+	RevisionType string `bson:"revisionType,omitempty"`
+	// Revision 分支名、Tag 名或 CommitID
+	Revision   string `bson:"revision,omitempty"`
 	ImageTag   string `bson:"imageTag,omitempty"`
 	PipelineID string `bson:"pipelineID,omitempty"`
 

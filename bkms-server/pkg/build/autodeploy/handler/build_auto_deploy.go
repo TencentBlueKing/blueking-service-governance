@@ -118,51 +118,15 @@ func (h *Handler) CreateTafBuildDeploy(c *gin.Context) {
 }
 
 func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType string) {
-	var uriInput serializer.AppEnvURIInput
-	var input serializer.CreateAppModelBuildDeployInput
-	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
+	// 绑定路径和请求体，并合并新旧修订字段；失败已写响应
+	uriInput, input, rev, ok := bindBuildDeployRequest(c)
+	if !ok {
 		return
 	}
 
-	ctx := c.Request.Context()
-	app, err := ginperm.ValidateAppByID(ctx, h.registry, uriInput.AppID, ginperm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	if app.Type != expectedAppType {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type))
-		return
-	}
-
-	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, app.WorkspaceID, "check env deploy perm"))
-		return
-	}
-
-	env, err := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, uriInput.EnvName)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env"))
-		return
-	}
-	if !supportsBuildAutoDeployEnvType(env.Type) {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Errorf(
-				bkerrs.ErrCodeInvalidArgument,
-				"build auto deploy only supports non-production env, please promote and deploy separately",
-			),
-		)
-		return
-	}
-	if err = app.CheckVisibleEnv(env); err != nil {
-		bkerrs.AbortWithErr(c, err)
+	// 校验应用类型、环境部署权限，以及非生产且应用可见的环境
+	app, ok := h.prepareBuildAutoDeploy(c, uriInput, expectedAppType)
+	if !ok {
 		return
 	}
 
@@ -172,8 +136,9 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		return
 	}
 
+	// 触发构建并登记自动部署；参数类失败由 buildAutoDeployErrCode 映射
 	buildRecord, err := build.StartAndScheduleBuild(
-		ctx,
+		c.Request.Context(),
 		buildService,
 		app,
 		rev,
@@ -189,22 +154,98 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 		},
 	)
 	if err != nil {
-		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
-		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
-		errCode := bkerrs.ErrCodeInternalServerError
-		switch {
-		case build.IsImageReferenceInvalid(err) || errors.Is(err, build.ErrWorkspaceImageCredentialMissing):
-			errCode = bkerrs.ErrCodeInvalidArgument
-		case errors.Is(err, build.ErrRevisionRequired):
-			errCode = bkerrs.ErrCodeInvalidRequest
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start build auto deploy"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, buildAutoDeployErrCode(err), "start build auto deploy"))
 		return
 	}
 
 	ginutils.OK(c, serializer.CreateBuildOutput{
 		Data: new(serializer.BuildRecordOutputObj).FromModel(*buildRecord),
 	})
+}
+
+// bindBuildDeployRequest 绑定构建自动部署请求，并解析代码修订
+// 绑定失败或修订格式不合法时已写 400，返回 false 表示调用方应直接结束
+func bindBuildDeployRequest(
+	c *gin.Context,
+) (serializer.AppEnvURIInput, serializer.CreateAppModelBuildDeployInput, revision.CodeRevision, bool) {
+	var uriInput serializer.AppEnvURIInput
+	var input serializer.CreateAppModelBuildDeployInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return serializer.AppEnvURIInput{}, serializer.CreateAppModelBuildDeployInput{}, revision.CodeRevision{}, false
+	}
+
+	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
+		return serializer.AppEnvURIInput{}, serializer.CreateAppModelBuildDeployInput{}, revision.CodeRevision{}, false
+	}
+
+	return uriInput, input, rev, true
+}
+
+// prepareBuildAutoDeploy 确认应用类型匹配，且目标环境允许构建后自动部署
+// 任一校验失败时已写响应，返回 false 表示调用方应直接结束
+func (h *Handler) prepareBuildAutoDeploy(
+	c *gin.Context,
+	uriInput serializer.AppEnvURIInput,
+	expectedAppType string,
+) (*bkmsapp.Application, bool) {
+	ctx := c.Request.Context()
+	app, err := ginperm.ValidateAppByID(ctx, h.registry, uriInput.AppID, ginperm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return nil, false
+	}
+
+	if app.Type != expectedAppType {
+		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type))
+		return nil, false
+	}
+
+	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, app.WorkspaceID, "check env deploy perm"))
+		return nil, false
+	}
+
+	env, err := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, uriInput.EnvName)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env"))
+		return nil, false
+	}
+
+	// 生产环境不允许构建后直接部署，需要先发布再单独部署
+	if !supportsBuildAutoDeployEnvType(env.Type) {
+		bkerrs.AbortWithErr(
+			c,
+			bkerrs.Errorf(
+				bkerrs.ErrCodeInvalidArgument,
+				"build auto deploy only supports non-production env, please promote and deploy separately",
+			),
+		)
+		return nil, false
+	}
+
+	if err = app.CheckVisibleEnv(env); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return nil, false
+	}
+
+	return app, true
+}
+
+// buildAutoDeployErrCode 把构建启动失败映射成接口错误码
+// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
+// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
+func buildAutoDeployErrCode(err error) bkerrs.ErrCode {
+	switch {
+	case build.IsImageReferenceInvalid(err) || errors.Is(err, build.ErrWorkspaceImageCredentialMissing):
+		return bkerrs.ErrCodeInvalidArgument
+	case errors.Is(err, revision.ErrRequired):
+		return bkerrs.ErrCodeInvalidRequest
+	default:
+		return bkerrs.ErrCodeInternalServerError
+	}
 }
 
 func supportsBuildAutoDeployEnvType(envType string) bool {

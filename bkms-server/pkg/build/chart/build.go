@@ -36,9 +36,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 )
 
-// ErrRevisionRequired Helm Chart 构建未指定代码修订
-var ErrRevisionRequired = errors.New("revision or branch is required for helm chart build")
-
 // ChartBuildResult 触发构建的结果
 type ChartBuildResult struct {
 	// ChartVersion 本次构建的 Chart 版本号（semver 格式：major.minor.patch）
@@ -232,7 +229,7 @@ func (s *ChartBuildService) ExecuteChartBuild(
 ) (*ChartBuildResult, error) {
 	// Helm Chart 始终从 Git 源码构建，必须指定修订；放在最前面，保证在消耗语义化版本号之前拦下
 	if rev.Value == "" {
-		return nil, errors.Wrapf(ErrRevisionRequired, "execute chart build for app %s", app.String())
+		return nil, errors.Wrapf(revision.ErrRequired, "execute chart build for app %s", app.String())
 	}
 
 	// 1. 校验

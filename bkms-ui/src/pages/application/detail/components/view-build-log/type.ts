@@ -27,8 +27,10 @@ export interface BuildInfo {
   operator: string;
   /** 蓝盾流水线 ID */
   pipelineID: string;
-  /** 代码分支 */
+  /** 分支名、Tag 名或 CommitID */
   revision: string;
+  /** 代码来源类型；缺省按分支展示 */
+  revisionType?: string;
   /** 构建状态 */
   status: BuildStatus;
 }

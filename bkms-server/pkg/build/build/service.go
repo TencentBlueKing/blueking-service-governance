@@ -46,9 +46,6 @@ var ErrWorkspaceImageCredentialMissing = errors.New(
 	"workspace image registry credential is not configured",
 )
 
-// ErrRevisionRequired 代码仓库构建模式下未指定代码修订
-var ErrRevisionRequired = errors.New("code revision is required when building from code repository")
-
 // BuildResult 构建执行结果
 type BuildResult struct {
 	PipelineType string
@@ -189,7 +186,7 @@ func (s *Service) Build(
 	// 代码仓库构建必须知道检出哪份代码；自定义流水线由用户流水线自行决定，维持允许为空
 	// 放在 validateBeforeBuild 之前，避免参数错误时还去请求镜像源等外部依赖
 	if cfg.SourceType == imgbuild.SourceTypeCodeRepository && rev.Value == "" {
-		return nil, errors.Wrapf(ErrRevisionRequired, "build app %s", app.ID)
+		return nil, errors.Wrapf(revision.ErrRequired, "build app %s", app.ID)
 	}
 
 	if err = s.validateBeforeBuild(ctx, app, cfg); err != nil {

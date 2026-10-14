@@ -342,7 +342,7 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 		switch {
 		case build.IsImageReferenceInvalid(err) || pkgerrors.Is(err, build.ErrWorkspaceImageCredentialMissing):
 			errCode = bkerrs.ErrCodeInvalidArgument
-		case pkgerrors.Is(err, build.ErrRevisionRequired):
+		case pkgerrors.Is(err, revision.ErrRequired):
 			errCode = bkerrs.ErrCodeInvalidRequest
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start and schedule build"))
@@ -413,12 +413,8 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 		}
 		imageTag = imagebuild.GenerateRecommendedSemverImageTag(tags)
 	case imagebuild.VersionTypeCustom:
-		rev, revErr := revision.Resolve(queryInput.RevisionType, queryInput.Revision, queryInput.Branch)
-		if revErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(revErr, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
-			return
-		}
-		// 修订为空时返回不含修订部分的版本号，供界面在 CommitID 未填完时先行展示
+		// 推荐 Tag 是预览：CommitID 未填完时按空修订出版本号，格式校验留给真正提交构建
+		rev := revision.ResolveForPreview(queryInput.RevisionType, queryInput.Revision, queryInput.Branch)
 		imageTag = imagebuild.GenerateRecommendedCustomImageTag(
 			rev.ImageTagSegment(),
 			time.Now(),

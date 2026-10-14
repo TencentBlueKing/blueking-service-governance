@@ -74,15 +74,51 @@ var _ = Describe("CodeRevision", func() {
 		)
 	})
 
+	Context("ResolveForPreview", func() {
+		It("should keep a complete commit id", func() {
+			rev := revision.ResolveForPreview("commit", "a1b2c3d", "")
+			Expect(rev).To(Equal(revision.CodeRevision{Type: revision.TypeCommit, Value: "a1b2c3d"}))
+		})
+
+		// 推荐 Tag 在用户逐字输入时不能 400，未填完按空修订预览
+		It("should drop an incomplete commit id", func() {
+			rev := revision.ResolveForPreview("commit", "a1b2", "main")
+			Expect(rev).To(Equal(revision.CodeRevision{Type: revision.TypeCommit}))
+		})
+	})
+
+	Context("Presented and LegacyBranch", func() {
+		It("should treat a historical branch-only record as branch", func() {
+			rev := revision.Presented("", "", "main")
+			Expect(rev).To(Equal(revision.CodeRevision{Type: revision.TypeBranch, Value: "main"}))
+			Expect(rev.LegacyBranch()).To(Equal("main"))
+		})
+
+		It("should not expose tag or commit through the legacy branch field", func() {
+			rev := revision.Presented("commit", fullSHA, "")
+			Expect(rev.LegacyBranch()).To(BeEmpty())
+		})
+	})
+
 	Context("CheckoutBy and TypeFromCheckoutBy", func() {
 		DescribeTable("should map both ways",
-			func(typ revision.Type, checkoutBy string) {
-				Expect(revision.CodeRevision{Type: typ}.CheckoutBy()).To(Equal(checkoutBy))
+			func(typ revision.Type, value, checkoutBy string) {
+				Expect(revision.CodeRevision{Type: typ, Value: value}.CheckoutBy()).To(Equal(checkoutBy))
 				Expect(revision.TypeFromCheckoutBy(checkoutBy)).To(Equal(typ))
 			},
-			Entry("branch", revision.TypeBranch, "BRANCH"),
-			Entry("tag", revision.TypeTag, "TAG"),
-			Entry("commit", revision.TypeCommit, "COMMIT_ID"),
+			Entry("branch", revision.TypeBranch, "master", "BRANCH"),
+			Entry("tag", revision.TypeTag, "v1.0.0", "TAG"),
+			Entry("commit", revision.TypeCommit, "a1b2c3d", "COMMIT_ID"),
+		)
+
+		// 自定义流水线允许空修订，空值不能再声称按 Tag / CommitID 检出
+		DescribeTable("should fall back to branch checkout when revision is empty",
+			func(typ revision.Type) {
+				Expect(revision.CodeRevision{Type: typ}.CheckoutBy()).To(Equal("BRANCH"))
+			},
+			Entry("branch", revision.TypeBranch),
+			Entry("tag", revision.TypeTag),
+			Entry("commit", revision.TypeCommit),
 		)
 
 		// 本功能上线前的构建记录没有检出方式参数，必须按分支处理才能免迁移

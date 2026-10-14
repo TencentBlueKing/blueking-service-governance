@@ -623,6 +623,20 @@ var _ = Describe("Build Functions", func() {
 			Expect(params[pipelineparam.RepoRevision]).To(Equal(fullSHA))
 		})
 
+		It("should fall back to branch checkout when commit revision is empty", func() {
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
+				Registry: "hub.example.com",
+			}, nil).Build()
+
+			params, err := genPipelineBuildRepoAndImageParams(
+				ctx, testApp, revision.CodeRevision{Type: revision.TypeCommit}, imageTag,
+			)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(params[pipelineparam.RepoCheckoutBy]).To(Equal("BRANCH"))
+			Expect(params[pipelineparam.RepoRevision]).To(BeEmpty())
+		})
+
 		It("should fill registry host when registry has username and credential", func() {
 			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
 				Registry:         "https://mirrors.tencent.com/example",

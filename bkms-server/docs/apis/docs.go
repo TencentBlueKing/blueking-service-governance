@@ -21667,7 +21667,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "branch": {
-                    "description": "代码分支（仅构建+部署记录返回）",
+                    "description": "兼容字段：仅 revisionType 为 branch 时返回",
                     "type": "string"
                 },
                 "clusterID": {
@@ -21705,6 +21705,14 @@ const docTemplate = `{
                 },
                 "replicas": {
                     "type": "integer"
+                },
+                "revision": {
+                    "description": "分支名、Tag 名或 CommitID（仅构建+部署记录返回）",
+                    "type": "string"
+                },
+                "revisionType": {
+                    "description": "代码来源类型 branch / tag / commit；历史记录为 branch",
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -27333,6 +27341,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "branch": {
+                    "description": "兼容字段：仅 revisionType 为 branch 时返回",
                     "type": "string"
                 },
                 "buildID": {
@@ -27364,6 +27373,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "pipelineID": {
+                    "type": "string"
+                },
+                "revision": {
+                    "description": "分支名、Tag 名或 CommitID",
+                    "type": "string"
+                },
+                "revisionType": {
+                    "description": "代码来源类型 branch / tag / commit；历史记录为 branch",
                     "type": "string"
                 },
                 "stage": {

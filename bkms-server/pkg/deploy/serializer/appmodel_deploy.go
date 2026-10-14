@@ -24,6 +24,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
@@ -179,7 +180,11 @@ type AppModelDeployRecordOutputObj struct {
 	IsBuildAutoDeploy bool `json:"isBuildAutoDeploy"`
 	// 部署来源
 	DeploySource string `json:"deploySource"`
-	// 代码分支（仅构建+部署记录返回）
+	// 代码来源类型 branch / tag / commit；历史记录为 branch
+	RevisionType string `json:"revisionType"`
+	// 分支名、Tag 名或 CommitID（仅构建+部署记录返回）
+	Revision string `json:"revision"`
+	// 兼容字段：仅 revisionType 为 branch 时返回
 	Branch string `json:"branch"`
 	// Commit ID（仅构建+部署记录返回）
 	CommitID string `json:"commitID"`
@@ -201,12 +206,20 @@ func (o *AppModelDeployRecordOutputObj) FromModel(record appmodeldeploy.Record) 
 	o.ImageTag = record.ImageTag
 	o.IsBuildAutoDeploy = false
 	// 对于未显式写入 deploySource 的历史/直接部署记录，默认按 directDeploy 返回；
-	// 当 Extras 中标记为 buildAutoDeploy 时，再补充 branch、commitID 等构建信息。
+	// 当 Extras 中标记为 buildAutoDeploy 时，再补充修订和 commitID。
+	// 历史记录只有 buildBranch，按分支还原
 	o.DeploySource = appmodeldeploy.DeploySourceDirectDeploy
 	if record.Extras[appmodeldeploy.ExtraKeyDeploySource] == appmodeldeploy.DeploySourceBuildAutoDeploy {
 		o.IsBuildAutoDeploy = true
 		o.DeploySource = appmodeldeploy.DeploySourceBuildAutoDeploy
-		o.Branch = record.Extras[appmodeldeploy.ExtraKeyBuildBranch]
+		rev := revision.Presented(
+			record.Extras[appmodeldeploy.ExtraKeyBuildRevisionType],
+			record.Extras[appmodeldeploy.ExtraKeyBuildRevision],
+			record.Extras[appmodeldeploy.ExtraKeyBuildBranch],
+		)
+		o.RevisionType = string(rev.Type)
+		o.Revision = rev.Value
+		o.Branch = rev.LegacyBranch()
 		o.CommitID = record.Extras[appmodeldeploy.ExtraKeyBuildCommitID]
 	}
 	o.Replicas = record.Replicas
@@ -237,11 +250,16 @@ type LatestDeployStatus struct {
 	DeploySource      string    `json:"deploySource"`
 	StartedAt         time.Time `json:"startedAt"`
 	EndedAt           time.Time `json:"endedAt"`
-	Branch            string    `json:"branch"`
-	ImageTag          string    `json:"imageTag"`
-	Operator          string    `json:"operator"`
-	PipelineID        string    `json:"pipelineID"`
-	HasDeployRecord   bool      `json:"hasDeployRecord"`
+	// 代码来源类型 branch / tag / commit；历史记录为 branch
+	RevisionType string `json:"revisionType"`
+	// 分支名、Tag 名或 CommitID
+	Revision string `json:"revision"`
+	// 兼容字段：仅 revisionType 为 branch 时返回
+	Branch          string `json:"branch"`
+	ImageTag        string `json:"imageTag"`
+	Operator        string `json:"operator"`
+	PipelineID      string `json:"pipelineID"`
+	HasDeployRecord bool   `json:"hasDeployRecord"`
 }
 
 // FromBuildAutoDeployRecord converts a build auto deploy record to latest status output.
@@ -255,7 +273,11 @@ func (o *LatestDeployStatus) FromBuildAutoDeployRecord(record *autodeploy.Record
 	o.DeploySource = appmodeldeploy.DeploySourceBuildAutoDeploy
 	o.StartedAt = record.StartedAt
 	o.EndedAt = record.EndedAt
-	o.Branch = record.Branch
+	// 历史记录只有 Branch，按分支还原，避免把 Tag / Commit 再写回 branch
+	rev := revision.Presented(record.RevisionType, record.Revision, record.Branch)
+	o.RevisionType = string(rev.Type)
+	o.Revision = rev.Value
+	o.Branch = rev.LegacyBranch()
 	o.ImageTag = record.ImageTag
 	o.Operator = record.Operator
 	o.PipelineID = record.PipelineID

@@ -122,9 +122,13 @@ const (
 	// 部署记录 Extras 字段 key
 	// ExtraKeyDeploySource 标记本次部署记录的来源
 	ExtraKeyDeploySource = "deploySource"
-	// ExtraKeyBuildBranch 记录触发本次部署的代码分支
+	// ExtraKeyBuildBranch 记录触发本次部署的代码分支，仅按分支检出时写入
 	ExtraKeyBuildBranch = "buildBranch"
-	// ExtraKeyBuildCommitID 记录触发本次部署的提交 ID
+	// ExtraKeyBuildRevisionType 记录代码来源类型 branch / tag / commit
+	ExtraKeyBuildRevisionType = "buildRevisionType"
+	// ExtraKeyBuildRevision 记录分支名、Tag 名或 CommitID
+	ExtraKeyBuildRevision = "buildRevision"
+	// ExtraKeyBuildCommitID 记录构建完成后的提交哈希，与检出用的修订不是同一字段
 	ExtraKeyBuildCommitID = "buildCommitID"
 )
 
@@ -138,7 +142,13 @@ const (
 
 // BuildAutoDeployInfo 表示构建阶段透传到部署记录中的构建信息快照。
 type BuildAutoDeployInfo struct {
-	Branch   string
+	// Branch 兼容字段，仅按分支检出时有值
+	Branch string
+	// RevisionType 代码来源类型 branch / tag / commit
+	RevisionType string
+	// Revision 分支名、Tag 名或 CommitID
+	Revision string
+	// CommitID 构建完成后的提交哈希
 	CommitID string
 }
 
@@ -149,6 +159,12 @@ func NewBuildAutoDeployExtras(info *BuildAutoDeployInfo) map[string]string {
 	}
 	extras := map[string]string{
 		ExtraKeyDeploySource: DeploySourceBuildAutoDeploy,
+	}
+	if info.RevisionType != "" {
+		extras[ExtraKeyBuildRevisionType] = info.RevisionType
+	}
+	if info.Revision != "" {
+		extras[ExtraKeyBuildRevision] = info.Revision
 	}
 	if info.Branch != "" {
 		extras[ExtraKeyBuildBranch] = info.Branch

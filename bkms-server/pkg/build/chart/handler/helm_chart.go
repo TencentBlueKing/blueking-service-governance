@@ -98,7 +98,7 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 	result, err := buildSvc.ExecuteChartBuild(ctx, app, input.BumpType, rev)
 	if err != nil {
 		errCode := lo.Ternary(
-			errors.Is(err, helmchartbuild.ErrRevisionRequired),
+			errors.Is(err, revision.ErrRequired),
 			bkerrs.ErrCodeInvalidRequest,
 			bkerrs.ErrCodeInternalServerError,
 		)
