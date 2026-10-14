@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,7 +39,6 @@ import (
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
@@ -50,6 +50,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	k8sworkload "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/workload"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -62,14 +63,8 @@ const AnnotationKeyDeployID = "bkms.tencent.com/deploy-id"
 
 // Deployer appmodel 应用部署器
 type Deployer struct {
-	recordStore             RecordStore
-	resourceSnapshotStore   ResourceSnapshotStore
-	buildDeployStore        autodeploy.RecordStore
-	appModelStore           appmodel.AppModelStore
 	builderService          *workload.BuilderService
-	appSpecStore            appspec.AppSpecStore
-	buildConfigStore        build.ConfigStore
-	appConfigFileStore      appcfg.AppConfigFileStore
+	db                      *mongo.Database
 	polarisEnvStateManager  *polaris.PolarisEnvStateManager
 	hostPortEnvStateManager *hostport.EnvStateManager
 
@@ -80,27 +75,15 @@ type Deployer struct {
 
 // NewDeployer 创建 appmodel 应用部署器
 func NewDeployer(
-	recordStore RecordStore,
-	resourceSnapshotStore ResourceSnapshotStore,
-	buildDeployStore autodeploy.RecordStore,
-	appModelStore appmodel.AppModelStore,
 	builderService *workload.BuilderService,
-	appSpecStore appspec.AppSpecStore,
-	buildConfigStore build.ConfigStore,
-	appConfigFileStore appcfg.AppConfigFileStore,
+	db *mongo.Database,
 	polarisEnvStateManager *polaris.PolarisEnvStateManager,
 	hostPortEnvStateManager *hostport.EnvStateManager,
 	app *bkmsapp.Application,
 ) *Deployer {
 	return &Deployer{
-		recordStore:             recordStore,
-		resourceSnapshotStore:   resourceSnapshotStore,
-		buildDeployStore:        buildDeployStore,
-		appModelStore:           appModelStore,
 		builderService:          builderService,
-		appSpecStore:            appSpecStore,
-		buildConfigStore:        buildConfigStore,
-		appConfigFileStore:      appConfigFileStore,
+		db:                      db,
 		polarisEnvStateManager:  polarisEnvStateManager,
 		hostPortEnvStateManager: hostPortEnvStateManager,
 		app:                     app,
@@ -120,7 +103,7 @@ func (d *Deployer) Deploy(
 ) (deployID string, retErr error) {
 	// 前置准备 & 预设配置
 	// 设置环境下的部署规格，调整 replicas 副本数
-	if err := appspec.SetReplicas(ctx, d.appSpecStore, d.app.ID, env.Name, replicas); err != nil {
+	if err := appspec.SetReplicas(ctx, d.db, d.app.ID, env.Name, replicas); err != nil {
 		return "", errors.Wrap(err, "setting replicas for the env")
 	}
 	d.setupAppModel(appModel, imageRegistry, trafficLaneName, imageTag, updateStrategy)
@@ -156,7 +139,7 @@ func (d *Deployer) Deploy(
 	createdDeployID := deployID
 	defer func() {
 		if retErr != nil {
-			record, getErr := d.recordStore.Get(ctx, d.app.ID, createdDeployID)
+			record, getErr := GetRecord(ctx, d.db, d.app.ID, createdDeployID)
 			if getErr != nil {
 				log.Errorf(ctx, "mark record failed: get deploy record %s: %v", createdDeployID, getErr)
 				return
@@ -164,19 +147,19 @@ func (d *Deployer) Deploy(
 			record.Status = StatusFailed
 			record.Message = retErr.Error()
 			record.EndedAt = time.Now()
-			if updateErr := d.recordStore.Update(ctx, record); updateErr != nil {
+			if updateErr := UpdateRecord(ctx, d.db, record); updateErr != nil {
 				log.Errorf(ctx, "mark record failed: update deploy record %s: %v", createdDeployID, updateErr)
 			}
 		}
 	}()
 
-	buildCfg, err := d.buildConfigStore.Get(ctx, d.app.ID)
+	buildCfg, err := store.Of(d.db, build.ConfigMeta).Get(ctx, build.ByApp(d.app.ID))
 	if err != nil {
 		return "", errors.Wrap(err, "get build config")
 	}
 
 	// 确保待部署环境中已经存在对应的 ImagePullSecret
-	if err = secret.NewImagePullSecretSyncer(env, d.app.ID, buildCfg).Sync(ctx); err != nil {
+	if err = secret.NewImagePullSecretSyncer(d.db, env, d.app.ID, buildCfg).Sync(ctx); err != nil {
 		return "", errors.Wrap(err, "sync image pull secret")
 	}
 
@@ -195,7 +178,7 @@ func (d *Deployer) Deploy(
 	// 持久化已下发资源清单
 	go saveResourceSnapshots(
 		ctx,
-		d.resourceSnapshotStore,
+		d.db,
 		appModel.AppID,
 		deployID,
 		buildResult.MainWorkload,
@@ -209,7 +192,7 @@ func (d *Deployer) Deploy(
 	}
 
 	// 更新应用模型部署组件
-	if err = d.appModelStore.UpdateAppModel(ctx, appModel); err != nil {
+	if err = appmodel.UpdateAppModel(ctx, d.db, appModel); err != nil {
 		return "", errors.Wrap(err, "update app model")
 	}
 
@@ -232,7 +215,7 @@ func (d *Deployer) Deploy(
 func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, trafficLaneName string) error {
 	envName := env.Name
 	// 获取最新部署记录
-	record, err := d.recordStore.GetLatest(ctx, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -245,7 +228,7 @@ func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, traf
 	record.Status = StatusUninstalling
 	record.Updater = auth.MustGetUser(ctx).ID
 	record.UpdatedAt = time.Now()
-	if err = d.recordStore.Update(ctx, record); err != nil {
+	if err = UpdateRecord(ctx, d.db, record); err != nil {
 		return errors.Wrap(err, "update deploy record status as uninstalling")
 	}
 	if err = d.syncBuildAutoDeployStatus(ctx, record); err != nil {
@@ -263,7 +246,7 @@ func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, traf
 	record.UpdatedAt = time.Now()
 	record.Status = StatusUninstalled
 	record.EndedAt = time.Now()
-	if err = d.recordStore.Update(ctx, record); err != nil {
+	if err = UpdateRecord(ctx, d.db, record); err != nil {
 		return errors.Wrap(err, "update deploy record status as uninstalled")
 	}
 	if err = d.syncBuildAutoDeployStatus(ctx, record); err != nil {
@@ -291,10 +274,10 @@ func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, traf
 }
 
 func (d *Deployer) syncBuildAutoDeployStatus(ctx context.Context, record *Record) error {
-	if d.buildDeployStore == nil || record == nil {
+	if record == nil {
 		return nil
 	}
-	operator, err := autodeploy.NewOperator(d.buildDeployStore)
+	operator, err := autodeploy.NewOperator(d.db)
 	if err != nil {
 		return errors.Wrap(err, "init build auto deploy operator")
 	}
@@ -326,7 +309,7 @@ func (d *Deployer) UpdateInstances(
 	podNames []string,
 ) (deployID string, err error) {
 	// 获取最新的部署记录
-	record, err := d.recordStore.GetLatest(ctx, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return "", errors.Wrap(err, "get latest deploy record")
 	}
@@ -401,7 +384,7 @@ func (d *Deployer) UpdateInstances(
 		// 灰度只回写 DeletionCost，不改 ImageTag
 		record.Updater = auth.MustGetUser(ctx).ID
 		record.UpdatedAt = time.Now()
-		if err = d.recordStore.Update(ctx, record); err != nil {
+		if err = UpdateRecord(ctx, d.db, record); err != nil {
 			return "", errors.Wrap(err, "update deploy record")
 		}
 		return "", nil
@@ -421,7 +404,7 @@ func (d *Deployer) UpdateInstances(
 	// 资源清单快照沿用上一次部署，并同步主工作负载的镜像与更新策略
 	go copyInstancesUpdateResourceSnapshots(
 		context.WithoutCancel(ctx),
-		d.resourceSnapshotStore,
+		d.db,
 		d.app.ID,
 		record.ID.Hex(),
 		deployID,
@@ -435,7 +418,7 @@ func (d *Deployer) UpdateInstances(
 // Scale 对应用实例进行扩缩容操作
 func (d *Deployer) Scale(ctx context.Context, envName, trafficLaneName string, replicas int32) error {
 	// 获取最新的部署记录
-	record, err := d.recordStore.GetLatest(ctx, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -461,12 +444,12 @@ func (d *Deployer) Scale(ctx context.Context, envName, trafficLaneName string, r
 	record.Updater = auth.MustGetUser(ctx).ID
 	record.UpdatedAt = time.Now()
 	record.Replicas = replicas
-	if err = d.recordStore.Update(ctx, record); err != nil {
+	if err = UpdateRecord(ctx, d.db, record); err != nil {
 		return errors.Wrap(err, "update deploy record replicas")
 	}
 
 	// 设置副本数量
-	if err = appspec.SetReplicas(ctx, d.appSpecStore, d.app.ID, envName, replicas); err != nil {
+	if err = appspec.SetReplicas(ctx, d.db, d.app.ID, envName, replicas); err != nil {
 		return errors.Wrap(err, "setting replicas for the env")
 	}
 	return nil
@@ -484,7 +467,7 @@ func (d *Deployer) BatchDeleteInstances(
 	}
 
 	// 获取最新的部署记录
-	record, err := d.recordStore.GetLatest(ctx, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -563,12 +546,12 @@ func (d *Deployer) deleteRunningPodsByGameDeployment(
 	record.Replicas = newReplicas
 	record.Updater = auth.MustGetUser(ctx).ID
 	record.UpdatedAt = time.Now()
-	if err = d.recordStore.Update(ctx, record); err != nil {
+	if err = UpdateRecord(ctx, d.db, record); err != nil {
 		return errors.Wrap(err, "update deploy record replicas")
 	}
 
 	// 设置副本数量
-	if err = appspec.SetReplicas(ctx, d.appSpecStore, record.AppID, record.EnvName, newReplicas); err != nil {
+	if err = appspec.SetReplicas(ctx, d.db, record.AppID, record.EnvName, newReplicas); err != nil {
 		return errors.Wrap(err, "setting replicas for the env")
 	}
 	return nil
@@ -736,7 +719,7 @@ func (d *Deployer) getExpiredResources(
 	currentResourceKeys ResourceKeys,
 ) (ResourceKeys, error) {
 	// 获取最新部署记录
-	record, err := d.recordStore.GetLatest(ctx, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		// 如果是首次部署，是没有历史记录的，可以直接跳过
 		if errors.Is(err, ErrDeployRecordNotFound) {
@@ -790,11 +773,10 @@ func (d *Deployer) createDeployRecord(
 		UpdatedAt:       timeNow,
 	}
 	// 创建部署记录
-	deployID, err := d.recordStore.Create(ctx, &record)
-	if err != nil {
+	if err := store.Of(d.db, RecordMeta).Create(ctx, &record); err != nil {
 		return "", errors.Wrapf(err, "create deploy record")
 	}
-	return deployID, nil
+	return record.ID.Hex(), nil
 }
 
 // createInstancesUpdateRecord 为全量实例更新创建部署记录
@@ -830,11 +812,10 @@ func (d *Deployer) createInstancesUpdateRecord(
 		CreatedAt:       timeNow,
 		UpdatedAt:       timeNow,
 	}
-	deployID, err := d.recordStore.Create(ctx, &record)
-	if err != nil {
+	if err := store.Of(d.db, RecordMeta).Create(ctx, &record); err != nil {
 		return "", errors.Wrapf(err, "create deploy record based on %s", base.ID.Hex())
 	}
-	return deployID, nil
+	return record.ID.Hex(), nil
 }
 
 // deleteDeployedResources 删除指定的某次部署所管理的资源
@@ -868,7 +849,7 @@ func (d *Deployer) UpdateInstancePolaris(
 	weight *int32,
 	isolate *bool,
 ) error {
-	record, err := d.recordStore.GetLatest(ctx, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "deploy record not found")
 	}

@@ -27,28 +27,28 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("ListSortByOpTime", func() {
 	var ctx context.Context
-	var wsStore bkmsworkspace.WorkspaceStore
-	var opStore audit.OperationRecordStore
+	var db *mongo.Database
+	var wsStore *bkmsworkspace.WorkspaceStore
+	var opStore *audit.OperationRecordStore
 
 	BeforeEach(func() {
-		var err error
 		ctx = context.Background()
 
-		wsStore, err = bkmsworkspace.NewWorkspaceStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
-		opStore, err = audit.NewOperationRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		wsStore = store.Of(db, bkmsworkspace.Meta)
+		opStore = store.Of(db, audit.OperationRecordMeta)
 	})
 
 	It("should sort workspaces by user operation time descending", func() {
@@ -58,9 +58,9 @@ var _ = Describe("ListSortByOpTime", func() {
 		ws2 := dbfactory.Workspace(ctx, wsStore)
 		ws3 := dbfactory.Workspace(ctx, wsStore)
 		defer func() {
-			_ = wsStore.Delete(ctx, ws1.ID)
-			_ = wsStore.Delete(ctx, ws2.ID)
-			_ = wsStore.Delete(ctx, ws3.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, ws1.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, ws2.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, ws3.ID)
 		}()
 
 		now := time.Now()
@@ -77,7 +77,7 @@ var _ = Describe("ListSortByOpTime", func() {
 				CreatedAt:     createdAt,
 				UpdatedAt:     createdAt,
 			}
-			_, err := opStore.Create(ctx, record)
+			err := opStore.Create(ctx, record)
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -85,7 +85,7 @@ var _ = Describe("ListSortByOpTime", func() {
 		createOpRecord(ws2.ID, now.Add(-1*time.Hour))
 		createOpRecord(ws3.ID, now.Add(-2*time.Hour))
 
-		result, err := bkmsworkspace.ListSortByOpTime(ctx, wsStore, opStore, username)
+		result, err := bkmsworkspace.ListSortByOpTime(ctx, db, username)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(result)).To(BeNumerically(">=", 3))
 
@@ -103,8 +103,8 @@ var _ = Describe("ListSortByOpTime", func() {
 		wsWithOp := dbfactory.Workspace(ctx, wsStore)
 		wsNoOp := dbfactory.Workspace(ctx, wsStore)
 		defer func() {
-			_ = wsStore.Delete(ctx, wsWithOp.ID)
-			_ = wsStore.Delete(ctx, wsNoOp.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, wsWithOp.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, wsNoOp.ID)
 		}()
 
 		record := &audit.OperationRecord{
@@ -119,10 +119,10 @@ var _ = Describe("ListSortByOpTime", func() {
 			CreatedAt:     time.Now(),
 			UpdatedAt:     time.Now(),
 		}
-		_, err := opStore.Create(ctx, record)
+		err := opStore.Create(ctx, record)
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := bkmsworkspace.ListSortByOpTime(ctx, wsStore, opStore, username)
+		result, err := bkmsworkspace.ListSortByOpTime(ctx, db, username)
 		Expect(err).NotTo(HaveOccurred())
 
 		idxMap := make(map[string]int)
@@ -139,8 +139,8 @@ var _ = Describe("ListSortByOpTime", func() {
 		wsA := dbfactory.Workspace(ctx, wsStore)
 		wsB := dbfactory.Workspace(ctx, wsStore)
 		defer func() {
-			_ = wsStore.Delete(ctx, wsA.ID)
-			_ = wsStore.Delete(ctx, wsB.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, wsA.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, wsB.ID)
 		}()
 
 		now := time.Now()
@@ -152,7 +152,7 @@ var _ = Describe("ListSortByOpTime", func() {
 			Result: audit.ResultSuccess, Group: audit.OperationGroup{WorkspaceID: wsA.ID},
 			CreatedAt: now, UpdatedAt: now,
 		}
-		_, err := opStore.Create(ctx, r1)
+		err := opStore.Create(ctx, r1)
 		Expect(err).NotTo(HaveOccurred())
 
 		// user2 最近操作了 wsB（但对 user1 来说不可见）
@@ -163,10 +163,10 @@ var _ = Describe("ListSortByOpTime", func() {
 			Result: audit.ResultSuccess, Group: audit.OperationGroup{WorkspaceID: wsB.ID},
 			CreatedAt: now.Add(time.Hour), UpdatedAt: now.Add(time.Hour),
 		}
-		_, err = opStore.Create(ctx, r2)
+		err = opStore.Create(ctx, r2)
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := bkmsworkspace.ListSortByOpTime(ctx, wsStore, opStore, user1)
+		result, err := bkmsworkspace.ListSortByOpTime(ctx, db, user1)
 		Expect(err).NotTo(HaveOccurred())
 
 		idxMap := make(map[string]int)

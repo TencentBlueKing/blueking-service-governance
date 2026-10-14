@@ -23,9 +23,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
@@ -55,11 +57,9 @@ type dynamicApplyEnvVarsReader interface {
 // 发现并发更新就重试，并按版本记录结果，避免旧任务覆盖新状态。
 // CR 更新与配置库不在同一事务中，依靠版本复核和重试在正常情况下收敛到最新配置。
 type DynamicApplyService struct {
-	appStore        bkmsapp.ApplicationStore
-	configStore     PolarisConfigStore
-	envStore        bkmsenv.EnvironmentStore
-	appModelStore   appmodel.AppModelStore
-	appSpecStore    appspec.AppSpecStore
+	appStore        *bkmsapp.ApplicationStore
+	db              *mongo.Database
+	envStore        *bkmsenv.EnvironmentStore
 	envVarsReader   dynamicApplyEnvVarsReader
 	envStateManager *PolarisEnvStateManager
 	applier         *CRApplier
@@ -67,20 +67,14 @@ type DynamicApplyService struct {
 
 // NewDynamicApplyService 创建 Polaris 动态下发服务。
 func NewDynamicApplyService(
-	appStore bkmsapp.ApplicationStore,
-	configStore PolarisConfigStore,
-	envStore bkmsenv.EnvironmentStore,
-	appModelStore appmodel.AppModelStore,
-	appSpecStore appspec.AppSpecStore,
+	db *mongo.Database,
 	envVarsReader dynamicApplyEnvVarsReader,
 	envStateManager *PolarisEnvStateManager,
 ) *DynamicApplyService {
 	return &DynamicApplyService{
-		appStore:        appStore,
-		configStore:     configStore,
-		envStore:        envStore,
-		appModelStore:   appModelStore,
-		appSpecStore:    appSpecStore,
+		appStore:        store.Of(db, bkmsapp.AppMeta),
+		db:              db,
+		envStore:        store.Of(db, bkmsenv.EnvMeta),
 		envVarsReader:   envVarsReader,
 		envStateManager: envStateManager,
 		applier:         NewCRApplier(),
@@ -93,12 +87,12 @@ func (s *DynamicApplyService) Apply(
 	ctx context.Context,
 	appID, configName, envName string,
 ) (time.Time, error) {
-	app, err := s.appStore.GetApp(ctx, appID)
+	app, err := s.appStore.Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		return time.Time{}, errors.Wrap(err, "get app for polaris CR apply")
 	}
 
-	config, err := s.configStore.Get(ctx, appID, configName)
+	config, err := store.Of(s.db, ConfigMeta).Get(ctx, ByName(appID, configName))
 	if err != nil {
 		return time.Time{}, errors.Wrap(err, "get polaris config for dynamic apply")
 	}
@@ -111,16 +105,16 @@ func (s *DynamicApplyService) Apply(
 		)
 	}
 
-	appModel, err := s.appModelStore.GetAppModel(ctx, app.ID)
+	appModel, err := store.Of(s.db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		return configUpdatedAt, errors.Wrap(err, "get app model for polaris CR apply")
 	}
 
-	env, err := s.envStore.GetByName(ctx, app.WorkspaceID, app.ID, envName)
+	env, err := s.envStore.Get(ctx, bkmsenv.AppEnvByName(app.WorkspaceID, app.ID, envName))
 	if err != nil {
 		return configUpdatedAt, errors.Wrapf(err, "get env %s", envName)
 	}
-	effective, _, err := appspec.ModelForEnv(ctx, s.appSpecStore, s.appModelStore, app.ID, env.Name, appModel)
+	effective, _, err := appspec.ModelForEnv(ctx, s.db, app.ID, env.Name, appModel)
 	if err != nil {
 		return configUpdatedAt, errors.Wrapf(err, "apply env app spec for %s", envName)
 	}
@@ -135,7 +129,7 @@ func (s *DynamicApplyService) Apply(
 	}
 
 	// 下发期间可能发生配置更新；完成后复读版本，避免旧渲染结果被当成最新结果。
-	latestConfig, err := s.configStore.Get(ctx, appID, configName)
+	latestConfig, err := store.Of(s.db, ConfigMeta).Get(ctx, ByName(appID, configName))
 	if err != nil {
 		return configUpdatedAt, errors.Wrap(err, "get polaris config after dynamic apply")
 	}

@@ -28,10 +28,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
@@ -59,19 +58,13 @@ var _ = Describe("PersistManager", func() {
 
 	var (
 		ctx         context.Context
-		store       Store
-		diApp       *fxtest.App
+		images      *Store
 		workspaceID string
 		snapshotSvc *snapshot.Service
 	)
 
 	BeforeEach(func() {
-		diApp = fxtest.New(
-			GinkgoT(),
-			FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
+		images = testutil.NewStore(GinkgoT(), Meta)
 		ctx = context.Background()
 		workspaceID = "ws-persist-" + stringx.Random(6)
 		snapshotSvc = &snapshot.Service{}
@@ -79,15 +72,14 @@ var _ = Describe("PersistManager", func() {
 
 	AfterEach(func() {
 		mockey.UnPatchAll()
-		Expect(store.DeleteAll(ctx)).To(Succeed())
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	newManager := func() *PersistManager {
 		mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(
 			&bkmsreg.ImageRegistry{Registry: registryAddr}, nil,
 		).Build()
-		return NewPersistManager(store, snapshotSvc)
+		return NewPersistManager(testutil.NewDB(GinkgoT()), snapshotSvc)
 	}
 
 	// mockSnapshotStatus 模拟快照状态：refreshedAt 为 nil 表示该镜像从未成功刷新过
@@ -117,16 +109,16 @@ var _ = Describe("PersistManager", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(refreshCalls).To(Equal(1))
 
-		got, getErr := store.GetByWorkspaceTypeAndName(ctx, workspaceID, ImageTypeBuilder, imageName)
+		got, getErr := images.Get(ctx, ByKey(workspaceID, ImageTypeBuilder, imageName))
 		Expect(getErr).NotTo(HaveOccurred())
 		Expect(got.Name).To(Equal(imageName))
-		_, runnerErr := store.GetByWorkspaceTypeAndName(ctx, workspaceID, ImageTypeRunner, imageName)
+		_, runnerErr := images.Get(ctx, ByKey(workspaceID, ImageTypeRunner, imageName))
 		Expect(runnerErr).To(MatchError(ErrCustomRuntimeImageNotFound))
 	})
 
 	It("does not refresh snapshots when the image already has a successful snapshot", func() {
 		existing := &Image{WorkspaceID: workspaceID, Type: ImageTypeBuilder, Name: imageName}
-		Expect(store.Upsert(ctx, existing)).To(Succeed())
+		Expect(Register(ctx, images, existing)).To(Succeed())
 		mockSnapshotStatus(lo.ToPtr(time.Now()))
 
 		refreshCalls := 0
@@ -141,14 +133,14 @@ var _ = Describe("PersistManager", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(refreshCalls).To(Equal(0))
-		got, getErr := store.GetByWorkspaceTypeAndName(ctx, workspaceID, ImageTypeBuilder, imageName)
+		got, getErr := images.Get(ctx, ByKey(workspaceID, ImageTypeBuilder, imageName))
 		Expect(getErr).NotTo(HaveOccurred())
 		Expect(got.ID).To(Equal(existing.ID))
 	})
 
 	It("retries the refresh when the record exists but was never refreshed successfully", func() {
 		// 首次刷新失败的现场：记录已落库，但快照状态里没有成功刷新时间
-		Expect(store.Upsert(ctx, &Image{
+		Expect(Register(ctx, images, &Image{
 			WorkspaceID: workspaceID, Type: ImageTypeBuilder, Name: imageName,
 		})).To(Succeed())
 		mockSnapshotStatus(nil)
@@ -176,7 +168,7 @@ var _ = Describe("PersistManager", func() {
 		err := newManager().PersistAfterSave(ctx, workspaceID, platformPersistConfig(imageRef, "debian:12"))
 
 		Expect(err).To(MatchError(ContainSubstring("refresh failed")))
-		_, getErr := store.GetByWorkspaceTypeAndName(ctx, workspaceID, ImageTypeBuilder, imageName)
+		_, getErr := images.Get(ctx, ByKey(workspaceID, ImageTypeBuilder, imageName))
 		Expect(getErr).NotTo(HaveOccurred())
 	})
 })

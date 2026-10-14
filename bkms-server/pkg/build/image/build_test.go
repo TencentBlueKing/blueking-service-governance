@@ -22,19 +22,23 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
@@ -42,6 +46,7 @@ import (
 var _ = Describe("Build Functions", func() {
 	var (
 		ctx       context.Context
+		db        *mongo.Database
 		testApp   *bkmsapp.Application
 		testCfg   *Config
 		rev       revision.CodeRevision
@@ -52,6 +57,7 @@ var _ = Describe("Build Functions", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		rev = revision.CodeRevision{Type: revision.TypeBranch, Value: "main"}
+		db = testutil.NewDB(GinkgoT())
 		imageTag = "v1.0.0"
 		oldConfig = config.G
 		config.G = &config.Config{}
@@ -64,7 +70,7 @@ var _ = Describe("Build Functions", func() {
 		testApp = &bkmsapp.Application{
 			ID:          "test-app-id",
 			Name:        "bkms-server",
-			WorkspaceID: "test-workspace-id",
+			WorkspaceID: "ws-" + stringx.Random(8),
 			TrpcSpec:    &bkmsapp.TrpcSpec{Language: appmodel.LanguageGo},
 		}
 
@@ -88,6 +94,16 @@ var _ = Describe("Build Functions", func() {
 		}
 	})
 
+	// seedPipeline 在测试库中写入流水线记录，供 ExecuteBKCIPipelineBuild 查询
+	seedPipeline := func(pipelineType string) {
+		Expect(store.Of(db, bkci.PipelineMeta).Create(ctx, &bkci.Pipeline{
+			ID:          "p-" + stringx.Random(16),
+			Type:        pipelineType,
+			WorkspaceID: testApp.WorkspaceID,
+			ProjectCode: "project-code",
+		})).To(Succeed())
+	}
+
 	AfterEach(func() {
 		// 清理所有 Mock
 		mockey.UnPatchAll()
@@ -107,16 +123,7 @@ var _ = Describe("Build Functions", func() {
 				&bkci.Pipeline{ID: "pipeline-123", Type: testCfg.PipelineType}, nil,
 			).Build()
 
-			// Mock PipelineStore
-			mockStore := &bkci.PipelineStoreMongo{}
-			mockey.Mock(bkci.NewPipelineStoreMongo).Return(mockStore, nil).Build()
-			mockey.Mock(
-				(*bkci.PipelineStoreMongo).GetByWorkspaceAndType,
-			).Return(&bkci.Pipeline{
-				ID:          "pipeline-123",
-				ProjectCode: "project-code",
-				Type:        testCfg.PipelineType,
-			}, nil).Build()
+			seedPipeline(testCfg.PipelineType)
 
 			// Mock bkciapi.New
 			mockey.Mock(bkciapi.New).Return(&bkciapi.ApiClient{}, nil).Build()
@@ -136,7 +143,7 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 执行构建
-			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 
 			// 验证结果
 			Expect(err).NotTo(HaveOccurred())
@@ -163,16 +170,7 @@ var _ = Describe("Build Functions", func() {
 				&bkci.Pipeline{ID: "p-123456", Name: "test-pipeline"}, nil,
 			).Build()
 
-			// Mock PipelineStore
-			mockStore := &bkci.PipelineStoreMongo{}
-			mockey.Mock(bkci.NewPipelineStoreMongo).Return(mockStore, nil).Build()
-			mockey.Mock(
-				(*bkci.PipelineStoreMongo).GetByWorkspaceAndType,
-			).Return(&bkci.Pipeline{
-				ID:          "pipeline-456",
-				ProjectCode: "project-code",
-				Type:        testCfg.PipelineType,
-			}, nil).Build()
+			seedPipeline(testCfg.PipelineType)
 
 			// Mock bkciapi.New 返回一个非 nil 的 ApiClient
 			mockey.Mock(bkciapi.New).Return(&bkciapi.ApiClient{}, nil).Build()
@@ -192,7 +190,7 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 执行构建
-			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 
 			// 验证结果
 			Expect(err).NotTo(HaveOccurred())
@@ -210,7 +208,7 @@ var _ = Describe("Build Functions", func() {
 			testCfg.SourceType = SourceTypeCodeRepository
 			testCfg.CodeRepo = nil
 
-			_, _, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			_, _, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("code repo config not found"))
 		})
@@ -221,7 +219,7 @@ var _ = Describe("Build Functions", func() {
 			testCfg.CodeRepo = nil
 			testCfg.Pipeline = nil
 
-			_, _, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			_, _, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("pipeline config not found"))
 		})
@@ -237,16 +235,7 @@ var _ = Describe("Build Functions", func() {
 				&bkci.Pipeline{ID: "pipeline-789", Type: testCfg.PipelineType}, nil,
 			).Build()
 
-			// Mock PipelineStore
-			mockStore := &bkci.PipelineStoreMongo{}
-			mockey.Mock(bkci.NewPipelineStoreMongo).Return(mockStore, nil).Build()
-			mockey.Mock(
-				(*bkci.PipelineStoreMongo).GetByWorkspaceAndType,
-			).Return(&bkci.Pipeline{
-				ID:          "pipeline-789",
-				ProjectCode: "project-code",
-				Type:        testCfg.PipelineType,
-			}, nil).Build()
+			seedPipeline(testCfg.PipelineType)
 
 			// Mock BKCI 客户端
 			mockey.Mock(bkciapi.New).Return(&bkciapi.ApiClient{}, nil).Build()
@@ -262,7 +251,7 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 执行构建
-			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, testApp, testCfg, rev, imageTag)
+			buildState, params, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
 
 			// 验证错误
 			Expect(err).To(HaveOccurred())
@@ -391,7 +380,7 @@ var _ = Describe("Build Functions", func() {
 			}, nil).Build()
 
 			// 生成参数
-			params, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			params, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 
 			// 验证结果
 			Expect(err).NotTo(HaveOccurred())
@@ -436,7 +425,7 @@ var _ = Describe("Build Functions", func() {
 				BkCICredentialID: "cred-123",
 			}, nil).Build()
 
-			params, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			params, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.DockerfileSourceType]).To(Equal(bkciDockerfileSourceRepository))
@@ -465,7 +454,7 @@ var _ = Describe("Build Functions", func() {
 				},
 			}
 
-			params, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			params, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.DockerfileSourceType]).To(Equal(bkciDockerfileSourceGenerated))
@@ -506,7 +495,7 @@ var _ = Describe("Build Functions", func() {
 				RunnerImage:  "debian:12",
 			}
 
-			params, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			params, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.DockerBuildDir]).To(Equal("."))
@@ -529,7 +518,7 @@ var _ = Describe("Build Functions", func() {
 				},
 			}
 
-			params, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			params, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.DockerfileStartCommand]).To(Equal(""))
@@ -543,7 +532,7 @@ var _ = Describe("Build Functions", func() {
 				RunnerImage:  "debian:12",
 			}
 
-			_, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			_, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("missing TrpcSpec for platform image build"))
@@ -557,7 +546,7 @@ var _ = Describe("Build Functions", func() {
 				RunnerImage:  "debian:12",
 			}
 
-			_, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			_, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("missing TrpcSpec language for platform image build"))
@@ -567,7 +556,7 @@ var _ = Describe("Build Functions", func() {
 			// 设置 CodeRepo 为 nil
 			testCfg.CodeRepo = nil
 
-			_, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			_, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("code repo config not found"))
 		})
@@ -576,7 +565,7 @@ var _ = Describe("Build Functions", func() {
 			// Mock 工作空间镜像仓库失败
 			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(nil, errors.New("registry not found")).Build()
 
-			_, err := genPipelineBuildParams(ctx, testApp, testCfg, rev, imageTag)
+			_, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("generate pipeline build image params"))
 		})
@@ -591,7 +580,13 @@ var _ = Describe("Build Functions", func() {
 			}, nil).Build()
 
 			// 生成参数
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, rev, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(
+				ctx,
+				testutil.NewDB(GinkgoT()),
+				testApp,
+				rev,
+				imageTag,
+			)
 
 			// 验证结果
 			Expect(err).NotTo(HaveOccurred())
@@ -614,7 +609,11 @@ var _ = Describe("Build Functions", func() {
 			const fullSHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
 
 			params, err := genPipelineBuildRepoAndImageParams(
-				ctx, testApp, revision.CodeRevision{Type: revision.TypeCommit, Value: fullSHA}, imageTag,
+				ctx,
+				testutil.NewDB(GinkgoT()),
+				testApp,
+				revision.CodeRevision{Type: revision.TypeCommit, Value: fullSHA},
+				imageTag,
 			)
 
 			Expect(err).NotTo(HaveOccurred())
@@ -629,7 +628,7 @@ var _ = Describe("Build Functions", func() {
 			}, nil).Build()
 
 			params, err := genPipelineBuildRepoAndImageParams(
-				ctx, testApp, revision.CodeRevision{Type: revision.TypeCommit}, imageTag,
+				ctx, testutil.NewDB(GinkgoT()), testApp, revision.CodeRevision{Type: revision.TypeCommit}, imageTag,
 			)
 
 			Expect(err).NotTo(HaveOccurred())
@@ -644,7 +643,13 @@ var _ = Describe("Build Functions", func() {
 				BkCICredentialID: "cred-123",
 			}, nil).Build()
 
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, rev, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(
+				ctx,
+				testutil.NewDB(GinkgoT()),
+				testApp,
+				rev,
+				imageTag,
+			)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.ImageRegistryHost]).To(Equal("mirrors.tencent.com"))
@@ -657,7 +662,13 @@ var _ = Describe("Build Functions", func() {
 				BkCICredentialID: "cred-123",
 			}, nil).Build()
 
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, rev, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(
+				ctx,
+				testutil.NewDB(GinkgoT()),
+				testApp,
+				rev,
+				imageTag,
+			)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.ImageRegistryHost]).To(BeEmpty())
@@ -670,7 +681,13 @@ var _ = Describe("Build Functions", func() {
 				Username: "robot",
 			}, nil).Build()
 
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, rev, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(
+				ctx,
+				testutil.NewDB(GinkgoT()),
+				testApp,
+				rev,
+				imageTag,
+			)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(params[pipelineparam.ImageRegistryHost]).To(BeEmpty())
@@ -683,7 +700,13 @@ var _ = Describe("Build Functions", func() {
 			).Build()
 
 			// 生成参数
-			params, err := genPipelineBuildRepoAndImageParams(ctx, testApp, rev, imageTag)
+			params, err := genPipelineBuildRepoAndImageParams(
+				ctx,
+				testutil.NewDB(GinkgoT()),
+				testApp,
+				rev,
+				imageTag,
+			)
 
 			// 验证错误
 			Expect(err).To(HaveOccurred())

@@ -32,6 +32,7 @@ import (
 	"github.com/TarsCloud/TarsGo/tars/util/conf"
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -43,6 +44,7 @@ import (
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -75,12 +77,8 @@ type InstanceExecuteTafAdminCmdResult struct {
 
 // AdminServiceStores AdminService 所需的存储依赖
 type AdminServiceStores struct {
-	TafDeployRecordStore  appmodeldeploy.RecordStore
+	DB                    *mongo.Database
 	MountableFileProvider appcfg.MountableFileProvider
-	EnvStore              envmodel.EnvironmentStore
-	AppStore              bkmsapp.ApplicationStore
-	AppModelStore         appmodel.AppModelStore
-	AppSpecStore          appspec.AppSpecStore
 	EnvVarsReader         *envvars.UnifiedEnvVarsReader
 }
 
@@ -139,16 +137,17 @@ func NewAdminService(
 
 // Init 初始化服务，执行 I/O 操作（获取环境、应用模型、解析配置、验证实例）
 func (s *TafAdminService) Init(ctx context.Context) error {
-	env, err := s.Stores.EnvStore.GetByName(ctx, s.App.WorkspaceID, s.App.ID, s.EnvName)
+	env, err := store.Of(s.Stores.DB, envmodel.EnvMeta).
+		Get(ctx, envmodel.AppEnvByName(s.App.WorkspaceID, s.App.ID, s.EnvName))
 	if err != nil {
 		return errors.Wrapf(err, "get env by name '%s'", s.EnvName)
 	}
-	appModel, err := s.Stores.AppModelStore.GetAppModel(ctx, s.App.ID)
+	appModel, err := store.Of(s.Stores.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(s.App.ID))
 	if err != nil {
 		return errors.Wrapf(err, "get app model by id '%s'", s.App.ID)
 	}
 	appModel, _, err = appspec.ModelForEnv(
-		ctx, s.Stores.AppSpecStore, s.Stores.AppModelStore, s.App.ID, env.Name, appModel,
+		ctx, s.Stores.DB, s.App.ID, env.Name, appModel,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "apply env app spec for app '%s' env '%s'", s.App.ID, env.Name)
@@ -264,7 +263,7 @@ func (s *TafAdminService) parseEndpoint(ctx context.Context, endpoint string) (i
 
 // GetPodNameIPMap 获取 Pod IP 映射
 func (s *TafAdminService) GetPodNameIPMap(ctx context.Context) (map[string]string, error) {
-	record, err := s.Stores.TafDeployRecordStore.GetLatest(ctx, s.App.ID, s.EnvName, "")
+	record, err := appmodeldeploy.GetLatest(ctx, s.Stores.DB, s.App.ID, s.EnvName, "")
 	if err != nil {
 		return nil, errors.Wrapf(err, "deploy record not found")
 	}

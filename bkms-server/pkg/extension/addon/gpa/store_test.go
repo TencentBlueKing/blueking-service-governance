@@ -24,9 +24,8 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa"
 )
 
@@ -43,42 +42,46 @@ func newValidConfig(appID string) *gpa.GPAConfig {
 	}
 }
 
-var _ = Describe("GPAConfigStore", func() {
-	var store gpa.GPAConfigStore
+var _ = Describe("GPAConfig store", func() {
+	var configs *gpa.ConfigStore
 	var ctx context.Context
 	var testAppID string
-	var diApp *fxtest.App
 
 	BeforeEach(func() {
-		diApp = fxtest.New(
-			GinkgoT(),
-			gpa.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
-
+		configs = testutil.NewStore(GinkgoT(), gpa.ConfigMeta)
 		ctx = context.Background()
 		testAppID = "test-app-" + stringx.Random(5)
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, testAppID)
-		diApp.RequireStop()
+		_, err := configs.DeleteMany(ctx, gpa.ByApp(testAppID))
+		Expect(err).NotTo(HaveOccurred())
 	})
 
-	Describe("Create", func() {
+	get := func(envName string) (*gpa.GPAConfig, error) {
+		return configs.Get(ctx, gpa.ByAppAndEnv(testAppID, envName))
+	}
+
+	Describe("CreateConfig", func() {
+		Context("when creating an invalid gpa config", func() {
+			It("should reject with validation error", func() {
+				config := newValidConfig(testAppID)
+				config.MaxReplicas = 1
+				Expect(gpa.CreateConfig(ctx, configs, config)).To(MatchError(ContainSubstring("maxReplicas")))
+			})
+		})
+
 		Context("when creating a valid gpa config", func() {
 			It("should create successfully and be retrievable by (appID, envName)", func() {
 				config := newValidConfig(testAppID)
 
-				err := store.Create(ctx, config)
+				err := gpa.CreateConfig(ctx, configs, config)
 				Expect(err).NotTo(HaveOccurred())
 				// Name 由 GenerateName 固定为 gpa-{appID}
 				Expect(config.Name).To(Equal("gpa-" + testAppID))
-				Expect(config.CreatedAt.IsZero()).To(BeFalse())
 
 				// 记录成功写入且可通过 (appID, envName) 查询到
-				stored, err := store.Get(ctx, testAppID, "dev")
+				stored, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.MinReplicas).To(Equal(int32(2)))
 				Expect(stored.MaxReplicas).To(Equal(int32(10)))
@@ -97,9 +100,9 @@ var _ = Describe("GPAConfigStore", func() {
 				config := newValidConfig(testAppID)
 				config.ComputeByLimits = true
 
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(gpa.CreateConfig(ctx, configs, config)).To(Succeed())
 
-				stored, err := store.Get(ctx, testAppID, "dev")
+				stored, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.ComputeByLimits).To(BeTrue())
 			})
@@ -107,8 +110,8 @@ var _ = Describe("GPAConfigStore", func() {
 
 		Context("when creating a second config for the same app and env", func() {
 			It("should reject with ErrConfigEnvExists", func() {
-				Expect(store.Create(ctx, newValidConfig(testAppID))).To(Succeed())
-				err := store.Create(ctx, newValidConfig(testAppID))
+				Expect(gpa.CreateConfig(ctx, configs, newValidConfig(testAppID))).To(Succeed())
+				err := gpa.CreateConfig(ctx, configs, newValidConfig(testAppID))
 				Expect(err).To(MatchError(gpa.ErrConfigEnvExists))
 			})
 		})
@@ -117,26 +120,26 @@ var _ = Describe("GPAConfigStore", func() {
 	Describe("Get", func() {
 		Context("when config does not exist", func() {
 			It("should return ErrConfigNotFound", func() {
-				_, err := store.Get(ctx, testAppID, "non-existent")
+				_, err := get("non-existent")
 				Expect(err).To(MatchError(gpa.ErrConfigNotFound))
 			})
 		})
 	})
 
-	Describe("Update", func() {
+	Describe("UpdateConfig", func() {
 		BeforeEach(func() {
-			Expect(store.Create(ctx, newValidConfig(testAppID))).To(Succeed())
+			Expect(gpa.CreateConfig(ctx, configs, newValidConfig(testAppID))).To(Succeed())
 		})
 
 		Context("when updating maxReplicas", func() {
 			It("should update successfully", func() {
 				newMax := int32(20)
-				err := store.Update(ctx, testAppID, "dev", &gpa.ConfigUpdateData{
+				err := gpa.UpdateConfig(ctx, configs, testAppID, "dev", &gpa.ConfigUpdateData{
 					MaxReplicas: &newMax,
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				updated, err := store.Get(ctx, testAppID, "dev")
+				updated, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updated.MaxReplicas).To(Equal(int32(20)))
 				Expect(updated.MinReplicas).To(Equal(int32(2)))
@@ -145,7 +148,7 @@ var _ = Describe("GPAConfigStore", func() {
 
 		Context("when updating metrics", func() {
 			It("should replace the metrics entirely", func() {
-				err := store.Update(ctx, testAppID, "dev", &gpa.ConfigUpdateData{
+				err := gpa.UpdateConfig(ctx, configs, testAppID, "dev", &gpa.ConfigUpdateData{
 					Metrics: []gpa.GPAMetric{
 						{Resource: gpa.ResourceCPU, AverageUtilization: 50},
 						{Resource: gpa.ResourceMemory, AverageUtilization: 80},
@@ -153,7 +156,7 @@ var _ = Describe("GPAConfigStore", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				updated, err := store.Get(ctx, testAppID, "dev")
+				updated, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updated.Metrics).To(HaveLen(2))
 			})
@@ -162,20 +165,20 @@ var _ = Describe("GPAConfigStore", func() {
 		Context("when toggling enabled", func() {
 			It("should update enabled to false and back to true", func() {
 				disable := false
-				err := store.Update(ctx, testAppID, "dev", &gpa.ConfigUpdateData{
+				err := gpa.UpdateConfig(ctx, configs, testAppID, "dev", &gpa.ConfigUpdateData{
 					Enabled: &disable,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				disabled, err := store.Get(ctx, testAppID, "dev")
+				disabled, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(disabled.Enabled).To(BeFalse())
 
 				enable := true
-				err = store.Update(ctx, testAppID, "dev", &gpa.ConfigUpdateData{
+				err = gpa.UpdateConfig(ctx, configs, testAppID, "dev", &gpa.ConfigUpdateData{
 					Enabled: &enable,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				enabled, err := store.Get(ctx, testAppID, "dev")
+				enabled, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(enabled.Enabled).To(BeTrue())
 			})
@@ -184,20 +187,20 @@ var _ = Describe("GPAConfigStore", func() {
 		Context("when toggling computeByLimits", func() {
 			It("should update computeByLimits to true and back to false", func() {
 				enable := true
-				err := store.Update(ctx, testAppID, "dev", &gpa.ConfigUpdateData{
+				err := gpa.UpdateConfig(ctx, configs, testAppID, "dev", &gpa.ConfigUpdateData{
 					ComputeByLimits: &enable,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				byLimits, err := store.Get(ctx, testAppID, "dev")
+				byLimits, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(byLimits.ComputeByLimits).To(BeTrue())
 
 				disable := false
-				err = store.Update(ctx, testAppID, "dev", &gpa.ConfigUpdateData{
+				err = gpa.UpdateConfig(ctx, configs, testAppID, "dev", &gpa.ConfigUpdateData{
 					ComputeByLimits: &disable,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				byRequests, err := store.Get(ctx, testAppID, "dev")
+				byRequests, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(byRequests.ComputeByLimits).To(BeFalse())
 			})
@@ -206,67 +209,29 @@ var _ = Describe("GPAConfigStore", func() {
 		Context("when the update would make maxReplicas less than minReplicas", func() {
 			It("should reject with validation error and keep the original value", func() {
 				newMax := int32(1)
-				err := store.Update(ctx, testAppID, "dev", &gpa.ConfigUpdateData{
+				err := gpa.UpdateConfig(ctx, configs, testAppID, "dev", &gpa.ConfigUpdateData{
 					MaxReplicas: &newMax,
 				})
 				Expect(err).To(MatchError(ContainSubstring("maxReplicas")))
 
-				unchanged, err := store.Get(ctx, testAppID, "dev")
+				unchanged, err := get("dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(unchanged.MaxReplicas).To(Equal(int32(10)))
 			})
 		})
-
-		Context("when config does not exist", func() {
-			It("should return ErrConfigNotFound", func() {
-				newMax := int32(20)
-				err := store.Update(ctx, testAppID, "non-existent", &gpa.ConfigUpdateData{
-					MaxReplicas: &newMax,
-				})
-				Expect(err).To(MatchError(gpa.ErrConfigNotFound))
-			})
-		})
 	})
 
-	Describe("Delete", func() {
-		BeforeEach(func() {
-			Expect(store.Create(ctx, newValidConfig(testAppID))).To(Succeed())
-		})
-
-		Context("when deleting an existing config", func() {
-			It("should delete it successfully", func() {
-				Expect(store.Delete(ctx, testAppID, "dev")).To(Succeed())
-				_, err := store.Get(ctx, testAppID, "dev")
-				Expect(err).To(MatchError(gpa.ErrConfigNotFound))
-			})
-		})
-
-		Context("when config does not exist", func() {
-			It("should return ErrConfigNotFound", func() {
-				Expect(store.Delete(ctx, testAppID, "non-existent")).To(MatchError(gpa.ErrConfigNotFound))
-			})
-		})
-	})
-
-	Describe("ListByApp", func() {
-		Context("when no configs exist", func() {
-			It("should return empty list", func() {
-				configs, err := store.ListByApp(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(configs).To(BeEmpty())
-			})
-		})
-
+	Describe("ByApp", func() {
 		Context("when configs exist for multiple envs", func() {
 			It("should return all configs", func() {
 				c1 := newValidConfig(testAppID)
 				c1.EnvName = "dev"
-				Expect(store.Create(ctx, c1)).To(Succeed())
+				Expect(gpa.CreateConfig(ctx, configs, c1)).To(Succeed())
 				c2 := newValidConfig(testAppID)
 				c2.EnvName = "prod"
-				Expect(store.Create(ctx, c2)).To(Succeed())
+				Expect(gpa.CreateConfig(ctx, configs, c2)).To(Succeed())
 
-				configs, err := store.ListByApp(ctx, testAppID)
+				configs, err := configs.List(ctx, gpa.ByApp(testAppID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(configs).To(HaveLen(2))
 			})

@@ -25,37 +25,29 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("createInstancesUpdateRecord", func() {
-	var diApp *fxtest.App
-
 	var ctx context.Context
-	var recordStore RecordStore
+	var db *mongo.Database
+	var recordStore *RecordStore
 	var appID string
 
 	BeforeEach(func() {
 		ctx = auth.WithUser(context.Background(), auth.User{ID: "tester"})
 		appID = "inst-update-app-" + stringx.Random(6)
-
-		diApp = fxtest.New(
-			GinkgoT(),
-			FxModule,
-			fx.Populate(&recordStore),
-		)
-		diApp.RequireStart()
-	})
-
-	AfterEach(func() {
-		diApp.RequireStop()
+		db = testutil.NewDB(GinkgoT())
+		recordStore = store.Of(db, RecordMeta)
+		DeferCleanup(func() { _, _ = recordStore.DeleteMany(ctx, store.Where("appID", appID)) })
 	})
 
 	Context("createInstancesUpdateRecord", func() {
@@ -81,16 +73,15 @@ var _ = Describe("createInstancesUpdateRecord", func() {
 				Extras:  map[string]string{ExtraKeyDeploySource: DeploySourceBuildAutoDeploy},
 				Creator: "creator",
 			}
-			baseID, err := recordStore.Create(ctx, base)
-			Expect(err).NotTo(HaveOccurred())
-			base.ID, _ = bson.ObjectIDFromHex(baseID)
+			Expect(recordStore.Create(ctx, base)).To(Succeed())
+			baseID := base.ID.Hex()
 
-			deployer := &Deployer{recordStore: recordStore, app: &bkmsapp.Application{ID: appID}}
+			deployer := &Deployer{db: db, app: &bkmsapp.Application{ID: appID}}
 			deployID, err := deployer.createInstancesUpdateRecord(ctx, base, "v2", "InplaceUpdate", 4)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployID).NotTo(Equal(baseID))
 
-			latest, err := recordStore.GetLatest(ctx, appID, "prod", "lane-1")
+			latest, err := GetLatest(ctx, db, appID, "prod", "lane-1")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest.ID.Hex()).To(Equal(deployID))
 			Expect(latest.Status).To(Equal(StatusDeploying))
@@ -111,7 +102,7 @@ var _ = Describe("createInstancesUpdateRecord", func() {
 			Expect(latest.StartedAt.IsZero()).To(BeFalse())
 
 			// 源记录保持不变
-			old, err := recordStore.Get(ctx, appID, baseID)
+			old, err := GetRecord(ctx, db, appID, baseID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(old.Status).To(Equal(StatusDeployed))
 			Expect(old.ImageTag).To(Equal("v1"))
@@ -290,32 +281,30 @@ spec:
 })
 
 var _ = Describe("copyInstancesUpdateResourceSnapshots", func() {
-	var diApp *fxtest.App
-
 	var ctx context.Context
-	var snapStore ResourceSnapshotStore
+	var db *mongo.Database
+	var snapStore *ResourceSnapshotStore
 	var appID string
 	mainWorkload := ResourceKey{Kind: k8skind.GameDeploy, Name: "gd1"}
+
+	// listByDeployRecord 按 kind、name 升序列出某次部署的全部快照
+	listByDeployRecord := func(deployOID bson.ObjectID) []ResourceSnapshot {
+		snapshots, err := snapStore.List(ctx, ByDeployRecord(appID, deployOID), InKindNameOrder())
+		Expect(err).NotTo(HaveOccurred())
+		return snapshots
+	}
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		appID = "inst-update-snap-" + stringx.Random(6)
-
-		diApp = fxtest.New(
-			GinkgoT(),
-			FxModule,
-			fx.Populate(&snapStore),
-		)
-		diApp.RequireStart()
-	})
-
-	AfterEach(func() {
-		diApp.RequireStop()
+		db = testutil.NewDB(GinkgoT())
+		snapStore = store.Of(db, ResourceSnapshotMeta)
+		DeferCleanup(func() { _, _ = snapStore.DeleteMany(ctx, store.Where("appID", appID)) })
 	})
 
 	It("should copy snapshots to the new deploy record and update the main workload", func() {
 		srcOID, dstOID := bson.NewObjectID(), bson.NewObjectID()
-		Expect(snapStore.CreateResources(ctx, []ResourceSnapshot{
+		Expect(snapStore.CreateMany(ctx, []*ResourceSnapshot{
 			{
 				AppID: appID, DeployRecordID: srcOID, APIVersion: "tkex.tencent.com/v1alpha1",
 				Kind: k8skind.GameDeploy, Name: "gd1", Manifest: gameDeployManifestForTest,
@@ -327,12 +316,11 @@ var _ = Describe("copyInstancesUpdateResourceSnapshots", func() {
 		})).To(Succeed())
 
 		copyInstancesUpdateResourceSnapshots(
-			ctx, snapStore, appID, srcOID.Hex(), dstOID.Hex(), mainWorkload,
+			ctx, db, appID, srcOID.Hex(), dstOID.Hex(), mainWorkload,
 			"mirrors.example.com/app:v2", "InplaceUpdate",
 		)
 
-		dst, err := snapStore.ListByDeployRecord(ctx, appID, dstOID.Hex())
-		Expect(err).NotTo(HaveOccurred())
+		dst := listByDeployRecord(dstOID)
 		Expect(dst).To(HaveLen(2))
 		// 按 kind、name 升序：ConfigMap 在前
 		Expect(dst[0].Kind).To(Equal("ConfigMap"))
@@ -345,24 +333,22 @@ var _ = Describe("copyInstancesUpdateResourceSnapshots", func() {
 			To(ContainElement("mirrors.example.com/app:v2"))
 
 		// 源快照保持不变
-		src, err := snapStore.ListByDeployRecord(ctx, appID, srcOID.Hex())
-		Expect(err).NotTo(HaveOccurred())
+		src := listByDeployRecord(srcOID)
 		Expect(src[1].Manifest).To(Equal(gameDeployManifestForTest))
 	})
 
 	It("should copy the main workload as is when the manifest is truncated", func() {
 		srcOID, dstOID := bson.NewObjectID(), bson.NewObjectID()
-		Expect(snapStore.CreateResources(ctx, []ResourceSnapshot{{
+		Expect(snapStore.Create(ctx, &ResourceSnapshot{
 			AppID: appID, DeployRecordID: srcOID, Kind: k8skind.GameDeploy, Name: "gd1",
 			Manifest: "truncated-yaml", IsTruncated: true,
-		}})).To(Succeed())
+		})).To(Succeed())
 
 		copyInstancesUpdateResourceSnapshots(
-			ctx, snapStore, appID, srcOID.Hex(), dstOID.Hex(), mainWorkload, "app:v2", "InplaceUpdate",
+			ctx, db, appID, srcOID.Hex(), dstOID.Hex(), mainWorkload, "app:v2", "InplaceUpdate",
 		)
 
-		dst, err := snapStore.ListByDeployRecord(ctx, appID, dstOID.Hex())
-		Expect(err).NotTo(HaveOccurred())
+		dst := listByDeployRecord(dstOID)
 		Expect(dst).To(HaveLen(1))
 		Expect(dst[0].Manifest).To(Equal("truncated-yaml"))
 		Expect(dst[0].IsTruncated).To(BeTrue())
@@ -372,10 +358,9 @@ var _ = Describe("copyInstancesUpdateResourceSnapshots", func() {
 		dstOID := bson.NewObjectID()
 
 		copyInstancesUpdateResourceSnapshots(
-			ctx, snapStore, appID, bson.NewObjectID().Hex(), dstOID.Hex(), mainWorkload, "app:v2", "InplaceUpdate",
+			ctx, db, appID, bson.NewObjectID().Hex(), dstOID.Hex(), mainWorkload, "app:v2", "InplaceUpdate",
 		)
 
-		_, err := snapStore.ListByDeployRecord(ctx, appID, dstOID.Hex())
-		Expect(err).To(MatchError(ErrResourceSnapshotNotFound))
+		Expect(listByDeployRecord(dstOID)).To(BeEmpty())
 	})
 })

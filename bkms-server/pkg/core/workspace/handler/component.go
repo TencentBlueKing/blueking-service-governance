@@ -24,6 +24,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -31,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // CreateWorkspaceComponent 创建工作空间组件。
@@ -57,7 +59,8 @@ func (h *Handler) CreateWorkspaceComponent(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	newComp := input.ToModel(uriInput.WorkspaceID)
-	if _, err := h.registry.ComponentDefStore.Get(ctx, newComp.Type, newComp.Version); err != nil {
+	if _, err := store.Of(h.registry.DB, component.ComponentDefMeta).
+		Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version)); err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			bkerrs.AbortWithErr(
 				c,
@@ -69,7 +72,7 @@ func (h *Handler) CreateWorkspaceComponent(c *gin.Context) {
 		return
 	}
 
-	if err := h.registry.WorkspaceCompsStore.Add(ctx, newComp); err != nil {
+	if err := workspace.AddComponents(ctx, h.registry.DB, newComp); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "add workspace component"))
 		return
 	}
@@ -113,7 +116,7 @@ func (h *Handler) PatchWorkspaceComponent(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	oldComp, err := h.registry.WorkspaceCompsStore.GetByName(ctx, uriInput.WorkspaceID, uriInput.CompName)
+	oldComp, err := h.components().Get(ctx, workspace.ComponentByName(uriInput.WorkspaceID, uriInput.CompName))
 	if err != nil {
 		if errors.Is(err, workspace.ErrComponentNotFound) {
 			bkerrs.AbortWithErr(
@@ -132,7 +135,7 @@ func (h *Handler) PatchWorkspaceComponent(c *gin.Context) {
 	}
 
 	updateData := input.ToModel()
-	if err = h.registry.WorkspaceCompsStore.Update(ctx, oldComp.ID, updateData); err != nil {
+	if err = workspace.UpdateComponent(ctx, h.registry.DB, oldComp.ID, updateData); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace component"))
 		return
 	}
@@ -172,7 +175,7 @@ func (h *Handler) DeleteWorkspaceComponent(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	oldComp, err := h.registry.WorkspaceCompsStore.GetByName(ctx, uriInput.WorkspaceID, uriInput.CompName)
+	oldComp, err := h.components().Get(ctx, workspace.ComponentByName(uriInput.WorkspaceID, uriInput.CompName))
 	if err != nil {
 		if errors.Is(err, workspace.ErrComponentNotFound) {
 			ginutils.OK(c, serializer.EmptyOutput{})
@@ -183,7 +186,7 @@ func (h *Handler) DeleteWorkspaceComponent(c *gin.Context) {
 	}
 
 	// 删除前检查组件引用关系，若有其他应用引用该组件，则不允许删除
-	compRefResolver := workspace.NewComponentRefResolver(h.registry.AppStore, h.registry.AppModelStore)
+	compRefResolver := workspace.NewComponentRefResolver(h.registry.DB)
 	compRefMap, err := compRefResolver.BuildRefMap(ctx, uriInput.WorkspaceID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build component ref map"))
@@ -198,7 +201,7 @@ func (h *Handler) DeleteWorkspaceComponent(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.WorkspaceCompsStore.Remove(ctx, oldComp.ID); err != nil {
+	if err = workspace.RemoveComponents(ctx, h.registry.DB, oldComp.ID); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "remove workspace component"))
 		return
 	}
@@ -236,13 +239,13 @@ func (h *Handler) ListWorkspaceComponents(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	comps, err := h.registry.WorkspaceCompsStore.ListByWorkspace(ctx, uriInput.WorkspaceID)
+	comps, err := h.components().List(ctx, workspace.ComponentsIn(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspace components"))
 		return
 	}
 
-	compRefResolver := workspace.NewComponentRefResolver(h.registry.AppStore, h.registry.AppModelStore)
+	compRefResolver := workspace.NewComponentRefResolver(h.registry.DB)
 	compRefMap, err := compRefResolver.BuildRefMap(ctx, uriInput.WorkspaceID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build component ref map"))
@@ -250,7 +253,7 @@ func (h *Handler) ListWorkspaceComponents(c *gin.Context) {
 	}
 
 	output := make([]*serializer.WorkspaceComponentOutputObj, 0, len(comps))
-	for _, comp := range comps {
+	for _, comp := range lo.ToSlicePtr(comps) {
 		output = append(output, new(serializer.WorkspaceComponentOutputObj).FromModel(comp, compRefMap[comp.Name]))
 	}
 	ginutils.JSON(c, http.StatusOK, serializer.ListWorkspaceComponentsOutput{Data: output})

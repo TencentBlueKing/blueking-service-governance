@@ -24,58 +24,44 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	coreapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	envvarsstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/envfile/import"
+	importer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/envfile/import"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
 var _ = Describe("ImportService", func() {
 	var (
-		diApp                 *fxtest.App
-		ctx                   context.Context
-		workspaceID           string
-		environment           envmodel.Environment
-		scopedEnvVarStore     envvarsstore.ScopedEnvVarStore
-		appStore              coreapp.ApplicationStore
-		appModelStore         appmodel.AppModelStore
-		appConfigFileStore    appcfg.AppConfigFileStore
-		appConfigFileDefStore appcfg.AppConfigFileDefStore
-		appConfigVersionStore appcfg.AppConfigFileVersionStore
-		buildConfigStore      build.ConfigStore
-		service               *importer.Service
+		diApp       *fxtest.App
+		ctx         context.Context
+		workspaceID string
+		environment envmodel.Environment
+		db          *mongo.Database
+		appStore    *coreapp.ApplicationStore
+		service     *importer.Service
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), coreapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvarsstore.FxModule,
-			depmodel.FxModule,
-			coreapp.FxModule,
-			appmodel.FxModule,
 			appcfg.FxModule,
-			build.FxModule,
-			fx.Populate(
-				&scopedEnvVarStore,
-				&appStore,
-				&appModelStore,
-				&appConfigFileStore,
-				&appConfigFileDefStore,
-				&appConfigVersionStore,
-				&buildConfigStore,
-			),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 
 		// 每条用例都使用独立的 workspace / env 种子数据，这样覆盖与新增的断言
 		// 不会受到其他导入场景污染。
@@ -89,13 +75,13 @@ var _ = Describe("ImportService", func() {
 				Namespace: "prod-ns",
 			},
 		}
-		seedScopedEnvVars(ctx, scopedEnvVarStore, workspaceID)
-		service = importer.NewService(scopedEnvVarStore, appModelStore)
+		seedScopedEnvVars(ctx, db, workspaceID)
+		service = importer.NewService(db)
 	})
 
 	AfterEach(func() {
-		if scopedEnvVarStore != nil {
-			Expect(scopedEnvVarStore.DeleteAll(ctx)).NotTo(HaveOccurred())
+		if db != nil {
+			Expect(testutil.CleanupMetaColl(envvarsstore.ScopedEnvVarMeta)).NotTo(HaveOccurred())
 		}
 		if diApp != nil {
 			diApp.RequireStop()
@@ -115,7 +101,7 @@ SHARED_KEY=dev-override
 `)
 		Expect(err).NotTo(HaveOccurred())
 
-		publicVars, err := scopedEnvVarStore.ListPublic(ctx, workspaceID)
+		publicVars, err := envvarsstore.ListPublic(ctx, db, workspaceID)
 		Expect(err).NotTo(HaveOccurred())
 
 		publicVarsByScope := map[string]envvarsstore.ScopedEnvVar{}
@@ -138,8 +124,8 @@ ANOTHER_ENV_KEY=another-value
 `)
 		Expect(err).NotTo(HaveOccurred())
 
-		envVars, err := scopedEnvVarStore.List(
-			ctx,
+		envVars, err := envvarsstore.List(
+			ctx, db,
 			workspaceID,
 			envvarsstore.WithScopes(envvartypes.ScopeEnv("prod-env")),
 		)
@@ -154,8 +140,8 @@ ANOTHER_ENV_KEY=another-value
 		Expect(envVarsByKey["ANOTHER_ENV_KEY"].Description).To(Equal("add another env key"))
 
 		// 导入只能影响目标 env scope；其余无关环境作用域应保持种子数据原样。
-		otherEnvVars, err := scopedEnvVarStore.List(
-			ctx,
+		otherEnvVars, err := envvarsstore.List(
+			ctx, db,
 			workspaceID,
 			envvarsstore.WithScopes(envvartypes.ScopeEnv("other-env")),
 		)
@@ -166,12 +152,7 @@ ANOTHER_ENV_KEY=another-value
 
 	It("imports app-defined vars by overwriting and appending in one batch", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
-			AppConfigFileVersionStore: appConfigVersionStore,
-			BuildConfigStore:          buildConfigStore,
+			AppStore: appStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -188,7 +169,7 @@ APP_REGION=ap-guangzhou
 `)
 		Expect(err).NotTo(HaveOccurred())
 
-		envVars, err := appModelStore.ListAppDefinedEnvVars(ctx, app.ID)
+		envVars, err := appmodel.ListAppDefinedEnvVars(ctx, db, app.ID)
 		Expect(err).NotTo(HaveOccurred())
 		envVarsByKey := map[string]appmodel.Variable{}
 		for _, item := range envVars {
@@ -210,10 +191,10 @@ ENV_ONLY_KEY=updated-env-value
 	})
 })
 
-func seedScopedEnvVars(ctx context.Context, store envvarsstore.ScopedEnvVarStore, workspaceID string) {
+func seedScopedEnvVars(ctx context.Context, db *mongo.Database, workspaceID string) {
 	// 预先种入公共作用域的共享 key 和若干 env 作用域数据，用来验证不同导入目标
 	// 下的覆盖规则。
-	_, err := store.Create(ctx, envvarsstore.ScopedEnvVar{
+	err := store.Of(db, envvarsstore.ScopedEnvVarMeta).Create(ctx, &envvarsstore.ScopedEnvVar{
 		WorkspaceID: workspaceID,
 		ScopeType:   envvartypes.ScopeTypeWorkspace,
 		ScopeValue:  "",
@@ -222,7 +203,7 @@ func seedScopedEnvVars(ctx context.Context, store envvarsstore.ScopedEnvVarStore
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.Create(ctx, envvarsstore.ScopedEnvVar{
+	err = store.Of(db, envvarsstore.ScopedEnvVarMeta).Create(ctx, &envvarsstore.ScopedEnvVar{
 		WorkspaceID: workspaceID,
 		ScopeType:   envvartypes.ScopeTypeEnvType,
 		ScopeValue:  "development",
@@ -231,8 +212,8 @@ func seedScopedEnvVars(ctx context.Context, store envvarsstore.ScopedEnvVarStore
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.CreateSimpleEnvScopeVar(
-		ctx,
+	_, err = envvarsstore.CreateSimpleEnvScopeVar(
+		ctx, db,
 		envmodel.Environment{WorkspaceID: workspaceID, Name: "prod-env"},
 		"ENV_ONLY_KEY",
 		"env-only-value",
@@ -240,8 +221,8 @@ func seedScopedEnvVars(ctx context.Context, store envvarsstore.ScopedEnvVarStore
 	)
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.CreateSimpleEnvScopeVar(
-		ctx,
+	_, err = envvarsstore.CreateSimpleEnvScopeVar(
+		ctx, db,
 		envmodel.Environment{WorkspaceID: workspaceID, Name: "other-env"},
 		"OTHER_ENV_KEY",
 		"ignored",

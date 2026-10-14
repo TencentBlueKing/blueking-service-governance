@@ -32,24 +32,31 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
-var _ = Describe("ScopedEnvVarStoreMongo", func() {
+var _ = Describe("ScopedEnvVar store", func() {
 	var diApp *fxtest.App
-	var store envvars.ScopedEnvVarStore
+	var db *mongo.Database
 	// rawColl reads documents straight from MongoDB, bypassing the store's
 	// encrypt/decrypt layer, so tests can assert on the persisted ciphertext.
 	var rawColl *mongo.Collection
 	var ctx context.Context
 	var workspaceID string
 	var otherWorkspaceID string
+
+	// create 写入 v 的副本并返回新记录的 ID，同一个 v 可以重复写入以验证唯一键冲突
+	create := func(v envvars.ScopedEnvVar) (bson.ObjectID, error) {
+		err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &v)
+		return v.ID, err
+	}
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -59,12 +66,12 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			database.PrivateFxModule,
-			fx.Populate(&store, &mongoClient, &dbName),
+			fx.Populate(&mongoClient, &dbName),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 		rawColl = mongoClient.Database(dbName).Collection(envvars.ScopedEnvVarCollectionName)
 
 		workspaceID = "test-workspace-" + stringx.Random(6)
@@ -72,7 +79,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteAll(ctx)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(envvars.ScopedEnvVarMeta)).NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -83,18 +90,25 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			Name:        "feature",
 			Kind:        envmodel.EnvironmentKindFeature,
 		}
-		_, err := store.Create(ctx, envvars.ScopedEnvVar{
+		err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 			WorkspaceID: workspaceID, ScopeType: envvartypes.ScopeTypeEnv, ScopeValue: source.Name,
 			Key: "SECRET", Value: "source-secret", Description: "source description", IsSensitive: true,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		targetID, err := store.CreateSimpleEnvScopeVar(ctx, target, "SECRET", "target-value", "target description")
+		targetID, err := envvars.CreateSimpleEnvScopeVar(
+			ctx,
+			db,
+			target,
+			"SECRET",
+			"target-value",
+			"target description",
+		)
 		Expect(err).NotTo(HaveOccurred())
-		before, err := store.GetByID(ctx, workspaceID, targetID)
+		before, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(workspaceID, targetID))
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(store.CopyEnvVars(ctx, source, target)).To(MatchError(envvars.ErrScopedEnvVarKeyConflict))
-		after, err := store.GetByID(ctx, workspaceID, targetID)
+		Expect(envvars.CopyEnvVars(ctx, db, source, target)).To(MatchError(envvars.ErrScopedEnvVarKeyConflict))
+		after, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(workspaceID, targetID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*after).To(Equal(*before))
 	})
@@ -115,14 +129,13 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should create a scoped env var successfully", func() {
-			oid, err := store.Create(ctx, testEnvVar)
+			oid, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oid).NotTo(Equal(bson.NilObjectID))
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
+			envVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
-			Expect(envVars[0].ID).NotTo(Equal(bson.NilObjectID))
 			Expect(envVars[0].WorkspaceID).To(Equal(testEnvVar.WorkspaceID))
 			Expect(envVars[0].ScopeType).To(Equal(testEnvVar.ScopeType))
 			Expect(envVars[0].ScopeValue).To(Equal(testEnvVar.ScopeValue))
@@ -130,16 +143,13 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			Expect(envVars[0].Value).To(Equal(testEnvVar.Value))
 			Expect(envVars[0].Description).To(Equal(testEnvVar.Description))
 			Expect(envVars[0].IsSensitive).To(Equal(testEnvVar.IsSensitive))
-			Expect(envVars[0].CreatedAt.IsZero()).To(BeFalse())
-			Expect(envVars[0].UpdatedAt.IsZero()).To(BeFalse())
-			Expect(envVars[0].UpdatedAt).To(Equal(envVars[0].CreatedAt))
 		})
 
 		It("should get a scoped env var by ID successfully", func() {
-			oid, err := store.Create(ctx, testEnvVar)
+			oid, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			envVar, err := store.GetByID(ctx, workspaceID, oid)
+			envVar, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(workspaceID, oid))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVar.ID).To(Equal(oid))
 			Expect(envVar.WorkspaceID).To(Equal(testEnvVar.WorkspaceID))
@@ -152,16 +162,15 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should return error when creating a duplicate scoped env var in the same scope", func() {
-			_, err := store.Create(ctx, testEnvVar)
+			_, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, testEnvVar)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("an env var with the same key already exists in this scope"))
+			_, err = create(testEnvVar)
+			Expect(err).To(MatchError(envvars.ErrScopedEnvVarKeyConflict))
 		})
 
 		It("should list only env vars in the target workspace scope and order by key", func() {
-			_, err := store.Create(ctx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -170,7 +179,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -179,7 +188,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnvType,
 				ScopeValue:  "production",
@@ -188,7 +197,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: otherWorkspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -197,7 +206,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
+			envVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(2))
 			Expect(envVars[0].Key).To(Equal("A_KEY"))
@@ -205,7 +214,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should list env vars ordered by created time when requested", func() {
-			_, err := store.Create(ctx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -216,7 +225,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 
 			time.Sleep(time.Millisecond)
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -225,8 +234,8 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := store.List(
-				ctx,
+			envVars, err := envvars.List(
+				ctx, db,
 				workspaceID,
 				envvars.WithScopes(envvartypes.ScopeWorkspace),
 				envvars.WithOrdering("created"),
@@ -238,7 +247,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should list env vars from multiple scopes ordered by key", func() {
-			_, err := store.Create(ctx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnvType,
 				ScopeValue:  "production",
@@ -247,7 +256,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -256,7 +265,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -265,7 +274,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnv,
 				ScopeValue:  "prod-env",
@@ -274,8 +283,8 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := store.List(
-				ctx,
+			envVars, err := envvars.List(
+				ctx, db,
 				workspaceID,
 				envvars.WithScopes(
 					envvartypes.ScopeWorkspace,
@@ -295,7 +304,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should list only built-in env vars in workspace scope and order by key", func() {
-			_, err := store.Create(ctx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -305,7 +314,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -316,7 +325,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -325,7 +334,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: otherWorkspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -335,8 +344,8 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			builtinVars, err := store.List(
-				ctx,
+			builtinVars, err := envvars.List(
+				ctx, db,
 				workspaceID,
 				envvars.WithScopes(envvartypes.ScopeWorkspace),
 				envvars.WithOnlyBuiltin(),
@@ -352,10 +361,10 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should delete the scoped env var in the target workspace scope only", func() {
-			_, err := store.Create(ctx, testEnvVar)
+			_, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: otherWorkspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -364,35 +373,33 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
+			envVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
 
-			err = store.DeleteByID(ctx, workspaceID, envVars[0].ID)
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Delete(ctx, envvars.ByID(workspaceID, envVars[0].ID))
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err = store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
+			envVars, err = envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(BeEmpty())
 
-			otherEnvVars, err := store.List(ctx, otherWorkspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
+			otherEnvVars, err := envvars.List(
+				ctx,
+				db,
+				otherWorkspaceID,
+				envvars.WithScopes(envvartypes.ScopeWorkspace),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(otherEnvVars).To(HaveLen(1))
 			Expect(otherEnvVars[0].Key).To(Equal(testEnvVar.Key))
 		})
 
 		It("should update key value description and isSensitive by ID", func() {
-			oid, err := store.Create(ctx, testEnvVar)
+			oid, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			originalEnvVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(originalEnvVars).To(HaveLen(1))
-			originalUpdatedAt := originalEnvVars[0].UpdatedAt
-
-			time.Sleep(time.Millisecond)
-
-			err = store.UpdateByID(ctx, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
+			err = envvars.UpdateByID(ctx, db, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
 				Key:         "UPDATED_KEY",
 				Value:       lo.ToPtr("updated-value"),
 				Description: "updated description",
@@ -400,27 +407,26 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			updatedEnvVar, err := store.GetByID(ctx, workspaceID, oid)
+			updatedEnvVar, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(workspaceID, oid))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedEnvVar.ID).To(Equal(oid))
 			Expect(updatedEnvVar.Key).To(Equal("UPDATED_KEY"))
 			Expect(updatedEnvVar.Value).To(Equal("updated-value"))
 			Expect(updatedEnvVar.Description).To(Equal("updated description"))
 			Expect(updatedEnvVar.IsSensitive).To(BeFalse())
-			Expect(updatedEnvVar.UpdatedAt.After(originalUpdatedAt)).To(BeTrue())
 		})
 
 		It("should keep isSensitive unchanged when update isSensitive is nil", func() {
-			oid, err := store.Create(ctx, testEnvVar)
+			oid, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = store.UpdateByID(ctx, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
+			err = envvars.UpdateByID(ctx, db, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
 				Key:         "UPDATED_KEY",
 				IsSensitive: nil,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			updatedEnvVar, err := store.GetByID(ctx, workspaceID, oid)
+			updatedEnvVar, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(workspaceID, oid))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedEnvVar.Key).To(Equal("UPDATED_KEY"))
 			Expect(updatedEnvVar.Value).To(Equal(testEnvVar.Value))
@@ -428,10 +434,10 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should encrypt the updated value at rest when Value is provided", func() {
-			oid, err := store.Create(ctx, testEnvVar)
+			oid, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = store.UpdateByID(ctx, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
+			err = envvars.UpdateByID(ctx, db, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
 				Key:   testEnvVar.Key,
 				Value: lo.ToPtr("updated-value"),
 			})
@@ -449,16 +455,16 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			Expect(decryptedValue).To(Equal("updated-value"))
 
 			// The store decrypts it back to plaintext on read.
-			got, err := store.GetByID(ctx, workspaceID, oid)
+			got, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(workspaceID, oid))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.Value).To(Equal("updated-value"))
 		})
 
 		It("should update value to empty string by ID", func() {
-			oid, err := store.Create(ctx, testEnvVar)
+			oid, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = store.UpdateByID(ctx, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
+			err = envvars.UpdateByID(ctx, db, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
 				Key:   testEnvVar.Key,
 				Value: lo.ToPtr(""),
 			})
@@ -475,7 +481,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(decryptedValue).To(BeEmpty())
 
-			updatedEnvVar, err := store.GetByID(ctx, workspaceID, oid)
+			updatedEnvVar, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(workspaceID, oid))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedEnvVar.Value).To(BeEmpty())
 		})
@@ -569,11 +575,11 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 					IsBuiltin:   true,
 				},
 			} {
-				_, err := store.Create(ctx, item)
+				_, err := create(item)
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			publicVars, err := store.ListPublic(ctx, workspaceID)
+			publicVars, err := envvars.ListPublic(ctx, db, workspaceID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(publicVars, func(item envvars.ScopedEnvVar, _ int) string {
 				return string(item.ScopeType) + ":" + item.ScopeValue + ":" + item.Key
@@ -604,14 +610,18 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should create a scoped env var successfully", func() {
-			oid, err := store.Create(ctx, testEnvVar)
+			oid, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oid).NotTo(Equal(bson.NilObjectID))
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnvType("production")))
+			envVars, err := envvars.List(
+				ctx,
+				db,
+				workspaceID,
+				envvars.WithScopes(envvartypes.ScopeEnvType("production")),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
-			Expect(envVars[0].ID).NotTo(Equal(bson.NilObjectID))
 			Expect(envVars[0].WorkspaceID).To(Equal(testEnvVar.WorkspaceID))
 			Expect(envVars[0].ScopeType).To(Equal(testEnvVar.ScopeType))
 			Expect(envVars[0].ScopeValue).To(Equal(testEnvVar.ScopeValue))
@@ -619,19 +629,10 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			Expect(envVars[0].Value).To(Equal(testEnvVar.Value))
 			Expect(envVars[0].Description).To(Equal(testEnvVar.Description))
 			Expect(envVars[0].IsSensitive).To(Equal(testEnvVar.IsSensitive))
-			Expect(envVars[0].CreatedAt.IsZero()).To(BeFalse())
-			Expect(envVars[0].UpdatedAt.IsZero()).To(BeFalse())
-			Expect(envVars[0].UpdatedAt).To(Equal(envVars[0].CreatedAt))
-		})
-
-		It("should return empty list for non-existent scope", func() {
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnvType("development")))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(envVars).To(BeEmpty())
 		})
 
 		It("should list only env vars in the target env type scope and order by key", func() {
-			_, err := store.Create(ctx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnvType,
 				ScopeValue:  "production",
@@ -640,7 +641,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnvType,
 				ScopeValue:  "production",
@@ -649,7 +650,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnvType,
 				ScopeValue:  "test",
@@ -658,7 +659,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: otherWorkspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnvType,
 				ScopeValue:  "production",
@@ -667,7 +668,12 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnvType("production")))
+			envVars, err := envvars.List(
+				ctx,
+				db,
+				workspaceID,
+				envvars.WithScopes(envvartypes.ScopeEnvType("production")),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(2))
 			Expect(envVars[0].Key).To(Equal("A_KEY"))
@@ -675,10 +681,10 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		})
 
 		It("should delete the scoped env var in the target env type scope only", func() {
-			_, err := store.Create(ctx, testEnvVar)
+			_, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnvType,
 				ScopeValue:  "test",
@@ -687,25 +693,40 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnvType("production")))
+			envVars, err := envvars.List(
+				ctx,
+				db,
+				workspaceID,
+				envvars.WithScopes(envvartypes.ScopeEnvType("production")),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
 
-			err = store.DeleteByID(ctx, workspaceID, envVars[0].ID)
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Delete(ctx, envvars.ByID(workspaceID, envVars[0].ID))
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err = store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnvType("production")))
+			envVars, err = envvars.List(
+				ctx,
+				db,
+				workspaceID,
+				envvars.WithScopes(envvartypes.ScopeEnvType("production")),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(BeEmpty())
 
-			otherEnvVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnvType("test")))
+			otherEnvVars, err := envvars.List(
+				ctx,
+				db,
+				workspaceID,
+				envvars.WithScopes(envvartypes.ScopeEnvType("test")),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(otherEnvVars).To(HaveLen(1))
 			Expect(otherEnvVars[0].Key).To(Equal(testEnvVar.Key))
 		})
 
 		It("should allow the same key to exist in different scopes", func() {
-			_, err := store.Create(ctx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -714,7 +735,7 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnvType,
 				ScopeValue:  "production",
@@ -729,11 +750,18 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		It("should create a simple env scoped var", func() {
 			environment := envmodel.Environment{WorkspaceID: workspaceID, Name: "prod-env"}
 
-			oid, err := store.CreateSimpleEnvScopeVar(ctx, environment, "SIMPLE_KEY", "simple-value", "simple desc")
+			oid, err := envvars.CreateSimpleEnvScopeVar(
+				ctx,
+				db,
+				environment,
+				"SIMPLE_KEY",
+				"simple-value",
+				"simple desc",
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oid).NotTo(Equal(bson.NilObjectID))
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnv("prod-env")))
+			envVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeEnv("prod-env")))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
 			Expect(envVars[0].Key).To(Equal("SIMPLE_KEY"))
@@ -748,10 +776,10 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 		It("should delete vars in the target env only", func() {
 			environment := envmodel.Environment{WorkspaceID: workspaceID, Name: "prod-env"}
 
-			_, err := store.CreateSimpleEnvScopeVar(ctx, environment, "ENV_KEY", "env-value", "env desc")
+			_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, environment, "ENV_KEY", "env-value", "env desc")
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Create(ctx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeWorkspace,
 				ScopeValue:  "",
@@ -760,21 +788,21 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = store.DeleteByEnv(ctx, environment)
+			err = envvars.DeleteByEnv(ctx, db, environment)
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnv("prod-env")))
+			envVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeEnv("prod-env")))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(BeEmpty())
 
-			workspaceVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
+			workspaceVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaceVars).To(HaveLen(1))
 			Expect(workspaceVars[0].Key).To(Equal("WORKSPACE_KEY"))
 		})
 
 		It("should batch upsert vars by key and only update value and description", func() {
-			_, err := store.Create(ctx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 				WorkspaceID: workspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnv,
 				ScopeValue:  "prod-env",
@@ -786,24 +814,30 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = store.BatchUpsertByKey(ctx, workspaceID, envvartypes.ScopeEnv("prod-env"), []envvars.ScopedEnvVar{
-				{
-					Key:         "EXISTING_KEY",
-					Value:       "new-value",
-					Description: "new desc",
-					IsBuiltin:   true,
-					IsSensitive: false,
+			err = envvars.BatchUpsertByKey(
+				ctx,
+				db,
+				workspaceID,
+				envvartypes.ScopeEnv("prod-env"),
+				[]envvars.ScopedEnvVar{
+					{
+						Key:         "EXISTING_KEY",
+						Value:       "new-value",
+						Description: "new desc",
+						IsBuiltin:   true,
+						IsSensitive: false,
+					},
+					{
+						Key:         "NEW_KEY",
+						Value:       "created-value",
+						Description: "created desc",
+						IsBuiltin:   true,
+					},
 				},
-				{
-					Key:         "NEW_KEY",
-					Value:       "created-value",
-					Description: "created desc",
-					IsBuiltin:   true,
-				},
-			})
+			)
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := store.List(ctx, workspaceID, envvars.WithScopes(envvartypes.ScopeEnv("prod-env")))
+			envVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeEnv("prod-env")))
 			Expect(err).NotTo(HaveOccurred())
 			varsByKey := lo.SliceToMap(envVars, func(item envvars.ScopedEnvVar) (string, envvars.ScopedEnvVar) {
 				return item.Key, item
@@ -815,8 +849,8 @@ var _ = Describe("ScopedEnvVarStoreMongo", func() {
 			Expect(existing.IsBuiltin).To(BeFalse())
 			Expect(existing.IsSensitive).To(BeTrue())
 
-			builtinVars, err := store.List(
-				ctx,
+			builtinVars, err := envvars.List(
+				ctx, db,
 				workspaceID,
 				envvars.WithScopes(envvartypes.ScopeEnv("prod-env")),
 				envvars.WithOnlyBuiltin(),

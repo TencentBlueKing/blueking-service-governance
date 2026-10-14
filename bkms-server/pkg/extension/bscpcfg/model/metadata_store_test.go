@@ -24,33 +24,24 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 )
 
 var _ = Describe("MetadataStore", func() {
-	var store model.MetadataStore
+	var store *model.MetadataStore
 	var ctx context.Context
 	var testAppID string
-	var diApp *fxtest.App
 
 	BeforeEach(func() {
-		diApp = fxtest.New(
-			GinkgoT(),
-			model.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
-
+		store = testutil.NewStore(GinkgoT(), model.MetadataMeta)
 		ctx = context.Background()
 		testAppID = "test-app-" + stringx.Random(5)
 	})
 
 	AfterEach(func() {
-		_ = store.Delete(ctx, testAppID)
-		diApp.RequireStop()
+		_ = store.DeleteIfExists(ctx, model.ByApp(testAppID))
 	})
 
 	Describe("Create", func() {
@@ -60,6 +51,7 @@ var _ = Describe("MetadataStore", func() {
 					AppID:        testAppID,
 					Enable:       true,
 					MountPath:    "/data/bscp",
+					WorkloadKind: "Deployment",
 					WorkloadName: "test-workload",
 					Operator:     "tester",
 				}
@@ -68,14 +60,13 @@ var _ = Describe("MetadataStore", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// 验证写入
-				stored, err := store.Get(ctx, testAppID)
+				stored, err := store.Get(ctx, model.ByApp(testAppID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.Enable).To(BeTrue())
 				Expect(stored.MountPath).To(Equal("/data/bscp"))
+				Expect(stored.WorkloadKind).To(Equal("Deployment"))
 				Expect(stored.WorkloadName).To(Equal("test-workload"))
 				Expect(stored.Operator).To(Equal("tester"))
-				Expect(stored.CreatedAt).NotTo(BeZero())
-				Expect(stored.UpdatedAt).NotTo(BeZero())
 			})
 		})
 
@@ -110,349 +101,11 @@ var _ = Describe("MetadataStore", func() {
 	})
 
 	Describe("Get", func() {
-		BeforeEach(func() {
-			meta := &model.Metadata{
-				AppID:     testAppID,
-				Enable:    true,
-				MountPath: "/etc/bscp",
-				Operator:  "admin",
-			}
-			err := store.Create(ctx, meta)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		Context("when meta exists", func() {
-			It("should return the meta", func() {
-				meta, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(meta.Enable).To(BeTrue())
-				Expect(meta.MountPath).To(Equal("/etc/bscp"))
-				Expect(meta.Operator).To(Equal("admin"))
-			})
-		})
-
 		Context("when meta does not exist", func() {
 			It("should return ErrMetadataNotFound", func() {
-				_, err := store.Get(ctx, "non-existent-app")
+				_, err := store.Get(ctx, model.ByApp("non-existent-app"))
 				Expect(err).To(MatchError(model.ErrMetadataNotFound))
 			})
-		})
-	})
-
-	Describe("Update", func() {
-		BeforeEach(func() {
-			meta := &model.Metadata{
-				AppID:     testAppID,
-				Enable:    true,
-				MountPath: "/old/path",
-				Operator:  "user1",
-			}
-			err := store.Create(ctx, meta)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		Context("when updating enable", func() {
-			It("should update enable successfully", func() {
-				newEnable := false
-				err := store.Update(ctx, testAppID, &model.MetadataUpdate{
-					Enable: &newEnable,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				updated, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.Enable).To(BeFalse())
-			})
-		})
-
-		Context("when meta does not exist", func() {
-			It("should return ErrMetadataNotFound", func() {
-				newPath := "/any"
-				err := store.Update(ctx, "non-existent-app", &model.MetadataUpdate{
-					MountPath: &newPath,
-				})
-				Expect(err).To(MatchError(model.ErrMetadataNotFound))
-			})
-		})
-
-		Context("when updateData is nil", func() {
-			It("should return nil without error", func() {
-				err := store.Update(ctx, testAppID, nil)
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		Context("when updating workload", func() {
-			It("should update workload successfully", func() {
-				newWorkload := "my-deployment"
-				err := store.Update(ctx, testAppID, &model.MetadataUpdate{
-					WorkloadName: &newWorkload,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				updated, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.WorkloadName).To(Equal("my-deployment"))
-			})
-		})
-
-		Context("when workload is nil in updateData", func() {
-			It("should not modify existing workload value", func() {
-				// 先设置 workload
-				workload := "existing-workload"
-				err := store.Update(ctx, testAppID, &model.MetadataUpdate{
-					WorkloadName: &workload,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// 更新其他字段，workload 为 nil
-				newEnable := false
-				err = store.Update(ctx, testAppID, &model.MetadataUpdate{
-					Enable: &newEnable,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// 验证 workload 未被修改
-				updated, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.WorkloadName).To(Equal("existing-workload"))
-				Expect(updated.Enable).To(BeFalse())
-			})
-		})
-
-		Context("when clearing workload with empty string", func() {
-			It("should set workload to empty string", func() {
-				// 先设置 workload
-				workload := "my-deployment"
-				err := store.Update(ctx, testAppID, &model.MetadataUpdate{
-					WorkloadName: &workload,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// 清除 workload
-				emptyWorkload := ""
-				err = store.Update(ctx, testAppID, &model.MetadataUpdate{
-					WorkloadName: &emptyWorkload,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				updated, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.WorkloadName).To(Equal(""))
-			})
-		})
-	})
-
-	Describe("Delete", func() {
-		BeforeEach(func() {
-			meta := &model.Metadata{
-				AppID:     testAppID,
-				MountPath: "/tmp",
-			}
-			err := store.Create(ctx, meta)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		Context("when meta exists", func() {
-			It("should delete successfully", func() {
-				err := store.Delete(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = store.Get(ctx, testAppID)
-				Expect(err).To(MatchError(model.ErrMetadataNotFound))
-			})
-		})
-
-		Context("when meta does not exist", func() {
-			It("should return ErrMetadataNotFound", func() {
-				err := store.Delete(ctx, "non-existent-app")
-				Expect(err).To(MatchError(model.ErrMetadataNotFound))
-			})
-		})
-	})
-
-	Describe("Update WorkloadKind", func() {
-		BeforeEach(func() {
-			meta := &model.Metadata{
-				AppID:     testAppID,
-				MountPath: "/data/bscp",
-				Operator:  "user1",
-			}
-			err := store.Create(ctx, meta)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		Context("when updating workloadKind", func() {
-			It("should update workloadKind successfully", func() {
-				kind := "StatefulSet"
-				err := store.Update(ctx, testAppID, &model.MetadataUpdate{
-					WorkloadKind: &kind,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				updated, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.WorkloadKind).To(Equal("StatefulSet"))
-			})
-		})
-
-		Context("when workloadKind is nil in updateData", func() {
-			It("should not modify existing workloadKind value", func() {
-				// 先设置 workloadKind
-				kind := "Deployment"
-				err := store.Update(ctx, testAppID, &model.MetadataUpdate{
-					WorkloadKind: &kind,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// 更新其他字段，workloadKind 为 nil
-				newEnable := false
-				err = store.Update(ctx, testAppID, &model.MetadataUpdate{
-					Enable: &newEnable,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// 验证 workloadKind 未被修改
-				updated, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.WorkloadKind).To(Equal("Deployment"))
-				Expect(updated.Enable).To(BeFalse())
-			})
-		})
-
-		Context("when clearing workloadKind with empty string", func() {
-			It("should set workloadKind to empty string", func() {
-				// 先设置 workloadKind
-				kind := "DaemonSet"
-				err := store.Update(ctx, testAppID, &model.MetadataUpdate{
-					WorkloadKind: &kind,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// 清除 workloadKind
-				empty := ""
-				err = store.Update(ctx, testAppID, &model.MetadataUpdate{
-					WorkloadKind: &empty,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				updated, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(updated.WorkloadKind).To(Equal(""))
-			})
-		})
-
-		Context("when creating metadata with workloadKind", func() {
-			It("should persist workloadKind on create", func() {
-				anotherAppID := "test-app-wk-" + stringx.Random(5)
-				defer func() { _ = store.Delete(ctx, anotherAppID) }()
-
-				meta := &model.Metadata{
-					AppID:        anotherAppID,
-					MountPath:    "/data/bscp",
-					WorkloadKind: "Deployment",
-					WorkloadName: "my-deploy",
-					Operator:     "user1",
-				}
-				err := store.Create(ctx, meta)
-				Expect(err).NotTo(HaveOccurred())
-
-				stored, err := store.Get(ctx, anotherAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(stored.WorkloadKind).To(Equal("Deployment"))
-				Expect(stored.WorkloadName).To(Equal("my-deploy"))
-			})
-		})
-
-		Context("when reading old data without workloadKind field", func() {
-			It("should default to empty string (backward compatible)", func() {
-				// 已有记录不含 workloadKind 字段时，读取应默认为空
-				stored, err := store.Get(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(stored.WorkloadKind).To(Equal(""))
-			})
-		})
-	})
-})
-
-// === 纯逻辑测试（不依赖数据库） ===
-
-var _ = Describe("Metadata Model Logic", func() {
-	Describe("MetadataUpdate.ApplyTo", func() {
-		It("should apply WorkloadKind when non-nil", func() {
-			meta := &model.Metadata{
-				AppID:        "app-1",
-				WorkloadKind: "",
-			}
-			kind := "StatefulSet"
-			update := &model.MetadataUpdate{
-				WorkloadKind: &kind,
-			}
-
-			update.ApplyTo(meta)
-
-			Expect(meta.WorkloadKind).To(Equal("StatefulSet"))
-		})
-
-		It("should not change WorkloadKind when nil", func() {
-			meta := &model.Metadata{
-				AppID:        "app-1",
-				WorkloadKind: "Deployment",
-			}
-			update := &model.MetadataUpdate{
-				WorkloadKind: nil,
-			}
-
-			update.ApplyTo(meta)
-
-			Expect(meta.WorkloadKind).To(Equal("Deployment"))
-		})
-
-		It("should allow clearing WorkloadKind to empty string", func() {
-			meta := &model.Metadata{
-				AppID:        "app-1",
-				WorkloadKind: "Deployment",
-			}
-			empty := ""
-			update := &model.MetadataUpdate{
-				WorkloadKind: &empty,
-			}
-
-			update.ApplyTo(meta)
-
-			Expect(meta.WorkloadKind).To(Equal(""))
-		})
-
-		It("should apply Enable when non-nil", func() {
-			meta := &model.Metadata{AppID: "app-1"}
-			enable := true
-			update := &model.MetadataUpdate{Enable: &enable}
-
-			update.ApplyTo(meta)
-
-			Expect(meta.Enable).To(BeTrue())
-		})
-
-		It("should handle nil update gracefully", func() {
-			meta := &model.Metadata{
-				AppID:        "app-1",
-				WorkloadKind: "Deployment",
-			}
-			var update *model.MetadataUpdate
-
-			update.ApplyTo(meta)
-
-			Expect(meta.WorkloadKind).To(Equal("Deployment"))
-		})
-
-		It("should handle nil metadata gracefully", func() {
-			kind := "StatefulSet"
-			update := &model.MetadataUpdate{
-				WorkloadKind: &kind,
-			}
-
-			// 不应 panic
-			update.ApplyTo(nil)
 		})
 	})
 })

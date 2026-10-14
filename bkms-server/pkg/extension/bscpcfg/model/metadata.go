@@ -47,34 +47,3 @@ type Metadata struct {
 	// UpdatedAt 更新时间
 	UpdatedAt time.Time `bson:"updatedAt"`
 }
-
-// MetadataUpdate 定义了更新 Metadata 时允许修改的数据
-type MetadataUpdate struct {
-	// MountPath 更新挂载路径（nil 表示不更新）
-	MountPath *string
-	// WorkloadName 更新目标 workload 名称（nil 表示不更新）
-	WorkloadName *string
-	// WorkloadKind 更新目标工作负载类型（nil 表示不更新）
-	WorkloadKind *string
-	// Enable 更新启用开关（nil 表示不更新）
-	Enable *bool
-}
-
-// ApplyTo 将更新数据应用到 Metadata 对象上
-func (u *MetadataUpdate) ApplyTo(m *Metadata) {
-	if u == nil || m == nil {
-		return
-	}
-	if u.MountPath != nil {
-		m.MountPath = *u.MountPath
-	}
-	if u.WorkloadName != nil {
-		m.WorkloadName = *u.WorkloadName
-	}
-	if u.WorkloadKind != nil {
-		m.WorkloadKind = *u.WorkloadKind
-	}
-	if u.Enable != nil {
-		m.Enable = *u.Enable
-	}
-}

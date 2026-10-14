@@ -23,369 +23,152 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("ApmInstConfigStoreMongo", func() {
+var _ = Describe("ApmInstConfigStore", func() {
 	var (
-		ctx   context.Context
-		diApp *fxtest.App
-		store ApmInstConfigStore
+		ctx  context.Context
+		db   *mongo.Database
+		apms *ApmInstConfigStore
 	)
+
+	newApm := func(workspaceID string, apmID int64, name string, envs ...EnvInfo) *ApmInstConfig {
+		return &ApmInstConfig{
+			WorkspaceID:    workspaceID,
+			ApmID:          apmID,
+			Name:           name,
+			Token:          "token",
+			Creator:        "test-user",
+			AssociatedEnvs: envs,
+		}
+	}
+
+	mustCreate := func(apm *ApmInstConfig) *ApmInstConfig {
+		Expect(apms.Create(ctx, apm)).To(Succeed())
+		return apm
+	}
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		// 清理测试数据
-		err := testutil.CleanupCollection("bkmonitor_apm_inst_config")
-		Expect(err).NotTo(HaveOccurred())
-
-		// 使用 FxModule 统一注入所有依赖
-		diApp = fxtest.New(
-			GinkgoT(),
-			FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
-	})
-
-	AfterEach(func() {
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(ApmInstConfigMeta)).To(Succeed())
+		db = testutil.NewDB(GinkgoT())
+		apms = store.Of(db, ApmInstConfigMeta)
 	})
 
 	Describe("Create", func() {
-		It("should create an APM successfully", func() {
-			apm := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "测试APM服务",
-				Token:       "test-token-001",
-				Creator:     "test-user",
-			}
+		It("should store associatedEnvs as an empty array", func() {
+			apm := mustCreate(newApm("ws", 1001, "apm"))
 
-			id, err := store.Create(ctx, apm)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(id).NotTo(Equal(bson.NilObjectID))
-			Expect(apm.CreatedAt).NotTo(BeZero())
+			raw := bson.M{}
+			Expect(db.Collection(ApmInstConfigMeta.Collection).
+				FindOne(ctx, bson.M{"_id": apm.ID}).Decode(&raw)).To(Succeed())
+			Expect(raw["associatedEnvs"]).To(BeEquivalentTo(bson.A{}))
+		})
+
+		It("should reject a config missing required fields", func() {
+			err := apms.Create(ctx, &ApmInstConfig{WorkspaceID: "ws", ApmID: 1001})
+			Expect(err).To(MatchError(ContainSubstring("validation failed")))
+		})
+
+		It("should return ErrApmInstConfigExists on duplicate apmID", func() {
+			mustCreate(newApm("ws", 1001, "apm"))
+			err := apms.Create(ctx, newApm("ws", 1001, "apm-2"))
+			Expect(err).To(MatchError(ErrApmInstConfigExists))
 		})
 	})
 
-	Describe("List", func() {
-		BeforeEach(func() {
-			apm1 := &ApmInstConfig{
-				WorkspaceID: "workspace-a",
-				ApmID:       1001,
-				Name:        "APM服务1",
-				Token:       "token-001",
-				Creator:     "user1",
-			}
-			apm2 := &ApmInstConfig{
-				WorkspaceID: "workspace-a",
-				ApmID:       1002,
-				Name:        "APM服务2",
-				Token:       "token-002",
-				Creator:     "user2",
-			}
-			apm3 := &ApmInstConfig{
-				WorkspaceID: "workspace-b",
-				ApmID:       1003,
-				Name:        "APM服务3",
-				Token:       "token-003",
-				Creator:     "user3",
-			}
+	Describe("Get", func() {
+		It("should find configs by apmID, name and bound env", func() {
+			envID := bson.NewObjectID()
+			mustCreate(newApm("ws", 1001, "apm", EnvInfo{EnvID: envID, EnvName: "env"}))
 
-			_, err := store.Create(ctx, apm1)
+			byApmID, err := apms.Get(ctx, ApmByApmID(1001))
 			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Create(ctx, apm2)
+			Expect(byApmID.Name).To(Equal("apm"))
+
+			byName, err := apms.Get(ctx, ApmByName("ws", "apm"))
 			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Create(ctx, apm3)
+			Expect(byName.ApmID).To(Equal(int64(1001)))
+
+			byEnv, err := apms.Get(ctx, ApmBoundToEnv(envID))
 			Expect(err).NotTo(HaveOccurred())
+			Expect(byEnv.AssociatedEnvs).To(Equal([]EnvInfo{{EnvID: envID, EnvName: "env"}}))
 		})
 
-		It("should list APMs by workspace ID", func() {
-			apms, err := store.List(ctx, "workspace-a")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(apms).To(HaveLen(2))
-			for _, apm := range apms {
-				Expect(apm.WorkspaceID).To(Equal("workspace-a"))
-			}
-
-			apms, err = store.List(ctx, "workspace-b")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(apms).To(HaveLen(1))
-			Expect(apms[0].ApmID).To(Equal(int64(1003)))
+		It("should return ErrApmInstConfigNotFound when nothing matches", func() {
+			mustCreate(newApm("ws", 1001, "apm"))
+			_, err := apms.Get(ctx, ApmByName("other-ws", "apm"))
+			Expect(err).To(MatchError(ErrApmInstConfigNotFound))
 		})
 	})
 
-	Describe("GetByApmID", func() {
-		BeforeEach(func() {
-			apm := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "测试APM服务",
-				Token:       "test-token-001",
-				Creator:     "test-user",
-			}
-			_, err := store.Create(ctx, apm)
+	Describe("GetApmIDMap", func() {
+		It("should index configs of the workspace by apmID", func() {
+			mustCreate(newApm("ws-a", 1001, "apm-1"))
+			mustCreate(newApm("ws-a", 1002, "apm-2"))
+			mustCreate(newApm("ws-b", 1003, "apm-3"))
+
+			m, err := GetApmIDMap(ctx, db, "ws-a")
 			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should get APM by APM ID successfully", func() {
-			apm, err := store.GetByApmID(ctx, 1001)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(apm).NotTo(BeNil())
-			Expect(apm.ApmID).To(Equal(int64(1001)))
-			Expect(apm.Name).To(Equal("测试APM服务"))
-		})
-	})
-
-	Describe("GetByEnvID", func() {
-		var envID bson.ObjectID
-
-		BeforeEach(func() {
-			envID = bson.NewObjectID()
-			apm := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "测试APM服务",
-				Token:       "test-token-001",
-				Creator:     "test-user",
-				AssociatedEnvs: []EnvInfo{
-					{EnvID: envID, EnvName: "测试环境"},
-				},
-			}
-			_, err := store.Create(ctx, apm)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should get APM by environment ID successfully", func() {
-			apm, err := store.GetByEnvID(ctx, envID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(apm).NotTo(BeNil())
-			Expect(apm.ApmID).To(Equal(int64(1001)))
-			Expect(apm.AssociatedEnvs).To(HaveLen(1))
-			Expect(apm.AssociatedEnvs[0].EnvID).To(Equal(envID))
-			Expect(apm.AssociatedEnvs[0].EnvName).To(Equal("测试环境"))
-		})
-	})
-
-	Describe("Update", func() {
-		var apmID bson.ObjectID
-
-		BeforeEach(func() {
-			apm := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "测试APM服务",
-				Token:       "test-token-001",
-				Creator:     "test-user",
-			}
-			var err error
-			apmID, err = store.Create(ctx, apm)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should update multiple fields successfully", func() {
-			newName := "更新后的APM服务"
-			newToken := "new-test-token"
-			err := store.Update(ctx, apmID, &ApmInstConfigUpdateData{Name: &newName, Token: &newToken})
-			Expect(err).NotTo(HaveOccurred())
-
-			apm, err := store.GetByApmID(ctx, 1001)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(apm.Name).To(Equal("更新后的APM服务"))
-			Expect(apm.Token).To(Equal("new-test-token"))
-		})
-	})
-
-	Describe("Delete", func() {
-		var apmID bson.ObjectID
-
-		BeforeEach(func() {
-			apm := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "测试APM服务",
-				Token:       "test-token-001",
-				Creator:     "test-user",
-			}
-			var err error
-			apmID, err = store.Create(ctx, apm)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should delete APM successfully", func() {
-			err := store.Delete(ctx, apmID)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 验证APM已被删除
-			apm, err := store.GetByApmID(ctx, 1001)
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrApmInstConfigNotFound)).To(BeTrue())
-			Expect(apm).To(BeNil())
+			Expect(m).To(HaveLen(2))
+			Expect(m[1001].Name).To(Equal("apm-1"))
+			Expect(m[1002].Name).To(Equal("apm-2"))
 		})
 	})
 
 	Describe("BindEnv", func() {
-		var apmID bson.ObjectID
+		var apm *ApmInstConfig
 
 		BeforeEach(func() {
-			apm := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "测试APM服务",
-				Token:       "test-token-001",
-				Creator:     "test-user",
-			}
-			var err error
-			apmID, err = store.Create(ctx, apm)
-			Expect(err).NotTo(HaveOccurred())
+			apm = mustCreate(newApm("ws", 1001, "apm"))
 		})
 
-		It("should add environment to APM successfully", func() {
+		It("should add the env only once", func() {
 			envID := bson.NewObjectID()
-			err := store.BindEnv(ctx, apmID, envID, "测试环境")
-			Expect(err).NotTo(HaveOccurred())
+			Expect(BindEnv(ctx, db, apm.ID, envID, "env")).To(Succeed())
+			Expect(BindEnv(ctx, db, apm.ID, envID, "env")).To(Succeed())
 
-			apm, err := store.GetByApmID(ctx, 1001)
+			got, err := apms.Get(ctx, store.ByID(apm.ID))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(apm.AssociatedEnvs).To(HaveLen(1))
-			Expect(apm.AssociatedEnvs[0].EnvID).To(Equal(envID))
-			Expect(apm.AssociatedEnvs[0].EnvName).To(Equal("测试环境"))
+			Expect(got.AssociatedEnvs).To(Equal([]EnvInfo{{EnvID: envID, EnvName: "env"}}))
 		})
 
-		It("should not add duplicate environment", func() {
-			envID := bson.NewObjectID()
-
-			err := store.BindEnv(ctx, apmID, envID, "测试环境")
-			Expect(err).NotTo(HaveOccurred())
-			// 重复添加相同环境
-			err = store.BindEnv(ctx, apmID, envID, "测试环境")
-			Expect(err).NotTo(HaveOccurred())
-
-			apm, err := store.GetByApmID(ctx, 1001)
-			Expect(err).NotTo(HaveOccurred())
-			// $addToSet 保证只有一条
-			Expect(apm.AssociatedEnvs).To(HaveLen(1))
-		})
-	})
-
-	Describe("UnbindEnv", func() {
-		var (
-			apmID bson.ObjectID
-			envID bson.ObjectID
-		)
-
-		BeforeEach(func() {
-			envID = bson.NewObjectID()
-			apm := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "测试APM服务",
-				Token:       "test-token-001",
-				Creator:     "test-user",
-				AssociatedEnvs: []EnvInfo{
-					{EnvID: envID, EnvName: "测试环境"},
-				},
-			}
-			var err error
-			apmID, err = store.Create(ctx, apm)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should remove environment from APM successfully", func() {
-			err := store.UnbindEnv(ctx, apmID, envID)
-			Expect(err).NotTo(HaveOccurred())
-
-			apm, err := store.GetByApmID(ctx, 1001)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(apm.AssociatedEnvs).To(HaveLen(0))
+		It("should return ErrApmInstConfigNotFound for a missing config", func() {
+			err := BindEnv(ctx, db, bson.NewObjectID(), bson.NewObjectID(), "env")
+			Expect(err).To(MatchError(ErrApmInstConfigNotFound))
 		})
 	})
 
 	Describe("UnbindEnvFromAll", func() {
-		var (
-			envID  bson.ObjectID
-			envID2 bson.ObjectID
-		)
-
-		BeforeEach(func() {
-			envID = bson.NewObjectID()
-			envID2 = bson.NewObjectID()
-		})
-
-		It("should remove env from a single APM", func() {
-			apm := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "APM服务1",
-				Token:       "token-001",
-				Creator:     "test-user",
-				AssociatedEnvs: []EnvInfo{
-					{EnvID: envID, EnvName: "测试环境"},
-					{EnvID: envID2, EnvName: "测试环境2"},
-				},
-			}
-			_, err := store.Create(ctx, apm)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = store.UnbindEnvFromAll(ctx, envID)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 验证 envID 已被移除，envID2 仍然保留
-			result, err := store.GetByApmID(ctx, 1001)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.AssociatedEnvs).To(HaveLen(1))
-			Expect(result.AssociatedEnvs[0].EnvID).To(Equal(envID2))
-		})
-
-		It("should remove env from multiple APMs (dirty data scenario)", func() {
+		It("should remove the env from every config that references it", func() {
+			envID, envID2 := bson.NewObjectID(), bson.NewObjectID()
 			// 模拟脏数据：同一个 env 出现在多个 APM 的 associatedEnvs 列表中
-			apm1 := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1001,
-				Name:        "APM服务1",
-				Token:       "token-001",
-				Creator:     "test-user",
-				AssociatedEnvs: []EnvInfo{
-					{EnvID: envID, EnvName: "测试环境"},
-				},
-			}
-			apm2 := &ApmInstConfig{
-				WorkspaceID: "test-workspace",
-				ApmID:       1002,
-				Name:        "APM服务2",
-				Token:       "token-002",
-				Creator:     "test-user",
-				AssociatedEnvs: []EnvInfo{
-					{EnvID: envID, EnvName: "测试环境"},
-					{EnvID: envID2, EnvName: "测试环境2"},
-				},
-			}
-			_, err := store.Create(ctx, apm1)
-			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Create(ctx, apm2)
-			Expect(err).NotTo(HaveOccurred())
+			apm1 := mustCreate(newApm("ws", 1001, "apm-1", EnvInfo{EnvID: envID, EnvName: "env"}))
+			apm2 := mustCreate(newApm("ws", 1002, "apm-2",
+				EnvInfo{EnvID: envID, EnvName: "env"},
+				EnvInfo{EnvID: envID2, EnvName: "env-2"},
+			))
 
-			// 一步清理所有关联
-			err = store.UnbindEnvFromAll(ctx, envID)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(UnbindEnvFromAll(ctx, db, envID)).To(Succeed())
 
-			// 验证 APM1 的 associatedEnvs 已清空
-			result1, err := store.GetByApmID(ctx, 1001)
+			got1, err := apms.Get(ctx, store.ByID(apm1.ID))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result1.AssociatedEnvs).To(HaveLen(0))
+			Expect(got1.AssociatedEnvs).To(BeEmpty())
 
-			// 验证 APM2 的 associatedEnvs 中 envID 被移除，envID2 保留
-			result2, err := store.GetByApmID(ctx, 1002)
+			got2, err := apms.Get(ctx, store.ByID(apm2.ID))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result2.AssociatedEnvs).To(HaveLen(1))
-			Expect(result2.AssociatedEnvs[0].EnvID).To(Equal(envID2))
+			Expect(got2.AssociatedEnvs).To(Equal([]EnvInfo{{EnvID: envID2, EnvName: "env-2"}}))
+		})
+
+		It("should succeed when no config references the env", func() {
+			mustCreate(newApm("ws", 1001, "apm"))
+			Expect(UnbindEnvFromAll(ctx, db, bson.NewObjectID())).To(Succeed())
 		})
 	})
 })

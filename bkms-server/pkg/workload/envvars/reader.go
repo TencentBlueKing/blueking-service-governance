@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -38,21 +39,21 @@ import (
 
 // UnifiedEnvVarsReader reads env vars from all sources with unified source semantics.
 type UnifiedEnvVarsReader struct {
-	scopedEnvVarStore ScopedEnvVarStore
-	appDepsVarReader  *depenvvars.Reader
-	polarisVarReader  *polarisenvvars.Reader
+	db               *mongo.Database
+	appDepsVarReader *depenvvars.Reader
+	polarisVarReader *polarisenvvars.Reader
 }
 
 // NewUnifiedEnvVarsReader creates a new unified env vars reader.
 func NewUnifiedEnvVarsReader(
-	store ScopedEnvVarStore,
+	db *mongo.Database,
 	appDepsVarReader *depenvvars.Reader,
 	polarisVarReader *polarisenvvars.Reader,
 ) *UnifiedEnvVarsReader {
 	return &UnifiedEnvVarsReader{
-		scopedEnvVarStore: store,
-		appDepsVarReader:  appDepsVarReader,
-		polarisVarReader:  polarisVarReader,
+		db:               db,
+		appDepsVarReader: appDepsVarReader,
+		polarisVarReader: polarisVarReader,
 	}
 }
 
@@ -99,13 +100,13 @@ func (r *UnifiedEnvVarsReader) ListVars(
 func (r *UnifiedEnvVarsReader) ListEnvBgVars(
 	ctx context.Context, environment envmodel.Environment,
 ) (envvartypes.EnvVariableRichList, error) {
-	builtinVars, err := ListBuiltinVars(ctx, r.scopedEnvVarStore, environment, nil, nil)
+	builtinVars, err := ListBuiltinVars(ctx, r.db, environment, nil, nil)
 	if err != nil {
 		return envvartypes.EnvVariableRichList{}, errors.Wrap(err, "list builtin vars")
 	}
 
-	scopedVars, err := r.scopedEnvVarStore.List(
-		ctx,
+	scopedVars, err := List(
+		ctx, r.db,
 		environment.WorkspaceID,
 		WithScopes(
 			envvartypes.ScopeWorkspace,
@@ -139,13 +140,13 @@ func (r *UnifiedEnvVarsReader) ListEnvBgVars(
 func (r *UnifiedEnvVarsReader) ListAppBgVars(
 	ctx context.Context, environment envmodel.Environment, app *bkmsapp.Application, am *appmodel.AppModel,
 ) (envvartypes.EnvVariableRichList, error) {
-	builtinVars, err := ListBuiltinVars(ctx, r.scopedEnvVarStore, environment, app, am)
+	builtinVars, err := ListBuiltinVars(ctx, r.db, environment, app, am)
 	if err != nil {
 		return envvartypes.EnvVariableRichList{}, errors.Wrap(err, "list builtin vars")
 	}
 
-	scopedVars, err := r.scopedEnvVarStore.List(
-		ctx,
+	scopedVars, err := List(
+		ctx, r.db,
 		environment.WorkspaceID,
 		WithScopes(
 			envvartypes.ScopeWorkspace,
@@ -225,13 +226,13 @@ func (r *UnifiedEnvVarsReader) ListAppBgVarsForConflicts(
 		Type:        string(env.TypeProduction),
 		Name:        "production",
 	}
-	builtinVars, err := ListBuiltinVars(ctx, r.scopedEnvVarStore, stubEnv, app, am)
+	builtinVars, err := ListBuiltinVars(ctx, r.db, stubEnv, app, am)
 	if err != nil {
 		return envvartypes.EnvVariableRichList{}, errors.Wrap(err, "list builtin vars")
 	}
 
 	// Get all scoped vars in the workspace.
-	scopedVars, err := r.scopedEnvVarStore.List(ctx, workspaceID)
+	scopedVars, err := List(ctx, r.db, workspaceID)
 	if err != nil {
 		return envvartypes.EnvVariableRichList{}, errors.Wrap(err, "list workspace scoped env vars")
 	}

@@ -26,9 +26,11 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -62,16 +64,16 @@ type TagQueryResult struct {
 
 // TagQueryManager 查询与刷新工作空间自定义镜像的 tag
 type TagQueryManager struct {
-	store       Store
+	images      *Store
 	checker     *ExistenceChecker
 	snapshotSvc *snapshot.Service
 }
 
 // NewTagQueryManager 创建 TagQueryManager
-func NewTagQueryManager(store Store, snapshotSvc *snapshot.Service) *TagQueryManager {
+func NewTagQueryManager(db *mongo.Database, snapshotSvc *snapshot.Service) *TagQueryManager {
 	return &TagQueryManager{
-		store:       store,
-		checker:     NewExistenceChecker(snapshotSvc),
+		images:      store.Of(db, Meta),
+		checker:     NewExistenceChecker(db, snapshotSvc),
 		snapshotSvc: snapshotSvc,
 	}
 }
@@ -89,7 +91,7 @@ func (m *TagQueryManager) ListTags(
 		return nil, errors.Wrap(err, "list custom runtime image tags")
 	}
 
-	persisted, err := m.store.Exists(ctx, workspaceID, imageName)
+	persisted, err := m.images.Exists(ctx, ByWorkspaceAndName(workspaceID, imageName))
 	if err != nil {
 		return nil, errors.Wrapf(err, "decide tag source of image %s", imageName)
 	}
@@ -111,7 +113,7 @@ func (m *TagQueryManager) RefreshTags(
 		return nil, errors.Wrap(err, "refresh custom runtime image tags")
 	}
 
-	persisted, err := m.store.Exists(ctx, workspaceID, imageName)
+	persisted, err := m.images.Exists(ctx, ByWorkspaceAndName(workspaceID, imageName))
 	if err != nil {
 		return nil, errors.Wrapf(err, "check if image %s is persisted in workspace %s", imageName, workspaceID)
 	}

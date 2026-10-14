@@ -32,8 +32,11 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/serializer"
+	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -44,6 +47,7 @@ import (
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	workspacetask "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -59,6 +63,14 @@ type Handler struct {
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) workspaces() *workspace.WorkspaceStore {
+	return store.Of(h.registry.DB, workspace.Meta)
+}
+
+func (h *Handler) components() *workspace.WorkspaceCompsStore {
+	return store.Of(h.registry.DB, workspace.ComponentMeta)
 }
 
 // GetUserStatistics 获取用户统计信息。
@@ -78,7 +90,7 @@ func (h *Handler) GetUserStatistics(c *gin.Context) {
 	var totalAppCount, totalEnvCount int64
 
 	// 获取所有工作空间列表
-	workspaces, err := h.registry.WorkspaceStore.List(ctx, &workspace.ListOptions{})
+	workspaces, err := h.workspaces().List(ctx)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspaces"))
 		return
@@ -116,12 +128,12 @@ func (h *Handler) GetUserStatistics(c *gin.Context) {
 	g, gCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		var countErr error
-		appCounts, countErr = h.registry.AppStore.CountByWorkspaceIDs(gCtx, allowedWorkspaceIDs)
+		appCounts, countErr = bkmsapp.CountByWorkspaceIDs(gCtx, h.registry.DB, allowedWorkspaceIDs)
 		return countErr
 	})
 	g.Go(func() error {
 		var countErr error
-		envCounts, countErr = h.registry.EnvStore.CountByWorkspaceIDs(gCtx, allowedWorkspaceIDs)
+		envCounts, countErr = envmodel.CountByWorkspaceIDs(gCtx, h.registry.DB, allowedWorkspaceIDs)
 		return countErr
 	})
 	if err = g.Wait(); err != nil {
@@ -231,7 +243,9 @@ func (h *Handler) GetWorkspace(c *gin.Context) {
 		return
 	}
 
-	imageRegistry, err := h.registry.ImageRegistryStore.GetByWorkspaceAndType(ctx, ws.ID, ws.ImageRegistryType)
+	imageRegistry, err := store.Of(h.registry.DB, bkmsreg.ImageRegistryMeta).Get(
+		ctx, bkmsreg.ByWorkspaceAndType(ws.ID, ws.ImageRegistryType),
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get image registry"))
 		return
@@ -264,12 +278,10 @@ func (h *Handler) ListWorkspaces(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	listOpts := &workspace.ListOptions{}
-	if queryInput.Keyword != nil {
-		listOpts.Keyword = *queryInput.Keyword
-	}
 	// 从数据库获取工作空间列表（支持关键字搜索）
-	workspaces, err := h.registry.WorkspaceStore.List(ctx, listOpts)
+	workspaces, err := h.workspaces().List(
+		ctx, workspace.KeywordMatches(lo.FromPtr(queryInput.Keyword)),
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspaces"))
 		return
@@ -328,9 +340,7 @@ func (h *Handler) ListWorkspacesOverview(c *gin.Context) {
 	username := auth.MustGetUser(ctx).ID
 
 	// 查询所有 workspace 并按当前用户操作时间排序
-	workspaces, err := workspace.ListSortByOpTime(
-		ctx, h.registry.WorkspaceStore, h.registry.OperationRecordStore, username,
-	)
+	workspaces, err := workspace.ListSortByOpTime(ctx, h.registry.DB, username)
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
@@ -382,13 +392,7 @@ func (h *Handler) ListWorkspacesOverview(c *gin.Context) {
 	outputList = outputList[:limit]
 
 	// 构造部署状态查询服务
-	deployStatusService := deploystatus.NewDeployStatusService(
-		h.registry.AppStore,
-		h.registry.EnvStore,
-		h.registry.BuildAutoDeployRecordStore,
-		h.registry.AppModelDeployRecordStore,
-		h.registry.HelmDeployRecordStore,
-	)
+	deployStatusService := deploystatus.NewDeployStatusService(h.registry.DB)
 
 	// 各空间互不依赖，并行拉应用与部署状态，但限制并发以免 limit 过大打满连接。
 	permMgr := perm.NewManager()
@@ -415,9 +419,7 @@ func (h *Handler) loadWorkspaceOverviewApps(
 	deployStatusService *deploystatus.DeployStatusService,
 	permMgr perm.Manager,
 ) {
-	appDetails, err := bkmsapp.ListSortByOpTime(
-		ctx, h.registry.AppStore, h.registry.OperationRecordStore, wsObj.ID, username,
-	)
+	appDetails, err := bkmsapp.ListSortByOpTime(ctx, h.registry.DB, wsObj.ID, username)
 	if err != nil {
 		log.WarnAttrs(ctx, "list workspace apps failed, keep apps empty",
 			slog.String("workspace_id", wsObj.ID),
@@ -536,7 +538,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		return
 	}
 
-	bkSystem, err := workspace.EnsureBkSystems(ctx, input.ID, input.BkCIProjectID, input.BkCCBizID)
+	bkSystem, err := workspace.EnsureBkSystems(ctx, h.registry.DB, input.ID, input.BkCIProjectID, input.BkCCBizID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure blueking system"))
 		return
@@ -549,7 +551,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 			ctx,
 			input.ID,
 			bkSystem.BkCIProjectID,
-			h.registry.ImageRegistryStore,
+			h.registry.DB,
 			reg.Registry,
 			reg.Username,
 			reg.Password,
@@ -578,21 +580,21 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		BkSystems: *bkSystem,
 		Creator:   auth.MustGetUser(ctx).ID,
 	}
-	if err = h.registry.WorkspaceStore.Create(ctx, ws); err != nil {
+	if err = h.workspaces().Create(ctx, ws); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create workspace in DB"))
 		return
 	}
 
 	// 创建工作空间默认环境（production, development, test 等）
-	imageRegistry, err := workspace.GetWorkspaceImageRegistry(ctx, ws.ID)
+	imageRegistry, err := workspace.GetWorkspaceImageRegistry(ctx, h.registry.DB, ws.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get image registry"))
 		return
 	}
-	envSvc := bkmsenv.NewEnvService(h.registry.EnvStore)
+	envSvc := bkmsenv.NewEnvService(h.registry.DB)
 	defaultEnvs := workspace.BuildDefaultEnvs(auth.MustGetUser(ctx).ID, ws.ID, bkSystem.BkBCSProjectCode)
 	for _, env := range defaultEnvs {
-		if _, envErr := envSvc.Create(ctx, &env); envErr != nil {
+		if envErr := envSvc.Create(ctx, &env); envErr != nil {
 			if abortIfEnvClusterNamespaceOccupied(c, envErr) {
 				return
 			}
@@ -666,7 +668,7 @@ func (h *Handler) UpdateWorkspaceInfo(c *gin.Context) {
 	ws.Updater = auth.MustGetUser(ctx).ID
 
 	// 保存更新
-	if err = h.registry.WorkspaceStore.Update(ctx, ws); err != nil {
+	if err = workspace.Update(ctx, h.workspaces(), ws); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace in DB"))
 		return
 	}
@@ -730,7 +732,7 @@ func (h *Handler) AddWorkspaceUser(c *gin.Context) {
 
 	// 对于 admin/sre 角色的新增，交由 UserGroupService 基于 workspace 统一处理
 	if uriInput.RoleCode == perm.RoleCodeAdmin || uriInput.RoleCode == perm.RoleCodeSre {
-		go bkmonitor.NewUserGroupService(h.registry.EnvStore).SyncMembersForWorkspace(
+		go bkmonitor.NewUserGroupService(h.registry.DB).SyncMembersForWorkspace(
 			ctx, ws, auth.MustGetUser(ctx).ID,
 		)
 	}
@@ -809,7 +811,7 @@ func (h *Handler) RemoveWorkspaceUser(c *gin.Context) {
 
 	// 从各环境的蓝鲸监控告警组中移除该用户（仅处理 type=user）
 	if userRoleCode == perm.RoleCodeAdmin || userRoleCode == perm.RoleCodeSre {
-		go bkmonitor.NewUserGroupService(h.registry.EnvStore).RemoveMemberForWorkspace(
+		go bkmonitor.NewUserGroupService(h.registry.DB).RemoveMemberForWorkspace(
 			ctx, ws, uriInput.UserID, auth.MustGetUser(ctx).ID,
 		)
 	}
@@ -884,7 +886,7 @@ func (h *Handler) SetWorkspaceState(c *gin.Context) {
 	}
 
 	// 保存更新
-	if err = h.registry.WorkspaceStore.Update(ctx, ws); err != nil {
+	if err = workspace.Update(ctx, h.workspaces(), ws); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace in DB"))
 		return
 	}
@@ -933,7 +935,7 @@ func (h *Handler) DeleteWorkspace(c *gin.Context) {
 	// 保留创建的镜像仓库/蓝盾项目等, 不做删除
 
 	// 删除工作空间下所有空间组件
-	if err = h.registry.WorkspaceCompsStore.DeleteByWorkspace(ctx, ws.ID); err != nil {
+	if err = workspace.DeleteComponentsOf(ctx, h.registry.DB, ws.ID); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete workspace components"))
 		return
 	}
@@ -945,7 +947,7 @@ func (h *Handler) DeleteWorkspace(c *gin.Context) {
 	}
 
 	// 删除工作空间
-	if err = h.registry.WorkspaceStore.Delete(ctx, ws.ID); err != nil {
+	if err = workspace.Delete(ctx, h.workspaces(), ws.ID); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete workspace in DB"))
 		return
 	}
@@ -968,13 +970,13 @@ func (h *Handler) DeleteWorkspace(c *gin.Context) {
 // HasActiveDeployments method from each deploy record store, matching the same
 // pattern used when deleting an app.
 func (h *Handler) hasActiveDeploymentsInWorkspace(ctx context.Context, workspaceID string) (bool, error) {
-	apps, err := h.registry.AppStore.ListApps(ctx, &bkmsapp.ListOpts{WorkspaceID: workspaceID})
+	apps, err := store.Of(h.registry.DB, bkmsapp.AppMeta).List(ctx, bkmsapp.InWorkspace(workspaceID))
 	if err != nil {
 		return false, err
 	}
 	for _, app := range apps {
 		if bkmsapp.IsAppModelType(app.Type) {
-			hasActive, err := h.registry.AppModelDeployRecordStore.HasActiveDeployments(ctx, app.ID)
+			hasActive, err := appmodeldeploy.HasActiveDeployments(ctx, h.registry.DB, app.ID)
 			if err != nil {
 				return false, err
 			}
@@ -982,7 +984,7 @@ func (h *Handler) hasActiveDeploymentsInWorkspace(ctx context.Context, workspace
 				return true, nil
 			}
 		} else if bkmsapp.IsHelmBasedType(app.Type) {
-			hasActive, err := h.registry.HelmDeployRecordStore.HasActiveDeployments(ctx, app.ID)
+			hasActive, err := helmdeploy.HasActiveDeployments(ctx, h.registry.DB, app.ID)
 			if err != nil {
 				return false, err
 			}

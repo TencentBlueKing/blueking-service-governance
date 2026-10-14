@@ -24,434 +24,304 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("SnapshotStoreMongo", func() {
+// cleanupSnapshotCollections 清空镜像快照与仓库快照状态集合
+func cleanupSnapshotCollections() {
+	Expect(testutil.CleanupMetaColl(ImageMeta)).To(Succeed())
+	Expect(testutil.CleanupMetaColl(RepoStatusMeta)).To(Succeed())
+}
+
+// listSnapshots 查询仓库第一页（最多 10 条）快照
+func listSnapshots(ctx context.Context, db *mongo.Database, repoKey string) ([]Image, int64, error) {
+	result, err := ListImagePage(ctx, db, repoKey, "", 1, 10)
+	if err != nil {
+		return nil, 0, err
+	}
+	return result.Items, result.Total, nil
+}
+
+var _ = Describe("Snapshot store", func() {
+	const repoKey = "testrepokey1234567890abcdef123456"
+
 	var ctx context.Context
-	var mongoClient *mongo.Client
-	var store SnapshotStore
-	var dbName string
+	var db *mongo.Database
 
 	BeforeEach(func() {
-		var err error
-		mongoClient, dbName = database.Client(), database.Name()
 		ctx = context.Background()
-		store, err = NewSnapshotStoreMongo(mongoClient, dbName)
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		DeferCleanup(cleanupSnapshotCollections)
 	})
 
-	AfterEach(func() {
-		err := store.DeleteAll(ctx)
+	listPage := func(repo, keyword string, page, size int, conds ...store.Opt) *store.Page[Image] {
+		result, err := ListImagePage(ctx, db, repo, keyword, page, size, conds...)
 		Expect(err).NotTo(HaveOccurred())
-	})
+		return result
+	}
+	tagsOf := func(images []Image) []string {
+		return lo.Map(images, func(img Image, _ int) string { return img.Tag })
+	}
+	getImage := func(tag string) *Image {
+		img, err := store.Of(db, ImageMeta).Get(ctx, ByRepoTag(repoKey, tag))
+		Expect(err).NotTo(HaveOccurred())
+		return img
+	}
 
-	Describe("UpsertSnapshots", func() {
-		It("should insert new snapshots", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			snapshots := []Image{
-				{Tag: "v1.0.0"},
-				{Tag: "v1.1.0"},
-			}
+	Describe("UpsertTags", func() {
+		It("inserts new snapshots", func() {
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v1.1.0"})).To(Succeed())
 
-			err := store.UpsertSnapshots(ctx, repoKey, snapshots)
-			Expect(err).NotTo(HaveOccurred())
-
-			results, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(2))
-			Expect(results).To(HaveLen(2))
+			result := listPage(repoKey, "", 1, 10)
+			Expect(result.Total).To(BeEquivalentTo(2))
+			Expect(tagsOf(result.Items)).To(ConsistOf("v1.0.0", "v1.1.0"))
 		})
 
-		It("should upsert existing snapshots without duplicating", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			snapshots := []Image{
-				{Tag: "v1.0.0"},
-			}
+		It("does not duplicate or reset details of existing snapshots", func() {
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0"})).To(Succeed())
+			Expect(UpdateDetail(ctx, db, repoKey, "v1.0.0", &registry.ImageDetail{Digest: "sha256:abc"})).To(Succeed())
 
-			err := store.UpsertSnapshots(ctx, repoKey, snapshots)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v1.0.0"})).To(Succeed())
 
-			// Upsert again with same tag
-			snapshots2 := []Image{
-				{Tag: "v1.0.0"},
-			}
-			err = store.UpsertSnapshots(ctx, repoKey, snapshots2)
-			Expect(err).NotTo(HaveOccurred())
+			result := listPage(repoKey, "", 1, 10)
+			Expect(result.Total).To(BeEquivalentTo(1))
+			Expect(result.Items[0].Digest).To(Equal("sha256:abc"))
+		})
 
-			results, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(1))
-			Expect(results[0].Tag).To(Equal("v1.0.0"))
+		It("ignores empty tags", func() {
+			Expect(UpsertTags(ctx, db, repoKey, nil)).To(Succeed())
+			Expect(listPage(repoKey, "", 1, 10).Total).To(BeZero())
 		})
 	})
 
-	Describe("ListByRepoKey", func() {
+	Describe("ListImagePage", func() {
 		BeforeEach(func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			snapshots := []Image{
-				{Tag: "v1.0.0"},
-				{Tag: "v1.1.0"},
-				{Tag: "v2.0.0"},
-				{Tag: "latest"},
-			}
-			err := store.UpsertSnapshots(ctx, repoKey, snapshots)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v1.1.0", "v2.0.0", "v3.0.0", "latest"})).
+				To(Succeed())
 		})
 
-		It("should support pagination", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
+		It("supports pagination", func() {
+			first := listPage(repoKey, "", 1, 2)
+			Expect(first.Total).To(BeEquivalentTo(5))
+			Expect(first.Items).To(HaveLen(2))
+			Expect(first.HasNext).To(BeTrue())
 
-			results, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 2)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(4))
-			Expect(results).To(HaveLen(2))
-
-			results2, _, err := store.ListByRepoKey(ctx, repoKey, "", 2, 2)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(results2).To(HaveLen(2))
+			second := listPage(repoKey, "", 2, 2)
+			Expect(second.Items).To(HaveLen(2))
+			Expect(tagsOf(second.Items)).NotTo(ContainElements(tagsOf(first.Items)))
 		})
 
-		It("should support keyword filtering", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
+		It("sorts by builtAt desc with unbuilt tags last, then by tag desc", func() {
+			now := time.Now()
+			Expect(UpdateDetail(ctx, db, repoKey, "v1.0.0", &registry.ImageDetail{BuiltAt: now})).To(Succeed())
+			Expect(UpdateDetail(ctx, db, repoKey, "v1.1.0", &registry.ImageDetail{BuiltAt: now.Add(-time.Hour)})).
+				To(Succeed())
 
-			results, total, err := store.ListByRepoKey(ctx, repoKey, "v1", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(2))
-			Expect(results).To(HaveLen(2))
+			Expect(tagsOf(listPage(repoKey, "", 1, 10).Items)).
+				To(Equal([]string{"v1.0.0", "v1.1.0", "v3.0.0", "v2.0.0", "latest"}))
 		})
 
-		It("should return empty for non-existent repoKey", func() {
-			results, total, err := store.ListByRepoKey(ctx, "nonexistent", "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(0))
-			Expect(results).To(BeNil())
+		It("filters by keyword case-insensitively", func() {
+			result := listPage(repoKey, "V1", 1, 10)
+			Expect(result.Total).To(BeEquivalentTo(2))
+			Expect(tagsOf(result.Items)).To(ConsistOf("v1.0.0", "v1.1.0"))
+		})
+
+		It("restricts results to the given tags", func() {
+			result := listPage(repoKey, "", 1, 10, TagIn([]string{"v1.0.0", "v2.0.0"}))
+			Expect(result.Total).To(BeEquivalentTo(2))
+			Expect(tagsOf(result.Items)).To(ConsistOf("v1.0.0", "v2.0.0"))
+		})
+
+		It("combines the given tags with keyword filtering", func() {
+			result := listPage(repoKey, "v1", 1, 10, TagIn([]string{"v1.0.0", "v1.1.0", "v2.0.0", "latest"}))
+			Expect(tagsOf(result.Items)).To(ConsistOf("v1.0.0", "v1.1.0"))
+		})
+
+		It("returns empty when the given tags are empty", func() {
+			result := listPage(repoKey, "", 1, 10, TagIn(nil))
+			Expect(result.Total).To(BeZero())
+			Expect(result.Items).To(BeEmpty())
 		})
 	})
 
-	Describe("DeleteByRepoKeyExcludeTags", func() {
-		It("should delete tags not in the active list", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			snapshots := []Image{
-				{Tag: "v1.0.0"},
-				{Tag: "v1.1.0"},
-				{Tag: "v2.0.0"},
-			}
-			err := store.UpsertSnapshots(ctx, repoKey, snapshots)
-			Expect(err).NotTo(HaveOccurred())
+	Describe("DeleteTagsNotIn", func() {
+		It("deletes tags not in the active list", func() {
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v1.1.0", "v2.0.0"})).To(Succeed())
 
-			// Only keep v1.0.0 and v2.0.0
-			deleted, err := store.DeleteByRepoKeyExcludeTags(ctx, repoKey, []string{"v1.0.0", "v2.0.0"})
+			deleted, err := DeleteTagsNotIn(ctx, db, repoKey, []string{"v1.0.0", "v2.0.0"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deleted).To(BeEquivalentTo(1))
-
-			results, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(2))
-			tags := make([]string, 0, len(results))
-			for _, r := range results {
-				tags = append(tags, r.Tag)
-			}
-			Expect(tags).To(ContainElements("v1.0.0", "v2.0.0"))
+			Expect(tagsOf(listPage(repoKey, "", 1, 10).Items)).To(ConsistOf("v1.0.0", "v2.0.0"))
 		})
-	})
 
-	Describe("DeleteByRepoKeyAndTag", func() {
-		It("should delete the specified tag only", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			snapshots := []Image{
-				{Tag: "v1.0.0"},
-				{Tag: "v1.1.0"},
-				{Tag: "v2.0.0"},
-			}
-			err := store.UpsertSnapshots(ctx, repoKey, snapshots)
-			Expect(err).NotTo(HaveOccurred())
+		It("deletes all tags when the active list is empty", func() {
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0"})).To(Succeed())
 
-			deleted, err := store.DeleteByRepoKeyAndTag(ctx, repoKey, "v1.1.0")
+			deleted, err := DeleteTagsNotIn(ctx, db, repoKey, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deleted).To(BeEquivalentTo(1))
+		})
+	})
 
-			results, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(2))
-			tags := make([]string, 0, len(results))
-			for _, r := range results {
-				tags = append(tags, r.Tag)
+	Describe("ByRepoTag", func() {
+		BeforeEach(func() {
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v1.1.0"})).To(Succeed())
+		})
+
+		It("checks whether a tag exists", func() {
+			images := store.Of(db, ImageMeta)
+			Expect(images.Exists(ctx, ByRepoTag(repoKey, "v1.0.0"))).To(BeTrue())
+			Expect(images.Exists(ctx, ByRepoTag(repoKey, "v2.0.0"))).To(BeFalse())
+		})
+
+		It("deletes the specified tag only, and is a no-op for a missing tag", func() {
+			images := store.Of(db, ImageMeta)
+			Expect(images.DeleteMany(ctx, ByRepoTag(repoKey, "v1.1.0"))).To(BeEquivalentTo(1))
+			Expect(images.DeleteMany(ctx, ByRepoTag(repoKey, "not-found"))).To(BeZero())
+			Expect(tagsOf(listPage(repoKey, "", 1, 10).Items)).To(Equal([]string{"v1.0.0"}))
+		})
+	})
+
+	Describe("details sync", func() {
+		BeforeEach(func() {
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v1.1.0", "latest"})).To(Succeed())
+		})
+
+		It("updates snapshot detail fields", func() {
+			builtAt := time.Now().Add(-time.Hour)
+			Expect(UpdateDetail(ctx, db, repoKey, "v1.0.0", &registry.ImageDetail{
+				Digest:  "sha256:abc123def456",
+				Size:    52428800,
+				BuiltAt: builtAt,
+			})).To(Succeed())
+
+			img := getImage("v1.0.0")
+			Expect(img.Digest).To(Equal("sha256:abc123def456"))
+			Expect(img.Size).To(Equal(int64(52428800)))
+			Expect(img.BuiltAt).NotTo(BeNil())
+			Expect(*img.BuiltAt).To(BeTemporally("~", builtAt, time.Millisecond))
+		})
+
+		It("ignores updating the detail of a missing tag", func() {
+			Expect(UpdateDetail(ctx, db, repoKey, "not-found", &registry.ImageDetail{Digest: "x"})).To(Succeed())
+		})
+
+		It("lists tags without details, marked as pending, or latest", func() {
+			Expect(ListUnsyncedDetailTags(ctx, db, repoKey)).To(ConsistOf("v1.0.0", "v1.1.0", "latest"))
+
+			for _, tag := range []string{"v1.0.0", "v1.1.0", "latest"} {
+				Expect(UpdateDetail(ctx, db, repoKey, tag, &registry.ImageDetail{BuiltAt: time.Now()})).To(Succeed())
 			}
-			Expect(tags).To(ContainElements("v1.0.0", "v2.0.0"))
-			Expect(tags).NotTo(ContainElement("v1.1.0"))
+			Expect(ListUnsyncedDetailTags(ctx, db, repoKey)).To(Equal([]string{"latest"}))
+
+			Expect(MarkDetailSyncPending(ctx, db, repoKey, []string{"v1.0.0", "not-found"})).To(Succeed())
+			Expect(ListUnsyncedDetailTags(ctx, db, repoKey)).To(ConsistOf("v1.0.0", "latest"))
+
+			// 详情同步成功后清除重新拉取标记
+			Expect(UpdateDetail(ctx, db, repoKey, "v1.0.0", &registry.ImageDetail{BuiltAt: time.Now()})).To(Succeed())
+			Expect(getImage("v1.0.0").DetailSyncPending).To(BeFalse())
+			Expect(ListUnsyncedDetailTags(ctx, db, repoKey)).To(Equal([]string{"latest"}))
 		})
 
-		It("should be a no-op when the tag does not exist", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "v1.0.0"}})
-			Expect(err).NotTo(HaveOccurred())
+		It("does not touch updatedAt when marking tags as pending", func() {
+			before := getImage("v1.0.0").UpdatedAt
+			Expect(MarkDetailSyncPending(ctx, db, repoKey, []string{"v1.0.0"})).To(Succeed())
 
-			deleted, err := store.DeleteByRepoKeyAndTag(ctx, repoKey, "not-found")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(deleted).To(BeZero())
-
-			results, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(1))
-			Expect(results).To(HaveLen(1))
-			Expect(results[0].Tag).To(Equal("v1.0.0"))
-		})
-	})
-
-	Describe("HasTag", func() {
-		It("should return true when the tag exists", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "v1.0.0"}})
-			Expect(err).NotTo(HaveOccurred())
-
-			exists, err := store.HasTag(ctx, repoKey, "v1.0.0")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeTrue())
-		})
-
-		It("should return false when the tag does not exist", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "v1.0.0"}})
-			Expect(err).NotTo(HaveOccurred())
-
-			exists, err := store.HasTag(ctx, repoKey, "v2.0.0")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeFalse())
-		})
-	})
-
-	Describe("GetStatus and TrySetRefreshing", func() {
-		It("should return nil for non-existent status", func() {
-			status, err := store.GetStatus(ctx, "nonexistent")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(status).To(BeNil())
-		})
-
-		It("should set refreshing status atomically", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-
-			// First attempt should succeed
-			acquired, err := store.TrySetRefreshing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired).To(BeTrue())
-
-			// Second attempt should fail (already refreshing)
-			acquired2, err := store.TrySetRefreshing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired2).To(BeFalse())
-
-			// Verify status
-			status, err := store.GetStatus(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(status).NotTo(BeNil())
-			Expect(status.RefreshStatus).To(Equal(RefreshStatusRefreshing))
-		})
-
-		It("should allow re-acquiring after reset to idle", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-
-			acquired, err := store.TrySetRefreshing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired).To(BeTrue())
-
-			// Reset to idle
-			err = store.UpsertStatus(ctx, &RepoSnapshotStatus{
-				RepoKey:       repoKey,
-				RefreshStatus: RefreshStatusIdle,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should be able to acquire again
-			acquired2, err := store.TrySetRefreshing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired2).To(BeTrue())
-		})
-	})
-
-	Describe("TrySetDetailSyncing", func() {
-		It("should set detail_syncing status atomically when idle", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-
-			// 首次调用应成功
-			acquired, err := store.TrySetDetailSyncing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired).To(BeTrue())
-
-			// 验证状态为 detail_syncing
-			status, err := store.GetStatus(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(status).NotTo(BeNil())
-			Expect(status.RefreshStatus).To(Equal(RefreshStatusDetailSyncing))
-		})
-
-		It("should reject when already detail_syncing", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-
-			acquired, err := store.TrySetDetailSyncing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired).To(BeTrue())
-
-			// 第二次调用应返回 false
-			acquired2, err := store.TrySetDetailSyncing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired2).To(BeFalse())
-		})
-
-		It("should reject when refreshing (mutual exclusion)", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-
-			// 先设为 refreshing
-			acquired, err := store.TrySetRefreshing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired).To(BeTrue())
-
-			// 尝试 detail sync 应被拒绝（与 refresh 互斥）
-			acquired2, err := store.TrySetDetailSyncing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired2).To(BeFalse())
-		})
-
-		It("should allow re-acquiring after reset to idle", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-
-			acquired, err := store.TrySetDetailSyncing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired).To(BeTrue())
-
-			// 重置为 idle
-			err = store.UpsertStatus(ctx, &RepoSnapshotStatus{
-				RepoKey:       repoKey,
-				RefreshStatus: RefreshStatusIdle,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// 再次调用应成功
-			acquired2, err := store.TrySetDetailSyncing(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(acquired2).To(BeTrue())
+			img := getImage("v1.0.0")
+			Expect(img.DetailSyncPending).To(BeTrue())
+			Expect(img.UpdatedAt).To(BeTemporally("==", before))
 		})
 	})
 
 	Describe("ListAllTags", func() {
-		It("should return all tags for a repo", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			snapshots := []Image{
-				{Tag: "v1.0.0"},
-				{Tag: "v1.1.0"},
-				{Tag: "v2.0.0"},
-			}
-			err := store.UpsertSnapshots(ctx, repoKey, snapshots)
-			Expect(err).NotTo(HaveOccurred())
-
-			tags, err := store.ListAllTags(ctx, repoKey)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(tags).To(HaveLen(3))
-			Expect(tags).To(ContainElements("v1.0.0", "v1.1.0", "v2.0.0"))
+		It("returns all tags for a repo", func() {
+			Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v1.1.0", "v2.0.0"})).To(Succeed())
+			Expect(ListAllTags(ctx, db, repoKey)).To(ConsistOf("v1.0.0", "v1.1.0", "v2.0.0"))
 		})
 
-		It("should return empty for non-existent repoKey", func() {
-			tags, err := store.ListAllTags(ctx, "nonexistent")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(tags).To(BeEmpty())
+		It("returns empty for non-existent repoKey", func() {
+			Expect(ListAllTags(ctx, db, "nonexistent")).To(BeEmpty())
 		})
 	})
 
-	Describe("UpdateDetail", func() {
-		It("should update snapshot detail fields", func() {
-			repoKey := "testrepokey1234567890abcdef123456"
-			snapshots := []Image{
-				{Tag: "v1.0.0"},
-			}
-			err := store.UpsertSnapshots(ctx, repoKey, snapshots)
+	Describe("repo status", func() {
+		getStatus := func() *RepoSnapshotStatus {
+			status, err := GetRepoStatus(ctx, db, repoKey)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(status).NotTo(BeNil())
+			return status
+		}
+		resetToIdle := func() {
+			Expect(UpsertRepoStatus(ctx, db, &RepoSnapshotStatus{RepoKey: repoKey, RefreshStatus: RefreshStatusIdle})).
+				To(Succeed())
+		}
 
-			builtAt := time.Now().Add(-time.Hour)
-			err = store.UpdateDetail(ctx, repoKey, "v1.0.0", &registry.ImageDetail{
-				Digest:  "sha256:abc123def456",
-				Size:    52428800,
-				BuiltAt: builtAt,
-			})
+		It("returns nil for non-existent status", func() {
+			status, err := GetRepoStatus(ctx, db, "nonexistent")
 			Expect(err).NotTo(HaveOccurred())
-
-			results, _, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(results).To(HaveLen(1))
-			Expect(results[0].Digest).To(Equal("sha256:abc123def456"))
-			Expect(results[0].Size).To(Equal(int64(52428800)))
-			Expect(results[0].BuiltAt).NotTo(BeNil())
-		})
-	})
-
-	Describe("ListByRepoKeyAndTags", func() {
-		const repoKey = "testrepokey1234567890abcdef123456"
-
-		BeforeEach(func() {
-			snapshots := []Image{
-				{Tag: "v1.0.0"},
-				{Tag: "v1.1.0"},
-				{Tag: "v2.0.0"},
-				{Tag: "v3.0.0"},
-				{Tag: "latest"},
-			}
-			err := store.UpsertSnapshots(ctx, repoKey, snapshots)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(status).To(BeNil())
 		})
 
-		It("should return only snapshots whose tags are in the given list", func() {
-			tags := []string{"v1.0.0", "v2.0.0"}
-			results, total, err := store.ListByRepoKeyAndTags(ctx, repoKey, tags, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(2))
-			Expect(results).To(HaveLen(2))
-			resultTags := make([]string, 0, len(results))
-			for _, r := range results {
-				resultTags = append(resultTags, r.Tag)
-			}
-			Expect(resultTags).To(ContainElements("v1.0.0", "v2.0.0"))
+		It("keeps repoName and timestamps that are not provided", func() {
+			refreshedAt := time.Now().Add(-time.Minute)
+			Expect(UpsertRepoStatus(ctx, db, &RepoSnapshotStatus{
+				RepoKey:         repoKey,
+				RepoName:        "mirrors/app",
+				RefreshStatus:   RefreshStatusIdle,
+				LastRefreshedAt: &refreshedAt,
+				LastError:       "boom",
+			})).To(Succeed())
+
+			resetToIdle()
+
+			status := getStatus()
+			Expect(status.RepoName).To(Equal("mirrors/app"))
+			Expect(status.LastRefreshedAt).NotTo(BeNil())
+			Expect(*status.LastRefreshedAt).To(BeTemporally("~", refreshedAt, time.Millisecond))
+			Expect(status.LastError).To(BeEmpty())
 		})
 
-		It("should support pagination within the given tags", func() {
-			tags := []string{"v1.0.0", "v1.1.0", "v2.0.0", "v3.0.0"}
-			results, total, err := store.ListByRepoKeyAndTags(ctx, repoKey, tags, "", 1, 2)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(4))
-			Expect(results).To(HaveLen(2))
-
-			results2, _, err := store.ListByRepoKeyAndTags(ctx, repoKey, tags, "", 2, 2)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(results2).To(HaveLen(2))
+		It("sets refreshing status atomically", func() {
+			Expect(TrySetRefreshing(ctx, db, repoKey)).To(BeTrue())
+			Expect(TrySetRefreshing(ctx, db, repoKey)).To(BeFalse())
+			Expect(getStatus().RefreshStatus).To(Equal(RefreshStatusRefreshing))
 		})
 
-		It("should support keyword filtering within the given tags", func() {
-			tags := []string{"v1.0.0", "v1.1.0", "v2.0.0", "latest"}
-			results, total, err := store.ListByRepoKeyAndTags(ctx, repoKey, tags, "v1", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(2))
-			Expect(results).To(HaveLen(2))
-			resultTags := make([]string, 0, len(results))
-			for _, r := range results {
-				resultTags = append(resultTags, r.Tag)
-			}
-			Expect(resultTags).To(ContainElements("v1.0.0", "v1.1.0"))
+		It("allows re-acquiring refreshing after reset to idle", func() {
+			Expect(TrySetRefreshing(ctx, db, repoKey)).To(BeTrue())
+			resetToIdle()
+			Expect(TrySetRefreshing(ctx, db, repoKey)).To(BeTrue())
 		})
 
-		It("should return empty when tags list is empty", func() {
-			results, total, err := store.ListByRepoKeyAndTags(ctx, repoKey, []string{}, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(0))
-			Expect(results).To(BeNil())
+		It("sets detail_syncing status atomically when idle", func() {
+			Expect(TrySetDetailSyncing(ctx, db, repoKey)).To(BeTrue())
+			Expect(getStatus().RefreshStatus).To(Equal(RefreshStatusDetailSyncing))
+			Expect(TrySetDetailSyncing(ctx, db, repoKey)).To(BeFalse())
 		})
 
-		It("should return empty for non-existent repoKey", func() {
-			tags := []string{"v1.0.0", "v2.0.0"}
-			results, total, err := store.ListByRepoKeyAndTags(ctx, "nonexistent", tags, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeEquivalentTo(0))
-			Expect(results).To(BeNil())
+		It("rejects detail syncing while refreshing (mutual exclusion)", func() {
+			Expect(TrySetRefreshing(ctx, db, repoKey)).To(BeTrue())
+			Expect(TrySetDetailSyncing(ctx, db, repoKey)).To(BeFalse())
+		})
+
+		It("allows re-acquiring detail syncing after reset to idle", func() {
+			Expect(TrySetDetailSyncing(ctx, db, repoKey)).To(BeTrue())
+			resetToIdle()
+			Expect(TrySetDetailSyncing(ctx, db, repoKey)).To(BeTrue())
+		})
+
+		It("clears the last error when acquiring", func() {
+			Expect(UpsertRepoStatus(ctx, db, &RepoSnapshotStatus{
+				RepoKey: repoKey, RefreshStatus: RefreshStatusIdle, LastError: "boom",
+			})).To(Succeed())
+			Expect(TrySetRefreshing(ctx, db, repoKey)).To(BeTrue())
+			Expect(getStatus().LastError).To(BeEmpty())
 		})
 	})
 })

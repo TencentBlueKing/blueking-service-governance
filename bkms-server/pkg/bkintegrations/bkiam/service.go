@@ -25,6 +25,8 @@ import (
 	iamsdk "github.com/TencentBlueKing/iam-go-sdk"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/actions"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
@@ -32,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	cloudapiiam "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam"
 	cloudapiiamtypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // IAM resource type identifiers used to build iam-go-sdk requests.
@@ -64,17 +67,22 @@ const (
 // pure-Go DTOs (see dto.go), so this package does not depend on generated PB
 // request/response types.
 type IAMService struct {
-	iamClient cloudapiiam.IAMClient
-	store     role.RoleStore
+	iamClient     cloudapiiam.IAMClient
+	roles         *role.RoleStore
+	gradeManagers *role.GradeManagerStore
 }
 
 // NewIAMService creates an IAMService.
 //
 // Argument order follows the "dependencies first, data later" convention:
-// the IAM gateway client and the role storage are both dependencies and
-// have no business-data parameters at construction time.
-func NewIAMService(client cloudapiiam.IAMClient, store role.RoleStore) *IAMService {
-	return &IAMService{iamClient: client, store: store}
+// the IAM gateway client and the database holding the role storage are both
+// dependencies and have no business-data parameters at construction time.
+func NewIAMService(client cloudapiiam.IAMClient, db *mongo.Database) *IAMService {
+	return &IAMService{
+		iamClient:     client,
+		roles:         store.Of(db, role.RoleMeta),
+		gradeManagers: store.Of(db, role.GradeManagerMeta),
+	}
 }
 
 // CreateWorkspaceAdmin creates the workspace admin role (and its initial
@@ -100,7 +108,7 @@ func (s *IAMService) CreateWorkspaceAdmin(
 		return nil, errors.Wrap(err, "create workspace admin: create grade manager")
 	}
 
-	if _, err = s.store.CreateWorkspaceGradeManager(
+	if err = s.gradeManagers.Create(
 		ctx,
 		&role.WorkspaceGradeManager{WorkspaceID: workspaceID, GradeManagerID: *gradeManagerID},
 	); err != nil {
@@ -172,14 +180,8 @@ func (s *IAMService) CreateWorkspaceScopeBuiltinRoles(
 		return nil, errors.Wrap(err, "create workspace builtin roles: get grade manager id")
 	}
 
-	isGradeManager := false
-	rs := role.PermissionScope{ResourceType: role.WorkspaceResourceType, ResourceID: workspaceID}
-	queryParams := role.RoleQueryParams{
-		WorkspaceID:    &workspaceID,
-		IsGradeManager: &isGradeManager,
-		Scope:          &rs,
-	}
-	existedRoles, err := s.store.ListRoles(ctx, &queryParams)
+	builtinRoles := workspaceScopeBuiltinRoles(workspaceID)
+	existedRoles, err := s.listRoles(ctx, builtinRoles)
 	if err != nil {
 		return nil, errors.Wrap(err, "create workspace builtin roles: list existed roles")
 	}
@@ -208,7 +210,7 @@ func (s *IAMService) CreateWorkspaceScopeBuiltinRoles(
 		}
 	}
 
-	existedRoles, err = s.store.ListRoles(ctx, &queryParams)
+	existedRoles, err = s.listRoles(ctx, builtinRoles)
 	if err != nil {
 		return nil, errors.Wrap(err, "create workspace builtin roles: list final roles")
 	}
@@ -220,14 +222,7 @@ func (s *IAMService) CreateWorkspaceScopeBuiltinRoles(
 func (s *IAMService) UpdateWorkspaceScopeBuiltinRoles(ctx context.Context, data WorkspaceData) error {
 	workspaceID := data.WorkspaceID
 
-	isGradeManager := false
-	rs := role.PermissionScope{ResourceType: role.WorkspaceResourceType, ResourceID: workspaceID}
-	queryParams := role.RoleQueryParams{
-		WorkspaceID:    &workspaceID,
-		IsGradeManager: &isGradeManager,
-		Scope:          &rs,
-	}
-	existedRoles, err := s.store.ListRoles(ctx, &queryParams)
+	existedRoles, err := s.listRoles(ctx, workspaceScopeBuiltinRoles(workspaceID))
 	if err != nil {
 		return errors.Wrap(err, "update workspace builtin roles: list roles")
 	}
@@ -305,13 +300,12 @@ func (s *IAMService) DeleteRoleForUsers(ctx context.Context, roleID string, user
 func (s *IAMService) ListRoles(
 	ctx context.Context, workspaceID string, scp role.PermissionScope,
 ) ([]*role.Role, error) {
-	params := role.RoleQueryParams{WorkspaceID: &workspaceID, Scope: &scp}
-	return s.store.ListRoles(ctx, &params)
+	return s.listRoles(ctx, role.ByWorkspace(workspaceID), role.ByScope(scp))
 }
 
 // ListRoleMembers returns the user list of the given role's user group.
 func (s *IAMService) ListRoleMembers(ctx context.Context, roleID string) ([]string, error) {
-	r, err := s.store.GetRoleByID(ctx, roleID)
+	r, err := s.roles.Get(ctx, role.ByRoleID(roleID))
 	if err != nil {
 		return nil, errors.Wrap(err, "list role members: get role")
 	}
@@ -332,7 +326,7 @@ func (s *IAMService) ListRoleMembers(ctx context.Context, roleID string) ([]stri
 // to make a best effort to delete IAM user groups even if some of them
 // fail; the first error encountered is preserved.
 func (s *IAMService) DeleteAllRolesByWorkspaceID(ctx context.Context, workspaceID string) error {
-	roles, err := s.store.ListRoles(ctx, &role.RoleQueryParams{WorkspaceID: &workspaceID})
+	roles, err := s.listRoles(ctx, role.ByWorkspace(workspaceID))
 	if err != nil {
 		return errors.Wrap(err, "delete all roles: list roles")
 	}
@@ -349,7 +343,7 @@ func (s *IAMService) DeleteAllRolesByWorkspaceID(ctx context.Context, workspaceI
 		deletedUserGroups = append(deletedUserGroups, r.UserGroupID)
 	}
 
-	if err = s.store.DeleteRolesByUserGroupIDs(ctx, workspaceID, deletedUserGroups); err != nil {
+	if _, err = s.roles.DeleteMany(ctx, role.ByUserGroupIDs(workspaceID, deletedUserGroups)); err != nil {
 		if firstErr == nil {
 			firstErr = err
 		} else {
@@ -368,7 +362,7 @@ func (s *IAMService) DeleteAllRolesByWorkspaceID(ctx context.Context, workspaceI
 	if err = s.iamClient.DeleteGradeManager(ctx, gradeManagerID); err != nil {
 		return errors.Wrap(err, "delete all roles: delete grade manager")
 	}
-	if err = s.store.DeleteWorkspaceGradeManager(ctx, workspaceID); err != nil {
+	if err = s.gradeManagers.DeleteIfExists(ctx, role.ByWorkspace(workspaceID)); err != nil {
 		return errors.Wrap(err, "delete all roles: delete grade manager record")
 	}
 	return nil
@@ -594,7 +588,7 @@ func (s *IAMService) createRole(
 		Scope:          scp,
 		UserGroupID:    groupID,
 	}
-	if _, err = s.store.CreateRole(ctx, r); err != nil {
+	if err = s.roles.Create(ctx, r); err != nil {
 		return nil, errors.Wrap(err, "persist role")
 	}
 	if err = s.grantRolePolicies(ctx, r, authScopes); err != nil {
@@ -622,12 +616,32 @@ func (s *IAMService) grantRolePolicies(
 	return s.iamClient.GrantUserGroupPolicies(ctx, r.UserGroupID, authScopes)
 }
 
+// listRoles returns the persisted roles matching opts as pointers, which is
+// the form exposed by IAMService.
+func (s *IAMService) listRoles(ctx context.Context, opts ...store.Opt) ([]*role.Role, error) {
+	roles, err := s.roles.List(ctx, opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "list roles")
+	}
+	return lo.ToSlicePtr(roles), nil
+}
+
+// workspaceScopeBuiltinRoles matches the non-grade-manager built-in roles
+// scoped to the given workspace.
+func workspaceScopeBuiltinRoles(workspaceID string) store.Opt {
+	return store.Combine(
+		role.ByWorkspace(workspaceID),
+		role.ByGradeManager(false),
+		role.ByScope(role.PermissionScope{ResourceType: role.WorkspaceResourceType, ResourceID: workspaceID}),
+	)
+}
+
 // getGradeManagerIDFromStorage returns the persisted IAM grade-manager ID
 // for the given workspace, or an error if not found.
 func (s *IAMService) getGradeManagerIDFromStorage(ctx context.Context, workspaceID string) (int, error) {
-	gm, err := s.store.GetWorkspaceGradeManager(ctx, workspaceID)
+	gm, err := s.gradeManagers.Get(ctx, role.ByWorkspace(workspaceID))
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "get workspace(%s) grade manager", workspaceID)
 	}
 	if gm.GradeManagerID == 0 {
 		return 0, errors.Errorf("workspace(%s) grade manager not found", workspaceID)
@@ -638,12 +652,9 @@ func (s *IAMService) getGradeManagerIDFromStorage(ctx context.Context, workspace
 // getAdminRoleFromStorage returns the persisted admin role of the given
 // workspace, or an error if not found.
 func (s *IAMService) getAdminRoleFromStorage(ctx context.Context, workspaceID string) (*role.Role, error) {
-	isGradeManager := true
-	roles, err := s.store.ListRoles(
-		ctx, &role.RoleQueryParams{WorkspaceID: &workspaceID, IsGradeManager: &isGradeManager},
-	)
+	roles, err := s.listRoles(ctx, role.ByWorkspace(workspaceID), role.ByGradeManager(true))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "list workspace(%s) admin roles", workspaceID)
 	}
 	if len(roles) == 0 {
 		return nil, errors.Errorf("workspace(%s) admin role not found", workspaceID)
@@ -654,9 +665,9 @@ func (s *IAMService) getAdminRoleFromStorage(ctx context.Context, workspaceID st
 // getRoleFromStorageByID returns the persisted role record for the given
 // role ID, or an error if it has no associated user group.
 func (s *IAMService) getRoleFromStorageByID(ctx context.Context, roleID string) (*role.Role, error) {
-	r, err := s.store.GetRoleByID(ctx, roleID)
+	r, err := s.roles.Get(ctx, role.ByRoleID(roleID))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "get role(%s)", roleID)
 	}
 	if r.UserGroupID == 0 {
 		return nil, errors.Errorf("role(%s) not found", roleID)

@@ -28,15 +28,16 @@ import (
 	"github.com/hibiken/asynq"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	helmchartbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func newRunningRecord(workspaceID, appID, buildID string) *helmchartbuild.Record {
@@ -76,40 +77,35 @@ var _ = Describe("Poller RunTick", func() {
 		ctx           context.Context
 		args          Args
 		rec           *helmchartbuild.Record
-		recordStore   helmchartbuild.RecordStore
-		pipelineStore bkci.PipelineStore
+		db            *mongo.Database
+		pipelineStore *bkci.PipelineStore
 		enqCount      int
 		enqDelay      time.Duration
 		plr           *poller
 	)
 
 	createRecord := func() {
-		Expect(recordStore.Create(ctx, rec)).To(Succeed())
+		Expect(helmchartbuild.CreateRecord(ctx, db, rec)).To(Succeed())
 		args.BuildID = rec.BuildID
 	}
 
 	reloadRecord := func() *helmchartbuild.Record {
-		got, err := recordStore.Get(ctx, rec.AppID, rec.BuildID)
+		got, err := plr.records.Get(ctx, helmchartbuild.ByBuild(rec.AppID, rec.BuildID))
 		Expect(err).NotTo(HaveOccurred())
 		return got
 	}
 
-	// Create 会把 StartedAt 写成 now，超时窗口用例需要把库里的时间拨回去
+	// CreateRecord 会把 StartedAt 写成 now，超时窗口用例需要把库里的时间拨回去
 	backdateStartedAt := func(startedAt time.Time) {
-		coll := database.Client().Database(database.Name()).Collection("helm_chart_build_records")
-		_, err := coll.UpdateOne(ctx, bson.M{
-			"appID": rec.AppID, "buildID": rec.BuildID,
-		}, bson.M{"$set": bson.M{"startedAt": startedAt}})
-		Expect(err).NotTo(HaveOccurred())
+		Expect(plr.records.Update(
+			ctx, map[string]any{"startedAt": startedAt}, helmchartbuild.ByBuild(rec.AppID, rec.BuildID),
+		)).To(Succeed())
 	}
 
 	BeforeEach(func() {
-		var err error
 		ctx = auth.WithUser(context.Background(), auth.User{ID: "alice"})
-		recordStore, err = helmchartbuild.NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		pipelineStore, err = bkci.NewPipelineStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		pipelineStore = store.Of(db, bkci.PipelineMeta)
 
 		workspaceID := "ws-" + stringx.Random(8)
 		appID := "app-" + stringx.Random(8)
@@ -118,7 +114,7 @@ var _ = Describe("Poller RunTick", func() {
 		args = Args{WorkspaceID: workspaceID, AppID: appID, BuildID: buildID}
 		enqCount = 0
 		enqDelay = 0
-		plr = newPoller(recordStore, pipelineStore)
+		plr = newPoller(db)
 
 		Expect(pipelineStore.Create(ctx, &bkci.Pipeline{
 			ID:          "p-" + stringx.Random(8),

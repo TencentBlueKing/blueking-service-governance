@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -46,6 +47,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
@@ -248,7 +250,7 @@ func (b *Builder) appendPluginAndConfigResources(in *buildInputs, pod *podConten
 
 // buildGameDeployment 构造 GameDeployment 资源对象（含 strategy、secrets、PodTemplate）。
 func (b *Builder) buildGameDeployment(in *buildInputs, pod *podContents) (tkex.GameDeployment, error) {
-	buildCfg, err := b.buildConfigStore.Get(in.ctx, b.app.ID)
+	buildCfg, err := store.Of(b.db, build.ConfigMeta).Get(in.ctx, build.ByApp(b.app.ID))
 	if err != nil {
 		return tkex.GameDeployment{}, errors.Wrap(err, "get build config")
 	}
@@ -351,7 +353,7 @@ func (b *Builder) applyPostProcessing(
 	var hostPortAppliedPorts []int32
 	if in.env.Cluster.IsFederation {
 		appliedPorts, err := hostport.InjectFromStore(
-			in.ctx, b.hostPortStore, b.app.ID,
+			in.ctx, b.db, b.app.ID,
 			&gd.Spec.Template.ObjectMeta,
 			gd.Spec.Template.Spec.Containers,
 			defaults.WorkloadMainContainerName,
@@ -362,13 +364,13 @@ func (b *Builder) applyPostProcessing(
 		hostPortAppliedPorts = appliedPorts
 	}
 
-	ws, err := b.workspaceStore.Get(in.ctx, b.app.WorkspaceID)
+	ws, err := b.workspaceStore.Get(in.ctx, workspace.ByWorkspaceID(b.app.WorkspaceID))
 	if err != nil {
 		return gd, extraObjs, nil, errors.Wrapf(err, "get workspace %s", b.app.WorkspaceID)
 	}
 
 	if err = bscpcfg.InjectFromStore(
-		in.ctx, b.bscpCfgStore, b.app.ID, in.env.Name,
+		in.ctx, b.db, b.app.ID, in.env.Name,
 		defaults.WorkloadMainContainerName, ws, &gd.Spec.Template.Spec,
 	); err != nil {
 		return gd, extraObjs, nil, errors.Wrap(err, "injecting bscp config")
@@ -378,10 +380,7 @@ func (b *Builder) applyPostProcessing(
 	if err != nil {
 		return gd, extraObjs, nil, errors.Wrap(err, "listing components")
 	}
-	compApplier, err := component.CreateDefaultApplier()
-	if err != nil {
-		return gd, extraObjs, nil, errors.Wrap(err, "creating component applier")
-	}
+	compApplier := component.CreateDefaultApplier()
 	evaluatedComps := make([]*component.EvaluatedComponent, 0, len(comps))
 	for _, comp := range comps {
 		evaluated, evaluateErr := compApplier.Evaluate(
@@ -742,12 +741,12 @@ func (b *Builder) resolveWorkspaceComps(
 	}
 
 	// Load the workspace components and build a lookup map
-	workspaceComps, err := b.workspaceCompsStore.ListByWorkspace(ctx, env.WorkspaceID)
+	workspaceComps, err := store.Of(b.db, workspace.ComponentMeta).List(ctx, workspace.ComponentsIn(env.WorkspaceID))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting workspace comps")
 	}
 	workspaceCompMap := make(map[string]*workspace.Component, len(workspaceComps))
-	for _, comp := range workspaceComps {
+	for _, comp := range lo.ToSlicePtr(workspaceComps) {
 		workspaceCompMap[comp.Name] = comp
 	}
 
@@ -829,7 +828,7 @@ func (b *Builder) ComputeAppModel(
 	env *envmodel.Environment,
 ) (*appmodel.AppModel, error) {
 	appModel, effectiveAppSpec, err := appspec.ModelForEnv(
-		ctx, b.appSpecStore, b.appModelStore, b.app.ID, env.Name, b.appModel,
+		ctx, b.db, b.app.ID, env.Name, b.appModel,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "applying env app spec for app %s env %s", b.app.ID, env.Name)

@@ -25,61 +25,58 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
-var _ = Describe("ResourceSnapshotStoreMongo", func() {
+var _ = Describe("ResourceSnapshotStore", func() {
 	var (
-		store *ResourceSnapshotStoreMongo
-		ctx   context.Context
+		snapshots *ResourceSnapshotStore
+		ctx       context.Context
 	)
+
+	newSnapshot := func(envName, trafficLaneName string, dataVersion int64) *ResourceSnapshot {
+		return &ResourceSnapshot{
+			AppID:           "test-app",
+			EnvName:         envName,
+			TrafficLaneName: trafficLaneName,
+			ClusterID:       "BCS-K8S-00001",
+			Namespace:       "default",
+			DataVersion:     dataVersion,
+			RefreshStatus:   RefreshStatusSuccess,
+			Resources:       []ResourceEntry{},
+			Relations:       []ResourceRelation{},
+		}
+	}
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-		store, err = NewResourceSnapshotStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		Expect(store).NotTo(BeNil())
-
-		// 每次测试前清空 Collection
-		err = store.DeleteAll(ctx)
-		Expect(err).NotTo(HaveOccurred())
+		snapshots = testutil.NewStore(GinkgoT(), ResourceSnapshotMeta)
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteAll(ctx)
+		Expect(testutil.CleanupMetaColl(ResourceSnapshotMeta)).To(Succeed())
 	})
 
-	Describe("UpsertWithVersion", func() {
+	Describe("SaveWithVersion", func() {
 		It("should create a new resource snapshot when not exists", func() {
-			snapshot := &ResourceSnapshot{
-				AppID:           "test-app",
-				EnvName:         "dev",
-				TrafficLaneName: "",
-				ClusterID:       "BCS-K8S-00001",
-				Namespace:       "default",
-				ReleaseName:     "test-release",
-				DataVersion:     1,
-				RefreshStatus:   RefreshStatusSuccess,
-				RefreshedAt:     time.Now(),
-				Resources: []ResourceEntry{
-					{
-						Kind:       "Deployment",
-						APIVersion: "apps/v1",
-						Namespace:  "default",
-						Name:       "nginx",
-						IsManaged:  true,
-						SourceType: SourceTypeHelmManifest,
-					},
+			snapshot := newSnapshot("dev", "", 1)
+			snapshot.ReleaseName = "test-release"
+			snapshot.RefreshedAt = time.Now()
+			snapshot.Resources = []ResourceEntry{
+				{
+					Kind:       "Deployment",
+					APIVersion: "apps/v1",
+					Namespace:  "default",
+					Name:       "nginx",
+					IsManaged:  true,
+					SourceType: SourceTypeHelmManifest,
 				},
-				Relations: []ResourceRelation{},
 			}
 
-			err := store.UpsertWithVersion(ctx, snapshot, 0)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(SaveWithVersion(ctx, snapshots, snapshot, 0)).To(Succeed())
 
 			// 验证数据已写入
-			result, err := store.Get(ctx, "test-app", "dev", "")
+			result, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(result.AppID).To(Equal("test-app"))
@@ -94,23 +91,14 @@ var _ = Describe("ResourceSnapshotStoreMongo", func() {
 
 		It("should update existing resource snapshot when version matches", func() {
 			// 第一次写入
-			snapshot := &ResourceSnapshot{
-				AppID:           "test-app",
-				EnvName:         "dev",
-				TrafficLaneName: "",
-				ClusterID:       "BCS-K8S-00001",
-				Namespace:       "default",
-				DataVersion:     1,
-				RefreshStatus:   RefreshStatusSuccess,
-				Resources:       []ResourceEntry{},
-				Relations:       []ResourceRelation{},
-			}
-			err := store.UpsertWithVersion(ctx, snapshot, 0)
+			snapshot := newSnapshot("dev", "", 1)
+			Expect(SaveWithVersion(ctx, snapshots, snapshot, 0)).To(Succeed())
+			created, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
 
-			// 第二次更新（版本匹配：expectedVersion=1 == 当前 dataVersion=1）
-			snapshot.DataVersion = 2
-			snapshot.Resources = []ResourceEntry{
+			// 第二次更新（版本匹配：expectedVersion=1 == 当前 dataVersion=1），使用新对象模拟一次新的刷新
+			next := newSnapshot("dev", "", 2)
+			next.Resources = []ResourceEntry{
 				{
 					Kind:       "Service",
 					Namespace:  "default",
@@ -119,13 +107,14 @@ var _ = Describe("ResourceSnapshotStoreMongo", func() {
 					SourceType: SourceTypeHelmManifest,
 				},
 			}
-			err = store.UpsertWithVersion(ctx, snapshot, 1)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(SaveWithVersion(ctx, snapshots, next, 1)).To(Succeed())
 
-			// 验证更新
-			result, err := store.Get(ctx, "test-app", "dev", "")
+			// 验证更新，且 _id 与 createdAt 保持不变
+			result, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
+			Expect(result.ID).To(Equal(created.ID))
+			Expect(result.CreatedAt).To(Equal(created.CreatedAt))
 			Expect(result.DataVersion).To(Equal(int64(2)))
 			Expect(result.Resources).To(HaveLen(1))
 			Expect(result.Resources[0].Kind).To(Equal("Service"))
@@ -133,55 +122,47 @@ var _ = Describe("ResourceSnapshotStoreMongo", func() {
 
 		It("should return ErrVersionConflict when version has been advanced", func() {
 			// 写入初始数据（dataVersion=2）
-			snapshot := &ResourceSnapshot{
-				AppID:           "test-app",
-				EnvName:         "dev",
-				TrafficLaneName: "",
-				ClusterID:       "BCS-K8S-00001",
-				Namespace:       "default",
-				DataVersion:     2,
-				RefreshStatus:   RefreshStatusSuccess,
-				Resources:       []ResourceEntry{},
-				Relations:       []ResourceRelation{},
-			}
-			err := store.UpsertWithVersion(ctx, snapshot, 0)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(SaveWithVersion(ctx, snapshots, newSnapshot("dev", "", 2), 0)).To(Succeed())
 
 			// 尝试用过期版本号写入（expectedVersion=1 < 当前 dataVersion=2）
-			snapshot.DataVersion = 3
-			err = store.UpsertWithVersion(ctx, snapshot, 1)
+			err := SaveWithVersion(ctx, snapshots, newSnapshot("dev", "", 3), 1)
 			Expect(err).To(MatchError(ErrVersionConflict))
 
 			// 验证数据未被修改
-			result, err := store.Get(ctx, "test-app", "dev", "")
+			result, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.DataVersion).To(Equal(int64(2)))
+		})
+
+		It("should return ErrVersionConflict when writing back a stale snapshot read earlier", func() {
+			Expect(SaveWithVersion(ctx, snapshots, newSnapshot("dev", "", 1), 0)).To(Succeed())
+			stale, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
+			Expect(err).NotTo(HaveOccurred())
+
+			// 其他刷新任务先推进了版本
+			Expect(SaveWithVersion(ctx, snapshots, newSnapshot("dev", "", 2), 1)).To(Succeed())
+
+			// 回写读出的旧快照（带 _id）同样视为版本冲突
+			Expect(SaveWithVersion(ctx, snapshots, stale, stale.DataVersion)).To(MatchError(ErrVersionConflict))
+			result, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.DataVersion).To(Equal(int64(2)))
 		})
 	})
 
-	Describe("Get", func() {
+	Describe("FindSnapshot", func() {
 		It("should return nil when resource snapshot not found", func() {
-			result, err := store.Get(ctx, "non-existent", "dev", "")
+			result, err := FindSnapshot(ctx, snapshots, "non-existent", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(BeNil())
 		})
 
 		It("should return the resource snapshot when found", func() {
-			snapshot := &ResourceSnapshot{
-				AppID:           "test-app",
-				EnvName:         "staging",
-				TrafficLaneName: "canary",
-				ClusterID:       "BCS-K8S-00002",
-				Namespace:       "staging-ns",
-				DataVersion:     5,
-				RefreshStatus:   RefreshStatusSuccess,
-				Resources:       []ResourceEntry{},
-				Relations:       []ResourceRelation{},
-			}
-			err := store.UpsertWithVersion(ctx, snapshot, 0)
-			Expect(err).NotTo(HaveOccurred())
+			snapshot := newSnapshot("staging", "canary", 5)
+			snapshot.ClusterID = "BCS-K8S-00002"
+			Expect(SaveWithVersion(ctx, snapshots, snapshot, 0)).To(Succeed())
 
-			result, err := store.Get(ctx, "test-app", "staging", "canary")
+			result, err := FindSnapshot(ctx, snapshots, "test-app", "staging", "canary")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(result.TrafficLaneName).To(Equal("canary"))
@@ -189,35 +170,47 @@ var _ = Describe("ResourceSnapshotStoreMongo", func() {
 		})
 	})
 
-	Describe("Delete", func() {
-		It("should delete existing resource snapshot", func() {
-			snapshot := &ResourceSnapshot{
-				AppID:           "test-app",
-				EnvName:         "dev",
-				TrafficLaneName: "",
-				ClusterID:       "BCS-K8S-00001",
-				Namespace:       "default",
-				DataVersion:     1,
-				RefreshStatus:   RefreshStatusProgressing,
-				Resources:       []ResourceEntry{},
-				Relations:       []ResourceRelation{},
-			}
-			err := store.UpsertWithVersion(ctx, snapshot, 0)
-			Expect(err).NotTo(HaveOccurred())
+	Describe("UpdateRefreshStatus", func() {
+		It("should update status and warning summary but keep resources", func() {
+			snapshot := newSnapshot("dev", "", 1)
+			snapshot.Resources = []ResourceEntry{{Kind: "Deployment", Name: "nginx", IsManaged: true}}
+			Expect(SaveWithVersion(ctx, snapshots, snapshot, 0)).To(Succeed())
 
-			// 删除
-			err = store.Delete(ctx, "test-app", "dev", "")
-			Expect(err).NotTo(HaveOccurred())
+			Expect(UpdateRefreshStatus(
+				ctx, snapshots, "test-app", "dev", "", RefreshStatusFailed, "boom",
+			)).To(Succeed())
 
-			// 验证已删除
-			result, err := store.Get(ctx, "test-app", "dev", "")
+			result, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RefreshStatus).To(Equal(RefreshStatusFailed))
+			Expect(result.WarningSummary).To(Equal("boom"))
+			Expect(result.Resources).To(HaveLen(1))
+		})
+
+		It("should do nothing when the snapshot does not exist", func() {
+			Expect(UpdateRefreshStatus(
+				ctx, snapshots, "non-existent", "dev", "", RefreshStatusProgressing, "",
+			)).To(Succeed())
+
+			result, err := FindSnapshot(ctx, snapshots, "non-existent", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(BeNil())
 		})
+	})
 
-		It("should not error when deleting non-existent snapshot", func() {
-			err := store.Delete(ctx, "non-existent", "dev", "")
+	Describe("DeleteIfExists by scope", func() {
+		It("should delete existing resource snapshot", func() {
+			snapshot := newSnapshot("dev", "", 1)
+			snapshot.RefreshStatus = RefreshStatusProgressing
+			Expect(SaveWithVersion(ctx, snapshots, snapshot, 0)).To(Succeed())
+
+			// 删除
+			Expect(snapshots.DeleteIfExists(ctx, ByScope("test-app", "dev", ""))).To(Succeed())
+
+			// 验证已删除
+			result, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeNil())
 		})
 	})
 })

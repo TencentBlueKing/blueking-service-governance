@@ -24,24 +24,25 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("AppSpecStore", func() {
+var _ = Describe("AppSpec store", func() {
 	var ctx context.Context
-	var store AppSpecStore
+	var db *mongo.Database
+	var specs *AppSpecStore
 	var appID, envName string
 	var spec *AppSpec
 
 	BeforeEach(func() {
-		var err error
-
 		ctx = context.Background()
-		store, err = NewAppSpecStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		specs = store.Of(db, AppSpecMeta)
 
 		appID = "test-app-" + stringx.Random(6)
 		envName = "test-env-" + stringx.Random(6)
@@ -65,63 +66,21 @@ var _ = Describe("AppSpecStore", func() {
 	})
 
 	AfterEach(func() {
-		_ = store.Delete(ctx, appID, DefaultEnvName)
-		_ = store.Delete(ctx, appID, envName)
+		_, _ = specs.DeleteMany(ctx, ByApp(appID))
 	})
 
-	It("creates and gets app spec", func() {
-		err := store.Create(ctx, spec)
-		Expect(err).NotTo(HaveOccurred())
+	upsert := func(spec *AppSpec) error {
+		_, err := specs.Upsert(ctx, spec, ByAppEnv(spec.AppID, spec.EnvName))
+		return err
+	}
 
-		saved, err := store.Get(ctx, appID, envName)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(saved.AppID).To(Equal(appID))
-		Expect(saved.EnvName).To(Equal(envName))
-		Expect(*saved.Resources.Replicas).To(Equal(int32(2)))
-		Expect(*saved.Resources.CPURequests).To(Equal("100m"))
-		Expect(*saved.Resources.CPULimits).To(Equal("200m"))
-		Expect(*saved.Resources.MemoryRequests).To(Equal("128Mi"))
-		Expect(*saved.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
-		Expect(saved.DevMode).NotTo(BeNil())
-		Expect(saved.DevMode.WorkPath).To(BeNil())
-	})
-
-	It("upserts and deletes app spec", func() {
-		err := store.Create(ctx, spec)
-		Expect(err).NotTo(HaveOccurred())
-
-		err = store.Upsert(ctx, &AppSpec{
-			AppID:   appID,
-			EnvName: envName,
-			Resources: &ResourcesSpec{
-				Replicas:       lo.ToPtr(int32(5)),
-				MemoryRequests: lo.ToPtr("256Mi"),
-				MemoryLimits:   lo.ToPtr("512Mi"),
-			},
-			DevMode: &DevModeSpec{
-				Enabled: lo.ToPtr(false),
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
-
-		saved, err := store.Get(ctx, appID, envName)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(*saved.Resources.Replicas).To(Equal(int32(5)))
-		Expect(saved.Resources.CPURequests).To(BeNil())
-		Expect(*saved.Resources.MemoryRequests).To(Equal("256Mi"))
-		Expect(*saved.Resources.MemoryLimits).To(Equal("512Mi"))
-		Expect(saved.UpdateStrategy).To(BeNil())
-		Expect(*saved.DevMode.Enabled).To(BeFalse())
-
-		err = store.Delete(ctx, appID, envName)
-		Expect(err).NotTo(HaveOccurred())
-
-		_, err = store.Get(ctx, appID, envName)
-		Expect(errors.Is(err, ErrAppSpecNotFound)).To(BeTrue())
+	It("returns ErrAppSpecNotFound when the app spec does not exist", func() {
+		_, err := specs.Get(ctx, ByAppEnv(appID, envName))
+		Expect(err).To(MatchError(ErrAppSpecNotFound))
 	})
 
 	It("lists env names without the default entry", func() {
-		err := store.Upsert(ctx, &AppSpec{
+		err := upsert(&AppSpec{
 			AppID:   appID,
 			EnvName: DefaultEnvName,
 			Resources: &ResourcesSpec{
@@ -130,34 +89,16 @@ var _ = Describe("AppSpecStore", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = store.Upsert(ctx, spec)
+		err = upsert(spec)
 		Expect(err).NotTo(HaveOccurred())
 
-		envNames, err := store.ListEnvNamesByApp(ctx, appID)
+		envNames, err := ListEnvNamesByApp(ctx, db, appID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(envNames).To(Equal([]string{envName}))
 	})
 
-	It("lists all specs including the default entry", func() {
-		err := store.Upsert(ctx, &AppSpec{
-			AppID:   appID,
-			EnvName: DefaultEnvName,
-			Resources: &ResourcesSpec{
-				Replicas: lo.ToPtr(int32(1)),
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(store.Upsert(ctx, spec)).To(Succeed())
-
-		specs, err := store.ListByApp(ctx, appID)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(specs).To(HaveLen(2))
-		envNames := lo.Map(specs, func(s *AppSpec, _ int) string { return s.EnvName })
-		Expect(envNames).To(ConsistOf(DefaultEnvName, envName))
-	})
-
 	It("ignores env docs with no configured sections when listing env names", func() {
-		err := store.SetSections(ctx, AppSpec{
+		err := SetSections(ctx, db, AppSpec{
 			AppID:   appID,
 			EnvName: envName,
 			Resources: &ResourcesSpec{
@@ -166,22 +107,22 @@ var _ = Describe("AppSpecStore", func() {
 		}, AppSpecSectionResources)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = store.SetSections(ctx, AppSpec{
+		err = SetSections(ctx, db, AppSpec{
 			AppID:   appID,
 			EnvName: envName,
 		}, AppSpecSectionResources)
 		Expect(err).NotTo(HaveOccurred())
 
-		envNames, err := store.ListEnvNamesByApp(ctx, appID)
+		envNames, err := ListEnvNamesByApp(ctx, db, appID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(envNames).To(BeEmpty())
 	})
 
 	It("patches existing spec with partial fields", func() {
-		err := store.Create(ctx, spec)
+		err := specs.Create(ctx, spec)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = store.Patch(ctx, AppSpec{
+		err = Patch(ctx, db, AppSpec{
 			AppID:   appID,
 			EnvName: envName,
 			Resources: &ResourcesSpec{
@@ -197,7 +138,7 @@ var _ = Describe("AppSpecStore", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		saved, err := store.Get(ctx, appID, envName)
+		saved, err := specs.Get(ctx, ByAppEnv(appID, envName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*saved.Resources.CPURequests).To(Equal("100m"))
 		Expect(*saved.Resources.MemoryRequests).To(Equal("256Mi"))
@@ -208,7 +149,7 @@ var _ = Describe("AppSpecStore", func() {
 	})
 
 	It("patches non-existent spec by creating one", func() {
-		err := store.Patch(ctx, AppSpec{
+		err := Patch(ctx, db, AppSpec{
 			AppID:   appID,
 			EnvName: envName,
 			Resources: &ResourcesSpec{
@@ -217,7 +158,7 @@ var _ = Describe("AppSpecStore", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		saved, err := store.Get(ctx, appID, envName)
+		saved, err := specs.Get(ctx, ByAppEnv(appID, envName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*saved.Resources.Replicas).To(Equal(int32(3)))
 		Expect(saved.UpdateStrategy).To(BeNil())
@@ -225,10 +166,10 @@ var _ = Describe("AppSpecStore", func() {
 	})
 
 	It("sets only the specified sections with whole-section semantics", func() {
-		err := store.Create(ctx, spec)
+		err := specs.Create(ctx, spec)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = store.SetSections(ctx, AppSpec{
+		err = SetSections(ctx, db, AppSpec{
 			AppID:   appID,
 			EnvName: envName,
 			Resources: &ResourcesSpec{
@@ -237,7 +178,7 @@ var _ = Describe("AppSpecStore", func() {
 		}, AppSpecSectionResources)
 		Expect(err).NotTo(HaveOccurred())
 
-		saved, err := store.Get(ctx, appID, envName)
+		saved, err := specs.Get(ctx, ByAppEnv(appID, envName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(saved.Resources.Replicas).To(BeNil())
 		Expect(saved.Resources.CPURequests).To(BeNil())
@@ -247,24 +188,77 @@ var _ = Describe("AppSpecStore", func() {
 	})
 
 	It("unsets a specified section without touching others", func() {
-		err := store.Create(ctx, spec)
+		err := specs.Create(ctx, spec)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = store.SetSections(ctx, AppSpec{
+		err = SetSections(ctx, db, AppSpec{
 			AppID:   appID,
 			EnvName: envName,
 		}, AppSpecSectionUpdateStrategy)
 		Expect(err).NotTo(HaveOccurred())
 
-		saved, err := store.Get(ctx, appID, envName)
+		saved, err := specs.Get(ctx, ByAppEnv(appID, envName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(saved.UpdateStrategy).To(BeNil())
 		Expect(*saved.Resources.Replicas).To(Equal(int32(2)))
 		Expect(*saved.DevMode.Enabled).To(BeTrue())
 	})
 
+	It("rejects creating a duplicate spec of the same app and env", func() {
+		Expect(specs.Create(ctx, spec)).To(Succeed())
+
+		err := specs.Create(ctx, spec)
+		Expect(err).To(MatchError(ErrAppSpecAlreadyExists))
+	})
+
+	It("collapses empty sections when saving", func() {
+		Expect(specs.Create(ctx, &AppSpec{
+			AppID:   appID,
+			EnvName: envName,
+			Labels:  &LabelsSpec{Labels: map[string]string{}},
+			DevMode: &DevModeSpec{},
+		})).To(Succeed())
+
+		// 空 section 不应落库
+		raw, err := specs.Collection().FindOne(ctx, bson.M{"appID": appID, "envName": envName}).Raw()
+		Expect(err).NotTo(HaveOccurred())
+		_, err = raw.LookupErr("labels")
+		Expect(err).To(HaveOccurred())
+		_, err = raw.LookupErr("devMode")
+		Expect(err).To(HaveOccurred())
+
+		saved, err := specs.Get(ctx, ByAppEnv(appID, envName))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(saved.HasConfiguredSections()).To(BeFalse())
+	})
+
+	It("does not create a spec when only unsetting sections", func() {
+		err := SetSections(ctx, db, AppSpec{
+			AppID:   appID,
+			EnvName: envName,
+		}, AppSpecSectionResources, AppSpecSectionDevMode)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = specs.Get(ctx, ByAppEnv(appID, envName))
+		Expect(err).To(MatchError(ErrAppSpecNotFound))
+	})
+
+	It("keeps appID and envName from the filter when patch creates a spec", func() {
+		Expect(Patch(ctx, db, AppSpec{
+			AppID:   appID,
+			EnvName: envName,
+			Labels:  &LabelsSpec{Labels: map[string]string{"team": "a"}},
+		})).To(Succeed())
+
+		saved, err := specs.Get(ctx, ByAppEnv(appID, envName))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(saved.AppID).To(Equal(appID))
+		Expect(saved.EnvName).To(Equal(envName))
+		Expect(saved.Labels.Labels).To(Equal(map[string]string{"team": "a"}))
+	})
+
 	It("returns error for unknown section IDs", func() {
-		err := store.SetSections(ctx, AppSpec{
+		err := SetSections(ctx, db, AppSpec{
 			AppID:   appID,
 			EnvName: envName,
 		}, AppSpecSectionID("unknown"))

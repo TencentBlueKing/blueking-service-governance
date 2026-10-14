@@ -22,11 +22,11 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
@@ -43,12 +43,12 @@ type Plugin struct {
 // NewPlugin creates a new tRPC plugin with the given dependencies.
 func NewPlugin(
 	mountableFileProvider appcfg.MountableFileProvider,
-	polarisConfigStore polaris.PolarisConfigStore,
+	db *mongo.Database,
 ) *Plugin {
 	return &Plugin{
 		mountableFileProvider: mountableFileProvider,
 		configPatchers: []appcfg.ConfigPatcher{
-			patcher.NewPolarisRegistryPatcher(polarisConfigStore),
+			patcher.NewPolarisRegistryPatcher(db),
 		},
 	}
 }

@@ -24,11 +24,14 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
 var managedWorkloadKinds = map[string]struct{}{
@@ -51,7 +54,12 @@ func (s *Service) resolveEffectiveEnvs(ctx context.Context, strategy *AlertStrat
 	// 1. 按策略生效范围类型分别查询环境集合。
 	switch strategy.EffectiveScope.Type {
 	case EffectiveScopeAll:
-		allEnvs, err := s.envStore.ListAppEnvs(ctx, strategy.WorkspaceID, strategy.AppID)
+		allEnvs, err := s.envStore.List(
+			ctx,
+			envmodel.InWorkspace(strategy.WorkspaceID),
+			envmodel.VisibleToApp(strategy.AppID),
+			envmodel.NewestFirst(),
+		)
 		if err != nil {
 			return nil, errors.Wrap(err, "list envs")
 		}
@@ -61,22 +69,24 @@ func (s *Service) resolveEffectiveEnvs(ctx context.Context, strategy *AlertStrat
 		})
 		return allEnvs, nil
 	case EffectiveScopeEnvType:
-		envs, err := s.envStore.ListAppEnvsByTypes(
+		envs, err := s.envStore.List(
 			ctx,
-			strategy.WorkspaceID,
-			strategy.AppID,
-			strategy.EffectiveScope.EnvTypes,
+			envmodel.InWorkspace(strategy.WorkspaceID),
+			store.Where("type", bson.M{"$in": strategy.EffectiveScope.EnvTypes}),
+			envmodel.BoundToApp(strategy.AppID),
+			envmodel.NewestFirst(),
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "list envs by types")
 		}
 		return envs, nil
 	case EffectiveScopeSpecificEnvs:
-		envs, err := s.envStore.ListAppEnvsByIDs(
+		envs, err := s.envStore.List(
 			ctx,
-			strategy.WorkspaceID,
-			strategy.AppID,
-			strategy.EffectiveScope.EnvIDs,
+			envmodel.InWorkspace(strategy.WorkspaceID),
+			store.Where("_id", bson.M{"$in": strategy.EffectiveScope.EnvIDs}),
+			envmodel.BoundToApp(strategy.AppID),
+			envmodel.NewestFirst(),
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "list envs by ids")
@@ -181,7 +191,7 @@ func (s *Service) resolveStrategyWorkloads(
 		return nil, errors.New("app store is nil")
 	}
 	// 2. 优先读取应用信息；读取失败时直接返回错误，避免误同步到错误 workload。
-	app, err := s.appStore.GetApp(ctx, strategy.AppID)
+	app, err := s.appStore.Get(ctx, bkmsapp.ByID(strategy.AppID))
 	if err != nil || app == nil {
 		log.Errorf(
 			ctx,
@@ -239,19 +249,8 @@ func (s *Service) resolveStrategyWorkloads(
 
 // resolveHelmWorkloads 从资源快照中提取当前 Helm 应用受管的 workload 名称列表。
 func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, trafficLaneName string) []string {
-	// 1. 没有快照存储时无法解析真实 workload，直接返回空让上层决定是否回退。
-	if s.snapshotStore == nil {
-		log.Warnf(
-			ctx,
-			"snapshot store is nil when resolving helm workloads, appID=%s env=%s lane=%s",
-			appID,
-			envName,
-			trafficLaneName,
-		)
-		return nil
-	}
-	// 2. 读取指定环境与泳道的资源快照，读取失败或快照缺失时返回空。
-	snapshot, err := s.snapshotStore.Get(ctx, appID, envName, trafficLaneName)
+	// 1. 读取指定环境与泳道的资源快照，读取失败或快照缺失时返回空，让上层决定是否回退。
+	snapshot, err := topology.FindSnapshot(ctx, s.snapshots, appID, envName, trafficLaneName)
 	if err != nil || snapshot == nil {
 		log.Warnf(
 			ctx,
@@ -264,7 +263,7 @@ func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, traf
 		)
 		return nil
 	}
-	// 3. 只保留受平台托管且属于工作负载类型的资源名称。
+	// 2. 只保留受平台托管且属于工作负载类型的资源名称。
 	workloads := make([]string, 0)
 	for _, resource := range snapshot.Resources {
 		if !resource.IsManaged {
@@ -275,7 +274,7 @@ func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, traf
 		}
 		workloads = append(workloads, resource.Name)
 	}
-	// 4. 对 workload 名称去重排序，保证下游同步结果稳定可复现。
+	// 3. 对 workload 名称去重排序，保证下游同步结果稳定可复现。
 	workloads = lo.Uniq(workloads)
 	sort.Strings(workloads)
 	log.Infof(

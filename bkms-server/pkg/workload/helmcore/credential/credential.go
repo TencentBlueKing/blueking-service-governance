@@ -23,9 +23,11 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // helmRepoCredentialID Helm 仓库凭证 ID（固定值，所有工作空间使用相同名称，蓝盾凭证管理按项目隔离）
@@ -38,11 +40,12 @@ const helmRepoCredentialDescription = "bkms helm repo credential (system-bkrepo)
 // 流程：查询本地 DB → 有记录则跳过 → 无记录则调用蓝盾 API 创建凭证 → 写入本地 DB
 func EnsureCredential(
 	ctx context.Context,
-	store HelmRepoCredentialStore,
+	db *mongo.Database,
 	workspaceID, bkciProjectCode, username, password string,
 ) error {
+	credStore := store.Of(db, Meta)
 	// 1. 查询本地 DB，确认是否已有该工作空间的凭证记录
-	if _, err := store.GetByWorkspace(ctx, workspaceID); err == nil {
+	if _, err := credStore.Get(ctx, ByWorkspace(workspaceID)); err == nil {
 		// 凭证已存在，直接跳过
 		return nil
 	} else if !errors.Is(err, ErrHelmRepoCredentialNotFound) {
@@ -67,7 +70,7 @@ func EnsureCredential(
 		Username:     username,
 		Password:     password,
 	}
-	if err = store.Create(ctx, cred); err != nil {
+	if err = credStore.Create(ctx, cred); err != nil {
 		return errors.Wrap(err, "save helm repo credential to db")
 	}
 

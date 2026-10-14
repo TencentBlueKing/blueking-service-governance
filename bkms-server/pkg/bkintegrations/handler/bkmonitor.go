@@ -31,12 +31,15 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking/serializer"
@@ -70,13 +73,13 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 		return
 	}
 
-	appModel, err := h.registry.AppModelStore.GetAppModel(ctx, app.ID)
+	appModel, err := store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting app model"))
 		return
 	}
 	appModel, _, err = appspec.ModelForEnv(
-		ctx, h.registry.AppSpecStore, h.registry.AppModelStore, app.ID, env.Name, appModel,
+		ctx, h.registry.DB, app.ID, env.Name, appModel,
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "applying env app spec"))
@@ -84,9 +87,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 	}
 
 	cfgProvider := appcfg.NewMountableFileProvider(
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
-		h.registry.AppConfigFileVersionStore,
+		h.registry.DB,
 	)
 	frameworkFile, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
 	if err != nil {
@@ -97,7 +98,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 	appEnvVars, err := envvars.BuildAppEnvVars(
 		ctx, app, appModel, env,
 		envvars.NewUnifiedEnvVarsReader(
-			h.registry.ScopedEnvVarStore,
+			h.registry.DB,
 			h.registry.AppDepsVarReader,
 			h.registry.PolarisVarReader,
 		),
@@ -163,7 +164,8 @@ func (h *Handler) ListApms(c *gin.Context) {
 		return
 	}
 
-	envList, err := h.registry.EnvStore.ListStdEnvs(ctx, ws.ID)
+	envList, err := store.Of(h.registry.DB, envmodel.EnvMeta).
+		List(ctx, envmodel.StdEnvsIn(ws.ID), envmodel.NewestFirst())
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -172,7 +174,7 @@ func (h *Handler) ListApms(c *gin.Context) {
 		return item.Name, item
 	})
 
-	apmMap, err := h.registry.ApmInstConfigStore.GetApmIDMap(ctx, ws.ID)
+	apmMap, err := bkmmodel.GetApmIDMap(ctx, h.registry.DB, ws.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list apm from store"))
 		return
@@ -250,7 +252,7 @@ func (h *Handler) CreateEnvApm(c *gin.Context) {
 		return
 	}
 
-	ws, err := h.registry.WorkspaceStore.Get(ctx, env.WorkspaceID)
+	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(env.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
 		return
@@ -263,7 +265,7 @@ func (h *Handler) CreateEnvApm(c *gin.Context) {
 		return
 	}
 
-	apmSvc := bkmmodel.NewApmService(storereg.G().ApmInstConfigStore, storereg.G().ScopedEnvVarStore)
+	apmSvc := bkmmodel.NewApmService(storereg.G().DB)
 	apm, err := apmSvc.CreateAndBindToEnv(
 		ctx,
 		env.ID,
@@ -281,7 +283,7 @@ func (h *Handler) CreateEnvApm(c *gin.Context) {
 	}
 
 	// APM 创建成功后，异步将 workspace 下 admin/sre 人员同步到新告警组
-	go bkmmodel.NewUserGroupService(storereg.G().EnvStore).SyncMembersForEnvWithRetry(
+	go bkmmodel.NewUserGroupService(storereg.G().DB).SyncMembersForEnvWithRetry(
 		context.WithoutCancel(ctx), ws, env.Name, auth.MustGetUser(ctx).ID,
 	)
 
@@ -322,13 +324,13 @@ func (h *Handler) BindApmToEnv(c *gin.Context) {
 		return
 	}
 
-	ws, err := h.registry.WorkspaceStore.Get(ctx, env.WorkspaceID)
+	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(env.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
 		return
 	}
 
-	apmSvc := bkmmodel.NewApmService(storereg.G().ApmInstConfigStore, storereg.G().ScopedEnvVarStore)
+	apmSvc := bkmmodel.NewApmService(storereg.G().DB)
 	apm, err := apmSvc.Get(
 		ctx,
 		cast.ToInt64(uriInput.ApmID),
@@ -378,7 +380,7 @@ func (h *Handler) GetEnvApm(c *gin.Context) {
 		return
 	}
 
-	apm, err := h.registry.ApmInstConfigStore.GetByEnvID(ctx, env.ID)
+	apm, err := store.Of(h.registry.DB, bkmmodel.ApmInstConfigMeta).Get(ctx, bkmmodel.ApmBoundToEnv(env.ID))
 	if err != nil {
 		if errors.Is(err, bkmmodel.ErrApmInstConfigNotFound) {
 			bkerrs.AbortWithErr(
@@ -427,7 +429,7 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	ws, err := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
 		return

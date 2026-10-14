@@ -5,12 +5,11 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	appdefaultshooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/hooks"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -18,32 +17,26 @@ import (
 
 var _ = Describe("Application default lifecycle hooks", func() {
 	var ctx context.Context
-	var diApp *fxtest.App
-	var ruleStore appdefaults.RuleStore
-	var workspaceStore bkmsworkspace.WorkspaceStore
+	var ruleStore *appdefaults.RuleStore
+	var workspaceStore *bkmsworkspace.WorkspaceStore
 	var workspace *bkmsworkspace.Workspace
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		bkmsworkspace.ResetLifecycleHooksForTest()
 
-		diApp = fxtest.New(
-			GinkgoT(),
-			appdefaults.FxModule,
-			bkmsworkspace.FxModule,
-			fx.Populate(&ruleStore, &workspaceStore),
-		)
-		diApp.RequireStart()
-		appdefaultshooks.RegisterPreDeleteHooks(ruleStore)
+		db := testutil.NewDB(GinkgoT())
+		ruleStore = store.Of(db, appdefaults.RuleMeta)
+		workspaceStore = store.Of(db, bkmsworkspace.Meta)
+		appdefaultshooks.RegisterPreDeleteHooks(db)
 	})
 
 	AfterEach(func() {
 		if workspace != nil {
-			Expect(workspaceStore.Delete(ctx, workspace.ID)).To(Succeed())
+			Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		}
-		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(appdefaults.RuleMeta)).To(Succeed())
 		bkmsworkspace.ResetLifecycleHooksForTest()
-		diApp.RequireStop()
 	})
 
 	It("removes rules when their workspace is deleted", func() {
@@ -59,10 +52,10 @@ var _ = Describe("Application default lifecycle hooks", func() {
 			},
 		})).To(Succeed())
 
-		Expect(workspaceStore.Delete(ctx, workspaceID)).To(Succeed())
+		Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspaceID)).To(Succeed())
 		workspace = nil
 
-		rules, err := ruleStore.List(ctx, workspaceID)
+		rules, err := ruleStore.List(ctx, appdefaults.ByWorkspace(workspaceID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rules).To(BeEmpty())
 	})

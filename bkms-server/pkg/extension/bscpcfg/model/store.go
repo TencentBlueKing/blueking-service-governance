@@ -24,140 +24,28 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ Store = (*StoreMongo)(nil)
-
-// Store 应用配置管理统一存储接口。
-type Store interface {
-	// === Metadata 操作 ===
-
-	// CreateMetadata 创建 Metadata（一个 app 一条记录）
-	CreateMetadata(ctx context.Context, meta *Metadata) error
-	// GetMetadata 获取指定 app 的 Metadata
-	GetMetadata(ctx context.Context, appID string) (*Metadata, error)
-	// UpdateMetadata 更新 Metadata（可更新 mountPath、token、credentialID、credential）
-	UpdateMetadata(ctx context.Context, appID string, updateData *MetadataUpdate) error
-	// DeleteMetadata 删除指定 app 的 Metadata
-	DeleteMetadata(ctx context.Context, appID string) error
-
-	// === EnvBinding 操作 ===
-
-	// CreateEnvBinding 创建 EnvBinding（一个 app+env 一条记录）
-	CreateEnvBinding(ctx context.Context, binding *EnvBinding) error
-	// GetEnvBinding 获取指定 app+env 的绑定
-	GetEnvBinding(ctx context.Context, appID, envName string) (*EnvBinding, error)
-	// DeleteEnvBinding 删除指定 app+env 的绑定
-	DeleteEnvBinding(ctx context.Context, appID, envName string) error
-
-	// === 聚合操作 ===
-
-	// DeleteEnvBindingsByApp 删除应用下所有 EnvBinding（应用删除时级联）
-	DeleteEnvBindingsByApp(ctx context.Context, appID string) error
-	// ListEnvBindingsByApp 获取应用下所有环境的绑定列表
-	ListEnvBindingsByApp(ctx context.Context, appID string) ([]*EnvBinding, error)
-	// GetSnapshot 获取指定 app+env 的聚合快照，不存在返回 nil, nil。
-	GetSnapshot(ctx context.Context, appID, envName string) (*Snapshot, error)
-}
-
-// StoreMongo Store 的 MongoDB 实现，组合 Metadata、EnvBinding 存储
-type StoreMongo struct {
-	defStore     MetadataStore
-	bindingStore EnvBindingStore
-}
-
-// NewStoreMongo 创建统一的配置管理存储
-func NewStoreMongo(client *mongo.Client, dbName string) (Store, error) {
-	defStore, err := NewMetadataStoreMongo(client, dbName)
-	if err != nil {
-		return nil, err
-	}
-	bindingStore, err := NewEnvBindingStoreMongo(client, dbName)
-	if err != nil {
-		return nil, err
-	}
-	return &StoreMongo{
-		defStore:     defStore,
-		bindingStore: bindingStore,
-	}, nil
-}
-
-// === Metadata 操作 ===
-
-// CreateMetadata 创建 Metadata（一个 app 一条记录）
-func (s *StoreMongo) CreateMetadata(ctx context.Context, meta *Metadata) error {
-	return s.defStore.Create(ctx, meta)
-}
-
-// GetMetadata 获取指定 app 的 Metadata
-func (s *StoreMongo) GetMetadata(ctx context.Context, appID string) (*Metadata, error) {
-	return s.defStore.Get(ctx, appID)
-}
-
-// UpdateMetadata 更新 Metadata（可更新 mountPath、token、credentialID、credential）
-func (s *StoreMongo) UpdateMetadata(
-	ctx context.Context,
-	appID string,
-	updateData *MetadataUpdate,
-) error {
-	return s.defStore.Update(ctx, appID, updateData)
-}
-
-// DeleteMetadata 删除指定 app 的 Metadata
-func (s *StoreMongo) DeleteMetadata(ctx context.Context, appID string) error {
-	return s.defStore.Delete(ctx, appID)
-}
-
-// === EnvBinding 操作 ===
-
-// CreateEnvBinding 创建 EnvBinding（一个 app+env 一条记录）
-func (s *StoreMongo) CreateEnvBinding(ctx context.Context, binding *EnvBinding) error {
-	return s.bindingStore.Create(ctx, binding)
-}
-
-// GetEnvBinding 获取指定 app+env 的绑定
-func (s *StoreMongo) GetEnvBinding(ctx context.Context, appID, envName string) (*EnvBinding, error) {
-	return s.bindingStore.Get(ctx, appID, envName)
-}
-
-// DeleteEnvBinding 删除指定 app+env 的绑定
-func (s *StoreMongo) DeleteEnvBinding(ctx context.Context, appID, envName string) error {
-	return s.bindingStore.Delete(ctx, appID, envName)
-}
-
-// === 聚合操作 ===
-
-// DeleteEnvBindingsByApp 删除应用下所有 EnvBinding（应用删除时级联）
-func (s *StoreMongo) DeleteEnvBindingsByApp(ctx context.Context, appID string) error {
-	return s.bindingStore.DeleteByApp(ctx, appID)
-}
-
-// ListEnvBindingsByApp 获取应用下所有环境的绑定列表
-func (s *StoreMongo) ListEnvBindingsByApp(ctx context.Context, appID string) ([]*EnvBinding, error) {
-	return s.bindingStore.ListByApp(ctx, appID)
-}
-
-// GetSnapshot 获取指定 app+env 的聚合快照。
+// GetSnapshot 获取指定 app+env 的聚合快照（Metadata + EnvBinding）。
 // 如果 Metadata 不存在或 EnvBinding 不存在，返回 nil, nil。
-func (s *StoreMongo) GetSnapshot(ctx context.Context, appID, envName string) (*Snapshot, error) {
-	meta, err := s.defStore.Get(ctx, appID)
+func GetSnapshot(ctx context.Context, db *mongo.Database, appID, envName string) (*Snapshot, error) {
+	meta, err := store.Of(db, MetadataMeta).Get(ctx, ByApp(appID))
 	if err != nil {
 		if errors.Is(err, ErrMetadataNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, errors.Wrapf(err, "get metadata of app %s", appID)
 	}
 
-	binding, err := s.bindingStore.Get(ctx, appID, envName)
+	binding, err := store.Of(db, EnvBindingMeta).Get(ctx, ByAppAndEnv(appID, envName))
 	if err != nil {
 		if errors.Is(err, ErrEnvBindingNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, errors.Wrapf(err, "get env binding of app %s env %s", appID, envName)
 	}
 
-	return &Snapshot{
-		Metadata:   meta,
-		EnvBinding: binding,
-	}, nil
+	return &Snapshot{Metadata: meta, EnvBinding: binding}, nil
 }

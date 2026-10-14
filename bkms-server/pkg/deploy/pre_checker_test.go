@@ -27,11 +27,13 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -47,13 +49,18 @@ func mockTrafficManagerAndGetBaseline(baselineLaneName string) {
 	mockey.Mock((*trafficmanager.StubTrafficManager).GetBaselineTrafficLane).Return(baselineLane, nil).Build()
 }
 
-// newTestChecker 创建用于测试的 PreDeployChecker，注入空依赖
+// persistEnv 把测试环境写入测试库，供检查器按名称查询
+func persistEnv(ctx context.Context, env *envmodel.Environment) {
+	envs := testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
+	Expect(envs.Create(ctx, env)).To(Succeed())
+	DeferCleanup(func() {
+		Expect(envs.DeleteIfExists(context.Background(), store.ByID(env.ID))).To(Succeed())
+	})
+}
+
+// newTestChecker 创建用于测试的 PreDeployChecker，晋级记录使用测试库，其余注入空依赖
 func newTestChecker() *PreDeployChecker {
-	return NewPreDeployChecker(
-		&envmodel.EnvironmentStoreMongo{},
-		&promotion.PromotionStoreMongo{},
-		&snapshot.Service{},
-	)
+	return NewPreDeployChecker(testutil.NewDB(GinkgoT()), &snapshot.Service{})
 }
 
 var _ = Describe("PreDeployChecker", func() {
@@ -96,7 +103,7 @@ var _ = Describe("PreDeployChecker", func() {
 	Describe("Do", func() {
 		It("should pass when traffic lane name is empty", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockey.Mock((*envmodel.EnvironmentStoreMongo).GetByName).Return(devEnv, nil).Build()
+				persistEnv(ctx, devEnv)
 
 				params.TrafficLaneName = ""
 				err := checker.Do(ctx, params)
@@ -107,7 +114,7 @@ var _ = Describe("PreDeployChecker", func() {
 		It("should pass when deploying to baseline lane", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				mockTrafficManagerAndGetBaseline("baseline")
-				mockey.Mock((*envmodel.EnvironmentStoreMongo).GetByName).Return(devEnv, nil).Build()
+				persistEnv(ctx, devEnv)
 
 				params.TrafficLaneName = "baseline"
 				err := checker.Do(ctx, params)
@@ -118,15 +125,14 @@ var _ = Describe("PreDeployChecker", func() {
 		It("should pass when baseline lane is deployed", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				mockTrafficManagerAndGetBaseline("baseline")
-				mockey.Mock((*envmodel.EnvironmentStoreMongo).GetByName).Return(devEnv, nil).Build()
+				persistEnv(ctx, devEnv)
 
-				deployedRecord := &helmdeploy.Record{
+				Expect(store.Of(checker.db, helmdeploy.RecordMeta).Create(ctx, &helmdeploy.Record{
 					AppID:           appID,
 					EnvName:         envName,
 					TrafficLaneName: "baseline",
 					Status:          helm.StatusDeployed,
-				}
-				mockey.Mock((*helmdeploy.RecordStoreMongo).GetLatest).Return(deployedRecord, nil).Build()
+				})).To(Succeed())
 
 				err := checker.Do(ctx, params)
 				Expect(err).NotTo(HaveOccurred())
@@ -137,13 +143,12 @@ var _ = Describe("PreDeployChecker", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				mockTrafficManagerAndGetBaseline("base")
 
-				notDeployedRecord := &helmdeploy.Record{
+				Expect(store.Of(checker.db, helmdeploy.RecordMeta).Create(ctx, &helmdeploy.Record{
 					AppID:           appID,
 					EnvName:         envName,
-					TrafficLaneName: "baseline",
+					TrafficLaneName: "base",
 					Status:          helm.StatusFailed,
-				}
-				mockey.Mock((*helmdeploy.RecordStoreMongo).GetLatest).Return(notDeployedRecord, nil).Build()
+				})).To(Succeed())
 
 				err := checker.Do(ctx, params)
 				Expect(err).To(HaveOccurred())
@@ -183,7 +188,7 @@ var _ = Describe("PreDeployChecker", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				params.TrafficLaneName = ""
 				params.ImageTag = "v1.0.0"
-				mockey.Mock((*envmodel.EnvironmentStoreMongo).GetByName).Return(devEnv, nil).Build()
+				persistEnv(ctx, devEnv)
 
 				err := checker.Do(ctx, params)
 				Expect(err).NotTo(HaveOccurred())
@@ -195,11 +200,16 @@ var _ = Describe("PreDeployChecker", func() {
 				params.TrafficLaneName = ""
 				params.ImageTag = "v1.0.0"
 
-				mockey.Mock((*envmodel.EnvironmentStoreMongo).GetByName).Return(productionEnv, nil).Build()
+				persistEnv(ctx, productionEnv)
 				mockey.Mock((*snapshot.Service).ResolveRepoKeyForApp).Return(
 					&snapshot.RepoKeyInfo{RepoKey: "repo-key-abc"}, nil,
 				).Build()
-				mockey.Mock((*promotion.PromotionStoreMongo).IsTagPromoted).Return(true, nil).Build()
+				promotions := testutil.NewStore(GinkgoT(), promotion.Meta)
+				Expect(promotion.Promote(ctx, promotions, appID, "repo-key-abc", "v1.0.0", "admin")).To(Succeed())
+				DeferCleanup(func() {
+					_, err := promotions.DeleteMany(ctx, promotion.ByApp(appID))
+					Expect(err).NotTo(HaveOccurred())
+				})
 
 				err := checker.Do(ctx, params)
 				Expect(err).NotTo(HaveOccurred())
@@ -211,11 +221,10 @@ var _ = Describe("PreDeployChecker", func() {
 				params.TrafficLaneName = ""
 				params.ImageTag = "v2.0.0-dev"
 
-				mockey.Mock((*envmodel.EnvironmentStoreMongo).GetByName).Return(productionEnv, nil).Build()
+				persistEnv(ctx, productionEnv)
 				mockey.Mock((*snapshot.Service).ResolveRepoKeyForApp).Return(
 					&snapshot.RepoKeyInfo{RepoKey: "repo-key-abc"}, nil,
 				).Build()
-				mockey.Mock((*promotion.PromotionStoreMongo).IsTagPromoted).Return(false, nil).Build()
 
 				err := checker.Do(ctx, params)
 				Expect(err).To(HaveOccurred())
@@ -223,14 +232,10 @@ var _ = Describe("PreDeployChecker", func() {
 			})
 		})
 
-		It("should return error when env query fails", func() {
+		It("should return error when env is not found", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				params.TrafficLaneName = ""
 				params.ImageTag = "v1.0.0"
-
-				mockey.Mock((*envmodel.EnvironmentStoreMongo).GetByName).Return(
-					nil, errors.New("db connection error"),
-				).Build()
 
 				err := checker.Do(ctx, params)
 				Expect(err).To(HaveOccurred())
@@ -243,7 +248,7 @@ var _ = Describe("PreDeployChecker", func() {
 				params.TrafficLaneName = ""
 				params.ImageTag = "v1.0.0"
 
-				mockey.Mock((*envmodel.EnvironmentStoreMongo).GetByName).Return(productionEnv, nil).Build()
+				persistEnv(ctx, productionEnv)
 				mockey.Mock((*snapshot.Service).ResolveRepoKeyForApp).Return(
 					nil, errors.New("build config not found"),
 				).Build()

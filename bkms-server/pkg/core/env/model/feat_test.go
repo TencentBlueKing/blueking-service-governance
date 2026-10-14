@@ -24,48 +24,35 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
-var _ = Describe("FeatureEnvCounterStoreMongo", func() {
-	var (
-		ctx   context.Context
-		store FeatureEnvCounterStore
-		diApp *fxtest.App
-	)
+var _ = Describe("FeatureEnvCounter", func() {
+	var ctx context.Context
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		diApp = fxtest.New(
-			GinkgoT(),
-			database.PrivateFxModule,
-			fx.Provide(NewFeatureEnvCounterStoreMongo),
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteAll(ctx)).To(Succeed())
-		diApp.RequireStop()
+		Expect(testutil.CleanupCollection(FeatureEnvCounterCollection)).To(Succeed())
 	})
 
 	It("allocates independent sequential indexes per app", func() {
+		counter := NewFeatureEnvCounter(testutil.NewDB(GinkgoT()))
 		appID1 := stringx.Random(10)
 		appID2 := stringx.Random(10)
 
-		index, err := store.Next(ctx, appID1)
+		index, err := counter.Next(ctx, appID1)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(index).To(Equal(int64(1)))
 
-		index, err = store.Next(ctx, appID1)
+		index, err = counter.Next(ctx, appID1)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(index).To(Equal(int64(2)))
 
-		index, err = store.Next(ctx, appID2)
+		index, err = counter.Next(ctx, appID2)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(index).To(Equal(int64(1)))
 	})

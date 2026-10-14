@@ -144,11 +144,7 @@ func (h *Handler) RevokeWorkspaceAdmin(c *gin.Context) {
 }
 
 func (h *Handler) workspaceAdminService() *workspaceadmin.Service {
-	return workspaceadmin.NewService(
-		h.registry.WorkspaceStore,
-		h.registry.TempAdminRecordStore,
-		perm.NewManager(),
-	)
+	return workspaceadmin.NewService(h.registry.DB, perm.NewManager())
 }
 
 func toAPIError(err error, internalMessage string) error {

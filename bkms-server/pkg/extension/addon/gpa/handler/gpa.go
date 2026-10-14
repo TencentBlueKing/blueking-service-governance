@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Handler handles Gin GPA config API requests.
@@ -44,7 +45,11 @@ func New(registry *storereg.Registry) *Handler {
 
 // gpaService 构造 GPA 下发服务（仅持有 Store，Service 在 handler 内构造）。
 func (h *Handler) gpaService() *gpa.GPAService {
-	return gpa.NewGPAService(h.registry.AppModelStore)
+	return gpa.NewGPAService(h.registry.DB)
+}
+
+func (h *Handler) gpaConfigs() *gpa.ConfigStore {
+	return store.Of(h.registry.DB, gpa.ConfigMeta)
 }
 
 // abortWithGPAApplyError 统一处理 gpaService().Apply 返回的错误并中止请求。
@@ -90,7 +95,7 @@ func (h *Handler) GetAppEnvGPAConfig(c *gin.Context) {
 		return
 	}
 
-	config, err := h.registry.GPAConfigStore.Get(ctx, uriInput.AppID, uriInput.EnvName)
+	config, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
 		if errors.Is(err, gpa.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -160,7 +165,7 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 
 	// 记录变更前配置用于审计（不存在视为新建，before 为 nil）
 	var before *gpa.GPAConfig
-	if existing, gErr := h.registry.GPAConfigStore.Get(ctx, uriInput.AppID, uriInput.EnvName); gErr == nil {
+	if existing, gErr := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName)); gErr == nil {
 		before = existing
 	} else if !errors.Is(gErr, gpa.ErrConfigNotFound) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(gErr, bkerrs.ErrCodeInternalServerError, "get gpa config"))
@@ -187,9 +192,9 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 	}
 
 	if before == nil {
-		err = h.registry.GPAConfigStore.Create(ctx, config)
+		err = gpa.CreateConfig(ctx, h.gpaConfigs(), config)
 	} else {
-		err = h.registry.GPAConfigStore.Update(ctx, uriInput.AppID, uriInput.EnvName, jsonInput.ToUpdateData())
+		err = gpa.UpdateConfig(ctx, h.gpaConfigs(), uriInput.AppID, uriInput.EnvName, jsonInput.ToUpdateData())
 	}
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "save gpa config"))
@@ -240,7 +245,7 @@ func (h *Handler) DeleteAppEnvGPAConfig(c *gin.Context) {
 		return
 	}
 
-	before, err := h.registry.GPAConfigStore.Get(ctx, uriInput.AppID, uriInput.EnvName)
+	before, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
 		if errors.Is(err, gpa.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -260,7 +265,7 @@ func (h *Handler) DeleteAppEnvGPAConfig(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.GPAConfigStore.Delete(ctx, uriInput.AppID, uriInput.EnvName); err != nil {
+	if err = h.gpaConfigs().Delete(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName)); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete gpa config"))
 		return
 	}
@@ -311,7 +316,7 @@ func (h *Handler) ToggleAppEnvGPAConfig(c *gin.Context) {
 		return
 	}
 
-	before, err := h.registry.GPAConfigStore.Get(ctx, uriInput.AppID, uriInput.EnvName)
+	before, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
 		if errors.Is(err, gpa.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -346,7 +351,7 @@ func (h *Handler) ToggleAppEnvGPAConfig(c *gin.Context) {
 	}
 
 	enabled := jsonInput.Enabled
-	if err = h.registry.GPAConfigStore.Update(ctx, uriInput.AppID, uriInput.EnvName, &gpa.ConfigUpdateData{
+	if err = gpa.UpdateConfig(ctx, h.gpaConfigs(), uriInput.AppID, uriInput.EnvName, &gpa.ConfigUpdateData{
 		Enabled: &enabled,
 	}); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update gpa config"))

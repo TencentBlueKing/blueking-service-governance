@@ -28,8 +28,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	cloudbkci "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("build-trigger type helpers", func() {
@@ -100,12 +102,12 @@ var _ = Describe("PipelineManager Initialize build-trigger guard", func() {
 	var (
 		ctx           context.Context
 		manager       *PipelineManager
-		pipelineStore *PipelineStoreMongo
+		pipelineStore *PipelineStore
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		manager = NewPipelineManager(managerTestWorkspaceID)
+		manager = NewPipelineManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		_, pipelineStore, _ = setupManagerTestStores()
 	})
 
@@ -136,9 +138,9 @@ var _ = Describe("TriggerPipelineManager", func() {
 	var (
 		ctx           context.Context
 		manager       *TriggerPipelineManager
-		projectStore  *ProjectStoreMongo
-		pipelineStore *PipelineStoreMongo
-		templateStore *DBPipelineTemplateStore
+		projectStore  *ProjectStore
+		pipelineStore *PipelineStore
+		templateStore *PipelineTemplateStore
 		prevConfig    *config.Config
 	)
 
@@ -147,7 +149,7 @@ var _ = Describe("TriggerPipelineManager", func() {
 		manager = NewTriggerPipelineManager(managerTestWorkspaceID)
 		projectStore, pipelineStore, templateStore = setupManagerTestStores()
 		Expect(projectStore.Create(ctx, mockProject())).To(Succeed())
-		Expect(templateStore.Upsert(ctx, &PipelineTemplate{
+		_, err := templateStore.Upsert(ctx, &PipelineTemplate{
 			ID:          "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
 			Type:        string(PipelineTypeBuildTrigger),
 			Version:     "1.0.0",
@@ -156,7 +158,8 @@ var _ = Describe("TriggerPipelineManager", func() {
 			Stages: []map[string]any{
 				{"script": "curl [[ .callbackURL ]] token=[[ .credentialID ]]"},
 			},
-		})).To(Succeed())
+		}, ByType(string(PipelineTypeBuildTrigger)))
+		Expect(err).NotTo(HaveOccurred())
 
 		prevConfig = config.G
 		config.G = &config.Config{
@@ -172,8 +175,8 @@ var _ = Describe("TriggerPipelineManager", func() {
 
 	expectNoLocal := func() {
 		GinkgoHelper()
-		_, err := pipelineStore.GetByWorkspaceAndType(
-			ctx, managerTestWorkspaceID, string(BuildTriggerPipelineType(testAppID)),
+		_, err := pipelineStore.Get(
+			ctx, ByWorkspaceAndType(managerTestWorkspaceID, string(BuildTriggerPipelineType(testAppID))),
 		)
 		Expect(errors.Is(err, ErrPipelineNotFound)).To(BeTrue())
 	}
@@ -199,7 +202,8 @@ var _ = Describe("TriggerPipelineManager", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(second.ID).To(Equal(first.ID))
 
-			Expect(pipelineStore.Delete(ctx, managerTestWorkspaceID, first.Type)).To(Succeed())
+			Expect(pipelineStore.DeleteIfExists(ctx, ByWorkspaceAndType(managerTestWorkspaceID, first.Type))).
+				To(Succeed())
 			mockey.Mock((*cloudbkci.StubApiClient).CreatePipeline).Return("", errors.New("create failed")).Build()
 			_, err = manager.Ensure(ctx, testAppID)
 			Expect(err).To(MatchError(ContainSubstring("create failed")))
@@ -218,7 +222,6 @@ var _ = Describe("TriggerPipelineManager", func() {
 			mockey.Mock((*cloudbkci.StubApiClient).CreatePipeline).
 				Return(remotePipelineID, nil).
 				Build()
-			mockey.Mock((*PipelineStoreMongo).Create).Return(errors.New("mongo insert failed")).Build()
 			mockey.Mock((*cloudbkci.StubApiClient).DeletePipeline).To(
 				func(_ context.Context, _, pipelineID string) error {
 					deletedPipelineID = pipelineID
@@ -226,8 +229,16 @@ var _ = Describe("TriggerPipelineManager", func() {
 				},
 			).Build()
 
+			// 其它工作空间已占用相同的流水线 ID，本地落库会因唯一索引冲突失败
+			Expect(pipelineStore.Create(ctx, &Pipeline{
+				ID:          remotePipelineID,
+				Type:        "occupied",
+				WorkspaceID: "other-workspace",
+				ProjectCode: managerTestProjectCode,
+			})).To(Succeed())
+
 			_, err := manager.Ensure(ctx, testAppID)
-			Expect(err).To(MatchError(ContainSubstring("mongo insert failed")))
+			Expect(errors.Is(err, store.ErrDuplicate)).To(BeTrue())
 			Expect(deletedPipelineID).To(Equal(remotePipelineID))
 			expectNoLocal()
 		})

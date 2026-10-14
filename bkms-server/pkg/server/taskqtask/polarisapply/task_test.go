@@ -30,9 +30,11 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -40,86 +42,60 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
 var _ = Describe("Polaris dynamic apply task", func() {
 	var (
-		ctx               context.Context
-		diApp             *fxtest.App
-		appStore          bkmsapp.ApplicationStore
-		envStore          bkmsenv.EnvironmentStore
-		envService        *env.EnvService
-		store             polaris.PolarisConfigStore
-		appModelStore     appmodel.AppModelStore
-		appSpecStore      appspec.AppSpecStore
-		scopedEnvVarStore envvars.ScopedEnvVarStore
-		depSvcStore       depsvcmodel.ServiceStore
-		depSvcInstStore   depsvcmodel.ServiceInstanceStore
-		depSvcBindStore   depsvcmodel.ServiceBindingStore
-		envStateManager   *polaris.PolarisEnvStateManager
-		service           *polaris.PolarisConfigService
-		app               *bkmsapp.Application
-		environment       *bkmsenv.Environment
-		otherEnvironment  *bkmsenv.Environment
+		ctx              context.Context
+		diApp            *fxtest.App
+		appStore         *bkmsapp.ApplicationStore
+		envService       *env.EnvService
+		configStore      *polaris.ConfigStore
+		db               *mongo.Database
+		envStateManager  *polaris.PolarisEnvStateManager
+		service          *polaris.PolarisConfigService
+		app              *bkmsapp.Application
+		environment      *bkmsenv.Environment
+		otherEnvironment *bkmsenv.Environment
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
 			envvars.FxModule,
-			depsvcmodel.FxModule,
 			polaris.FxModule,
 			fx.Populate(
-				&appStore,
-				&envStore,
 				&envService,
-				&store,
-				&appModelStore,
-				&appSpecStore,
-				&scopedEnvVarStore,
-				&depSvcStore,
-				&depSvcInstStore,
-				&depSvcBindStore,
 				&envStateManager,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		configStore = testutil.NewStore(GinkgoT(), polaris.ConfigMeta)
 
 		registry := &storereg.Registry{
-			AppStore:           appStore,
-			EnvStore:           envStore,
-			AppModelStore:      appModelStore,
-			AppSpecStore:       appSpecStore,
-			ScopedEnvVarStore:  scopedEnvVarStore,
-			PolarisConfigStore: store,
-			AppDepsVarReader:   depenvvars.NewReader(depSvcInstStore, depSvcBindStore),
-			PolarisVarReader:   polarisenvvars.NewReader(store),
+			DB:               db,
+			AppDepsVarReader: depenvvars.NewReader(db),
+			PolarisVarReader: polarisenvvars.NewReader(db),
 		}
 		registryMock := mockey.Mock(storereg.G).Return(registry).Build()
 		DeferCleanup(registryMock.UnPatch)
 
 		service = polaris.NewPolarisConfigService(
-			store,
-			polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+			db,
+			polaris.NewPolarisPlatformManager(db),
 			envStateManager,
-			envStore,
-			appModelStore,
-			appSpecStore,
 			envvars.NewUnifiedEnvVarsReader(
-				scopedEnvVarStore,
-				depenvvars.NewReader(depSvcInstStore, depSvcBindStore),
-				polarisenvvars.NewReader(store),
+				db,
+				depenvvars.NewReader(db),
+				polarisenvvars.NewReader(db),
 			),
 			Enqueue,
 		)
@@ -129,7 +105,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, app.ID)
+		_, _ = configStore.DeleteMany(ctx, polaris.ByApp(app.ID))
 		diApp.RequireStop()
 	})
 
@@ -147,7 +123,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 			states[envName] = envState(applied)
 		}
 		config := newTestConfig(app.ID, name, envNames, states)
-		Expect(store.Create(ctx, config)).To(Succeed())
+		Expect(configStore.Create(ctx, config)).To(Succeed())
 		return config
 	}
 
@@ -196,7 +172,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 				Expect(err).To(MatchError(ContainSubstring(environment.Name)))
 				Expect(calls).To(Equal(2))
 
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.GetEnvState(environment.Name).LastError).To(ContainSubstring("asynq unavailable"))
 				Expect(stored.GetEnvState(otherEnvironment.Name).LastError).To(BeEmpty())
@@ -218,15 +194,15 @@ var _ = Describe("Polaris dynamic apply task", func() {
 				AppID: app.ID, ConfigName: config.Name, EnvName: environment.Name,
 			})
 			Expect(stderrors.Is(err, asynq.SkipRetry)).To(BeTrue())
-			stored, getErr := store.Get(ctx, app.ID, config.Name)
+			stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.GetEnvState(environment.Name).LastError).To(ContainSubstring("get app model"))
 		})
 
 		It("should mark lastError as exhausted when retries are exhausted", func() {
 			config := createDeployedConfig("cfg-retry-exhausted", []string{environment.Name})
-			Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
-			DeferCleanup(func() { _ = appModelStore.DeleteAppModel(ctx, app.ID) })
+			Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
+			DeferCleanup(func() { _ = appmodel.DeleteAppModel(ctx, db, app.ID) })
 
 			mockey.PatchConvey("retries exhausted", GinkgoT(), func() {
 				mockey.Mock((*polaris.CRApplier).Apply).Return(errors.New("upsert polaris CR failed")).Build()
@@ -238,7 +214,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 				})
 				Expect(err).To(MatchError("upsert polaris CR failed"))
 
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.GetEnvState(environment.Name).LastError).To(Equal(
 					"upsert polaris CR failed (retry 11/11, retries exhausted)",

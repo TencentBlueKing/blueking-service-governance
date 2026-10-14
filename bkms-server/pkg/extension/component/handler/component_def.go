@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Handler handles Gin component definition API requests.
@@ -41,6 +42,10 @@ type Handler struct {
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) componentDefs() *component.ComponentDefStore {
+	return store.Of(h.registry.DB, component.ComponentDefMeta)
 }
 
 // ListComponentDefs 获取组件定义列表。
@@ -65,15 +70,15 @@ func (h *Handler) ListComponentDefs(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	compDefs, err := h.registry.ComponentDefStore.List(ctx, queryInput.ToModel())
+	compDefs, err := h.componentDefs().List(ctx, queryInput.ToListOpt())
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list component defs"))
 		return
 	}
 
 	output := make([]*serializer.ComponentDefOutputObj, 0, len(compDefs))
-	for _, compDef := range compDefs {
-		output = append(output, new(serializer.ComponentDefOutputObj).FromModel(compDef))
+	for i := range compDefs {
+		output = append(output, new(serializer.ComponentDefOutputObj).FromModel(&compDefs[i]))
 	}
 	ginutils.OK(c, serializer.ListComponentDefsOutput{Data: output})
 }
@@ -103,7 +108,7 @@ func (h *Handler) CreateComponentDef(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	// name + version 全局唯一，由 store.Create 的唯一索引保证，避免并发下先查后写被覆盖。
-	if err := h.registry.ComponentDefStore.Create(ctx, compDef); err != nil {
+	if err := h.componentDefs().Create(ctx, compDef); err != nil {
 		if errors.Is(err, component.ErrComponentDefAlreadyExists) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
 				bkerrs.ErrCodeAlreadyExists,
@@ -151,10 +156,9 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	existingCompDef, err := h.registry.ComponentDefStore.Get(
-		ctx,
-		uriInput.CompDefName,
-		component.DefaultComponentDefVersion,
+	defs := h.componentDefs()
+	existingCompDef, err := defs.Get(
+		ctx, component.ByNameVersion(uriInput.CompDefName, component.DefaultComponentDefVersion),
 	)
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
@@ -185,7 +189,7 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.ComponentDefStore.Upsert(ctx, nextCompDef); err != nil {
+	if err = component.UpsertDef(ctx, defs, nextCompDef); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update component def"))
 		return
 	}
@@ -222,11 +226,9 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	existingCompDef, err := h.registry.ComponentDefStore.Get(
-		ctx,
-		uriInput.CompDefName,
-		component.DefaultComponentDefVersion,
-	)
+	defs := h.componentDefs()
+	byKey := component.ByNameVersion(uriInput.CompDefName, component.DefaultComponentDefVersion)
+	existingCompDef, err := defs.Get(ctx, byKey)
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			ginutils.OK(c, serializer.EmptyOutput{})
@@ -254,9 +256,7 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 		return
 	}
 
-	if _, err = h.registry.ComponentDefStore.Delete(
-		ctx, uriInput.CompDefName, component.DefaultComponentDefVersion,
-	); err != nil {
+	if err = defs.DeleteIfExists(ctx, byKey); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete component def"))
 		return
 	}

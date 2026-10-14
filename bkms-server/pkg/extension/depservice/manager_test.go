@@ -26,14 +26,14 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/fake"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // fakeProvisionParams 满足 types.ProvisionParams，供 CreateServiceInstance 入参使用。
@@ -43,12 +43,10 @@ func (fakeProvisionParams) Validate() error { return nil }
 
 var _ = Describe("ServiceManager", func() {
 	var (
-		ctx          context.Context
-		diApp        *fxtest.App
-		svcStore     model.ServiceStore
-		instStore    model.ServiceInstanceStore
-		bindingStore model.ServiceBindingStore
-		mgr          *depservice.ServiceManager
+		ctx      context.Context
+		svcStore *model.ServiceStore
+		insts    *model.ServiceInstanceStore
+		mgr      *depservice.ServiceManager
 
 		planName string
 	)
@@ -57,13 +55,9 @@ var _ = Describe("ServiceManager", func() {
 		ctx = context.Background()
 		fake.Reset()
 
-		diApp = fxtest.New(
-			GinkgoT(),
-			model.FxModule,
-			fx.Populate(&svcStore, &instStore, &bindingStore),
-		)
-		diApp.RequireStart()
-		mgr = depservice.New(svcStore, instStore, bindingStore, nil)
+		svcStore = testutil.NewStore(GinkgoT(), model.ServiceMeta)
+		insts = testutil.NewStore(GinkgoT(), model.ServiceInstanceMeta)
+		mgr = depservice.New(testutil.NewDB(GinkgoT()))
 		Expect(testutil.CleanupCollection("depservice_bindings")).To(Succeed())
 		Expect(testutil.CleanupCollection("depservice_instances")).To(Succeed())
 		Expect(testutil.CleanupCollection("depservice_services")).To(Succeed())
@@ -83,14 +77,19 @@ var _ = Describe("ServiceManager", func() {
 
 	AfterEach(func() {
 		fake.Reset()
-		Expect(instStore.DeleteAll(ctx)).To(Succeed())
-		Expect(bindingStore.DeleteAll(ctx)).To(Succeed())
-		Expect(svcStore.DeleteAll(ctx)).To(Succeed())
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(model.ServiceInstanceMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(model.ServiceBindingMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(model.ServiceMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(envmodel.EnvMeta)).To(Succeed())
 	})
 
+	insertInstance := func(inst *model.ServiceInstance) (bson.ObjectID, error) {
+		err := insts.Create(ctx, inst)
+		return inst.ID, err
+	}
+
 	createInstance := func(status model.InstanceStatus) bson.ObjectID {
-		id, err := instStore.Create(ctx, &model.ServiceInstance{
+		id, err := insertInstance(&model.ServiceInstance{
 			Name:         "inst-" + stringx.Random(6),
 			ServiceName:  "fake",
 			PlanName:     planName,
@@ -125,7 +124,7 @@ var _ = Describe("ServiceManager", func() {
 			instID := createInstance(model.AvailableStatus)
 
 			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
-			_, err := instStore.Get(ctx, instID)
+			_, err := insts.Get(ctx, store.ByID(instID))
 			Expect(model.AsNotFoundError(err)).To(BeTrue())
 		})
 
@@ -137,7 +136,7 @@ var _ = Describe("ServiceManager", func() {
 			Expect(errors.Is(err, depservice.ErrInvalidArgument)).To(BeTrue())
 			Expect(err.Error()).To(ContainSubstring("service instance is provisioning, cannot delete"))
 
-			inst, getErr := instStore.Get(ctx, instID)
+			inst, getErr := insts.Get(ctx, store.ByID(instID))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(inst.Status).To(Equal(model.ProvisioningStatus))
 		})
@@ -148,7 +147,7 @@ var _ = Describe("ServiceManager", func() {
 
 			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
 
-			inst, err := instStore.Get(ctx, instID)
+			inst, err := insts.Get(ctx, store.ByID(instID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inst.Status).To(Equal(model.DeletingStatus))
 		})
@@ -157,7 +156,7 @@ var _ = Describe("ServiceManager", func() {
 			instID := createInstance(model.CreateFailedStatus)
 
 			Expect(mgr.DeleteServiceInstance(ctx, instID)).To(Succeed())
-			_, err := instStore.Get(ctx, instID)
+			_, err := insts.Get(ctx, store.ByID(instID))
 			Expect(model.AsNotFoundError(err)).To(BeTrue())
 		})
 
@@ -169,7 +168,7 @@ var _ = Describe("ServiceManager", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("delete failed"))
 
-			inst, getErr := instStore.Get(ctx, instID)
+			inst, getErr := insts.Get(ctx, store.ByID(instID))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(inst.Status).To(Equal(model.DeleteFailedStatus))
 			Expect(inst.Message).To(ContainSubstring("delete failed"))
@@ -197,7 +196,7 @@ var _ = Describe("ServiceManager", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(id).NotTo(Equal(bson.NilObjectID))
 
-			inst, getErr := instStore.Get(ctx, id)
+			inst, getErr := insts.Get(ctx, store.ByID(id))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(inst.Status).To(Equal(model.AvailableStatus))
 			Expect(inst.Config["key"]).To(Equal("val"))
@@ -218,7 +217,7 @@ var _ = Describe("ServiceManager", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			inst, getErr := instStore.Get(ctx, id)
+			inst, getErr := insts.Get(ctx, store.ByID(id))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(inst.Status).To(Equal(model.ProvisioningStatus))
 		})
@@ -248,9 +247,9 @@ var _ = Describe("ServiceManager", func() {
 			Expect(err.Error()).To(ContainSubstring("provider not found"))
 			Expect(id).To(Equal(bson.NilObjectID))
 
-			insts, listErr := instStore.List(ctx, nil)
+			list, listErr := insts.List(ctx)
 			Expect(listErr).NotTo(HaveOccurred())
-			Expect(insts).To(BeEmpty())
+			Expect(list).To(BeEmpty())
 		})
 
 		It("marks createFailed when the provider create fails", func() {
@@ -268,7 +267,7 @@ var _ = Describe("ServiceManager", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(id).NotTo(Equal(bson.NilObjectID))
 
-			inst, getErr := instStore.Get(ctx, id)
+			inst, getErr := insts.Get(ctx, store.ByID(id))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(inst.Status).To(Equal(model.CreateFailedStatus))
 			Expect(inst.Message).To(ContainSubstring("provider create failed"))
@@ -307,7 +306,7 @@ var _ = Describe("ServiceManager", func() {
 				}},
 			})).To(Succeed())
 
-			instID, err := instStore.Create(ctx, &model.ServiceInstance{
+			instID, err := insertInstance(&model.ServiceInstance{
 				Name:         "redis-" + stringx.Random(6),
 				ServiceName:  "redis",
 				PlanName:     planName,
@@ -328,7 +327,7 @@ var _ = Describe("ServiceManager", func() {
 		It("filters by workspace", func() {
 			wsID := "ws-" + stringx.Random(6)
 			for i := 0; i < 3; i++ {
-				_, err := instStore.Create(ctx, &model.ServiceInstance{
+				_, err := insertInstance(&model.ServiceInstance{
 					Name:         "inst-" + stringx.Random(6),
 					ServiceName:  "fake",
 					PlanName:     planName,
@@ -343,12 +342,12 @@ var _ = Describe("ServiceManager", func() {
 			// other workspace
 			_ = createInstance(model.AvailableStatus)
 
-			insts, err := mgr.ListServiceInstances(ctx, &depservice.ListServiceInstancesParams{
+			list, err := mgr.ListServiceInstances(ctx, &depservice.ListServiceInstancesParams{
 				WorkspaceID: wsID,
 				ServiceName: "fake",
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(insts).To(HaveLen(3))
+			Expect(list).To(HaveLen(3))
 		})
 	})
 
@@ -369,9 +368,27 @@ var _ = Describe("ServiceManager", func() {
 			Expect(list).To(HaveLen(1))
 		})
 
+		It("rejects mapping an instance to an env that does not exist", func() {
+			wsID := "ws-" + stringx.Random(6)
+			_, err := mgr.CreateServiceBinding(ctx, &depservice.CreateServiceBindingParams{
+				Name:           "cache",
+				AppID:          "app-1",
+				WorkspaceID:    wsID,
+				ServiceName:    "redis",
+				EnvInstanceMap: map[string]bson.ObjectID{"prod": bson.NewObjectID()},
+			})
+			Expect(err).To(MatchError(depservice.ErrInvalidArgument))
+			Expect(err.Error()).To(ContainSubstring(`environment "prod" not found`))
+		})
+
 		It("maps an instance per env and rejects delete while referenced", func() {
 			wsID := "ws-" + stringx.Random(6)
-			instID, err := instStore.Create(ctx, &model.ServiceInstance{
+			Expect(testutil.NewStore(GinkgoT(), envmodel.EnvMeta).Create(ctx, &envmodel.Environment{
+				WorkspaceID: wsID,
+				Name:        "prod",
+				Type:        "production",
+			})).To(Succeed())
+			instID, err := insertInstance(&model.ServiceInstance{
 				Name:         "redis-" + stringx.Random(6),
 				ServiceName:  "redis",
 				PlanName:     planName,

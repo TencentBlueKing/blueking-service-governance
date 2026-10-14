@@ -27,6 +27,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // AddOperationRecord 添加操作记录，返回新记录的 ID（hex）和错误信息
@@ -65,23 +66,15 @@ func AddOperationRecord(
 	resourceID string,
 	opts ...Option,
 ) (string, error) {
-	// 获取 store
-	store, err := NewOperationRecordStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return "", errors.Wrap(err, "new operation record store")
-	}
-
 	// 将数据写入数据库
-	id, err := store.Create(ctx, newOperationRecord(
-		username, operationType, resourceType, resourceID, opts...,
-	))
-	if err != nil {
+	record := newOperationRecord(username, operationType, resourceType, resourceID, opts...)
+	if err := store.Of(database.DB(), OperationRecordMeta).Create(ctx, record); err != nil {
 		return "", errors.Wrapf(
 			err, "create operation record (username: %s, opType: %s, resType: %s, resID: %s)",
 			username, operationType, resourceType, resourceID,
 		)
 	}
-	return id, nil
+	return record.ID.Hex(), nil
 }
 
 // AddOperationRecordAsync 异步添加操作记录，不返回任何值

@@ -24,10 +24,11 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -36,7 +37,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/trpc/admincmd"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -48,15 +48,11 @@ var _ = Describe("TrpcAdminService", func() {
 	var adminService *admincmd.TrpcAdminService
 
 	// Store instances
-	var appStore bkmsapp.ApplicationStore
-	var appConfigFileStore appcfg.AppConfigFileStore
-	var appConfigFileDefStore appcfg.AppConfigFileDefStore
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	var buildConfigStore build.ConfigStore
-	var scopedEnvVarStore envvars.ScopedEnvVarStore
+	var appStore *bkmsapp.ApplicationStore
+	var appConfigFileDefStore *appcfg.AppConfigFileDefStore
+	var db *mongo.Database
 	var appDepsVarReader *depenvvars.Reader
 	var polarisVarReader *polarisenvvars.Reader
-	var appModelStore appmodel.AppModelStore
 	var envService *bkmsenv.EnvService
 
 	// Test data
@@ -66,41 +62,28 @@ var _ = Describe("TrpcAdminService", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			appcfg.FxModule,
-			appmodel.FxModule,
 			bkmsenv.FxModule,
 			envvars.FxModule,
-			build.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
 			fx.Populate(
-				&appStore,
-				&appConfigFileStore,
-				&appConfigFileDefStore,
-				&appConfigFileVersionStore,
-				&buildConfigStore,
-				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
-				&appModelStore,
 				&envService,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		// 使用 dbfactory 创建测试用 tRPC 应用（包含 App、AppModel 和 AppConfigFile）
 		testApp, testAppModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
-			BuildConfigStore:          buildConfigStore,
+			AppStore: appStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			EnvVars: []appmodel.Variable{
 				{Key: "MODEL_ADMIN_PORT", Value: "7070"},
@@ -115,13 +98,10 @@ var _ = Describe("TrpcAdminService", func() {
 		// 创建 TrpcAdminService（跳过验证逻辑）
 		adminService = &admincmd.TrpcAdminService{
 			MountableFileProvider: appcfg.NewMountableFileProvider(
-				appConfigFileStore,
-				appConfigFileDefStore,
-				appConfigFileVersionStore,
+				testutil.NewDB(GinkgoT()),
 			),
-			AppModelStore: appModelStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
-				scopedEnvVarStore,
+				db,
 				appDepsVarReader,
 				polarisVarReader,
 			),
@@ -148,12 +128,11 @@ var _ = Describe("TrpcAdminService", func() {
   admin_port: "8081"`
 
 				svc := appcfg.NewAppConfigFileService(
-					appConfigFileStore,
-					appConfigFileDefStore,
-					appConfigFileVersionStore,
+					testutil.NewDB(GinkgoT()),
 				)
-				defs, err := appConfigFileDefStore.ListByApp(
+				defs, err := appcfg.ListDefsByApp(
 					ctx,
+					appConfigFileDefStore,
 					testApp.ID,
 					appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 				)
@@ -196,7 +175,7 @@ var _ = Describe("TrpcAdminService", func() {
 			// 并且已包含 MODEL_ADMIN_PORT 环境变量
 
 			// 添加环境变量（使用 dbfactory 创建的环境）
-			_, err := scopedEnvVarStore.CreateSimpleEnvScopeVar(ctx, *testEnv, "ADMIN_PORT", "9090", "")
+			_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, *testEnv, "ADMIN_PORT", "9090", "")
 			Expect(err).NotTo(HaveOccurred())
 		})
 		Context("when port is a direct number", func() {
@@ -295,9 +274,12 @@ var _ = Describe("TrpcAdminService", func() {
 	Describe("Precheck", func() {
 		// 辅助函数：更新已有框架配置文件的内容
 		createConfigFile := func(content string) {
-			svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
-			defs, err := appConfigFileDefStore.ListByApp(
+			svc := appcfg.NewAppConfigFileService(
+				testutil.NewDB(GinkgoT()),
+			)
+			defs, err := appcfg.ListDefsByApp(
 				ctx,
+				appConfigFileDefStore,
 				testApp.ID,
 				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 			)

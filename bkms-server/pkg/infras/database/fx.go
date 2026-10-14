@@ -24,10 +24,15 @@ import (
 )
 
 // PrivateFxModule exposes the shared database client only inside the enclosing fx.Module.
+//
+// *mongo.Database is provided for GenericStore based models (store.Of(db, Meta)). Because all
+// providers are private, every fx.Module may include PrivateFxModule independently, and it does
+// not conflict with a public *mongo.Database provided elsewhere in the app (e.g. store.FxModule).
 var PrivateFxModule = fx.Options(
 	fx.Provide(
 		func() *mongo.Client { return Client() },
 		func() string { return Name() },
+		func() *mongo.Database { return DB() },
 		fx.Private,
 	),
 )

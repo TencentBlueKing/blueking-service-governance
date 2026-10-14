@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
@@ -45,7 +46,8 @@ func (h *Handler) validateHelmDeployAppEnv(
 	if err != nil {
 		return nil, nil, err
 	}
-	env, err := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, envName)
+	env, err := store.Of(h.registry.DB, bkmsenv.EnvMeta).
+		Get(ctx, bkmsenv.AppEnvByName(app.WorkspaceID, app.ID, envName))
 	if err != nil {
 		return nil, nil, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get workspace %s env %s", app.WorkspaceID, envName)
 	}
@@ -85,7 +87,7 @@ func (h *Handler) bindOptionalJSON(c *gin.Context, obj any) error {
 
 // newSnapshotService 创建镜像快照服务，用于 Helm 部署前检查镜像晋级状态
 func (h *Handler) newSnapshotService() *snapshot.Service {
-	return snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	return snapshot.NewService(h.registry.DB)
 }
 
 // genDeployInfo 生成部署信息（用于日志输出标识部署详情）

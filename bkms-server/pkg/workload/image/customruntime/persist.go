@@ -23,25 +23,27 @@ import (
 	stderrors "errors"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 // PersistManager 在构建配置保存成功后 get_or_create 自定义镜像记录，并按需初始化 TAG 快照
 type PersistManager struct {
-	store       Store
+	images      *Store
 	checker     *ExistenceChecker
 	snapshotSvc *snapshot.Service
 }
 
 // NewPersistManager 创建 PersistManager，内部同时装配路径判定与仓库存在性校验
-func NewPersistManager(store Store, snapshotSvc *snapshot.Service) *PersistManager {
+func NewPersistManager(db *mongo.Database, snapshotSvc *snapshot.Service) *PersistManager {
 	return &PersistManager{
-		store:       store,
-		checker:     NewExistenceChecker(snapshotSvc),
+		images:      store.Of(db, Meta),
+		checker:     NewExistenceChecker(db, snapshotSvc),
 		snapshotSvc: snapshotSvc,
 	}
 }
@@ -68,7 +70,7 @@ func (m *PersistManager) ValidateTaggedReference(ctx context.Context, workspaceI
 //
 // 失败只返回 error 供调用方打日志，调用方不得回滚已成功的构建配置保存
 func (m *PersistManager) PersistAfterSave(ctx context.Context, workspaceID string, cfg *imagebuild.Config) error {
-	if m == nil || m.store == nil || m.checker == nil {
+	if m == nil || m.images == nil || m.checker == nil {
 		return errors.New("custom runtime image persist manager is not initialized")
 	}
 	if cfg == nil || cfg.SourceType != imagebuild.SourceTypeCodeRepository || cfg.CodeRepo == nil {
@@ -120,7 +122,7 @@ func (m *PersistManager) persistOne(ctx context.Context, workspaceID string, ima
 func (m *PersistManager) upsertRecord(
 	ctx context.Context, workspaceID string, imageType ImageType, imageName string,
 ) error {
-	if err := m.store.Upsert(ctx, &Image{
+	if err := Register(ctx, m.images, &Image{
 		WorkspaceID: workspaceID,
 		Type:        imageType,
 		Name:        imageName,

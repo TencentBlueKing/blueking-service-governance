@@ -20,7 +20,10 @@
 package handler
 
 import (
+	bkciproject "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Handler handles Gin external platform integration API requests.
@@ -31,4 +34,12 @@ type Handler struct {
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) bkciProjects() *bkciproject.ProjectStore {
+	return store.Of(h.registry.DB, bkciproject.ProjectMeta)
+}
+
+func (h *Handler) workspaces() *workspace.WorkspaceStore {
+	return store.Of(h.registry.DB, workspace.Meta)
 }

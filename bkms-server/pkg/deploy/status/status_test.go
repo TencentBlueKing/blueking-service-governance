@@ -29,26 +29,25 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
-func reloadEnv(ctx context.Context, store envmodel.EnvironmentStore, id bson.ObjectID) *envmodel.Environment {
-	env, err := store.Get(ctx, id)
+func reloadEnv(ctx context.Context, store *envmodel.EnvironmentStore, id bson.ObjectID) *envmodel.Environment {
+	env, err := store.GetByID(ctx, id)
 	Expect(err).NotTo(HaveOccurred())
 	return env
 }
@@ -80,62 +79,36 @@ func mockListTrafficLanesReturn(lanes []*trafficmanager.TrafficLane, err error) 
 
 var _ = Describe("DeployStatusService", func() {
 	var (
-		ctx                        context.Context
-		diApp                      *fxtest.App
-		appStore                   bkmsapp.ApplicationStore
-		appModelStore              appmodel.AppModelStore
-		appConfigFileStore         appcfg.AppConfigFileStore
-		appConfigFileDefStore      appcfg.AppConfigFileDefStore
-		appConfigFileVersionStore  appcfg.AppConfigFileVersionStore
-		buildConfigStore           build.ConfigStore
-		buildAutoDeployRecordStore autodeploy.RecordStore
-		envStore                   envmodel.EnvironmentStore
-		envSvc                     *bkmsenv.EnvService
-		appModelDeployRecordStore  appmodeldeploy.RecordStore
-		helmDeployRecordStore      helmdeploy.RecordStore
-		svc                        *DeployStatusService
+		ctx      context.Context
+		diApp    *fxtest.App
+		appStore *bkmsapp.ApplicationStore
+		envStore *envmodel.EnvironmentStore
+		envSvc   *bkmsenv.EnvService
+		db       *mongo.Database
+		svc      *DeployStatusService
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
 			appcfg.FxModule,
 			bkmsenv.FxModule,
-			autodeploy.FxModule,
-			appmodeldeploy.FxModule,
-			helmdeploy.FxModule,
-			build.FxModule,
 			fx.Populate(
-				&appStore,
-				&appModelStore,
-				&appConfigFileStore,
-				&appConfigFileDefStore,
-				&appConfigFileVersionStore,
-				&buildConfigStore,
-				&envStore,
 				&envSvc,
-				&buildAutoDeployRecordStore,
-				&appModelDeployRecordStore,
-				&helmDeployRecordStore,
 			),
 		)
 		diApp.RequireStart()
 
-		svc = NewDeployStatusService(
-			appStore,
-			envStore,
-			buildAutoDeployRecordStore,
-			appModelDeployRecordStore,
-			helmDeployRecordStore,
-		)
+		db = testutil.NewDB(GinkgoT())
+		svc = NewDeployStatusService(db)
 		svc.TrafficManager = &trafficmanager.StubTrafficManager{}
 	})
 
 	AfterEach(func() {
-		Expect(envStore.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupCollection("environments")).To(Succeed())
 		diApp.RequireStop()
 	})
 
@@ -148,15 +121,10 @@ var _ = Describe("DeployStatusService", func() {
 
 			BeforeEach(func() {
 				trpcApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-					AppStore:                  appStore,
-					AppModelStore:             appModelStore,
-					AppConfigFileStore:        appConfigFileStore,
-					AppConfigFileDefStore:     appConfigFileDefStore,
-					AppConfigFileVersionStore: appConfigFileVersionStore,
-					BuildConfigStore:          buildConfigStore,
+					AppStore: appStore,
 				}, nil)
 				testEnv = dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-				Expect(envStore.AddApp(ctx, testEnv.ID, trpcApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, testEnv.ID, trpcApp.ID)).To(Succeed())
 				testEnv = reloadEnv(ctx, envStore, testEnv.ID)
 			})
 
@@ -176,7 +144,7 @@ var _ = Describe("DeployStatusService", func() {
 
 					dbfactory.AppModelDeployRecord(
 						ctx,
-						appModelDeployRecordStore,
+						db,
 						trpcApp,
 						testEnv,
 						&dbfactory.AppModelDeployRecordOpts{
@@ -203,7 +171,7 @@ var _ = Describe("DeployStatusService", func() {
 
 					dbfactory.AppModelDeployRecord(
 						ctx,
-						appModelDeployRecordStore,
+						db,
 						trpcApp,
 						testEnv,
 						&dbfactory.AppModelDeployRecordOpts{
@@ -228,7 +196,7 @@ var _ = Describe("DeployStatusService", func() {
 
 					deployID := dbfactory.AppModelDeployRecord(
 						ctx,
-						appModelDeployRecordStore,
+						db,
 						trpcApp,
 						testEnv,
 						&dbfactory.AppModelDeployRecordOpts{
@@ -240,7 +208,7 @@ var _ = Describe("DeployStatusService", func() {
 
 					dbfactory.BuildAutoDeployRecord(
 						ctx,
-						buildAutoDeployRecordStore,
+						db,
 						trpcApp,
 						testEnv,
 						&dbfactory.BuildAutoDeployRecordOpts{
@@ -268,7 +236,7 @@ var _ = Describe("DeployStatusService", func() {
 
 					dbfactory.BuildAutoDeployRecord(
 						ctx,
-						buildAutoDeployRecordStore,
+						db,
 						trpcApp,
 						testEnv,
 						&dbfactory.BuildAutoDeployRecordOpts{
@@ -282,7 +250,7 @@ var _ = Describe("DeployStatusService", func() {
 
 					dbfactory.AppModelDeployRecord(
 						ctx,
-						appModelDeployRecordStore,
+						db,
 						trpcApp,
 						testEnv,
 						&dbfactory.AppModelDeployRecordOpts{
@@ -308,7 +276,7 @@ var _ = Describe("DeployStatusService", func() {
 
 					dbfactory.BuildAutoDeployRecord(
 						ctx,
-						buildAutoDeployRecordStore,
+						db,
 						trpcApp,
 						testEnv,
 						&dbfactory.BuildAutoDeployRecordOpts{
@@ -340,7 +308,7 @@ var _ = Describe("DeployStatusService", func() {
 					AppStore: appStore,
 				}, nil)
 				testEnv = dbfactory.Env(ctx, envSvc, helmApp.WorkspaceID)
-				Expect(envStore.AddApp(ctx, testEnv.ID, helmApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, testEnv.ID, helmApp.ID)).To(Succeed())
 				testEnv = reloadEnv(ctx, envStore, testEnv.ID)
 			})
 
@@ -349,7 +317,7 @@ var _ = Describe("DeployStatusService", func() {
 
 				dbfactory.HelmDeployRecord(
 					ctx,
-					helmDeployRecordStore,
+					db,
 					helmApp,
 					testEnv,
 					&dbfactory.HelmDeployRecordOpts{
@@ -379,7 +347,7 @@ var _ = Describe("DeployStatusService", func() {
 				wsID := "test-ws-" + stringx.Random(8)
 				testEnv = dbfactory.Env(ctx, envSvc, wsID)
 				missingAppID = "nonexistent-app-" + stringx.Random(8)
-				Expect(envStore.AddApp(ctx, testEnv.ID, missingAppID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, testEnv.ID, missingAppID)).To(Succeed())
 				testEnv = reloadEnv(ctx, envStore, testEnv.ID)
 			})
 
@@ -411,8 +379,8 @@ var _ = Describe("DeployStatusService", func() {
 					DisplayName: name,
 					Creator:     "test",
 				}
-				Expect(appStore.CreateApp(ctx, weirdApp)).To(Succeed())
-				Expect(envStore.AddApp(ctx, testEnv.ID, weirdApp.ID)).To(Succeed())
+				Expect(appStore.Create(ctx, weirdApp)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, testEnv.ID, weirdApp.ID)).To(Succeed())
 				testEnv = reloadEnv(ctx, envStore, testEnv.ID)
 			})
 
@@ -438,12 +406,7 @@ var _ = Describe("DeployStatusService", func() {
 
 		BeforeEach(func() {
 			trpcApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
+				AppStore: appStore,
 			}, nil)
 			workspaceID = trpcApp.WorkspaceID
 			envStaging = dbfactory.Env(ctx, envSvc, workspaceID)
@@ -453,8 +416,8 @@ var _ = Describe("DeployStatusService", func() {
 
 		Context("when environments include the requested apps", func() {
 			BeforeEach(func() {
-				Expect(envStore.AddApp(ctx, envStaging.ID, trpcApp.ID)).To(Succeed())
-				Expect(envStore.AddApp(ctx, envDev.ID, trpcApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, envStaging.ID, trpcApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, envDev.ID, trpcApp.ID)).To(Succeed())
 				envStaging = reloadEnv(ctx, envStore, envStaging.ID)
 				envDev = reloadEnv(ctx, envStore, envDev.ID)
 			})
@@ -464,7 +427,7 @@ var _ = Describe("DeployStatusService", func() {
 
 				dbfactory.AppModelDeployRecord(
 					ctx,
-					appModelDeployRecordStore,
+					db,
 					trpcApp,
 					envStaging,
 					&dbfactory.AppModelDeployRecordOpts{
@@ -475,7 +438,7 @@ var _ = Describe("DeployStatusService", func() {
 
 				dbfactory.AppModelDeployRecord(
 					ctx,
-					appModelDeployRecordStore,
+					db,
 					trpcApp,
 					envDev,
 					&dbfactory.AppModelDeployRecordOpts{
@@ -517,21 +480,16 @@ var _ = Describe("DeployStatusService", func() {
 
 			BeforeEach(func() {
 				trpcApp2, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-					AppStore:                  appStore,
-					AppModelStore:             appModelStore,
-					AppConfigFileStore:        appConfigFileStore,
-					AppConfigFileDefStore:     appConfigFileDefStore,
-					AppConfigFileVersionStore: appConfigFileVersionStore,
-					BuildConfigStore:          buildConfigStore,
+					AppStore: appStore,
 				}, &dbfactory.TrpcApplicationOpts{WorkspaceID: workspaceID})
 				helmApp = dbfactory.HelmApplication(ctx, &dbfactory.HelmApplicationStores{
 					AppStore: appStore,
 				}, &dbfactory.HelmApplicationOpts{WorkspaceID: workspaceID})
 
-				Expect(envStore.AddApp(ctx, envStaging.ID, trpcApp.ID)).To(Succeed())
-				Expect(envStore.AddApp(ctx, envStaging.ID, trpcApp2.ID)).To(Succeed())
-				Expect(envStore.AddApp(ctx, envStaging.ID, helmApp.ID)).To(Succeed())
-				Expect(envStore.AddApp(ctx, envDev.ID, trpcApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, envStaging.ID, trpcApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, envStaging.ID, trpcApp2.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, envStaging.ID, helmApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, envDev.ID, trpcApp.ID)).To(Succeed())
 				envStaging = reloadEnv(ctx, envStore, envStaging.ID)
 				envDev = reloadEnv(ctx, envStore, envDev.ID)
 			})
@@ -541,7 +499,7 @@ var _ = Describe("DeployStatusService", func() {
 
 				dbfactory.AppModelDeployRecord(
 					ctx,
-					appModelDeployRecordStore,
+					db,
 					trpcApp,
 					envStaging,
 					&dbfactory.AppModelDeployRecordOpts{
@@ -551,7 +509,7 @@ var _ = Describe("DeployStatusService", func() {
 				)
 				dbfactory.AppModelDeployRecord(
 					ctx,
-					appModelDeployRecordStore,
+					db,
 					trpcApp,
 					envDev,
 					&dbfactory.AppModelDeployRecordOpts{
@@ -561,7 +519,7 @@ var _ = Describe("DeployStatusService", func() {
 				)
 				dbfactory.AppModelDeployRecord(
 					ctx,
-					appModelDeployRecordStore,
+					db,
 					trpcApp2,
 					envStaging,
 					&dbfactory.AppModelDeployRecordOpts{
@@ -571,7 +529,7 @@ var _ = Describe("DeployStatusService", func() {
 				)
 				dbfactory.HelmDeployRecord(
 					ctx,
-					helmDeployRecordStore,
+					db,
 					helmApp,
 					envStaging,
 					&dbfactory.HelmDeployRecordOpts{
@@ -621,7 +579,7 @@ var _ = Describe("DeployStatusService", func() {
 
 		Context("when only one environment contains the filtered apps", func() {
 			BeforeEach(func() {
-				Expect(envStore.AddApp(ctx, envStaging.ID, trpcApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, envStaging.ID, trpcApp.ID)).To(Succeed())
 				envStaging = reloadEnv(ctx, envStore, envStaging.ID)
 				envDev = reloadEnv(ctx, envStore, envDev.ID)
 			})
@@ -640,7 +598,7 @@ var _ = Describe("DeployStatusService", func() {
 
 				dbfactory.AppModelDeployRecord(
 					ctx,
-					appModelDeployRecordStore,
+					db,
 					trpcApp,
 					envStaging,
 					&dbfactory.AppModelDeployRecordOpts{
@@ -671,7 +629,7 @@ var _ = Describe("DeployStatusService", func() {
 		Context("when the app owns a feature environment", func() {
 			BeforeEach(func() {
 				featureEnv = dbfactory.FeatEnv(ctx, envSvc, trpcApp, envStaging)
-				Expect(envStore.AddApp(ctx, featureEnv.ID, trpcApp.ID)).To(Succeed())
+				Expect(envmodel.AddApp(ctx, db, featureEnv.ID, trpcApp.ID)).To(Succeed())
 				featureEnv = reloadEnv(ctx, envStore, featureEnv.ID)
 			})
 
@@ -680,7 +638,7 @@ var _ = Describe("DeployStatusService", func() {
 
 				dbfactory.AppModelDeployRecord(
 					ctx,
-					appModelDeployRecordStore,
+					db,
 					trpcApp,
 					featureEnv,
 					&dbfactory.AppModelDeployRecordOpts{
@@ -706,9 +664,9 @@ var _ = Describe("DeployStatusService", func() {
 			})
 		})
 
-		Context("when EnvStore.ListBatchAppEnvs fails", func() {
+		Context("when listing app envs fails", func() {
 			It("should return an error", func() {
-				mocker := mockey.Mock((*envmodel.EnvironmentStoreMongo).ListBatchAppEnvs).
+				mocker := mockey.Mock(envmodel.ListBatchAppEnvs).
 					Return(nil, errors.New("list failed")).Build()
 				DeferCleanup(func() {
 					mocker.UnPatch()
@@ -731,34 +689,24 @@ var _ = Describe("DeployStatusService", func() {
 
 		BeforeEach(func() {
 			trpcApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
+				AppStore: appStore,
 			}, nil)
 			otherApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
+				AppStore: appStore,
 			}, &dbfactory.TrpcApplicationOpts{WorkspaceID: trpcApp.WorkspaceID})
 			sourceEnv = dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
 			featureEnv = dbfactory.FeatEnv(ctx, envSvc, trpcApp, sourceEnv)
 		})
 
 		It("should return deploy statuses for all lanes", func() {
-			Expect(envStore.AddApp(ctx, featureEnv.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, featureEnv.ID, trpcApp.ID)).To(Succeed())
 			featureEnv = reloadEnv(ctx, envStore, featureEnv.ID)
 
 			mockListTrafficLanesReturn([]*trafficmanager.TrafficLane{{LaneName: "lane-x"}}, nil)
 
 			dbfactory.AppModelDeployRecord(
 				ctx,
-				appModelDeployRecordStore,
+				db,
 				trpcApp,
 				featureEnv,
 				&dbfactory.AppModelDeployRecordOpts{
@@ -768,7 +716,7 @@ var _ = Describe("DeployStatusService", func() {
 			)
 			dbfactory.AppModelDeployRecord(
 				ctx,
-				appModelDeployRecordStore,
+				db,
 				trpcApp,
 				featureEnv,
 				&dbfactory.AppModelDeployRecordOpts{

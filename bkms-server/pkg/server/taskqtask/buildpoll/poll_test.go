@@ -29,15 +29,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func newRunningRecord(workspaceID, appID, buildID string) *build.Record {
@@ -70,9 +72,9 @@ var _ = Describe("Poller RunTick", func() {
 		ctx             context.Context
 		args            Args
 		rec             *build.Record
-		recordStore     build.RecordStore
-		pipelineStore   bkci.PipelineStore
-		autoDeployStore autodeploy.RecordStore
+		db              *mongo.Database
+		pipelineStore   *bkci.PipelineStore
+		autoDeployStore *autodeploy.RecordStore
 		enqCount        int
 		enqDelay        time.Duration
 		plr             *poller
@@ -81,25 +83,21 @@ var _ = Describe("Poller RunTick", func() {
 	)
 
 	createRecord := func() {
-		Expect(recordStore.Create(ctx, rec)).To(Succeed())
+		Expect(build.CreateRecord(ctx, db, rec)).To(Succeed())
 		args.BuildID = rec.BuildID
 	}
 
 	reloadRecord := func() *build.Record {
-		got, err := recordStore.Get(ctx, rec.AppID, rec.BuildID)
+		got, err := plr.records.Get(ctx, build.ByBuild(rec.AppID, rec.BuildID))
 		Expect(err).NotTo(HaveOccurred())
 		return got
 	}
 
 	BeforeEach(func() {
-		var err error
 		ctx = auth.WithUser(context.Background(), auth.User{ID: "alice"})
-		recordStore, err = build.NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		pipelineStore, err = bkci.NewPipelineStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		autoDeployStore, err = autodeploy.NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		pipelineStore = store.Of(db, bkci.PipelineMeta)
+		autoDeployStore = store.Of(db, autodeploy.RecordMeta)
 
 		workspaceID := "ws-" + stringx.Random(8)
 		appID := "app-" + stringx.Random(8)
@@ -108,7 +106,7 @@ var _ = Describe("Poller RunTick", func() {
 		args = Args{WorkspaceID: workspaceID, PipelineType: "build", AppID: appID, BuildID: buildID}
 		enqCount = 0
 		enqDelay = 0
-		plr = newPoller(recordStore, pipelineStore, autoDeployStore)
+		plr = newPoller(db)
 		deployHook = nil
 		snapshotHook = nil
 

@@ -33,14 +33,20 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
+	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/overview"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -50,8 +56,11 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -64,14 +73,19 @@ type Handler struct {
 
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
-	snapshotService := snapshot.NewService(registry.SnapshotStore, registry.BuildConfigStore, registry.AppStore)
+	snapshotService := snapshot.NewService(registry.DB)
 	return &Handler{
-		registry: registry,
-		persistMgr: customruntime.NewPersistManager(
-			registry.CustomRuntimeImageStore,
-			snapshotService,
-		),
+		registry:   registry,
+		persistMgr: customruntime.NewPersistManager(registry.DB, snapshotService),
 	}
+}
+
+func (h *Handler) apps() *bkmsapp.ApplicationStore {
+	return store.Of(h.registry.DB, bkmsapp.AppMeta)
+}
+
+func (h *Handler) buildConfigs() *imagebuild.ConfigStore {
+	return store.Of(h.registry.DB, imagebuild.ConfigMeta)
 }
 
 // CreateApp 创建应用。
@@ -105,7 +119,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 	}
 
 	// 检查应用是否已存在
-	existingApp, err := h.registry.AppStore.GetAppByName(ctx, uriInput.WorkspaceID, input.Name)
+	existingApp, err := h.apps().Get(ctx, bkmsapp.ByName(uriInput.WorkspaceID, input.Name))
 	if existingApp != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "app %s already exists", input.Name))
 		return
@@ -161,10 +175,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse build config"))
 		return
 	}
-	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.RuntimeImageStore,
-		h.registry.SnapshotStore,
-	)
+	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(h.registry.DB)
 	if err = build.ValidatePlatformBuildImages(
 		ctx, imageReferenceValidator, h.persistMgr, buildConfig, app.WorkspaceID,
 	); err != nil {
@@ -178,13 +189,14 @@ func (h *Handler) CreateApp(c *gin.Context) {
 	}
 	if err = bkci.EnsureWorkspaceRepositories(
 		ctx,
+		h.registry.DB,
 		uriInput.WorkspaceID,
 		collectBKCIRepositoriesForCreateApp(input.Type, app.HelmSpec, buildConfig),
 	); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"))
 		return
 	}
-	if err = h.registry.BuildConfigStore.Create(ctx, buildConfig); err != nil {
+	if err = h.buildConfigs().Create(ctx, buildConfig); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create build config"))
 		return
 	}
@@ -208,7 +220,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 	// 创建应用后，异步为该应用初始化默认监控告警策略，应用部署后真正下发到监控平台
 	go func() {
 		bgCtx := context.WithoutCancel(ctx)
-		ws, wsErr := h.registry.WorkspaceStore.Get(bgCtx, app.WorkspaceID)
+		ws, wsErr := store.Of(h.registry.DB, workspace.Meta).Get(bgCtx, workspace.ByWorkspaceID(app.WorkspaceID))
 		if wsErr != nil {
 			log.Errorf(bgCtx, "get workspace %s for default alert strategies failed: %v", app.WorkspaceID, wsErr)
 			return
@@ -229,12 +241,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 			)
 			return
 		}
-		initErr := alertstrategy.NewService(
-			storereg.G().AlertStrategyStore,
-			storereg.G().EnvStore,
-			storereg.G().AppStore,
-			storereg.G().ResourceSnapshotStore,
-		).InitDefaultAlertStrategiesForApp(
+		initErr := alertstrategy.NewService(storereg.G().DB).InitDefaultAlertStrategiesForApp(
 			bgCtx, app.WorkspaceID, app.ID, app.Name, auth.MustGetUser(ctx).ID, noticeGroupIDs,
 		)
 		if initErr != nil {
@@ -311,13 +318,13 @@ func (h *Handler) ResolveApp(c *gin.Context) {
 	ctx := c.Request.Context()
 	input := uriInput.App
 
-	app, err := h.registry.AppStore.GetApp(ctx, input)
+	app, err := h.apps().Get(ctx, bkmsapp.ByID(input))
 	if err != nil && !errors.Is(err, bkmsapp.ErrAppNotFound) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve app by id"))
 		return
 	}
 	if app == nil {
-		app, err = h.registry.AppStore.GetAppByName(ctx, uriInput.WorkspaceID, input)
+		app, err = h.apps().Get(ctx, bkmsapp.ByName(uriInput.WorkspaceID, input))
 		if err != nil {
 			if errors.Is(err, bkmsapp.ErrAppNotFound) {
 				bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", input))
@@ -367,7 +374,7 @@ func (h *Handler) GetApp(c *gin.Context) {
 		return
 	}
 
-	buildConfig, err := h.registry.BuildConfigStore.Get(ctx, app.ID)
+	buildConfig, err := h.buildConfigs().Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get build config"))
 		return
@@ -376,7 +383,7 @@ func (h *Handler) GetApp(c *gin.Context) {
 	var appModel *appmodel.AppModel
 	var components []serializer.ComponentOutputObj
 	if bkmsapp.IsAppModelType(app.Type) {
-		appModel, err = h.registry.AppModelStore.GetAppModel(ctx, app.ID)
+		appModel, err = store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		if err != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app model"))
 			return
@@ -418,15 +425,16 @@ func (h *Handler) ListApps(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	opts := &bkmsapp.ListOpts{
-		WorkspaceID: uriInput.WorkspaceID,
-		AppName:     queryInput.AppName,
+	opts := []store.Opt{bkmsapp.InWorkspace(uriInput.WorkspaceID)}
+	if queryInput.AppName != "" {
+		opts = append(opts, store.Where("name", queryInput.AppName))
 	}
-	apps, err := h.registry.AppStore.ListApps(ctx, opts)
+	listed, err := h.apps().List(ctx, opts...)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list apps"))
 		return
 	}
+	apps := lo.ToSlicePtr(listed)
 
 	if len(apps) == 0 {
 		// 没有 app 时及时返回, 避免空请求权限管理器
@@ -455,22 +463,16 @@ func (h *Handler) ListApps(c *gin.Context) {
 
 	username := auth.MustGetUser(ctx).ID
 	filteredAppIDs := lo.Map(filteredApps, func(app *bkmsapp.Application, _ int) string { return app.ID })
-	latestOpTimes, err := h.registry.OperationRecordStore.GetLatestOperationTimesByAppsForUser(
-		ctx, uriInput.WorkspaceID, filteredAppIDs, username,
+	latestOpTimes, err := audit.GetLatestOperationTimesByAppsForUser(
+		ctx, h.registry.DB, uriInput.WorkspaceID, filteredAppIDs, username,
 	)
 	if err != nil {
-		log.Warnf(ctx, "get latest operation times by apps for user: %s: %v", username, err)
+		log.Warnf(ctx, "list apps: %v", err)
 		latestOpTimes = nil
 	}
 
 	// 查询应用在各环境下的部署状态
-	deployStatusService := deploystatus.NewDeployStatusService(
-		h.registry.AppStore,
-		h.registry.EnvStore,
-		h.registry.BuildAutoDeployRecordStore,
-		h.registry.AppModelDeployRecordStore,
-		h.registry.HelmDeployRecordStore,
-	)
+	deployStatusService := deploystatus.NewDeployStatusService(h.registry.DB)
 	deployStatusMap, err := deployStatusService.ListForAppsInWorkspace(ctx, uriInput.WorkspaceID, filteredApps)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list apps deploy statuses"))
@@ -515,7 +517,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 
 	// 检查是否存在活跃的部署
 	if bkmsapp.IsAppModelType(app.Type) {
-		hasActive, iErr := h.registry.AppModelDeployRecordStore.HasActiveDeployments(ctx, app.ID)
+		hasActive, iErr := appmodeldeploy.HasActiveDeployments(ctx, h.registry.DB, app.ID)
 		if iErr != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(iErr, bkerrs.ErrCodeInternalServerError, "check active deployments"))
 			return
@@ -527,7 +529,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 			return
 		}
 	} else if bkmsapp.IsHelmBasedType(app.Type) {
-		hasActive, iErr := h.registry.HelmDeployRecordStore.HasActiveDeployments(ctx, app.ID)
+		hasActive, iErr := helmdeploy.HasActiveDeployments(ctx, h.registry.DB, app.ID)
 		if iErr != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(iErr, bkerrs.ErrCodeInternalServerError, "check active deployments"))
 			return
@@ -562,7 +564,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 	}
 
 	// 删除应用基础数据
-	if err = h.registry.AppStore.DeleteAppByName(ctx, app.WorkspaceID, app.Name); err != nil {
+	if err = h.apps().DeleteIfExists(ctx, bkmsapp.ByName(app.WorkspaceID, app.Name)); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete app"))
 		return
 	}
@@ -611,7 +613,7 @@ func (h *Handler) UpdateAppDisplayName(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.AppStore.UpdateDisplayName(ctx, app, input.DisplayName); err != nil {
+	if err = h.apps().Update(ctx, map[string]any{"displayName": input.DisplayName}, bkmsapp.ByID(app.ID)); err != nil {
 		if errors.Is(err, bkmsapp.ErrAppNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", uriInput.AppID))
 			return
@@ -667,7 +669,8 @@ func (h *Handler) UpdateAppVisibleEnvs(c *gin.Context) {
 		return
 	}
 
-	stdEnvs, err := h.registry.EnvStore.ListStdEnvs(ctx, app.WorkspaceID)
+	stdEnvs, err := store.Of(h.registry.DB, envmodel.EnvMeta).
+		List(ctx, envmodel.StdEnvsIn(app.WorkspaceID), envmodel.NewestFirst())
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list standard envs"))
 		return
@@ -689,7 +692,7 @@ func (h *Handler) UpdateAppVisibleEnvs(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.AppStore.UpdateVisibleEnvNames(ctx, app, names); err != nil {
+	if err = h.apps().Update(ctx, map[string]any{"visibleEnvNames": names}, bkmsapp.ByID(app.ID)); err != nil {
 		if errors.Is(err, bkmsapp.ErrAppNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", uriInput.AppID))
 			return
@@ -740,13 +743,7 @@ func (h *Handler) GetAppDeployStatuses(c *gin.Context) {
 		return
 	}
 
-	deployStatusService := deploystatus.NewDeployStatusService(
-		h.registry.AppStore,
-		h.registry.EnvStore,
-		h.registry.BuildAutoDeployRecordStore,
-		h.registry.AppModelDeployRecordStore,
-		h.registry.HelmDeployRecordStore,
-	)
+	deployStatusService := deploystatus.NewDeployStatusService(h.registry.DB)
 	deployStatusMap, err := deployStatusService.ListForAppsInWorkspace(
 		ctx,
 		app.WorkspaceID,
@@ -802,15 +799,7 @@ func (h *Handler) GetAppDeployOverview(c *gin.Context) {
 		return
 	}
 
-	svc := overview.NewService(
-		h.registry.EnvStore,
-		h.registry.AppStore,
-		h.registry.AppModelStore,
-		h.registry.BuildAutoDeployRecordStore,
-		h.registry.AppModelDeployRecordStore,
-		h.registry.HelmDeployRecordStore,
-		h.registry.GPAConfigStore,
-	)
+	svc := overview.NewService(h.registry.DB)
 	result, err := svc.GetOverview(ctx, app)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build app deploy overview"))
@@ -850,33 +839,33 @@ func (h *Handler) createAppByType(
 // 由于不同 workloadType 的删除流程一致，因此不需要根据 workloadType 分发
 func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Application) error {
 	// 1. 删除 AppModel
-	if err := h.registry.AppModelStore.DeleteAppModel(ctx, app.ID); err != nil {
+	if err := appmodel.DeleteAppModel(ctx, h.registry.DB, app.ID); err != nil {
 		return errors.Wrapf(err, "delete app(%s) model", app.Name)
 	}
 
 	// 2. 删除所有关联的配置文件、def 及版本记录
-	if _, err := h.registry.AppConfigFileStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileMeta).DeleteMany(ctx, appcfg.FilesByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config files", app.Name)
 	}
-	if _, err := h.registry.AppConfigFileDefStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(ctx, appcfg.DefsByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config file defs", app.Name)
 	}
-	if _, err := h.registry.AppConfigFileVersionStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileVersionMeta).DeleteMany(ctx, appcfg.VersionsByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config file versions", app.Name)
 	}
 
 	// 3. 删除北极星配置
-	if err := h.registry.PolarisConfigStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, polaris.ConfigMeta).DeleteMany(ctx, polaris.ByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) polaris configs", app.Name)
 	}
 
 	// 4. 删除 HostPort 配置
-	if err := h.registry.HostPortStore.DeleteByApp(ctx, app.ID); err != nil {
+	if err := store.Of(h.registry.DB, hostport.HostPortConfigMeta).DeleteIfExists(ctx, hostport.ByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) hostport config", app.Name)
 	}
 
 	// 删除应用规格配置
-	if err := h.registry.AppSpecStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appspec.AppSpecMeta).DeleteMany(ctx, appspec.ByApp(app.ID)); err != nil {
 		return errors.Wrap(err, "delete app specs")
 	}
 
@@ -888,12 +877,12 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 func (h *Handler) cleanupAppResources(ctx context.Context, appID string) error {
 	// TODO 确认是否需要删除蓝盾侧数据
 	// 删除构建配置
-	if err := h.registry.BuildConfigStore.Delete(ctx, appID); err != nil {
+	if err := h.buildConfigs().DeleteIfExists(ctx, imagebuild.ByApp(appID)); err != nil {
 		return errors.Wrap(err, "delete build config")
 	}
 
 	// 删除镜像晋级记录
-	if err := h.registry.PromotionStore.DeleteByApp(ctx, appID); err != nil {
+	if _, err := store.Of(h.registry.DB, promotion.Meta).DeleteMany(ctx, promotion.ByApp(appID)); err != nil {
 		return errors.Wrap(err, "delete promotions")
 	}
 
@@ -908,18 +897,13 @@ func (h *Handler) cleanupAlertStrategiesAsync(
 ) {
 	go func() {
 		bgCtx := context.WithoutCancel(ctx)
-		ws, err := h.registry.WorkspaceStore.Get(bgCtx, app.WorkspaceID)
+		ws, err := store.Of(h.registry.DB, workspace.Meta).Get(bgCtx, workspace.ByWorkspaceID(app.WorkspaceID))
 		if err != nil {
 			log.Errorf(bgCtx, "get workspace %s for app %s alert cleanup failed: %v", app.WorkspaceID, app.ID, err)
 			return
 		}
 
-		err = alertstrategy.NewService(
-			h.registry.AlertStrategyStore,
-			h.registry.EnvStore,
-			h.registry.AppStore,
-			h.registry.ResourceSnapshotStore,
-		).DeleteByApp(bgCtx, ws, app.WorkspaceID, app.ID, operator)
+		err = alertstrategy.NewService(h.registry.DB).DeleteByApp(bgCtx, ws, app.WorkspaceID, app.ID, operator)
 		if err != nil {
 			log.Errorf(bgCtx, "cleanup alert strategies for deleted app %s failed: %v", app.ID, err)
 		}
@@ -933,12 +917,13 @@ func (h *Handler) convertAppComponentsForOutput(
 ) ([]serializer.ComponentOutputObj, error) {
 	var workspaceComponentsMap map[string]*workspace.Component
 	if hasWorkspaceComponentRef(appComponents) {
-		workspaceComponents, err := h.registry.WorkspaceCompsStore.ListByWorkspace(ctx, workspaceID)
+		workspaceComponents, err := store.Of(h.registry.DB, workspace.ComponentMeta).
+			List(ctx, workspace.ComponentsIn(workspaceID))
 		if err != nil {
 			return nil, err
 		}
 		workspaceComponentsMap = make(map[string]*workspace.Component, len(workspaceComponents))
-		for _, workspaceComp := range workspaceComponents {
+		for _, workspaceComp := range lo.ToSlicePtr(workspaceComponents) {
 			workspaceComponentsMap[workspaceComp.Name] = workspaceComp
 		}
 	}

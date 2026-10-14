@@ -64,14 +64,6 @@ type Image struct {
 	UpdatedAt time.Time `bson:"updatedAt"`
 }
 
-// ListOptions 运行时镜像查询选项
-type ListOptions struct {
-	// Type 镜像类型，为空时查询全部类型
-	Type ImageType
-	// Keyword 搜索关键字，按名称或描述模糊匹配
-	Keyword string
-}
-
 // Validate 校验运行时镜像记录
 func (i *Image) Validate() error {
 	if i == nil {

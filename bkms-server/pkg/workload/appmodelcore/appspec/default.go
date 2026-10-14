@@ -22,7 +22,9 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -35,12 +37,11 @@ import (
 // the same AppModel snapshot, the result is deterministic, but a redundant write may occur.
 func GetDefault(
 	ctx context.Context,
-	store AppSpecStore,
-	appModelStore appmodel.AppModelStore,
+	db *mongo.Database,
 	appID string,
 ) (*AppSpec, error) {
 	// If the default spec already exists, return it directly.
-	spec, err := store.Get(ctx, appID, DefaultEnvName)
+	spec, err := store.Of(db, AppSpecMeta).Get(ctx, ByAppEnv(appID, DefaultEnvName))
 	if err == nil {
 		return spec, nil
 	}
@@ -49,12 +50,12 @@ func GetDefault(
 	}
 
 	// The default spec does not exist, we need to construct it from app model and persist it for future use.
-	appModel, err := appModelStore.GetAppModel(ctx, appID)
+	appModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(appID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting app model for appID %q", appID)
 	}
 	baseSpec := FromAppModel(appID, DefaultEnvName, appModel)
-	if err = store.Upsert(ctx, baseSpec); err != nil {
+	if _, err = store.Of(db, AppSpecMeta).Upsert(ctx, baseSpec, ByAppEnv(appID, DefaultEnvName)); err != nil {
 		return nil, errors.Wrapf(err, "persisting default app spec for appID %q", appID)
 	}
 	return baseSpec, nil
@@ -67,8 +68,7 @@ func GetDefault(
 // transient errors, or run a reconciliation pass to bring the two stores back in sync.
 func SetDefault(
 	ctx context.Context,
-	store AppSpecStore,
-	appModelStore appmodel.AppModelStore,
+	db *mongo.Database,
 	appID string,
 	spec *AppSpec,
 ) error {
@@ -83,10 +83,10 @@ func SetDefault(
 		return wrapValidationErr(err)
 	}
 
-	if err := store.Upsert(ctx, scoped); err != nil {
+	if _, err := store.Of(db, AppSpecMeta).Upsert(ctx, scoped, ByAppEnv(appID, DefaultEnvName)); err != nil {
 		return errors.Wrapf(err, "upserting default app spec for appID %q", appID)
 	}
-	if err := syncDefaultToAppModel(ctx, appModelStore, appID, scoped); err != nil {
+	if err := syncDefaultToAppModel(ctx, db, appID, scoped); err != nil {
 		return errors.Wrapf(err, "syncing default app spec to app model for appID %q", appID)
 	}
 	return nil
@@ -95,11 +95,11 @@ func SetDefault(
 // syncDefaultToAppModel syncs AppModel-backed fields in the default app spec to app model.
 func syncDefaultToAppModel(
 	ctx context.Context,
-	appModelStore appmodel.AppModelStore,
+	db *mongo.Database,
 	appID string,
 	spec *AppSpec,
 ) error {
-	appModel, err := appModelStore.GetAppModel(ctx, appID)
+	appModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(appID))
 	if err != nil {
 		return errors.Wrapf(err, "getting app model for appID %q", appID)
 	}
@@ -107,7 +107,7 @@ func syncDefaultToAppModel(
 	// Directly apply the spec object to app model, replace all existing AppModel-backed fields to
 	// avoid complicated and error-prone partial updates.
 	ApplyToAppModel(spec, appModel)
-	if err := appModelStore.UpdateAppModel(ctx, appModel); err != nil {
+	if err := appmodel.UpdateAppModel(ctx, db, appModel); err != nil {
 		return errors.Wrapf(err, "updating app model for appID %q", appID)
 	}
 	return nil

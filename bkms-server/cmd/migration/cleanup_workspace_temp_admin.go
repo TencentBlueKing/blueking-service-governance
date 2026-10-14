@@ -37,7 +37,7 @@ import (
 // 必要时同步回收对应的 workspace admin 权限并更新本地记录。
 // 命令执行流程：
 //  1. 读取业务配置并初始化 MongoDB 连接
-//  2. 初始化存储层（WorkspaceStore、TempAdminRecordStore）
+//  2. 初始化存储层（WorkspaceStore、临时管理员记录）
 //  3. 构造 workspace admin Service 并执行一次 CleanupExpiredGrants() 清理
 //  4. 处理完成后退出，退出码反映处理结果（0 成功，非 0 失败）
 //
@@ -63,11 +63,7 @@ func NewCleanupExpiredWorkspaceTempAdminsCmd() *cobra.Command {
 			database.InitClient(ctx, cfg.Mongo)
 			storereg.Init(ctx)
 
-			service := workspaceadmin.NewService(
-				storereg.G().WorkspaceStore,
-				storereg.G().TempAdminRecordStore,
-				perm.NewManager(),
-			)
+			service := workspaceadmin.NewService(storereg.G().DB, perm.NewManager())
 			if err = service.CleanupExpiredGrants(context.Background()); err != nil {
 				log.Fatalf("cleanup expired workspace temp admins failed: %v", err)
 			}

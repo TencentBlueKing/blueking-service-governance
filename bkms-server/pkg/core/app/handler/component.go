@@ -25,10 +25,12 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -63,12 +65,14 @@ func (h *Handler) CreateAppComponent(c *gin.Context) {
 
 	newComp := input.ToModel()
 	if newComp.RefWorkspaceCompName != "" {
-		if _, err = h.registry.WorkspaceCompsStore.GetByName(ctx, app.WorkspaceID, newComp.RefWorkspaceCompName); err != nil {
+		if _, err = store.Of(h.registry.DB, workspace.ComponentMeta).
+			Get(ctx, workspace.ComponentByName(app.WorkspaceID, newComp.RefWorkspaceCompName)); err != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace component"))
 			return
 		}
 	} else {
-		def, iErr := h.registry.ComponentDefStore.Get(ctx, newComp.Type, newComp.Version)
+		def, iErr := store.Of(h.registry.DB, component.ComponentDefMeta).
+			Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version))
 		if iErr != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(iErr, bkerrs.ErrCodeInternalServerError, "get component def"))
 			return
@@ -77,7 +81,7 @@ func (h *Handler) CreateAppComponent(c *gin.Context) {
 		newComp.Version = def.Version
 	}
 
-	if err = h.registry.AppModelStore.AddComponent(ctx, app.ID, newComp); err != nil {
+	if err = appmodel.AddComponent(ctx, h.registry.DB, app.ID, newComp); err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app(%s) model not found", app.Name))
 			return
@@ -141,7 +145,7 @@ func (h *Handler) PatchAppComponent(c *gin.Context) {
 		return
 	}
 
-	appModel, err := h.registry.AppModelStore.GetAppModel(ctx, app.ID)
+	appModel, err := store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app(%s) model not found", app.Name))
@@ -174,7 +178,7 @@ func (h *Handler) PatchAppComponent(c *gin.Context) {
 	}
 
 	updateData := input.ToModel()
-	if err = h.registry.AppModelStore.UpdateComponent(ctx, app.ID, uriInput.CompName, updateData); err != nil {
+	if err = appmodel.UpdateComponent(ctx, h.registry.DB, app.ID, uriInput.CompName, updateData); err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app(%s) model not found", app.Name))
 			return
@@ -240,7 +244,7 @@ func (h *Handler) DeleteAppComponent(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.AppModelStore.RemoveComponent(ctx, app.ID, uriInput.CompName); err != nil {
+	if err = appmodel.RemoveComponent(ctx, h.registry.DB, app.ID, uriInput.CompName); err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app(%s) model not found", app.Name))
 			return

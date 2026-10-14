@@ -37,6 +37,7 @@ import (
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/usergroup"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const skipReasonExistingStrategies = "existing alert strategies found"
@@ -59,9 +60,9 @@ type backfillDefaultAlertStrategiesSummary struct {
 }
 
 type backfillDefaultAlertStrategiesDeps struct {
-	appStore              bkmsapp.ApplicationStore
-	workspaceStore        workspace.WorkspaceStore
-	strategyStore         alertstrategy.Store
+	appStore              *bkmsapp.ApplicationStore
+	workspaceStore        *workspace.WorkspaceStore
+	strategies            *alertstrategy.Store
 	resolveNoticeGroupIDs func(ctx context.Context, ws *workspace.Workspace) ([]int64, error)
 	initDefaultStrategies func(ctx context.Context, ws *workspace.Workspace, app *bkmsapp.Application, noticeGroupIDs []int64) error
 }
@@ -90,9 +91,9 @@ func NewBackfillDefaultAlertStrategiesCmd() *cobra.Command {
 
 			operator := auth.MustGetUser(ctx).ID
 			summary, err := runBackfillDefaultAlertStrategies(ctx, backfillDefaultAlertStrategiesDeps{
-				appStore:       storereg.G().AppStore,
-				workspaceStore: storereg.G().WorkspaceStore,
-				strategyStore:  storereg.G().AlertStrategyStore,
+				appStore:       store.Of(storereg.G().DB, bkmsapp.AppMeta),
+				workspaceStore: store.Of(storereg.G().DB, workspace.Meta),
+				strategies:     store.Of(storereg.G().DB, alertstrategy.Meta),
 				resolveNoticeGroupIDs: func(ctx context.Context, ws *workspace.Workspace) ([]int64, error) {
 					return usergroup.ResolveDefaultAlertNoticeGroupIDs(
 						ctx,
@@ -108,12 +109,7 @@ func NewBackfillDefaultAlertStrategiesCmd() *cobra.Command {
 					app *bkmsapp.Application,
 					noticeGroupIDs []int64,
 				) error {
-					return alertstrategy.NewService(
-						storereg.G().AlertStrategyStore,
-						storereg.G().EnvStore,
-						storereg.G().AppStore,
-						storereg.G().ResourceSnapshotStore,
-					).InitDefaultAlertStrategiesForApp(
+					return alertstrategy.NewService(storereg.G().DB).InitDefaultAlertStrategiesForApp(
 						ctx,
 						app.WorkspaceID,
 						app.ID,
@@ -155,7 +151,7 @@ func runBackfillDefaultAlertStrategies(
 		return nil, errors.New("app-id is required")
 	}
 
-	app, err := deps.appStore.GetApp(ctx, opts.AppID)
+	app, err := deps.appStore.Get(ctx, bkmsapp.ByID(opts.AppID))
 	if err != nil {
 		return nil, errors.Wrap(err, "get app")
 	}
@@ -163,12 +159,12 @@ func runBackfillDefaultAlertStrategies(
 		return nil, errors.Errorf("app %s does not belong to workspace %s", app.ID, opts.WorkspaceID)
 	}
 
-	ws, err := deps.workspaceStore.Get(ctx, opts.WorkspaceID)
+	ws, err := deps.workspaceStore.Get(ctx, workspace.ByWorkspaceID(opts.WorkspaceID))
 	if err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 
-	existingStrategies, err := deps.strategyStore.ListByApp(ctx, opts.WorkspaceID, opts.AppID)
+	existingStrategies, err := deps.strategies.List(ctx, alertstrategy.ByApp(opts.WorkspaceID, opts.AppID))
 	if err != nil {
 		return nil, errors.Wrap(err, "list existing alert strategies by app")
 	}

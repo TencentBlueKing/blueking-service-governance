@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
@@ -77,7 +78,7 @@ func (h *Handler) PortForward(c *gin.Context) {
 	}
 
 	// 校验环境类型：禁止在正式环境使用 port-forward
-	envInfo, err := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, uriInput.AppID, uriInput.EnvName)
+	envInfo, err := h.envs().Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, uriInput.AppID, uriInput.EnvName))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get environment info"))
 		return
@@ -91,7 +92,7 @@ func (h *Handler) PortForward(c *gin.Context) {
 	}
 
 	// 校验 port-forward 白名单权限
-	pfService := pfwhitelist.NewService(h.registry.PortForwardWhitelistStore, h.registry.EnvStore)
+	pfService := pfwhitelist.NewService(h.registry.DB)
 	if err = pfService.CheckPermission(ctx, envInfo.ID.Hex()); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.New(
 			bkerrs.ErrCodeNoPermission, pfwhitelist.ErrPermissionDenied.Error(),
@@ -100,7 +101,7 @@ func (h *Handler) PortForward(c *gin.Context) {
 	}
 
 	// 先连接目标 Pod，失败时直接返回 HTTP 错误
-	svc := portforward.NewService(h.registry.AppModelDeployRecordStore)
+	svc := portforward.NewService(h.registry.DB)
 	podStream, err := svc.OpenTargetStream(
 		ctx,
 		uriInput.AppID,

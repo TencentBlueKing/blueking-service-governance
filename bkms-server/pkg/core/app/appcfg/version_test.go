@@ -24,6 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -32,74 +33,81 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("AppConfigFileVersionStoreMongo", func() {
+var _ = Describe("AppConfigFileVersion", func() {
 	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var fileStore appcfg.AppConfigFileStore
-	var store appcfg.AppConfigFileVersionStore
+	var appStore *bkmsapp.ApplicationStore
+	var fileStore *appcfg.AppConfigFileStore
+	var versions *appcfg.AppConfigFileVersionStore
+	var base *appcfg.BaseAppCfgFileService
 	var ctx context.Context
 	var appID string
 	var fileID bson.ObjectID
 
-	newVersion := func(version int64, createdAt time.Time, creator, description string) appcfg.AppConfigFileVersion {
-		return dbfactory.AppConfigFileVersion(&dbfactory.AppConfigFileVersionOpts{
+	newVersion := func(version int64, createdAt time.Time, creator, description string) *appcfg.AppConfigFileVersion {
+		return lo.ToPtr(dbfactory.AppConfigFileVersion(&dbfactory.AppConfigFileVersionOpts{
 			AppConfigFileID: fileID,
 			AppID:           appID,
 			Version:         version,
 			Description:     description,
 			Creator:         creator,
 			CreatedAt:       createdAt,
-		})
+		}))
+	}
+	addVersion := func(v *appcfg.AppConfigFileVersion) bson.ObjectID {
+		Expect(versions.Create(ctx, v)).To(Succeed())
+		return v.ID
+	}
+	versionNumbers := func(items []appcfg.AppConfigFileVersion) []int64 {
+		return lo.Map(items, func(v appcfg.AppConfigFileVersion, _ int) int64 { return v.Version })
 	}
 
 	BeforeEach(func() {
-		var err error
-
 		ctx = context.Background()
-		err = testutil.CleanupCollection("app_config_file_versions")
-		Expect(err).NotTo(HaveOccurred())
-		err = testutil.CleanupCollection("app_config_files")
-		Expect(err).NotTo(HaveOccurred())
-		err = testutil.CleanupCollection("applications")
-		Expect(err).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(appcfg.AppConfigFileVersionMeta)).To(Succeed())
+		Expect(testutil.CleanupCollection("app_config_files")).To(Succeed())
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &fileStore, &store),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
+		db := testutil.NewDB(GinkgoT())
+		versions = store.Of(db, appcfg.AppConfigFileVersionMeta)
+		base = appcfg.NewBaseAppCfgFileService(db)
+		fileStore = base.FileStore
 
 		app := dbfactory.Application(ctx, appStore)
+		appID = app.ID
 		fileID = bson.NewObjectID()
-		_, err = fileStore.Add(ctx, appcfg.AppConfigFile{
-			ID:      fileID,
-			AppID:   app.ID,
-			EnvName: appcfg.EnvNameDefault,
-			Type:    appcfg.AppConfigFileTypeNormal,
+		err := fileStore.Create(ctx, &appcfg.AppConfigFile{
+			ID:             fileID,
+			AppID:          appID,
+			EnvName:        appcfg.EnvNameDefault,
+			Type:           appcfg.AppConfigFileTypeNormal,
+			CurrentVersion: 3,
 			VersionedContent: appcfg.VersionedContent{
 				ContentSourceType: appcfg.ContentSourceTypeLocal,
 				Format:            appcfg.FileFormatYAML,
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
-		appID = app.ID
 	})
 
 	AfterEach(func() {
 		diApp.RequireStop()
 	})
 
-	Context("Add and Get", func() {
-		It("should add and load a version record successfully", func() {
+	Context("Meta", func() {
+		It("should persist all fields of a version record", func() {
 			baseID := bson.NewObjectID()
-			baseVersion := int64(3)
-			rollbackFromVersion := int64(1)
 			content := "foo: v2"
-			version := appcfg.AppConfigFileVersion{
+			version := &appcfg.AppConfigFileVersion{
 				AppConfigFileID: fileID,
 				AppID:           appID,
 				EnvName:         "prod",
@@ -112,294 +120,194 @@ var _ = Describe("AppConfigFileVersionStoreMongo", func() {
 					BaseAppConfigFileID: &baseID,
 				},
 				Creator:             "tester",
-				CreatedAt:           time.Now(),
 				Version:             2,
 				Description:         "second version",
-				BaseVersion:         &baseVersion,
+				BaseVersion:         lo.ToPtr(int64(3)),
 				OperationType:       appcfg.AppConfigFileVersionOperationTypeRollback,
-				RollbackFromVersion: &rollbackFromVersion,
+				RollbackFromVersion: lo.ToPtr(int64(1)),
 			}
+			id := addVersion(version)
 
-			id, err := store.Add(ctx, version)
+			got, err := versions.GetByID(ctx, id)
 			Expect(err).NotTo(HaveOccurred())
-
-			got, err := store.BatchGetByAppAndIDs(ctx, appID, []bson.ObjectID{id})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got).To(HaveLen(1))
-			Expect(got[0].AppConfigFileID).To(Equal(fileID))
-			Expect(got[0].BaseAppConfigFileID).NotTo(BeNil())
-			Expect(*got[0].BaseAppConfigFileID).To(Equal(baseID))
-			Expect(got[0].BaseVersion).NotTo(BeNil())
-			Expect(*got[0].BaseVersion).To(Equal(baseVersion))
-			Expect(got[0].RollbackFromVersion).NotTo(BeNil())
-			Expect(*got[0].RollbackFromVersion).To(Equal(rollbackFromVersion))
-			Expect(*got[0].OverlayContent).To(Equal(content))
+			Expect(got.AppConfigFileID).To(Equal(fileID))
+			Expect(got.BaseAppConfigFileID).To(Equal(&baseID))
+			Expect(got.BaseVersion).To(Equal(lo.ToPtr(int64(3))))
+			Expect(got.RollbackFromVersion).To(Equal(lo.ToPtr(int64(1))))
+			Expect(got.OverlayContent).To(Equal(&content))
 		})
 
-		It("should reject duplicate version number in the same file", func() {
-			_, err := store.Add(ctx, newVersion(1, time.Now(), "alice", "v1"))
-			Expect(err).NotTo(HaveOccurred())
+		It("should reject a duplicate version number in the same file", func() {
+			addVersion(newVersion(1, time.Now(), "alice", "v1"))
 
-			_, err = store.Add(ctx, newVersion(1, time.Now().Add(time.Second), "bob", "duplicate"))
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("app config file version already exists"))
+			err := versions.Create(ctx, newVersion(1, time.Now(), "bob", "duplicate"))
+			Expect(err).To(MatchError(appcfg.ErrAppCfgFileVersionAlreadyExists))
 		})
 
 		It("should allow the same version number for different files", func() {
-			_, err := store.Add(ctx, newVersion(1, time.Now(), "alice", "file-1"))
-			Expect(err).NotTo(HaveOccurred())
+			addVersion(newVersion(1, time.Now(), "alice", "file-1"))
 
-			otherFileID := bson.NewObjectID()
-			v := newVersion(1, time.Now().Add(time.Second), "alice", "file-2")
-			v.AppConfigFileID = otherFileID
-
-			_, err = store.Add(ctx, v)
-			Expect(err).NotTo(HaveOccurred())
+			v := newVersion(1, time.Now(), "alice", "file-2")
+			v.AppConfigFileID = bson.NewObjectID()
+			Expect(versions.Create(ctx, v)).To(Succeed())
 		})
+	})
 
-		It("should get a version by app and id", func() {
-			version := newVersion(2, time.Now(), "tester", "by-app-id")
-			id, err := store.Add(ctx, version)
-			Expect(err).NotTo(HaveOccurred())
-
-			items, err := store.BatchGetByAppAndIDs(ctx, appID, []bson.ObjectID{id})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(items).To(HaveLen(1))
-			Expect(items[0].ID).To(Equal(id))
-			Expect(items[0].AppID).To(Equal(appID))
-
-			items, err = store.BatchGetByAppAndIDs(ctx, "another-app", []bson.ObjectID{id})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(items).To(BeEmpty())
-		})
-
-		It("should batch get versions by app and ids", func() {
-			id1, err := store.Add(ctx, newVersion(1, time.Now(), "alice", "first"))
-			Expect(err).NotTo(HaveOccurred())
-			id2, err := store.Add(ctx, newVersion(2, time.Now().Add(time.Second), "bob", "second"))
-			Expect(err).NotTo(HaveOccurred())
-
-			otherAppVersion := newVersion(3, time.Now().Add(2*time.Second), "carol", "other-app")
-			otherAppVersion.AppID = "other-app"
-			otherID, err := store.Add(ctx, otherAppVersion)
-			Expect(err).NotTo(HaveOccurred())
-
-			items, err := store.BatchGetByAppAndIDs(ctx, appID, []bson.ObjectID{id1, id2, otherID})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(items).To(HaveLen(2))
-
-			gotIDs := map[bson.ObjectID]struct{}{}
-			for _, item := range items {
-				gotIDs[item.ID] = struct{}{}
-				Expect(item.AppID).To(Equal(appID))
+	Context("ListVersions", func() {
+		It("should apply the query filters from the serializer and paginate", func() {
+			for i, desc := range []string{"initial import", "hotfix rollback", "release"} {
+				v := newVersion(int64(i+1), time.Now().Add(time.Duration(i-3)*time.Hour), "alice", desc)
+				v.EnvName = "prod"
+				if i == 1 {
+					v.Creator = "bob"
+				}
+				addVersion(v)
 			}
-			Expect(gotIDs).To(HaveKey(id1))
-			Expect(gotIDs).To(HaveKey(id2))
-			Expect(gotIDs).NotTo(HaveKey(otherID))
-		})
-	})
-
-	Context("List", func() {
-		It("should support filters and pagination", func() {
-			v1 := newVersion(1, time.Now().Add(-3*time.Hour), "alice", "initial import")
-			v1.Name = "values"
-			v1.EnvName = "prod"
-			v2 := newVersion(2, time.Now().Add(-2*time.Hour), "bob", "hotfix rollback")
-			v2.Name = "values"
-			v2.EnvName = "prod"
-			v3 := newVersion(3, time.Now().Add(-1*time.Hour), "alice", "release")
-			v3.Name = "values"
-			v3.EnvName = "prod"
-
-			_, err := store.Add(ctx, v1)
-			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Add(ctx, v2)
-			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Add(ctx, v3)
+			filter, err := serializer.ListAppConfigFileVersionsQueryInput{
+				AppConfigFileID: lo.ToPtr(fileID.Hex()),
+				EnvName:         lo.ToPtr("prod"),
+				Creator:         lo.ToPtr("alice"),
+				Description:     lo.ToPtr("LEA"),
+			}.ToVersionListOpt()
 			Expect(err).NotTo(HaveOccurred())
 
-			envName := "prod"
-			creator := "alice"
-			description := "lea"
-			items, total, err := store.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:           appID,
-				AppConfigFileID: &fileID,
-				EnvName:         &envName,
-				Creator:         &creator,
-				Description:     &description,
-				Page:            1,
-				PageSize:        1,
-			})
+			page, err := base.ListVersions(ctx, appID, 1, 1, filter)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(items).To(HaveLen(1))
-			Expect(items[0].Version).To(Equal(int64(3)))
-			Expect(items[0].Description).To(Equal("release"))
+			Expect(page.Total).To(Equal(int64(1)))
+			Expect(versionNumbers(page.Items)).To(Equal([]int64{3}))
 		})
 
-		It("should sort by version desc when filtering by appConfigFileID", func() {
-			sharedTime := time.Now()
-			v1 := newVersion(1, sharedTime, "alice", "v1")
-			v2 := newVersion(2, sharedTime, "bob", "v2")
-			v3 := newVersion(3, sharedTime, "carol", "v3")
+		It("should match the description keyword literally", func() {
+			addVersion(newVersion(1, time.Now(), "alice", "release v1.0"))
+			addVersion(newVersion(2, time.Now(), "alice", "release v100"))
 
-			_, err := store.Add(ctx, v1)
+			filter, err := serializer.ListAppConfigFileVersionsQueryInput{
+				Description: lo.ToPtr("v1."),
+			}.ToVersionListOpt()
 			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Add(ctx, v2)
+			page, err := base.ListVersions(ctx, appID, 1, 10, filter)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Add(ctx, v3)
-			Expect(err).NotTo(HaveOccurred())
-
-			items, total, err := store.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:           appID,
-				AppConfigFileID: &fileID,
-				Page:            1,
-				PageSize:        10,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(3)))
-			Expect(items).To(HaveLen(3))
-			Expect(items[0].Version).To(Equal(int64(3)))
-			Expect(items[1].Version).To(Equal(int64(2)))
-			Expect(items[2].Version).To(Equal(int64(1)))
+			Expect(versionNumbers(page.Items)).To(Equal([]int64{1}))
 		})
 
-		It("should hide deleted versions by default and include them when requested", func() {
-			id, err := store.Add(ctx, newVersion(1, time.Now(), "alice", "to be deleted"))
-			Expect(err).NotTo(HaveOccurred())
-
-			count, err := store.SoftDeleteByID(ctx, id, "deleter")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(1)))
-
-			items, total, err := store.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(items).To(BeEmpty())
-
-			items, total, err = store.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:          appID,
-				Page:           1,
-				PageSize:       10,
-				IncludeDeleted: true,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(items).To(HaveLen(1))
-			Expect(items[0].IsDeleted).To(BeTrue())
-		})
-	})
-
-	Context("GetByFileAndVersion and SoftDeleteByID", func() {
-		It("should not return a soft-deleted version from GetByFileAndVersion", func() {
-			id, err := store.Add(ctx, newVersion(5, time.Now(), "alice", "candidate"))
-			Expect(err).NotTo(HaveOccurred())
-
-			count, err := store.SoftDeleteByID(ctx, id, "deleter")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(1)))
-
-			got, err := store.BatchGetByAppAndIDs(ctx, appID, []bson.ObjectID{id})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got).To(HaveLen(1))
-			Expect(got[0].IsDeleted).To(BeTrue())
-			Expect(got[0].Deleter).To(Equal("deleter"))
-			Expect(got[0].DeletedAt).NotTo(BeNil())
-
-			_, err = store.GetByFileAndVersion(ctx, fileID, 5)
+		It("should reject an invalid appConfigFileID", func() {
+			_, err := serializer.ListAppConfigFileVersionsQueryInput{
+				AppConfigFileID: lo.ToPtr("bad"),
+			}.ToVersionListOpt()
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+
+		It("should order versions newest first and break ties by _id", func() {
+			sharedTime := time.Now()
+			for i := int64(1); i <= 3; i++ {
+				addVersion(newVersion(i, sharedTime, "alice", ""))
+			}
+
+			page, err := base.ListVersions(ctx, appID, 1, 2, appcfg.VersionsByFile(fileID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(page.Total).To(Equal(int64(3)))
+			Expect(page.HasNext).To(BeTrue())
+			Expect(versionNumbers(page.Items)).To(Equal([]int64{3, 2}))
+
+			page, err = base.ListVersions(ctx, appID, 2, 2, appcfg.VersionsByFile(fileID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(versionNumbers(page.Items)).To(Equal([]int64{1}))
+		})
+
+		It("should only list versions of the given app", func() {
+			addVersion(newVersion(1, time.Now(), "alice", ""))
+			other := newVersion(1, time.Now(), "alice", "")
+			other.AppID = "other-app"
+			other.AppConfigFileID = bson.NewObjectID()
+			addVersion(other)
+
+			page, err := base.ListVersions(ctx, appID, 1, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(page.Total).To(Equal(int64(1)))
+			Expect(page.Items[0].AppID).To(Equal(appID))
 		})
 	})
 
-	Context("DeleteByFileID", func() {
-		It("should hard-delete all versions belonging to a file", func() {
-			_, err := store.Add(ctx, newVersion(1, time.Now(), "alice", "v1"))
-			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Add(ctx, newVersion(2, time.Now().Add(time.Second), "bob", "v2"))
-			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Add(ctx, newVersion(3, time.Now().Add(2*time.Second), "carol", "v3"))
-			Expect(err).NotTo(HaveOccurred())
+	Context("GetVersionByAppAndID", func() {
+		It("should not return a version of another app", func() {
+			id := addVersion(newVersion(2, time.Now(), "tester", ""))
 
-			count, err := store.DeleteByFileID(ctx, fileID)
+			got, err := base.GetVersionByAppAndID(ctx, appID, id)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(3)))
+			Expect(got.ID).To(Equal(id))
 
-			items, total, err := store.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:           appID,
-				AppConfigFileID: &fileID,
-				Page:            1,
-				PageSize:        10,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(items).To(BeEmpty())
+			_, err = base.GetVersionByAppAndID(ctx, "another-app", id)
+			Expect(err).To(MatchError(appcfg.ErrAppCfgFileVersionNotFound))
+		})
+	})
 
-			items, total, err = store.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:           appID,
-				AppConfigFileID: &fileID,
-				Page:            1,
-				PageSize:        10,
-				IncludeDeleted:  true,
-			})
+	Context("CompareVersions", func() {
+		It("should return both versions of the same app", func() {
+			id1 := addVersion(newVersion(1, time.Now(), "alice", ""))
+			id2 := addVersion(newVersion(2, time.Now(), "bob", ""))
+
+			previous, current, err := base.CompareVersions(ctx, appID, id1, id2)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(items).To(BeEmpty())
+			Expect(previous.Version).To(Equal(int64(1)))
+			Expect(current.Version).To(Equal(int64(2)))
 		})
 
-		It("should not affect versions belonging to other files", func() {
-			_, err := store.Add(ctx, newVersion(1, time.Now(), "alice", "file-A v1"))
-			Expect(err).NotTo(HaveOccurred())
+		It("should treat a version of another app as not found", func() {
+			id1 := addVersion(newVersion(1, time.Now(), "alice", ""))
+			other := newVersion(1, time.Now(), "carol", "")
+			other.AppID = "other-app"
+			other.AppConfigFileID = bson.NewObjectID()
+			otherID := addVersion(other)
 
-			otherFileID := bson.NewObjectID()
-			otherV := newVersion(1, time.Now().Add(time.Second), "alice", "file-B v1")
-			otherV.AppConfigFileID = otherFileID
-			_, err = store.Add(ctx, otherV)
-			Expect(err).NotTo(HaveOccurred())
+			_, _, err := base.CompareVersions(ctx, appID, id1, otherID)
+			Expect(err).To(MatchError(appcfg.ErrAppCfgFileVersionNotFound))
+		})
+	})
 
-			count, err := store.DeleteByFileID(ctx, fileID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(1)))
+	Context("DeleteVersion", func() {
+		It("should soft delete a historical version and hide it from the list", func() {
+			id := addVersion(newVersion(1, time.Now(), "alice", "to be deleted"))
+			addVersion(newVersion(3, time.Now(), "alice", "current"))
 
-			items, total, err := store.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:           appID,
-				AppConfigFileID: &otherFileID,
-				Page:            1,
-				PageSize:        10,
-			})
+			deleted, _, err := base.DeleteVersion(ctx, appID, id, "deleter")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(items[0].IsDeleted).To(BeFalse())
+			Expect(deleted.ID).To(Equal(id))
+
+			got, err := base.GetVersionByAppAndID(ctx, appID, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsDeleted).To(BeTrue())
+			Expect(got.Deleter).To(Equal("deleter"))
+			Expect(got.DeletedAt).NotTo(BeNil())
+
+			page, err := base.ListVersions(ctx, appID, 1, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(versionNumbers(page.Items)).To(Equal([]int64{3}))
 		})
 
-		It("should also remove already soft-deleted versions", func() {
-			id, err := store.Add(ctx, newVersion(1, time.Now(), "alice", "already deleted"))
-			Expect(err).NotTo(HaveOccurred())
+		It("should reject deleting the current version", func() {
+			id := addVersion(newVersion(3, time.Now(), "alice", "current"))
 
-			_, err = store.SoftDeleteByID(ctx, id, "first-deleter")
-			Expect(err).NotTo(HaveOccurred())
+			_, _, err := base.DeleteVersion(ctx, appID, id, "deleter")
+			Expect(err).To(MatchError(appcfg.ErrUsingVersionCannotBeDeleted))
+		})
+	})
 
-			_, err = store.Add(ctx, newVersion(2, time.Now().Add(time.Second), "bob", "active"))
-			Expect(err).NotTo(HaveOccurred())
+	Context("VersionsByFile", func() {
+		It("should hard delete all versions of a file including soft-deleted ones", func() {
+			soft := newVersion(1, time.Now(), "alice", "already deleted")
+			soft.IsDeleted = true
+			addVersion(soft)
+			addVersion(newVersion(2, time.Now(), "bob", "active"))
+			other := newVersion(1, time.Now(), "alice", "file-B v1")
+			other.AppConfigFileID = bson.NewObjectID()
+			addVersion(other)
 
-			count, err := store.DeleteByFileID(ctx, fileID)
+			count, err := versions.DeleteMany(ctx, appcfg.VersionsByFile(fileID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(count).To(Equal(int64(2)))
 
-			items, total, err := store.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:           appID,
-				AppConfigFileID: &fileID,
-				Page:            1,
-				PageSize:        10,
-				IncludeDeleted:  true,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(items).To(BeEmpty())
+			Expect(versions.Count(ctx, appcfg.VersionsByFile(fileID))).To(BeZero())
+			Expect(versions.Count(ctx, appcfg.VersionsByFile(other.AppConfigFileID))).To(Equal(int64(1)))
 		})
 	})
 })

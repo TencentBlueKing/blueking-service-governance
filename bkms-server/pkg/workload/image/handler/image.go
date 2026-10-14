@@ -29,6 +29,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	reginfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
@@ -37,6 +40,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
@@ -54,6 +58,10 @@ type Handler struct {
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) promotions() *promotion.Store {
+	return store.Of(h.registry.DB, promotion.Meta)
 }
 
 // ListAppImages 获取应用镜像列表（从本地快照查询，含已部署环境信息和晋级状态）。
@@ -88,7 +96,7 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 		return
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.DB)
 	snapshots, total, status, err := snapshotService.ListAppSnapshots(
 		ctx,
 		uriInput.AppID,
@@ -113,7 +121,7 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 		return
 	}
 
-	envTypeMap, err := h.registry.EnvStore.GetEnvTypeMap(ctx, app.WorkspaceID)
+	envTypeMap, err := envmodel.GetEnvTypeMap(ctx, h.registry.DB, app.WorkspaceID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list environments"))
 		return
@@ -187,7 +195,7 @@ func (h *Handler) RefreshAppImages(c *gin.Context) {
 		metrics.ImageSnapshotRefreshFinished(metricStatus, startedAt)
 	}()
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.DB)
 	result, err := snapshotService.RefreshAppSnapshots(ctx, uriInput.AppID)
 	if err != nil {
 		metricStatus = metrics.StatusErr
@@ -229,7 +237,7 @@ func (h *Handler) PromoteAppImage(c *gin.Context) {
 		return
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.DB)
 	info, err := snapshotService.ResolveRepoKeyForApp(ctx, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(
@@ -239,8 +247,8 @@ func (h *Handler) PromoteAppImage(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.PromotionStore.Upsert(
-		ctx, app.ID, info.RepoKey, uriInput.Tag, auth.MustGetUser(ctx).ID,
+	if err = promotion.Promote(
+		ctx, h.promotions(), app.ID, info.RepoKey, uriInput.Tag, auth.MustGetUser(ctx).ID,
 	); err != nil {
 		bkerrs.AbortWithErr(
 			c,
@@ -282,15 +290,7 @@ func (h *Handler) ListAppImageUsages(c *gin.Context) {
 		return
 	}
 
-	svc := tagdeletion.NewService(
-		h.registry.SnapshotStore,
-		h.registry.PromotionStore,
-		h.registry.BuildConfigStore,
-		h.registry.AppStore,
-		h.registry.EnvStore,
-		h.registry.AppModelDeployRecordStore,
-		h.registry.HelmDeployRecordStore,
-	)
+	svc := tagdeletion.NewService(h.registry.DB)
 	usages, err := svc.ListImageUsages(ctx, uriInput.AppID, uriInput.Tag)
 	if err != nil {
 		bkerrs.AbortWithErr(
@@ -347,15 +347,7 @@ func (h *Handler) DeleteAppImage(c *gin.Context) {
 		metrics.ImageTagDeleteFinished(metricStatus, startedAt)
 	}()
 
-	svc := tagdeletion.NewService(
-		h.registry.SnapshotStore,
-		h.registry.PromotionStore,
-		h.registry.BuildConfigStore,
-		h.registry.AppStore,
-		h.registry.EnvStore,
-		h.registry.AppModelDeployRecordStore,
-		h.registry.HelmDeployRecordStore,
-	)
+	svc := tagdeletion.NewService(h.registry.DB)
 	if err := svc.DeleteImageTag(ctx, uriInput.AppID, uriInput.Tag); err != nil {
 		metricStatus = metrics.StatusErr
 		code := bkerrs.ErrCodeInternalServerError
@@ -430,12 +422,12 @@ func (h *Handler) ListImageTagDeployRecords(c *gin.Context) {
 		results []*serializer.ImageTagDeployRecordOutputObj
 	)
 	if bkmsapp.IsAppModelType(app.Type) {
-		records, count, listErr := h.registry.AppModelDeployRecordStore.ListByImageTag(
+		recordPage, listErr := store.Of(h.registry.DB, appmodeldeploy.RecordMeta).ListPage(
 			ctx,
-			uriInput.AppID,
-			uriInput.Tag,
 			queryInput.Page,
 			queryInput.PageSize,
+			appmodeldeploy.ByImageTag(uriInput.AppID, uriInput.Tag),
+			deploytypes.NewestFirst(),
 		)
 		if listErr != nil {
 			bkerrs.AbortWithErr(
@@ -450,14 +442,16 @@ func (h *Handler) ListImageTagDeployRecords(c *gin.Context) {
 			)
 			return
 		}
-		total = count
-		results = make([]*serializer.ImageTagDeployRecordOutputObj, 0, len(records))
-		for _, record := range records {
+		total = recordPage.Total
+		results = make([]*serializer.ImageTagDeployRecordOutputObj, 0, len(recordPage.Items))
+		for _, record := range recordPage.Items {
 			results = append(results, new(serializer.ImageTagDeployRecordOutputObj).FromAppModelRecord(record))
 		}
 	} else {
-		records, count, listErr := h.registry.HelmDeployRecordStore.ListByImageTag(
-			ctx, uriInput.AppID, uriInput.Tag, queryInput.Page, queryInput.PageSize,
+		recordPage, listErr := store.Of(h.registry.DB, helmdeploy.RecordMeta).ListPage(
+			ctx, queryInput.Page, queryInput.PageSize,
+			helmdeploy.ByImageTag(uriInput.AppID, uriInput.Tag),
+			deploytypes.NewestFirst(),
 		)
 		if listErr != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrapf(
@@ -466,9 +460,9 @@ func (h *Handler) ListImageTagDeployRecords(c *gin.Context) {
 			))
 			return
 		}
-		total = count
-		results = make([]*serializer.ImageTagDeployRecordOutputObj, 0, len(records))
-		for _, record := range records {
+		total = recordPage.Total
+		results = make([]*serializer.ImageTagDeployRecordOutputObj, 0, len(recordPage.Items))
+		for _, record := range recordPage.Items {
 			results = append(results, new(serializer.ImageTagDeployRecordOutputObj).FromHelmRecord(record))
 		}
 	}
@@ -514,7 +508,7 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 		return
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.DB)
 	repoInfo, err := snapshotService.ResolveRepoKeyForApp(ctx, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(
@@ -524,15 +518,12 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 		return
 	}
 
-	page := int(queryInput.Page)
-	pageSize := int(queryInput.PageSize)
-
-	var (
-		snapshots []snapshot.Image
-		total     int64
-	)
+	// 生产环境只能部署已晋级的 tag
+	var conds []store.Opt
 	if bkmsenv.IsProductionType(bkmsenv.Type(env.Type)) {
-		promotedTags, listErr := h.registry.PromotionStore.ListTagsByAppAndRepoKey(ctx, app.ID, repoInfo.RepoKey)
+		promotedTags, listErr := promotion.ListPromotedTags(
+			ctx, h.promotions(), app.ID, repoInfo.RepoKey,
+		)
 		if listErr != nil {
 			bkerrs.AbortWithErr(
 				c,
@@ -540,19 +531,17 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 			)
 			return
 		}
-		snapshots, total, err = h.registry.SnapshotStore.ListByRepoKeyAndTags(
-			ctx,
-			repoInfo.RepoKey,
-			promotedTags,
-			queryInput.Keyword,
-			page,
-			pageSize,
-		)
-	} else {
-		snapshots, total, err = h.registry.SnapshotStore.ListByRepoKey(
-			ctx, repoInfo.RepoKey, queryInput.Keyword, page, pageSize,
-		)
+		conds = append(conds, snapshot.TagIn(promotedTags))
 	}
+	snapshotPage, err := snapshot.ListImagePage(
+		ctx,
+		h.registry.DB,
+		repoInfo.RepoKey,
+		queryInput.Keyword,
+		int(queryInput.Page),
+		int(queryInput.PageSize),
+		conds...,
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
 			err, bkerrs.ErrCodeInternalServerError, "list deployable image tags for app %s env %s", app.ID, env.Name,
@@ -560,14 +549,14 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 		return
 	}
 
-	results := make([]*serializer.DeployableImageTagOutputObj, 0, len(snapshots))
-	for _, snap := range snapshots {
+	results := make([]*serializer.DeployableImageTagOutputObj, 0, len(snapshotPage.Items))
+	for _, snap := range snapshotPage.Items {
 		results = append(results, new(serializer.DeployableImageTagOutputObj).FromModel(snap))
 	}
 
 	ginutils.OK(c, serializer.ListDeployableImageTagsOutput{
 		Data: &serializer.PaginatedDeployableImageTagOutputObjs{
-			Count:   total,
+			Count:   snapshotPage.Total,
 			Results: results,
 		},
 	})
@@ -584,9 +573,11 @@ func (h *Handler) buildPromotionMap(
 		return nil, nil
 	}
 
-	promotions, err := h.registry.PromotionStore.ListByAppAndRepoKey(ctx, appID, status.RepoKey)
+	promotions, err := h.promotions().List(
+		ctx, promotion.ByAppAndRepoKey(appID, status.RepoKey),
+	)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "list promotions of app %s", appID)
 	}
 	result := make(map[string]*promotion.Image, len(promotions))
 	for i := range promotions {
@@ -608,9 +599,9 @@ func (h *Handler) buildDeployedEnvsMap(
 		err   error
 	)
 	if bkmsapp.IsAppModelType(app.Type) {
-		pairs, err = h.registry.AppModelDeployRecordStore.ListImageTagDeployedEnvs(ctx, appID)
+		pairs, err = appmodeldeploy.ListImageTagDeployedEnvs(ctx, h.registry.DB, appID)
 	} else {
-		pairs, err = h.registry.HelmDeployRecordStore.ListImageTagDeployedEnvs(ctx, appID)
+		pairs, err = helmdeploy.ListImageTagDeployedEnvs(ctx, h.registry.DB, appID)
 	}
 	if err != nil {
 		return nil, err

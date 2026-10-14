@@ -26,8 +26,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
@@ -50,23 +48,16 @@ func newStrategy(workspaceID, name string) *releasestrategy.ReleaseStrategy {
 
 var _ = Describe("Release strategy store", func() {
 	var ctx context.Context
-	var diApp *fxtest.App
-	var store releasestrategy.Store
+	var store *releasestrategy.Store
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		diApp = fxtest.New(
-			GinkgoT(),
-			releasestrategy.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
+		store = testutil.NewStore(GinkgoT(), releasestrategy.Meta)
 	})
 
 	AfterEach(func() {
 		// 仅清空文档，保留 migration 创建的唯一索引
-		Expect(testutil.CleanupCollection(releasestrategy.CollectionName)).To(Succeed())
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(releasestrategy.Meta)).To(Succeed())
 	})
 
 	It("supports workspace scoped CRUD operations", func() {
@@ -78,13 +69,13 @@ var _ = Describe("Release strategy store", func() {
 		Expect(store.Create(ctx, newStrategy("workspace-a", "fast"))).To(Succeed())
 		Expect(store.Create(ctx, newStrategy("workspace-b", "other"))).To(Succeed())
 
-		strategies, err := store.List(ctx, "workspace-a")
+		strategies, err := store.List(ctx, releasestrategy.ByWorkspace("workspace-a"), releasestrategy.OldestFirst())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(strategies).To(HaveLen(2))
 		Expect(strategies[0].Name).To(Equal("生产谨慎发布"))
 		Expect(strategies[1].Name).To(Equal("fast"))
 
-		stored, err := store.Get(ctx, "workspace-a", created.ID.Hex())
+		stored, err := releasestrategy.GetStrategy(ctx, store, "workspace-a", created.ID.Hex())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(stored.Batches).To(Equal(created.Batches))
 		Expect(stored.Creator).To(Equal("admin"))
@@ -94,9 +85,9 @@ var _ = Describe("Release strategy store", func() {
 		updated.Description = ""
 		updated.Batches = []releasestrategy.Batch{{Target: "100%", PauseMode: releasestrategy.PauseModeNone}}
 		updated.Updater = "operator"
-		Expect(store.Update(ctx, &updated)).To(Succeed())
+		Expect(releasestrategy.UpdateStrategy(ctx, store, &updated)).To(Succeed())
 
-		stored, err = store.Get(ctx, "workspace-a", created.ID.Hex())
+		stored, err = releasestrategy.GetStrategy(ctx, store, "workspace-a", created.ID.Hex())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(stored.Name).To(Equal("renamed"))
 		Expect(stored.Description).To(BeEmpty())
@@ -104,10 +95,10 @@ var _ = Describe("Release strategy store", func() {
 		Expect(stored.Creator).To(Equal("admin"))
 		Expect(stored.Updater).To(Equal("operator"))
 
-		deleted, err := store.Delete(ctx, "workspace-a", created.ID.Hex())
+		deleted, err := releasestrategy.DeleteStrategy(ctx, store, "workspace-a", created.ID.Hex())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(deleted.ID).To(Equal(created.ID))
-		_, err = store.Get(ctx, "workspace-a", created.ID.Hex())
+		_, err = releasestrategy.GetStrategy(ctx, store, "workspace-a", created.ID.Hex())
 		Expect(errors.Is(err, releasestrategy.ErrStrategyNotFound)).To(BeTrue())
 	})
 
@@ -126,7 +117,7 @@ var _ = Describe("Release strategy store", func() {
 		Expect(store.Create(ctx, second)).To(Succeed())
 
 		second.Name = "first"
-		err := store.Update(ctx, second)
+		err := releasestrategy.UpdateStrategy(ctx, store, second)
 		Expect(errors.Is(err, releasestrategy.ErrStrategyNameConflict)).To(BeTrue())
 	})
 
@@ -135,23 +126,23 @@ var _ = Describe("Release strategy store", func() {
 		Expect(store.Create(ctx, created)).To(Succeed())
 
 		for _, id := range []string{bson.NewObjectID().Hex(), "not-an-object-id"} {
-			_, err := store.Get(ctx, "workspace-a", id)
+			_, err := releasestrategy.GetStrategy(ctx, store, "workspace-a", id)
 			Expect(errors.Is(err, releasestrategy.ErrStrategyNotFound)).To(BeTrue())
-			_, err = store.Delete(ctx, "workspace-a", id)
+			_, err = releasestrategy.DeleteStrategy(ctx, store, "workspace-a", id)
 			Expect(errors.Is(err, releasestrategy.ErrStrategyNotFound)).To(BeTrue())
 		}
 
-		_, err := store.Get(ctx, "workspace-b", created.ID.Hex())
+		_, err := releasestrategy.GetStrategy(ctx, store, "workspace-b", created.ID.Hex())
 		Expect(errors.Is(err, releasestrategy.ErrStrategyNotFound)).To(BeTrue())
 
 		crossWorkspace := *created
 		crossWorkspace.WorkspaceID = "workspace-b"
-		err = store.Update(ctx, &crossWorkspace)
+		err = releasestrategy.UpdateStrategy(ctx, store, &crossWorkspace)
 		Expect(errors.Is(err, releasestrategy.ErrStrategyNotFound)).To(BeTrue())
 
-		_, err = store.Delete(ctx, "workspace-b", created.ID.Hex())
+		_, err = releasestrategy.DeleteStrategy(ctx, store, "workspace-b", created.ID.Hex())
 		Expect(errors.Is(err, releasestrategy.ErrStrategyNotFound)).To(BeTrue())
-		_, err = store.Get(ctx, "workspace-a", created.ID.Hex())
+		_, err = releasestrategy.GetStrategy(ctx, store, "workspace-a", created.ID.Hex())
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

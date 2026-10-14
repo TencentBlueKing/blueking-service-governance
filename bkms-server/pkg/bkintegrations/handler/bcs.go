@@ -75,7 +75,7 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 		return item.Code, true
 	})
 
-	workspaces, err := h.registry.WorkspaceStore.List(ctx, &workspace.ListOptions{})
+	workspaces, err := h.workspaces().List(ctx)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspaces"))
 		return

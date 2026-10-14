@@ -28,9 +28,12 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
+	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
@@ -39,7 +42,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/alertstrategysync"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/helmdeploypoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
 // ListHelmDeployRecords 获取 Helm 应用部署记录列表。
@@ -74,14 +79,11 @@ func (h *Handler) ListHelmDeployRecords(c *gin.Context) {
 		return
 	}
 
-	records, total, err := h.registry.HelmDeployRecordStore.List(
-		ctx,
-		app.ID,
-		uriInput.EnvName,
-		queryInput.TrafficLaneName,
-		queryInput.Keyword,
-		queryInput.Page,
-		queryInput.PageSize,
+	recordPage, err := h.helmRecords().ListPage(
+		ctx, queryInput.Page, queryInput.PageSize,
+		deploytypes.ByAppEnvLane(app.ID, uriInput.EnvName, queryInput.TrafficLaneName),
+		helmdeploy.KeywordMatches(queryInput.Keyword),
+		deploytypes.NewestFirst(),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
@@ -93,8 +95,8 @@ func (h *Handler) ListHelmDeployRecords(c *gin.Context) {
 		return
 	}
 
-	outputRecords := make([]*serializer.HelmDeployRecordOutputObj, 0, len(records))
-	for _, record := range records {
+	outputRecords := make([]*serializer.HelmDeployRecordOutputObj, 0, len(recordPage.Items))
+	for _, record := range recordPage.Items {
 		outputRecords = append(outputRecords, new(serializer.HelmDeployRecordOutputObj).FromModel(record))
 	}
 	if err = h.attachHelmDeployRecordsValues(
@@ -106,7 +108,7 @@ func (h *Handler) ListHelmDeployRecords(c *gin.Context) {
 
 	ginutils.OK(c, serializer.ListHelmDeployRecordsOutput{
 		Data: &serializer.PaginatedHelmDeployRecordOutputObjs{
-			Count:   total,
+			Count:   recordPage.Total,
 			Results: outputRecords,
 		},
 	})
@@ -146,15 +148,13 @@ func (h *Handler) PreviewHelmDeploy(c *gin.Context) {
 
 	// 预览待部署的 Helm Chart 的 Manifests 差异
 	envVarsReader := envvars.NewUnifiedEnvVarsReader(
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
 	result, err := helmdeploy.PreviewHelmRelease(
 		ctx,
-		h.registry.BkCIProjectStore,
-		h.registry.BkRepoProjectStore,
-		h.registry.HelmRepoCredentialStore,
+		h.registry.DB,
 		envVarsReader,
 		app,
 		env,
@@ -217,7 +217,7 @@ func (h *Handler) CreateHelmDeploy(c *gin.Context) {
 		return
 	}
 
-	deploypkg.TrackEnvAddApp(ctx, h.registry.EnvStore, app.WorkspaceID, uriInput.EnvName, app.ID)
+	deploypkg.TrackEnvAddApp(ctx, h.registry.DB, app.WorkspaceID, uriInput.EnvName, app.ID)
 	// 执行部署的若干步骤
 	deployID, err := h.execHelmAppDeploySteps(
 		ctx, app, env, input.TrafficLaneName, input.ChartVersion, input.ValuesFileID, input.ImageTag,
@@ -417,8 +417,8 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 	}()
 
 	// 找到最新部署记录
-	record, err := h.registry.HelmDeployRecordStore.GetLatest(
-		ctx, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
+	record, err := helmdeploy.GetLatest(
+		ctx, h.registry.DB, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
 	)
 	if err != nil {
 		metricStatus = metrics.StatusErr
@@ -443,7 +443,7 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 	}
 	// 修改状态为已卸载
 	record.Status = helm.StatusUninstalled
-	if err = h.registry.HelmDeployRecordStore.Update(ctx, record); err != nil {
+	if err = helmdeploy.UpdateRecord(ctx, h.registry.DB, record); err != nil {
 		metricStatus = metrics.StatusErr
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
 			err, bkerrs.ErrCodeInternalServerError, "update deploy record for %s", deployInfo,
@@ -453,15 +453,20 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 
 	// 记录应用从环境卸载
 	deploypkg.TrackEnvRemoveApp(
-		ctx, h.registry.EnvStore, app.WorkspaceID, uriInput.EnvName, queryInput.TrafficLaneName, app.ID,
+		ctx,
+		h.registry.DB,
+		app.WorkspaceID,
+		uriInput.EnvName,
+		queryInput.TrafficLaneName,
+		app.ID,
 	)
 	// 应用已从环境卸载，需同步清理该应用在该环境下关联的告警策略，避免残留无效告警。
 	// 先查询 workspace 与 env 信息（清理时需要其标识）；任一查询失败仅记录日志，不中断卸载主流程。
-	ws, wsErr := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, wsErr := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if wsErr != nil {
 		log.Errorf(ctx, "get workspace %s for alert cleanup failed: %v", app.WorkspaceID, wsErr)
 	} else {
-		env, envErr := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, uriInput.EnvName)
+		env, envErr := store.Of(h.registry.DB, envmodel.EnvMeta).Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 		if envErr != nil {
 			log.Errorf(ctx, "get env %s for alert cleanup failed: %v", uriInput.EnvName, envErr)
 		} else {
@@ -488,8 +493,8 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 	}
 
 	// 清理资源拓扑快照（失败不阻塞主流程）
-	if err = h.registry.ResourceSnapshotStore.Delete(
-		ctx, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
+	if err = store.Of(h.registry.DB, topology.ResourceSnapshotMeta).DeleteIfExists(
+		ctx, topology.ByScope(app.ID, uriInput.EnvName, queryInput.TrafficLaneName),
 	); err != nil {
 		log.Errorf(
 			ctx, "delete resource snapshot for app %s env %s lane %s failed: %v",

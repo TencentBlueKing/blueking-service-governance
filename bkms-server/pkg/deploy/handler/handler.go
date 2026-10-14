@@ -21,7 +21,9 @@ package handler
 
 import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Handler 处理部署相关 Gin API 请求
@@ -34,10 +36,12 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
+func (h *Handler) helmRecords() *helmdeploy.RecordStore {
+	return store.Of(h.registry.DB, helmdeploy.RecordMeta)
+}
+
 func (h *Handler) newMountableFileProvider() appcfg.MountableFileProvider {
 	return appcfg.NewMountableFileProvider(
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
-		h.registry.AppConfigFileVersionStore,
+		h.registry.DB,
 	)
 }

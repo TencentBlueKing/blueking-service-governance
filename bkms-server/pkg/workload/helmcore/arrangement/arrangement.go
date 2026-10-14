@@ -139,15 +139,11 @@ func ListPlaceholderVars() []PlaceholderVar {
 
 // AppArranger arranges the application to enable various functionalities.
 // This is often achieved by using special placeholders in the values.yaml file.
-type AppArranger struct {
-	appStore bkmsapp.ApplicationStore
-}
+type AppArranger struct{}
 
-// NewAppArranger creates a new WorkloadImageArranger with the given store.
-func NewAppArranger(appStore bkmsapp.ApplicationStore) *AppArranger {
-	return &AppArranger{
-		appStore: appStore,
-	}
+// NewAppArranger creates a new WorkloadImageArranger.
+func NewAppArranger() *AppArranger {
+	return &AppArranger{}
 }
 
 // ArrgResult is a struct that contains the arrangement result of the application,

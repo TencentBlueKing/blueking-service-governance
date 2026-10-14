@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // AppCfgFileDefService 场景层服务，感知 ConfigKind, 内嵌 BaseAppCfgFileService 以直接暴露底层 CRUD 方法；
@@ -87,7 +89,7 @@ func (s *AppCfgFileDefService) Create(
 
 	acf, err := s.createFileAndVersion(ctx, params, def)
 	if err != nil {
-		_, _ = s.DefStore.DeleteByID(ctx, def.ID)
+		_ = s.DefStore.DeleteIfExists(ctx, store.ByID(def.ID))
 		return nil, err
 	}
 	return &AppConfigFileWithDef{AppConfigFile: *acf, Def: def}, nil
@@ -118,11 +120,9 @@ func (s *AppCfgFileDefService) createDef(
 		EnableEnvVarRender: enableEnvVarRender,
 		Creator:            params.Creator,
 	}
-	defID, err := s.DefStore.Add(ctx, def)
-	if err != nil {
+	if err := s.DefStore.Create(ctx, &def); err != nil {
 		return nil, errors.Wrap(err, "creating def record")
 	}
-	def.ID = defID
 	return &def, nil
 }
 
@@ -205,7 +205,7 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 			return err
 		}
 	}
-	if _, err := s.DefStore.Update(ctx, *def); err != nil {
+	if err := UpdateDef(ctx, s.DefStore, def); err != nil {
 		return errors.Wrap(err, "updating def record")
 	}
 	return nil
@@ -213,7 +213,7 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 
 // deleteEnvInstances 删除指定 def 下所有非默认的环境实例及其版本记录。
 func (s *AppCfgFileDefService) deleteEnvInstances(ctx context.Context, defID bson.ObjectID) error {
-	files, err := s.FileStore.ListByDefID(ctx, defID)
+	files, err := s.FileStore.List(ctx, FilesByDef(defID))
 	if err != nil {
 		return errors.Wrap(err, "listing env instances for cleanup")
 	}
@@ -221,10 +221,10 @@ func (s *AppCfgFileDefService) deleteEnvInstances(ctx context.Context, defID bso
 		if f.EnvName == EnvNameDefault {
 			continue
 		}
-		if _, err = s.FileStore.DeleteByID(ctx, f.AppID, f.ID); err != nil {
+		if err = DeleteFile(ctx, s.FileStore, f.AppID, f.ID); err != nil {
 			return errors.Wrapf(err, "delete env instance %s", f.ID.Hex())
 		}
-		if _, err = s.VersionStore.DeleteByFileID(ctx, f.ID); err != nil {
+		if _, err = s.VersionStore.DeleteMany(ctx, VersionsByFile(f.ID)); err != nil {
 			return errors.Wrapf(err, "delete versions for env instance %s", f.ID.Hex())
 		}
 	}
@@ -243,7 +243,7 @@ func (s *AppCfgFileDefService) ensureSingleFrameworkDef(
 	if appType != "trpc" && appType != "taf" {
 		return nil
 	}
-	defs, err := s.DefStore.ListByApp(ctx, appID, DefFilterConfigKind(ConfigKindFramework))
+	defs, err := ListDefsByApp(ctx, s.DefStore, appID, DefFilterConfigKind(ConfigKindFramework))
 	if err != nil {
 		return errors.Wrap(err, "listing framework defs")
 	}

@@ -21,48 +21,100 @@ package portforward
 import (
 	"context"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
+	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Service", func() {
 	var (
-		ctx     context.Context
-		service *Service
-		store   *StoreMongo
+		ctx         context.Context
+		service     *Service
+		whitelist   *Store
+		envSvc      *bkmsenv.EnvService
+		workspaceID string
 	)
 
+	// newEnvID 创建一个指定类型的环境，返回其 ID
+	newEnvID := func(envType bkmsenv.Type) string {
+		env := dbfactory.EnvWithOpts(ctx, envSvc, &dbfactory.EnvOpts{WorkspaceID: workspaceID, Type: string(envType)})
+		return env.ID.Hex()
+	}
+
 	BeforeEach(func() {
-		var err error
 		ctx = context.Background()
-		store, err = NewStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		// Service 的 envStore 在 CheckPermission 中不使用，仅在 Add 的 validateEnvIDs 中使用。
-		// 此处测试 CheckPermission 逻辑，envStore 传 nil（不会被调用）。
-		service = NewService(store, nil)
+		workspaceID = "ws-" + stringx.Random(8)
+
+		diApp := fxtest.New(GinkgoT(), bkmsenv.FxModule, fx.Populate(&envSvc))
+		diApp.RequireStart()
+		DeferCleanup(diApp.RequireStop)
+
+		db := testutil.NewDB(GinkgoT())
+		service = NewService(db)
+		whitelist = store.Of(db, Meta)
 	})
 
 	AfterEach(func() {
-		_, _ = store.collection.DeleteMany(ctx, bson.M{})
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
+	})
+
+	Describe("Add", func() {
+		It("should add env IDs to whitelist", func() {
+			env1, env2 := newEnvID(bkmsenv.TypeTest), newEnvID(bkmsenv.TypeTest)
+			Expect(service.Add(ctx, []string{env1, env2})).To(Succeed())
+
+			envIDs, err := service.List(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envIDs).To(ConsistOf(env1, env2))
+		})
+
+		It("should skip env IDs already in whitelist and duplicated in input", func() {
+			env1, env2, env3 := newEnvID(bkmsenv.TypeTest), newEnvID(bkmsenv.TypeTest), newEnvID(bkmsenv.TypeTest)
+			Expect(service.Add(ctx, []string{env1, env2})).To(Succeed())
+			Expect(service.Add(ctx, []string{env2, env3, env3})).To(Succeed())
+
+			envIDs, err := service.List(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envIDs).To(ConsistOf(env1, env2, env3))
+		})
+
+		It("should handle empty input", func() {
+			Expect(service.Add(ctx, []string{})).To(Succeed())
+
+			envIDs, err := service.List(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envIDs).To(BeEmpty())
+		})
+
+		It("should reject production environments", func() {
+			err := service.Add(ctx, []string{newEnvID(bkmsenv.TypeProduction)})
+			Expect(err).To(MatchError(ErrProductionEnvNotAllowed))
+		})
+
+		It("should reject environments that do not exist", func() {
+			err := service.Add(ctx, []string{bson.NewObjectID().Hex()})
+			Expect(err).To(MatchError(ErrEnvNotFound))
+		})
 	})
 
 	Describe("CheckPermission", func() {
 		BeforeEach(func() {
 			// 添加测试白名单记录
-			Expect(store.Add(ctx, []string{"env-id-aaa", "env-id-bbb"})).To(Succeed())
+			Expect(whitelist.CreateMany(ctx, []*WhitelistEntry{{EnvID: "env-id-aaa"}, {EnvID: "env-id-bbb"}})).
+				To(Succeed())
 		})
 
 		It("should allow access when envID is in whitelist", func() {
-			err := service.CheckPermission(ctx, "env-id-aaa")
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should allow access for another allowed envID", func() {
-			err := service.CheckPermission(ctx, "env-id-bbb")
-			Expect(err).NotTo(HaveOccurred())
+			Expect(service.CheckPermission(ctx, "env-id-aaa")).To(Succeed())
+			Expect(service.CheckPermission(ctx, "env-id-bbb")).To(Succeed())
 		})
 
 		It("should deny access when envID not in whitelist", func() {
@@ -72,39 +124,34 @@ var _ = Describe("Service", func() {
 
 		It("should deny access when whitelist is empty", func() {
 			// 清空白名单
-			Expect(store.Remove(ctx, []string{"env-id-aaa", "env-id-bbb"})).To(Succeed())
+			Expect(service.Remove(ctx, []string{"env-id-aaa", "env-id-bbb"})).To(Succeed())
 
 			err := service.CheckPermission(ctx, "env-id-aaa")
 			Expect(err).To(Equal(ErrPermissionDenied))
 		})
 	})
 
-	Describe("List", func() {
-		It("should return empty when no env IDs added", func() {
-			envIDs, err := service.List(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(envIDs).To(BeEmpty())
-		})
-
-		It("should return all env IDs after add", func() {
-			Expect(store.Add(ctx, []string{"env-1", "env-2"})).To(Succeed())
-
-			envIDs, err := service.List(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(envIDs).To(ConsistOf("env-1", "env-2"))
-		})
-	})
-
 	Describe("Remove", func() {
-		It("should remove env IDs via service", func() {
-			Expect(store.Add(ctx, []string{"env-1", "env-2", "env-3"})).To(Succeed())
+		BeforeEach(func() {
+			Expect(whitelist.CreateMany(ctx, []*WhitelistEntry{{EnvID: "env-1"}, {EnvID: "env-2"}, {EnvID: "env-3"}})).
+				To(Succeed())
+		})
 
-			err := service.Remove(ctx, []string{"env-2"})
-			Expect(err).NotTo(HaveOccurred())
+		It("should remove env IDs from whitelist", func() {
+			Expect(service.Remove(ctx, []string{"env-2"})).To(Succeed())
 
 			envIDs, err := service.List(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envIDs).To(ConsistOf("env-1", "env-3"))
+		})
+
+		It("should ignore env IDs not in whitelist and empty input", func() {
+			Expect(service.Remove(ctx, []string{"env-nonexist"})).To(Succeed())
+			Expect(service.Remove(ctx, []string{})).To(Succeed())
+
+			envIDs, err := service.List(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envIDs).To(ConsistOf("env-1", "env-2", "env-3"))
 		})
 	})
 })

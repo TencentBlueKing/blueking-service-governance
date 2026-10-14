@@ -27,8 +27,5 @@ import (
 // FxModule provides app dashboard binding dependencies via uber fx.
 var FxModule = fx.Module("bkmonitor-dashboard",
 	database.PrivateFxModule,
-	fx.Provide(
-		NewStoreMongo,
-		NewService,
-	),
+	fx.Provide(NewService),
 )

@@ -32,13 +32,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
@@ -127,9 +126,8 @@ var gvrToKind = func() map[string]string {
 var _ = Describe("Integration - HelmRelease Topology", func() {
 	var (
 		ctx         context.Context
-		diApp       *fxtest.App
 		mockers     []*mockey.Mocker
-		store       *ResourceSnapshotStoreMongo
+		snapshots   *ResourceSnapshotStore
 		topologySvc *Service
 		// allResources 所有预构造的 mock 资源（静态 + 动态），key 为 "Kind/Namespace/Name"
 		allResources map[string]*unstructured.Unstructured
@@ -246,18 +244,10 @@ var _ = Describe("Integration - HelmRelease Topology", func() {
 		mockers = append(mockers, m5)
 
 		// ========== 初始化 Store 和 Service ==========
-		diApp = fxtest.New(
-			GinkgoT(),
-			FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
-
-		err := store.DeleteAll(ctx)
-		Expect(err).NotTo(HaveOccurred())
+		snapshots = testutil.NewStore(GinkgoT(), ResourceSnapshotMeta)
 
 		builder := NewBuilder()
-		topologySvc = NewService(store, builder, nil, nil, nil, nil, nil)
+		topologySvc = NewService(testutil.NewDB(GinkgoT()), builder, nil, nil)
 	})
 
 	AfterEach(func() {
@@ -269,12 +259,7 @@ var _ = Describe("Integration - HelmRelease Topology", func() {
 		}
 
 		// 清理 MongoDB 数据
-		if store != nil {
-			_ = store.DeleteAll(ctx)
-		}
-		if diApp != nil {
-			diApp.RequireStop()
-		}
+		Expect(testutil.CleanupMetaColl(ResourceSnapshotMeta)).To(Succeed())
 	})
 
 	It("should build complete topology graph for HelmRelease scenario", func() {
@@ -310,7 +295,7 @@ var _ = Describe("Integration - HelmRelease Topology", func() {
 		}
 
 		// 写入 MongoDB
-		err = store.UpsertWithVersion(ctx, snapshot, 0)
+		err = SaveWithVersion(ctx, snapshots, snapshot, 0)
 		Expect(err).NotTo(HaveOccurred())
 
 		// ========== 步骤 2：调用 GetTopology ==========

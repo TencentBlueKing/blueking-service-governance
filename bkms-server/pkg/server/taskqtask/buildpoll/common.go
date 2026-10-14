@@ -213,7 +213,7 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args)
 // imageTag 非空则强制同步该 tag，避免同 tag 重建后详情不更新；空则走默认刷新。
 func refreshSnapshots(ctx context.Context, appID, imageTag string) error {
 	reg := storereg.G()
-	svc := snapshot.NewService(reg.SnapshotStore, reg.BuildConfigStore, reg.AppStore)
+	svc := snapshot.NewService(reg.DB)
 	var forceTags []string
 	if imageTag != "" {
 		forceTags = []string{imageTag}
@@ -229,32 +229,9 @@ func refreshSnapshots(ctx context.Context, appID, imageTag string) error {
 // newAppModelDeployService 从 registry 组装 AppModel 部署服务，供构建成功后自动部署使用
 func newAppModelDeployService(reg *storereg.Registry) (*appmodeldeploysvc.Service, error) {
 	return appmodeldeploysvc.NewService(appmodeldeploysvc.ServiceDeps{
-		AppStore:       reg.AppStore,
-		EnvStore:       reg.EnvStore,
-		PromotionStore: reg.PromotionStore,
-		SnapshotService: snapshot.NewService(
-			reg.SnapshotStore,
-			reg.BuildConfigStore,
-			reg.AppStore,
-		),
-		AppModelStore:                       reg.AppModelStore,
-		WorkspaceStore:                      reg.WorkspaceStore,
-		ImageRegistryStore:                  reg.ImageRegistryStore,
-		ScopedEnvVarStore:                   reg.ScopedEnvVarStore,
-		AppDepsVarReader:                    reg.AppDepsVarReader,
-		PolarisVarReader:                    reg.PolarisVarReader,
-		WorkspaceCompsStore:                 reg.WorkspaceCompsStore,
-		PolarisConfigStore:                  reg.PolarisConfigStore,
-		HostPortStore:                       reg.HostPortStore,
-		BscpCfgStore:                        reg.BscpCfgStore,
-		AppSpecStore:                        reg.AppSpecStore,
-		BuildConfigStore:                    reg.BuildConfigStore,
-		BuildAutoDeployRecordStore:          reg.BuildAutoDeployRecordStore,
-		AppModelDeployRecordStore:           reg.AppModelDeployRecordStore,
-		AppModelDeployResourceSnapshotStore: reg.AppModelDeployResourceSnapshotStore,
-		AppConfigFileStore:                  reg.AppConfigFileStore,
-		AppConfigFileDefStore:               reg.AppConfigFileDefStore,
-		AppConfigFileVersionStore:           reg.AppConfigFileVersionStore,
-		ClusterAddonDefStore:                reg.ClusterAddonDefStore,
+		DB:               reg.DB,
+		SnapshotService:  snapshot.NewService(reg.DB),
+		AppDepsVarReader: reg.AppDepsVarReader,
+		PolarisVarReader: reg.PolarisVarReader,
 	})
 }

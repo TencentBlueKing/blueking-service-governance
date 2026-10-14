@@ -75,6 +75,17 @@ func AESDecrypt(key, data string) (string, error) {
 	return string(open), nil
 }
 
+// OnDemand 仅在 data 非空时用 fn（如 AESEncrypt / AESDecrypt）处理 data；空字符串表示敏感字段未设置，原样返回。
+// 主要用于 store.Meta 的 Encode / Decode 钩子，例如：
+//
+//	p.Password, err = crypto.OnDemand(config.G.Encrypt.Secret, crypto.AESEncrypt, p.Password)
+func OnDemand(key string, fn func(key, data string) (string, error), data string) (string, error) {
+	if data == "" {
+		return "", nil
+	}
+	return fn(key, data)
+}
+
 // GenerateKey 生成随机密钥
 func GenerateKey(keySize int) (string, error) {
 	key := make([]byte, keySize)

@@ -27,12 +27,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	k8smanifest "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/manifest"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
@@ -48,7 +50,7 @@ const (
 // saveResourceSnapshots 持久化本次部署下发的资源清单快照
 func saveResourceSnapshots(
 	ctx context.Context,
-	store ResourceSnapshotStore,
+	db *mongo.Database,
 	appID string,
 	deployID string,
 	mainWorkload any,
@@ -84,7 +86,7 @@ func saveResourceSnapshots(
 		return *snap, true
 	})
 
-	if err = store.CreateResources(ctx, snapshots); err != nil {
+	if err = store.Of(db, ResourceSnapshotMeta).CreateMany(ctx, lo.ToSlicePtr(snapshots)); err != nil {
 		log.Errorf(ctx, "create resource snapshots for app %s deploy %s: %v", appID, deployID, err)
 	}
 }
@@ -94,19 +96,25 @@ func saveResourceSnapshots(
 // 并在主工作负载快照中同步修改这两处；源快照已脱敏，复制不会泄露敏感信息
 func copyInstancesUpdateResourceSnapshots(
 	ctx context.Context,
-	store ResourceSnapshotStore,
+	db *mongo.Database,
 	appID, srcDeployID, dstDeployID string,
 	mainWorkload ResourceKey,
 	image, updateStrategy string,
 ) {
-	srcSnapshots, err := store.ListByDeployRecord(ctx, appID, srcDeployID)
+	srcOID, err := bson.ObjectIDFromHex(srcDeployID)
 	if err != nil {
-		// 历史部署记录可能没有快照，此时无需复制
-		if errors.Is(err, ErrResourceSnapshotNotFound) {
-			log.Warnf(ctx, "no resource snapshots for app %s deploy %s, skip copy", appID, srcDeployID)
-			return
-		}
+		log.Errorf(ctx, "invalid source deploy id %s for app %s: %v", srcDeployID, appID, err)
+		return
+	}
+	snapshotStore := store.Of(db, ResourceSnapshotMeta)
+	srcSnapshots, err := snapshotStore.List(ctx, ByDeployRecord(appID, srcOID), InKindNameOrder())
+	if err != nil {
 		log.Errorf(ctx, "list resource snapshots for app %s deploy %s: %v", appID, srcDeployID, err)
+		return
+	}
+	// 历史部署记录可能没有快照，此时无需复制
+	if len(srcSnapshots) == 0 {
+		log.Warnf(ctx, "no resource snapshots for app %s deploy %s, skip copy", appID, srcDeployID)
 		return
 	}
 
@@ -128,7 +136,7 @@ func copyInstancesUpdateResourceSnapshots(
 		return snap
 	})
 
-	if err = store.CreateResources(ctx, snapshots); err != nil {
+	if err = snapshotStore.CreateMany(ctx, lo.ToSlicePtr(snapshots)); err != nil {
 		log.Errorf(ctx, "create resource snapshots for app %s deploy %s: %v", appID, dstDeployID, err)
 	}
 }

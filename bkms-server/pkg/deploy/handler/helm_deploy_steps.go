@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
@@ -35,7 +36,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
+	appnetworking "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking"
 )
 
 // attachHelmDeployRecordsValues 给部署记录添加 Values 相关信息。
@@ -49,7 +52,8 @@ func (h *Handler) attachHelmDeployRecordsValues(
 	records []*serializer.HelmDeployRecordOutputObj,
 ) error {
 	// 1. 获取部署环境信息
-	env, err := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, envName)
+	env, err := store.Of(h.registry.DB, bkmsenv.EnvMeta).
+		Get(ctx, bkmsenv.AppEnvByName(app.WorkspaceID, app.ID, envName))
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s env %s", app.WorkspaceID, envName)
 	}
@@ -90,9 +94,7 @@ func (h *Handler) execHelmAppDeploySteps(
 ) (string, error) {
 	deployInfo := genDeployInfo(app.WorkspaceID, app.ID, env.Name, trafficLaneName)
 	// 1. 部署前检查
-	if err := deploypkg.NewPreDeployChecker(
-		h.registry.EnvStore, h.registry.PromotionStore, h.newSnapshotService(),
-	).Do(ctx, &deploypkg.PreDeployCheckParams{
+	if err := deploypkg.NewPreDeployChecker(h.registry.DB, h.newSnapshotService()).Do(ctx, &deploypkg.PreDeployCheckParams{
 		WorkspaceID:     app.WorkspaceID,
 		EnvName:         env.Name,
 		TrafficLaneName: trafficLaneName,
@@ -104,16 +106,18 @@ func (h *Handler) execHelmAppDeploySteps(
 	}
 
 	// 2. 确保部署环境存在相应的 ImagePullSecret
-	buildCfg, err := h.registry.BuildConfigStore.Get(ctx, app.ID)
+	buildCfg, err := store.Of(h.registry.DB, imagebuild.ConfigMeta).Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
 		return "", errors.Wrapf(err, "get build config for %s", deployInfo)
 	}
-	if err = secret.NewImagePullSecretSyncer(env, app.ID, buildCfg).Sync(ctx); err != nil {
+	if err = secret.NewImagePullSecretSyncer(h.registry.DB, env, app.ID, buildCfg).Sync(ctx); err != nil {
 		return "", errors.Wrapf(err, "ensure image pull secret for %s", deployInfo)
 	}
 
 	// 3. 同步 app services 到集群中
-	services, err := h.registry.AppServiceStore.ListByApp(ctx, app.ID)
+	services, err := store.Of(h.registry.DB, appnetworking.ServiceMeta).List(
+		ctx, appnetworking.ByApp(app.ID), store.Desc("createdAt"),
+	)
 	if err != nil {
 		return "", errors.Wrapf(err, "list app services for %s", deployInfo)
 	}
@@ -123,15 +127,13 @@ func (h *Handler) execHelmAppDeploySteps(
 
 	// 4. 使用指定版本的 Chart 进行部署（通过 Helm SDK 直接部署，无需 Chart 转存）
 	envVarsReader := envvars.NewUnifiedEnvVarsReader(
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
 	release, err := helmdeploy.UpgradeOrInstallHelmChart(
 		ctx,
-		h.registry.BkCIProjectStore,
-		h.registry.BkRepoProjectStore,
-		h.registry.HelmRepoCredentialStore,
+		h.registry.DB,
 		envVarsReader,
 		app,
 		env,
@@ -166,20 +168,19 @@ func (h *Handler) execHelmAppDeploySteps(
 		CreatedAt:       timeNow,
 		UpdatedAt:       timeNow,
 	}
-	recordID, err := h.registry.HelmDeployRecordStore.Create(ctx, &record)
-	if err != nil {
+	if err := h.helmRecords().Create(ctx, &record); err != nil {
 		return "", errors.Wrapf(err, "create deploy record for %s", deployInfo)
 	}
 
-	return recordID, nil
+	return record.ID.Hex(), nil
 }
 
 // getDeployRecordForRollback 获取回滚用的部署记录。
 func (h *Handler) getDeployRecordForRollback(ctx context.Context, appID, deployID string) (*helmdeploy.Record, error) {
 	// 查询数据库获取部署记录
-	record, err := h.registry.HelmDeployRecordStore.Get(ctx, appID, deployID)
+	record, err := helmdeploy.GetRecord(ctx, h.registry.DB, appID, deployID)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get app %s deploy record %s", appID, deployID)
+		return nil, err
 	}
 
 	// 检查指定回滚到的版本必须是成功部署的
@@ -193,9 +194,7 @@ func (h *Handler) getDeployRecordForRollback(ctx context.Context, appID, deployI
 func (h *Handler) execHelmAppRollbackSteps(ctx context.Context, record *helmdeploy.Record) (string, error) {
 	deployInfo := genDeployInfo(record.WorkspaceID, record.AppID, record.EnvName, record.TrafficLaneName)
 	// 1. 部署前检查
-	if err := deploypkg.NewPreDeployChecker(
-		h.registry.EnvStore, h.registry.PromotionStore, h.newSnapshotService(),
-	).Do(ctx, &deploypkg.PreDeployCheckParams{
+	if err := deploypkg.NewPreDeployChecker(h.registry.DB, h.newSnapshotService()).Do(ctx, &deploypkg.PreDeployCheckParams{
 		WorkspaceID:     record.WorkspaceID,
 		EnvName:         record.EnvName,
 		TrafficLaneName: record.TrafficLaneName,
@@ -233,10 +232,9 @@ func (h *Handler) execHelmAppRollbackSteps(ctx context.Context, record *helmdepl
 		CreatedAt:       timeNow,
 		UpdatedAt:       timeNow,
 	}
-	recordID, err := h.registry.HelmDeployRecordStore.Create(ctx, &newRecord)
-	if err != nil {
+	if err := h.helmRecords().Create(ctx, &newRecord); err != nil {
 		return "", errors.Wrapf(err, "create deploy record for %s", deployInfo)
 	}
 
-	return recordID, nil
+	return newRecord.ID.Hex(), nil
 }

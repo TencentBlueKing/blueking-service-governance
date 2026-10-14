@@ -20,163 +20,67 @@ package appcfg
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// defCollectionName 存储配置文件定义信息
-const defCollectionName = "app_config_file_defs"
+var (
+	// ErrAppConfigFileDefNotFound 配置文件 def 不存在
+	ErrAppConfigFileDefNotFound = errors.New("app config file def not found")
+	// ErrAppConfigFileDefAlreadyExists 应用下已存在同名（或同挂载目录）的配置文件 def
+	ErrAppConfigFileDefAlreadyExists = errors.New("app config file def already exists")
+)
 
-// AppConfigFileDefStore 配置文件 def 的存储接口。
-type AppConfigFileDefStore interface {
-	Add(ctx context.Context, def AppConfigFileDef) (bson.ObjectID, error)
-	GetByID(ctx context.Context, id bson.ObjectID) (*AppConfigFileDef, error)
-	ListByApp(ctx context.Context, appID string, opts ...DefListOption) ([]AppConfigFileDef, error)
-	Update(ctx context.Context, def AppConfigFileDef) (int64, error)
-	DeleteByID(ctx context.Context, id bson.ObjectID) (int64, error)
-	DeleteByApp(ctx context.Context, appID string) (int64, error)
+// AppConfigFileDefStore 配置文件 def 存储
+type AppConfigFileDefStore = store.GenericStore[AppConfigFileDef]
+
+// AppConfigFileDefMeta 配置文件 def 的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：appID + name
+// - 唯一（partial，mountDir 非空）：appID + mountDir + name，保证最终挂载路径 Join(mountDir, name) 不重复
+// - 查询：appID + configKind
+var AppConfigFileDefMeta = store.Meta[AppConfigFileDef]{
+	Collection: "app_config_file_defs",
+	NotFound:   ErrAppConfigFileDefNotFound,
+	Duplicate:  ErrAppConfigFileDefAlreadyExists,
 }
 
-// DefListOption def 列表查询选项。
-type DefListOption interface {
-	ApplyToDefOptions(*DefListOptions)
+// DefsByApp 按应用 ID 匹配 def 记录
+func DefsByApp(appID string) store.Opt {
+	return store.Where("appID", appID)
 }
 
-// DefListOptions def 列表查询的聚合选项。
-type DefListOptions struct {
-	filterConfigKind *ConfigKind
+// DefFilterConfigKind 按 ConfigKind 过滤 def 记录
+func DefFilterConfigKind(kind ConfigKind) store.Opt {
+	return store.Where("configKind", kind)
 }
 
-// DefFilterConfigKind 按 ConfigKind 过滤 def 记录。
-type DefFilterConfigKind ConfigKind
-
-// ApplyToDefOptions 应用 ConfigKind 过滤条件。
-func (f DefFilterConfigKind) ApplyToDefOptions(opts *DefListOptions) {
-	ck := ConfigKind(f)
-	opts.filterConfigKind = &ck
-}
-
-var _ AppConfigFileDefStore = &AppConfigFileDefStoreMongo{}
-
-// AppConfigFileDefStoreMongo AppConfigFileDefStore 的 MongoDB 实现。
-type AppConfigFileDefStoreMongo struct {
-	collection *mongo.Collection
-}
-
-// NewAppConfigFileDefStoreMongo 创建 MongoDB 驱动的 def store。
-func NewAppConfigFileDefStoreMongo(client *mongo.Client, dbName string) (*AppConfigFileDefStoreMongo, error) {
-	coll := client.Database(dbName).Collection(defCollectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：appID + name
-	// - 唯一（partial，mountDir 非空）：appID + mountDir + name，保证最终挂载路径 Join(mountDir, name) 不重复
-	// - 查询：appID + configKind
-	return &AppConfigFileDefStoreMongo{collection: coll}, nil
-}
-
-// Add 插入一条 def 记录。
-func (s *AppConfigFileDefStoreMongo) Add(ctx context.Context, def AppConfigFileDef) (bson.ObjectID, error) {
-	now := time.Now()
-	if def.CreatedAt.IsZero() {
-		def.CreatedAt = now
-	}
-
-	ret, err := s.collection.InsertOne(ctx, def)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return bson.NilObjectID, errors.New("app config file def already exists")
-		}
-		return bson.NilObjectID, err
-	}
-	oid, ok := ret.InsertedID.(bson.ObjectID)
-	if !ok {
-		return bson.NilObjectID, errors.New("failed to get inserted ID")
-	}
-	return oid, nil
-}
-
-// GetByID 按主键查询 def 记录。
-func (s *AppConfigFileDefStoreMongo) GetByID(ctx context.Context, id bson.ObjectID) (*AppConfigFileDef, error) {
-	var obj AppConfigFileDef
-	if err := s.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&obj); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errors.Errorf("app config file def %s not found", id.Hex())
-		}
-		return nil, err
-	}
-	return &obj, nil
-}
-
-// ListByApp 返回指定应用下的全部 def 记录。
-func (s *AppConfigFileDefStoreMongo) ListByApp(
+// ListDefsByApp 返回指定应用下的全部 def 记录（按名称排序），可通过 DefFilterConfigKind 等条件进一步过滤
+func ListDefsByApp(
 	ctx context.Context,
+	defs *AppConfigFileDefStore,
 	appID string,
-	opts ...DefListOption,
+	opts ...store.Opt,
 ) ([]AppConfigFileDef, error) {
-	listOpts := &DefListOptions{}
-	for _, o := range opts {
-		o.ApplyToDefOptions(listOpts)
-	}
-
-	filter := bson.M{"appID": appID}
-	if listOpts.filterConfigKind != nil {
-		filter["configKind"] = string(*listOpts.filterConfigKind)
-	}
-
-	findOpts := options.Find().SetSort(bson.D{{Key: "name", Value: 1}})
-	cursor, err := s.collection.Find(ctx, filter, findOpts)
+	list, err := defs.List(ctx, append([]store.Opt{DefsByApp(appID), store.Asc("name")}, opts...)...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "list app config file defs of app %s", appID)
 	}
-	defer cursor.Close(ctx)
-
-	var result []AppConfigFileDef
-	if err = cursor.All(ctx, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return list, nil
 }
 
-// Update 更新 def 记录的可变字段。
-func (s *AppConfigFileDefStoreMongo) Update(ctx context.Context, def AppConfigFileDef) (int64, error) {
-	if def.ID == bson.NilObjectID {
-		return 0, errors.New("def ID is required for update")
+// UpdateDef 按 ID 更新 def 记录的可变字段，def 不存在时返回 ErrAppConfigFileDefNotFound。
+// EnvConfigMode 以 inline 方式展开为 isUnifiedConfig / mountedEnvNames 两个字段
+func UpdateDef(ctx context.Context, defs *AppConfigFileDefStore, def *AppConfigFileDef) error {
+	if def.ID.IsZero() {
+		return errors.New("def ID is required for update")
 	}
-	result, err := s.collection.UpdateOne(ctx, bson.M{"_id": def.ID}, bson.M{
-		"$set": bson.M{
-			"name":               def.Name,
-			"mountDir":           def.MountDir,
-			"isUnifiedConfig":    def.EnvConfigMode.IsUnifiedConfig,
-			"mountedEnvNames":    def.EnvConfigMode.MountedEnvNames,
-			"enableEnvVarRender": def.EnableEnvVarRender,
-		},
-	})
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return 0, errors.New("app config file def already exists")
-		}
-		return 0, err
+	mutable := store.UpdateSelected("name", "mountDir", "isUnifiedConfig", "mountedEnvNames", "enableEnvVarRender")
+	if err := defs.Update(ctx, def, mutable, store.ByID(def.ID)); err != nil {
+		return errors.Wrapf(err, "update app config file def %s", def.ID.Hex())
 	}
-	return result.ModifiedCount, nil
-}
-
-// DeleteByID 按 ID 删除 def 记录。
-func (s *AppConfigFileDefStoreMongo) DeleteByID(ctx context.Context, id bson.ObjectID) (int64, error) {
-	result, err := s.collection.DeleteOne(ctx, bson.M{"_id": id})
-	if err != nil {
-		return 0, err
-	}
-	return result.DeletedCount, nil
-}
-
-// DeleteByApp 删除指定应用下的全部 def 记录。
-func (s *AppConfigFileDefStoreMongo) DeleteByApp(ctx context.Context, appID string) (int64, error) {
-	result, err := s.collection.DeleteMany(ctx, bson.M{"appID": appID})
-	if err != nil {
-		return 0, errors.Wrapf(err, "delete app config file defs for app [%s]", appID)
-	}
-	return result.DeletedCount, nil
+	return nil
 }

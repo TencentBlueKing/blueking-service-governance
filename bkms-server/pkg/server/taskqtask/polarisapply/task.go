@@ -87,19 +87,11 @@ type applier struct {
 // newApplier 注入动态下发所需 store，供 asynq handler 与单测共用
 func newApplier(reg *storereg.Registry) *applier {
 	return &applier{
-		service: polaris.NewDynamicApplyService(
-			reg.AppStore,
-			reg.PolarisConfigStore,
-			reg.EnvStore,
-			reg.AppModelStore,
-			reg.AppSpecStore,
-			envvars.NewUnifiedEnvVarsReader(
-				reg.ScopedEnvVarStore,
-				reg.AppDepsVarReader,
-				reg.PolarisVarReader,
-			),
-			polaris.NewPolarisEnvStateManager(reg.PolarisConfigStore),
-		),
+		service: polaris.NewDynamicApplyService(reg.DB, envvars.NewUnifiedEnvVarsReader(
+			reg.DB,
+			reg.AppDepsVarReader,
+			reg.PolarisVarReader,
+		), polaris.NewPolarisEnvStateManager(reg.DB)),
 	}
 }
 

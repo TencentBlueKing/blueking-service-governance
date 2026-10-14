@@ -23,6 +23,7 @@ import (
 
 	gabs "github.com/Jeffail/gabs/v2"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -32,22 +33,22 @@ import (
 // 当应用存在启用了健康检查的北极星配置时，将 plugins.registry.polaris.service 配置块
 // 注入到 YAML 配置文件中。如果原始配置已有该路径，则不覆盖。
 type PolarisRegistryPatcher struct {
-	polarisConfigStore polaris.PolarisConfigStore
+	db *mongo.Database
 }
 
 // NewPolarisRegistryPatcher 创建北极星注册配置补丁器
-func NewPolarisRegistryPatcher(store polaris.PolarisConfigStore) *PolarisRegistryPatcher {
-	return &PolarisRegistryPatcher{polarisConfigStore: store}
+func NewPolarisRegistryPatcher(db *mongo.Database) *PolarisRegistryPatcher {
+	return &PolarisRegistryPatcher{db: db}
 }
 
 // Patch 实现 ConfigPatcher 接口
 func (p *PolarisRegistryPatcher) Patch(ctx context.Context, appID, envName, content string) (string, error) {
-	if p.polarisConfigStore == nil {
+	if p.db == nil {
 		return content, nil
 	}
 
 	// 获取当前环境下可用的北极星配置列表
-	configs, listErr := p.polarisConfigStore.ListByEnv(ctx, appID, envName)
+	configs, listErr := polaris.ListByEnv(ctx, p.db, appID, envName)
 	if listErr != nil {
 		return "", errors.Wrap(listErr, "listing polaris configs")
 	}

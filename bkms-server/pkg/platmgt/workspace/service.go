@@ -23,40 +23,37 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Service provides platform workspace query capabilities.
 type Service struct {
-	workspaceStore bkmsworkspace.WorkspaceStore
-	appStore       bkmsapp.ApplicationStore
-	envStore       envmodel.EnvironmentStore
+	workspaceStore *bkmsworkspace.WorkspaceStore
+	db             *mongo.Database
 }
 
 // NewService creates a platform workspace service.
-func NewService(
-	workspaceStore bkmsworkspace.WorkspaceStore,
-	appStore bkmsapp.ApplicationStore,
-	envStore envmodel.EnvironmentStore,
-) *Service {
+func NewService(db *mongo.Database) *Service {
 	return &Service{
-		workspaceStore: workspaceStore,
-		appStore:       appStore,
-		envStore:       envStore,
+		workspaceStore: store.Of(db, bkmsworkspace.Meta),
+		db:             db,
 	}
 }
 
 // List returns workspaces without per-workspace permission filtering.
 func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*WorkspaceListResult, error) {
-	workspaces, total, err := s.workspaceStore.ListWithPagination(ctx, opts.ToWorkspaceStoreListPageOptions())
+	page, err := s.workspaceStore.ListPage(ctx, opts.Page, opts.PageSize, opts.ToWorkspaceStoreListOpt())
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "list workspaces")
 	}
+	workspaces := page.Items
 
-	statistics, err := s.getStateStatistics(ctx, opts.ToWorkspaceStoreStatisticsOptions())
+	statistics, err := s.getStateStatistics(ctx, opts.ToWorkspaceStoreStatisticsOpt())
 	if err != nil {
 		return nil, errors.Wrap(err, "count workspace states by filter")
 	}
@@ -64,11 +61,11 @@ func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*Workspa
 	workspaceIDs := lo.Map(workspaces, func(ws bkmsworkspace.Workspace, _ int) string {
 		return ws.ID
 	})
-	appCounts, err := s.appStore.CountByWorkspaceIDs(ctx, workspaceIDs)
+	appCounts, err := bkmsapp.CountByWorkspaceIDs(ctx, s.db, workspaceIDs)
 	if err != nil {
 		return nil, errors.Wrap(err, "count applications by workspace IDs")
 	}
-	envCounts, err := s.envStore.CountByWorkspaceIDs(ctx, workspaceIDs)
+	envCounts, err := envmodel.CountByWorkspaceIDs(ctx, s.db, workspaceIDs)
 	if err != nil {
 		return nil, errors.Wrap(err, "count environments by workspace IDs")
 	}
@@ -89,7 +86,7 @@ func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*Workspa
 	}
 
 	return &WorkspaceListResult{
-		Count:      total,
+		Count:      page.Total,
 		Page:       opts.Page,
 		PageSize:   opts.PageSize,
 		Results:    items,
@@ -99,7 +96,7 @@ func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*Workspa
 
 // Get returns the basic info of a target workspace for platform administrators.
 func (s *Service) Get(ctx context.Context, workspaceID string) (*WorkspaceInfo, error) {
-	ws, err := s.workspaceStore.Get(ctx, workspaceID)
+	ws, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, err
 	}
@@ -118,14 +115,11 @@ func (s *Service) Get(ctx context.Context, workspaceID string) (*WorkspaceInfo, 
 
 // GetStateStatistics returns aggregated workspace state counts for all workspaces.
 func (s *Service) GetStateStatistics(ctx context.Context) (*WorkspaceStateStatistics, error) {
-	return s.getStateStatistics(ctx, nil)
+	return s.getStateStatistics(ctx)
 }
 
-func (s *Service) getStateStatistics(
-	ctx context.Context,
-	opts *bkmsworkspace.ListOptions,
-) (*WorkspaceStateStatistics, error) {
-	counts, err := s.workspaceStore.CountByState(ctx, opts)
+func (s *Service) getStateStatistics(ctx context.Context, opts ...store.Opt) (*WorkspaceStateStatistics, error) {
+	counts, err := bkmsworkspace.CountByState(ctx, s.workspaceStore, opts...)
 	if err != nil {
 		return nil, err
 	}

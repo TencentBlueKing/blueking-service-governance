@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
@@ -84,7 +85,7 @@ func GetEnvClusterNamespaceConflictInfo(err error) (*EnvClusterNamespaceConflict
 // findClusterNamespaceOccupant 查询 clusterID+namespace 是否已被其他环境占用
 func findClusterNamespaceOccupant(
 	ctx context.Context,
-	store model.EnvironmentStore,
+	db *mongo.Database,
 	cluster model.BizCluster,
 	excludeEnvID bson.ObjectID,
 ) error {
@@ -92,7 +93,7 @@ func findClusterNamespaceOccupant(
 		return nil
 	}
 
-	occupiedEnv, err := store.GetByClusterNamespace(ctx, cluster.ClusterID, cluster.Namespace, excludeEnvID)
+	occupiedEnv, err := model.FindByClusterNamespace(ctx, db, cluster.ClusterID, cluster.Namespace, excludeEnvID)
 	if err != nil {
 		return errors.Wrap(err, "find env by cluster namespace conflict")
 	}
@@ -111,12 +112,12 @@ func findClusterNamespaceOccupant(
 // 查 store 确认是否存在 clusterID+namespace 占用，是则返回结构化冲突错误，否则原样返回 originalErr。
 func rewriteWriteErrIfClusterOccupied(
 	ctx context.Context,
-	store model.EnvironmentStore,
+	db *mongo.Database,
 	cluster model.BizCluster,
 	excludeEnvID bson.ObjectID,
 	originalErr error,
 ) error {
-	if conflictErr := findClusterNamespaceOccupant(ctx, store, cluster, excludeEnvID); conflictErr != nil {
+	if conflictErr := findClusterNamespaceOccupant(ctx, db, cluster, excludeEnvID); conflictErr != nil {
 		return conflictErr
 	}
 	return originalErr

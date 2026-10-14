@@ -24,7 +24,6 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
@@ -37,12 +36,7 @@ func triggerTopologyRefresh(ctx context.Context, args Args, record *helmdeploy.R
 		return
 	}
 
-	store, err := topology.NewResourceSnapshotStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		log.Errorf(ctx, "topology refresh (helm): create store: %v", err)
-		return
-	}
-	topology.NewRefresher(store).TriggerRefresh(ctx, topology.RefreshArgs{
+	topology.NewRefresher(storereg.G().DB).TriggerRefresh(ctx, topology.RefreshArgs{
 		AppID:           args.AppID,
 		EnvName:         args.EnvName,
 		TrafficLaneName: args.TrafficLaneName,
@@ -65,11 +59,11 @@ func handleDeploySucceeded(ctx context.Context, args Args, record *helmdeploy.Re
 		ctx, "deploy succeeded, start post-deploy hooks for workspace=%s app=%s env=%s lane=%s operator=%s",
 		args.WorkspaceID, args.AppID, args.EnvName, args.TrafficLaneName, record.Operator,
 	)
-	// 记录应用到环境的部署关联，envStore 未初始化时只打日志，不阻断后续告警同步
-	if reg.EnvStore == nil {
-		log.Errorf(ctx, "track env add app: env store is not initialized")
+	// 记录应用到环境的部署关联，DB 未初始化时只打日志，不阻断后续告警同步
+	if reg.DB == nil {
+		log.Errorf(ctx, "track env add app: db is not initialized")
 	} else {
-		deploy.TrackEnvAddApp(ctx, reg.EnvStore, args.WorkspaceID, args.EnvName, args.AppID)
+		deploy.TrackEnvAddApp(ctx, reg.DB, args.WorkspaceID, args.EnvName, args.AppID)
 	}
 
 	// 异步把应用关联的告警策略同步到当前环境，失败只打日志，不改部署结果、不让本 tick 失败

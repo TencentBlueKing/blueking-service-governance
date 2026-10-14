@@ -40,6 +40,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
 // Handler handles Gin env API requests.
@@ -52,14 +54,12 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
+func (h *Handler) envs() *envmodel.EnvironmentStore {
+	return store.Of(h.registry.DB, envmodel.EnvMeta)
+}
+
 func (h *Handler) newDeployStatusService() *deploystatus.DeployStatusService {
-	return deploystatus.NewDeployStatusService(
-		h.registry.AppStore,
-		h.registry.EnvStore,
-		h.registry.BuildAutoDeployRecordStore,
-		h.registry.AppModelDeployRecordStore,
-		h.registry.HelmDeployRecordStore,
-	)
+	return deploystatus.NewDeployStatusService(h.registry.DB)
 }
 
 // CreateEnv 创建部署环境。
@@ -100,7 +100,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 
 	// 创建环境(包括内置环境变量)
 	creator := auth.MustGetUser(ctx).ID
-	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
+	svc := bkmsenv.NewEnvService(h.registry.DB)
 	envData := &envmodel.Environment{
 		Name:        input.Name,
 		WorkspaceID: ws.ID,
@@ -117,8 +117,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 		Creator: creator,
 	}
 
-	envID, err := svc.Create(ctx, envData)
-	if err != nil {
+	if err = svc.Create(ctx, envData); err != nil {
 		metrics.CreateEnvFailed(ws.ID, input.Name)
 		if abortIfEnvClusterNamespaceOccupied(c, err) {
 			return
@@ -131,13 +130,13 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 	// - 在环境创建时，如果对应监控项目已经就绪, 则同步创建 ApmApp 并添加 apm 相关环境变量
 	// - 在工作空间创建时的异步任务中，会定时检查监控项目状态。待其就绪时，会为空间下的所有环境创建 ApmApp 并添加 apm 相关环境变量
 	if ws.BkSystems.BkMonitorProjectID != "" {
-		apmSvc := bkmonitor.NewApmService(h.registry.ApmInstConfigStore, h.registry.ScopedEnvVarStore)
+		apmSvc := bkmonitor.NewApmService(h.registry.DB)
 		bkMonitorProjectID := cast.ToInt64(ws.BkSystems.BkMonitorProjectID)
 
 		if input.ApmID == nil || *input.ApmID == 0 {
 			// apmID 为空，按默认逻辑创建同名 APM 并绑定
 			if _, cErr := apmSvc.CreateAndBindToEnv(
-				ctx, envID, input.Name, ws.BkSystems.BkBCSProjectCode,
+				ctx, envData.ID, input.Name, ws.BkSystems.BkBCSProjectCode,
 				bkmonitor.CreateApmInstParams{
 					WorkspaceID:  ws.ID,
 					Username:     creator,
@@ -148,7 +147,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 				return
 			}
 			// APM 创建成功后，异步将 workspace 下 admin/sre 人员同步到新告警组（内部自带重试与延迟）
-			go bkmonitor.NewUserGroupService(h.registry.EnvStore).SyncMembersForEnvWithRetry(
+			go bkmonitor.NewUserGroupService(h.registry.DB).SyncMembersForEnvWithRetry(
 				ctx, ws, input.Name, creator,
 			)
 		} else {
@@ -162,7 +161,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 				bkerrs.AbortWithErr(c, bkerrs.Wrap(cErr, bkerrs.ErrCodeInternalError, "get or create apm"))
 				return
 			}
-			if cErr = apmSvc.BindToEnv(ctx, apm, envID, input.Name); cErr != nil {
+			if cErr = apmSvc.BindToEnv(ctx, apm, envData.ID, input.Name); cErr != nil {
 				bkerrs.AbortWithErr(c, bkerrs.Wrap(cErr, bkerrs.ErrCodeInternalError, "bind apm to env"))
 				return
 			}
@@ -173,14 +172,14 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 		ctx,
 		audit.OperationTypeCreate,
 		audit.ResourceTypeEnv,
-		envID.Hex(),
+		envData.ID.Hex(),
 		audit.WithDataAfter(input),
 		audit.WithWorkspaceID(ws.ID),
 		audit.WithEnvName(input.Name),
 	)
 
 	ginutils.OK(c, serializer.CreateEnvOutput{
-		Data: &serializer.EnvIDOutput{ID: envID.Hex()},
+		Data: &serializer.EnvIDOutput{ID: envData.ID.Hex()},
 	})
 }
 
@@ -223,9 +222,8 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 	}
 
 	svc := bkmsenv.NewFeatureEnvService(
-		h.registry.EnvStore,
-		h.registry.FeatureEnvCounterStore,
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
+		envvars.NewFeatureEnvVarCopier(h.registry.DB),
 		bkmsenv.NewFeatureEnvNamespaceInitializer(),
 	)
 	featureEnv, err := svc.Create(ctx, bkmsenv.CreateFeatureEnvInput{
@@ -289,8 +287,9 @@ func (h *Handler) ListEnvs(c *gin.Context) {
 		return
 	}
 
-	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
-	envs, err := svc.ListStdEnvs(ctx, uriInput.WorkspaceID)
+	envs, err := h.envs().List(
+		ctx, envmodel.StdEnvsIn(uriInput.WorkspaceID), envmodel.NewestFirst(),
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list envs"))
 		return
@@ -329,7 +328,8 @@ func (h *Handler) ListAppEnvs(c *gin.Context) {
 		return
 	}
 
-	envs, err := h.registry.EnvStore.ListAppEnvs(ctx, app.WorkspaceID, app.ID)
+	envs, err := h.envs().
+		List(ctx, envmodel.InWorkspace(app.WorkspaceID), envmodel.VisibleToApp(app.ID), envmodel.NewestFirst())
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list app envs"))
 		return
@@ -372,7 +372,7 @@ func (h *Handler) ListFeatureEnvs(c *gin.Context) {
 		return
 	}
 
-	featureEnvs, sourceEnvByFeatEnvName, err := bkmsenv.ListAppFeatEnvs(ctx, h.registry.EnvStore, app)
+	featureEnvs, sourceEnvByFeatEnvName, err := bkmsenv.ListAppFeatEnvs(ctx, h.registry.DB, app)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list feature envs"))
 		return
@@ -461,7 +461,7 @@ func (h *Handler) GetEnvByName(c *gin.Context) {
 		return
 	}
 
-	env, err := h.registry.EnvStore.GetByWorkspaceAndName(ctx, uriInput.WorkspaceID, uriInput.EnvName)
+	env, err := h.envs().Get(ctx, envmodel.ByName(uriInput.WorkspaceID, uriInput.EnvName))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get env by workspace and name"))
 		return
@@ -509,7 +509,7 @@ func (h *Handler) UpdateEnvBasicInfo(c *gin.Context) {
 		updateData.Type = input.Type
 	}
 
-	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
+	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env basic info"))
 		return
@@ -569,7 +569,7 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 		updateData.Namespace = &input.Namespace
 	}
 
-	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
+	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
 		if abortIfEnvClusterNamespaceOccupied(c, err) {
 			return
@@ -619,11 +619,11 @@ func (h *Handler) DeleteEnv(c *gin.Context) {
 	}
 	envID := env.ID
 
-	if err = h.registry.ApmInstConfigStore.UnbindEnvFromAll(ctx, envID); err != nil {
+	if err = bkmonitor.UnbindEnvFromAll(ctx, h.registry.DB, envID); err != nil {
 		log.Warnf(ctx, "remove env %s from all APMs failed: %v", envID.Hex(), err)
 	}
 
-	svc := bkmsenv.NewEnvService(h.registry.EnvStore)
+	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Delete(ctx, envID); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete environment"))
 		return

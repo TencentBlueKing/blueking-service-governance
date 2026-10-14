@@ -31,6 +31,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -42,6 +43,7 @@ import (
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	instanceroute "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance"
@@ -60,11 +62,13 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
+func (h *Handler) envs() *envmodel.EnvironmentStore {
+	return store.Of(h.registry.DB, envmodel.EnvMeta)
+}
+
 func (h *Handler) newMountableFileProvider() appcfg.MountableFileProvider {
 	return appcfg.NewMountableFileProvider(
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
-		h.registry.AppConfigFileVersionStore,
+		h.registry.DB,
 	)
 }
 
@@ -271,8 +275,7 @@ func (h *Handler) ScaleAppInstances(c *gin.Context) {
 	// 获取应用当前环境生效的部署规格
 	spec, err := appspec.GetEnvEffective(
 		ctx,
-		h.registry.AppSpecStore,
-		h.registry.AppModelStore,
+		h.registry.DB,
 		app.ID,
 		uriInput.EnvName,
 	)
@@ -447,7 +450,7 @@ func (h *Handler) UpdateAppInstancePolaris(c *gin.Context) {
 // 避免一直停留在部署中；标记失败只记录日志
 func (h *Handler) markDeployPollingBroken(ctx context.Context, appID, deployID string, enqueueErr error) {
 	ctx = context.WithoutCancel(ctx)
-	record, err := h.registry.AppModelDeployRecordStore.Get(ctx, appID, deployID)
+	record, err := appmodeldeploy.GetRecord(ctx, h.registry.DB, appID, deployID)
 	if err != nil {
 		log.Errorf(ctx, "mark deploy %s polling broken: get deploy record: %v", deployID, err)
 		return
@@ -457,7 +460,7 @@ func (h *Handler) markDeployPollingBroken(ctx context.Context, appID, deployID s
 	record.Message = "enqueue polling deploy status task failed: " + enqueueErr.Error()
 	record.EndedAt = timeNow
 	record.UpdatedAt = timeNow
-	if err = h.registry.AppModelDeployRecordStore.Update(ctx, record); err != nil {
+	if err = appmodeldeploy.UpdateRecord(ctx, h.registry.DB, record); err != nil {
 		log.Errorf(ctx, "mark deploy %s polling broken: update deploy record: %v", deployID, err)
 	}
 }
@@ -479,29 +482,15 @@ func (h *Handler) validateEditableAppModel(ctx context.Context, appID string) (*
 // newDeployer 创建 AppModel 应用部署器。
 func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer {
 	return appmodeldeploy.NewDeployer(
-		h.registry.AppModelDeployRecordStore,
-		h.registry.AppModelDeployResourceSnapshotStore,
-		h.registry.BuildAutoDeployRecordStore,
-		h.registry.AppModelStore,
 		workload.NewBuilderService(
-			h.registry.ScopedEnvVarStore,
 			h.registry.AppDepsVarReader,
 			h.registry.PolarisVarReader,
-			h.registry.WorkspaceCompsStore,
-			h.registry.WorkspaceStore,
-			h.registry.PolarisConfigStore,
-			h.registry.HostPortStore,
-			h.registry.BscpCfgStore,
-			h.registry.AppModelStore,
-			h.registry.AppSpecStore,
-			h.registry.BuildConfigStore,
+			h.registry.DB,
 			h.newMountableFileProvider(),
 		),
-		h.registry.AppSpecStore,
-		h.registry.BuildConfigStore,
-		h.registry.AppConfigFileStore,
-		polaris.NewPolarisEnvStateManager(h.registry.PolarisConfigStore),
-		hostport.NewEnvStateManager(h.registry.HostPortStore),
+		h.registry.DB,
+		polaris.NewPolarisEnvStateManager(h.registry.DB),
+		hostport.NewEnvStateManager(h.registry.DB),
 		app,
 	)
 }

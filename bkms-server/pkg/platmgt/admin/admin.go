@@ -21,37 +21,44 @@ package admin
 
 import (
 	"context"
-	"errors"
-	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Service provides platform administrator role binding operations.
 type Service struct {
-	store Store
+	roleBindings *Store
 }
 
-// NewService creates a platform administrator role binding manager backed by the given store.
-func NewService(store Store) *Service {
-	return &Service{store: store}
+// NewService creates a platform administrator role binding manager backed by the given database.
+func NewService(db *mongo.Database) *Service {
+	return &Service{roleBindings: store.Of(db, RoleBindingMeta)}
 }
 
-// List lists platform administrator role bindings with optional keyword filtering.
+// List lists platform administrator role bindings sorted by username, keyword fuzzy matches
+// usernames case-insensitively and is ignored when empty.
 func (a *Service) List(ctx context.Context, keyword string) ([]RoleBinding, error) {
-	return a.store.List(ctx, &ListOptions{Keyword: strings.TrimSpace(keyword)})
+	roleBindings, err := a.roleBindings.List(ctx, UsernameContains(keyword), store.Asc("username"))
+	if err != nil {
+		return nil, errors.Wrap(err, "list platform administrator role bindings")
+	}
+	return roleBindings, nil
 }
 
 // GetRole returns the current platform role of the given username.
 func (a *Service) GetRole(ctx context.Context, username string) (RoleCode, bool, error) {
-	roleBinding, err := a.store.Get(ctx, username)
+	roleBinding, err := a.roleBindings.Get(ctx, ByUsername(username))
 	if err == nil {
 		return roleBinding.RoleCode, true, nil
 	}
 	if errors.Is(err, ErrRoleBindingNotFound) {
 		return "", false, nil
 	}
-	return "", false, err
+	return "", false, errors.Wrapf(err, "get platform role of user %s", username)
 }
 
 // AssignRoles adds platform administrator roles for multiple users.
@@ -66,7 +73,7 @@ func (a *Service) AssignRoles(
 		return ErrInvalidRoleCode
 	}
 
-	roleBindings := lo.Map(usernames, func(username string, _ int) *RoleBinding {
+	roleBindings := lo.Map(lo.Uniq(usernames), func(username string, _ int) *RoleBinding {
 		return &RoleBinding{
 			Username: username,
 			RoleCode: roleCode,
@@ -74,10 +81,17 @@ func (a *Service) AssignRoles(
 			Updater:  operator,
 		}
 	})
-	return a.store.CreateMany(ctx, roleBindings)
+	if err := a.roleBindings.CreateManyIfAbsent(ctx, roleBindings); err != nil {
+		return errors.Wrap(err, "create platform administrator role bindings")
+	}
+	return nil
 }
 
 // RevokeRole removes a platform administrator by username.
+// Revoking a user without platform role succeeds silently.
 func (a *Service) RevokeRole(ctx context.Context, username string) error {
-	return a.store.Delete(ctx, username)
+	if err := a.roleBindings.DeleteIfExists(ctx, ByUsername(username)); err != nil {
+		return errors.Wrapf(err, "delete platform administrator role binding of user %s", username)
+	}
+	return nil
 }

@@ -26,12 +26,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -215,8 +215,7 @@ var _ = Describe("Service build validation", func() {
 var _ = Describe("Service build revision check", func() {
 	var (
 		ctx          context.Context
-		diApp        *fxtest.App
-		configStore  imagebuild.ConfigStore
+		configStore  *imagebuild.ConfigStore
 		app          *bkmsapp.Application
 		buildService *Service
 		// executed 记录是否走到了蓝盾构建，用于确认空修订在调用外部依赖前就被拦下
@@ -224,8 +223,7 @@ var _ = Describe("Service build revision check", func() {
 	)
 
 	BeforeEach(func() {
-		diApp = fxtest.New(GinkgoT(), imagebuild.FxModule, fx.Populate(&configStore))
-		diApp.RequireStart()
+		configStore = testutil.NewStore(GinkgoT(), imagebuild.ConfigMeta)
 
 		ctx = context.Background()
 		app = &bkmsapp.Application{
@@ -234,11 +232,11 @@ var _ = Describe("Service build revision check", func() {
 			WorkspaceID: "test-workspace",
 			Type:        bkmsapp.AppTypeTRPC,
 		}
-		buildService = &Service{buildConfigStore: configStore}
+		buildService = &Service{db: testutil.NewDB(GinkgoT())}
 
 		executed = false
 		mockey.Mock(imagebuild.ExecuteBKCIPipelineBuild).To(func(
-			context.Context, *bkmsapp.Application, *imagebuild.Config, revision.CodeRevision, string,
+			context.Context, *mongo.Database, *bkmsapp.Application, *imagebuild.Config, revision.CodeRevision, string,
 		) (*bkciapi.PipelineBuildState, map[string]string, error) {
 			executed = true
 			return nil, nil, errors.New("stop at bkci")
@@ -247,8 +245,7 @@ var _ = Describe("Service build revision check", func() {
 
 	AfterEach(func() {
 		mockey.UnPatchAll()
-		Expect(configStore.Delete(ctx, app.ID)).To(Succeed())
-		diApp.RequireStop()
+		Expect(configStore.DeleteIfExists(ctx, imagebuild.ByApp(app.ID))).To(Succeed())
 	})
 
 	It("rejects empty revision when building from code repository", func() {

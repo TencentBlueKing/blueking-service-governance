@@ -20,165 +20,54 @@ package devmode
 
 import (
 	"context"
-	"regexp"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// collectionName 开发模式发布记录表名
-const publishRecordCollectionName = "devmode_publish_records"
+// PublishRecordStore 开发模式发布记录存储
+type PublishRecordStore = store.GenericStore[PublishRecord]
 
-// PublishRecordStore 开发模式发布记录存储接口
-type PublishRecordStore interface {
-	// Create 批量创建发布记录，返回新记录 ID 列表（hex）
-	Create(ctx context.Context, records []PublishRecord) ([]string, error)
+// PublishRecordMeta 开发模式发布记录的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - appID + envName + createdAt(desc)：按环境分页列出记录
+// - appID + envName + instance + createdAt(desc)：取每个实例最新的一条记录
+var PublishRecordMeta = store.Meta[PublishRecord]{Collection: "devmode_publish_records"}
 
-	// List 列表发布记录（支持分页）
-	List(
-		ctx context.Context,
-		appID, envName, keyword string,
-		page, pageSize int64,
-	) ([]PublishRecord, int64, error)
-
-	// ListLatestByInstance 返回指定实例列表中每个实例的最新一条发布记录
-	ListLatestByInstance(
-		ctx context.Context,
-		appID, envName string,
-		instanceIDs []string,
-	) (map[string]*PublishRecord, error)
+// ByAppEnv 按应用与环境匹配
+func ByAppEnv(appID, envName string) store.Opt {
+	return store.Combine(store.Where("appID", appID), store.Where("envName", envName))
 }
 
-var _ PublishRecordStore = &PublishRecordStoreMongo{}
-
-// PublishRecordStoreMongo PublishRecordStore 实现（基于 MongoDB）
-type PublishRecordStoreMongo struct {
-	collection *mongo.Collection
+// KeywordMatches 按二进制名称、操作人或实例名模糊匹配（不区分大小写），keyword 为空白时不过滤
+func KeywordMatches(keyword string) store.Opt {
+	return store.ContainsIgnoreCase(keyword, "binaryName", "operator", "instance")
 }
 
-// NewPublishRecordStoreMongo 新建 PublishRecordStoreMongo 实例
-func NewPublishRecordStoreMongo(client *mongo.Client, dbName string) (*PublishRecordStoreMongo, error) {
-	coll := client.Database(dbName).Collection(publishRecordCollectionName)
-	return &PublishRecordStoreMongo{collection: coll}, nil
+// NewestFirst 按创建时间倒序；同一次上报的记录创建时间相同，再按 _id 倒序保证翻页稳定
+func NewestFirst() store.Opt {
+	return store.Combine(store.Desc("createdAt"), store.Desc("_id"))
 }
 
-// Create 批量创建发布记录
-func (s *PublishRecordStoreMongo) Create(ctx context.Context, records []PublishRecord) ([]string, error) {
-	if len(records) == 0 {
-		return nil, nil
-	}
-
-	now := time.Now()
-	docs := lo.Map(records, func(record PublishRecord, _ int) any {
-		record.ID = bson.NewObjectID()
-		record.CreatedAt, record.UpdatedAt = now, now
-		return record
-	})
-
-	ret, err := s.collection.InsertMany(ctx, docs)
-	if err != nil {
-		return nil, err
-	}
-
-	ids := lo.FilterMap(ret.InsertedIDs, func(id any, _ int) (string, bool) {
-		oid, ok := id.(bson.ObjectID)
-		if !ok {
-			return "", false
-		}
-		return oid.Hex(), true
-	})
-	return ids, nil
-}
-
-// List 列表发布记录（支持分页）
-func (s *PublishRecordStoreMongo) List(
-	ctx context.Context,
-	appID, envName, keyword string,
-	page, pageSize int64,
-) ([]PublishRecord, int64, error) {
-	filter := bson.M{
-		"appID":   appID,
-		"envName": envName,
-	}
-	if keyword != "" {
-		// 转义正则表达式特殊字符，防止注入攻击和语法错误
-		keyword = regexp.QuoteMeta(keyword)
-		// 模糊匹配：二进制名称、操作人、实例
-		filter["$or"] = []bson.M{
-			{"binaryName": bson.M{"$regex": keyword, "$options": "i"}},
-			{"operator": bson.M{"$regex": keyword, "$options": "i"}},
-			{"instance": bson.M{"$regex": keyword, "$options": "i"}},
-		}
-	}
-
-	total, err := s.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "count devmode publish records for app %s env %s", appID, envName)
-	}
-
-	opts := options.Find().
-		SetLimit(pageSize).
-		SetSkip((page - 1) * pageSize).
-		SetSort(bson.D{{"createdAt", -1}})
-
-	cursor, err := s.collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "list devmode publish records for app %s env %s", appID, envName)
-	}
-	defer cursor.Close(ctx)
-
-	var records []PublishRecord
-	if err = cursor.All(ctx, &records); err != nil {
-		return nil, 0, errors.Wrapf(err, "decode devmode publish records for app %s env %s", appID, envName)
-	}
-	return records, total, nil
-}
-
-// ListLatestByInstance 返回指定实例列表中每个实例的最新一条发布记录
-func (s *PublishRecordStoreMongo) ListLatestByInstance(
-	ctx context.Context,
-	appID, envName string,
-	instanceIDs []string,
+// ListLatestByInstance 返回指定实例中每个实例最新的一条发布记录，key 为实例名，没有记录的实例不在其中
+func ListLatestByInstance(
+	ctx context.Context, db *mongo.Database, appID, envName string, instanceIDs []string,
 ) (map[string]*PublishRecord, error) {
 	if len(instanceIDs) == 0 {
-		return nil, nil
+		return map[string]*PublishRecord{}, nil
 	}
-
-	pipeline := bson.A{
-		bson.M{"$match": bson.M{
-			"appID":    appID,
-			"envName":  envName,
-			"instance": bson.M{"$in": instanceIDs},
-		}},
-		bson.M{"$sort": bson.M{"createdAt": -1}},
-		bson.M{"$group": bson.M{
-			"_id": "$instance",
-			"doc": bson.M{"$first": "$$ROOT"},
-		}},
-		bson.M{"$replaceRoot": bson.M{"newRoot": "$doc"}},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
+	records, err := store.Of(db, PublishRecordMeta).ListLatestBy(ctx, []string{"instance"},
+		ByAppEnv(appID, envName),
+		store.Where("instance", bson.M{"$in": instanceIDs}),
+		store.Asc("instance"), store.Desc("createdAt"),
+	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "aggregate latest publish records for app %s env %s", appID, envName)
+		return nil, errors.Wrapf(err, "list latest publish records for app %s env %s", appID, envName)
 	}
-	defer cursor.Close(ctx)
-
-	out := make(map[string]*PublishRecord)
-	for cursor.Next(ctx) {
-		var record PublishRecord
-		if err := cursor.Decode(&record); err != nil {
-			return nil, errors.Wrapf(err, "decode latest publish record for app %s env %s", appID, envName)
-		}
-		rec := record
-		out[rec.Instance] = &rec
-	}
-	if err := cursor.Err(); err != nil {
-		return nil, errors.Wrapf(err, "iterate latest publish records for app %s env %s", appID, envName)
-	}
-	return out, nil
+	return lo.SliceToMap(records, func(r PublishRecord) (string, *PublishRecord) { return r.Instance, &r }), nil
 }

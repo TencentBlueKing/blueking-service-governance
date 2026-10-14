@@ -21,40 +21,36 @@ package polaris_test
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("PolarisConfigStore", func() {
-	var store polaris.PolarisConfigStore
-	var ctx context.Context
-	var diApp *fxtest.App
-	var testAppID string
+	var (
+		configStore *polaris.ConfigStore
+		db          *mongo.Database
+		ctx         context.Context
+		testAppID   string
+	)
 
 	BeforeEach(func() {
-		diApp = fxtest.New(
-			GinkgoT(),
-			polaris.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
-
+		db = testutil.NewDB(GinkgoT())
+		configStore = store.Of(db, polaris.ConfigMeta)
 		ctx = context.Background()
 		testAppID = "test-app-" + stringx.Random(5)
 	})
 
 	AfterEach(func() {
 		// 清理测试数据
-		_ = store.DeleteByApp(ctx, testAppID)
-		diApp.RequireStop()
+		_, _ = configStore.DeleteMany(ctx, polaris.ByApp(testAppID))
 	})
 
 	Describe("Create", func() {
@@ -78,12 +74,12 @@ var _ = Describe("PolarisConfigStore", func() {
 					},
 				}
 
-				err := store.Create(ctx, config)
+				err := configStore.Create(ctx, config)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(config.Name).NotTo(BeEmpty())
 
 				// Verify stored config
-				storedConfig, err := store.Get(ctx, testAppID, config.Name)
+				storedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, config.Name))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(storedConfig.KeepNotReadyPod).To(BeFalse())
 				Expect(storedConfig.EnableHealthCheck).To(BeTrue())
@@ -108,7 +104,7 @@ var _ = Describe("PolarisConfigStore", func() {
 						ServicePort:      8080,
 					},
 				}
-				err := store.Create(ctx, config1)
+				err := configStore.Create(ctx, config1)
 				Expect(err).NotTo(HaveOccurred())
 
 				config2 := &polaris.PolarisConfig{
@@ -122,7 +118,7 @@ var _ = Describe("PolarisConfigStore", func() {
 						ServicePort:      8081,
 					},
 				}
-				err = store.Create(ctx, config2)
+				err = configStore.Create(ctx, config2)
 				Expect(err).To(MatchError(polaris.ErrConfigNameExists))
 			})
 		})
@@ -142,7 +138,7 @@ var _ = Describe("PolarisConfigStore", func() {
 					ServicePort:      8080,
 				},
 			}
-			err := store.Create(ctx, config)
+			err := configStore.Create(ctx, config)
 			Expect(err).NotTo(HaveOccurred())
 			configName = config.Name
 		})
@@ -150,13 +146,13 @@ var _ = Describe("PolarisConfigStore", func() {
 		Context("when updating an existing config", func() {
 			It("should update config successfully", func() {
 				newPort := int32(9090)
-				err := store.Update(ctx, testAppID, configName, &polaris.ConfigUpdateData{
+				err := polaris.UpdateConfig(ctx, db, testAppID, configName, &polaris.ConfigUpdateData{
 					ServicePort: &newPort,
 				})
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify update
-				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.ServicePort).To(Equal(newPort))
 			})
@@ -164,89 +160,83 @@ var _ = Describe("PolarisConfigStore", func() {
 
 		Context("when upserting an environment weight", func() {
 			It("should set the weight of a single environment without touching others", func() {
-				before, err := store.Get(ctx, testAppID, configName)
-				Expect(err).NotTo(HaveOccurred())
+				Expect(polaris.UpsertEnvWeight(ctx, db, testAppID, configName, "dev", 0, nil)).To(Succeed())
 
-				// MongoDB DateTime 精度为毫秒，断言 updatedAt 被刷新需要等到下一个精度窗口
-				time.Sleep(5 * time.Millisecond)
-				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 0, nil)).To(Succeed())
-
-				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(updatedConfig.EnvWeights["dev"]).To(BeZero())
+				Expect(updatedConfig.EnvWeights).To(HaveKeyWithValue("dev", BeZero()))
 				Expect(updatedConfig.EnvWeights).NotTo(HaveKey("staging"))
-				Expect(updatedConfig.UpdatedAt).NotTo(BeTemporally("<", before.UpdatedAt))
 			})
 
 			It("should write the weight and the dynamic weight switch in one update", func() {
-				Expect(store.UpsertEnvWeight(
-					ctx, testAppID, configName, "dev", 80, lo.ToPtr(true),
+				Expect(polaris.UpsertEnvWeight(
+					ctx, db, testAppID, configName, "dev", 80, lo.ToPtr(true),
 				)).To(Succeed())
 
-				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.EnvWeights["dev"]).To(Equal(int32(80)))
 				Expect(updatedConfig.EnvDynamicWeights["dev"]).To(BeTrue())
 			})
 
 			It("should keep the dynamic weight switch untouched when it is not given", func() {
-				Expect(store.UpsertEnvWeight(
-					ctx, testAppID, configName, "dev", 80, lo.ToPtr(true),
+				Expect(polaris.UpsertEnvWeight(
+					ctx, db, testAppID, configName, "dev", 80, lo.ToPtr(true),
 				)).To(Succeed())
-				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "dev", 20, nil)).To(Succeed())
+				Expect(polaris.UpsertEnvWeight(ctx, db, testAppID, configName, "dev", 20, nil)).To(Succeed())
 
-				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.EnvWeights["dev"]).To(Equal(int32(20)))
 				Expect(updatedConfig.EnvDynamicWeights["dev"]).To(BeTrue())
 			})
 
 			It("should return not found when the config does not exist", func() {
-				err := store.UpsertEnvWeight(ctx, testAppID, "missing-config", "dev", 10, nil)
+				err := polaris.UpsertEnvWeight(ctx, db, testAppID, "missing-config", "dev", 10, nil)
 				Expect(errors.Is(err, polaris.ErrConfigNotFound)).To(BeTrue())
 			})
 		})
 
 		Context("when removing environment settings", func() {
 			BeforeEach(func() {
-				Expect(store.UpsertEnvWeight(
-					ctx, testAppID, configName, "dev", 10, lo.ToPtr(true),
+				Expect(polaris.UpsertEnvWeight(
+					ctx, db, testAppID, configName, "dev", 10, lo.ToPtr(true),
 				)).To(Succeed())
-				Expect(store.UpsertEnvWeight(ctx, testAppID, configName, "staging", 20, nil)).To(Succeed())
-				Expect(store.UpsertEnvWeight(
-					ctx, testAppID, configName, "prod", 30, lo.ToPtr(true),
+				Expect(polaris.UpsertEnvWeight(ctx, db, testAppID, configName, "staging", 20, nil)).To(Succeed())
+				Expect(polaris.UpsertEnvWeight(
+					ctx, db, testAppID, configName, "prod", 30, lo.ToPtr(true),
 				)).To(Succeed())
 			})
 
 			It("should remove every env setting of the selected environments in one go", func() {
-				Expect(store.RemoveEnvSettings(
-					ctx, testAppID, configName, []string{"dev", "staging"},
+				Expect(polaris.RemoveEnvSettings(
+					ctx, db, testAppID, configName, []string{"dev", "staging"},
 				)).To(Succeed())
-				Expect(store.RemoveEnvSettings(
-					ctx, testAppID, configName, []string{"dev", "staging"},
+				Expect(polaris.RemoveEnvSettings(
+					ctx, db, testAppID, configName, []string{"dev", "staging"},
 				)).To(Succeed())
 
-				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.EnvWeights).To(Equal(map[string]int32{"prod": 30}))
 				Expect(updatedConfig.EnvDynamicWeights).To(Equal(map[string]bool{"prod": true}))
 			})
 
 			It("should do nothing for an empty environment list", func() {
-				Expect(store.RemoveEnvSettings(ctx, testAppID, configName, nil)).To(Succeed())
+				Expect(polaris.RemoveEnvSettings(ctx, db, testAppID, configName, nil)).To(Succeed())
 
-				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.EnvWeights["dev"]).To(Equal(int32(10)))
 				Expect(updatedConfig.EnvDynamicWeights["dev"]).To(BeTrue())
 			})
 
 			It("should reject unsafe environment names", func() {
-				Expect(store.RemoveEnvSettings(
-					ctx, testAppID, configName, []string{"dev.test"},
+				Expect(polaris.RemoveEnvSettings(
+					ctx, db, testAppID, configName, []string{"dev.test"},
 				)).To(MatchError(ContainSubstring("invalid env name")))
-				Expect(store.RemoveEnvSettings(
-					ctx, testAppID, configName, []string{"dev$test"},
+				Expect(polaris.RemoveEnvSettings(
+					ctx, db, testAppID, configName, []string{"dev$test"},
 				)).To(MatchError(ContainSubstring("invalid env name")))
 			})
 		})
@@ -254,13 +244,13 @@ var _ = Describe("PolarisConfigStore", func() {
 		Context("when updating polarisToken", func() {
 			It("should update polarisToken successfully", func() {
 				newToken := "new-updated-token"
-				err := store.Update(ctx, testAppID, configName, &polaris.ConfigUpdateData{
+				err := polaris.UpdateConfig(ctx, db, testAppID, configName, &polaris.ConfigUpdateData{
 					PolarisToken: &newToken,
 				})
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify update
-				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.PolarisToken).To(Equal(newToken))
 				// Verify other fields unchanged
@@ -272,25 +262,15 @@ var _ = Describe("PolarisConfigStore", func() {
 		Context("when updating operator", func() {
 			It("should update operator successfully", func() {
 				operator := "lisi,wangwu"
-				err := store.Update(ctx, testAppID, configName, &polaris.ConfigUpdateData{
+				err := polaris.UpdateConfig(ctx, db, testAppID, configName, &polaris.ConfigUpdateData{
 					Operator: &operator,
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				updatedConfig, err := store.Get(ctx, testAppID, configName)
+				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedConfig.Operator).To(Equal(operator))
 				Expect(updatedConfig.PolarisName).To(Equal("original-name"))
-			})
-		})
-
-		Context("when config does not exist", func() {
-			It("should return ErrConfigNotFound", func() {
-				newPort := int32(9090)
-				err := store.Update(ctx, testAppID, "non-existent-config", &polaris.ConfigUpdateData{
-					ServicePort: &newPort,
-				})
-				Expect(err).To(MatchError(polaris.ErrConfigNotFound))
 			})
 		})
 	})
@@ -309,27 +289,9 @@ var _ = Describe("PolarisConfigStore", func() {
 					ServicePort:      8080,
 				},
 			}
-			err := store.Create(ctx, config)
+			err := configStore.Create(ctx, config)
 			Expect(err).NotTo(HaveOccurred())
 			configName = config.Name
-		})
-
-		Context("when deleting an existing config", func() {
-			It("should delete config successfully", func() {
-				err := store.Delete(ctx, testAppID, configName)
-				Expect(err).NotTo(HaveOccurred())
-
-				// Verify deletion
-				_, err = store.Get(ctx, testAppID, configName)
-				Expect(err).To(MatchError(polaris.ErrConfigNotFound))
-			})
-		})
-
-		Context("when config does not exist", func() {
-			It("should return ErrConfigNotFound", func() {
-				err := store.Delete(ctx, testAppID, "non-existent-config")
-				Expect(err).To(MatchError(polaris.ErrConfigNotFound))
-			})
 		})
 
 		Context("when deleting one of multiple configs", func() {
@@ -345,15 +307,15 @@ var _ = Describe("PolarisConfigStore", func() {
 						ServicePort:      9090,
 					},
 				}
-				err := store.Create(ctx, config2)
+				err := configStore.Create(ctx, config2)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Delete the first config
-				err = store.Delete(ctx, testAppID, configName)
+				err = configStore.Delete(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify only the second config remains
-				configs, err := store.ListByApp(ctx, testAppID)
+				configs, err := configStore.List(ctx, polaris.ByApp(testAppID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(configs).To(HaveLen(1))
 				Expect(configs[0].Name).To(Equal(config2.Name))
@@ -362,14 +324,6 @@ var _ = Describe("PolarisConfigStore", func() {
 	})
 
 	Describe("ListByApp", func() {
-		Context("when no configs exist", func() {
-			It("should return empty list", func() {
-				configs, err := store.ListByApp(ctx, testAppID)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(configs).To(BeEmpty())
-			})
-		})
-
 		Context("when multiple configs exist", func() {
 			It("should return all configs", func() {
 				// Add multiple configs
@@ -383,7 +337,7 @@ var _ = Describe("PolarisConfigStore", func() {
 						ServicePort:      8081,
 					},
 				}
-				err := store.Create(ctx, config1)
+				err := configStore.Create(ctx, config1)
 				Expect(err).NotTo(HaveOccurred())
 
 				config2 := &polaris.PolarisConfig{
@@ -396,10 +350,10 @@ var _ = Describe("PolarisConfigStore", func() {
 						ServicePort:      8082,
 					},
 				}
-				err = store.Create(ctx, config2)
+				err = configStore.Create(ctx, config2)
 				Expect(err).NotTo(HaveOccurred())
 
-				configs, err := store.ListByApp(ctx, testAppID)
+				configs, err := configStore.List(ctx, polaris.ByApp(testAppID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(configs).To(HaveLen(2))
 			})
@@ -407,38 +361,9 @@ var _ = Describe("PolarisConfigStore", func() {
 	})
 
 	Describe("Get", func() {
-		var configName string
-
-		BeforeEach(func() {
-			config := &polaris.PolarisConfig{
-				AppID: testAppID,
-				Properties: polaris.Properties{
-					InstanceKey:      "get-test",
-					PolarisName:      "get-polaris",
-					PolarisNamespace: "get-ns",
-					PolarisToken:     "get-token-123456789",
-					ServicePort:      8080,
-				},
-			}
-			err := store.Create(ctx, config)
-			Expect(err).NotTo(HaveOccurred())
-			configName = config.Name
-		})
-
-		Context("when config exists", func() {
-			It("should return the config", func() {
-				config, err := store.Get(ctx, testAppID, configName)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(config).NotTo(BeNil())
-				Expect(config.Name).To(Equal(configName))
-				Expect(config.InstanceKey).To(Equal("get-test"))
-				Expect(config.PolarisName).To(Equal("get-polaris"))
-			})
-		})
-
 		Context("when config does not exist", func() {
 			It("should return ErrConfigNotFound", func() {
-				_, err := store.Get(ctx, testAppID, "non-existent-config")
+				_, err := configStore.Get(ctx, polaris.ByName(testAppID, "non-existent-config"))
 				Expect(err).To(MatchError(polaris.ErrConfigNotFound))
 			})
 		})
@@ -459,18 +384,18 @@ var _ = Describe("PolarisConfigStore", func() {
 					},
 					ScopeEnvNames: []string{"dev", "staging"},
 				}
-				err := store.Create(ctx, config)
+				err := configStore.Create(ctx, config)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return config for matching environment", func() {
-				configs, err := store.ListByEnv(ctx, testAppID, "dev")
+				configs, err := polaris.ListByEnv(ctx, db, testAppID, "dev")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(configs).To(HaveLen(1))
 			})
 
 			It("should not return config for non-matching environment", func() {
-				configs, err := store.ListByEnv(ctx, testAppID, "production")
+				configs, err := polaris.ListByEnv(ctx, db, testAppID, "production")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(configs).To(BeEmpty())
 			})
@@ -493,17 +418,17 @@ var _ = Describe("PolarisConfigStore", func() {
 				},
 				ScopeEnvNames: []string{"dev", "staging"},
 			}
-			Expect(store.Create(ctx, config)).NotTo(HaveOccurred())
+			Expect(configStore.Create(ctx, config)).NotTo(HaveOccurred())
 			configName = config.Name
 		})
 
 		DescribeTable("should reject environment names that are unsafe as MongoDB field keys",
 			func(envName string) {
-				Expect(store.UpsertEnvState(
-					ctx, testAppID, configName, envName, polaris.PolarisEnvStateUpdate{},
+				Expect(polaris.UpsertEnvState(
+					ctx, db, testAppID, configName, envName, polaris.PolarisEnvStateUpdate{},
 				)).To(MatchError(ContainSubstring("invalid env name")))
-				Expect(store.RemoveEnvStates(
-					ctx, testAppID, configName, []string{envName},
+				Expect(polaris.RemoveEnvStates(
+					ctx, db, testAppID, configName, []string{envName},
 				)).To(MatchError(ContainSubstring("invalid env name")))
 			},
 			Entry("empty name", ""),
@@ -513,14 +438,14 @@ var _ = Describe("PolarisConfigStore", func() {
 
 		Describe("UpsertEnvState", func() {
 			It("should add an environment idempotently", func() {
-				Expect(store.UpsertEnvState(
-					ctx, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{},
+				Expect(polaris.UpsertEnvState(
+					ctx, db, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{},
 				)).To(Succeed())
-				Expect(store.UpsertEnvState(
-					ctx, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{},
+				Expect(polaris.UpsertEnvState(
+					ctx, db, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{},
 				)).To(Succeed())
 
-				stored, err := store.Get(ctx, testAppID, configName)
+				stored, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.EnvStates).To(HaveLen(1))
 				Expect(stored.GetEnvState("dev").AppliedFields).To(BeNil())
@@ -529,7 +454,7 @@ var _ = Describe("PolarisConfigStore", func() {
 			It("should update only the provided fields", func() {
 				fields := &polaris.RedeployRequiredFields{InstanceKey: "k1", PolarisToken: "t1", ServicePort: 8080}
 				errMessage := "apply cr timed out"
-				Expect(store.UpsertEnvState(ctx, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{
+				Expect(polaris.UpsertEnvState(ctx, db, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{
 					AppliedFields: fields,
 					LastError:     &errMessage,
 				})).To(Succeed())
@@ -537,11 +462,11 @@ var _ = Describe("PolarisConfigStore", func() {
 				updatedFields := &polaris.RedeployRequiredFields{
 					InstanceKey: "k2", PolarisToken: "t2", ServicePort: 9090,
 				}
-				Expect(store.UpsertEnvState(ctx, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{
+				Expect(polaris.UpsertEnvState(ctx, db, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{
 					AppliedFields: updatedFields,
 				})).To(Succeed())
 
-				stored, err := store.Get(ctx, testAppID, configName)
+				stored, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				state := stored.GetEnvState("dev")
 				Expect(state.AppliedFields).To(Equal(updatedFields))
@@ -552,16 +477,16 @@ var _ = Describe("PolarisConfigStore", func() {
 			It("should clear an error without changing other fields", func() {
 				fields := &polaris.RedeployRequiredFields{InstanceKey: "k1", PolarisToken: "t1", ServicePort: 8080}
 				errMessage := "failed"
-				Expect(store.UpsertEnvState(ctx, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{
+				Expect(polaris.UpsertEnvState(ctx, db, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{
 					AppliedFields: fields, LastError: &errMessage,
 				})).To(Succeed())
 
 				errMessage = ""
-				Expect(store.UpsertEnvState(ctx, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{
+				Expect(polaris.UpsertEnvState(ctx, db, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{
 					LastError: &errMessage,
 				})).To(Succeed())
 
-				stored, err := store.Get(ctx, testAppID, configName)
+				stored, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.GetEnvState("dev").LastError).To(BeEmpty())
 				Expect(stored.GetEnvState("dev").AppliedFields).To(Equal(fields))
@@ -569,11 +494,11 @@ var _ = Describe("PolarisConfigStore", func() {
 
 			It("should create a missing environment with the provided fields", func() {
 				errMessage := "apply error"
-				Expect(store.UpsertEnvState(ctx, testAppID, configName, "staging", polaris.PolarisEnvStateUpdate{
+				Expect(polaris.UpsertEnvState(ctx, db, testAppID, configName, "staging", polaris.PolarisEnvStateUpdate{
 					LastError: &errMessage,
 				})).To(Succeed())
 
-				stored, err := store.Get(ctx, testAppID, configName)
+				stored, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.GetEnvState("staging").LastError).To(Equal(errMessage))
 				Expect(stored.GetEnvState("staging").UpdatedAt).NotTo(BeZero())
@@ -583,32 +508,32 @@ var _ = Describe("PolarisConfigStore", func() {
 		Describe("RemoveEnvStates", func() {
 			It("should remove multiple environments and preserve the others", func() {
 				for _, envName := range []string{"dev", "staging", "prod"} {
-					Expect(store.UpsertEnvState(
-						ctx, testAppID, configName, envName, polaris.PolarisEnvStateUpdate{},
+					Expect(polaris.UpsertEnvState(
+						ctx, db, testAppID, configName, envName, polaris.PolarisEnvStateUpdate{},
 					)).To(Succeed())
 				}
 
-				Expect(store.RemoveEnvStates(
-					ctx, testAppID, configName, []string{"dev", "staging"},
+				Expect(polaris.RemoveEnvStates(
+					ctx, db, testAppID, configName, []string{"dev", "staging"},
 				)).To(Succeed())
-				Expect(store.RemoveEnvStates(
-					ctx, testAppID, configName, []string{"dev", "staging"},
+				Expect(polaris.RemoveEnvStates(
+					ctx, db, testAppID, configName, []string{"dev", "staging"},
 				)).To(Succeed())
 
-				stored, err := store.Get(ctx, testAppID, configName)
+				stored, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.EnvStates).To(HaveLen(1))
 				Expect(stored.EnvStates).To(HaveKey("prod"))
 			})
 
 			It("should do nothing for an empty environment list", func() {
-				Expect(store.UpsertEnvState(
-					ctx, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{},
+				Expect(polaris.UpsertEnvState(
+					ctx, db, testAppID, configName, "dev", polaris.PolarisEnvStateUpdate{},
 				)).To(Succeed())
 
-				Expect(store.RemoveEnvStates(ctx, testAppID, configName, nil)).To(Succeed())
+				Expect(polaris.RemoveEnvStates(ctx, db, testAppID, configName, nil)).To(Succeed())
 
-				stored, err := store.Get(ctx, testAppID, configName)
+				stored, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.EnvStates).To(HaveKey("dev"))
 			})

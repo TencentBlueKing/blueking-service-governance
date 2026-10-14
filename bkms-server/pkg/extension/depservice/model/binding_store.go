@@ -20,96 +20,52 @@ package model
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// ErrBindingNameExists 应用内同服务下绑定名已存在
-var ErrBindingNameExists = errors.New("service binding name already exists")
+var (
+	// ErrBindingNameExists 应用内同服务下绑定名已存在
+	ErrBindingNameExists = errors.New("service binding name already exists")
+	// ErrBindingNotFound 服务绑定不存在，AsNotFoundError 同样将其视为未找到
+	ErrBindingNotFound = errors.New("service binding not found")
+)
 
-// ServiceBindingStore defines persistence operations for service bindings.
-type ServiceBindingStore interface {
-	Create(ctx context.Context, binding *ServiceBinding) (bson.ObjectID, error)
-	Get(ctx context.Context, appID, serviceName, name string) (*ServiceBinding, error)
-	List(ctx context.Context, opts *BindingQueryOptions) ([]*ServiceBinding, error)
-	Update(ctx context.Context, appID, serviceName, name string, data *ServiceBindingUpdateData) error
-	Delete(ctx context.Context, appID, serviceName, name string) error
-	// DeleteAll deletes all bindings while preserving the collection and its indexes.
-	// Attention: only used in unit test
-	DeleteAll(ctx context.Context) error
+// ServiceBindingStore 服务绑定存储
+type ServiceBindingStore = store.GenericStore[ServiceBinding]
+
+// ServiceBindingMeta 服务绑定的存储元数据，写入完整文档前会校验字段并由 EnvInstanceMap 重建 InstanceIDs。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：appID + serviceName + name
+// - instanceIDs：按实例反查引用
+var ServiceBindingMeta = store.Meta[ServiceBinding]{
+	Collection: serviceBindingCollName,
+	NotFound:   ErrBindingNotFound,
+	Duplicate:  ErrBindingNameExists,
+	BeforeSave: []func(*ServiceBinding) error{validateBinding},
 }
 
-var _ ServiceBindingStore = &ServiceBindingStoreMongo{}
-
-// ServiceBindingStoreMongo implements ServiceBindingStore with MongoDB.
-type ServiceBindingStoreMongo struct {
-	collection *mongo.Collection
-}
-
-// NewServiceBindingStoreMongo creates a ServiceBindingStoreMongo.
-func NewServiceBindingStoreMongo(client *mongo.Client, dbName string) (ServiceBindingStore, error) {
-	coll := client.Database(dbName).Collection(serviceBindingCollName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：appID + serviceName + name
-	// - instanceIDs：按实例反查引用
-	return &ServiceBindingStoreMongo{collection: coll}, nil
-}
-
-// Create creates a new service binding.
-func (s *ServiceBindingStoreMongo) Create(ctx context.Context, binding *ServiceBinding) (bson.ObjectID, error) {
+func validateBinding(binding *ServiceBinding) error {
 	if err := validate.Struct(binding); err != nil {
-		return bson.NilObjectID, errors.Wrap(err, "service binding validation failed")
+		return errors.Wrap(err, "service binding validation failed")
 	}
-
 	binding.SyncInstanceIDs()
-	if binding.CreatedAt.IsZero() {
-		binding.CreatedAt = time.Now()
-	}
-	binding.UpdatedAt = binding.CreatedAt
-
-	result, err := s.collection.InsertOne(ctx, binding)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return bson.NilObjectID, ErrBindingNameExists
-		}
-		return bson.NilObjectID, err
-	}
-	return result.InsertedID.(bson.ObjectID), nil
+	return nil
 }
 
-// Get gets a binding by app, service and name.
-func (s *ServiceBindingStoreMongo) Get(
-	ctx context.Context,
-	appID, serviceName, name string,
-) (*ServiceBinding, error) {
-	binding := new(ServiceBinding)
-	err := s.collection.FindOne(ctx, bson.M{
-		"appID":       appID,
-		"serviceName": serviceName,
-		"name":        name,
-	}).Decode(binding)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, NewNotFoundError(fmt.Sprintf(
-				"service binding(app=%s, service=%s, name=%s)", appID, serviceName, name,
-			))
-		}
-		return nil, err
-	}
-	return binding, nil
+// ByBindingName 按应用 + 服务 + 绑定名匹配服务绑定（至多一条）
+func ByBindingName(appID, serviceName, name string) store.Opt {
+	return store.Filter(bson.M{"appID": appID, "serviceName": serviceName, "name": name})
 }
 
-// List lists bindings by query options.
-func (s *ServiceBindingStoreMongo) List(
-	ctx context.Context,
-	opts *BindingQueryOptions,
-) ([]*ServiceBinding, error) {
+// ByBindingQuery 按查询条件匹配服务绑定，零值字段不参与过滤；opts 为 nil 时匹配全部绑定
+func ByBindingQuery(opts *BindingQueryOptions) store.Opt {
 	if opts == nil {
-		opts = &BindingQueryOptions{}
+		return nil
 	}
 	filter := bson.M{}
 	if opts.AppID != "" {
@@ -124,78 +80,32 @@ func (s *ServiceBindingStoreMongo) List(
 	if !opts.InstanceID.IsZero() {
 		filter["instanceIDs"] = opts.InstanceID
 	}
-
-	cursor, err := s.collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	bindings := make([]*ServiceBinding, 0)
-	if err = cursor.All(ctx, &bindings); err != nil {
-		return nil, err
-	}
-	return bindings, nil
+	return store.Filter(filter)
 }
 
-// Update replaces env mapping, env vars and description of a binding.
-func (s *ServiceBindingStoreMongo) Update(
+// UpdateBinding 全量更新绑定的环境映射、环境变量与描述，并同步重建 InstanceIDs；绑定不存在时返回 ErrBindingNotFound
+func UpdateBinding(
 	ctx context.Context,
+	bindings *ServiceBindingStore,
 	appID, serviceName, name string,
 	data *ServiceBindingUpdateData,
 ) error {
 	if data == nil {
 		return nil
 	}
-
-	tmp := &ServiceBinding{
+	updated := &ServiceBinding{
 		EnvInstanceMap: data.EnvInstanceMap,
 		EnvVars:        data.EnvVars,
+		Description:    data.Description,
 	}
-	tmp.SyncInstanceIDs()
-
-	ret, err := s.collection.UpdateOne(ctx, bson.M{
-		"appID":       appID,
-		"serviceName": serviceName,
-		"name":        name,
-	}, bson.M{"$set": bson.M{
-		"envInstanceMap": tmp.EnvInstanceMap,
-		"envVars":        tmp.EnvVars,
-		"instanceIDs":    tmp.InstanceIDs,
-		"description":    data.Description,
-		"updatedAt":      time.Now(),
-	}})
+	updated.SyncInstanceIDs()
+	err := bindings.Update(
+		ctx, updated,
+		store.UpdateSelected("envInstanceMap", "envVars", "instanceIDs", "description"),
+		ByBindingName(appID, serviceName, name),
+	)
 	if err != nil {
-		return err
-	}
-	if ret.MatchedCount == 0 {
-		return NewNotFoundError(fmt.Sprintf(
-			"service binding(app=%s, service=%s, name=%s)", appID, serviceName, name,
-		))
+		return errors.Wrapf(err, "update service binding(app=%s, service=%s, name=%s)", appID, serviceName, name)
 	}
 	return nil
-}
-
-// Delete deletes a binding by app, service and name.
-func (s *ServiceBindingStoreMongo) Delete(ctx context.Context, appID, serviceName, name string) error {
-	ret, err := s.collection.DeleteOne(ctx, bson.M{
-		"appID":       appID,
-		"serviceName": serviceName,
-		"name":        name,
-	})
-	if err != nil {
-		return err
-	}
-	if ret.DeletedCount == 0 {
-		return NewNotFoundError(fmt.Sprintf(
-			"service binding(app=%s, service=%s, name=%s)", appID, serviceName, name,
-		))
-	}
-	return nil
-}
-
-// DeleteAll deletes all bindings. Attention: only used in unit test.
-func (s *ServiceBindingStoreMongo) DeleteAll(ctx context.Context) error {
-	_, err := s.collection.DeleteMany(ctx, bson.M{})
-	return err
 }

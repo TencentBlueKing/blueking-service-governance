@@ -87,7 +87,8 @@ func (h *Handler) PreviewComponentInst(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	compDef, err := h.registry.ComponentDefStore.Get(ctx, input.Type, component.DefaultComponentDefVersion)
+	compDef, err := h.componentDefs().
+		Get(ctx, component.ByNameVersion(input.Type, component.DefaultComponentDefVersion))
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(

@@ -63,7 +63,7 @@ func (h *Handler) ListAppInstanceLogs(c *gin.Context) {
 	// 创建日志管理器并查询日志
 	mgr, err := instancelog.NewLogManager(
 		ctx,
-		h.registry.AppModelDeployRecordStore,
+		h.registry.DB,
 		app,
 		env,
 		queryInput.TrafficLaneName,

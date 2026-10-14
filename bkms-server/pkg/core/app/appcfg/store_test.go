@@ -20,22 +20,19 @@ package appcfg_test
 
 import (
 	"context"
-	"errors"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/dbutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("AppConfigFileStoreMongo", func() {
-	var store *appcfg.AppConfigFileStoreMongo
-	var defStore *appcfg.AppConfigFileDefStoreMongo
-	var versionStore *appcfg.AppConfigFileVersionStoreMongo
+var _ = Describe("AppConfigFile store", func() {
+	var files *appcfg.AppConfigFileStore
 	var ctx context.Context
 
 	var appID string
@@ -44,15 +41,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 	var testAppConfigFile appcfg.AppConfigFile
 
 	BeforeEach(func() {
-		var err error
-
-		store, err = appcfg.NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		defStore, err = appcfg.NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		versionStore, err = appcfg.NewAppConfigFileVersionStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
+		files = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileMeta)
 		ctx = context.Background()
 		appID = "test-app-" + stringx.Random(6)
 		appID2 = appID + stringx.Random(2)
@@ -71,375 +60,241 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		}
 	})
 
-	Context("Add", func() {
-		It("should add an app config file successfully", func() {
-			oid, err := store.Add(ctx, testAppConfigFile)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(oid).NotTo(Equal(bson.NilObjectID))
+	AfterEach(func() {
+		_, err := files.DeleteMany(ctx, store.Where("appID", bson.M{"$in": []string{appID, appID2}}))
+		Expect(err).NotTo(HaveOccurred())
+	})
 
-			// Call List to verify the app config file was added
-			appConfigFiles, err := store.List(ctx, appID)
+	// newFile 基于 testAppConfigFile 创建一个文件记录，modify 用于调整字段
+	newFile := func(modify func(acf *appcfg.AppConfigFile)) *appcfg.AppConfigFile {
+		acf := testAppConfigFile
+		if modify != nil {
+			modify(&acf)
+		}
+		Expect(files.Create(ctx, &acf)).To(Succeed())
+		return &acf
+	}
+
+	Context("Create", func() {
+		It("creates a file that can be listed back", func() {
+			acf := newFile(nil)
+
+			appConfigFiles, err := appcfg.ListFiles(ctx, files, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(appConfigFiles).To(HaveLen(1))
-			Expect(dbutil.EqualIgnoringID(appConfigFiles[0], testAppConfigFile)).To(BeTrue())
+			Expect(appConfigFiles[0].ID).To(Equal(acf.ID))
+			Expect(appConfigFiles[0].Content).To(Equal(testAppConfigFile.Content))
 		})
 
-		It("should return error when adding a duplicate app config file with same defID+envName", func() {
+		It("rejects a duplicate file with the same defID and envName", func() {
 			defID := bson.NewObjectID()
+			newFile(func(acf *appcfg.AppConfigFile) {
+				acf.DefID = defID
+				acf.EnvName = "prod"
+			})
+
 			dup := testAppConfigFile
 			dup.DefID = defID
 			dup.EnvName = "prod"
-
-			_, err := store.Add(ctx, dup)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = store.Add(ctx, dup)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("app config file already exists"))
+			Expect(files.Create(ctx, &dup)).To(MatchError(appcfg.ErrAppConfigFileAlreadyExists))
 		})
 	})
 
-	Context("IsOwnedByApp", func() {
-		It("should return true for owned", func() {
-			oid, _ := store.Add(ctx, testAppConfigFile)
+	Context("ListFiles", func() {
+		It("filters by type", func() {
+			newFile(nil)
 
-			owned, _ := store.IsOwnedByApp(ctx, oid, appID)
-			Expect(owned).To(BeTrue())
-			owned, _ = store.IsOwnedByApp(ctx, oid, appID2)
-			Expect(owned).To(BeFalse())
-		})
-	})
-
-	Context("List", func() {
-		It("should return empty list for non-existent app", func() {
-			appConfigFiles, err := store.List(ctx, "non-existent-app")
+			appConfigFiles, err := appcfg.ListFiles(ctx, files, appID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(appConfigFiles).To(BeEmpty())
-		})
-		It("should filter by type", func() {
-			_, err := store.Add(ctx, testAppConfigFile)
-			Expect(err).NotTo(HaveOccurred())
-
-			appConfigFiles, err := store.List(ctx, appID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(len(appConfigFiles)).To(Equal(1))
+			Expect(appConfigFiles).To(HaveLen(1))
 
 			By("filter with another type should return nothing")
-			appConfigFiles, err = store.List(ctx, appID, appcfg.AcfFilterType("overlay"))
+			appConfigFiles, err = appcfg.ListFiles(ctx, files, appID, appcfg.AcfFilterType("overlay"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(appConfigFiles).To(BeEmpty())
 		})
-		It("should filter by envName", func() {
-			// Create app-level default config (envName = "")
-			appLevelContent := "config: app-level"
-			appLevelFile := appcfg.AppConfigFile{
-				AppID:   appID,
-				EnvName: appcfg.EnvNameDefault,
-				Type:    appcfg.AppConfigFileTypeNormal,
-				VersionedContent: appcfg.VersionedContent{
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &appLevelContent,
-				},
-			}
-			_, err := store.Add(ctx, appLevelFile)
-			Expect(err).NotTo(HaveOccurred())
 
-			// Create prod environment config
-			prodContent := "config: prod"
-			prodFile := appcfg.AppConfigFile{
-				AppID:   appID,
-				EnvName: "prod",
-				Type:    appcfg.AppConfigFileTypeNormal,
-				VersionedContent: appcfg.VersionedContent{
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &prodContent,
-				},
-			}
-			_, err = store.Add(ctx, prodFile)
-			Expect(err).NotTo(HaveOccurred())
+		It("filters by envName", func() {
+			newFile(func(acf *appcfg.AppConfigFile) { acf.EnvName = appcfg.EnvNameDefault })
+			newFile(func(acf *appcfg.AppConfigFile) { acf.EnvName = "prod" })
 
 			By("list all should return 2 files")
-			appConfigFiles, err := store.List(ctx, appID)
+			appConfigFiles, err := appcfg.ListFiles(ctx, files, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(appConfigFiles).To(HaveLen(2))
 
 			By("filter by app-level (empty envName) should return 1 file")
-			appConfigFiles, err = store.List(ctx, appID, appcfg.AcfFilterEnvName(appcfg.EnvNameDefault))
+			appConfigFiles, err = appcfg.ListFiles(ctx, files, appID, appcfg.AcfFilterEnvName(appcfg.EnvNameDefault))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(appConfigFiles).To(HaveLen(1))
 			Expect(appConfigFiles[0].EnvName).To(Equal(appcfg.EnvNameDefault))
 
 			By("filter by prod envName should return 1 file")
-			appConfigFiles, err = store.List(ctx, appID, appcfg.AcfFilterEnvName("prod"))
+			appConfigFiles, err = appcfg.ListFiles(ctx, files, appID, appcfg.AcfFilterEnvName("prod"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(appConfigFiles).To(HaveLen(1))
 			Expect(appConfigFiles[0].EnvName).To(Equal("prod"))
 
 			By("filter by non-existent envName should return empty")
-			appConfigFiles, err = store.List(ctx, appID, appcfg.AcfFilterEnvName("staging"))
+			appConfigFiles, err = appcfg.ListFiles(ctx, files, appID, appcfg.AcfFilterEnvName("staging"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(appConfigFiles).To(BeEmpty())
 		})
+
+		It("filters by def IDs", func() {
+			defID1, defID2 := bson.NewObjectID(), bson.NewObjectID()
+			newFile(func(acf *appcfg.AppConfigFile) { acf.DefID = defID1 })
+			newFile(func(acf *appcfg.AppConfigFile) { acf.DefID = defID2 })
+			newFile(func(acf *appcfg.AppConfigFile) { acf.DefID = bson.NewObjectID() })
+
+			appConfigFiles, err := appcfg.ListFiles(ctx, files, appID, appcfg.AcfFilterDefIDs{defID1, defID2})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(appConfigFiles).To(HaveLen(2))
+			Expect([]bson.ObjectID{appConfigFiles[0].DefID, appConfigFiles[1].DefID}).To(ConsistOf(defID1, defID2))
+		})
+
+		It("rejects ordering by name", func() {
+			_, err := appcfg.ListFiles(ctx, files, appID, appcfg.AcfOrderBy(appcfg.ListOrderByName))
+			Expect(err).To(MatchError(ContainSubstring("unsupported orderBy field")))
+		})
 	})
 
-	Context("Update", func() {
-		It("should updateFieldsWithVersionCheck an existing app config file", func() {
-			// Add an initial app config file
-			oid, _ := store.Add(ctx, testAppConfigFile)
+	Context("UpdateFileIfVersionMatches", func() {
+		It("updates the file when the version matches", func() {
+			acf := newFile(nil)
 
-			// Update the app config file, set the ID field
-			testAppConfigFile.ID = oid
-			newContent := `global:
- image: myapp:v2.0
- replicas: 5`
-			testAppConfigFile.Content = &newContent
-			count, err := store.Update(ctx, testAppConfigFile)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(1)))
+			newContent := "latest-content"
+			acf.Content = &newContent
+			acf.CurrentVersion = 1
+			Expect(appcfg.UpdateFileIfVersionMatches(ctx, files, acf, 0)).To(Succeed())
 
-			// Verify the update
-			dbObj, err := store.GetByID(ctx, oid)
+			dbObj, err := files.GetByID(ctx, acf.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*dbObj.Content).To(Equal(newContent))
+			Expect(dbObj.CurrentVersion).To(Equal(int64(1)))
 		})
 
-		It("should reject stale updates when expected version mismatches", func() {
-			testAppConfigFile.CurrentVersion = 0
-			oid, err := store.Add(ctx, testAppConfigFile)
-			Expect(err).NotTo(HaveOccurred())
+		It("rejects stale updates when the expected version mismatches", func() {
+			acf := newFile(nil)
 
-			testAppConfigFile.ID = oid
-
-			latest := testAppConfigFile
-			latest.CurrentVersion = 1
+			latest := *acf
 			latestContent := "latest-content"
 			latest.Content = &latestContent
-			count, err := store.UpdateIfVersionMatches(ctx, latest, 0)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(1)))
+			latest.CurrentVersion = 1
+			Expect(appcfg.UpdateFileIfVersionMatches(ctx, files, &latest, 0)).To(Succeed())
 
-			stale := testAppConfigFile
-			stale.CurrentVersion = 1
+			stale := *acf
 			staleContent := "stale-content"
 			stale.Content = &staleContent
-			count, err = store.UpdateIfVersionMatches(ctx, stale, 0)
-			Expect(errors.Is(err, appcfg.ErrAppConfigFileVersionConflict)).To(BeTrue())
-			Expect(count).To(Equal(int64(0)))
+			stale.CurrentVersion = 1
+			err := appcfg.UpdateFileIfVersionMatches(ctx, files, &stale, 0)
+			Expect(err).To(MatchError(appcfg.ErrAppConfigFileVersionConflict))
+
+			dbObj, err := files.GetByID(ctx, acf.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*dbObj.Content).To(Equal(latestContent))
 		})
-	})
 
-	Context("DeleteByID", func() {
-		It("should remove an existing app config file", func() {
-			oid, _ := store.Add(ctx, testAppConfigFile)
-
-			// Verify the app config file was added
-			dbObj, err := store.GetByID(ctx, oid)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dbutil.EqualIgnoringID(dbObj, &testAppConfigFile)).To(BeTrue())
-
-			// Remove the app config file
-			count, err := store.DeleteByID(ctx, appID, oid)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(1)))
-
-			// Verify the app config file was removed
-			_, err = store.GetByID(ctx, oid)
-			Expect(errors.Is(err, appcfg.ErrAppConfigFileNotFound)).To(BeTrue())
-		})
-		It("should error when deleting a referenced normal app config file", func() {
-			// Add a normal app config file
-			normalFile := testAppConfigFile
-			normalID, err := store.Add(ctx, normalFile)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Add an overlay app config file that references the normal file
-			_, err = appcfg.NewAppConfigFileService(store, defStore, versionStore).Create(
-				ctx,
-				appcfg.CreateCfgFileParams{
-					AppID:               appID,
-					EnvName:             appcfg.EnvNameDefault,
-					Name:                "test-overlay",
-					Type:                appcfg.AppConfigFileTypeOverlay,
-					ContentSourceType:   appcfg.ContentSourceTypeLocal,
-					Format:              appcfg.FileFormatYAML,
-					BaseAppConfigFileID: &normalID,
-					Creator:             appcfg.CfgSystemUser,
-					Description:         appcfg.CfgSystemVersionDescription,
-					ConfigKind:          appcfg.ConfigKindFramework,
-				},
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Try to delete the referenced normal app config file
-			count, err := store.DeleteByID(ctx, appID, normalID)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("file is referenced by other files"))
-			Expect(count).To(Equal(int64(0)))
-		})
-	})
-
-	Context("GetByDefIDAndEnv", func() {
-		It("should return the file matching defID and envName", func() {
-			defID := bson.NewObjectID()
+		It("reports a version conflict when the file has been deleted", func() {
 			acf := testAppConfigFile
-			acf.DefID = defID
-			acf.EnvName = "prod"
-			_, err := store.Add(ctx, acf)
-			Expect(err).NotTo(HaveOccurred())
+			acf.ID = bson.NewObjectID()
+			err := appcfg.UpdateFileIfVersionMatches(ctx, files, &acf, 0)
+			Expect(err).To(MatchError(appcfg.ErrAppConfigFileVersionConflict))
+		})
+	})
 
-			got, err := store.GetByDefIDAndEnv(ctx, defID, "prod")
+	Context("DeleteFile", func() {
+		It("removes an existing app config file", func() {
+			acf := newFile(nil)
+
+			Expect(appcfg.DeleteFile(ctx, files, appID, acf.ID)).To(Succeed())
+
+			_, err := files.GetByID(ctx, acf.ID)
+			Expect(err).To(MatchError(appcfg.ErrAppConfigFileNotFound))
+		})
+
+		It("leaves files owned by other apps untouched", func() {
+			acf := newFile(nil)
+
+			Expect(appcfg.DeleteFile(ctx, files, appID2, acf.ID)).To(Succeed())
+
+			_, err := files.GetByID(ctx, acf.ID)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("refuses to delete a file referenced by an overlay file", func() {
+			normalFile := newFile(nil)
+			newFile(func(acf *appcfg.AppConfigFile) {
+				acf.Type = appcfg.AppConfigFileTypeOverlay
+				acf.BaseAppConfigFileID = &normalFile.ID
+			})
+
+			err := appcfg.DeleteFile(ctx, files, appID, normalFile.ID)
+			Expect(err).To(MatchError(appcfg.ErrAppConfigFileReferenced))
+
+			_, err = files.GetByID(ctx, normalFile.ID)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("FileByDefEnv", func() {
+		It("returns the file matching defID and envName", func() {
+			defID := bson.NewObjectID()
+			newFile(func(acf *appcfg.AppConfigFile) {
+				acf.DefID = defID
+				acf.EnvName = "prod"
+			})
+
+			got, err := files.Get(ctx, appcfg.FileByDefEnv(defID, "prod"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.DefID).To(Equal(defID))
 			Expect(got.EnvName).To(Equal("prod"))
 		})
 
-		It("should return error when no record matches", func() {
-			_, err := store.GetByDefIDAndEnv(ctx, bson.NewObjectID(), "non-existent")
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, appcfg.ErrAppConfigFileNotFound)).To(BeTrue())
+		It("returns ErrAppConfigFileNotFound when no record matches", func() {
+			_, err := files.Get(ctx, appcfg.FileByDefEnv(bson.NewObjectID(), "non-existent"))
+			Expect(err).To(MatchError(appcfg.ErrAppConfigFileNotFound))
 		})
 
-		It("should distinguish between different envNames under the same defID", func() {
+		It("distinguishes between different envNames under the same defID", func() {
 			defID := bson.NewObjectID()
+			defaultContent, prodContent := "config: default", "config: prod"
+			newFile(func(acf *appcfg.AppConfigFile) {
+				acf.DefID = defID
+				acf.EnvName = appcfg.EnvNameDefault
+				acf.Content = &defaultContent
+			})
+			newFile(func(acf *appcfg.AppConfigFile) {
+				acf.DefID = defID
+				acf.EnvName = "prod"
+				acf.Content = &prodContent
+			})
 
-			defaultContent := "config: default"
-			defaultFile := appcfg.AppConfigFile{
-				AppID:   appID,
-				DefID:   defID,
-				EnvName: appcfg.EnvNameDefault,
-				Type:    appcfg.AppConfigFileTypeNormal,
-				VersionedContent: appcfg.VersionedContent{
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &defaultContent,
-				},
-			}
-			_, err := store.Add(ctx, defaultFile)
+			got, err := files.Get(ctx, appcfg.FileByDefEnv(defID, "prod"))
 			Expect(err).NotTo(HaveOccurred())
+			Expect(*got.Content).To(Equal(prodContent))
 
-			prodContent := "config: prod"
-			prodFile := appcfg.AppConfigFile{
-				AppID:   appID,
-				DefID:   defID,
-				EnvName: "prod",
-				Type:    appcfg.AppConfigFileTypeNormal,
-				VersionedContent: appcfg.VersionedContent{
-					ContentSourceType: appcfg.ContentSourceTypeLocal,
-					Content:           &prodContent,
-				},
-			}
-			_, err = store.Add(ctx, prodFile)
+			got, err = files.Get(ctx, appcfg.FileByDefEnv(defID, appcfg.EnvNameDefault))
 			Expect(err).NotTo(HaveOccurred())
-
-			got, err := store.GetByDefIDAndEnv(ctx, defID, "prod")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(*got.Content).To(Equal("config: prod"))
-
-			got, err = store.GetByDefIDAndEnv(ctx, defID, appcfg.EnvNameDefault)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(*got.Content).To(Equal("config: default"))
+			Expect(*got.Content).To(Equal(defaultContent))
 		})
 	})
 
-	Context("ListByDefID", func() {
-		It("should return all files under the given defID", func() {
+	Context("FilesByDef", func() {
+		It("returns all files under the given defID", func() {
 			defID := bson.NewObjectID()
+			newFile(func(acf *appcfg.AppConfigFile) {
+				acf.DefID = defID
+				acf.EnvName = appcfg.EnvNameDefault
+			})
+			newFile(func(acf *appcfg.AppConfigFile) {
+				acf.DefID = defID
+				acf.EnvName = "prod"
+			})
 
-			defaultFile := testAppConfigFile
-			defaultFile.DefID = defID
-			defaultFile.EnvName = appcfg.EnvNameDefault
-			_, err := store.Add(ctx, defaultFile)
-			Expect(err).NotTo(HaveOccurred())
-
-			prodFile := testAppConfigFile
-			prodFile.DefID = defID
-			prodFile.EnvName = "prod"
-			_, err = store.Add(ctx, prodFile)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := store.ListByDefID(ctx, defID)
+			result, err := files.List(ctx, appcfg.FilesByDef(defID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(2))
-		})
-
-		It("should return empty list when no files exist for defID", func() {
-			result, err := store.ListByDefID(ctx, bson.NewObjectID())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(BeEmpty())
-		})
-
-		It("should not include files from other defIDs", func() {
-			defID1 := bson.NewObjectID()
-			defID2 := bson.NewObjectID()
-
-			file1 := testAppConfigFile
-			file1.DefID = defID1
-			_, err := store.Add(ctx, file1)
-			Expect(err).NotTo(HaveOccurred())
-
-			file2 := testAppConfigFile
-			file2.DefID = defID2
-			_, err = store.Add(ctx, file2)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := store.ListByDefID(ctx, defID1)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(HaveLen(1))
-			Expect(result[0].DefID).To(Equal(defID1))
-		})
-	})
-
-	Context("DeleteByDefID", func() {
-		It("should delete all files under the given defID", func() {
-			defID := bson.NewObjectID()
-
-			file1 := testAppConfigFile
-			file1.DefID = defID
-			file1.EnvName = appcfg.EnvNameDefault
-			_, err := store.Add(ctx, file1)
-			Expect(err).NotTo(HaveOccurred())
-
-			file2 := testAppConfigFile
-			file2.DefID = defID
-			file2.EnvName = "prod"
-			_, err = store.Add(ctx, file2)
-			Expect(err).NotTo(HaveOccurred())
-
-			count, err := store.DeleteByDefID(ctx, defID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(2)))
-
-			remaining, err := store.ListByDefID(ctx, defID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(remaining).To(BeEmpty())
-		})
-
-		It("should return 0 when no files match", func() {
-			count, err := store.DeleteByDefID(ctx, bson.NewObjectID())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(0)))
-		})
-
-		It("should not affect files from other defIDs", func() {
-			defID1 := bson.NewObjectID()
-			defID2 := bson.NewObjectID()
-
-			file1 := testAppConfigFile
-			file1.DefID = defID1
-			_, err := store.Add(ctx, file1)
-			Expect(err).NotTo(HaveOccurred())
-
-			file2 := testAppConfigFile
-			file2.DefID = defID2
-			_, err = store.Add(ctx, file2)
-			Expect(err).NotTo(HaveOccurred())
-
-			count, err := store.DeleteByDefID(ctx, defID1)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(int64(1)))
-
-			remaining, err := store.ListByDefID(ctx, defID2)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(remaining).To(HaveLen(1))
 		})
 	})
 })

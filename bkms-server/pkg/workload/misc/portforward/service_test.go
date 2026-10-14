@@ -25,27 +25,29 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Service", func() {
 	var (
-		ctx   context.Context
-		store appmodeldeploy.RecordStore
+		ctx     context.Context
+		db      *mongo.Database
+		records *appmodeldeploy.RecordStore
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-		store, err = appmodeldeploy.NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, appmodeldeploy.RecordMeta)
 	})
 
 	It("validates a running pod from latest deploy record", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:         "myapp",
 			EnvName:       "test",
 			Status:        appmodeldeploy.StatusDeployed,
@@ -58,7 +60,7 @@ var _ = Describe("Service", func() {
 		pod := runningPodWithLabels("pod-1", "10.0.0.1", map[string]string{"app": "myapp"})
 		podClient := &MockPodClient{}
 		podClient.On("Get", mock.Anything, "default", "pod-1", mock.Anything).Return(&pod, nil)
-		svc := NewService(store, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
 			Expect(clusterID).To(Equal("BCS-K8S-12345"))
 			return podClient
 		}))
@@ -75,7 +77,7 @@ var _ = Describe("Service", func() {
 	})
 
 	It("rejects a running pod without pod IP", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:         "myapp",
 			EnvName:       "test",
 			Status:        appmodeldeploy.StatusDeployed,
@@ -86,7 +88,7 @@ var _ = Describe("Service", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		pod := podWithPhaseIPAndLabels("pod-1", "Running", "", map[string]string{"app": "myapp"})
-		svc := NewService(store, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
 			return m
@@ -99,7 +101,7 @@ var _ = Describe("Service", func() {
 	})
 
 	It("rejects a pod with invalid pod IP", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:         "myapp",
 			EnvName:       "test",
 			Status:        appmodeldeploy.StatusDeployed,
@@ -110,7 +112,7 @@ var _ = Describe("Service", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		pod := podWithPhaseIPAndLabels("pod-1", "Running", "not-an-ip", map[string]string{"app": "myapp"})
-		svc := NewService(store, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
 			return m
@@ -123,7 +125,7 @@ var _ = Describe("Service", func() {
 	})
 
 	It("rejects a pod with forbidden pod IP", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:         "myapp",
 			EnvName:       "test",
 			Status:        appmodeldeploy.StatusDeployed,
@@ -134,7 +136,7 @@ var _ = Describe("Service", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		pod := podWithPhaseIPAndLabels("pod-1", "Running", "127.0.0.1", map[string]string{"app": "myapp"})
-		svc := NewService(store, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
 			return m
@@ -148,7 +150,7 @@ var _ = Describe("Service", func() {
 
 	It("returns a controlled error when deploy record lookup fails", func() {
 		// 不插入任何记录，GetLatest 应返回 not found 错误
-		svc := NewService(store)
+		svc := NewService(db)
 
 		_, err := svc.ResolveTarget(ctx, "nonexistent-app", "test", "pod-1", 8080)
 
@@ -157,7 +159,7 @@ var _ = Describe("Service", func() {
 	})
 
 	It("returns a controlled error when pod get fails", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:         "myapp",
 			EnvName:       "test",
 			Status:        appmodeldeploy.StatusDeployed,
@@ -167,7 +169,7 @@ var _ = Describe("Service", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		svc := NewService(store, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return(nil, errors.New("kube internal error"))
@@ -181,7 +183,7 @@ var _ = Describe("Service", func() {
 	})
 
 	It("rejects a pod that does not belong to current application environment", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:         "myapp",
 			EnvName:       "test",
 			Status:        appmodeldeploy.StatusDeployed,
@@ -193,7 +195,7 @@ var _ = Describe("Service", func() {
 
 		// Pod 存在但 labels 不匹配部署记录的 LabelSelector
 		pod := runningPodWithLabels("pod-1", "127.0.0.1", map[string]string{"app": "other-app"})
-		svc := NewService(store, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
 			return m
@@ -206,7 +208,7 @@ var _ = Describe("Service", func() {
 	})
 
 	It("rejects a pod that is not running", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:         "myapp",
 			EnvName:       "test",
 			Status:        appmodeldeploy.StatusDeployed,
@@ -217,7 +219,7 @@ var _ = Describe("Service", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		pod := podWithPhaseIPAndLabels("pod-1", "Pending", "127.0.0.1", map[string]string{"app": "myapp"})
-		svc := NewService(store, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
 			return m

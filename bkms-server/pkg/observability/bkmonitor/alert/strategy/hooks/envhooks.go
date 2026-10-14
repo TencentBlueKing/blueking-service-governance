@@ -23,41 +23,29 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const ReconcileEnvTypeChangeHookName = "alert_strategy.reconcile_env_type_change"
 
 // RegisterUpdateHooks 注册告警策略相关的环境更新 Hook，并显式传入所需的存储依赖。
-func RegisterUpdateHooks(
-	workspaceStore workspace.WorkspaceStore,
-	alertStrategyStore alertstrategy.Store,
-	envStore envmodel.EnvironmentStore,
-	appStore bkmsapp.ApplicationStore,
-	snapshotStore topology.ResourceSnapshotStore,
-) {
+func RegisterUpdateHooks(db *mongo.Database) {
 	// 注册环境类型变更时协调告警策略的 Hook。
 	bkmsenv.RegisterUpdateHook(
 		ReconcileEnvTypeChangeHookName,
-		NewReconcileEnvTypeChangeHook(workspaceStore, alertStrategyStore, envStore, appStore, snapshotStore),
+		NewReconcileEnvTypeChangeHook(db),
 	)
 }
 
 // NewReconcileEnvTypeChangeHook 创建一个 Hook，用于在环境类型发生变更后 reconcile 告警策略。
-func NewReconcileEnvTypeChangeHook(
-	workspaceStore workspace.WorkspaceStore,
-	alertStrategyStore alertstrategy.Store,
-	envStore envmodel.EnvironmentStore,
-	appStore bkmsapp.ApplicationStore,
-	snapshotStore topology.ResourceSnapshotStore,
-) bkmsenv.UpdateHook {
+func NewReconcileEnvTypeChangeHook(db *mongo.Database) bkmsenv.UpdateHook {
 	return func(ctx context.Context, before, after envmodel.Environment) error {
 		// 环境类型未变化时无需处理，直接跳过。
 		if before.Type == after.Type {
@@ -65,7 +53,7 @@ func NewReconcileEnvTypeChangeHook(
 		}
 
 		// 查询环境所属的工作空间，用于后续的告警策略协调。
-		ws, err := workspaceStore.Get(ctx, after.WorkspaceID)
+		ws, err := store.Of(db, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(after.WorkspaceID))
 		if err != nil {
 			return errors.Wrapf(err, "get workspace %s", after.WorkspaceID)
 		}
@@ -76,7 +64,7 @@ func NewReconcileEnvTypeChangeHook(
 		}
 
 		// 构建告警策略服务，并针对本次环境类型变更协调相关告警策略。
-		svc := alertstrategy.NewService(alertStrategyStore, envStore, appStore, snapshotStore)
+		svc := alertstrategy.NewService(db)
 		if err := svc.ReconcileStrategiesForEnvTypeChange(
 			ctx,
 			ws,

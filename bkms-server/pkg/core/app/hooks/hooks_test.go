@@ -39,21 +39,18 @@ var _ = Describe("Env delete hooks from app visible envs", func() {
 	var diApp *fxtest.App
 	var ctx context.Context
 	var envSvc *bkmsenv.EnvService
-	var appStore bkmsapp.ApplicationStore
-	var envStore envmodel.EnvironmentStore
+	var appStore *bkmsapp.ApplicationStore
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		bkmsenv.ResetHooksForTest()
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			bkmsenv.FxModule,
 			fx.Populate(
 				&envSvc,
-				&appStore,
-				&envStore,
 			),
 		)
 		diApp.RequireStart()
@@ -72,17 +69,25 @@ var _ = Describe("Env delete hooks from app visible envs", func() {
 		appB := dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{WorkspaceID: workspaceID})
 		environment := dbfactory.Env(ctx, envSvc, workspaceID)
 
-		Expect(appStore.UpdateVisibleEnvNames(ctx, appA, []string{environment.Name, "stag"})).To(Succeed())
-		Expect(appStore.UpdateVisibleEnvNames(ctx, appB, []string{environment.Name})).To(Succeed())
+		Expect(
+			appStore.Update(
+				ctx,
+				map[string]any{"visibleEnvNames": []string{environment.Name, "stag"}},
+				bkmsapp.ByID(appA.ID),
+			),
+		).To(Succeed())
+		Expect(
+			appStore.Update(ctx, map[string]any{"visibleEnvNames": []string{environment.Name}}, bkmsapp.ByID(appB.ID)),
+		).To(Succeed())
 
-		apphooks.RegisterDeleteHooks(appStore)
+		apphooks.RegisterDeleteHooks(testutil.NewDB(GinkgoT()))
 		Expect(envSvc.Delete(ctx, environment.ID)).To(Succeed())
 
-		appA, err := appStore.GetApp(ctx, appA.ID)
+		appA, err := appStore.Get(ctx, bkmsapp.ByID(appA.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(appA.VisibleEnvNames).To(Equal([]string{"stag"}))
 
-		appB, err = appStore.GetApp(ctx, appB.ID)
+		appB, err = appStore.Get(ctx, bkmsapp.ByID(appB.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(appB.VisibleEnvNames).To(BeEmpty())
 	})
@@ -98,13 +103,21 @@ var _ = Describe("Env delete hooks from app visible envs", func() {
 		)
 		environment := dbfactory.Env(ctx, envSvc, workspaceID)
 
-		Expect(appStore.UpdateVisibleEnvNames(ctx, app, []string{environment.Name})).To(Succeed())
-		Expect(appStore.UpdateVisibleEnvNames(ctx, otherApp, []string{environment.Name})).To(Succeed())
+		Expect(
+			appStore.Update(ctx, map[string]any{"visibleEnvNames": []string{environment.Name}}, bkmsapp.ByID(app.ID)),
+		).To(Succeed())
+		Expect(
+			appStore.Update(
+				ctx,
+				map[string]any{"visibleEnvNames": []string{environment.Name}},
+				bkmsapp.ByID(otherApp.ID),
+			),
+		).To(Succeed())
 
-		apphooks.RegisterDeleteHooks(appStore)
+		apphooks.RegisterDeleteHooks(testutil.NewDB(GinkgoT()))
 		Expect(envSvc.Delete(ctx, environment.ID)).To(Succeed())
 
-		otherApp, err := appStore.GetApp(ctx, otherApp.ID)
+		otherApp, err := appStore.Get(ctx, bkmsapp.ByID(otherApp.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(otherApp.VisibleEnvNames).To(Equal([]string{environment.Name}))
 	})
@@ -112,9 +125,11 @@ var _ = Describe("Env delete hooks from app visible envs", func() {
 	It("should skip feature environments", func() {
 		workspaceID := "test-ws-" + stringx.Random(6)
 		app := dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{WorkspaceID: workspaceID})
-		Expect(appStore.UpdateVisibleEnvNames(ctx, app, []string{"test", "stag"})).To(Succeed())
+		Expect(
+			appStore.Update(ctx, map[string]any{"visibleEnvNames": []string{"test", "stag"}}, bkmsapp.ByID(app.ID)),
+		).To(Succeed())
 
-		hook := apphooks.NewCleanupVisibleEnvNamesHook(appStore)
+		hook := apphooks.NewCleanupVisibleEnvNamesHook(testutil.NewDB(GinkgoT()))
 		err := hook(ctx, envmodel.Environment{
 			Kind:        envmodel.EnvironmentKindFeature,
 			WorkspaceID: workspaceID,
@@ -123,7 +138,7 @@ var _ = Describe("Env delete hooks from app visible envs", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		app, err = appStore.GetApp(ctx, app.ID)
+		app, err = appStore.Get(ctx, bkmsapp.ByID(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(app.VisibleEnvNames).To(Equal([]string{"test", "stag"}))
 	})

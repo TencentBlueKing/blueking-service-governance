@@ -25,23 +25,20 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
-var _ = Describe("ClusterAddonDefStoreMongo", func() {
+var _ = Describe("ClusterAddonDef store", func() {
 	var (
 		ctx      context.Context
-		store    clusteraddon.ClusterAddonDefStore
+		store    *clusteraddon.ClusterAddonDefStore
 		addonDef *clusteraddon.ClusterAddonDef
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-
-		var err error
-		store, err = clusteraddon.NewClusterAddonDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		store = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 
 		addonDef = &clusteraddon.ClusterAddonDef{
 			Name:        "test-addon-" + stringx.Random(6),
@@ -60,16 +57,16 @@ var _ = Describe("ClusterAddonDefStoreMongo", func() {
 	})
 
 	AfterEach(func() {
-		_, _ = store.Delete(ctx, addonDef.Name)
+		_ = store.DeleteIfExists(ctx, clusteraddon.ByName(addonDef.Name))
 	})
 
 	Describe("Create", func() {
 		Context("creating a valid addon def", func() {
 			It("should create and get successfully", func() {
-				err := store.Create(ctx, addonDef)
+				err := clusteraddon.SaveDef(ctx, store, addonDef)
 				Expect(err).NotTo(HaveOccurred())
 
-				got, err := store.Get(ctx, addonDef.Name)
+				got, err := store.Get(ctx, clusteraddon.ByName(addonDef.Name))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got.Name).To(Equal(addonDef.Name))
 				Expect(got.DisplayName).To(Equal(addonDef.DisplayName))
@@ -79,42 +76,20 @@ var _ = Describe("ClusterAddonDefStoreMongo", func() {
 				Expect(got.OptionalForAppTypes).To(Equal([]string{"worker"}))
 				Expect(got.UnsupportedOnFederation).To(BeTrue())
 			})
-
-			It("createdAt and updatedAt fields should behave normally", func() {
-				err := store.Create(ctx, addonDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err := store.Get(ctx, addonDef.Name)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.CreatedAt.IsZero()).To(BeFalse())
-				Expect(retrieved.UpdatedAt.IsZero()).To(BeFalse())
-
-				oldCreatedAt := retrieved.CreatedAt
-				oldUpdatedAt := retrieved.UpdatedAt
-
-				addonDef.DisplayName = "Updated Name"
-				err = store.Create(ctx, addonDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err = store.Get(ctx, addonDef.Name)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.CreatedAt).To(Equal(oldCreatedAt))
-				Expect(retrieved.UpdatedAt.Compare(oldUpdatedAt)).To(BeElementOf(0, 1))
-			})
 		})
 
 		Context("updating an existing addon def", func() {
 			It("should update successfully via upsert", func() {
-				err := store.Create(ctx, addonDef)
+				err := clusteraddon.SaveDef(ctx, store, addonDef)
 				Expect(err).NotTo(HaveOccurred())
 
 				addonDef.DisplayName = "Updated Name"
 				addonDef.ChartInfo.DefaultChartVersion = "2.0.0"
 				addonDef.RequiredForAppTypes = []string{"webserver", "worker"}
-				err = store.Create(ctx, addonDef)
+				err = clusteraddon.SaveDef(ctx, store, addonDef)
 				Expect(err).NotTo(HaveOccurred())
 
-				got, err := store.Get(ctx, addonDef.Name)
+				got, err := store.Get(ctx, clusteraddon.ByName(addonDef.Name))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got.DisplayName).To(Equal("Updated Name"))
 				Expect(got.ChartInfo.DefaultChartVersion).To(Equal("2.0.0"))
@@ -126,7 +101,7 @@ var _ = Describe("ClusterAddonDefStoreMongo", func() {
 	Describe("Get", func() {
 		Context("when addon def does not exist", func() {
 			It("should return ErrClusterAddonDefNotFound", func() {
-				_, err := store.Get(ctx, "non-existent-"+stringx.Random(6))
+				_, err := store.Get(ctx, clusteraddon.ByName("non-existent-"+stringx.Random(6)))
 				Expect(err).To(MatchError(clusteraddon.ErrClusterAddonDefNotFound))
 			})
 		})
@@ -147,18 +122,18 @@ var _ = Describe("ClusterAddonDefStoreMongo", func() {
 		})
 
 		AfterEach(func() {
-			_, _ = store.Delete(ctx, addonDef2.Name)
-			_, _ = store.Delete(ctx, addonDef3.Name)
+			_ = store.DeleteIfExists(ctx, clusteraddon.ByName(addonDef2.Name))
+			_ = store.DeleteIfExists(ctx, clusteraddon.ByName(addonDef3.Name))
 		})
 
 		Context("listing all addon defs", func() {
 			It("should return all created addon defs", func() {
-				err := store.Create(ctx, addonDef)
+				err := clusteraddon.SaveDef(ctx, store, addonDef)
 				Expect(err).NotTo(HaveOccurred())
-				err = store.Create(ctx, addonDef2)
+				err = clusteraddon.SaveDef(ctx, store, addonDef2)
 				Expect(err).NotTo(HaveOccurred())
 
-				results, err := store.List(ctx)
+				results, err := clusteraddon.ListDefs(ctx, store)
 				Expect(err).NotTo(HaveOccurred())
 
 				names := make([]string, 0, len(results))
@@ -170,12 +145,12 @@ var _ = Describe("ClusterAddonDefStoreMongo", func() {
 			})
 
 			It("should return results sorted by name", func() {
-				err := store.Create(ctx, addonDef2)
+				err := clusteraddon.SaveDef(ctx, store, addonDef2)
 				Expect(err).NotTo(HaveOccurred())
-				err = store.Create(ctx, addonDef3)
+				err = clusteraddon.SaveDef(ctx, store, addonDef3)
 				Expect(err).NotTo(HaveOccurred())
 
-				results, err := store.List(ctx)
+				results, err := clusteraddon.ListDefs(ctx, store)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(len(results)).To(BeNumerically(">=", 2))
 
@@ -183,30 +158,6 @@ var _ = Describe("ClusterAddonDefStoreMongo", func() {
 					Expect(results[i].Name >= results[i-1].Name).To(BeTrue(),
 						"expected %s >= %s", results[i].Name, results[i-1].Name)
 				}
-			})
-		})
-	})
-
-	Describe("Delete", func() {
-		Context("when deleting an existing addon def", func() {
-			It("should delete successfully", func() {
-				err := store.Create(ctx, addonDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				count, err := store.Delete(ctx, addonDef.Name)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(count).To(Equal(int64(1)))
-
-				_, err = store.Get(ctx, addonDef.Name)
-				Expect(err).To(MatchError(clusteraddon.ErrClusterAddonDefNotFound))
-			})
-		})
-
-		Context("when deleting a non-existent addon def", func() {
-			It("should return 0 deleted count", func() {
-				count, err := store.Delete(ctx, "non-existent-"+stringx.Random(6))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(count).To(Equal(int64(0)))
 			})
 		})
 	})

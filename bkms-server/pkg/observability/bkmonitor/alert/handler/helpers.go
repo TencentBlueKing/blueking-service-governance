@@ -30,12 +30,11 @@ import (
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func (h *Handler) alertStrategyService() *alertstrategy.Service {
-	return alertstrategy.NewService(
-		h.registry.AlertStrategyStore, h.registry.EnvStore, h.registry.AppStore, h.registry.ResourceSnapshotStore,
-	)
+	return alertstrategy.NewService(h.registry.DB)
 }
 
 func (h *Handler) loadStrategyContext(
@@ -47,7 +46,7 @@ func (h *Handler) loadStrategyContext(
 	if err != nil {
 		return nil, nil, bson.NilObjectID, err
 	}
-	ws, err := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return nil, nil, bson.NilObjectID, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
 	}
@@ -74,14 +73,9 @@ func getAlertStrategyInApp(
 	strategyID bson.ObjectID,
 	workspaceID, appID string,
 ) (*alertstrategy.AlertStrategy, error) {
-	rule, err := registry.AlertStrategyStore.Get(ctx, strategyID)
-	if err != nil {
-		return nil, err
-	}
-	if rule.WorkspaceID != workspaceID || rule.AppID != appID {
-		return nil, alertstrategy.ErrNotFound
-	}
-	return rule, nil
+	return store.Of(registry.DB, alertstrategy.Meta).Get(
+		ctx, store.ByID(strategyID), alertstrategy.ByApp(workspaceID, appID),
+	)
 }
 
 func validateAppInWorkspace(

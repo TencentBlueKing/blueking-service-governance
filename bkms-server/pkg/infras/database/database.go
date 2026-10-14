@@ -58,6 +58,11 @@ func Name() string {
 	return dbName
 }
 
+// DB 获取 mongodb 数据库
+func DB() *mongo.Database {
+	return Client().Database(Name())
+}
+
 // InitClient 初始化
 func InitClient(ctx context.Context, cfg config.MongoConfig) {
 	if mongoClient != nil {

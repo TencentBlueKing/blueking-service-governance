@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -32,17 +33,17 @@ import (
 const CleanupScopedEnvVarsByEnvHookName = "envvars.cleanup_scoped_env_vars"
 
 // RegisterDeleteHooks registers envvars hooks with explicit store dependencies.
-func RegisterDeleteHooks(scopedEnvVarStore envvars.ScopedEnvVarStore) {
+func RegisterDeleteHooks(db *mongo.Database) {
 	bkmsenv.RegisterDeleteHook(
 		CleanupScopedEnvVarsByEnvHookName,
-		NewCleanupScopedEnvVarsByEnvHook(scopedEnvVarStore),
+		NewCleanupScopedEnvVarsByEnvHook(db),
 	)
 }
 
 // NewCleanupScopedEnvVarsByEnvHook creates a hook that removes env-scoped variables.
-func NewCleanupScopedEnvVarsByEnvHook(scopedEnvVarStore envvars.ScopedEnvVarStore) bkmsenv.DeleteHook {
+func NewCleanupScopedEnvVarsByEnvHook(db *mongo.Database) bkmsenv.DeleteHook {
 	return func(ctx context.Context, environment envmodel.Environment) error {
-		if err := scopedEnvVarStore.DeleteByEnv(ctx, environment); err != nil {
+		if err := envvars.DeleteByEnv(ctx, db, environment); err != nil {
 			return errors.Wrapf(
 				err,
 				"delete scoped env vars for workspace %s env %s",

@@ -26,13 +26,15 @@ import (
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // 快照陈旧阈值
@@ -45,22 +47,12 @@ const (
 
 // Service 镜像快照服务
 type Service struct {
-	snapshotStore    SnapshotStore
-	buildConfigStore build.ConfigStore
-	appStore         bkmsapp.ApplicationStore
+	db *mongo.Database
 }
 
 // NewService 创建 Service 实例
-func NewService(
-	snapshotStore SnapshotStore,
-	buildConfigStore build.ConfigStore,
-	appStore bkmsapp.ApplicationStore,
-) *Service {
-	return &Service{
-		snapshotStore:    snapshotStore,
-		buildConfigStore: buildConfigStore,
-		appStore:         appStore,
-	}
+func NewService(db *mongo.Database) *Service {
+	return &Service{db: db}
 }
 
 // RepoKeyInfo 仓库 key 解析结果
@@ -90,17 +82,17 @@ func (s *Service) ResolveRepoKeyForRepository(repoName string) (*RepoKeyInfo, er
 func (s *Service) ResolveRepoKeyForApp(
 	ctx context.Context, appID string,
 ) (*RepoKeyInfo, error) {
-	app, err := s.appStore.GetApp(ctx, appID)
+	app, err := store.Of(s.db, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app %s", appID)
 	}
 
-	cfg, err := s.buildConfigStore.Get(ctx, app.ID)
+	cfg, err := store.Of(s.db, build.ConfigMeta).Get(ctx, build.ByApp(app.ID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app %s build config", app.ID)
 	}
 
-	info, rErr := build.ResolveImageRepoInfo(ctx, cfg, app.WorkspaceID, app.Name)
+	info, rErr := build.ResolveImageRepoInfo(ctx, s.db, cfg, app.WorkspaceID, app.Name)
 	if rErr != nil {
 		return nil, errors.Wrap(rErr, "resolve image repo info")
 	}
@@ -133,7 +125,7 @@ func (s *Service) ResolveRepoKeyForWorkspace(
 		return nil, errors.New("image name is required")
 	}
 
-	reg, err := workspace.GetWorkspaceImageRegistry(ctx, workspaceID)
+	reg, err := workspace.GetWorkspaceImageRegistry(ctx, s.db, workspaceID)
 	if err != nil {
 		return nil, errors.Wrap(err, "get workspace image registry")
 	}
@@ -169,11 +161,7 @@ func (s *Service) GetWorkspaceSnapshotStatus(
 		return nil, errors.Wrapf(err, "resolve repo key for workspace %s image %s", workspaceID, imageName)
 	}
 
-	status, err := s.snapshotStore.GetStatus(ctx, info.RepoKey)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get snapshot status of %s", info.RepoKey)
-	}
-	return status, nil
+	return GetRepoStatus(ctx, s.db, info.RepoKey)
 }
 
 // ListRepositorySnapshots 从本地快照查询指定镜像仓库的标签列表。
@@ -249,19 +237,19 @@ func (s *Service) listSnapshotsByRepoInfo(
 	staleTTL time.Duration,
 ) ([]Image, int64, *RepoSnapshotStatus, error) {
 	// 查询快照
-	snapshots, total, err := s.snapshotStore.ListByRepoKey(ctx, info.RepoKey, keyword, page, pageSize)
+	snapshots, err := ListImagePage(ctx, s.db, info.RepoKey, keyword, page, pageSize)
 	if err != nil {
-		return nil, 0, nil, errors.Wrap(err, "list snapshots")
+		return nil, 0, nil, err
 	}
 
 	// 获取仓库状态
-	status, err := s.snapshotStore.GetStatus(ctx, info.RepoKey)
+	status, err := GetRepoStatus(ctx, s.db, info.RepoKey)
 	if err != nil {
-		return nil, 0, nil, errors.Wrap(err, "get snapshot status")
+		return nil, 0, nil, err
 	}
 
 	// 刷新只能异步：本次请求必须立即返回当前快照，不被远端镜像仓库请求阻塞
-	if s.shouldTriggerRefresh(total, status, keyword, staleTTL) {
+	if s.shouldTriggerRefresh(snapshots.Total, status, keyword, staleTTL) {
 		log.Infof(ctx, "snapshot of %s is empty or stale, triggering refresh", info.RepoName)
 		go func() {
 			rCtx := context.WithoutCancel(ctx)
@@ -271,7 +259,7 @@ func (s *Service) listSnapshotsByRepoInfo(
 		}()
 	}
 
-	return snapshots, total, status, nil
+	return snapshots.Items, snapshots.Total, status, nil
 }
 
 // shouldTriggerRefresh 判断查询标签列表时是否顺带触发一次异步刷新
@@ -327,15 +315,15 @@ func (s *Service) refreshSnapshotsByRepoInfo(
 ) (*RefreshResult, error) {
 	// 先落库标记，确保即使抢不到刷新权，这些标签也会在后续任意一次刷新中被重新拉取详情
 	if len(forceDetailSyncTags) > 0 {
-		if err := s.snapshotStore.MarkDetailSyncPending(ctx, info.RepoKey, forceDetailSyncTags); err != nil {
-			return nil, errors.Wrap(err, "mark detail sync pending")
+		if err := MarkDetailSyncPending(ctx, s.db, info.RepoKey, forceDetailSyncTags); err != nil {
+			return nil, err
 		}
 	}
 
 	// 幂等性检查
-	acquired, err := s.snapshotStore.TrySetRefreshing(ctx, info.RepoKey)
+	acquired, err := TrySetRefreshing(ctx, s.db, info.RepoKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "try set refreshing")
+		return nil, err
 	}
 	if !acquired {
 		log.Infof(ctx, "snapshot refresh for %s is already in progress", info.RepoKey)
@@ -350,7 +338,7 @@ func (s *Service) refreshSnapshotsByRepoInfo(
 		// 回置要用未取消的 ctx：失败常源于 ctx 超时，复用同一个 ctx 会连状态也写不进去，
 		// 而 TrySetRefreshing 无超时恢复，状态将永久停在 refreshing 挡死后续所有刷新
 		rCtx := context.WithoutCancel(ctx)
-		if statusErr := s.snapshotStore.UpsertStatus(rCtx, &RepoSnapshotStatus{
+		if statusErr := UpsertRepoStatus(rCtx, s.db, &RepoSnapshotStatus{
 			RepoKey:       info.RepoKey,
 			RepoName:      info.RepoName,
 			RefreshStatus: RefreshStatusIdle,
@@ -376,9 +364,9 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	persistCtx := context.WithoutCancel(ctx)
 
 	// 获取本地已有标签
-	localTags, err := s.snapshotStore.ListAllTags(persistCtx, info.RepoKey)
+	localTags, err := ListAllTags(persistCtx, s.db, info.RepoKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "list all tags")
+		return nil, err
 	}
 
 	// 计算 diff：找出新增标签
@@ -390,29 +378,22 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	// 只对新增标签进行插入
 	var addedCount int64
 	if len(newTags) > 0 {
-		snapshots := make([]Image, 0, len(newTags))
-		for _, tag := range newTags {
-			snapshots = append(snapshots, Image{
-				RepoKey: info.RepoKey,
-				Tag:     tag,
-			})
-		}
-		if err = s.snapshotStore.UpsertSnapshots(persistCtx, info.RepoKey, snapshots); err != nil {
+		if err = UpsertTags(persistCtx, s.db, info.RepoKey, newTags); err != nil {
 			return nil, errors.Wrap(err, "upsert new snapshots")
 		}
 		addedCount = int64(len(newTags))
 	}
 
 	// 删除远程已消失的标签
-	removedCount, err := s.snapshotStore.DeleteByRepoKeyExcludeTags(persistCtx, info.RepoKey, remoteTags)
+	removedCount, err := DeleteTagsNotIn(persistCtx, s.db, info.RepoKey, remoteTags)
 	if err != nil {
-		return nil, errors.Wrap(err, "delete excluded tags")
+		return nil, err
 	}
 
 	// 更新状态为 idle + lastRefreshedAt（必须在提交异步任务之前，确保状态已重置为 idle，
 	// 否则异步任务消费时 TrySetDetailSyncing 会因状态非 idle 而失败）
 	refreshAt := time.Now()
-	if err = s.snapshotStore.UpsertStatus(persistCtx, &RepoSnapshotStatus{
+	if err = UpsertRepoStatus(persistCtx, s.db, &RepoSnapshotStatus{
 		RepoKey:         info.RepoKey,
 		RepoName:        info.RepoName,
 		RefreshStatus:   RefreshStatusIdle,
@@ -425,9 +406,9 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 
 	// 状态重置为 idle 后，判断是否需要异步触发详情同步
 	resultMsg := "Snapshot refresh completed, no tags need detail sync"
-	unsyncedDetailTags, err := s.snapshotStore.ListUnsyncedDetailTags(persistCtx, info.RepoKey)
+	unsyncedDetailTags, err := ListUnsyncedDetailTags(persistCtx, s.db, info.RepoKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "list unsynced detail tags")
+		return nil, err
 	}
 
 	if len(unsyncedDetailTags) > 0 {

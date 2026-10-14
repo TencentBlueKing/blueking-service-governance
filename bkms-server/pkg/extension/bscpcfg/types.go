@@ -21,13 +21,8 @@ package bscpcfg
 
 import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 
-// 类型别名 —— 方便外部包直接使用 bscpcfg.XxxType 而无需引入 model 子包
-type (
-	// Store 应用配置管理统一存储接口
-	Store = model.Store
-	// Snapshot 聚合快照（Metadata + EnvBinding）
-	Snapshot = model.Snapshot
-)
+// Snapshot 聚合快照（Metadata + EnvBinding）。类型别名，方便外部包直接使用而无需引入 model 子包
+type Snapshot = model.Snapshot
 
-// NewStoreMongo 重新导出构造函数
-var NewStoreMongo = model.NewStoreMongo
+// GetSnapshot 重新导出 model.GetSnapshot：获取指定 app+env 的聚合快照，未配置时返回 nil, nil
+var GetSnapshot = model.GetSnapshot

@@ -21,76 +21,73 @@ package runtime
 import (
 	"context"
 
-	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 var _ = Describe("ImageReferenceValidator", func() {
 	var (
-		ctx           context.Context
-		runtimeStore  *StoreMongo
-		snapshotStore *snapshot.SnapshotStoreMongo
-		validator     *ImageReferenceValidator
+		ctx       context.Context
+		db        *mongo.Database
+		images    *Store
+		validator *ImageReferenceValidator
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		runtimeStore = &StoreMongo{}
-		snapshotStore = &snapshot.SnapshotStoreMongo{}
-		validator = NewImageReferenceValidator(runtimeStore, snapshotStore)
+		images = testutil.NewStore(GinkgoT(), Meta)
+		db = testutil.NewDB(GinkgoT())
+		validator = NewImageReferenceValidator(db)
 	})
 
-	mockRuntimeImage := func(imageType ImageType, name string, err error) {
-		mockey.Mock((*StoreMongo).GetByTypeAndName).Return(&Image{Type: imageType, Name: name}, err).Build()
+	AfterEach(func() {
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(snapshot.ImageMeta)).To(Succeed())
+	})
+
+	createRuntimeImage := func(imageType ImageType, name string) {
+		Expect(images.Create(ctx, &Image{Type: imageType, Name: name})).To(Succeed())
 	}
 
-	mockSnapshotTag := func(exists bool, err error) {
-		mockey.Mock((*snapshot.SnapshotStoreMongo).HasTag).Return(exists, err).Build()
+	// seedSnapshotTags 为运行时镜像（无凭证仓库）预置标签快照
+	seedSnapshotTags := func(name string, tags ...string) {
+		Expect(snapshot.UpsertTags(ctx, db, snapshot.GenerateRepoKey(name, "", ""), tags)).To(Succeed())
 	}
 
 	It("accepts an existing runtime image and snapshot tag", func() {
-		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockRuntimeImage(ImageTypeBuilder, "golang", nil)
-			mockSnapshotTag(true, nil)
+		createRuntimeImage(ImageTypeBuilder, "golang")
+		seedSnapshotTags("golang", "1.24")
 
-			ref, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
+		ref, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ref).To(Equal(&ImageReference{Name: "golang", Tag: "1.24"}))
-		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ref).To(Equal(&ImageReference{Name: "golang", Tag: "1.24"}))
 	})
 
 	It("returns not found when runtime image name does not exist", func() {
-		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockRuntimeImage(ImageTypeBuilder, "golang", ErrRuntimeImageNotFound)
+		_, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
 
-			_, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
-
-			Expect(err).To(MatchError(ErrRuntimeImageNotFound))
-		})
+		Expect(err).To(MatchError(ErrRuntimeImageNotFound))
 	})
 
 	It("returns not found when runtime image type does not match", func() {
-		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockRuntimeImage(ImageTypeRunner, "golang", ErrRuntimeImageNotFound)
+		createRuntimeImage(ImageTypeRunner, "golang")
 
-			_, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
+		_, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
 
-			Expect(err).To(MatchError(ErrRuntimeImageNotFound))
-		})
+		Expect(err).To(MatchError(ErrRuntimeImageNotFound))
 	})
 
 	It("returns tag not found when snapshot tag does not exist", func() {
-		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockRuntimeImage(ImageTypeRunner, "debian", nil)
-			mockSnapshotTag(false, nil)
+		createRuntimeImage(ImageTypeRunner, "debian")
+		seedSnapshotTags("debian", "11")
 
-			_, err := validator.ValidateTaggedReference(ctx, ImageTypeRunner, "debian:12")
+		_, err := validator.ValidateTaggedReference(ctx, ImageTypeRunner, "debian:12")
 
-			Expect(err).To(MatchError(ErrRuntimeImageTagNotFound))
-		})
+		Expect(err).To(MatchError(ErrRuntimeImageTagNotFound))
 	})
 })

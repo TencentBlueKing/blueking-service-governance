@@ -24,10 +24,12 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const (
@@ -46,17 +48,17 @@ var (
 
 // Service 提供平台管理页下统一的 workspace admin 能力。
 type Service struct {
-	workspaceStore bkmsworkspace.WorkspaceStore
-	recordStore    Store
+	workspaceStore *bkmsworkspace.WorkspaceStore
+	records        *Store
 	permMgr        perm.Manager
 	grantDuration  time.Duration
 }
 
 // NewService 创建 workspace admin 服务。
-func NewService(workspaceStore bkmsworkspace.WorkspaceStore, recordStore Store, permMgr perm.Manager) *Service {
+func NewService(db *mongo.Database, permMgr perm.Manager) *Service {
 	return &Service{
-		workspaceStore: workspaceStore,
-		recordStore:    recordStore,
+		workspaceStore: store.Of(db, bkmsworkspace.Meta),
+		records:        store.Of(db, Meta),
 		permMgr:        permMgr,
 		grantDuration:  defaultGrantDuration,
 	}
@@ -67,7 +69,7 @@ func (s *Service) GetRoleStatus(
 	ctx context.Context,
 	workspaceID, roleCode, username string,
 ) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, workspaceID); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID)); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 	_, hasRole, err := s.loadRoleState(ctx, workspaceID, roleCode, username)
@@ -83,7 +85,7 @@ func (s *Service) GrantAdmin(
 	workspaceID, username string,
 	isTemporary bool,
 ) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, workspaceID); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID)); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 
@@ -124,7 +126,7 @@ func (s *Service) GrantAdmin(
 		UpdatedAt:   now,
 		Updater:     username,
 	}
-	if err := s.recordStore.Create(ctx, record); err != nil {
+	if err := s.records.Create(ctx, record); err != nil {
 		if errors.Is(err, ErrRecordAlreadyExists) {
 			return nil, ErrTempAdminAlreadyExists
 		}
@@ -136,7 +138,7 @@ func (s *Service) GrantAdmin(
 
 // RevokeAdmin 统一回收目标空间管理员权限。
 func (s *Service) RevokeAdmin(ctx context.Context, workspaceID, username string) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, workspaceID); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID)); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 
@@ -156,7 +158,7 @@ func (s *Service) RevokeAdmin(ctx context.Context, workspaceID, username string)
 	if record != nil {
 		record.IsRecycled = true
 		record.Updater = username
-		if err := s.recordStore.Update(ctx, record); err != nil {
+		if err := updateRecord(ctx, s.records, record); err != nil {
 			return nil, err
 		}
 	}
@@ -178,12 +180,12 @@ func (s *Service) loadAdminRoleAndRecord(
 	if err != nil {
 		return "", false, nil, err
 	}
-	record, err := s.recordStore.GetLatestActiveGrant(ctx, workspaceID, username)
+	record, err := s.records.Get(ctx, ByActiveGrant(workspaceID, username))
 	if err != nil {
 		if errors.Is(err, ErrRecordNotFound) {
 			return roleID, hasAdminRole, nil, nil
 		}
-		return "", false, nil, err
+		return "", false, nil, errors.Wrap(err, "find active temporary admin grant")
 	}
 	return roleID, hasAdminRole, record, nil
 }

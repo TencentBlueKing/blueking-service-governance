@@ -13,6 +13,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/serializer"
 )
@@ -25,6 +26,10 @@ type Handler struct {
 // New creates an application-default API handler.
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) rules() *appdefaults.RuleStore {
+	return store.Of(h.registry.DB, appdefaults.RuleMeta)
 }
 
 type listRulesOutput[T any] struct {
@@ -54,7 +59,7 @@ func listRules[Output any](
 		return
 	}
 
-	rules, err := h.registry.AppDefaultRuleStore.ListByConfigType(ctx, workspace.ID, configType)
+	rules, err := h.rules().List(ctx, appdefaults.ByConfigType(workspace.ID, configType))
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "list "+configType.String()+" application default rules"))
 		return
@@ -98,7 +103,7 @@ func createRule[Input, Output any](
 		bkerrs.AbortWithErr(c, apiError(err, "create "+configType.String()+" application default rule"))
 		return
 	}
-	if err = h.registry.AppDefaultRuleStore.Create(ctx, created); err != nil {
+	if err = h.rules().Create(ctx, created); err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "create "+configType.String()+" application default rule"))
 		return
 	}
@@ -134,7 +139,7 @@ func updateRule[Input, Output any](
 
 	// Workspace and config type stay fixed by the route; updating another
 	// section with the same rule ID therefore resolves as not found.
-	before, err := h.registry.AppDefaultRuleStore.Get(ctx, workspace.ID, configType, ruleID)
+	before, err := h.rules().Get(ctx, appdefaults.ByID(workspace.ID, configType, ruleID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
 		return
@@ -147,7 +152,8 @@ func updateRule[Input, Output any](
 		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
 		return
 	}
-	if err = h.registry.AppDefaultRuleStore.Update(ctx, workspace.ID, configType, &updated); err != nil {
+	// Replace the complete document so removed configuration cannot survive as stale BSON.
+	if err = h.rules().Replace(ctx, &updated, appdefaults.ByID(workspace.ID, configType, ruleID)); err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
 		return
 	}
@@ -178,7 +184,7 @@ func deleteRule(
 		return
 	}
 
-	deleted, err := h.registry.AppDefaultRuleStore.Delete(ctx, workspace.ID, configType, ruleID)
+	deleted, err := h.rules().GetAndDelete(ctx, appdefaults.ByID(workspace.ID, configType, ruleID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "delete "+configType.String()+" application default rule"))
 		return

@@ -29,7 +29,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/tof"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 const (
@@ -55,22 +54,17 @@ func mockProject() *Project {
 	}
 }
 
-func setupManagerTestStores() (*ProjectStoreMongo, *PipelineStoreMongo, *DBPipelineTemplateStore) {
-	Expect(testutil.CleanupCollection(projectCollName)).To(Succeed())
-	Expect(testutil.CleanupCollection(pipelineCollName)).To(Succeed())
-	Expect(testutil.CleanupCollection(pipelineTemplateCollName)).To(Succeed())
+func setupManagerTestStores() (*ProjectStore, *PipelineStore, *PipelineTemplateStore) {
+	Expect(testutil.CleanupMetaColl(ProjectMeta)).To(Succeed())
+	Expect(testutil.CleanupMetaColl(PipelineMeta)).To(Succeed())
+	Expect(testutil.CleanupMetaColl(PipelineTemplateMeta)).To(Succeed())
 
-	projectStore, err := NewProjectStoreMongo(database.Client(), database.Name())
-	Expect(err).NotTo(HaveOccurred())
-	pipelineStore, err := NewPipelineStoreMongo(database.Client(), database.Name())
-	Expect(err).NotTo(HaveOccurred())
-	templateStore, err := NewDBPipelineTemplateStore(database.Client(), database.Name())
-	Expect(err).NotTo(HaveOccurred())
-
-	return projectStore, pipelineStore, templateStore
+	return testutil.NewStore(GinkgoT(), ProjectMeta),
+		testutil.NewStore(GinkgoT(), PipelineMeta),
+		testutil.NewStore(GinkgoT(), PipelineTemplateMeta)
 }
 
-func createManagerTestPipeline(ctx context.Context, store *PipelineStoreMongo, templateVersion string) *Pipeline {
+func createManagerTestPipeline(ctx context.Context, pipelineStore *PipelineStore, templateVersion string) *Pipeline {
 	pipeline := &Pipeline{
 		ID:              "p-builtin-pipeline-id",
 		Type:            string(PipelineTypeDockerfile),
@@ -81,11 +75,15 @@ func createManagerTestPipeline(ctx context.Context, store *PipelineStoreMongo, t
 		TemplateVersion: templateVersion,
 		Creator:         "test-user",
 	}
-	Expect(store.Create(ctx, pipeline)).To(Succeed())
+	Expect(pipelineStore.Create(ctx, pipeline)).To(Succeed())
 	return pipeline
 }
 
-func createManagerTestTemplate(ctx context.Context, store *DBPipelineTemplateStore, version string) *PipelineTemplate {
+func createManagerTestTemplate(
+	ctx context.Context,
+	tmplStore *PipelineTemplateStore,
+	version string,
+) *PipelineTemplate {
 	tmpl := &PipelineTemplate{
 		ID:          "0348a1df-44de-29b2-1c94-2d42841c009d",
 		Type:        string(PipelineTypeDockerfile),
@@ -99,14 +97,15 @@ func createManagerTestTemplate(ctx context.Context, store *DBPipelineTemplateSto
 			},
 		},
 	}
-	Expect(store.Upsert(ctx, tmpl)).To(Succeed())
+	_, err := tmplStore.Upsert(ctx, tmpl, ByType(tmpl.Type))
+	Expect(err).NotTo(HaveOccurred())
 	return tmpl
 }
 
 var _ = Describe("NewProjectManager", func() {
 	It("should create valid ProjectManager instance", func() {
 		workspaceID := "test-workspace"
-		manager := NewProjectManager(workspaceID)
+		manager := NewProjectManager(testutil.NewDB(GinkgoT()), workspaceID)
 		Expect(manager).NotTo(BeNil())
 		Expect(manager.workspaceID).To(Equal(workspaceID))
 	})
@@ -114,7 +113,7 @@ var _ = Describe("NewProjectManager", func() {
 
 var _ = Describe("genDefaultProjectCode", func() {
 	It("should return code in format 'bkms-{workspaceID}'", func() {
-		manager := NewProjectManager("test-workspace")
+		manager := NewProjectManager(testutil.NewDB(GinkgoT()), "test-workspace")
 		code := manager.genDefaultProjectCode("test-workspace")
 		Expect(code).To(Equal("bkms-test-workspace"))
 	})
@@ -124,12 +123,12 @@ var _ = Describe("ProjectManager Initialize", func() {
 	var (
 		ctx          context.Context
 		manager      *ProjectManager
-		projectStore *ProjectStoreMongo
+		projectStore *ProjectStore
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		manager = NewProjectManager(managerTestWorkspaceID)
+		manager = NewProjectManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		projectStore, _, _ = setupManagerTestStores()
 	})
 
@@ -162,7 +161,7 @@ var _ = Describe("ProjectManager Initialize", func() {
 				Expect(proj.Code).To(Equal(managerTestProjectCode))
 				Expect(proj.WorkspaceID).To(Equal(managerTestWorkspaceID))
 
-				stored, err := projectStore.GetByWorkspace(ctx, managerTestWorkspaceID)
+				stored, err := projectStore.Get(ctx, ByWorkspace(managerTestWorkspaceID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.Code).To(Equal(managerTestProjectCode))
 			})
@@ -229,13 +228,13 @@ var _ = Describe("PipelineManager Initialize", func() {
 	var (
 		ctx           context.Context
 		manager       *PipelineManager
-		pipelineStore *PipelineStoreMongo
-		templateStore *DBPipelineTemplateStore
+		pipelineStore *PipelineStore
+		templateStore *PipelineTemplateStore
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		manager = NewPipelineManager(managerTestWorkspaceID)
+		manager = NewPipelineManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		_, pipelineStore, templateStore = setupManagerTestStores()
 	})
 
@@ -269,10 +268,8 @@ var _ = Describe("PipelineManager Initialize", func() {
 			Expect(result.Name).To(Equal("updated pipeline"))
 			Expect(result.Description).To(Equal("updated description"))
 
-			stored, err := pipelineStore.GetByWorkspaceAndType(
-				ctx,
-				managerTestWorkspaceID,
-				string(PipelineTypeDockerfile),
+			stored, err := pipelineStore.Get(
+				ctx, ByWorkspaceAndType(managerTestWorkspaceID, string(PipelineTypeDockerfile)),
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.TemplateVersion).To(Equal("1.1.0"))

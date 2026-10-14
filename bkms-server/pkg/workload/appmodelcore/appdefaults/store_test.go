@@ -6,8 +6,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
@@ -16,26 +14,19 @@ import (
 
 var _ = Describe("Application default rule store", func() {
 	var ctx context.Context
-	var diApp *fxtest.App
-	var store appdefaults.RuleStore
+	var store *appdefaults.RuleStore
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		diApp = fxtest.New(
-			GinkgoT(),
-			appdefaults.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
+		store = testutil.NewStore(GinkgoT(), appdefaults.RuleMeta)
 	})
 
 	AfterEach(func() {
 		// Clear documents without Drop so migration-managed unique indexes survive.
-		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(appdefaults.RuleMeta)).To(Succeed())
 	})
 
-	It("supports scoped CRUD operations", func() {
+	It("scopes rules by workspace, section and ID", func() {
 		resources := resourcesRule("workspace-a", "production")
 		devMode := devModeRule("workspace-a", "production", true)
 		otherWorkspace := resourcesRule("workspace-b", "production")
@@ -43,41 +34,24 @@ var _ = Describe("Application default rule store", func() {
 		Expect(store.Create(ctx, devMode)).To(Succeed())
 		Expect(store.Create(ctx, otherWorkspace)).To(Succeed())
 
-		rules, err := store.List(ctx, "workspace-a")
+		rules, err := store.List(ctx, appdefaults.ByWorkspace("workspace-a"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rules).To(HaveLen(2))
-		resourcesRules, err := store.ListByConfigType(
+		resourcesRules, err := store.List(
 			ctx,
-			"workspace-a",
-			appspec.AppSpecSectionResources,
+			appdefaults.ByConfigType("workspace-a", appspec.AppSpecSectionResources),
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resourcesRules).To(HaveLen(1))
 		Expect(resourcesRules[0].ID).To(Equal(resources.ID))
 
-		stored, err := store.Get(ctx, "workspace-a", appspec.AppSpecSectionResources, resources.ID)
+		stored, err := store.Get(ctx, appdefaults.ByID("workspace-a", appspec.AppSpecSectionResources, resources.ID))
 		Expect(err).NotTo(HaveOccurred())
-		updated := *stored
-		updated.EnvTypes = []string{"test"}
-		updated.Spec = &appspec.AppSpec{
-			Resources: resourcesSpec(3, "1", "2", "2Gi", "4Gi"),
-		}
-		Expect(store.Update(ctx, "workspace-a", appspec.AppSpecSectionResources, &updated)).To(Succeed())
+		Expect(stored.ID).To(Equal(resources.ID))
 
-		stored, err = store.Get(ctx, "workspace-a", appspec.AppSpecSectionResources, resources.ID)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(stored.EnvTypes).To(Equal([]string{"test"}))
-		Expect(*stored.Spec.Resources.Replicas).To(Equal(int32(3)))
-
-		_, err = store.Get(ctx, "workspace-b", appspec.AppSpecSectionResources, resources.ID)
+		_, err = store.Get(ctx, appdefaults.ByID("workspace-b", appspec.AppSpecSectionResources, resources.ID))
 		Expect(errors.Is(err, appdefaults.ErrRuleNotFound)).To(BeTrue())
-		_, err = store.Get(ctx, "workspace-a", appspec.AppSpecSectionDevMode, resources.ID)
-		Expect(errors.Is(err, appdefaults.ErrRuleNotFound)).To(BeTrue())
-
-		deleted, err := store.Delete(ctx, "workspace-a", appspec.AppSpecSectionResources, resources.ID)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(deleted.ID).To(Equal(resources.ID))
-		_, err = store.Get(ctx, "workspace-a", appspec.AppSpecSectionResources, resources.ID)
+		_, err = store.Get(ctx, appdefaults.ByID("workspace-a", appspec.AppSpecSectionDevMode, resources.ID))
 		Expect(errors.Is(err, appdefaults.ErrRuleNotFound)).To(BeTrue())
 	})
 

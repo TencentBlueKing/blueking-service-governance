@@ -25,6 +25,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -32,7 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkrepo"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	helmchartcred "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
@@ -42,6 +43,7 @@ const bkRepoAccountPasswordLength = 32
 
 // ProjectManager 蓝盾制品项目管理
 type ProjectManager struct {
+	db          *mongo.Database
 	workspaceID string
 	operator    string
 	// 公共账户（如：g_bkms_test）
@@ -50,8 +52,9 @@ type ProjectManager struct {
 }
 
 // NewProjectManager ...
-func NewProjectManager(workspaceID, operator string) *ProjectManager {
+func NewProjectManager(db *mongo.Database, workspaceID, operator string) *ProjectManager {
 	return &ProjectManager{
+		db:          db,
 		workspaceID: workspaceID,
 		operator:    operator,
 		username:    fmt.Sprintf("g_bkms_%s", strings.ReplaceAll(workspaceID, "-", "_")),
@@ -62,11 +65,7 @@ func NewProjectManager(workspaceID, operator string) *ProjectManager {
 // Initialize 执行蓝盾制品库初始化，确保工作空间对应的项目 & 仓库存在
 func (m *ProjectManager) Initialize(ctx context.Context) error {
 	// 1. 查询数据库以获取蓝盾项目 Code
-	bkciProjStore, err := bkci.NewProjectStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrapf(err, "create bkci project store")
-	}
-	proj, err := bkciProjStore.GetByWorkspace(ctx, m.workspaceID)
+	proj, err := store.Of(m.db, bkci.ProjectMeta).Get(ctx, bkci.ByWorkspace(m.workspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get bkci project for workspace %s to initialize bkrepo", m.workspaceID)
 	}
@@ -99,20 +98,17 @@ func (m *ProjectManager) Initialize(ctx context.Context) error {
 func (m *ProjectManager) initProject(
 	ctx context.Context, client bkrepo.Client, projectID string,
 ) error {
-	store, err := NewProjectStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrap(err, "create bkrepo project store")
-	}
+	projStore := store.Of(m.db, ProjectMeta)
 
 	// 1. 查询 DB，确认是否有关联记录
-	if _, err = store.GetByWorkspace(ctx, m.workspaceID); err == nil {
+	if _, err := projStore.Get(ctx, ByWorkspace(m.workspaceID)); err == nil {
 		return nil
 	} else if !errors.Is(err, ErrProjectNotFound) {
-		return err
+		return errors.Wrapf(err, "get bkrepo project of workspace %s", m.workspaceID)
 	}
 
 	// 2. 调用蓝盾制品库 API 创建项目
-	if err = client.CreateProject(ctx, projectID); err != nil {
+	if err := client.CreateProject(ctx, projectID); err != nil {
 		return errors.Wrapf(err, "create bkrepo %s", projectID)
 	}
 
@@ -124,12 +120,12 @@ func (m *ProjectManager) initProject(
 		Password:    m.password,
 		Creator:     m.operator,
 	}
-	if err = store.Create(ctx, project); err != nil {
+	if err := projStore.Create(ctx, project); err != nil {
 		return errors.Wrap(err, "insert bkrepo project")
 	}
 
 	// 4. 创建公共账号用户 & 关联到蓝盾制品库项目，并且为操作人添加关联
-	if err = client.CreateUserToProject(
+	if err := client.CreateUserToProject(
 		ctx, projectID, m.username, m.password, []string{m.operator},
 	); err != nil {
 		return errors.Wrapf(err, "create bkrepo user to project %s", m.username)
@@ -142,21 +138,18 @@ func (m *ProjectManager) initProject(
 func (m *ProjectManager) initRepositories(
 	ctx context.Context, client bkrepo.Client, projectID string,
 ) error {
-	store, err := NewRepositoryStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrap(err, "create bkrepo repository store")
-	}
+	repoStore := store.Of(m.db, RepositoryMeta)
 
 	for _, repo := range config.G.BKRepo.InitRepos {
 		// 1. 逐个仓库检查是否存在，不存在的需要创建
-		if _, err = store.GetByWorkspaceAndType(ctx, m.workspaceID, RepoType(repo.Type)); err == nil {
+		if _, err := repoStore.Get(ctx, ByWorkspaceAndType(m.workspaceID, RepoType(repo.Type))); err == nil {
 			continue
 		} else if !errors.Is(err, ErrRepositoryNotFound) {
-			return err
+			return errors.Wrapf(err, "get bkrepo repository %s", repo.Type)
 		}
 
 		// 2. 调用蓝盾制品库 API 创建仓库
-		if err = client.CreateRepository(
+		if err := client.CreateRepository(
 			ctx, projectID, repo.Name, repo.Type, repo.Description, repo.IsPublic,
 		); err != nil {
 			return errors.Wrapf(err, "create repository %s", repo.Name)
@@ -171,7 +164,7 @@ func (m *ProjectManager) initRepositories(
 			IsPublic:    repo.IsPublic,
 			Creator:     m.operator,
 		}
-		if err = store.Create(ctx, repository); err != nil {
+		if err := repoStore.Create(ctx, repository); err != nil {
 			return errors.Wrap(err, "insert bkrepo repository")
 		}
 	}
@@ -185,16 +178,14 @@ func (m *ProjectManager) initImageRegistryCredentials(ctx context.Context, proje
 		return errors.Wrap(err, "generate image registry from config")
 	}
 
-	store, err := bkmsreg.NewImageRegistryStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrap(err, "create image registry store")
-	}
+	regStore := store.Of(m.db, bkmsreg.ImageRegistryMeta)
 
 	// 1. 查询 DB，确认是否有关联记录，若存在，直接返回
-	if _, err = store.GetByWorkspaceAndType(ctx, m.workspaceID, bkmsreg.ImageRegistryTypeBuiltin); err == nil {
+	_, err = regStore.Get(ctx, bkmsreg.ByWorkspaceAndType(m.workspaceID, bkmsreg.ImageRegistryTypeBuiltin))
+	if err == nil {
 		return nil
 	} else if !errors.Is(err, bkmsreg.ErrImageRegistryNotFound) {
-		return err
+		return errors.Wrapf(err, "get builtin image registry of workspace %s", m.workspaceID)
 	}
 
 	// 2. 数据库中没有该镜像源配置的记录，重新初始化
@@ -222,7 +213,7 @@ func (m *ProjectManager) initImageRegistryCredentials(ctx context.Context, proje
 		Password:         m.password,
 		BkCICredentialID: credentialID,
 	}
-	if _, err = store.Create(ctx, imageReg); err != nil {
+	if err = regStore.Create(ctx, imageReg); err != nil {
 		return errors.Wrap(err, "insert image registry")
 	}
 
@@ -231,12 +222,6 @@ func (m *ProjectManager) initImageRegistryCredentials(ctx context.Context, proje
 
 // Helm 仓库凭证初始化到蓝盾凭证管理
 func (m *ProjectManager) initHelmRepoCredentials(ctx context.Context, projectCode string) error {
-	// 1. 创建 Helm 仓库凭证 store
-	credStore, err := helmchartcred.NewHelmRepoCredentialStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrap(err, "create helm repo credential store")
-	}
-
-	// 2. 幂等初始化 Helm 仓库凭证
-	return helmchartcred.EnsureCredential(ctx, credStore, m.workspaceID, projectCode, m.username, m.password)
+	// 幂等初始化 Helm 仓库凭证
+	return helmchartcred.EnsureCredential(ctx, m.db, m.workspaceID, projectCode, m.username, m.password)
 }

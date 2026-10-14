@@ -37,6 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/polarisapply"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -50,20 +51,17 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
+func (h *Handler) polarisConfigs() *polaris.ConfigStore {
+	return store.Of(h.registry.DB, polaris.ConfigMeta)
+}
+
 func (h *Handler) polarisConfigService() *polaris.PolarisConfigService {
 	return polaris.NewPolarisConfigService(
-		h.registry.PolarisConfigStore,
-		polaris.NewPolarisPlatformManager(
-			h.registry.DepSvcStore,
-			h.registry.DepSvcInstStore,
-			h.registry.PolarisConfigStore,
-		),
-		polaris.NewPolarisEnvStateManager(h.registry.PolarisConfigStore),
-		h.registry.EnvStore,
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
+		h.registry.DB,
+		polaris.NewPolarisPlatformManager(h.registry.DB),
+		polaris.NewPolarisEnvStateManager(h.registry.DB),
 		envvars.NewUnifiedEnvVarsReader(
-			h.registry.ScopedEnvVarStore,
+			h.registry.DB,
 			h.registry.AppDepsVarReader,
 			h.registry.PolarisVarReader,
 		),
@@ -98,21 +96,20 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 		return
 	}
 
-	configs, err := h.registry.PolarisConfigStore.ListByApp(ctx, app.ID)
+	configValues, err := h.polarisConfigs().List(ctx, polaris.ByApp(app.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list polaris configs"))
 		return
 	}
+	configs := lo.ToSlicePtr(configValues)
 
 	cfgProvider := appcfg.NewMountableFileProvider(
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
-		h.registry.AppConfigFileVersionStore,
+		h.registry.DB,
 	)
 	outputList := lo.Map(configs, func(config *polaris.PolarisConfig, _ int) *serializer.PolarisConfigOutputObj {
 		warnings := polaris.CollectConfigWarnings(
 			ctx,
-			h.registry.AppModelStore,
+			h.registry.DB,
 			cfgProvider,
 			config,
 		)
@@ -235,7 +232,7 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		return
 	}
 
-	existingConfig, err := h.registry.PolarisConfigStore.Get(ctx, app.ID, uriInput.ConfigName)
+	existingConfig, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -331,7 +328,7 @@ func (h *Handler) DeleteAppPolarisConfig(c *gin.Context) {
 	}
 
 	service := h.polarisConfigService()
-	existingConfig, err := h.registry.PolarisConfigStore.Get(ctx, app.ID, uriInput.ConfigName)
+	existingConfig, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -407,7 +404,7 @@ func (h *Handler) ListAppPolarisConfigVars(c *gin.Context) {
 		return
 	}
 
-	config, err := h.registry.PolarisConfigStore.Get(ctx, app.ID, uriInput.ConfigName)
+	config, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -462,11 +459,9 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 
 	warnings := polaris.CollectConfigWarnings(
 		ctx,
-		h.registry.AppModelStore,
+		h.registry.DB,
 		appcfg.NewMountableFileProvider(
-			h.registry.AppConfigFileStore,
-			h.registry.AppConfigFileDefStore,
-			h.registry.AppConfigFileVersionStore,
+			h.registry.DB,
 		),
 		config,
 	)
@@ -612,7 +607,7 @@ func (h *Handler) PutEnvWeight(c *gin.Context) {
 		return
 	}
 
-	config, err := h.registry.PolarisConfigStore.Get(ctx, app.ID, uriInput.ConfigName)
+	config, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -695,7 +690,7 @@ func (h *Handler) GetEnvInstanceStats(c *gin.Context) {
 		return
 	}
 
-	config, err := h.registry.PolarisConfigStore.Get(ctx, app.ID, uriInput.ConfigName)
+	config, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -709,7 +704,7 @@ func (h *Handler) GetEnvInstanceStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := instancestats.NewCollector(h.registry.AppModelDeployRecordStore).Collect(ctx, app.ID, config)
+	stats, err := instancestats.NewCollector(h.registry.DB).Collect(ctx, app.ID, config)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "collect env instance stats"))
 		return

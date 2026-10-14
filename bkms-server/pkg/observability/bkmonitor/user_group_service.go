@@ -25,12 +25,14 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ErrNoticeGroupNotFound 告警组不存在的语义错误，调用方可据此跳过。
@@ -63,14 +65,14 @@ type UserGroupService struct {
 	newClient userGroupClientFactory
 
 	// envStore 用于查询 workspace 下全部环境列表
-	envStore envmodel.EnvironmentStore
+	envStore *envmodel.EnvironmentStore
 }
 
 // NewUserGroupService 创建 UserGroupService 实例。
-func NewUserGroupService(envStore envmodel.EnvironmentStore) *UserGroupService {
+func NewUserGroupService(db *mongo.Database) *UserGroupService {
 	return &UserGroupService{
 		newClient: bkmapi.NewMonitorClient,
-		envStore:  envStore,
+		envStore:  store.Of(db, envmodel.EnvMeta),
 	}
 }
 
@@ -275,7 +277,7 @@ func (s *UserGroupService) listEnvNames(
 		return nil, errors.New("envStore is nil")
 	}
 
-	envs, err := s.envStore.ListStdEnvs(ctx, workspaceID)
+	envs, err := s.envStore.List(ctx, envmodel.StdEnvsIn(workspaceID), envmodel.NewestFirst())
 	if err != nil {
 		return nil, errors.Wrapf(err, "list envs of workspace(%s)", workspaceID)
 	}

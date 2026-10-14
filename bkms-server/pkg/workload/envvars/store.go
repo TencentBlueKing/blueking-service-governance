@@ -28,12 +28,12 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
@@ -48,6 +48,22 @@ var ErrScopedEnvVarNotFound = errors.New("scoped env var not found")
 // (workspaceID, scopeType, scopeValue, key), so currently only key collisions trigger this.
 var ErrScopedEnvVarKeyConflict = errors.New("an env var with the same key already exists in this scope")
 
+// ScopedEnvVarStore is the store of scoped env vars.
+type ScopedEnvVarStore = store.GenericStore[ScopedEnvVar]
+
+// ScopedEnvVarMeta describes how scoped env vars are stored. Values are encrypted before
+// being written and decrypted after being read.
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：workspaceID + scopeType + scopeValue + key
+var ScopedEnvVarMeta = store.Meta[ScopedEnvVar]{
+	Collection: ScopedEnvVarCollectionName,
+	NotFound:   ErrScopedEnvVarNotFound,
+	Duplicate:  ErrScopedEnvVarKeyConflict,
+	Encode:     []func(*ScopedEnvVar) error{encryptValue},
+	Decode:     []func(*ScopedEnvVar) error{decryptValue},
+}
+
 // ScopedEnvVarUpdateData defines the updatable fields of a scoped env var.
 type ScopedEnvVarUpdateData struct {
 	Key string
@@ -58,13 +74,38 @@ type ScopedEnvVarUpdateData struct {
 	IsSensitive *bool
 }
 
+// InWorkspace matches env vars in the given workspace.
+func InWorkspace(workspaceID string) store.Opt {
+	return store.Where("workspaceID", workspaceID)
+}
+
+// InScopes matches env vars in any of the given scopes; no scope means no scope filtering.
+func InScopes(scopes ...envvartypes.ScopedEnvVarScope) store.Opt {
+	switch len(scopes) {
+	case 0:
+		return store.Combine()
+	case 1:
+		// 单个作用域写成等值条件，Upsert 插入时会从过滤条件中取得作用域字段
+		return store.Filter(bson.M{"scopeType": scopes[0].ScopeType, "scopeValue": scopes[0].ScopeValue})
+	default:
+		return store.Where("$or", lo.Map(scopes, func(scope envvartypes.ScopedEnvVarScope, _ int) bson.M {
+			return bson.M{"scopeType": scope.ScopeType, "scopeValue": scope.ScopeValue}
+		}))
+	}
+}
+
+// ByID matches the env var with the given ID. Operations by ID are limited to a single workspace.
+func ByID(workspaceID string, id bson.ObjectID) store.Opt {
+	return store.Combine(store.ByID(id), InWorkspace(workspaceID))
+}
+
 type scopedEnvVarListOptions struct {
 	onlyBuiltin bool
 	ordering    string
 	scopes      []envvartypes.ScopedEnvVarScope
 }
 
-// ScopedEnvVarListOption customizes ScopedEnvVarStore.List behavior.
+// ScopedEnvVarListOption customizes List behavior.
 type ScopedEnvVarListOption func(*scopedEnvVarListOptions)
 
 // WithOrdering sorts list results by the named field in ascending order.
@@ -92,74 +133,12 @@ func WithOnlyBuiltin() ScopedEnvVarListOption {
 	}
 }
 
-// ScopedEnvVarStore defines the storage interface for scoped env vars.
-type ScopedEnvVarStore interface {
-	// List lists env vars in the given workspace.
-	// Use WithScopes to limit the result to one or more scopes; when WithScopes
-	// is omitted, all scopes are returned (i.e. no scope filtering is applied).
-	List(
-		ctx context.Context,
-		workspaceID string,
-		opts ...ScopedEnvVarListOption,
-	) ([]ScopedEnvVar, error)
-	// ListPublic lists public(scopeType workspace/envType) env vars in the target workspace.
-	ListPublic(ctx context.Context, workspaceID string) ([]ScopedEnvVar, error)
-	// Create creates a scoped env var.
-	Create(ctx context.Context, envVar ScopedEnvVar) (bson.ObjectID, error)
-	// CopyEnvVars copies custom variables into another environment, including sensitive values.
-	CopyEnvVars(ctx context.Context, source, target envmodel.Environment) error
-	// CreateSimpleEnvScopeVar creates a non-builtin, non-sensitive env-scoped var.
-	CreateSimpleEnvScopeVar(
-		ctx context.Context,
-		environment envmodel.Environment,
-		key string,
-		value string,
-		description string,
-	) (bson.ObjectID, error)
-	// BatchUpsertByKey creates or updates env vars in the given scope by key.
-	// Existing vars only have value and description updated.
-	BatchUpsertByKey(
-		ctx context.Context,
-		workspaceID string,
-		scope envvartypes.ScopedEnvVarScope,
-		vars []ScopedEnvVar,
-	) error
-
-	// NOTE: Below methods are limited to operate on a single workspace.
-
-	// GetByID gets a scoped env var by ID.
-	GetByID(ctx context.Context, workspaceID string, id bson.ObjectID) (*ScopedEnvVar, error)
-	// UpdateByID updates a scoped env var by ID.
-	UpdateByID(ctx context.Context, workspaceID string, id bson.ObjectID, updateData ScopedEnvVarUpdateData) error
-	// DeleteByID deletes a scoped env var by workspace and ID.
-	DeleteByID(ctx context.Context, workspaceID string, id bson.ObjectID) error
-	// DeleteByEnv deletes all scoped env vars defined in the target environment scope.
-	DeleteByEnv(ctx context.Context, environment envmodel.Environment) error
-
-	// DeleteAll deletes all scoped env vars while preserving the collection and its indexes.
-	// Attention: only used in unit test
-	DeleteAll(ctx context.Context) error
-}
-
-var _ ScopedEnvVarStore = (*ScopedEnvVarStoreMongo)(nil)
-
-// ScopedEnvVarStoreMongo is the MongoDB implementation of ScopedEnvVarStore.
-type ScopedEnvVarStoreMongo struct {
-	collection *mongo.Collection
-}
-
-// NewScopedEnvVarStoreMongo creates a new ScopedEnvVarStore backed by MongoDB.
-func NewScopedEnvVarStoreMongo(client *mongo.Client, dbName string) (ScopedEnvVarStore, error) {
-	coll := client.Database(dbName).Collection(ScopedEnvVarCollectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：workspaceID + scopeType + scopeValue + key
-	return &ScopedEnvVarStoreMongo{collection: coll}, nil
-}
-
 // List lists env vars in the given workspace.
-// When WithScopes is omitted, all scopes are returned.
-func (s *ScopedEnvVarStoreMongo) List(
+// Use WithScopes to limit the result to one or more scopes; when WithScopes
+// is omitted, all scopes are returned (i.e. no scope filtering is applied).
+func List(
 	ctx context.Context,
+	db *mongo.Database,
 	workspaceID string,
 	opts ...ScopedEnvVarListOption,
 ) ([]ScopedEnvVar, error) {
@@ -173,63 +152,25 @@ func (s *ScopedEnvVarStoreMongo) List(
 	// A: ScopedEnvVar 中 isBuiltin 为 true 的比较特殊，它们只有在系统需要后期动态写入一些内置变量时
 	// 才会被用到，比如 APM_TOKEN，且它们会被认为是和那些动态的（无需写入数据库）的内置变量同属“内置”
 	// 这个分类，而非某个 Scoped 环境级变量。因此，单次查询 ScopedEnvVar 列表数据，不会同时需要两类数据。
-	filter := bson.M{
-		"workspaceID": workspaceID,
-		"isBuiltin":   listOpts.onlyBuiltin,
-	}
-
-	// Build the scope filter according to the provided scopes.
-	switch len(listOpts.scopes) {
-	case 0:
-	case 1:
-		filter["scopeType"] = listOpts.scopes[0].ScopeType
-		filter["scopeValue"] = listOpts.scopes[0].ScopeValue
-	default:
-		scopeFilters := make([]bson.M, 0, len(listOpts.scopes))
-		for _, scope := range listOpts.scopes {
-			scopeFilters = append(scopeFilters, bson.M{
-				"scopeType":  scope.ScopeType,
-				"scopeValue": scope.ScopeValue,
-			})
-		}
-		filter["$or"] = scopeFilters
-	}
-
-	cursor, err := s.collection.Find(ctx, filter, options.Find().SetSort(scopedEnvVarSort(listOpts.ordering)))
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var result []ScopedEnvVar
-	if err = cursor.All(ctx, &result); err != nil {
-		return nil, err
-	}
-
-	return s.decryptEnvVarList(result)
+	return store.Of(db, ScopedEnvVarMeta).List(
+		ctx,
+		InWorkspace(workspaceID),
+		store.Where("isBuiltin", listOpts.onlyBuiltin),
+		InScopes(listOpts.scopes...),
+		scopedEnvVarSort(listOpts.ordering),
+	)
 }
 
 // ListPublic lists workspace-level and env-type-level env vars in the target workspace.
-func (s *ScopedEnvVarStoreMongo) ListPublic(ctx context.Context, workspaceID string) ([]ScopedEnvVar, error) {
-	filter := bson.M{
-		"workspaceID": workspaceID,
-		"scopeType": bson.M{
+func ListPublic(ctx context.Context, db *mongo.Database, workspaceID string) ([]ScopedEnvVar, error) {
+	result, err := store.Of(db, ScopedEnvVarMeta).List(
+		ctx,
+		InWorkspace(workspaceID),
+		store.Where("scopeType", bson.M{
 			"$in": []envvartypes.ScopeType{envvartypes.ScopeTypeWorkspace, envvartypes.ScopeTypeEnvType},
-		},
-		"isBuiltin": false,
-	}
-	cursor, err := s.collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var result []ScopedEnvVar
-	if err = cursor.All(ctx, &result); err != nil {
-		return nil, err
-	}
-
-	result, err = s.decryptEnvVarList(result)
+		}),
+		store.Where("isBuiltin", false),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -263,77 +204,26 @@ func SortPublicScopedEnvVars(result []ScopedEnvVar) {
 	})
 }
 
-func scopedEnvVarSort(ordering string) bson.D {
+func scopedEnvVarSort(ordering string) store.Opt {
 	switch ordering {
 	case "created":
-		return bson.D{{Key: "createdAt", Value: 1}}
+		return store.Asc("createdAt")
 	case "key":
 		fallthrough
 	default:
-		return bson.D{{Key: "key", Value: 1}}
+		return store.Asc("key")
 	}
-}
-
-// GetByID gets a scoped env var by workspaceID and ID.
-func (s *ScopedEnvVarStoreMongo) GetByID(
-	ctx context.Context, workspaceID string, id bson.ObjectID,
-) (*ScopedEnvVar, error) {
-	var result ScopedEnvVar
-	if err := s.collection.FindOne(ctx, bson.M{"_id": id, "workspaceID": workspaceID}).Decode(&result); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrScopedEnvVarNotFound
-		}
-		return nil, err
-	}
-
-	decryptedValue, err := s.decryptEnvVar(result.Value)
-	if err != nil {
-		return nil, errors.Wrapf(err, "decrypt variable %s", result.Key)
-	}
-	result.Value = decryptedValue
-	return &result, nil
-}
-
-// Create creates a scoped env var.
-func (s *ScopedEnvVarStoreMongo) Create(ctx context.Context, envVar ScopedEnvVar) (bson.ObjectID, error) {
-	now := time.Now()
-	envVar.CreatedAt = now
-	envVar.UpdatedAt = now
-
-	// 加密变量值
-	encryptedValue, err := s.encryptEnvVar(envVar.Value)
-	if err != nil {
-		return bson.NilObjectID, errors.Wrapf(err, "encrypt variable %s", envVar.Key)
-	}
-	envVar.Value = encryptedValue
-
-	ret, err := s.collection.InsertOne(ctx, envVar)
-	if err != nil {
-		// The unique index is on (workspaceID, scopeType, scopeValue, key),
-		// so a duplicate key error means a record with the same key already
-		// exists in this scope.
-		if mongo.IsDuplicateKeyError(err) {
-			return bson.NilObjectID, ErrScopedEnvVarKeyConflict
-		}
-		return bson.NilObjectID, err
-	}
-
-	oid, ok := ret.InsertedID.(bson.ObjectID)
-	if !ok {
-		return bson.NilObjectID, errors.New("failed to get inserted ID")
-	}
-	return oid, nil
 }
 
 // CopyEnvVars copies only variables directly defined in the source environment.
 // Public and built-in variables keep their existing resolution rules. The copies
 // are new records, so later edits on either side stay independent. A failed copy
 // may leave partial inserts; the caller must clean up through environment delete hooks.
-func (s *ScopedEnvVarStoreMongo) CopyEnvVars(ctx context.Context, source, target envmodel.Environment) error {
+func CopyEnvVars(ctx context.Context, db *mongo.Database, source, target envmodel.Environment) error {
 	if source.WorkspaceID != target.WorkspaceID || source.Name == target.Name {
 		return errors.New("env var copy requires distinct environments in the same workspace")
 	}
-	vars, err := s.List(ctx, source.WorkspaceID, WithScopes(envvartypes.ScopeEnv(source.Name)))
+	vars, err := List(ctx, db, source.WorkspaceID, WithScopes(envvartypes.ScopeEnv(source.Name)))
 	if err != nil {
 		return errors.Wrapf(err, "read custom variables from environment %s", source.Name)
 	}
@@ -342,43 +232,48 @@ func (s *ScopedEnvVarStoreMongo) CopyEnvVars(ctx context.Context, source, target
 	}
 	// Insert new records so a concurrently created key causes a conflict instead
 	// of receiving a source secret while retaining a non-sensitive target flag.
-	now := time.Now()
-	docs := make([]any, 0, len(vars))
-	for _, item := range vars {
-		encryptedValue, encryptErr := s.encryptEnvVar(item.Value)
-		if encryptErr != nil {
-			return errors.Wrapf(encryptErr, "encrypt copied variable %s for environment %s", item.Key, target.Name)
-		}
-		docs = append(docs, ScopedEnvVar{
+	copies := lo.Map(vars, func(item ScopedEnvVar, _ int) *ScopedEnvVar {
+		return &ScopedEnvVar{
 			WorkspaceID: target.WorkspaceID,
 			ScopeType:   envvartypes.ScopeTypeEnv,
 			ScopeValue:  target.Name,
 			Key:         item.Key,
-			Value:       encryptedValue,
+			Value:       item.Value,
 			Description: item.Description,
 			IsSensitive: item.IsSensitive,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		})
-	}
-	if _, err = s.collection.InsertMany(ctx, docs); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			err = ErrScopedEnvVarKeyConflict
 		}
+	})
+	if err = store.Of(db, ScopedEnvVarMeta).CreateMany(ctx, copies); err != nil {
 		return errors.Wrapf(err, "copy custom variables to environment %s", target.Name)
 	}
 	return nil
 }
 
+// FeatureEnvVarCopier implements bkmsenv.FeatureEnvVarStore on top of the database.
+type FeatureEnvVarCopier struct {
+	db *mongo.Database
+}
+
+// NewFeatureEnvVarCopier creates a FeatureEnvVarCopier.
+func NewFeatureEnvVarCopier(db *mongo.Database) *FeatureEnvVarCopier {
+	return &FeatureEnvVarCopier{db: db}
+}
+
+// CopyEnvVars copies custom variables into another environment, including sensitive values.
+func (c *FeatureEnvVarCopier) CopyEnvVars(ctx context.Context, source, target envmodel.Environment) error {
+	return CopyEnvVars(ctx, c.db, source, target)
+}
+
 // CreateSimpleEnvScopeVar creates a non-builtin, non-sensitive env-scoped var.
-func (s *ScopedEnvVarStoreMongo) CreateSimpleEnvScopeVar(
+func CreateSimpleEnvScopeVar(
 	ctx context.Context,
+	db *mongo.Database,
 	environment envmodel.Environment,
 	key string,
 	value string,
 	description string,
 ) (bson.ObjectID, error) {
-	return s.Create(ctx, ScopedEnvVar{
+	envVar := &ScopedEnvVar{
 		WorkspaceID: environment.WorkspaceID,
 		ScopeType:   envvartypes.ScopeTypeEnv,
 		ScopeValue:  environment.Name,
@@ -387,171 +282,93 @@ func (s *ScopedEnvVarStoreMongo) CreateSimpleEnvScopeVar(
 		Description: description,
 		IsBuiltin:   false,
 		IsSensitive: false,
-	})
+	}
+	if err := store.Of(db, ScopedEnvVarMeta).Create(ctx, envVar); err != nil {
+		return bson.NilObjectID, err
+	}
+	return envVar.ID, nil
 }
 
 // BatchUpsertByKey creates or updates env vars in the given scope by key.
-func (s *ScopedEnvVarStoreMongo) BatchUpsertByKey(
+// Existing vars only have value and description updated.
+func BatchUpsertByKey(
 	ctx context.Context,
+	db *mongo.Database,
 	workspaceID string,
 	scope envvartypes.ScopedEnvVarScope,
 	vars []ScopedEnvVar,
 ) error {
-	if len(vars) == 0 {
-		return nil
-	}
-
-	now := time.Now()
-	models := make([]mongo.WriteModel, 0, len(vars))
+	objs := make([]*ScopedEnvVar, 0, len(vars))
 	for _, item := range vars {
 		if item.Key == "" {
 			return errors.New("scoped env var key is required for upsert")
 		}
-
-		encryptedValue, err := s.encryptEnvVar(item.Value)
-		if err != nil {
-			return errors.Wrapf(err, "encrypt variable %s", item.Key)
-		}
-
-		filter := bson.M{
-			"workspaceID": workspaceID,
-			"scopeType":   scope.ScopeType,
-			"scopeValue":  scope.ScopeValue,
-			"key":         item.Key,
-		}
-		update := bson.M{
-			"$set": bson.M{
-				"value":       encryptedValue,
-				"description": item.Description,
-				"updatedAt":   now,
-			},
-			"$setOnInsert": bson.M{
-				"workspaceID": workspaceID,
-				"scopeType":   scope.ScopeType,
-				"scopeValue":  scope.ScopeValue,
-				"key":         item.Key,
-				"isBuiltin":   item.IsBuiltin,
-				"isSensitive": item.IsSensitive,
-				"createdAt":   now,
-			},
-		}
-		models = append(models, mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update).SetUpsert(true))
+		// 在副本上写入：变量按 workspace + scope + key 匹配，调用方传入的 ID 与时间不参与写入
+		obj := item
+		obj.ID = bson.NilObjectID
+		obj.WorkspaceID, obj.ScopeType, obj.ScopeValue = workspaceID, scope.ScopeType, scope.ScopeValue
+		obj.CreatedAt, obj.UpdatedAt = time.Time{}, time.Time{}
+		objs = append(objs, &obj)
 	}
 
-	if _, err := s.collection.BulkWrite(ctx, models); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return ErrScopedEnvVarKeyConflict
-		}
+	_, err := store.Of(db, ScopedEnvVarMeta).UpsertMany(
+		ctx,
+		objs,
+		func(v *ScopedEnvVar) store.Opt { return store.Where("key", v.Key) },
+		InWorkspace(workspaceID),
+		InScopes(scope),
+		store.UpdateSelected("value", "description"),
+	)
+	if err != nil {
 		return errors.Wrap(err, "bulk upsert scoped env vars")
 	}
 	return nil
 }
 
 // UpdateByID updates a scoped env var by workspaceID and ID.
-func (s *ScopedEnvVarStoreMongo) UpdateByID(
-	ctx context.Context, workspaceID string, id bson.ObjectID, updateData ScopedEnvVarUpdateData,
+func UpdateByID(
+	ctx context.Context,
+	db *mongo.Database,
+	workspaceID string,
+	id bson.ObjectID,
+	updateData ScopedEnvVarUpdateData,
 ) error {
 	if id == bson.NilObjectID {
 		return errors.New("scoped env var ID is required for update")
 	}
 
-	updateSet := bson.M{
+	fields := map[string]any{
 		"key":         updateData.Key,
 		"description": updateData.Description,
-		"updatedAt":   time.Now(),
 	}
 	if updateData.Value != nil {
-		encryptedValue, err := s.encryptEnvVar(*updateData.Value)
-		if err != nil {
-			return errors.Wrapf(err, "encrypt variable %s", updateData.Key)
-		}
-		updateSet["value"] = encryptedValue
+		fields["value"] = *updateData.Value
 	}
 	if updateData.IsSensitive != nil {
-		updateSet["isSensitive"] = *updateData.IsSensitive
+		fields["isSensitive"] = *updateData.IsSensitive
 	}
-
-	opts := options.UpdateOne().SetUpsert(false)
-	result, err := s.collection.UpdateOne(
-		ctx,
-		bson.M{"_id": id, "workspaceID": workspaceID},
-		bson.M{"$set": updateSet},
-		opts,
-	)
-	if err != nil {
-		// The unique index is on (workspaceID, scopeType, scopeValue, key),
-		// so a duplicate key error means a record with the same key already
-		// exists in this scope.
-		if mongo.IsDuplicateKeyError(err) {
-			return ErrScopedEnvVarKeyConflict
-		}
-		return err
-	}
-	if result.MatchedCount == 0 {
-		return ErrScopedEnvVarNotFound
-	}
-	return nil
-}
-
-// DeleteByID deletes a scoped env var by workspaceID and ID.
-func (s *ScopedEnvVarStoreMongo) DeleteByID(ctx context.Context, workspaceID string, id bson.ObjectID) error {
-	if id == bson.NilObjectID {
-		return errors.New("scoped env var ID is required for delete")
-	}
-
-	result, err := s.collection.DeleteOne(ctx, bson.M{"_id": id, "workspaceID": workspaceID})
-	if err != nil {
-		return err
-	}
-	if result.DeletedCount == 0 {
-		return ErrScopedEnvVarNotFound
-	}
-	return nil
+	return store.Of(db, ScopedEnvVarMeta).Update(ctx, fields, ByID(workspaceID, id))
 }
 
 // DeleteByEnv deletes all scoped env vars defined in the target environment scope.
-func (s *ScopedEnvVarStoreMongo) DeleteByEnv(ctx context.Context, environment envmodel.Environment) error {
-	_, err := s.collection.DeleteMany(ctx, bson.M{
-		"workspaceID": environment.WorkspaceID,
-		"scopeType":   envvartypes.ScopeTypeEnv,
-		"scopeValue":  environment.Name,
-	})
+func DeleteByEnv(ctx context.Context, db *mongo.Database, environment envmodel.Environment) error {
+	_, err := store.Of(db, ScopedEnvVarMeta).DeleteMany(
+		ctx,
+		InWorkspace(environment.WorkspaceID),
+		InScopes(envvartypes.ScopeEnv(environment.Name)),
+	)
 	return err
 }
 
-// DeleteAll deletes all scoped env vars while preserving the collection and its indexes.
-// Attention: only used in unit test.
-func (s *ScopedEnvVarStoreMongo) DeleteAll(ctx context.Context) error {
-	_, err := s.collection.DeleteMany(ctx, bson.M{})
-	return err
+// encryptValue encrypts the variable value before it is written. Unlike crypto.OnDemand,
+// an empty value is encrypted as well, so every stored value is ciphertext.
+func encryptValue(v *ScopedEnvVar) (err error) {
+	v.Value, err = crypto.AESEncrypt(config.G.Encrypt.Secret, v.Value)
+	return errors.Wrapf(err, "encrypt variable %s", v.Key)
 }
 
-// encryptEnvVar encrypts a variable value through a crypto function
-func (s *ScopedEnvVarStoreMongo) encryptEnvVar(v string) (string, error) {
-	if data, err := crypto.AESEncrypt(config.G.Encrypt.Secret, v); err != nil {
-		return "", err
-	} else {
-		return data, nil
-	}
-}
-
-// decryptEnvVar decrypts a variable value through a crypto function
-func (s *ScopedEnvVarStoreMongo) decryptEnvVar(v string) (string, error) {
-	if data, err := crypto.AESDecrypt(config.G.Encrypt.Secret, v); err != nil {
-		return "", err
-	} else {
-		return data, nil
-	}
-}
-
-func (s *ScopedEnvVarStoreMongo) decryptEnvVarList(vars []ScopedEnvVar) ([]ScopedEnvVar, error) {
-	// 解密环境变量值
-	for i, v := range vars {
-		decryptedValue, decryptErr := s.decryptEnvVar(v.Value)
-		if decryptErr != nil {
-			return nil, errors.Wrapf(decryptErr, "decrypt variable %s", v.Key)
-		}
-		vars[i].Value = decryptedValue
-	}
-	return vars, nil
+// decryptValue decrypts the variable value after it is read
+func decryptValue(v *ScopedEnvVar) (err error) {
+	v.Value, err = crypto.AESDecrypt(config.G.Encrypt.Secret, v.Value)
+	return errors.Wrapf(err, "decrypt variable %s", v.Key)
 }

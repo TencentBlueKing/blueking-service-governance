@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
@@ -63,13 +64,12 @@ func (h *Handler) ListCustomBuildImages(c *gin.Context) {
 	}
 
 	// 只查落库记录：不校验镜像源是否绑定，也不读快照
-	images, err := h.registry.CustomRuntimeImageStore.List(
+	images, err := store.Of(h.registry.DB, customruntime.Meta).List(
 		ctx,
-		uriInput.WorkspaceID,
-		customruntime.ListOptions{
-			Type:    customruntime.ImageType(queryInput.Type),
-			Keyword: queryInput.Keyword,
-		},
+		customruntime.ByWorkspace(uriInput.WorkspaceID),
+		customruntime.ByType(customruntime.ImageType(queryInput.Type)),
+		customruntime.NameContains(queryInput.Keyword),
+		customruntime.InListOrder(),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
@@ -209,11 +209,11 @@ func (h *Handler) RefreshCustomBuildImageTags(c *gin.Context) {
 
 // newTagQueryManager 组装自定义镜像 tag 查询依赖。
 //
-// 工作空间口径的 repoKey 只依赖镜像源账密，不读构建配置与应用，故快照服务的另两个 store 传 nil
+// 工作空间口径的 repoKey 只依赖镜像源账密，不读应用
 func (h *Handler) newTagQueryManager() *customruntime.TagQueryManager {
 	return customruntime.NewTagQueryManager(
-		h.registry.CustomRuntimeImageStore,
-		snapshot.NewService(h.registry.SnapshotStore, nil, nil),
+		h.registry.DB,
+		snapshot.NewService(h.registry.DB),
 	)
 }
 

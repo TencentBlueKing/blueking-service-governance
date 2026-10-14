@@ -18,9 +18,14 @@
 
 package workspace
 
-import "go.uber.org/fx"
+import (
+	"go.uber.org/fx"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+)
 
 // FxModule provides platform workspace service dependencies via uber fx.
 var FxModule = fx.Module("plat-workspace",
+	database.PrivateFxModule,
 	fx.Provide(NewService),
 )

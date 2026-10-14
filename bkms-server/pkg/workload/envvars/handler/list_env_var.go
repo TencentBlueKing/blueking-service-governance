@@ -27,8 +27,10 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -70,7 +72,7 @@ func (h *Handler) ListAppEnvVars(c *gin.Context) {
 	}
 
 	reader := envvars.NewUnifiedEnvVarsReader(
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
@@ -120,7 +122,7 @@ func (h *Handler) ListEnvBgEnvVars(c *gin.Context) {
 	}
 
 	reader := envvars.NewUnifiedEnvVarsReader(
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
@@ -168,7 +170,8 @@ func (h *Handler) ListAppBgEnvVars(c *gin.Context) {
 		return
 	}
 
-	env, err := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, uriInput.EnvName)
+	env, err := store.Of(h.registry.DB, envmodel.EnvMeta).
+		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get env by name"))
 		return
@@ -181,7 +184,7 @@ func (h *Handler) ListAppBgEnvVars(c *gin.Context) {
 	}
 
 	reader := envvars.NewUnifiedEnvVarsReader(
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
@@ -207,7 +210,7 @@ func (h *Handler) ListAppBgEnvVars(c *gin.Context) {
 func (h *Handler) getEnvEffectiveAppModel(
 	ctx context.Context, appID, envName string,
 ) (*appmodel.AppModel, error) {
-	am, err := h.registry.AppModelStore.GetAppModel(ctx, appID)
+	am, err := store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(appID))
 	if err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
 			return nil, nil
@@ -216,7 +219,7 @@ func (h *Handler) getEnvEffectiveAppModel(
 	}
 
 	effective, _, err := appspec.ModelForEnv(
-		ctx, h.registry.AppSpecStore, h.registry.AppModelStore, appID, envName, am,
+		ctx, h.registry.DB, appID, envName, am,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "apply env app spec for app id=%s env=%s", appID, envName)

@@ -157,15 +157,11 @@ func buildManager() (Manager, error) {
 }
 
 // newIAMService 装配 LocalManager 内部依赖：cloudapi/iam.IAMClient +
-// role.RoleStoreMongo（复用全局 mongo client）+ iam.IAMService。
+// role 存储（复用全局 mongo 连接）+ iam.IAMService。
 func newIAMService() (*bkiam.IAMService, error) {
 	cli, err := cloudapiiam.NewIAMClient()
 	if err != nil {
 		return nil, errors.Wrap(err, "new iam client")
 	}
-	store, err := role.NewRoleStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "new role store")
-	}
-	return bkiam.NewIAMService(cli, store), nil
+	return bkiam.NewIAMService(cli, database.DB()), nil
 }

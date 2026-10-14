@@ -182,7 +182,7 @@ func (s *AppCfgFileDefService) applyContentUpdate(
 	targetFile *AppConfigFile,
 	content string,
 ) (string, error) {
-	editor, err := NewAppConfigFileEditor(s.FileStore, s.DefStore, targetFile)
+	editor, err := NewAppConfigFileEditor(s.db, targetFile)
 	if err != nil {
 		return "", errors.Wrap(err, "creating app config file editor")
 	}

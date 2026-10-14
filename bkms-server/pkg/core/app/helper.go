@@ -23,8 +23,12 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // AppWithDetails app 信息 + 用户最近操作时间
@@ -38,13 +42,12 @@ type AppWithDetails struct {
 // 不包含权限过滤。
 func ListSortByOpTime(
 	ctx context.Context,
-	appStore ApplicationStore,
-	opStore audit.OperationRecordStore,
+	db *mongo.Database,
 	workspaceID, username string,
 ) ([]AppWithDetails, error) {
-	apps, err := appStore.ListApps(ctx, &ListOpts{WorkspaceID: workspaceID})
+	apps, err := store.Of(db, AppMeta).List(ctx, InWorkspace(workspaceID))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "list apps in workspace %s", workspaceID)
 	}
 	if len(apps) == 0 {
 		return nil, nil
@@ -56,16 +59,16 @@ func ListSortByOpTime(
 	}
 
 	// 查询用户操作时间
-	latestOpTimes, err := opStore.GetLatestOperationTimesByAppsForUser(ctx, workspaceID, appIDs, username)
+	latestOpTimes, err := audit.GetLatestOperationTimesByAppsForUser(ctx, db, workspaceID, appIDs, username)
 	if err != nil {
-		log.Warnf(ctx, "get latest operation times by apps for user: %s: %v", username, err)
+		log.Warnf(ctx, "list apps sorted by operation time: %v", err)
 		latestOpTimes = nil
 	}
 
 	result := make([]AppWithDetails, 0, len(apps))
-	for _, app := range apps {
+	for i, app := range apps {
 		item := AppWithDetails{
-			Application: app,
+			Application: &apps[i],
 		}
 		if t, ok := latestOpTimes[app.ID]; ok {
 			item.LastOperatedAt = t

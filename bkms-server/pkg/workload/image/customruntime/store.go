@@ -20,224 +20,88 @@ package customruntime
 
 import (
 	"context"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-const (
-	// collCustomRuntimeImages 工作空间自定义运行时镜像集合
-	collCustomRuntimeImages = "custom_runtime_images"
-)
-
-// Store 工作空间自定义运行时镜像存储接口。
+// Store 工作空间自定义运行时镜像存储。
 //
-// 记录归属工作空间而非应用，因此接口不提供任何以 appID 为条件的查询或删除方法。
-type Store interface {
-	// Upsert 幂等写入自定义运行时镜像记录。
-	//
-	// 以 workspaceID + type + name 为唯一键：命中已有记录时只刷新 updatedAt，
-	// 其余字段保持不变。调用方无需在写入前先查重。
-	Upsert(ctx context.Context, image *Image) error
+// 记录归属工作空间而非应用，因此不提供任何以 appID 为条件的具名 Opt
+type Store = store.GenericStore[Image]
 
-	// GetByWorkspaceTypeAndName 按工作空间、镜像类型与仓库名称获取记录，
-	// 未命中返回 ErrCustomRuntimeImageNotFound
-	GetByWorkspaceTypeAndName(
-		ctx context.Context,
-		workspaceID string,
-		imageType ImageType,
-		name string,
-	) (*Image, error)
-
-	// Exists 判断工作空间下是否已有指定名称的记录，不区分 builder / runner。
-	//
-	// tag 查询只拿到镜像名，而唯一键含类型，因此不能走 GetByWorkspaceTypeAndName
-	Exists(ctx context.Context, workspaceID, name string) (bool, error)
-
-	// List 查询指定工作空间下的自定义运行时镜像记录列表。
-	//
-	// 候选口径仅以落库记录为准：不过滤快照同步状态，也不校验镜像在 registry 中是否
-	// 仍然存在。结果不分页，预期单工作空间的记录数量在百条以内。
-	List(ctx context.Context, workspaceID string, opts ListOptions) ([]Image, error)
-
-	// DeleteAll 删除所有记录并保留集合及索引（仅用于测试）
-	DeleteAll(ctx context.Context) error
-}
-
-// 编译期接口实现检查
-var _ Store = &StoreMongo{}
-
-// StoreMongo Store 的 MongoDB 实现
-type StoreMongo struct {
-	coll *mongo.Collection
-}
-
-// NewStoreMongo 创建 StoreMongo。
-func NewStoreMongo(client *mongo.Client, dbName string) (*StoreMongo, error) {
-	coll := client.Database(dbName).Collection(collCustomRuntimeImages)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：workspaceID + type + name
-	store := &StoreMongo{coll: coll}
-	return store, nil
-}
-
-// Upsert 幂等写入自定义运行时镜像记录。
+// Meta 自定义运行时镜像的存储元数据，写入完整文档前会校验记录并去除唯一键字段的首尾空白。
 //
-// 命中已有记录时只刷新 updatedAt，其余字段保持不变。
-func (s *StoreMongo) Upsert(ctx context.Context, image *Image) error {
+// 索引（由 golang-migrate 维护）：
+// - 唯一：workspaceID + type + name
+var Meta = store.Meta[Image]{
+	Collection: "custom_runtime_images",
+	NotFound:   ErrCustomRuntimeImageNotFound,
+	BeforeSave: []func(*Image) error{normalizeImage},
+}
+
+// normalizeImage 校验记录，并按 trim 后的值落库：后续查询的具名 Opt 也用同一口径，避免空白差异造成查不到
+func normalizeImage(image *Image) error {
 	if err := image.Validate(); err != nil {
 		return err
 	}
-
-	// 唯一键按 trim 后的值落库，后续 Get/List 也用同一口径，避免空白差异造成查不到
 	image.WorkspaceID = strings.TrimSpace(image.WorkspaceID)
 	image.Name = strings.TrimSpace(image.Name)
-
-	now := time.Now()
-	filter := bson.M{
-		"workspaceID": image.WorkspaceID,
-		"type":        image.Type,
-		"name":        image.Name,
-	}
-
-	id := image.ID
-	if id == "" {
-		id = bson.NewObjectID().Hex()
-	}
-
-	// $set 只刷新 updatedAt；身份字段放在 $setOnInsert，命中已有记录时不得被覆盖
-	update := bson.M{
-		"$set": bson.M{
-			"updatedAt": now,
-		},
-		"$setOnInsert": bson.M{
-			"_id":         id,
-			"workspaceID": image.WorkspaceID,
-			"type":        image.Type,
-			"name":        image.Name,
-			"createdAt":   now,
-		},
-	}
-
-	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
-	var result Image
-	if err := s.coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&result); err != nil {
-		return errors.Wrapf(
-			err, "upsert custom runtime image %s/%s/%s", image.WorkspaceID, image.Type, image.Name,
-		)
-	}
-
-	// 把落库后的文档回写到入参，调用方能拿到生成的 ID 与时间戳
-	*image = result
 	return nil
 }
 
-// GetByWorkspaceTypeAndName 按工作空间、镜像类型与仓库名称获取记录
-func (s *StoreMongo) GetByWorkspaceTypeAndName(
-	ctx context.Context,
-	workspaceID string,
-	imageType ImageType,
-	name string,
-) (*Image, error) {
-	// 查询键与 Upsert 落库口径对齐：先 trim 再 Validate，空白或非法名称直接拒绝
-	image := &Image{
-		WorkspaceID: strings.TrimSpace(workspaceID),
-		Type:        imageType,
-		Name:        strings.TrimSpace(name),
-	}
-	if err := image.Validate(); err != nil {
-		return nil, err
-	}
-
-	var result Image
-	err := s.coll.FindOne(ctx, bson.M{
-		"workspaceID": image.WorkspaceID,
-		"type":        image.Type,
-		"name":        image.Name,
-	}).Decode(&result)
-	if err != nil {
-		// 未命中统一成哨兵错误，调用方无需感知 mongo.ErrNoDocuments
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrCustomRuntimeImageNotFound
-		}
-		return nil, errors.Wrapf(
-			err, "get custom runtime image %s/%s/%s", image.WorkspaceID, image.Type, image.Name,
-		)
-	}
-	return &result, nil
+// ByWorkspace 按所属工作空间匹配
+func ByWorkspace(workspaceID string) store.Opt {
+	return store.Where("workspaceID", strings.TrimSpace(workspaceID))
 }
 
-// Exists 判断工作空间下是否已有指定名称的记录，不区分 builder / runner
-func (s *StoreMongo) Exists(ctx context.Context, workspaceID, name string) (bool, error) {
-	if workspaceID == "" {
-		return false, errors.New("workspaceID is required")
+// ByType 按镜像类型匹配，imageType 为空时不过滤
+func ByType(imageType ImageType) store.Opt {
+	if imageType == "" {
+		return nil
 	}
-	if name == "" {
-		return false, errors.New("name is required")
-	}
-
-	// 只按 workspaceID + name 查，任一类型命中即视为已落库
-	err := s.coll.FindOne(ctx, bson.M{
-		"workspaceID": workspaceID,
-		"name":        name,
-	}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return false, nil
-		}
-		return false, errors.Wrapf(err, "check custom runtime image %s/%s exists", workspaceID, name)
-	}
-	return true, nil
+	return store.Where("type", imageType)
 }
 
-// List 查询指定工作空间下的自定义运行时镜像记录列表
-func (s *StoreMongo) List(ctx context.Context, workspaceID string, opts ListOptions) ([]Image, error) {
-	// 工作空间是必填过滤条件，空值不能退化成全库扫描
-	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" {
-		return nil, errors.New("workspaceID is required")
-	}
-
-	filter := bson.M{"workspaceID": workspaceID}
-	// Type 为空表示查全部类型；非空时先校验枚举，避免把非法 type 当查询条件
-	if opts.Type != "" {
-		validator := &Image{Type: opts.Type}
-		if err := validator.validateType(); err != nil {
-			return nil, err
-		}
-		filter["type"] = opts.Type
-	}
-	// keyword 只按名称模糊匹配，QuoteMeta 防止正则注入；不分页，按 type + name 稳定排序
-	if keyword := strings.TrimSpace(opts.Keyword); keyword != "" {
-		filter["name"] = bson.M{"$regex": regexp.QuoteMeta(keyword), "$options": "i"}
-	}
-
-	cursor, err := s.coll.Find(ctx, filter, options.Find().SetSort(bson.D{
-		{Key: "type", Value: 1},
-		{Key: "name", Value: 1},
-	}))
-	if err != nil {
-		return nil, errors.Wrapf(err, "find custom runtime images in workspace %s", workspaceID)
-	}
-	defer cursor.Close(ctx)
-
-	var images []Image
-	if err = cursor.All(ctx, &images); err != nil {
-		return nil, errors.Wrap(err, "decode custom runtime images")
-	}
-	return images, nil
+// ByWorkspaceAndName 按工作空间与仓库名称匹配，不区分 builder / runner。
+//
+// tag 查询只拿到镜像名，而唯一键含类型，因此判断「是否已落库」时用它而不是 ByKey
+func ByWorkspaceAndName(workspaceID, name string) store.Opt {
+	return store.Combine(ByWorkspace(workspaceID), store.Where("name", strings.TrimSpace(name)))
 }
 
-// DeleteAll 删除所有记录并保留集合及索引（仅用于测试）
-func (s *StoreMongo) DeleteAll(ctx context.Context) error {
-	// 只清文档，不 drop 集合，避免测试后把 golang-migrate 维护的唯一索引一并删掉
-	if _, err := s.coll.DeleteMany(ctx, bson.M{}); err != nil {
-		return errors.Wrap(err, "delete custom runtime image documents")
+// ByKey 按唯一键（工作空间 + 镜像类型 + 仓库名称）匹配
+func ByKey(workspaceID string, imageType ImageType, name string) store.Opt {
+	return store.Combine(ByWorkspaceAndName(workspaceID, name), store.Where("type", imageType))
+}
+
+// NameContains 按仓库名称模糊匹配（不区分大小写），keyword 为空白时不过滤
+func NameContains(keyword string) store.Opt {
+	return store.ContainsIgnoreCase(keyword, "name")
+}
+
+// InListOrder 列表的稳定排序：先按类型，再按名称
+func InListOrder() store.Opt {
+	return store.Combine(store.Asc("type"), store.Asc("name"))
+}
+
+// Register 幂等登记自定义运行时镜像：以工作空间 + 类型 + 名称为唯一键，
+// 不存在时插入，已存在时只刷新 updatedAt，其余字段保持不变，调用方无需在写入前先查重
+func Register(ctx context.Context, images *Store, image *Image) error {
+	// 先规范化再构造过滤条件，保证过滤条件与落库值口径一致
+	if err := normalizeImage(image); err != nil {
+		return err
+	}
+	// 显式选中 updatedAt 时写入的是对象中的值，因此需要先赋值
+	image.UpdatedAt = time.Now()
+	_, err := images.Upsert(
+		ctx, image, store.UpdateSelected("updatedAt"), ByKey(image.WorkspaceID, image.Type, image.Name),
+	)
+	if err != nil {
+		return errors.Wrapf(err, "register custom runtime image %s/%s/%s", image.WorkspaceID, image.Type, image.Name)
 	}
 	return nil
 }

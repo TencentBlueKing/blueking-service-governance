@@ -24,9 +24,11 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // PolarisEnvStateManager 管理 PolarisConfig 的环境部署快照、权重生命周期和动态下发结果。
@@ -36,12 +38,12 @@ import (
 // 应用部署后调用 ReconcileAfterDeploy，记录本次部署生效的关键字段并清理离域环境级设置；
 // 应用卸载后调用 ReconcileAfterUninstall，移除对应环境的记录与离域环境级设置（条件见函数说明）。
 type PolarisEnvStateManager struct {
-	store PolarisConfigStore
+	db *mongo.Database
 }
 
 // NewPolarisEnvStateManager 创建环境状态管理器。
-func NewPolarisEnvStateManager(store PolarisConfigStore) *PolarisEnvStateManager {
-	return &PolarisEnvStateManager{store: store}
+func NewPolarisEnvStateManager(db *mongo.Database) *PolarisEnvStateManager {
+	return &PolarisEnvStateManager{db: db}
 }
 
 // 环境部署状态
@@ -102,7 +104,7 @@ func (m *PolarisEnvStateManager) removeUnappliedEnvStatesOutsideScope(
 		orphanEnvNames = append(orphanEnvNames, envName)
 	}
 
-	if err := m.store.RemoveEnvStates(ctx, config.AppID, config.Name, orphanEnvNames); err != nil {
+	if err := RemoveEnvStates(ctx, m.db, config.AppID, config.Name, orphanEnvNames); err != nil {
 		return err
 	}
 	for _, envName := range orphanEnvNames {
@@ -197,7 +199,7 @@ func (m *PolarisEnvStateManager) RecordImmediateApplyResult(
 	} else {
 		update.AppliedFields = NewRedeployRequiredFields(config)
 	}
-	if err := m.store.UpsertEnvState(ctx, config.AppID, config.Name, envName, update); err != nil {
+	if err := UpsertEnvState(ctx, m.db, config.AppID, config.Name, envName, update); err != nil {
 		return errors.Wrapf(err, "record immediate apply result for env %s", envName)
 	}
 	return nil
@@ -209,10 +211,10 @@ func (m *PolarisEnvStateManager) ReleaseEnv(
 	appID, configName, envName string,
 ) error {
 	envNames := []string{envName}
-	if err := m.store.RemoveEnvStates(ctx, appID, configName, envNames); err != nil {
+	if err := RemoveEnvStates(ctx, m.db, appID, configName, envNames); err != nil {
 		return errors.Wrapf(err, "remove env state for env %s after release", envName)
 	}
-	if err := m.store.RemoveEnvSettings(ctx, appID, configName, envNames); err != nil {
+	if err := RemoveEnvSettings(ctx, m.db, appID, configName, envNames); err != nil {
 		return errors.Wrapf(err, "remove env settings for env %s after release", envName)
 	}
 	return nil
@@ -230,8 +232,9 @@ func (m *PolarisEnvStateManager) RecordDynamicApplyResult(
 	if applyErr != nil {
 		lastError = applyErr.Error()
 	}
-	if _, err := m.store.UpsertEnvStateIfUpdatedAtMatch(
+	if _, err := UpsertEnvStateIfUpdatedAtMatch(
 		ctx,
+		m.db,
 		appID,
 		configName,
 		envName,
@@ -249,13 +252,13 @@ func (m *PolarisEnvStateManager) ReconcileAfterDeploy(
 	app *bkmsapp.Application,
 	env *bkmsenv.Environment,
 ) error {
-	configs, err := m.store.ListByApp(ctx, app.ID)
+	configs, err := store.Of(m.db, ConfigMeta).List(ctx, ByApp(app.ID))
 	if err != nil {
 		return errors.Wrap(err, "list polaris configs after deploy")
 	}
 
-	for _, config := range configs {
-		if err = m.reconcileEnvStateAfterDeploy(ctx, app.ID, env.Name, config); err != nil {
+	for i := range configs {
+		if err = m.reconcileEnvStateAfterDeploy(ctx, app.ID, env.Name, &configs[i]); err != nil {
 			return err
 		}
 	}
@@ -269,17 +272,18 @@ func (m *PolarisEnvStateManager) reconcileEnvStateAfterDeploy(
 	config *PolarisConfig,
 ) error {
 	if !lo.Contains(config.ScopeEnvNames, envName) {
-		if err := m.store.RemoveEnvStates(ctx, appID, config.Name, []string{envName}); err != nil {
+		if err := RemoveEnvStates(ctx, m.db, appID, config.Name, []string{envName}); err != nil {
 			return errors.Wrapf(err, "remove out-of-scope env state for config %s", config.Name)
 		}
-		if err := m.store.RemoveEnvSettings(ctx, appID, config.Name, []string{envName}); err != nil {
+		if err := RemoveEnvSettings(ctx, m.db, appID, config.Name, []string{envName}); err != nil {
 			return errors.Wrapf(err, "remove out-of-scope env settings for config %s", config.Name)
 		}
 		return nil
 	}
 
-	if err := m.store.UpsertEnvState(
+	if err := UpsertEnvState(
 		ctx,
+		m.db,
 		appID,
 		config.Name,
 		envName,
@@ -299,12 +303,12 @@ func (m *PolarisEnvStateManager) ReconcileAfterUninstall(
 	app *bkmsapp.Application,
 	envName string,
 ) error {
-	configs, err := m.store.ListByApp(ctx, app.ID)
+	configs, err := store.Of(m.db, ConfigMeta).List(ctx, ByApp(app.ID))
 	if err != nil {
 		return errors.Wrap(err, "list polaris configs after uninstall")
 	}
 	for _, config := range configs {
-		if err = m.store.RemoveEnvStates(ctx, app.ID, config.Name, []string{envName}); err != nil {
+		if err = RemoveEnvStates(ctx, m.db, app.ID, config.Name, []string{envName}); err != nil {
 			return errors.Wrapf(err, "remove env state for config %s after uninstall", config.Name)
 		}
 		// 若环境仍在 scope 内时保留权重与动态权重开关，供下次部署使用
@@ -312,7 +316,7 @@ func (m *PolarisEnvStateManager) ReconcileAfterUninstall(
 			continue
 		}
 		// 若环境已不在 scope 内，同步清理此前保留的环境级设置
-		if err = m.store.RemoveEnvSettings(ctx, app.ID, config.Name, []string{envName}); err != nil {
+		if err = RemoveEnvSettings(ctx, m.db, app.ID, config.Name, []string{envName}); err != nil {
 			return errors.Wrapf(err, "remove env settings for config %s after uninstall", config.Name)
 		}
 	}

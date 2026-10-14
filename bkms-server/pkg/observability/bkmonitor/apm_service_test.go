@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -32,19 +33,19 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
 var _ = Describe("ApmService", func() {
 	var (
-		ctx               context.Context
-		diApp             *fxtest.App
-		store             ApmInstConfigStore
-		scopedEnvVarStore envvars.ScopedEnvVarStore
-		svc               *ApmService
+		ctx   context.Context
+		diApp *fxtest.App
+		db    *mongo.Database
+		apms  *ApmInstConfigStore
+		svc   *ApmService
 		// oldAPMEndpoint/oldAPMHttpEndpoint 保存配置原值，AfterEach 恢复，避免污染其他用例
 		oldAPMEndpoint     string
 		oldAPMHttpEndpoint string
@@ -71,12 +72,12 @@ var _ = Describe("ApmService", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			FxModule,
-			fx.Populate(&store, &svc),
+			fx.Populate(&svc),
 		)
 		diApp.RequireStart()
 
-		scopedEnvVarStore, err = envvars.NewScopedEnvVarStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		apms = store.Of(db, ApmInstConfigMeta)
 	})
 
 	AfterEach(func() {
@@ -99,9 +100,7 @@ var _ = Describe("ApmService", func() {
 					Token:       "existing-token",
 					Creator:     "test-user",
 				}
-				id, err := store.Create(ctx, existingApm)
-				Expect(err).NotTo(HaveOccurred())
-				existingApm.ID = id
+				Expect(apms.Create(ctx, existingApm)).To(Succeed())
 			})
 
 			// 本地已有记录时，应直接返回本地数据，不调用远程 API
@@ -143,7 +142,7 @@ var _ = Describe("ApmService", func() {
 
 					// 验证已持久化到本地
 					var localApm *ApmInstConfig
-					localApm, err = store.GetByApmID(ctx, 3001)
+					localApm, err = apms.Get(ctx, ApmByApmID(3001))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(localApm.Name).To(Equal("remote-apm"))
 				})
@@ -188,9 +187,7 @@ var _ = Describe("ApmService", func() {
 				Token:       "bind-test-token",
 				Creator:     "test-user",
 			}
-			id, err := store.Create(ctx, apm)
-			Expect(err).NotTo(HaveOccurred())
-			apm.ID = id
+			Expect(apms.Create(ctx, apm)).To(Succeed())
 		})
 
 		// 应成功将环境绑定到 APM
@@ -199,13 +196,13 @@ var _ = Describe("ApmService", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 验证绑定关系已建立
-			result, err := store.GetByEnvID(ctx, envID)
+			result, err := apms.Get(ctx, ApmBoundToEnv(envID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(result.ApmID).To(Equal(int64(4001)))
 			Expect(result.AssociatedEnvs).To(HaveLen(1))
 			Expect(result.AssociatedEnvs[0].EnvName).To(Equal("test-env"))
-			assertApmEnvVars(ctx, scopedEnvVarStore, apm.WorkspaceID, "test-env", apm.Token)
+			assertApmEnvVars(ctx, db, apm.WorkspaceID, "test-env", apm.Token)
 		})
 
 		// 重复绑定相同环境时，不应报错
@@ -223,8 +220,7 @@ var _ = Describe("ApmService", func() {
 
 			BeforeEach(func() {
 				// 先将 env 绑定到 apm
-				err := store.BindEnv(ctx, apm.ID, envID, "test-env")
-				Expect(err).NotTo(HaveOccurred())
+				Expect(BindEnv(ctx, db, apm.ID, envID, "test-env")).To(Succeed())
 
 				// 创建另一个 APM
 				apm2 = &ApmInstConfig{
@@ -234,9 +230,7 @@ var _ = Describe("ApmService", func() {
 					Token:       "bind-test-token-2",
 					Creator:     "test-user",
 				}
-				id, err := store.Create(ctx, apm2)
-				Expect(err).NotTo(HaveOccurred())
-				apm2.ID = id
+				Expect(apms.Create(ctx, apm2)).To(Succeed())
 			})
 
 			// 应先解绑旧的关联，再绑定到新的 APM
@@ -245,12 +239,12 @@ var _ = Describe("ApmService", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// 验证旧 APM 已解绑
-				oldApm, err := store.GetByApmID(ctx, 4001)
+				oldApm, err := apms.Get(ctx, ApmByApmID(4001))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(oldApm.AssociatedEnvs).To(HaveLen(0))
 
 				// 验证新 APM 已绑定
-				newApm, err := store.GetByApmID(ctx, 4002)
+				newApm, err := apms.Get(ctx, ApmByApmID(4002))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(newApm.AssociatedEnvs).To(HaveLen(1))
 				Expect(newApm.AssociatedEnvs[0].EnvID).To(Equal(envID))
@@ -272,9 +266,7 @@ var _ = Describe("ApmService", func() {
 					Token:       "existing-token",
 					Creator:     "test-user",
 				}
-				id, err := store.Create(ctx, existingApm)
-				Expect(err).NotTo(HaveOccurred())
-				existingApm.ID = id
+				Expect(apms.Create(ctx, existingApm)).To(Succeed())
 			})
 
 			// 应复用已存在的同名 APM 并绑定到环境
@@ -290,10 +282,10 @@ var _ = Describe("ApmService", func() {
 				Expect(result.ApmID).To(Equal(int64(5001)))
 
 				// 验证绑定关系
-				bound, err := store.GetByEnvID(ctx, envID)
+				bound, err := apms.Get(ctx, ApmBoundToEnv(envID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(bound.ApmID).To(Equal(int64(5001)))
-				assertApmEnvVars(ctx, scopedEnvVarStore, existingApm.WorkspaceID, "test-env", existingApm.Token)
+				assertApmEnvVars(ctx, db, existingApm.WorkspaceID, "test-env", existingApm.Token)
 			})
 		})
 
@@ -326,15 +318,15 @@ var _ = Describe("ApmService", func() {
 					Expect(result.Token).To(Equal("new-token"))
 
 					// 验证已持久化
-					localApm, err := store.GetByApmID(ctx, 6001)
+					localApm, err := apms.Get(ctx, ApmByApmID(6001))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(localApm.Name).To(Equal("new-env"))
 
 					// 验证绑定关系
-					bound, err := store.GetByEnvID(ctx, envID)
+					bound, err := apms.Get(ctx, ApmBoundToEnv(envID))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(bound.ApmID).To(Equal(int64(6001)))
-					assertApmEnvVars(ctx, scopedEnvVarStore, "test-workspace", "new-env", "new-token")
+					assertApmEnvVars(ctx, db, "test-workspace", "new-env", "new-token")
 				})
 			})
 		})
@@ -343,13 +335,14 @@ var _ = Describe("ApmService", func() {
 
 func assertApmEnvVars(
 	ctx context.Context,
-	store envvars.ScopedEnvVarStore,
+	db *mongo.Database,
 	workspaceID string,
 	envName string,
 	expectedToken string,
 ) {
-	envVars, err := store.List(
+	envVars, err := envvars.List(
 		ctx,
+		db,
 		workspaceID,
 		envvars.WithScopes(envvartypes.ScopeEnv(envName)),
 		envvars.WithOnlyBuiltin(),

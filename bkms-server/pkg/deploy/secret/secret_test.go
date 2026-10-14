@@ -83,7 +83,7 @@ var _ = Describe("imagePullSecretSyncer", func() {
 				"password": "blueking",
 			},
 		}
-		syncer = NewImagePullSecretSyncer(env, "", nil)
+		syncer = NewImagePullSecretSyncer(testutil.NewDB(GinkgoT()), env, "", nil)
 
 		var err error
 		cfg, err := testutil.TestClusterConfig("")

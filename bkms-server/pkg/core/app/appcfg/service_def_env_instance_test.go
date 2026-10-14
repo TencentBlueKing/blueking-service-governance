@@ -34,10 +34,6 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 		f = setupDefServiceFixture()
 	})
 
-	AfterEach(func() {
-		f.DiApp.RequireStop()
-	})
-
 	Context("FindEnvInstance", func() {
 		It("should return nil when no env instance exists", func() {
 			result := f.createFrameworkFile("values.yaml")
@@ -324,7 +320,7 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// framework def 不应被删除
-			defs, err := f.DefStore.ListByApp(f.Ctx, f.AppID)
+			defs, err := appcfg.ListDefsByApp(f.Ctx, f.DefStore, f.AppID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defs).To(HaveLen(2))
 		})

@@ -23,6 +23,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
@@ -45,31 +46,27 @@ func init() {
 	)
 }
 
-// handleImageDetailSync asynq 入口：按现网口径建 store，解密失败停重试，其余错误交给 asynq 重试
+// handleImageDetailSync asynq 入口：使用现网数据库，解密失败停重试，其余错误交给 asynq 重试
 func handleImageDetailSync(ctx context.Context, args ImageDetailSyncArgs) error {
-	store, err := NewSnapshotStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrap(err, "create snapshot store")
-	}
-	return NewDetailSyncManager(store).Handle(ctx, args)
+	return NewDetailSyncManager(database.DB()).Handle(ctx, args)
 }
 
 // DetailSyncManager 执行一次镜像详情同步
 type DetailSyncManager struct {
-	store SnapshotStore
+	db *mongo.Database
 }
 
-// NewDetailSyncManager 注入快照 store，供 asynq handler 与单测共用
-func NewDetailSyncManager(store SnapshotStore) *DetailSyncManager {
-	return &DetailSyncManager{store: store}
+// NewDetailSyncManager 注入数据库，供 asynq handler 与单测共用
+func NewDetailSyncManager(db *mongo.Database) *DetailSyncManager {
+	return &DetailSyncManager{db: db}
 }
 
 // Handle 解密仓库凭据后调用 DetailSyncer 补全 tag 详情。
 // 解密失败属不可恢复，wrap taskq.ErrStopRetry；SyncDetails 的 store 类错误原样返回，
 // 由 asynq MaxRetry 重试。部分 tag 拉取失败由 SyncDetails 写 LastError 后成功返回，不在此改判。
 func (m *DetailSyncManager) Handle(ctx context.Context, args ImageDetailSyncArgs) error {
-	if m.store == nil {
-		return errors.Wrap(taskq.ErrStopRetry, "snapshot store not initialized")
+	if m.db == nil {
+		return errors.Wrap(taskq.ErrStopRetry, "snapshot database not initialized")
 	}
 
 	log.Infof(ctx, "start image detail sync task %s", args)
@@ -89,7 +86,7 @@ func (m *DetailSyncManager) Handle(ctx context.Context, args ImageDetailSyncArgs
 		Username: username,
 		Password: password,
 	}
-	if err = NewDetailSyncer(m.store).SyncDetails(ctx, info); err != nil {
+	if err = NewDetailSyncer(m.db).SyncDetails(ctx, info); err != nil {
 		return errors.Wrapf(err, "detail sync for %s failed", args.RepoKey)
 	}
 

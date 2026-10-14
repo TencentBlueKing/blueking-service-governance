@@ -20,128 +20,94 @@ package appmodel
 
 import (
 	"context"
-	"regexp"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
-
-// collectionName 应用部署记录表名
-const collectionName = "app_model_deploy_records"
 
 // ErrDeployRecordNotFound 部署记录不存在
 var ErrDeployRecordNotFound = errors.New("app model deploy record not found")
 
-// RecordStore 部署记录存储接口
-type RecordStore interface {
-	// Create 创建应用部署记录
-	Create(ctx context.Context, record *Record) (string, error)
+// RecordStore 应用部署记录存储
+type RecordStore = store.GenericStore[Record]
 
-	// Update 更新应用部署记录。不写 batchProgress，分批进度由 UpdateBatchProgress 定向更新
-	Update(ctx context.Context, record *Record) error
-
-	// UpdateBatchProgress 只更新分批发布进度
-	UpdateBatchProgress(ctx context.Context, id string, progress *BatchProgress) error
-
-	// List 列表应用部署记录（支持分页）
-	List(
-		ctx context.Context,
-		appID, envName, trafficLaneName, keyword string,
-		page, pageSize int64,
-	) ([]Record, int64, error)
-
-	// ListByImageTag 按 appID 和 imageTag 查询部署记录（支持分页，按 createdAt 降序）
-	ListByImageTag(ctx context.Context, appID, imageTag string, page, pageSize int64) ([]Record, int64, error)
-
-	// Get 通过 ID 获取应用部署记录
-	Get(ctx context.Context, appID, id string) (*Record, error)
-
-	// GetLatest 获取最新应用部署记录
-	GetLatest(ctx context.Context, appID, envName, trafficLaneName string) (*Record, error)
-
-	// ListLatestByApps 按应用、环境返回一批应用在指定泳道下各环境最新的一条部署记录
-	ListLatestByApps(
-		ctx context.Context, appIDs []string, trafficLaneName string,
-	) (map[string]map[string]*Record, error)
-
-	// GetLatestByStatuses 获取指定状态集合中的最新应用部署记录
-	GetLatestByStatuses(
-		ctx context.Context,
-		appID, envName, trafficLaneName string,
-		statuses []Status,
-	) (*Record, error)
-
-	// ListImageTagDeployedEnvs 获取指定应用各镜像标签的已部署环境列表（去重，仅统计部署成功的记录，默认查询所有环境）
-	ListImageTagDeployedEnvs(ctx context.Context, appID string) ([]deploytypes.ImageTagEnvPair, error)
-
-	// HasActiveDeployments 检查是否存在活跃的部署（未卸载的部署）
-	HasActiveDeployments(ctx context.Context, appID string) (bool, error)
+// RecordMeta 应用部署记录的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 查询提速：appID + envName + trafficLaneName + createdAt(倒序)
+// - 查询提速：appID + trafficLaneName + createdAt(倒序)
+var RecordMeta = store.Meta[Record]{
+	Collection: "app_model_deploy_records",
+	NotFound:   ErrDeployRecordNotFound,
 }
 
-var _ RecordStore = &RecordStoreMongo{}
-
-// RecordStoreMongo RecordStore 实现（基于 MongoDB）
-type RecordStoreMongo struct {
-	collection *mongo.Collection
+// imageTagHistoryStatuses 按镜像标签查询部署记录时关注的状态（经讨论确认该功能仅关注部分状态）
+var imageTagHistoryStatuses = []Status{
+	// 部署成功
+	StatusDeployed,
+	// 部署中
+	StatusDeploying,
+	// 部署失败（含超时、中断）
+	StatusFailed,
+	StatusPollingTimeout,
+	StatusPollingBroken,
 }
 
-// NewRecordStoreMongo 新建 RecordStoreMongo 实例
-func NewRecordStoreMongo(client *mongo.Client, dbName string) (*RecordStoreMongo, error) {
-	coll := client.Database(dbName).Collection(collectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 查询提速：appID + envName + trafficLaneName + createdAt(倒序)
-	// - 查询提速：appID + trafficLaneName + createdAt(倒序)
-	return &RecordStoreMongo{collection: coll}, nil
+// activeStatuses 视为活跃部署（未卸载）的状态：已部署、部署中、卸载中或分批发布已回滚
+var activeStatuses = []Status{
+	StatusDeployed,
+	StatusDeploying,
+	StatusUninstalling,
+	// 回滚后工作负载仍在运行（Pod 为旧版本）
+	StatusRolledBack,
 }
 
-// Create 创建应用部署记录
-func (s *RecordStoreMongo) Create(ctx context.Context, record *Record) (string, error) {
-	timeNow := time.Now()
-	record.CreatedAt, record.UpdatedAt = timeNow, timeNow
-	ret, err := s.collection.InsertOne(ctx, record)
+// KeywordMatches 按镜像标签或更新人模糊匹配（不区分大小写），keyword 为空白时不过滤
+func KeywordMatches(keyword string) store.Opt {
+	return store.ContainsIgnoreCase(keyword, "imageTag", "updater")
+}
+
+// ByImageTag 匹配应用中使用指定镜像标签、且状态为部署成功、部署中或部署失败的记录
+func ByImageTag(appID, imageTag string) store.Opt {
+	return store.Combine(
+		store.Where("appID", appID),
+		store.Where("imageTag", imageTag),
+		store.Where("status", bson.M{"$in": imageTagHistoryStatuses}),
+	)
+}
+
+// GetRecord 获取应用的一条部署记录，记录不存在时返回 ErrDeployRecordNotFound
+func GetRecord(ctx context.Context, db *mongo.Database, appID, id string) (*Record, error) {
+	objID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
-		return "", err
+		return nil, errors.Wrapf(err, "invalid record id %s", id)
 	}
-	if oid, ok := ret.InsertedID.(bson.ObjectID); ok {
-		return oid.Hex(), nil
-	}
-	return "", errors.New("failed to get inserted ID")
-}
-
-// Update 更新应用部署记录
-func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
-	filter := bson.M{"_id": record.ID}
-	updateDoc := bson.M{"$set": bson.M{
-		"replicas":     record.Replicas,
-		"deletionCost": record.DeletionCost,
-		"message":      record.Message,
-		"status":       record.Status,
-		"extras":       record.Extras,
-		"endedAt":      record.EndedAt,
-		"updater":      record.Updater,
-		"updatedAt":    time.Now(),
-	}}
-	ret, err := s.collection.UpdateOne(ctx, filter, updateDoc)
+	record, err := store.Of(db, RecordMeta).Get(ctx, store.ByID(objID), store.Where("appID", appID))
 	if err != nil {
-		return errors.Wrapf(err, "update app model app deploy record %s", record.ID.Hex())
+		return nil, errors.Wrapf(err, "get app %s deploy record %s", appID, id)
 	}
-	// id 匹配不到数据的情况
-	if ret.MatchedCount == 0 {
-		return ErrDeployRecordNotFound
-	}
-	return nil
+	return record, nil
 }
 
-// UpdateBatchProgress 只更新分批发布进度，供轮询任务写入。
-// 与 Update 分开：非分批记录的该字段为 nil，放进 Update 的 $set 会被写成 null；
+// UpdateRecord 更新部署记录的可变字段（replicas、deletionCost、message、status、extras、endedAt、updater），
+// 记录不存在时返回 ErrDeployRecordNotFound。不写 batchProgress，分批进度由 UpdateBatchProgress 定向更新
+func UpdateRecord(ctx context.Context, db *mongo.Database, record *Record) error {
+	err := store.Of(db, RecordMeta).Update(ctx, record,
+		store.UpdateSelected("replicas", "deletionCost", "message", "status", "extras", "endedAt", "updater"),
+		store.ByID(record.ID),
+	)
+	return errors.Wrapf(err, "update app model deploy record %s", record.ID.Hex())
+}
+
+// UpdateBatchProgress 只更新分批发布进度，供轮询任务写入，记录不存在时返回 ErrDeployRecordNotFound。
+// 与 UpdateRecord 分开：非分批记录的该字段为 nil，放进 UpdateRecord 的字段中会被 $unset；
 // 扩缩容、下架等先读再写的路径也会用旧快照覆盖轮询刚写入的进度。
-func (s *RecordStoreMongo) UpdateBatchProgress(ctx context.Context, id string, progress *BatchProgress) error {
+func UpdateBatchProgress(ctx context.Context, db *mongo.Database, id string, progress *BatchProgress) error {
 	if progress == nil {
 		return errors.New("batch progress is nil")
 	}
@@ -149,289 +115,54 @@ func (s *RecordStoreMongo) UpdateBatchProgress(ctx context.Context, id string, p
 	if err != nil {
 		return errors.Wrapf(err, "parse deploy record id %s", id)
 	}
-	ret, err := s.collection.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": bson.M{
-		"batchProgress": progress,
-		"updatedAt":     time.Now(),
-	}})
-	if err != nil {
-		return errors.Wrapf(err, "update batch progress of deploy record %s", id)
-	}
-	if ret.MatchedCount == 0 {
-		return ErrDeployRecordNotFound
-	}
-	return nil
+	err = store.Of(db, RecordMeta).Update(ctx, &Record{BatchProgress: progress},
+		store.UpdateSelected("batchProgress"),
+		store.ByID(oid),
+	)
+	return errors.Wrapf(err, "update batch progress of deploy record %s", id)
 }
 
-// List 列出应用部署记录（支持分页）
-func (s *RecordStoreMongo) List(
-	ctx context.Context,
-	appID, envName, trafficLaneName, keyword string,
-	page, pageSize int64,
-) ([]Record, int64, error) {
-	filter := bson.M{
-		"appID":           appID,
-		"envName":         envName,
-		"trafficLaneName": trafficLaneName,
-	}
-	// 支持 keyword 参数
-	if keyword != "" {
-		// 转义正则表达式特殊字符，防止注入攻击和语法错误
-		keyword = regexp.QuoteMeta(keyword)
-		// 模糊匹配：Image Tag、更新人
-		filter["$or"] = []bson.M{
-			{"imageTag": bson.M{"$regex": keyword, "$options": "i"}},
-			{"updater": bson.M{"$regex": keyword, "$options": "i"}},
-		}
-	}
-
-	records, total, err := s.list(ctx, filter, page, pageSize)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "list app model app %s deploy records", appID)
-	}
-	return records, total, nil
-}
-
-// ListByImageTag 按 appID 和 imageTag 查询部署记录（支持分页，按 createdAt 降序）
-func (s *RecordStoreMongo) ListByImageTag(
-	ctx context.Context, appID, imageTag string, page, pageSize int64,
-) ([]Record, int64, error) {
-	filter := bson.M{
-		"appID":    appID,
-		"imageTag": imageTag,
-		// 经讨论确认该功能仅关注部分状态
-		"status": bson.M{
-			"$in": []Status{
-				// 部署成功
-				StatusDeployed,
-				// 部署中
-				StatusDeploying,
-				// 部署失败（含超时、中断）
-				StatusFailed,
-				StatusPollingTimeout,
-				StatusPollingBroken,
-			},
-		},
-	}
-
-	records, total, err := s.list(ctx, filter, page, pageSize)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "list app model app %s image tag %s deploy records", appID, imageTag)
-	}
-	return records, total, nil
-}
-
-// list 通用的分页查询方法
-func (s *RecordStoreMongo) list(
-	ctx context.Context,
-	filter bson.M,
-	page, pageSize int64,
-) ([]Record, int64, error) {
-	// 先统计总数
-	total, err := s.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// 分页参数
-	opts := options.Find().
-		SetLimit(pageSize).
-		SetSkip((page - 1) * pageSize).
-		SetSort(bson.D{{"createdAt", -1}})
-
-	cursor, err := s.collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer cursor.Close(ctx)
-
-	var records []Record
-	if err = cursor.All(ctx, &records); err != nil {
-		return nil, 0, err
-	}
-	return records, total, nil
-}
-
-// Get 获取应用部署记录
-func (s *RecordStoreMongo) Get(ctx context.Context, appID, id string) (*Record, error) {
-	// ID 类型转换
-	objID, err := bson.ObjectIDFromHex(id)
-	if err != nil {
-		return nil, errors.Wrapf(err, "invalid record id %s", id)
-	}
-
-	var record Record
-	err = s.collection.FindOne(ctx, bson.M{"appID": appID, "_id": objID}).Decode(&record)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrDeployRecordNotFound
-		}
-		return nil, errors.Wrapf(err, "find app model deploy record %s", id)
-	}
-	return &record, nil
-}
-
-// GetLatest 获取最新应用部署记录
-func (s *RecordStoreMongo) GetLatest(
-	ctx context.Context,
-	appID, envName, trafficLaneName string,
+// GetLatest 获取应用在指定环境、泳道下最新的一条部署记录；传入 statuses 时只在这些状态中查找。
+// 不存在时返回 ErrDeployRecordNotFound
+func GetLatest(
+	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string, statuses ...Status,
 ) (*Record, error) {
-	return s.getLatestByFilter(ctx, bson.M{
-		"appID":           appID,
-		"envName":         envName,
-		"trafficLaneName": trafficLaneName,
-	})
+	opts := []store.Opt{deploytypes.ByAppEnvLane(appID, envName, trafficLaneName), deploytypes.NewestFirst()}
+	if len(statuses) > 0 {
+		opts = append(opts, store.Where("status", bson.M{"$in": statuses}))
+	}
+	record, err := store.Of(db, RecordMeta).Get(ctx, opts...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get latest app model deploy record of app %s env %s", appID, envName)
+	}
+	return record, nil
 }
 
-// ListLatestByApps 返回一批 app 在指定泳道下各环境最新部署记录（按 createdAt 倒序取每组第一条）。
+// ListLatestByApps 返回一批应用在指定泳道下各环境最新的一条部署记录。
 // 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
-func (s *RecordStoreMongo) ListLatestByApps(
-	ctx context.Context,
-	appIDs []string, trafficLaneName string,
+func ListLatestByApps(
+	ctx context.Context, db *mongo.Database, appIDs []string, trafficLaneName string,
 ) (map[string]map[string]*Record, error) {
-	out := make(map[string]map[string]*Record, len(appIDs))
-	if len(appIDs) == 0 {
-		return out, nil
-	}
-
-	pipeline := bson.A{
-		bson.M{"$match": bson.M{
-			"appID":           bson.M{"$in": lo.Uniq(appIDs)},
-			"trafficLaneName": trafficLaneName,
-		}},
-		bson.M{"$sort": bson.D{
-			{Key: "appID", Value: 1},
-			{Key: "trafficLaneName", Value: 1},
-			{Key: "createdAt", Value: -1},
-		}},
-		bson.M{"$group": bson.M{
-			"_id": bson.M{"appID": "$appID", "envName": "$envName"},
-			"doc": bson.M{"$first": "$$ROOT"},
-		}},
-		bson.M{"$replaceRoot": bson.M{"newRoot": "$doc"}},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, errors.Wrap(err, "aggregate latest deploy records for apps")
-	}
-	defer cursor.Close(ctx)
-
-	for cursor.Next(ctx) {
-		var record Record
-		if err := cursor.Decode(&record); err != nil {
-			return nil, errors.Wrap(err, "decode latest deploy record for apps")
-		}
-		rec := record
-		if _, ok := out[rec.AppID]; !ok {
-			out[rec.AppID] = make(map[string]*Record)
-		}
-		out[rec.AppID][rec.EnvName] = &rec
-	}
-	if err := cursor.Err(); err != nil {
-		return nil, errors.Wrap(err, "iterate latest deploy records for apps")
-	}
-	return out, nil
-}
-
-// GetLatestByStatuses 获取指定状态集合中的最新应用部署记录
-func (s *RecordStoreMongo) GetLatestByStatuses(
-	ctx context.Context,
-	appID, envName, trafficLaneName string,
-	statuses []Status,
-) (*Record, error) {
-	return s.getLatestByFilter(ctx, bson.M{
-		"appID":           appID,
-		"envName":         envName,
-		"trafficLaneName": trafficLaneName,
-		"status":          bson.M{"$in": statuses},
-	})
-}
-
-func (s *RecordStoreMongo) getLatestByFilter(ctx context.Context, filter bson.M) (*Record, error) {
-	// 排序参数
-	opts := options.FindOne().SetSort(bson.D{{"createdAt", -1}})
-
-	var record Record
-	err := s.collection.FindOne(ctx, filter, opts).Decode(&record)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrDeployRecordNotFound
-		}
-		return nil, errors.Wrapf(err, "find app model app latest deploy record (filter: %v)", filter)
-	}
-	return &record, nil
+	return deploytypes.ListLatestByApps(ctx, store.Of(db, RecordMeta), appIDs, trafficLaneName,
+		func(r *Record) (string, string) { return r.AppID, r.EnvName },
+	)
 }
 
 // ListImageTagDeployedEnvs 获取指定应用各镜像标签的已部署环境列表（去重，仅统计部署成功的记录，默认查询所有环境）
-func (s *RecordStoreMongo) ListImageTagDeployedEnvs(
+func ListImageTagDeployedEnvs(
 	ctx context.Context,
+	db *mongo.Database,
 	appID string,
 ) ([]deploytypes.ImageTagEnvPair, error) {
-	pipeline := bson.A{
-		// Stage 1: 按 appID 和 status 过滤，只保留成功部署的记录
-		bson.M{"$match": bson.M{"appID": appID, "status": string(StatusDeployed)}},
-		// Stage 2: 按 (imageTag, envName) 复合键分组去重
-		bson.M{"$group": bson.M{
-			"_id": bson.M{"imageTag": "$imageTag", "envName": "$envName"},
-		}},
-		// Stage 3: 将分组 _id 中的字段提升为顶层字段，输出扁平结构
-		bson.M{"$project": bson.M{
-			"imageTag": "$_id.imageTag",
-			"envName":  "$_id.envName",
-			"_id":      0,
-		}},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, errors.Wrapf(err, "aggregate distinct image tag envs for app %s", appID)
-	}
-	defer cursor.Close(ctx)
-
-	var results []deploytypes.ImageTagEnvPair
-	if err = cursor.All(ctx, &results); err != nil {
-		return nil, errors.Wrapf(err, "decode distinct image tag envs for app %s", appID)
-	}
-	return results, nil
+	return deploytypes.ListDeployedEnvPairs[deploytypes.ImageTagEnvPair](
+		ctx, store.Of(db, RecordMeta), appID, string(StatusDeployed), "imageTag",
+	)
 }
 
-// HasActiveDeployments 检查是否存在活跃的部署（已部署、部署中、卸载中或分批发布已回滚）
-// 判断逻辑：按环境+泳道分组，获取每组最新记录，检查最新记录是否为活跃状态
-func (s *RecordStoreMongo) HasActiveDeployments(ctx context.Context, appID string) (bool, error) {
-	activeStatuses := bson.A{
-		string(StatusDeployed),
-		string(StatusDeploying),
-		string(StatusUninstalling),
-		// 回滚后工作负载仍在运行（Pod 为旧版本）
-		string(StatusRolledBack),
-	}
-
-	// 使用聚合查询：按 (envName, trafficLaneName) 分组，获取每组最新记录
-	pipeline := bson.A{
-		// Stage 1: 按 appID 过滤
-		bson.M{"$match": bson.M{"appID": appID}},
-		// Stage 2: 按 (envName, trafficLaneName) 分组，获取每组最新记录
-		bson.M{"$sort": bson.M{"createdAt": -1}},
-		bson.M{"$group": bson.M{
-			"_id":    bson.M{"envName": "$envName", "trafficLaneName": "$trafficLaneName"},
-			"status": bson.M{"$first": "$status"},
-		}},
-		// Stage 3: 检查最新记录是否为活跃状态
-		bson.M{"$match": bson.M{"status": bson.M{"$in": activeStatuses}}},
-		// Stage 4: 限制返回 1 条记录（只要有一条活跃部署即可）
-		bson.M{"$limit": 1},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return false, errors.Wrapf(err, "aggregate active deployments for app %s", appID)
-	}
-	defer cursor.Close(ctx)
-
-	var results []bson.M
-	if err = cursor.All(ctx, &results); err != nil {
-		return false, errors.Wrapf(err, "decode active deployments for app %s", appID)
-	}
-
-	return len(results) > 0, nil
+// HasActiveDeployments 检查是否存在活跃的部署（已部署、部署中、卸载中或分批发布已回滚）：
+// 按环境 + 泳道分组获取每组最新记录，检查最新记录是否为活跃状态
+func HasActiveDeployments(ctx context.Context, db *mongo.Database, appID string) (bool, error) {
+	return deploytypes.HasActiveDeployment(ctx, store.Of(db, RecordMeta), appID, func(r *Record) bool {
+		return lo.Contains(activeStatuses, r.Status)
+	})
 }

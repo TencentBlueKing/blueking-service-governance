@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	corev1 "k8s.io/api/core/v1"
@@ -40,74 +41,56 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
 var _ = Describe("Polaris CR applier", func() {
 	var (
-		ctx               context.Context
-		diApp             *fxtest.App
-		appStore          bkmsapp.ApplicationStore
-		envStore          bkmsenv.EnvironmentStore
-		envService        *env.EnvService
-		store             polaris.PolarisConfigStore
-		appModelStore     appmodel.AppModelStore
-		appSpecStore      appspec.AppSpecStore
-		scopedEnvVarStore envvars.ScopedEnvVarStore
-		appDepsVarReader  *depenvvars.Reader
-		polarisVarReader  *polarisenvvars.Reader
-		depSvcStore       depsvcmodel.ServiceStore
-		depSvcInstStore   depsvcmodel.ServiceInstanceStore
-		envStateManager   *polaris.PolarisEnvStateManager
-		service           *polaris.PolarisConfigService
-		app               *bkmsapp.Application
-		environment       *bkmsenv.Environment
+		ctx              context.Context
+		diApp            *fxtest.App
+		appStore         *bkmsapp.ApplicationStore
+		envService       *env.EnvService
+		configStore      *polaris.ConfigStore
+		db               *mongo.Database
+		appDepsVarReader *depenvvars.Reader
+		polarisVarReader *polarisenvvars.Reader
+		envStateManager  *polaris.PolarisEnvStateManager
+		service          *polaris.PolarisConfigService
+		app              *bkmsapp.Application
+		environment      *bkmsenv.Environment
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
 			envvars.FxModule,
-			depsvcmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
 			fx.Populate(
-				&appStore,
-				&envStore,
 				&envService,
-				&store,
-				&appModelStore,
-				&appSpecStore,
-				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
-				&depSvcStore,
-				&depSvcInstStore,
 				&envStateManager,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		configStore = store.Of(db, polaris.ConfigMeta)
 
 		service = polaris.NewPolarisConfigService(
-			store,
-			polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+			db,
+			polaris.NewPolarisPlatformManager(db),
 			envStateManager,
-			envStore,
-			appModelStore,
-			appSpecStore,
-			envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+			envvars.NewUnifiedEnvVarsReader(db, appDepsVarReader, polarisVarReader),
 			nil,
 		)
 		app = dbfactory.Application(ctx, appStore)
@@ -115,7 +98,7 @@ var _ = Describe("Polaris CR applier", func() {
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, app.ID)
+		_, _ = configStore.DeleteMany(ctx, polaris.ByApp(app.ID))
 		diApp.RequireStop()
 	})
 
@@ -127,8 +110,8 @@ var _ = Describe("Polaris CR applier", func() {
 			[]string{environment.Name},
 			map[string]polaris.PolarisEnvState{environment.Name: envState(applied)},
 		)
-		Expect(store.Create(ctx, config)).To(Succeed())
-		Expect(store.UpsertEnvState(ctx, app.ID, config.Name, environment.Name, polaris.PolarisEnvStateUpdate{
+		Expect(configStore.Create(ctx, config)).To(Succeed())
+		Expect(polaris.UpsertEnvState(ctx, db, app.ID, config.Name, environment.Name, polaris.PolarisEnvStateUpdate{
 			AppliedFields: applied,
 		})).To(Succeed())
 
@@ -138,7 +121,7 @@ var _ = Describe("Polaris CR applier", func() {
 			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 20, nil)
 			Expect(err).To(MatchError(ContainSubstring("patch env weight")))
 			Expect(updated).To(BeNil())
-			stored, getErr := store.Get(ctx, app.ID, config.Name)
+			stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.EnvWeights).NotTo(HaveKey(environment.Name))
 			state := stored.GetEnvState(environment.Name)
@@ -181,8 +164,8 @@ var _ = Describe("Polaris CR applier", func() {
 					Namespace:   "default",
 				},
 			})
-			Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
-			DeferCleanup(func() { _ = appModelStore.DeleteAppModel(ctx, app.ID) })
+			Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
+			DeferCleanup(func() { _ = appmodel.DeleteAppModel(ctx, db, app.ID) })
 
 			applied = redeployFields("key", "token", 8080)
 			config = &polaris.PolarisConfig{
@@ -200,14 +183,14 @@ var _ = Describe("Polaris CR applier", func() {
 					clusterEnv.Name: {AppliedFields: applied, LastError: "previous error"},
 				},
 			}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 			previousError := "previous error"
-			Expect(store.UpsertEnvState(ctx, app.ID, config.Name, clusterEnv.Name, polaris.PolarisEnvStateUpdate{
+			Expect(polaris.UpsertEnvState(ctx, db, app.ID, config.Name, clusterEnv.Name, polaris.PolarisEnvStateUpdate{
 				AppliedFields: applied,
 				LastError:     &previousError,
 			})).To(Succeed())
 
-			buildResult, err := polaris.NewWorkloadBuilder(store).Build(
+			buildResult, err := polaris.NewWorkloadBuilder(db).Build(
 				ctx, app, clusterEnv, nil, corev1.PodSpec{}, nil,
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -251,7 +234,7 @@ var _ = Describe("Polaris CR applier", func() {
 				currentServices := mapx.GetList(obj.Object, "spec.services")
 				Expect(currentServices).To(HaveLen(1))
 				Expect(currentServices[0].(map[string]any)).NotTo(HaveKey("weight"))
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.EnvWeights[clusterEnv.Name]).To(Equal(int32(10)))
 				state := stored.GetEnvState(clusterEnv.Name)
@@ -288,10 +271,10 @@ var _ = Describe("Polaris CR applier", func() {
 
 		It("should patch the dynamic weight switch together with the weight", func() {
 			enabled := true
-			Expect(store.Update(ctx, app.ID, config.Name, &polaris.ConfigUpdateData{
+			Expect(polaris.UpdateConfig(ctx, db, app.ID, config.Name, &polaris.ConfigUpdateData{
 				EnableWeightFactor: &enabled,
 			})).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 
 			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
@@ -327,10 +310,10 @@ var _ = Describe("Polaris CR applier", func() {
 
 		It("should keep the patched dynamic weight untouched when the request omits it", func() {
 			enabled := true
-			Expect(store.Update(ctx, app.ID, config.Name, &polaris.ConfigUpdateData{
+			Expect(polaris.UpdateConfig(ctx, db, app.ID, config.Name, &polaris.ConfigUpdateData{
 				EnableWeightFactor: &enabled,
 			})).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 
 			mockey.PatchConvey("use the configured test cluster", GinkgoT(), func() {
@@ -406,7 +389,7 @@ var _ = Describe("Polaris CR applier", func() {
 				_, getErr = serviceClient.Get(ctx, "default", immediateServiceName, metav1.GetOptions{})
 				Expect(getErr).NotTo(HaveOccurred())
 
-				stored, storeErr := store.Get(ctx, app.ID, immediate.Name)
+				stored, storeErr := configStore.Get(ctx, polaris.ByName(app.ID, immediate.Name))
 				Expect(storeErr).NotTo(HaveOccurred())
 				state := stored.GetEnvState(clusterEnv.Name)
 				Expect(state.LastError).To(BeEmpty())
@@ -435,7 +418,7 @@ var _ = Describe("Polaris CR applier", func() {
 				updated, updateErr := service.UpdateEnvWeight(ctx, app, config, clusterEnv.Name, 25, nil)
 				Expect(updateErr).To(MatchError(ContainSubstring("patch env weight")))
 				Expect(updated).To(BeNil())
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.EnvWeights[clusterEnv.Name]).To(Equal(int32(10)))
 				state := stored.GetEnvState(clusterEnv.Name)

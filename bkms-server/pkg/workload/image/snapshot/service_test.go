@@ -30,14 +30,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
@@ -46,9 +47,9 @@ import (
 var _ = Describe("Service", func() {
 	var (
 		ctx              context.Context
-		store            SnapshotStore
-		appStore         *bkmsapp.ApplicationStoreMongo
-		cfgStore         *build.ConfigStoreMongo
+		db               *mongo.Database
+		appStore         *bkmsapp.ApplicationStore
+		cfgStore         *build.ConfigStore
 		service          *Service
 		oldConfig        *config.Config
 		testAppID1       string
@@ -60,15 +61,12 @@ var _ = Describe("Service", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		var err error
-		store, err = NewSnapshotStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		DeferCleanup(cleanupSnapshotCollections)
 
-		appStore, err = bkmsapp.NewApplicationStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		cfgStore, err = build.NewConfigStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
-		service = NewService(store, cfgStore, appStore)
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		cfgStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
+		service = NewService(db)
 
 		secret, err := crypto.GenerateKey(32)
 		Expect(err).NotTo(HaveOccurred())
@@ -85,12 +83,12 @@ var _ = Describe("Service", func() {
 		testWorkspaceID2 = "ws-2-" + stringx.Random(12)
 
 		// 插入测试应用数据
-		Expect(appStore.CreateApp(ctx, &bkmsapp.Application{
+		Expect(appStore.Create(ctx, &bkmsapp.Application{
 			ID:          testAppID1,
 			Name:        testAppID2,
 			WorkspaceID: testWorkspaceID1,
 		})).To(Succeed())
-		Expect(appStore.CreateApp(ctx, &bkmsapp.Application{
+		Expect(appStore.Create(ctx, &bkmsapp.Application{
 			ID:          testAppID2,
 			Name:        testAppID2,
 			WorkspaceID: testWorkspaceID2,
@@ -115,7 +113,6 @@ var _ = Describe("Service", func() {
 
 	AfterEach(func() {
 		mockey.UnPatchAll()
-		Expect(store.DeleteAll(ctx)).To(Succeed())
 		config.G = oldConfig
 	})
 
@@ -132,7 +129,7 @@ var _ = Describe("Service", func() {
 		It("should resolve platform registry config for non-image source", func() {
 			mockey.PatchConvey("mock workspace image registry", GinkgoT(), func() {
 				mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
-					func(_ context.Context, wsID string) (*bkmsreg.ImageRegistry, error) {
+					func(_ context.Context, _ *mongo.Database, wsID string) (*bkmsreg.ImageRegistry, error) {
 						Expect(wsID).To(Equal(testWorkspaceID2))
 						return &bkmsreg.ImageRegistry{
 							Registry: "mirrors.tencent.com/bkpaas",
@@ -178,7 +175,7 @@ var _ = Describe("Service", func() {
 		It("should resolve workspace registry credentials with the given image name", func() {
 			mockey.PatchConvey("mock workspace image registry", GinkgoT(), func() {
 				mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
-					func(_ context.Context, wsID string) (*bkmsreg.ImageRegistry, error) {
+					func(_ context.Context, _ *mongo.Database, wsID string) (*bkmsreg.ImageRegistry, error) {
 						Expect(wsID).To(Equal(testWorkspaceID1))
 						return &bkmsreg.ImageRegistry{
 							Registry: "docker.bkrepo.example.com/demo",
@@ -214,7 +211,7 @@ var _ = Describe("Service", func() {
 		It("should refresh snapshots and enqueue detail sync", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
-				err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "stale"}})
+				err := UpsertTags(ctx, db, repoKey, []string{"stale"})
 				Expect(err).NotTo(HaveOccurred())
 
 				var gotUsername string
@@ -227,9 +224,6 @@ var _ = Describe("Service", func() {
 					return &registry.Client{}
 				}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest, "v1.0.0"}, nil).Build()
-				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).
-					Return([]string{TagLatest, "v1.0.0"}, nil).
-					Build()
 				mockey.Mock(NewImageDetailSyncArgs).
 					To(func(repoKey, repoName, username, password string) (*ImageDetailSyncArgs, error) {
 						preparedArgs = &ImageDetailSyncArgs{
@@ -253,13 +247,13 @@ var _ = Describe("Service", func() {
 				Expect(gotUsername).To(Equal("alice"))
 				Expect(gotPassword).To(Equal("secret"))
 
-				snapshots, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
+				snapshots, total, err := listSnapshots(ctx, db, repoKey)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(total).To(BeEquivalentTo(2))
 				Expect(snapshots).To(HaveLen(2))
 				Expect([]string{snapshots[0].Tag, snapshots[1].Tag}).To(ContainElements(TagLatest, "v1.0.0"))
 
-				status, err := store.GetStatus(ctx, repoKey)
+				status, err := GetRepoStatus(ctx, db, repoKey)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(status.RepoName).To(Equal("library/busybox"))
 				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
@@ -275,7 +269,7 @@ var _ = Describe("Service", func() {
 		It("should short-circuit when another refresh is in progress", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
-				err := store.UpsertStatus(ctx, &RepoSnapshotStatus{
+				err := UpsertRepoStatus(ctx, db, &RepoSnapshotStatus{
 					RepoKey:       repoKey,
 					RefreshStatus: RefreshStatusRefreshing,
 				})
@@ -300,7 +294,7 @@ var _ = Describe("Service", func() {
 				Expect(err).To(HaveOccurred())
 
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
-				status, getErr := store.GetStatus(ctx, repoKey)
+				status, getErr := GetRepoStatus(ctx, db, repoKey)
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 				Expect(status.LastError).To(ContainSubstring("list all tags"))
@@ -310,12 +304,14 @@ var _ = Describe("Service", func() {
 		It("should not submit detail sync task when no new tags found", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
-				err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: TagLatest}, {Tag: "v1.0.0"}})
+				err := UpsertTags(ctx, db, repoKey, []string{"v1.0.0"})
+				Expect(err).NotTo(HaveOccurred())
+				// latest 每次都会重新拉取详情，因此只预置一个详情已补全的普通标签
+				err = UpdateDetail(ctx, db, repoKey, "v1.0.0", &registry.ImageDetail{BuiltAt: time.Now()})
 				Expect(err).NotTo(HaveOccurred())
 
 				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
-				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest, "v1.0.0"}, nil).Build()
-				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).Return([]string{}, nil).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"v1.0.0"}, nil).Build()
 
 				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
 				Expect(err).NotTo(HaveOccurred())
@@ -329,10 +325,10 @@ var _ = Describe("Service", func() {
 		It("should submit detail sync task for a forced tag that already has details", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
-				err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "core-test-01"}})
+				err := UpsertTags(ctx, db, repoKey, []string{"core-test-01"})
 				Expect(err).NotTo(HaveOccurred())
 				// 详情已补全，常规查询不会返回它
-				err = store.UpdateDetail(ctx, repoKey, "core-test-01", &registry.ImageDetail{
+				err = UpdateDetail(ctx, db, repoKey, "core-test-01", &registry.ImageDetail{
 					Tag:     "core-test-01",
 					Digest:  "sha256:a376477a",
 					BuiltAt: time.Now().Add(-time.Hour),
@@ -352,7 +348,7 @@ var _ = Describe("Service", func() {
 				))
 
 				// 标记已落库，即使本次任务被跳过，后续刷新仍会重新拉取该标签
-				tags, listErr := store.ListUnsyncedDetailTags(ctx, repoKey)
+				tags, listErr := ListUnsyncedDetailTags(ctx, db, repoKey)
 				Expect(listErr).NotTo(HaveOccurred())
 				Expect(tags).To(ContainElement("core-test-01"))
 			})
@@ -364,7 +360,7 @@ var _ = Describe("Service", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoName := "registry.example.com/team/runtime"
 				repoKey := GenerateRepoKey(repoName, "", "")
-				err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "stale"}})
+				err := UpsertTags(ctx, db, repoKey, []string{"stale"})
 				Expect(err).NotTo(HaveOccurred())
 
 				var gotUsername string
@@ -377,7 +373,6 @@ var _ = Describe("Service", func() {
 					return &registry.Client{}
 				}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest, "v1.0.0"}, nil).Build()
-				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).Return([]string{TagLatest}, nil).Build()
 				mockey.Mock(NewImageDetailSyncArgs).
 					To(func(
 						repoKey, repoName, username, password string,
@@ -398,13 +393,13 @@ var _ = Describe("Service", func() {
 				Expect(gotUsername).To(BeEmpty())
 				Expect(gotPassword).To(BeEmpty())
 
-				snapshots, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
+				snapshots, total, err := listSnapshots(ctx, db, repoKey)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(total).To(BeEquivalentTo(2))
 				Expect(snapshots).To(HaveLen(2))
 				Expect([]string{snapshots[0].Tag, snapshots[1].Tag}).To(ContainElements(TagLatest, "v1.0.0"))
 
-				status, err := store.GetStatus(ctx, repoKey)
+				status, err := GetRepoStatus(ctx, db, repoKey)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(status.RepoName).To(Equal(repoName))
 				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
@@ -422,7 +417,6 @@ var _ = Describe("Service", func() {
 				repoName := "registry.example.com/team/runtime-failed"
 				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest}, nil).Build()
-				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).Return([]string{TagLatest}, nil).Build()
 				mockey.Mock(NewImageDetailSyncArgs).
 					Return(&ImageDetailSyncArgs{RepoKey: GenerateRepoKey(repoName, "", ""), RepoName: repoName}, nil).
 					Build()
@@ -455,7 +449,7 @@ var _ = Describe("Service", func() {
 
 				// 回置若复用已超时的 ctx 就会写不进去，状态将永久停在 refreshing 挡住后续刷新
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
-				status, getErr := store.GetStatus(ctx, repoKey)
+				status, getErr := GetRepoStatus(ctx, db, repoKey)
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 				Expect(status.LastError).NotTo(BeEmpty())
@@ -520,8 +514,8 @@ var _ = Describe("Service", func() {
 
 		// seedRepo 预置一条快照与其最后刷新时间
 		seedRepo := func(key, name string, lastRefreshedAt time.Time) {
-			Expect(store.UpsertSnapshots(ctx, key, []Image{{Tag: "v1"}})).To(Succeed())
-			Expect(store.UpsertStatus(ctx, &RepoSnapshotStatus{
+			Expect(UpsertTags(ctx, db, key, []string{"v1"})).To(Succeed())
+			Expect(UpsertRepoStatus(ctx, db, &RepoSnapshotStatus{
 				RepoKey:         key,
 				RepoName:        name,
 				RefreshStatus:   RefreshStatusIdle,
@@ -553,7 +547,7 @@ var _ = Describe("Service", func() {
 				Expect(tags).To(HaveLen(1))
 				Expect(status).NotTo(BeNil())
 				Eventually(func() int64 {
-					_, refreshed, lErr := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
+					_, refreshed, lErr := listSnapshots(ctx, db, repoKey)
 					Expect(lErr).NotTo(HaveOccurred())
 					return refreshed
 				}, "5s", "50ms").Should(BeEquivalentTo(2))

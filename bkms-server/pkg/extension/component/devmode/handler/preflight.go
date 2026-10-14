@@ -35,6 +35,8 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
@@ -43,6 +45,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
 
@@ -169,7 +172,7 @@ func (h *Handler) getEffectiveDevMode(
 	ctx context.Context, app *bkmsapp.Application, envName string,
 ) (*appspec.DevModeSpec, error) {
 	devModeSpec, err := appspec.GetEnvEffectiveSection(
-		ctx, h.registry.AppSpecStore, h.registry.AppModelStore,
+		ctx, h.registry.DB,
 		app.ID, envName, appspec.DevModeSection,
 	)
 	if err != nil {
@@ -189,7 +192,7 @@ func (h *Handler) getEffectiveDevMode(
 
 // getBCSProjectCode 从工作空间获取 BCS 项目 Code。
 func (h *Handler) getBCSProjectCode(ctx context.Context, workspaceID string) (string, error) {
-	ws, err := h.registry.WorkspaceStore.Get(ctx, workspaceID)
+	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		return "", bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get workspace %s", workspaceID)
 	}
@@ -238,7 +241,7 @@ func (h *Handler) resolveInstanceIDs(
 	ctx context.Context, appID, envName string, input slz.PreflightBodyInput,
 ) ([]string, error) {
 	// 获取最新部署记录
-	record, err := h.registry.AppModelDeployRecordStore.GetLatest(ctx, appID, envName, "")
+	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, appID, envName, "")
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "no deploy record found for this environment")
 	}

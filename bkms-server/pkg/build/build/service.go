@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
@@ -37,6 +38,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 )
@@ -54,8 +56,7 @@ type BuildResult struct {
 
 // Service 负责构建相关业务编排
 type Service struct {
-	buildConfigStore        imgbuild.ConfigStore
-	buildRecordStore        imgbuild.RecordStore
+	db                      *mongo.Database
 	imageReferenceValidator ImageReferenceValidator
 	customImageChecker      CustomImageChecker
 }
@@ -64,12 +65,11 @@ type Service struct {
 // 依赖参数按"先依赖后数据"顺序传入，且所有依赖均为必选：任何一个为 nil 都会直接返回错误，
 // 避免运行时才发现依赖缺失。
 func NewService(
-	buildConfigStore imgbuild.ConfigStore,
-	buildRecordStore imgbuild.RecordStore,
+	db *mongo.Database,
 	imageReferenceValidator ImageReferenceValidator,
 	customImageChecker CustomImageChecker,
 ) (*Service, error) {
-	if buildConfigStore == nil || buildRecordStore == nil {
+	if db == nil {
 		return nil, errors.New("build service dependencies not initialized")
 	}
 	if imageReferenceValidator == nil {
@@ -79,8 +79,7 @@ func NewService(
 		return nil, errors.New("customImageChecker must not be nil")
 	}
 	return &Service{
-		buildConfigStore:        buildConfigStore,
-		buildRecordStore:        buildRecordStore,
+		db:                      db,
 		imageReferenceValidator: imageReferenceValidator,
 		customImageChecker:      customImageChecker,
 	}, nil
@@ -140,7 +139,7 @@ func (s *Service) validateCustomImageCredential(
 	if !usesCustom {
 		return nil
 	}
-	registry, err := workspace.GetWorkspaceImageRegistry(ctx, app.WorkspaceID)
+	registry, err := workspace.GetWorkspaceImageRegistry(ctx, s.db, app.WorkspaceID)
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s image registry", app.WorkspaceID)
 	}
@@ -178,7 +177,7 @@ func (s *Service) usesCustomBuildImage(ctx context.Context, workspaceID string, 
 func (s *Service) Build(
 	ctx context.Context, app *bkmsapp.Application, rev revision.CodeRevision, imageTag string,
 ) (*BuildResult, error) {
-	cfg, err := s.buildConfigStore.Get(ctx, app.ID)
+	cfg, err := store.Of(s.db, imgbuild.ConfigMeta).Get(ctx, imgbuild.ByApp(app.ID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app %s build config", app.ID)
 	}
@@ -193,7 +192,7 @@ func (s *Service) Build(
 		return nil, errors.Wrapf(err, "validate app %s build before start", app.ID)
 	}
 
-	buildState, params, err := imgbuild.ExecuteBKCIPipelineBuild(ctx, app, cfg, rev, imageTag)
+	buildState, params, err := imgbuild.ExecuteBKCIPipelineBuild(ctx, s.db, app, cfg, rev, imageTag)
 	if err != nil {
 		return nil, errors.Wrapf(err, "execute bkci pipeline build for %s", app.ID)
 	}
@@ -219,8 +218,8 @@ func (s *Service) Build(
 		CreatedAt:   timeNow,
 		UpdatedAt:   timeNow,
 	}
-	if err = s.buildRecordStore.Create(ctx, buildRecord); err != nil {
-		return nil, errors.Wrapf(err, "create build record for %s", app.ID)
+	if err = imgbuild.CreateRecord(ctx, s.db, buildRecord); err != nil {
+		return nil, err
 	}
 
 	return &BuildResult{

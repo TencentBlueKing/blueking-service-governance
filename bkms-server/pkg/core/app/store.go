@@ -28,161 +28,80 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // The name of the MongoDB collection for storing application data.
 const collectionName = "applications"
 
 // use a single instance of Validate, it caches struct info
-var validate *validator.Validate
+var validate = validator.New(validator.WithRequiredStructEnabled())
 
-var ErrAppNotFound = errors.New("application not found")
+var (
+	ErrAppNotFound = errors.New("application not found")
+	// ErrAppAlreadyExists 应用 id 或（同一工作空间内的）名称与已有应用冲突
+	ErrAppAlreadyExists = errors.New("application already exists")
+)
 
-// ListOpts defines the options for listing applications
-type ListOpts struct {
-	// WorkspaceID filters applications by workspace ID
-	WorkspaceID string
-	// AppName filters applications by name
-	AppName string
-	// AppType filters applications by type (e.g., "trpc", "helm")
-	AppType string
-}
+// ApplicationStore 应用的 GenericStore
+type ApplicationStore = store.GenericStore[Application]
 
-// ApplicationStore is the interface for storing application data
-type ApplicationStore interface {
-	// ListApps lists applications based on the provided options
-	ListApps(ctx context.Context, opts *ListOpts) ([]*Application, error)
-
-	// CountByWorkspaceIDs returns application counts grouped by workspace ID.
-	CountByWorkspaceIDs(ctx context.Context, workspaceIDs []string) (map[string]int, error)
-
-	// CreateApp creates a new application
-	CreateApp(ctx context.Context, app *Application) error
-
-	// GetApp gets an application by id
-	GetApp(ctx context.Context, id string) (*Application, error)
-
-	// GetAppsByIDs gets applications by id list in one query.
-	// The returned slice is in the same order as ids.
-	// If any requested id is missing from storage, returns an error wrapping ErrAppNotFound.
-	GetAppsByIDs(ctx context.Context, ids []string) ([]*Application, error)
-
-	// GetAppByName gets an application by name
-	GetAppByName(ctx context.Context, workspaceID, name string) (*Application, error)
-
-	// DeleteAppByName delete an application by name
-	DeleteAppByName(ctx context.Context, workspaceID, name string) error
-
-	// UpdateDisplayName updates the display name of an application
-	UpdateDisplayName(ctx context.Context, app *Application, displayName string) error
-
-	// UpdateVisibleEnvNames replaces the application's visible standard environment names.
-	UpdateVisibleEnvNames(ctx context.Context, app *Application, visibleEnvNames []string) error
-
-	// RemoveVisibleEnvName pulls envName from visibleEnvNames of all apps in the workspace.
-	RemoveVisibleEnvName(ctx context.Context, workspaceID, envName string) error
-
-	// UpdateHelmSource updates the helm source of an application
-	UpdateHelmSource(ctx context.Context, app *Application, helmSource *HelmSource) error
-}
-
-var _ ApplicationStore = &ApplicationStoreMongo{}
-
-// ApplicationStoreMongo is the implementation of ApplicationStore
-type ApplicationStoreMongo struct {
-	// Collection is the MongoDB collection for storing arrangement data.
-	collection *mongo.Collection
-}
-
-// NewApplicationStoreMongo creates a new ApplicationStore, it accepts a MongoDB client and database name.
-func NewApplicationStoreMongo(client *mongo.Client, dbName string) (*ApplicationStoreMongo, error) {
-	coll := client.Database(dbName).Collection(collectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：id
-	// - 唯一：workspaceID + name
-	return &ApplicationStoreMongo{collection: coll}, nil
-}
-
-// CreateApp creates a new application
+// AppMeta 应用的存储元信息：入库前校验必填字段，Helm 仓库密码加密存储。
 //
-// - ctx: The context object for cancellation and timeout
-// - app: The application to create
-//
-// Return an error if the operation fails.
-func (s *ApplicationStoreMongo) CreateApp(ctx context.Context, app *Application) error {
-	// 入库前对敏感字段进行加密
-	if err := s.handleSensitiveFields(app, crypto.AESEncrypt); err != nil {
-		return errors.Wrap(err, "encrypt fields")
-	}
-	// Validate the application struct to ensure required fields are present
-	validate = validator.New(validator.WithRequiredStructEnabled())
-	if err := validate.Struct(app); err != nil {
-		return errors.Wrap(err, "application validation failed")
-	}
-
-	_, err := s.collection.InsertOne(ctx, app)
-	if err != nil {
-		// Check if it's a duplicate key error
-		if mongo.IsDuplicateKeyError(err) {
-			dupKey := lo.Ternary(strings.Contains(err.Error(), "id_1 dup key"), "id", "name")
-			return errors.Errorf("application with the same %s already exists", dupKey)
-		}
-		return err
-	}
-	return nil
+// 索引（由 golang-migrate 维护）：
+// - 唯一：id
+// - 唯一：workspaceID + name
+var AppMeta = store.Meta[Application]{
+	Collection: collectionName,
+	NotFound:   ErrAppNotFound,
+	Duplicate:  ErrAppAlreadyExists,
+	BeforeSave: []func(*Application) error{validateApp},
+	Encode:     []func(*Application) error{encryptHelmRepoPassword},
+	Decode:     []func(*Application) error{decryptHelmRepoPassword},
 }
 
-// GetApp gets an application by ID
-func (s *ApplicationStoreMongo) GetApp(ctx context.Context, id string) (*Application, error) {
-	app := new(Application)
-	err := s.collection.FindOne(ctx, bson.M{"id": id}).Decode(app)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			// When no record can be found, return a new error
-			return nil, ErrAppNotFound
-		}
-		return nil, err
-	}
+// ByID 按应用 id 匹配。应用 id 是业务主键，与 MongoDB 自动生成的 _id 无关，不能使用 store.ByID
+func ByID(id string) store.Opt { return store.Where("id", id) }
 
-	// 出库前对敏感字段进行解密
-	if err = s.handleSensitiveFields(app, crypto.AESDecrypt); err != nil {
-		return nil, errors.Wrap(err, "decrypt fields")
-	}
+// InWorkspace 匹配工作空间内的应用
+func InWorkspace(workspaceID string) store.Opt { return store.Where("workspaceID", workspaceID) }
 
-	return app, nil
+// ByName 按工作空间与应用名称匹配
+func ByName(workspaceID, name string) store.Opt {
+	return store.Combine(InWorkspace(workspaceID), store.Where("name", name))
+}
+
+// OfType 按应用类型匹配，如 AppTypeTRPC、AppTypeHelm
+func OfType(appType string) store.Opt { return store.Where("type", appType) }
+
+// CreateApp 创建应用。与已有应用冲突时返回的错误满足 errors.Is(err, ErrAppAlreadyExists)，
+// 错误信息中指明冲突的是 id 还是名称
+func CreateApp(ctx context.Context, db *mongo.Database, app *Application) error {
+	err := store.Of(db, AppMeta).Create(ctx, app)
+	if errors.Is(err, ErrAppAlreadyExists) {
+		// 集合上有 id、workspaceID + name 两个唯一索引，只能从驱动返回的错误信息中区分
+		dupKey := lo.Ternary(strings.Contains(err.Error(), "id_1 dup key"), "id", "name")
+		return errors.Wrapf(err, "application with the same %s already exists", dupKey)
+	}
+	return errors.Wrapf(err, "create application %s", app.ID)
 }
 
 // GetAppsByIDs gets applications by id list in one query.
-func (s *ApplicationStoreMongo) GetAppsByIDs(ctx context.Context, ids []string) ([]*Application, error) {
+// The returned slice is in the same order as ids.
+// If any requested id is missing from storage, returns an error wrapping ErrAppNotFound.
+func GetAppsByIDs(ctx context.Context, db *mongo.Database, ids []string) ([]*Application, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 
-	uniqueIDs := lo.Uniq(ids)
-	cursor, err := s.collection.Find(ctx, bson.M{"id": bson.M{"$in": uniqueIDs}})
+	apps, err := store.Of(db, AppMeta).List(ctx, store.Where("id", bson.M{"$in": lo.Uniq(ids)}))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "list applications by ids")
 	}
-	defer cursor.Close(ctx)
-
-	byID := make(map[string]*Application, len(uniqueIDs))
-	for cursor.Next(ctx) {
-		app := new(Application)
-		if err = cursor.Decode(app); err != nil {
-			return nil, err
-		}
-		if err = s.handleSensitiveFields(app, crypto.AESDecrypt); err != nil {
-			return nil, errors.Wrap(err, "decrypt fields")
-		}
-		byID[app.ID] = app
-	}
-	if err := cursor.Err(); err != nil {
-		return nil, err
-	}
+	byID := lo.SliceToMap(apps, func(a Application) (string, *Application) { return a.ID, &a })
 
 	out := make([]*Application, 0, len(ids))
 	for _, id := range ids {
@@ -195,139 +114,15 @@ func (s *ApplicationStoreMongo) GetAppsByIDs(ctx context.Context, ids []string) 
 	return out, nil
 }
 
-// GetAppByName gets an application by name
-func (s *ApplicationStoreMongo) GetAppByName(ctx context.Context, workspaceID, name string) (*Application, error) {
-	app := new(Application)
-	err := s.collection.FindOne(ctx, bson.M{"name": name, "workspaceID": workspaceID}).
-		Decode(app)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			// When no record can be found, return a new error
-			return nil, ErrAppNotFound
-		}
-		return nil, err
-	}
-
-	// 出库前对敏感字段进行解密
-	if err = s.handleSensitiveFields(app, crypto.AESDecrypt); err != nil {
-		return nil, errors.Wrap(err, "decrypt fields")
-	}
-
-	return app, nil
-}
-
-// DeleteAppByName delete an application by name
-func (s *ApplicationStoreMongo) DeleteAppByName(ctx context.Context, workspaceID, name string) error {
-	_, err := s.collection.DeleteOne(ctx, bson.M{"workspaceID": workspaceID, "name": name})
-	return err
-}
-
-// UpdateDisplayName updates the display name of an application
-func (s *ApplicationStoreMongo) UpdateDisplayName(
-	ctx context.Context,
-	app *Application,
-	displayName string,
-) error {
-	filter := bson.M{"id": app.ID}
-	update := bson.M{"$set": bson.M{"displayName": displayName}}
-	return s.collUpdateOne(ctx, filter, update)
-}
-
-// UpdateVisibleEnvNames replaces the application's visible standard environment names.
-func (s *ApplicationStoreMongo) UpdateVisibleEnvNames(
-	ctx context.Context,
-	app *Application,
-	visibleEnvNames []string,
-) error {
-	if visibleEnvNames == nil {
-		visibleEnvNames = []string{}
-	}
-	filter := bson.M{"id": app.ID}
-	update := bson.M{"$set": bson.M{"visibleEnvNames": visibleEnvNames}}
-	return s.collUpdateOne(ctx, filter, update)
-}
-
 // RemoveVisibleEnvName pulls envName from visibleEnvNames of all apps in the workspace.
-func (s *ApplicationStoreMongo) RemoveVisibleEnvName(ctx context.Context, workspaceID, envName string) error {
-	_, err := s.collection.UpdateMany(
+func RemoveVisibleEnvName(ctx context.Context, db *mongo.Database, workspaceID, envName string) error {
+	_, err := store.Of(db, AppMeta).ModifyMany(
 		ctx,
-		bson.M{"workspaceID": workspaceID, "visibleEnvNames": envName},
 		bson.M{"$pull": bson.M{"visibleEnvNames": envName}},
+		InWorkspace(workspaceID),
+		store.Where("visibleEnvNames", envName),
 	)
-	if err != nil {
-		return errors.Wrapf(err, "remove visible env %s from workspace %s apps", envName, workspaceID)
-	}
-	return nil
-}
-
-// UpdateHelmSource updates the helm source of an application
-func (s *ApplicationStoreMongo) UpdateHelmSource(
-	ctx context.Context,
-	app *Application,
-	helmSource *HelmSource,
-) error {
-	newApp := Application{
-		Name:        app.Name,
-		WorkspaceID: app.WorkspaceID,
-		HelmSpec:    &HelmSpec{HelmSource: helmSource},
-	}
-	// 入库前对敏感字段进行加密
-	if err := s.handleSensitiveFields(&newApp, crypto.AESEncrypt); err != nil {
-		return errors.Wrap(err, "encrypt fields")
-	}
-
-	filter := bson.M{"name": app.Name, "workspaceID": app.WorkspaceID}
-	update := bson.M{
-		"$set": bson.M{"helmSpec.helmSource": newApp.HelmSpec.HelmSource},
-	}
-	return s.collUpdateOne(ctx, filter, update)
-}
-
-// ListApps lists applications based on the provided options
-//
-// - opts: The options for filtering applications. If nil, returns all applications.
-//   - WorkspaceID: If non-empty, filter applications by workspace ID
-//   - AppName: If non-empty, filter applications by name
-//   - AppType: If non-empty, filter applications by type
-func (s *ApplicationStoreMongo) ListApps(ctx context.Context, opts *ListOpts) ([]*Application, error) {
-	// Build filter based on options
-	filter := bson.M{}
-	if opts != nil {
-		if opts.WorkspaceID != "" {
-			filter["workspaceID"] = opts.WorkspaceID
-		}
-		if opts.AppName != "" {
-			filter["name"] = opts.AppName
-		}
-		if opts.AppType != "" {
-			filter["type"] = opts.AppType
-		}
-	}
-
-	cursor, err := s.collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var apps []*Application
-	for cursor.Next(ctx) {
-		app := new(Application)
-		if err = cursor.Decode(app); err != nil {
-			return nil, err
-		}
-		// 出库前对敏感字段进行解密
-		if err = s.handleSensitiveFields(app, crypto.AESDecrypt); err != nil {
-			return nil, errors.Wrap(err, "decrypt fields")
-		}
-
-		apps = append(apps, app)
-	}
-
-	if err := cursor.Err(); err != nil {
-		return nil, err
-	}
-	return apps, nil
+	return errors.Wrapf(err, "remove visible env %s from workspace %s apps", envName, workspaceID)
 }
 
 type appCountByWorkspace struct {
@@ -336,30 +131,21 @@ type appCountByWorkspace struct {
 }
 
 // CountByWorkspaceIDs returns application counts grouped by workspace ID.
-func (s *ApplicationStoreMongo) CountByWorkspaceIDs(
-	ctx context.Context,
-	workspaceIDs []string,
-) (map[string]int, error) {
+func CountByWorkspaceIDs(ctx context.Context, db *mongo.Database, workspaceIDs []string) (map[string]int, error) {
 	if len(workspaceIDs) == 0 {
 		return map[string]int{}, nil
 	}
 
 	pipeline := mongo.Pipeline{
-		{{"$match", bson.M{"workspaceID": bson.M{"$in": lo.Uniq(workspaceIDs)}}}},
-		{{"$group", bson.M{
+		{{Key: "$match", Value: bson.M{"workspaceID": bson.M{"$in": lo.Uniq(workspaceIDs)}}}},
+		{{Key: "$group", Value: bson.M{
 			"_id":   "$workspaceID",
 			"count": bson.M{"$sum": 1},
 		}}},
 	}
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
+	results, err := store.Aggregate[appCountByWorkspace](ctx, store.Of(db, AppMeta), pipeline)
 	if err != nil {
 		return nil, errors.Wrap(err, "aggregate application counts by workspace IDs")
-	}
-	defer cursor.Close(ctx)
-
-	var results []appCountByWorkspace
-	if err := cursor.All(ctx, &results); err != nil {
-		return nil, errors.Wrap(err, "decode application counts by workspace IDs")
 	}
 
 	counts := make(map[string]int, len(results))
@@ -369,39 +155,24 @@ func (s *ApplicationStoreMongo) CountByWorkspaceIDs(
 	return counts, nil
 }
 
-// handleSensitiveFields encrypts or decrypts sensitive fields in the Application
-// - handleFunc is a function that encrypts or decrypts a field
-func (s *ApplicationStoreMongo) handleSensitiveFields(
-	app *Application, handleFunc func(key, data string) (string, error),
-) error {
-	if app.HelmSpec == nil || app.HelmSpec.HelmSource == nil {
-		return nil
-	}
-
-	if app.HelmSpec.HelmSource.HelmRepoConfig == nil {
-		return nil
-	}
-
-	rawPassword := app.HelmSpec.HelmSource.HelmRepoConfig.Password
-	if rawPassword == "" {
-		return nil
-	}
-
-	password, err := handleFunc(config.G.Encrypt.Secret, rawPassword)
-	if err != nil {
-		return err
-	}
-
-	app.HelmSpec.HelmSource.HelmRepoConfig.Password = password
-
-	return nil
+func validateApp(app *Application) error {
+	return errors.Wrap(validate.Struct(app), "application validation failed")
 }
 
-func (s *ApplicationStoreMongo) collUpdateOne(ctx context.Context, filter, update bson.M) error {
-	opts := options.UpdateOne().SetUpsert(false)
-	ret, err := s.collection.UpdateOne(ctx, filter, update, opts)
-	if ret != nil && ret.MatchedCount == 0 {
-		return ErrAppNotFound
+func encryptHelmRepoPassword(app *Application) error {
+	return transformHelmRepoPassword(app, crypto.AESEncrypt)
+}
+
+func decryptHelmRepoPassword(app *Application) error {
+	return transformHelmRepoPassword(app, crypto.AESDecrypt)
+}
+
+// transformHelmRepoPassword encrypts or decrypts the helm repo password, the only sensitive field in Application
+func transformHelmRepoPassword(app *Application, fn func(key, data string) (string, error)) (err error) {
+	if app.HelmSpec == nil || app.HelmSpec.HelmSource == nil || app.HelmSpec.HelmSource.HelmRepoConfig == nil {
+		return nil
 	}
-	return err
+	repoConfig := app.HelmSpec.HelmSource.HelmRepoConfig
+	repoConfig.Password, err = crypto.OnDemand(config.G.Encrypt.Secret, fn, repoConfig.Password)
+	return errors.Wrap(err, "transform helm repo password")
 }

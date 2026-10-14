@@ -28,7 +28,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	appcomponent "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func TestHelmComponent(t *testing.T) {
@@ -48,24 +48,21 @@ var _ = AfterSuite(func() {
 	}
 })
 
-var _ = Describe("DbHelmAppComponentStore", func() {
+var _ = Describe("HelmAppComponent store", func() {
 	var (
-		store *DbHelmAppComponentStore
+		comps *Store
 		ctx   context.Context
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-		store, err = NewDbHelmAppComponentStore(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		comps = testutil.NewStore(GinkgoT(), Meta)
 
 		// 清理测试数据
-		err = testutil.CleanupCollection(helmAppComponentCollectionName)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
-	Describe("Add", func() {
+	Describe("Create", func() {
 		It("should insert a component and auto-generate name", func() {
 			comp := &HelmAppComponent{
 				AppID:   "app-001",
@@ -84,12 +81,13 @@ var _ = Describe("DbHelmAppComponentStore", func() {
 				Priority: 0,
 			}
 
-			err := store.Add(ctx, comp)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(comp.ID).NotTo(BeZero())
+			Expect(comps.Create(ctx, comp)).To(Succeed())
 			Expect(comp.Name).NotTo(BeEmpty())
-			Expect(comp.CreatedAt).NotTo(BeZero())
-			Expect(comp.UpdatedAt).NotTo(BeZero())
+
+			got, err := comps.GetByID(ctx, comp.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Name).To(Equal(comp.Name))
+			Expect(got.Properties).To(HaveKeyWithValue("image", "envoy:latest"))
 		})
 
 		It("should reject duplicate name in same app+env", func() {
@@ -105,8 +103,7 @@ var _ = Describe("DbHelmAppComponentStore", func() {
 				},
 				Target: TargetResourceSelector{Kind: "Deployment", Name: "nginx"},
 			}
-			err := store.Add(ctx, comp)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(comps.Create(ctx, comp)).To(Succeed())
 
 			// 同名组件应该失败
 			comp2 := &HelmAppComponent{
@@ -121,167 +118,44 @@ var _ = Describe("DbHelmAppComponentStore", func() {
 				},
 				Target: TargetResourceSelector{Kind: "Deployment", Name: "other"},
 			}
-			err = store.Add(ctx, comp2)
-			Expect(err).To(HaveOccurred())
+			Expect(comps.Create(ctx, comp2)).To(MatchError(store.ErrDuplicate))
 		})
 	})
 
 	Describe("Get", func() {
-		It("should return the component by ID", func() {
-			comp := &HelmAppComponent{
-				AppID:   "app-002",
-				EnvName: "staging",
-				Component: appcomponent.Component{
-					Name: "my-comp",
-					ComponentInst: appcomponent.ComponentInst{
-						Type:    "config-injector",
-						Version: "v1.0.0",
-					},
-				},
-				Target:   TargetResourceSelector{Kind: "Deployment", Name: "web"},
-				Priority: 1,
-			}
-			err := store.Add(ctx, comp)
-			Expect(err).NotTo(HaveOccurred())
-
-			got, err := store.Get(ctx, comp.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.AppID).To(Equal("app-002"))
-			Expect(got.Name).To(Equal("my-comp"))
-			Expect(got.Target.Kind).To(Equal("Deployment"))
-		})
-
 		It("should return error when not found", func() {
-			_, err := store.Get(ctx, bson.NewObjectID())
+			_, err := comps.GetByID(ctx, bson.NewObjectID())
 			Expect(err).To(MatchError(ErrHelmAppComponentNotFound))
 		})
 	})
 
-	Describe("ListByAppAndEnv", func() {
+	Describe("ByAppAndEnv and InExecutionOrder", func() {
 		It("should return components sorted by priority then createdAt", func() {
-			comps := []*HelmAppComponent{
-				{
+			newComp := func(name string, priority int) *HelmAppComponent {
+				return &HelmAppComponent{
 					AppID:   "app-003",
 					EnvName: "prod",
 					Component: appcomponent.Component{
-						Name:          "comp-b",
-						ComponentInst: appcomponent.ComponentInst{Type: "b", Version: "v1.0.0"},
+						Name:          name,
+						ComponentInst: appcomponent.ComponentInst{Type: name, Version: "v1.0.0"},
 					},
-					Target:   TargetResourceSelector{Kind: "Deployment", Name: "b"},
-					Priority: 10,
-				},
-				{
-					AppID:   "app-003",
-					EnvName: "prod",
-					Component: appcomponent.Component{
-						Name:          "comp-a",
-						ComponentInst: appcomponent.ComponentInst{Type: "a", Version: "v1.0.0"},
-					},
-					Target:   TargetResourceSelector{Kind: "Deployment", Name: "a"},
-					Priority: 1,
-				},
+					Target:   TargetResourceSelector{Kind: "Deployment", Name: name},
+					Priority: priority,
+				}
 			}
-			for _, c := range comps {
-				Expect(store.Add(ctx, c)).To(Succeed())
+			for _, c := range []*HelmAppComponent{newComp("comp-b", 10), newComp("comp-a", 1), newComp("comp-c", 10)} {
+				Expect(comps.Create(ctx, c)).To(Succeed())
 			}
+			other := newComp("comp-x", 0)
+			other.EnvName = "staging"
+			Expect(comps.Create(ctx, other)).To(Succeed())
 
-			list, err := store.ListByAppAndEnv(ctx, "app-003", "prod")
+			list, err := comps.List(ctx, ByAppAndEnv("app-003", "prod"), InExecutionOrder())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(list).To(HaveLen(2))
+			Expect(list).To(HaveLen(3))
 			Expect(list[0].Name).To(Equal("comp-a"))
 			Expect(list[1].Name).To(Equal("comp-b"))
-		})
-
-		It("should return empty list when no components exist", func() {
-			list, err := store.ListByAppAndEnv(ctx, "non-existent", "prod")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(list).To(BeEmpty())
-		})
-	})
-
-	Describe("Update", func() {
-		It("should update properties and target", func() {
-			comp := &HelmAppComponent{
-				AppID:   "app-004",
-				EnvName: "prod",
-				Component: appcomponent.Component{
-					Name:          "updatable",
-					ComponentInst: appcomponent.ComponentInst{Type: "x", Version: "v1.0.0"},
-				},
-				Target: TargetResourceSelector{Kind: "Deployment", Name: "old"},
-			}
-			Expect(store.Add(ctx, comp)).To(Succeed())
-
-			newPriority := 5
-			err := store.Update(ctx, comp.ID, &UpdateData{
-				Properties: map[string]any{"key": "value"},
-				Target:     &TargetResourceSelector{Kind: "StatefulSet", Name: "new"},
-				Priority:   &newPriority,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			got, err := store.Get(ctx, comp.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Target.Kind).To(Equal("StatefulSet"))
-			Expect(got.Target.Name).To(Equal("new"))
-			Expect(got.Priority).To(Equal(5))
-		})
-
-		It("should return error when component not found", func() {
-			err := store.Update(ctx, bson.NewObjectID(), &UpdateData{})
-			Expect(err).To(MatchError(ErrHelmAppComponentNotFound))
-		})
-	})
-
-	Describe("Delete", func() {
-		It("should delete the component", func() {
-			comp := &HelmAppComponent{
-				AppID:   "app-005",
-				EnvName: "prod",
-				Component: appcomponent.Component{
-					Name:          "deletable",
-					ComponentInst: appcomponent.ComponentInst{Type: "y", Version: "v1.0.0"},
-				},
-				Target: TargetResourceSelector{Kind: "Deployment", Name: "del"},
-			}
-			Expect(store.Add(ctx, comp)).To(Succeed())
-
-			err := store.Delete(ctx, comp.ID)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = store.Get(ctx, comp.ID)
-			Expect(err).To(MatchError(ErrHelmAppComponentNotFound))
-		})
-
-		It("should be idempotent (no error when not found)", func() {
-			err := store.Delete(ctx, bson.NewObjectID())
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
-
-	Describe("DeleteByApp", func() {
-		It("should delete all components for the app", func() {
-			for i := range 3 {
-				comp := &HelmAppComponent{
-					AppID:   "app-006",
-					EnvName: "prod",
-					Component: appcomponent.Component{
-						ComponentInst: appcomponent.ComponentInst{
-							Type:    "comp-" + string(rune('a'+i)),
-							Version: "v1.0.0",
-						},
-					},
-					Target: TargetResourceSelector{Kind: "Deployment", Name: "d"},
-				}
-				Expect(store.Add(ctx, comp)).To(Succeed())
-			}
-
-			err := store.DeleteByApp(ctx, "app-006")
-			Expect(err).NotTo(HaveOccurred())
-
-			list, err := store.ListByAppAndEnv(ctx, "app-006", "prod")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(list).To(BeEmpty())
+			Expect(list[2].Name).To(Equal("comp-c"))
 		})
 	})
 })

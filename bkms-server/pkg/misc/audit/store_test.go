@@ -21,621 +21,126 @@ package audit
 import (
 	"context"
 	"strings"
+	"time"
 
-	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("OperationRecordStoreMongo", func() {
-	var store OperationRecordStore
-	var ctx context.Context
+var _ = Describe("OperationRecordStore", func() {
+	var (
+		ctx     context.Context
+		db      *mongo.Database
+		records *OperationRecordStore
+		base    time.Time
+	)
+
+	// mustCreate 以 base 为基准、offset 为偏移设置创建时间，便于断言排序
+	mustCreate := func(offset time.Duration, username string, opts ...Option) *OperationRecord {
+		r := newOperationRecord(username, OperationTypeCreate, ResourceTypeApp, "res", opts...)
+		r.CreatedAt = base.Add(offset)
+		r.UpdatedAt = r.CreatedAt
+		Expect(records.Create(ctx, r)).To(Succeed())
+		return r
+	}
+	usernames := func(page *store.Page[OperationRecord]) []string {
+		return lo.Map(page.Items, func(r OperationRecord, _ int) string { return r.Username })
+	}
 
 	BeforeEach(func() {
-		var err error
-		// 创建 store 实例
-		store, err = NewOperationRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
 		ctx = context.Background()
+		Expect(testutil.CleanupMetaColl(OperationRecordMeta)).To(Succeed())
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, OperationRecordMeta)
+		base = time.Now().Truncate(time.Millisecond)
 	})
 
-	AfterEach(func() {
-		if store != nil {
-			// 清理测试数据
-			_ = store.DeleteAll(ctx)
+	Describe("ListRecords", func() {
+		BeforeEach(func() {
+			mustCreate(1*time.Minute, "alice", WithWorkspaceID("ws-1"), WithAppID("app-1"), WithEnvName("dev"))
+			mustCreate(2*time.Minute, "alice", WithWorkspaceID("ws-1"), WithAppID("app-2"), WithEnvName("prod"),
+				WithResult(ResultFailed))
+			mustCreate(3*time.Minute, "bob", WithWorkspaceID("ws-1"), WithAppID("app-1"), WithEnvName("dev"))
+			mustCreate(4*time.Minute, "carol", WithWorkspaceID("ws-2"))
+		})
+
+		list := func(opts ListOptions) *store.Page[OperationRecord] {
+			if opts.Page == 0 {
+				opts.Page, opts.PageSize = 1, 10
+			}
+			page, err := ListRecords(ctx, db, opts)
+			Expect(err).NotTo(HaveOccurred())
+			return page
 		}
-	})
 
-	Describe("Create", func() {
-		It("should create a new operation record successfully", func() {
-			record := &OperationRecord{
-				ID:            bson.NewObjectID(),
-				Username:      "blueking",
-				AccessType:    AccessTypeWeb,
-				OperationType: OperationTypeCreate,
-				ResourceType:  ResourceTypeApp,
-				ResourceID:    bson.NewObjectID().Hex(),
-				Attribute:     "test-app",
-				Result:        ResultSuccess,
-			}
-
-			id, err := store.Create(ctx, record)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(id).NotTo(BeEmpty())
-
-			// 验证创建的记录可以被获取
-			retrieved, err := store.Get(ctx, id)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.Username).To(Equal("blueking"))
-			Expect(retrieved.OperationType).To(Equal(OperationTypeCreate))
-			Expect(retrieved.ResourceType).To(Equal(ResourceTypeApp))
-			Expect(retrieved.Attribute).To(Equal(Attribute("test-app")))
+		It("should list newest first and count all matched records", func() {
+			page := list(ListOptions{WorkspaceID: "ws-1"})
+			Expect(page.Total).To(Equal(int64(3)))
+			Expect(usernames(page)).To(Equal([]string{"bob", "alice", "alice"}))
 		})
 
-		It("should create operation record with data before and after", func() {
-			dataBefore := []byte(`{"name": "old-name"}`)
-			dataAfter := []byte(`{"name": "new-name"}`)
+		It("should paginate in a stable order", func() {
+			first := list(ListOptions{Page: 1, PageSize: 3})
+			second := list(ListOptions{Page: 2, PageSize: 3})
+			Expect(first.Total).To(Equal(int64(4)))
+			Expect(usernames(first)).To(Equal([]string{"carol", "bob", "alice"}))
+			Expect(usernames(second)).To(Equal([]string{"alice"}))
+		})
 
-			record := &OperationRecord{
-				ID:            bson.NewObjectID(),
-				Username:      "admin",
-				AccessType:    AccessTypeAPI,
-				OperationType: OperationTypeUpdate,
-				ResourceType:  ResourceTypeWorkspace,
-				ResourceID:    bson.NewObjectID().Hex(),
-				Attribute:     "test-workspace",
-				Result:        ResultSuccess,
-				Data: OperationData{
-					Before: dataBefore,
-					After:  dataAfter,
-				},
-			}
+		It("should match username case-insensitively by substring", func() {
+			page := list(ListOptions{Username: strings.ToUpper(" LIC ")})
+			Expect(usernames(page)).To(Equal([]string{"alice", "alice"}))
+		})
 
-			id, err := store.Create(ctx, record)
-			Expect(err).NotTo(HaveOccurred())
+		It("should filter by group fields", func() {
+			page := list(ListOptions{WorkspaceID: "ws-1", AppID: "app-1", EnvName: "dev"})
+			Expect(usernames(page)).To(Equal([]string{"bob", "alice"}))
+		})
 
-			retrieved, err := store.Get(ctx, id)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.Data.Before).To(Equal(dataBefore))
-			Expect(retrieved.Data.After).To(Equal(dataAfter))
+		It("should filter by operation result", func() {
+			Expect(usernames(list(ListOptions{Result: ResultFailed}))).To(Equal([]string{"alice"}))
+			Expect(list(ListOptions{OpType: OperationTypeDelete}).Total).To(BeZero())
+			Expect(list(ListOptions{ResType: ResourceTypeApp}).Total).To(Equal(int64(4)))
+		})
+
+		It("should filter by an inclusive time range", func() {
+			page := list(ListOptions{StartedAt: base.Add(2 * time.Minute), EndedAt: base.Add(3 * time.Minute)})
+			Expect(usernames(page)).To(Equal([]string{"bob", "alice"}))
+		})
+
+		It("should ignore a time range that is not increasing", func() {
+			page := list(ListOptions{StartedAt: base.Add(3 * time.Minute), EndedAt: base.Add(2 * time.Minute)})
+			Expect(page.Total).To(Equal(int64(4)))
 		})
 	})
 
-	Describe("Get", func() {
-		var recordID string
-
+	Describe("latest operation times", func() {
 		BeforeEach(func() {
-			record := &OperationRecord{
-				ID:            bson.NewObjectID(),
-				Username:      "getUser",
-				AccessType:    AccessTypeWeb,
-				OperationType: OperationTypeDelete,
-				ResourceType:  ResourceTypeEnv,
-				ResourceID:    bson.NewObjectID().Hex(),
-				Attribute:     "test-env",
-				Result:        ResultSuccess,
-			}
+			mustCreate(1*time.Minute, "alice", WithWorkspaceID("ws-1"), WithAppID("app-1"))
+			mustCreate(3*time.Minute, "alice", WithWorkspaceID("ws-1"), WithAppID("app-2"))
+			mustCreate(2*time.Minute, "alice", WithWorkspaceID("ws-2"), WithAppID("app-1"))
+			mustCreate(5*time.Minute, "bob", WithWorkspaceID("ws-1"), WithAppID("app-1"))
+		})
 
-			var err error
-			recordID, err = store.Create(ctx, record)
+		It("should return the latest time of the user in each workspace", func() {
+			m, err := GetLatestOperationTimesByWorkspacesForUser(ctx, db, []string{"ws-1", "ws-2", "ws-3"}, "alice")
 			Expect(err).NotTo(HaveOccurred())
+			Expect(m).To(HaveLen(2))
+			Expect(m["ws-1"]).To(BeTemporally("==", base.Add(3*time.Minute)))
+			Expect(m["ws-2"]).To(BeTemporally("==", base.Add(2*time.Minute)))
 		})
 
-		It("should get operation record by valid ID", func() {
-			record, err := store.Get(ctx, recordID)
+		It("should return the latest time of the user for each app in the workspace", func() {
+			m, err := GetLatestOperationTimesByAppsForUser(ctx, db, "ws-1", []string{"app-1", "app-2"}, "alice")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(record).NotTo(BeNil())
-			Expect(record.Username).To(Equal("getUser"))
-			Expect(record.OperationType).To(Equal(OperationTypeDelete))
-		})
-
-		It("should return error for invalid ID format", func() {
-			_, err := store.Get(ctx, "invalid-id")
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("should return error for non-existent ID", func() {
-			nonExistentID := bson.NewObjectID().Hex()
-			_, err := store.Get(ctx, nonExistentID)
-			Expect(err).To(HaveOccurred())
-		})
-	})
-
-	Describe("Update", func() {
-		var recordID string
-		var originalRecord *OperationRecord
-
-		BeforeEach(func() {
-			originalRecord = &OperationRecord{
-				ID:            bson.NewObjectID(),
-				Username:      "newUser",
-				AccessType:    AccessTypeWeb,
-				OperationType: OperationTypeDeploy,
-				ResourceType:  ResourceTypeApp,
-				ResourceID:    bson.NewObjectID().Hex(),
-				Attribute:     "deploy-app",
-				Result:        ResultSuccess,
-			}
-
-			var err error
-			recordID, err = store.Create(ctx, originalRecord)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 获取创建的记录以获得完整的 ID
-			originalRecord, err = store.Get(ctx, recordID)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should update operation result", func() {
-			originalRecord.Result = ResultSuccess
-			err := store.Update(ctx, originalRecord)
-			Expect(err).NotTo(HaveOccurred())
-
-			updated, err := store.Get(ctx, recordID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updated.Result).To(Equal(ResultSuccess))
-		})
-
-		It("should update data before and after", func() {
-			dataBefore := []byte(`{"status": "pending"}`)
-			dataAfter := []byte(`{"status": "completed"}`)
-
-			originalRecord.Data.Before = dataBefore
-			originalRecord.Data.After = dataAfter
-			err := store.Update(ctx, originalRecord)
-			Expect(err).NotTo(HaveOccurred())
-
-			updated, err := store.Get(ctx, recordID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updated.Data.Before).To(Equal(dataBefore))
-			Expect(updated.Data.After).To(Equal(dataAfter))
-		})
-	})
-
-	Describe("List", func() {
-		var username1, username2 string
-		var resourceID1, resourceID2 string
-
-		BeforeEach(func() {
-			username1 = "user1-" + stringx.Random(6)
-			username2 = "user2-" + stringx.Random(6)
-			resourceID1 = bson.NewObjectID().Hex()
-			resourceID2 = bson.NewObjectID().Hex()
-
-			// 创建多条测试记录
-			records := []*OperationRecord{
-				{
-					ID:            bson.NewObjectID(),
-					Username:      username1,
-					AccessType:    AccessTypeWeb,
-					OperationType: OperationTypeCreate,
-					ResourceType:  ResourceTypeApp,
-					ResourceID:    resourceID1,
-					Attribute:     "app1",
-					Result:        ResultSuccess,
-				},
-				{
-					ID:            bson.NewObjectID(),
-					Username:      username1,
-					AccessType:    AccessTypeAPI,
-					OperationType: OperationTypeUpdate,
-					ResourceType:  ResourceTypeApp,
-					ResourceID:    resourceID1,
-					Attribute:     "app1",
-					Result:        ResultSuccess,
-				},
-				{
-					ID:            bson.NewObjectID(),
-					Username:      username2,
-					AccessType:    AccessTypeWeb,
-					OperationType: OperationTypeDelete,
-					ResourceType:  ResourceTypeWorkspace,
-					ResourceID:    resourceID2,
-					Attribute:     "workspace1",
-					Result:        ResultFailed,
-				},
-				{
-					ID:            bson.NewObjectID(),
-					Username:      username2,
-					AccessType:    AccessTypeWeb,
-					OperationType: OperationTypeBuild,
-					ResourceType:  ResourceTypeApp,
-					ResourceID:    resourceID2,
-					Attribute:     "app2",
-					Result:        ResultSuccess,
-				},
-			}
-
-			for _, record := range records {
-				_, err := store.Create(ctx, record)
-				Expect(err).NotTo(HaveOccurred())
-			}
-		})
-
-		It("should list all records with pagination", func() {
-			opts := ListOptions{
-				Page:     1,
-				PageSize: 5,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(4)))
-			Expect(len(records)).To(Equal(4))
-		})
-
-		It("should filter by username", func() {
-			opts := ListOptions{
-				Username: username1,
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(2)))
-			Expect(len(records)).To(Equal(2))
-			for _, record := range records {
-				Expect(record.Username).To(Equal(username1))
-			}
-		})
-
-		It("should filter by username case-insensitively", func() {
-			opts := ListOptions{
-				Username: strings.ToUpper(username1),
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(2)))
-			Expect(len(records)).To(Equal(2))
-			for _, record := range records {
-				Expect(record.Username).To(Equal(username1))
-			}
-		})
-
-		It("should filter by operation type", func() {
-			opts := ListOptions{
-				OpType:   OperationTypeCreate,
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 1))
-			for _, record := range records {
-				Expect(record.OperationType).To(Equal(OperationTypeCreate))
-			}
-		})
-
-		It("should filter by resource type", func() {
-			opts := ListOptions{
-				ResType:  ResourceTypeApp,
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 3))
-			for _, record := range records {
-				Expect(record.ResourceType).To(Equal(ResourceTypeApp))
-			}
-		})
-
-		It("should filter by result", func() {
-			opts := ListOptions{
-				Result:   ResultSuccess,
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 2))
-			for _, record := range records {
-				Expect(record.Result).To(Equal(ResultSuccess))
-			}
-		})
-
-		It("should support pagination", func() {
-			// 第一页
-			opts := ListOptions{
-				Page:     1,
-				PageSize: 2,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 4))
-			Expect(len(records)).To(Equal(2))
-
-			// 第二页
-			opts.Page = 2
-			records, total, err = store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 4))
-			Expect(len(records)).To(BeNumerically(">=", 2))
-		})
-
-		It("should combine multiple filters", func() {
-			opts := ListOptions{
-				Username: username2,
-				ResType:  ResourceTypeApp,
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(len(records)).To(Equal(1))
-			Expect(records[0].Username).To(Equal(username2))
-			Expect(records[0].ResourceType).To(Equal(ResourceTypeApp))
-		})
-
-		It("should filter by workspace ID", func() {
-			// 创建带有分组信息的记录
-			workspaceID := "workspace-test-" + stringx.Random(6)
-			record := &OperationRecord{
-				ID:            bson.NewObjectID(),
-				Username:      "groupUser",
-				AccessType:    AccessTypeWeb,
-				OperationType: OperationTypeCreate,
-				ResourceType:  ResourceTypeApp,
-				ResourceID:    bson.NewObjectID().Hex(),
-				Attribute:     "grouped-app",
-				Result:        ResultSuccess,
-				Group: OperationGroup{
-					WorkspaceID: workspaceID,
-				},
-			}
-			_, err := store.Create(ctx, record)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 按 workspaceID 过滤
-			opts := ListOptions{
-				WorkspaceID: workspaceID,
-				Page:        1,
-				PageSize:    10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 1))
-			for _, r := range records {
-				Expect(r.Group.WorkspaceID).To(Equal(workspaceID))
-			}
-		})
-
-		It("should filter by app ID", func() {
-			// 创建带有分组信息的记录
-			appID := "app-test-" + stringx.Random(6)
-			record := &OperationRecord{
-				ID:            bson.NewObjectID(),
-				Username:      "appUser",
-				AccessType:    AccessTypeWeb,
-				OperationType: OperationTypeUpdate,
-				ResourceType:  ResourceTypeApp,
-				ResourceID:    bson.NewObjectID().Hex(),
-				Attribute:     "app-with-group",
-				Result:        ResultSuccess,
-				Group: OperationGroup{
-					AppID: appID,
-				},
-			}
-			_, err := store.Create(ctx, record)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 按 appID 过滤
-			opts := ListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 1))
-			for _, r := range records {
-				Expect(r.Group.AppID).To(Equal(appID))
-			}
-		})
-
-		It("should filter by env name", func() {
-			// 创建带有分组信息的记录
-			workspaceID := "workspace-test-" + stringx.Random(6)
-			envName := "staging"
-			record := &OperationRecord{
-				ID:            bson.NewObjectID(),
-				Username:      "envUser",
-				AccessType:    AccessTypeWeb,
-				OperationType: OperationTypeDeploy,
-				ResourceType:  ResourceTypeEnv,
-				ResourceID:    bson.NewObjectID().Hex(),
-				Attribute:     "env-with-group",
-				Result:        ResultSuccess,
-				Group: OperationGroup{
-					WorkspaceID: workspaceID,
-					EnvName:     envName,
-				},
-			}
-			_, err := store.Create(ctx, record)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 按 envName 过滤
-			opts := ListOptions{
-				EnvName:  envName,
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 1))
-			for _, r := range records {
-				Expect(r.Group.EnvName).To(Equal(envName))
-			}
-		})
-
-		It("should filter by multiple group fields", func() {
-			// 创建带有完整分组信息的记录
-			workspaceID := "workspace-test-" + stringx.Random(6)
-			appID := "app-test-" + stringx.Random(6)
-			envName := "staging"
-			record := &OperationRecord{
-				ID:            bson.NewObjectID(),
-				Username:      "multigroup",
-				AccessType:    AccessTypeWeb,
-				OperationType: OperationTypeDeploy,
-				ResourceType:  ResourceTypeApp,
-				ResourceID:    bson.NewObjectID().Hex(),
-				Attribute:     "multi-grouped-app",
-				Result:        ResultSuccess,
-				Group: OperationGroup{
-					WorkspaceID: workspaceID,
-					AppID:       appID,
-					EnvName:     envName,
-				},
-			}
-			_, err := store.Create(ctx, record)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 按多个分组字段过滤
-			opts := ListOptions{
-				WorkspaceID: workspaceID,
-				AppID:       appID,
-				EnvName:     envName,
-				Page:        1,
-				PageSize:    10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(BeNumerically(">=", 1))
-			for _, r := range records {
-				Expect(r.Group.WorkspaceID).To(Equal(workspaceID))
-				Expect(r.Group.AppID).To(Equal(appID))
-				Expect(r.Group.EnvName).To(Equal(envName))
-			}
-		})
-
-		It("should return empty list when no records match", func() {
-			opts := ListOptions{
-				Username: "nonexistent-user",
-				Page:     1,
-				PageSize: 10,
-			}
-
-			records, total, err := store.List(ctx, opts)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(len(records)).To(Equal(0))
-		})
-	})
-
-	Describe("ListOptions.AsFilter", func() {
-		It("should create empty filter when no options set", func() {
-			opts := ListOptions{}
-			filter := opts.AsFilter()
-			Expect(filter).To(BeEmpty())
-		})
-
-		It("should create filter with username", func() {
-			opts := ListOptions{Username: "blueking"}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("username"))
-			Expect(filter["username"]).To(Equal(bson.M{
-				"$regex": "blueking", "$options": "i",
-			}))
-		})
-
-		It("should create filter with operation type", func() {
-			opts := ListOptions{OpType: OperationTypeCreate}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("operationType"))
-			Expect(filter["operationType"]).To(Equal(OperationTypeCreate))
-		})
-
-		It("should create filter with resource type", func() {
-			opts := ListOptions{ResType: ResourceTypeApp}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("resourceType"))
-			Expect(filter["resourceType"]).To(Equal(ResourceTypeApp))
-		})
-
-		It("should create filter with result", func() {
-			opts := ListOptions{Result: ResultSuccess}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("result"))
-			Expect(filter["result"]).To(Equal(ResultSuccess))
-		})
-
-		It("should create filter with workspace ID", func() {
-			workspaceID := "workspace-test-" + stringx.Random(6)
-			opts := ListOptions{WorkspaceID: workspaceID}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("group.workspaceID"))
-			Expect(filter["group.workspaceID"]).To(Equal(workspaceID))
-		})
-
-		It("should create filter with app ID", func() {
-			appID := "app-test-" + stringx.Random(6)
-			opts := ListOptions{AppID: appID}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("group.appID"))
-			Expect(filter["group.appID"]).To(Equal(appID))
-		})
-
-		It("should not create filter only with envName", func() {
-			envName := "production"
-			opts := ListOptions{EnvName: envName}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("group.envName"))
-			Expect(filter["group.envName"]).To(Equal(envName))
-		})
-
-		It("should create filter with all group fields", func() {
-			workspaceID := "workspace-test-" + stringx.Random(6)
-			appID := "app-test-" + stringx.Random(6)
-			envName := "staging"
-			opts := ListOptions{
-				WorkspaceID: workspaceID,
-				AppID:       appID,
-				EnvName:     envName,
-			}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("group.workspaceID"))
-			Expect(filter).To(HaveKey("group.appID"))
-			Expect(filter).To(HaveKey("group.envName"))
-			Expect(filter["group.workspaceID"]).To(Equal(workspaceID))
-			Expect(filter["group.appID"]).To(Equal(appID))
-			Expect(filter["group.envName"]).To(Equal(envName))
-		})
-
-		It("should accept any workspace ID string", func() {
-			opts := ListOptions{
-				WorkspaceID: "custom-workspace-id",
-			}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("group.workspaceID"))
-			Expect(filter["group.workspaceID"]).To(Equal("custom-workspace-id"))
-		})
-
-		It("should accept any app ID string", func() {
-			opts := ListOptions{
-				AppID: "custom-app-id",
-			}
-			filter := opts.AsFilter()
-			Expect(filter).To(HaveKey("group.appID"))
-			Expect(filter["group.appID"]).To(Equal("custom-app-id"))
+			Expect(m).To(HaveLen(2))
+			Expect(m["app-1"]).To(BeTemporally("==", base.Add(1*time.Minute)))
+			Expect(m["app-2"]).To(BeTemporally("==", base.Add(3*time.Minute)))
 		})
 	})
 })

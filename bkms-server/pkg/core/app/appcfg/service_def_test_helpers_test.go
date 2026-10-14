@@ -23,8 +23,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
@@ -34,14 +32,12 @@ import (
 
 // defServiceFixture 封装 AppCfgFileDefService 集成测试所需的共享上下文。
 type defServiceFixture struct {
-	DiApp        *fxtest.App
-	AppStore     bkmsapp.ApplicationStore
-	FileStore    appcfg.AppConfigFileStore
-	DefStore     appcfg.AppConfigFileDefStore
-	VersionStore appcfg.AppConfigFileVersionStore
-	Svc          *appcfg.AppCfgFileDefService
-	Ctx          context.Context
-	AppID        string
+	AppStore  *bkmsapp.ApplicationStore
+	FileStore *appcfg.AppConfigFileStore
+	DefStore  *appcfg.AppConfigFileDefStore
+	Svc       *appcfg.AppCfgFileDefService
+	Ctx       context.Context
+	AppID     string
 }
 
 // setupDefServiceFixture 初始化测试 fixture，应在 BeforeEach 中调用。
@@ -53,18 +49,13 @@ func setupDefServiceFixture() *defServiceFixture {
 	Expect(testutil.CleanupCollection("app_config_file_defs")).To(Succeed())
 	Expect(testutil.CleanupCollection("applications")).To(Succeed())
 
-	f.DiApp = fxtest.New(
-		GinkgoT(),
-		bkmsapp.FxModule,
-		appcfg.FxModule,
-		fx.Populate(&f.AppStore, &f.FileStore, &f.DefStore, &f.VersionStore),
-	)
-	f.DiApp.RequireStart()
-
+	f.AppStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 	app := dbfactory.Application(f.Ctx, f.AppStore)
 	f.AppID = app.ID
 
-	base := appcfg.NewBaseAppCfgFileService(f.DefStore, f.FileStore, f.VersionStore)
+	base := appcfg.NewBaseAppCfgFileService(testutil.NewDB(GinkgoT()))
+	f.FileStore = base.FileStore
+	f.DefStore = base.DefStore
 	f.Svc = appcfg.NewAppCfgFileDefService(base)
 	return f
 }

@@ -114,38 +114,32 @@ type PatchMetadataInput struct {
 	WorkloadKind *string `json:"workloadKind"`
 }
 
-// ToUpdateModel 校验输入并转换为 model.MetadataUpdate。
+// ToUpdateFields 校验输入并转换为 Metadata 中待更新的字段（key 为 bson 字段名）。
 // 至少需要传入一个字段，否则返回错误。
-func (input *PatchMetadataInput) ToUpdateModel() (*model.MetadataUpdate, error) {
-	update := &model.MetadataUpdate{}
-	hasUpdate := false
-
+func (input *PatchMetadataInput) ToUpdateFields() (map[string]any, error) {
+	fields := map[string]any{}
 	if input.MountPath != nil {
 		mp := normalizeMountPath(*input.MountPath)
 		if mp == "" {
 			return nil, errBlankField("mountPath")
 		}
-		update.MountPath = &mp
-		hasUpdate = true
+		fields["mountPath"] = mp
 	}
 	if input.WorkloadName != nil {
 		wl := strings.TrimSpace(*input.WorkloadName)
 		if wl == "" {
 			return nil, errBlankField("workloadName")
 		}
-		update.WorkloadName = &wl
-		hasUpdate = true
+		fields["workloadName"] = wl
 	}
 	if input.WorkloadKind != nil {
-		wk := strings.TrimSpace(*input.WorkloadKind)
-		update.WorkloadKind = &wk
-		hasUpdate = true
+		fields["workloadKind"] = strings.TrimSpace(*input.WorkloadKind)
 	}
 
-	if !hasUpdate {
+	if len(fields) == 0 {
 		return nil, errNoField()
 	}
-	return update, nil
+	return fields, nil
 }
 
 // -------------------------------- Output --------------------------------

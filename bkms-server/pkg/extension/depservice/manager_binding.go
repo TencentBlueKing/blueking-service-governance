@@ -22,27 +22,19 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
-
-func (m *ServiceManager) requireBindingStore() error {
-	if m.bindingStore == nil {
-		return errors.New("binding store is not configured")
-	}
-	return nil
-}
 
 // CreateServiceBinding 创建一个依赖服务和应用间的绑定
 func (m *ServiceManager) CreateServiceBinding(
 	ctx context.Context,
 	params *CreateServiceBindingParams,
 ) (*model.ServiceBinding, error) {
-	if err := m.requireBindingStore(); err != nil {
-		return nil, err
-	}
 	if err := validate.Struct(params); err != nil {
 		return nil, errors.Wrap(err, "validate params")
 	}
@@ -69,8 +61,7 @@ func (m *ServiceManager) CreateServiceBinding(
 		EnvVars:        envVars,
 		Description:    params.Description,
 	}
-	id, err := m.bindingStore.Create(ctx, binding)
-	if err != nil {
+	if err := m.bindings.Create(ctx, binding); err != nil {
 		if errors.Is(err, model.ErrBindingNameExists) {
 			return nil, errors.Wrapf(
 				err,
@@ -80,8 +71,6 @@ func (m *ServiceManager) CreateServiceBinding(
 		}
 		return nil, errors.Wrap(err, "create service binding")
 	}
-	binding.ID = id
-	binding.SyncInstanceIDs()
 	return binding, nil
 }
 
@@ -90,10 +79,7 @@ func (m *ServiceManager) GetServiceBinding(
 	ctx context.Context,
 	appID, serviceName, name string,
 ) (*model.ServiceBinding, error) {
-	if err := m.requireBindingStore(); err != nil {
-		return nil, err
-	}
-	return m.bindingStore.Get(ctx, appID, serviceName, name)
+	return m.bindings.Get(ctx, model.ByBindingName(appID, serviceName, name))
 }
 
 // ListServiceBindings 列出应用下某服务的全部绑定。
@@ -101,13 +87,14 @@ func (m *ServiceManager) ListServiceBindings(
 	ctx context.Context,
 	appID, serviceName string,
 ) ([]*model.ServiceBinding, error) {
-	if err := m.requireBindingStore(); err != nil {
-		return nil, err
-	}
-	return m.bindingStore.List(ctx, &model.BindingQueryOptions{
+	bindings, err := m.bindings.List(ctx, model.ByBindingQuery(&model.BindingQueryOptions{
 		AppID:       appID,
 		ServiceName: serviceName,
-	})
+	}))
+	if err != nil {
+		return nil, errors.Wrapf(err, "list service bindings of app %s service %s", appID, serviceName)
+	}
+	return lo.ToSlicePtr(bindings), nil
 }
 
 // UpdateServiceBinding 全量更新绑定的环境映射与环境变量。
@@ -116,16 +103,13 @@ func (m *ServiceManager) UpdateServiceBinding(
 	appID, serviceName, name string,
 	params *UpdateServiceBindingParams,
 ) (*model.ServiceBinding, error) {
-	if err := m.requireBindingStore(); err != nil {
-		return nil, err
-	}
 	if err := validate.Struct(params); err != nil {
 		return nil, errors.Wrap(err, "validate params")
 	}
 
-	existing, err := m.bindingStore.Get(ctx, appID, serviceName, name)
+	existing, err := m.bindings.Get(ctx, model.ByBindingName(appID, serviceName, name))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "get service binding")
 	}
 
 	envMap := params.EnvInstanceMap
@@ -141,32 +125,30 @@ func (m *ServiceManager) UpdateServiceBinding(
 		return nil, err
 	}
 
-	if err = m.bindingStore.Update(ctx, appID, serviceName, name, &model.ServiceBindingUpdateData{
+	if err = model.UpdateBinding(ctx, m.bindings, appID, serviceName, name, &model.ServiceBindingUpdateData{
 		EnvInstanceMap: envMap,
 		EnvVars:        envVars,
 		Description:    params.Description,
 	}); err != nil {
 		return nil, errors.Wrap(err, "update service binding")
 	}
-	return m.bindingStore.Get(ctx, appID, serviceName, name)
+	return m.bindings.Get(ctx, model.ByBindingName(appID, serviceName, name))
 }
 
 // DeleteServiceBinding 删除应用侧绑定。
 func (m *ServiceManager) DeleteServiceBinding(ctx context.Context, appID, serviceName, name string) error {
-	if err := m.requireBindingStore(); err != nil {
-		return err
-	}
-	return m.bindingStore.Delete(ctx, appID, serviceName, name)
+	return m.bindings.Delete(ctx, model.ByBindingName(appID, serviceName, name))
 }
 
 func (m *ServiceManager) listBindingsByInstance(
 	ctx context.Context,
 	instID bson.ObjectID,
-) ([]*model.ServiceBinding, error) {
-	if m.bindingStore == nil {
-		return nil, nil
+) ([]model.ServiceBinding, error) {
+	bindings, err := m.bindings.List(ctx, model.ByBindingQuery(&model.BindingQueryOptions{InstanceID: instID}))
+	if err != nil {
+		return nil, errors.Wrapf(err, "list service bindings of instance %s", instID.Hex())
 	}
-	return m.bindingStore.List(ctx, &model.BindingQueryOptions{InstanceID: instID})
+	return bindings, nil
 }
 
 func (m *ServiceManager) validateEnvInstanceMap(
@@ -182,19 +164,16 @@ func (m *ServiceManager) validateEnvInstanceMap(
 			return errors.Wrapf(ErrInvalidArgument, "instance id for env %q must not be empty", envName)
 		}
 
-		envType := ""
-		if m.envStore != nil {
-			environment, err := m.envStore.GetByName(ctx, workspaceID, appID, envName)
-			if err != nil {
-				if errors.Is(err, envmodel.ErrEnvNotFound) {
-					return errors.Wrapf(ErrInvalidArgument, "environment %q not found", envName)
-				}
-				return errors.Wrapf(err, "get environment %s", envName)
+		environment, err := m.envs.Get(ctx, envmodel.AppEnvByName(workspaceID, appID, envName))
+		if err != nil {
+			if errors.Is(err, envmodel.ErrEnvNotFound) {
+				return errors.Wrapf(ErrInvalidArgument, "environment %q not found", envName)
 			}
-			envType = environment.Type
+			return errors.Wrapf(err, "get environment %s", envName)
 		}
+		envType := environment.Type
 
-		inst, err := m.instStore.Get(ctx, instID)
+		inst, err := m.insts.Get(ctx, store.ByID(instID))
 		if err != nil {
 			if model.AsNotFoundError(err) {
 				return errors.Wrapf(ErrInvalidArgument, "service instance %s not found", instID.Hex())

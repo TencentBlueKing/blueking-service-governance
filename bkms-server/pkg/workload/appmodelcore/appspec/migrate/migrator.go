@@ -13,6 +13,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
@@ -35,32 +36,15 @@ type Result struct {
 
 // Migrator migrates tkeRouteEni component mounts onto AppSpec sections.
 type Migrator struct {
-	db            *mongo.Database
-	appStore      bkmsapp.ApplicationStore
-	appSpecStore  appspec.AppSpecStore
-	appModelStore appmodel.AppModelStore
-	wsCompStore   workspace.WorkspaceCompsStore
-	compDefStore  component.ComponentDefStore
+	db *mongo.Database
 }
 
-// New creates a tkeRouteEni component migrator with reference-count hooks wired.
+// New creates a tkeRouteEni component migrator.
 func New(
 	db *mongo.Database,
-	appStore bkmsapp.ApplicationStore,
-	appSpecStore appspec.AppSpecStore,
-	appModelStore appmodel.AppModelStore,
-	wsCompStore workspace.WorkspaceCompsStore,
-	compDefStore component.ComponentDefStore,
 ) *Migrator {
-	appModelStore.SetComponentHooks(appmodel.NewComponentRefCountHooks(compDefStore))
-	wsCompStore.SetComponentHooks(workspace.NewComponentRefCountHooks(compDefStore))
 	return &Migrator{
-		db:            db,
-		appStore:      appStore,
-		appSpecStore:  appSpecStore,
-		appModelStore: appModelStore,
-		wsCompStore:   wsCompStore,
-		compDefStore:  compDefStore,
+		db: db,
 	}
 }
 
@@ -222,7 +206,7 @@ func (m *Migrator) removeAppComponent(
 		result.AppComponentsRemoved++
 		return nil
 	}
-	if err := m.appModelStore.RemoveComponent(ctx, appID, compName); err != nil {
+	if err := appmodel.RemoveComponent(ctx, m.db, appID, compName); err != nil {
 		return errors.Wrapf(err, "remove component appID=%s name=%s", appID, compName)
 	}
 	result.AppComponentsRemoved++
@@ -238,7 +222,7 @@ func (m *Migrator) removeWorkspaceComponents(
 			result.WorkspaceComponentsRemoved++
 			continue
 		}
-		if err := m.wsCompStore.Remove(ctx, wsComp.ID); err != nil {
+		if err := workspace.RemoveComponents(ctx, m.db, wsComp.ID); err != nil {
 			return errors.Wrapf(err, "remove workspace component %s/%s", wsComp.WorkspaceID, wsComp.Name)
 		}
 		result.WorkspaceComponentsRemoved++
@@ -254,7 +238,7 @@ func (m *Migrator) loadAppWorkspaceIDs(
 	for _, am := range appModels {
 		ids = append(ids, am.AppID)
 	}
-	apps, err := m.appStore.GetAppsByIDs(ctx, ids)
+	apps, err := bkmsapp.GetAppsByIDs(ctx, m.db, ids)
 	if err != nil {
 		return nil, errors.Wrap(err, "load applications for workspace lookup")
 	}
@@ -268,7 +252,7 @@ func (m *Migrator) loadAppWorkspaceIDs(
 func (m *Migrator) enableTkeRouteEni(
 	ctx context.Context, appID, envName string, spec *appspec.TkeRouteEniSpec,
 ) (bool, error) {
-	existing, err := m.appSpecStore.Get(ctx, appID, envName)
+	existing, err := store.Of(m.db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(appID, envName))
 	if err == nil && existing.TkeRouteEni != nil &&
 		existing.TkeRouteEni.Enabled != nil && *existing.TkeRouteEni.Enabled {
 		return false, nil
@@ -278,12 +262,12 @@ func (m *Migrator) enableTkeRouteEni(
 	}
 	if envName == appspec.DefaultEnvName {
 		err = appspec.SetDefaultSection(
-			ctx, m.appSpecStore, m.appModelStore, appID,
+			ctx, m.db, appID,
 			appspec.TkeRouteEniSection, spec, appspec.SectionWriteModeReplace,
 		)
 	} else {
 		err = appspec.SetEnvSection(
-			ctx, m.appSpecStore, appID, envName,
+			ctx, m.db, appID, envName,
 			appspec.TkeRouteEniSection, spec, appspec.SectionWriteModeReplace,
 		)
 	}

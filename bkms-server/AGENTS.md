@@ -21,8 +21,9 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * Some design notes can be found in `design_notes/`.
 * When writing tests, always refer to `pkg/extension/component/evaluate_test.go` for guidance on code structure and the usage of common utils and db factories.
 * Test context descriptions (`Describe`, `Context`, `It`, etc.) MUST be written in English. Comments inside test bodies may use Chinese.
-* When a unit test needs a store, service, or other FX-provided dependency, construct and inject it via the fx framework: use the package's `FxModule` with `fxtest.New` + `fx.Populate`. Do **not** call constructors like `NewStoreMongo(...)` / `NewService(...)` directly in tests. See `pkg/extension/bscpcfg/model/store_test.go` for the pattern.
-* Do **not** mock store implementations (no stub/fake Store, no `mockey.Mock` on `*StoreMongo` methods). Operate against the test database and assert persisted data. Only mock store methods after confirming with the user, and only when hitting the real DB is prohibitively expensive.
+* When a unit test needs a store, use `testutil.NewStore(GinkgoT(), XxxMeta)`; when it needs the database handle, use `testutil.NewDB(GinkgoT())`. See `pkg/extension/bscpcfg/model/store_test.go` for the pattern.
+* When a unit test needs a service or other FX-provided dependency, construct and inject it via the fx framework: use the package's `FxModule` with `fxtest.New` + `fx.Populate`. Do **not** call constructors like `NewService(...)` directly in tests.
+* Do **not** mock stores (no stub/fake store, no `mockey.Mock` on `*store.GenericStore` methods). Operate against the test database and assert persisted data. Only mock store methods after confirming with the user, and only when hitting the real DB is prohibitively expensive.
 * Prefer using `dbfactory` helpers (e.g., `dbfactory.TrpcApplication`, `dbfactory.Env`) to create test resources, rather than manually inserting records into the database.
 
 ## Coding style
@@ -64,7 +65,8 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 
 #### Database model & migrations
 
-* When adding new store for new models, use `pkg/core/app/store.go` as reference
+* Models are persisted with `GenericStore` (`pkg/store`): define a `store.Meta` and named `Opt`s in the model package, and get the store with `store.Of(db, XxxMeta)`; do not define a per-model Store interface. Read `design_notes/generic_store.md` first, and use `pkg/core/app/store.go` as a full example (hooks, unique keys, aggregation).
+* Domain code receives `*mongo.Database` explicitly instead of accessing `storereg.G()`. Functions that read or write more than one model must list those models in their doc comment, since the signature no longer shows them.
 * When adding new migrations, read the guide in `README.md`, specifically the "数据库迁移" section
 * ALWAYS add a comment for extra indexes in the store source file
 

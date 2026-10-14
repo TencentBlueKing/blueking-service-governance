@@ -20,497 +20,226 @@ package snapshot
 
 import (
 	"context"
-	"regexp"
-	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// MongoDB 集合名
-const (
-	// collImageSnapshots 镜像快照集合
-	collImageSnapshots = "image_snapshots"
-	// collRepoSnapshotStatus 仓库快照状态集合
-	collRepoSnapshotStatus = "repo_snapshot_statuses"
+var (
+	// ErrImageNotFound 镜像快照不存在
+	ErrImageNotFound = errors.New("image snapshot not found")
+	// ErrRepoStatusNotFound 仓库快照状态不存在
+	ErrRepoStatusNotFound = errors.New("repo snapshot status not found")
 )
 
-// SnapshotStore 镜像快照存储接口
-type SnapshotStore interface {
-	// UpsertSnapshots 批量创建或更新快照记录（用于标签刷新同步）
-	UpsertSnapshots(ctx context.Context, repoKey string, snapshots []Image) error
+// ImageStore 镜像快照存储，repoKey + tag 唯一确定一条快照
+type ImageStore = store.GenericStore[Image]
 
-	// DeleteByRepoKeyExcludeTags 删除指定仓库中不在给定标签列表中的快照（清理远程已消失的标签）
-	DeleteByRepoKeyExcludeTags(ctx context.Context, repoKey string, activeTags []string) (int64, error)
-
-	// DeleteByRepoKeyAndTag 删除指定仓库中的单个标签快照。
-	// 返回实际删除的条数；若记录不存在，则返回 0 和 nil，保持幂等语义。
-	DeleteByRepoKeyAndTag(ctx context.Context, repoKey, tag string) (int64, error)
-
-	// HasTag 判断指定仓库快照中是否存在 tag
-	HasTag(ctx context.Context, repoKey, tag string) (bool, error)
-
-	// UpdateDetail 更新单条快照的详情字段（用于详情补全）
-	UpdateDetail(ctx context.Context, repoKey, tag string, detail *registry.ImageDetail) error
-
-	// MarkDetailSyncPending 将指定标签标记为需要重新拉取详情（标签不存在时忽略）
-	MarkDetailSyncPending(ctx context.Context, repoKey string, tags []string) error
-
-	// ListByRepoKey 分页查询指定仓库的快照列表（支持关键词过滤和时间排序）
-	ListByRepoKey(ctx context.Context, repoKey, keyword string, page, pageSize int) ([]Image, int64, error)
-
-	// ListByRepoKeyAndTags 在给定的 tags 列表范围内分页查询快照（用于生产环境：已晋级 tag 的交集查询）
-	ListByRepoKeyAndTags(
-		ctx context.Context, repoKey string, tags []string, keyword string, page, pageSize int,
-	) ([]Image, int64, error)
-
-	// ListUnsyncedDetailTags 获取指定仓库中需要补全详情的标签列表
-	// （builtAt 为空、detailSyncPending，或 latest）
-	ListUnsyncedDetailTags(ctx context.Context, repoKey string) ([]string, error)
-
-	// ListAllTags 获取指定仓库中所有标签列表（用于 diff 计算）
-	ListAllTags(ctx context.Context, repoKey string) ([]string, error)
-
-	// UpsertStatus 创建或更新仓库快照状态
-	UpsertStatus(ctx context.Context, status *RepoSnapshotStatus) error
-
-	// GetStatus 获取仓库快照状态
-	GetStatus(ctx context.Context, repoKey string) (*RepoSnapshotStatus, error)
-
-	// TrySetRefreshing 原子性地将状态从非 refreshing 设为 refreshing（用于幂等性检查）
-	// 返回 true 表示成功获取刷新权，false 表示已有刷新在进行中
-	TrySetRefreshing(ctx context.Context, repoKey string) (bool, error)
-
-	// TrySetDetailSyncing 原子性地将状态从 idle 设为 detail_syncing（用于详情同步并发控制）
-	// 返回 true 表示成功获取同步权，false 表示当前状态不允许开始详情同步
-	TrySetDetailSyncing(ctx context.Context, repoKey string) (bool, error)
-
-	// DeleteAll 删除所有记录并保留集合及索引（仅用于测试）
-	DeleteAll(ctx context.Context) error
+// ImageMeta 镜像快照的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：repoKey + tag
+// - 查询提速：repoKey
+var ImageMeta = store.Meta[Image]{
+	Collection: "image_snapshots",
+	NotFound:   ErrImageNotFound,
 }
 
-// 编译期接口实现检查
-var _ SnapshotStore = &SnapshotStoreMongo{}
+// RepoStatusStore 仓库快照状态存储，每个 repoKey 一条
+type RepoStatusStore = store.GenericStore[RepoSnapshotStatus]
 
-// SnapshotStoreMongo MongoDB 实现
-type SnapshotStoreMongo struct {
-	snapshotColl *mongo.Collection
-	statusColl   *mongo.Collection
+// RepoStatusMeta 仓库快照状态的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：repoKey
+var RepoStatusMeta = store.Meta[RepoSnapshotStatus]{
+	Collection: "repo_snapshot_statuses",
+	NotFound:   ErrRepoStatusNotFound,
 }
 
-// NewSnapshotStoreMongo 创建 SnapshotStoreMongo 实例。
-func NewSnapshotStoreMongo(client *mongo.Client, dbName string) (*SnapshotStoreMongo, error) {
-	db := client.Database(dbName)
-	snapshotColl := db.Collection(collImageSnapshots)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：repoKey + tag
-	// - 查询提速：repoKey
-	statusColl := db.Collection(collRepoSnapshotStatus)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：repoKey
-	store := &SnapshotStoreMongo{
-		snapshotColl: snapshotColl,
-		statusColl:   statusColl,
-	}
-	return store, nil
+// InRepo 按仓库匹配镜像快照或仓库快照状态
+func InRepo(repoKey string) store.Opt {
+	return store.Where("repoKey", repoKey)
 }
 
-// UpsertSnapshots 批量 upsert 快照记录
-func (s *SnapshotStoreMongo) UpsertSnapshots(ctx context.Context, repoKey string, snapshots []Image) error {
-	if len(snapshots) == 0 {
+// ByRepoTag 按仓库与标签匹配镜像快照
+func ByRepoTag(repoKey, tag string) store.Opt {
+	return store.Combine(InRepo(repoKey), store.Where("tag", tag))
+}
+
+// TagIn 匹配标签在 tags 中的镜像快照，tags 为空时不匹配任何快照
+func TagIn(tags []string) store.Opt {
+	// $in 不接受 null，lo.Uniq 总是返回非 nil 的切片
+	return store.Where("tag", bson.M{"$in": lo.Uniq(tags)})
+}
+
+// UpsertTags 批量写入仓库的标签快照（用于标签刷新同步）；已存在的快照只刷新 updatedAt，详情字段保持不变
+func UpsertTags(ctx context.Context, db *mongo.Database, repoKey string, tags []string) error {
+	if len(tags) == 0 {
 		return nil
 	}
-
-	models := make([]mongo.WriteModel, 0, len(snapshots))
-	now := time.Now()
-
-	for i := range snapshots {
-		snap := &snapshots[i]
-		snap.RepoKey = repoKey
-		snap.UpdatedAt = now
-
-		filter := bson.M{"repoKey": repoKey, "tag": snap.Tag}
-		update := bson.M{
-			"$set": bson.M{
-				"repoKey":   repoKey,
-				"tag":       snap.Tag,
-				"updatedAt": now,
-			},
-			"$setOnInsert": bson.M{
-				"createdAt": now,
-			},
-		}
-
-		model := mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update).SetUpsert(true)
-		models = append(models, model)
-	}
-
-	_, err := s.snapshotColl.BulkWrite(ctx, models)
-	if err != nil {
-		return errors.Wrap(err, "bulk upsert snapshots")
-	}
-
-	return nil
-}
-
-// DeleteByRepoKeyExcludeTags 删除不在 activeTags 中的快照
-func (s *SnapshotStoreMongo) DeleteByRepoKeyExcludeTags(
-	ctx context.Context, repoKey string, activeTags []string,
-) (int64, error) {
-	filter := bson.M{
-		"repoKey": repoKey,
-		"tag":     bson.M{"$nin": activeTags},
-	}
-
-	result, err := s.snapshotColl.DeleteMany(ctx, filter)
-	if err != nil {
-		return 0, errors.Wrap(err, "delete excluded snapshots")
-	}
-
-	return result.DeletedCount, nil
-}
-
-// DeleteByRepoKeyAndTag 删除指定仓库中的单个标签快照。
-// 即使未命中记录也不会报错，而是返回 0，以保持幂等删除语义。
-func (s *SnapshotStoreMongo) DeleteByRepoKeyAndTag(ctx context.Context, repoKey, tag string) (int64, error) {
-	result, err := s.snapshotColl.DeleteOne(ctx, bson.M{
-		"repoKey": repoKey,
-		"tag":     tag,
+	objs := lo.Map(lo.Uniq(tags), func(tag string, _ int) *Image {
+		return &Image{RepoKey: repoKey, Tag: tag}
 	})
-	if err != nil {
-		return 0, errors.Wrapf(err, "delete snapshot for %s:%s", repoKey, tag)
-	}
-	return result.DeletedCount, nil
+	_, err := store.Of(db, ImageMeta).UpsertMany(ctx, objs, func(img *Image) store.Opt {
+		return ByRepoTag(img.RepoKey, img.Tag)
+	}, store.UpdateSelected("repoKey", "tag"))
+	return errors.Wrapf(err, "upsert tags of %s", repoKey)
 }
 
-// HasTag 判断指定仓库快照中是否存在 tag
-func (s *SnapshotStoreMongo) HasTag(ctx context.Context, repoKey, tag string) (bool, error) {
-	count, err := s.snapshotColl.CountDocuments(ctx, bson.M{
-		"repoKey": repoKey,
-		"tag":     tag,
-	}, options.Count().SetLimit(1))
-	if err != nil {
-		return false, errors.Wrapf(err, "check snapshot tag for %s:%s", repoKey, tag)
-	}
-	return count > 0, nil
+// DeleteTagsNotIn 删除仓库中不在 activeTags 中的快照（清理远程已消失的标签），返回删除的数量
+func DeleteTagsNotIn(ctx context.Context, db *mongo.Database, repoKey string, activeTags []string) (int64, error) {
+	n, err := store.Of(db, ImageMeta).DeleteMany(
+		ctx,
+		InRepo(repoKey),
+		store.Where("tag", bson.M{"$nin": lo.Uniq(activeTags)}),
+	)
+	return n, errors.Wrapf(err, "delete tags of %s not in active tags", repoKey)
 }
 
-// UpdateDetail 更新快照详情
+// UpdateDetail 更新单条快照的详情字段（用于详情补全），快照不存在时忽略
 //
 // 会无条件清除 detailSyncPending；并发同 tag 构建下可能误清较新的 pending 标记，
 // 详见 Image.DetailSyncPending 字段注释中的 TODO
-func (s *SnapshotStoreMongo) UpdateDetail(
-	ctx context.Context,
-	repoKey, tag string,
-	detail *registry.ImageDetail,
-) error {
-	now := time.Now()
-
-	update := bson.M{
-		"$set": bson.M{
-			"digest":    detail.Digest,
-			"size":      detail.Size,
-			"builtAt":   detail.BuiltAt,
-			"updatedAt": now,
-		},
+func UpdateDetail(ctx context.Context, db *mongo.Database, repoKey, tag string, detail *registry.ImageDetail) error {
+	err := store.Of(db, ImageMeta).Update(ctx, map[string]any{
+		"digest":  detail.Digest,
+		"size":    detail.Size,
+		"builtAt": lo.ToPtr(detail.BuiltAt),
 		// 详情已是最新，清除重新拉取标记（无条件清除，见函数注释中的并发限制）
-		"$unset": bson.M{"detailSyncPending": ""},
-	}
-
-	filter := bson.M{"repoKey": repoKey, "tag": tag}
-	_, err := s.snapshotColl.UpdateOne(ctx, filter, update)
-	if err != nil {
-		return errors.Wrapf(err, "update detail for %s:%s", repoKey, tag)
-	}
-
-	return nil
+		"detailSyncPending": false,
+	}, ByRepoTag(repoKey, tag))
+	return errors.Wrapf(store.IgnoreNotFound(err), "update detail for %s:%s", repoKey, tag)
 }
 
-// MarkDetailSyncPending 将指定标签标记为需要重新拉取详情
-func (s *SnapshotStoreMongo) MarkDetailSyncPending(ctx context.Context, repoKey string, tags []string) error {
+// MarkDetailSyncPending 将指定标签标记为需要重新拉取详情，标签不存在时忽略；不刷新 updatedAt
+func MarkDetailSyncPending(ctx context.Context, db *mongo.Database, repoKey string, tags []string) error {
 	if len(tags) == 0 {
 		return nil
 	}
-
-	filter := bson.M{"repoKey": repoKey, "tag": bson.M{"$in": tags}}
-	update := bson.M{"$set": bson.M{"detailSyncPending": true}}
-	if _, err := s.snapshotColl.UpdateMany(ctx, filter, update); err != nil {
-		return errors.Wrapf(err, "mark detail sync pending for %s", repoKey)
-	}
-
-	return nil
+	_, err := store.Of(db, ImageMeta).UpdateMany(
+		ctx,
+		map[string]any{"detailSyncPending": true},
+		InRepo(repoKey),
+		TagIn(tags),
+		store.KeepUpdatedAt(),
+	)
+	return errors.Wrapf(err, "mark detail sync pending for %s", repoKey)
 }
 
-// ListByRepoKey 分页查询快照列表
-func (s *SnapshotStoreMongo) ListByRepoKey(
-	ctx context.Context, repoKey, keyword string, page, pageSize int,
-) ([]Image, int64, error) {
-	filter := bson.M{"repoKey": repoKey}
-
-	// 关键词过滤（模糊匹配 tag）
-	if keyword != "" {
-		// 转义正则表达式特殊字符，防止注入攻击和语法错误
-		keyword = regexp.QuoteMeta(keyword)
-		filter["tag"] = bson.M{"$regex": keyword, "$options": "i"}
-	}
-
-	results, total, err := s.listSnapshots(ctx, filter, page, pageSize)
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "list snapshots")
-	}
-	return results, total, nil
-}
-
-// ListByRepoKeyAndTags 在给定的 tags 列表范围内分页查询快照
-func (s *SnapshotStoreMongo) ListByRepoKeyAndTags(
-	ctx context.Context, repoKey string, tags []string, keyword string, page, pageSize int,
-) ([]Image, int64, error) {
-	if len(tags) == 0 {
-		return nil, 0, nil
-	}
-
-	filter := bson.M{
-		"repoKey": repoKey,
-		"tag":     bson.M{"$in": tags},
-	}
-
-	// 关键词过滤（模糊匹配 tag），使用 $and 与 $in 组合
-	if keyword != "" {
-		// 转义正则表达式特殊字符，防止注入攻击和语法错误
-		keyword = regexp.QuoteMeta(keyword)
-		filter = bson.M{
-			"repoKey": repoKey,
-			"$and": []bson.M{
-				{"tag": bson.M{"$in": tags}},
-				{"tag": bson.M{"$regex": keyword, "$options": "i"}},
-			},
-		}
-	}
-
-	results, total, err := s.listSnapshots(ctx, filter, page, pageSize)
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "list snapshots by tags")
-	}
-	return results, total, nil
-}
-
-// listSnapshots 通用分页查询快照方法，封装 CountDocuments → Find → cursor.All 的完整流程
-func (s *SnapshotStoreMongo) listSnapshots(
+// ListImagePage 分页查询仓库的快照，keyword 按 tag 模糊匹配（忽略大小写），conds 用于追加过滤条件（如 TagIn）。
+// 按构建时间降序排列（无构建时间的排在后面），其次按 tag 逆序
+func ListImagePage(
 	ctx context.Context,
-	filter bson.M,
+	db *mongo.Database,
+	repoKey, keyword string,
 	page, pageSize int,
-) ([]Image, int64, error) {
-	// 计算总数
-	total, err := s.snapshotColl.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "count snapshots")
-	}
-
-	if total == 0 {
-		return nil, 0, nil
-	}
-
-	// 分页查询，按构建时间降序排序（无构建时间的排在后面），其次按 tag 字母序逆序排列
-	skip := int64((page - 1) * pageSize)
-	findOpts := options.Find().
-		SetSort(bson.D{
-			{Key: "builtAt", Value: -1},
-			{Key: "tag", Value: -1},
-		}).
-		SetSkip(skip).
-		SetLimit(int64(pageSize))
-
-	cursor, err := s.snapshotColl.Find(ctx, filter, findOpts)
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "find snapshots")
-	}
-	defer cursor.Close(ctx)
-
-	var results []Image
-	if err = cursor.All(ctx, &results); err != nil {
-		return nil, 0, errors.Wrap(err, "decode snapshots")
-	}
-
-	return results, total, nil
+	conds ...store.Opt,
+) (*store.Page[Image], error) {
+	opts := append([]store.Opt{
+		InRepo(repoKey),
+		store.ContainsIgnoreCase(keyword, "tag"),
+		store.Desc("builtAt"),
+		store.Desc("tag"),
+	}, conds...)
+	result, err := store.Of(db, ImageMeta).ListPage(ctx, int64(page), int64(pageSize), opts...)
+	return result, errors.Wrapf(err, "list snapshots of %s", repoKey)
 }
 
-// listTags 根据过滤条件查询标签列表的通用方法
-func (s *SnapshotStoreMongo) listTags(ctx context.Context, filter bson.M) ([]string, error) {
-	cursor, err := s.snapshotColl.Find(ctx, filter, options.Find().SetProjection(bson.M{"tag": 1}))
-	if err != nil {
-		return nil, errors.Wrap(err, "find tags")
-	}
-	defer cursor.Close(ctx)
-
-	var tags []string
-	for cursor.Next(ctx) {
-		var doc struct {
-			Tag string `bson:"tag"`
-		}
-		if err = cursor.Decode(&doc); err != nil {
-			return nil, errors.Wrap(err, "decode tag")
-		}
-		tags = append(tags, doc.Tag)
-	}
-
-	return tags, nil
-}
-
-// ListUnsyncedDetailTags 获取需要补全详情的标签
-func (s *SnapshotStoreMongo) ListUnsyncedDetailTags(ctx context.Context, repoKey string) ([]string, error) {
-	// 查询：builtAt 为空（未补全详情）、被标记需重新拉取，或者 tag 为 latest（每次都刷新）
-	filter := bson.M{
-		"repoKey": repoKey,
+// ListUnsyncedDetailTags 获取仓库中需要补全详情的标签：builtAt 为空、被标记需重新拉取，或者 latest（每次都刷新）
+func ListUnsyncedDetailTags(ctx context.Context, db *mongo.Database, repoKey string) ([]string, error) {
+	tags, err := listTags(ctx, db, InRepo(repoKey), store.Filter(bson.M{
 		"$or": []bson.M{
 			{"builtAt": bson.M{"$exists": false}},
 			{"builtAt": nil},
 			{"detailSyncPending": true},
 			{"tag": TagLatest},
 		},
-	}
-
-	return s.listTags(ctx, filter)
+	}))
+	return tags, errors.Wrapf(err, "list unsynced detail tags of %s", repoKey)
 }
 
-// ListAllTags 获取指定仓库中所有标签列表（用于 diff 计算）
-func (s *SnapshotStoreMongo) ListAllTags(ctx context.Context, repoKey string) ([]string, error) {
-	filter := bson.M{"repoKey": repoKey}
-	return s.listTags(ctx, filter)
+// ListAllTags 获取仓库中的全部标签（用于 diff 计算）
+func ListAllTags(ctx context.Context, db *mongo.Database, repoKey string) ([]string, error) {
+	tags, err := listTags(ctx, db, InRepo(repoKey))
+	return tags, errors.Wrapf(err, "list all tags of %s", repoKey)
 }
 
-// UpsertStatus 创建或更新仓库快照状态
-func (s *SnapshotStoreMongo) UpsertStatus(ctx context.Context, status *RepoSnapshotStatus) error {
-	now := time.Now()
-	status.UpdatedAt = now
-
-	filter := bson.M{"repoKey": status.RepoKey}
-	setFields := bson.M{
-		"refreshStatus": string(status.RefreshStatus),
-		"lastError":     status.LastError,
-		"updatedAt":     now,
+// listTags 获取匹配快照的标签，只读出 tag 字段
+func listTags(ctx context.Context, db *mongo.Database, conds ...store.Opt) ([]string, error) {
+	opts := append([]store.Opt{store.SelectFields("tag")}, conds...)
+	images, err := store.Of(db, ImageMeta).List(ctx, opts...)
+	if err != nil {
+		return nil, err
 	}
+	return lo.Map(images, func(img Image, _ int) string { return img.Tag }), nil
+}
 
+// GetRepoStatus 获取仓库快照状态，不存在时返回 nil
+func GetRepoStatus(ctx context.Context, db *mongo.Database, repoKey string) (*RepoSnapshotStatus, error) {
+	status, err := store.Of(db, RepoStatusMeta).Get(ctx, InRepo(repoKey))
+	if errors.Is(err, ErrRepoStatusNotFound) {
+		return nil, nil
+	}
+	return status, errors.Wrapf(err, "get status for %s", repoKey)
+}
+
+// UpsertRepoStatus 创建或更新仓库快照状态。refreshStatus 与 lastError 总会写入；
+// repoName 为空、两个时间字段为 nil 时保留库中已有的值
+func UpsertRepoStatus(ctx context.Context, db *mongo.Database, status *RepoSnapshotStatus) error {
+	fields := []string{"refreshStatus", "lastError"}
 	if status.RepoName != "" {
-		setFields["repoName"] = status.RepoName
+		fields = append(fields, "repoName")
 	}
-
-	update := bson.M{
-		"$set": setFields,
-		"$setOnInsert": bson.M{
-			"repoKey":   status.RepoKey,
-			"createdAt": now,
-		},
-	}
-
-	// 可选时间字段
 	if status.LastRefreshedAt != nil {
-		update["$set"].(bson.M)["lastRefreshedAt"] = status.LastRefreshedAt
+		fields = append(fields, "lastRefreshedAt")
 	}
 	if status.LastDetailSyncedAt != nil {
-		update["$set"].(bson.M)["lastDetailSyncedAt"] = status.LastDetailSyncedAt
+		fields = append(fields, "lastDetailSyncedAt")
 	}
-
-	opts := options.UpdateOne().SetUpsert(true)
-	_, err := s.statusColl.UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		return errors.Wrapf(err, "upsert status for %s", status.RepoKey)
-	}
-
-	return nil
+	_, err := store.Of(db, RepoStatusMeta).Upsert(ctx, status, InRepo(status.RepoKey), store.UpdateSelected(fields...))
+	return errors.Wrapf(err, "upsert status for %s", status.RepoKey)
 }
 
-// GetStatus 获取仓库快照状态
-func (s *SnapshotStoreMongo) GetStatus(ctx context.Context, repoKey string) (*RepoSnapshotStatus, error) {
-	var status RepoSnapshotStatus
-	err := s.statusColl.FindOne(ctx, bson.M{"repoKey": repoKey}).Decode(&status)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, nil
-		}
-		return nil, errors.Wrapf(err, "get status for %s", repoKey)
-	}
-	return &status, nil
+// TrySetRefreshing 原子性地将状态从非 refreshing 设为 refreshing（用于幂等性检查）。
+// 返回 true 表示成功获取刷新权，false 表示已有刷新在进行中
+func TrySetRefreshing(ctx context.Context, db *mongo.Database, repoKey string) (bool, error) {
+	acquired, err := trySetRepoStatus(ctx, db, repoKey, RefreshStatusRefreshing,
+		bson.M{"$ne": RefreshStatusRefreshing})
+	return acquired, errors.Wrapf(err, "try set refreshing for %s", repoKey)
 }
 
-// TrySetRefreshing 原子性设置为 refreshing 状态
-func (s *SnapshotStoreMongo) TrySetRefreshing(ctx context.Context, repoKey string) (bool, error) {
-	now := time.Now()
-
-	filter := bson.M{
-		"repoKey":       repoKey,
-		"refreshStatus": bson.M{"$ne": string(RefreshStatusRefreshing)},
-	}
-	update := bson.M{
-		"$set": bson.M{
-			"refreshStatus": string(RefreshStatusRefreshing),
-			"lastError":     "",
-			"updatedAt":     now,
-		},
-		"$setOnInsert": bson.M{
-			"repoKey":   repoKey,
-			"createdAt": now,
-		},
-	}
-
-	opts := options.UpdateOne().SetUpsert(true)
-	result, err := s.statusColl.UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		// 如果是 duplicate key error（说明已存在且状态为 refreshing），返回 false
-		if mongo.IsDuplicateKeyError(err) {
-			return false, nil
-		}
-		return false, errors.Wrapf(err, "try set refreshing for %s", repoKey)
-	}
-
-	// 如果 ModifiedCount > 0 或 UpsertedCount > 0，说明成功获取刷新权
-	return result.ModifiedCount > 0 || result.UpsertedCount > 0, nil
+// TrySetDetailSyncing 原子性地将状态从 idle 设为 detail_syncing（用于详情同步并发控制）。
+// 返回 true 表示成功获取同步权，false 表示当前状态不允许开始详情同步
+func TrySetDetailSyncing(ctx context.Context, db *mongo.Database, repoKey string) (bool, error) {
+	acquired, err := trySetRepoStatus(ctx, db, repoKey, RefreshStatusDetailSyncing, RefreshStatusIdle)
+	return acquired, errors.Wrapf(err, "try set detail syncing for %s", repoKey)
 }
 
-// TrySetDetailSyncing 原子性设置为 detail_syncing 状态（仅当当前状态为 idle 时）
-func (s *SnapshotStoreMongo) TrySetDetailSyncing(ctx context.Context, repoKey string) (bool, error) {
-	now := time.Now()
-
-	filter := bson.M{
-		"repoKey":       repoKey,
-		"refreshStatus": string(RefreshStatusIdle),
+// trySetRepoStatus 在当前状态满足 from 时将状态设为 to，状态记录不存在时直接创建。
+//
+// 状态记录存在但不满足 from 时，upsert 会尝试插入一条同 repoKey 的新记录并因唯一索引冲突失败，
+// 以此判定未获取到状态
+func trySetRepoStatus(
+	ctx context.Context,
+	db *mongo.Database,
+	repoKey string,
+	to RefreshStatus,
+	from any,
+) (bool, error) {
+	_, err := store.Of(db, RepoStatusMeta).Upsert(
+		ctx,
+		map[string]any{"refreshStatus": to, "lastError": ""},
+		InRepo(repoKey),
+		store.Where("refreshStatus", from),
+	)
+	if errors.Is(err, store.ErrDuplicate) {
+		return false, nil
 	}
-	update := bson.M{
-		"$set": bson.M{
-			"refreshStatus": string(RefreshStatusDetailSyncing),
-			"lastError":     "",
-			"updatedAt":     now,
-		},
-		"$setOnInsert": bson.M{
-			"repoKey":   repoKey,
-			"createdAt": now,
-		},
-	}
-
-	opts := options.UpdateOne().SetUpsert(true)
-	result, err := s.statusColl.UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		// 如果是 duplicate key error（说明已存在且状态非 idle），返回 false
-		if mongo.IsDuplicateKeyError(err) {
-			return false, nil
-		}
-		return false, errors.Wrapf(err, "try set detail syncing for %s", repoKey)
-	}
-
-	// 如果 ModifiedCount > 0 或 UpsertedCount > 0，说明成功获取同步权
-	return result.ModifiedCount > 0 || result.UpsertedCount > 0, nil
-}
-
-// DeleteAll 删除所有记录并保留集合及索引（仅用于测试）
-func (s *SnapshotStoreMongo) DeleteAll(ctx context.Context) error {
-	if _, err := s.snapshotColl.DeleteMany(ctx, bson.M{}); err != nil {
-		return errors.Wrap(err, "delete snapshot documents")
-	}
-	if _, err := s.statusColl.DeleteMany(ctx, bson.M{}); err != nil {
-		return errors.Wrap(err, "delete status documents")
-	}
-	return nil
+	return err == nil, err
 }

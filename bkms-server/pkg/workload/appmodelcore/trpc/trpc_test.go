@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -18,6 +19,8 @@ import (
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -27,45 +30,30 @@ import (
 var _ = Describe("tRPC application service", func() {
 	var ctx context.Context
 	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var appConfigFileStore appcfg.AppConfigFileStore
-	var appConfigFileDefStore appcfg.AppConfigFileDefStore
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	var envStore envmodel.EnvironmentStore
+	var appStore *bkmsapp.ApplicationStore
 	var envService *bkmsenv.EnvService
-	var workspaceStore bkmsworkspace.WorkspaceStore
-	var ruleStore appdefaults.RuleStore
-	var appModelStore appmodel.AppModelStore
-	var appSpecStore appspec.AppSpecStore
+	var workspaceStore *bkmsworkspace.WorkspaceStore
+	var ruleStore *appdefaults.RuleStore
+	var db *mongo.Database
 	var workspace *bkmsworkspace.Workspace
 	var environment *envmodel.Environment
 	var application *bkmsapp.Application
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			appcfg.FxModule,
 			bkmsenv.FxModule,
-			bkmsworkspace.FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
-			appdefaults.FxModule,
 			fx.Populate(
-				&appStore,
-				&appConfigFileStore,
-				&appConfigFileDefStore,
-				&appConfigFileVersionStore,
-				&envStore,
 				&envService,
-				&workspaceStore,
-				&ruleStore,
-				&appModelStore,
-				&appSpecStore,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
+		ruleStore = testutil.NewStore(GinkgoT(), appdefaults.RuleMeta)
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
 		environment = dbfactory.EnvWithOpts(ctx, envService, &dbfactory.EnvOpts{
 			WorkspaceID: workspace.ID,
@@ -75,14 +63,15 @@ var _ = Describe("tRPC application service", func() {
 
 	AfterEach(func() {
 		if application != nil {
-			_ = appSpecStore.DeleteByApp(ctx, application.ID)
-			_ = appModelStore.DeleteAppModel(ctx, application.ID)
-			_, _ = appConfigFileStore.DeleteByApp(ctx, application.ID)
-			_ = appStore.DeleteAppByName(ctx, application.WorkspaceID, application.Name)
+			_, _ = store.Of(db, appspec.AppSpecMeta).DeleteMany(ctx, appspec.ByApp(application.ID))
+			_ = appmodel.DeleteAppModel(ctx, db, application.ID)
+			_, _ = store.Of(database.DB(), appcfg.AppConfigFileMeta).
+				DeleteMany(ctx, appcfg.FilesByApp(application.ID))
+			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(application.WorkspaceID, application.Name))
 		}
-		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
-		Expect(envStore.DeleteAll(ctx)).To(Succeed())
-		Expect(workspaceStore.Delete(ctx, workspace.ID)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(appdefaults.RuleMeta)).To(Succeed())
+		Expect(testutil.CleanupCollection("environments")).To(Succeed())
+		Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		diApp.RequireStop()
 	})
 
@@ -120,16 +109,7 @@ var _ = Describe("tRPC application service", func() {
 			WorkspaceID: workspace.ID,
 			Type:        bkmsapp.AppTypeTRPC,
 		}
-		err = trpc.NewService(
-			appModelStore,
-			appSpecStore,
-			ruleStore,
-			envStore,
-			appConfigFileStore,
-			appConfigFileDefStore,
-			appConfigFileVersionStore,
-			appStore,
-		).Create(ctx, application, &trpc.CreateParams{
+		err = trpc.NewService(db).Create(ctx, application, &trpc.CreateParams{
 			TrpcConfig: &trpc.TrpcConfigParams{
 				Language: "go",
 				FileName: "trpc.yaml",
@@ -138,7 +118,7 @@ var _ = Describe("tRPC application service", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		persistedModel, err := appModelStore.GetAppModel(ctx, application.ID)
+		persistedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(application.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persistedModel.Workload.Type).To(Equal(appmodel.WorkloadTypeTrpc))
 		Expect(*persistedModel.Replicas).To(Equal(int32(1)))
@@ -149,7 +129,8 @@ var _ = Describe("tRPC application service", func() {
 		Expect(*persistedModel.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
 		Expect(*persistedModel.UpdateStrategy.MaxSurge).To(Equal("25%"))
 
-		defaultSpec, err := appSpecStore.Get(ctx, application.ID, appspec.DefaultEnvName)
+		defaultSpec, err := store.Of(db, appspec.AppSpecMeta).
+			Get(ctx, appspec.ByAppEnv(application.ID, appspec.DefaultEnvName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*defaultSpec.Resources.Replicas).To(Equal(int32(1)))
 		Expect(*defaultSpec.Resources.CPURequests).To(Equal("1"))
@@ -161,7 +142,7 @@ var _ = Describe("tRPC application service", func() {
 		Expect(defaultSpec.Labels).To(BeNil())
 		Expect(defaultSpec.Annotations).To(BeNil())
 
-		envSpec, err := appSpecStore.Get(ctx, application.ID, environment.Name)
+		envSpec, err := store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(application.ID, environment.Name))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*envSpec.Resources.Replicas).To(Equal(int32(2)))
 		Expect(*envSpec.Resources.CPURequests).To(Equal("500m"))
@@ -170,7 +151,7 @@ var _ = Describe("tRPC application service", func() {
 	})
 
 	It("persists platform defaults when the workspace has no rules", func() {
-		rules, err := ruleStore.List(ctx, workspace.ID)
+		rules, err := ruleStore.List(ctx, appdefaults.ByWorkspace(workspace.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rules).To(BeEmpty())
 
@@ -182,16 +163,7 @@ var _ = Describe("tRPC application service", func() {
 			WorkspaceID: workspace.ID,
 			Type:        bkmsapp.AppTypeTRPC,
 		}
-		err = trpc.NewService(
-			appModelStore,
-			appSpecStore,
-			ruleStore,
-			envStore,
-			appConfigFileStore,
-			appConfigFileDefStore,
-			appConfigFileVersionStore,
-			appStore,
-		).Create(ctx, application, &trpc.CreateParams{
+		err = trpc.NewService(db).Create(ctx, application, &trpc.CreateParams{
 			TrpcConfig: &trpc.TrpcConfigParams{
 				Language: "go",
 				FileName: "trpc.yaml",
@@ -200,7 +172,7 @@ var _ = Describe("tRPC application service", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		persistedModel, err := appModelStore.GetAppModel(ctx, application.ID)
+		persistedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(application.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persistedModel.Workload.Type).To(Equal(appmodel.WorkloadTypeTrpc))
 		Expect(*persistedModel.Replicas).To(Equal(int32(1)))
@@ -211,14 +183,15 @@ var _ = Describe("tRPC application service", func() {
 		Expect(*persistedModel.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
 		Expect(*persistedModel.UpdateStrategy.MaxSurge).To(Equal("25%"))
 
-		defaultSpec, err := appSpecStore.Get(ctx, application.ID, appspec.DefaultEnvName)
+		defaultSpec, err := store.Of(db, appspec.AppSpecMeta).
+			Get(ctx, appspec.ByAppEnv(application.ID, appspec.DefaultEnvName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaultSpec.AppID).To(Equal(application.ID))
 		Expect(defaultSpec.EnvName).To(Equal(appspec.DefaultEnvName))
 		Expect(*defaultSpec.Resources.Replicas).To(Equal(int32(1)))
 		Expect(*defaultSpec.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
 
-		_, err = appSpecStore.Get(ctx, application.ID, environment.Name)
+		_, err = store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(application.ID, environment.Name))
 		Expect(errors.Is(err, appspec.ErrAppSpecNotFound)).To(BeTrue())
 	})
 })

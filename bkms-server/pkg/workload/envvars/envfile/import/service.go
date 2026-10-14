@@ -22,6 +22,7 @@ import (
 	"context"
 
 	pkgerrors "github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -35,18 +36,15 @@ import (
 // Service imports env vars into public/env/app targets using the same parsing and
 // scope validation semantics as the preview flow.
 type Service struct {
-	scopedEnvVarStore envvars.ScopedEnvVarStore
-	appModelStore     appmodel.AppModelStore
+	db *mongo.Database
 }
 
 // NewService creates an import service.
 func NewService(
-	scopedEnvVarStore envvars.ScopedEnvVarStore,
-	appModelStore appmodel.AppModelStore,
+	db *mongo.Database,
 ) *Service {
 	return &Service{
-		scopedEnvVarStore: scopedEnvVarStore,
-		appModelStore:     appModelStore,
+		db: db,
 	}
 }
 
@@ -83,7 +81,7 @@ func (s *Service) ImportPublic(ctx context.Context, workspaceID, content string)
 
 	for i, scope := range scopeOrder {
 		vars := grouped[scope]
-		if err := s.scopedEnvVarStore.BatchUpsertByKey(ctx, workspaceID, scope, vars); err != nil {
+		if err := envvars.BatchUpsertByKey(ctx, s.db, workspaceID, scope, vars); err != nil {
 			if i > 0 {
 				return pkgerrors.Wrapf(
 					err,
@@ -143,7 +141,7 @@ func (s *Service) ImportEnv(ctx context.Context, environment envmodel.Environmen
 		})
 	}
 
-	return s.scopedEnvVarStore.BatchUpsertByKey(ctx, environment.WorkspaceID, scope, vars)
+	return envvars.BatchUpsertByKey(ctx, s.db, environment.WorkspaceID, scope, vars)
 }
 
 // ImportApp imports vars into app-defined env vars.
@@ -168,5 +166,5 @@ func (s *Service) ImportApp(ctx context.Context, app *bkmsapp.Application, conte
 		})
 	}
 
-	return appmodel.NewAppEnvVarService(s.appModelStore).BatchUpsert(ctx, app.ID, vars)
+	return appmodel.NewAppEnvVarService(s.db).BatchUpsert(ctx, app.ID, vars)
 }

@@ -38,10 +38,9 @@ import (
 var _ = Describe("BuildPlainConfigFiles", func() {
 	var diApp *fxtest.App
 	var ctx context.Context
-	var appStore bkmsapp.ApplicationStore
-	var store appcfg.AppConfigFileStore
-	var defStore appcfg.AppConfigFileDefStore
-	var versionStore appcfg.AppConfigFileVersionStore
+	var appStore *bkmsapp.ApplicationStore
+	var files *appcfg.AppConfigFileStore
+	var defStore *appcfg.AppConfigFileDefStore
 	var app *bkmsapp.Application
 	var provider appcfg.MountableFileProvider
 
@@ -56,16 +55,17 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 		err = testutil.CleanupCollection("applications")
 		Expect(err).NotTo(HaveOccurred())
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
-			appcfg.FxModule,
-			fx.Populate(&appStore, &store, &defStore, &versionStore),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
+		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		files = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileMeta)
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewMountableFileProvider(store, defStore, versionStore)
+		provider = appcfg.NewMountableFileProvider(testutil.NewDB(GinkgoT()))
 	})
 
 	AfterEach(func() {
@@ -73,19 +73,21 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 	})
 
 	createPlainDef := func(name, mountDir string) bson.ObjectID {
-		id, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+		def := &appcfg.AppConfigFileDef{
 			AppID:      app.ID,
 			Name:       name,
 			ConfigKind: appcfg.ConfigKindPlain,
 			MountDir:   mountDir,
 			Creator:    "tester",
-		})
+		}
+		err := defStore.Create(ctx, def)
+		id := def.ID
 		Expect(err).NotTo(HaveOccurred())
 		return id
 	}
 
 	addDefaultFile := func(defID bson.ObjectID, content string) {
-		_, err := store.Add(ctx, appcfg.AppConfigFile{
+		err := files.Create(ctx, &appcfg.AppConfigFile{
 			DefID:   defID,
 			AppID:   app.ID,
 			EnvName: appcfg.EnvNameDefault,
@@ -100,14 +102,16 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 	}
 
 	createPlainDefWithRender := func(name, mountDir string, enableRender bool) bson.ObjectID {
-		id, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+		def := &appcfg.AppConfigFileDef{
 			AppID:              app.ID,
 			Name:               name,
 			ConfigKind:         appcfg.ConfigKindPlain,
 			MountDir:           mountDir,
 			EnableEnvVarRender: enableRender,
 			Creator:            "tester",
-		})
+		}
+		err := defStore.Create(ctx, def)
+		id := def.ID
 		Expect(err).NotTo(HaveOccurred())
 		return id
 	}

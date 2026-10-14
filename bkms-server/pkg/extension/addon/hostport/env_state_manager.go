@@ -21,7 +21,7 @@ package hostport
 import (
 	"context"
 
-	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -29,12 +29,12 @@ import (
 
 // EnvStateManager reconciles HostPort applied-port snapshots after deploy/uninstall.
 type EnvStateManager struct {
-	store HostPortStore
+	db *mongo.Database
 }
 
 // NewEnvStateManager creates an EnvStateManager.
-func NewEnvStateManager(store HostPortStore) *EnvStateManager {
-	return &EnvStateManager{store: store}
+func NewEnvStateManager(db *mongo.Database) *EnvStateManager {
+	return &EnvStateManager{db: db}
 }
 
 // ReconcileAfterDeploy records the ports that were actually injected/deployed
@@ -49,10 +49,7 @@ func (m *EnvStateManager) ReconcileAfterDeploy(
 	if !env.Cluster.IsFederation {
 		return nil
 	}
-	if err := m.store.UpsertEnvState(ctx, app.ID, env.Name, appliedPorts); err != nil {
-		return errors.Wrapf(err, "upsert hostport env state for env %s", env.Name)
-	}
-	return nil
+	return UpsertEnvState(ctx, m.db, app.ID, env.Name, appliedPorts)
 }
 
 // ReconcileAfterUninstall removes the env HostPort snapshot for federated envs.
@@ -64,8 +61,5 @@ func (m *EnvStateManager) ReconcileAfterUninstall(
 	if !env.Cluster.IsFederation {
 		return nil
 	}
-	if err := m.store.RemoveEnvState(ctx, app.ID, env.Name); err != nil {
-		return errors.Wrapf(err, "remove hostport env state for env %s", env.Name)
-	}
-	return nil
+	return RemoveEnvState(ctx, m.db, app.ID, env.Name)
 }

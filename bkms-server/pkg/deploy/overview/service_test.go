@@ -27,107 +27,68 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
 
 var _ = Describe("overview.Service", func() {
 	var (
-		ctx                        context.Context
-		diApp                      *fxtest.App
-		appStore                   bkmsapp.ApplicationStore
-		appModelStore              appmodel.AppModelStore
-		appSpecStore               appspec.AppSpecStore
-		appConfigFileStore         appcfg.AppConfigFileStore
-		appConfigFileDefStore      appcfg.AppConfigFileDefStore
-		appConfigFileVersionStore  appcfg.AppConfigFileVersionStore
-		buildConfigStore           build.ConfigStore
-		buildAutoDeployRecordStore autodeploy.RecordStore
-		envStore                   envmodel.EnvironmentStore
-		envSvc                     *bkmsenv.EnvService
-		appModelDeployRecordStore  appmodeldeploy.RecordStore
-		helmDeployRecordStore      helmdeploy.RecordStore
-		gpaConfigStore             gpa.GPAConfigStore
-		svc                        *Service
+		ctx                       context.Context
+		diApp                     *fxtest.App
+		appStore                  *bkmsapp.ApplicationStore
+		db                        *mongo.Database
+		envSvc                    *bkmsenv.EnvService
+		appModelDeployRecordStore *appmodeldeploy.RecordStore
+		gpaConfigs                *gpa.ConfigStore
+		svc                       *Service
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		// Note: gpa.FxModule nests appmodel.FxModule, so appmodel.FxModule must not be
-		// listed again here — fx would reject the duplicate providers.
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
-			gpa.FxModule,
-			appspec.FxModule,
 			appcfg.FxModule,
 			bkmsenv.FxModule,
-			autodeploy.FxModule,
-			appmodeldeploy.FxModule,
-			helmdeploy.FxModule,
-			build.FxModule,
 			fx.Populate(
-				&appStore,
-				&appModelStore,
-				&appSpecStore,
-				&appConfigFileStore,
-				&appConfigFileDefStore,
-				&appConfigFileVersionStore,
-				&buildConfigStore,
-				&envStore,
 				&envSvc,
-				&buildAutoDeployRecordStore,
-				&appModelDeployRecordStore,
-				&helmDeployRecordStore,
-				&gpaConfigStore,
 			),
 		)
 		diApp.RequireStart()
+		gpaConfigs = testutil.NewStore(GinkgoT(), gpa.ConfigMeta)
 
-		svc = NewService(
-			envStore,
-			appStore,
-			appModelStore,
-			buildAutoDeployRecordStore,
-			appModelDeployRecordStore,
-			helmDeployRecordStore,
-			gpaConfigStore,
-		)
+		db = testutil.NewDB(GinkgoT())
+		appModelDeployRecordStore = store.Of(db, appmodeldeploy.RecordMeta)
+		svc = NewService(db)
 	})
 
 	AfterEach(func() {
-		Expect(envStore.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupCollection("environments")).To(Succeed())
 		diApp.RequireStop()
 	})
 
 	newTrpcApp := func() *bkmsapp.Application {
 		trpcApp, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
-			BuildConfigStore:          buildConfigStore,
+			AppStore: appStore,
 		}, nil)
 		return trpcApp
 	}
@@ -187,10 +148,10 @@ var _ = Describe("overview.Service", func() {
 			trpcApp := newTrpcApp()
 			tracked := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
 			untracked := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-			Expect(envStore.AddApp(ctx, tracked.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, tracked.ID, trpcApp.ID)).To(Succeed())
 
 			startedAt := time.Now().UTC().Truncate(time.Millisecond)
-			_, err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
+			err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
 				WorkspaceID: trpcApp.WorkspaceID,
 				AppID:       trpcApp.ID,
 				EnvName:     tracked.Name,
@@ -221,7 +182,7 @@ var _ = Describe("overview.Service", func() {
 			source := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
 			_ = dbfactory.FeatEnv(ctx, envSvc, trpcApp, source)
 			featWithApp := dbfactory.FeatEnv(ctx, envSvc, trpcApp, source)
-			Expect(envStore.AddApp(ctx, featWithApp.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, featWithApp.ID, trpcApp.ID)).To(Succeed())
 
 			result, err := svc.GetOverview(ctx, trpcApp)
 			Expect(err).NotTo(HaveOccurred())
@@ -233,7 +194,7 @@ var _ = Describe("overview.Service", func() {
 		It("fills gpa autoscaling summary from config", func() {
 			trpcApp := newTrpcApp()
 			env := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-			Expect(envStore.AddApp(ctx, env.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, env.ID, trpcApp.ID)).To(Succeed())
 
 			cfg := &gpa.GPAConfig{
 				AppID:       trpcApp.ID,
@@ -245,7 +206,7 @@ var _ = Describe("overview.Service", func() {
 					{Resource: gpa.ResourceMemory, AverageUtilization: 70},
 				},
 			}
-			Expect(gpaConfigStore.Create(ctx, cfg)).To(Succeed())
+			Expect(gpa.CreateConfig(ctx, gpaConfigs, cfg)).To(Succeed())
 
 			mockey.PatchConvey("gpa CR absent in cluster", GinkgoT(), func() {
 				mockGPAClusterClientChain()
@@ -271,10 +232,10 @@ var _ = Describe("overview.Service", func() {
 		It("fills resources from the cluster GameDeployment instead of app-spec", func() {
 			trpcApp := newTrpcApp()
 			env := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-			Expect(envStore.AddApp(ctx, env.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, env.ID, trpcApp.ID)).To(Succeed())
 
 			// AppSpec 与集群实际值刻意设成不同，回归「改了配置未重部署」时总览仍应展示集群值。
-			Expect(appspec.SetDefault(ctx, appSpecStore, appModelStore, trpcApp.ID, &appspec.AppSpec{
+			Expect(appspec.SetDefault(ctx, db, trpcApp.ID, &appspec.AppSpec{
 				Resources: &appspec.ResourcesSpec{
 					CPULimits:      lo.ToPtr("2"),
 					CPURequests:    lo.ToPtr("1"),
@@ -285,7 +246,7 @@ var _ = Describe("overview.Service", func() {
 
 			ns := "ns-prod"
 			gdName := trpcApp.Name
-			_, err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
+			err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
 				WorkspaceID:   trpcApp.WorkspaceID,
 				AppID:         trpcApp.ID,
 				EnvName:       env.Name,
@@ -354,11 +315,11 @@ var _ = Describe("overview.Service", func() {
 		It("keeps resources when pod list fails", func() {
 			trpcApp := newTrpcApp()
 			env := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-			Expect(envStore.AddApp(ctx, env.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, env.ID, trpcApp.ID)).To(Succeed())
 
 			ns := "ns-prod"
 			gdName := trpcApp.Name
-			_, err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
+			err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
 				WorkspaceID:   trpcApp.WorkspaceID,
 				AppID:         trpcApp.ID,
 				EnvName:       env.Name,
@@ -399,11 +360,11 @@ var _ = Describe("overview.Service", func() {
 		It("keeps resources when deploy record has no label selector", func() {
 			trpcApp := newTrpcApp()
 			env := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-			Expect(envStore.AddApp(ctx, env.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, env.ID, trpcApp.ID)).To(Succeed())
 
 			ns := "ns-prod"
 			gdName := trpcApp.Name
-			_, err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
+			err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
 				WorkspaceID: trpcApp.WorkspaceID,
 				AppID:       trpcApp.ID,
 				EnvName:     env.Name,
@@ -444,7 +405,7 @@ var _ = Describe("overview.Service", func() {
 		It("attaches gpa CR status including Failed phase for frontend display", func() {
 			trpcApp := newTrpcApp()
 			env := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-			Expect(envStore.AddApp(ctx, env.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, env.ID, trpcApp.ID)).To(Succeed())
 
 			cfg := &gpa.GPAConfig{
 				AppID:       trpcApp.ID,
@@ -455,7 +416,7 @@ var _ = Describe("overview.Service", func() {
 					{Resource: gpa.ResourceCPU, AverageUtilization: 60},
 				},
 			}
-			Expect(gpaConfigStore.Create(ctx, cfg)).To(Succeed())
+			Expect(gpa.CreateConfig(ctx, gpaConfigs, cfg)).To(Succeed())
 
 			mockey.PatchConvey("gpa status failed", GinkgoT(), func() {
 				mockGPAClusterClientChain()
@@ -483,14 +444,14 @@ var _ = Describe("overview.Service", func() {
 		It("counts ready/abnormal pods and GD replicas on successful k8s queries", func() {
 			trpcApp := newTrpcApp()
 			env := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-			Expect(envStore.AddApp(ctx, env.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, env.ID, trpcApp.ID)).To(Succeed())
 
 			ns := "ns-prod"
 			clusterID := "cluster-prod"
 			gdName := trpcApp.Name
 			labelSel := map[string]string{"app.kubernetes.io/name": trpcApp.Name}
 
-			_, err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
+			err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
 				WorkspaceID:   trpcApp.WorkspaceID,
 				AppID:         trpcApp.ID,
 				EnvName:       env.Name,
@@ -564,9 +525,9 @@ var _ = Describe("overview.Service", func() {
 		It("sets instances null when env k8s query fails without failing the request", func() {
 			trpcApp := newTrpcApp()
 			env := dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
-			Expect(envStore.AddApp(ctx, env.ID, trpcApp.ID)).To(Succeed())
+			Expect(envmodel.AddApp(ctx, db, env.ID, trpcApp.ID)).To(Succeed())
 
-			_, err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
+			err := appModelDeployRecordStore.Create(ctx, &appmodeldeploy.Record{
 				WorkspaceID:   trpcApp.WorkspaceID,
 				AppID:         trpcApp.ID,
 				EnvName:       env.Name,

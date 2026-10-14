@@ -19,18 +19,18 @@
 package envvars
 
 import (
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
-// FxModule provides the scoped env var store as a singleton.
+// FxModule provides the unified env vars reader and the env var copier used by feature environments.
 var FxModule = fx.Module("envvars",
 	database.PrivateFxModule,
 	fx.Provide(
-		NewScopedEnvVarStoreMongo,
 		NewUnifiedEnvVarsReader,
-		func(store ScopedEnvVarStore) bkmsenv.FeatureEnvVarStore { return store },
+		func(db *mongo.Database) bkmsenv.FeatureEnvVarStore { return NewFeatureEnvVarCopier(db) },
 	),
 )

@@ -25,84 +25,81 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Custom runtime image store", func() {
 	var (
-		ctx   context.Context
-		store Store
-		diApp *fxtest.App
+		ctx    context.Context
+		images *Store
 	)
 
 	BeforeEach(func() {
-		diApp = fxtest.New(
-			GinkgoT(),
-			FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
 		ctx = context.Background()
+		images = testutil.NewStore(GinkgoT(), Meta)
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteAll(ctx)).To(Succeed())
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
-	Describe("Upsert", func() {
-		It("creates a record and fills identity fields", func() {
+	Describe("Register", func() {
+		It("creates a record that can be found by key", func() {
 			image := newTestImage("ws-demo", ImageTypeBuilder)
-			Expect(store.Upsert(ctx, image)).To(Succeed())
-			Expect(image.ID).NotTo(BeEmpty())
-			Expect(image.CreatedAt).NotTo(BeZero())
-			Expect(image.UpdatedAt).NotTo(BeZero())
+			Expect(Register(ctx, images, image)).To(Succeed())
 
-			got, err := store.GetByWorkspaceTypeAndName(ctx, image.WorkspaceID, image.Type, image.Name)
+			got, err := images.Get(ctx, ByKey(image.WorkspaceID, image.Type, image.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.ID).To(Equal(image.ID))
 			Expect(got.Name).To(Equal(image.Name))
 		})
 
+		It("stores trimmed workspace ID and name", func() {
+			image := newTestImage("ws-demo", ImageTypeBuilder)
+			name := image.Name
+			image.WorkspaceID, image.Name = " ws-demo ", "  "+name+"  "
+			Expect(Register(ctx, images, image)).To(Succeed())
+
+			got, err := images.Get(ctx, ByKey("ws-demo", ImageTypeBuilder, name))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.WorkspaceID).To(Equal("ws-demo"))
+			Expect(got.Name).To(Equal(name))
+		})
+
 		It("refreshes only updatedAt when the unique key already exists", func() {
 			image := newTestImage("ws-demo", ImageTypeBuilder)
-			Expect(store.Upsert(ctx, image)).To(Succeed())
+			Expect(Register(ctx, images, image)).To(Succeed())
 
-			before, err := store.GetByWorkspaceTypeAndName(ctx, image.WorkspaceID, image.Type, image.Name)
+			before, err := images.Get(ctx, ByKey(image.WorkspaceID, image.Type, image.Name))
 			Expect(err).NotTo(HaveOccurred())
-			originalID := before.ID
-			originalCreatedAt := before.CreatedAt
-			originalUpdatedAt := before.UpdatedAt
 
-			// 从 DB 读回的 updatedAt 是毫秒精度，稍等再写，避免两次 upsert 时间戳无法区分
+			// 从 DB 读回的 updatedAt 是毫秒精度，稍等再写，避免两次写入的时间戳无法区分
 			time.Sleep(50 * time.Millisecond)
 
-			duplicate := &Image{
-				WorkspaceID: image.WorkspaceID,
-				Type:        image.Type,
-				Name:        image.Name,
-			}
-			Expect(store.Upsert(ctx, duplicate)).To(Succeed())
+			duplicate := &Image{WorkspaceID: image.WorkspaceID, Type: image.Type, Name: image.Name}
+			Expect(Register(ctx, images, duplicate)).To(Succeed())
 
-			got, err := store.GetByWorkspaceTypeAndName(ctx, image.WorkspaceID, image.Type, image.Name)
+			got, err := images.Get(ctx, ByKey(image.WorkspaceID, image.Type, image.Name))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.ID).To(Equal(originalID))
-			Expect(got.CreatedAt.Equal(originalCreatedAt)).To(BeTrue())
-			Expect(got.UpdatedAt.After(originalUpdatedAt)).To(BeTrue())
+			Expect(got.ID).To(Equal(before.ID))
+			Expect(got.CreatedAt.Equal(before.CreatedAt)).To(BeTrue())
+			Expect(got.UpdatedAt.After(before.UpdatedAt)).To(BeTrue())
+			Expect(images.Count(ctx, ByWorkspace(image.WorkspaceID))).To(BeEquivalentTo(1))
 		})
 
 		It("stores builder and runner records separately for the same name", func() {
 			builder := newTestImage("ws-demo", ImageTypeBuilder)
-			Expect(store.Upsert(ctx, builder)).To(Succeed())
+			Expect(Register(ctx, images, builder)).To(Succeed())
 
 			runner := newTestImage("ws-demo", ImageTypeRunner)
 			runner.Name = builder.Name
-			Expect(store.Upsert(ctx, runner)).To(Succeed())
+			Expect(Register(ctx, images, runner)).To(Succeed())
 
-			gotBuilder, err := store.GetByWorkspaceTypeAndName(ctx, "ws-demo", ImageTypeBuilder, builder.Name)
+			gotBuilder, err := images.Get(ctx, ByKey("ws-demo", ImageTypeBuilder, builder.Name))
 			Expect(err).NotTo(HaveOccurred())
-			gotRunner, err := store.GetByWorkspaceTypeAndName(ctx, "ws-demo", ImageTypeRunner, builder.Name)
+			gotRunner, err := images.Get(ctx, ByKey("ws-demo", ImageTypeRunner, builder.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gotBuilder.ID).NotTo(Equal(gotRunner.ID))
 		})
@@ -110,102 +107,101 @@ var _ = Describe("Custom runtime image store", func() {
 		It("rejects an image whose name contains a tag", func() {
 			image := newTestImage("ws-demo", ImageTypeBuilder)
 			image.Name += ":latest"
-			err := store.Upsert(ctx, image)
-			Expect(err).To(HaveOccurred())
-			Expect(err).NotTo(MatchError(ErrCustomRuntimeImageNotFound))
+			Expect(Register(ctx, images, image)).To(MatchError(ContainSubstring("must not contain tag or digest")))
+		})
+
+		It("rejects an image without workspace ID", func() {
+			image := newTestImage("  ", ImageTypeBuilder)
+			Expect(Register(ctx, images, image)).To(MatchError(ContainSubstring("workspaceID is required")))
 		})
 	})
 
-	Describe("GetByWorkspaceTypeAndName", func() {
+	Describe("Get by key", func() {
 		It("returns not found when the record does not exist", func() {
-			_, err := store.GetByWorkspaceTypeAndName(
-				ctx, "ws-demo", ImageTypeBuilder, "docker.bkrepo.example.com/demo/repo/missing",
+			_, err := images.Get(
+				ctx, ByKey("ws-demo", ImageTypeBuilder, "docker.bkrepo.example.com/demo/repo/missing"),
 			)
 			Expect(err).To(MatchError(ErrCustomRuntimeImageNotFound))
+			Expect(err).To(MatchError(store.ErrNotFound))
 		})
 
 		It("does not match the same name under a different workspace", func() {
 			image := newTestImage("ws-demo", ImageTypeBuilder)
-			Expect(store.Upsert(ctx, image)).To(Succeed())
+			Expect(Register(ctx, images, image)).To(Succeed())
 
-			_, err := store.GetByWorkspaceTypeAndName(ctx, "ws-other", image.Type, image.Name)
+			_, err := images.Get(ctx, ByKey("ws-other", image.Type, image.Name))
 			Expect(err).To(MatchError(ErrCustomRuntimeImageNotFound))
 		})
 	})
 
-	Describe("Exists", func() {
+	Describe("Exists by workspace and name", func() {
 		It("matches by workspace and name regardless of type", func() {
 			builder := newTestImage("ws-demo", ImageTypeBuilder)
-			Expect(store.Upsert(ctx, builder)).To(Succeed())
-
-			exists, err := store.Exists(ctx, "ws-demo", builder.Name)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeTrue())
+			Expect(Register(ctx, images, builder)).To(Succeed())
+			Expect(images.Exists(ctx, ByWorkspaceAndName("ws-demo", builder.Name))).To(BeTrue())
 
 			// 只落 runner 时同样按名称命中，调用方无需知道类型
 			runner := newTestImage("ws-demo", ImageTypeRunner)
-			Expect(store.Upsert(ctx, runner)).To(Succeed())
-			exists, err = store.Exists(ctx, "ws-demo", runner.Name)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeTrue())
+			Expect(Register(ctx, images, runner)).To(Succeed())
+			Expect(images.Exists(ctx, ByWorkspaceAndName("ws-demo", runner.Name))).To(BeTrue())
 
-			exists, err = store.Exists(ctx, "ws-other", builder.Name)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeFalse())
+			Expect(images.Exists(ctx, ByWorkspaceAndName("ws-other", builder.Name))).To(BeFalse())
+			Expect(images.Exists(ctx, ByWorkspaceAndName("ws-demo", builder.Name+"-missing"))).To(BeFalse())
+		})
 
-			exists, err = store.Exists(ctx, "ws-demo", builder.Name+"-missing")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeFalse())
-
-			_, err = store.Exists(ctx, "", builder.Name)
-			Expect(err).To(MatchError(ContainSubstring("workspaceID is required")))
+		It("does not match any record when the workspace ID is empty", func() {
+			image := newTestImage("ws-demo", ImageTypeBuilder)
+			Expect(Register(ctx, images, image)).To(Succeed())
+			Expect(images.Exists(ctx, ByWorkspaceAndName("", image.Name))).To(BeFalse())
 		})
 	})
 
 	Describe("List", func() {
 		It("lists records in one workspace and ignores other workspaces", func() {
 			inWorkspace := newTestImage("ws-demo", ImageTypeBuilder)
-			Expect(store.Upsert(ctx, inWorkspace)).To(Succeed())
-
+			Expect(Register(ctx, images, inWorkspace)).To(Succeed())
 			otherWorkspace := newTestImage("ws-other", ImageTypeBuilder)
-			Expect(store.Upsert(ctx, otherWorkspace)).To(Succeed())
+			Expect(Register(ctx, images, otherWorkspace)).To(Succeed())
 
-			images, err := store.List(ctx, "ws-demo", ListOptions{})
+			got, err := images.List(ctx, ByWorkspace("ws-demo"))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(images).To(HaveLen(1))
-			Expect(images[0].ID).To(Equal(inWorkspace.ID))
+			Expect(got).To(HaveLen(1))
+			Expect(got[0].ID).To(Equal(inWorkspace.ID))
 		})
 
 		It("filters by type and keyword", func() {
 			builder := newTestImage("ws-demo", ImageTypeBuilder)
 			builder.Name = "docker.bkrepo.example.com/demo/repo/special-golang"
-			Expect(store.Upsert(ctx, builder)).To(Succeed())
+			Expect(Register(ctx, images, builder)).To(Succeed())
 
 			runner := newTestImage("ws-demo", ImageTypeRunner)
 			runner.Name = "docker.bkrepo.example.com/demo/repo/special-alpine"
-			Expect(store.Upsert(ctx, runner)).To(Succeed())
+			Expect(Register(ctx, images, runner)).To(Succeed())
 
 			unmatched := newTestImage("ws-demo", ImageTypeBuilder)
-			Expect(store.Upsert(ctx, unmatched)).To(Succeed())
+			Expect(Register(ctx, images, unmatched)).To(Succeed())
 
-			images, err := store.List(ctx, "ws-demo", ListOptions{
-				Type:    ImageTypeBuilder,
-				Keyword: "special",
-			})
+			got, err := images.List(ctx, ByWorkspace("ws-demo"), ByType(ImageTypeBuilder), NameContains("SPECIAL"))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(images).To(HaveLen(1))
-			Expect(images[0].ID).To(Equal(builder.ID))
+			Expect(got).To(HaveLen(1))
+			Expect(got[0].ID).To(Equal(builder.ID))
 		})
 
-		It("rejects an empty workspace ID", func() {
-			_, err := store.List(ctx, "  ", ListOptions{})
-			Expect(err).To(MatchError(ContainSubstring("workspaceID is required")))
-		})
+		It("lists all types ordered by type then name when type is empty", func() {
+			runner := newTestImage("ws-demo", ImageTypeRunner)
+			runner.Name = "docker.bkrepo.example.com/demo/repo/a"
+			builderB := newTestImage("ws-demo", ImageTypeBuilder)
+			builderB.Name = "docker.bkrepo.example.com/demo/repo/b"
+			builderA := newTestImage("ws-demo", ImageTypeBuilder)
+			builderA.Name = "docker.bkrepo.example.com/demo/repo/a"
+			for _, img := range []*Image{runner, builderB, builderA} {
+				Expect(Register(ctx, images, img)).To(Succeed())
+			}
 
-		It("returns an empty list when the workspace has no records", func() {
-			images, err := store.List(ctx, "ws-empty", ListOptions{Type: ImageTypeBuilder})
+			got, err := images.List(ctx, ByWorkspace("ws-demo"), ByType(""), InListOrder())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(images).To(BeEmpty())
+			Expect(got).To(HaveLen(3))
+			Expect([]string{got[0].ID, got[1].ID, got[2].ID}).To(Equal([]string{builderA.ID, builderB.ID, runner.ID}))
 		})
 	})
 })

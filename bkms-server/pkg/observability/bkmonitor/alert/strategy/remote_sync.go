@@ -32,6 +32,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // SyncToRemote 将告警策略的最新状态同步到蓝鲸监控远端，并回写远端引用。
@@ -48,7 +49,7 @@ func (s *Service) SyncToRemote(
 			return err
 		}
 		// 2. 把远端引用回写到本地，保持本地与远端映射一致。
-		if err = s.store.Update(ctx, strategyID, bson.M{"remoteRefs": remoteRefs, "updater": operator}); err != nil {
+		if err = s.strategies.Update(ctx, bson.M{"remoteRefs": remoteRefs, "updater": operator}, store.ByID(strategyID)); err != nil {
 			return errors.Wrap(err, "update remoteRefs")
 		}
 		return nil
@@ -87,7 +88,7 @@ func (s *Service) syncStrategyStateToRemote(
 		if ref.TrafficLaneName == "" {
 			continue
 		}
-		env, envErr := s.envStore.Get(ctx, ref.EnvID)
+		env, envErr := s.envStore.GetByID(ctx, ref.EnvID)
 		if envErr != nil {
 			log.Warnf(
 				ctx,
@@ -179,10 +180,10 @@ func (s *Service) SwitchEnabled(
 			if err != nil {
 				return err
 			}
-			if err = s.store.Update(
+			if err = s.strategies.Update(
 				ctx,
-				strategyID,
 				bson.M{"enabled": true, "remoteRefs": remoteRefs, "updater": operator},
+				store.ByID(strategyID),
 			); err != nil {
 				return errors.Wrap(err, "update enabled state")
 			}
@@ -206,7 +207,7 @@ func (s *Service) SwitchEnabled(
 			}
 		}
 		// 3. 最后回写本地启停状态。
-		if err := s.store.Update(ctx, strategyID, bson.M{"enabled": enabled, "updater": operator}); err != nil {
+		if err := s.strategies.Update(ctx, bson.M{"enabled": enabled, "updater": operator}, store.ByID(strategyID)); err != nil {
 			return errors.Wrap(err, "update enabled state")
 		}
 		return nil
@@ -223,12 +224,12 @@ func (s *Service) SyncStrategiesForAppInEnv(
 	operator string,
 ) {
 	// 1. 先获取目标环境，并查询该应用下命中该环境的启用策略。
-	env, err := s.envStore.Get(ctx, envID)
+	env, err := s.envStore.GetByID(ctx, envID)
 	if err != nil {
 		log.Errorf(ctx, "get env %s for alert sync failed: %v", envID.Hex(), err)
 		return
 	}
-	strategies, err := s.store.ListEnabledByAppMatchingEnv(ctx, ws.ID, appID, env.Type, envID)
+	strategies, err := s.strategies.List(ctx, EnabledMatchingEnv(ws.ID, appID, env.Type, envID), NewestFirst())
 	if err != nil {
 		log.Errorf(ctx, "list alert strategies for workspace %s app %s failed: %v", ws.ID, appID, err)
 		return
@@ -268,12 +269,14 @@ func (s *Service) ReconcileStrategiesForEnvTypeChange(
 	// 进而影响其告警策略在蓝鲸监控远端的预期状态，需要重新同步。
 	for _, appID := range affectedAppIDsForEnvTypeChange(before, after) {
 		// 查询该应用下的全部告警策略。
-		appStrategies, err := s.store.ListByApp(ctx, ws.ID, appID)
+		appStrategies, err := s.strategies.List(ctx, ByApp(ws.ID, appID), NewestFirst())
 		if err != nil {
 			return errors.Wrapf(err, "list alert strategies for app %s", appID)
 		}
 		// 查询该应用在新环境类型(after.Type)、新环境下已启用且匹配的策略。
-		matchedStrategies, err := s.store.ListEnabledByAppMatchingEnv(ctx, ws.ID, appID, after.Type, after.ID)
+		matchedStrategies, err := s.strategies.List(
+			ctx, EnabledMatchingEnv(ws.ID, appID, after.Type, after.ID), NewestFirst(),
+		)
 		if err != nil {
 			return errors.Wrapf(err, "list matched alert strategies for app %s", appID)
 		}
@@ -328,7 +331,7 @@ func (s *Service) CleanupStrategiesForAppInEnv(
 	operator string,
 ) {
 	// 1. 先查出所有在目标环境或泳道上已有远端引用的策略。
-	strategies, err := s.store.ListByAppAndRemoteEnv(ctx, ws.ID, appID, envID, trafficLaneName)
+	strategies, err := s.strategies.List(ctx, ByRemoteEnv(ws.ID, appID, envID, trafficLaneName), NewestFirst())
 	if err != nil {
 		log.Errorf(ctx, "list alert strategies for cleanup workspace %s app %s failed: %v", ws.ID, appID, err)
 		return
@@ -425,7 +428,7 @@ func (s *Service) cleanupSingleStrategy(
 			if err := s.deleteRemoteStrategies(ctx, ws, strategy, operator); err != nil {
 				return errors.Wrap(err, "delete remote strategies")
 			}
-			if err := s.store.Update(ctx, strategy.ID, bson.M{"remoteRefs": keepRefs, "updater": operator}); err != nil {
+			if err := s.strategies.Update(ctx, bson.M{"remoteRefs": keepRefs, "updater": operator}, store.ByID(strategy.ID)); err != nil {
 				return errors.Wrap(err, "update remote refs after delete")
 			}
 			return nil
@@ -435,7 +438,7 @@ func (s *Service) cleanupSingleStrategy(
 		targets := make([]remoteTargetContext, 0, len(keepRefs))
 		validKeepRefs := make([]RemoteStrategyRef, 0, len(keepRefs))
 		for _, ref := range keepRefs {
-			keepEnv, getErr := s.envStore.Get(ctx, ref.EnvID)
+			keepEnv, getErr := s.envStore.GetByID(ctx, ref.EnvID)
 			if getErr != nil {
 				log.Warnf(ctx,
 					"drop stale ref during cleanup: get env %s failed: %v, strategyID=%s code=%s",
@@ -466,7 +469,7 @@ func (s *Service) cleanupSingleStrategy(
 			if err := s.deleteRemoteStrategies(ctx, ws, strategy, operator); err != nil {
 				return errors.Wrap(err, "delete remote strategies (all stale)")
 			}
-			if err := s.store.Update(ctx, strategy.ID, bson.M{"remoteRefs": keepRefs, "updater": operator}); err != nil {
+			if err := s.strategies.Update(ctx, bson.M{"remoteRefs": keepRefs, "updater": operator}, store.ByID(strategy.ID)); err != nil {
 				return errors.Wrap(err, "update remote refs after delete (all stale)")
 			}
 			return nil
@@ -477,7 +480,7 @@ func (s *Service) cleanupSingleStrategy(
 		if reconcileErr != nil {
 			return errors.Wrap(reconcileErr, "reconcile shared remote strategy for cleanup")
 		}
-		if err := s.store.Update(ctx, strategy.ID, bson.M{"remoteRefs": newRefs, "updater": operator}); err != nil {
+		if err := s.strategies.Update(ctx, bson.M{"remoteRefs": newRefs, "updater": operator}, store.ByID(strategy.ID)); err != nil {
 			return errors.Wrap(err, "update remote refs after reconcile")
 		}
 		return nil
@@ -519,7 +522,7 @@ func (s *Service) syncStrategyToEnv(
 			if sameRemoteRefTarget(ref, env.ID, trafficLaneName) {
 				continue
 			}
-			refEnv, getErr := s.envStore.Get(ctx, ref.EnvID)
+			refEnv, getErr := s.envStore.GetByID(ctx, ref.EnvID)
 			if getErr != nil {
 				log.Warnf(ctx,
 					"drop stale ref during sync: get env %s failed: %v, strategyID=%s code=%s",
@@ -544,7 +547,7 @@ func (s *Service) syncStrategyToEnv(
 			return err
 		}
 
-		if err = s.store.Update(ctx, fresh.ID, bson.M{"remoteRefs": newRefs, "updater": operator}); err != nil {
+		if err = s.strategies.Update(ctx, bson.M{"remoteRefs": newRefs, "updater": operator}, store.ByID(fresh.ID)); err != nil {
 			return err
 		}
 		return nil
@@ -725,7 +728,7 @@ func (s *Service) withLockedStrategy(
 	defer release()
 	defer mu.Unlock()
 
-	strategy, err := s.store.Get(ctx, strategyID)
+	strategy, err := s.strategies.GetByID(ctx, strategyID)
 	if err != nil {
 		return errors.Wrap(err, getErrMsg)
 	}

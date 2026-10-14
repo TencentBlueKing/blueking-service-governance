@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -84,26 +85,21 @@ func (c *recreateOnMissingRemoteClient) SaveAlarmStrategy(
 
 var _ = Describe("AlertStrategyServiceRealDB", func() {
 	var (
-		ctx           context.Context
-		diApp         *fxtest.App
-		store         Store
-		envStore      envmodel.EnvironmentStore
-		appStore      bkmsapp.ApplicationStore
-		snapshotStore topology.ResourceSnapshotStore
-		svc           *Service
-		client        *captureAlertStrategyClient
+		ctx        context.Context
+		diApp      *fxtest.App
+		db         *mongo.Database
+		strategies *Store
+		envStore   *envmodel.EnvironmentStore
+		appStore   *bkmsapp.ApplicationStore
+		snapshots  *topology.ResourceSnapshotStore
+		svc        *Service
+		client     *captureAlertStrategyClient
 	)
 
 	buildService := func() *Service {
-		return newServiceWithClientFactory(
-			store,
-			envStore,
-			appStore,
-			snapshotStore,
-			func(_ string) (bkmapi.MonitorClient, error) {
-				return client, nil
-			},
-		)
+		return newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+			return client, nil
+		})
 	}
 
 	buildWorkspace := func(workspaceID string) *workspace.Workspace {
@@ -126,9 +122,8 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			AppIDs:      appIDs,
 			Cluster:     cluster,
 		}
-		envID, err := envStore.Create(ctx, env)
-		Expect(err).NotTo(HaveOccurred())
-		created, err := envStore.Get(ctx, envID)
+		Expect(envStore.Create(ctx, env)).To(Succeed())
+		created, err := envStore.GetByID(ctx, env.ID)
 		Expect(err).NotTo(HaveOccurred())
 		return created
 	}
@@ -143,9 +138,8 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 		if strategy.EffectiveScope.Type == "" {
 			strategy.EffectiveScope = EffectiveScope{Type: EffectiveScopeAll}
 		}
-		id, err := store.Create(ctx, strategy)
-		Expect(err).NotTo(HaveOccurred())
-		return id
+		Expect(strategies.Create(ctx, strategy)).To(Succeed())
+		return strategy.ID
 	}
 
 	createApp := func(workspaceID, appID, appName string) *bkmsapp.Application {
@@ -160,24 +154,23 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 		ctx = context.Background()
 		client = &captureAlertStrategyClient{StubClient: bkmapi.NewStub("test-user")}
 
-		Expect(testutil.CleanupCollection(collectionName)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 		Expect(testutil.CleanupCollection("environments")).To(Succeed())
 		Expect(testutil.CleanupCollection("applications")).To(Succeed())
-		Expect(testutil.CleanupCollection(topology.ResourceSnapshotsCollection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(topology.ResourceSnapshotMeta)).To(Succeed())
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
 			FxModule,
 			database.PrivateFxModule,
-			fx.Provide(
-				envmodel.NewEnvironmentStoreMongo,
-				fx.Annotate(bkmsapp.NewApplicationStoreMongo, fx.As(new(bkmsapp.ApplicationStore))),
-				topology.NewResourceSnapshotStoreMongo,
-				func(store *topology.ResourceSnapshotStoreMongo) topology.ResourceSnapshotStore { return store },
-			),
-			fx.Populate(&store, &envStore, &appStore, &snapshotStore),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		strategies = testutil.NewStore(GinkgoT(), Meta)
+		snapshots = testutil.NewStore(GinkgoT(), topology.ResourceSnapshotMeta)
 		svc = buildService()
 	})
 
@@ -380,7 +373,7 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			Expect(client.deleteReqs).To(HaveLen(1))
 			Expect(client.deleteReqs[0].IDs).To(Equal([]int64{202}))
 
-			updated, err := store.Get(ctx, strategyID)
+			updated, err := strategies.GetByID(ctx, strategyID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.RemoteRefs).To(HaveLen(1))
 			Expect(updated.RemoteRefs[0].EnvID).To(Equal(targetEnv.ID))
@@ -417,7 +410,7 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			Expect(client.deleteReqs).To(HaveLen(1))
 			Expect(client.deleteReqs[0].IDs).To(Equal([]int64{101}))
 
-			updated, getErr := store.Get(ctx, strategyID)
+			updated, getErr := strategies.GetByID(ctx, strategyID)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(updated.RemoteRefs).To(BeEmpty())
 		})
@@ -432,15 +425,9 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 				envmodel.BizCluster{ClusterID: "BCS-K8S-100018", Namespace: "ieg-bkms-pd-stage"},
 			)
 			recoverClient := &recreateOnMissingRemoteClient{StubClient: bkmapi.NewStub("test-user")}
-			recoverSvc := newServiceWithClientFactory(
-				store,
-				envStore,
-				appStore,
-				snapshotStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return recoverClient, nil
-				},
-			)
+			recoverSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return recoverClient, nil
+			})
 			strategyID := createStrategy(&AlertStrategy{
 				WorkspaceID:   "test-ws",
 				AppID:         "app-1",
@@ -470,7 +457,7 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			Expect(recoverClient.saveReqs[0].ID).To(Equal(int64(101)))
 			Expect(recoverClient.saveReqs[1].ID).To(BeZero())
 
-			updated, getErr := store.Get(ctx, strategyID)
+			updated, getErr := strategies.GetByID(ctx, strategyID)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(updated.RemoteRefs).To(HaveLen(1))
 			Expect(updated.RemoteRefs[0].RemoteStrategyID).To(Equal(int64(2001)))
@@ -484,7 +471,7 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 				AppStore: appStore,
 			}, &dbfactory.HelmApplicationOpts{WorkspaceID: "test-ws"})
 
-			err := snapshotStore.UpsertWithVersion(ctx, &topology.ResourceSnapshot{
+			err := topology.SaveWithVersion(ctx, snapshots, &topology.ResourceSnapshot{
 				AppID:           app.ID,
 				EnvName:         "prod",
 				TrafficLaneName: "",
@@ -560,7 +547,7 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			Expect(client.deleteReqs).To(HaveLen(1))
 			Expect(client.deleteReqs[0].IDs).To(Equal([]int64{102, 103}))
 
-			updated, err := store.Get(ctx, strategyID)
+			updated, err := strategies.GetByID(ctx, strategyID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.RemoteRefs).To(HaveLen(2))
 			Expect(updated.RemoteRefs).To(ContainElements(
@@ -649,7 +636,7 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 
 			svc.SyncStrategiesForAppInEnv(ctx, buildWorkspace("test-ws"), "app-1", env.ID, "feature-a", "tester")
 
-			updated, err := store.Get(ctx, strategyID)
+			updated, err := strategies.GetByID(ctx, strategyID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.RemoteRefs).To(HaveLen(2))
 			Expect(updated.RemoteRefs).To(ContainElements(
@@ -712,8 +699,8 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			})
 
 			newType := "staging"
-			Expect(envStore.Update(ctx, env.ID, &envmodel.EnvironmentUpdateData{Type: &newType})).To(Succeed())
-			after, err := envStore.Get(ctx, env.ID)
+			Expect(envmodel.UpdateEnv(ctx, db, env.ID, &envmodel.EnvironmentUpdateData{Type: &newType})).To(Succeed())
+			after, err := envStore.GetByID(ctx, env.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(
@@ -730,11 +717,11 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			Expect(client.deleteReqs[0].IDs).To(Equal([]int64{101}))
 			Expect(client.saveReqs).To(HaveLen(1))
 
-			oldTypeUpdated, err := store.Get(ctx, oldTypeStrategyID)
+			oldTypeUpdated, err := strategies.GetByID(ctx, oldTypeStrategyID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oldTypeUpdated.RemoteRefs).To(BeEmpty())
 
-			newTypeUpdated, err := store.Get(ctx, newTypeStrategyID)
+			newTypeUpdated, err := strategies.GetByID(ctx, newTypeStrategyID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newTypeUpdated.RemoteRefs).To(HaveLen(1))
 			Expect(newTypeUpdated.RemoteRefs[0].EnvID).To(Equal(env.ID))

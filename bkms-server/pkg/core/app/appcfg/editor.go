@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // EditableContentField shows which field of the app config file can be edited by the user,
@@ -57,15 +58,14 @@ type AppConfigFileEditor interface {
 
 // NewAppConfigFileEditor creates an editor object based on the given file object.
 func NewAppConfigFileEditor(
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
+	db *mongo.Database,
 	acf *AppConfigFile,
 ) (AppConfigFileEditor, error) {
 	switch acf.ContentSourceType {
 	case ContentSourceTypeLocal:
-		return newLocalAppConfigFileEditor(store, defStore, acf), nil
+		return newLocalAppConfigFileEditor(db, acf), nil
 	case ContentSourceTypeBSCP:
-		return newBSCPAppConfigFileEditor(store, defStore, acf), nil
+		return newBSCPAppConfigFileEditor(db, acf), nil
 	default:
 		return nil, errors.New("invalid content source type")
 	}
@@ -73,18 +73,16 @@ func NewAppConfigFileEditor(
 
 // LocalAppConfigFileEditor for ContentSourceType: local
 type LocalAppConfigFileEditor struct {
-	store    AppConfigFileStore
-	defStore AppConfigFileDefStore
-	acf      *AppConfigFile
+	db  *mongo.Database
+	acf *AppConfigFile
 }
 
 // newLocalAppConfigFileEditor creates a new LocalAppConfigFileEditor
 func newLocalAppConfigFileEditor(
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
+	db *mongo.Database,
 	acf *AppConfigFile,
 ) AppConfigFileEditor {
-	return &LocalAppConfigFileEditor{store: store, defStore: defStore, acf: acf}
+	return &LocalAppConfigFileEditor{db: db, acf: acf}
 }
 
 // GetEditableContentField returns the editable field of the app config file content
@@ -128,7 +126,7 @@ func (e *LocalAppConfigFileEditor) GetCompiledContent(ctx context.Context) (stri
 		return *e.acf.Content, nil
 	// Overlay 类型，需要先获取 BaseContent，再与 OverlayContent 合并
 	case AppConfigFileTypeOverlay:
-		provider, err := NewBaseContentProvider(e.store, e.defStore, e.acf)
+		provider, err := NewBaseContentProvider(e.db, e.acf)
 		if err != nil {
 			return "", errors.Wrap(err, "create base content provider")
 		}
@@ -152,18 +150,16 @@ var _ AppConfigFileEditor = (*LocalAppConfigFileEditor)(nil)
 
 // BSCPAppConfigFileEditor for ContentSourceType: BSCP
 type BSCPAppConfigFileEditor struct {
-	store    AppConfigFileStore
-	defStore AppConfigFileDefStore
-	acf      *AppConfigFile
+	db  *mongo.Database
+	acf *AppConfigFile
 }
 
 // newBSCPAppConfigFileEditor creates a new BSCPAppConfigFileEditor.
 func newBSCPAppConfigFileEditor(
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
+	db *mongo.Database,
 	acf *AppConfigFile,
 ) AppConfigFileEditor {
-	return &BSCPAppConfigFileEditor{store: store, defStore: defStore, acf: acf}
+	return &BSCPAppConfigFileEditor{db: db, acf: acf}
 }
 
 // GetEditableContentField returns the editable field of the app config file content
@@ -211,7 +207,7 @@ func (e *BSCPAppConfigFileEditor) GetCompiledContent(ctx context.Context) (strin
 
 	// Overlay 类型，需要先获取 BaseContent，再从 bscp 取配置内容合并
 	case AppConfigFileTypeOverlay:
-		provider, err := NewBaseContentProvider(e.store, e.defStore, e.acf)
+		provider, err := NewBaseContentProvider(e.db, e.acf)
 		if err != nil {
 			return "", errors.Wrap(err, "create base content provider")
 		}

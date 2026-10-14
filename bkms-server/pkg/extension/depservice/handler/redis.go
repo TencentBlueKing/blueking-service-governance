@@ -36,6 +36,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const redisPlanName = "default"
@@ -51,12 +52,7 @@ func New(registry *storereg.Registry) *Handler {
 }
 
 func (h *Handler) serviceManager() *depservice.ServiceManager {
-	return depservice.New(
-		h.registry.DepSvcStore,
-		h.registry.DepSvcInstStore,
-		h.registry.DepSvcBindingStore,
-		h.registry.EnvStore,
-	)
+	return depservice.New(h.registry.DB)
 }
 
 // CreateRedisInstance 申请创建 Redis 依赖服务实例。
@@ -279,9 +275,9 @@ func (h *Handler) usedAppIDsByInstance(
 	ctx context.Context,
 	opts *model.BindingQueryOptions,
 ) (map[bson.ObjectID][]string, error) {
-	bindings, err := h.registry.DepSvcBindingStore.List(ctx, opts)
+	bindings, err := store.Of(h.registry.DB, model.ServiceBindingMeta).List(ctx, model.ByBindingQuery(opts))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "list service bindings")
 	}
 
 	result := make(map[bson.ObjectID][]string)

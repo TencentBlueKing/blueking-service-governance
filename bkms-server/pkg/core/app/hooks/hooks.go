@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -33,10 +34,10 @@ import (
 const CleanupVisibleEnvNamesHookName = "app.cleanup_visible_env_names"
 
 // RegisterDeleteHooks 注册应用模块的环境删除 Hook。
-func RegisterDeleteHooks(appStore bkmsapp.ApplicationStore) {
+func RegisterDeleteHooks(db *mongo.Database) {
 	bkmsenv.RegisterDeleteHook(
 		CleanupVisibleEnvNamesHookName,
-		NewCleanupVisibleEnvNamesHook(appStore),
+		NewCleanupVisibleEnvNamesHook(db),
 	)
 }
 
@@ -44,12 +45,12 @@ func RegisterDeleteHooks(appStore bkmsapp.ApplicationStore) {
 // 特性环境不会写入可见名单，因此直接跳过。
 //
 // 注意：空名单表示「未配置 = 不限制」，摘掉最后一个 name 后应用将可以部署到该空间的任意标准环境。
-func NewCleanupVisibleEnvNamesHook(appStore bkmsapp.ApplicationStore) bkmsenv.DeleteHook {
+func NewCleanupVisibleEnvNamesHook(db *mongo.Database) bkmsenv.DeleteHook {
 	return func(ctx context.Context, environment envmodel.Environment) error {
 		if environment.IsFeatureEnv() {
 			return nil
 		}
-		if err := appStore.RemoveVisibleEnvName(ctx, environment.WorkspaceID, environment.Name); err != nil {
+		if err := bkmsapp.RemoveVisibleEnvName(ctx, db, environment.WorkspaceID, environment.Name); err != nil {
 			return errors.Wrapf(
 				err,
 				"cleanup visible env names for workspace %s env %s",

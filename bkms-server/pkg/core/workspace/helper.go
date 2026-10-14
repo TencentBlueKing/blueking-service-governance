@@ -25,10 +25,12 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // WorkspaceWithOpTime workspace 信息 + 用户最近操作时间
@@ -39,16 +41,10 @@ type WorkspaceWithOpTime struct {
 
 // ListSortByOpTime 查询所有 workspace 并按指定用户的最近操作时间倒序排序。
 // 不包含权限过滤
-func ListSortByOpTime(
-	ctx context.Context,
-	wsStore WorkspaceStore,
-	opStore audit.OperationRecordStore,
-	username string,
-) ([]WorkspaceWithOpTime, error) {
-	readyState := StateReady
-	workspaces, err := wsStore.List(ctx, &ListOptions{State: &readyState})
+func ListSortByOpTime(ctx context.Context, db *mongo.Database, username string) ([]WorkspaceWithOpTime, error) {
+	workspaces, err := store.Of(db, Meta).List(ctx, InState(StateReady))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "list ready workspaces")
 	}
 	if len(workspaces) == 0 {
 		return nil, nil
@@ -56,9 +52,9 @@ func ListSortByOpTime(
 
 	workspaceIDs := lo.Map(workspaces, func(ws Workspace, _ int) string { return ws.ID })
 
-	latestOpTimes, err := opStore.GetLatestOperationTimesByWorkspacesForUser(ctx, workspaceIDs, username)
+	latestOpTimes, err := audit.GetLatestOperationTimesByWorkspacesForUser(ctx, db, workspaceIDs, username)
 	if err != nil {
-		log.Warnf(ctx, "get latest operation times by workspaces for user: %s: %v", username, err)
+		log.Warnf(ctx, "list workspaces sorted by operation time: %v", err)
 		latestOpTimes = nil
 	}
 

@@ -104,25 +104,23 @@ func NewWebServerCmd() *cobra.Command {
 			}
 			workload.InitPlugin(
 				appcfg.NewMountableFileProvider(
-					reg.AppConfigFileStore,
-					reg.AppConfigFileDefStore,
-					reg.AppConfigFileVersionStore,
+					reg.DB,
 				),
-				reg.PolarisConfigStore,
+				reg.DB,
 			)
 
 			// 加载流水线模板
 			// FIXME 建议该 Reload 逻辑放在 migration 中完成
 			// 使用 Errorf + return 而不是 log.Fatalf → os.Exit，确保上方注册的 shutdownAPM defer 能够被执行，
 			// 从而把已缓冲的 span 完整刷到蓝鲸监控采集端
-			if err = bkci.ReloadPipelineTemplates(cmd.Context()); err != nil {
+			if err = bkci.ReloadPipelineTemplates(cmd.Context(), reg.DB); err != nil {
 				log.Errorf(ctx, "failed to reload pipeline templates: %v", err)
 				return err
 			}
 
 			// 加载内置集群 Addon 定义
 			// 与 ReloadPipelineTemplates 保持一致，避免绕过 shutdownAPM defer
-			if err = clusteraddon.ReloadBuiltinClusterAddons(cmd.Context()); err != nil {
+			if err = clusteraddon.ReloadBuiltinClusterAddons(cmd.Context(), reg.DB); err != nil {
 				log.Errorf(ctx, "failed to reload builtin cluster addons: %v", err)
 				return err
 			}

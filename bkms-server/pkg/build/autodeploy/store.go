@@ -20,185 +20,68 @@ package autodeploy
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
-)
 
-const collectionName = "build_auto_deploy_records"
+	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
 
 // ErrRecordNotFound build auto deploy record not found error
 var ErrRecordNotFound = errors.New("build auto deploy record not found")
 
-// RecordStore build auto deploy 记录存储接口。
-type RecordStore interface {
-	Create(ctx context.Context, record *Record) error
-	Update(ctx context.Context, record *Record) error
-	GetLatest(ctx context.Context, appID, envName, trafficLaneName string) (*Record, error)
-	// ListLatestByApps 返回一批应用在指定泳道下各环境最新的一条记录。
-	// 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
-	ListLatestByApps(
-		ctx context.Context, appIDs []string, trafficLaneName string,
-	) (map[string]map[string]*Record, error)
-	GetByBuildID(ctx context.Context, appID, buildID string) (*Record, error)
-	GetByDeployID(ctx context.Context, appID, deployID string) (*Record, error)
+// RecordStore build auto deploy 记录存储
+type RecordStore = store.GenericStore[Record]
+
+// RecordMeta build auto deploy 记录的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：appID + buildID
+// - 查询提速：appID + envName + trafficLaneName + createdAt(倒序)
+// - 查询提速：appID + trafficLaneName + createdAt(倒序)
+// - 条件唯一：appID + deployID（仅 deployID 非空）
+var RecordMeta = store.Meta[Record]{
+	Collection: "build_auto_deploy_records",
+	NotFound:   ErrRecordNotFound,
 }
 
-var _ RecordStore = &RecordStoreMongo{}
-
-// RecordStoreMongo 基于 MongoDB 的实现。
-type RecordStoreMongo struct {
-	collection *mongo.Collection
+// ByBuild 按应用与 buildID 匹配记录
+func ByBuild(appID, buildID string) store.Opt {
+	return store.Combine(store.Where("appID", appID), store.Where("buildID", buildID))
 }
 
-// NewRecordStoreMongo 创建 build auto deploy record store。
-func NewRecordStoreMongo(client *mongo.Client, dbName string) (*RecordStoreMongo, error) {
-	coll := client.Database(dbName).Collection(collectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：appID + buildID
-	// - 查询提速：appID + envName + trafficLaneName + createdAt(倒序)
-	// - 查询提速：appID + trafficLaneName + createdAt(倒序)
-	// - 条件唯一：appID + deployID（仅 deployID 非空）
-	return &RecordStoreMongo{collection: coll}, nil
+// ByDeploy 按应用与 deployID 匹配记录
+func ByDeploy(appID, deployID string) store.Opt {
+	return store.Combine(store.Where("appID", appID), store.Where("deployID", deployID))
 }
 
-// Create 创建记录
-func (s *RecordStoreMongo) Create(ctx context.Context, record *Record) error {
-	timeNow := time.Now()
-	record.CreatedAt = timeNow
-	record.UpdatedAt = timeNow
-	if _, err := s.collection.InsertOne(ctx, record); err != nil {
-		return errors.Wrap(err, "create build auto deploy record")
-	}
-	return nil
+// UpdateRecord 更新记录的状态字段（deployID、stage、status、message、endedAt），记录不存在时返回 ErrRecordNotFound
+func UpdateRecord(ctx context.Context, db *mongo.Database, record *Record) error {
+	err := store.Of(db, RecordMeta).Update(ctx, record,
+		store.UpdateSelected("deployID", "stage", "status", "message", "endedAt"),
+		store.ByID(record.ID),
+	)
+	return errors.Wrapf(err, "update build auto deploy record %s", record.ID.Hex())
 }
 
-// Update 更新记录
-func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
-	filter := bson.M{"_id": record.ID}
-	updateDoc := bson.M{"$set": bson.M{
-		"deployID":  record.DeployID,
-		"stage":     record.Stage,
-		"status":    record.Status,
-		"message":   record.Message,
-		"endedAt":   record.EndedAt,
-		"updatedAt": time.Now(),
-	}}
-	ret, err := s.collection.UpdateOne(ctx, filter, updateDoc)
+// GetLatest 获取应用在指定环境、泳道下最新的一条记录，不存在时返回 ErrRecordNotFound
+func GetLatest(ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string) (*Record, error) {
+	record, err := store.Of(db, RecordMeta).Get(ctx,
+		deploytypes.ByAppEnvLane(appID, envName, trafficLaneName), deploytypes.NewestFirst(),
+	)
 	if err != nil {
-		return errors.Wrapf(err, "update build auto deploy record %s", record.ID.Hex())
+		return nil, errors.Wrapf(err, "get latest build auto deploy record of app %s env %s", appID, envName)
 	}
-	if ret.MatchedCount == 0 {
-		return ErrRecordNotFound
-	}
-	return nil
+	return record, nil
 }
 
-// GetLatest 获取最新记录
-func (s *RecordStoreMongo) GetLatest(
-	ctx context.Context,
-	appID, envName, trafficLaneName string,
-) (*Record, error) {
-	var record Record
-	err := s.collection.FindOne(
-		ctx,
-		bson.M{
-			"appID":           appID,
-			"envName":         envName,
-			"trafficLaneName": trafficLaneName,
-		},
-		options.FindOne().SetSort(bson.D{{"createdAt", -1}}),
-	).Decode(&record)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrRecordNotFound
-		}
-		return nil, errors.Wrap(err, "find latest build auto deploy record")
-	}
-	return &record, nil
-}
-
-// ListLatestByApps 返回一批 app 在指定泳道下各环境最新记录（按 createdAt 倒序取每组第一条）。
+// ListLatestByApps 返回一批应用在指定泳道下各环境最新的一条记录。
 // 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
-func (s *RecordStoreMongo) ListLatestByApps(
-	ctx context.Context,
-	appIDs []string, trafficLaneName string,
+func ListLatestByApps(
+	ctx context.Context, db *mongo.Database, appIDs []string, trafficLaneName string,
 ) (map[string]map[string]*Record, error) {
-	out := make(map[string]map[string]*Record, len(appIDs))
-	if len(appIDs) == 0 {
-		return out, nil
-	}
-
-	pipeline := bson.A{
-		bson.M{"$match": bson.M{
-			"appID":           bson.M{"$in": lo.Uniq(appIDs)},
-			"trafficLaneName": trafficLaneName,
-		}},
-		bson.M{"$sort": bson.D{
-			{Key: "appID", Value: 1},
-			{Key: "trafficLaneName", Value: 1},
-			{Key: "createdAt", Value: -1},
-		}},
-		bson.M{"$group": bson.M{
-			"_id": bson.M{"appID": "$appID", "envName": "$envName"},
-			"doc": bson.M{"$first": "$$ROOT"},
-		}},
-		bson.M{"$replaceRoot": bson.M{"newRoot": "$doc"}},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, errors.Wrap(err, "aggregate latest build auto deploy records for apps")
-	}
-	defer cursor.Close(ctx)
-
-	for cursor.Next(ctx) {
-		var record Record
-		if err := cursor.Decode(&record); err != nil {
-			return nil, errors.Wrap(err, "decode latest build auto deploy record for apps")
-		}
-		rec := record
-		if _, ok := out[rec.AppID]; !ok {
-			out[rec.AppID] = make(map[string]*Record)
-		}
-		out[rec.AppID][rec.EnvName] = &rec
-	}
-	if err := cursor.Err(); err != nil {
-		return nil, errors.Wrap(err, "iterate latest build auto deploy records for apps")
-	}
-	return out, nil
-}
-
-// GetByBuildID 根据 buildID 获取记录
-func (s *RecordStoreMongo) GetByBuildID(ctx context.Context, appID, buildID string) (*Record, error) {
-	record, err := s.findOne(ctx, bson.M{"appID": appID, "buildID": buildID})
-	if err != nil {
-		return nil, errors.Wrap(err, "find build auto deploy record by buildID")
-	}
-	return record, nil
-}
-
-// GetByDeployID 根据 deployID 获取记录
-func (s *RecordStoreMongo) GetByDeployID(ctx context.Context, appID, deployID string) (*Record, error) {
-	record, err := s.findOne(ctx, bson.M{"appID": appID, "deployID": deployID})
-	if err != nil {
-		return nil, errors.Wrap(err, "find build auto deploy record by deployID")
-	}
-	return record, nil
-}
-
-func (s *RecordStoreMongo) findOne(ctx context.Context, filter bson.M) (*Record, error) {
-	var record Record
-	err := s.collection.FindOne(ctx, filter).Decode(&record)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrRecordNotFound
-		}
-		return nil, err
-	}
-	return &record, nil
+	return deploytypes.ListLatestByApps(ctx, store.Of(db, RecordMeta), appIDs, trafficLaneName,
+		func(r *Record) (string, string) { return r.AppID, r.EnvName },
+	)
 }

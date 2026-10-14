@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -29,6 +30,7 @@ import (
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -48,9 +50,10 @@ type PreDeployCheckParams struct {
 
 // PreDeployChecker 部署前检查器
 type PreDeployChecker struct {
-	envStore       envmodel.EnvironmentStore
-	promotionStore promotion.PromotionStore
-	snapshotSvc    *snapshot.Service
+	envStore    *envmodel.EnvironmentStore
+	db          *mongo.Database
+	promotions  *promotion.Store
+	snapshotSvc *snapshot.Service
 }
 
 // NewPreDeployChecker 创建检查器，适用于 app model 应用 / Helm 应用等的部署前检查
@@ -58,14 +61,14 @@ type PreDeployChecker struct {
 //   - 检查基线泳道是否已部署
 //   - 检查部署到生产环境的镜像是否已晋级
 func NewPreDeployChecker(
-	envStore envmodel.EnvironmentStore,
-	promotionStore promotion.PromotionStore,
+	db *mongo.Database,
 	snapshotSvc *snapshot.Service,
 ) *PreDeployChecker {
 	return &PreDeployChecker{
-		envStore:       envStore,
-		promotionStore: promotionStore,
-		snapshotSvc:    snapshotSvc,
+		envStore:    store.Of(db, envmodel.EnvMeta),
+		db:          db,
+		promotions:  store.Of(db, promotion.Meta),
+		snapshotSvc: snapshotSvc,
 	}
 }
 
@@ -90,7 +93,7 @@ func (c *PreDeployChecker) checkIfImagePromoted(ctx context.Context, params *Pre
 	}
 
 	// 查询目标环境信息，获取环境类型
-	env, err := c.envStore.GetByName(ctx, params.WorkspaceID, params.AppID, params.EnvName)
+	env, err := c.envStore.Get(ctx, envmodel.AppEnvByName(params.WorkspaceID, params.AppID, params.EnvName))
 	if err != nil {
 		return errors.Wrapf(err, "get env %s in workspace %s", params.EnvName, params.WorkspaceID)
 	}
@@ -107,7 +110,7 @@ func (c *PreDeployChecker) checkIfImagePromoted(ctx context.Context, params *Pre
 	}
 
 	// 查询指定 tag 是否已晋级
-	exists, err := c.promotionStore.IsTagPromoted(ctx, params.AppID, repoInfo.RepoKey, params.ImageTag)
+	exists, err := c.promotions.Exists(ctx, promotion.ByTag(params.AppID, repoInfo.RepoKey, params.ImageTag))
 	if err != nil {
 		return errors.Wrapf(err, "check promotion exists for app %s tag %s", params.AppID, params.ImageTag)
 	}
@@ -144,9 +147,15 @@ func (c *PreDeployChecker) checkIfBaselineLaneDeployed(ctx context.Context, para
 
 	switch params.AppType {
 	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:
-		return helmdeploy.CheckIfTrafficLaneDeployed(ctx, params.AppID, params.EnvName, baselineLane.LaneName)
+		return helmdeploy.CheckIfTrafficLaneDeployed(ctx, c.db, params.AppID, params.EnvName, baselineLane.LaneName)
 	case bkmsapp.AppTypeTRPC, bkmsapp.AppTypeTAF:
-		return appmodeldeploy.CheckIfTrafficLaneDeployed(ctx, params.AppID, params.EnvName, baselineLane.LaneName)
+		return appmodeldeploy.CheckIfTrafficLaneDeployed(
+			ctx,
+			c.db,
+			params.AppID,
+			params.EnvName,
+			baselineLane.LaneName,
+		)
 	default:
 		return errors.Errorf("pre deploy checker not support app type %s", params.AppType)
 	}

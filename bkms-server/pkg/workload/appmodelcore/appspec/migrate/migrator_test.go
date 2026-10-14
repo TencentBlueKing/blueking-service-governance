@@ -6,15 +6,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/migrate"
@@ -24,38 +23,25 @@ const tkeRouteEniName = "tkeRouteEni"
 
 var _ = Describe("tkeRouteEni component migration", func() {
 	var (
-		ctx           context.Context
-		diApp         *fxtest.App
-		appStore      bkmsapp.ApplicationStore
-		appModelStore appmodel.AppModelStore
-		appSpecStore  appspec.AppSpecStore
-		wsCompStore   workspace.WorkspaceCompsStore
-		compDefStore  component.ComponentDefStore
-		migrator      *migrate.Migrator
+		ctx          context.Context
+		appStore     *bkmsapp.ApplicationStore
+		db           *mongo.Database
+		compDefStore *component.ComponentDefStore
+		migrator     *migrate.Migrator
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		Expect(testutil.CleanupCollection(appmodel.CollectionName)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(appmodel.AppModelMeta)).To(Succeed())
 		Expect(testutil.CleanupCollection("app_specs")).To(Succeed())
 		Expect(testutil.CleanupCollection("workspace_components")).To(Succeed())
 		Expect(testutil.CleanupCollection("component_defs")).To(Succeed())
 
-		diApp = fxtest.New(
-			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
-			workspace.FxModule,
-			component.FxModule,
-			fx.Populate(&appStore, &appModelStore, &appSpecStore, &wsCompStore, &compDefStore),
-		)
-		diApp.RequireStart()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		db = testutil.NewDB(GinkgoT())
+		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 
-		migrator = migrate.New(
-			database.Client().Database(database.Name()),
-			appStore, appSpecStore, appModelStore, wsCompStore, compDefStore,
-		)
+		migrator = migrate.New(db)
 		Expect(compDefStore.Create(ctx, &component.ComponentDef{
 			Name:    tkeRouteEniName,
 			Version: component.DefaultComponentDefVersion,
@@ -68,17 +54,13 @@ var _ = Describe("tkeRouteEni component migration", func() {
 		})).To(Succeed())
 	})
 
-	AfterEach(func() {
-		diApp.RequireStop()
-	})
-
 	createAppWithDirectMount := func() *bkmsapp.Application {
 		app := dbfactory.Application(ctx, appStore)
-		Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID:    app.ID,
 			Workload: appmodel.Workload{Type: appmodel.WorkloadTypeTrpc, Name: app.Name},
 		})).To(Succeed())
-		Expect(appModelStore.AddComponent(ctx, app.ID, &component.Component{
+		Expect(appmodel.AddComponent(ctx, db, app.ID, &component.Component{
 			Name: "tkerouteeni-aaaaa",
 			ComponentInst: component.ComponentInst{
 				Type: tkeRouteEniName, Version: component.DefaultComponentDefVersion,
@@ -94,7 +76,7 @@ var _ = Describe("tkeRouteEni component migration", func() {
 		Expect(result.AppSpecWrites).To(Equal(1))
 		Expect(result.AppComponentsRemoved).To(Equal(1))
 
-		am, err := appModelStore.GetAppModel(ctx, app.ID)
+		am, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(am.Components).To(HaveLen(1))
 	})
@@ -106,11 +88,11 @@ var _ = Describe("tkeRouteEni component migration", func() {
 		Expect(result.AppSpecWrites).To(Equal(1))
 		Expect(result.AppComponentsRemoved).To(Equal(1))
 
-		spec, err := appSpecStore.Get(ctx, app.ID, appspec.DefaultEnvName)
+		spec, err := store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(app.ID, appspec.DefaultEnvName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*spec.TkeRouteEni.Enabled).To(BeTrue())
 
-		am, err := appModelStore.GetAppModel(ctx, app.ID)
+		am, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(am.Components).To(BeEmpty())
 	})
@@ -118,7 +100,7 @@ var _ = Describe("tkeRouteEni component migration", func() {
 	It("skips AppSpec write when already enabled", func() {
 		app := createAppWithDirectMount()
 		Expect(appspec.SetDefaultSection(
-			ctx, appSpecStore, appModelStore, app.ID,
+			ctx, db, app.ID,
 			appspec.TkeRouteEniSection,
 			&appspec.TkeRouteEniSpec{Enabled: lo.ToPtr(true)},
 			appspec.SectionWriteModeReplace,
@@ -129,14 +111,14 @@ var _ = Describe("tkeRouteEni component migration", func() {
 		Expect(result.AppSpecWrites).To(BeZero())
 		Expect(result.AppComponentsRemoved).To(Equal(1))
 
-		am, err := appModelStore.GetAppModel(ctx, app.ID)
+		am, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(am.Components).To(BeEmpty())
 	})
 
 	It("expands workspace environment scope and cleans refs", func() {
 		app := dbfactory.Application(ctx, appStore)
-		Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID:    app.ID,
 			Workload: appmodel.Workload{Type: appmodel.WorkloadTypeTrpc, Name: app.Name},
 		})).To(Succeed())
@@ -150,8 +132,8 @@ var _ = Describe("tkeRouteEni component migration", func() {
 			ScopeType:     component.ScopeTypeEnvironment,
 			ScopeEnvNames: []string{"prod", "stag"},
 		}
-		Expect(wsCompStore.Add(ctx, wsComp)).To(Succeed())
-		Expect(appModelStore.AddComponent(ctx, app.ID, &component.Component{
+		Expect(workspace.AddComponents(ctx, db, wsComp)).To(Succeed())
+		Expect(appmodel.AddComponent(ctx, db, app.ID, &component.Component{
 			Name:         "ref-tkerouteeni",
 			ComponentRef: component.ComponentRef{RefWorkspaceCompName: wsComp.Name},
 		})).To(Succeed())
@@ -162,11 +144,12 @@ var _ = Describe("tkeRouteEni component migration", func() {
 		Expect(result.WorkspaceComponentsRemoved).To(Equal(1))
 
 		for _, envName := range []string{"prod", "stag"} {
-			spec, getErr := appSpecStore.Get(ctx, app.ID, envName)
+			spec, getErr := store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(app.ID, envName))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(*spec.TkeRouteEni.Enabled).To(BeTrue())
 		}
-		_, err = wsCompStore.GetByName(ctx, app.WorkspaceID, wsComp.Name)
+		_, err = store.Of(db, workspace.ComponentMeta).
+			Get(ctx, workspace.ComponentByName(app.WorkspaceID, wsComp.Name))
 		Expect(err).To(MatchError(workspace.ErrComponentNotFound))
 	})
 
@@ -180,13 +163,13 @@ var _ = Describe("tkeRouteEni component migration", func() {
 			WorkspaceID: "ws-b",
 		})
 		for _, app := range []*bkmsapp.Application{appA, appB} {
-			Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID:    app.ID,
 				Workload: appmodel.Workload{Type: appmodel.WorkloadTypeTrpc, Name: app.Name},
 			})).To(Succeed())
 		}
 
-		Expect(wsCompStore.Add(ctx,
+		Expect(workspace.AddComponents(ctx, db,
 			&workspace.Component{
 				ComponentInst: component.ComponentInst{
 					Type: tkeRouteEniName, Version: component.DefaultComponentDefVersion,
@@ -203,11 +186,11 @@ var _ = Describe("tkeRouteEni component migration", func() {
 			},
 		)).To(Succeed())
 
-		Expect(appModelStore.AddComponent(ctx, appA.ID, &component.Component{
+		Expect(appmodel.AddComponent(ctx, db, appA.ID, &component.Component{
 			Name:         "ref-a",
 			ComponentRef: component.ComponentRef{RefWorkspaceCompName: sharedName},
 		})).To(Succeed())
-		Expect(appModelStore.AddComponent(ctx, appB.ID, &component.Component{
+		Expect(appmodel.AddComponent(ctx, db, appB.ID, &component.Component{
 			Name:         "ref-b",
 			ComponentRef: component.ComponentRef{RefWorkspaceCompName: sharedName},
 		})).To(Succeed())
@@ -217,16 +200,16 @@ var _ = Describe("tkeRouteEni component migration", func() {
 		Expect(result.AppSpecWrites).To(Equal(2))
 		Expect(result.WorkspaceComponentsRemoved).To(Equal(2))
 
-		specA, err := appSpecStore.Get(ctx, appA.ID, "prod")
+		specA, err := store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(appA.ID, "prod"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*specA.TkeRouteEni.Enabled).To(BeTrue())
-		_, err = appSpecStore.Get(ctx, appA.ID, "stag")
+		_, err = store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(appA.ID, "stag"))
 		Expect(err).To(MatchError(appspec.ErrAppSpecNotFound))
 
-		specB, err := appSpecStore.Get(ctx, appB.ID, "stag")
+		specB, err := store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(appB.ID, "stag"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*specB.TkeRouteEni.Enabled).To(BeTrue())
-		_, err = appSpecStore.Get(ctx, appB.ID, "prod")
+		_, err = store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(appB.ID, "prod"))
 		Expect(err).To(MatchError(appspec.ErrAppSpecNotFound))
 	})
 })

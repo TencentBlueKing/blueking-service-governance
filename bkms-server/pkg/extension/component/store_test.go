@@ -25,21 +25,34 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("ComponentDefStoreMongo", func() {
-	var compDefStore component.ComponentDefStore
+var _ = Describe("ComponentDefStore", func() {
+	var compDefStore *component.ComponentDefStore
 	var ctx context.Context
 	var compDef *component.ComponentDef
 
-	BeforeEach(func() {
-		var err error
-
-		compDefStore, err = component.NewComponentDefStoreMongo(database.Client(), database.Name())
+	get := func(name, version string) (*component.ComponentDef, error) {
+		return compDefStore.Get(ctx, component.ByNameVersion(name, version))
+	}
+	deleteDef := func(d *component.ComponentDef) {
+		Expect(compDefStore.DeleteIfExists(ctx, component.ByNameVersion(d.Name, d.Version))).To(Succeed())
+	}
+	listNames := func(opts ...store.Opt) []string {
+		results, err := compDefStore.List(ctx, opts...)
 		Expect(err).NotTo(HaveOccurred())
+		names := make([]string, 0, len(results))
+		for _, r := range results {
+			names = append(names, r.Name)
+		}
+		return names
+	}
 
+	BeforeEach(func() {
+		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 		ctx = context.Background()
 
 		// The default component for testing
@@ -55,29 +68,18 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 	})
 
 	AfterEach(func() {
-		_, _ = compDefStore.Delete(ctx, compDef.Name, compDef.Version)
+		deleteDef(compDef)
 	})
 
 	Describe("Create", func() {
 		Context("creating a valid component-def", func() {
-			It("should create and get successfully", func() {
-				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.Name).To(Equal(compDef.Name))
-				Expect(retrieved.Version).To(Equal(compDef.Version))
-				Expect(retrieved.DisplayName).To(Equal(compDef.DisplayName))
-			})
-
 			DescribeTable("should persist fragment fields as arrays",
 				func(patchers, specs []string) {
 					compDef.Patchers = patchers
 					compDef.Specs = specs
 					Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
 
-					retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
+					retrieved, err := get(compDef.Name, compDef.Version)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(retrieved.Patchers).NotTo(BeNil())
 					Expect(retrieved.Specs).NotTo(BeNil())
@@ -93,57 +95,53 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 				Expect(err).To(MatchError(component.ErrComponentDefAlreadyExists))
 			})
 		})
+
+		It("should reject an invalid component-def", func() {
+			compDef.Patchers = []string{"not: [valid"}
+			Expect(compDefStore.Create(ctx, compDef)).To(MatchError(ContainSubstring("component validation failed")))
+			_, err := get(compDef.Name, compDef.Version)
+			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
+		})
 	})
 
-	Describe("Upsert", func() {
+	Describe("UpsertDef", func() {
+		It("should create the component-def when it does not exist", func() {
+			Expect(component.UpsertDef(ctx, compDefStore, compDef)).To(Succeed())
+
+			retrieved, err := get(compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(retrieved.Description).To(Equal(compDef.Description))
+			Expect(retrieved.Specs).To(BeEmpty())
+			Expect(retrieved.Specs).NotTo(BeNil())
+		})
+
+		It("should keep instance counts maintained by UpdateInstanceCount", func() {
+			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
+			Expect(component.UpdateInstanceCount(
+				ctx, compDefStore, compDef.Name, component.FieldWorkspaceCompInstance, 2,
+			)).To(Succeed())
+
+			// 调用方对象中的计数是旧值（0），覆盖时不应写回
+			compDef.DisplayName = "Updated Name"
+			Expect(component.UpsertDef(ctx, compDefStore, compDef)).To(Succeed())
+
+			retrieved, err := get(compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(retrieved.DisplayName).To(Equal("Updated Name"))
+			Expect(retrieved.WorkspaceCompInstanceCount).To(Equal(int32(2)))
+		})
+
 		It("should update an existing component-def", func() {
 			err := compDefStore.Create(ctx, compDef)
 			Expect(err).NotTo(HaveOccurred())
 
 			compDef.DisplayName = "Updated Name"
-			err = compDefStore.Upsert(ctx, compDef)
+			err = component.UpsertDef(ctx, compDefStore, compDef)
 			Expect(err).NotTo(HaveOccurred())
 
-			retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
+			retrieved, err := get(compDef.Name, compDef.Version)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(retrieved.DisplayName).To(Equal("Updated Name"))
-		})
-
-		It("createdAt and updatedAt fields should behaviour normally", func() {
-			err := compDefStore.Create(ctx, compDef)
-			Expect(err).NotTo(HaveOccurred())
-
-			retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.CreatedAt.IsZero()).To(BeFalse())
-			Expect(retrieved.UpdatedAt.IsZero()).To(BeFalse())
-
-			oldCreatedAt := retrieved.CreatedAt
-			oldUpdatedAt := retrieved.UpdatedAt
-			compDef.DisplayName = "Updated Name"
-			err = compDefStore.Upsert(ctx, compDef)
-			Expect(err).NotTo(HaveOccurred())
-
-			retrieved, err = compDefStore.Get(ctx, compDef.Name, compDef.Version)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.CreatedAt).To(Equal(oldCreatedAt))
-			Expect(retrieved.UpdatedAt.Compare(oldUpdatedAt)).To(BeElementOf(0, 1))
-		})
-	})
-
-	Describe("Delete", func() {
-		Context("when deleting an existing component-def", func() {
-			It("should delete successfully", func() {
-				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				cnt, err := compDefStore.Delete(ctx, compDef.Name, compDef.Version)
-				Expect(cnt).To(Equal(int64(1)))
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = compDefStore.Get(ctx, compDef.Name, compDef.Version)
-				Expect(err).To(Equal(component.ErrComponentDefNotFound))
-			})
 		})
 	})
 
@@ -179,31 +177,8 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 		})
 
 		AfterEach(func() {
-			_, _ = compDefStore.Delete(ctx, compDef2.Name, compDef2.Version)
-			_, _ = compDefStore.Delete(ctx, compDef3.Name, compDef3.Version)
-		})
-
-		Context("listing all component-defs without filters", func() {
-			It("should return all component-defs", func() {
-				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
-				err = compDefStore.Create(ctx, compDef2)
-				Expect(err).NotTo(HaveOccurred())
-
-				results, err := compDefStore.List(ctx, nil)
-				Expect(err).NotTo(HaveOccurred())
-				// builtin 会引入默认组件，因此不能直接通过 list 返回的总量判断
-				count := 0
-				for _, r := range results {
-					if r.Name == compDef.Name && r.Version == compDef.Version {
-						count++
-					}
-					if r.Name == compDef2.Name && r.Version == compDef2.Version {
-						count++
-					}
-				}
-				Expect(count).To(Equal(2))
-			})
+			deleteDef(compDef2)
+			deleteDef(compDef3)
 		})
 
 		Context("filtering by workspace ID", func() {
@@ -213,16 +188,8 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 				err = compDefStore.Create(ctx, compDef3) // workspace-specific
 				Expect(err).NotTo(HaveOccurred())
 
-				results, err := compDefStore.List(ctx, &component.ListOptions{
-					ScopeWorkspaceID: "ws-test-001",
-				})
-				Expect(err).NotTo(HaveOccurred())
-
+				names := listNames(component.UsableInWorkspace("ws-test-001"))
 				// 应该包含 global 和 workspace-specific 的组件
-				names := make([]string, 0, len(results))
-				for _, r := range results {
-					names = append(names, r.Name)
-				}
 				Expect(names).To(ContainElement(compDef2.Name))
 				Expect(names).To(ContainElement(compDef3.Name))
 				// 对于没配置可见性/不满足可见性的组件，不应该返回
@@ -233,27 +200,15 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 				err := compDefStore.Create(ctx, compDef3) // workspace-specific for ws-test-001, ws-test-002
 				Expect(err).NotTo(HaveOccurred())
 
-				results, err := compDefStore.List(ctx, &component.ListOptions{
-					ScopeWorkspaceID: "ws-other",
-				})
-				Expect(err).NotTo(HaveOccurred())
-
 				// 不应该包含 compDef3
-				for _, r := range results {
-					Expect(r.Name).NotTo(Equal(compDef3.Name))
-				}
+				Expect(listNames(component.UsableInWorkspace("ws-other"))).NotTo(ContainElement(compDef3.Name))
 			})
 
 			It("should return only component-defs that can be managed by the workspace", func() {
 				err := compDefStore.Create(ctx, compDef3) // workspace-specific for ws-test-001, ws-test-002
 				Expect(err).NotTo(HaveOccurred())
 
-				results, err := compDefStore.List(ctx, &component.ListOptions{
-					ManagedByWorkspaceID: "ws-test-001",
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(len(results)).To(Equal(1))
-				Expect(results[0].Name).To(Equal(compDef3.Name))
+				Expect(listNames(component.ManagedByWorkspace("ws-test-001"))).To(Equal([]string{compDef3.Name}))
 			})
 		})
 
@@ -262,32 +217,14 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 				err := compDefStore.Create(ctx, compDef2)
 				Expect(err).NotTo(HaveOccurred())
 
-				results, err := compDefStore.List(ctx, &component.ListOptions{
-					Keyword: "list-test",
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				names := make([]string, 0, len(results))
-				for _, r := range results {
-					names = append(names, r.Name)
-				}
-				Expect(names).To(ContainElement(compDef2.Name))
+				Expect(listNames(component.KeywordMatches("list-test"))).To(ContainElement(compDef2.Name))
 			})
 
 			It("should search in displayName (case insensitive)", func() {
 				err := compDefStore.Create(ctx, compDef3)
 				Expect(err).NotTo(HaveOccurred())
 
-				results, err := compDefStore.List(ctx, &component.ListOptions{
-					Keyword: "workspace specific",
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				names := make([]string, 0, len(results))
-				for _, r := range results {
-					names = append(names, r.Name)
-				}
-				Expect(names).To(ContainElement(compDef3.Name))
+				Expect(listNames(component.KeywordMatches("workspace specific"))).To(ContainElement(compDef3.Name))
 			})
 		})
 
@@ -301,18 +238,15 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// 按 keyword 过滤
-				results, err := compDefStore.List(ctx, &component.ListOptions{
-					Keyword: "Workspace",
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// 应该只返回 compDef3
-				names := make([]string, 0, len(results))
-				for _, r := range results {
-					names = append(names, r.Name)
-				}
+				names := listNames(component.KeywordMatches("Workspace"))
 				Expect(names).To(ContainElement(compDef3.Name))
 				Expect(names).NotTo(ContainElement(compDef2.Name))
+
+				// 工作空间范围与关键字各自是一组 $or，组合后两组条件都要满足
+				names = listNames(component.UsableInWorkspace("ws-test-001"), component.KeywordMatches("list test"))
+				Expect(names).To(ContainElement(compDef2.Name))
+				Expect(names).NotTo(ContainElement(compDef3.Name))
+				Expect(names).NotTo(ContainElement(compDef.Name))
 			})
 		})
 	})
@@ -324,11 +258,17 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				for i := 0; i < 5; i++ {
-					err = compDefStore.UpdateInstanceCount(ctx, compDef.Name, component.FieldAppCompInstance, 1)
+					err = component.UpdateInstanceCount(
+						ctx,
+						compDefStore,
+						compDef.Name,
+						component.FieldAppCompInstance,
+						1,
+					)
 					Expect(err).NotTo(HaveOccurred())
 				}
 
-				retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
+				retrieved, err := get(compDef.Name, compDef.Version)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(retrieved.AppCompInstanceCount).To(Equal(int32(5)))
 			})
@@ -338,17 +278,48 @@ var _ = Describe("ComponentDefStoreMongo", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// 先增加 3
-				err = compDefStore.UpdateInstanceCount(ctx, compDef.Name, component.FieldAppCompInstance, 3)
+				err = component.UpdateInstanceCount(ctx, compDefStore, compDef.Name, component.FieldAppCompInstance, 3)
 				Expect(err).NotTo(HaveOccurred())
 
 				// 再减少 2
-				err = compDefStore.UpdateInstanceCount(ctx, compDef.Name, component.FieldAppCompInstance, -2)
+				err = component.UpdateInstanceCount(
+					ctx,
+					compDefStore,
+					compDef.Name,
+					component.FieldAppCompInstance,
+					-2,
+				)
 				Expect(err).NotTo(HaveOccurred())
 
-				retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
+				retrieved, err := get(compDef.Name, compDef.Version)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(retrieved.AppCompInstanceCount).To(Equal(int32(1)))
 			})
+		})
+
+		It("should not refresh updatedAt of the definition", func() {
+			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
+			before, err := get(compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = component.UpdateInstanceCount(
+				ctx,
+				compDefStore,
+				compDef.Name,
+				component.FieldWorkspaceCompInstance,
+				1,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			after, err := get(compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(after.WorkspaceCompInstanceCount).To(Equal(before.WorkspaceCompInstanceCount + 1))
+			Expect(after.UpdatedAt).To(Equal(before.UpdatedAt))
+		})
+
+		It("should ignore a missing definition", func() {
+			err := component.UpdateInstanceCount(ctx, compDefStore, "not-exists", component.FieldAppCompInstance, 1)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

@@ -22,20 +22,15 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 )
 
 // CheckIfTrafficLaneDeployed 检查指定的流量泳道是否已部署
-func CheckIfTrafficLaneDeployed(ctx context.Context, appID, envName, laneName string) error {
-	store, err := NewRecordStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrapf(err, "get helm record store")
-	}
-
+func CheckIfTrafficLaneDeployed(ctx context.Context, db *mongo.Database, appID, envName, laneName string) error {
 	// 获取指定泳道的部署情况
-	record, err := store.GetLatest(ctx, appID, envName, laneName)
+	record, err := GetLatest(ctx, db, appID, envName, laneName)
 	if err != nil {
 		return errors.Wrapf(err, "get helm deploy record (app: %s, env: %s, lane: %s)", appID, envName, laneName)
 	}

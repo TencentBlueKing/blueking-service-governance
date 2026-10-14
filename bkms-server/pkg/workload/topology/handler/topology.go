@@ -72,11 +72,8 @@ func (h *Handler) GetResourceTopology(c *gin.Context) {
 	}
 
 	graph, err := topology.NewService(
-		h.registry.ResourceSnapshotStore,
+		h.registry.DB,
 		topology.NewBuilder(),
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
-		h.registry.ScopedEnvVarStore,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	).GetTopology(ctx, uriInput.AppID, uriInput.EnvName, queryInput.TrafficLaneName)
@@ -121,11 +118,8 @@ func (h *Handler) GetTopologyNodeDetail(c *gin.Context) {
 	}
 
 	detail, err := topology.NewService(
-		h.registry.ResourceSnapshotStore,
+		h.registry.DB,
 		topology.NewBuilder(),
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
-		h.registry.ScopedEnvVarStore,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	).GetNodeDetail(ctx, uriInput.AppID, uriInput.EnvName, queryInput.TrafficLaneName, uriInput.NodeID)
@@ -175,11 +169,8 @@ func (h *Handler) ListTopologyNodeEvents(c *gin.Context) {
 	}
 
 	paginatedEvents, err := topology.NewService(
-		h.registry.ResourceSnapshotStore,
+		h.registry.DB,
 		topology.NewBuilder(),
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
-		h.registry.ScopedEnvVarStore,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	).ListNodeEvents(
@@ -236,11 +227,8 @@ func (h *Handler) GetTopologyNodeManifest(c *gin.Context) {
 	}
 
 	manifest, err := topology.NewService(
-		h.registry.ResourceSnapshotStore,
+		h.registry.DB,
 		topology.NewBuilder(),
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
-		h.registry.ScopedEnvVarStore,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	).GetNodeManifest(ctx, app, env, queryInput.TrafficLaneName, uriInput.NodeID)

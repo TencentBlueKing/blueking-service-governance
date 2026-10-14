@@ -24,10 +24,10 @@ import (
 	"slices"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"helm.sh/helm/v3/pkg/postrender"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	wlbscpcfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/bscpcfg"
 )
@@ -60,15 +60,15 @@ func NewBscpPostRenderer(fragment *wlbscpcfg.PodFragment) *BscpPostRenderer {
 	return &BscpPostRenderer{fragment: fragment}
 }
 
-// NewBscpPostRendererFromStore 从 Store 获取 PodFragment 并创建 PostRenderer
+// NewBscpPostRendererFromStore 从数据库获取 PodFragment 并创建 PostRenderer
 // 未配置时返回 nil, nil
 func NewBscpPostRendererFromStore(
 	ctx context.Context,
-	store bscpcfg.Store,
+	db *mongo.Database,
 	appID, envName string,
 	ws *workspace.Workspace,
 ) (*BscpPostRenderer, error) {
-	fragment, err := wlbscpcfg.BuildFromStore(ctx, store, appID, envName, ws)
+	fragment, err := wlbscpcfg.BuildFromStore(ctx, db, appID, envName, ws)
 	if err != nil {
 		return nil, errors.Wrap(err, "build bscp post renderer from store")
 	}

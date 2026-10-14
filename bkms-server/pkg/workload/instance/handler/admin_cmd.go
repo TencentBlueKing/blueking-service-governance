@@ -208,18 +208,12 @@ func (h *Handler) ExecuteTafAdminCmd(c *gin.Context) {
 		uriInput.EnvName,
 		input.InstanceIDs,
 		&tafadmincmd.AdminServiceStores{
-			TafDeployRecordStore: h.registry.AppModelDeployRecordStore,
+			DB: h.registry.DB,
 			MountableFileProvider: appcfg.NewMountableFileProvider(
-				h.registry.AppConfigFileStore,
-				h.registry.AppConfigFileDefStore,
-				h.registry.AppConfigFileVersionStore,
+				h.registry.DB,
 			),
-			EnvStore:      h.registry.EnvStore,
-			AppStore:      h.registry.AppStore,
-			AppModelStore: h.registry.AppModelStore,
-			AppSpecStore:  h.registry.AppSpecStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
-				h.registry.ScopedEnvVarStore,
+				h.registry.DB,
 				h.registry.AppDepsVarReader,
 				h.registry.PolarisVarReader,
 			),
@@ -276,23 +270,7 @@ func (h *Handler) newTrpcAdminService(
 	envName string,
 	instanceIDs []string,
 ) (*admincmd.TrpcAdminService, error) {
-	return admincmd.NewAdminService(
-		ctx,
-		app,
-		envName,
-		instanceIDs,
-		h.registry.AppModelDeployRecordStore,
-		appcfg.NewMountableFileProvider(
-			h.registry.AppConfigFileStore,
-			h.registry.AppConfigFileDefStore,
-			h.registry.AppConfigFileVersionStore,
-		),
-		h.registry.EnvStore,
-		h.registry.AppStore,
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
-		h.registry.ScopedEnvVarStore,
-		h.registry.AppDepsVarReader,
-		h.registry.PolarisVarReader,
-	)
+	return admincmd.NewAdminService(ctx, app, envName, instanceIDs, h.registry.DB, appcfg.NewMountableFileProvider(
+		h.registry.DB,
+	), h.registry.AppDepsVarReader, h.registry.PolarisVarReader)
 }

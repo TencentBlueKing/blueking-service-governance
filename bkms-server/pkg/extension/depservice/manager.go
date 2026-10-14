@@ -25,13 +25,16 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // use a single instance of Validate, it caches struct info
@@ -39,25 +42,21 @@ var validate = validator.New(validator.WithRequiredStructEnabled())
 
 // ServiceManager is the manager for app dependency services
 type ServiceManager struct {
-	svcStore     model.ServiceStore
-	instStore    model.ServiceInstanceStore
-	bindingStore model.ServiceBindingStore
-	envStore     envmodel.EnvironmentStore
+	db       *mongo.Database
+	services *model.ServiceStore
+	insts    *model.ServiceInstanceStore
+	bindings *model.ServiceBindingStore
+	envs     *envmodel.EnvironmentStore
 }
 
 // New creates a new app dependency services manager.
-// bindingStore / envStore 在北极星等不走绑定的路径上可以为 nil。
-func New(
-	svcStore model.ServiceStore,
-	instStore model.ServiceInstanceStore,
-	bindingStore model.ServiceBindingStore,
-	envStore envmodel.EnvironmentStore,
-) *ServiceManager {
+func New(db *mongo.Database) *ServiceManager {
 	return &ServiceManager{
-		svcStore:     svcStore,
-		instStore:    instStore,
-		bindingStore: bindingStore,
-		envStore:     envStore,
+		db:       db,
+		services: store.Of(db, model.ServiceMeta),
+		insts:    store.Of(db, model.ServiceInstanceMeta),
+		bindings: store.Of(db, model.ServiceBindingMeta),
+		envs:     store.Of(db, envmodel.EnvMeta),
 	}
 }
 
@@ -76,31 +75,29 @@ func (m *ServiceManager) CreateServiceInstance(
 		return bson.NilObjectID, err
 	}
 
-	instID, err := m.instStore.Create(
-		ctx,
-		&model.ServiceInstance{
-			Name:         params.Name,
-			ServiceName:  params.ServiceName,
-			PlanName:     params.PlanName,
-			ProviderType: plan.ProviderType,
-			ScopeType:    params.ScopeType,
-			ScopeValue:   params.ScopeValue,
-			WorkspaceID:  params.WorkspaceID,
-			Operator:     params.Operator,
-			Description:  params.Description,
-			Status:       model.ProvisioningStatus,
-		},
-	)
-	if err != nil {
+	inst := &model.ServiceInstance{
+		Name:         params.Name,
+		ServiceName:  params.ServiceName,
+		PlanName:     params.PlanName,
+		ProviderType: plan.ProviderType,
+		ScopeType:    params.ScopeType,
+		ScopeValue:   params.ScopeValue,
+		WorkspaceID:  params.WorkspaceID,
+		Operator:     params.Operator,
+		Description:  params.Description,
+		Status:       model.ProvisioningStatus,
+	}
+	if err = m.insts.Create(ctx, inst); err != nil {
 		if errors.Is(err, model.ErrInstanceNameExists) {
-			return instID, errors.Wrapf(
+			return bson.NilObjectID, errors.Wrapf(
 				err,
 				"service instance %q already exists for service %s in workspace %s",
 				params.Name, params.ServiceName, params.WorkspaceID,
 			)
 		}
-		return instID, errors.Wrap(err, "init service instance to db")
+		return bson.NilObjectID, errors.Wrap(err, "init service instance to db")
 	}
+	instID := inst.ID
 
 	createResult, err := svcProvider.CreateInstance(ctx, instID.Hex(), &types.ServicePlanConfig{
 		Config: plan.Config,
@@ -117,13 +114,15 @@ func (m *ServiceManager) CreateServiceInstance(
 
 	// 同步 provider 直接更新配置和凭证
 	if len(createResult.InstConfig) > 0 {
-		if err = m.instStore.UpdateConfig(ctx, instID, createResult.InstConfig); err != nil {
+		err = m.insts.Update(ctx, map[string]any{"config": createResult.InstConfig}, store.ByID(instID))
+		if err != nil {
 			updateErr := errors.Wrap(err, "update service instance config")
 			return instID, m.updateInstanceStatus(ctx, instID, model.UnavailableStatus, updateErr)
 		}
 	}
 	if len(createResult.Credentials) > 0 {
-		if err = m.instStore.UpdateCredentials(ctx, instID, createResult.Credentials); err != nil {
+		err = m.insts.Update(ctx, map[string]any{"credentials": createResult.Credentials}, store.ByID(instID))
+		if err != nil {
 			updateErr := errors.Wrap(err, "update service instance credentials")
 			return instID, m.updateInstanceStatus(ctx, instID, model.UnavailableStatus, updateErr)
 		}
@@ -138,7 +137,7 @@ func (m *ServiceManager) UpdateServiceInstance(
 	instID bson.ObjectID,
 	params types.ProvisionParams,
 ) error {
-	inst, err := m.instStore.Get(ctx, instID)
+	inst, err := m.insts.Get(ctx, store.ByID(instID))
 	if err != nil {
 		return errors.Wrap(err, "get service instance")
 	}
@@ -167,7 +166,7 @@ func (m *ServiceManager) getPlanAndProvider(
 	ctx context.Context,
 	serviceName, planName string,
 ) (*model.ServicePlan, provider.ServiceProvider, error) {
-	svc, err := m.svcStore.Get(ctx, serviceName)
+	svc, err := m.services.Get(ctx, model.ByName(serviceName))
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "get service %s", serviceName)
 	}
@@ -187,7 +186,7 @@ func (m *ServiceManager) GetServiceInstance(
 	ctx context.Context,
 	instID bson.ObjectID,
 ) (*model.ServiceInstance, error) {
-	return m.instStore.Get(ctx, instID)
+	return m.insts.Get(ctx, store.ByID(instID))
 }
 
 // ListServiceInstances 按条件列出服务实例。
@@ -199,22 +198,23 @@ func (m *ServiceManager) ListServiceInstances(
 		params = &ListServiceInstancesParams{}
 	}
 
-	insts, err := m.instStore.List(ctx, &model.SvcInstQueryOptions{
+	query := &model.SvcInstQueryOptions{
 		WorkspaceID: params.WorkspaceID,
 		ServiceName: params.ServiceName,
 		Status:      params.Status,
 		ScopeType:   params.ScopeType,
-	})
+	}
+	insts, err := m.insts.List(ctx, query.Cond(), model.RecentlyUpdatedFirst())
 	if err != nil {
 		return nil, errors.Wrap(err, "list service instances")
 	}
-	return insts, nil
+	return lo.ToSlicePtr(insts), nil
 }
 
 // DeleteServiceInstance 删除服务实例. 用于需要销毁实例的场景.
 // NOTE: 如果实例被绑定引用, 则无法删除
 func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.ObjectID) error {
-	inst, err := m.instStore.Get(ctx, instID)
+	inst, err := m.insts.Get(ctx, store.ByID(instID))
 	if err != nil {
 		return errors.Wrap(err, "get service instance")
 	}
@@ -239,7 +239,7 @@ func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.
 	}
 
 	if inst.Status == model.CreateFailedStatus {
-		return m.instStore.Delete(ctx, instID)
+		return m.insts.DeleteIfExists(ctx, store.ByID(instID))
 	}
 
 	if !isDeletableStatus(inst.Status) {
@@ -271,7 +271,7 @@ func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.
 		return nil
 	}
 
-	return m.instStore.Delete(ctx, instID)
+	return m.insts.DeleteIfExists(ctx, store.ByID(instID))
 }
 
 // isDeletableStatus 判断是否允许走 provider 删除路径的稳定态。
@@ -295,7 +295,7 @@ func (m *ServiceManager) updateInstanceStatus(
 		message = statusError.Error()
 	}
 
-	if err := m.instStore.UpdateStatus(ctx, instID, status, message); err != nil {
+	if err := model.UpdateInstanceStatus(ctx, m.db, instID, status, message); err != nil {
 		// 有业务错误时优先返回业务错误
 		log.Errorf(ctx, "update service instance status failed: %s", err)
 		if statusError != nil {

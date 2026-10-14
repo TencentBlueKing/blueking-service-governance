@@ -28,12 +28,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
@@ -48,13 +46,12 @@ var _ = Describe("TagQueryManager", func() {
 	)
 
 	var (
-		ctx           context.Context
-		store         Store
-		snapshotStore snapshot.SnapshotStore
-		manager       *TagQueryManager
-		diApp         *fxtest.App
-		repoKey       string
-		listAllCalls  int
+		ctx          context.Context
+		images       *Store
+		db           *mongo.Database
+		manager      *TagQueryManager
+		repoKey      string
+		listAllCalls int
 		// 以下三者由各用例改写，用于控制镜像源绑定与远程拉取结果
 		boundRegistry *bkmsreg.ImageRegistry
 		remoteTags    []string
@@ -62,15 +59,11 @@ var _ = Describe("TagQueryManager", func() {
 	)
 
 	BeforeEach(func() {
-		diApp = fxtest.New(GinkgoT(), FxModule, fx.Populate(&store))
-		diApp.RequireStart()
+		images = testutil.NewStore(GinkgoT(), Meta)
 		ctx = context.Background()
 
-		var err error
-		snapshotStore, err = snapshot.NewSnapshotStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
-		manager = NewTagQueryManager(store, snapshot.NewService(snapshotStore, nil, nil))
+		db = testutil.NewDB(GinkgoT())
+		manager = NewTagQueryManager(db, snapshot.NewService(db))
 		repoKey = snapshot.GenerateRepoKey(imageName, "ws-user", "ws-pass")
 		listAllCalls = 0
 		remoteTags, remoteErr = nil, nil
@@ -79,7 +72,7 @@ var _ = Describe("TagQueryManager", func() {
 		}
 
 		mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
-			func(context.Context, string) (*bkmsreg.ImageRegistry, error) {
+			func(context.Context, *mongo.Database, string) (*bkmsreg.ImageRegistry, error) {
 				if boundRegistry == nil {
 					return nil, bkmsreg.ErrImageRegistryNotFound
 				}
@@ -98,21 +91,19 @@ var _ = Describe("TagQueryManager", func() {
 
 	AfterEach(func() {
 		mockey.UnPatchAll()
-		Expect(store.DeleteAll(ctx)).To(Succeed())
-		Expect(snapshotStore.DeleteAll(ctx)).To(Succeed())
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(snapshot.ImageMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(snapshot.RepoStatusMeta)).To(Succeed())
 	})
 
 	// seedPersisted 造落库记录与新鲜快照，使该镜像走快照来源且不触发 TTL 懒刷新
 	seedPersisted := func(tags ...string) {
-		Expect(store.Upsert(ctx, &Image{
+		Expect(Register(ctx, images, &Image{
 			WorkspaceID: workspaceID, Type: ImageTypeBuilder, Name: imageName,
 		})).To(Succeed())
-		Expect(snapshotStore.UpsertSnapshots(ctx, repoKey, lo.Map(tags,
-			func(tag string, _ int) snapshot.Image { return snapshot.Image{Tag: tag} },
-		))).To(Succeed())
+		Expect(snapshot.UpsertTags(ctx, db, repoKey, tags)).To(Succeed())
 		refreshedAt := time.Now()
-		Expect(snapshotStore.UpsertStatus(ctx, &snapshot.RepoSnapshotStatus{
+		Expect(snapshot.UpsertRepoStatus(ctx, db, &snapshot.RepoSnapshotStatus{
 			RepoKey: repoKey, RepoName: imageName,
 			RefreshStatus: snapshot.RefreshStatusIdle, LastRefreshedAt: &refreshedAt,
 		})).To(Succeed())
@@ -128,12 +119,12 @@ var _ = Describe("TagQueryManager", func() {
 		Expect(queried.Status).To(BeNil())
 		Expect(listAllCalls).To(Equal(1))
 
-		records, err := store.List(ctx, workspaceID, ListOptions{})
+		records, err := images.List(ctx, ByWorkspace(workspaceID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(records).To(BeEmpty())
-		_, total, err := snapshotStore.ListByRepoKey(ctx, repoKey, "", 1, 10)
+		tags, err := snapshot.ListAllTags(ctx, db, repoKey)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(total).To(BeZero())
+		Expect(tags).To(BeEmpty())
 
 		// 落库后同一请求自动切到快照来源，不再打远端
 		seedPersisted("v1.0")
@@ -213,7 +204,7 @@ var _ = Describe("TagQueryManager", func() {
 
 		// 已有刷新在进行中：幂等保护生效，不重复发起远程调用
 		callsBefore := listAllCalls
-		Expect(snapshotStore.UpsertStatus(ctx, &snapshot.RepoSnapshotStatus{
+		Expect(snapshot.UpsertRepoStatus(ctx, db, &snapshot.RepoSnapshotStatus{
 			RepoKey: repoKey, RepoName: imageName, RefreshStatus: snapshot.RefreshStatusRefreshing,
 		})).To(Succeed())
 		result, err = manager.RefreshTags(ctx, workspaceID, imageName)
@@ -230,10 +221,10 @@ var _ = Describe("TagQueryManager", func() {
 		Expect(result.Message).To(Equal(registryAuthFailedMessage))
 
 		// 快照内容不因刷新失败而清空，状态回置为 idle 并记录原因
-		_, total, err := snapshotStore.ListByRepoKey(ctx, repoKey, "", 1, 10)
+		tags, err := snapshot.ListAllTags(ctx, db, repoKey)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(total).To(BeNumerically(">", 0))
-		status, err := snapshotStore.GetStatus(ctx, repoKey)
+		Expect(tags).NotTo(BeEmpty())
+		status, err := snapshot.GetRepoStatus(ctx, db, repoKey)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.RefreshStatus).To(Equal(snapshot.RefreshStatusIdle))
 		Expect(status.LastError).NotTo(BeEmpty())

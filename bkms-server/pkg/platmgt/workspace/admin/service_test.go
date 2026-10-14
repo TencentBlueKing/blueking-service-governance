@@ -25,7 +25,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -34,14 +33,15 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("WorkspaceAdminService", func() {
 	var (
 		ctx            context.Context
 		diApp          *fxtest.App
-		recordStore    Store
-		workspaceStore bkmsworkspace.WorkspaceStore
+		recordStore    *Store
+		workspaceStore *bkmsworkspace.WorkspaceStore
 		roleMgr        *stubRoleManager
 		service        *Service
 		ws             *bkmsworkspace.Workspace
@@ -53,14 +53,15 @@ var _ = Describe("WorkspaceAdminService", func() {
 
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsworkspace.FxModule,
 			FxModule,
 			fx.Provide(
 				func() perm.Manager { return roleMgr },
 			),
-			fx.Populate(&service, &workspaceStore, &recordStore),
+			fx.Populate(&service),
 		)
 		diApp.RequireStart()
+		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
+		recordStore = testutil.NewStore(GinkgoT(), Meta)
 
 		Expect(cleanupWorkspaceAdminCollections()).To(Succeed())
 		ws = dbfactory.Workspace(ctx, workspaceStore)
@@ -87,7 +88,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeTrue())
 
-		record, err := recordStore.GetLatestActiveGrant(ctx, ws.ID, "temp-user")
+		record, err := recordStore.Get(ctx, ByActiveGrant(ws.ID, "temp-user"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(record.IsRecycled).To(BeFalse())
 		Expect(record.ExpiresAt).To(BeTemporally("~", before.Add(2*time.Hour), 3*time.Second))
@@ -99,7 +100,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 		Expect(status.HasRole).To(BeTrue())
 		Expect(roleMgr.members).To(ContainElement("perm-user"))
 
-		_, err = recordStore.GetLatestActiveGrant(ctx, ws.ID, "perm-user")
+		_, err = recordStore.Get(ctx, ByActiveGrant(ws.ID, "perm-user"))
 		Expect(err).To(MatchError(ErrRecordNotFound))
 	})
 
@@ -146,7 +147,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeFalse())
 
-		_, err = recordStore.GetLatestActiveGrant(ctx, ws.ID, "temp-user")
+		_, err = recordStore.Get(ctx, ByActiveGrant(ws.ID, "temp-user"))
 		Expect(err).To(MatchError(ErrRecordNotFound))
 
 		record := loadLatestRecord(ctx, recordStore, ws.ID, "temp-user")
@@ -161,7 +162,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeFalse())
 
-		_, err = recordStore.GetLatestActiveGrant(ctx, ws.ID, "admin")
+		_, err = recordStore.Get(ctx, ByActiveGrant(ws.ID, "admin"))
 		Expect(err).To(MatchError(ErrRecordNotFound))
 	})
 
@@ -169,15 +170,15 @@ var _ = Describe("WorkspaceAdminService", func() {
 		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 
-		record, err := recordStore.GetLatestActiveGrant(ctx, ws.ID, "temp-user")
+		record, err := recordStore.Get(ctx, ByActiveGrant(ws.ID, "temp-user"))
 		Expect(err).NotTo(HaveOccurred())
 		record.ExpiresAt = time.Now().Add(-time.Hour)
-		Expect(recordStore.Update(ctx, record)).To(Succeed())
+		Expect(updateRecord(ctx, recordStore, record)).To(Succeed())
 
 		err = service.CleanupExpiredGrants(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = recordStore.GetLatestActiveGrant(ctx, ws.ID, "temp-user")
+		_, err = recordStore.Get(ctx, ByActiveGrant(ws.ID, "temp-user"))
 		Expect(err).To(MatchError(ErrRecordNotFound))
 
 		record = loadLatestRecord(ctx, recordStore, ws.ID, "temp-user")
@@ -260,26 +261,20 @@ func cleanupWorkspaceAdminCollections() error {
 	if err := testutil.CleanupCollection("workspaces"); err != nil {
 		return err
 	}
-	return testutil.CleanupCollection(collectionName)
+	return testutil.CleanupMetaColl(Meta)
 }
 
 func loadLatestRecord(
 	ctx context.Context,
-	store Store,
+	records *Store,
 	workspaceID, username string,
 ) *WorkspaceTempAdmin {
-	mongoStore, ok := store.(*StoreMongo)
-	Expect(ok).To(BeTrue())
-
-	var record WorkspaceTempAdmin
-	err := mongoStore.collection.FindOne(
+	record, err := records.Get(
 		ctx,
-		bson.M{
-			"workspaceID": workspaceID,
-			"username":    username,
-		},
-		options.FindOne().SetSort(bson.D{{Key: "updatedAt", Value: -1}, {Key: "_id", Value: -1}}),
-	).Decode(&record)
+		store.Filter(bson.M{"workspaceID": workspaceID, "username": username}),
+		store.Desc("updatedAt"),
+		store.Desc("_id"),
+	)
 	Expect(err).NotTo(HaveOccurred())
-	return &record
+	return record
 }

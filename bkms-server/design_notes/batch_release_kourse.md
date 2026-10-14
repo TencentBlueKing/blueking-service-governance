@@ -251,6 +251,6 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
   - 泳道部署前检查：要求基线泳道为 `deployed`。
   - 轮询收尾的审计与指标：只把 `deployed` 记为成功。
   - 前端状态枚举。
-- **进度写入与其他写操作的竞争**：通用 `Update` 不写 `batchProgress`，进度由 `UpdateBatchProgress` 定向更新。轮询接入时必须走这个方法，不能把进度放进 `Update` 的整记录写回。
+- **进度写入与其他写操作的竞争**：通用的 `UpdateRecord` 不写 `batchProgress`，进度由 `UpdateBatchProgress` 定向更新。轮询接入时必须走这个函数，不能把进度放进 `UpdateRecord` 的整记录写回。
 - **webhook 缓存竞争**：4.2 的第 2、4 步是对 webhook 缓存未同步的兜底，需要在真实集群验证。
 - **轮询中断**：记录置为 `polling-broken` 后不再是"分批发布中"，但集群中的 Rollout 可能仍在进行，兜底方式另行设计。

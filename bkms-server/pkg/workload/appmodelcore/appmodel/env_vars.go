@@ -24,13 +24,14 @@ import (
 	"time"
 
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
 // AppEnvVarService manages app-defined workload env vars stored in AppModel.
 type AppEnvVarService struct {
-	appModelStore AppModelStore
+	db *mongo.Database
 }
 
 // AppEnvVarUpdateData defines the updatable fields of an app-defined env var.
@@ -44,13 +45,13 @@ type AppEnvVarUpdateData struct {
 }
 
 // NewAppEnvVarService creates an app env var service.
-func NewAppEnvVarService(appModelStore AppModelStore) *AppEnvVarService {
-	return &AppEnvVarService{appModelStore: appModelStore}
+func NewAppEnvVarService(db *mongo.Database) *AppEnvVarService {
+	return &AppEnvVarService{db: db}
 }
 
 // List lists app-defined env vars in workload.envVars.
 func (s *AppEnvVarService) List(ctx context.Context, appID string) ([]Variable, error) {
-	return s.appModelStore.ListAppDefinedEnvVars(ctx, appID)
+	return ListAppDefinedEnvVars(ctx, s.db, appID)
 }
 
 // Create creates a new app-defined env var.
@@ -61,7 +62,7 @@ func (s *AppEnvVarService) Create(ctx context.Context, appID string, envVar Vari
 	now := time.Now()
 	envVar.CreatedAt = now
 	envVar.UpdatedAt = now
-	if err := s.appModelStore.AddAppDefinedEnvVar(ctx, appID, envVar); err != nil {
+	if err := AddAppDefinedEnvVar(ctx, s.db, appID, envVar); err != nil {
 		return nil, err
 	}
 	return &envVar, nil
@@ -74,7 +75,7 @@ func (s *AppEnvVarService) Update(
 	key string,
 	updateData AppEnvVarUpdateData,
 ) (*Variable, *Variable, error) {
-	envVars, err := s.appModelStore.ListAppDefinedEnvVars(ctx, appID)
+	envVars, err := ListAppDefinedEnvVars(ctx, s.db, appID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -114,7 +115,7 @@ func (s *AppEnvVarService) Update(
 	updated.CreatedAt = oldEnvVar.CreatedAt
 	updated.UpdatedAt = time.Now()
 
-	if err := s.appModelStore.UpdateAppDefinedEnvVar(ctx, appID, key, updated); err != nil {
+	if err := UpdateAppDefinedEnvVar(ctx, s.db, appID, key, updated); err != nil {
 		return nil, nil, err
 	}
 	return &oldEnvVar, &updated, nil
@@ -122,7 +123,7 @@ func (s *AppEnvVarService) Update(
 
 // Delete deletes an existing app-defined env var by key.
 func (s *AppEnvVarService) Delete(ctx context.Context, appID, key string) (*Variable, error) {
-	envVars, err := s.appModelStore.ListAppDefinedEnvVars(ctx, appID)
+	envVars, err := ListAppDefinedEnvVars(ctx, s.db, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +134,7 @@ func (s *AppEnvVarService) Delete(ctx context.Context, appID, key string) (*Vari
 	}
 
 	removedEnvVar := envVars[idx]
-	if err := s.appModelStore.RemoveAppDefinedEnvVar(ctx, appID, key); err != nil {
+	if err := RemoveAppDefinedEnvVar(ctx, s.db, appID, key); err != nil {
 		return nil, err
 	}
 	return &removedEnvVar, nil
@@ -147,7 +148,7 @@ func (s *AppEnvVarService) BatchUpsert(ctx context.Context, appID string, vars [
 		return nil
 	}
 
-	existingEnvVars, err := s.appModelStore.ListAppDefinedEnvVars(ctx, appID)
+	existingEnvVars, err := ListAppDefinedEnvVars(ctx, s.db, appID)
 	if err != nil {
 		return err
 	}
@@ -184,7 +185,7 @@ func (s *AppEnvVarService) BatchUpsert(ctx context.Context, appID string, vars [
 			}
 			merged.IsSensitive = existing.IsSensitive || item.IsSensitive
 			merged.CreatedAt = existing.CreatedAt
-			if err := s.appModelStore.UpdateAppDefinedEnvVar(ctx, appID, item.Key, merged); err != nil {
+			if err := UpdateAppDefinedEnvVar(ctx, s.db, appID, item.Key, merged); err != nil {
 				return err
 			}
 			continue
@@ -192,7 +193,7 @@ func (s *AppEnvVarService) BatchUpsert(ctx context.Context, appID string, vars [
 
 		// 全新的 key 按请求里的出现顺序逐条追加，避免批量导入退化成整份
 		// AppModel Replace，同时保持导出顺序稳定可预测。
-		if err := s.appModelStore.AddAppDefinedEnvVar(ctx, appID, merged); err != nil {
+		if err := AddAppDefinedEnvVar(ctx, s.db, appID, merged); err != nil {
 			return err
 		}
 	}

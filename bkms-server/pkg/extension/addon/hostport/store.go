@@ -24,163 +24,98 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
-)
 
-const collectionName = "hostport_configs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
 
 // ErrConfigNotFound is returned when the app has no HostPort config document.
 var ErrConfigNotFound = errors.New("hostport config not found")
 
 // HostPortStore persists HostPortConfig documents.
-type HostPortStore interface {
-	Get(ctx context.Context, appID string) (*HostPortConfig, error)
-	ListPorts(ctx context.Context, appID string) ([]int32, error)
-	ReplacePorts(ctx context.Context, appID string, ports []int32) (*HostPortConfig, error)
-	UpsertEnvState(ctx context.Context, appID, envName string, appliedPorts []int32) error
-	RemoveEnvState(ctx context.Context, appID, envName string) error
-	DeleteByApp(ctx context.Context, appID string) error
+type HostPortStore = store.GenericStore[HostPortConfig]
+
+// HostPortConfigMeta is the storage metadata of HostPortConfig, one document per app keyed by appID.
+// Reads normalize ports and never return a nil EnvStates map.
+var HostPortConfigMeta = store.Meta[HostPortConfig]{
+	Collection: "hostport_configs",
+	NotFound:   ErrConfigNotFound,
+	Decode:     []func(*HostPortConfig) error{normalizeConfig},
 }
 
-var _ HostPortStore = &HostPortStoreMongo{}
-
-// HostPortStoreMongo is the MongoDB implementation of HostPortStore.
-type HostPortStoreMongo struct {
-	collection *mongo.Collection
-}
-
-// NewHostPortStoreMongo creates a HostPortStore backed by MongoDB.
-func NewHostPortStoreMongo(client *mongo.Client, dbName string) (HostPortStore, error) {
-	coll := client.Database(dbName).Collection(collectionName)
-	return &HostPortStoreMongo{collection: coll}, nil
-}
-
-// Get returns the HostPort config for an app.
-func (s *HostPortStoreMongo) Get(ctx context.Context, appID string) (*HostPortConfig, error) {
-	var config HostPortConfig
-	err := s.collection.FindOne(ctx, bson.M{"appID": appID}).Decode(&config)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrConfigNotFound
-		}
-		return nil, errors.Wrap(err, "find hostport config")
-	}
-	normalizeConfig(&config)
-	return &config, nil
+// ByApp matches the HostPort config of an app.
+func ByApp(appID string) store.Opt {
+	return store.Where("appID", appID)
 }
 
 // ListPorts returns declared container ports; missing config yields an empty slice.
-func (s *HostPortStoreMongo) ListPorts(ctx context.Context, appID string) ([]int32, error) {
-	config, err := s.Get(ctx, appID)
+func ListPorts(ctx context.Context, db *mongo.Database, appID string) ([]int32, error) {
+	config, err := store.Of(db, HostPortConfigMeta).Get(ctx, ByApp(appID))
+	if errors.Is(err, ErrConfigNotFound) {
+		return []int32{}, nil
+	}
 	if err != nil {
-		if errors.Is(err, ErrConfigNotFound) {
-			return []int32{}, nil
-		}
-		return nil, err
+		return nil, errors.Wrapf(err, "get hostport config of app %s", appID)
 	}
 	return config.Ports, nil
 }
 
-// ReplacePorts replaces the declared container ports for an app (upsert).
-func (s *HostPortStoreMongo) ReplacePorts(ctx context.Context, appID string, ports []int32) (*HostPortConfig, error) {
-	ports = NormalizePorts(ports)
-
-	now := time.Now()
-	update := bson.M{
-		"$set": bson.M{
-			"ports":     ports,
-			"updatedAt": now,
-		},
-		"$setOnInsert": bson.M{
-			"appID":     appID,
-			"envStates": bson.M{},
-			"createdAt": now,
-		},
+// ReplacePorts replaces the declared container ports for an app, creating the config when absent,
+// and returns the normalized ports that were stored.
+func ReplacePorts(ctx context.Context, db *mongo.Database, appID string, ports []int32) ([]int32, error) {
+	config := &HostPortConfig{AppID: appID, Ports: NormalizePorts(ports), EnvStates: map[string]HostPortEnvState{}}
+	if _, err := store.Of(db, HostPortConfigMeta).Upsert(ctx, config,
+		ByApp(appID), store.UpdateSelected("ports"),
+	); err != nil {
+		return nil, errors.Wrapf(err, "replace hostport ports of app %s", appID)
 	}
-	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
-
-	var config HostPortConfig
-	if err := s.collection.FindOneAndUpdate(ctx, bson.M{"appID": appID}, update, opts).Decode(&config); err != nil {
-		return nil, errors.Wrap(err, "replace hostport mappings")
-	}
-	normalizeConfig(&config)
-	return &config, nil
+	return config.Ports, nil
 }
 
-// UpsertEnvState records applied ports for an environment in one upsert round-trip.
-func (s *HostPortStoreMongo) UpsertEnvState(
-	ctx context.Context,
-	appID, envName string,
-	appliedPorts []int32,
-) error {
-	fieldPrefix, err := envFieldPrefix("envStates", envName)
+// UpsertEnvState records applied ports for an environment, creating the config when absent.
+func UpsertEnvState(ctx context.Context, db *mongo.Database, appID, envName string, appliedPorts []int32) error {
+	field, err := envStateField(envName)
 	if err != nil {
 		return err
 	}
-
-	now := time.Now()
-	appliedPorts = NormalizePorts(appliedPorts)
-	update := bson.M{
-		"$set": bson.M{
-			fieldPrefix + ".appliedPorts": appliedPorts,
-			fieldPrefix + ".updatedAt":    now,
-			"updatedAt":                   now,
-		},
-		"$setOnInsert": bson.M{
-			"appID":     appID,
-			"ports":     []int32{},
-			"createdAt": now,
+	config := &HostPortConfig{
+		AppID: appID,
+		Ports: []int32{},
+		EnvStates: map[string]HostPortEnvState{
+			envName: {AppliedPorts: NormalizePorts(appliedPorts), UpdatedAt: time.Now()},
 		},
 	}
-	opts := options.UpdateOne().SetUpsert(true)
-	_, err = s.collection.UpdateOne(ctx, bson.M{"appID": appID}, update, opts)
-	if err != nil {
-		return errors.Wrap(err, "upsert hostport env state")
+	if _, err = store.Of(db, HostPortConfigMeta).Upsert(ctx, config,
+		ByApp(appID), store.UpdateSelected(field),
+	); err != nil {
+		return errors.Wrapf(err, "upsert hostport env state of app %s, env %s", appID, envName)
 	}
 	return nil
 }
 
-// RemoveEnvState removes the env snapshot after uninstall.
-func (s *HostPortStoreMongo) RemoveEnvState(ctx context.Context, appID, envName string) error {
-	fieldPrefix, err := envFieldPrefix("envStates", envName)
+// RemoveEnvState removes the env snapshot after uninstall; a missing config is ignored.
+func RemoveEnvState(ctx context.Context, db *mongo.Database, appID, envName string) error {
+	field, err := envStateField(envName)
 	if err != nil {
 		return err
 	}
-	_, err = s.collection.UpdateOne(
-		ctx,
-		bson.M{"appID": appID},
-		bson.M{
-			"$unset": bson.M{fieldPrefix: ""},
-			"$set":   bson.M{"updatedAt": time.Now()},
-		},
-	)
-	if err != nil {
-		return errors.Wrap(err, "remove hostport env state")
-	}
-	return nil
+	err = store.Of(db, HostPortConfigMeta).Update(ctx, map[string]any{field: nil}, ByApp(appID))
+	return errors.Wrapf(store.IgnoreNotFound(err), "remove hostport env state of app %s, env %s", appID, envName)
 }
 
-// DeleteByApp deletes the HostPort config for an app.
-func (s *HostPortStoreMongo) DeleteByApp(ctx context.Context, appID string) error {
-	_, err := s.collection.DeleteOne(ctx, bson.M{"appID": appID})
-	if err != nil {
-		return errors.Wrap(err, "delete hostport config by app")
-	}
-	return nil
-}
-
-func normalizeConfig(config *HostPortConfig) {
+func normalizeConfig(config *HostPortConfig) error {
 	config.Ports = NormalizePorts(config.Ports)
 	if config.EnvStates == nil {
 		config.EnvStates = map[string]HostPortEnvState{}
 	}
+	return nil
 }
 
-func envFieldPrefix(root, envName string) (string, error) {
+// envStateField returns the path of an env state; env names are used as map keys, so they must not contain
+// characters that MongoDB treats as path separators or operators.
+func envStateField(envName string) (string, error) {
 	if envName == "" || strings.ContainsAny(envName, ".$") {
 		return "", errors.Errorf("invalid env name %q", envName)
 	}
-	return root + "." + envName, nil
+	return "envStates." + envName, nil
 }

@@ -28,26 +28,22 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
-var _ = Describe("AppConfigFileDefStoreMongo", func() {
-	var store *appcfg.AppConfigFileDefStoreMongo
+var _ = Describe("AppConfigFileDef store", func() {
+	var defs *appcfg.AppConfigFileDefStore
 	var ctx context.Context
 	var appID string
 
 	BeforeEach(func() {
-		var err error
-		store, err = appcfg.NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		err = testutil.CleanupCollection("app_config_file_defs")
-		Expect(err).NotTo(HaveOccurred())
+		defs = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		Expect(testutil.CleanupMetaColl(appcfg.AppConfigFileDefMeta)).To(Succeed())
 		ctx = context.Background()
 		appID = "def-test-app-" + stringx.Random(6)
 	})
 
-	newDef := func() appcfg.AppConfigFileDef {
-		return appcfg.AppConfigFileDef{
+	newDef := func() *appcfg.AppConfigFileDef {
+		return &appcfg.AppConfigFileDef{
 			AppID:      appID,
 			Name:       "values.yaml",
 			ConfigKind: appcfg.ConfigKindFramework,
@@ -59,14 +55,17 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 		}
 	}
 
-	Context("Add and GetByID", func() {
+	mustCreate := func(def *appcfg.AppConfigFileDef) bson.ObjectID {
+		Expect(defs.Create(ctx, def)).To(Succeed())
+		return def.ID
+	}
+
+	Context("Create and GetByID", func() {
 		It("should persist and retrieve a def record", func() {
 			def := newDef()
-			id, err := store.Add(ctx, def)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(id).NotTo(Equal(bson.NilObjectID))
+			id := mustCreate(def)
 
-			got, err := store.GetByID(ctx, id)
+			got, err := defs.GetByID(ctx, id)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.Name).To(Equal("values.yaml"))
 			Expect(got.AppID).To(Equal(appID))
@@ -74,10 +73,7 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 			Expect(got.EnvConfigMode.IsUnifiedConfig).To(BeTrue())
 
 			var raw bson.M
-			err = database.Client().Database(database.Name()).
-				Collection("app_config_file_defs").
-				FindOne(ctx, bson.M{"_id": id}).
-				Decode(&raw)
+			err = defs.Collection().FindOne(ctx, bson.M{"_id": id}).Decode(&raw)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(raw).To(HaveKeyWithValue("isUnifiedConfig", true))
 			Expect(raw).NotTo(HaveKey("envConfigMode"))
@@ -86,14 +82,24 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 		It("should preserve explicit empty mounted env names", func() {
 			def := newDef()
 			def.EnvConfigMode.MountedEnvNames = []string{}
+			id := mustCreate(def)
 
-			id, err := store.Add(ctx, def)
-			Expect(err).NotTo(HaveOccurred())
-
-			got, err := store.GetByID(ctx, id)
+			got, err := defs.GetByID(ctx, id)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.EnvConfigMode.MountedEnvNames).NotTo(BeNil())
 			Expect(got.EnvConfigMode.MountedEnvNames).To(BeEmpty())
+		})
+
+		It("should reject duplicate names in the same app", func() {
+			mustCreate(newDef())
+			dup := newDef()
+			dup.MountDir = "/data/other"
+			Expect(defs.Create(ctx, dup)).To(MatchError(appcfg.ErrAppConfigFileDefAlreadyExists))
+		})
+
+		It("should return ErrAppConfigFileDefNotFound for missing defs", func() {
+			_, err := defs.GetByID(ctx, bson.NewObjectID())
+			Expect(err).To(MatchError(appcfg.ErrAppConfigFileDefNotFound))
 		})
 	})
 
@@ -102,84 +108,97 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 			first := newDef()
 			first.Name = "a.conf"
 			first.MountDir = "/etc/app"
-			_, err := store.Add(ctx, first)
-			Expect(err).NotTo(HaveOccurred())
+			mustCreate(first)
 
 			second := newDef()
 			second.Name = "b.conf"
 			second.MountDir = "/etc/app"
-			_, err = store.Add(ctx, second)
-			Expect(err).NotTo(HaveOccurred())
+			mustCreate(second)
 		})
 
 		It("should reject the same mountDir and name", func() {
 			first := newDef()
 			first.Name = "app.conf"
 			first.MountDir = "/etc/app"
-			_, err := store.Add(ctx, first)
-			Expect(err).NotTo(HaveOccurred())
+			mustCreate(first)
 
 			second := newDef()
 			second.Name = "app.conf"
 			second.MountDir = "/etc/app"
-			_, err = store.Add(ctx, second)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("app config file def already exists"))
+			Expect(defs.Create(ctx, second)).To(MatchError(appcfg.ErrAppConfigFileDefAlreadyExists))
 		})
 	})
 
-	Context("Update", func() {
+	Context("UpdateDef", func() {
 		It("should update name, flat env config fields and enableEnvVarRender", func() {
-			def := newDef()
-			id, err := store.Add(ctx, def)
-			Expect(err).NotTo(HaveOccurred())
+			id := mustCreate(newDef())
 
-			got, err := store.GetByID(ctx, id)
+			got, err := defs.GetByID(ctx, id)
 			Expect(err).NotTo(HaveOccurred())
 
 			got.Name = "new-values.yaml"
 			got.EnvConfigMode.IsUnifiedConfig = false
 			got.EnableEnvVarRender = true
-			cnt, err := store.Update(ctx, *got)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cnt).To(Equal(int64(1)))
+			Expect(appcfg.UpdateDef(ctx, defs, got)).To(Succeed())
 
-			updated, err := store.GetByID(ctx, id)
+			updated, err := defs.GetByID(ctx, id)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.Name).To(Equal("new-values.yaml"))
 			Expect(updated.EnvConfigMode.IsUnifiedConfig).To(BeFalse())
 			Expect(updated.EnableEnvVarRender).To(BeTrue())
 
 			var raw bson.M
-			err = database.Client().Database(database.Name()).
-				Collection("app_config_file_defs").
-				FindOne(ctx, bson.M{"_id": id}).
-				Decode(&raw)
+			err = defs.Collection().FindOne(ctx, bson.M{"_id": id}).Decode(&raw)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(raw).To(HaveKeyWithValue("isUnifiedConfig", false))
 			Expect(raw).NotTo(HaveKey("envConfigMode"))
+			Expect(updated.CreatedAt).To(Equal(got.CreatedAt))
+		})
+
+		It("should clear mountDir and keep other fields immutable", func() {
+			id := mustCreate(newDef())
+
+			Expect(appcfg.UpdateDef(ctx, defs, &appcfg.AppConfigFileDef{
+				ID:         id,
+				AppID:      "another-app",
+				Name:       "values.yaml",
+				ConfigKind: appcfg.ConfigKindPlain,
+			})).To(Succeed())
+
+			updated, err := defs.GetByID(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.MountDir).To(BeEmpty())
+			Expect(updated.AppID).To(Equal(appID))
+			Expect(updated.ConfigKind).To(Equal(appcfg.ConfigKindFramework))
+		})
+
+		It("should reject defs without ID and report missing defs", func() {
+			Expect(appcfg.UpdateDef(ctx, defs, newDef())).To(MatchError(ContainSubstring("def ID is required")))
+
+			def := newDef()
+			def.ID = bson.NewObjectID()
+			Expect(appcfg.UpdateDef(ctx, defs, def)).To(MatchError(appcfg.ErrAppConfigFileDefNotFound))
 		})
 	})
 
-	Context("ListByApp", func() {
-		It("should list all metas for an app and filter by ConfigKind", func() {
+	Context("ListDefsByApp", func() {
+		It("should list all defs for an app sorted by name and filter by ConfigKind", func() {
 			m1 := newDef()
-			m1.Name = "a.yaml"
-			m1.MountDir = "/data/conf/a"
-			_, err := store.Add(ctx, m1)
-			Expect(err).NotTo(HaveOccurred())
+			m1.Name = "b.yaml"
+			m1.MountDir = "/data/conf/b"
+			mustCreate(m1)
 
 			m2 := newDef()
-			m2.Name = "b.yaml"
-			m2.MountDir = "/data/conf/b"
-			_, err = store.Add(ctx, m2)
-			Expect(err).NotTo(HaveOccurred())
+			m2.Name = "a.yaml"
+			m2.MountDir = "/data/conf/a"
+			mustCreate(m2)
 
-			all, err := store.ListByApp(ctx, appID)
+			all, err := appcfg.ListDefsByApp(ctx, defs, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(all).To(HaveLen(2))
+			Expect(all[0].Name).To(Equal("a.yaml"))
 
-			filtered, err := store.ListByApp(ctx, appID,
+			filtered, err := appcfg.ListDefsByApp(ctx, defs, appID,
 				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(filtered).To(HaveLen(2))
@@ -188,63 +207,24 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 		It("should not treat empty configKind as framework", func() {
 			frameworkDef := newDef()
 			frameworkDef.Name = "framework.yaml"
-			_, err := store.Add(ctx, frameworkDef)
-			Expect(err).NotTo(HaveOccurred())
+			mustCreate(frameworkDef)
 
 			legacyDef := newDef()
 			legacyDef.Name = "legacy.yaml"
 			legacyDef.MountDir = "/data/conf/legacy"
 			legacyDef.ConfigKind = ""
-			_, err = store.Add(ctx, legacyDef)
-			Expect(err).NotTo(HaveOccurred())
+			mustCreate(legacyDef)
 
-			all, err := store.ListByApp(ctx, appID)
+			all, err := appcfg.ListDefsByApp(ctx, defs, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(all).To(HaveLen(2))
 
-			filtered, err := store.ListByApp(ctx, appID,
+			filtered, err := appcfg.ListDefsByApp(ctx, defs, appID,
 				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(filtered).To(HaveLen(1))
 			Expect(filtered[0].Name).To(Equal("framework.yaml"))
 			Expect(filtered[0].ConfigKind).To(Equal(appcfg.ConfigKindFramework))
-		})
-	})
-
-	Context("DeleteByID", func() {
-		It("should remove the def record", func() {
-			id, err := store.Add(ctx, newDef())
-			Expect(err).NotTo(HaveOccurred())
-
-			cnt, err := store.DeleteByID(ctx, id)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cnt).To(Equal(int64(1)))
-
-			_, err = store.GetByID(ctx, id)
-			Expect(err).To(HaveOccurred())
-		})
-	})
-
-	Context("DeleteByApp", func() {
-		It("should remove all def records for the app", func() {
-			m1 := newDef()
-			m1.Name = "x.yaml"
-			m1.MountDir = "/data/conf/x"
-			_, err := store.Add(ctx, m1)
-			Expect(err).NotTo(HaveOccurred())
-			m2 := newDef()
-			m2.Name = "y.yaml"
-			m2.MountDir = "/data/conf/y"
-			_, err = store.Add(ctx, m2)
-			Expect(err).NotTo(HaveOccurred())
-
-			cnt, err := store.DeleteByApp(ctx, appID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cnt).To(Equal(int64(2)))
-
-			all, err := store.ListByApp(ctx, appID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(all).To(BeEmpty())
 		})
 	})
 })

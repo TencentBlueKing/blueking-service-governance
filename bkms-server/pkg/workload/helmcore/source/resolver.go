@@ -22,20 +22,21 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 )
 
-// ResolveConfig 根据应用的 HelmSource.RepoType，将不同类型的配置统一转换为 HelmRepoConfig
+// ResolveConfig 根据应用的 HelmSource.RepoType，将不同类型的配置统一转换为 HelmRepoConfig。
+// HelmGitRepo 类型会读取 bkci.Project、bkrepo.Project，并读写 credential.HelmRepoCredential（缺失时初始化）
 func ResolveConfig(
 	ctx context.Context,
-	bkciProjectStore bkci.ProjectStore,
-	bkrepoProjectStore bkrepo.ProjectStore,
-	credentialStore credential.HelmRepoCredentialStore,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 ) (*bkmsapp.HelmRepoConfig, error) {
 	hs := app.HelmSpec.HelmSource
@@ -43,7 +44,7 @@ func ResolveConfig(
 	switch hs.RepoType {
 	case bkmsapp.HelmSourceRepoTypeGit:
 		// HelmGitRepo 类型：从工作空间绑定的 bkrepo HELM 仓库获取配置
-		bkciProj, err := bkciProjectStore.GetByWorkspace(ctx, app.WorkspaceID)
+		bkciProj, err := store.Of(db, bkci.ProjectMeta).Get(ctx, bkci.ByWorkspace(app.WorkspaceID))
 		if err != nil {
 			return nil, errors.Wrapf(err, "get bkci project for workspace %s", app.WorkspaceID)
 		}
@@ -54,18 +55,18 @@ func ResolveConfig(
 		}
 
 		// 确保凭证已初始化（幂等操作）
-		bkrepoProj, err := bkrepoProjectStore.GetByWorkspace(ctx, app.WorkspaceID)
+		bkrepoProj, err := store.Of(db, bkrepo.ProjectMeta).Get(ctx, bkrepo.ByWorkspace(app.WorkspaceID))
 		if err != nil {
 			return nil, errors.Wrapf(err, "get bkrepo project for workspace %s", app.WorkspaceID)
 		}
 		if err = credential.EnsureCredential(
-			ctx, credentialStore, app.WorkspaceID, bkciProj.Code, bkrepoProj.Username, bkrepoProj.Password,
+			ctx, db, app.WorkspaceID, bkciProj.Code, bkrepoProj.Username, bkrepoProj.Password,
 		); err != nil {
 			return nil, errors.Wrapf(err, "ensure helm repo credential for workspace %s", app.WorkspaceID)
 		}
 
 		// 从凭证 store 获取用户名密码
-		cred, err := credentialStore.GetByWorkspace(ctx, app.WorkspaceID)
+		cred, err := store.Of(db, credential.Meta).Get(ctx, credential.ByWorkspace(app.WorkspaceID))
 		if err != nil {
 			return nil, errors.Wrapf(err, "get helm repo credential for workspace %s", app.WorkspaceID)
 		}

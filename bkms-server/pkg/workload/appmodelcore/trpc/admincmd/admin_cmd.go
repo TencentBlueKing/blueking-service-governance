@@ -31,6 +31,7 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -44,6 +45,7 @@ import (
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -114,16 +116,10 @@ type InstanceExecuteTrpcAdminCmdResult struct {
 
 // TrpcAdminService TRPC Admin 服务，封装所有 TRPC Admin 相关的功能
 type TrpcAdminService struct {
-	// TrpcDeployRecordStore 部署记录存储
-	TrpcDeployRecordStore appmodeldeploy.RecordStore
+	// DB 数据库，用于查询部署记录
+	DB *mongo.Database
 	// MountableFileProvider 配置挂载文件 provider
 	MountableFileProvider appcfg.MountableFileProvider
-	// EnvStore 环境存储
-	EnvStore envmodel.EnvironmentStore
-	// AppStore 应用存储
-	AppStore bkmsapp.ApplicationStore
-	// AppModelStore 应用模型存储
-	AppModelStore appmodel.AppModelStore
 	// EnvVarsReader 统一环境变量读取器
 	EnvVarsReader *envvars.UnifiedEnvVarsReader
 
@@ -156,13 +152,8 @@ func NewAdminService(
 	app *bkmsapp.Application,
 	envName string,
 	instanceIDs []string,
-	trpcDeployRecordStore appmodeldeploy.RecordStore,
+	db *mongo.Database,
 	mountableFileProvider appcfg.MountableFileProvider,
-	envStore envmodel.EnvironmentStore,
-	appStore bkmsapp.ApplicationStore,
-	appModelStore appmodel.AppModelStore,
-	appSpecStore appspec.AppSpecStore,
-	scopedEnvVarStore envvars.ScopedEnvVarStore,
 	appDepsVarReader *depenvvars.Reader,
 	polarisVarReader *polarisenvvars.Reader,
 ) (*TrpcAdminService, error) {
@@ -170,12 +161,9 @@ func NewAdminService(
 		App:                   app,
 		EnvName:               envName,
 		InstanceIDs:           instanceIDs,
-		TrpcDeployRecordStore: trpcDeployRecordStore,
+		DB:                    db,
 		MountableFileProvider: mountableFileProvider,
-		EnvStore:              envStore,
-		AppStore:              appStore,
-		AppModelStore:         appModelStore,
-		EnvVarsReader:         envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+		EnvVarsReader:         envvars.NewUnifiedEnvVarsReader(db, appDepsVarReader, polarisVarReader),
 	}
 
 	// 目前只支持 Trpc 应用
@@ -185,15 +173,15 @@ func NewAdminService(
 	if len(instanceIDs) == 0 {
 		return nil, errors.New("instanceIDs is required")
 	}
-	env, err := s.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, envName)
+	env, err := store.Of(s.DB, envmodel.EnvMeta).Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, envName))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get env by name '%s'", envName)
 	}
-	appModel, err := s.AppModelStore.GetAppModel(ctx, s.App.ID)
+	appModel, err := store.Of(s.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(s.App.ID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app model by id '%s'", app.ID)
 	}
-	appModel, _, err = appspec.ModelForEnv(ctx, appSpecStore, s.AppModelStore, s.App.ID, env.Name, appModel)
+	appModel, _, err = appspec.ModelForEnv(ctx, s.DB, s.App.ID, env.Name, appModel)
 	if err != nil {
 		return nil, errors.Wrapf(err, "apply env app spec for app '%s' env '%s'", app.ID, env.Name)
 	}
@@ -221,7 +209,7 @@ func NewAdminService(
 
 // GetPodIPMap 获取 Pod IP 映射
 func (s *TrpcAdminService) GetPodIPMap(ctx context.Context) (map[string]string, error) {
-	record, err := s.TrpcDeployRecordStore.GetLatest(ctx, s.App.ID, s.EnvName, "")
+	record, err := appmodeldeploy.GetLatest(ctx, s.DB, s.App.ID, s.EnvName, "")
 	if err != nil {
 		return nil, errors.Wrapf(err, "deploy record not found")
 	}

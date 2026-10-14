@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/clusterresources"
@@ -74,8 +75,8 @@ func (h *Handler) ListEvents(c *gin.Context) {
 	}
 
 	// 获取最新部署记录，用于获取集群 ID、命名空间以及工作负载资源信息
-	record, err := h.registry.AppModelDeployRecordStore.GetLatest(
-		ctx, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
+	record, err := appmodeldeploy.GetLatest(
+		ctx, h.registry.DB, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
 	)
 	if err != nil {
 		// 如果部署记录不存在，则不会有事件，此时需返回空结果
@@ -90,7 +91,7 @@ func (h *Handler) ListEvents(c *gin.Context) {
 	}
 
 	// 获取环境信息，用于获取 BCS 项目 Code
-	env, err := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, uriInput.EnvName)
+	env, err := h.envs().Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env by name"))
 		return

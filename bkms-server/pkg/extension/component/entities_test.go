@@ -24,19 +24,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 var _ = Describe("entities tests", func() {
-	var compDefStore component.ComponentDefStore
+	var compDefStore *component.ComponentDefStore
 	var ctx context.Context
 
 	BeforeEach(func() {
-		var err error
-		compDefStore, err = component.NewComponentDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 		ctx = context.Background()
 	})
 
@@ -53,7 +51,7 @@ var _ = Describe("entities tests", func() {
 			})
 
 			// dbfactory.CompDef 已落库，再读回以验证 DefaultValue 的序列化/反序列化。
-			retrieved, err := compDefStore.Get(ctx, compDef.Name, compDef.Version)
+			retrieved, err := compDefStore.Get(ctx, component.ByNameVersion(compDef.Name, compDef.Version))
 			Expect(err).NotTo(HaveOccurred())
 
 			// NOTE: All numeric values will be converted to float64 by json.Unmarshal

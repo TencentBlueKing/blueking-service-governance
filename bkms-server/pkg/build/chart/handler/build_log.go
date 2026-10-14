@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 type buildLogDeps struct {
@@ -109,11 +110,13 @@ func (h *Handler) prepareBuildLogDeps(
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init bkci client")
 	}
 
-	record, err := h.registry.HelmChartBuildRecordStore.Get(ctx, app.ID, uriInput.BuildID)
+	record, err := store.Of(h.registry.DB, helmchartbuild.RecordMeta).
+		Get(ctx, helmchartbuild.ByBuild(app.ID, uriInput.BuildID))
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get chart build record")
 	}
-	project, err := h.registry.BkCIProjectStore.GetByWorkspace(ctx, record.WorkspaceID)
+	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
+		Get(ctx, bkciproject.ByWorkspace(record.WorkspaceID))
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get bkci project")
 	}

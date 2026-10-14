@@ -30,11 +30,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func newDeployingRecord(appID string) *appmodeldeploy.Record {
@@ -62,7 +64,8 @@ var _ = Describe("Poller Handle", func() {
 		ctx       context.Context
 		args      Args
 		rec       *appmodeldeploy.Record
-		store     appmodeldeploy.RecordStore
+		db        *mongo.Database
+		records   *appmodeldeploy.RecordStore
 		enqCount  int
 		topoCount atomic.Int32
 		hookCount atomic.Int32
@@ -70,22 +73,20 @@ var _ = Describe("Poller Handle", func() {
 	)
 
 	insert := func() {
-		id, err := store.Create(ctx, rec)
-		Expect(err).NotTo(HaveOccurred())
-		args.DeployID = id
+		Expect(records.Create(ctx, rec)).To(Succeed())
+		args.DeployID = rec.ID.Hex()
 	}
 
 	reload := func() *appmodeldeploy.Record {
-		got, err := store.Get(ctx, rec.AppID, args.DeployID)
+		got, err := appmodeldeploy.GetRecord(ctx, db, rec.AppID, args.DeployID)
 		Expect(err).NotTo(HaveOccurred())
 		return got
 	}
 
 	BeforeEach(func() {
-		var err error
 		ctx = context.Background()
-		store, err = appmodeldeploy.NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, appmodeldeploy.RecordMeta)
 
 		appID := "app-" + stringx.Random(8)
 		rec = newDeployingRecord(appID)
@@ -93,7 +94,7 @@ var _ = Describe("Poller Handle", func() {
 		enqCount = 0
 		topoCount.Store(0)
 		hookCount.Store(0)
-		plr = NewPoller(store, nil)
+		plr = NewPoller(db)
 
 		mockey.Mock(taskq.Enqueue).To(func(context.Context, *taskq.Task, ...asynq.Option) error {
 			enqCount++
@@ -190,7 +191,7 @@ var _ = Describe("Poller Handle", func() {
 		insert()
 		stubFetch(appmodeldeploy.StatusDeployed)
 		// 只在本例模拟落库失败，其余用例走真实 Mongo Update
-		mockey.Mock((*appmodeldeploy.RecordStoreMongo).Update).Return(errors.New("db down")).Build()
+		mockey.Mock((*mongo.Collection).UpdateOne).Return(nil, errors.New("db down")).Build()
 		err := plr.Handle(ctx, args)
 		Expect(err).To(HaveOccurred())
 		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeFalse())
@@ -203,8 +204,7 @@ var _ = Describe("Poller Handle", func() {
 		insert()
 		stubFetch(appmodeldeploy.StatusDeploying)
 		time.Sleep(5 * time.Millisecond)
-		_, err := store.Create(ctx, newDeployingRecord(rec.AppID))
-		Expect(err).NotTo(HaveOccurred())
+		Expect(records.Create(ctx, newDeployingRecord(rec.AppID))).To(Succeed())
 		Expect(plr.Handle(ctx, args)).To(Succeed())
 		got := reload()
 		Expect(got.Status).To(Equal(appmodeldeploy.StatusCanceled))

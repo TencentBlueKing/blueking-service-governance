@@ -34,6 +34,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -83,7 +84,7 @@ func (h *Handler) validateAppAndGetDeployRecord(
 	}
 
 	// 按环境 + 泳道取最新部署记录；未命中与 List 一样 404，Watch 也建不成连接
-	record, err := h.registry.AppModelDeployRecordStore.GetLatest(ctx, app.ID, uriInput.EnvName, trafficLaneName)
+	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, app.ID, uriInput.EnvName, trafficLaneName)
 	if err != nil {
 		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
 	}
@@ -179,11 +180,7 @@ func (h *Handler) attachPolarisToListedAppInstances(
 	}
 
 	// 按应用 + 环境拉北极星实例，分页与全量共用同一条失败口径
-	mgr := polaris.NewPolarisPlatformManager(
-		h.registry.DepSvcStore,
-		h.registry.DepSvcInstStore,
-		h.registry.PolarisConfigStore,
-	)
+	mgr := polaris.NewPolarisPlatformManager(h.registry.DB)
 
 	svcInstances, err := mgr.ListPolarisServiceInstances(ctx, appID, envName)
 	if err != nil {
@@ -215,7 +212,7 @@ func (h *Handler) attachPublishStatusToListedAppInstances(
 		return i.ID
 	})
 
-	latestByInstance, err := h.registry.PublishRecordStore.ListLatestByInstance(ctx, appID, envName, instanceIDs)
+	latestByInstance, err := devmode.ListLatestByInstance(ctx, h.registry.DB, appID, envName, instanceIDs)
 	if err != nil {
 		log.WarnAttrs(ctx, "list latest publish status failed, fallback to empty",
 			slog.String("app_id", appID),

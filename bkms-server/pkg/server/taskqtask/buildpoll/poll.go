@@ -25,6 +25,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
@@ -37,6 +38,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // PollingInterval 按已运行时长返回下一 tick 延迟：10s → 15s → 30s → 1min → 5min
@@ -55,21 +57,14 @@ func PollingInterval(elapsed time.Duration) time.Duration {
 	}
 }
 
-// handle asynq 入口：registry / 必要 store 缺失则打日志并 ErrStopRetry，否则交给 poller
+// handle asynq 入口：registry / 数据库缺失则打日志并 ErrStopRetry，否则交给 poller
 func handle(ctx context.Context, args Args) error {
 	reg := storereg.G()
-	if reg == nil ||
-		reg.BuildRecordStore == nil ||
-		reg.BkCIPipelineStore == nil ||
-		reg.BuildAutoDeployRecordStore == nil {
+	if reg == nil || reg.DB == nil {
 		log.Errorf(ctx, "build poll stores not initialized, stop task: %s", args)
 		return errors.Wrap(taskq.ErrStopRetry, "build poll stores not initialized")
 	}
-	return newPoller(
-		reg.BuildRecordStore,
-		reg.BkCIPipelineStore,
-		reg.BuildAutoDeployRecordStore,
-	).runTick(ctx, args)
+	return newPoller(reg.DB).runTick(ctx, args)
 }
 
 // onExhausted tick 重试耗尽（如 Redis 抖动导致连续投递失败）意味着轮询链已断，后续不会再有 tick
@@ -78,12 +73,12 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 	log.Errorf(ctx, "build poll %s exhausted, try mark pollingBroken: %v", args, lastErr)
 
 	reg := storereg.G()
-	if reg == nil || reg.BuildRecordStore == nil {
+	if reg == nil || reg.DB == nil {
 		log.Errorf(ctx, "build poll stores not initialized, skip mark pollingBroken: %s", args)
 		return
 	}
-	p := newPoller(reg.BuildRecordStore, reg.BkCIPipelineStore, reg.BuildAutoDeployRecordStore)
-	record, err := p.recordStore.Get(ctx, args.AppID, args.BuildID)
+	p := newPoller(reg.DB)
+	record, err := p.records.Get(ctx, build.ByBuild(args.AppID, args.BuildID))
 	if err != nil {
 		log.Errorf(ctx, "get build record %s failed, skip mark pollingBroken: %v", args, err)
 		return
@@ -99,21 +94,15 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 
 // poller 执行一次构建状态轮询 tick
 type poller struct {
-	recordStore     build.RecordStore
-	pipelineStore   bkci.PipelineStore
-	autoDeployStore autodeploy.RecordStore
+	records *build.RecordStore
+	db      *mongo.Database
 }
 
-// newPoller 注入构建轮询所需 store，供 asynq handler 与单测共用
-func newPoller(
-	recordStore build.RecordStore,
-	pipelineStore bkci.PipelineStore,
-	autoDeployStore autodeploy.RecordStore,
-) *poller {
+// newPoller 注入构建轮询所需数据库，供 asynq handler 与单测共用，db 不能为 nil
+func newPoller(db *mongo.Database) *poller {
 	return &poller{
-		recordStore:     recordStore,
-		pipelineStore:   pipelineStore,
-		autoDeployStore: autoDeployStore,
+		records: store.Of(db, build.RecordMeta),
+		db:      db,
 	}
 }
 
@@ -124,12 +113,8 @@ func newPoller(
 // 仅记录 / 流水线不存在等不可恢复错误 wrap taskq.ErrStopRetry；瞬时错误交回 asynq 退避重试，
 // 否则一次 DB 抖动就会断掉轮询链，让构建记录永久停在 running。
 func (p *poller) runTick(ctx context.Context, args Args) error {
-	// store / 记录缺失无法自行恢复，停掉 asynq 重试
-	if p.recordStore == nil || p.pipelineStore == nil {
-		return errors.Wrap(taskq.ErrStopRetry, "build poll stores not initialized")
-	}
-
-	record, err := p.recordStore.Get(ctx, args.AppID, args.BuildID)
+	// 记录缺失无法自行恢复，停掉 asynq 重试
+	record, err := p.records.Get(ctx, build.ByBuild(args.AppID, args.BuildID))
 	if err != nil {
 		if errors.Is(err, build.ErrRecordNotFound) {
 			return errors.Wrapf(taskq.ErrStopRetry, "get build record: %v", err)
@@ -155,7 +140,8 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 	if err != nil {
 		return errors.Wrapf(taskq.ErrStopRetry, "create bkci api client: %v", err)
 	}
-	pipeline, err := p.pipelineStore.GetByWorkspaceAndType(ctx, args.WorkspaceID, args.PipelineType)
+	pipeline, err := store.Of(p.db, bkci.PipelineMeta).
+		Get(ctx, bkci.ByWorkspaceAndType(args.WorkspaceID, args.PipelineType))
 	if err != nil {
 		if errors.Is(err, bkci.ErrPipelineNotFound) {
 			return errors.Wrapf(
@@ -232,18 +218,14 @@ func (p *poller) save(ctx context.Context, record *build.Record, args Args) erro
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveStatusTimeout)
 	defer cancel()
 
-	if err := p.recordStore.Update(saveCtx, record); err != nil {
+	if err := build.UpdateRecord(saveCtx, p.records, record); err != nil {
 		return err
 	}
 	if args.AutoDeploy == nil {
 		return nil
 	}
-	// 生产路径 store 必注入；缺失只打日志，不让本 tick 失败
-	if p.autoDeployStore == nil {
-		log.Errorf(saveCtx, "build %s auto deploy enabled but store is nil, skip sync", args)
-		return nil
-	}
-	operator, err := autodeploy.NewOperator(p.autoDeployStore)
+	// 同步失败只打日志，不让本 tick 失败
+	operator, err := autodeploy.NewOperator(p.db)
 	if err != nil {
 		log.Errorf(saveCtx, "failed to init build auto deploy operator: %v", err)
 		return nil
@@ -287,14 +269,11 @@ func (p *poller) onTerminated(ctx context.Context, record *build.Record, args Ar
 	return nil
 }
 
-// triggerDeploy 构建成功后触发自动部署；store 未初始化返回 error，由 onTerminated 吞掉
+// triggerDeploy 构建成功后触发自动部署；失败返回 error，由 onTerminated 吞掉
 func (p *poller) triggerDeploy(ctx context.Context, record *build.Record, args Args) error {
-	if p.autoDeployStore == nil {
-		return errors.New("build auto deploy record store is not initialized")
-	}
-	operator, err := autodeploy.NewOperator(p.autoDeployStore)
+	operator, err := autodeploy.NewOperator(p.db)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "init build auto deploy operator")
 	}
 	return triggerDeployAfterBuild(ctx, operator, record, args)
 }

@@ -30,12 +30,14 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	cloudbkci "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const (
@@ -61,12 +63,14 @@ var nonCredentialIDCharPattern = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 // 与 PipelineManager 分叉：共享内置流水线走 Initialize；触发专用必须经本 Manager，
 // 以便注入回调地址、应用独享凭证，并渲染带 appID 的显示名
 type TriggerPipelineManager struct {
+	db          *mongo.Database
 	workspaceID string
 }
 
-// NewTriggerPipelineManager 按工作空间创建触发流水线管理器
+// NewTriggerPipelineManager 按工作空间创建触发流水线管理器，使用全局数据库连接
+// （签名是构建触发策略侧依赖的契约，见 design_notes/build_trigger_contract.md）
 func NewTriggerPipelineManager(workspaceID string) *TriggerPipelineManager {
-	return &TriggerPipelineManager{workspaceID: workspaceID}
+	return &TriggerPipelineManager{db: database.DB(), workspaceID: workspaceID}
 }
 
 // Ensure 确保指定应用的触发专用流水线存在（幂等 create-if-missing）
@@ -81,11 +85,8 @@ func NewTriggerPipelineManager(workspaceID string) *TriggerPipelineManager {
 func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pipeline, error) {
 	// 本地以 workspaceID + build-trigger-{appID} 唯一索引幂等判定
 	pipelineType := string(BuildTriggerPipelineType(appID))
-	store, err := NewPipelineStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create pipeline store")
-	}
-	existing, err := store.GetByWorkspaceAndType(ctx, m.workspaceID, pipelineType)
+	pipelineStore := store.Of(m.db, PipelineMeta)
+	existing, err := pipelineStore.Get(ctx, ByWorkspaceAndType(m.workspaceID, pipelineType))
 	if err == nil {
 		// 幂等命中：有意跳过模板版本检查，理由见方法注释
 		return existing, nil
@@ -100,11 +101,7 @@ func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pip
 	}
 
 	// 触发流水线挂在工作空间已绑定的蓝盾项目下
-	projectStore, err := NewProjectStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create project store")
-	}
-	project, err := projectStore.GetByWorkspace(ctx, m.workspaceID)
+	project, err := store.Of(m.db, ProjectMeta).Get(ctx, ByWorkspace(m.workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get project by workspace %s", m.workspaceID)
 	}
@@ -137,7 +134,16 @@ func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pip
 	// create 失败（含蓝盾创建失败、本地落库失败）时回滚刚建的凭证；
 	// 若蓝盾流水线已创建，create 内部会先删远程流水线，避免留下孤儿实例。
 	// 凭证删除失败只告警，错误仍返回 createErr
-	pipeline, createErr := m.create(ctx, client, store, project, appID, pipelineType, credentialID, callbackURL)
+	pipeline, createErr := m.create(
+		ctx,
+		client,
+		pipelineStore,
+		project,
+		appID,
+		pipelineType,
+		credentialID,
+		callbackURL,
+	)
 	if createErr != nil {
 		if delErr := client.DeleteCredential(ctx, project.Code, credentialID); delErr != nil {
 			log.Warnf(
@@ -157,11 +163,8 @@ func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pip
 // 蓝盾删流水线失败时保留本地并返回错误；凭证回收失败则告警并继续清本地
 func (m *TriggerPipelineManager) Cleanup(ctx context.Context, appID string) error {
 	pipelineType := string(BuildTriggerPipelineType(appID))
-	store, err := NewPipelineStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrap(err, "create pipeline store")
-	}
-	pipeline, err := store.GetByWorkspaceAndType(ctx, m.workspaceID, pipelineType)
+	pipelineStore := store.Of(m.db, PipelineMeta)
+	pipeline, err := pipelineStore.Get(ctx, ByWorkspaceAndType(m.workspaceID, pipelineType))
 	if err != nil {
 		// 本地已无记录视为幂等成功（可能已被清理或从未 Ensure）
 		if errors.Is(err, ErrPipelineNotFound) {
@@ -196,8 +199,8 @@ func (m *TriggerPipelineManager) Cleanup(ctx context.Context, appID string) erro
 		}
 	}
 
-	// 本地 Delete 对不存在静默成功
-	if err = store.Delete(ctx, m.workspaceID, pipelineType); err != nil {
+	// 本地记录不存在时静默成功
+	if err = pipelineStore.DeleteIfExists(ctx, ByWorkspaceAndType(m.workspaceID, pipelineType)); err != nil {
 		return errors.Wrapf(err, "delete local pipeline %s", pipelineType)
 	}
 	return nil
@@ -212,12 +215,12 @@ func (m *TriggerPipelineManager) Cleanup(ctx context.Context, appID string) erro
 func (m *TriggerPipelineManager) create(
 	ctx context.Context,
 	client cloudbkci.Client,
-	store PipelineStore,
+	pipelineStore *PipelineStore,
 	project *Project,
 	appID, pipelineType, credentialID, callbackURL string,
 ) (*Pipeline, error) {
 	// 查模板类型为 build-trigger（非复合 type）；复用 PipelineManager 的加载逻辑
-	tmpl, err := NewPipelineManager(m.workspaceID).getPipelineTemplate(
+	tmpl, err := NewPipelineManager(m.db, m.workspaceID).getPipelineTemplate(
 		ctx, string(PipelineTypeBuildTrigger),
 	)
 	if err != nil {
@@ -254,7 +257,7 @@ func (m *TriggerPipelineManager) create(
 		CallbackCredentialID: credentialID,
 		Creator:              auth.MustGetUser(ctx).ID,
 	}
-	if err = store.Create(ctx, pipeline); err != nil {
+	if err = pipelineStore.Create(ctx, pipeline); err != nil {
 		// 本地未落库则远程也必须回收，否则下次 Ensure 会再建一条且 Cleanup 对不上账
 		if delErr := client.DeletePipeline(ctx, project.Code, pipelineID); delErr != nil &&
 			!errors.Is(delErr, cloudbkci.ObjectNotFound) {

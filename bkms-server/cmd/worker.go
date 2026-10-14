@@ -91,11 +91,9 @@ func NewWorkerCmd() *cobra.Command {
 			// 初始化 workload 插件（必须在 store 初始化之后）
 			workload.InitPlugin(
 				appcfg.NewMountableFileProvider(
-					storereg.G().AppConfigFileStore,
-					storereg.G().AppConfigFileDefStore,
-					storereg.G().AppConfigFileVersionStore,
+					storereg.G().DB,
 				),
-				storereg.G().PolarisConfigStore,
+				storereg.G().DB,
 			)
 
 			// 启动通用任务框架 server: 初始化任务依赖并挂载所有业务任务 handler

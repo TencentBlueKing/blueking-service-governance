@@ -20,139 +20,78 @@ package releasestrategy
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// CollectionName 发布策略表名
-const CollectionName = "release_strategies"
+// Store 发布策略存储
+type Store = store.GenericStore[ReleaseStrategy]
 
-// Store 发布策略存储接口
-type Store interface {
-	// List 列出空间内全部发布策略（按创建时间升序，不分页）
-	List(ctx context.Context, workspaceID string) ([]ReleaseStrategy, error)
-	// Get 获取空间内指定 ID 的发布策略，不存在（含 ID 不合法）时返回 ErrStrategyNotFound
-	Get(ctx context.Context, workspaceID, id string) (*ReleaseStrategy, error)
-	// Create 创建发布策略，同一空间内名称重复时返回 ErrStrategyNameConflict
-	Create(ctx context.Context, strategy *ReleaseStrategy) error
-	// Update 整体替换发布策略的可编辑内容，名称冲突返回 ErrStrategyNameConflict，不存在返回 ErrStrategyNotFound
-	Update(ctx context.Context, strategy *ReleaseStrategy) error
-	// Delete 删除并返回空间内指定 ID 的发布策略，不存在时返回 ErrStrategyNotFound
-	Delete(ctx context.Context, workspaceID, id string) (*ReleaseStrategy, error)
+// Meta 发布策略的存储元数据。不存在（含 ID 不合法）时返回 ErrStrategyNotFound，
+// 同一空间内名称重复时返回 ErrStrategyNameConflict。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：workspaceID + name，约束同一空间内策略名称唯一
+var Meta = store.Meta[ReleaseStrategy]{
+	Collection: "release_strategies",
+	NotFound:   ErrStrategyNotFound,
+	Duplicate:  ErrStrategyNameConflict,
 }
 
-var _ Store = (*StoreMongo)(nil)
-
-// StoreMongo Store 实现（基于 MongoDB）
-type StoreMongo struct {
-	collection *mongo.Collection
+// ByWorkspace 匹配空间内的全部发布策略
+func ByWorkspace(workspaceID string) store.Opt {
+	return store.Where("workspaceID", workspaceID)
 }
 
-// NewStoreMongo 新建 StoreMongo 实例
-func NewStoreMongo(client *mongo.Client, dbName string) (*StoreMongo, error) {
-	coll := client.Database(dbName).Collection(CollectionName)
-	// 索引
-	// - 唯一：workspaceID + name，约束同一空间内策略名称唯一
-	return &StoreMongo{collection: coll}, nil
+// OldestFirst 按创建时间升序
+func OldestFirst() store.Opt {
+	return store.Asc("createdAt")
 }
 
-// List 列出空间内全部发布策略
-func (s *StoreMongo) List(ctx context.Context, workspaceID string) ([]ReleaseStrategy, error) {
-	opts := options.Find().SetSort(bson.D{{Key: "createdAt", Value: 1}})
-	cursor, err := s.collection.Find(ctx, bson.M{"workspaceID": workspaceID}, opts)
-	if err != nil {
-		return nil, errors.Wrapf(err, "find release strategies in workspace %s", workspaceID)
-	}
-	defer cursor.Close(ctx)
-
-	strategies := make([]ReleaseStrategy, 0)
-	if err = cursor.All(ctx, &strategies); err != nil {
-		return nil, errors.Wrapf(err, "decode release strategies in workspace %s", workspaceID)
-	}
-	return strategies, nil
-}
-
-// Get 获取空间内指定 ID 的发布策略
-func (s *StoreMongo) Get(ctx context.Context, workspaceID, id string) (*ReleaseStrategy, error) {
+// byWorkspaceAndID 匹配空间内指定 ID 的发布策略，id 不是合法的 ObjectID 时返回 ErrStrategyNotFound
+func byWorkspaceAndID(workspaceID, id string) (store.Opt, error) {
 	objID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, errors.Wrapf(ErrStrategyNotFound, "invalid release strategy id %q", id)
 	}
+	return store.Combine(ByWorkspace(workspaceID), store.ByID(objID)), nil
+}
 
-	strategy := new(ReleaseStrategy)
-	err = s.collection.FindOne(ctx, bson.M{"_id": objID, "workspaceID": workspaceID}).Decode(strategy)
+// GetStrategy 获取空间内指定 ID 的发布策略，不存在（含 ID 不合法）时返回 ErrStrategyNotFound
+func GetStrategy(ctx context.Context, strategies *Store, workspaceID, id string) (*ReleaseStrategy, error) {
+	opt, err := byWorkspaceAndID(workspaceID, id)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errors.Wrapf(ErrStrategyNotFound, "release strategy %s in workspace %s", id, workspaceID)
-		}
-		return nil, errors.Wrapf(err, "find release strategy %s in workspace %s", id, workspaceID)
+		return nil, err
+	}
+	strategy, err := strategies.Get(ctx, opt)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get release strategy %s in workspace %s", id, workspaceID)
 	}
 	return strategy, nil
 }
 
-// Create 创建发布策略
-func (s *StoreMongo) Create(ctx context.Context, strategy *ReleaseStrategy) error {
-	strategy.ID = bson.NewObjectID()
-	now := time.Now()
-	strategy.CreatedAt, strategy.UpdatedAt = now, now
-	if _, err := s.collection.InsertOne(ctx, strategy); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return errors.Wrapf(
-				ErrStrategyNameConflict, "name %q in workspace %s", strategy.Name, strategy.WorkspaceID,
-			)
-		}
-		return errors.Wrapf(err, "insert release strategy %q", strategy.Name)
-	}
-	return nil
-}
-
-// Update 整体替换发布策略的可编辑内容（名称、描述、批次）及更新人
-func (s *StoreMongo) Update(ctx context.Context, strategy *ReleaseStrategy) error {
-	strategy.UpdatedAt = time.Now()
-	ret, err := s.collection.UpdateOne(
-		ctx,
-		bson.M{"_id": strategy.ID, "workspaceID": strategy.WorkspaceID},
-		bson.M{"$set": bson.M{
-			"name":        strategy.Name,
-			"description": strategy.Description,
-			"batches":     strategy.Batches,
-			"updater":     strategy.Updater,
-			"updatedAt":   strategy.UpdatedAt,
-		}},
+// UpdateStrategy 整体替换发布策略的可编辑内容（名称、描述、批次）及更新人，
+// 名称冲突返回 ErrStrategyNameConflict，不存在返回 ErrStrategyNotFound
+func UpdateStrategy(ctx context.Context, strategies *Store, strategy *ReleaseStrategy) error {
+	err := strategies.Update(ctx, strategy,
+		store.UpdateSelected("name", "description", "batches", "updater"),
+		ByWorkspace(strategy.WorkspaceID),
+		store.ByID(strategy.ID),
 	)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return errors.Wrapf(
-				ErrStrategyNameConflict, "name %q in workspace %s", strategy.Name, strategy.WorkspaceID,
-			)
-		}
-		return errors.Wrapf(err, "update release strategy %s", strategy.ID.Hex())
-	}
-	if ret.MatchedCount == 0 {
-		return errors.Wrapf(
-			ErrStrategyNotFound, "release strategy %s in workspace %s", strategy.ID.Hex(), strategy.WorkspaceID,
-		)
-	}
-	return nil
+	return errors.Wrapf(err, "update release strategy %s in workspace %s", strategy.ID.Hex(), strategy.WorkspaceID)
 }
 
-// Delete 删除并返回空间内指定 ID 的发布策略
-func (s *StoreMongo) Delete(ctx context.Context, workspaceID, id string) (*ReleaseStrategy, error) {
-	objID, err := bson.ObjectIDFromHex(id)
+// DeleteStrategy 删除并返回空间内指定 ID 的发布策略，不存在（含 ID 不合法）时返回 ErrStrategyNotFound
+func DeleteStrategy(ctx context.Context, strategies *Store, workspaceID, id string) (*ReleaseStrategy, error) {
+	opt, err := byWorkspaceAndID(workspaceID, id)
 	if err != nil {
-		return nil, errors.Wrapf(ErrStrategyNotFound, "invalid release strategy id %q", id)
+		return nil, err
 	}
-
-	strategy := new(ReleaseStrategy)
-	err = s.collection.FindOneAndDelete(ctx, bson.M{"_id": objID, "workspaceID": workspaceID}).Decode(strategy)
+	strategy, err := strategies.GetAndDelete(ctx, opt)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errors.Wrapf(ErrStrategyNotFound, "release strategy %s in workspace %s", id, workspaceID)
-		}
 		return nil, errors.Wrapf(err, "delete release strategy %s in workspace %s", id, workspaceID)
 	}
 	return strategy, nil

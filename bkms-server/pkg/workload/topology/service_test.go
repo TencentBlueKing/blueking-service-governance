@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -40,7 +41,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/clusterresources"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
@@ -48,23 +48,22 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	k8sstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
 var _ = Describe("Service", func() {
 	var (
-		diApp             *fxtest.App
-		svc               *Service
-		store             *ResourceSnapshotStoreMongo
-		scopedEnvVarStore envvars.ScopedEnvVarStore
-		appModelStore     appmodel.AppModelStore
-		testApp           *bkmsapp.Application
-		testEnv           *envmodel.Environment
-		testCtx           context.Context
-		mocker            *mockey.Mocker
+		diApp     *fxtest.App
+		svc       *Service
+		snapshots *ResourceSnapshotStore
+		db        *mongo.Database
+		testApp   *bkmsapp.Application
+		testEnv   *envmodel.Environment
+		testCtx   context.Context
+		mocker    *mockey.Mocker
 	)
 
 	BeforeEach(func() {
@@ -73,19 +72,18 @@ var _ = Describe("Service", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
 			bkmsenv.FxModule,
 			envvars.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polarisenvvars.FxModule,
 			polaris.FxModule,
-			fx.Populate(&svc, &store, &appModelStore, &scopedEnvVarStore),
+			fx.Populate(&svc),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		snapshots = testutil.NewStore(GinkgoT(), ResourceSnapshotMeta)
 
-		err := testutil.CleanupCollection(ResourceSnapshotsCollection)
+		err := testutil.CleanupMetaColl(ResourceSnapshotMeta)
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("app_models")
 		Expect(err).NotTo(HaveOccurred())
@@ -108,7 +106,7 @@ var _ = Describe("Service", func() {
 				Namespace: "default",
 			},
 		}
-		err = appModelStore.CreateAppModel(testCtx, &appmodel.AppModel{AppID: testApp.ID})
+		err = appmodel.CreateAppModel(testCtx, db, &appmodel.AppModel{AppID: testApp.ID})
 		Expect(err).NotTo(HaveOccurred())
 
 		cfg, err := testutil.TestClusterConfig("BCS-K8S-00000")
@@ -123,7 +121,7 @@ var _ = Describe("Service", func() {
 		if mocker != nil {
 			mocker.Release()
 		}
-		_ = testutil.CleanupCollection(ResourceSnapshotsCollection)
+		_ = testutil.CleanupMetaColl(ResourceSnapshotMeta)
 		_ = testutil.CleanupCollection("app_models")
 		_ = testutil.CleanupCollection("scoped_env_vars")
 		if diApp != nil {
@@ -158,7 +156,7 @@ var _ = Describe("Service", func() {
 				Resources:       []ResourceEntry{},
 				Relations:       []ResourceRelation{},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			graph, err := svc.GetTopology(testCtx, "test-app", "dev", "")
@@ -190,7 +188,7 @@ var _ = Describe("Service", func() {
 				},
 				Relations: []ResourceRelation{},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			graph, err := svc.GetTopology(testCtx, "test-app", "dev", "")
@@ -243,7 +241,7 @@ var _ = Describe("Service", func() {
 				},
 				Relations: []ResourceRelation{},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -313,7 +311,7 @@ var _ = Describe("Service", func() {
 					{Kind: "CustomResource", Namespace: "default", Name: "my-cr"},
 				},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshotWithCustom, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshotWithCustom, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			nodeID := EncodeNodeID("CustomResource", "default", "my-cr")
@@ -366,7 +364,7 @@ var _ = Describe("Service", func() {
 					},
 				},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -517,7 +515,7 @@ var _ = Describe("Service", func() {
 					},
 				},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -555,7 +553,7 @@ var _ = Describe("Service", func() {
 			nodeID := EncodeNodeID(k8skind.Deploy, "default", "my-deploy")
 			secretValue := "1"
 			publicValue := "1"
-			_, err := scopedEnvVarStore.Create(testCtx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(testCtx, &envvars.ScopedEnvVar{
 				WorkspaceID: testEnv.WorkspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnv,
 				ScopeValue:  testEnv.Name,
@@ -564,7 +562,7 @@ var _ = Describe("Service", func() {
 				IsSensitive: true,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			_, err = scopedEnvVarStore.Create(testCtx, envvars.ScopedEnvVar{
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(testCtx, &envvars.ScopedEnvVar{
 				WorkspaceID: testEnv.WorkspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnv,
 				ScopeValue:  testEnv.Name,
@@ -643,7 +641,7 @@ var _ = Describe("Service", func() {
 
 		It("should mask sensitive ConfigMap data in manifest", func() {
 			nodeID := EncodeNodeID(k8skind.CM, "default", "my-config")
-			_, err := scopedEnvVarStore.Create(testCtx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(testCtx, &envvars.ScopedEnvVar{
 				WorkspaceID: testEnv.WorkspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnv,
 				ScopeValue:  testEnv.Name,
@@ -698,7 +696,7 @@ var _ = Describe("Service", func() {
 
 		It("should mask sensitive env vars by key when configured value is empty", func() {
 			nodeID := EncodeNodeID(k8skind.Deploy, "default", "my-deploy")
-			_, err := scopedEnvVarStore.Create(testCtx, envvars.ScopedEnvVar{
+			err := store.Of(db, envvars.ScopedEnvVarMeta).Create(testCtx, &envvars.ScopedEnvVar{
 				WorkspaceID: testEnv.WorkspaceID,
 				ScopeType:   envvartypes.ScopeTypeEnv,
 				ScopeValue:  testEnv.Name,

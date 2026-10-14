@@ -27,11 +27,13 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
@@ -39,24 +41,25 @@ var _ = Describe("validateScopedEnvVarScopeValue", func() {
 	var ctx context.Context
 	var diApp *fxtest.App
 	var envSvc *bkmsenv.EnvService
-	var envStore envmodel.EnvironmentStore
+	var envStore *envmodel.EnvironmentStore
 	var handler *Handler
 	var standardEnv, featureEnv *envmodel.Environment
 	var workspaceID string
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		diApp = fxtest.New(GinkgoT(), bkmsenv.FxModule, fx.Populate(&envSvc, &envStore))
+		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
+		diApp = fxtest.New(GinkgoT(), bkmsenv.FxModule, fx.Populate(&envSvc))
 		diApp.RequireStart()
 		DeferCleanup(diApp.RequireStop)
 		workspaceID = "envvars-test-" + stringx.Random(8)
 		standardEnv = dbfactory.Env(ctx, envSvc, workspaceID)
-		DeferCleanup(func() { Expect(envStore.Delete(ctx, standardEnv.ID)).To(Succeed()) })
+		DeferCleanup(func() { Expect(envStore.DeleteIfExists(ctx, store.ByID(standardEnv.ID))).To(Succeed()) })
 		featureEnv = dbfactory.FeatEnv(ctx, envSvc, &bkmsapp.Application{
 			ID: "owner-app", WorkspaceID: workspaceID,
 		}, standardEnv)
-		DeferCleanup(func() { Expect(envStore.Delete(ctx, featureEnv.ID)).To(Succeed()) })
-		handler = &Handler{registry: &storereg.Registry{EnvStore: envStore}}
+		DeferCleanup(func() { Expect(envStore.DeleteIfExists(ctx, store.ByID(featureEnv.ID))).To(Succeed()) })
+		handler = &Handler{registry: &storereg.Registry{DB: testutil.NewDB(GinkgoT())}}
 	})
 
 	It("accepts standard and feature environments in the workspace", func() {

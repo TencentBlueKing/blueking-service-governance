@@ -24,7 +24,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // BaseAppCfgFileService 是三表模型（def / file / version）的底层 CRUD 服务。
@@ -37,21 +41,21 @@ import (
 // ConfigKind 相关规则由上层 AppCfgFileDefService 通过 ConfigKindPolicy 处理。
 // AppConfigFileService 仍作为兼容门面内嵌场景层，CLI 切完后会撤掉。
 type BaseAppCfgFileService struct {
-	DefStore     AppConfigFileDefStore
-	FileStore    AppConfigFileStore
-	VersionStore AppConfigFileVersionStore
+	DefStore     *AppConfigFileDefStore
+	FileStore    *AppConfigFileStore
+	VersionStore *AppConfigFileVersionStore
+
+	// db 供编辑器、内容提供者等按需读取 def 记录
+	db *mongo.Database
 }
 
 // NewBaseAppCfgFileService 创建底层服务实例。
-func NewBaseAppCfgFileService(
-	defStore AppConfigFileDefStore,
-	fileStore AppConfigFileStore,
-	versionStore AppConfigFileVersionStore,
-) *BaseAppCfgFileService {
+func NewBaseAppCfgFileService(db *mongo.Database) *BaseAppCfgFileService {
 	return &BaseAppCfgFileService{
-		DefStore:     defStore,
-		FileStore:    fileStore,
-		VersionStore: versionStore,
+		DefStore:     store.Of(db, AppConfigFileDefMeta),
+		FileStore:    store.Of(db, AppConfigFileMeta),
+		VersionStore: store.Of(db, AppConfigFileVersionMeta),
+		db:           db,
 	}
 }
 
@@ -98,12 +102,14 @@ func (s *BaseAppCfgFileService) UpdateFile(
 		return err
 	}
 
-	if _, err = s.FileStore.UpdateIfVersionMatches(ctx, *acf, curVersion); err != nil {
+	if err = UpdateFileIfVersionMatches(ctx, s.FileStore, acf, curVersion); err != nil {
 		return err
 	}
 
-	_, err = s.VersionStore.Add(ctx, version)
-	return err
+	if err = s.VersionStore.Create(ctx, &version); err != nil {
+		return errors.Wrapf(err, "add version %d of app config file %s", version.Version, acf.ID.Hex())
+	}
+	return nil
 }
 
 // Rollback 加载目标版本并回滚到当前文件，生成一条回滚版本记录。
@@ -154,41 +160,41 @@ func (s *BaseAppCfgFileService) DeleteFile(
 		return nil, err
 	}
 
-	if _, err = s.FileStore.DeleteByID(ctx, appID, fileID); err != nil {
+	if err = DeleteFile(ctx, s.FileStore, appID, fileID); err != nil {
 		return nil, errors.Wrap(err, "delete app config file")
 	}
-	if _, err = s.VersionStore.DeleteByFileID(ctx, fileID); err != nil {
+	if _, err = s.VersionStore.DeleteMany(ctx, VersionsByFile(fileID)); err != nil {
 		return nil, errors.Wrap(err, "delete version records for deleted file")
 	}
 
 	// 若删除的是默认实例，同时清理同 def 下的环境实例和 def 记录，不区分 configKind。
 	if acf.EnvName == EnvNameDefault {
 		var siblings []AppConfigFile
-		siblings, err = s.FileStore.ListByDefID(ctx, acf.DefID)
+		siblings, err = s.FileStore.List(ctx, FilesByDef(acf.DefID))
 		if err != nil {
 			return nil, errors.Wrap(err, "listing sibling env instances")
 		}
 		for _, sib := range siblings {
-			if _, err = s.FileStore.DeleteByID(ctx, appID, sib.ID); err != nil {
+			if err = DeleteFile(ctx, s.FileStore, appID, sib.ID); err != nil {
 				return nil, errors.Wrapf(err, "delete sibling env instance %s", sib.ID.Hex())
 			}
-			if _, err = s.VersionStore.DeleteByFileID(ctx, sib.ID); err != nil {
+			if _, err = s.VersionStore.DeleteMany(ctx, VersionsByFile(sib.ID)); err != nil {
 				return nil, errors.Wrapf(err, "delete versions for sibling %s", sib.ID.Hex())
 			}
 		}
-		if _, err = s.DefStore.DeleteByID(ctx, acf.DefID); err != nil {
+		if err = s.DefStore.DeleteIfExists(ctx, store.ByID(acf.DefID)); err != nil {
 			return nil, errors.Wrap(err, "delete def record")
 		}
 		return acf, nil
 	}
 
 	// 若没有关联文件，def 定义一并删除
-	remaining, err := s.FileStore.ListByDefID(ctx, acf.DefID)
+	remaining, err := s.FileStore.List(ctx, FilesByDef(acf.DefID))
 	if err != nil {
 		return nil, errors.Wrap(err, "listing remaining files for def cleanup")
 	}
 	if len(remaining) == 0 {
-		if _, err = s.DefStore.DeleteByID(ctx, acf.DefID); err != nil {
+		if err = s.DefStore.DeleteIfExists(ctx, store.ByID(acf.DefID)); err != nil {
 			return nil, errors.Wrap(err, "delete orphan def record")
 		}
 	}
@@ -198,31 +204,33 @@ func (s *BaseAppCfgFileService) DeleteFile(
 
 // --- 版本方法 ---
 
-// ListVersions 按过滤条件返回版本记录。
+// ListVersions 分页返回应用下未删除的版本记录（按创建时间倒序），opts 为附加的过滤条件。
 func (s *BaseAppCfgFileService) ListVersions(
 	ctx context.Context,
-	opts AppConfigFileVersionListOptions,
-) ([]AppConfigFileVersion, int64, error) {
-	return s.VersionStore.List(ctx, opts)
+	appID string,
+	page, pageSize int64,
+	opts ...store.Opt,
+) (*store.Page[AppConfigFileVersion], error) {
+	opts = append([]store.Opt{VersionsByApp(appID), VersionNotDeleted(), VersionsNewestFirst()}, opts...)
+	result, err := s.VersionStore.ListPage(ctx, page, pageSize, opts...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list app config file versions of app %s", appID)
+	}
+	return result, nil
 }
 
-// GetVersionByAppAndID 获取一条版本记录，并校验其归属于指定应用。
+// GetVersionByAppAndID 获取一条版本记录（含已软删除的），并校验其归属于指定应用，
+// 不存在或不属于该应用时返回 ErrAppCfgFileVersionNotFound。
 func (s *BaseAppCfgFileService) GetVersionByAppAndID(
 	ctx context.Context,
 	appID string,
 	id bson.ObjectID,
 ) (*AppConfigFileVersion, error) {
-	items, err := s.VersionStore.BatchGetByAppAndIDs(ctx, appID, []bson.ObjectID{id})
+	version, err := s.VersionStore.Get(ctx, store.ByID(id), VersionsByApp(appID))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "get app config file version %s", id.Hex())
 	}
-	if len(items) == 0 {
-		return nil, errors.Wrap(
-			ErrAppCfgFileVersionNotFound,
-			fmt.Sprintf("app config file version %s not found", id.Hex()),
-		)
-	}
-	return &items[0], nil
+	return version, nil
 }
 
 // CompareVersions 返回两条版本记录用于 diff，同时校验归属关系。
@@ -232,11 +240,13 @@ func (s *BaseAppCfgFileService) CompareVersions(
 	previousVersionID bson.ObjectID,
 	currentVersionID bson.ObjectID,
 ) (*AppConfigFileVersion, *AppConfigFileVersion, error) {
-	versions, err := s.VersionStore.BatchGetByAppAndIDs(
-		ctx, appID, []bson.ObjectID{previousVersionID, currentVersionID},
+	versions, err := s.VersionStore.List(
+		ctx,
+		VersionsByApp(appID),
+		store.Where("_id", bson.M{"$in": []bson.ObjectID{previousVersionID, currentVersionID}}),
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "list compared app config file versions")
 	}
 	versionMap := make(map[bson.ObjectID]AppConfigFileVersion, len(versions))
 	for _, v := range versions {
@@ -274,8 +284,9 @@ func (s *BaseAppCfgFileService) DeleteVersion(
 	if acf.CurrentVersion == targetVersion.Version {
 		return nil, nil, ErrUsingVersionCannotBeDeleted
 	}
-	if _, err = s.VersionStore.SoftDeleteByID(ctx, versionID, deleter); err != nil {
-		return nil, nil, err
+	softDeleted := map[string]any{"isDeleted": true, "deleter": deleter, "deletedAt": lo.ToPtr(time.Now())}
+	if err = s.VersionStore.Update(ctx, softDeleted, store.ByID(versionID)); err != nil {
+		return nil, nil, errors.Wrapf(err, "soft delete app config file version %s", versionID.Hex())
 	}
 	return targetVersion, acf, nil
 }
@@ -288,11 +299,9 @@ func (s *BaseAppCfgFileService) CreateFileWithVersion(
 	description string,
 	creator string,
 ) (*AppConfigFile, error) {
-	fileID, err := s.FileStore.Add(ctx, acf)
-	if err != nil {
+	if err := s.FileStore.Create(ctx, &acf); err != nil {
 		return nil, errors.Wrap(err, "adding file record")
 	}
-	acf.ID = fileID
 
 	version, err := s.buildVersionRecord(
 		ctx, acf, name,
@@ -301,7 +310,7 @@ func (s *BaseAppCfgFileService) CreateFileWithVersion(
 	if err != nil {
 		return nil, errors.Wrap(err, "building initial version record")
 	}
-	if _, err = s.VersionStore.Add(ctx, version); err != nil {
+	if err = s.VersionStore.Create(ctx, &version); err != nil {
 		return nil, errors.Wrap(err, "adding initial version record")
 	}
 	return &acf, nil
@@ -354,7 +363,7 @@ func (s *BaseAppCfgFileService) GetDefaultFileWithDef(
 	if err != nil {
 		return nil, errors.Wrap(err, "loading def")
 	}
-	acf, err := s.FileStore.GetByDefIDAndEnv(ctx, defID, EnvNameDefault)
+	acf, err := s.FileStore.Get(ctx, FileByDefEnv(defID, EnvNameDefault))
 	if err != nil {
 		return nil, errors.Wrap(err, "loading default file for def")
 	}

@@ -26,13 +26,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	helminfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
@@ -338,26 +339,24 @@ var _ = Describe("supplementOwnerRefChain", func() {
 var _ = Describe("Refresher", func() {
 	Describe("Refresh", func() {
 		var (
-			ctx   context.Context
-			store *ResourceSnapshotStoreMongo
+			ctx       context.Context
+			db        *mongo.Database
+			snapshots *ResourceSnapshotStore
 		)
 
 		BeforeEach(func() {
 			ctx = context.Background()
-			var err error
-			// 构建真实 ResourceSnapshotStoreMongo，并在每个用例前清空测试数据
-			store, err = NewResourceSnapshotStoreMongo(database.Client(), database.Name())
-			Expect(err).NotTo(HaveOccurred())
-			err = store.DeleteAll(ctx)
-			Expect(err).NotTo(HaveOccurred())
+			// 使用真实测试数据库，用例结束后清空测试数据
+			db = testutil.NewDB(GinkgoT())
+			snapshots = testutil.NewStore(GinkgoT(), ResourceSnapshotMeta)
 		})
 
 		AfterEach(func() {
-			_ = store.DeleteAll(ctx)
+			Expect(testutil.CleanupMetaColl(ResourceSnapshotMeta)).To(Succeed())
 		})
 
 		It("should generate success snapshot when all declared resources exist", func() {
-			refresher := NewRefresher(store)
+			refresher := NewRefresher(db)
 
 			mockey.PatchConvey("all-declared-resources-exist", GinkgoT(), func() {
 				cfg := &cluster.Config{ClusterID: "test-cluster"}
@@ -386,8 +385,8 @@ var _ = Describe("Refresher", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				// 直接从真实 store 回读 snapshot 断言
-				got, err := store.Get(ctx, "test-app", "dev", "")
+				// 直接从真实数据库回读 snapshot 断言
+				got, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got).NotTo(BeNil())
 				Expect(got.RefreshStatus).To(Equal(RefreshStatusSuccess))
@@ -401,7 +400,7 @@ var _ = Describe("Refresher", func() {
 		})
 
 		It("should keep declared resources in snapshot when some resources are missing", func() {
-			refresher := NewRefresher(store)
+			refresher := NewRefresher(db)
 
 			mockey.PatchConvey("appmodel-keeps-missing-declared-resources", GinkgoT(), func() {
 				cfg := &cluster.Config{ClusterID: "test-cluster"}
@@ -438,7 +437,7 @@ var _ = Describe("Refresher", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				got, err := store.Get(ctx, "test-app", "dev", "")
+				got, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got).NotTo(BeNil())
 				Expect(got.RefreshStatus).To(Equal(RefreshStatusSuccess))
@@ -462,10 +461,10 @@ var _ = Describe("Refresher", func() {
 					{Kind: k8skind.CM, Namespace: "default", Name: "existing-cm"},
 				},
 			}
-			err := store.UpsertWithVersion(ctx, previousSnapshot, 2)
+			err := SaveWithVersion(ctx, snapshots, previousSnapshot, 2)
 			Expect(err).NotTo(HaveOccurred())
 
-			refresher := NewRefresher(store)
+			refresher := NewRefresher(db)
 
 			mockey.PatchConvey("helm-release-not-found", GinkgoT(), func() {
 				mockey.Mock(helminfra.NewActionConfiguration).Return(&action.Configuration{}, nil).Build()
@@ -482,7 +481,7 @@ var _ = Describe("Refresher", func() {
 				})
 				Expect(refreshErr).NotTo(HaveOccurred())
 
-				got, err := store.Get(ctx, "test-app", "dev", "")
+				got, err := FindSnapshot(ctx, snapshots, "test-app", "dev", "")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got).NotTo(BeNil())
 				Expect(got.DataVersion).To(Equal(int64(3)))

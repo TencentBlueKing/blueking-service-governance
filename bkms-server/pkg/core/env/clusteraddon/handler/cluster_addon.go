@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Handler handles Gin cluster-addon API requests.
@@ -42,6 +43,10 @@ type Handler struct {
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) addonDefs() *clusteraddon.ClusterAddonDefStore {
+	return store.Of(h.registry.DB, clusteraddon.ClusterAddonDefMeta)
 }
 
 // ListClusterAddons 查询可安装的集群插件列表。
@@ -80,7 +85,7 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 		return
 	}
 
-	addonDefs, err := h.registry.ClusterAddonDefStore.List(ctx)
+	addonDefs, err := clusteraddon.ListDefs(ctx, h.addonDefs())
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list cluster addon defs"))
 		return
@@ -145,7 +150,9 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 		return
 	}
 
-	addonDef, err := h.registry.ClusterAddonDefStore.Get(ctx, uriInput.AddonName)
+	addonDef, err := h.addonDefs().Get(
+		ctx, clusteraddon.ByName(uriInput.AddonName),
+	)
 	if err != nil {
 		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
 			bkerrs.AbortWithErr(
@@ -233,7 +240,9 @@ func (h *Handler) DeleteClusterAddon(c *gin.Context) {
 		return
 	}
 
-	addonDef, err := h.registry.ClusterAddonDefStore.Get(ctx, uriInput.AddonName)
+	addonDef, err := h.addonDefs().Get(
+		ctx, clusteraddon.ByName(uriInput.AddonName),
+	)
 	if err != nil {
 		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
 			bkerrs.AbortWithErr(

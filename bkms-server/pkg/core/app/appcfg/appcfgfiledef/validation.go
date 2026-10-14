@@ -53,7 +53,7 @@ func (h *Handler) validateBaseAppConfigFileID(
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid baseAppConfigFileId")
 	}
-	obj, err := h.registry.AppConfigFileStore.GetByID(ctx, baseObjID)
+	obj, err := h.configFiles().GetByID(ctx, baseObjID)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting the base app config file")
 	}

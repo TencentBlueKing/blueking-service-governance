@@ -30,12 +30,14 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 	svc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/service"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // NewAppBscpCfgMgrCmd 创建 app-bscpcfg-mgr 命令，用于启用或停用应用的 bscp 配置。
@@ -164,8 +166,8 @@ func setBscpCfgForApp(
 		return enableBscpCfgForApp(ctx, reg, user, appID)
 	}
 
-	disabled := false
-	if err := reg.BscpCfgStore.UpdateMetadata(ctx, appID, &model.MetadataUpdate{Enable: &disabled}); err != nil {
+	update := map[string]any{"enable": false}
+	if err := store.Of(reg.DB, model.MetadataMeta).Update(ctx, update, model.ByApp(appID)); err != nil {
 		return errors.Wrapf(err, "disable bscp config for app %s", appID)
 	}
 	return nil
@@ -178,12 +180,12 @@ func enableBscpCfgForApp(
 	user auth.User,
 	appID string,
 ) error {
-	app, err := reg.AppStore.GetApp(ctx, appID)
+	app, err := store.Of(reg.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		return errors.Wrapf(err, "get app %s", appID)
 	}
 
-	ws, err := reg.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := store.Of(reg.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", app.WorkspaceID)
 	}
@@ -194,7 +196,7 @@ func enableBscpCfgForApp(
 		return errors.Errorf("workspace %s missing BkBSCPProjectID, run bind-bscp-project first", ws.ID)
 	}
 
-	mgr, err := svc.NewManager(user, reg.BscpCfgStore)
+	mgr, err := svc.NewManager(user, reg.DB)
 	if err != nil {
 		return errors.Wrap(err, "create manager")
 	}
@@ -217,8 +219,8 @@ func enableBscpCfgForApp(
 	}
 
 	// 已存在的 Metadata 幂等返回时 enable 可能仍为 false，这里显式置为 true
-	enabled := true
-	if err := reg.BscpCfgStore.UpdateMetadata(ctx, appID, &model.MetadataUpdate{Enable: &enabled}); err != nil {
+	update := map[string]any{"enable": true}
+	if err := store.Of(reg.DB, model.MetadataMeta).Update(ctx, update, model.ByApp(appID)); err != nil {
 		return errors.Wrapf(err, "enable bscp config for app %s", appID)
 	}
 

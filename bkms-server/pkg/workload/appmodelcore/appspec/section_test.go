@@ -24,11 +24,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	lifecyclesection "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/sections/lifecycle"
@@ -37,30 +38,18 @@ import (
 var _ = Describe("AppSpec Sections", func() {
 	Context("default scope", func() {
 		var ctx context.Context
-		var diApp *fxtest.App
-		var appStore bkmsapp.ApplicationStore
-		var appModelStore appmodel.AppModelStore
-		var appSpecStore AppSpecStore
+		var appStore *bkmsapp.ApplicationStore
+		var db *mongo.Database
 
 		BeforeEach(func() {
 			ctx = context.Background()
-			diApp = fxtest.New(
-				GinkgoT(),
-				bkmsapp.FxModule,
-				appmodel.FxModule,
-				FxModule,
-				fx.Populate(&appStore, &appModelStore, &appSpecStore),
-			)
-			diApp.RequireStart()
-		})
-
-		AfterEach(func() {
-			diApp.RequireStop()
+			appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+			db = testutil.NewDB(GinkgoT())
 		})
 
 		It("patches only the default resources section", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID: app.ID,
 				UpdateStrategy: &appmodel.UpdateStrategy{
 					Type:           "RollingUpdate",
@@ -71,7 +60,7 @@ var _ = Describe("AppSpec Sections", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+			err = SetDefault(ctx, db, app.ID, &AppSpec{
 				Resources: &ResourcesSpec{
 					Replicas:       lo.ToPtr(int32(2)),
 					CPURequests:    lo.ToPtr("100m"),
@@ -89,8 +78,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			err = SetDefaultSection(
 				ctx,
-				appSpecStore,
-				appModelStore,
+				db,
 				app.ID,
 				ResourcesSection,
 				&ResourcesSpec{MemoryRequests: lo.ToPtr("1Gi")},
@@ -98,19 +86,19 @@ var _ = Describe("AppSpec Sections", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			resourcesSpec, err := GetDefaultSection(ctx, appSpecStore, appModelStore, app.ID, ResourcesSection)
+			resourcesSpec, err := GetDefaultSection(ctx, db, app.ID, ResourcesSection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*resourcesSpec.CPURequests).To(Equal("100m"))
 			Expect(*resourcesSpec.MemoryRequests).To(Equal("1Gi"))
 			Expect(*resourcesSpec.MemoryLimits).To(Equal("512Mi"))
 
 			// Other sections should be unaffected.
-			updateStrategy, err := GetDefaultSection(ctx, appSpecStore, appModelStore, app.ID, UpdateStrategySection)
+			updateStrategy, err := GetDefaultSection(ctx, db, app.ID, UpdateStrategySection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*updateStrategy.MaxUnavailable).To(Equal("25%"))
 			Expect(*updateStrategy.MaxSurge).To(Equal("1"))
 
-			savedModel, err := appModelStore.GetAppModel(ctx, app.ID)
+			savedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(savedModel.UpdateStrategy.Type).To(Equal("RollingUpdate"))
 			Expect(*savedModel.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
@@ -123,13 +111,13 @@ var _ = Describe("AppSpec Sections", func() {
 
 		It("returns cloned section values instead of internal pointers", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID:    app.ID,
 				Workload: appmodel.Workload{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+			err = SetDefault(ctx, db, app.ID, &AppSpec{
 				Resources: &ResourcesSpec{
 					Replicas:       lo.ToPtr(int32(2)),
 					CPURequests:    lo.ToPtr("100m"),
@@ -138,13 +126,13 @@ var _ = Describe("AppSpec Sections", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			resourcesSpec, err := GetDefaultSection(ctx, appSpecStore, appModelStore, app.ID, ResourcesSection)
+			resourcesSpec, err := GetDefaultSection(ctx, db, app.ID, ResourcesSection)
 			Expect(err).NotTo(HaveOccurred())
 
 			resourcesSpec.Replicas = lo.ToPtr(int32(9))
 			resourcesSpec.MemoryRequests = lo.ToPtr("2Gi")
 
-			reloadedResources, err := GetDefaultSection(ctx, appSpecStore, appModelStore, app.ID, ResourcesSection)
+			reloadedResources, err := GetDefaultSection(ctx, db, app.ID, ResourcesSection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*reloadedResources.Replicas).To(Equal(int32(2)))
 			Expect(*reloadedResources.MemoryRequests).To(Equal("256Mi"))
@@ -152,7 +140,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 		It("replaces only the default update strategy section", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID: app.ID,
 				UpdateStrategy: &appmodel.UpdateStrategy{
 					Type:           "RollingUpdate",
@@ -163,7 +151,7 @@ var _ = Describe("AppSpec Sections", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+			err = SetDefault(ctx, db, app.ID, &AppSpec{
 				Resources: &ResourcesSpec{
 					Replicas: lo.ToPtr(int32(3)),
 				},
@@ -177,8 +165,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			err = SetDefaultSection(
 				ctx,
-				appSpecStore,
-				appModelStore,
+				db,
 				app.ID,
 				UpdateStrategySection,
 				&UpdateStrategySpec{MaxUnavailable: lo.ToPtr("35%")},
@@ -186,12 +173,12 @@ var _ = Describe("AppSpec Sections", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			updateStrategy, err := GetDefaultSection(ctx, appSpecStore, appModelStore, app.ID, UpdateStrategySection)
+			updateStrategy, err := GetDefaultSection(ctx, db, app.ID, UpdateStrategySection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*updateStrategy.MaxUnavailable).To(Equal("35%"))
 			Expect(updateStrategy.MaxSurge).To(BeNil())
 
-			savedModel, err := appModelStore.GetAppModel(ctx, app.ID)
+			savedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(savedModel.UpdateStrategy.Type).To(Equal("RollingUpdate"))
 			Expect(*savedModel.UpdateStrategy.MaxUnavailable).To(Equal("35%"))
@@ -200,21 +187,20 @@ var _ = Describe("AppSpec Sections", func() {
 
 		It("patches dev mode without overwriting default paths", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID:    app.ID,
 				Workload: appmodel.Workload{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+			err = SetDefault(ctx, db, app.ID, &AppSpec{
 				DevMode: &DevModeSpec{Enabled: lo.ToPtr(true)},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			err = SetDefaultSection(
 				ctx,
-				appSpecStore,
-				appModelStore,
+				db,
 				app.ID,
 				DevModeSection,
 				&DevModeSpec{Enabled: lo.ToPtr(false)},
@@ -222,7 +208,7 @@ var _ = Describe("AppSpec Sections", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			devModeSpec, err := GetDefaultSection(ctx, appSpecStore, appModelStore, app.ID, DevModeSection)
+			devModeSpec, err := GetDefaultSection(ctx, db, app.ID, DevModeSection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*devModeSpec.Enabled).To(BeFalse())
 			Expect(devModeSpec.WorkPath).To(BeNil())
@@ -232,36 +218,24 @@ var _ = Describe("AppSpec Sections", func() {
 
 	Context("env scope", func() {
 		var ctx context.Context
-		var diApp *fxtest.App
-		var appStore bkmsapp.ApplicationStore
-		var appModelStore appmodel.AppModelStore
-		var appSpecStore AppSpecStore
+		var appStore *bkmsapp.ApplicationStore
+		var db *mongo.Database
 
 		BeforeEach(func() {
 			ctx = context.Background()
-			diApp = fxtest.New(
-				GinkgoT(),
-				bkmsapp.FxModule,
-				appmodel.FxModule,
-				FxModule,
-				fx.Populate(&appStore, &appModelStore, &appSpecStore),
-			)
-			diApp.RequireStart()
-		})
-
-		AfterEach(func() {
-			diApp.RequireStop()
+			appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+			db = testutil.NewDB(GinkgoT())
 		})
 
 		It("patches only one env section and preserves the others", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID:    app.ID,
 				Workload: appmodel.Workload{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+			err = SetDefault(ctx, db, app.ID, &AppSpec{
 				Resources: &ResourcesSpec{
 					Replicas:    lo.ToPtr(int32(2)),
 					CPURequests: lo.ToPtr("100m"),
@@ -274,7 +248,7 @@ var _ = Describe("AppSpec Sections", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetEnv(ctx, appSpecStore, &AppSpec{
+			err = SetEnv(ctx, db, &AppSpec{
 				AppID:   app.ID,
 				EnvName: "stag",
 				Resources: &ResourcesSpec{
@@ -292,7 +266,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			err = SetEnvSection(
 				ctx,
-				appSpecStore,
+				db,
 				app.ID,
 				"stag",
 				DevModeSection,
@@ -301,7 +275,7 @@ var _ = Describe("AppSpec Sections", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			rawDevMode, err := GetEnvSection(ctx, appSpecStore, app.ID, "stag", DevModeSection)
+			rawDevMode, err := GetEnvSection(ctx, db, app.ID, "stag", DevModeSection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*rawDevMode.Enabled).To(BeFalse())
 			Expect(rawDevMode.WorkPath).To(BeNil())
@@ -309,8 +283,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			effectiveResources, err := GetEnvEffectiveSection(
 				ctx,
-				appSpecStore,
-				appModelStore,
+				db,
 				app.ID,
 				"stag",
 				ResourcesSection,
@@ -323,7 +296,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 		It("creates a new env override from one section write", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID:    app.ID,
 				Workload: appmodel.Workload{},
 			})
@@ -331,7 +304,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			err = SetEnvSection(
 				ctx,
-				appSpecStore,
+				db,
 				app.ID,
 				"prod",
 				ResourcesSection,
@@ -340,24 +313,24 @@ var _ = Describe("AppSpec Sections", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			rawResources, err := GetEnvSection(ctx, appSpecStore, app.ID, "prod", ResourcesSection)
+			rawResources, err := GetEnvSection(ctx, db, app.ID, "prod", ResourcesSection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*rawResources.Replicas).To(Equal(int32(4)))
 
-			rawUpdateStrategy, err := GetEnvSection(ctx, appSpecStore, app.ID, "prod", UpdateStrategySection)
+			rawUpdateStrategy, err := GetEnvSection(ctx, db, app.ID, "prod", UpdateStrategySection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rawUpdateStrategy).To(BeNil())
 		})
 
 		It("replaces only the target env section", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID:    app.ID,
 				Workload: appmodel.Workload{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetEnv(ctx, appSpecStore, &AppSpec{
+			err = SetEnv(ctx, db, &AppSpec{
 				AppID:   app.ID,
 				EnvName: "stag",
 				UpdateStrategy: &UpdateStrategySpec{
@@ -370,7 +343,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			err = SetEnvSection(
 				ctx,
-				appSpecStore,
+				db,
 				app.ID,
 				"stag",
 				UpdateStrategySection,
@@ -379,7 +352,7 @@ var _ = Describe("AppSpec Sections", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			rawUpdateStrategy, err := GetEnvSection(ctx, appSpecStore, app.ID, "stag", UpdateStrategySection)
+			rawUpdateStrategy, err := GetEnvSection(ctx, db, app.ID, "stag", UpdateStrategySection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*rawUpdateStrategy.MaxUnavailable).To(Equal("30%"))
 			Expect(rawUpdateStrategy.MaxSurge).To(BeNil())
@@ -387,20 +360,20 @@ var _ = Describe("AppSpec Sections", func() {
 
 		It("removes env resources override and falls back to default values", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID:    app.ID,
 				Workload: appmodel.Workload{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+			err = SetDefault(ctx, db, app.ID, &AppSpec{
 				Resources: &ResourcesSpec{Replicas: lo.ToPtr(int32(2)), CPURequests: lo.ToPtr("100m")},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			err = SetEnvSection(
 				ctx,
-				appSpecStore,
+				db,
 				app.ID,
 				"stag",
 				ResourcesSection,
@@ -411,8 +384,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			effectiveResources, err := GetEnvEffectiveSection(
 				ctx,
-				appSpecStore,
-				appModelStore,
+				db,
 				app.ID,
 				"stag",
 				ResourcesSection,
@@ -424,7 +396,7 @@ var _ = Describe("AppSpec Sections", func() {
 			// Delete the env override by replacing with nil.
 			err = SetEnvSection(
 				ctx,
-				appSpecStore,
+				db,
 				app.ID,
 				"stag",
 				ResourcesSection,
@@ -433,14 +405,13 @@ var _ = Describe("AppSpec Sections", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			rawResources, err := GetEnvSection(ctx, appSpecStore, app.ID, "stag", ResourcesSection)
+			rawResources, err := GetEnvSection(ctx, db, app.ID, "stag", ResourcesSection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rawResources).To(BeNil())
 
 			effectiveResources, err = GetEnvEffectiveSection(
 				ctx,
-				appSpecStore,
-				appModelStore,
+				db,
 				app.ID,
 				"stag",
 				ResourcesSection,
@@ -452,13 +423,13 @@ var _ = Describe("AppSpec Sections", func() {
 
 		It("keeps an empty env lifecycle override instead of falling back to default values", func() {
 			app := dbfactory.Application(ctx, appStore)
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID:    app.ID,
 				Workload: appmodel.Workload{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+			err = SetDefault(ctx, db, app.ID, &AppSpec{
 				Lifecycle: &LifecycleSpec{
 					PostStart: &lifecyclesection.Handler{
 						Type:         appmodel.LifecycleTypeExec,
@@ -470,7 +441,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			err = SetEnvSection(
 				ctx,
-				appSpecStore,
+				db,
 				app.ID,
 				"stag",
 				LifecycleSection,
@@ -479,7 +450,7 @@ var _ = Describe("AppSpec Sections", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			rawLifecycle, err := GetEnvSection(ctx, appSpecStore, app.ID, "stag", LifecycleSection)
+			rawLifecycle, err := GetEnvSection(ctx, db, app.ID, "stag", LifecycleSection)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rawLifecycle).NotTo(BeNil())
 			Expect(rawLifecycle.PostStart).To(BeNil())
@@ -488,8 +459,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			effectiveLifecycle, err := GetEnvEffectiveSection(
 				ctx,
-				appSpecStore,
-				appModelStore,
+				db,
 				app.ID,
 				"stag",
 				LifecycleSection,
@@ -500,7 +470,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			err = SetEnvSection(
 				ctx,
-				appSpecStore,
+				db,
 				app.ID,
 				"stag",
 				LifecycleSection,
@@ -511,8 +481,7 @@ var _ = Describe("AppSpec Sections", func() {
 
 			effectiveLifecycle, err = GetEnvEffectiveSection(
 				ctx,
-				appSpecStore,
-				appModelStore,
+				db,
 				app.ID,
 				"stag",
 				LifecycleSection,

@@ -35,10 +35,12 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
+	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -49,8 +51,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/alertstrategysync"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
 // listAppModelDeployRecords 获取 AppModel 应用部署记录列表
@@ -71,8 +75,11 @@ func (h *Handler) listAppModelDeployRecords(c *gin.Context) {
 	}
 
 	// 获取 AppModel 应用部署记录
-	records, total, err := h.registry.AppModelDeployRecordStore.List(
-		ctx, app.ID, uriInput.EnvName, input.TrafficLaneName, input.Keyword, input.Page, input.PageSize,
+	recordPage, err := store.Of(h.registry.DB, appmodeldeploy.RecordMeta).ListPage(
+		ctx, input.Page, input.PageSize,
+		deploytypes.ByAppEnvLane(app.ID, uriInput.EnvName, input.TrafficLaneName),
+		appmodeldeploy.KeywordMatches(input.Keyword),
+		deploytypes.NewestFirst(),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
@@ -83,12 +90,12 @@ func (h *Handler) listAppModelDeployRecords(c *gin.Context) {
 	}
 
 	// 转换成输出格式；构建+部署触发的补充字段直接从部署记录 Extras 中读取
-	outputRecords := make([]*serializer.AppModelDeployRecordOutputObj, 0, len(records))
-	for _, record := range records {
+	outputRecords := make([]*serializer.AppModelDeployRecordOutputObj, 0, len(recordPage.Items))
+	for _, record := range recordPage.Items {
 		outputRecords = append(outputRecords, new(serializer.AppModelDeployRecordOutputObj).FromModel(record))
 	}
 	ginutils.OK(c, serializer.ListAppModelDeployRecordsOutput{
-		Data: serializer.PaginatedAppModelDeployRecordsOutputObjs{Count: total, Results: outputRecords},
+		Data: serializer.PaginatedAppModelDeployRecordsOutputObjs{Count: recordPage.Total, Results: outputRecords},
 	})
 }
 
@@ -132,23 +139,14 @@ func (h *Handler) preCheckDeploy(c *gin.Context, expectedAppType string) {
 
 func (h *Handler) newDeployPreChecker() *deploypkg.DeployPreChecker {
 	builderService := workload.NewBuilderService(
-		h.registry.ScopedEnvVarStore,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
-		h.registry.WorkspaceCompsStore,
-		h.registry.WorkspaceStore,
-		h.registry.PolarisConfigStore,
-		h.registry.HostPortStore,
-		h.registry.BscpCfgStore,
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
-		h.registry.BuildConfigStore,
+		h.registry.DB,
 		h.newMountableFileProvider(),
 	)
 	return deploypkg.NewDeployPreChecker(
-		h.registry.AppModelStore,
 		builderService,
-		h.registry.ClusterAddonDefStore,
+		h.registry.DB,
 	)
 }
 
@@ -178,7 +176,7 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init appmodel deploy service"))
 		return
 	}
-	deploypkg.TrackEnvAddApp(ctx, h.registry.EnvStore, app.WorkspaceID, uriInput.EnvName, app.ID)
+	deploypkg.TrackEnvAddApp(ctx, h.registry.DB, app.WorkspaceID, uriInput.EnvName, app.ID)
 	deployID, err := deployService.Deploy(ctx, app, appmodeldeploysvc.DeployParams{
 		EnvName:         uriInput.EnvName,
 		TrafficLaneName: input.TrafficLaneName,
@@ -270,11 +268,11 @@ func (h *Handler) handleAppModelDeployUninstalled(
 	envName, trafficLaneName, operator string,
 ) {
 	// 记录应用从环境卸载
-	deploypkg.TrackEnvRemoveApp(ctx, h.registry.EnvStore, app.WorkspaceID, envName, trafficLaneName, app.ID)
+	deploypkg.TrackEnvRemoveApp(ctx, h.registry.DB, app.WorkspaceID, envName, trafficLaneName, app.ID)
 
 	// 应用已从环境卸载，需同步清理该应用在该环境下关联的告警策略，避免残留的无效告警。
 	// 先查询 workspace 信息（清理时需要其标识），查询失败仅记录日志，不影响卸载主流程。
-	if ws, wsErr := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID); wsErr != nil {
+	if ws, wsErr := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID)); wsErr != nil {
 		log.Errorf(ctx, "get workspace %s for alert cleanup failed: %v", app.WorkspaceID, wsErr)
 	} else {
 		// 异步执行清理，避免阻塞卸载接口的响应
@@ -299,7 +297,8 @@ func (h *Handler) handleAppModelDeployUninstalled(
 	}
 
 	// 清理资源拓扑快照（失败不阻塞主流程）
-	if err := h.registry.ResourceSnapshotStore.Delete(ctx, app.ID, envName, trafficLaneName); err != nil {
+	snapshots := store.Of(h.registry.DB, topology.ResourceSnapshotMeta)
+	if err := snapshots.DeleteIfExists(ctx, topology.ByScope(app.ID, envName, trafficLaneName)); err != nil {
 		log.Errorf(
 			ctx, "delete resource snapshot for app %s env %s lane %s failed: %v",
 			app.ID, envName, trafficLaneName, err,
@@ -337,8 +336,9 @@ func (h *Handler) listAppModelResourceSnapshots(c *gin.Context) {
 	}
 
 	// 获取资源清单快照元数据（分页）
-	rows, total, err := h.registry.AppModelDeployResourceSnapshotStore.ListMetaByDeployRecord(
-		ctx, app.ID, uriInput.DeployID, input.Page, input.PageSize,
+	snapshots := store.Of(h.registry.DB, appmodeldeploy.ResourceSnapshotMeta)
+	page, err := appmodeldeploy.ListSnapshotMeta(
+		ctx, snapshots, app.ID, uriInput.DeployID, input.Page, input.PageSize,
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(
@@ -346,12 +346,12 @@ func (h *Handler) listAppModelResourceSnapshots(c *gin.Context) {
 		))
 		return
 	}
-	outputs := make([]*serializer.AppModelResourceSnapshot, 0, len(rows))
-	for _, row := range rows {
+	outputs := make([]*serializer.AppModelResourceSnapshot, 0, len(page.Items))
+	for _, row := range page.Items {
 		outputs = append(outputs, new(serializer.AppModelResourceSnapshot).FromModel(row, false))
 	}
 	ginutils.OK(c, serializer.ListAppModelResourceSnapshotsOutput{
-		Data: serializer.PaginatedAppModelResourceSnapshotsOutputObjs{Count: total, Results: outputs},
+		Data: serializer.PaginatedAppModelResourceSnapshotsOutputObjs{Count: page.Total, Results: outputs},
 	})
 }
 
@@ -372,9 +372,8 @@ func (h *Handler) getAppModelResourceSnapshot(c *gin.Context) {
 	}
 
 	// 获取资源清单快照
-	row, err := h.registry.AppModelDeployResourceSnapshotStore.GetByID(
-		ctx, app.ID, uriInput.DeployID, uriInput.SnapshotID,
-	)
+	snapshots := store.Of(h.registry.DB, appmodeldeploy.ResourceSnapshotMeta)
+	row, err := appmodeldeploy.GetSnapshot(ctx, snapshots, app.ID, uriInput.DeployID, uriInput.SnapshotID)
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrResourceSnapshotRowNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotFound, "resource snapshot not found"))
@@ -423,7 +422,7 @@ func (h *Handler) latestAppModelDeployStatus(
 	ctx context.Context, appID, envName, trafficLaneName string,
 ) (*serializer.LatestDeployStatus, error) {
 	// 获取最新一次构建自动部署结果
-	latestBuildAutoDeploy, err := h.registry.BuildAutoDeployRecordStore.GetLatest(ctx, appID, envName, trafficLaneName)
+	latestBuildAutoDeploy, err := autodeploy.GetLatest(ctx, h.registry.DB, appID, envName, trafficLaneName)
 	if err != nil && !errors.Is(err, autodeploy.ErrRecordNotFound) {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get latest build auto deploy record")
 	}
@@ -432,7 +431,7 @@ func (h *Handler) latestAppModelDeployStatus(
 	}
 
 	// 获取最新一次应用部署结果
-	latestDeploy, err := h.registry.AppModelDeployRecordStore.GetLatest(ctx, appID, envName, trafficLaneName)
+	latestDeploy, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, appID, envName, trafficLaneName)
 	if err != nil && !errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get latest app model deploy record")
 	}
@@ -460,61 +459,28 @@ func (h *Handler) latestAppModelDeployStatus(
 // newAppModelDeployService 创建 AppModel 部署编排服务
 func (h *Handler) newAppModelDeployService() (*appmodeldeploysvc.Service, error) {
 	reg := h.registry
-	snapshotService := snapshot.NewService(reg.SnapshotStore, reg.BuildConfigStore, reg.AppStore)
+	snapshotService := snapshot.NewService(reg.DB)
 
 	return appmodeldeploysvc.NewService(appmodeldeploysvc.ServiceDeps{
-		AppStore:                            reg.AppStore,
-		EnvStore:                            reg.EnvStore,
-		PromotionStore:                      reg.PromotionStore,
-		SnapshotService:                     snapshotService,
-		AppModelStore:                       reg.AppModelStore,
-		WorkspaceStore:                      reg.WorkspaceStore,
-		ImageRegistryStore:                  reg.ImageRegistryStore,
-		ScopedEnvVarStore:                   reg.ScopedEnvVarStore,
-		AppDepsVarReader:                    reg.AppDepsVarReader,
-		PolarisVarReader:                    reg.PolarisVarReader,
-		WorkspaceCompsStore:                 reg.WorkspaceCompsStore,
-		PolarisConfigStore:                  reg.PolarisConfigStore,
-		HostPortStore:                       reg.HostPortStore,
-		BscpCfgStore:                        reg.BscpCfgStore,
-		AppSpecStore:                        reg.AppSpecStore,
-		BuildConfigStore:                    reg.BuildConfigStore,
-		BuildAutoDeployRecordStore:          reg.BuildAutoDeployRecordStore,
-		AppModelDeployRecordStore:           reg.AppModelDeployRecordStore,
-		AppModelDeployResourceSnapshotStore: reg.AppModelDeployResourceSnapshotStore,
-		AppConfigFileStore:                  reg.AppConfigFileStore,
-		AppConfigFileDefStore:               reg.AppConfigFileDefStore,
-		AppConfigFileVersionStore:           reg.AppConfigFileVersionStore,
-		ClusterAddonDefStore:                reg.ClusterAddonDefStore,
+		DB:               reg.DB,
+		SnapshotService:  snapshotService,
+		AppDepsVarReader: reg.AppDepsVarReader,
+		PolarisVarReader: reg.PolarisVarReader,
 	})
 }
 
 // newDeployer 创建 AppModel 部署器
 func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer {
 	return appmodeldeploy.NewDeployer(
-		h.registry.AppModelDeployRecordStore,
-		h.registry.AppModelDeployResourceSnapshotStore,
-		h.registry.BuildAutoDeployRecordStore,
-		h.registry.AppModelStore,
 		workload.NewBuilderService(
-			h.registry.ScopedEnvVarStore,
 			h.registry.AppDepsVarReader,
 			h.registry.PolarisVarReader,
-			h.registry.WorkspaceCompsStore,
-			h.registry.WorkspaceStore,
-			h.registry.PolarisConfigStore,
-			h.registry.HostPortStore,
-			h.registry.BscpCfgStore,
-			h.registry.AppModelStore,
-			h.registry.AppSpecStore,
-			h.registry.BuildConfigStore,
+			h.registry.DB,
 			h.newMountableFileProvider(),
 		),
-		h.registry.AppSpecStore,
-		h.registry.BuildConfigStore,
-		h.registry.AppConfigFileStore,
-		polaris.NewPolarisEnvStateManager(h.registry.PolarisConfigStore),
-		hostport.NewEnvStateManager(h.registry.HostPortStore),
+		h.registry.DB,
+		polaris.NewPolarisEnvStateManager(h.registry.DB),
+		hostport.NewEnvStateManager(h.registry.DB),
 		app,
 	)
 }

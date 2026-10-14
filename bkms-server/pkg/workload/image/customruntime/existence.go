@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
@@ -37,12 +38,13 @@ const existenceCheckTimeout = 20 * time.Second
 
 // ExistenceChecker 判断镜像是否属于工作空间生效镜像源，并向仓库确认 name + tag 存在
 type ExistenceChecker struct {
+	db          *mongo.Database
 	snapshotSvc *snapshot.Service
 }
 
-// NewExistenceChecker 创建 ExistenceChecker
-func NewExistenceChecker(snapshotSvc *snapshot.Service) *ExistenceChecker {
-	return &ExistenceChecker{snapshotSvc: snapshotSvc}
+// NewExistenceChecker 创建 ExistenceChecker，db 用于查询工作空间生效的镜像源
+func NewExistenceChecker(db *mongo.Database, snapshotSvc *snapshot.Service) *ExistenceChecker {
+	return &ExistenceChecker{db: db, snapshotSvc: snapshotSvc}
 }
 
 // MatchesWorkspaceRegistry 不含 tag 的镜像名是否落在工作空间生效镜像源路径下
@@ -125,7 +127,7 @@ func (c *ExistenceChecker) lookupRegistry(
 	if workspaceID == "" {
 		return nil, nil
 	}
-	reg, err := workspace.GetWorkspaceImageRegistry(ctx, workspaceID)
+	reg, err := workspace.GetWorkspaceImageRegistry(ctx, c.db, workspaceID)
 	if err != nil {
 		if errors.Is(err, bkmsreg.ErrImageRegistryNotFound) {
 			return nil, nil

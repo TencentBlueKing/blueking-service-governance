@@ -28,6 +28,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -75,19 +76,11 @@ func NewUpsertRuntimeImageCmd() *cobra.Command {
 
 			database.InitClient(ctx, cfg.Mongo)
 
-			store, err := workloadruntime.NewStoreMongo(database.Client(), database.Name())
-			if err != nil {
-				log.Fatalf("init runtime image store failed: %v", err)
-			}
-			snapshotStore, err := snapshot.NewSnapshotStoreMongo(database.Client(), database.Name())
-			if err != nil {
-				log.Fatalf("init snapshot store failed: %v", err)
-			}
-
+			images := store.Of(database.DB(), workloadruntime.Meta)
 			image.Type = workloadruntime.ImageType(imageType)
 
 			// 判断是否已存在，决定走新增还是幂等分支
-			_, err = store.GetByTypeAndName(ctx, image.Type, image.Name)
+			_, err = images.Get(ctx, workloadruntime.ByTypeAndName(image.Type, image.Name))
 			switch {
 			case err == nil:
 				// 已存在：跳过创建，按需更新 description
@@ -98,7 +91,8 @@ func NewUpsertRuntimeImageCmd() *cobra.Command {
 				)
 				// 仅当用户显式传入了非空 --description 时才更新描述
 				if cmd.Flags().Changed(descriptionFlag) && image.Description != "" {
-					if err = store.UpdateDescription(ctx, image.Type, image.Name, image.Description); err != nil {
+					err = workloadruntime.UpdateDescription(ctx, images, image.Type, image.Name, image.Description)
+					if err != nil {
 						log.Fatalf("update runtime image description failed: %v", err)
 					}
 					_, _ = fmt.Fprintf(
@@ -109,7 +103,7 @@ func NewUpsertRuntimeImageCmd() *cobra.Command {
 				}
 			case errors.Is(err, workloadruntime.ErrRuntimeImageNotFound):
 				// 不存在：走原有新增分支
-				if err = store.Create(ctx, &image); err != nil {
+				if err = images.Create(ctx, &image); err != nil {
 					log.Fatalf("add runtime image failed: %v", err)
 				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "added %s runtime image: %s\n", image.Type, image.Name)
@@ -117,7 +111,7 @@ func NewUpsertRuntimeImageCmd() *cobra.Command {
 				log.Fatalf("check runtime image existence failed: %v", err)
 			}
 
-			result, err := snapshot.NewService(snapshotStore, nil, nil).RefreshRepositorySnapshots(ctx, image.Name)
+			result, err := snapshot.NewService(database.DB()).RefreshRepositorySnapshots(ctx, image.Name)
 			if err != nil {
 				log.Fatalf("sync runtime image tags failed: %v", err)
 			}

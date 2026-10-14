@@ -27,11 +27,12 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // builtinCreator 内置组件的创建者名称
@@ -40,9 +41,9 @@ const builtinCreator = "admin"
 // LoadBuiltinFromFolder 从指定目录加载集群 Addon 定义并存入数据库
 //
 // Args:
-//   - store: Addon 定义 store
+//   - defs: Addon 定义 store
 //   - folderPath: 包含 Addon 定义 YAML 文件的目录路径，也可以是单个文件路径
-func LoadBuiltinFromFolder(ctx context.Context, store ClusterAddonDefStore, folderPath string) error {
+func LoadBuiltinFromFolder(ctx context.Context, defs *ClusterAddonDefStore, folderPath string) error {
 	addonDefs := make([]*ClusterAddonDef, 0)
 
 	fileInfo, err := os.Stat(folderPath)
@@ -85,7 +86,7 @@ func LoadBuiltinFromFolder(ctx context.Context, store ClusterAddonDefStore, fold
 
 	// 保存到数据库
 	for _, addonDef := range addonDefs {
-		if err = store.Create(ctx, addonDef); err != nil {
+		if err = SaveDef(ctx, defs, addonDef); err != nil {
 			return errors.Wrapf(err, "creating builtin cluster addon def %s", addonDef.Name)
 		}
 	}
@@ -119,7 +120,7 @@ func parseAddonDefFile(path string) (*ClusterAddonDef, error) {
 }
 
 // ReloadBuiltinClusterAddons 加载内置集群 Addon 定义到数据库
-func ReloadBuiltinClusterAddons(ctx context.Context) error {
+func ReloadBuiltinClusterAddons(ctx context.Context, db *mongo.Database) error {
 	addonDir := config.G.ClusterAddons.BuiltinAddonDir
 	// 如果没有指定内置 Addon 目录，则跳过
 	if addonDir == "" {
@@ -127,10 +128,5 @@ func ReloadBuiltinClusterAddons(ctx context.Context) error {
 		return nil
 	}
 
-	store, err := NewClusterAddonDefStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrap(err, "new db cluster addon def store")
-	}
-
-	return LoadBuiltinFromFolder(ctx, store, addonDir)
+	return LoadBuiltinFromFolder(ctx, store.Of(db, ClusterAddonDefMeta), addonDir)
 }

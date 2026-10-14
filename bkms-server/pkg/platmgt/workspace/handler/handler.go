@@ -46,11 +46,7 @@ func New(registry *storereg.Registry) *GinHandler {
 }
 
 func (h *GinHandler) service() *platmgtworkspace.Service {
-	return platmgtworkspace.NewService(
-		h.registry.WorkspaceStore,
-		h.registry.AppStore,
-		h.registry.EnvStore,
-	)
+	return platmgtworkspace.NewService(h.registry.DB)
 }
 
 // ListPlatWorkspaces 查询平台空间列表

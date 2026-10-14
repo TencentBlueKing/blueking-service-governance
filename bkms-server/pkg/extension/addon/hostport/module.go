@@ -24,11 +24,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
-// FxModule provides HostPort store and env-state manager for tests / DI.
+// FxModule provides the HostPort env-state manager for tests / DI.
 var FxModule = fx.Module("hostport",
 	database.PrivateFxModule,
 	fx.Provide(
-		NewHostPortStoreMongo,
 		NewEnvStateManager,
 	),
 )

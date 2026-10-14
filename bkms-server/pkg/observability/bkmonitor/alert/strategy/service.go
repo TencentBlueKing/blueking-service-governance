@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
@@ -40,28 +41,17 @@ import (
 var ErrDisplayNameAlreadyExists = errors.New("alert strategy displayName already exists in app")
 
 // NewService 创建 Service 实例。
-func NewService(
-	store Store,
-	envStore envmodel.EnvironmentStore,
-	appStore bkmsapp.ApplicationStore,
-	snapshotStore topology.ResourceSnapshotStore,
-) *Service {
-	return newServiceWithClientFactory(store, envStore, appStore, snapshotStore, bkmapi.NewMonitorClient)
+func NewService(db *mongo.Database) *Service {
+	return newServiceWithClientFactory(db, bkmapi.NewMonitorClient)
 }
 
-func newServiceWithClientFactory(
-	store Store,
-	envStore envmodel.EnvironmentStore,
-	appStore bkmsapp.ApplicationStore,
-	snapshotStore topology.ResourceSnapshotStore,
-	newClient alert.ClientFactory,
-) *Service {
+func newServiceWithClientFactory(db *mongo.Database, newClient alert.ClientFactory) *Service {
 	return &Service{
-		store:         store,
-		envStore:      envStore,
-		appStore:      appStore,
-		snapshotStore: snapshotStore,
-		newClient:     newClient,
+		strategies: store.Of(db, Meta),
+		envStore:   store.Of(db, envmodel.EnvMeta),
+		appStore:   store.Of(db, bkmsapp.AppMeta),
+		snapshots:  store.Of(db, topology.ResourceSnapshotMeta),
+		newClient:  newClient,
 	}
 }
 
@@ -74,14 +64,9 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) (*AlertStrategy, e
 		return nil, err
 	}
 	strategy := buildStrategyFromCreateReq(req)
-	id, err := s.store.Create(ctx, strategy)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return nil, ErrDisplayNameAlreadyExists
-		}
+	if err := s.strategies.Create(ctx, strategy); err != nil {
 		return nil, errors.Wrap(err, "create alert strategy")
 	}
-	strategy.ID = id
 	return strategy, nil
 }
 
@@ -110,10 +95,7 @@ func (s *Service) CreateAndSync(
 	}
 	strategy.RemoteRefs = remoteRefs
 
-	if _, err = s.store.Create(ctx, strategy); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return nil, ErrDisplayNameAlreadyExists
-		}
+	if err = s.strategies.Create(ctx, strategy); err != nil {
 		return nil, errors.Wrap(err, "create alert strategy")
 	}
 	return strategy, nil
@@ -121,17 +103,17 @@ func (s *Service) CreateAndSync(
 
 // Get 获取指定的告警策略。
 func (s *Service) Get(ctx context.Context, id bson.ObjectID) (*AlertStrategy, error) {
-	return s.store.Get(ctx, id)
+	return s.strategies.GetByID(ctx, id)
 }
 
 // ListByWorkspace 获取工作空间下的告警策略列表。
 func (s *Service) ListByWorkspace(ctx context.Context, workspaceID string) ([]AlertStrategy, error) {
-	return s.store.ListByWorkspace(ctx, workspaceID)
+	return s.strategies.List(ctx, ByWorkspace(workspaceID), NewestFirst())
 }
 
 // ListByApp 获取应用下的告警策略列表。
 func (s *Service) ListByApp(ctx context.Context, workspaceID, appID string) ([]AlertStrategy, error) {
-	return s.store.ListByApp(ctx, workspaceID, appID)
+	return s.strategies.List(ctx, ByApp(workspaceID, appID), NewestFirst())
 }
 
 // UpdateAndSync 更新告警策略；若有变更，则先同步远端，再持久化本地记录。
@@ -164,10 +146,7 @@ func (s *Service) UpdateAndSync(
 		}
 		if !next.Enabled && len(current.RemoteRefs) == 0 {
 			updateData["updater"] = req.Operator
-			if updateErr := s.store.Update(ctx, id, updateData); updateErr != nil {
-				if mongo.IsDuplicateKeyError(updateErr) {
-					return ErrDisplayNameAlreadyExists
-				}
+			if updateErr := s.strategies.Update(ctx, updateData, store.ByID(id)); updateErr != nil {
 				return errors.Wrap(updateErr, "update alert strategy")
 			}
 			return nil
@@ -180,10 +159,7 @@ func (s *Service) UpdateAndSync(
 
 		updateData["remoteRefs"] = remoteRefs
 		updateData["updater"] = req.Operator
-		if updateErr := s.store.Update(ctx, id, updateData); updateErr != nil {
-			if mongo.IsDuplicateKeyError(updateErr) {
-				return ErrDisplayNameAlreadyExists
-			}
+		if updateErr := s.strategies.Update(ctx, updateData, store.ByID(id)); updateErr != nil {
 			return errors.Wrap(updateErr, "update alert strategy")
 		}
 		return nil
@@ -204,7 +180,7 @@ func (s *Service) Delete(ctx context.Context, ws *workspace.Workspace, id bson.O
 				return errors.Wrap(err, "delete remote strategies")
 			}
 		}
-		if err := s.store.Delete(ctx, id); err != nil {
+		if err := s.strategies.DeleteIfExists(ctx, store.ByID(id)); err != nil {
 			return errors.Wrap(err, "delete alert strategy")
 		}
 		return nil
@@ -221,7 +197,7 @@ func (s *Service) DeleteByApp(
 	workspaceID, appID string,
 	operator string,
 ) error {
-	strategies, err := s.store.ListByApp(ctx, workspaceID, appID)
+	strategies, err := s.strategies.List(ctx, ByApp(workspaceID, appID), NewestFirst())
 	if err != nil {
 		return errors.Wrap(err, "list alert strategies by app")
 	}
@@ -274,13 +250,8 @@ func (s *Service) InitDefaultAlertStrategiesForApp(
 		if err := s.ensureDisplayNameUnique(ctx, workspaceID, appID, rule.DisplayName, nil); err != nil {
 			return err
 		}
-		if _, createErr := s.store.Create(ctx, rule); createErr != nil {
-			if mongo.IsDuplicateKeyError(createErr) {
-				return ErrDisplayNameAlreadyExists
-			}
-			log.Errorf(ctx, "failed to create default alert strategy %s for workspace %s app %s: %v",
-				tmpl.StrategyCode, workspaceID, appID, createErr)
-			return createErr
+		if createErr := s.strategies.Create(ctx, rule); createErr != nil {
+			return errors.Wrapf(createErr, "create default alert strategy %s", tmpl.StrategyCode)
 		}
 		log.Infof(
 			ctx,
@@ -331,7 +302,7 @@ func (s *Service) ensureDisplayNameUnique(
 	workspaceID, appID, displayName string,
 	excludeID *bson.ObjectID,
 ) error {
-	exists, err := s.store.ExistsByAppAndDisplayName(ctx, workspaceID, appID, displayName, excludeID)
+	exists, err := s.strategies.Exists(ctx, ByDisplayName(workspaceID, appID, displayName, excludeID))
 	if err != nil {
 		return errors.Wrap(err, "check alert strategy displayName uniqueness")
 	}

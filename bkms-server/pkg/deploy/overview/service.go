@@ -24,17 +24,16 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa"
-	workloadappmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // defaultTrafficLaneName 默认（基线）泳道名称；空字符串表示基线泳道。
@@ -47,35 +46,21 @@ const maxConcurrentK8sRequests = 10
 
 // Service 组装应用部署总览。
 type Service struct {
-	envStore            envmodel.EnvironmentStore
-	gpaConfigStore      gpa.GPAConfigStore
+	envStore            *envmodel.EnvironmentStore
+	gpaConfigs          *gpa.ConfigStore
 	gpaService          *gpa.GPAService
 	deployStatusService *deploystatus.DeployStatusService
 }
 
 // NewService 创建部署总览 Service。
 func NewService(
-	envStore envmodel.EnvironmentStore,
-	appStore bkmsapp.ApplicationStore,
-	appModelStore workloadappmodel.AppModelStore,
-	buildAutoDeployRecordStore autodeploy.RecordStore,
-	appModelDeployRecordStore appmodel.RecordStore,
-	// helmDeployRecordStore 总览只处理 AppModel 类型应用，用不到 helm 记录，
-	// 但它是 deploystatus.NewDeployStatusService 的必需依赖，需原样透传。
-	helmDeployRecordStore helm.RecordStore,
-	gpaConfigStore gpa.GPAConfigStore,
+	db *mongo.Database,
 ) *Service {
 	return &Service{
-		envStore:       envStore,
-		gpaConfigStore: gpaConfigStore,
-		gpaService:     gpa.NewGPAService(appModelStore),
-		deployStatusService: deploystatus.NewDeployStatusService(
-			appStore,
-			envStore,
-			buildAutoDeployRecordStore,
-			appModelDeployRecordStore,
-			helmDeployRecordStore,
-		),
+		envStore:            store.Of(db, envmodel.EnvMeta),
+		gpaConfigs:          store.Of(db, gpa.ConfigMeta),
+		gpaService:          gpa.NewGPAService(db),
+		deployStatusService: deploystatus.NewDeployStatusService(db),
 	}
 }
 
@@ -204,7 +189,12 @@ func (s *Service) listTrackedEnvs(
 	ctx context.Context,
 	application *bkmsapp.Application,
 ) ([]envmodel.Environment, error) {
-	envs, err := s.envStore.ListBatchAppEnvs(ctx, application.WorkspaceID, []string{application.ID})
+	envs, err := s.envStore.List(
+		ctx,
+		envmodel.InWorkspace(application.WorkspaceID),
+		envmodel.VisibleToApp(application.ID),
+		envmodel.NewestFirst(),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "list app environments")
 	}

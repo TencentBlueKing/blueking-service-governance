@@ -28,6 +28,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	cloudapiiam "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam"
 	cloudapiiamtypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
 )
@@ -177,125 +178,22 @@ func (f *fakeIAMClient) BatchResourceMultiActionsAllowed(
 	return results, nil
 }
 
-// fakeRoleStore is an in-memory role.RoleStore implementation used to drive
-// IAMService specs without requiring a real MongoDB.
-type fakeRoleStore struct {
-	gradeManagers map[string]*role.WorkspaceGradeManager
-	rolesByID     map[string]*role.Role
-	roles         []*role.Role
-
-	listErr error
-}
-
-var _ role.RoleStore = (*fakeRoleStore)(nil)
-
-func newFakeRoleStore() *fakeRoleStore {
-	return &fakeRoleStore{
-		gradeManagers: map[string]*role.WorkspaceGradeManager{},
-		rolesByID:     map[string]*role.Role{},
-	}
-}
-
-func (s *fakeRoleStore) CreateWorkspaceGradeManager(
-	_ context.Context, wgm *role.WorkspaceGradeManager,
-) (*role.WorkspaceGradeManager, error) {
-	if _, ok := s.gradeManagers[wgm.WorkspaceID]; ok {
-		return nil, errors.New("duplicate grade manager")
-	}
-	s.gradeManagers[wgm.WorkspaceID] = wgm
-	return wgm, nil
-}
-
-func (s *fakeRoleStore) GetWorkspaceGradeManager(
-	_ context.Context, workspaceID string,
-) (*role.WorkspaceGradeManager, error) {
-	wgm, ok := s.gradeManagers[workspaceID]
-	if !ok {
-		return nil, errors.Errorf("workspace(%s) grade manager not found", workspaceID)
-	}
-	return wgm, nil
-}
-
-func (s *fakeRoleStore) DeleteWorkspaceGradeManager(_ context.Context, workspaceID string) error {
-	delete(s.gradeManagers, workspaceID)
-	return nil
-}
-
-func (s *fakeRoleStore) CreateRole(_ context.Context, r *role.Role) (*role.Role, error) {
-	s.rolesByID[r.ID] = r
-	s.roles = append(s.roles, r)
-	return r, nil
-}
-
-func (s *fakeRoleStore) GetRoleByID(_ context.Context, roleID string) (*role.Role, error) {
-	r, ok := s.rolesByID[roleID]
-	if !ok {
-		return nil, errors.Errorf("role(%s) not found", roleID)
-	}
-	return r, nil
-}
-
-func (s *fakeRoleStore) DeleteRolesByUserGroupIDs(
-	_ context.Context, workspaceID string, userGroupIDs []int,
-) error {
-	keep := s.roles[:0]
-	idSet := map[int]struct{}{}
-	for _, id := range userGroupIDs {
-		idSet[id] = struct{}{}
-	}
-	for _, r := range s.roles {
-		if r.WorkspaceID == workspaceID {
-			if _, ok := idSet[r.UserGroupID]; ok {
-				delete(s.rolesByID, r.ID)
-				continue
-			}
-		}
-		keep = append(keep, r)
-	}
-	s.roles = keep
-	return nil
-}
-
-func (s *fakeRoleStore) ListRoles(
-	_ context.Context, params *role.RoleQueryParams,
-) ([]*role.Role, error) {
-	if s.listErr != nil {
-		return nil, s.listErr
-	}
-	out := make([]*role.Role, 0, len(s.roles))
-	for _, r := range s.roles {
-		if params.WorkspaceID != nil && *params.WorkspaceID != r.WorkspaceID {
-			continue
-		}
-		if params.IsGradeManager != nil && *params.IsGradeManager != r.IsGradeManager {
-			continue
-		}
-		if params.Scope != nil &&
-			(params.Scope.ResourceType != r.Scope.ResourceType ||
-				params.Scope.ResourceID != r.Scope.ResourceID) {
-			continue
-		}
-		out = append(out, r)
-	}
-	return out, nil
-}
-
 var _ = Describe("IAMService", func() {
 	const workspaceID = "ws-001"
 
 	var (
-		ctx       context.Context
-		client    *fakeIAMClient
-		store     *fakeRoleStore
-		svc       *IAMService
-		originCfg *config.Config
+		ctx           context.Context
+		client        *fakeIAMClient
+		gradeManagers *role.GradeManagerStore
+		svc           *IAMService
+		originCfg     *config.Config
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		client = newFakeIAMClient()
-		store = newFakeRoleStore()
-		svc = NewIAMService(client, store)
+		gradeManagers = testutil.NewStore(GinkgoT(), role.GradeManagerMeta)
+		svc = NewIAMService(client, testutil.NewDB(GinkgoT()))
 
 		// IAMService reads config.G.BkIAMSystemIDs.Bkms when building IAM
 		// requests; populate a minimal config and restore on AfterEach.
@@ -316,6 +214,8 @@ var _ = Describe("IAMService", func() {
 
 	AfterEach(func() {
 		config.G = originCfg
+		Expect(testutil.CleanupMetaColl(role.GradeManagerMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(role.RoleMeta)).To(Succeed())
 	})
 
 	Context("workspace admin lifecycle", func() {
@@ -332,7 +232,7 @@ var _ = Describe("IAMService", func() {
 			Expect(r.Scope.ResourceType).To(Equal(role.WorkspaceResourceType))
 
 			// grade manager record should be persisted
-			wgm, err := store.GetWorkspaceGradeManager(ctx, workspaceID)
+			wgm, err := gradeManagers.Get(ctx, role.ByWorkspace(workspaceID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(wgm.GradeManagerID).To(Equal(client.gradeManagerID))
 
@@ -474,7 +374,7 @@ var _ = Describe("IAMService", func() {
 			// User group should have been deleted via the IAM client.
 			Expect(client.gotDeletedUserGroups).To(ContainElement(expectedUGID))
 			// Grade manager record should have been removed from local store.
-			_, err = store.GetWorkspaceGradeManager(ctx, workspaceID)
+			_, err = gradeManagers.Get(ctx, role.ByWorkspace(workspaceID))
 			Expect(err).To(HaveOccurred())
 		})
 	})

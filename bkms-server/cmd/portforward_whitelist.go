@@ -64,7 +64,7 @@ func newPFWhitelistAddCmd() *cobra.Command {
 			storereg.Init(ctx)
 			reg := storereg.G()
 
-			svc := pfwhitelist.NewService(reg.PortForwardWhitelistStore, reg.EnvStore)
+			svc := pfwhitelist.NewService(reg.DB)
 			if err = svc.Add(ctx, args); err != nil {
 				log.Fatalf("add to port-forward whitelist failed: %v", err)
 			}
@@ -97,7 +97,7 @@ func newPFWhitelistRmCmd() *cobra.Command {
 			storereg.Init(ctx)
 			reg := storereg.G()
 
-			svc := pfwhitelist.NewService(reg.PortForwardWhitelistStore, reg.EnvStore)
+			svc := pfwhitelist.NewService(reg.DB)
 			if err = svc.Remove(ctx, args); err != nil {
 				log.Fatalf("remove from port-forward whitelist failed: %v", err)
 			}
@@ -129,7 +129,7 @@ func newPFWhitelistListCmd() *cobra.Command {
 			storereg.Init(ctx)
 			reg := storereg.G()
 
-			svc := pfwhitelist.NewService(reg.PortForwardWhitelistStore, reg.EnvStore)
+			svc := pfwhitelist.NewService(reg.DB)
 			envIDs, err := svc.List(ctx)
 			if err != nil {
 				log.Fatalf("list port-forward whitelist failed: %v", err)

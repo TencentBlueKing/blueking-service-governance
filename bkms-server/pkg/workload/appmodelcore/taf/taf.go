@@ -24,10 +24,11 @@ import (
 
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -67,35 +68,18 @@ type UpdateParams struct {
 
 // Service TAF 应用服务
 type Service struct {
-	appModelStore        appmodel.AppModelStore
-	appSpecStore         appspec.AppSpecStore
-	appDefaultRuleStore  appdefaults.RuleStore
-	envStore             envmodel.EnvironmentStore
-	appStore             bkmsapp.ApplicationStore
+	db                   *mongo.Database
 	appConfigFileService *appcfg.AppConfigFileService
 }
 
 // NewService 创建服务实例
 func NewService(
-	appModelStore appmodel.AppModelStore,
-	appSpecStore appspec.AppSpecStore,
-	appDefaultRuleStore appdefaults.RuleStore,
-	envStore envmodel.EnvironmentStore,
-	appConfigFileStore appcfg.AppConfigFileStore,
-	appConfigFileDefStore appcfg.AppConfigFileDefStore,
-	appConfigFileVersionStore appcfg.AppConfigFileVersionStore,
-	appStore bkmsapp.ApplicationStore,
+	db *mongo.Database,
 ) *Service {
 	return &Service{
-		appModelStore:       appModelStore,
-		appSpecStore:        appSpecStore,
-		appDefaultRuleStore: appDefaultRuleStore,
-		envStore:            envStore,
-		appStore:            appStore,
+		db: db,
 		appConfigFileService: appcfg.NewAppConfigFileService(
-			appConfigFileStore,
-			appConfigFileDefStore,
-			appConfigFileVersionStore,
+			db,
 		),
 	}
 }
@@ -103,14 +87,7 @@ func NewService(
 // Create 创建 TAF 应用资源（AppModel + AppConfigFile + App）
 func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *CreateParams) error {
 	// 在写入任何应用数据前读取初始化规则，避免读取失败时留下部分应用数据。
-	resolved, err := appdefaults.Resolve(
-		ctx,
-		s.appDefaultRuleStore,
-		s.envStore,
-		app.WorkspaceID,
-		app.ID,
-		app.Type,
-	)
+	resolved, err := appdefaults.Resolve(ctx, s.db, app.WorkspaceID, app.ID, app.Type)
 	if err != nil {
 		return errors.Wrap(err, "resolve application defaults")
 	}
@@ -177,18 +154,21 @@ func (s *Service) persistCreatedApp(
 	resolved *appdefaults.ResolvedAppSpec,
 ) error {
 	appspec.ApplyToAppModel(&resolved.Default, appModel)
-	if err := s.appModelStore.CreateAppModel(ctx, appModel); err != nil {
+	if err := appmodel.CreateAppModel(ctx, s.db, appModel); err != nil {
 		return errors.Wrapf(err, "create app(%s) model", app.Name)
 	}
-	if err := s.appSpecStore.Upsert(ctx, &resolved.Default); err != nil {
+	specs := store.Of(s.db, appspec.AppSpecMeta)
+	if _, err := specs.Upsert(
+		ctx, &resolved.Default, appspec.ByAppEnv(resolved.Default.AppID, resolved.Default.EnvName),
+	); err != nil {
 		return errors.Wrap(err, "create default app spec")
 	}
 	for _, spec := range resolved.Environments {
-		if err := s.appSpecStore.Upsert(ctx, spec); err != nil {
+		if _, err := specs.Upsert(ctx, spec, appspec.ByAppEnv(spec.AppID, spec.EnvName)); err != nil {
 			return errors.Wrapf(err, "create app spec for environment %q", spec.EnvName)
 		}
 	}
-	if err := s.appStore.CreateApp(ctx, app); err != nil {
+	if err := bkmsapp.CreateApp(ctx, s.db, app); err != nil {
 		return errors.Wrap(err, "create app")
 	}
 	return nil
@@ -201,7 +181,7 @@ func (s *Service) Update(
 	params *UpdateParams,
 ) (*appmodel.AppModel, *appmodel.AppModel, error) {
 	// 获取应用模型
-	appModel, err := s.appModelStore.GetAppModel(ctx, app.ID)
+	appModel, err := store.Of(s.db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "get app(%s) model", app.Name)
 	}
@@ -225,7 +205,7 @@ func (s *Service) Update(
 	appModel.Workload.Args = params.Args
 
 	// 保存更新
-	if err = s.appModelStore.UpdateAppModel(ctx, appModel); err != nil {
+	if err = appmodel.UpdateAppModel(ctx, s.db, appModel); err != nil {
 		return nil, nil, errors.Wrapf(err, "update app(%s) model", app.Name)
 	}
 

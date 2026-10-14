@@ -23,8 +23,10 @@ import (
 	"errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmdashboard "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/dashboard"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Handler handles app dashboard binding HTTP requests.
@@ -36,6 +38,10 @@ type Handler struct {
 // New creates an app dashboard binding HTTP handler.
 func New(registry *storereg.Registry, service *bkmdashboard.Service) *Handler {
 	return &Handler{registry: registry, service: service}
+}
+
+func (h *Handler) workspaces() *workspace.WorkspaceStore {
+	return store.Of(h.registry.DB, workspace.Meta)
 }
 
 // wrapError 将底层错误转换为统一的 bkerrs 错误码。

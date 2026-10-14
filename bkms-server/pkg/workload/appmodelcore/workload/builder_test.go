@@ -23,11 +23,13 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	corev1 "k8s.io/api/core/v1"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -37,7 +39,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -48,41 +49,32 @@ import (
 var _ = Describe("Builder", func() {
 	var ctx context.Context
 	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var appModelStore appmodel.AppModelStore
-	var appSpecStore appspec.AppSpecStore
-	var buildConfigStore build.ConfigStore
+	var appStore *bkmsapp.ApplicationStore
+	var buildConfigStore *build.ConfigStore
 	var envSvc *env.EnvService
-	var scopedEnvVarStore envvars.ScopedEnvVarStore
+	var db *mongo.Database
 	var builderSvc *workload.BuilderService
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
 			appcfg.FxModule,
 			workload.FxModule,
 			env.FxModule,
 			envvars.FxModule,
-			build.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polarisenvvars.FxModule,
 			polaris.FxModule,
 			fx.Populate(
-				&appStore,
-				&appModelStore,
-				&appSpecStore,
-				&buildConfigStore,
 				&envSvc,
-				&scopedEnvVarStore,
 				&builderSvc,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		buildConfigStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
 	})
 
 	AfterEach(func() {
@@ -102,7 +94,7 @@ var _ = Describe("Builder", func() {
 			})
 			envObj = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			_, err := scopedEnvVarStore.CreateSimpleEnvScopeVar(ctx, *envObj, "ENV_VAR", "env_var", "")
+			_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, *envObj, "ENV_VAR", "env_var", "")
 			Expect(err).NotTo(HaveOccurred())
 
 			appModel = &appmodel.AppModel{
@@ -116,7 +108,7 @@ var _ = Describe("Builder", func() {
 					},
 				},
 			}
-			err = appModelStore.CreateAppModel(ctx, appModel)
+			err = appmodel.CreateAppModel(ctx, db, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("seed build config")
@@ -171,10 +163,10 @@ var _ = Describe("Builder", func() {
 				MaxUnavailable: &maxUnavailable,
 				MaxSurge:       &maxSurge,
 			}
-			Expect(appModelStore.UpdateAppModel(ctx, appModel)).To(Succeed())
+			Expect(appmodel.UpdateAppModel(ctx, db, appModel)).To(Succeed())
 
 			overriddenMaxSurge := "50%"
-			err := appspec.SetEnv(ctx, appSpecStore, &appspec.AppSpec{
+			err := appspec.SetEnv(ctx, db, &appspec.AppSpec{
 				AppID:   app.ID,
 				EnvName: envObj.Name,
 				UpdateStrategy: &appspec.UpdateStrategySpec{
@@ -223,7 +215,7 @@ var _ = Describe("Builder", func() {
 		It("should inject custom labels/annotations into the pod template metadata only", func() {
 			appModel.Labels = map[string]string{"team": "sre", "region": "sh"}
 			appModel.Annotations = map[string]string{"note": "hello", "owner": "bkms"}
-			Expect(appModelStore.UpdateAppModel(ctx, appModel)).NotTo(HaveOccurred())
+			Expect(appmodel.UpdateAppModel(ctx, db, appModel)).NotTo(HaveOccurred())
 
 			result, err := builder.Build(ctx, envObj)
 			Expect(err).NotTo(HaveOccurred())
@@ -256,7 +248,7 @@ var _ = Describe("Builder", func() {
 
 		It("should inject tkeRouteEni annotation when appspec tkeRouteEni is enabled", func() {
 			enabled := true
-			err := appspec.SetDefault(ctx, appSpecStore, appModelStore, app.ID, &appspec.AppSpec{
+			err := appspec.SetDefault(ctx, db, app.ID, &appspec.AppSpec{
 				TkeRouteEni: &appspec.TkeRouteEniSpec{Enabled: &enabled},
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -272,7 +264,7 @@ var _ = Describe("Builder", func() {
 
 		It("should not inject tkeRouteEni annotation when appspec tkeRouteEni is disabled", func() {
 			disabled := false
-			err := appspec.SetDefault(ctx, appSpecStore, appModelStore, app.ID, &appspec.AppSpec{
+			err := appspec.SetDefault(ctx, db, app.ID, &appspec.AppSpec{
 				TkeRouteEni: &appspec.TkeRouteEniSpec{Enabled: &disabled},
 			})
 			Expect(err).NotTo(HaveOccurred())

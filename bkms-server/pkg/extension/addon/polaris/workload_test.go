@@ -24,26 +24,30 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("WorkloadBuilder", func() {
 	var (
 		ctx         context.Context
 		diApp       *fxtest.App
-		appStore    bkmsapp.ApplicationStore
+		appStore    *bkmsapp.ApplicationStore
 		envService  *env.EnvService
-		store       polaris.PolarisConfigStore
+		configStore *polaris.ConfigStore
+		db          *mongo.Database
 		builder     *polaris.WorkloadBuilder
 		app         *bkmsapp.Application
 		environment *envmodel.Environment
@@ -51,21 +55,23 @@ var _ = Describe("WorkloadBuilder", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
 			polaris.FxModule,
-			fx.Populate(&appStore, &envService, &store, &builder),
+			fx.Populate(&envService, &builder),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		configStore = store.Of(db, polaris.ConfigMeta)
 
 		app = dbfactory.Application(ctx, appStore)
 		environment = dbfactory.Env(ctx, envService, app.WorkspaceID)
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteByApp(ctx, app.ID)).To(Succeed())
+		Expect(configStore.DeleteMany(ctx, polaris.ByApp(app.ID))).Error().NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -86,7 +92,7 @@ var _ = Describe("WorkloadBuilder", func() {
 			},
 			ScopeEnvNames: scopeEnvNames,
 		}
-		Expect(store.Create(ctx, config)).To(Succeed())
+		Expect(configStore.Create(ctx, config)).To(Succeed())
 		return config
 	}
 
@@ -155,7 +161,7 @@ var _ = Describe("WorkloadBuilder", func() {
 
 	It("uses the environment weight in the PolarisConfig resource", func() {
 		config := createConfig("env-weight", []string{environment.Name}, 8080, nil)
-		Expect(store.UpsertEnvWeight(ctx, app.ID, config.Name, environment.Name, 35, nil)).To(Succeed())
+		Expect(polaris.UpsertEnvWeight(ctx, db, app.ID, config.Name, environment.Name, 35, nil)).To(Succeed())
 
 		result, err := builder.Build(
 			ctx,
@@ -208,7 +214,7 @@ var _ = Describe("WorkloadBuilder", func() {
 		if envOptedIn {
 			envDynamicWeights = map[string]bool{environment.Name: true}
 		}
-		Expect(store.Create(ctx, &polaris.PolarisConfig{
+		Expect(configStore.Create(ctx, &polaris.PolarisConfig{
 			Name:  "weight-factor",
 			AppID: app.ID,
 			Properties: polaris.Properties{
@@ -277,7 +283,7 @@ var _ = Describe("WorkloadBuilder", func() {
 	})
 
 	It("keeps an immediate-register config out of the pod spec while still building its resources", func() {
-		Expect(store.Create(ctx, &polaris.PolarisConfig{
+		Expect(configStore.Create(ctx, &polaris.PolarisConfig{
 			Name:  "immediate",
 			AppID: app.ID,
 			Properties: polaris.Properties{

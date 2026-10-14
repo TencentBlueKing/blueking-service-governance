@@ -27,13 +27,16 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
@@ -42,11 +45,10 @@ import (
 var _ = Describe("FeatureEnvService", func() {
 	var (
 		ctx           context.Context
-		appStore      bkmsapp.ApplicationStore
+		appStore      *bkmsapp.ApplicationStore
 		envSvc        *bkmsenv.EnvService
-		envStore      model.EnvironmentStore
-		counterStore  model.FeatureEnvCounterStore
-		variableStore envvars.ScopedEnvVarStore
+		envStore      *model.EnvironmentStore
+		db            *mongo.Database
 		service       *bkmsenv.FeatureEnvService
 		nsInitializer *MockFeatureEnvNamespaceInitializer
 		diApp         *fxtest.App
@@ -55,9 +57,10 @@ var _ = Describe("FeatureEnvService", func() {
 	BeforeEach(func() {
 		bkmsenv.ResetHooksForTest()
 		nsInitializer = NewMockFeatureEnvNamespaceInitializer(GinkgoT())
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		envStore = testutil.NewStore(GinkgoT(), model.EnvMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			bkmsenv.FxModule,
 			envvars.FxModule,
 			fxtest.WithTestLogger(GinkgoT()),
@@ -65,19 +68,20 @@ var _ = Describe("FeatureEnvService", func() {
 				nsInitializer,
 				fx.As(new(bkmsenv.FeatureEnvNamespaceInitializer)),
 			)),
-			fx.Populate(&appStore, &envSvc, &envStore, &counterStore, &variableStore, &service),
+			fx.Populate(&envSvc, &service),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 
 		ctx = context.Background()
-		envvarhooks.RegisterDeleteHooks(variableStore)
+		envvarhooks.RegisterDeleteHooks(db)
 	})
 
 	AfterEach(func() {
 		bkmsenv.ResetHooksForTest()
-		Expect(envStore.DeleteAll(ctx)).To(Succeed())
-		Expect(counterStore.DeleteAll(ctx)).To(Succeed())
-		Expect(variableStore.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupCollection("environments")).To(Succeed())
+		Expect(testutil.CleanupCollection(model.FeatureEnvCounterCollection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(envvars.ScopedEnvVarMeta)).To(Succeed())
 		diApp.RequireStop()
 	})
 
@@ -92,9 +96,9 @@ var _ = Describe("FeatureEnvService", func() {
 		otherSourceEnv := dbfactory.Env(ctx, envSvc, otherApp.WorkspaceID)
 		_ = dbfactory.FeatEnv(ctx, envSvc, otherApp, otherSourceEnv)
 
-		Expect(envStore.Delete(ctx, deletedSourceEnv.ID)).To(Succeed())
+		Expect(envStore.DeleteIfExists(ctx, store.ByID(deletedSourceEnv.ID))).To(Succeed())
 
-		featureEnvs, sourceEnvByFeatEnvName, err := bkmsenv.ListAppFeatEnvs(ctx, envStore, app)
+		featureEnvs, sourceEnvByFeatEnvName, err := bkmsenv.ListAppFeatEnvs(ctx, db, app)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(featureEnvs).To(HaveLen(2))
 		Expect([]string{featureEnvs[0].Name, featureEnvs[1].Name}).To(ConsistOf(
@@ -110,7 +114,7 @@ var _ = Describe("FeatureEnvService", func() {
 	It("creates feature environments from a standard source environment", func() {
 		app := dbfactory.Application(ctx, appStore)
 		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
-		_, err := variableStore.CreateSimpleEnvScopeVar(ctx, *sourceEnv, "SOURCE_ONLY", "source-value", "")
+		_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, *sourceEnv, "SOURCE_ONLY", "source-value", "")
 		Expect(err).NotTo(HaveOccurred())
 		sourceEnv.Cluster.IsFederation = true
 		firstNamespace := fmt.Sprintf("feat-%s-1", app.ID)
@@ -136,11 +140,11 @@ var _ = Describe("FeatureEnvService", func() {
 		})
 		expectEnvironmentsEqual(featEnv, expectedEnv)
 
-		storedEnv, err := envStore.Get(ctx, featEnv.ID)
+		storedEnv, err := envStore.GetByID(ctx, featEnv.ID)
 		Expect(err).NotTo(HaveOccurred())
 		expectEnvironmentsEqual(storedEnv, expectedEnv)
-		firstVars, err := variableStore.List(
-			ctx,
+		firstVars, err := envvars.List(
+			ctx, db,
 			app.WorkspaceID,
 			envvars.WithScopes(envvartypes.ScopeEnv(featEnv.Name)),
 		)
@@ -160,8 +164,8 @@ var _ = Describe("FeatureEnvService", func() {
 			CopyEnvVars: false,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		secondVars, err := variableStore.List(
-			ctx,
+		secondVars, err := envvars.List(
+			ctx, db,
 			app.WorkspaceID,
 			envvars.WithScopes(envvartypes.ScopeEnv(nextEnv.Name)),
 		)
@@ -179,26 +183,27 @@ var _ = Describe("FeatureEnvService", func() {
 	It("copies custom variables as an independent snapshot including sensitive values", func() {
 		app := dbfactory.Application(ctx, appStore)
 		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
-		plainID, err := variableStore.CreateSimpleEnvScopeVar(
-			ctx,
+		plainID, err := envvars.CreateSimpleEnvScopeVar(
+			ctx, db,
 			*sourceEnv,
 			"CONFIG_KEY",
 			"source-value",
 			"config desc",
 		)
 		Expect(err).NotTo(HaveOccurred())
-		secretID, err := variableStore.Create(ctx, envvars.ScopedEnvVar{
+		secret := &envvars.ScopedEnvVar{
 			WorkspaceID: app.WorkspaceID, ScopeType: envvartypes.ScopeTypeEnv, ScopeValue: sourceEnv.Name,
 			Key: "SECRET", Value: "source-secret", Description: "secret desc", IsSensitive: true,
-		})
-		Expect(err).NotTo(HaveOccurred())
+		}
+		Expect(store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, secret)).To(Succeed())
+		secretID := secret.ID
 		for _, variable := range []envvars.ScopedEnvVar{
 			{ScopeType: envvartypes.ScopeTypeWorkspace, Key: "PUBLIC", Value: "public"},
 			{ScopeType: envvartypes.ScopeTypeEnvType, ScopeValue: sourceEnv.Type, Key: "TYPE_VAR", Value: "type"},
 			{ScopeType: envvartypes.ScopeTypeEnv, ScopeValue: sourceEnv.Name, Key: "BUILTIN", Value: "builtin", IsBuiltin: true},
 		} {
 			variable.WorkspaceID = app.WorkspaceID
-			_, err = variableStore.Create(ctx, variable)
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &variable)
 			Expect(err).NotTo(HaveOccurred())
 		}
 		namespace := fmt.Sprintf("feat-%s-1", app.ID)
@@ -210,8 +215,8 @@ var _ = Describe("FeatureEnvService", func() {
 			App: app, SourceEnv: sourceEnv, DisplayName: "copy variables", CopyEnvVars: true,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		copied, err := variableStore.List(
-			ctx,
+		copied, err := envvars.List(
+			ctx, db,
 			app.WorkspaceID,
 			envvars.WithScopes(envvartypes.ScopeEnv(featureEnv.Name)),
 		)
@@ -228,25 +233,28 @@ var _ = Describe("FeatureEnvService", func() {
 		Expect(copied[1].IsSensitive).To(BeTrue())
 		Expect(copied[1].ID).NotTo(Equal(secretID))
 
-		builtins, err := variableStore.List(ctx, app.WorkspaceID,
+		builtins, err := envvars.List(ctx, db, app.WorkspaceID,
 			envvars.WithScopes(envvartypes.ScopeEnv(featureEnv.Name)), envvars.WithOnlyBuiltin())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(builtins).To(BeEmpty())
 
-		Expect(variableStore.UpdateByID(ctx, app.WorkspaceID, plainID, envvars.ScopedEnvVarUpdateData{
+		Expect(envvars.UpdateByID(ctx, db, app.WorkspaceID, plainID, envvars.ScopedEnvVarUpdateData{
 			Key: "CONFIG_KEY", Value: lo.ToPtr("source-updated"),
 		})).To(Succeed())
-		featurePlain, err := variableStore.GetByID(ctx, app.WorkspaceID, copied[0].ID)
+		featurePlain, err := store.Of(db, envvars.ScopedEnvVarMeta).
+			Get(ctx, envvars.ByID(app.WorkspaceID, copied[0].ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(featurePlain.Value).To(Equal("source-value"))
-		Expect(variableStore.UpdateByID(ctx, app.WorkspaceID, copied[1].ID, envvars.ScopedEnvVarUpdateData{
+		Expect(envvars.UpdateByID(ctx, db, app.WorkspaceID, copied[1].ID, envvars.ScopedEnvVarUpdateData{
 			Key: "SECRET", Value: lo.ToPtr("feature-updated"),
 		})).To(Succeed())
-		sourceSecret, err := variableStore.GetByID(ctx, app.WorkspaceID, secretID)
+		sourceSecret, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(app.WorkspaceID, secretID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(sourceSecret.Value).To(Equal("source-secret"))
-		Expect(variableStore.DeleteByID(ctx, app.WorkspaceID, copied[0].ID)).To(Succeed())
-		sourcePlain, err := variableStore.GetByID(ctx, app.WorkspaceID, plainID)
+		Expect(
+			store.Of(db, envvars.ScopedEnvVarMeta).Delete(ctx, envvars.ByID(app.WorkspaceID, copied[0].ID)),
+		).To(Succeed())
+		sourcePlain, err := store.Of(db, envvars.ScopedEnvVarMeta).Get(ctx, envvars.ByID(app.WorkspaceID, plainID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(sourcePlain.Value).To(Equal("source-updated"))
 	})
@@ -255,13 +263,13 @@ var _ = Describe("FeatureEnvService", func() {
 		app := dbfactory.Application(ctx, appStore)
 		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 		for _, key := range []string{"A_OK", "Z_FAIL"} {
-			_, err := variableStore.CreateSimpleEnvScopeVar(ctx, *sourceEnv, key, "source", "")
+			_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, *sourceEnv, key, "source", "")
 			Expect(err).NotTo(HaveOccurred())
 		}
 		namespace := fmt.Sprintf("feat-%s-1", app.ID)
 		// 目标作用域里先占住第二个 key，复制写完 A_OK 后在 Z_FAIL 上撞唯一索引。
-		_, err := variableStore.CreateSimpleEnvScopeVar(
-			ctx,
+		_, err := envvars.CreateSimpleEnvScopeVar(
+			ctx, db,
 			model.Environment{WorkspaceID: app.WorkspaceID, Name: namespace},
 			"Z_FAIL",
 			"pre-existing",
@@ -273,14 +281,14 @@ var _ = Describe("FeatureEnvService", func() {
 			App: app, SourceEnv: sourceEnv, DisplayName: "partial copy failure", CopyEnvVars: true,
 		})
 		Expect(err).To(MatchError(envvars.ErrScopedEnvVarKeyConflict))
-		_, err = envStore.GetByWorkspaceAndName(ctx, app.WorkspaceID, namespace)
+		_, err = envStore.Get(ctx, model.ByName(app.WorkspaceID, namespace))
 		Expect(err).To(MatchError(model.ErrEnvNotFound))
 		// 环境即将删除，目标作用域内的本次副本及并发写入记录都必须清理。
-		copied, err := variableStore.List(ctx, app.WorkspaceID, envvars.WithScopes(envvartypes.ScopeEnv(namespace)))
+		copied, err := envvars.List(ctx, db, app.WorkspaceID, envvars.WithScopes(envvartypes.ScopeEnv(namespace)))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(copied).To(BeEmpty())
-		sourceVars, err := variableStore.List(
-			ctx,
+		sourceVars, err := envvars.List(
+			ctx, db,
 			app.WorkspaceID,
 			envvars.WithScopes(envvartypes.ScopeEnv(sourceEnv.Name)),
 		)
@@ -291,15 +299,15 @@ var _ = Describe("FeatureEnvService", func() {
 	It("keeps a failed environment when cleanup fails and allows deletion to be retried", func() {
 		app := dbfactory.Application(ctx, appStore)
 		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
-		_, err := variableStore.Create(ctx, envvars.ScopedEnvVar{
+		err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 			WorkspaceID: app.WorkspaceID, ScopeType: envvartypes.ScopeTypeEnv, ScopeValue: sourceEnv.Name,
 			Key: "A_SECRET", Value: "source-secret", IsSensitive: true,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		_, err = variableStore.CreateSimpleEnvScopeVar(ctx, *sourceEnv, "Z_FAIL", "source", "")
+		_, err = envvars.CreateSimpleEnvScopeVar(ctx, db, *sourceEnv, "Z_FAIL", "source", "")
 		Expect(err).NotTo(HaveOccurred())
 		namespace := fmt.Sprintf("feat-%s-1", app.ID)
-		_, err = variableStore.CreateSimpleEnvScopeVar(ctx,
+		_, err = envvars.CreateSimpleEnvScopeVar(ctx, db,
 			model.Environment{WorkspaceID: app.WorkspaceID, Name: namespace}, "Z_FAIL", "concurrent-value", "")
 		Expect(err).NotTo(HaveOccurred())
 
@@ -312,7 +320,7 @@ var _ = Describe("FeatureEnvService", func() {
 			}
 			return nil
 		})).To(BeTrue())
-		envvarhooks.RegisterDeleteHooks(variableStore)
+		envvarhooks.RegisterDeleteHooks(db)
 
 		_, err = service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
 			App: app, SourceEnv: sourceEnv, DisplayName: "cleanup failure", CopyEnvVars: true,
@@ -322,10 +330,10 @@ var _ = Describe("FeatureEnvService", func() {
 		Expect(errors.Is(err, envvars.ErrScopedEnvVarKeyConflict)).To(BeFalse())
 		Expect(err.Error()).To(ContainSubstring("delete this environment before retrying"))
 		Expect(err.Error()).To(ContainSubstring(namespace))
-		retainedEnv, getErr := envStore.GetByWorkspaceAndName(ctx, app.WorkspaceID, namespace)
+		retainedEnv, getErr := envStore.Get(ctx, model.ByName(app.WorkspaceID, namespace))
 		Expect(getErr).NotTo(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring(retainedEnv.ID.Hex()))
-		remaining, err := variableStore.List(ctx, app.WorkspaceID, envvars.WithScopes(envvartypes.ScopeEnv(namespace)))
+		remaining, err := envvars.List(ctx, db, app.WorkspaceID, envvars.WithScopes(envvartypes.ScopeEnv(namespace)))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(remaining).To(HaveLen(2))
 		Expect(remaining[0].Key).To(Equal("A_SECRET"))
@@ -333,9 +341,9 @@ var _ = Describe("FeatureEnvService", func() {
 
 		allowCleanup = true
 		Expect(envSvc.Delete(ctx, retainedEnv.ID)).To(Succeed())
-		_, err = envStore.Get(ctx, retainedEnv.ID)
+		_, err = envStore.GetByID(ctx, retainedEnv.ID)
 		Expect(err).To(MatchError(model.ErrEnvNotFound))
-		remaining, err = variableStore.List(ctx, app.WorkspaceID, envvars.WithScopes(envvartypes.ScopeEnv(namespace)))
+		remaining, err = envvars.List(ctx, db, app.WorkspaceID, envvars.WithScopes(envvartypes.ScopeEnv(namespace)))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(remaining).To(BeEmpty())
 	})
@@ -343,7 +351,7 @@ var _ = Describe("FeatureEnvService", func() {
 	It("still persists the feature environment when namespace creation fails", func() {
 		app := dbfactory.Application(ctx, appStore)
 		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
-		_, err := variableStore.CreateSimpleEnvScopeVar(ctx, *sourceEnv, "CONFIG_KEY", "source-value", "")
+		_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, *sourceEnv, "CONFIG_KEY", "source-value", "")
 		Expect(err).NotTo(HaveOccurred())
 		namespace := fmt.Sprintf("feat-%s-1", app.ID)
 		initErr := errors.New("namespace initialization failed")
@@ -361,10 +369,10 @@ var _ = Describe("FeatureEnvService", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(featEnv.Name).To(Equal(namespace))
 
-		storedEnv, err := envStore.GetByName(ctx, app.WorkspaceID, app.ID, namespace)
+		storedEnv, err := envStore.Get(ctx, model.AppEnvByName(app.WorkspaceID, app.ID, namespace))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(storedEnv.ID).To(Equal(featEnv.ID))
-		copied, err := variableStore.List(ctx, app.WorkspaceID, envvars.WithScopes(envvartypes.ScopeEnv(featEnv.Name)))
+		copied, err := envvars.List(ctx, db, app.WorkspaceID, envvars.WithScopes(envvartypes.ScopeEnv(featEnv.Name)))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(copied).To(HaveLen(1))
 		Expect(copied[0].Value).To(Equal("source-value"))
@@ -376,7 +384,7 @@ var _ = Describe("FeatureEnvService", func() {
 		occupiedNamespace := fmt.Sprintf("feat-%s-1", app.ID)
 		occupiedEnvName := "occupied-" + occupiedNamespace
 		occupiedWorkspaceID := "other-workspace-" + app.ID
-		_, err := envStore.Create(ctx, &model.Environment{
+		err := envStore.Create(ctx, &model.Environment{
 			Name:        occupiedEnvName,
 			DisplayName: occupiedEnvName,
 			Type:        sourceEnv.Type,

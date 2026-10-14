@@ -23,6 +23,7 @@ import (
 	"time"
 
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
+	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -30,7 +31,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 )
 
@@ -44,49 +47,6 @@ func newGameDeploy(objAnnotations, tplAnnotations map[string]string) *tkex.GameD
 			},
 		},
 	}
-}
-
-type fakeBuildAutoDeployStore struct {
-	record *autodeploy.Record
-}
-
-func (f *fakeBuildAutoDeployStore) Create(_ context.Context, record *autodeploy.Record) error {
-	f.record = record
-	return nil
-}
-
-func (f *fakeBuildAutoDeployStore) Update(_ context.Context, record *autodeploy.Record) error {
-	f.record = record
-	return nil
-}
-
-func (f *fakeBuildAutoDeployStore) GetLatest(_ context.Context, _, _, _ string) (*autodeploy.Record, error) {
-	return f.record, nil
-}
-
-func (f *fakeBuildAutoDeployStore) ListLatestByApps(
-	_ context.Context, _ []string, _ string,
-) (map[string]map[string]*autodeploy.Record, error) {
-	if f.record == nil {
-		return map[string]map[string]*autodeploy.Record{}, nil
-	}
-	return map[string]map[string]*autodeploy.Record{
-		f.record.AppID: {f.record.EnvName: f.record},
-	}, nil
-}
-
-func (f *fakeBuildAutoDeployStore) GetByBuildID(_ context.Context, _, buildID string) (*autodeploy.Record, error) {
-	if f.record != nil && f.record.BuildID == buildID {
-		return f.record, nil
-	}
-	return nil, autodeploy.ErrRecordNotFound
-}
-
-func (f *fakeBuildAutoDeployStore) GetByDeployID(_ context.Context, _, deployID string) (*autodeploy.Record, error) {
-	if f.record != nil && f.record.DeployID == deployID {
-		return f.record, nil
-	}
-	return nil, autodeploy.ErrRecordNotFound
 }
 
 var _ = Describe("injectDeployID", func() {
@@ -130,17 +90,24 @@ var _ = Describe("injectDeployID", func() {
 
 var _ = Describe("syncBuildAutoDeployStatus", func() {
 	It("should update linked build auto deploy record by deploy ID", func() {
+		ctx := context.Background()
+		db := testutil.NewDB(GinkgoT())
+		records := store.Of(db, autodeploy.RecordMeta)
+		appID := "app-" + stringx.Random(6)
+		DeferCleanup(func() { _, _ = records.DeleteMany(ctx, store.Where("appID", appID)) })
+
 		deployID := bson.NewObjectID()
 		record := &autodeploy.Record{
-			AppID:    "app-1",
+			AppID:    appID,
+			BuildID:  "build-" + stringx.Random(6),
 			DeployID: deployID.Hex(),
 			Stage:    autodeploy.StageDeploy,
 			Status:   "deploying",
 		}
-		store := &fakeBuildAutoDeployStore{record: record}
+		Expect(records.Create(ctx, record)).To(Succeed())
 		deployer := &Deployer{
-			buildDeployStore: store,
-			app:              &bkmsapp.Application{ID: "app-1"},
+			db:  db,
+			app: &bkmsapp.Application{ID: appID},
 		}
 		deployRecord := &Record{
 			ID:      deployID,
@@ -149,12 +116,14 @@ var _ = Describe("syncBuildAutoDeployStatus", func() {
 			EndedAt: time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC),
 		}
 
-		err := deployer.syncBuildAutoDeployStatus(context.Background(), deployRecord)
+		err := deployer.syncBuildAutoDeployStatus(ctx, deployRecord)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(store.record.Status).To(Equal(string(StatusUninstalled)))
-		Expect(store.record.Stage).To(Equal(autodeploy.StageDeploy))
-		Expect(store.record.Message).To(Equal("done"))
-		Expect(store.record.EndedAt).To(Equal(deployRecord.EndedAt))
+		got, err := records.Get(ctx, autodeploy.ByDeploy(appID, deployID.Hex()))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(string(StatusUninstalled)))
+		Expect(got.Stage).To(Equal(autodeploy.StageDeploy))
+		Expect(got.Message).To(Equal("done"))
+		Expect(got.EndedAt).To(BeTemporally("==", deployRecord.EndedAt))
 	})
 })

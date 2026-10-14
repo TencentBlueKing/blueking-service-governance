@@ -22,20 +22,22 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Service provides HostPort mapping CRUD and federated env state queries.
 type Service struct {
-	store    HostPortStore
-	envStore envmodel.EnvironmentStore
+	db       *mongo.Database
+	envStore *envmodel.EnvironmentStore
 }
 
 // NewService creates a HostPort Service.
-func NewService(store HostPortStore, envStore envmodel.EnvironmentStore) *Service {
-	return &Service{store: store, envStore: envStore}
+func NewService(db *mongo.Database) *Service {
+	return &Service{db: db, envStore: store.Of(db, envmodel.EnvMeta)}
 }
 
 // GetHostPorts returns declared ports and federated env pending-deploy views.
@@ -53,16 +55,12 @@ func (s *Service) GetHostPorts(ctx context.Context, app *bkmsapp.Application) (*
 
 // ListPorts returns declared container ports for an app.
 func (s *Service) ListPorts(ctx context.Context, appID string) ([]int32, error) {
-	return s.store.ListPorts(ctx, appID)
+	return ListPorts(ctx, s.db, appID)
 }
 
 // ReplacePorts replaces the declared container ports for an app.
 func (s *Service) ReplacePorts(ctx context.Context, appID string, ports []int32) ([]int32, error) {
-	config, err := s.store.ReplacePorts(ctx, appID, ports)
-	if err != nil {
-		return nil, err
-	}
-	return NormalizePorts(config.Ports), nil
+	return ReplacePorts(ctx, s.db, appID, ports)
 }
 
 // ListFederatedEnvStates returns HostPort pending-deploy status for federated envs only.
@@ -70,12 +68,17 @@ func (s *Service) ListFederatedEnvStates(
 	ctx context.Context,
 	app *bkmsapp.Application,
 ) (map[string]EnvStateView, error) {
-	envs, err := s.envStore.ListAppEnvs(ctx, app.WorkspaceID, app.ID)
+	envs, err := s.envStore.List(
+		ctx,
+		envmodel.InWorkspace(app.WorkspaceID),
+		envmodel.VisibleToApp(app.ID),
+		envmodel.NewestFirst(),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "list app envs")
 	}
 
-	config, err := s.store.Get(ctx, app.ID)
+	config, err := store.Of(s.db, HostPortConfigMeta).Get(ctx, ByApp(app.ID))
 	if err != nil && !errors.Is(err, ErrConfigNotFound) {
 		return nil, errors.Wrap(err, "get hostport config")
 	}

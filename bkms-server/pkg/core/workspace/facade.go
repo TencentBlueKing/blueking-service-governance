@@ -22,28 +22,27 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
 // GetWorkspaceImageRegistry 获取工作区当前使用的镜像仓库
-func GetWorkspaceImageRegistry(ctx context.Context, workspaceID string) (*bkmsreg.ImageRegistry, error) {
+func GetWorkspaceImageRegistry(
+	ctx context.Context,
+	db *mongo.Database,
+	workspaceID string,
+) (*bkmsreg.ImageRegistry, error) {
 	// 先获取工作空间，以知晓当前使用的镜像仓库类型
-	wsStore, err := NewWorkspaceStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, err
-	}
-	workspace, err := wsStore.Get(ctx, workspaceID)
+	workspace, err := store.Of(db, Meta).Get(ctx, ByWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get workspace %s", workspaceID)
 	}
 	// 再通过工作空间 ID + 类型，获取镜像仓库
-	regStore, err := bkmsreg.NewImageRegistryStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, err
-	}
-	registry, err := regStore.GetByWorkspaceAndType(ctx, workspaceID, workspace.ImageRegistryType)
+	registry, err := store.Of(db, bkmsreg.ImageRegistryMeta).Get(
+		ctx, bkmsreg.ByWorkspaceAndType(workspaceID, workspace.ImageRegistryType),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "get image registry")
 	}

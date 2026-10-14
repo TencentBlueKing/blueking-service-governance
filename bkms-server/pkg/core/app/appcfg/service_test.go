@@ -32,14 +32,14 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("AppConfigFileService", func() {
 	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var fileStore appcfg.AppConfigFileStore
-	var defStore appcfg.AppConfigFileDefStore
-	var versionStore appcfg.AppConfigFileVersionStore
+	var appStore *bkmsapp.ApplicationStore
+	var fileStore *appcfg.AppConfigFileStore
+	var versionStore *appcfg.AppConfigFileVersionStore
 	var service *appcfg.AppConfigFileService
 	var ctx context.Context
 	var appID string
@@ -57,18 +57,21 @@ var _ = Describe("AppConfigFileService", func() {
 		err = testutil.CleanupCollection("applications")
 		Expect(err).NotTo(HaveOccurred())
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &fileStore, &defStore, &versionStore),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
+		db := testutil.NewDB(GinkgoT())
+		versionStore = store.Of(db, appcfg.AppConfigFileVersionMeta)
 
 		app := dbfactory.Application(ctx, appStore)
 		appID = app.ID
 
-		service = appcfg.NewAppConfigFileService(fileStore, defStore, versionStore)
+		service = appcfg.NewAppConfigFileService(db)
+		fileStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileMeta)
 	})
 
 	AfterEach(func() {
@@ -103,11 +106,7 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(gotFile.CurrentVersion).To(Equal(int64(1)))
 
 			// 验证初始版本已持久化到数据库
-			items, _, err := versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			})
+			items, err := versionStore.List(ctx, appcfg.VersionsByApp(appID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(items).To(HaveLen(1))
 			Expect(items[0].Description).To(Equal("initial values"))
@@ -152,11 +151,7 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(gotFile.Updater).To(Equal("new-user"))
 
 			// 验证新版本已持久化
-			items, _, err := versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			})
+			items, err := versionStore.List(ctx, appcfg.VersionsByApp(appID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(items).To(HaveLen(2))
 
@@ -207,11 +202,7 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 获取 v2 的版本 ID
-			items, _, err := versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			})
+			items, err := versionStore.List(ctx, appcfg.VersionsByApp(appID))
 			Expect(err).NotTo(HaveOccurred())
 			var targetVersionID bson.ObjectID
 			for _, v := range items {
@@ -230,11 +221,7 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(*rollbackAcf.Content).To(Equal(content2))
 
 			// 验证回滚版本已持久化
-			items, _, err = versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			})
+			items, err = versionStore.List(ctx, appcfg.VersionsByApp(appID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(items).To(HaveLen(4))
 
@@ -287,24 +274,7 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(errors.Is(err, appcfg.ErrAppConfigFileNotFound)).To(BeTrue())
 
 			// version records should be fully removed
-			items, total, err := versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(items).To(BeEmpty())
-
-			items, total, err = versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:          appID,
-				Page:           1,
-				PageSize:       10,
-				IncludeDeleted: true,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(items).To(BeEmpty())
+			Expect(versionStore.Count(ctx, appcfg.VersionsByApp(appID))).To(BeZero())
 
 			// recreating the same file should start fresh without version conflicts
 			newAcf, err := service.Create(ctx, appcfg.CreateCfgFileParams{
@@ -323,14 +293,10 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(newAcf.CurrentVersion).To(Equal(int64(1)))
 
 			// only the new file's version should be visible
-			items, total, err = versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			})
+			page, err := service.ListVersions(ctx, appID, 1, 10)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(items[0].AppConfigFileID).To(Equal(newAcf.ID))
+			Expect(page.Total).To(Equal(int64(1)))
+			Expect(page.Items[0].AppConfigFileID).To(Equal(newAcf.ID))
 		})
 	})
 
@@ -352,11 +318,7 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 获取当前活跃版本
-			items, _, err := versionStore.List(ctx, appcfg.AppConfigFileVersionListOptions{
-				AppID:    appID,
-				Page:     1,
-				PageSize: 10,
-			})
+			items, err := versionStore.List(ctx, appcfg.VersionsByApp(appID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(items).To(HaveLen(1))
 			currentVersionID := items[0].ID

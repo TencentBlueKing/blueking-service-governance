@@ -75,14 +75,6 @@ type Image struct {
 	UpdatedAt time.Time `bson:"updatedAt"`
 }
 
-// ListOptions 自定义运行时镜像查询选项
-type ListOptions struct {
-	// Type 镜像类型，为空时查询全部类型
-	Type ImageType
-	// Keyword 搜索关键字，按名称模糊匹配
-	Keyword string
-}
-
 // Validate 校验自定义运行时镜像记录
 func (i *Image) Validate() error {
 	if i == nil {
@@ -100,7 +92,7 @@ func (i *Image) Validate() error {
 
 // validateWorkspaceID 校验所属工作空间
 func (i *Image) validateWorkspaceID() error {
-	// 只拒绝空白，不在这里改写原值；落库时由 Upsert 再 trim，保证查询与写入口径一致
+	// 只拒绝空白，不在这里改写原值；落库前由 Meta 的 BeforeSave 再 trim，保证查询与写入口径一致
 	if strings.TrimSpace(i.WorkspaceID) == "" {
 		return errors.New("workspaceID is required")
 	}

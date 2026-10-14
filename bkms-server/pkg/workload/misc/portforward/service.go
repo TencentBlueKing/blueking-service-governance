@@ -28,6 +28,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -71,9 +72,9 @@ func DefaultStreamOpener(ctx context.Context, target Target) (io.ReadWriteCloser
 
 // Service 应用实例端口转发服务。
 type Service struct {
-	deployRecordStore appmodeldeploy.RecordStore
-	podClientFactory  PodClientFactory
-	streamOpener      StreamOpener
+	db               *mongo.Database
+	podClientFactory PodClientFactory
+	streamOpener     StreamOpener
 }
 
 // Option Service 选项。
@@ -94,9 +95,9 @@ func WithStreamOpener(opener StreamOpener) Option {
 }
 
 // NewService 创建端口转发服务。
-func NewService(deployRecordStore appmodeldeploy.RecordStore, opts ...Option) *Service {
+func NewService(db *mongo.Database, opts ...Option) *Service {
 	s := &Service{
-		deployRecordStore: deployRecordStore,
+		db: db,
 		podClientFactory: func(clusterID string) PodClient {
 			return k8sclient.NewPodClient(cluster.NewConfig(clusterID))
 		},
@@ -112,7 +113,7 @@ func NewService(deployRecordStore appmodeldeploy.RecordStore, opts ...Option) *S
 func (s *Service) GetDeployedPod(
 	ctx context.Context, appID, envName, instanceID string,
 ) (*unstructured.Unstructured, *appmodeldeploy.Record, error) {
-	record, err := s.deployRecordStore.GetLatest(ctx, appID, envName, "")
+	record, err := appmodeldeploy.GetLatest(ctx, s.db, appID, envName, "")
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "deploy record not found")
 	}

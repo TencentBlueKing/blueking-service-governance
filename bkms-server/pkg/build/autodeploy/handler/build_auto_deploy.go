@@ -30,11 +30,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
@@ -50,26 +52,18 @@ type Handler struct {
 
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
-	snapshotService := snapshot.NewService(
-		registry.SnapshotStore,
-		registry.BuildConfigStore,
-		registry.AppStore,
-	)
+	snapshotService := snapshot.NewService(registry.DB)
 	return &Handler{
 		registry:           registry,
-		customImageChecker: customruntime.NewExistenceChecker(snapshotService),
+		customImageChecker: customruntime.NewExistenceChecker(registry.DB, snapshotService),
 	}
 }
 
 // newBuildService 装配构建服务，并注入平台构建镜像引用校验器
 func (h *Handler) newBuildService() (*build.Service, error) {
-	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.RuntimeImageStore,
-		h.registry.SnapshotStore,
-	)
+	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(h.registry.DB)
 	return build.NewService(
-		h.registry.BuildConfigStore,
-		h.registry.BuildRecordStore,
+		h.registry.DB,
 		imageReferenceValidator,
 		h.customImageChecker,
 	)
@@ -149,8 +143,7 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedAppType stri
 				TrafficLaneName: input.TrafficLaneName,
 				Replicas:        input.Replicas,
 			},
-			EnvStore:              h.registry.EnvStore,
-			AutoDeployRecordStore: h.registry.BuildAutoDeployRecordStore,
+			DB: h.registry.DB,
 		},
 	)
 	if err != nil {
@@ -208,7 +201,8 @@ func (h *Handler) prepareBuildAutoDeploy(
 		return nil, false
 	}
 
-	env, err := h.registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, uriInput.EnvName)
+	env, err := store.Of(h.registry.DB, envmodel.EnvMeta).
+		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env"))
 		return nil, false

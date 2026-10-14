@@ -19,18 +19,11 @@
 package dashboard
 
 import (
-	"context"
-	"time"
-
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
-)
 
-// appDashboardCollectionName is the MongoDB collection name for storing app dashboard bindings.
-const appDashboardCollectionName = "bkmonitor_app_dashboard"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
 
 var (
 	// ErrNotFound 应用仪表盘绑定未找到
@@ -43,127 +36,32 @@ var (
 	ErrDashboardNotExist = errors.New("dashboard uid does not exist in bkmonitor")
 )
 
-var _ AppDashboardStore = &StoreMongo{}
+var validate = validator.New(validator.WithRequiredStructEnabled())
 
-// AppDashboardStore defines the storage interface for app dashboard binding data.
-type AppDashboardStore interface {
-	// Create creates a new app dashboard binding.
-	Create(ctx context.Context, d *AppDashboard) (bson.ObjectID, error)
+// Store 应用仪表盘绑定存储
+type Store = store.GenericStore[AppDashboard]
 
-	// ListByApp returns app dashboard bindings by app ID.
-	ListByApp(ctx context.Context, appID string) ([]AppDashboard, error)
-
-	// Update updates an app dashboard binding by app ID and uid.
-	Update(ctx context.Context, appID, uid, updater string, updateData *AppDashboardUpdateData) error
-
-	// Delete deletes an app dashboard binding by app ID and uid.
-	Delete(ctx context.Context, appID, uid string) error
+// Meta 应用仪表盘绑定的存储元数据，写入完整文档前会校验必填字段。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：appID + uid
+var Meta = store.Meta[AppDashboard]{
+	Collection: "bkmonitor_app_dashboard",
+	NotFound:   ErrNotFound,
+	Duplicate:  ErrDuplicate,
+	BeforeSave: []func(*AppDashboard) error{validateDashboard},
 }
 
-// StoreMongo implements AppDashboardStore interface with MongoDB.
-type StoreMongo struct {
-	collection *mongo.Collection
+func validateDashboard(d *AppDashboard) error {
+	return errors.Wrap(validate.Struct(d), "AppDashboard validation failed")
 }
 
-// NewStoreMongo creates a new AppDashboardStore instance.
-func NewStoreMongo(client *mongo.Client, dbName string) (AppDashboardStore, error) {
-	coll := client.Database(dbName).Collection(appDashboardCollectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：appID + uid
-	return &StoreMongo{collection: coll}, nil
+// ByApp 按应用 ID 匹配仪表盘绑定
+func ByApp(appID string) store.Opt {
+	return store.Where("appID", appID)
 }
 
-// Create creates a new app dashboard binding.
-func (s *StoreMongo) Create(ctx context.Context, d *AppDashboard) (bson.ObjectID, error) {
-	validate := validator.New(validator.WithRequiredStructEnabled())
-	if err := validate.Struct(d); err != nil {
-		return bson.NilObjectID, errors.Wrap(err, "AppDashboard validation failed")
-	}
-
-	if d.CreatedAt.IsZero() {
-		d.CreatedAt = time.Now()
-	}
-	d.UpdatedAt = d.CreatedAt
-
-	count, err := s.collection.CountDocuments(ctx, bson.M{"appID": d.AppID, "uid": d.UID})
-	if err != nil {
-		return bson.NilObjectID, err
-	}
-	if count > 0 {
-		return bson.NilObjectID, ErrDuplicate
-	}
-
-	ret, err := s.collection.InsertOne(ctx, d)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return bson.NilObjectID, ErrDuplicate
-		}
-		return bson.NilObjectID, err
-	}
-	return ret.InsertedID.(bson.ObjectID), nil
-}
-
-// ListByApp returns app dashboard bindings by app ID.
-func (s *StoreMongo) ListByApp(ctx context.Context, appID string) ([]AppDashboard, error) {
-	filter := bson.M{"appID": appID}
-	sort := bson.D{{Key: "createdAt", Value: -1}}
-	findOptions := options.Find().SetSort(sort)
-
-	cursor, err := s.collection.Find(ctx, filter, findOptions)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx) // nolint
-
-	list := make([]AppDashboard, 0)
-	if err = cursor.All(ctx, &list); err != nil {
-		return nil, err
-	}
-	return list, nil
-}
-
-// Update updates an app dashboard binding by app ID and uid.
-func (s *StoreMongo) Update(
-	ctx context.Context,
-	appID, uid, updater string,
-	updateData *AppDashboardUpdateData,
-) error {
-	if updateData == nil {
-		return nil
-	}
-
-	update, isEmpty := updateData.ToBSON()
-	if !isEmpty {
-		update["updater"] = updater
-		update["updatedAt"] = time.Now()
-		return s.updateOne(ctx, bson.M{"appID": appID, "uid": uid}, bson.M{"$set": update})
-	}
-	return nil
-}
-
-// Delete deletes an app dashboard binding by app ID and uid.
-func (s *StoreMongo) Delete(ctx context.Context, appID, uid string) error {
-	ret, err := s.collection.DeleteOne(ctx, bson.M{"appID": appID, "uid": uid})
-	if err != nil {
-		return err
-	}
-	if ret.DeletedCount == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-func (s *StoreMongo) updateOne(ctx context.Context, filter, update bson.M) error {
-	opts := options.UpdateOne().SetUpsert(false)
-	ret, err := s.collection.UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return ErrDuplicate
-		}
-		return err
-	}
-	if ret != nil && ret.MatchedCount == 0 {
-		return ErrNotFound
-	}
-	return nil
+// ByAppAndUID 按应用 ID 与仪表盘 uid 匹配仪表盘绑定（至多一条）
+func ByAppAndUID(appID, uid string) store.Opt {
+	return store.Combine(ByApp(appID), store.Where("uid", uid))
 }

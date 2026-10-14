@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // UpdateHelmSpec 更新应用 Helm Chart 配置。
@@ -87,12 +88,14 @@ func (h *Handler) UpdateHelmSpec(c *gin.Context) {
 			return
 		}
 	}
-	if err = bkci.EnsureWorkspaceRepositories(ctx, app.WorkspaceID, helmSourceRepositoriesToBind(helmSource)); err != nil {
+	if err = bkci.EnsureWorkspaceRepositories(
+		ctx, h.registry.DB, app.WorkspaceID, helmSourceRepositoriesToBind(helmSource),
+	); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"))
 		return
 	}
 
-	if err = h.registry.AppStore.UpdateHelmSource(ctx, app, helmSource); err != nil {
+	if err = h.apps().Update(ctx, map[string]any{"helmSpec.helmSource": helmSource}, bkmsapp.ByID(app.ID)); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update helm spec"))
 		return
 	}
@@ -123,9 +126,7 @@ func (h *Handler) createHelmApp(ctx context.Context, app *bkmsapp.Application) e
 	// 创建 Helm 应用默认的 Values 文件
 	// 新应用默认拥有一个名为 default 的本地普通 values 文件
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
-		h.registry.AppConfigFileVersionStore,
+		h.registry.DB,
 	)
 	if _, err := acfService.Create(
 		ctx,
@@ -145,7 +146,7 @@ func (h *Handler) createHelmApp(ctx context.Context, app *bkmsapp.Application) e
 		return errors.Wrap(err, "create default values file")
 	}
 
-	if err := h.registry.AppStore.CreateApp(ctx, app); err != nil {
+	if err := bkmsapp.CreateApp(ctx, h.registry.DB, app); err != nil {
 		return errors.Wrap(err, "create app")
 	}
 	return nil
@@ -154,13 +155,13 @@ func (h *Handler) createHelmApp(ctx context.Context, app *bkmsapp.Application) e
 // deleteHelmApp 删除 Helm 类型应用
 func (h *Handler) deleteHelmApp(ctx context.Context, app *bkmsapp.Application) error {
 	// 删除所有关联的配置文件、def 及版本记录
-	if _, err := h.registry.AppConfigFileStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileMeta).DeleteMany(ctx, appcfg.FilesByApp(app.ID)); err != nil {
 		return errors.Wrap(err, "delete values files")
 	}
-	if _, err := h.registry.AppConfigFileDefStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(ctx, appcfg.DefsByApp(app.ID)); err != nil {
 		return errors.Wrap(err, "delete values file metas")
 	}
-	if _, err := h.registry.AppConfigFileVersionStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileVersionMeta).DeleteMany(ctx, appcfg.VersionsByApp(app.ID)); err != nil {
 		return errors.Wrap(err, "delete values file versions")
 	}
 	return nil

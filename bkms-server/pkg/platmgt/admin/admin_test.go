@@ -26,30 +26,16 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
-)
-
-// FxModule wires the platform administrator store and administrators for tests and DI usage.
-var FxModule = fx.Options(
-	fx.Provide(
-		func() *mongo.Client { return database.Client() },
-		func() string { return database.Name() },
-		NewStoreMongo,
-		func(store *StoreMongo) Store { return store },
-		NewService,
-	),
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Platform administrators", func() {
 	var (
 		ctx          context.Context
-		diApp        *fxtest.App
 		roleBindings *Service
-		store        *StoreMongo
+		bindingStore *Store
 		testPrefix   string
 	)
 
@@ -57,14 +43,10 @@ var _ = Describe("Platform administrators", func() {
 		ctx = context.Background()
 		testPrefix = "plat-admin-service-test-" + stringx.Random(6)
 
-		diApp = fxtest.New(
-			GinkgoT(),
-			FxModule,
-			fx.Populate(&store, &roleBindings),
-		)
-		diApp.RequireStart()
+		roleBindings = NewService(testutil.NewDB(GinkgoT()))
+		bindingStore = testutil.NewStore(GinkgoT(), RoleBindingMeta)
 
-		Expect(store.CreateMany(ctx, []*RoleBinding{
+		Expect(bindingStore.CreateMany(ctx, []*RoleBinding{
 			{
 				Username: testPrefix + "-b",
 				RoleCode: RoleCodeAdmin,
@@ -75,25 +57,29 @@ var _ = Describe("Platform administrators", func() {
 				Username: testPrefix + "-a",
 				RoleCode: RoleCodeAdmin,
 				Creator:  "bootstrap-admin",
-				Updater:  "bootstrap-admin",
 			},
 		})).To(Succeed())
 	})
 
 	AfterEach(func() {
-		if store != nil {
-			_, err := store.collection.DeleteMany(ctx, bson.M{
-				"username": bson.M{"$regex": "^" + regexp.QuoteMeta(testPrefix)},
-			})
-			Expect(err).NotTo(HaveOccurred())
-		}
-		if diApp != nil {
-			diApp.RequireStop()
-		}
+		_, err := bindingStore.DeleteMany(ctx, store.Where("username", bson.M{
+			"$regex": "^" + regexp.QuoteMeta(testPrefix),
+		}))
+		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should list platform administrator role bindings with keyword filtering", func() {
-		results, err := roleBindings.List(ctx, testPrefix+"-a")
+	It("should list role bindings sorted by username with keyword filtering", func() {
+		results, err := roleBindings.List(ctx, " "+testPrefix+" ")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(2))
+		Expect(results[0].Username).To(Equal(testPrefix + "-a"))
+		Expect(results[1].Username).To(Equal(testPrefix + "-b"))
+		Expect(results[0].CreatedAt).NotTo(BeZero())
+		Expect(results[0].UpdatedAt).To(Equal(results[0].CreatedAt))
+		// 未指定更新人时以创建人作为更新人
+		Expect(results[0].Updater).To(Equal("bootstrap-admin"))
+
+		results, err = roleBindings.List(ctx, testPrefix+"-A")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(results).To(HaveLen(1))
 		Expect(results[0].Username).To(Equal(testPrefix + "-a"))
@@ -111,20 +97,35 @@ var _ = Describe("Platform administrators", func() {
 		Expect(roleCode).To(BeEmpty())
 	})
 
-	It("should assign platform administrator roles in batch", func() {
-		err := roleBindings.AssignRoles(ctx, []string{testPrefix + "-c", testPrefix + "-a"}, RoleCodeAdmin, "admin-a")
+	It("should assign platform administrator roles in batch and skip existing usernames", func() {
+		err := roleBindings.AssignRoles(
+			ctx, []string{testPrefix + "-c", testPrefix + "-a", testPrefix + "-c"}, RoleCodeAdmin, "admin-a",
+		)
 		Expect(err).NotTo(HaveOccurred())
 
-		roleBindings, err := store.List(ctx, &ListOptions{Keyword: testPrefix})
+		results, err := roleBindings.List(ctx, testPrefix)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(roleBindings).To(HaveLen(3))
+		Expect(results).To(HaveLen(3))
+
+		// 已存在的角色绑定保持不变
+		existing, err := bindingStore.Get(ctx, ByUsername(testPrefix+"-a"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(existing.Creator).To(Equal("bootstrap-admin"))
+		created, err := bindingStore.Get(ctx, ByUsername(testPrefix+"-c"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(created.Creator).To(Equal("admin-a"))
+	})
+
+	It("should reject invalid role codes", func() {
+		err := roleBindings.AssignRoles(ctx, []string{testPrefix + "-c"}, RoleCode("invalid"), "admin-a")
+		Expect(err).To(MatchError(ErrInvalidRoleCode))
 	})
 
 	It("should revoke platform administrator roles idempotently", func() {
 		targetUsername := testPrefix + "-b"
 		Expect(roleBindings.RevokeRole(ctx, targetUsername)).To(Succeed())
 		Expect(roleBindings.RevokeRole(ctx, targetUsername)).To(Succeed())
-		_, err := store.Get(ctx, targetUsername)
-		Expect(err).To(Equal(ErrRoleBindingNotFound))
+		_, err := bindingStore.Get(ctx, ByUsername(targetUsername))
+		Expect(err).To(MatchError(ErrRoleBindingNotFound))
 	})
 })

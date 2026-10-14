@@ -23,6 +23,9 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // BaseContentProvider defines the interface for providing base content information
@@ -39,23 +42,22 @@ type BaseContentProvider interface {
 
 // NewBaseContentProvider creates provider object based on the given file object.
 func NewBaseContentProvider(
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
+	db *mongo.Database,
 	acf *AppConfigFile,
 ) (BaseContentProvider, error) {
 	switch acf.ContentSourceType {
 	case ContentSourceTypeLocal:
-		return newLocalBaseContentProvider(store, defStore, acf), nil
+		return newLocalBaseContentProvider(db, acf), nil
 	case ContentSourceTypeBSCP:
-		return newBSCPBaseContentProvider(store, defStore, acf), nil
+		return newBSCPBaseContentProvider(db, acf), nil
 	default:
 		return nil, errors.New("invalid content source type")
 	}
 }
 
-// getNameByDefID 从 defStore 获取文件名。
-func getNameByDefID(ctx context.Context, defStore AppConfigFileDefStore, defID bson.ObjectID) string {
-	def, err := defStore.GetByID(ctx, defID)
+// getNameByDefID 从 def 记录获取文件名，def 不存在或查询失败时返回空字符串。
+func getNameByDefID(ctx context.Context, db *mongo.Database, defID bson.ObjectID) string {
+	def, err := store.Of(db, AppConfigFileDefMeta).GetByID(ctx, defID)
 	if err != nil {
 		return ""
 	}
@@ -86,18 +88,16 @@ var ErrBaseContentEmpty = errors.New("base content is empty")
 
 // LocalBaseContentProvider provides base content for local content source app config files
 type LocalBaseContentProvider struct {
-	store    AppConfigFileStore
-	defStore AppConfigFileDefStore
-	acf      *AppConfigFile
+	db  *mongo.Database
+	acf *AppConfigFile
 }
 
 // newLocalBaseContentProvider creates a new LocalBaseContentProvider
 func newLocalBaseContentProvider(
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
+	db *mongo.Database,
 	acf *AppConfigFile,
 ) BaseContentProvider {
-	return &LocalBaseContentProvider{store: store, defStore: defStore, acf: acf}
+	return &LocalBaseContentProvider{db: db, acf: acf}
 }
 
 // GetInfo returns the base content info for local app config files
@@ -107,12 +107,12 @@ func (p *LocalBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInf
 		return nil, ErrBaseContentEmpty
 	}
 
-	baseAcf, err := p.store.GetByID(ctx, *p.acf.BaseAppConfigFileID)
+	baseAcf, err := store.Of(p.db, AppConfigFileMeta).GetByID(ctx, *p.acf.BaseAppConfigFileID)
 	if err != nil {
 		return nil, errors.Wrap(err, "retrieving the base app config file")
 	}
 	// 获取 Base AppConfigFile 的 Content
-	editor, err := NewAppConfigFileEditor(p.store, p.defStore, baseAcf)
+	editor, err := NewAppConfigFileEditor(p.db, baseAcf)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating the base content provider")
 	}
@@ -122,7 +122,7 @@ func (p *LocalBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInf
 	}
 	return &BaseContentInfo{
 		HolderID:                baseAcf.ID,
-		HolderName:              getNameByDefID(ctx, p.defStore, baseAcf.DefID),
+		HolderName:              getNameByDefID(ctx, p.db, baseAcf.DefID),
 		HolderContentSourceType: string(baseAcf.ContentSourceType),
 		IsFromAnotherFile:       true,
 		Content:                 compiledContent,
@@ -133,18 +133,16 @@ var _ BaseContentProvider = &LocalBaseContentProvider{}
 
 // BSCPBaseContentProvider provides base content for BSCP content source app config files
 type BSCPBaseContentProvider struct {
-	store    AppConfigFileStore
-	defStore AppConfigFileDefStore
-	acf      *AppConfigFile
+	db  *mongo.Database
+	acf *AppConfigFile
 }
 
 // newBSCPBaseContentProvider creates a new BSCPBaseContentProvider
 func newBSCPBaseContentProvider(
-	store AppConfigFileStore,
-	defStore AppConfigFileDefStore,
+	db *mongo.Database,
 	acf *AppConfigFile,
 ) BaseContentProvider {
-	return &BSCPBaseContentProvider{store: store, defStore: defStore, acf: acf}
+	return &BSCPBaseContentProvider{db: db, acf: acf}
 }
 
 // GetInfo 返回 AppConfigFile 的 BaseContentInfo
@@ -158,7 +156,7 @@ func (p *BSCPBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInfo
 
 	if p.acf.Type == AppConfigFileTypeOverlay {
 		// For overlay app config file, the base content is from another app config file
-		targetAcf, err = p.store.GetByID(ctx, *p.acf.BaseAppConfigFileID)
+		targetAcf, err = store.Of(p.db, AppConfigFileMeta).GetByID(ctx, *p.acf.BaseAppConfigFileID)
 		if err != nil {
 			return nil, errors.Wrap(err, "retrieving the base app config file")
 		}
@@ -170,7 +168,7 @@ func (p *BSCPBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInfo
 	}
 
 	// 获取 Base AppConfigFile 的 Content
-	editor, err := NewAppConfigFileEditor(p.store, p.defStore, targetAcf)
+	editor, err := NewAppConfigFileEditor(p.db, targetAcf)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating the base content provider")
 	}
@@ -181,7 +179,7 @@ func (p *BSCPBaseContentProvider) GetInfo(ctx context.Context) (*BaseContentInfo
 
 	return &BaseContentInfo{
 		HolderID:                targetAcf.ID,
-		HolderName:              getNameByDefID(ctx, p.defStore, targetAcf.DefID),
+		HolderName:              getNameByDefID(ctx, p.db, targetAcf.DefID),
 		HolderContentSourceType: string(targetAcf.ContentSourceType),
 		IsFromAnotherFile:       isFromAnotherFile,
 		Content:                 compiledContent,

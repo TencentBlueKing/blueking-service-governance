@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -13,9 +14,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	componentdevmode "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
@@ -23,10 +24,10 @@ import (
 var _ = Describe("Application default resolution", func() {
 	var ctx context.Context
 	var diApp *fxtest.App
-	var ruleStore appdefaults.RuleStore
+	var ruleStore *appdefaults.RuleStore
+	var db *mongo.Database
 	var envService *bkmsenv.EnvService
-	var envStore envmodel.EnvironmentStore
-	var workspaceStore bkmsworkspace.WorkspaceStore
+	var workspaceStore *bkmsworkspace.WorkspaceStore
 	var workspace *bkmsworkspace.Workspace
 
 	BeforeEach(func() {
@@ -36,29 +37,28 @@ var _ = Describe("Application default resolution", func() {
 
 		diApp = fxtest.New(
 			GinkgoT(),
-			appdefaults.FxModule,
 			bkmsenv.FxModule,
-			bkmsworkspace.FxModule,
-			fx.Populate(&ruleStore, &envService, &envStore, &workspaceStore),
+			fx.Populate(&envService),
 		)
 		diApp.RequireStart()
+		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
+		db = testutil.NewDB(GinkgoT())
+		ruleStore = store.Of(db, appdefaults.RuleMeta)
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
 	})
 
 	AfterEach(func() {
 		// Clear documents without Drop so migration-managed unique indexes survive.
-		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
-		Expect(envStore.DeleteAll(ctx)).To(Succeed())
-		Expect(workspaceStore.Delete(ctx, workspace.ID)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(appdefaults.RuleMeta)).To(Succeed())
+		Expect(testutil.CleanupCollection("environments")).To(Succeed())
+		Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		bkmsworkspace.ResetLifecycleHooksForTest()
 		bkmsenv.ResetHooksForTest()
 		diApp.RequireStop()
 	})
 
 	It("uses platform defaults without persisting rules", func() {
-		resolved, err := appdefaults.Resolve(
-			ctx, ruleStore, envStore, workspace.ID, "app-without-rules", bkmsapp.AppTypeTRPC,
-		)
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-without-rules", bkmsapp.AppTypeTRPC)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Default.AppID).To(Equal("app-without-rules"))
 		Expect(resolved.Default.EnvName).To(Equal(appspec.DefaultEnvName))
@@ -66,7 +66,7 @@ var _ = Describe("Application default resolution", func() {
 		Expect(*resolved.Default.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
 		Expect(resolved.Environments).To(BeEmpty())
 
-		persisted, err := ruleStore.List(ctx, workspace.ID)
+		persisted, err := ruleStore.List(ctx, appdefaults.ByWorkspace(workspace.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persisted).To(BeEmpty())
 	})
@@ -79,9 +79,7 @@ var _ = Describe("Application default resolution", func() {
 		Expect(ruleStore.Create(ctx, resourcesRule(workspace.ID, "production"))).To(Succeed())
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "production", true))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(
-			ctx, ruleStore, envStore, workspace.ID, "app-combined-defaults", bkmsapp.AppTypeTRPC,
-		)
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-combined-defaults", bkmsapp.AppTypeTRPC)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(1))
 		spec := resolved.Environments[0]
@@ -106,9 +104,7 @@ var _ = Describe("Application default resolution", func() {
 		})
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "production", true))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(
-			ctx, ruleStore, envStore, workspace.ID, "app-matching-envs", bkmsapp.AppTypeTRPC,
-		)
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-matching-envs", bkmsapp.AppTypeTRPC)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(2))
 
@@ -129,9 +125,7 @@ var _ = Describe("Application default resolution", func() {
 		})
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "development", true))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(
-			ctx, ruleStore, envStore, workspace.ID, "app-taf-dev-mode", bkmsapp.AppTypeTAF,
-		)
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-taf-dev-mode", bkmsapp.AppTypeTAF)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(1))
 		spec := resolved.Environments[0]
@@ -140,7 +134,7 @@ var _ = Describe("Application default resolution", func() {
 		Expect(*spec.DevMode.WorkPath).To(Equal(componentdevmode.TafWorkPath))
 		Expect(*spec.DevMode.MountPath).To(Equal(componentdevmode.TafMountPath))
 
-		rules, err := ruleStore.List(ctx, workspace.ID)
+		rules, err := ruleStore.List(ctx, appdefaults.ByWorkspace(workspace.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rules).To(HaveLen(1))
 		Expect(rules[0].Spec.DevMode.WorkPath).To(BeNil())
@@ -161,9 +155,7 @@ var _ = Describe("Application default resolution", func() {
 		})
 		Expect(ruleStore.Create(ctx, resourcesRule(workspace.ID, "production", "staging"))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(
-			ctx, ruleStore, envStore, workspace.ID, "app-multi-env-types", bkmsapp.AppTypeTRPC,
-		)
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-multi-env-types", bkmsapp.AppTypeTRPC)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(2))
 

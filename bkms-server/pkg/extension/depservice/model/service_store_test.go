@@ -24,98 +24,95 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("Test ServiceStoreMongo", func() {
-	var mongoClient *mongo.Client
-
+var _ = Describe("Service store", func() {
 	var ctx context.Context
-
-	var serviceStore *ServiceStoreMongo
+	var services *ServiceStore
+	var svc Service
+	var systemPlan ServicePlan
+	var userPlan ServicePlan
 
 	BeforeEach(func() {
-		var err error
-		var dbName string
-
-		mongoClient, dbName = database.Client(), database.Name()
-
 		ctx = context.Background()
+		services = testutil.NewStore(GinkgoT(), ServiceMeta)
 
-		serviceStore, err = NewServiceStoreMongo(mongoClient, dbName)
-		Expect(err).NotTo(HaveOccurred())
+		systemPlan = ServicePlan{
+			Name:         "default",
+			ProviderType: ProviderTypeSystemAllocated,
+			Config:       map[string]any{"baseUrl": "http://test-polaris.example.com:8080"},
+		}
+		userPlan = ServicePlan{
+			Name:         "custom",
+			ProviderType: ProviderTypeUserDefined,
+			Config:       map[string]any{},
+		}
+		plans := []ServicePlan{systemPlan, userPlan}
+
+		svcName := "test-svc-" + stringx.Random(6)
+		svc = Service{Name: svcName, DisplayName: svcName, Plans: plans}
+		// test: 成功创建 service
+		Expect(services.Create(ctx, &svc)).To(Succeed())
 	})
 
 	AfterEach(func() {
-		err := serviceStore.DeleteAll(context.Background())
-		Expect(err).NotTo(HaveOccurred())
+		// test: 成功删除 service
+		Expect(services.Delete(ctx, ByName(svc.Name))).To(Succeed())
+		_, err := services.Get(ctx, ByName(svc.Name))
+		Expect(err).To(MatchError(ErrServiceNotFound))
+		Expect(AsNotFoundError(err)).To(BeTrue())
 	})
 
-	Context("Test ServiceStoreMongo methods", func() {
-		var svc Service
-		var systemPlan ServicePlan
-		var userPlan ServicePlan
+	It("test get service", func() {
+		svcFromDB, err := services.Get(ctx, ByName(svc.Name))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(svcFromDB.Name).To(Equal(svc.Name))
+		Expect(svcFromDB.Plans[0].Name).To(Equal(systemPlan.Name))
+		// test: 此处验证了 plan config 编解码钩子的正确性
+		Expect(svcFromDB.Plans[0].Config["baseUrl"]).To(Equal("http://test-polaris.example.com:8080"))
+		Expect(svcFromDB.Plans[1].Name).To(Equal(userPlan.Name))
+		// 调用方对象中的 config 不受编码影响
+		Expect(svc.Plans[0].Config).To(Equal(systemPlan.Config))
+	})
 
-		BeforeEach(func() {
-			systemPlan = ServicePlan{
-				Name:         "default",
-				ProviderType: ProviderTypeSystemAllocated,
-				Config:       map[string]any{"baseUrl": "http://test-polaris.example.com:8080"},
-			}
-			userPlan = ServicePlan{
-				Name:         "custom",
-				ProviderType: ProviderTypeUserDefined,
-				Config:       map[string]any{},
-			}
-			plans := []ServicePlan{systemPlan, userPlan}
+	It("stores plan config as a json string", func() {
+		var raw Service
+		Expect(services.Collection().FindOne(ctx, bson.M{"name": svc.Name}).Decode(&raw)).To(Succeed())
+		Expect(
+			raw.Plans[0].Config,
+		).To(HaveKeyWithValue(configValueKey, `{"baseUrl":"http://test-polaris.example.com:8080"}`))
+	})
 
-			svcName := "test-svc-" + stringx.Random(6)
-			svc = Service{Name: svcName, DisplayName: svcName, Plans: plans}
-			// test: 成功创建 service
-			err := serviceStore.Create(ctx, &svc)
-			Expect(err).NotTo(HaveOccurred())
-		})
+	It("rejects duplicate service names", func() {
+		Expect(services.Create(ctx, &Service{Name: svc.Name, Plans: []ServicePlan{userPlan}})).
+			To(MatchError(store.ErrDuplicate))
+	})
 
-		AfterEach(func() {
-			// test: 成功删除 service
-			err := serviceStore.Delete(ctx, svc.Name)
-			Expect(err).NotTo(HaveOccurred())
-			_, err = serviceStore.Get(ctx, svc.Name)
-			Expect(AsNotFoundError(err)).To(Equal(true))
-		})
+	It("test upsert service", func() {
+		newDisplayName := "new-display-name-" + stringx.Random(6)
+		planName := "foo-" + stringx.Random(6)
+		newSvc := Service{Name: svc.Name, DisplayName: newDisplayName, Plans: []ServicePlan{{Name: planName}}}
 
-		It("test get service", func() {
-			svcFromDB, err := serviceStore.Get(ctx, svc.Name)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(svcFromDB.Name).To(Equal(svc.Name))
-			Expect(svcFromDB.Plans[0].Name).To(Equal(systemPlan.Name))
-			// test: 此处验证了 serviceFromDBValue 和 servicePrepDBValue 的正确性
-			Expect(svcFromDB.Plans[0].Config["baseUrl"]).To(Equal("http://test-polaris.example.com:8080"))
-			Expect(svcFromDB.Plans[1].Name).To(Equal(userPlan.Name))
-		})
+		_, err := services.Upsert(ctx, &newSvc, ByName(newSvc.Name))
+		Expect(err).NotTo(HaveOccurred())
 
-		It("test upsert service", func() {
-			newDisplayName := "new-display-name-" + stringx.Random(6)
-			planName := "foo-" + stringx.Random(6)
-			newSvc := Service{Name: svc.Name, DisplayName: newDisplayName, Plans: []ServicePlan{{Name: planName}}}
+		dbSvc, err := services.Get(ctx, ByName(svc.Name))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dbSvc.DisplayName).To(Equal(newDisplayName))
+		Expect(dbSvc.Plans).To(HaveLen(1))
+		Expect(dbSvc.Plans[0].Name).To(Equal(planName))
+	})
 
-			err := serviceStore.Upsert(ctx, &newSvc)
-			Expect(err).NotTo(HaveOccurred())
-
-			dbSvc, err := serviceStore.Get(ctx, svc.Name)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dbSvc.DisplayName).To(Equal(newDisplayName))
-			Expect(dbSvc.Plans).To(HaveLen(1))
-			Expect(dbSvc.Plans[0].Name).To(Equal(planName))
-		})
-
-		It("test list services", func() {
-			svcList, err := serviceStore.List(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(svcList).To(HaveLen(1))
-			Expect(svcList[0].Name).To(Equal(svc.Name))
-		})
+	It("test list services", func() {
+		svcList, err := services.List(ctx, ByName(svc.Name))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(svcList).To(HaveLen(1))
+		Expect(svcList[0].Name).To(Equal(svc.Name))
+		// List 同样会解码 plan config
+		Expect(svcList[0].Plans[0].Config["baseUrl"]).To(Equal("http://test-polaris.example.com:8080"))
 	})
 })

@@ -27,6 +27,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -41,22 +42,22 @@ var _ = Describe("PlatWorkspaceService", func() {
 		ctx            context.Context
 		diApp          *fxtest.App
 		service        *Service
-		workspaceStore bkmsworkspace.WorkspaceStore
-		appStore       bkmsapp.ApplicationStore
+		workspaceStore *bkmsworkspace.WorkspaceStore
+		appStore       *bkmsapp.ApplicationStore
 		envSvc         *env.EnvService
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsworkspace.FxModule,
-			bkmsapp.FxModule,
 			env.FxModule,
 			FxModule,
-			fx.Populate(&service, &workspaceStore, &appStore, &envSvc),
+			fx.Populate(&service, &envSvc),
 		)
 		diApp.RequireStart()
+		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 	})
 
 	AfterEach(func() {
@@ -69,8 +70,8 @@ var _ = Describe("PlatWorkspaceService", func() {
 		wsA := dbfactory.Workspace(ctx, workspaceStore)
 		wsB := dbfactory.Workspace(ctx, workspaceStore)
 		defer func() {
-			_ = workspaceStore.Delete(ctx, wsA.ID)
-			_ = workspaceStore.Delete(ctx, wsB.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsA.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsB.ID)
 		}()
 
 		helmStores := &dbfactory.HelmApplicationStores{AppStore: appStore}
@@ -78,9 +79,9 @@ var _ = Describe("PlatWorkspaceService", func() {
 		appA2 := dbfactory.HelmApplication(ctx, helmStores, &dbfactory.HelmApplicationOpts{WorkspaceID: wsA.ID})
 		appB1 := dbfactory.HelmApplication(ctx, helmStores, &dbfactory.HelmApplicationOpts{WorkspaceID: wsB.ID})
 		defer func() {
-			_ = appStore.DeleteAppByName(ctx, wsA.ID, appA1.Name)
-			_ = appStore.DeleteAppByName(ctx, wsA.ID, appA2.Name)
-			_ = appStore.DeleteAppByName(ctx, wsB.ID, appB1.Name)
+			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsA.ID, appA1.Name))
+			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsA.ID, appA2.Name))
+			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsB.ID, appB1.Name))
 		}()
 
 		envA1 := dbfactory.Env(ctx, envSvc, wsA.ID)
@@ -94,7 +95,7 @@ var _ = Describe("PlatWorkspaceService", func() {
 
 		time.Sleep(workspaceTimestampPrecisionWait)
 		wsB.Description = "workspace b updated"
-		Expect(workspaceStore.Update(ctx, wsB)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsB)).To(Succeed())
 
 		items, err := service.List(ctx, WorkspaceListOptions{
 			Page:     1,
@@ -117,8 +118,8 @@ var _ = Describe("PlatWorkspaceService", func() {
 		wsA := dbfactory.Workspace(ctx, workspaceStore)
 		wsB := dbfactory.Workspace(ctx, workspaceStore)
 		defer func() {
-			_ = workspaceStore.Delete(ctx, wsA.ID)
-			_ = workspaceStore.Delete(ctx, wsB.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsA.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsB.ID)
 		}()
 
 		items, err := service.List(ctx, WorkspaceListOptions{
@@ -138,21 +139,21 @@ var _ = Describe("PlatWorkspaceService", func() {
 		wsDisabled := dbfactory.Workspace(ctx, workspaceStore)
 		wsOther := dbfactory.Workspace(ctx, workspaceStore)
 		defer func() {
-			_ = workspaceStore.Delete(ctx, wsReady.ID)
-			_ = workspaceStore.Delete(ctx, wsDisabled.ID)
-			_ = workspaceStore.Delete(ctx, wsOther.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsReady.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsDisabled.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsOther.ID)
 		}()
 
 		wsReady.DisplayName = "alpha ready workspace"
-		Expect(workspaceStore.Update(ctx, wsReady)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsReady)).To(Succeed())
 
 		wsDisabled.DisplayName = "alpha disabled workspace"
 		wsDisabled.State = bkmsworkspace.StateDisabled
-		Expect(workspaceStore.Update(ctx, wsDisabled)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsDisabled)).To(Succeed())
 
 		wsOther.DisplayName = "beta processing workspace"
 		wsOther.State = bkmsworkspace.StateProcessing
-		Expect(workspaceStore.Update(ctx, wsOther)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsOther)).To(Succeed())
 
 		items, err := service.List(ctx, WorkspaceListOptions{
 			Keyword:  "alpha",
@@ -173,21 +174,21 @@ var _ = Describe("PlatWorkspaceService", func() {
 		wsDisabled := dbfactory.Workspace(ctx, workspaceStore)
 		wsProcessing := dbfactory.Workspace(ctx, workspaceStore)
 		defer func() {
-			_ = workspaceStore.Delete(ctx, wsReady.ID)
-			_ = workspaceStore.Delete(ctx, wsDisabled.ID)
-			_ = workspaceStore.Delete(ctx, wsProcessing.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsReady.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsDisabled.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsProcessing.ID)
 		}()
 
 		wsReady.DisplayName = "alpha ready workspace"
-		Expect(workspaceStore.Update(ctx, wsReady)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsReady)).To(Succeed())
 
 		wsDisabled.DisplayName = "alpha disabled workspace"
 		wsDisabled.State = bkmsworkspace.StateDisabled
-		Expect(workspaceStore.Update(ctx, wsDisabled)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsDisabled)).To(Succeed())
 
 		wsProcessing.DisplayName = "alpha processing workspace"
 		wsProcessing.State = bkmsworkspace.StateProcessing
-		Expect(workspaceStore.Update(ctx, wsProcessing)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsProcessing)).To(Succeed())
 
 		items, err := service.List(ctx, WorkspaceListOptions{
 			Keyword:  "alpha",
@@ -209,13 +210,13 @@ var _ = Describe("PlatWorkspaceService", func() {
 		wsA := dbfactory.Workspace(ctx, workspaceStore)
 		wsB := dbfactory.Workspace(ctx, workspaceStore)
 		defer func() {
-			_ = workspaceStore.Delete(ctx, wsA.ID)
-			_ = workspaceStore.Delete(ctx, wsB.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsA.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsB.ID)
 		}()
 
 		time.Sleep(workspaceTimestampPrecisionWait)
 		wsB.Description = "workspace b updated"
-		Expect(workspaceStore.Update(ctx, wsB)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsB)).To(Succeed())
 
 		items, err := service.List(ctx, WorkspaceListOptions{
 			SortBy:    "updatedAt",
@@ -233,8 +234,8 @@ var _ = Describe("PlatWorkspaceService", func() {
 		wsA := dbfactory.Workspace(ctx, workspaceStore)
 		wsB := dbfactory.Workspace(ctx, workspaceStore)
 		defer func() {
-			_ = workspaceStore.Delete(ctx, wsA.ID)
-			_ = workspaceStore.Delete(ctx, wsB.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsA.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsB.ID)
 		}()
 
 		items, err := service.List(ctx, WorkspaceListOptions{
@@ -250,7 +251,7 @@ var _ = Describe("PlatWorkspaceService", func() {
 
 	It("should get one platform workspace info", func() {
 		ws := dbfactory.Workspace(ctx, workspaceStore)
-		defer func() { _ = workspaceStore.Delete(ctx, ws.ID) }()
+		defer func() { _ = bkmsworkspace.Delete(ctx, workspaceStore, ws.ID) }()
 
 		item, err := service.Get(ctx, ws.ID)
 		Expect(err).NotTo(HaveOccurred())
@@ -263,7 +264,7 @@ var _ = Describe("PlatWorkspaceService", func() {
 
 	It("should return not found when target workspace does not exist", func() {
 		_, err := service.Get(ctx, "plat-ws-nonexistent")
-		Expect(err).To(Equal(bkmsworkspace.ErrWorkspaceNotFound))
+		Expect(err).To(MatchError(bkmsworkspace.ErrWorkspaceNotFound))
 	})
 
 	It("should return aggregated workspace state statistics", func() {
@@ -275,16 +276,16 @@ var _ = Describe("PlatWorkspaceService", func() {
 		wsProcessing := dbfactory.Workspace(ctx, workspaceStore)
 		wsDisabled := dbfactory.Workspace(ctx, workspaceStore)
 		defer func() {
-			_ = workspaceStore.Delete(ctx, wsReady.ID)
-			_ = workspaceStore.Delete(ctx, wsProcessing.ID)
-			_ = workspaceStore.Delete(ctx, wsDisabled.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsReady.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsProcessing.ID)
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsDisabled.ID)
 		}()
 
 		wsProcessing.State = bkmsworkspace.StateProcessing
-		Expect(workspaceStore.Update(ctx, wsProcessing)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsProcessing)).To(Succeed())
 
 		wsDisabled.State = bkmsworkspace.StateDisabled
-		Expect(workspaceStore.Update(ctx, wsDisabled)).To(Succeed())
+		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsDisabled)).To(Succeed())
 
 		stats, err := service.GetStateStatistics(ctx)
 		Expect(err).NotTo(HaveOccurred())

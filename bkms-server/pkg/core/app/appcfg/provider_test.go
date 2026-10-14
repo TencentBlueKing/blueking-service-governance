@@ -26,15 +26,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 var _ = Describe("Local Provider", func() {
-	var store *AppConfigFileStoreMongo
-	var defStore *AppConfigFileDefStoreMongo
+	var files *AppConfigFileStore
+	var defStore *AppConfigFileDefStore
+	var db *mongo.Database
 	var ctx context.Context
 
 	var appID string
@@ -42,12 +44,9 @@ var _ = Describe("Local Provider", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-
-		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		defStore, err = NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		files = testutil.NewStore(GinkgoT(), AppConfigFileMeta)
+		db = testutil.NewDB(GinkgoT())
+		defStore = testutil.NewStore(GinkgoT(), AppConfigFileDefMeta)
 
 		appID = "test-app-" + stringx.Random(6)
 
@@ -69,7 +68,7 @@ var _ = Describe("Local Provider", func() {
 
 	Context("GetBaseContentInfo", func() {
 		It("should return nil for normal file", func() {
-			info, err := newLocalBaseContentProvider(store, defStore, normalAcf).GetInfo(ctx)
+			info, err := newLocalBaseContentProvider(db, normalAcf).GetInfo(ctx)
 			Expect(errors.Is(err, ErrBaseContentEmpty)).To(BeTrue())
 			Expect(info).To(BeNil())
 		})
@@ -80,7 +79,8 @@ var _ = Describe("Local Provider", func() {
 				Name:       "base-config",
 				ConfigKind: ConfigKindFramework,
 			}
-			baseDefID, err := defStore.Add(ctx, baseDef)
+			err := defStore.Create(ctx, &baseDef)
+			baseDefID := baseDef.ID
 			Expect(err).ToNot(HaveOccurred())
 
 			baseContent := "base: content"
@@ -93,12 +93,13 @@ var _ = Describe("Local Provider", func() {
 					Content:           &baseContent,
 				},
 			}
-			baseID, err := store.Add(ctx, *baseAcf)
+			err = files.Create(ctx, baseAcf)
 			Expect(err).ToNot(HaveOccurred())
+			baseID := baseAcf.ID
 
 			overlayAcf.BaseAppConfigFileID = &baseID
 
-			baseInfo, err := newLocalBaseContentProvider(store, defStore, overlayAcf).GetInfo(ctx)
+			baseInfo, err := newLocalBaseContentProvider(db, overlayAcf).GetInfo(ctx)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(baseInfo).To(Equal(&BaseContentInfo{
 				HolderID:                baseID,
@@ -112,8 +113,9 @@ var _ = Describe("Local Provider", func() {
 })
 
 var _ = Describe("BSCP Provider", func() {
-	var store *AppConfigFileStoreMongo
-	var defStore *AppConfigFileDefStoreMongo
+	var files *AppConfigFileStore
+	var defStore *AppConfigFileDefStore
+	var db *mongo.Database
 	var ctx context.Context
 
 	var appID string
@@ -121,12 +123,9 @@ var _ = Describe("BSCP Provider", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-
-		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		defStore, err = NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		files = testutil.NewStore(GinkgoT(), AppConfigFileMeta)
+		db = testutil.NewDB(GinkgoT())
+		defStore = testutil.NewStore(GinkgoT(), AppConfigFileDefMeta)
 
 		appID = "test-app-" + stringx.Random(6)
 
@@ -164,7 +163,7 @@ var _ = Describe("BSCP Provider", func() {
 				normalAcf.BSCPConfig = &BSCPConfig{BizID: "123", ServiceID: "456", VersionID: "789", ConfigID: "666"}
 				normalAcf.OverlayContent = &overlayContent
 
-				baseInfo, err := newBSCPBaseContentProvider(store, defStore, normalAcf).GetInfo(ctx)
+				baseInfo, err := newBSCPBaseContentProvider(db, normalAcf).GetInfo(ctx)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(baseInfo).To(Equal(&BaseContentInfo{
 					HolderID:                normalAcf.ID,
@@ -182,7 +181,8 @@ var _ = Describe("BSCP Provider", func() {
 				Name:       "bscp-base-config",
 				ConfigKind: ConfigKindFramework,
 			}
-			baseDefID, err := defStore.Add(ctx, baseDef)
+			err := defStore.Create(ctx, &baseDef)
+			baseDefID := baseDef.ID
 			Expect(err).ToNot(HaveOccurred())
 
 			baseContent := "base: content"
@@ -195,12 +195,13 @@ var _ = Describe("BSCP Provider", func() {
 					Content:           &baseContent,
 				},
 			}
-			baseID, err := store.Add(ctx, *baseAcf)
+			err = files.Create(ctx, baseAcf)
 			Expect(err).ToNot(HaveOccurred())
+			baseID := baseAcf.ID
 
 			overlayAcf.BaseAppConfigFileID = &baseID
 
-			baseInfo, err := newBSCPBaseContentProvider(store, defStore, overlayAcf).GetInfo(ctx)
+			baseInfo, err := newBSCPBaseContentProvider(db, overlayAcf).GetInfo(ctx)
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(baseInfo).To(Equal(&BaseContentInfo{
 				HolderID:                baseID,

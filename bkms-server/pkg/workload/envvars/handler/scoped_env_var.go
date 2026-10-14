@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/serializer"
@@ -90,7 +91,7 @@ func (h *Handler) CreateScopedEnvVar(c *gin.Context) {
 		return
 	}
 
-	id, err := h.registry.ScopedEnvVarStore.Create(ctx, envvars.ScopedEnvVar{
+	envVar := &envvars.ScopedEnvVar{
 		WorkspaceID: ws.ID,
 		ScopeType:   scope.ScopeType,
 		ScopeValue:  scope.ScopeValue,
@@ -98,8 +99,8 @@ func (h *Handler) CreateScopedEnvVar(c *gin.Context) {
 		Value:       input.Value,
 		Description: input.Description,
 		IsSensitive: input.IsSensitive,
-	})
-	if err != nil {
+	}
+	if err = h.scopedEnvVars().Create(ctx, envVar); err != nil {
 		if errors.Is(err, envvars.ErrScopedEnvVarKeyConflict) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "create scoped env var"))
 			return
@@ -108,7 +109,7 @@ func (h *Handler) CreateScopedEnvVar(c *gin.Context) {
 		return
 	}
 
-	obj, err := h.registry.ScopedEnvVarStore.GetByID(ctx, ws.ID, id)
+	obj, err := h.scopedEnvVars().Get(ctx, envvars.ByID(ws.ID, envVar.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get created scoped env var"))
 		return
@@ -165,7 +166,7 @@ func (h *Handler) UpdateScopedEnvVar(c *gin.Context) {
 		return
 	}
 
-	oldObj, err := h.registry.ScopedEnvVarStore.GetByID(ctx, ws.ID, id)
+	oldObj, err := h.scopedEnvVars().Get(ctx, envvars.ByID(ws.ID, id))
 	if err != nil {
 		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
 			bkerrs.AbortWithErr(
@@ -194,7 +195,7 @@ func (h *Handler) UpdateScopedEnvVar(c *gin.Context) {
 		Description: input.Description,
 		IsSensitive: input.IsSensitive,
 	}
-	if err = h.registry.ScopedEnvVarStore.UpdateByID(ctx, ws.ID, id, updateData); err != nil {
+	if err = envvars.UpdateByID(ctx, h.registry.DB, ws.ID, id, updateData); err != nil {
 		if errors.Is(err, envvars.ErrScopedEnvVarKeyConflict) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update scoped env var"))
 			return
@@ -210,7 +211,7 @@ func (h *Handler) UpdateScopedEnvVar(c *gin.Context) {
 		return
 	}
 
-	updatedObj, err := h.registry.ScopedEnvVarStore.GetByID(ctx, ws.ID, id)
+	updatedObj, err := h.scopedEnvVars().Get(ctx, envvars.ByID(ws.ID, id))
 	if err != nil {
 		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
 			bkerrs.AbortWithErr(
@@ -272,7 +273,7 @@ func (h *Handler) DeleteScopedEnvVar(c *gin.Context) {
 		return
 	}
 
-	obj, err := h.registry.ScopedEnvVarStore.GetByID(ctx, ws.ID, id)
+	obj, err := h.scopedEnvVars().Get(ctx, envvars.ByID(ws.ID, id))
 	if err != nil {
 		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
 			bkerrs.AbortWithErr(
@@ -285,7 +286,7 @@ func (h *Handler) DeleteScopedEnvVar(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.ScopedEnvVarStore.DeleteByID(ctx, ws.ID, id); err != nil {
+	if err = h.scopedEnvVars().Delete(ctx, envvars.ByID(ws.ID, id)); err != nil {
 		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
 			bkerrs.AbortWithErr(
 				c,
@@ -337,7 +338,7 @@ func (h *Handler) ListPublicScopedEnvVars(c *gin.Context) {
 		return
 	}
 
-	scopedVars, err := h.registry.ScopedEnvVarStore.ListPublic(ctx, ws.ID)
+	scopedVars, err := envvars.ListPublic(ctx, h.registry.DB, ws.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list public scoped env vars"))
 		return
@@ -375,8 +376,8 @@ func (h *Handler) ListDetailedEnvScopedEnvVars(c *gin.Context) {
 		return
 	}
 
-	scopedVars, err := h.registry.ScopedEnvVarStore.List(
-		ctx,
+	scopedVars, err := envvars.List(
+		ctx, h.registry.DB,
 		env.WorkspaceID,
 		envvars.WithScopes(envvartypes.ScopeEnv(env.Name)),
 		envvars.WithOrdering("created"),
@@ -398,7 +399,7 @@ func (h *Handler) ListDetailedEnvScopedEnvVars(c *gin.Context) {
 		return item.Key
 	})
 	reader := envvars.NewUnifiedEnvVarsReader(
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
@@ -444,7 +445,7 @@ func (h *Handler) ListDetailedAppEnvVars(c *gin.Context) {
 		return
 	}
 
-	am, err := h.registry.AppModelStore.GetAppModel(ctx, app.ID)
+	am, err := store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
 			ginutils.OK(c, serializer.ListDetailedAppEnvVarsOutput{
@@ -465,7 +466,7 @@ func (h *Handler) ListDetailedAppEnvVars(c *gin.Context) {
 	}
 
 	reader := envvars.NewUnifiedEnvVarsReader(
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
@@ -518,7 +519,7 @@ func (h *Handler) ListAppDefinedEnvVars(c *gin.Context) {
 		return
 	}
 
-	envVars, err := appmodel.NewAppEnvVarService(h.registry.AppModelStore).List(ctx, app.ID)
+	envVars, err := appmodel.NewAppEnvVarService(h.registry.DB).List(ctx, app.ID)
 	if err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
 			ginutils.OK(c, serializer.ListAppDefinedEnvVarsOutput{Data: []*serializer.AppDefinedEnvVarOutputObj{}})
@@ -567,7 +568,7 @@ func (h *Handler) CreateAppDefinedEnvVar(c *gin.Context) {
 		return
 	}
 
-	created, err := appmodel.NewAppEnvVarService(h.registry.AppModelStore).Create(ctx, app.ID, appmodel.Variable{
+	created, err := appmodel.NewAppEnvVarService(h.registry.DB).Create(ctx, app.ID, appmodel.Variable{
 		Key:         input.Key,
 		Value:       input.Value,
 		Description: input.Description,
@@ -636,7 +637,7 @@ func (h *Handler) UpdateAppDefinedEnvVar(c *gin.Context) {
 		return
 	}
 
-	oldEnvVar, updatedEnvVar, err := appmodel.NewAppEnvVarService(h.registry.AppModelStore).Update(
+	oldEnvVar, updatedEnvVar, err := appmodel.NewAppEnvVarService(h.registry.DB).Update(
 		ctx,
 		app.ID,
 		uriInput.Key,
@@ -716,7 +717,7 @@ func (h *Handler) DeleteAppDefinedEnvVar(c *gin.Context) {
 		return
 	}
 
-	deletedEnvVar, err := appmodel.NewAppEnvVarService(h.registry.AppModelStore).Delete(ctx, app.ID, uriInput.Key)
+	deletedEnvVar, err := appmodel.NewAppEnvVarService(h.registry.DB).Delete(ctx, app.ID, uriInput.Key)
 	if err != nil {
 		if errors.Is(err, appmodel.ErrEnvVarNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app env var %s not found", uriInput.Key))
@@ -772,7 +773,7 @@ func (h *Handler) ListEnvAvailableEnvVars(c *gin.Context) {
 	}
 
 	reader := envvars.NewUnifiedEnvVarsReader(
-		h.registry.ScopedEnvVarStore,
+		h.registry.DB,
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 	)
@@ -803,7 +804,7 @@ func (h *Handler) validateScopedEnvVarScopeValue(
 
 	// The caller has already checked workspace edit permission, so both standard
 	// and feature environments in this workspace are valid targets.
-	if _, err := h.registry.EnvStore.GetByWorkspaceAndName(ctx, workspaceID, scope.ScopeValue); err != nil {
+	if _, err := store.Of(h.registry.DB, envmodel.EnvMeta).Get(ctx, envmodel.ByName(workspaceID, scope.ScopeValue)); err != nil {
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", scope.ScopeValue)
 		}
@@ -821,4 +822,8 @@ func ensureAppSupportsDefinedEnvVars(app *bkmsapp.Application) error {
 		"app type %s does not support app-defined env vars",
 		app.Type,
 	)
+}
+
+func (h *Handler) scopedEnvVars() *envvars.ScopedEnvVarStore {
+	return store.Of(h.registry.DB, envvars.ScopedEnvVarMeta)
 }

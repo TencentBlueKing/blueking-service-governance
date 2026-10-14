@@ -27,10 +27,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"golang.org/x/sync/errgroup"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -38,6 +38,7 @@ import (
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	trafficMgr "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -58,40 +59,28 @@ var ErrImageRepoAuthRequired = errors.New("image repository authentication requi
 
 // Service 提供镜像占用检查与镜像删除能力
 type Service struct {
-	snapshotStore         snapshot.SnapshotStore
-	promotionStore        promotion.PromotionStore
-	buildConfigStore      build.ConfigStore
-	appStore              bkmsapp.ApplicationStore
-	envStore              envmodel.EnvironmentStore
-	appModelDeployStore   appmodeldeploy.RecordStore
-	helmDeployRecordStore helmdeploy.RecordStore
+	db         *mongo.Database
+	snapshots  *snapshot.ImageStore
+	promotions *promotion.Store
+	apps       *bkmsapp.ApplicationStore
+	envs       *envmodel.EnvironmentStore
 }
 
 // NewService 创建删除服务。
-func NewService(
-	snapshotStore snapshot.SnapshotStore,
-	promotionStore promotion.PromotionStore,
-	buildConfigStore build.ConfigStore,
-	appStore bkmsapp.ApplicationStore,
-	envStore envmodel.EnvironmentStore,
-	appModelDeployStore appmodeldeploy.RecordStore,
-	helmDeployRecordStore helmdeploy.RecordStore,
-) *Service {
+func NewService(db *mongo.Database) *Service {
 	return &Service{
-		snapshotStore:         snapshotStore,
-		promotionStore:        promotionStore,
-		buildConfigStore:      buildConfigStore,
-		appStore:              appStore,
-		envStore:              envStore,
-		appModelDeployStore:   appModelDeployStore,
-		helmDeployRecordStore: helmDeployRecordStore,
+		db:         db,
+		snapshots:  store.Of(db, snapshot.ImageMeta),
+		promotions: store.Of(db, promotion.Meta),
+		apps:       store.Of(db, bkmsapp.AppMeta),
+		envs:       store.Of(db, envmodel.EnvMeta),
 	}
 }
 
 // DeleteImageTag 删除指定应用下的镜像标签，并同步清理本地记录
 // 该接口不再额外校验镜像标签是否仍被当前工作负载引用，直接删除，如遇到问题直接抛出错误
 func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
-	repoResolver := snapshot.NewService(s.snapshotStore, s.buildConfigStore, s.appStore)
+	repoResolver := snapshot.NewService(s.db)
 	info, err := repoResolver.ResolveRepoKeyForApp(ctx, appID)
 	if err != nil {
 		return errors.Wrapf(err, "resolve repo key for app %s", appID)
@@ -110,10 +99,10 @@ func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
 		}
 		return errors.Wrapf(err, "delete remote image %s:%s", info.RepoName, tag)
 	}
-	if _, err = s.snapshotStore.DeleteByRepoKeyAndTag(ctx, info.RepoKey, tag); err != nil {
+	if _, err = s.snapshots.DeleteMany(ctx, snapshot.ByRepoTag(info.RepoKey, tag)); err != nil {
 		return errors.Wrapf(err, "delete local snapshot %s:%s", info.RepoKey, tag)
 	}
-	if err = s.promotionStore.DeleteTag(ctx, appID, info.RepoKey, tag); err != nil {
+	if err = s.promotions.DeleteIfExists(ctx, promotion.ByTag(appID, info.RepoKey, tag)); err != nil {
 		return errors.Wrapf(err, "delete promotion %s:%s", info.RepoKey, tag)
 	}
 	return nil
@@ -121,7 +110,7 @@ func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
 
 // ListImageUsages 查询指定镜像标签在当前生效工作负载中的引用关系，不作为删除接口的前置约束
 func (s *Service) ListImageUsages(ctx context.Context, appID, tag string) ([]ImageUsage, error) {
-	app, err := s.appStore.GetApp(ctx, appID)
+	app, err := s.apps.Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app %s", appID)
 	}
@@ -129,7 +118,12 @@ func (s *Service) ListImageUsages(ctx context.Context, appID, tag string) ([]Ima
 		return nil, errors.Errorf("app %s has no workspace", appID)
 	}
 	// Include the app's feature environments so image tags deployed there are visible.
-	envs, err := s.envStore.ListAppEnvs(ctx, app.WorkspaceID, appID)
+	envs, err := s.envs.List(
+		ctx,
+		envmodel.InWorkspace(app.WorkspaceID),
+		envmodel.VisibleToApp(appID),
+		envmodel.NewestFirst(),
+	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "list environments for app %s", appID)
 	}
@@ -213,7 +207,7 @@ func (s *Service) collectAppModelLaneUsageNames(
 	scope := fmt.Sprintf("app %s env %s lane %s", appID, envName, laneName)
 
 	// 1. 获取最新部署记录
-	record, err := s.appModelDeployStore.GetLatest(ctx, appID, envName, laneName)
+	record, err := appmodeldeploy.GetLatest(ctx, s.db, appID, envName, laneName)
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
 			return nil, nil
@@ -230,12 +224,13 @@ func (s *Service) collectAppModelLaneUsageNames(
 	}
 
 	// 4. 获取最近一次成功部署记录
-	lastSuccessfulRecord, err := s.appModelDeployStore.GetLatestByStatuses(
+	lastSuccessfulRecord, err := appmodeldeploy.GetLatest(
 		ctx,
+		s.db,
 		appID,
 		envName,
 		laneName,
-		[]appmodeldeploy.Status{appmodeldeploy.StatusDeployed},
+		appmodeldeploy.StatusDeployed,
 	)
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
@@ -256,7 +251,7 @@ func (s *Service) collectHelmLaneUsageNames(
 	scope := fmt.Sprintf("app %s env %s lane %s", appID, envName, laneName)
 
 	// 1. 获取最新部署记录
-	record, err := s.helmDeployRecordStore.GetLatest(ctx, appID, envName, laneName)
+	record, err := helmdeploy.GetLatest(ctx, s.db, appID, envName, laneName)
 	if err != nil {
 		if errors.Is(err, helmdeploy.ErrLatestDeployRecordNotFound) {
 			return nil, nil
@@ -273,12 +268,13 @@ func (s *Service) collectHelmLaneUsageNames(
 	}
 
 	// 4. 获取最近一次成功部署记录
-	lastSuccessfulRecord, err := s.helmDeployRecordStore.GetLatestByStatuses(
+	lastSuccessfulRecord, err := helmdeploy.GetLatest(
 		ctx,
+		s.db,
 		appID,
 		envName,
 		laneName,
-		[]helmrelease.Status{helmrelease.StatusDeployed},
+		helmrelease.StatusDeployed,
 	)
 	if err != nil {
 		if errors.Is(err, helmdeploy.ErrLatestDeployRecordNotFound) {

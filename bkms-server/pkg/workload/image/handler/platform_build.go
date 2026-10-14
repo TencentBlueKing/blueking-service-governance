@@ -19,12 +19,15 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
@@ -51,11 +54,12 @@ func (h *Handler) ListPlatformBuildImages(c *gin.Context) {
 		return
 	}
 
-	images, err := h.registry.RuntimeImageStore.List(
-		c.Request.Context(), workloadruntime.ListOptions{
-			Type:    workloadruntime.ImageType(queryInput.Type),
-			Keyword: queryInput.Keyword,
-		},
+	images, err := store.Of(h.registry.DB, workloadruntime.Meta).List(
+		c.Request.Context(),
+		workloadruntime.ByType(workloadruntime.ImageType(queryInput.Type)),
+		workloadruntime.KeywordMatches(queryInput.Keyword),
+		store.Asc("type"),
+		store.Asc("name"),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
@@ -100,7 +104,8 @@ func (h *Handler) ListPlatformBuildImageTags(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	runtimeImage, err := h.registry.RuntimeImageStore.GetByID(ctx, uriInput.ImageID)
+	imageID := strings.TrimSpace(uriInput.ImageID)
+	runtimeImage, err := store.Of(h.registry.DB, workloadruntime.Meta).GetByID(ctx, imageID)
 	if err != nil {
 		code := lo.Ternary(
 			errors.Is(err, workloadruntime.ErrRuntimeImageNotFound),
@@ -111,7 +116,7 @@ func (h *Handler) ListPlatformBuildImageTags(c *gin.Context) {
 		return
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, nil, nil)
+	snapshotService := snapshot.NewService(nil)
 	snapshots, total, status, err := snapshotService.ListRepositorySnapshots(
 		ctx,
 		runtimeImage.Name,

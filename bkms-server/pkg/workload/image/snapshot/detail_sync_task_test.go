@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 )
 
@@ -37,11 +38,16 @@ var _ = Describe("DetailSyncManager Handle", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		mgr = NewDetailSyncManager(&SnapshotStoreMongo{})
+		mgr = NewDetailSyncManager(testutil.NewDB(GinkgoT()))
 	})
 
 	AfterEach(func() {
 		mockey.UnPatchAll()
+	})
+
+	It("stops retry when the database is not initialized", func() {
+		err := NewDetailSyncManager(nil).Handle(ctx, ImageDetailSyncArgs{RepoKey: "repo-1", RepoName: "example/app"})
+		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeTrue())
 	})
 
 	It("stops retry when credential decrypt fails", func() {

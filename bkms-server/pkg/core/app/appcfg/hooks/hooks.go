@@ -23,35 +23,27 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const CleanupPlainEnvInstancesHookName = "appcfg.cleanup_plain_env_instances"
 
 // RegisterDeleteHooks 注册配置文件模块的环境删除 Hook。
-func RegisterDeleteHooks(
-	appStore bkmsapp.ApplicationStore,
-	fileStore appcfg.AppConfigFileStore,
-	defStore appcfg.AppConfigFileDefStore,
-	versionStore appcfg.AppConfigFileVersionStore,
-) {
+func RegisterDeleteHooks(db *mongo.Database) {
 	bkmsenv.RegisterDeleteHook(
 		CleanupPlainEnvInstancesHookName,
-		NewCleanupPlainEnvInstancesHook(appStore, fileStore, defStore, versionStore),
+		NewCleanupPlainEnvInstancesHook(db),
 	)
 }
 
 // NewCleanupPlainEnvInstancesHook 创建一个在环境删除前清理 plain 环境实例的 Hook。
-func NewCleanupPlainEnvInstancesHook(
-	appStore bkmsapp.ApplicationStore,
-	fileStore appcfg.AppConfigFileStore,
-	defStore appcfg.AppConfigFileDefStore,
-	versionStore appcfg.AppConfigFileVersionStore,
-) bkmsenv.DeleteHook {
+func NewCleanupPlainEnvInstancesHook(db *mongo.Database) bkmsenv.DeleteHook {
 	return func(ctx context.Context, environment envmodel.Environment) error {
 		appIDs := make([]string, 0)
 		if environment.IsFeatureEnv() {
@@ -60,7 +52,7 @@ func NewCleanupPlainEnvInstancesHook(
 			}
 			appIDs = append(appIDs, environment.OwnerAppID)
 		} else {
-			apps, err := appStore.ListApps(ctx, &bkmsapp.ListOpts{WorkspaceID: environment.WorkspaceID})
+			apps, err := store.Of(db, bkmsapp.AppMeta).List(ctx, bkmsapp.InWorkspace(environment.WorkspaceID))
 			if err != nil {
 				return errors.Wrap(err, "list apps for workspace")
 			}
@@ -69,7 +61,7 @@ func NewCleanupPlainEnvInstancesHook(
 			}
 		}
 
-		cfgService := appcfg.NewAppConfigFileService(fileStore, defStore, versionStore)
+		cfgService := appcfg.NewAppConfigFileService(db)
 		for _, appID := range appIDs {
 			if err := cfgService.CleanupPlainEnvInstancesByEnv(ctx, appID, environment.Name); err != nil {
 				return errors.Wrapf(err, "cleanup plain env instances for app %s env %s", appID, environment.Name)

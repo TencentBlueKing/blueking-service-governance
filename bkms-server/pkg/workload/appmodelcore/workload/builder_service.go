@@ -20,26 +20,24 @@ package workload
 
 import (
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
@@ -50,14 +48,9 @@ import (
 // and reused for multiple build requests.
 type BuilderService struct {
 	envVarsReader          *envvars.UnifiedEnvVarsReader
-	workspaceCompsStore    workspace.WorkspaceCompsStore
-	workspaceStore         workspace.WorkspaceStore
+	workspaceStore         *workspace.WorkspaceStore
 	polarisWorkloadBuilder *polaris.WorkloadBuilder
-	hostPortStore          hostport.HostPortStore
-	bscpCfgStore           bscpcfg.Store
-	appModelStore          appmodel.AppModelStore
-	appSpecStore           appspec.AppSpecStore
-	buildConfigStore       build.ConfigStore
+	db                     *mongo.Database
 	mountableFileProvider  appcfg.MountableFileProvider
 }
 
@@ -165,29 +158,16 @@ func (r *BuildResult) mainInfo() (workloadMeta, bool) {
 
 // NewBuilderService creates a BuilderService from the dependencies that can be injected by fx.
 func NewBuilderService(
-	scopedEnvVarStore envvars.ScopedEnvVarStore,
 	appDepsVarReader *depenvvars.Reader,
 	polarisVarReader *polarisenvvars.Reader,
-	workspaceCompsStore workspace.WorkspaceCompsStore,
-	workspaceStore workspace.WorkspaceStore,
-	polarisConfigStore polaris.PolarisConfigStore,
-	hostPortStore hostport.HostPortStore,
-	bscpCfgStore bscpcfg.Store,
-	appModelStore appmodel.AppModelStore,
-	appSpecStore appspec.AppSpecStore,
-	buildConfigStore build.ConfigStore,
+	db *mongo.Database,
 	mountableFileProvider appcfg.MountableFileProvider,
 ) *BuilderService {
 	return &BuilderService{
-		envVarsReader:          envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
-		workspaceCompsStore:    workspaceCompsStore,
-		workspaceStore:         workspaceStore,
-		polarisWorkloadBuilder: polaris.NewWorkloadBuilder(polarisConfigStore),
-		hostPortStore:          hostPortStore,
-		bscpCfgStore:           bscpCfgStore,
-		appModelStore:          appModelStore,
-		appSpecStore:           appSpecStore,
-		buildConfigStore:       buildConfigStore,
+		envVarsReader:          envvars.NewUnifiedEnvVarsReader(db, appDepsVarReader, polarisVarReader),
+		workspaceStore:         store.Of(db, workspace.Meta),
+		polarisWorkloadBuilder: polaris.NewWorkloadBuilder(db),
+		db:                     db,
 		mountableFileProvider:  mountableFileProvider,
 	}
 }

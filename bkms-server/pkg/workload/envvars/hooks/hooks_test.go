@@ -24,14 +24,15 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
@@ -41,8 +42,7 @@ var _ = Describe("Env delete hooks from envvars", func() {
 	var diApp *fxtest.App
 	var ctx context.Context
 	var envSvc *bkmsenv.EnvService
-	var envStore envmodel.EnvironmentStore
-	var scopedEnvVarStore envvars.ScopedEnvVarStore
+	var db *mongo.Database
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -51,20 +51,18 @@ var _ = Describe("Env delete hooks from envvars", func() {
 			GinkgoT(),
 			bkmsenv.FxModule,
 			envvars.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			fx.Populate(
 				&envSvc,
-				&envStore,
-				&scopedEnvVarStore,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 	})
 
 	AfterEach(func() {
-		Expect(scopedEnvVarStore.DeleteAll(ctx)).NotTo(HaveOccurred())
-		Expect(envStore.DeleteAll(ctx)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(envvars.ScopedEnvVarMeta)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupCollection("environments")).NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -98,17 +96,17 @@ var _ = Describe("Env delete hooks from envvars", func() {
 				Value:       "other-env-value",
 			},
 		} {
-			_, err = scopedEnvVarStore.Create(ctx, item)
+			err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &item)
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		hook := envvarhooks.NewCleanupScopedEnvVarsByEnvHook(scopedEnvVarStore)
+		hook := envvarhooks.NewCleanupScopedEnvVarsByEnvHook(db)
 		err = hook(ctx, *environment)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Env-scoped variables belonging to the deleted environment should be cleaned by the hook.
-		deletedEnvVars, err := scopedEnvVarStore.List(
-			ctx,
+		deletedEnvVars, err := envvars.List(
+			ctx, db,
 			workspaceID,
 			envvars.WithScopes(envvartypes.ScopeEnv(envName)),
 		)
@@ -116,8 +114,8 @@ var _ = Describe("Env delete hooks from envvars", func() {
 		Expect(deletedEnvVars).To(BeEmpty())
 
 		// Variables in other env scopes must stay untouched.
-		otherEnvVars, err := scopedEnvVarStore.List(
-			ctx,
+		otherEnvVars, err := envvars.List(
+			ctx, db,
 			workspaceID,
 			envvars.WithScopes(envvartypes.ScopeEnv(otherEnvName)),
 		)

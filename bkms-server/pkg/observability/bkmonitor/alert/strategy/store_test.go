@@ -26,13 +26,13 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("AlertStrategyStoreMongo", func() {
+var _ = Describe("AlertStrategyStore", func() {
 	var (
-		ctx   context.Context
-		store Store
+		ctx        context.Context
+		strategies *Store
 	)
 
 	newStoreRule := func(workspaceID, appID, appName, strategyCode string) *AlertStrategy {
@@ -55,67 +55,63 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		strategies = testutil.NewStore(GinkgoT(), Meta)
+	})
 
-		err := testutil.CleanupCollection("bkmonitor_alert_strategy")
-		Expect(err).NotTo(HaveOccurred())
-
-		store, err = NewStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+	AfterEach(func() {
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	Describe("Create and Get", func() {
-		It("should create and retrieve by ID", func() {
-			rule := &AlertStrategy{
-				WorkspaceID:   "ws-1",
-				AppID:         "app-1",
-				AppName:       "app-one",
-				StrategyCode:  "cpu_high",
-				DisplayName:   "CPU 过高",
-				MonitorMetric: "cpu_usage",
-				Severity:      AlertSeverityWarning,
-				Threshold:     ThresholdConfig{Method: "gte", Value: 80},
-				EffectiveScope: EffectiveScope{
-					Type: EffectiveScopeAll,
-				},
-				Creator: "user-1",
-				Updater: "user-1",
-			}
+		It("should store empty slices instead of null for remoteRefs and noticeGroupIDs", func() {
+			rule := newStoreRule("ws-1", "app-1", "app-one", "empty_slices")
+			Expect(strategies.Create(ctx, rule)).To(Succeed())
 
-			id, err := store.Create(ctx, rule)
+			raw, err := strategies.Collection().FindOne(ctx, bson.M{"_id": rule.ID}).Raw()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(id).NotTo(Equal(bson.NilObjectID))
+			Expect(raw.Lookup("remoteRefs").Type).To(Equal(bson.TypeArray))
+			Expect(raw.Lookup("noticeGroupIDs").Type).To(Equal(bson.TypeArray))
+		})
 
-			got, err := store.Get(ctx, id)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.StrategyCode).To(Equal("cpu_high"))
-			Expect(got.DisplayName).To(Equal("CPU 过高"))
-			Expect(got.WorkspaceID).To(Equal("ws-1"))
-			Expect(got.AppID).To(Equal("app-1"))
+		It("should reject strategies missing required fields", func() {
+			rule := newStoreRule("ws-1", "app-1", "app-one", "missing_app_name")
+			rule.AppName = ""
+			Expect(strategies.Create(ctx, rule)).To(MatchError(ContainSubstring("AlertStrategy validation failed")))
+		})
+
+		It("should reject strategies with an invalid effective scope", func() {
+			rule := newStoreRule("ws-1", "app-1", "app-one", "invalid_scope")
+			rule.EffectiveScope = EffectiveScope{Type: EffectiveScopeEnvType}
+			Expect(strategies.Create(ctx, rule)).To(
+				MatchError(ContainSubstring("AlertStrategy effectiveScope validation failed")),
+			)
+		})
+
+		It("should return ErrNotFound when the strategy does not exist", func() {
+			_, err := strategies.GetByID(ctx, bson.NewObjectID())
+			Expect(err).To(MatchError(ErrNotFound))
 		})
 	})
 
 	Describe("List", func() {
 		It("should list rules by workspace", func() {
 			for _, code := range []string{"rule_1", "rule_2", "rule_3"} {
-				_, err := store.Create(ctx, newStoreRule("ws-list", "app-1", "app-one", code))
-				Expect(err).NotTo(HaveOccurred())
+				Expect(strategies.Create(ctx, newStoreRule("ws-list", "app-1", "app-one", code))).To(Succeed())
 			}
+			Expect(strategies.Create(ctx, newStoreRule("ws-other", "app-2", "app-two", "rule_x"))).To(Succeed())
 
-			_, err := store.Create(ctx, newStoreRule("ws-other", "app-2", "app-two", "rule_x"))
-			Expect(err).NotTo(HaveOccurred())
-
-			rules, err := store.ListByWorkspace(ctx, "ws-list")
+			rules, err := strategies.List(ctx, ByWorkspace("ws-list"), NewestFirst())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rules).To(HaveLen(3))
+			// 按创建时间倒序，最后创建的排在最前
+			Expect(rules[0].StrategyCode).To(Equal("rule_3"))
 		})
 
 		It("should list rules by app", func() {
-			_, err := store.Create(ctx, newStoreRule("ws-list", "app-a", "app-a", "rule_1"))
-			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Create(ctx, newStoreRule("ws-list", "app-b", "app-b", "rule_1"))
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, newStoreRule("ws-list", "app-a", "app-a", "rule_1"))).To(Succeed())
+			Expect(strategies.Create(ctx, newStoreRule("ws-list", "app-b", "app-b", "rule_1"))).To(Succeed())
 
-			rules, err := store.ListByApp(ctx, "ws-list", "app-a")
+			rules, err := strategies.List(ctx, ByApp("ws-list", "app-a"), NewestFirst())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rules).To(HaveLen(1))
 			Expect(rules[0].AppID).To(Equal("app-a"))
@@ -129,34 +125,30 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 			matched.RemoteRefs = []RemoteStrategyRef{
 				{EnvID: targetEnvID, TrafficLaneName: "feature-a", RemoteStrategyID: 1001},
 			}
-			_, err := store.Create(ctx, matched)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, matched)).To(Succeed())
 
 			otherEnv := newStoreRule("ws-list", "app-a", "app-a", "rule_other_env")
 			otherEnv.RemoteRefs = []RemoteStrategyRef{
 				{EnvID: otherEnvID, TrafficLaneName: "feature-a", RemoteStrategyID: 1002},
 			}
-			_, err = store.Create(ctx, otherEnv)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, otherEnv)).To(Succeed())
 
 			otherApp := newStoreRule("ws-list", "app-b", "app-b", "rule_other_app")
 			otherApp.RemoteRefs = []RemoteStrategyRef{
 				{EnvID: targetEnvID, TrafficLaneName: "feature-a", RemoteStrategyID: 1003},
 			}
-			_, err = store.Create(ctx, otherApp)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, otherApp)).To(Succeed())
 
 			otherLane := newStoreRule("ws-list", "app-a", "app-a", "rule_other_lane")
 			otherLane.RemoteRefs = []RemoteStrategyRef{
 				{EnvID: targetEnvID, TrafficLaneName: "", RemoteStrategyID: 1004},
 			}
-			_, err = store.Create(ctx, otherLane)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, otherLane)).To(Succeed())
 
-			strategies, err := store.ListByAppAndRemoteEnv(ctx, "ws-list", "app-a", targetEnvID, "feature-a")
+			got, err := strategies.List(ctx, ByRemoteEnv("ws-list", "app-a", targetEnvID, "feature-a"), NewestFirst())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(strategies).To(HaveLen(1))
-			Expect(strategies[0].StrategyCode).To(Equal("rule_match"))
+			Expect(got).To(HaveLen(1))
+			Expect(got[0].StrategyCode).To(Equal("rule_match"))
 		})
 
 		It("should list enabled strategies by app matching env scope", func() {
@@ -164,8 +156,7 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 
 			matchedAll := newStoreRule("ws-list", "app-a", "app-a", "rule_all")
 			matchedAll.Enabled = true
-			_, err := store.Create(ctx, matchedAll)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, matchedAll)).To(Succeed())
 
 			matchedEnvType := newStoreRule("ws-list", "app-a", "app-a", "rule_env_type")
 			matchedEnvType.Enabled = true
@@ -173,8 +164,7 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 				Type:     EffectiveScopeEnvType,
 				EnvTypes: []string{"production"},
 			}
-			_, err = store.Create(ctx, matchedEnvType)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, matchedEnvType)).To(Succeed())
 
 			matchedSpecificEnv := newStoreRule("ws-list", "app-a", "app-a", "rule_specific_env")
 			matchedSpecificEnv.Enabled = true
@@ -182,13 +172,11 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 				Type:   EffectiveScopeSpecificEnvs,
 				EnvIDs: []bson.ObjectID{targetEnvID},
 			}
-			_, err = store.Create(ctx, matchedSpecificEnv)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, matchedSpecificEnv)).To(Succeed())
 
 			disabledAll := newStoreRule("ws-list", "app-a", "app-a", "rule_disabled")
 			disabledAll.Enabled = false
-			_, err = store.Create(ctx, disabledAll)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, disabledAll)).To(Succeed())
 
 			otherType := newStoreRule("ws-list", "app-a", "app-a", "rule_other_type")
 			otherType.Enabled = true
@@ -196,135 +184,64 @@ var _ = Describe("AlertStrategyStoreMongo", func() {
 				Type:     EffectiveScopeEnvType,
 				EnvTypes: []string{"development"},
 			}
-			_, err = store.Create(ctx, otherType)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, otherType)).To(Succeed())
 
 			otherApp := newStoreRule("ws-list", "app-b", "app-b", "rule_other_app")
 			otherApp.Enabled = true
-			_, err = store.Create(ctx, otherApp)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, otherApp)).To(Succeed())
 
-			strategies, err := store.ListEnabledByAppMatchingEnv(ctx, "ws-list", "app-a", "production", targetEnvID)
+			got, err := strategies.List(
+				ctx, EnabledMatchingEnv("ws-list", "app-a", "production", targetEnvID), NewestFirst(),
+			)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(strategies).To(HaveLen(3))
-			Expect(strategies[0].StrategyCode).To(Equal("rule_specific_env"))
-			Expect(strategies[1].StrategyCode).To(Equal("rule_env_type"))
-			Expect(strategies[2].StrategyCode).To(Equal("rule_all"))
+			Expect(got).To(HaveLen(3))
+			Expect(got[0].StrategyCode).To(Equal("rule_specific_env"))
+			Expect(got[1].StrategyCode).To(Equal("rule_env_type"))
+			Expect(got[2].StrategyCode).To(Equal("rule_all"))
 		})
 
 		It("should detect duplicate displayName in same app", func() {
 			first := newStoreRule("ws-list", "app-a", "app-a", "rule_a")
 			first.DisplayName = "Same Name"
-			firstID, err := store.Create(ctx, first)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, first)).To(Succeed())
 
 			second := newStoreRule("ws-list", "app-a", "app-a", "rule_b")
 			second.DisplayName = "Same Name"
-			_, err = store.Create(ctx, second)
-			Expect(err).To(HaveOccurred())
+			err := strategies.Create(ctx, second)
+			Expect(err).To(MatchError(ErrDisplayNameAlreadyExists))
+			Expect(err).To(MatchError(store.ErrDuplicate))
 
-			exists, err := store.ExistsByAppAndDisplayName(ctx, "ws-list", "app-a", "Same Name", nil)
+			exists, err := strategies.Exists(ctx, ByDisplayName("ws-list", "app-a", "Same Name", nil))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exists).To(BeTrue())
 
-			exists, err = store.ExistsByAppAndDisplayName(ctx, "ws-list", "app-a", "Same Name", &firstID)
+			exists, err = strategies.Exists(ctx, ByDisplayName("ws-list", "app-a", "Same Name", &first.ID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exists).To(BeFalse())
 		})
 	})
 
-	Describe("Update", func() {
-		It("should update mutable fields", func() {
-			rule := &AlertStrategy{
-				WorkspaceID:   "ws-1",
-				AppID:         "app-1",
-				AppName:       "app-one",
-				StrategyCode:  "update_me",
-				DisplayName:   "Before",
-				MonitorMetric: "cpu_usage",
-				Severity:      AlertSeverityInfo,
-				Threshold:     ThresholdConfig{Method: "gte", Value: 80},
-				EffectiveScope: EffectiveScope{
-					Type: EffectiveScopeAll,
-				},
-				Creator: "tester",
-				Updater: "tester",
-			}
-			id, err := store.Create(ctx, rule)
-			Expect(err).NotTo(HaveOccurred())
-
-			rule.ID = id
-			rule.DisplayName = "After"
-			rule.Severity = AlertSeverityFatal
-
-			err = store.Update(ctx, id, bson.M{
-				"displayName": rule.DisplayName,
-				"severity":    rule.Severity,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			got, err := store.Get(ctx, id)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.DisplayName).To(Equal("After"))
-			Expect(got.Severity).To(Equal(AlertSeverityFatal))
-		})
-	})
-
-	Describe("Delete", func() {
-		It("should delete by ID", func() {
-			rule := &AlertStrategy{
-				WorkspaceID:   "ws-1",
-				AppID:         "app-1",
-				AppName:       "app-one",
-				StrategyCode:  "delete_me",
-				DisplayName:   "Delete Me",
-				MonitorMetric: "cpu_usage",
-				Severity:      AlertSeverityInfo,
-				Threshold:     ThresholdConfig{Method: "gte", Value: 80},
-				EffectiveScope: EffectiveScope{
-					Type: EffectiveScopeAll,
-				},
-				Creator: "tester",
-				Updater: "tester",
-			}
-			id, err := store.Create(ctx, rule)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = store.Delete(ctx, id)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = store.Get(ctx, id)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(ErrNotFound))
-		})
-	})
-
 	Describe("Repeated strategyCode", func() {
 		It("should allow duplicate strategyCode for different apps in same workspace", func() {
-			_, err := store.Create(ctx, newStoreRule("ws-dup", "app-a", "app-a", "same_code"))
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, newStoreRule("ws-dup", "app-a", "app-a", "same_code"))).To(Succeed())
 
 			second := newStoreRule("ws-dup", "app-b", "app-b", "same_code")
 			second.Severity = AlertSeverityWarning
-			_, err = store.Create(ctx, second)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, second)).To(Succeed())
 		})
 
 		It("should allow duplicate strategyCode in the same app", func() {
-			_, err := store.Create(ctx, newStoreRule("ws-a", "app-a", "app-a", "same_code"))
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, newStoreRule("ws-a", "app-a", "app-a", "same_code"))).To(Succeed())
 
 			second := newStoreRule("ws-a", "app-a", "app-a", "same_code")
 			second.DisplayName = "same_code-display-2"
-			_, err = store.Create(ctx, second)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(strategies.Create(ctx, second)).To(Succeed())
 		})
 	})
 
 	Describe("Indexes", func() {
 		It("should create the expected compound indexes", func() {
-			storeMongo := store.(*StoreMongo)
-			cursor, err := storeMongo.collection.Indexes().List(ctx)
+			cursor, err := strategies.Collection().Indexes().List(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			defer cursor.Close(ctx) // nolint
 

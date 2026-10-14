@@ -25,10 +25,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -40,10 +42,9 @@ import (
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -71,68 +72,53 @@ func newTestPolarisConfig(
 
 var _ = Describe("DeployPreChecker Check", func() {
 	var (
-		statusMock                *mockey.Mocker
-		clusterAddonDefStore      clusteraddon.ClusterAddonDefStore
-		ctx                       context.Context
-		fxApp                     *fxtest.App
-		appStore                  bkmsapp.ApplicationStore
-		appModelStore             appmodel.AppModelStore
-		appConfigFileStore        appcfg.AppConfigFileStore
-		appConfigFileDefStore     appcfg.AppConfigFileDefStore
-		appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-		componentDefStore         component.ComponentDefStore
-		polarisConfigStore        polaris.PolarisConfigStore
-		buildConfigStore          build.ConfigStore
-		workspaceCompsStore       workspace.WorkspaceCompsStore
-		workspaceStore            workspace.WorkspaceStore
-		createdWorkspaces         []string
-		envService                *env.EnvService
-		checker                   *DeployPreChecker
-		newApp                    func(*dbfactory.TrpcApplicationOpts) (*bkmsapp.Application, *envmodel.Environment)
+		statusMock            *mockey.Mocker
+		clusterAddonDefStore  *clusteraddon.ClusterAddonDefStore
+		ctx                   context.Context
+		db                    *mongo.Database
+		fxApp                 *fxtest.App
+		appStore              *bkmsapp.ApplicationStore
+		appConfigFileDefStore *appcfg.AppConfigFileDefStore
+		componentDefStore     *component.ComponentDefStore
+		configStore           *polaris.ConfigStore
+		buildConfigStore      *build.ConfigStore
+		workspaceStore        *workspace.WorkspaceStore
+		createdWorkspaces     []string
+		envService            *env.EnvService
+		checker               *DeployPreChecker
+		newApp                func(*dbfactory.TrpcApplicationOpts) (*bkmsapp.Application, *envmodel.Environment)
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		db = testutil.NewDB(GinkgoT())
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		fxApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
 			appcfg.FxModule,
-			appspec.FxModule,
-			component.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
 			env.FxModule,
 			envvars.FxModule,
-			workspace.FxModule,
-			build.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			workload.FxModule,
-			fx.Provide(func() (clusteraddon.ClusterAddonDefStore, error) {
-				return clusteraddon.NewClusterAddonDefStoreMongo(database.Client(), database.Name())
-			}),
+			store.FxModule,
 			fx.Provide(NewDeployPreChecker),
 			fx.Populate(
-				&appStore,
-				&appModelStore,
-				&appConfigFileStore,
-				&appConfigFileDefStore,
-				&appConfigFileVersionStore,
-				&componentDefStore,
-				&polarisConfigStore,
-				&buildConfigStore,
-				&workspaceCompsStore,
-				&workspaceStore,
 				&envService,
 				&checker,
-				&clusterAddonDefStore,
 			),
 		)
 		fxApp.RequireStart()
+		configStore = testutil.NewStore(GinkgoT(), polaris.ConfigMeta)
+		workspaceStore = testutil.NewStore(GinkgoT(), workspace.Meta)
+		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		buildConfigStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
+		componentDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
+		clusterAddonDefStore = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 		workload.InitPlugin(
-			appcfg.NewMountableFileProvider(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore),
-			polarisConfigStore,
+			appcfg.NewMountableFileProvider(testutil.NewDB(GinkgoT())),
+			testutil.NewDB(GinkgoT()),
 		)
 		statusMock = mockey.Mock(clusteraddon.InspectRequiredAddons).
 			Return(nil, nil).
@@ -149,12 +135,7 @@ var _ = Describe("DeployPreChecker Check", func() {
 			createdWorkspaces = append(createdWorkspaces, ws.ID)
 			opts.WorkspaceID = ws.ID
 			app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
+				AppStore: appStore,
 			}, opts)
 			return app, dbfactory.Env(ctx, envService, app.WorkspaceID)
 		}
@@ -163,7 +144,7 @@ var _ = Describe("DeployPreChecker Check", func() {
 	AfterEach(func() {
 		statusMock.UnPatch()
 		for _, id := range createdWorkspaces {
-			_ = workspaceStore.Delete(ctx, id)
+			_ = workspace.Delete(ctx, workspaceStore, id)
 		}
 		fxApp.RequireStop()
 	})
@@ -202,7 +183,7 @@ ignored: ${LEGACY}
 			},
 			Components: []*component.Component{comp},
 		})
-		Expect(polarisConfigStore.Create(ctx, newTestPolarisConfig(
+		Expect(configStore.Create(ctx, newTestPolarisConfig(
 			app.ID,
 			"polaris-main",
 			[]string{appEnv.Name},
@@ -256,17 +237,17 @@ ignored: ${LEGACY}
 
 	It("builds the pre-check report when the persisted workload image is empty", func() {
 		app, appEnv := newApp(nil)
-		model, err := appModelStore.GetAppModel(ctx, app.ID)
+		model, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		model.Workload.Image = ""
-		Expect(appModelStore.UpdateAppModel(ctx, model)).To(Succeed())
+		Expect(appmodel.UpdateAppModel(ctx, db, model)).To(Succeed())
 
 		result, err := checker.Check(ctx, app, appEnv)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.UndefinedVars).To(BeEmpty())
 		Expect(result.UndefinedVars).NotTo(BeNil())
-		persistedModel, err := appModelStore.GetAppModel(ctx, app.ID)
+		persistedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persistedModel.Workload.Image).To(BeEmpty())
 	})
@@ -280,9 +261,10 @@ ignored: ${LEGACY}
 				FileContent: "default: ${{ env.DEFAULT_ONLY }}\n",
 			},
 		})
-		svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
-		defs, err := appConfigFileDefStore.ListByApp(
+		svc := appcfg.NewAppConfigFileService(testutil.NewDB(GinkgoT()))
+		defs, err := appcfg.ListDefsByApp(
 			ctx,
+			appConfigFileDefStore,
 			app.ID,
 			appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 		)
@@ -402,7 +384,7 @@ ignored: ${LEGACY}
 				},
 			},
 		} {
-			Expect(workspaceCompsStore.Add(ctx, comp)).To(Succeed())
+			Expect(workspace.AddComponents(ctx, testutil.NewDB(GinkgoT()), comp)).To(Succeed())
 		}
 
 		result, err := checker.Check(ctx, app, appEnv)
@@ -430,7 +412,7 @@ ignored: ${LEGACY}
 		config.PolarisName = "${{ env.IGNORED_POLARIS_NAME }}"
 		config.PolarisNamespace = "${{ env.IGNORED_POLARIS_NAMESPACE }}"
 		config.PolarisToken = "${{ env.IGNORED_POLARIS_TOKEN }}"
-		Expect(polarisConfigStore.Create(ctx, config)).To(Succeed())
+		Expect(configStore.Create(ctx, config)).To(Succeed())
 
 		result, err := checker.Check(ctx, app, appEnv)
 
@@ -461,7 +443,7 @@ ignored: ${LEGACY}
 				map[string]string{"env": "${{ env.HIDDEN_POLARIS }}"},
 			),
 		} {
-			Expect(polarisConfigStore.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 		}
 
 		result, err := checker.Check(ctx, app, appEnv)
@@ -521,7 +503,8 @@ ignored: ${LEGACY}
 		})
 
 		It("returns an error when the effective app config is missing", func() {
-			_, err := appConfigFileStore.DeleteByApp(ctx, app.ID)
+			_, err := store.Of(database.DB(), appcfg.AppConfigFileMeta).
+				DeleteMany(ctx, appcfg.FilesByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = checker.Check(ctx, app, appEnv)
@@ -530,7 +513,7 @@ ignored: ${LEGACY}
 		})
 
 		It("returns workload build errors", func() {
-			Expect(buildConfigStore.Delete(ctx, app.ID)).To(Succeed())
+			Expect(buildConfigStore.DeleteIfExists(ctx, build.ByApp(app.ID))).To(Succeed())
 
 			_, err := checker.Check(ctx, app, appEnv)
 
@@ -545,11 +528,10 @@ ignored: ${LEGACY}
 				Name: "precheck-test-addon", DisplayName: "Test operator",
 				RequiredForAppTypes: []string{bkmsapp.AppTypeTRPC},
 			}
-			Expect(clusterAddonDefStore.Create(ctx, addon)).To(Succeed())
+			Expect(clusteraddon.SaveDef(ctx, clusterAddonDefStore, addon)).To(Succeed())
 		})
 		AfterEach(func() {
-			_, err := clusterAddonDefStore.Delete(ctx, addon.Name)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(clusterAddonDefStore.Delete(ctx, clusteraddon.ByName(addon.Name))).To(Succeed())
 		})
 		It("returns missing addon identities", func() {
 			app, appEnv := newApp(nil)

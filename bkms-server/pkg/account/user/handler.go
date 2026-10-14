@@ -39,7 +39,7 @@ func New(registry *storereg.Registry) *Handler {
 }
 
 func (h *Handler) platAdminService() *admin.Service {
-	return admin.NewService(h.registry.PlatAdminStore)
+	return admin.NewService(h.registry.DB)
 }
 
 // RoleInfo is the JSON representation of current user's platform role.

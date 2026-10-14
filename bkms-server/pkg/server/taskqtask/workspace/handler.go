@@ -36,7 +36,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // maxWaitDuration 等待 BKM Project 就绪的最长时间, 自 workspace 创建起算
@@ -51,12 +51,8 @@ const maxWaitDuration = 10 * time.Minute
 func initHandler(ctx context.Context, args InitializationArgs) error {
 	log.Infof(ctx, "polling workspace status for workspace %s", args.WorkspaceID)
 
-	mongoCli, dbName := database.Client(), database.Name()
-	workspaceStore, err := workspace.NewWorkspaceStoreMongo(mongoCli, dbName)
-	if err != nil {
-		return errors.Wrapf(err, "create workspace store")
-	}
-	ws, err := workspaceStore.Get(ctx, args.WorkspaceID)
+	workspaceStore := store.Of(database.DB(), workspace.Meta)
+	ws, err := workspaceStore.Get(ctx, workspace.ByWorkspaceID(args.WorkspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", args.WorkspaceID)
 	}
@@ -92,11 +88,10 @@ func initHandler(ctx context.Context, args InitializationArgs) error {
 // activateWorkspace 激活工作空间（iam 授权、ws 改为就绪、创建并绑定 APM）
 func activateWorkspace(
 	ctx context.Context,
-	workspaceStore workspace.WorkspaceStore,
+	workspaceStore *workspace.WorkspaceStore,
 	ws *workspace.Workspace,
 	bkmProject *bkmonitor.Space,
 ) error {
-	mongoCli, dbName := database.Client(), database.Name()
 	permMgr := perm.NewManager()
 
 	// 给空间角色加上权限
@@ -123,27 +118,16 @@ func activateWorkspace(
 	ws.State = workspace.StateReady
 	ws.BkSystems.BkLogProjectID = cast.ToString(bkmProject.ID)
 	ws.BkSystems.BkMonitorProjectID = cast.ToString(bkmProject.ID)
-	if err := workspaceStore.Update(ctx, ws); err != nil {
-		return errors.Wrapf(err, "update workspace %s", ws.ID)
+	if err := workspace.Update(ctx, workspaceStore, ws); err != nil {
+		return err
 	}
 
 	// 确保空间下的所有环境都有对应 ApmApp, 并添加 APM 相关环境变量
-	envStore, err := envmodel.NewEnvironmentStoreMongo(mongoCli, dbName)
-	if err != nil {
-		return errors.Wrapf(err, "create env store")
-	}
-	scopedEnvVarStore, err := envvars.NewScopedEnvVarStoreMongo(mongoCli, dbName)
-	if err != nil {
-		return errors.Wrapf(err, "create scoped env var store")
-	}
-	apmStore, err := bkmmodel.NewApmInstConfigStoreMongo(mongoCli, dbName)
-	if err != nil {
-		return errors.Wrapf(err, "create apm store")
-	}
-	userGroupService := bkmmodel.NewUserGroupService(envStore)
-	apmService := bkmmodel.NewApmService(apmStore, scopedEnvVarStore)
+	db := database.DB()
+	userGroupService := bkmmodel.NewUserGroupService(db)
+	apmService := bkmmodel.NewApmService(db)
 
-	envs, err := envStore.ListStdEnvs(ctx, ws.ID)
+	envs, err := store.Of(db, envmodel.EnvMeta).List(ctx, envmodel.StdEnvsIn(ws.ID), envmodel.NewestFirst())
 	if err != nil {
 		return errors.Wrapf(err, "list envs for workspace %s", ws.ID)
 	}
@@ -179,12 +163,7 @@ func activateWorkspace(
 func onExhausted(ctx context.Context, workspaceID string, lastErr error) {
 	log.Errorf(ctx, "workspace init task exhausted for %s: %v", workspaceID, lastErr)
 
-	workspaceStore, err := workspace.NewWorkspaceStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		log.Errorf(ctx, "workspace init exhausted: create store for %s: %v", workspaceID, err)
-		return
-	}
-	ws, err := workspaceStore.Get(ctx, workspaceID)
+	ws, err := store.Of(database.DB(), workspace.Meta).Get(ctx, workspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		log.Errorf(ctx, "workspace init exhausted: get workspace %s: %v", workspaceID, err)
 		return

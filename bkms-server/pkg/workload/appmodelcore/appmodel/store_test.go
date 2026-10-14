@@ -25,24 +25,24 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
-var _ = Describe("AppModelStoreMongo", func() {
-	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var appModelStore appmodel.AppModelStore
+var _ = Describe("AppModel store", func() {
+	var db *mongo.Database
+	var appStore *bkmsapp.ApplicationStore
+	var models *appmodel.AppModelStore
 	// rawColl reads documents straight from MongoDB, bypassing the store's
 	// encrypt/decrypt layer, so tests can assert on the persisted ciphertext.
 	var rawColl *mongo.Collection
@@ -55,50 +55,22 @@ var _ = Describe("AppModelStoreMongo", func() {
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
 		ctx = context.Background()
-		var mongoClient *mongo.Client
-		var dbName string
-		diApp = fxtest.New(
-			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
-			database.PrivateFxModule,
-			fx.Populate(&appStore, &appModelStore, &mongoClient, &dbName),
-		)
-		diApp.RequireStart()
-		rawColl = mongoClient.Database(dbName).Collection(appmodel.CollectionName)
+		db = testutil.NewDB(GinkgoT())
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		models = store.Of(db, appmodel.AppModelMeta)
+		rawColl = db.Collection(appmodel.CollectionName)
 	})
 
 	AfterEach(func() {
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(appmodel.AppModelMeta)).To(Succeed())
 	})
 
 	Describe("CreateAppModel", func() {
 		Context("when creating a valid app model", func() {
-			It("should create and get successfully", func() {
-				app := dbfactory.Application(ctx, appStore)
-
-				appModel := &appmodel.AppModel{
-					AppID: app.ID,
-					Labels: map[string]string{
-						"foo_label": "bar_value",
-					},
-					Annotations: map[string]string{
-						"description": "test app model",
-					},
-				}
-
-				err := appModelStore.CreateAppModel(ctx, appModel)
-				Expect(err).NotTo(HaveOccurred())
-
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
-				Expect(err).To(Not(HaveOccurred()))
-				Expect(am.Labels).To(Equal(appModel.Labels))
-			})
-
 			It("encrypts sensitive env vars at rest but returns plaintext on read", func() {
 				app := dbfactory.Application(ctx, appStore)
 
-				err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+				err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 					AppID: app.ID,
 					Workload: appmodel.Workload{
 						EnvVars: []appmodel.Variable{
@@ -133,8 +105,8 @@ var _ = Describe("AppModelStoreMongo", func() {
 				// The non-sensitive value is stored as plaintext.
 				Expect(varsByKey["MODE"]).To(Equal("prod"))
 
-				// GetAppModel decrypts sensitive values, so callers see plaintext.
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				// Reads decrypt sensitive values, so callers see plaintext.
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				for i := range am.Workload.EnvVars {
 					Expect(am.Workload.EnvVars[i].CreatedAt.IsZero()).To(BeFalse())
@@ -146,6 +118,28 @@ var _ = Describe("AppModelStoreMongo", func() {
 					appmodel.Variable{Key: "SECRET", Value: "supersecret", IsSensitive: true},
 					appmodel.Variable{Key: "MODE", Value: "prod", IsSensitive: false},
 				))
+			})
+
+			It("keeps the caller's sensitive env vars in plaintext", func() {
+				app := dbfactory.Application(ctx, appStore)
+				appModel := &appmodel.AppModel{
+					AppID: app.ID,
+					Workload: appmodel.Workload{
+						EnvVars: []appmodel.Variable{{Key: "SECRET", Value: "supersecret", IsSensitive: true}},
+					},
+				}
+				Expect(appmodel.CreateAppModel(ctx, db, appModel)).To(Succeed())
+				Expect(appModel.Workload.EnvVars[0].Value).To(Equal("supersecret"))
+			})
+		})
+
+		Context("when the app already has an app model", func() {
+			It("should return ErrAppModelAlreadyExists", func() {
+				app := dbfactory.Application(ctx, appStore)
+				Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
+
+				err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{AppID: app.ID})
+				Expect(err).To(MatchError(appmodel.ErrAppModelAlreadyExists))
 			})
 		})
 
@@ -177,11 +171,11 @@ var _ = Describe("AppModelStoreMongo", func() {
 					}},
 				}
 
-				err := appModelStore.CreateAppModel(ctx, appModel)
+				err := appmodel.CreateAppModel(ctx, db, appModel)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Retrieve the AppModel
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(am.Components).To(HaveLen(1))
 
@@ -220,7 +214,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 						// Both Type and RefWorkspaceCompName are empty
 					}},
 				}
-				err := appModelStore.CreateAppModel(ctx, appModel)
+				err := appmodel.CreateAppModel(ctx, db, appModel)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("must have only one of"))
 			})
@@ -240,7 +234,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 						},
 					}},
 				}
-				err := appModelStore.CreateAppModel(ctx, appModel)
+				err := appmodel.CreateAppModel(ctx, db, appModel)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("must have only one of"))
 			})
@@ -257,7 +251,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 						},
 					}},
 				}
-				err := appModelStore.CreateAppModel(ctx, appModel)
+				err := appmodel.CreateAppModel(ctx, db, appModel)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -272,7 +266,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 						},
 					}},
 				}
-				err := appModelStore.CreateAppModel(ctx, appModel)
+				err := appmodel.CreateAppModel(ctx, db, appModel)
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
@@ -291,7 +285,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 				},
 			}
 
-			err := appModelStore.CreateAppModel(ctx, appModel)
+			err := appmodel.CreateAppModel(ctx, db, appModel)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("duplicate env var key 'DUP_KEY'"))
 		})
@@ -306,7 +300,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 					},
 				},
 			}
-			err := appModelStore.CreateAppModel(ctx, appModel)
+			err := appmodel.CreateAppModel(ctx, db, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
 			appModel.Workload.EnvVars = []appmodel.Variable{
@@ -314,9 +308,39 @@ var _ = Describe("AppModelStoreMongo", func() {
 				{Key: "DUP_KEY", Value: "v2"},
 			}
 
-			err = appModelStore.UpdateAppModel(ctx, appModel)
+			err = appmodel.UpdateAppModel(ctx, db, appModel)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("duplicate env var key 'DUP_KEY'"))
+		})
+	})
+
+	Describe("UpdateAppModel and DeleteAppModel", func() {
+		It("should return ErrAppModelNotFound when the app model does not exist", func() {
+			Expect(appmodel.UpdateAppModel(ctx, db, &appmodel.AppModel{AppID: "non-existent-app"})).
+				To(MatchError(appmodel.ErrAppModelNotFound))
+			Expect(appmodel.DeleteAppModel(ctx, db, "non-existent-app")).
+				To(MatchError(appmodel.ErrAppModelNotFound))
+		})
+
+		It("should replace the whole app model and generate missing component names", func() {
+			app := dbfactory.Application(ctx, appStore)
+			Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
+				AppID:  app.ID,
+				Labels: map[string]string{"old": "label"},
+			})).To(Succeed())
+
+			Expect(appmodel.UpdateAppModel(ctx, db, &appmodel.AppModel{
+				AppID: app.ID,
+				Components: []*component.Component{{
+					ComponentInst: component.ComponentInst{Type: "VolumeSecret", Version: "v1.0.0"},
+				}},
+			})).To(Succeed())
+
+			am, err := models.Get(ctx, appmodel.ByApp(app.ID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(am.Labels).To(BeEmpty())
+			Expect(am.Components).To(HaveLen(1))
+			Expect(am.Components[0].Name).To(HavePrefix("volumesecret-"))
 		})
 	})
 
@@ -329,7 +353,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 				AppID:      app.ID,
 				Components: []*component.Component{},
 			}
-			err := appModelStore.CreateAppModel(ctx, appModel)
+			err := appmodel.CreateAppModel(ctx, db, appModel)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -346,11 +370,11 @@ var _ = Describe("AppModelStoreMongo", func() {
 					},
 				}
 
-				err := appModelStore.AddComponent(ctx, app.ID, comp)
+				err := appmodel.AddComponent(ctx, db, app.ID, comp)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify component was added
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(am.Components).To(HaveLen(1))
 				Expect(am.Components[0].Name).To(Equal("test-comp-1"))
@@ -365,11 +389,11 @@ var _ = Describe("AppModelStoreMongo", func() {
 					},
 				}
 
-				err := appModelStore.AddComponent(ctx, app.ID, comp)
+				err := appmodel.AddComponent(ctx, db, app.ID, comp)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify component name was auto-generated
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(am.Components).To(HaveLen(1))
 				Expect(am.Components[0].Name).To(HavePrefix(strings.ToLower(comp.Type) + "-"))
@@ -386,7 +410,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 					},
 				}
 
-				err := appModelStore.AddComponent(ctx, "non-existent-app", comp)
+				err := appmodel.AddComponent(ctx, db, "non-existent-app", comp)
 				Expect(err).To(MatchError(appmodel.ErrAppModelNotFound))
 			})
 		})
@@ -404,11 +428,11 @@ var _ = Describe("AppModelStoreMongo", func() {
 					},
 				}
 
-				err := appModelStore.AddComponent(ctx, app.ID, comp)
+				err := appmodel.AddComponent(ctx, db, app.ID, comp)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("must have only one of"))
 
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(am.Components).To(BeEmpty())
 			})
@@ -424,7 +448,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 						Version: "v1.0.0",
 					},
 				}
-				err := appModelStore.AddComponent(ctx, app.ID, comp1)
+				err := appmodel.AddComponent(ctx, db, app.ID, comp1)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Try to add second component with same name
@@ -435,7 +459,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 						Version: "v1.0.0",
 					},
 				}
-				err = appModelStore.AddComponent(ctx, app.ID, comp2)
+				err = appmodel.AddComponent(ctx, db, app.ID, comp2)
 				Expect(err).To(MatchError(appmodel.ErrComponentNameExists))
 			})
 		})
@@ -460,7 +484,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 					},
 				}},
 			}
-			err := appModelStore.CreateAppModel(ctx, appModel)
+			err := appmodel.CreateAppModel(ctx, db, appModel)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -474,11 +498,11 @@ var _ = Describe("AppModelStoreMongo", func() {
 					Properties: newProps,
 				}
 
-				err := appModelStore.UpdateComponent(ctx, app.ID, compName, updateData)
+				err := appmodel.UpdateComponent(ctx, db, app.ID, compName, updateData)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify update
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(am.Components[0].Properties["key1"]).To(Equal("updated-value"))
 				Expect(am.Components[0].Properties["key2"]).To(Equal("new-value"))
@@ -494,11 +518,11 @@ var _ = Describe("AppModelStoreMongo", func() {
 					Name:    &newName,
 				}
 
-				err := appModelStore.UpdateComponent(ctx, app.ID, compName, updateData)
+				err := appmodel.UpdateComponent(ctx, db, app.ID, compName, updateData)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify update
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(am.Components[0].Version).To(Equal("v2.0.0"))
 				Expect(am.Components[0].Name).To(Equal("renamed-comp"))
@@ -512,7 +536,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 					Version: &newVersion,
 				}
 
-				err := appModelStore.UpdateComponent(ctx, "non-existent-app", compName, updateData)
+				err := appmodel.UpdateComponent(ctx, db, "non-existent-app", compName, updateData)
 				Expect(err).To(MatchError(appmodel.ErrAppModelNotFound))
 			})
 		})
@@ -527,7 +551,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 						Version: "v1.0.0",
 					},
 				}
-				err := appModelStore.AddComponent(ctx, app.ID, comp2)
+				err := appmodel.AddComponent(ctx, db, app.ID, comp2)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Try to rename first component to second component's name
@@ -536,14 +560,28 @@ var _ = Describe("AppModelStoreMongo", func() {
 					Name: &existingName,
 				}
 
-				err = appModelStore.UpdateComponent(ctx, app.ID, compName, updateData)
+				err = appmodel.UpdateComponent(ctx, db, app.ID, compName, updateData)
 				Expect(err).To(MatchError(appmodel.ErrComponentNameExists))
+			})
+		})
+
+		Context("when the component does not exist", func() {
+			It("should return ErrComponentNotFound", func() {
+				newVersion := "v2.0.0"
+				err := appmodel.UpdateComponent(ctx, db, app.ID, "non-existent-comp",
+					&appmodel.ComponentUpdateData{Version: &newVersion})
+				Expect(err).To(MatchError(appmodel.ErrComponentNotFound))
+
+				newName := "renamed-comp"
+				err = appmodel.UpdateComponent(ctx, db, app.ID, "non-existent-comp",
+					&appmodel.ComponentUpdateData{Name: &newName})
+				Expect(err).To(MatchError(appmodel.ErrComponentNotFound))
 			})
 		})
 
 		Context("when updateData is nil", func() {
 			It("should return nil without error", func() {
-				err := appModelStore.UpdateComponent(ctx, app.ID, compName, nil)
+				err := appmodel.UpdateComponent(ctx, db, app.ID, compName, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
@@ -565,17 +603,17 @@ var _ = Describe("AppModelStoreMongo", func() {
 					},
 				}},
 			}
-			err := appModelStore.CreateAppModel(ctx, appModel)
+			err := appmodel.CreateAppModel(ctx, db, appModel)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		Context("when removing an existing component", func() {
 			It("should remove component successfully", func() {
-				err := appModelStore.RemoveComponent(ctx, app.ID, compName)
+				err := appmodel.RemoveComponent(ctx, db, app.ID, compName)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify removal
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(am.Components).To(BeEmpty())
 			})
@@ -583,14 +621,14 @@ var _ = Describe("AppModelStoreMongo", func() {
 
 		Context("when app model does not exist", func() {
 			It("should return ErrAppModelNotFound", func() {
-				err := appModelStore.RemoveComponent(ctx, "non-existent-app", compName)
+				err := appmodel.RemoveComponent(ctx, db, "non-existent-app", compName)
 				Expect(err).To(MatchError(appmodel.ErrAppModelNotFound))
 			})
 		})
 
 		Context("when component does not exist", func() {
 			It("should return ErrComponentNotFound", func() {
-				err := appModelStore.RemoveComponent(ctx, app.ID, "non-existent-comp")
+				err := appmodel.RemoveComponent(ctx, db, app.ID, "non-existent-comp")
 				Expect(err).To(MatchError(appmodel.ErrComponentNotFound))
 			})
 		})
@@ -605,15 +643,15 @@ var _ = Describe("AppModelStoreMongo", func() {
 						Version: "v1.0.0",
 					},
 				}
-				err := appModelStore.AddComponent(ctx, app.ID, comp2)
+				err := appmodel.AddComponent(ctx, db, app.ID, comp2)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Remove the first component
-				err = appModelStore.RemoveComponent(ctx, app.ID, compName)
+				err = appmodel.RemoveComponent(ctx, db, app.ID, compName)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify only the second component remains
-				am, err := appModelStore.GetAppModel(ctx, app.ID)
+				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(am.Components).To(HaveLen(1))
 				Expect(am.Components[0].Name).To(Equal("another-comp"))
@@ -624,15 +662,15 @@ var _ = Describe("AppModelStoreMongo", func() {
 	Describe("AddAppDefinedEnvVar", func() {
 		It("initializes missing timestamps", func() {
 			app := dbfactory.Application(ctx, appStore)
-			Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
+			Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
 
-			err := appModelStore.AddAppDefinedEnvVar(ctx, app.ID, appmodel.Variable{
+			err := appmodel.AddAppDefinedEnvVar(ctx, db, app.ID, appmodel.Variable{
 				Key:   "MODE",
 				Value: "prod",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			envVars, err := appModelStore.ListAppDefinedEnvVars(ctx, app.ID)
+			envVars, err := appmodel.ListAppDefinedEnvVars(ctx, db, app.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
 			Expect(envVars[0].CreatedAt.IsZero()).To(BeFalse())
@@ -644,7 +682,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 		It("initializes a missing updated timestamp", func() {
 			app := dbfactory.Application(ctx, appStore)
 
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID: app.ID,
 				Workload: appmodel.Workload{
 					EnvVars: []appmodel.Variable{{Key: "MODE", Value: "prod"}},
@@ -652,17 +690,17 @@ var _ = Describe("AppModelStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			beforeUpdate, err := appModelStore.ListAppDefinedEnvVars(ctx, app.ID)
+			beforeUpdate, err := appmodel.ListAppDefinedEnvVars(ctx, db, app.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(beforeUpdate).To(HaveLen(1))
 
-			err = appModelStore.UpdateAppDefinedEnvVar(ctx, app.ID, "MODE", appmodel.Variable{
+			err = appmodel.UpdateAppDefinedEnvVar(ctx, db, app.ID, "MODE", appmodel.Variable{
 				Key:   "MODE",
 				Value: "test",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			afterUpdate, err := appModelStore.ListAppDefinedEnvVars(ctx, app.ID)
+			afterUpdate, err := appmodel.ListAppDefinedEnvVars(ctx, db, app.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(afterUpdate).To(HaveLen(1))
 			Expect(afterUpdate[0].CreatedAt).To(Equal(beforeUpdate[0].CreatedAt))
@@ -672,7 +710,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 		It("encrypts an empty sensitive value at rest", func() {
 			app := dbfactory.Application(ctx, appStore)
 
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 				AppID: app.ID,
 				Workload: appmodel.Workload{
 					EnvVars: []appmodel.Variable{
@@ -682,7 +720,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = appModelStore.UpdateAppDefinedEnvVar(ctx, app.ID, "SECRET", appmodel.Variable{
+			err = appmodel.UpdateAppDefinedEnvVar(ctx, db, app.ID, "SECRET", appmodel.Variable{
 				Key:         "SECRET",
 				Value:       "",
 				IsSensitive: true,
@@ -711,7 +749,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(decryptedValue).To(BeEmpty())
 
-			envVars, err := appModelStore.ListAppDefinedEnvVars(ctx, app.ID)
+			envVars, err := appmodel.ListAppDefinedEnvVars(ctx, db, app.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
 			Expect(envVars[0].Key).To(Equal("SECRET"))
@@ -719,13 +757,66 @@ var _ = Describe("AppModelStoreMongo", func() {
 			Expect(envVars[0].IsSensitive).To(BeTrue())
 		})
 	})
+
+	Describe("env var error paths", func() {
+		var app *bkmsapp.Application
+
+		BeforeEach(func() {
+			app = dbfactory.Application(ctx, appStore)
+			Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
+				AppID: app.ID,
+				Workload: appmodel.Workload{
+					EnvVars: []appmodel.Variable{{Key: "ENV_A", Value: "a"}, {Key: "ENV_B", Value: "b"}},
+				},
+			})).To(Succeed())
+		})
+
+		It("distinguishes a missing app model from a missing or conflicting env var", func() {
+			Expect(appmodel.AddAppDefinedEnvVar(ctx, db, "non-existent-app", appmodel.Variable{Key: "ENV_C"})).
+				To(MatchError(appmodel.ErrAppModelNotFound))
+			Expect(appmodel.AddAppDefinedEnvVar(ctx, db, app.ID, appmodel.Variable{Key: "ENV_A"})).
+				To(MatchError(appmodel.ErrEnvVarKeyExists))
+
+			Expect(
+				appmodel.UpdateAppDefinedEnvVar(ctx, db, "non-existent-app", "ENV_A", appmodel.Variable{Key: "ENV_A"}),
+			).
+				To(MatchError(appmodel.ErrAppModelNotFound))
+			Expect(appmodel.UpdateAppDefinedEnvVar(ctx, db, app.ID, "ENV_X", appmodel.Variable{Key: "ENV_X"})).
+				To(MatchError(appmodel.ErrEnvVarNotFound))
+			Expect(appmodel.UpdateAppDefinedEnvVar(ctx, db, app.ID, "ENV_A", appmodel.Variable{Key: "ENV_B"})).
+				To(MatchError(appmodel.ErrEnvVarKeyExists))
+
+			Expect(appmodel.RemoveAppDefinedEnvVar(ctx, db, "non-existent-app", "ENV_A")).
+				To(MatchError(appmodel.ErrAppModelNotFound))
+			Expect(appmodel.RemoveAppDefinedEnvVar(ctx, db, app.ID, "ENV_X")).
+				To(MatchError(appmodel.ErrEnvVarNotFound))
+
+			envVars, err := appmodel.ListAppDefinedEnvVars(ctx, db, app.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lo.Map(envVars, func(v appmodel.Variable, _ int) string { return v.Key })).
+				To(ConsistOf("ENV_A", "ENV_B"))
+		})
+
+		It("renames and removes env vars", func() {
+			Expect(
+				appmodel.UpdateAppDefinedEnvVar(ctx, db, app.ID, "ENV_A", appmodel.Variable{Key: "ENV_C", Value: "c"}),
+			).
+				To(Succeed())
+			Expect(appmodel.RemoveAppDefinedEnvVar(ctx, db, app.ID, "ENV_B")).To(Succeed())
+
+			envVars, err := appmodel.ListAppDefinedEnvVars(ctx, db, app.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envVars).To(HaveLen(1))
+			Expect(envVars[0].Key).To(Equal("ENV_C"))
+			Expect(envVars[0].Value).To(Equal("c"))
+		})
+	})
 })
 
-var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
-	var diApp *fxtest.App
-	var compDefStore component.ComponentDefStore
-	var appModelStore appmodel.AppModelStore
-	var appStore bkmsapp.ApplicationStore
+var _ = Describe("ComponentDef ref count maintained by AppModel functions", func() {
+	var db *mongo.Database
+	var compDefStore *component.ComponentDefStore
+	var appStore *bkmsapp.ApplicationStore
 	var ctx context.Context
 	var compDefName string
 
@@ -738,18 +829,9 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 
 		ctx = context.Background()
 
-		diApp = fxtest.New(
-			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
-			component.FxModule,
-			fx.Populate(&appStore, &appModelStore, &compDefStore),
-		)
-		diApp.RequireStart()
-		// 设置 hooks
-		appModelStore.SetComponentHooks(
-			appmodel.NewComponentRefCountHooks(compDefStore),
-		)
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		db = testutil.NewDB(GinkgoT())
+		compDefStore = store.Of(db, component.ComponentDefMeta)
 
 		compDef := dbfactory.CompDef(ctx, compDefStore, &dbfactory.ComponentDefOpts{
 			Properties: []component.Property{{Name: "key", Type: "STRING", Description: "A key"}},
@@ -758,11 +840,11 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 	})
 
 	AfterEach(func() {
-		diApp.RequireStop()
+		Expect(testutil.CleanupMetaColl(appmodel.AppModelMeta)).To(Succeed())
 	})
 
 	getAppCompInstanceCount := func() int32 {
-		def, err := compDefStore.Get(ctx, compDefName, component.DefaultComponentDefVersion)
+		def, err := compDefStore.Get(ctx, component.ByNameVersion(compDefName, component.DefaultComponentDefVersion))
 		Expect(err).NotTo(HaveOccurred())
 		return def.AppCompInstanceCount
 	}
@@ -771,12 +853,12 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 		app := dbfactory.Application(ctx, appStore)
 
 		// 创建空 AppModel
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{AppID: app.ID})
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{AppID: app.ID})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(getAppCompInstanceCount()).To(Equal(int32(0)))
 
 		// AddComponent -> appCompInstanceCount = 1
-		err = appModelStore.AddComponent(ctx, app.ID, &component.Component{
+		err = appmodel.AddComponent(ctx, db, app.ID, &component.Component{
 			Name: "comp-a",
 			ComponentInst: component.ComponentInst{
 				Type:    compDefName,
@@ -787,7 +869,7 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 		Expect(getAppCompInstanceCount()).To(Equal(int32(1)))
 
 		// 再添加同类型组件 -> appCompInstanceCount = 2
-		err = appModelStore.AddComponent(ctx, app.ID, &component.Component{
+		err = appmodel.AddComponent(ctx, db, app.ID, &component.Component{
 			Name: "comp-b",
 			ComponentInst: component.ComponentInst{
 				Type:    compDefName,
@@ -798,7 +880,7 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 		Expect(getAppCompInstanceCount()).To(Equal(int32(2)))
 
 		// 添加引用类型组件（RefWorkspaceCompName 非空）不应增加计数
-		err = appModelStore.AddComponent(ctx, app.ID, &component.Component{
+		err = appmodel.AddComponent(ctx, db, app.ID, &component.Component{
 			Name:         "comp-ref",
 			ComponentRef: component.ComponentRef{RefWorkspaceCompName: "some-ws-comp"},
 		})
@@ -806,12 +888,12 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 		Expect(getAppCompInstanceCount()).To(Equal(int32(2)))
 
 		// RemoveComponent comp-a -> appCompInstanceCount = 1
-		err = appModelStore.RemoveComponent(ctx, app.ID, "comp-a")
+		err = appmodel.RemoveComponent(ctx, db, app.ID, "comp-a")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(getAppCompInstanceCount()).To(Equal(int32(1)))
 
 		// DeleteAppModel -> 剩余的 comp-b 被一并清除，appCompInstanceCount = 0
-		err = appModelStore.DeleteAppModel(ctx, app.ID)
+		err = appmodel.DeleteAppModel(ctx, db, app.ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(getAppCompInstanceCount()).To(Equal(int32(0)))
 	})
@@ -821,10 +903,10 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 		app2 := dbfactory.Application(ctx, appStore)
 
 		for _, appID := range []string{app1.ID, app2.ID} {
-			err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{AppID: appID})
+			err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{AppID: appID})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = appModelStore.AddComponent(ctx, appID, &component.Component{
+			err = appmodel.AddComponent(ctx, db, appID, &component.Component{
 				Name: "comp-1",
 				ComponentInst: component.ComponentInst{
 					Type:    compDefName,
@@ -836,12 +918,12 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 		Expect(getAppCompInstanceCount()).To(Equal(int32(2)))
 
 		// 删除第一个 AppModel -> appCompInstanceCount = 1
-		err := appModelStore.DeleteAppModel(ctx, app1.ID)
+		err := appmodel.DeleteAppModel(ctx, db, app1.ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(getAppCompInstanceCount()).To(Equal(int32(1)))
 
 		// 删除第二个 AppModel -> appCompInstanceCount = 0
-		err = appModelStore.DeleteAppModel(ctx, app2.ID)
+		err = appmodel.DeleteAppModel(ctx, db, app2.ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(getAppCompInstanceCount()).To(Equal(int32(0)))
 	})

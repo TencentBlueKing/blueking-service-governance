@@ -26,23 +26,27 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("PolarisEnvStateManager", func() {
 	var (
 		ctx              context.Context
 		diApp            *fxtest.App
-		appStore         bkmsapp.ApplicationStore
+		appStore         *bkmsapp.ApplicationStore
 		envService       *env.EnvService
-		store            polaris.PolarisConfigStore
+		configStore      *polaris.ConfigStore
+		db               *mongo.Database
 		manager          *polaris.PolarisEnvStateManager
 		app              *bkmsapp.Application
 		environment      *bkmsenv.Environment
@@ -52,19 +56,19 @@ var _ = Describe("PolarisEnvStateManager", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
 			polaris.FxModule,
 			fx.Populate(
-				&appStore,
 				&envService,
-				&store,
 				&manager,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		configStore = store.Of(db, polaris.ConfigMeta)
 
 		app = dbfactory.Application(ctx, appStore)
 		environment = dbfactory.Env(ctx, envService, app.WorkspaceID)
@@ -73,7 +77,7 @@ var _ = Describe("PolarisEnvStateManager", func() {
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, app.ID)
+		_, _ = configStore.DeleteMany(ctx, polaris.ByApp(app.ID))
 		diApp.RequireStop()
 	})
 
@@ -81,7 +85,7 @@ var _ = Describe("PolarisEnvStateManager", func() {
 		name string, scopeEnvNames []string, states map[string]polaris.PolarisEnvState,
 	) *polaris.PolarisConfig {
 		config := newTestConfig(app.ID, name, scopeEnvNames, states)
-		Expect(store.Create(ctx, config)).To(Succeed())
+		Expect(configStore.Create(ctx, config)).To(Succeed())
 		for envName, state := range states {
 			update := polaris.PolarisEnvStateUpdate{
 				AppliedFields: state.AppliedFields,
@@ -90,9 +94,9 @@ var _ = Describe("PolarisEnvStateManager", func() {
 				errorMessage := state.LastError
 				update.LastError = &errorMessage
 			}
-			Expect(store.UpsertEnvState(ctx, app.ID, name, envName, update)).To(Succeed())
+			Expect(polaris.UpsertEnvState(ctx, db, app.ID, name, envName, update)).To(Succeed())
 		}
-		stored, err := store.Get(ctx, app.ID, name)
+		stored, err := configStore.Get(ctx, polaris.ByName(app.ID, name))
 		Expect(err).NotTo(HaveOccurred())
 		return stored
 	}
@@ -100,8 +104,8 @@ var _ = Describe("PolarisEnvStateManager", func() {
 	updateAndPrepareDynamicApply := func(
 		config *polaris.PolarisConfig, update *polaris.ConfigUpdateData,
 	) (*polaris.PolarisConfig, []string) {
-		Expect(store.Update(ctx, app.ID, config.Name, update)).To(Succeed())
-		updated, err := store.Get(ctx, app.ID, config.Name)
+		Expect(polaris.UpdateConfig(ctx, db, app.ID, config.Name, update)).To(Succeed())
+		updated, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 		Expect(err).NotTo(HaveOccurred())
 		envNames, err := manager.PrepareDynamicApply(ctx, updated)
 		Expect(err).NotTo(HaveOccurred())
@@ -250,14 +254,14 @@ var _ = Describe("PolarisEnvStateManager", func() {
 			Expect(manager.RecordDynamicApplyResult(
 				ctx, app.ID, config.Name, environment.Name, config.UpdatedAt, errors.New("apply failed"),
 			)).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.GetEnvState(environment.Name).LastError).To(Equal("apply failed"))
 
 			Expect(manager.RecordDynamicApplyResult(
 				ctx, app.ID, config.Name, environment.Name, config.UpdatedAt, nil,
 			)).To(Succeed())
-			stored, err = store.Get(ctx, app.ID, config.Name)
+			stored, err = configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.GetEnvState(environment.Name).LastError).To(BeEmpty())
 		})
@@ -274,10 +278,10 @@ var _ = Describe("PolarisEnvStateManager", func() {
 
 			time.Sleep(5 * time.Millisecond)
 			direct := true
-			Expect(store.Update(ctx, app.ID, config.Name, &polaris.ConfigUpdateData{
+			Expect(polaris.UpdateConfig(ctx, db, app.ID, config.Name, &polaris.ConfigUpdateData{
 				Direct: &direct,
 			})).To(Succeed())
-			latest, err := store.Get(ctx, app.ID, config.Name)
+			latest, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest.UpdatedAt).NotTo(Equal(expectedUpdatedAt))
 
@@ -289,7 +293,7 @@ var _ = Describe("PolarisEnvStateManager", func() {
 				latest.UpdatedAt,
 				errors.New("latest task error"),
 			)).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.GetEnvState(environment.Name).LastError).To(Equal("latest task error"))
 
@@ -301,7 +305,7 @@ var _ = Describe("PolarisEnvStateManager", func() {
 				expectedUpdatedAt,
 				nil,
 			)).To(Succeed())
-			stored, err = store.Get(ctx, app.ID, config.Name)
+			stored, err = configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.GetEnvState(environment.Name).LastError).To(Equal("latest task error"))
 
@@ -313,7 +317,7 @@ var _ = Describe("PolarisEnvStateManager", func() {
 				expectedUpdatedAt,
 				errors.New("stale task error"),
 			)).To(Succeed())
-			stored, err = store.Get(ctx, app.ID, config.Name)
+			stored, err = configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.GetEnvState(environment.Name).LastError).To(Equal("latest task error"))
 		})
@@ -336,13 +340,13 @@ var _ = Describe("PolarisEnvStateManager", func() {
 
 			Expect(manager.ReconcileAfterDeploy(ctx, app, environment)).To(Succeed())
 
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			updatedState := stored.GetEnvState(environment.Name)
 			Expect(updatedState.AppliedFields).To(Equal(redeployFields("k1", "t1", 8080)))
 			Expect(updatedState.LastError).To(BeEmpty())
 
-			otherStored, err := store.Get(ctx, app.ID, other.Name)
+			otherStored, err := configStore.Get(ctx, polaris.ByName(app.ID, other.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(otherStored.GetEnvState(otherEnvironment.Name).LastError).To(Equal("keep"))
 		})
@@ -354,7 +358,7 @@ var _ = Describe("PolarisEnvStateManager", func() {
 			)
 
 			Expect(manager.ReconcileAfterDeploy(ctx, app, environment)).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 		})
@@ -366,12 +370,12 @@ var _ = Describe("PolarisEnvStateManager", func() {
 				nil,
 				map[string]polaris.PolarisEnvState{environment.Name: state},
 			)
-			Expect(store.UpsertEnvWeight(
-				ctx, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
+			Expect(polaris.UpsertEnvWeight(
+				ctx, db, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
 			)).To(Succeed())
 
 			Expect(manager.ReconcileAfterDeploy(ctx, app, environment)).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 			Expect(stored.EnvWeights).NotTo(HaveKey(environment.Name))
@@ -392,10 +396,10 @@ var _ = Describe("PolarisEnvStateManager", func() {
 			)
 
 			Expect(manager.ReconcileAfterUninstall(ctx, app, environment.Name)).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, first.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, first.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
-			stored, err = store.Get(ctx, app.ID, second.Name)
+			stored, err = configStore.Get(ctx, polaris.ByName(app.ID, second.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 		})
@@ -412,7 +416,7 @@ var _ = Describe("PolarisEnvStateManager", func() {
 			)
 
 			Expect(manager.ReconcileAfterUninstall(ctx, app, environment.Name)).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 			Expect(stored.GetEnvState(otherEnvironment.Name).AppliedFields).To(Equal(applied))
@@ -426,12 +430,12 @@ var _ = Describe("PolarisEnvStateManager", func() {
 					environment.Name: envState(redeployFields("k1", "t1", 8080)),
 				},
 			)
-			Expect(store.UpsertEnvWeight(
-				ctx, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
+			Expect(polaris.UpsertEnvWeight(
+				ctx, db, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
 			)).To(Succeed())
 
 			Expect(manager.ReconcileAfterUninstall(ctx, app, environment.Name)).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 			Expect(stored.EnvWeights[environment.Name]).To(Equal(int32(35)))
@@ -446,12 +450,12 @@ var _ = Describe("PolarisEnvStateManager", func() {
 					environment.Name: envState(redeployFields("k1", "t1", 8080)),
 				},
 			)
-			Expect(store.UpsertEnvWeight(
-				ctx, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
+			Expect(polaris.UpsertEnvWeight(
+				ctx, db, app.ID, config.Name, environment.Name, 35, lo.ToPtr(true),
 			)).To(Succeed())
 
 			Expect(manager.ReconcileAfterUninstall(ctx, app, environment.Name)).To(Succeed())
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 			Expect(stored.EnvWeights).NotTo(HaveKey(environment.Name))

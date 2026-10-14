@@ -24,42 +24,47 @@ import (
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
-	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	polarisinfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
+	gstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("PolarisPlatformManager", func() {
 	var (
-		ctx       context.Context
-		diApp     *fxtest.App
-		appStore  bkmsapp.ApplicationStore
-		store     polaris.PolarisConfigStore
-		manager   *polaris.PolarisPlatformManager
-		testAppID string
+		ctx         context.Context
+		diApp       *fxtest.App
+		appStore    *bkmsapp.ApplicationStore
+		configStore *polaris.ConfigStore
+		db          *mongo.Database
+		manager     *polaris.PolarisPlatformManager
+		testAppID   string
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			polaris.FxModule,
-			depsvcmodel.FxModule,
+			gstore.FxModule,
 			fx.Provide(polaris.NewPolarisPlatformManager),
-			fx.Populate(&appStore, &store, &manager),
+			fx.Populate(&manager),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		configStore = gstore.Of(db, polaris.ConfigMeta)
 		testAppID = dbfactory.Application(ctx, appStore).ID
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, testAppID)
+		_, _ = configStore.DeleteMany(ctx, polaris.ByApp(testAppID))
 		diApp.RequireStop()
 	})
 
@@ -84,7 +89,7 @@ var _ = Describe("PolarisPlatformManager", func() {
 					},
 					ScopeEnvNames: []string{"dev"},
 				}
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 
 				instances, err := manager.ListPolarisServiceInstances(ctx, testAppID, "dev")
 				Expect(err).NotTo(HaveOccurred())

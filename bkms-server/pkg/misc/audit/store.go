@@ -20,71 +20,35 @@ package audit
 
 import (
 	"context"
-	"regexp"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// 存储操作记录数据的 MongoDB 集合名称
-const collectionName = "operation_records"
+// ErrOperationRecordNotFound is returned when an operation record is not found.
+var ErrOperationRecordNotFound = errors.New("operation record not found")
 
-// OperationRecordStore 是用于管理操作记录的存储接口
-type OperationRecordStore interface {
-	// List 获取操作记录列表，支持分页 & 关键字查询
-	// opts: 查询选项
-	// 返回值：
-	// - records: 操作记录列表
-	// - total: 总记录数
-	// - err: 错误信息
-	List(ctx context.Context, opts ListOptions) ([]OperationRecord, int64, error)
+// OperationRecordStore 操作记录存储
+type OperationRecordStore = store.GenericStore[OperationRecord]
 
-	// Get 通过 ID 获取操作记录
-	Get(ctx context.Context, id string) (*OperationRecord, error)
-
-	// Create 创建新的操作记录
-	Create(ctx context.Context, record *OperationRecord) (string, error)
-
-	// Update 更新已经存在的操作记录
-	Update(ctx context.Context, record *OperationRecord) error
-
-	// GetLatestOperationTimesByWorkspacesForUser 批量查询指定用户在各 workspace 的最近操作时间
-	GetLatestOperationTimesByWorkspacesForUser(
-		ctx context.Context, workspaceIDs []string, username string,
-	) (map[string]time.Time, error)
-
-	// GetLatestOperationTimesByAppsForUser 批量查询指定用户在指定 workspace 下各 app 的最近操作时间
-	GetLatestOperationTimesByAppsForUser(
-		ctx context.Context, workspaceID string, appIDs []string, username string,
-	) (map[string]time.Time, error)
-
-	// DeleteAll 删除所有操作记录并保留集合及索引（仅用于测试）
-	DeleteAll(ctx context.Context) error
+// OperationRecordMeta 操作记录的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 查询提速：username + group.workspaceID + createdAt(倒序)
+// - 查询提速：username + group.workspaceID + group.appID + createdAt(倒序)
+var OperationRecordMeta = store.Meta[OperationRecord]{
+	Collection: "operation_records",
+	NotFound:   ErrOperationRecordNotFound,
 }
 
-var _ OperationRecordStore = &OperationRecordStoreMongo{}
-
-// OperationRecordStoreMongo 是 OperationRecordStore 接口的 MongoDB 实现
-type OperationRecordStoreMongo struct {
-	collection *mongo.Collection
-}
-
-// NewOperationRecordStoreMongo 创建新的 OperationRecordStoreMongo 实例
-func NewOperationRecordStoreMongo(client *mongo.Client, dbName string) (*OperationRecordStoreMongo, error) {
-	coll := client.Database(dbName).Collection(collectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 查询提速：username + group.workspaceID + createdAt(倒序)
-	// - 查询提速：username + group.workspaceID + group.appID + createdAt(倒序)
-	return &OperationRecordStoreMongo{collection: coll}, nil
-}
-
-// DeleteAll 删除所有操作记录并保留集合及索引（仅用于测试）
-func (s *OperationRecordStoreMongo) DeleteAll(ctx context.Context) error {
-	_, err := s.collection.DeleteMany(ctx, bson.M{})
-	return err
+// NewestFirst 按创建时间倒序，以 _id 兜底保证翻页稳定
+func NewestFirst() store.Opt {
+	return store.Combine(store.Desc("createdAt"), store.Desc("_id"))
 }
 
 // ListOptions 列表查询选项
@@ -114,8 +78,8 @@ type ListOptions struct {
 	Page, PageSize int64
 }
 
-// AsFilter 将选项转换为过滤器
-func (o *ListOptions) AsFilter() bson.M {
+// Cond 将选项中的过滤条件（不含分页）转换为查询条件，空值字段不参与过滤
+func (o *ListOptions) Cond() store.Opt {
 	filter := bson.M{}
 	// 分组过滤
 	if o.WorkspaceID != "" {
@@ -135,9 +99,6 @@ func (o *ListOptions) AsFilter() bson.M {
 		}
 	}
 	// 数据字段过滤
-	if o.Username != "" {
-		filter["username"] = buildCaseInsensitiveMatch(o.Username)
-	}
 	if o.OpType != "" {
 		filter["operationType"] = o.OpType
 	}
@@ -147,93 +108,36 @@ func (o *ListOptions) AsFilter() bson.M {
 	if o.Result != "" {
 		filter["result"] = o.Result
 	}
-	return filter
+	return store.Combine(store.Filter(filter), store.ContainsIgnoreCase(o.Username, "username"))
 }
 
-// List 获取操作记录列表
-func (s *OperationRecordStoreMongo) List(ctx context.Context, opts ListOptions) ([]OperationRecord, int64, error) {
-	// 统计总数
-	total, err := s.collection.CountDocuments(ctx, opts.AsFilter())
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "count operation records")
-	}
-
-	// 分页查询
-	cursor, err := s.collection.Find(
-		ctx,
-		opts.AsFilter(),
-		options.Find().
-			SetLimit(opts.PageSize).
-			SetSkip((opts.Page-1)*opts.PageSize).
-			SetSort(bson.D{{"createdAt", -1}}),
-	)
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "find operation records")
-	}
-	defer cursor.Close(ctx)
-
-	var records []OperationRecord
-	if err = cursor.All(ctx, &records); err != nil {
-		return nil, 0, errors.Wrap(err, "decode operation records")
-	}
-	return records, total, nil
+// ListRecords 按选项分页获取操作记录，最新的在前
+func ListRecords(ctx context.Context, db *mongo.Database, opts ListOptions) (*store.Page[OperationRecord], error) {
+	page, err := store.Of(db, OperationRecordMeta).ListPage(ctx, opts.Page, opts.PageSize, opts.Cond(), NewestFirst())
+	return page, errors.Wrap(err, "list operation records")
 }
 
-// Get 通过 ID 获取操作记录
-func (s *OperationRecordStoreMongo) Get(ctx context.Context, id string) (*OperationRecord, error) {
-	objID, err := bson.ObjectIDFromHex(id)
-	if err != nil {
-		return nil, errors.Wrapf(err, "invalid format id %s", id)
-	}
-
-	var record OperationRecord
-	if err = s.collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&record); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errors.Wrapf(err, "operation record for id %s not found", id)
-		}
-		return nil, err
-	}
-	return &record, nil
+// GetLatestOperationTimesByWorkspacesForUser 批量查询指定用户在各 workspace 的最近操作时间，key 为 workspaceID
+func GetLatestOperationTimesByWorkspacesForUser(
+	ctx context.Context, db *mongo.Database, workspaceIDs []string, username string,
+) (map[string]time.Time, error) {
+	m, err := latestOperationTimes(ctx, db, "group.workspaceID", bson.M{
+		"group.workspaceID": bson.M{"$in": workspaceIDs},
+		"username":          username,
+	})
+	return m, errors.Wrapf(err, "get latest operation times of user %s by workspaces", username)
 }
 
-// Create 创建新的操作记录
-func (s *OperationRecordStoreMongo) Create(ctx context.Context, record *OperationRecord) (string, error) {
-	ret, err := s.collection.InsertOne(ctx, record)
-	if err != nil {
-		return "", err
-	}
-	if oid, ok := ret.InsertedID.(bson.ObjectID); ok {
-		return oid.Hex(), nil
-	}
-	return "", errors.New("failed to get inserted ID")
-}
-
-// Update 更新已经存在的操作记录
-// 注意：只更新可变字段，不更新创建时的固定字段（如 username、type、resourceType 等）
-func (s *OperationRecordStoreMongo) Update(ctx context.Context, record *OperationRecord) error {
-	updateDoc := bson.M{"updatedAt": time.Now()}
-	// 操作结果（从 running → success / failed / canceled）
-	if record.Result != "" {
-		updateDoc["result"] = record.Result
-	}
-	// 操作前数据（可能需要补充）
-	if record.Data.Before != nil {
-		updateDoc["data.before"] = record.Data.Before
-	}
-	// 操作后数据（可能需要补充）
-	if record.Data.After != nil {
-		updateDoc["data.after"] = record.Data.After
-	}
-	// 额外信息
-	if record.Data.Extras != nil {
-		updateDoc["data.extras"] = record.Data.Extras
-	}
-
-	// 更新记录
-	if _, err := s.collection.UpdateOne(ctx, bson.M{"_id": record.ID}, bson.M{"$set": updateDoc}); err != nil {
-		return err
-	}
-	return nil
+// GetLatestOperationTimesByAppsForUser 批量查询指定用户在指定 workspace 下各 app 的最近操作时间，key 为 appID
+func GetLatestOperationTimesByAppsForUser(
+	ctx context.Context, db *mongo.Database, workspaceID string, appIDs []string, username string,
+) (map[string]time.Time, error) {
+	m, err := latestOperationTimes(ctx, db, "group.appID", bson.M{
+		"group.workspaceID": workspaceID,
+		"group.appID":       bson.M{"$in": appIDs},
+		"username":          username,
+	})
+	return m, errors.Wrapf(err, "get latest operation times of user %s by apps in workspace %s", username, workspaceID)
 }
 
 // latestTimeResult 用于解码 aggregation 结果
@@ -242,78 +146,20 @@ type latestTimeResult struct {
 	LatestAt time.Time `bson:"latestAt"`
 }
 
-// GetLatestOperationTimesByWorkspacesForUser 批量查询指定用户在各 workspace 的最近操作时间
-func (s *OperationRecordStoreMongo) GetLatestOperationTimesByWorkspacesForUser(
-	ctx context.Context, workspaceIDs []string, username string,
+// latestOperationTimes 按 groupField 分组，统计匹配 match 的记录中各组的最近操作时间
+func latestOperationTimes(
+	ctx context.Context, db *mongo.Database, groupField string, match bson.M,
 ) (map[string]time.Time, error) {
 	pipeline := mongo.Pipeline{
-		{{"$match", bson.M{
-			"group.workspaceID": bson.M{"$in": workspaceIDs},
-			"username":          username,
-		}}},
-		{{"$group", bson.M{
-			"_id":      "$group.workspaceID",
+		{{Key: "$match", Value: match}},
+		{{Key: "$group", Value: bson.M{
+			"_id":      "$" + groupField,
 			"latestAt": bson.M{"$max": "$createdAt"},
 		}}},
 	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
+	results, err := store.Aggregate[latestTimeResult](ctx, store.Of(db, OperationRecordMeta), pipeline)
 	if err != nil {
-		return nil, errors.Wrap(err, "aggregate latest operation times by workspaces for user")
+		return nil, errors.Wrapf(err, "aggregate latest operation times by %s", groupField)
 	}
-	defer cursor.Close(ctx)
-
-	var results []latestTimeResult
-	if err = cursor.All(ctx, &results); err != nil {
-		return nil, errors.Wrap(err, "decode aggregation results")
-	}
-
-	m := make(map[string]time.Time, len(results))
-	for _, r := range results {
-		m[r.ID] = r.LatestAt
-	}
-	return m, nil
-}
-
-// GetLatestOperationTimesByAppsForUser 批量查询指定用户在指定 workspace 下各 app 的最近操作时间
-func (s *OperationRecordStoreMongo) GetLatestOperationTimesByAppsForUser(
-	ctx context.Context, workspaceID string, appIDs []string, username string,
-) (map[string]time.Time, error) {
-	pipeline := mongo.Pipeline{
-		{{"$match", bson.M{
-			"group.workspaceID": workspaceID,
-			"group.appID":       bson.M{"$in": appIDs},
-			"username":          username,
-		}}},
-		{{"$group", bson.M{
-			"_id":      "$group.appID",
-			"latestAt": bson.M{"$max": "$createdAt"},
-		}}},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, errors.Wrap(err, "aggregate latest operation times by apps for user")
-	}
-	defer cursor.Close(ctx)
-
-	var results []latestTimeResult
-	if err = cursor.All(ctx, &results); err != nil {
-		return nil, errors.Wrap(err, "decode aggregation results")
-	}
-
-	m := make(map[string]time.Time, len(results))
-	for _, r := range results {
-		m[r.ID] = r.LatestAt
-	}
-	return m, nil
-}
-
-// buildCaseInsensitiveMatch 构造过滤器，转义特殊字符，忽略大小写进行模糊匹配
-func buildCaseInsensitiveMatch(s string) bson.M {
-	pattern := regexp.QuoteMeta(s)
-	return bson.M{
-		"$regex":   pattern,
-		"$options": "i",
-	}
+	return lo.SliceToMap(results, func(r latestTimeResult) (string, time.Time) { return r.ID, r.LatestAt }), nil
 }

@@ -25,29 +25,20 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
-	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
 var _ = Describe("AppEnvVarService", func() {
 	var (
-		diApp                     *fxtest.App
-		ctx                       context.Context
-		appStore                  bkmsapp.ApplicationStore
-		appModelStore             appmodel.AppModelStore
-		appConfigFileStore        appcfg.AppConfigFileStore
-		appConfigFileDefStore     appcfg.AppConfigFileDefStore
-		appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-		buildConfigStore          imagebuild.ConfigStore
-		service                   *appmodel.AppEnvVarService
+		ctx      context.Context
+		appStore *bkmsapp.ApplicationStore
+		service  *appmodel.AppEnvVarService
 	)
 
 	BeforeEach(func() {
@@ -56,37 +47,13 @@ var _ = Describe("AppEnvVarService", func() {
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
 		ctx = context.Background()
-		diApp = fxtest.New(
-			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
-			appcfg.FxModule,
-			imagebuild.FxModule,
-			fx.Populate(
-				&appStore,
-				&appModelStore,
-				&appConfigFileStore,
-				&appConfigFileDefStore,
-				&appConfigFileVersionStore,
-				&buildConfigStore,
-				&service,
-			),
-		)
-		diApp.RequireStart()
-	})
-
-	AfterEach(func() {
-		diApp.RequireStop()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		service = appmodel.NewAppEnvVarService(testutil.NewDB(GinkgoT()))
 	})
 
 	newTrpcApp := func(envVars []appmodel.Variable) *bkmsapp.Application {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
-			BuildConfigStore:          buildConfigStore,
+			AppStore: appStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			EnvVars: envVars,
 		})

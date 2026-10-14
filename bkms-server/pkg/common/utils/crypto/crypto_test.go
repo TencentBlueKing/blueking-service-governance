@@ -60,4 +60,34 @@ var _ = Describe("Test crypto tools", func() {
 		Entry("case AES 24 bytes", "AES", crypto.AESEncrypt, crypto.AESDecrypt, 24),
 		Entry("case AES 32 bytes", "AES", crypto.AESEncrypt, crypto.AESDecrypt, 32),
 	)
+
+	Describe("OnDemand", func() {
+		var key string
+
+		BeforeEach(func() {
+			var err error
+			key, err = crypto.GenerateKey(32)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should round trip non-empty data", func() {
+			ciphertext, err := crypto.OnDemand(key, crypto.AESEncrypt, "secret")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ciphertext).NotTo(Equal("secret"))
+
+			plaintext, err := crypto.OnDemand(key, crypto.AESDecrypt, ciphertext)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plaintext).To(Equal("secret"))
+		})
+
+		It("should leave empty data untouched", func() {
+			Expect(crypto.OnDemand(key, crypto.AESEncrypt, "")).To(BeEmpty())
+			Expect(crypto.OnDemand(key, crypto.AESDecrypt, "")).To(BeEmpty())
+		})
+
+		It("should propagate errors from fn", func() {
+			_, err := crypto.OnDemand(key, crypto.AESDecrypt, "not-hex")
+			Expect(err).To(MatchError(ContainSubstring("hex decode string")))
+		})
+	})
 })

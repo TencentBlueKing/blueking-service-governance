@@ -23,6 +23,7 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
@@ -30,6 +31,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // AppModelDeployRecordOpts 定义创建 AppModel 部署记录时的可覆盖字段
@@ -45,7 +47,7 @@ type AppModelDeployRecordOpts struct {
 // AppModelDeployRecord 创建并持久化一条 AppModel 部署记录，返回部署 ID
 func AppModelDeployRecord(
 	ctx context.Context,
-	store appmodeldeploy.RecordStore,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 	opts *AppModelDeployRecordOpts,
@@ -69,7 +71,7 @@ func AppModelDeployRecord(
 	if namespace == "" {
 		namespace = "ns-" + stringx.Random(6)
 	}
-	deployID, err := store.Create(ctx, &appmodeldeploy.Record{
+	record := &appmodeldeploy.Record{
 		WorkspaceID:     app.WorkspaceID,
 		AppID:           app.ID,
 		EnvName:         env.Name,
@@ -79,9 +81,10 @@ func AppModelDeployRecord(
 		Namespace:       namespace,
 		LabelSelector:   opts.LabelSelector,
 		ImageTag:        imageTag,
-	})
+	}
+	err := store.Of(db, appmodeldeploy.RecordMeta).Create(ctx, record)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	return deployID
+	return record.ID.Hex()
 }
 
 // BuildAutoDeployRecordOpts 定义创建构建自动部署记录时的可覆盖字段
@@ -96,7 +99,7 @@ type BuildAutoDeployRecordOpts struct {
 // BuildAutoDeployRecord 创建并持久化一条构建自动部署记录，用于测试
 func BuildAutoDeployRecord(
 	ctx context.Context,
-	store autodeploy.RecordStore,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 	opts *BuildAutoDeployRecordOpts,
@@ -116,7 +119,7 @@ func BuildAutoDeployRecord(
 	if status == "" {
 		status = string(appmodeldeploy.StatusDeploying)
 	}
-	err := store.Create(ctx, &autodeploy.Record{
+	err := store.Of(db, autodeploy.RecordMeta).Create(ctx, &autodeploy.Record{
 		WorkspaceID:     app.WorkspaceID,
 		AppID:           app.ID,
 		AppType:         app.Type,
@@ -140,7 +143,7 @@ type HelmDeployRecordOpts struct {
 // HelmDeployRecord 创建并持久化一条 Helm 部署记录，用于测试
 func HelmDeployRecord(
 	ctx context.Context,
-	store helmdeploy.RecordStore,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 	opts *HelmDeployRecordOpts,
@@ -156,7 +159,7 @@ func HelmDeployRecord(
 	if imageTag == "" {
 		imageTag = "helm-v1"
 	}
-	_, err := store.Create(ctx, &helmdeploy.Record{
+	err := store.Of(db, helmdeploy.RecordMeta).Create(ctx, &helmdeploy.Record{
 		WorkspaceID:     app.WorkspaceID,
 		AppID:           app.ID,
 		EnvName:         env.Name,

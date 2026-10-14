@@ -31,140 +31,118 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
-var _ = Describe("AppDashboardStoreMongo", func() {
+var _ = Describe("AppDashboard store", func() {
 	var (
-		ctx   context.Context
-		diApp *fxtest.App
-		store AppDashboardStore
+		ctx        context.Context
+		dashboards *Store
+		service    *Service
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		err := testutil.CleanupCollection("bkmonitor_app_dashboard")
-		Expect(err).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 
-		diApp = fxtest.New(
-			GinkgoT(),
-			FxModule,
-			fx.Populate(&store),
-		)
+		diApp := fxtest.New(GinkgoT(), FxModule, fx.Populate(&service))
 		diApp.RequireStart()
+		DeferCleanup(diApp.RequireStop)
+		dashboards = testutil.NewStore(GinkgoT(), Meta)
 	})
 
-	AfterEach(func() {
-		diApp.RequireStop()
-	})
+	mustCreate := func(d *AppDashboard) {
+		Expect(dashboards.Create(ctx, d)).To(Succeed())
+	}
 
 	Describe("Create", func() {
-		It("should create a binding successfully", func() {
-			d := &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "My Dashboard", Creator: "user1"}
-			id, err := store.Create(ctx, d)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(id).NotTo(Equal(bson.NilObjectID))
-			Expect(d.CreatedAt).NotTo(BeZero())
+		It("should reject bindings missing required fields", func() {
+			err := dashboards.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1"})
+			Expect(err).To(MatchError(ContainSubstring("AppDashboard validation failed")))
 		})
 
 		It("should reject duplicate (appID, uid)", func() {
-			_, err := store.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
-			Expect(err).NotTo(HaveOccurred())
+			mustCreate(&AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
 
-			_, err = store.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t2"})
-			Expect(err).To(HaveOccurred())
+			err := dashboards.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t2"})
 			Expect(errors.Is(err, ErrDuplicate)).To(BeTrue())
 		})
 
 		It("should allow same uid across different apps", func() {
-			_, err := store.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = store.Create(ctx, &AppDashboard{AppID: "app-b", UID: "uid-1", Title: "t2"})
-			Expect(err).NotTo(HaveOccurred())
+			mustCreate(&AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
+			mustCreate(&AppDashboard{AppID: "app-b", UID: "uid-1", Title: "t2"})
 		})
 	})
 
-	Describe("ListByApp", func() {
-		BeforeEach(func() {
-			_, _ = store.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
-			_, _ = store.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-2", Title: "t2"})
-			_, _ = store.Create(ctx, &AppDashboard{AppID: "app-b", UID: "uid-3", Title: "t3"})
-		})
-
+	Describe("ByApp", func() {
 		It("should list bindings by app ID", func() {
-			list, err := store.ListByApp(ctx, "app-a")
+			mustCreate(&AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
+			mustCreate(&AppDashboard{AppID: "app-a", UID: "uid-2", Title: "t2"})
+			mustCreate(&AppDashboard{AppID: "app-b", UID: "uid-3", Title: "t3"})
+
+			list, err := dashboards.List(ctx, ByApp("app-a"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list).To(HaveLen(2))
 
-			list, err = store.ListByApp(ctx, "app-b")
+			list, err = dashboards.List(ctx, ByApp("app-b"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list).To(HaveLen(1))
 			Expect(list[0].UID).To(Equal("uid-3"))
 		})
-
-		It("should return empty list when no bindings", func() {
-			list, err := store.ListByApp(ctx, "app-empty")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(list).To(BeEmpty())
-		})
 	})
 
-	Describe("Update", func() {
+	Describe("Service.Update", func() {
 		BeforeEach(func() {
-			_, _ = store.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
+			mustCreate(&AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
 		})
 
-		It("should update title", func() {
+		It("should update title and updater", func() {
 			newTitle := "New Title"
-			err := store.Update(ctx, "app-a", "uid-1", "tester", &AppDashboardUpdateData{Title: &newTitle})
+			err := service.Update(ctx, nil, "app-a", "uid-1", "tester", &AppDashboardUpdateData{Title: &newTitle})
 			Expect(err).NotTo(HaveOccurred())
 
-			list, err := store.ListByApp(ctx, "app-a")
+			got, err := dashboards.Get(ctx, ByAppAndUID("app-a", "uid-1"))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(list).To(HaveLen(1))
-			Expect(list[0].Title).To(Equal("New Title"))
-			Expect(list[0].Updater).To(Equal("tester"))
+			Expect(got.Title).To(Equal("New Title"))
+			Expect(got.Updater).To(Equal("tester"))
 		})
 
-		It("should update uid", func() {
-			newUID := "uid-new"
-			err := store.Update(ctx, "app-a", "uid-1", "tester", &AppDashboardUpdateData{UID: &newUID})
+		It("should do nothing when there is nothing to update", func() {
+			Expect(service.Update(ctx, nil, "app-a", "uid-1", "tester", &AppDashboardUpdateData{})).To(Succeed())
+
+			got, err := dashboards.Get(ctx, ByAppAndUID("app-a", "uid-1"))
 			Expect(err).NotTo(HaveOccurred())
-
-			list, err := store.ListByApp(ctx, "app-a")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(list[0].UID).To(Equal("uid-new"))
-		})
-
-		It("should reject duplicate uid on update", func() {
-			_, _ = store.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-2", Title: "t2"})
-
-			newUID := "uid-2"
-			err := store.Update(ctx, "app-a", "uid-1", "tester", &AppDashboardUpdateData{UID: &newUID})
-			Expect(errors.Is(err, ErrDuplicate)).To(BeTrue())
+			Expect(got.Updater).To(BeEmpty())
 		})
 
 		It("should return not found when binding missing", func() {
 			newTitle := "x"
-			err := store.Update(ctx, "app-a", "uid-missing", "tester", &AppDashboardUpdateData{Title: &newTitle})
+			err := service.Update(
+				ctx, nil, "app-a", "uid-missing", "tester", &AppDashboardUpdateData{Title: &newTitle},
+			)
 			Expect(errors.Is(err, ErrNotFound)).To(BeTrue())
+		})
+
+		It("should reject duplicate uid", func() {
+			mustCreate(&AppDashboard{AppID: "app-a", UID: "uid-2", Title: "t2"})
+
+			err := dashboards.Update(ctx, bson.M{"uid": "uid-2"}, ByAppAndUID("app-a", "uid-1"))
+			Expect(errors.Is(err, ErrDuplicate)).To(BeTrue())
 		})
 	})
 
-	Describe("Delete", func() {
+	Describe("Service.Delete", func() {
 		BeforeEach(func() {
-			_, _ = store.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
+			mustCreate(&AppDashboard{AppID: "app-a", UID: "uid-1", Title: "t1"})
 		})
 
 		It("should delete binding", func() {
-			err := store.Delete(ctx, "app-a", "uid-1")
-			Expect(err).NotTo(HaveOccurred())
+			Expect(service.Delete(ctx, "app-a", "uid-1")).To(Succeed())
 
-			list, err := store.ListByApp(ctx, "app-a")
+			list, err := dashboards.List(ctx, ByApp("app-a"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list).To(BeEmpty())
 		})
 
 		It("should return not found when binding missing", func() {
-			err := store.Delete(ctx, "app-a", "uid-missing")
+			err := service.Delete(ctx, "app-a", "uid-missing")
 			Expect(errors.Is(err, ErrNotFound)).To(BeTrue())
 		})
 	})

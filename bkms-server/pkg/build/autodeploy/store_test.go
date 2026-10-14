@@ -26,18 +26,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("RecordStoreMongo", func() {
+var _ = Describe("RecordStore", func() {
 	var (
-		store           autodeploy.RecordStore
-		diApp           *fxtest.App
 		ctx             context.Context
+		db              *mongo.Database
+		records         *autodeploy.RecordStore
 		appID           string
 		trafficLaneName string
 	)
@@ -60,51 +60,34 @@ var _ = Describe("RecordStoreMongo", func() {
 	}
 
 	BeforeEach(func() {
-		diApp = fxtest.New(
-			GinkgoT(),
-			autodeploy.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
-
 		ctx = context.Background()
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, autodeploy.RecordMeta)
 		appID = "test-app-" + stringx.Random(6)
 		trafficLaneName = ""
-	})
-
-	AfterEach(func() {
-		diApp.RequireStop()
-	})
-
-	Describe("Create", func() {
-		It("should create a record and set timestamps", func() {
-			record := newRecord("stag", "v1", trafficLaneName)
-
-			Expect(store.Create(ctx, record)).To(Succeed())
-
-			got, err := store.GetByBuildID(ctx, appID, record.BuildID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.ID).NotTo(Equal(bson.NilObjectID))
-			Expect(got.AppID).To(Equal(appID))
-			Expect(got.EnvName).To(Equal("stag"))
-			Expect(got.ImageTag).To(Equal("v1"))
-			Expect(got.Stage).To(Equal(autodeploy.StageBuild))
-			Expect(got.Status).To(Equal("pending"))
-			Expect(got.CreatedAt).NotTo(BeZero())
-			Expect(got.UpdatedAt).NotTo(BeZero())
-			Expect(got.UpdatedAt).To(Equal(got.CreatedAt))
+		DeferCleanup(func() {
+			Expect(testutil.CleanupMetaColl(autodeploy.RecordMeta)).To(Succeed())
 		})
 	})
 
-	Describe("Update", func() {
-		It("should update mutable fields and refresh updatedAt", func() {
+	Describe("Create", func() {
+		It("should reject a duplicated appID + buildID", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
-			Expect(store.Create(ctx, record)).To(Succeed())
+			Expect(records.Create(ctx, record)).To(Succeed())
 
-			created, err := store.GetByBuildID(ctx, appID, record.BuildID)
+			dup := newRecord("stag", "v2", trafficLaneName)
+			dup.BuildID = record.BuildID
+			Expect(records.Create(ctx, dup)).To(MatchError(store.ErrDuplicate))
+		})
+	})
+
+	Describe("UpdateRecord", func() {
+		It("should only update mutable fields", func() {
+			record := newRecord("stag", "v1", trafficLaneName)
+			Expect(records.Create(ctx, record)).To(Succeed())
+
+			created, err := records.Get(ctx, autodeploy.ByBuild(appID, record.BuildID))
 			Expect(err).NotTo(HaveOccurred())
-
-			time.Sleep(5 * time.Millisecond)
 
 			endedAt := time.Now()
 			created.DeployID = "deploy-" + stringx.Random(8)
@@ -112,18 +95,19 @@ var _ = Describe("RecordStoreMongo", func() {
 			created.Status = "deployed"
 			created.Message = "ok"
 			created.EndedAt = endedAt
+			// 不在更新范围内的字段，不应写入
+			created.ImageTag = "v2"
 
-			Expect(store.Update(ctx, created)).To(Succeed())
+			Expect(autodeploy.UpdateRecord(ctx, db, created)).To(Succeed())
 
-			got, err := store.GetByBuildID(ctx, appID, record.BuildID)
+			got, err := records.Get(ctx, autodeploy.ByBuild(appID, record.BuildID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.DeployID).To(Equal(created.DeployID))
 			Expect(got.Stage).To(Equal(autodeploy.StageDeploy))
 			Expect(got.Status).To(Equal("deployed"))
 			Expect(got.Message).To(Equal("ok"))
 			Expect(got.EndedAt.Unix()).To(Equal(endedAt.Unix()))
-			Expect(got.UpdatedAt.UnixMilli()).To(BeNumerically(">", created.CreatedAt.UnixMilli()))
-			// Update 只更新指定字段，ImageTag 等保持不变
+			// UpdateRecord 只更新指定字段，ImageTag 等保持不变
 			Expect(got.ImageTag).To(Equal("v1"))
 		})
 
@@ -131,7 +115,7 @@ var _ = Describe("RecordStoreMongo", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
 			record.ID = bson.NewObjectID()
 
-			err := store.Update(ctx, record)
+			err := autodeploy.UpdateRecord(ctx, db, record)
 			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
 		})
 	})
@@ -139,22 +123,22 @@ var _ = Describe("RecordStoreMongo", func() {
 	Describe("GetLatest", func() {
 		It("should return the newest record for the env and traffic lane", func() {
 			older := newRecord("stag", "stag-v1", trafficLaneName)
-			Expect(store.Create(ctx, older)).To(Succeed())
+			Expect(records.Create(ctx, older)).To(Succeed())
 			time.Sleep(5 * time.Millisecond)
 
 			newer := newRecord("stag", "stag-v2", trafficLaneName)
-			Expect(store.Create(ctx, newer)).To(Succeed())
-			Expect(store.Create(ctx, newRecord("prod", "prod-v1", trafficLaneName))).To(Succeed())
-			Expect(store.Create(ctx, newRecord("stag", "lane-v1", "lane-a"))).To(Succeed())
+			Expect(records.Create(ctx, newer)).To(Succeed())
+			Expect(records.Create(ctx, newRecord("prod", "prod-v1", trafficLaneName))).To(Succeed())
+			Expect(records.Create(ctx, newRecord("stag", "lane-v1", "lane-a"))).To(Succeed())
 
-			got, err := store.GetLatest(ctx, appID, "stag", trafficLaneName)
+			got, err := autodeploy.GetLatest(ctx, db, appID, "stag", trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.ImageTag).To(Equal("stag-v2"))
 			Expect(got.BuildID).To(Equal(newer.BuildID))
 		})
 
 		It("should return ErrRecordNotFound when no record exists", func() {
-			_, err := store.GetLatest(ctx, appID, "stag", trafficLaneName)
+			_, err := autodeploy.GetLatest(ctx, db, appID, "stag", trafficLaneName)
 			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
 		})
 	})
@@ -165,11 +149,10 @@ var _ = Describe("RecordStoreMongo", func() {
 		// 创建后再显式回写 createdAt，用明确时间差拉开新旧记录，避免 CI 抖动影响结果。
 		createAt := func(record *autodeploy.Record, createdAt time.Time) {
 			GinkgoHelper()
-			Expect(store.Create(ctx, record)).To(Succeed())
-			got, err := store.GetByBuildID(ctx, record.AppID, record.BuildID)
-			Expect(err).NotTo(HaveOccurred())
-			_, err = database.Client().Database(database.Name()).Collection("build_auto_deploy_records").UpdateByID(
-				ctx, got.ID, bson.M{"$set": bson.M{"createdAt": createdAt}},
+			Expect(records.Create(ctx, record)).To(Succeed())
+			// GenericStore 不允许更新 createdAt，直接写集合
+			_, err := db.Collection(autodeploy.RecordMeta.Collection).UpdateByID(
+				ctx, record.ID, bson.M{"$set": bson.M{"createdAt": createdAt}},
 			)
 			Expect(err).NotTo(HaveOccurred())
 		}
@@ -179,8 +162,8 @@ var _ = Describe("RecordStoreMongo", func() {
 			now := time.Now().UTC().Truncate(time.Millisecond)
 
 			createAt(newRecord("stag", "stag-v1", trafficLaneName), now.Add(-2*time.Second))
-			Expect(store.Create(ctx, newRecord("stag", "stag-v2", trafficLaneName))).To(Succeed())
-			Expect(store.Create(ctx, newRecord("prod", "prod-v1", trafficLaneName))).To(Succeed())
+			Expect(records.Create(ctx, newRecord("stag", "stag-v2", trafficLaneName))).To(Succeed())
+			Expect(records.Create(ctx, newRecord("prod", "prod-v1", trafficLaneName))).To(Succeed())
 
 			otherStag := newRecord("stag", "other-stag-v1", trafficLaneName)
 			otherStag.AppID = otherAppID
@@ -188,9 +171,9 @@ var _ = Describe("RecordStoreMongo", func() {
 
 			otherStagNew := newRecord("stag", "other-stag-v2", trafficLaneName)
 			otherStagNew.AppID = otherAppID
-			Expect(store.Create(ctx, otherStagNew)).To(Succeed())
+			Expect(records.Create(ctx, otherStagNew)).To(Succeed())
 
-			latest, err := store.ListLatestByApps(ctx, []string{appID, otherAppID}, trafficLaneName)
+			latest, err := autodeploy.ListLatestByApps(ctx, db, []string{appID, otherAppID}, trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest).To(HaveLen(2))
 			Expect(latest[appID]).To(HaveLen(2))
@@ -201,15 +184,15 @@ var _ = Describe("RecordStoreMongo", func() {
 		})
 
 		It("should only return records of the given traffic lane", func() {
-			Expect(store.Create(ctx, newRecord("stag", "base-v1", trafficLaneName))).To(Succeed())
-			Expect(store.Create(ctx, newRecord("stag", "lane-v1", "feature-lane"))).To(Succeed())
+			Expect(records.Create(ctx, newRecord("stag", "base-v1", trafficLaneName))).To(Succeed())
+			Expect(records.Create(ctx, newRecord("stag", "lane-v1", "feature-lane"))).To(Succeed())
 
-			latest, err := store.ListLatestByApps(ctx, []string{appID}, trafficLaneName)
+			latest, err := autodeploy.ListLatestByApps(ctx, db, []string{appID}, trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest).To(HaveLen(1))
 			Expect(latest[appID]["stag"].ImageTag).To(Equal("base-v1"))
 
-			laneLatest, err := store.ListLatestByApps(ctx, []string{appID}, "feature-lane")
+			laneLatest, err := autodeploy.ListLatestByApps(ctx, db, []string{appID}, "feature-lane")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(laneLatest).To(HaveLen(1))
 			Expect(laneLatest[appID]["stag"].ImageTag).To(Equal("lane-v1"))
@@ -218,13 +201,13 @@ var _ = Describe("RecordStoreMongo", func() {
 		It("should not return records of apps not in the list", func() {
 			otherAppID := "other-app-" + stringx.Random(6)
 
-			Expect(store.Create(ctx, newRecord("stag", "mine-v1", trafficLaneName))).To(Succeed())
+			Expect(records.Create(ctx, newRecord("stag", "mine-v1", trafficLaneName))).To(Succeed())
 
 			other := newRecord("stag", "other-v1", trafficLaneName)
 			other.AppID = otherAppID
-			Expect(store.Create(ctx, other)).To(Succeed())
+			Expect(records.Create(ctx, other)).To(Succeed())
 
-			latest, err := store.ListLatestByApps(ctx, []string{appID}, trafficLaneName)
+			latest, err := autodeploy.ListLatestByApps(ctx, db, []string{appID}, trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest).To(HaveLen(1))
 			Expect(latest).To(HaveKey(appID))
@@ -233,110 +216,98 @@ var _ = Describe("RecordStoreMongo", func() {
 		})
 
 		It("should omit apps that have no record", func() {
-			latest, err := store.ListLatestByApps(ctx, []string{"non-existent-app"}, trafficLaneName)
+			latest, err := autodeploy.ListLatestByApps(ctx, db, []string{"non-existent-app"}, trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(latest).To(BeEmpty())
+		})
+
+		It("should return an empty map for empty appIDs", func() {
+			latest, err := autodeploy.ListLatestByApps(ctx, db, nil, trafficLaneName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(latest).NotTo(BeNil())
 			Expect(latest).To(BeEmpty())
 		})
 	})
 
-	Describe("GetByBuildID", func() {
-		It("should return the record matching appID and buildID", func() {
+	Describe("ByBuild", func() {
+		It("should match the record by appID and buildID", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
-			Expect(store.Create(ctx, record)).To(Succeed())
+			Expect(records.Create(ctx, record)).To(Succeed())
 
-			got, err := store.GetByBuildID(ctx, appID, record.BuildID)
+			got, err := records.Get(ctx, autodeploy.ByBuild(appID, record.BuildID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.BuildID).To(Equal(record.BuildID))
 			Expect(got.ImageTag).To(Equal("v1"))
 		})
 
-		It("should return ErrRecordNotFound for unknown buildID", func() {
-			_, err := store.GetByBuildID(ctx, appID, "missing-build")
-			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
-		})
-
-		It("should not return another app's record with the same buildID", func() {
+		It("should not match another app's record with the same buildID", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
-			Expect(store.Create(ctx, record)).To(Succeed())
+			Expect(records.Create(ctx, record)).To(Succeed())
 
-			_, err := store.GetByBuildID(ctx, "other-app", record.BuildID)
+			_, err := records.Get(ctx, autodeploy.ByBuild("other-app", record.BuildID))
 			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
 		})
 	})
 
-	Describe("GetByDeployID", func() {
-		It("should return the record matching appID and deployID", func() {
+	Describe("ByDeploy", func() {
+		It("should match the record by appID and deployID", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
-			Expect(store.Create(ctx, record)).To(Succeed())
-
-			created, err := store.GetByBuildID(ctx, appID, record.BuildID)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(records.Create(ctx, record)).To(Succeed())
 
 			deployID := "deploy-" + stringx.Random(8)
-			created.DeployID = deployID
-			created.Stage = autodeploy.StageDeploy
-			created.Status = "deploying"
-			Expect(store.Update(ctx, created)).To(Succeed())
+			record.DeployID = deployID
+			record.Stage = autodeploy.StageDeploy
+			record.Status = "deploying"
+			Expect(autodeploy.UpdateRecord(ctx, db, record)).To(Succeed())
 
-			got, err := store.GetByDeployID(ctx, appID, deployID)
+			got, err := records.Get(ctx, autodeploy.ByDeploy(appID, deployID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.BuildID).To(Equal(record.BuildID))
 			Expect(got.DeployID).To(Equal(deployID))
 			Expect(got.Stage).To(Equal(autodeploy.StageDeploy))
 		})
 
-		It("should return ErrRecordNotFound for unknown deployID", func() {
-			_, err := store.GetByDeployID(ctx, appID, "missing-deploy")
-			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
-		})
-
-		It("should not return another app's record with the same deployID", func() {
+		It("should not match another app's record with the same deployID", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
-			Expect(store.Create(ctx, record)).To(Succeed())
-
-			created, err := store.GetByBuildID(ctx, appID, record.BuildID)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(records.Create(ctx, record)).To(Succeed())
 
 			deployID := "deploy-" + stringx.Random(8)
-			created.DeployID = deployID
-			Expect(store.Update(ctx, created)).To(Succeed())
+			record.DeployID = deployID
+			Expect(autodeploy.UpdateRecord(ctx, db, record)).To(Succeed())
 
-			_, err = store.GetByDeployID(ctx, "other-app", deployID)
+			_, err := records.Get(ctx, autodeploy.ByDeploy("other-app", deployID))
 			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
 		})
 
 		It("should not match empty deployID", func() {
-			// Create 后 DeployID 为空；GetByDeployID("", "") 不应误命中
-			Expect(store.Create(ctx, newRecord("stag", "v1", trafficLaneName))).To(Succeed())
+			// Create 后 DeployID 为空；ByDeploy(appID, "") 不应误命中
+			Expect(records.Create(ctx, newRecord("stag", "v1", trafficLaneName))).To(Succeed())
 
-			_, err := store.GetByDeployID(ctx, appID, "")
+			_, err := records.Get(ctx, autodeploy.ByDeploy(appID, ""))
 			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
 		})
 	})
 
-	// 保留一个组合场景，覆盖 Create → Update → GetLatest 主路径
+	// 保留一个组合场景，覆盖 Create → UpdateRecord → GetLatest 主路径
 	Describe("end-to-end flow", func() {
 		It("should reflect deploy progress through store APIs", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
-			Expect(store.Create(ctx, record)).To(Succeed())
-
-			created, err := store.GetByBuildID(ctx, appID, record.BuildID)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(records.Create(ctx, record)).To(Succeed())
 
 			deployID := "deploy-" + stringx.Random(8)
-			created.DeployID = deployID
-			created.Stage = autodeploy.StageDeploy
-			created.Status = "deployed"
-			created.Message = "done"
-			created.EndedAt = time.Now()
-			Expect(store.Update(ctx, created)).To(Succeed())
+			record.DeployID = deployID
+			record.Stage = autodeploy.StageDeploy
+			record.Status = "deployed"
+			record.Message = "done"
+			record.EndedAt = time.Now()
+			Expect(autodeploy.UpdateRecord(ctx, db, record)).To(Succeed())
 
-			latest, err := store.GetLatest(ctx, appID, "stag", trafficLaneName)
+			latest, err := autodeploy.GetLatest(ctx, db, appID, "stag", trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest.DeployID).To(Equal(deployID))
 			Expect(latest.Status).To(Equal("deployed"))
 
-			byDeploy, err := store.GetByDeployID(ctx, appID, deployID)
+			byDeploy, err := records.Get(ctx, autodeploy.ByDeploy(appID, deployID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(byDeploy.BuildID).To(Equal(record.BuildID))
 		})

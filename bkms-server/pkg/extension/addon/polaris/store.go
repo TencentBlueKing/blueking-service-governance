@@ -24,12 +24,10 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-)
 
-// The name of the MongoDB collection for storing polaris config data.
-const collectionName = "polaris_configs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
 
 // 环境维度子文档的根字段名，key 均为环境名。
 const (
@@ -44,42 +42,33 @@ const (
 // envStates 不属于此列——它记录的是系统观测到的部署事实，清理时机与写入方都不同。
 var envSettingFields = []string{envWeightsField, envDynamicWeightsField}
 
-// PolarisConfigStore 北极星配置存储接口
-type PolarisConfigStore interface {
-	// Create 创建北极星配置
-	Create(ctx context.Context, config *PolarisConfig) error
-	// Get 根据应用 ID 和配置名称获取北极星配置
-	Get(ctx context.Context, appID, name string) (*PolarisConfig, error)
-	// ListByApp 获取应用下的所有北极星配置
-	ListByApp(ctx context.Context, appID string) ([]*PolarisConfig, error)
-	// ListByEnv 获取应用在指定环境下可用的北极星配置列表
-	ListByEnv(ctx context.Context, appID, envName string) ([]*PolarisConfig, error)
-	// Update 根据应用 ID 和配置名称更新北极星配置
-	Update(ctx context.Context, appID, name string, updateData *ConfigUpdateData) error
-	// UpsertEnvState 幂等新增或更新指定环境的信息
-	UpsertEnvState(ctx context.Context, appID, name, envName string, update PolarisEnvStateUpdate) error
-	// UpsertEnvStateIfUpdatedAtMatch 仅当配置的顶层 updatedAt 与期望值匹配时更新环境信息。
-	// 返回值表示是否匹配到期望版本；版本不匹配时不会返回错误，也不会写入数据。
-	UpsertEnvStateIfUpdatedAtMatch(
-		ctx context.Context,
-		appID, name, envName string,
-		expectedUpdatedAt time.Time,
-		update PolarisEnvStateUpdate,
-	) (bool, error)
-	// UpsertEnvWeight 幂等设置指定环境的单实例权重与动态权重开关。
-	// dynamicWeight 为 nil 表示不改开关；两个字段在同一次更新中写入，不会出现中间态
-	UpsertEnvWeight(ctx context.Context, appID, name, envName string, weight int32, dynamicWeight *bool) error
-	// RemoveEnvStates 幂等移除多个指定环境的信息
-	RemoveEnvStates(ctx context.Context, appID, name string, envNames []string) error
-	// RemoveEnvSettings 幂等移除多个指定环境的全部环境级配置（见 envSettingFields），
-	RemoveEnvSettings(ctx context.Context, appID, name string, envNames []string) error
-	// Delete 根据应用 ID 和配置名称删除北极星配置
-	Delete(ctx context.Context, appID, name string) error
-	// DeleteByApp 删除应用下的所有北极星配置（仅测试使用）
-	DeleteByApp(ctx context.Context, appID string) error
+// ConfigStore 北极星配置存储
+type ConfigStore = store.GenericStore[PolarisConfig]
+
+// ConfigMeta 北极星配置的存储元数据。
+//
+// 顶层 updatedAt 同时是乐观锁版本号（见 UpsertEnvStateIfUpdatedAtMatch），
+// 只记录系统观测结果的环境状态写入与清理须带 store.KeepUpdatedAt()，不能推进它。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：appID + name
+var ConfigMeta = store.Meta[PolarisConfig]{
+	Collection: "polaris_configs",
+	NotFound:   ErrConfigNotFound,
+	Duplicate:  ErrConfigNameExists,
+	BeforeSave: []func(*PolarisConfig) error{fillConfigDefaults},
 }
 
-var _ PolarisConfigStore = &PolarisConfigStoreMongo{}
+// fillConfigDefaults 补齐配置名称与空的服务标签
+func fillConfigDefaults(config *PolarisConfig) error {
+	if config.Name == "" {
+		config.Name = config.GenerateName()
+	}
+	if config.ServiceLabels == nil {
+		config.ServiceLabels = make(map[string]string)
+	}
+	return nil
+}
 
 // PolarisEnvStateUpdate 定义单个环境信息的可选更新字段。
 type PolarisEnvStateUpdate struct {
@@ -87,230 +76,144 @@ type PolarisEnvStateUpdate struct {
 	LastError     *string
 }
 
-// PolarisConfigStoreMongo 北极星配置的 MongoDB 存储实现
-type PolarisConfigStoreMongo struct {
-	collection *mongo.Collection
+// ByApp 匹配应用下的全部北极星配置
+func ByApp(appID string) store.Opt {
+	return store.Where("appID", appID)
 }
 
-// NewPolarisConfigStoreMongo 创建北极星配置存储
-func NewPolarisConfigStoreMongo(client *mongo.Client, dbName string) (PolarisConfigStore, error) {
-	coll := client.Database(dbName).Collection(collectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：appID + name
-	return &PolarisConfigStoreMongo{collection: coll}, nil
+// ByName 按应用 ID 和配置名称匹配北极星配置
+func ByName(appID, name string) store.Opt {
+	return store.Combine(ByApp(appID), store.Where("name", name))
 }
 
-// Create 创建北极星配置
-func (s *PolarisConfigStoreMongo) Create(ctx context.Context, config *PolarisConfig) error {
-	now := time.Now()
-	if config.Name == "" {
-		config.Name = config.GenerateName()
-	}
-	if config.CreatedAt.IsZero() {
-		config.CreatedAt = now
-	}
-	if config.UpdatedAt.IsZero() {
-		config.UpdatedAt = now
-	}
-	if config.ServiceLabels == nil {
-		config.ServiceLabels = make(map[string]string)
-	}
-	if config.EnvStates == nil {
-		config.EnvStates = make(map[string]PolarisEnvState)
-	}
-
-	_, err := s.collection.InsertOne(ctx, config)
+// ListByEnv 获取应用在指定环境下可用的北极星配置列表
+func ListByEnv(ctx context.Context, db *mongo.Database, appID, envName string) ([]*PolarisConfig, error) {
+	configs, err := store.Of(db, ConfigMeta).List(ctx, ByApp(appID))
 	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return ErrConfigNameExists
+		return nil, errors.Wrapf(err, "list polaris configs of app %s", appID)
+	}
+	result := make([]*PolarisConfig, 0, len(configs))
+	for i := range configs {
+		// 检查配置是否在当前环境中可用
+		if configs[i].IsAvailableInEnv(envName) {
+			result = append(result, &configs[i])
 		}
-		return errors.Wrap(err, "insert polaris config")
 	}
-	return nil
+	return result, nil
 }
 
-// Get 根据应用 ID 和配置名称获取北极星配置
-func (s *PolarisConfigStoreMongo) Get(ctx context.Context, appID, name string) (*PolarisConfig, error) {
-	var config PolarisConfig
-	err := s.collection.FindOne(ctx, bson.M{"appID": appID, "name": name}).Decode(&config)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrConfigNotFound
-		}
-		return nil, errors.Wrap(err, "find polaris config by name")
-	}
-	return &config, nil
-}
-
-// ListByApp 获取应用下的所有北极星配置
-func (s *PolarisConfigStoreMongo) ListByApp(ctx context.Context, appID string) ([]*PolarisConfig, error) {
-	cursor, err := s.collection.Find(ctx, bson.M{"appID": appID})
-	if err != nil {
-		return nil, errors.Wrap(err, "find polaris configs")
-	}
-	defer cursor.Close(ctx)
-
-	var configs []*PolarisConfig
-	if err = cursor.All(ctx, &configs); err != nil {
-		return nil, errors.Wrap(err, "decode polaris configs")
-	}
-
-	return configs, nil
-}
-
-// Update 根据应用 ID 和配置名称更新北极星配置
-func (s *PolarisConfigStoreMongo) Update(
-	ctx context.Context,
-	appID, name string,
-	updateData *ConfigUpdateData,
-) error {
-	if updateData == nil {
+// UpdateConfig 根据应用 ID 和配置名称更新 updateData 中给出的字段；没有待更新的字段时直接返回，
+// 配置不存在时返回 ErrConfigNotFound
+func UpdateConfig(ctx context.Context, db *mongo.Database, appID, name string, updateData *ConfigUpdateData) error {
+	fields := updateData.toUpdateFields()
+	if len(fields) == 0 {
 		return nil
 	}
+	err := store.Of(db, ConfigMeta).Update(ctx, fields, ByName(appID, name))
+	return errors.Wrapf(err, "update polaris config %s of app %s", name, appID)
+}
 
-	updateSet := bson.M{}
-	needUpdate := false
-
-	if updateData.InstanceKey != nil {
-		updateSet["instanceKey"] = *updateData.InstanceKey
-		needUpdate = true
-	}
-	if updateData.ServicePort != nil {
-		updateSet["servicePort"] = *updateData.ServicePort
-		needUpdate = true
-	}
-	if updateData.Direct != nil {
-		updateSet["direct"] = *updateData.Direct
-		needUpdate = true
-	}
-	if updateData.KeepNotReadyPod != nil {
-		updateSet["keepNotReadyPod"] = *updateData.KeepNotReadyPod
-		needUpdate = true
-	}
-	if updateData.EnableHealthCheck != nil {
-		updateSet["enableHealthCheck"] = *updateData.EnableHealthCheck
-		needUpdate = true
-	}
-	if updateData.ServiceLabels != nil {
-		updateSet["serviceLabels"] = updateData.ServiceLabels
-		needUpdate = true
-	}
-	if updateData.PolarisToken != nil {
-		updateSet["polarisToken"] = *updateData.PolarisToken
-		needUpdate = true
-	}
-	if updateData.Operator != nil {
-		updateSet["operator"] = *updateData.Operator
-		needUpdate = true
-	}
-	if updateData.ScopeEnvNames != nil {
-		updateSet["scopeEnvNames"] = updateData.ScopeEnvNames
-		needUpdate = true
-	}
-	if updateData.envWeights != nil {
-		updateSet[envWeightsField] = updateData.envWeights
-		needUpdate = true
-	}
-	if updateData.envDynamicWeights != nil {
-		updateSet[envDynamicWeightsField] = updateData.envDynamicWeights
-		needUpdate = true
-	}
-	if !needUpdate {
+// toUpdateFields 将非空的待更新字段转换为 Update 使用的 map
+func (d *ConfigUpdateData) toUpdateFields() map[string]any {
+	if d == nil {
 		return nil
 	}
-
-	updateSet["updatedAt"] = time.Now()
-
-	filter := bson.M{"appID": appID, "name": name}
-	result, err := s.collection.UpdateOne(ctx, filter, bson.M{"$set": updateSet})
-	if err != nil {
-		return errors.Wrap(err, "update polaris config")
+	fields := map[string]any{}
+	if d.InstanceKey != nil {
+		fields["instanceKey"] = *d.InstanceKey
 	}
-	if result.MatchedCount == 0 {
-		return ErrConfigNotFound
+	if d.ServicePort != nil {
+		fields["servicePort"] = *d.ServicePort
 	}
-
-	return nil
+	if d.Direct != nil {
+		fields["direct"] = *d.Direct
+	}
+	if d.KeepNotReadyPod != nil {
+		fields["keepNotReadyPod"] = *d.KeepNotReadyPod
+	}
+	if d.EnableHealthCheck != nil {
+		fields["enableHealthCheck"] = *d.EnableHealthCheck
+	}
+	if d.ServiceLabels != nil {
+		fields["serviceLabels"] = d.ServiceLabels
+	}
+	if d.PolarisToken != nil {
+		fields["polarisToken"] = *d.PolarisToken
+	}
+	if d.Operator != nil {
+		fields["operator"] = *d.Operator
+	}
+	if d.ScopeEnvNames != nil {
+		fields["scopeEnvNames"] = d.ScopeEnvNames
+	}
+	if d.envWeights != nil {
+		fields[envWeightsField] = d.envWeights
+	}
+	if d.envDynamicWeights != nil {
+		fields[envDynamicWeightsField] = d.envDynamicWeights
+	}
+	return fields
 }
 
-// Delete 根据应用 ID 和配置名称删除北极星配置
-func (s *PolarisConfigStoreMongo) Delete(ctx context.Context, appID, name string) error {
-	filter := bson.M{"appID": appID, "name": name}
-	result, err := s.collection.DeleteOne(ctx, filter)
-	if err != nil {
-		return errors.Wrap(err, "delete polaris config")
-	}
-	if result.DeletedCount == 0 {
-		return ErrConfigNotFound
-	}
-	return nil
-}
-
-// UpsertEnvState 幂等新增或更新指定环境的信息。
-func (s *PolarisConfigStoreMongo) UpsertEnvState(
-	ctx context.Context,
-	appID, name, envName string,
-	update PolarisEnvStateUpdate,
+// UpsertEnvState 幂等新增或更新指定环境的信息，不推进配置的顶层 updatedAt；配置不存在时返回 ErrConfigNotFound
+func UpsertEnvState(
+	ctx context.Context, db *mongo.Database, appID, name, envName string, update PolarisEnvStateUpdate,
 ) error {
-	fieldPrefix, err := envFieldPrefix(envStatesField, envName)
+	fields, err := envStateFields(envName, update)
 	if err != nil {
 		return err
 	}
-	setFields := bson.M{fieldPrefix + ".updatedAt": time.Now()}
-	if update.AppliedFields != nil {
-		setFields[fieldPrefix+".appliedFields"] = update.AppliedFields
-	}
-	if update.LastError != nil {
-		setFields[fieldPrefix+".lastError"] = *update.LastError
-	}
-
-	result, err := s.collection.UpdateOne(ctx,
-		bson.M{"appID": appID, "name": name},
-		bson.M{"$set": setFields},
-	)
-	if err != nil {
-		return errors.Wrap(err, "upsert polaris env state")
-	}
-	if result.MatchedCount == 0 {
-		return ErrConfigNotFound
-	}
-	return nil
+	err = store.Of(db, ConfigMeta).Update(ctx, fields, ByName(appID, name), store.KeepUpdatedAt())
+	return errors.Wrapf(err, "upsert polaris config %s of app %s env %s state", name, appID, envName)
 }
 
 // UpsertEnvStateIfUpdatedAtMatch 仅在配置顶层 updatedAt 仍与 expectedUpdatedAt 匹配时更新环境信息。
-// 版本不匹配通常表示任务处理的是旧配置，此时返回 false 并跳过写入。
-func (s *PolarisConfigStoreMongo) UpsertEnvStateIfUpdatedAtMatch(
+// 返回值表示是否匹配到期望版本；版本不匹配（通常表示任务处理的是旧配置）或配置不存在时返回 false 并跳过写入，不返回错误。
+func UpsertEnvStateIfUpdatedAtMatch(
 	ctx context.Context,
+	db *mongo.Database,
 	appID, name, envName string,
 	expectedUpdatedAt time.Time,
 	update PolarisEnvStateUpdate,
 ) (bool, error) {
-	fieldPrefix, err := envFieldPrefix(envStatesField, envName)
+	fields, err := envStateFields(envName, update)
 	if err != nil {
 		return false, err
 	}
-	setFields := bson.M{fieldPrefix + ".updatedAt": time.Now()}
-	if update.AppliedFields != nil {
-		setFields[fieldPrefix+".appliedFields"] = update.AppliedFields
-	}
-	if update.LastError != nil {
-		setFields[fieldPrefix+".lastError"] = *update.LastError
-	}
-
-	result, err := s.collection.UpdateOne(ctx,
-		bson.M{"appID": appID, "name": name, "updatedAt": expectedUpdatedAt},
-		bson.M{"$set": setFields},
+	err = store.Of(db, ConfigMeta).Update(ctx, fields,
+		ByName(appID, name), store.Where("updatedAt", expectedUpdatedAt), store.KeepUpdatedAt(),
 	)
-	if err != nil {
-		return false, errors.Wrap(err, "conditionally upsert polaris env state")
+	if errors.Is(err, ErrConfigNotFound) {
+		return false, nil
 	}
-	return result.MatchedCount > 0, nil
+	if err != nil {
+		return false, errors.Wrapf(err, "conditionally upsert polaris config %s of app %s env %s state",
+			name, appID, envName)
+	}
+	return true, nil
 }
 
-// UpsertEnvWeight 幂等设置指定环境的单实例权重与动态权重开关。
-// 两者在同一次更新中写入，保证集群侧的单次 Patch 与库侧记录一致。
-func (s *PolarisConfigStoreMongo) UpsertEnvWeight(
+// envStateFields 生成单个环境信息的待更新字段：总是刷新该环境的 updatedAt，其余字段非 nil 时写入
+func envStateFields(envName string, update PolarisEnvStateUpdate) (map[string]any, error) {
+	fieldPrefix, err := envFieldPrefix(envStatesField, envName)
+	if err != nil {
+		return nil, err
+	}
+	fields := map[string]any{fieldPrefix + ".updatedAt": time.Now()}
+	if update.AppliedFields != nil {
+		fields[fieldPrefix+".appliedFields"] = update.AppliedFields
+	}
+	if update.LastError != nil {
+		fields[fieldPrefix+".lastError"] = *update.LastError
+	}
+	return fields, nil
+}
+
+// UpsertEnvWeight 幂等设置指定环境的单实例权重与动态权重开关，dynamicWeight 为 nil 表示不改开关。
+// 两者在同一次更新中写入，保证集群侧的单次 Patch 与库侧记录一致；配置不存在时返回 ErrConfigNotFound
+func UpsertEnvWeight(
 	ctx context.Context,
+	db *mongo.Database,
 	appID, name, envName string,
 	weight int32,
 	dynamicWeight *bool,
@@ -319,72 +222,49 @@ func (s *PolarisConfigStoreMongo) UpsertEnvWeight(
 	if err != nil {
 		return err
 	}
-	setFields := bson.M{
-		weightPath:  weight,
-		"updatedAt": time.Now(),
-	}
+	fields := map[string]any{weightPath: weight}
 	if dynamicWeight != nil {
 		dynamicWeightPath, pathErr := envFieldPrefix(envDynamicWeightsField, envName)
 		if pathErr != nil {
 			return pathErr
 		}
-		setFields[dynamicWeightPath] = *dynamicWeight
+		fields[dynamicWeightPath] = *dynamicWeight
 	}
-
-	result, err := s.collection.UpdateOne(ctx,
-		bson.M{"appID": appID, "name": name},
-		bson.M{"$set": setFields},
-	)
-	if err != nil {
-		return errors.Wrap(err, "upsert polaris env weight")
-	}
-	if result.MatchedCount == 0 {
-		return ErrConfigNotFound
-	}
-	return nil
+	err = store.Of(db, ConfigMeta).Update(ctx, fields, ByName(appID, name))
+	return errors.Wrapf(err, "upsert polaris config %s of app %s env %s weight", name, appID, envName)
 }
 
-// RemoveEnvStates 幂等移除多个指定环境的信息。
-func (s *PolarisConfigStoreMongo) RemoveEnvStates(
-	ctx context.Context, appID, name string, envNames []string,
-) error {
-	return s.removeEnvFields(ctx, appID, name, []string{envStatesField}, envNames)
+// RemoveEnvStates 幂等移除多个指定环境的信息，配置不存在时静默成功
+func RemoveEnvStates(ctx context.Context, db *mongo.Database, appID, name string, envNames []string) error {
+	return removeEnvFields(ctx, db, appID, name, []string{envStatesField}, envNames)
 }
 
-// RemoveEnvSettings 幂等移除多个指定环境的全部环境级配置。
-func (s *PolarisConfigStoreMongo) RemoveEnvSettings(
-	ctx context.Context, appID, name string, envNames []string,
-) error {
-	return s.removeEnvFields(ctx, appID, name, envSettingFields, envNames)
+// RemoveEnvSettings 幂等移除多个指定环境的全部环境级配置（见 envSettingFields），配置不存在时静默成功
+func RemoveEnvSettings(ctx context.Context, db *mongo.Database, appID, name string, envNames []string) error {
+	return removeEnvFields(ctx, db, appID, name, envSettingFields, envNames)
 }
 
-// removeEnvFields 从 roots 指向的各个环境维度子文档中 unset 多个环境条目。
+// removeEnvFields 从 roots 指向的各个环境维度子文档中删除多个环境条目，不推进配置的顶层 updatedAt。
 // 所有路径在同一次更新中提交，避免部分字段清理成功、部分残留。
-func (s *PolarisConfigStoreMongo) removeEnvFields(
-	ctx context.Context, appID, name string, roots, envNames []string,
-) error {
+func removeEnvFields(ctx context.Context, db *mongo.Database, appID, name string, roots, envNames []string) error {
 	if len(envNames) == 0 {
 		return nil
 	}
 
-	unsetFields := make(bson.M, len(envNames)*len(roots))
+	fields := make(map[string]any, len(envNames)*len(roots))
 	for _, root := range roots {
 		for _, envName := range envNames {
 			fieldPath, err := envFieldPrefix(root, envName)
 			if err != nil {
 				return err
 			}
-			unsetFields[fieldPath] = ""
+			// map 条目置为 nil 即从库中删除该条目
+			fields[fieldPath] = nil
 		}
 	}
-	_, err := s.collection.UpdateOne(ctx,
-		bson.M{"appID": appID, "name": name},
-		bson.M{"$unset": unsetFields},
-	)
-	if err != nil {
-		return errors.Wrapf(err, "remove polaris env fields %v", roots)
-	}
-	return nil
+	err := store.Of(db, ConfigMeta).Update(ctx, fields, ByName(appID, name), store.KeepUpdatedAt())
+	return errors.Wrapf(store.IgnoreNotFound(err), "remove polaris config %s of app %s env fields %v",
+		name, appID, roots)
 }
 
 // envFieldPrefix 校验环境名并生成环境维度子文档的嵌套字段路径前缀
@@ -393,31 +273,4 @@ func envFieldPrefix(root, envName string) (string, error) {
 		return "", errors.Errorf("invalid env name %q", envName)
 	}
 	return root + "." + envName, nil
-}
-
-// DeleteByApp 删除应用下的所有北极星配置
-func (s *PolarisConfigStoreMongo) DeleteByApp(ctx context.Context, appID string) error {
-	_, err := s.collection.DeleteMany(ctx, bson.M{"appID": appID})
-	if err != nil {
-		return errors.Wrap(err, "delete polaris configs by app")
-	}
-	return nil
-}
-
-// ListByEnv 获取应用在指定环境下可用的北极星配置列表
-func (s *PolarisConfigStoreMongo) ListByEnv(ctx context.Context, appID, envName string) ([]*PolarisConfig, error) {
-	configs, err := s.ListByApp(ctx, appID)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]*PolarisConfig, 0, len(configs))
-	for _, config := range configs {
-		// 检查配置是否在当前环境中可用
-		if config.IsAvailableInEnv(envName) {
-			result = append(result, config)
-		}
-	}
-
-	return result, nil
 }

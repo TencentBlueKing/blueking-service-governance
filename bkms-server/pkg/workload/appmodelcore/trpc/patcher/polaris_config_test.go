@@ -23,10 +23,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"gopkg.in/yaml.v3"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -39,9 +41,10 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 	var (
 		ctx                 context.Context
 		diApp               *fxtest.App
-		appStore            bkmsapp.ApplicationStore
+		appStore            *bkmsapp.ApplicationStore
 		envService          *env.EnvService
-		store               polaris.PolarisConfigStore
+		configStore         *polaris.ConfigStore
+		db                  *mongo.Database
 		app                 *bkmsapp.Application
 		environment         *bkmsenv.Environment
 		otherEnvironment    *bkmsenv.Environment
@@ -51,25 +54,27 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
 			polaris.FxModule,
-			fx.Populate(&appStore, &envService, &store),
+			fx.Populate(&envService),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		configStore = testutil.NewStore(GinkgoT(), polaris.ConfigMeta)
 
 		app = dbfactory.Application(ctx, appStore)
 		environment = dbfactory.Env(ctx, envService, app.WorkspaceID)
 		otherEnvironment = dbfactory.Env(ctx, envService, app.WorkspaceID)
 		unscopedEnvironment = dbfactory.Env(ctx, envService, app.WorkspaceID)
 
-		p = patcher.NewPolarisRegistryPatcher(store)
+		p = patcher.NewPolarisRegistryPatcher(db)
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, app.ID)
+		_, _ = configStore.DeleteMany(ctx, polaris.ByApp(app.ID))
 		diApp.RequireStop()
 	})
 
@@ -95,7 +100,7 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 				},
 				ScopeEnvNames: []string{environment.Name},
 			}
-			err := store.Create(ctx, config)
+			err := configStore.Create(ctx, config)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -121,7 +126,7 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 				},
 				ScopeEnvNames: []string{environment.Name},
 			}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 		})
 
 		It("should return content as-is", func() {
@@ -145,7 +150,7 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 				},
 				ScopeEnvNames: []string{environment.Name},
 			}
-			err := store.Create(ctx, config)
+			err := configStore.Create(ctx, config)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -268,7 +273,7 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 				},
 				ScopeEnvNames: []string{environment.Name},
 			}
-			err := store.Create(ctx, configA)
+			err := configStore.Create(ctx, configA)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 未启用健康检查的配置 B
@@ -284,7 +289,7 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 				},
 				ScopeEnvNames: []string{environment.Name},
 			}
-			err = store.Create(ctx, configB)
+			err = configStore.Create(ctx, configB)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 启用健康检查的配置 C
@@ -300,7 +305,7 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 				},
 				ScopeEnvNames: []string{environment.Name},
 			}
-			err = store.Create(ctx, configC)
+			err = configStore.Create(ctx, configC)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -344,7 +349,7 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 				},
 				ScopeEnvNames: []string{environment.Name},
 			}
-			err := store.Create(ctx, configEnv)
+			err := configStore.Create(ctx, configEnv)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 仅对另一个环境生效的配置
@@ -360,7 +365,7 @@ var _ = Describe("PolarisRegistryPatcher", func() {
 				},
 				ScopeEnvNames: []string{otherEnvironment.Name},
 			}
-			err = store.Create(ctx, configProd)
+			err = configStore.Create(ctx, configProd)
 			Expect(err).NotTo(HaveOccurred())
 		})
 

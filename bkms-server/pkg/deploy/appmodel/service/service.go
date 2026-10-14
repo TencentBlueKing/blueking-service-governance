@@ -24,9 +24,8 @@ import (
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
@@ -37,14 +36,11 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
-	scopedenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -61,56 +57,21 @@ type DeployParams struct {
 
 // Service 负责 appmodel 部署相关编排，不负责权限校验与任务投递
 type Service struct {
-	appStore                            bkmsapp.ApplicationStore
-	envStore                            envmodel.EnvironmentStore
-	promotionStore                      promotion.PromotionStore
-	snapshotService                     *snapshot.Service
-	appModelStore                       appmodel.AppModelStore
-	workspaceStore                      workspace.WorkspaceStore
-	imageRegistryStore                  registry.ImageRegistryStore
-	scopedEnvVarStore                   scopedenvvars.ScopedEnvVarStore
-	appDepsVarReader                    *depenvvars.Reader
-	polarisVarReader                    *polarisenvvars.Reader
-	bscpCfgStore                        bscpcfg.Store
-	workspaceCompsStore                 workspace.WorkspaceCompsStore
-	polarisConfigStore                  polaris.PolarisConfigStore
-	hostPortStore                       hostport.HostPortStore
-	appSpecStore                        appspec.AppSpecStore
-	buildConfigStore                    build.ConfigStore
-	buildAutoDeployRecordStore          autodeploy.RecordStore
-	appModelDeployRecordStore           deployappmodel.RecordStore
-	appModelDeployResourceSnapshotStore deployappmodel.ResourceSnapshotStore
-	appConfigFileStore                  appcfg.AppConfigFileStore
-	appConfigFileDefStore               appcfg.AppConfigFileDefStore
-	appConfigFileVersionStore           appcfg.AppConfigFileVersionStore
-	clusterAddonDefStore                clusteraddon.ClusterAddonDefStore
+	db               *mongo.Database
+	appStore         *bkmsapp.ApplicationStore
+	envStore         *envmodel.EnvironmentStore
+	snapshotService  *snapshot.Service
+	appDepsVarReader *depenvvars.Reader
+	polarisVarReader *polarisenvvars.Reader
 }
 
 // ServiceDeps 部署服务所需依赖
 type ServiceDeps struct {
-	AppStore                            bkmsapp.ApplicationStore             `validate:"required"`
-	EnvStore                            envmodel.EnvironmentStore            `validate:"required"`
-	PromotionStore                      promotion.PromotionStore             `validate:"required"`
-	SnapshotService                     *snapshot.Service                    `validate:"required"`
-	AppModelStore                       appmodel.AppModelStore               `validate:"required"`
-	WorkspaceStore                      workspace.WorkspaceStore             `validate:"required"`
-	ImageRegistryStore                  registry.ImageRegistryStore          `validate:"required"`
-	ScopedEnvVarStore                   scopedenvvars.ScopedEnvVarStore      `validate:"required"`
-	AppDepsVarReader                    *depenvvars.Reader                   `validate:"required"`
-	PolarisVarReader                    *polarisenvvars.Reader               `validate:"required"`
-	WorkspaceCompsStore                 workspace.WorkspaceCompsStore        `validate:"required"`
-	PolarisConfigStore                  polaris.PolarisConfigStore           `validate:"required"`
-	HostPortStore                       hostport.HostPortStore               `validate:"required"`
-	BscpCfgStore                        bscpcfg.Store                        `validate:"required"`
-	AppSpecStore                        appspec.AppSpecStore                 `validate:"required"`
-	BuildConfigStore                    build.ConfigStore                    `validate:"required"`
-	BuildAutoDeployRecordStore          autodeploy.RecordStore               `validate:"required"`
-	AppModelDeployRecordStore           deployappmodel.RecordStore           `validate:"required"`
-	AppModelDeployResourceSnapshotStore deployappmodel.ResourceSnapshotStore `validate:"required"`
-	AppConfigFileStore                  appcfg.AppConfigFileStore            `validate:"required"`
-	AppConfigFileDefStore               appcfg.AppConfigFileDefStore         `validate:"required"`
-	AppConfigFileVersionStore           appcfg.AppConfigFileVersionStore     `validate:"required"`
-	ClusterAddonDefStore                clusteraddon.ClusterAddonDefStore    `validate:"required"`
+	// DB 供基于 GenericStore 的模型使用
+	DB               *mongo.Database        `validate:"required"`
+	SnapshotService  *snapshot.Service      `validate:"required"`
+	AppDepsVarReader *depenvvars.Reader     `validate:"required"`
+	PolarisVarReader *polarisenvvars.Reader `validate:"required"`
 }
 
 var validate = validator.New(validator.WithRequiredStructEnabled())
@@ -121,29 +82,12 @@ func NewService(deps ServiceDeps) (*Service, error) {
 		return nil, errors.Wrap(err, "validate dependencies")
 	}
 	return &Service{
-		appStore:                            deps.AppStore,
-		envStore:                            deps.EnvStore,
-		promotionStore:                      deps.PromotionStore,
-		snapshotService:                     deps.SnapshotService,
-		appModelStore:                       deps.AppModelStore,
-		workspaceStore:                      deps.WorkspaceStore,
-		imageRegistryStore:                  deps.ImageRegistryStore,
-		scopedEnvVarStore:                   deps.ScopedEnvVarStore,
-		appDepsVarReader:                    deps.AppDepsVarReader,
-		polarisVarReader:                    deps.PolarisVarReader,
-		bscpCfgStore:                        deps.BscpCfgStore,
-		workspaceCompsStore:                 deps.WorkspaceCompsStore,
-		polarisConfigStore:                  deps.PolarisConfigStore,
-		hostPortStore:                       deps.HostPortStore,
-		appSpecStore:                        deps.AppSpecStore,
-		buildConfigStore:                    deps.BuildConfigStore,
-		buildAutoDeployRecordStore:          deps.BuildAutoDeployRecordStore,
-		appModelDeployRecordStore:           deps.AppModelDeployRecordStore,
-		appModelDeployResourceSnapshotStore: deps.AppModelDeployResourceSnapshotStore,
-		appConfigFileStore:                  deps.AppConfigFileStore,
-		appConfigFileDefStore:               deps.AppConfigFileDefStore,
-		appConfigFileVersionStore:           deps.AppConfigFileVersionStore,
-		clusterAddonDefStore:                deps.ClusterAddonDefStore,
+		db:               deps.DB,
+		appStore:         store.Of(deps.DB, bkmsapp.AppMeta),
+		envStore:         store.Of(deps.DB, envmodel.EnvMeta),
+		snapshotService:  deps.SnapshotService,
+		appDepsVarReader: deps.AppDepsVarReader,
+		polarisVarReader: deps.PolarisVarReader,
 	}, nil
 }
 
@@ -152,35 +96,12 @@ func NewServiceFromRegistry(reg *storereg.Registry) (*Service, error) {
 	if reg == nil {
 		return nil, errors.New("store registry not initialized")
 	}
-	snapshotSvc := snapshot.NewService(
-		reg.SnapshotStore,
-		reg.BuildConfigStore,
-		reg.AppStore,
-	)
+	snapshotSvc := snapshot.NewService(reg.DB)
 	return NewService(ServiceDeps{
-		AppStore:                            reg.AppStore,
-		EnvStore:                            reg.EnvStore,
-		PromotionStore:                      reg.PromotionStore,
-		SnapshotService:                     snapshotSvc,
-		AppModelStore:                       reg.AppModelStore,
-		WorkspaceStore:                      reg.WorkspaceStore,
-		ImageRegistryStore:                  reg.ImageRegistryStore,
-		ScopedEnvVarStore:                   reg.ScopedEnvVarStore,
-		AppDepsVarReader:                    reg.AppDepsVarReader,
-		PolarisVarReader:                    reg.PolarisVarReader,
-		WorkspaceCompsStore:                 reg.WorkspaceCompsStore,
-		PolarisConfigStore:                  reg.PolarisConfigStore,
-		HostPortStore:                       reg.HostPortStore,
-		BscpCfgStore:                        reg.BscpCfgStore,
-		AppSpecStore:                        reg.AppSpecStore,
-		BuildConfigStore:                    reg.BuildConfigStore,
-		BuildAutoDeployRecordStore:          reg.BuildAutoDeployRecordStore,
-		AppModelDeployRecordStore:           reg.AppModelDeployRecordStore,
-		AppModelDeployResourceSnapshotStore: reg.AppModelDeployResourceSnapshotStore,
-		AppConfigFileStore:                  reg.AppConfigFileStore,
-		AppConfigFileDefStore:               reg.AppConfigFileDefStore,
-		AppConfigFileVersionStore:           reg.AppConfigFileVersionStore,
-		ClusterAddonDefStore:                reg.ClusterAddonDefStore,
+		DB:               reg.DB,
+		SnapshotService:  snapshotSvc,
+		AppDepsVarReader: reg.AppDepsVarReader,
+		PolarisVarReader: reg.PolarisVarReader,
 	})
 }
 
@@ -191,7 +112,7 @@ func NewGlobalService() (*Service, error) {
 
 // Deploy 执行 appmodel 部署并返回 deployID。
 func (s *Service) Deploy(ctx context.Context, app *bkmsapp.Application, params DeployParams) (string, error) {
-	env, err := s.envStore.GetByName(ctx, app.WorkspaceID, app.ID, params.EnvName)
+	env, err := s.envStore.Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, params.EnvName))
 	if err != nil {
 		return "", errors.Wrap(err, "get env")
 	}
@@ -200,15 +121,17 @@ func (s *Service) Deploy(ctx context.Context, app *bkmsapp.Application, params D
 		return "", err
 	}
 
-	appModel, err := s.appModelStore.GetAppModel(ctx, app.ID)
+	appModel, err := store.Of(s.db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		return "", errors.Wrapf(err, "get app %s model", app.ID)
 	}
-	ws, err := s.workspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := store.Of(s.db, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return "", errors.Wrap(err, "get workspace")
 	}
-	imageRegistry, err := s.imageRegistryStore.GetByWorkspaceAndType(ctx, ws.ID, ws.ImageRegistryType)
+	imageRegistry, err := store.Of(s.db, registry.ImageRegistryMeta).Get(
+		ctx, registry.ByWorkspaceAndType(ws.ID, ws.ImageRegistryType),
+	)
 	if err != nil {
 		return "", errors.Wrap(err, "get image registry")
 	}
@@ -218,30 +141,16 @@ func (s *Service) Deploy(ctx context.Context, app *bkmsapp.Application, params D
 		updateStrategy = string(tkex.RollingGameDeploymentUpdateStrategyType)
 	}
 	builderService := workload.NewBuilderService(
-		s.scopedEnvVarStore,
 		s.appDepsVarReader,
 		s.polarisVarReader,
-		s.workspaceCompsStore,
-		s.workspaceStore,
-		s.polarisConfigStore,
-		s.hostPortStore,
-		s.bscpCfgStore,
-		s.appModelStore,
-		s.appSpecStore,
-		s.buildConfigStore,
-		appcfg.NewMountableFileProvider(s.appConfigFileStore, s.appConfigFileDefStore, s.appConfigFileVersionStore),
+		s.db,
+		appcfg.NewMountableFileProvider(s.db),
 	)
 	deployer := deployappmodel.NewDeployer(
-		s.appModelDeployRecordStore,
-		s.appModelDeployResourceSnapshotStore,
-		s.buildAutoDeployRecordStore,
-		s.appModelStore,
 		builderService,
-		s.appSpecStore,
-		s.buildConfigStore,
-		s.appConfigFileStore,
-		polaris.NewPolarisEnvStateManager(s.polarisConfigStore),
-		hostport.NewEnvStateManager(s.hostPortStore),
+		s.db,
+		polaris.NewPolarisEnvStateManager(s.db),
+		hostport.NewEnvStateManager(s.db),
 		app,
 	)
 	deployID, err := deployer.Deploy(
@@ -271,9 +180,7 @@ func (s *Service) runPreDeployChecks(
 	if err := s.checkRequiredClusterAddons(ctx, app, env); err != nil {
 		return errors.Wrap(err, "check required cluster addons")
 	}
-	if err := deploy.NewPreDeployChecker(
-		s.envStore, s.promotionStore, s.snapshotService,
-	).Do(ctx, &deploy.PreDeployCheckParams{
+	if err := deploy.NewPreDeployChecker(s.db, s.snapshotService).Do(ctx, &deploy.PreDeployCheckParams{
 		WorkspaceID:     app.WorkspaceID,
 		EnvName:         params.EnvName,
 		TrafficLaneName: params.TrafficLaneName,
@@ -291,9 +198,9 @@ func (s *Service) checkRequiredClusterAddons(
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 ) error {
-	defs, err := s.clusterAddonDefStore.List(ctx)
+	defs, err := clusteraddon.ListDefs(ctx, store.Of(s.db, clusteraddon.ClusterAddonDefMeta))
 	if err != nil {
-		return errors.Wrap(err, "list cluster addon defs")
+		return err
 	}
 	missing, err := clusteraddon.InspectRequiredAddons(
 		ctx, defs, app.Type, env, "",
@@ -309,7 +216,7 @@ func (s *Service) checkRequiredClusterAddons(
 
 // DeployByAppID 通过 appID 装载应用后执行部署
 func (s *Service) DeployByAppID(ctx context.Context, appID string, params DeployParams) (string, error) {
-	app, err := s.appStore.GetApp(ctx, appID)
+	app, err := s.appStore.Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		return "", errors.Wrapf(err, "get app %s", appID)
 	}

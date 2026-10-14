@@ -123,16 +123,12 @@ func (h *Handler) newWatchManager(clusterID, appID, envName string) *watch.Manag
 	return watch.NewManager(
 		k8sclient.NewPodClient(cluster.NewConfig(clusterID)),
 		polarisplugin.New(func(ctx context.Context) ([]*polaris.PolarisServiceInstances, error) {
-			mgr := polaris.NewPolarisPlatformManager(
-				h.registry.DepSvcStore,
-				h.registry.DepSvcInstStore,
-				h.registry.PolarisConfigStore,
-			)
+			mgr := polaris.NewPolarisPlatformManager(h.registry.DB)
 			return mgr.ListPolarisServiceInstances(ctx, appID, envName)
 		}),
 		publishplugin.New(
 			func(ctx context.Context, instanceIDs []string) (map[string]*devmode.PublishRecord, error) {
-				return h.registry.PublishRecordStore.ListLatestByInstance(ctx, appID, envName, instanceIDs)
+				return devmode.ListLatestByInstance(ctx, h.registry.DB, appID, envName, instanceIDs)
 			},
 		),
 	)

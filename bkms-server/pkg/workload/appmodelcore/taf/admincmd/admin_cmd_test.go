@@ -24,10 +24,11 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -36,7 +37,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/taf/admincmd"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -47,15 +47,10 @@ var _ = Describe("TafAdminService", func() {
 	var diApp *fxtest.App
 
 	// Store instances
-	var appStore bkmsapp.ApplicationStore
-	var appConfigFileStore appcfg.AppConfigFileStore
-	var appConfigFileDefStore appcfg.AppConfigFileDefStore
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	var appModelStore appmodel.AppModelStore
-	var envStore envmodel.EnvironmentStore
+	var appStore *bkmsapp.ApplicationStore
+	var appConfigFileDefStore *appcfg.AppConfigFileDefStore
 	var envService *bkmsenv.EnvService
-	var scopedEnvVarStore envvars.ScopedEnvVarStore
-	var buildConfigStore build.ConfigStore
+	var db *mongo.Database
 	var appDepsVarReader *depenvvars.Reader
 	var polarisVarReader *polarisenvvars.Reader
 
@@ -73,15 +68,10 @@ var _ = Describe("TafAdminService", func() {
 		svc.EnvName = testEnv.Name
 		svc.Stores = &admincmd.AdminServiceStores{
 			MountableFileProvider: appcfg.NewMountableFileProvider(
-				appConfigFileStore,
-				appConfigFileDefStore,
-				appConfigFileVersionStore,
+				testutil.NewDB(GinkgoT()),
 			),
-			AppModelStore: appModelStore,
-			EnvStore:      envStore,
-			AppStore:      appStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
-				scopedEnvVarStore,
+				db,
 				appDepsVarReader,
 				polarisVarReader,
 			),
@@ -91,9 +81,10 @@ var _ = Describe("TafAdminService", func() {
 
 	// 辅助函数：创建指定内容的 TAF 配置文件
 	createConfigFile := func(content string) {
-		svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
-		defs, err := appConfigFileDefStore.ListByApp(
+		svc := appcfg.NewAppConfigFileService(testutil.NewDB(GinkgoT()))
+		defs, err := appcfg.ListDefsByApp(
 			ctx,
+			appConfigFileDefStore,
 			testApp.ID,
 			appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 		)
@@ -120,42 +111,28 @@ var _ = Describe("TafAdminService", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			appcfg.FxModule,
-			appmodel.FxModule,
 			bkmsenv.FxModule,
 			envvars.FxModule,
-			build.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
 			fx.Populate(
-				&appStore,
-				&appConfigFileStore,
-				&appConfigFileDefStore,
-				&appConfigFileVersionStore,
-				&buildConfigStore,
-				&appModelStore,
-				&envStore,
 				&envService,
-				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		// 使用 dbfactory 创建测试用 TAF 应用
 		testApp, testAppModel = dbfactory.TafApplication(ctx, &dbfactory.TafApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
-			BuildConfigStore:          buildConfigStore,
+			AppStore: appStore,
 		}, nil)
 
 		// 使用 dbfactory 创建测试用 Environment
@@ -227,7 +204,7 @@ var _ = Describe("TafAdminService", func() {
 					appmodel.Variable{Key: "TAF_SERVER_PORT", Value: "17064"},
 					appmodel.Variable{Key: "TAF_SERVER_IP", Value: "0.0.0.0"},
 				)
-				err := appModelStore.UpdateAppModel(ctx, testAppModel)
+				err := appmodel.UpdateAppModel(ctx, db, testAppModel)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -250,9 +227,9 @@ var _ = Describe("TafAdminService", func() {
 </taf>`)
 
 				// 通过环境级变量设置 TAF_SERVER_PORT
-				_, err := scopedEnvVarStore.CreateSimpleEnvScopeVar(ctx, *testEnv, "TAF_SERVER_PORT", "18080", "")
+				_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, *testEnv, "TAF_SERVER_PORT", "18080", "")
 				Expect(err).NotTo(HaveOccurred())
-				_, err = scopedEnvVarStore.CreateSimpleEnvScopeVar(ctx, *testEnv, "TAF_SERVER_IP", "0.0.0.0", "")
+				_, err = envvars.CreateSimpleEnvScopeVar(ctx, db, *testEnv, "TAF_SERVER_IP", "0.0.0.0", "")
 				Expect(err).NotTo(HaveOccurred())
 			})
 
