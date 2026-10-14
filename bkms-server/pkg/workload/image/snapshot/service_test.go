@@ -22,13 +22,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync/atomic"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
@@ -227,6 +230,7 @@ var _ = Describe("Service", func() {
 					return &registry.Client{}
 				}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest, "v1.0.0"}, nil).Build()
+				mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
 				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).
 					Return([]string{TagLatest, "v1.0.0"}, nil).
 					Build()
@@ -269,6 +273,49 @@ var _ = Describe("Service", func() {
 				Expect(preparedArgs).NotTo(BeNil())
 				Expect(preparedArgs.RepoKey).To(Equal(repoKey))
 				Expect(preparedArgs.RepoName).To(Equal("library/busybox"))
+			})
+		})
+
+		It("should skip tags whose remote manifest is already gone", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "202604231525"}})
+				Expect(err).NotTo(HaveOccurred())
+
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).
+					Return([]string{"202604231525", "v1.0.3", "v1.0.4"}, nil).
+					Build()
+				mockey.Mock((*registry.Client).HeadManifest).To(
+					func(_ *registry.Client, _ context.Context, _, tag string) error {
+						switch tag {
+						case "202604231525":
+							return pkgerrors.Wrap(
+								&transport.Error{StatusCode: http.StatusNotFound},
+								"head manifest",
+							)
+						case "v1.0.4":
+							return errors.New("registry timeout")
+						default:
+							return nil
+						}
+					},
+				).Build()
+				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).
+					Return([]string{"v1.0.3", "v1.0.4"}, nil).
+					Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.AddedTagCnt).To(BeEquivalentTo(2))
+				Expect(result.RemovedTagCnt).To(BeEquivalentTo(1))
+
+				snapshots, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(total).To(BeEquivalentTo(2))
+				tags := lo.Map(snapshots, func(item Image, _ int) string { return item.Tag })
+				Expect(tags).To(ConsistOf("v1.0.3", "v1.0.4"))
 			})
 		})
 
@@ -315,6 +362,7 @@ var _ = Describe("Service", func() {
 
 				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest, "v1.0.0"}, nil).Build()
+				mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
 				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).Return([]string{}, nil).Build()
 
 				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
@@ -341,6 +389,7 @@ var _ = Describe("Service", func() {
 
 				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"core-test-01"}, nil).Build()
+				mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
 				mockey.Mock(taskq.Enqueue).Return(nil).Build()
 
 				result, err := service.RefreshAppSnapshots(ctx, testAppID1, "core-test-01")
@@ -377,6 +426,7 @@ var _ = Describe("Service", func() {
 					return &registry.Client{}
 				}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest, "v1.0.0"}, nil).Build()
+				mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
 				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).Return([]string{TagLatest}, nil).Build()
 				mockey.Mock(NewImageDetailSyncArgs).
 					To(func(
@@ -422,6 +472,7 @@ var _ = Describe("Service", func() {
 				repoName := "registry.example.com/team/runtime-failed"
 				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{TagLatest}, nil).Build()
+				mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
 				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).Return([]string{TagLatest}, nil).Build()
 				mockey.Mock(NewImageDetailSyncArgs).
 					Return(&ImageDetailSyncArgs{RepoKey: GenerateRepoKey(repoName, "", ""), RepoName: repoName}, nil).
@@ -515,6 +566,7 @@ var _ = Describe("Service", func() {
 					return []string{"v1", "v2"}, nil
 				},
 			).Build()
+			mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
 			mockey.Mock(taskq.Enqueue).Return(nil).Build()
 		}
 

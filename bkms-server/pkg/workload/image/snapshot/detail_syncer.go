@@ -109,6 +109,20 @@ func (s *DetailSyncer) syncDetailBatch(
 			gCtx := context.WithoutCancel(ctx)
 			detail, err := client.GetTagDetail(gCtx, repoName, tag)
 			if err != nil {
+				// tag 列表仍返回该名字，但 manifest 已不存在。留着快照会让一键同步反复写回这条脏数据。
+				if registry.IsTagNotFound(err) {
+					if _, delErr := s.store.DeleteByRepoKeyAndTag(gCtx, repoKey, tag); delErr != nil {
+						log.Errorf(gCtx, "delete missing manifest snapshot %s:%s failed: %v", repoName, tag, delErr)
+						mu.Lock()
+						if firstErr == nil {
+							firstErr = errors.Wrapf(delErr, "delete missing manifest snapshot %s", tag)
+						}
+						mu.Unlock()
+						return
+					}
+					log.Infof(gCtx, "dropped snapshot %s:%s because the remote manifest is gone", repoName, tag)
+					return
+				}
 				log.Errorf(gCtx, "get tag detail for %s:%s failed: %v", repoName, tag, err)
 				mu.Lock()
 				if firstErr == nil {

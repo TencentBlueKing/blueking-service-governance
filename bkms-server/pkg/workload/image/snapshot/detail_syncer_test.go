@@ -21,10 +21,12 @@ package snapshot
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
@@ -162,6 +164,46 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 			Expect(status.LastError).To(ContainSubstring("get detail for v1.1.0"))
+		})
+
+		It("should drop the snapshot when the remote manifest is gone", func() {
+			err := store.UpsertSnapshots(ctx, info.RepoKey, []Image{
+				{Tag: "v1.0.2"},
+				{Tag: "v1.0.3"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			mockey.Mock((*registry.Client).GetTagDetail).
+				To(func(_ *registry.Client, _ context.Context, _, tag string) (registry.ImageDetail, error) {
+					if tag == "v1.0.2" {
+						return registry.ImageDetail{}, errors.Wrap(
+							&transport.Error{StatusCode: http.StatusNotFound},
+							"get manifest",
+						)
+					}
+					return registry.ImageDetail{
+						Tag:     tag,
+						Digest:  fmt.Sprintf("sha256:%s", tag),
+						Size:    64,
+						BuiltAt: time.Now(),
+					}, nil
+				}).
+				Build()
+
+			err = syncer.SyncDetails(ctx, info)
+			Expect(err).NotTo(HaveOccurred())
+
+			snapshots, total, listErr := store.ListByRepoKey(ctx, info.RepoKey, "", 1, 10)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(total).To(BeEquivalentTo(1))
+			Expect(snapshots).To(HaveLen(1))
+			Expect(snapshots[0].Tag).To(Equal("v1.0.3"))
+			Expect(snapshots[0].Digest).To(Equal("sha256:v1.0.3"))
+
+			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+			Expect(status.LastError).To(BeEmpty())
 		})
 
 		It("should finish cleanly when there is no tag to sync", func() {

@@ -21,11 +21,13 @@ package snapshot
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -371,6 +373,11 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	if err != nil {
 		return nil, errors.Wrapf(err, "list all tags for %s", info.RepoName)
 	}
+	// tag 列表仍可能包含 manifest 已删除的名字。这些名字不能写回快照，否则删除后一键同步会再次出现。
+	remoteTags, err = tagsWithManifest(ctx, client, info.RepoName, remoteTags)
+	if err != nil {
+		return nil, errors.Wrapf(err, "check manifests for %s", info.RepoName)
+	}
 
 	// 远端已返回，后续落库不得再受请求取消影响，否则 tag 已拉到却写不进状态
 	persistCtx := context.WithoutCancel(ctx)
@@ -452,4 +459,40 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		AddedTagCnt:   addedCount,
 		RemovedTagCnt: removedCount,
 	}, nil
+}
+
+// tagsWithManifest 去掉 manifest 已不存在的 tag。
+// HEAD 出现非 404 错误时保留该 tag，避免仓库短暂不可用时把本地快照清掉。
+func tagsWithManifest(ctx context.Context, client *registry.Client, repoName string, tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return tags, nil
+	}
+
+	present := make([]string, 0, len(tags))
+	var mu sync.Mutex
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(10)
+	for _, tag := range tags {
+		g.Go(func() error {
+			err := client.HeadManifest(gCtx, repoName, tag)
+			if err != nil && registry.IsTagNotFound(err) {
+				log.Infof(gCtx, "skip tag %s:%s because the remote manifest is gone", repoName, tag)
+				return nil
+			}
+			if err != nil {
+				log.Errorf(gCtx, "head manifest %s:%s failed, keep the tag: %v", repoName, tag, err)
+			}
+			mu.Lock()
+			present = append(present, tag)
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, errors.Wrap(err, "check remote manifests")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Wrap(err, "check remote manifests")
+	}
+	return present, nil
 }

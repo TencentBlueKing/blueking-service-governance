@@ -31,6 +31,7 @@ import (
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -108,7 +109,12 @@ func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
 		if registry.IsAuthRequired(err) {
 			return errors.Wrapf(ErrImageRepoAuthRequired, "registry authentication required: %v", err)
 		}
-		return errors.Wrapf(err, "delete remote image %s:%s", info.RepoName, tag)
+		// 制品库 tag 索引还在、manifest 已不存在时，HEAD 会 404。远端已经删不掉，
+		// 继续清理本地快照和晋级记录，避免列表里留下无法删除的条目。
+		if !registry.IsTagNotFound(err) {
+			return errors.Wrapf(err, "delete remote image %s:%s", info.RepoName, tag)
+		}
+		log.Infof(ctx, "remote image %s:%s is already absent, clearing local records", info.RepoName, tag)
 	}
 	if _, err = s.snapshotStore.DeleteByRepoKeyAndTag(ctx, info.RepoKey, tag); err != nil {
 		return errors.Wrapf(err, "delete local snapshot %s:%s", info.RepoKey, tag)
