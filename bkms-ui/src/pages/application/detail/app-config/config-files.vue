@@ -560,6 +560,7 @@
   import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
   import type { MountScope } from '~/pages/application/detail/app-config/components/mount-scope-field.vue';
   import type {
+    ConfigFileDefView,
     ConfigFileListItem,
     PlainFileCreateInput,
   } from '~/pages/application/detail/app-config/use-config-file-defs';
@@ -648,12 +649,13 @@
   const activeDisplayPath = computed(() =>
     isFrameworkFile.value ? currentFileSpec.value?.filePath || '' : activeDef.value?.mountDir || '',
   );
-  // 挂载范围：框架文件或已挂载全部环境时视为「全部环境」
-  const activeMountScope = computed<MountScope>(() => {
-    if (isFrameworkFile.value || activeDef.value?.mountScope === 'all') return 'all';
+  // 挂载范围归一化：框架文件固定「全部环境」，普通文件覆盖全部现存环境即视为「全部环境」（忽略已删除环境名）
+  function resolveMountScope(def: ConfigFileDefView): MountScope {
+    if (def.configKind === 'framework' || def.mountScope === 'all') return 'all';
     const allNames = allEnvNames.value;
-    return allNames.length && allNames.every(name => activeDef.value?.mountedEnvNames.includes(name)) ? 'all' : 'envs';
-  });
+    return allNames.length > 0 && allNames.every(name => def.mountedEnvNames.includes(name)) ? 'all' : 'envs';
+  }
+  const activeMountScope = computed<MountScope>(() => (activeDef.value ? resolveMountScope(activeDef.value) : 'envs'));
   // 已挂载环境列表
   const mountedEnvList = computed(() =>
     envList.value.filter(env => !!env.name && activeDef.value?.mountedEnvNames.includes(env.name)),
@@ -678,13 +680,7 @@
       displayName: file.configKind === 'framework' ? currentFileSpec.value?.fileName || file.name : file.name,
       displayPath: file.configKind === 'framework' ? currentFileSpec.value?.filePath || file.mountDir : file.mountDir,
       mountedEnvDisplayNames: file.mountedEnvNames.map(name => envDisplayNameMap.value[name] || name),
-      mountScope:
-        file.configKind === 'framework' ||
-        (file.mountScope === 'envs' &&
-          allEnvNames.value.length > 0 &&
-          sameStringSet(file.mountedEnvNames, allEnvNames.value))
-          ? 'all'
-          : file.mountScope,
+      mountScope: resolveMountScope(file),
     })),
   );
   // 挂载预览表格排序依据：与左侧文件列表保持一致，框架配置文件置顶
@@ -781,11 +777,6 @@
       },
     ],
     mountDir: [
-      {
-        message: t('挂载路径不能为根目录 /'),
-        trigger: 'blur',
-        validator: (value: string) => isFrameworkFile.value || value !== '/',
-      },
       {
         message: t('挂载路径需以 / 开头，例如 /data/config'),
         trigger: 'blur',

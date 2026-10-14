@@ -193,11 +193,6 @@
     ],
     mountDir: [
       {
-        message: t('挂载路径不能为根目录 /'),
-        trigger: 'blur',
-        validator: (val: string) => val !== '/',
-      },
-      {
         message: t('挂载路径需以 / 开头，例如 /data/config'),
         trigger: 'blur',
         validator: (val: string) => val === '/' || BKMS_REGEX.appConfigMountDirRegex.test(val),
