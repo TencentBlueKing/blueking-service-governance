@@ -73,9 +73,10 @@ func (s *GenericStore[T]) CreateManyIfAbsent(ctx context.Context, objs []*T) err
 }
 
 // Update 对匹配的一个文档执行 $set，并刷新 updatedAt（set 中显式指定时以其为准）。
-// 不经过任何钩子，因此不能用于需要 Encode 的字段，此时请使用 UpdateFields。set 为空时不做任何操作
+// 不经过任何钩子，因此不能用于需要 Encode 的字段，此时请使用 UpdateFields。set 为空时不做任何操作。
+// 支持的选项：CondOpt
 func (s *GenericStore[T]) Update(ctx context.Context, set bson.M, opts ...Opt) error {
-	q, err := s.writeQuery("update", opts)
+	q, err := s.writeQuery("update", opts, condOpts)
 	if err != nil {
 		return err
 	}
@@ -91,9 +92,9 @@ func (s *GenericStore[T]) Update(ctx context.Context, set bson.M, opts ...Opt) e
 
 // UpdateFields 用 obj 中指定字段（bson 路径，支持 "a.b" 形式）的值更新匹配的一个文档，并刷新 updatedAt。
 // obj 会先经过 Encode，因此可用于加密字段；不会执行 BeforeSave，obj 可以只填写待更新的字段。
-// 字段在编码结果中不存在时（如 omitempty 的零值）会被 $unset
+// 字段在编码结果中不存在时（如 omitempty 的零值）会被 $unset。支持的选项：CondOpt
 func (s *GenericStore[T]) UpdateFields(ctx context.Context, obj *T, fields []string, opts ...Opt) error {
-	q, err := s.writeQuery("update fields of", opts)
+	q, err := s.writeQuery("update fields of", opts, condOpts)
 	if err != nil {
 		return err
 	}
@@ -131,12 +132,26 @@ func (s *GenericStore[T]) UpdateFields(ctx context.Context, obj *T, fields []str
 	return s.updateOne(ctx, q, update)
 }
 
-// Upsert 用 obj 覆盖匹配文档的全部字段，不存在时插入，返回是否发生了插入。
-// _id 与 createdAt 仅在插入时写入：_id 依次取过滤条件中的值、obj 的值、新生成的值；
+// Upsert 用 obj 编码结果中的全部字段 $set 匹配的文档，不存在时插入，返回是否发生了插入。
+// 支持的选项：CondOpt、UpsertOpt。
+//
+// 编码结果中没有的字段默认保留库中的旧值，典型的是 omitempty 的零值字段。需要让 obj 中被清空的字段
+// 在库中同样被清除时（如撤销凭证），传入 UnsetOmitted()，模型中定义、但编码结果中没有的顶层字段会被 $unset：
+//
+//	// w.Secret 为 nil（bson tag 为 "secret,omitempty"），库中已有的 secret 字段会被删除
+//	_, err := widgets.Upsert(ctx, w, ByName(name), store.UnsetOmitted())
+//
+// 无论是否传入 UnsetOmitted，模型中没有定义的字段（如模型删除字段后库中残留的旧数据）都不会被删除，
+// 需要整体替换文档时请使用 Replace。
+//
+// _id 与 createdAt 仅在插入时写入。过滤条件中的 _id 只参与匹配，不会成为待写入的值：
+// obj 已有 _id 时，该值会自动追加到过滤条件并写入 $setOnInsert，因此可不额外传入 CondOpt；
+// 此时若调用方又显式传入 _id 条件，Upsert 会在发送请求前报错；
+// obj 的 _id 为零值时，插入所需的 _id 会按模型类型生成，但不会加入过滤条件。
 // createdAt 取 obj 的值，零值时取当前时间。obj 的 updatedAt 总会被更新；
 // 插入时 _id 与 createdAt 会回填到 obj，更新时库中已有的值未知，obj 中的这两个字段保持不变
 func (s *GenericStore[T]) Upsert(ctx context.Context, obj *T, opts ...Opt) (bool, error) {
-	q, err := s.writeQuery("upsert into", opts)
+	q, err := s.parseOpts("upsert into", opts, upsertOpts)
 	if err != nil {
 		return false, err
 	}
@@ -145,6 +160,20 @@ func (s *GenericStore[T]) Upsert(ctx context.Context, obj *T, opts ...Opt) (bool
 	}
 	now := time.Now()
 	v := reflect.ValueOf(obj).Elem()
+	objectID, hasObjectID := s.schema.idOf(v)
+	if hasObjectID {
+		if q.hasKey(keyID) {
+			return false, errors.Errorf(
+				"upsert into %s: %s is specified in both object and filter",
+				s.coll.Name(),
+				keyID,
+			)
+		}
+		q.conds = append(q.conds, bson.E{Key: keyID, Value: objectID})
+	}
+	if err = s.requireFilter("upsert into", q); err != nil {
+		return false, err
+	}
 	s.schema.setUpdated(v, now)
 	doc, err := s.encodeDoc(obj, keyID, keyCreatedAt)
 	if err != nil {
@@ -157,16 +186,19 @@ func (s *GenericStore[T]) Upsert(ctx context.Context, obj *T, opts ...Opt) (bool
 		createdAt = lo.Ternary(s.schema.createdAtOf(v).IsZero(), now, s.schema.createdAtOf(v))
 		onInsert[keyCreatedAt] = createdAt
 	}
-	if !q.hasKey(keyID) {
-		if id, ok := s.schema.idOf(v); ok {
-			onInsert[keyID] = id
-		} else if id, ok := s.schema.newID(); ok {
-			onInsert[keyID] = id
-		}
+	if hasObjectID {
+		onInsert[keyID] = objectID
+	} else if id, ok := s.schema.newID(); ok {
+		onInsert[keyID] = id
 	}
 	update := bson.M{}
 	if len(doc) > 0 {
 		update["$set"] = doc
+	}
+	if q.unsetOmitted {
+		if omitted := s.schema.omittedFields(doc); len(omitted) > 0 {
+			update["$unset"] = lo.SliceToMap(omitted, func(k string) (string, any) { return k, "" })
+		}
 	}
 	if len(onInsert) > 0 {
 		update["$setOnInsert"] = onInsert
@@ -186,9 +218,10 @@ func (s *GenericStore[T]) Upsert(ctx context.Context, obj *T, opts ...Opt) (bool
 }
 
 // Replace 用 obj 整体替换匹配的一个文档，并更新 obj 的 updatedAt；不存在时返回 NotFound 错误。
-// obj 应是完整的文档（通常来自 Get），其 createdAt 会原样写入；obj 的 _id 被忽略，文档保留原有 _id
+// obj 应是完整的文档（通常来自 Get），其 createdAt 会原样写入；obj 的 _id 被忽略，文档保留原有 _id。
+// 支持的选项：CondOpt
 func (s *GenericStore[T]) Replace(ctx context.Context, obj *T, opts ...Opt) error {
-	q, err := s.writeQuery("replace in", opts)
+	q, err := s.writeQuery("replace in", opts, condOpts)
 	if err != nil {
 		return err
 	}

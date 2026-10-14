@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -46,6 +47,8 @@ type schema struct {
 	id        []int
 	createdAt []int
 	updatedAt []int
+	// keys 模型编码后的全部顶层字段名，含 inline 结构体展开的字段；inline map 中的字段是动态的，不在其列
+	keys []string
 }
 
 func newSchema(typ reflect.Type) (*schema, error) {
@@ -59,7 +62,7 @@ func newSchema(typ reflect.Type) (*schema, error) {
 	return s, nil
 }
 
-// scan 只扫描顶层与 inline 的值类型结构体字段，因为这些是 _id 与时间戳可能出现的位置
+// scan 只扫描顶层与 inline 的值类型结构体字段，因为这些是 _id、时间戳等顶层字段可能出现的位置
 func (s *schema) scan(typ reflect.Type, index []int) error {
 	for i := range typ.NumField() {
 		sf := typ.Field(i)
@@ -76,6 +79,7 @@ func (s *schema) scan(typ reflect.Type, index []int) error {
 			}
 			continue
 		}
+		s.keys = append(s.keys, key)
 		switch key {
 		case keyID:
 			s.id = idx
@@ -167,6 +171,13 @@ func (s *schema) idOf(v reflect.Value) (any, bool) {
 	}
 	f := v.FieldByIndex(s.id)
 	return f.Interface(), !f.IsZero()
+}
+
+// omittedFields 返回模型中定义、但不在编码结果 doc 中的顶层字段；
+// _id 与 createdAt 只在插入时写入，不会被删除
+func (s *schema) omittedFields(doc bson.D) []string {
+	present := append(lo.Map(doc, func(e bson.E, _ int) string { return e.Key }), keyID, keyCreatedAt)
+	return lo.Without(s.keys, present...)
 }
 
 // hasPath 判断以 "." 分隔的 bson 路径是否是模型中合法的字段，用于在更新前拦截拼写错误。

@@ -32,7 +32,8 @@ import (
 // GenericStore 基于 Meta 描述的通用 Store，提供模型 T 的 CRUD 操作。
 //
 // 约定：
-//   - 过滤条件、排序与数量限制均通过 Opt 传入；读操作不带过滤条件时匹配全部文档
+//   - 过滤条件、排序、数量限制等均通过 Opt 传入，各操作只接受部分类型的 Opt（见 Opt）；
+//     读操作不带过滤条件时匹配全部文档
 //   - bson tag 为 "_id"、"createdAt"、"updatedAt" 的字段（含 inline 嵌入）会被自动维护
 //   - 返回的错误均已附带集合名等上下文，NotFound / Duplicate 可用 errors.Is 判断
 type GenericStore[T any] struct {
@@ -82,16 +83,20 @@ func (s *GenericStore[T]) Collection() *mongo.Collection {
 	return s.coll
 }
 
-// Get 获取一个匹配的文档，可通过 Asc / Desc 指定取哪一个；不存在时返回 NotFound 错误
+// Get 获取一个匹配的文档，可通过 Asc / Desc 指定取哪一个；不存在时返回 NotFound 错误。
+// 支持的选项：CondOpt、SortOpt
 func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
-	q := newQuery(opts)
+	q, err := s.parseOpts("find one in", opts, getOpts)
+	if err != nil {
+		return nil, err
+	}
 	findOpts := options.FindOne()
 	if len(q.sort) > 0 {
 		findOpts.SetSort(q.sort)
 	}
 
 	var obj T
-	err := s.coll.FindOne(ctx, q.filter(), findOpts).Decode(&obj)
+	err = s.coll.FindOne(ctx, q.filter(), findOpts).Decode(&obj)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, s.notFound(q)
 	}
@@ -104,9 +109,13 @@ func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
 	return &obj, nil
 }
 
-// List 获取所有匹配的文档，可通过 Asc / Desc / Limit 指定排序与数量；无结果时返回空切片而非 nil
+// List 获取所有匹配的文档，可通过 Asc / Desc / Limit 指定排序与数量；无结果时返回空切片而非 nil。
+// 支持的选项：CondOpt、SortOpt、LimitOpt
 func (s *GenericStore[T]) List(ctx context.Context, opts ...Opt) ([]T, error) {
-	q := newQuery(opts)
+	q, err := s.parseOpts("find in", opts, listOpts)
+	if err != nil {
+		return nil, err
+	}
 	findOpts := options.Find()
 	if len(q.sort) > 0 {
 		findOpts.SetSort(q.sort)
@@ -131,9 +140,9 @@ func (s *GenericStore[T]) List(ctx context.Context, opts ...Opt) ([]T, error) {
 	return objs, nil
 }
 
-// Exists 判断是否存在匹配的文档
+// Exists 判断是否存在匹配的文档。支持的选项：CondOpt
 func (s *GenericStore[T]) Exists(ctx context.Context, opts ...Opt) (bool, error) {
-	q, err := s.readQuery("exists in", opts)
+	q, err := s.parseOpts("exists in", opts, condOpts)
 	if err != nil {
 		return false, err
 	}
@@ -144,9 +153,9 @@ func (s *GenericStore[T]) Exists(ctx context.Context, opts ...Opt) (bool, error)
 	return n > 0, nil
 }
 
-// Count 统计匹配的文档数量
+// Count 统计匹配的文档数量。支持的选项：CondOpt
 func (s *GenericStore[T]) Count(ctx context.Context, opts ...Opt) (int64, error) {
-	q, err := s.readQuery("count in", opts)
+	q, err := s.parseOpts("count in", opts, condOpts)
 	if err != nil {
 		return 0, err
 	}

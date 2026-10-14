@@ -24,9 +24,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Delete 删除匹配的一个文档，不存在时返回 NotFound 错误；需要忽略不存在的场景请使用 DeleteIfExists
+// Delete 删除匹配的一个文档，不存在时返回 NotFound 错误；需要忽略不存在的场景请使用 DeleteIfExists。
+// 支持的选项：CondOpt
 func (s *GenericStore[T]) Delete(ctx context.Context, opts ...Opt) error {
-	q, err := s.writeQuery("delete from", opts)
+	q, err := s.writeQuery("delete from", opts, condOpts)
 	if err != nil {
 		return err
 	}
@@ -40,9 +41,9 @@ func (s *GenericStore[T]) Delete(ctx context.Context, opts ...Opt) error {
 	return nil
 }
 
-// DeleteIfExists 删除匹配的一个文档，不存在时直接返回 nil
+// DeleteIfExists 删除匹配的一个文档，不存在时直接返回 nil。支持的选项：CondOpt
 func (s *GenericStore[T]) DeleteIfExists(ctx context.Context, opts ...Opt) error {
-	q, err := s.writeQuery("delete from", opts)
+	q, err := s.writeQuery("delete from", opts, condOpts)
 	if err != nil {
 		return err
 	}
@@ -50,9 +51,9 @@ func (s *GenericStore[T]) DeleteIfExists(ctx context.Context, opts ...Opt) error
 	return err
 }
 
-// DeleteMany 删除所有匹配的文档，返回删除的数量
+// DeleteMany 删除所有匹配的文档，返回删除的数量。支持的选项：CondOpt
 func (s *GenericStore[T]) DeleteMany(ctx context.Context, opts ...Opt) (int64, error) {
-	q, err := s.writeQuery("delete many from", opts)
+	q, err := s.writeQuery("delete many from", opts, condOpts)
 	if err != nil {
 		return 0, err
 	}

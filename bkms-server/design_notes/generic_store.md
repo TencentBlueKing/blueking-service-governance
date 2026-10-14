@@ -116,12 +116,14 @@ type Meta[T any] struct {
 func Of[T any](db *mongo.Database, meta Meta[T]) *GenericStore[T]           // Meta 配置错误时 panic，日常使用
 func New[T any](db *mongo.Database, meta Meta[T]) (*GenericStore[T], error) // 以 error 返回配置错误
 
-// 查询条件（Opt）：多个 Opt 的条件按 AND 合并
-func Where(field string, value any) Opt   // 单字段条件，value 可以是 bson.M{"$gte": 1} 等操作符文档
-func Filter(m bson.M) Opt                 // 一次传入多个条件，按 key 排序以保证生成的 filter 稳定
-func Combine(opts ...Opt) Opt             // 组合多个 Opt，供领域包定义 ByWorkspaceAndType 之类的复合条件
-func All() Opt                            // 写操作显式声明作用于全部文档
-func Asc(field string) Opt / Desc(field string) Opt / Limit(n int64) Opt // 仅 Get / List 可用
+// 选项（Opt 接口，按用途分为不同类型，见决策 9）：多个过滤条件按 AND 合并
+func Where(field string, value any) CondOpt // 单字段条件，value 可以是 bson.M{"$gte": 1} 等操作符文档
+func Filter(m bson.M) CondOpt               // 一次传入多个条件，按 key 排序以保证生成的 filter 稳定
+func All() CondOpt                          // 写操作显式声明作用于全部文档
+func Asc(field string) SortOpt / Desc(field string) SortOpt // 仅 Get / List 支持
+func Limit(n int64) LimitOpt                // 仅 List 支持
+func UnsetOmitted() UpsertOpt               // 仅 Upsert 支持：$unset 编码结果中缺失的模型字段
+func Combine(opts ...Opt) Opt               // 组合多个 Opt，供领域包定义 ByWorkspaceAndType 之类的复合条件
 
 // 读（不传条件即匹配全部）
 Get(ctx, opts ...Opt) (*T, error)                           // 未命中返回 NotFound；可配合 Desc 取最新一条
@@ -134,7 +136,7 @@ CreateMany(ctx, objs []*T) error
 CreateManyIfAbsent(ctx, objs []*T) error                    // 跳过唯一键冲突的文档
 Update(ctx, set bson.M, opts ...Opt) error                  // $set + updatedAt，不经过钩子
 UpdateFields(ctx, obj *T, fields []string, opts ...Opt) error // 从 Encode 后的 obj 中取指定字段 $set
-Upsert(ctx, obj *T, opts ...Opt) (inserted bool, err error) // $set 全部字段 + $setOnInsert _id/createdAt；插入时回填二者
+Upsert(ctx, obj *T, opts ...Opt) (inserted bool, err error) // $set 编码出的字段 + $setOnInsert _id/createdAt；插入时回填二者
 Replace(ctx, obj *T, opts ...Opt) error                     // 整体替换，保留原 _id；未命中返回 NotFound
 // 删
 Delete(ctx, opts ...Opt) error                              // 未命中返回 NotFound
@@ -157,11 +159,11 @@ store.Provide(meta)     // 提供 *GenericStore[T]，启动时即构造，Meta �
   反射分析结果按模型类型缓存在进程内，`Of` / `New` 只在首次遇到某个模型时反射，之后的构造只是组装结构体。
 * `_id` 为零值时在写入前生成：`bson.ObjectID` 生成 ObjectID，string 生成 ObjectID 的 hex，其它类型交给 MongoDB。
 * Create 时 `createdAt` 为零值则取当前时间，`updatedAt` 与之相同；其余写操作刷新 `updatedAt`。
-* 写操作（Update / UpdateFields / Upsert / Replace / Delete*）必须带条件，确需作用于全部文档时显式传 `store.All()`；
-  排序与 Limit 只对 Get / List 生效，传给其它操作直接报错，避免被静默忽略。
+* 写操作（Update / UpdateFields / Replace / Delete*）必须带条件，确需作用于全部文档时显式传 `store.All()`；
+  `Upsert` 在 obj 已有 `_id` 时会自动把它追加到过滤条件，因此此时可以不额外传条件；obj 的 `_id` 为零值时仍须传条件；
+  每个操作只接受部分类型的 Opt（如 Limit 只用于 List），传入不支持的 Opt 直接报错，避免被静默忽略。
 * 同一字段出现在多个 Opt 中时（如 `Where("n", {"$gte": 1})` 与 `Where("n", {"$lte": 9})`）改用 `$and` 合并，不会互相覆盖。
 * `UpdateFields` 会校验字段路径是否存在于模型中；字段在编码结果中缺失（omitempty 的零值）时 `$unset`。
-
 字段名直接写 bson 字段名字符串，嵌套字段用 `"a.b"`；更新内容仍使用 driver 原生的 `bson.M`。
 领域包把常用条件定义为具名 Opt，调用方读起来接近原先的具名方法：
 
@@ -205,7 +207,8 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 
 6. **查询条件形式**（阶段 3 确定）：所有查询与写操作的条件统一通过可变参数 `...Opt` 传入，取代位置参数 `filter bson.M`。
    好处是领域包可以把条件封装为具名 Opt（`ByWorkspace` 等）自由组合，排序、Limit 也走同一个入口；
-   代价是「写操作必须带条件」只能在运行时校验，所以由 `store.All()` 显式表达全量操作。
+   代价是「写操作必须带条件」只能在运行时校验，所以由 `store.All()` 显式表达全量操作；
+   `Upsert` 中非零的 obj `_id` 本身也是过滤条件。
 7. **Store 的获取方式**（阶段 3 后调整）：领域函数与 Manager 不再接收若干个 Store，而是显式接收 `db *mongo.Database`，
    在用到时 `store.Of(db, XxxMeta)`；handler、taskq 任务传入 `storereg.Registry.DB`。
    没有选择「领域代码内部直接取全局 `database.DB()`」，是为了让依赖在签名上可见，单测也能传入测试库。
@@ -225,6 +228,13 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
    `OnDemand` 对空字符串直接返回（敏感字段未设置），其余情况调用传入的加解密函数并原样返回错误。
    曾实现过声明式方案（`Meta.Encrypted` 按 bson 路径声明字段 + `Cipher` 接口，`Update` 也能自动加密），
    因按字段路径反射定位、校验路径形态、处理 `Update` 中父字段写入等逻辑过于复杂而撤回；代价是 `Update` 仍会绕过加密（见 API 回顾问题 1）。
+9. **选项类型**（评审 Upsert 语义后确定）：`Opt` 是只能由 `pkg/store` 实现的接口，按用途分为 `CondOpt`（Where / Filter / All）、
+   `SortOpt`（Asc / Desc）、`LimitOpt`（Limit）、`UpsertOpt`（UnsetOmitted）。每个操作声明自己接受的类别，
+   遇到其它类别（含 `Combine` 组合出的）时返回错误，取代原先散落在各处的「排序与 Limit 仅 Get / List 可用」判断；
+   新增行为开关时只需新增类型并登记到对应的操作，其它操作不会被动接受它。
+   仍保留统一的 `...Opt` 参数而非为每个操作定义不同的参数接口，好处是领域包的具名 Opt 可以返回 `store.Opt` 并自由组合，
+   代价是不支持的选项只能在运行时发现（与决策 6 相同的取舍）。随之 `Get` 不再静默忽略 `Limit`。
+   `UnsetOmitted` 做成可选项而非默认行为：多数调用方传入的是完整对象，默认的 `$set` 已足够，且不会意外清掉库中由其它途径写入的字段。
 
 ## 阶段 2 API 回顾
 
@@ -276,8 +286,8 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 2. **唯一键冲突**统一返回 `store.ErrDuplicate`（可同时匹配 Meta 中的 `Duplicate`），不再是各 Store 自拼的 "already exists" 文案。
 3. **NotFound 错误**带上 collection 与 filter，便于排查；业务哨兵（如 `bkci.ErrPipelineNotFound`）照常匹配。
 4. **`bkci.UpdateBuiltinTemplateVersion`** 基于 `UpdateFields`：`templateVersion` 为空时会 `$unset`，原实现写入空字符串；读出后两者都是空字符串。
-5. **流水线模板 reload** 由 `ReplaceOne(upsert)` 改为 `Upsert`（`$set` 全部字段）：模板中删掉的字段不会从库中清除。
-   目前模板字段固定，无影响；如需整体替换，可改为「`Get` 后 `Replace`，未命中再 `Create`」。
+5. **流水线模板 reload** 由 `ReplaceOne(upsert)` 改为 `Upsert(..., store.UnsetOmitted())`：模型中定义的字段与模板文件保持一致，
+   但模型中删掉的字段不会从库中清除。目前模板字段固定，无影响；如需整体替换，可改为「`Get` 后 `Replace`，未命中再 `Create`」。
 
 测试改造：上述包的单测全部改为针对测试库，移除了对这些 Store 的 mockey mock。原先 mock `Create` 返回错误来验证
 「本地落库失败时回滚远端流水线」的用例，改为预先写入相同流水线 ID 的记录、制造真实的唯一键冲突。

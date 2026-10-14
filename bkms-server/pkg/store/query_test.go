@@ -107,24 +107,54 @@ var _ = Describe("GenericStore query options", func() {
 			Expect(got.Name).To(Equal("w3"))
 		})
 
-		It("should reject sort and limit for operations other than Get and List", func() {
+		It("should honor sort and limit combined with conditions through Combine", func() {
+			createWithPriority(1, 3, 2)
+
+			list, err := f.widgets.List(f.ctx, store.Combine(f.byOwner(), store.Desc("priority")), store.Limit(2))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(namesOf(list)).To(Equal([]string{"w3", "w2"}))
+		})
+	})
+
+	Describe("unsupported options", func() {
+		const msg = "option not supported by this operation"
+
+		It("should be rejected by every operation that does not accept them", func() {
 			createWithPriority(1)
 			w := f.newWidget("w1")
 
-			_, err := f.widgets.Exists(f.ctx, f.byOwner(), store.Limit(1))
-			Expect(err).To(MatchError(ContainSubstring("only supported by Get and List")))
+			_, err := f.widgets.Get(f.ctx, f.byOwner(), store.Limit(1))
+			Expect(err).To(MatchError(ContainSubstring(msg)))
+			_, err = f.widgets.List(f.ctx, f.byOwner(), store.UnsetOmitted())
+			Expect(err).To(MatchError(ContainSubstring(msg)))
+			_, err = f.widgets.Exists(f.ctx, f.byOwner(), store.Limit(1))
+			Expect(err).To(MatchError(ContainSubstring(msg)))
 			_, err = f.widgets.Count(f.ctx, f.byOwner(), store.Asc("name"))
-			Expect(err).To(MatchError(ContainSubstring("only supported by Get and List")))
+			Expect(err).To(MatchError(ContainSubstring(msg)))
 			_, err = f.widgets.DeleteMany(f.ctx, f.byOwner(), store.Limit(1))
-			Expect(err).To(MatchError(ContainSubstring("only supported by Get and List")))
+			Expect(err).To(MatchError(ContainSubstring(msg)))
 			Expect(f.widgets.Update(f.ctx, bson.M{"priority": 9}, f.byOwner(), store.Desc("name"))).
-				To(MatchError(ContainSubstring("only supported by Get and List")))
+				To(MatchError(ContainSubstring(msg)))
+			Expect(f.widgets.UpdateFields(f.ctx, w, []string{"priority"}, f.byOwner(), store.UnsetOmitted())).
+				To(MatchError(ContainSubstring(msg)))
+			Expect(f.widgets.Replace(f.ctx, w, f.byName("w1"), store.UnsetOmitted())).
+				To(MatchError(ContainSubstring(msg)))
 			_, err = f.widgets.Upsert(f.ctx, w, f.byName("w1"), store.Desc("name"))
-			Expect(err).To(MatchError(ContainSubstring("only supported by Get and List")))
+			Expect(err).To(MatchError(ContainSubstring(msg)))
 
 			n, err := f.widgets.Count(f.ctx, f.byOwner())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(n).To(Equal(int64(1)))
+		})
+
+		It("should be detected inside options built by Combine", func() {
+			_, err := f.widgets.Count(f.ctx, store.Combine(f.byOwner(), store.Desc("name")))
+			Expect(err).To(MatchError(ContainSubstring(msg)))
+		})
+
+		It("should name the rejected option kind in the error", func() {
+			_, err := f.widgets.Count(f.ctx, store.Combine(store.Asc("name"), store.Limit(1)))
+			Expect(err).To(MatchError(ContainSubstring("count in " + widgetCollection + ": sort, limit")))
 		})
 	})
 
@@ -144,8 +174,8 @@ var _ = Describe("GenericStore query options", func() {
 			Expect(err).To(MatchError(ContainSubstring(msg)))
 			Expect(f.widgets.Replace(f.ctx, w)).To(MatchError(ContainSubstring(msg)))
 
-			// 仅包含排序、数量限制等非过滤条件的 Opt 同样视为没有过滤条件
-			_, err = f.widgets.DeleteMany(f.ctx, store.Asc("name"))
+			// 仅包含非过滤条件的 Opt 同样视为没有过滤条件
+			_, err = f.widgets.Upsert(f.ctx, w, store.UnsetOmitted())
 			Expect(err).To(MatchError(ContainSubstring(msg)))
 
 			n, err := f.widgets.Count(f.ctx, f.byOwner())
