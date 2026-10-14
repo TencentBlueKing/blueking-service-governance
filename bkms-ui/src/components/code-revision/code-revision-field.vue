@@ -44,11 +44,10 @@
     <Input
       v-if="showSource && revisionType === 'commit'"
       ref="commitInputRef"
+      v-model.trim="commitModel"
       :class="controlClass"
       clearable
       :disabled="disabled"
-      :model-value="modelValue"
-      @update:model-value="handleCommitInput"
     />
     <!-- 按来源重建下拉，避免切到 Tag 后还拿着上一次分支名做过滤，列表被滤空 -->
     <RepoRefSelect
@@ -161,6 +160,24 @@
     emit('confirm');
   }, 500);
 
+  // 模板使用 v-model.trim。bkui Input 不读取 modelModifiers，首尾空白在这里再去掉一次
+  const commitModel = computed({
+    get: () => props.modelValue,
+    set: (value: string) => {
+      const next = value.trim();
+      emit('update:modelValue', next);
+
+      // 清空后立刻按「不含修订」重算，不等 0.5 秒
+      if (!next) {
+        debouncedCommitConfirm.cancel();
+        emit('confirm');
+        return;
+      }
+
+      debouncedCommitConfirm();
+    },
+  });
+
   onBeforeUnmount(() => {
     debouncedCommitConfirm.cancel();
   });
@@ -198,20 +215,6 @@
     });
 
     emit('confirm');
-  }
-
-  function handleCommitInput(value: string) {
-    const next = value.trim();
-    emit('update:modelValue', next);
-
-    // 清空后立刻按「不含修订」重算，不等 0.5 秒
-    if (!next) {
-      debouncedCommitConfirm.cancel();
-      emit('confirm');
-      return;
-    }
-
-    debouncedCommitConfirm();
   }
 
   function hidePopover() {
