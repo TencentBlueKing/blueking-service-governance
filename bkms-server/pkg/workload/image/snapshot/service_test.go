@@ -266,6 +266,77 @@ var _ = Describe("Service", func() {
 			})
 		})
 
+		It("should ignore suppressed new tags and enqueue them for suppression recheck", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				Expect(UpsertTags(ctx, db, repoKey, []string{"stale"})).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v1.0.0")).To(Succeed())
+
+				var preparedArgs *ImageDetailSyncArgs
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"v1.0.0", "v2.0.0"}, nil).Build()
+				mockey.Mock(NewImageDetailSyncArgs).
+					To(func(repoKey, repoName, username, password string) (*ImageDetailSyncArgs, error) {
+						preparedArgs = &ImageDetailSyncArgs{RepoKey: repoKey, RepoName: repoName}
+						return preparedArgs, nil
+					}).
+					Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal("success"))
+				Expect(result.AddedTagCnt).To(BeEquivalentTo(1))
+				Expect(result.RemovedTagCnt).To(BeEquivalentTo(1))
+
+				snapshots, total, err := listSnapshots(ctx, db, repoKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(total).To(BeEquivalentTo(1))
+				Expect(
+					lo.Map(snapshots, func(item Image, _ int) string { return item.Tag }),
+				).To(Equal([]string{"v2.0.0"}))
+
+				suppressions, err := ListSuppressedTags(ctx, db, repoKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(suppressions).To(Equal([]string{"v1.0.0"}))
+
+				Expect(preparedArgs).NotTo(BeNil())
+				Expect(preparedArgs.SuppressedTags).To(Equal([]string{"v1.0.0"}))
+			})
+		})
+
+		It("should clear stale suppressions and keep only active suppressed ones", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				err := UpsertTags(ctx, db, repoKey, []string{"stale-local"})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "removed-tag")).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "still-suppressed")).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "stale-local")).To(Succeed())
+
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).
+					Return([]string{"still-suppressed", "v1.0.3"}, nil).
+					Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.AddedTagCnt).To(BeEquivalentTo(1))
+				Expect(result.RemovedTagCnt).To(BeEquivalentTo(1))
+
+				snapshots, total, err := listSnapshots(ctx, db, repoKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(total).To(BeEquivalentTo(1))
+				tags := lo.Map(snapshots, func(item Image, _ int) string { return item.Tag })
+				Expect(tags).To(ConsistOf("v1.0.3"))
+
+				suppressions, err := ListSuppressedTags(ctx, db, repoKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(suppressions).To(Equal([]string{"still-suppressed"}))
+			})
+		})
+
 		It("should short-circuit when another refresh is in progress", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")

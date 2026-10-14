@@ -57,10 +57,11 @@ func NewService(db *mongo.Database) *Service {
 
 // RepoKeyInfo 仓库 key 解析结果
 type RepoKeyInfo struct {
-	RepoKey  string
-	RepoName string
-	Username string
-	Password string
+	RepoKey        string
+	RepoName       string
+	Username       string
+	Password       string
+	SuppressedTags []string
 }
 
 // ResolveRepoKeyForRepository 根据镜像仓库名称生成无凭据的仓库实例信息。
@@ -368,12 +369,34 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	if err != nil {
 		return nil, err
 	}
+	suppressedTags, err := ListSuppressedTags(persistCtx, s.db, info.RepoKey)
+	if err != nil {
+		return nil, err
+	}
 
-	// 计算 diff：找出新增标签
+	// 计算 diff：找出新增标签。
 	localTagSet := set.NewStringSetWithValues(localTags)
+	remoteTagSet := set.NewStringSetWithValues(remoteTags)
+	suppressedTagSet := set.NewStringSetWithValues(suppressedTags)
 	newTags := lo.Filter(remoteTags, func(tag string, _ int) bool {
 		return !localTagSet.Has(tag)
 	})
+
+	// 删除后本地快照已清掉，tags/list 残留的名字会被当成新增；命中 suppression 的先别写回。
+	suppressedNewTags := lo.Filter(newTags, func(tag string, _ int) bool {
+		return suppressedTagSet.Has(tag)
+	})
+	newTags = lo.Filter(newTags, func(tag string, _ int) bool {
+		return !suppressedTagSet.Has(tag)
+	})
+
+	// suppression 若已不在远端名单，或本地快照已重新存在，说明已可清理。
+	staleSuppressions := lo.Filter(suppressedTags, func(tag string, _ int) bool {
+		return !remoteTagSet.Has(tag) || localTagSet.Has(tag)
+	})
+	if err = DeleteTagSuppressions(persistCtx, s.db, info.RepoKey, staleSuppressions); err != nil {
+		return nil, err
+	}
 
 	// 只对新增标签进行插入
 	var addedCount int64
@@ -411,7 +434,7 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		return nil, err
 	}
 
-	if len(unsyncedDetailTags) > 0 {
+	if len(unsyncedDetailTags) > 0 || len(suppressedNewTags) > 0 {
 		// 通过任务队列异步触发详情同步（构造时即完成凭据加密）
 		detailSyncArgs, encryptErr := NewImageDetailSyncArgs(
 			info.RepoKey, info.RepoName, info.Username, info.Password,
@@ -419,10 +442,12 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		if encryptErr != nil {
 			log.Errorf(persistCtx, "encrypt credentials for detail sync task %s failed: %v", info.RepoKey, encryptErr)
 			resultMsg = "Snapshot refresh completed, but the detail sync task was not submitted"
-		} else if enqueueErr := taskq.Enqueue(persistCtx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
-			log.Errorf(persistCtx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
-			return nil, errors.Wrap(enqueueErr, "enqueue image detail sync task")
 		} else {
+			detailSyncArgs.SuppressedTags = suppressedNewTags
+			if enqueueErr := taskq.Enqueue(persistCtx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
+				log.Errorf(persistCtx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
+				return nil, errors.Wrap(enqueueErr, "enqueue image detail sync task")
+			}
 			resultMsg = "Snapshot refresh completed, and the detail sync task has started asynchronously"
 		}
 	}

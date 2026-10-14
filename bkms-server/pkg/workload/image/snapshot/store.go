@@ -50,6 +50,15 @@ var ImageMeta = store.Meta[Image]{
 	NotFound:   ErrImageNotFound,
 }
 
+// TagSuppressionMeta 镜像 tag suppression 的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：repoKey + tag
+// - 查询提速：repoKey
+var TagSuppressionMeta = store.Meta[TagSuppression]{
+	Collection: "image_tag_suppressions",
+}
+
 // RepoStatusStore 仓库快照状态存储，每个 repoKey 一条
 type RepoStatusStore = store.GenericStore[RepoSnapshotStatus]
 
@@ -62,17 +71,17 @@ var RepoStatusMeta = store.Meta[RepoSnapshotStatus]{
 	NotFound:   ErrRepoStatusNotFound,
 }
 
-// InRepo 按仓库匹配镜像快照或仓库快照状态
+// InRepo 按仓库匹配镜像快照、tag suppression 或仓库快照状态
 func InRepo(repoKey string) store.Opt {
 	return store.Where("repoKey", repoKey)
 }
 
-// ByRepoTag 按仓库与标签匹配镜像快照
+// ByRepoTag 按仓库与标签匹配镜像快照或 tag suppression
 func ByRepoTag(repoKey, tag string) store.Opt {
 	return store.Combine(InRepo(repoKey), store.Where("tag", tag))
 }
 
-// TagIn 匹配标签在 tags 中的镜像快照，tags 为空时不匹配任何快照
+// TagIn 匹配标签在 tags 中的镜像快照或 tag suppression，tags 为空时不匹配任何快照
 func TagIn(tags []string) store.Opt {
 	// $in 不接受 null，lo.Uniq 总是返回非 nil 的切片
 	return store.Where("tag", bson.M{"$in": lo.Uniq(tags)})
@@ -178,6 +187,37 @@ func listTags(ctx context.Context, db *mongo.Database, conds ...store.Opt) ([]st
 		return nil, err
 	}
 	return lo.Map(images, func(img Image, _ int) string { return img.Tag }), nil
+}
+
+// UpsertTagSuppression 写入 tag suppression，已存在时只刷新 repoName 与 updatedAt
+func UpsertTagSuppression(ctx context.Context, db *mongo.Database, repoKey, repoName, tag string) error {
+	_, err := store.Of(db, TagSuppressionMeta).Upsert(
+		ctx,
+		&TagSuppression{RepoKey: repoKey, Tag: tag, RepoName: repoName},
+		ByRepoTag(repoKey, tag),
+		store.UpdateSelected("repoName"),
+	)
+	return errors.Wrapf(err, "upsert tag suppression %s:%s", repoKey, tag)
+}
+
+// ListSuppressedTags 获取仓库中全部被 suppression 的标签
+func ListSuppressedTags(ctx context.Context, db *mongo.Database, repoKey string) ([]string, error) {
+	suppressions, err := store.Of(db, TagSuppressionMeta).List(
+		ctx, InRepo(repoKey), store.SelectFields("tag"), store.Asc("tag"),
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list tag suppressions of %s", repoKey)
+	}
+	return lo.Map(suppressions, func(s TagSuppression, _ int) string { return s.Tag }), nil
+}
+
+// DeleteTagSuppressions 删除仓库中指定标签的 suppression
+func DeleteTagSuppressions(ctx context.Context, db *mongo.Database, repoKey string, tags []string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+	_, err := store.Of(db, TagSuppressionMeta).DeleteMany(ctx, InRepo(repoKey), TagIn(tags))
+	return errors.Wrapf(err, "delete tag suppressions of %s", repoKey)
 }
 
 // GetRepoStatus 获取仓库快照状态，不存在时返回 nil

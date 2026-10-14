@@ -82,6 +82,8 @@ type ImageDetailSyncArgs struct {
 	RepoName          string `json:"repoName"`
 	EncryptedUsername string `json:"encryptedUsername"`
 	EncryptedPassword string `json:"encryptedPassword"`
+	// SuppressedTags 是本次 refresh 命中的被删除 tag，异步任务仅复核这一小批。
+	SuppressedTags []string `json:"suppressedTags,omitempty"`
 }
 
 // NewImageDetailSyncArgs 创建 ImageDetailSyncArgs，构造时即对凭据进行 AES-GCM 加密

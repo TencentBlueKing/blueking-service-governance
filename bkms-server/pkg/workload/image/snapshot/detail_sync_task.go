@@ -81,10 +81,11 @@ func (m *DetailSyncManager) Handle(ctx context.Context, args ImageDetailSyncArgs
 	}
 
 	info := &RepoKeyInfo{
-		RepoKey:  args.RepoKey,
-		RepoName: args.RepoName,
-		Username: username,
-		Password: password,
+		RepoKey:        args.RepoKey,
+		RepoName:       args.RepoName,
+		Username:       username,
+		Password:       password,
+		SuppressedTags: args.SuppressedTags,
 	}
 	if err = NewDetailSyncer(m.db).SyncDetails(ctx, info); err != nil {
 		return errors.Wrapf(err, "detail sync for %s failed", args.RepoKey)

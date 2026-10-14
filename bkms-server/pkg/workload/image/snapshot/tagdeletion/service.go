@@ -31,6 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -97,7 +98,16 @@ func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
 		if registry.IsAuthRequired(err) {
 			return errors.Wrapf(ErrImageRepoAuthRequired, "registry authentication required: %v", err)
 		}
-		return errors.Wrapf(err, "delete remote image %s:%s", info.RepoName, tag)
+		// 制品库 tag 索引还在、manifest 已不存在时，HEAD 会 404。远端已经删不掉，
+		// 继续清理本地快照和晋级记录，避免列表里留下无法删除的条目。
+		if !registry.IsTagNotFound(err) {
+			return errors.Wrapf(err, "delete remote image %s:%s", info.RepoName, tag)
+		}
+		log.Infof(ctx, "remote image %s:%s is already absent, clearing local records", info.RepoName, tag)
+	}
+	// suppression 必须先于快照删除写入，否则两步之间的刷新会把 tag 当成新增写回。
+	if err = snapshot.UpsertTagSuppression(ctx, s.db, info.RepoKey, info.RepoName, tag); err != nil {
+		return err
 	}
 	if _, err = s.snapshots.DeleteMany(ctx, snapshot.ByRepoTag(info.RepoKey, tag)); err != nil {
 		return errors.Wrapf(err, "delete local snapshot %s:%s", info.RepoKey, tag)

@@ -267,6 +267,20 @@ func (c *Client) DeleteTag(ctx context.Context, repoName, tagName string) error 
 
 	// 按 digest 删除
 	if err = remote.Delete(digestRef, c.withContext(ctx)...); err != nil {
+		if !IsTagNotFound(err) {
+			return errors.Wrap(err, "delete tag")
+		}
+		// digest 删除返回 404 时，tag 可能已被并发推送指向新 digest，必须再查一次 tag 才能当作已删除。
+		if _, headErr := c.headDescriptor(ctx, repoName, tagName); headErr == nil {
+			return errors.Errorf(
+				"delete tag %s: digest %s is gone but tag still exists: %v",
+				tagName,
+				desc.Digest,
+				err,
+			)
+		} else if !IsTagNotFound(headErr) {
+			return errors.Wrap(headErr, "confirm tag after digest delete returned 404")
+		}
 		return errors.Wrap(err, "delete tag")
 	}
 	return nil
