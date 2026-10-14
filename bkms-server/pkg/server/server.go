@@ -101,6 +101,8 @@ import (
 	appdefaultshandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	appspechandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis"
+	deploydiagnosishandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvarhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/arrangement"
@@ -212,6 +214,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	appspec.Register(v1, appspechandler.New(storereg.G()))
 	arrangement.Register(v1, arrangementhandler.New(storereg.G()))
 	instance.Register(v1, instancehandler.New(storereg.G()))
+	deploydiagnosis.Register(v1, deploydiagnosishandler.New(storereg.G()))
 	envvars.Register(v1, envvarhandler.New(storereg.G()))
 	topology.Register(v1, topologyhandler.New(storereg.G()))
 	env.Register(v1, envhandler.New(storereg.G()))
