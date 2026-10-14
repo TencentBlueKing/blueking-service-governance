@@ -2,12 +2,9 @@
 
 ## 背景
 
-本次变更将 `AppConfigFileDef` 的环境配置字段改为顶层平铺存储：
+此前环境配置字段已按顶层 inline 设计，`000011` 等 migration 也按顶层写入了 `isUnifiedConfig`、`mountedEnvNames`，但业务代码没有真正按 inline 读写。本次把 def 模型改成 `bson:",inline"`，与已有字段对齐并真正生效。
 
-- `isUnifiedConfig`
-- `mountedEnvNames`
-
-但存量数据里可能同时存在以下问题：
+存量数据里可能同时存在以下问题：
 
 1. `000011_app_config_files_def_split` 在拆分 `app_config_file_defs` 时，会从默认配置文件记录生成 def：
 

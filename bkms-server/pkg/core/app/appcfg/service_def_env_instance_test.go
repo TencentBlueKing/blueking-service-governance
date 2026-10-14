@@ -61,10 +61,14 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			overlay := "env: prod\n"
-			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "prod", overlay, "editor")
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     overlay,
+				Operator:    "editor",
+				Description: "prod overlay",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			created, err := f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "prod overlay", "editor")
-			Expect(err).NotTo(HaveOccurred())
+			created := upserted.File
 
 			found, err := f.Svc.FindEnvInstance(f.Ctx, def.ID, "prod")
 			Expect(err).NotTo(HaveOccurred())
@@ -186,14 +190,21 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 
 			// 创建环境实例
 			overlay := "env: prod\n"
-			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "prod", overlay, "editor")
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     overlay,
+				Operator:    "editor",
+				Description: "prod overlay",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			created, err := f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "prod overlay", "editor")
-			Expect(err).NotTo(HaveOccurred())
+			created := upserted.File
 
 			// Reset
-			err = f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
+			deleted, err := f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
 			Expect(err).NotTo(HaveOccurred())
+			Expect(deleted).NotTo(BeNil())
+			Expect(deleted.ID).To(Equal(created.ID))
+			Expect(deleted.EnvName).To(Equal("prod"))
 
 			// 环境实例应已被删除
 			_, err = f.FileStore.GetByID(f.Ctx, created.ID)
@@ -216,13 +227,17 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "prod", "env: prod\n", "editor")
-			Expect(err).NotTo(HaveOccurred())
-			_, err = f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "prod overlay", "editor")
+			_, err = f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     "env: prod\n",
+				Operator:    "editor",
+				Description: "prod overlay",
+			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
+			deleted, err := f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
 			Expect(err).NotTo(HaveOccurred())
+			Expect(deleted).NotTo(BeNil())
 
 			updatedDef, err := f.DefStore.GetByID(f.Ctx, def.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -235,8 +250,9 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 默认就是统一配置
-			err = f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
+			deleted, err := f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
 			Expect(err).To(HaveOccurred())
+			Expect(deleted).To(BeNil())
 			Expect(errors.Is(err, appcfg.ErrResetToDefaultRequiresIndependentConfig)).To(BeTrue())
 		})
 
@@ -253,8 +269,9 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 没有创建实例就直接 reset，应该幂等成功
-			err = f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
+			deleted, err := f.Svc.ResetEnvInstanceToDefault(f.Ctx, def, "prod")
 			Expect(err).NotTo(HaveOccurred())
+			Expect(deleted).To(BeNil())
 		})
 	})
 
@@ -275,10 +292,14 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 为 prod 创建环境实例
-			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "prod", "key=prod", "editor")
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     "key=prod",
+				Operator:    "editor",
+				Description: "prod file",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			prodFile, err := f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "prod file", "editor")
-			Expect(err).NotTo(HaveOccurred())
+			prodFile := upserted.File
 
 			// 清理 prod 环境
 			err = f.Svc.CleanupPlainEnvInstancesByEnv(f.Ctx, f.AppID, "prod")

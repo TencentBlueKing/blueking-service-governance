@@ -149,9 +149,13 @@ var _ = Describe("DefDetailObj", func() {
 })
 
 var _ = Describe("mountDir binding", func() {
-	It("should accept an absolute directory that is not root", func() {
+	It("should accept an absolute directory including root", func() {
+		root := "/"
+		err := binding.Validator.ValidateStruct(UpdateDefInput{MountDir: &root})
+		Expect(err).NotTo(HaveOccurred())
+
 		longDir := "/" + strings.Repeat("a", 255)
-		err := binding.Validator.ValidateStruct(CreateDefInput{
+		err = binding.Validator.ValidateStruct(CreateDefInput{
 			Name:              "app.conf",
 			ConfigKind:        "plain",
 			MountDir:          "/usr/local/trpc/bin/",
@@ -165,14 +169,9 @@ var _ = Describe("mountDir binding", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should reject a directory that does not start with slash or is root", func() {
+	It("should reject a directory that does not start with slash", func() {
 		relative := "etc/app"
 		err := binding.Validator.ValidateStruct(UpdateDefInput{MountDir: &relative})
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("mount_dir"))
-
-		root := "/"
-		err = binding.Validator.ValidateStruct(UpdateDefInput{MountDir: &root})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("mount_dir"))
 	})

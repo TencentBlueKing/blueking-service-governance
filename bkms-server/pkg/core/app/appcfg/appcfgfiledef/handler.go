@@ -285,11 +285,7 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 
 	operator := auth.MustGetUser(ctx).ID
 	update := input.ToFileDefUpdate(operator)
-	auditCtx, err := h.prepareUpdateDefAuditContext(ctx, def, update)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "preparing audit context"))
-		return
-	}
+	oldDef := *def
 
 	svc := h.newAppCfgFileDefService()
 	if err = svc.UpdateAppCfgFileDef(ctx, def, update); err != nil {
@@ -301,7 +297,14 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 		return
 	}
 
-	h.auditDefUpdate(ctx, app, auditCtx, def)
+	h.addAppConfigFileDefAudit(
+		ctx,
+		app,
+		appcfg.EnvNameDefault,
+		audit.OperationTypeUpdate,
+		buildAppConfigFileDefAuditData(&oldDef, nil),
+		buildAppConfigFileDefAuditData(def, nil),
+	)
 	ginutils.OK(c, UpdateDefOutput{
 		Item: new(DefSummaryObj).FromDef(*def),
 	})
@@ -447,12 +450,6 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	auditCtx, err := h.prepareUpdateContentAuditContext(ctx, def, query.EnvName)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "preparing audit context"))
-		return
-	}
-
 	operator := auth.MustGetUser(ctx).ID
 	svc := h.newAppCfgFileDefService()
 	result, err := svc.UpsertEnvContent(ctx, def, appcfg.UpsertEnvContentParams{
@@ -483,7 +480,7 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
 			code = bkerrs.ErrCodeInvalidArgument
 		}
-		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
+		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) && result != nil && result.File != nil {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, def.AppID, result.File.ID.Hex()))
 			return
 		}
@@ -491,7 +488,7 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 		return
 	}
 
-	h.auditContentUpsert(ctx, app, def, auditCtx, result.File)
+	h.auditContentUpsert(ctx, app, def, result)
 	ginutils.OK(c, UpdateContentOutput{
 		FileID:         result.File.ID.Hex(),
 		CurrentVersion: result.File.CurrentVersion,
@@ -537,13 +534,8 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 		return
 	}
 	svc := h.newAppCfgFileDefService()
-	envFile, err := svc.FindEnvInstance(ctx, def.ID, uriInput.EnvName)
+	envFile, err := svc.ResetEnvInstanceToDefault(ctx, def, uriInput.EnvName)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "preparing audit context"))
-		return
-	}
-
-	if err = svc.ResetEnvInstanceToDefault(ctx, def, uriInput.EnvName); err != nil {
 		if errors.Is(err, appcfg.ErrResetToDefaultRequiresIndependentConfig) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "reset requires independent mode"))
 			return
@@ -552,7 +544,16 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 		return
 	}
 
-	h.auditEnvResetDelete(ctx, app, def, envFile)
+	if envFile != nil {
+		h.addAppConfigFileDefAudit(
+			ctx,
+			app,
+			envFile.EnvName,
+			audit.OperationTypeDelete,
+			buildAppConfigFileDefAuditData(def, envFile),
+			nil,
+		)
+	}
 	ginutils.OK(c, ResetEnvOutput{})
 }
 

@@ -73,7 +73,6 @@ var _ = Describe("buildAppConfigFileDefAuditData", func() {
 		Expect(data.MountedEnvNames).To(Equal([]string{"prod", "stag"}))
 		Expect(data.EnableEnvVarRender).To(BeTrue())
 		Expect(data.BaseAppConfigFileID).To(Equal(baseFileID.Hex()))
-		Expect(*data.Content).To(Equal("plain content"))
 		Expect(data.BSCPConfig).NotTo(BeNil())
 		Expect(*data.BSCPConfig).To(Equal(BSCPConfigObj{
 			BizID:     "2",

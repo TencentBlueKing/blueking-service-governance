@@ -19,44 +19,40 @@
 package handler
 
 import (
-	"testing"
-
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
 
-func TestBuildAppConfigFileAuditDataIncludesBSCPConfig(t *testing.T) {
-	t.Parallel()
-
-	fileID := bson.NewObjectID()
-	content := "content"
-	data := buildAppConfigFileAuditData(&appcfg.AppConfigFile{
-		ID:      fileID,
-		EnvName: appcfg.EnvNameDefault,
-		Type:    appcfg.AppConfigFileTypeNormal,
-		VersionedContent: appcfg.VersionedContent{
-			ContentSourceType: appcfg.ContentSourceTypeBSCP,
-			Format:            appcfg.FileFormatYAML,
-			Content:           &content,
-			BSCPConfig: &appcfg.BSCPConfig{
-				BizID:     "2",
-				ServiceID: "3",
-				ConfigID:  "4",
-				VersionID: "5",
+var _ = Describe("buildAppConfigFileAuditData", func() {
+	It("should include BSCP config in audit data", func() {
+		fileID := bson.NewObjectID()
+		content := "content"
+		data := buildAppConfigFileAuditData(&appcfg.AppConfigFile{
+			ID:      fileID,
+			EnvName: appcfg.EnvNameDefault,
+			Type:    appcfg.AppConfigFileTypeNormal,
+			VersionedContent: appcfg.VersionedContent{
+				ContentSourceType: appcfg.ContentSourceTypeBSCP,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				BSCPConfig: &appcfg.BSCPConfig{
+					BizID:     "2",
+					ServiceID: "3",
+					ConfigID:  "4",
+					VersionID: "5",
+				},
 			},
-		},
-		CurrentVersion: 7,
-	}, "values.yaml")
+			CurrentVersion: 7,
+		}, "values.yaml")
 
-	bscpCfg, ok := data["bscpConfig"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected bscpConfig in audit data, got %#v", data["bscpConfig"])
-	}
-	if bscpCfg["bizID"] != "2" ||
-		bscpCfg["serviceID"] != "3" ||
-		bscpCfg["configID"] != "4" ||
-		bscpCfg["versionID"] != "5" {
-		t.Fatalf("unexpected bscpConfig: %#v", bscpCfg)
-	}
-}
+		Expect(data["bscpConfig"]).To(Equal(map[string]any{
+			"bizID":     "2",
+			"serviceID": "3",
+			"configID":  "4",
+			"versionID": "5",
+		}))
+	})
+})

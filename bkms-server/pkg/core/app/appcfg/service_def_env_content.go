@@ -30,7 +30,7 @@ func (s *AppCfgFileDefService) UpsertEnvContent(
 	def *AppConfigFileDef,
 	params UpsertEnvContentParams,
 ) (*UpsertEnvContentResult, error) {
-	targetFile, compiledContent, isNewFile, err := s.PrepareEnvContentUpdate(
+	targetFile, compiledContent, isNewFile, oldFile, err := s.prepareEnvContentUpdate(
 		ctx, def, params.EnvName, params.Content, params.Operator,
 	)
 	if err != nil {
@@ -43,6 +43,12 @@ func (s *AppCfgFileDefService) UpsertEnvContent(
 		}
 	}
 
+	result := &UpsertEnvContentResult{
+		File:            targetFile,
+		CompiledContent: compiledContent,
+		IsNewFile:       isNewFile,
+		OldFile:         oldFile,
+	}
 	if isNewFile {
 		targetFile, err = s.CreateFileWithVersion(
 			ctx, *targetFile, def.Name, params.Description, params.Operator,
@@ -50,88 +56,69 @@ func (s *AppCfgFileDefService) UpsertEnvContent(
 		if err != nil {
 			return nil, errors.Wrap(err, "creating env instance")
 		}
+		result.File = targetFile
 	} else {
 		if err = s.UpdateFile(ctx, targetFile, def.Name, params.Operator, UpdateCfgFileOptions{
 			OperationType:          AppConfigFileVersionOperationTypeUpdate,
 			Description:            params.Description,
 			ExpectedCurrentVersion: params.ExpectedCurrentVersion,
 		}); err != nil {
-			return &UpsertEnvContentResult{File: targetFile, CompiledContent: compiledContent},
-				errors.Wrap(err, "updating target file")
+			return result, errors.Wrap(err, "updating target file")
 		}
 	}
 
-	return &UpsertEnvContentResult{File: targetFile, CompiledContent: compiledContent}, nil
+	return result, nil
 }
 
-// PrepareEnvContentUpdate 解析并应用一次内容更新，但不持久化，返回已写入内存的目标文件、编译后的内容，以及是否需要新建环境实例。
-func (s *AppCfgFileDefService) PrepareEnvContentUpdate(
+func (s *AppCfgFileDefService) prepareEnvContentUpdate(
 	ctx context.Context,
 	def *AppConfigFileDef,
 	envName string,
 	content string,
 	operator string,
-) (*AppConfigFile, string, bool, error) {
+) (*AppConfigFile, string, bool, *AppConfigFile, error) {
 	if def == nil {
-		return nil, "", false, errors.New("def is required")
+		return nil, "", false, nil, errors.New("def is required")
 	}
 
 	policy, err := s.policyFor(def.ConfigKind)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", false, nil, err
 	}
 
 	defaultFileWithDef, err := s.GetDefaultFileWithDef(ctx, def.ID)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", false, nil, err
 	}
 
 	if err = policy.ValidateContent(content, defaultFileWithDef.GetConfigFormat()); err != nil {
-		return nil, "", false, errors.Wrap(err, "kind-specific content validation")
+		return nil, "", false, nil, errors.Wrap(err, "kind-specific content validation")
 	}
 
 	targetFile, isNewFile, err := s.resolveContentUpdateTarget(
 		ctx, def, envName, policy, *defaultFileWithDef,
 	)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", false, nil, err
 	}
 	if isNewFile {
 		targetFile, err = s.buildContentUpdateNewFile(defaultFileWithDef, content, operator, policy, envName)
 		if err != nil {
-			return nil, "", false, err
+			return nil, "", false, nil, err
 		}
+	}
+
+	var oldFile *AppConfigFile
+	if !isNewFile && targetFile != nil {
+		copied := *targetFile
+		oldFile = &copied
 	}
 
 	compiledContent, err := s.applyContentUpdate(ctx, targetFile, content)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", false, nil, err
 	}
-	return targetFile, compiledContent, isNewFile, nil
-}
-
-// FindContentUpdateTarget 查找一次内容更新最终会落到哪个文件。
-// 返回 isNewFile=true 表示后续需要创建新的环境实例。
-func (s *AppCfgFileDefService) FindContentUpdateTarget(
-	ctx context.Context,
-	def *AppConfigFileDef,
-	envName string,
-) (*AppConfigFile, bool, error) {
-	if def == nil {
-		return nil, false, errors.New("def is required")
-	}
-
-	policy, err := s.policyFor(def.ConfigKind)
-	if err != nil {
-		return nil, false, err
-	}
-
-	defaultFileWithDef, err := s.GetDefaultFileWithDef(ctx, def.ID)
-	if err != nil {
-		return nil, false, err
-	}
-
-	return s.resolveContentUpdateTarget(ctx, def, envName, policy, *defaultFileWithDef)
+	return targetFile, compiledContent, isNewFile, oldFile, nil
 }
 
 func (s *AppCfgFileDefService) resolveContentUpdateTarget(

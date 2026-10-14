@@ -165,7 +165,7 @@ func (s *AppCfgFileDefService) applyMountedEnvNamesChange(
 			if file.EnvName == EnvNameDefault || slices.Contains(newEnvNames, file.EnvName) {
 				continue
 			}
-			if err = s.deleteEnvInstanceByName(ctx, def.ID, def.AppID, file.EnvName); err != nil {
+			if _, err = s.deleteEnvInstanceByName(ctx, def.ID, def.AppID, file.EnvName); err != nil {
 				return errors.Wrapf(err, "cleanup env instance for removed env %s", file.EnvName)
 			}
 		}
@@ -175,7 +175,7 @@ func (s *AppCfgFileDefService) applyMountedEnvNamesChange(
 	// 旧值已是明确列表：按 old − new 删除被移出范围的环境实例。
 	for _, oldEnv := range oldEnvNames {
 		if !slices.Contains(newEnvNames, oldEnv) {
-			if err := s.deleteEnvInstanceByName(ctx, def.ID, def.AppID, oldEnv); err != nil {
+			if _, err := s.deleteEnvInstanceByName(ctx, def.ID, def.AppID, oldEnv); err != nil {
 				return errors.Wrapf(err, "cleanup env instance for removed env %s", oldEnv)
 			}
 		}
@@ -186,13 +186,14 @@ func (s *AppCfgFileDefService) applyMountedEnvNamesChange(
 // --- 环境实例删除 / 清理 ---
 
 // ResetEnvInstanceToDefault 恢复指定环境为默认配置，删除该环境的独立实例及其版本历史。
+// 返回被删除的环境实例快照；没有实例时返回 nil。
 func (s *AppCfgFileDefService) ResetEnvInstanceToDefault(
 	ctx context.Context,
 	def *AppConfigFileDef,
 	envName string,
-) error {
+) (*AppConfigFile, error) {
 	if !def.EnvConfigMode.IsIndependent() {
-		return ErrResetToDefaultRequiresIndependentConfig
+		return nil, ErrResetToDefaultRequiresIndependentConfig
 	}
 	return s.deleteEnvInstanceByName(ctx, def.ID, def.AppID, envName)
 }
@@ -212,7 +213,7 @@ func (s *AppCfgFileDefService) CleanupPlainEnvInstancesByEnv(
 	}
 	for _, def := range plainDefs {
 		// 删除该环境的实例
-		if err = s.deleteEnvInstanceByName(ctx, def.ID, appID, envName); err != nil {
+		if _, err = s.deleteEnvInstanceByName(ctx, def.ID, appID, envName); err != nil {
 			return err
 		}
 		// 从 mountedEnvNames 中移除
@@ -233,24 +234,25 @@ func (s *AppCfgFileDefService) CleanupPlainEnvInstancesByEnv(
 }
 
 // deleteEnvInstanceByName 删除指定 def + envName 的环境实例及其版本。
+// 没有实例时返回 (nil, nil)。
 func (s *AppCfgFileDefService) deleteEnvInstanceByName(
 	ctx context.Context,
 	defID bson.ObjectID,
 	appID string,
 	envName string,
-) error {
+) (*AppConfigFile, error) {
 	acf, err := s.FileStore.GetByDefIDAndEnv(ctx, defID, envName)
 	if err != nil {
 		if errors.Is(err, ErrAppConfigFileNotFound) {
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
 	if _, err = s.FileStore.DeleteByID(ctx, appID, acf.ID); err != nil {
-		return errors.Wrap(err, "delete env instance")
+		return nil, errors.Wrap(err, "delete env instance")
 	}
 	if _, err = s.VersionStore.DeleteByFileID(ctx, acf.ID); err != nil {
-		return errors.Wrap(err, "delete versions for env instance")
+		return nil, errors.Wrap(err, "delete versions for env instance")
 	}
-	return nil
+	return acf, nil
 }

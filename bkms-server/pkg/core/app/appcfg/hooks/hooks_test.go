@@ -113,12 +113,14 @@ var _ = Describe("Env delete hooks from appcfg", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		envContent := "key: env\n"
-		targetFile, _, isNewFile, err := cfgSvc.PrepareEnvContentUpdate(ctx, def, envName, envContent, "tester")
+		upserted, err := cfgSvc.UpsertEnvContent(ctx, def, appcfg.UpsertEnvContentParams{
+			EnvName:     envName,
+			Content:     envContent,
+			Operator:    "tester",
+			Description: "create env file",
+		})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(isNewFile).To(BeTrue())
-
-		_, err = cfgSvc.CreateFileWithVersion(ctx, *targetFile, def.Name, "create env file", "tester")
-		Expect(err).NotTo(HaveOccurred())
+		Expect(upserted.IsNewFile).To(BeTrue())
 
 		return *def
 	}

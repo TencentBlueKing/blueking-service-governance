@@ -545,18 +545,18 @@ var _ = Describe("App serializers", func() {
 		Entry("trpc accepts trailing slash", serializer.TrpcSpecInput{
 			Language: "go", FileName: "trpc_go.yaml", FilePath: "/usr/local/trpc/bin/",
 		}, false),
-		Entry("trpc rejects root", serializer.TrpcSpecInput{
+		Entry("trpc accepts root", serializer.TrpcSpecInput{
 			Language: "go", FileName: "trpc_go.yaml", FilePath: "/",
-		}, true),
+		}, false),
 		Entry("trpc rejects relative path", serializer.TrpcSpecInput{
 			Language: "go", FileName: "trpc_go.yaml", FilePath: "./application/resource/storage/conf/cn/test/",
 		}, true),
 		Entry("taf accepts absolute directory", serializer.TafSpecInput{
 			FileName: "taf.conf", FilePath: "/usr/local/taf/conf",
 		}, false),
-		Entry("taf rejects root", serializer.TafSpecInput{
+		Entry("taf accepts root", serializer.TafSpecInput{
 			FileName: "taf.conf", FilePath: "/",
-		}, true),
+		}, false),
 		Entry("taf rejects relative path", serializer.TafSpecInput{
 			FileName: "taf.conf", FilePath: "etc/taf",
 		}, true),

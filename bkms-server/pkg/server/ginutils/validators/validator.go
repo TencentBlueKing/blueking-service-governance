@@ -44,8 +44,9 @@ func validateURISlug(fl validator.FieldLevel) bool {
 	return uriSlugPattern.MatchString(fl.Field().String())
 }
 
-// validateMountDir 校验容器内挂载目录：以 / 开头，且不能是根目录 /。
+// validateMountDir 校验容器内挂载目录：必须是以 / 开头的绝对路径。
+// 允许 "/"：实际挂载路径还会再拼接文件名，不会把 volume 直接挂到根目录。
 func validateMountDir(fl validator.FieldLevel) bool {
 	s := fl.Field().String()
-	return len(s) > 1 && s[0] == '/'
+	return len(s) >= 1 && s[0] == '/'
 }

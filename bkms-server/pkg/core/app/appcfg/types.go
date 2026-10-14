@@ -193,6 +193,9 @@ type UpsertEnvContentParams struct {
 type UpsertEnvContentResult struct {
 	File            *AppConfigFile
 	CompiledContent string
+	IsNewFile       bool
+	// OldFile 更新前的目标文件快照；新建环境实例时为 nil。
+	OldFile *AppConfigFile
 }
 
 // EnvFileDetailResult 环境文件详情查询结果。

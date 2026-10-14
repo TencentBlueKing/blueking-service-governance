@@ -67,13 +67,15 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			overlayContent := "base: prod\n"
-			updated, compiled, isNewFile, err := f.Svc.PrepareEnvContentUpdate(
-				f.Ctx, def, "prod", overlayContent, "editor",
-			)
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     overlayContent,
+				Operator:    "editor",
+				Description: "create prod overlay",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(isNewFile).To(BeTrue())
-			updated, err = f.Svc.CreateFileWithVersion(f.Ctx, *updated, def.Name, "create prod overlay", "editor")
-			Expect(err).NotTo(HaveOccurred())
+			Expect(upserted.IsNewFile).To(BeTrue())
+			updated := upserted.File
 			Expect(updated.EnvName).To(Equal("prod"))
 			Expect(updated.Type).To(Equal(appcfg.AppConfigFileTypeOverlay))
 			Expect(updated.OverlayContent).NotTo(BeNil())
@@ -81,8 +83,8 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			Expect(updated.BaseAppConfigFileID).NotTo(BeNil())
 			Expect(*updated.BaseAppConfigFileID).To(Equal(result.ID))
 			Expect(updated.CurrentVersion).To(Equal(int64(1)))
-			Expect(compiled).To(ContainSubstring("base: prod"))
-			Expect(compiled).To(ContainSubstring("keep: true"))
+			Expect(upserted.CompiledContent).To(ContainSubstring("base: prod"))
+			Expect(upserted.CompiledContent).To(ContainSubstring("keep: true"))
 		})
 
 		It("should update existing framework env overlay content", func() {
@@ -111,35 +113,36 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			initialOverlay := "base: prod\n"
-			created, compiled, isNewFile, err := f.Svc.PrepareEnvContentUpdate(
-				f.Ctx, def, "prod", initialOverlay, "editor",
-			)
+			createdResult, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     initialOverlay,
+				Operator:    "editor",
+				Description: "create prod overlay",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(isNewFile).To(BeTrue())
-			created, err = f.Svc.CreateFileWithVersion(f.Ctx, *created, def.Name, "create prod overlay", "editor")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(compiled).To(ContainSubstring("base: prod"))
+			Expect(createdResult.IsNewFile).To(BeTrue())
+			Expect(createdResult.CompiledContent).To(ContainSubstring("base: prod"))
+			created := createdResult.File
 
 			newOverlay := "base: prod-v2\nnewKey: enabled\n"
-			updated, compiled, isNewFile, err := f.Svc.PrepareEnvContentUpdate(
-				f.Ctx, def, "prod", newOverlay, "editor",
-			)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(isNewFile).To(BeFalse())
-			err = f.Svc.UpdateFile(f.Ctx, updated, def.Name, "editor", appcfg.UpdateCfgFileOptions{
-				OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
+			updatedResult, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:                "prod",
+				Content:                newOverlay,
+				Operator:               "editor",
 				Description:            "update prod overlay",
 				ExpectedCurrentVersion: lo.ToPtr(created.CurrentVersion),
 			})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(updatedResult.IsNewFile).To(BeFalse())
+			updated := updatedResult.File
 			Expect(updated.ID).To(Equal(created.ID))
 			Expect(updated.Type).To(Equal(appcfg.AppConfigFileTypeOverlay))
 			Expect(updated.OverlayContent).NotTo(BeNil())
 			Expect(*updated.OverlayContent).To(Equal(newOverlay))
 			Expect(updated.CurrentVersion).To(Equal(int64(2)))
-			Expect(compiled).To(ContainSubstring("base: prod-v2"))
-			Expect(compiled).To(ContainSubstring("keep: true"))
-			Expect(compiled).To(ContainSubstring("newKey: enabled"))
+			Expect(updatedResult.CompiledContent).To(ContainSubstring("base: prod-v2"))
+			Expect(updatedResult.CompiledContent).To(ContainSubstring("keep: true"))
+			Expect(updatedResult.CompiledContent).To(ContainSubstring("newKey: enabled"))
 		})
 
 		It("should create plain env file with overwrite strategy", func() {
@@ -157,19 +160,21 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			envContent := "key: prod\n"
-			updated, compiled, isNewFile, err := f.Svc.PrepareEnvContentUpdate(
-				f.Ctx, def, "prod", envContent, "editor",
-			)
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     envContent,
+				Operator:    "editor",
+				Description: "create plain prod file",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(isNewFile).To(BeTrue())
-			updated, err = f.Svc.CreateFileWithVersion(f.Ctx, *updated, def.Name, "create plain prod file", "editor")
-			Expect(err).NotTo(HaveOccurred())
+			Expect(upserted.IsNewFile).To(BeTrue())
+			updated := upserted.File
 			Expect(updated.EnvName).To(Equal("prod"))
 			Expect(updated.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
 			Expect(updated.Content).NotTo(BeNil())
 			Expect(*updated.Content).To(Equal(envContent))
 			Expect(updated.CurrentVersion).To(Equal(int64(1)))
-			Expect(compiled).To(Equal(envContent))
+			Expect(upserted.CompiledContent).To(Equal(envContent))
 		})
 
 		It("should write to default file for unified config", func() {
@@ -193,14 +198,17 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			// 保持统一配置（默认就是）
 
 			newContent := "base: updated\n"
-			updated, _, isNewFile, err := f.Svc.PrepareEnvContentUpdate(
-				f.Ctx, def, "prod", newContent, "editor",
-			)
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     newContent,
+				Operator:    "editor",
+				Description: "update unified",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(isNewFile).To(BeFalse())
+			Expect(upserted.IsNewFile).To(BeFalse())
 			// 统一配置时写到默认文件
-			Expect(updated.ID).To(Equal(result.ID))
-			Expect(updated.EnvName).To(Equal(appcfg.EnvNameDefault))
+			Expect(upserted.File.ID).To(Equal(result.ID))
+			Expect(upserted.File.EnvName).To(Equal(appcfg.EnvNameDefault))
 		})
 
 		It("should write to default file for default env name", func() {
@@ -223,12 +231,15 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			newContent := "base: updated\n"
-			updated, _, isNewFile, err := f.Svc.PrepareEnvContentUpdate(
-				f.Ctx, def, appcfg.EnvNameDefault, newContent, "editor",
-			)
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     appcfg.EnvNameDefault,
+				Content:     newContent,
+				Operator:    "editor",
+				Description: "update default",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(isNewFile).To(BeFalse())
-			Expect(updated.ID).To(Equal(result.ID))
+			Expect(upserted.IsNewFile).To(BeFalse())
+			Expect(upserted.File.ID).To(Equal(result.ID))
 		})
 
 		It("should reject writing to unmounted env even in unified config mode", func() {
@@ -243,7 +254,12 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, _, _, err = f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "staging", "new-content", "editor")
+			_, err = f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "staging",
+				Content:     "new-content",
+				Operator:    "editor",
+				Description: "unmounted",
+			})
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
 			Expect(err.Error()).To(ContainSubstring("not effective"))
@@ -282,6 +298,8 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(upsertResult.File).NotTo(BeNil())
+			Expect(upsertResult.IsNewFile).To(BeTrue())
+			Expect(upsertResult.OldFile).To(BeNil())
 			Expect(upsertResult.File.EnvName).To(Equal("prod"))
 			Expect(upsertResult.CompiledContent).To(ContainSubstring("base: prod"))
 			Expect(upsertResult.CompiledContent).To(ContainSubstring("keep: true"))
@@ -320,6 +338,7 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 				Description: "create prod",
 			})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(firstResult.IsNewFile).To(BeTrue())
 
 			// 第二次 upsert 更新
 			secondResult, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
@@ -330,6 +349,9 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 				ExpectedCurrentVersion: lo.ToPtr(firstResult.File.CurrentVersion),
 			})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(secondResult.IsNewFile).To(BeFalse())
+			Expect(secondResult.OldFile).NotTo(BeNil())
+			Expect(secondResult.OldFile.ID).To(Equal(firstResult.File.ID))
 			Expect(secondResult.File.ID).To(Equal(firstResult.File.ID))
 			Expect(secondResult.CompiledContent).To(ContainSubstring("base: prod-v2"))
 		})
@@ -392,11 +414,15 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			initialOverlay := "base: prod\n"
-			created, _, isNewFile, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "prod", initialOverlay, "editor")
+			createdResult, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     initialOverlay,
+				Operator:    "editor",
+				Description: "create prod overlay",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(isNewFile).To(BeTrue())
-			created, err = f.Svc.CreateFileWithVersion(f.Ctx, *created, def.Name, "create prod overlay", "editor")
-			Expect(err).NotTo(HaveOccurred())
+			Expect(createdResult.IsNewFile).To(BeTrue())
+			created := createdResult.File
 
 			conflictResult, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
 				EnvName:                "prod",

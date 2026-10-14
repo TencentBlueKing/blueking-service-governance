@@ -297,19 +297,14 @@ ignored: ${LEGACY}
 		Expect(err).NotTo(HaveOccurred())
 
 		content := "environment: ${{ env.ENV_ONLY }}\n"
-		envFile, _, isNewFile, err := svc.PrepareEnvContentUpdate(
-			ctx,
-			&defs[0],
-			appEnv.Name,
-			content,
-			appcfg.CfgSystemUser,
-		)
+		upserted, err := svc.UpsertEnvContent(ctx, &defs[0], appcfg.UpsertEnvContentParams{
+			EnvName:     appEnv.Name,
+			Content:     content,
+			Operator:    appcfg.CfgSystemUser,
+			Description: appcfg.CfgSystemVersionDescription,
+		})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(isNewFile).To(BeTrue())
-		_, err = svc.CreateFileWithVersion(
-			ctx, *envFile, defs[0].Name, appcfg.CfgSystemVersionDescription, appcfg.CfgSystemUser,
-		)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(upserted.IsNewFile).To(BeTrue())
 
 		result, err := checker.Check(ctx, app, appEnv)
 

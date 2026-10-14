@@ -225,12 +225,15 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			overlay := "overlayVersion: \"2\"\npatches:\n- database:\n    host: ${{ env.OVERLAY_HOST }}\n"
-			envFile, compiled, isNewFile, err := svc.PrepareEnvContentUpdate(ctx, def, "prod", overlay, "editor")
+			upserted, err := svc.UpsertEnvContent(ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     overlay,
+				Operator:    "editor",
+				Description: "create prod overlay",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(isNewFile).To(BeTrue())
-			Expect(compiled).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
-			_, err = svc.CreateFileWithVersion(ctx, *envFile, def.Name, "create prod overlay", "editor")
-			Expect(err).NotTo(HaveOccurred())
+			Expect(upserted.IsNewFile).To(BeTrue())
+			Expect(upserted.CompiledContent).To(Equal("database:\n  host: ${{ env.OVERLAY_HOST }}\n  port: 3306\n"))
 
 			frameworkFile, err := provider.GetFrameworkMountableFile(ctx, app.ID, "prod")
 			Expect(err).NotTo(HaveOccurred())
