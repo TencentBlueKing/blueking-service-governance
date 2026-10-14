@@ -117,7 +117,12 @@ func (c *RolloutClient) UpdateStatus(ctx context.Context, namespace, name string
 		status["paused"] = *patch.Paused
 	}
 	if patch.CurrentStepIndex != nil {
-		status["stepStatus"] = map[string]any{"currentStepIndex": *patch.CurrentStepIndex}
+		// Kourse 以 pauseStartTime != nil 判断当前批次是否已暂停过；Merge Patch 修改批次序号时需一并清空，
+		// 否则从已暂停批次（含 pauseStartTime）回退上一批并置 paused=false 后，会被当成本批已解除暂停而直接跳回下一批
+		status["stepStatus"] = map[string]any{
+			"currentStepIndex": *patch.CurrentStepIndex,
+			"pauseStartTime":   nil,
+		}
 	}
 	if len(status) == 0 {
 		return errors.New("empty rollout status patch")

@@ -201,10 +201,17 @@ var _ = Describe("RolloutClient", func() {
 			}))
 
 			Expect(client.UpdateStatus(ctx, "demo-ns", "demo", batchrelease.StatusPatch{
+				Paused:           lo.ToPtr(batchrelease.PausedFalse),
 				CurrentStepIndex: lo.ToPtr(int64(-1)),
 			})).To(Succeed())
 			Expect(fake.lastRequest().Body).To(Equal(map[string]any{
-				"status": map[string]any{"stepStatus": map[string]any{"currentStepIndex": float64(-1)}},
+				"status": map[string]any{
+					"paused": "false",
+					"stepStatus": map[string]any{
+						"currentStepIndex": float64(-1),
+						"pauseStartTime":   nil,
+					},
+				},
 			}))
 		})
 

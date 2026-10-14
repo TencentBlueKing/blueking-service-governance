@@ -42,11 +42,11 @@ const (
 	ActionContinue Action = "continue"
 	// ActionPause 暂停：批次执行中且未暂停时 status.paused 置为 "true"
 	ActionPause Action = "pause"
-	// ActionBackward 回退上一批：当前批次序号 ≥ 1 时 currentStepIndex 置为当前值 - 1
+	// ActionBackward 回退上一批：当前批次序号 ≥ 1 时 currentStepIndex 置为当前值 - 1，同时将 status.paused 置为 "false"
 	ActionBackward Action = "backward"
-	// ActionSkip 跳过剩余批次：currentStepIndex 置为批次总数，所有实例更新为新版本
+	// ActionSkip 跳过剩余批次：currentStepIndex 置为批次总数、status.paused 置为 "false"，所有实例更新为新版本
 	ActionSkip Action = "skip"
-	// ActionRollback 回滚：currentStepIndex 置为 -1，Kourse 完全回滚。
+	// ActionRollback 回滚：currentStepIndex 置为 -1、status.paused 置为 "false"，Kourse 完全回滚。
 	// 注意工作负载 spec 仍为新版本，只有 Pod 恢复为旧版本。
 	ActionRollback Action = "rollback"
 )
@@ -56,6 +56,7 @@ const (
 //
 // 所有操作都要求 Rollout 处于 Running 且批次序号在 [0, batchCount) 内：进入 UpdatingPrimary 后
 // Kourse 不再处理批次序号，此时修改会被静默忽略。
+// backward / skip / rollback 同时将 status.paused 置为 "false"(用户执行这种操作时，认为需要忽略暂停)
 func (s Status) ActionPatch(action Action, batchCount int) (StatusPatch, error) {
 	if s.Phase != RolloutPhaseRunning || s.CurrentStepIndex == nil ||
 		*s.CurrentStepIndex < 0 || *s.CurrentStepIndex >= int64(batchCount) {
@@ -75,12 +76,21 @@ func (s Status) ActionPatch(action Action, batchCount int) (StatusPatch, error) 
 		}
 	case ActionBackward:
 		if stepIndex >= 1 {
-			return StatusPatch{CurrentStepIndex: lo.ToPtr(stepIndex - 1)}, nil
+			return StatusPatch{
+				Paused:           lo.ToPtr(PausedFalse),
+				CurrentStepIndex: lo.ToPtr(stepIndex - 1),
+			}, nil
 		}
 	case ActionSkip:
-		return StatusPatch{CurrentStepIndex: lo.ToPtr(int64(batchCount))}, nil
+		return StatusPatch{
+			Paused:           lo.ToPtr(PausedFalse),
+			CurrentStepIndex: lo.ToPtr(int64(batchCount)),
+		}, nil
 	case ActionRollback:
-		return StatusPatch{CurrentStepIndex: lo.ToPtr(int64(-1))}, nil
+		return StatusPatch{
+			Paused:           lo.ToPtr(PausedFalse),
+			CurrentStepIndex: lo.ToPtr(int64(-1)),
+		}, nil
 	default:
 		return StatusPatch{}, errors.Wrapf(ErrActionNotAllowed, "unknown action %q", action)
 	}

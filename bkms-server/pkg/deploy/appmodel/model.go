@@ -169,8 +169,9 @@ type ReleaseStrategySnapshot struct {
 
 // BatchProgress 分批发布进度，由部署轮询任务读取 Rollout CR 状态后写入
 type BatchProgress struct {
-	// CurrentBatchIndex 当前批次序号，从 0 开始
-	CurrentBatchIndex int64 `bson:"currentBatchIndex"`
+	// CurrentBatchIndex 当前批次序号，从 0 开始，-1 表示回滚。
+	// 发布尚未进入批次、或全部批次走完后 stepStatus 被清空，此时为 nil，必须和 0 区分
+	CurrentBatchIndex *int64 `bson:"currentBatchIndex,omitempty"`
 	// BatchPhase 当前批次状态
 	BatchPhase batchrelease.BatchPhase `bson:"batchPhase"`
 	// RolloutPhase Rollout 原始 phase

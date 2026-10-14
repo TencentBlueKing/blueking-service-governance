@@ -43,8 +43,11 @@ type RecordStore interface {
 	// Create 创建应用部署记录
 	Create(ctx context.Context, record *Record) (string, error)
 
-	// Update 更新应用部署记录
+	// Update 更新应用部署记录。不写 batchProgress，分批进度由 UpdateBatchProgress 定向更新
 	Update(ctx context.Context, record *Record) error
+
+	// UpdateBatchProgress 只更新分批发布进度
+	UpdateBatchProgress(ctx context.Context, id string, progress *BatchProgress) error
 
 	// List 列表应用部署记录（支持分页）
 	List(
@@ -115,21 +118,44 @@ func (s *RecordStoreMongo) Create(ctx context.Context, record *Record) (string, 
 func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
 	filter := bson.M{"_id": record.ID}
 	updateDoc := bson.M{"$set": bson.M{
-		"replicas":      record.Replicas,
-		"deletionCost":  record.DeletionCost,
-		"message":       record.Message,
-		"status":        record.Status,
-		"extras":        record.Extras,
-		"batchProgress": record.BatchProgress,
-		"endedAt":       record.EndedAt,
-		"updater":       record.Updater,
-		"updatedAt":     time.Now(),
+		"replicas":     record.Replicas,
+		"deletionCost": record.DeletionCost,
+		"message":      record.Message,
+		"status":       record.Status,
+		"extras":       record.Extras,
+		"endedAt":      record.EndedAt,
+		"updater":      record.Updater,
+		"updatedAt":    time.Now(),
 	}}
 	ret, err := s.collection.UpdateOne(ctx, filter, updateDoc)
 	if err != nil {
 		return errors.Wrapf(err, "update app model app deploy record %s", record.ID.Hex())
 	}
 	// id 匹配不到数据的情况
+	if ret.MatchedCount == 0 {
+		return ErrDeployRecordNotFound
+	}
+	return nil
+}
+
+// UpdateBatchProgress 只更新分批发布进度，供轮询任务写入。
+// 与 Update 分开：非分批记录的该字段为 nil，放进 Update 的 $set 会被写成 null；
+// 扩缩容、下架等先读再写的路径也会用旧快照覆盖轮询刚写入的进度。
+func (s *RecordStoreMongo) UpdateBatchProgress(ctx context.Context, id string, progress *BatchProgress) error {
+	if progress == nil {
+		return errors.New("batch progress is nil")
+	}
+	oid, err := bson.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.Wrapf(err, "parse deploy record id %s", id)
+	}
+	ret, err := s.collection.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": bson.M{
+		"batchProgress": progress,
+		"updatedAt":     time.Now(),
+	}})
+	if err != nil {
+		return errors.Wrapf(err, "update batch progress of deploy record %s", id)
+	}
 	if ret.MatchedCount == 0 {
 		return ErrDeployRecordNotFound
 	}

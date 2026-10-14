@@ -203,6 +203,11 @@ func (s Status) IsRolledBack(workload WorkloadSnapshot) bool {
 	return s.isRollingBack() && s.Phase == RolloutPhaseRollbackCompleted && workload.IsRolledBack()
 }
 
+// IsPaused 是否处于暂停中（手动、永久或定时暂停）
+func (p BatchPhase) IsPaused() bool {
+	return p == BatchPhaseManualPaused || p == BatchPhaseTimedPaused
+}
+
 func (s Status) isRollingBack() bool {
 	return s.CurrentStepIndex != nil && *s.CurrentStepIndex < 0
 }
@@ -219,9 +224,4 @@ func (s Status) stepBatchPhase() BatchPhase {
 	default:
 		return BatchPhaseUpdating
 	}
-}
-
-// IsPaused 是否处于暂停中（手动、永久或定时暂停）
-func (p BatchPhase) IsPaused() bool {
-	return p == BatchPhaseManualPaused || p == BatchPhaseTimedPaused
 }

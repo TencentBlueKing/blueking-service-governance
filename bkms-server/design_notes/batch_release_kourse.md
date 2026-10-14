@@ -67,7 +67,7 @@
 |------|------|
 | `releaseMode` | `all` 一次更新全部 / `batch` 按策略分批。存量记录没有该字段，读取时通过 `GetReleaseMode()` 视为 `all`，无需迁移 |
 | `releaseStrategy` | 发起时的策略快照（ID、名称、批次）。策略之后被修改或删除，进度查询仍以快照为准 |
-| `batchProgress` | 轮询任务写入的进度：当前批次序号、批次状态、Rollout 原始 phase 与提示、暂停开始时间、已更新 / 总实例数、新旧镜像 |
+| `batchProgress` | 轮询任务写入的进度：当前批次序号（缺失为 `nil`，与第一批的 `0` 区分）、批次状态、Rollout 原始 phase 与提示、暂停开始时间、已更新 / 总实例数、新旧镜像 |
 | `status` | 新增 `rolled-back`，属于终态（`IsStable()` 为真） |
 
 `Record.IsBatchReleasing()`：发布方式为 `batch` 且状态为 `deploying` 时视为"分批发布中"。冲突拦截和手动操作都以环境 / 泳道的**最新部署记录**为准，不实时请求集群。
@@ -214,9 +214,9 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 |------|------|------|------|
 | 继续 `continue` | 暂停中（手动 / 永久 / 定时） | `paused: "false"` | 进入下一批；定时暂停中执行则提前进入下一批 |
 | 暂停 `pause` | 未暂停 | `paused: "true"` | 不再进入下一批，本批已开始更新的实例继续完成 |
-| 回退上一批 `backward` | 当前批次序号 ≥ 1 | `currentStepIndex` 减 1 | 回到上一批重新执行 |
-| 跳过剩余批次 `skip` | — | `currentStepIndex` = 批次总数 | 放开 partition，所有实例更新为新版本，最终进入 `Healthy` |
-| 回滚 `rollback` | — | `currentStepIndex: -1` | 所有 Pod 恢复旧版本 |
+| 回退上一批 `backward` | 当前批次序号 ≥ 1 | `paused: "false"`，`currentStepIndex` 减 1，`pauseStartTime: null` | 多出的新版本 Pod 退回旧版本，按上一批策略重新执行（清空 `pauseStartTime` 避免被 Kourse 当成已暂停过而直接跳回下一批） |
+| 跳过剩余批次 `skip` | — | `paused: "false"`，`currentStepIndex` = 批次总数 | 放开 partition，所有实例更新为新版本，最终进入 `Healthy` |
+| 回滚 `rollback` | — | `paused: "false"`，`currentStepIndex: -1` | 所有 Pod 恢复旧版本 |
 
 **回滚的语义与判定**
 
@@ -251,7 +251,6 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
   - 泳道部署前检查：要求基线泳道为 `deployed`。
   - 轮询收尾的审计与指标：只把 `deployed` 记为成功。
   - 前端状态枚举。
-- **进度写入与其他写操作的竞争**：部署记录的通用 `Update` 会整体写回 `batchProgress`，扩缩容、下架等"先读再写"的路径可能覆盖轮询刚写入的进度。进度同步应使用单独的定向更新。
+- **进度写入与其他写操作的竞争**：通用 `Update` 不写 `batchProgress`，进度由 `UpdateBatchProgress` 定向更新。轮询接入时必须走这个方法，不能把进度放进 `Update` 的整记录写回。
 - **webhook 缓存竞争**：4.2 的第 2、4 步是对 webhook 缓存未同步的兜底，需要在真实集群验证。
-- **回退上一批的行为**：回退后是否在该批暂停，需要在实现手动操作时实测确认。
 - **轮询中断**：记录置为 `polling-broken` 后不再是"分批发布中"，但集群中的 Rollout 可能仍在进行，兜底方式另行设计。

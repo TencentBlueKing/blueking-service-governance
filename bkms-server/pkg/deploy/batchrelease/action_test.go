@@ -38,6 +38,10 @@ var _ = Describe("Status.ActionPatch", func() {
 			Phase: "Running", Paused: "true", CurrentStepIndex: lo.ToPtr(int64(1)),
 			CurrentStepPhase: "PausedPermanently",
 		}
+		frozenAtSecond = batchrelease.Status{
+			Phase: "Running", Paused: "manually", CurrentStepIndex: lo.ToPtr(int64(1)),
+			CurrentStepPhase: "PausedManually",
+		}
 		scaling = batchrelease.Status{
 			Phase: "Running", Paused: "false", CurrentStepIndex: lo.ToPtr(int64(0)),
 			CurrentStepPhase: "ScalingReplicas",
@@ -58,25 +62,48 @@ var _ = Describe("Status.ActionPatch", func() {
 				CurrentStepPhase: "PausedTemporarily",
 			},
 			batchrelease.ActionContinue, batchrelease.StatusPatch{Paused: lo.ToPtr(batchrelease.PausedFalse)}),
-		Entry("continue a manual freeze",
-			batchrelease.Status{
-				Phase: "Running", Paused: "manually", CurrentStepIndex: lo.ToPtr(int64(0)),
-				CurrentStepPhase: "PausedManually",
-			},
-			batchrelease.ActionContinue, batchrelease.StatusPatch{Paused: lo.ToPtr(batchrelease.PausedFalse)}),
+		Entry("continue a manual freeze", frozenAtSecond, batchrelease.ActionContinue,
+			batchrelease.StatusPatch{Paused: lo.ToPtr(batchrelease.PausedFalse)}),
 		Entry("pause while scaling", scaling, batchrelease.ActionPause,
 			batchrelease.StatusPatch{Paused: lo.ToPtr(batchrelease.PausedTrue)}),
 		Entry("pause between two steps",
 			batchrelease.Status{Phase: "Running", Paused: "false", CurrentStepIndex: lo.ToPtr(int64(1))},
 			batchrelease.ActionPause, batchrelease.StatusPatch{Paused: lo.ToPtr(batchrelease.PausedTrue)}),
 		Entry("go back to the previous batch", pausedAtSecond, batchrelease.ActionBackward,
-			batchrelease.StatusPatch{CurrentStepIndex: lo.ToPtr(int64(0))}),
+			batchrelease.StatusPatch{
+				Paused:           lo.ToPtr(batchrelease.PausedFalse),
+				CurrentStepIndex: lo.ToPtr(int64(0)),
+			}),
+		Entry("go back to the previous batch while frozen manually", frozenAtSecond, batchrelease.ActionBackward,
+			batchrelease.StatusPatch{
+				Paused:           lo.ToPtr(batchrelease.PausedFalse),
+				CurrentStepIndex: lo.ToPtr(int64(0)),
+			}),
 		Entry("skip the remaining batches", pausedAtFirst, batchrelease.ActionSkip,
-			batchrelease.StatusPatch{CurrentStepIndex: lo.ToPtr(int64(batchCount))}),
+			batchrelease.StatusPatch{
+				Paused:           lo.ToPtr(batchrelease.PausedFalse),
+				CurrentStepIndex: lo.ToPtr(int64(batchCount)),
+			}),
+		Entry("skip the remaining batches while frozen manually", frozenAtSecond, batchrelease.ActionSkip,
+			batchrelease.StatusPatch{
+				Paused:           lo.ToPtr(batchrelease.PausedFalse),
+				CurrentStepIndex: lo.ToPtr(int64(batchCount)),
+			}),
 		Entry("roll back while paused", pausedAtFirst, batchrelease.ActionRollback,
-			batchrelease.StatusPatch{CurrentStepIndex: lo.ToPtr(int64(-1))}),
+			batchrelease.StatusPatch{
+				Paused:           lo.ToPtr(batchrelease.PausedFalse),
+				CurrentStepIndex: lo.ToPtr(int64(-1)),
+			}),
+		Entry("roll back while frozen manually", frozenAtSecond, batchrelease.ActionRollback,
+			batchrelease.StatusPatch{
+				Paused:           lo.ToPtr(batchrelease.PausedFalse),
+				CurrentStepIndex: lo.ToPtr(int64(-1)),
+			}),
 		Entry("roll back while scaling", scaling, batchrelease.ActionRollback,
-			batchrelease.StatusPatch{CurrentStepIndex: lo.ToPtr(int64(-1))}),
+			batchrelease.StatusPatch{
+				Paused:           lo.ToPtr(batchrelease.PausedFalse),
+				CurrentStepIndex: lo.ToPtr(int64(-1)),
+			}),
 	)
 
 	DescribeTable("rejects the action in the current state",
@@ -86,6 +113,7 @@ var _ = Describe("Status.ActionPatch", func() {
 		},
 		Entry("continue when not paused", scaling, batchrelease.ActionContinue),
 		Entry("pause when already paused", pausedAtFirst, batchrelease.ActionPause),
+		Entry("pause when frozen manually", frozenAtSecond, batchrelease.ActionPause),
 		Entry("go back from the first batch", pausedAtFirst, batchrelease.ActionBackward),
 		Entry("unknown action", pausedAtFirst, batchrelease.Action("restart")),
 		// 跳过剩余批次后、Kourse 尚未进入 UpdatingPrimary 前

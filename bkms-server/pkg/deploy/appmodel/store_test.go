@@ -195,7 +195,7 @@ var _ = Describe("RecordStoreMongo", func() {
 			// 轮询写入进度，毫秒精度与 Mongo 存储一致
 			pauseStartTime := time.Now().UTC().Truncate(time.Millisecond)
 			progress := &appmodel.BatchProgress{
-				CurrentBatchIndex: 0,
+				CurrentBatchIndex: lo.ToPtr(int64(0)),
 				BatchPhase:        batchrelease.BatchPhaseManualPaused,
 				RolloutPhase:      "Running",
 				Message:           "Running canary step 0",
@@ -205,13 +205,31 @@ var _ = Describe("RecordStoreMongo", func() {
 				OldImageTag:       "v1.0.0",
 				NewImageTag:       "v1.1.0",
 			}
-			record.BatchProgress = progress
-			Expect(store.Update(ctx, record)).To(Succeed())
+			Expect(store.UpdateBatchProgress(ctx, recordID, progress)).To(Succeed())
 
 			record, err = store.Get(ctx, appID, recordID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(record.BatchProgress).To(Equal(progress))
 			Expect(record.ReleaseStrategy).To(Equal(strategy))
+
+			// 通用 Update 拿着不含进度的快照写回，不能把刚写入的进度盖掉
+			record.BatchProgress = nil
+			record.Message = "still deploying"
+			Expect(store.Update(ctx, record)).To(Succeed())
+
+			record, err = store.Get(ctx, appID, recordID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(record.Message).To(Equal("still deploying"))
+			Expect(record.BatchProgress).To(Equal(progress))
+		})
+
+		It("rejects a nil batch progress and a missing record", func() {
+			Expect(store.UpdateBatchProgress(ctx, bson.NewObjectID().Hex(), nil)).NotTo(Succeed())
+
+			err := store.UpdateBatchProgress(ctx, bson.NewObjectID().Hex(), &appmodel.BatchProgress{
+				BatchPhase: batchrelease.BatchPhasePending,
+			})
+			Expect(err).To(MatchError(appmodel.ErrDeployRecordNotFound))
 		})
 
 		It("should treat records without release mode as releasing all at once", func() {
@@ -230,6 +248,14 @@ var _ = Describe("RecordStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(record.GetReleaseMode()).To(Equal(appmodel.ReleaseModeAll))
 			Expect(record.IsBatchReleasing()).To(BeFalse())
+
+			// 状态更新不能给非分批记录补上 batchProgress: null
+			record.Status = appmodel.StatusDeployed
+			Expect(store.Update(ctx, record)).To(Succeed())
+			raw = bson.M{}
+			Expect(database.Client().Database(database.Name()).Collection("app_model_deploy_records").
+				FindOne(ctx, bson.M{"_id": lo.Must(bson.ObjectIDFromHex(recordID))}).Decode(&raw)).To(Succeed())
+			Expect(raw).NotTo(HaveKey("batchProgress"))
 		})
 	})
 
