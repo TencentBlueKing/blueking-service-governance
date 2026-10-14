@@ -14,6 +14,7 @@ declare module 'vue' {
     CheckContainer: typeof import('./components/check-container.vue')['default']
     ClusterHealthScore: typeof import('./components/cluster-health-score.vue')['default']
     ClusterSelector: typeof import('./components/cluster-selector/cluster-selector.vue')['default']
+    CodeRevisionField: typeof import('./components/code-revision/code-revision-field.vue')['default']
     CollapseCard: typeof import('./components/collapse-card.vue')['default']
     CollapsibleAsideLayout: typeof import('./components/collapsible-aside-layout.vue')['default']
     CollapsiblePanel: typeof import('./components/collapsible-panel.vue')['default']

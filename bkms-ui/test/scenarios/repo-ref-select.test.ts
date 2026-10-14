@@ -125,16 +125,18 @@ describe('RepoRefSelect：Input trim 与防抖确认', () => {
     expect(wrapper.emitted('branchCommit')?.at(-1)).toEqual(['feature/a']);
   });
 
-  it('当用户输入仅空格（trim 后为空）时，防抖结束后仍不应触发分支确认', async () => {
+  it('当用户输入仅空格（trim 后为空）时，应立刻确认空修订，且防抖结束后不再发第二次', async () => {
     const { wrapper } = mountPipelineInput('master');
 
     await typeBranch(wrapper, '   ');
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['']);
+    // 清空后立刻通知父级按「不含修订」重算，不等 0.5 秒
+    expect(wrapper.emitted('branchCommit')).toEqual([['']]);
 
-    // 源码防抖 500ms，推进 2 倍确保触发（避免与 debounce 边界等值耦合）
+    // 源码防抖 500ms，推进 2 倍确保若未取消会再触发一次
     await vi.advanceTimersByTimeAsync(1000);
     await nextTick();
 
-    expect(wrapper.emitted('branchCommit')).toBeUndefined();
+    expect(wrapper.emitted('branchCommit')).toEqual([['']]);
   });
 });
