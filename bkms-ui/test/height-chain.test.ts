@@ -22,7 +22,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { describe, expect, it, vi } from 'vitest';
 import AppDetailShell from '~/pages/application/detail.vue';
-import FrameworkConfig from '~/pages/application/detail/app-config/framework-config.vue';
+import ConfigFiles from '~/pages/application/detail/app-config/config-files.vue';
 import AppConfigIndex from '~/pages/application/detail/app-config/index.vue';
 import AppDetailObservation from '~/pages/application/detail/observation.vue';
 
@@ -96,7 +96,7 @@ function mountOptions(extraStubs: Record<string, boolean | { template: string }>
         RouterView: { template: '<div data-test="router-view" />' },
         // <component :is> 动态组件 shallow 拦不住，显式封住三个子页
         DeployConfig: true,
-        FrameworkConfig: true,
+        ConfigFiles: true,
         EnvVariable: true,
         // 宿主容器藏在多层 slot 里，透传渲染
         Skeleton: { template: '<div data-test="skeleton"><slot /></div>' },
@@ -150,18 +150,21 @@ describe('高度链契约（关键页面的高度角色声明）', () => {
     wrapper.unmount();
   });
 
-  it('框架配置文件 framework-config.vue：根容器声明 flex h-full min-h-0 flex-col', () => {
-    const wrapper = mount(FrameworkConfig, mountOptions());
-    expect(wrapper.classes(), '框架配置页根容器必须撑满父级并允许收缩').toEqual(
-      expect.arrayContaining(['flex', 'flex-col', 'h-full', 'min-h-0']),
+  it('配置文件 config-files.vue：根容器声明 h-full min-h-0', () => {
+    const wrapper = mount(ConfigFiles, mountOptions());
+    expect(wrapper.classes(), '配置文件页根容器必须撑满父级并允许收缩').toEqual(
+      expect.arrayContaining(['h-full', 'min-h-0']),
     );
     wrapper.unmount();
   });
 
-  it('框架配置文件 framework-config.vue：编辑器宿主区声明 flex-1 + min-h-0（Monaco 高度链收口环）', () => {
-    const wrapper = mount(FrameworkConfig, mountOptions());
-    const host = wrapper.find('div.flex-1.min-h-0');
-    expect(host.exists(), '编辑器宿主区必须存在且声明 flex-1 min-h-0').toBe(true);
+  it('配置文件 config-files.vue：分栏容器声明 h-full min-h-0', () => {
+    const wrapper = mount(ConfigFiles, mountOptions());
+    const layout = wrapper.find('resize-layout-stub');
+    expect(layout.exists(), '配置文件分栏容器必须存在').toBe(true);
+    expect(layout.classes(), '配置文件分栏容器必须撑满父级并允许收缩').toEqual(
+      expect.arrayContaining(['h-full', 'min-h-0']),
+    );
     wrapper.unmount();
   });
 });

@@ -487,7 +487,6 @@
     <VersionListSideslider
       v-model:visible="showVersionListSideslider"
       :config-file-def-id="activeDefID"
-      :config-file-list="[]"
       :current-env-name="currentEnv.name"
       :default-file-id="activeDef?.fileId"
       :default-version="activeDef?.currentVersion"
@@ -976,6 +975,8 @@
 
   // 切换差异/完整内容视图；切到完整视图时调用合并预览接口生成完整配置
   async function handleContentViewChange(view: ContentView) {
+    // 同视图点击不重复预览，避免将编辑器中的完整内容覆盖到差异草稿。
+    if (view === contentView.value) return;
     if (view === 'editable') {
       fullContentRequestID += 1;
       fullContentLoading.value = false;

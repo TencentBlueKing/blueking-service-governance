@@ -293,7 +293,6 @@
   <!-- 版本列表侧边栏 -->
   <VersionListSideslider
     v-model:visible="showVersionListSideslider"
-    :config-file-list="[]"
     :current-file-id="latestFileInfo?.fileId"
     :current-file-name="latestFileInfo?.name"
     :current-version="latestFileInfo?.currentVersion"

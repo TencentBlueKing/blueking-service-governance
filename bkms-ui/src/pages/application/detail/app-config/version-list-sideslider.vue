@@ -272,7 +272,6 @@
   const props = defineProps<{
     /** 配置文件定义 ID（Def 页面按环境切换版本时使用） */
     configFileDefId?: string;
-    configFileList: AppConfigFileOutputObj[];
     /** 当前环境名（按环境模式时使用） */
     currentEnvName?: string;
     /** 当前选中的文件（Helm 按文件模式时使用） */
@@ -382,18 +381,14 @@
   /** 是否发生了回滚操作（关闭侧边栏时通知父组件刷新文件内容） */
   const hasRollback = ref(false);
 
-  /** 当前生效版本号（按文件模式从 currentFile 获取，按环境模式从 configFileList 获取） */
+  /** 当前生效版本号 */
   const currentVersionNum = computed(() => {
     if (props.configFileDefId) {
       if (!props.enableEnvConfig || curEnvID.value === DEFAULT_ENV_ID) return props.defaultVersion ?? 0;
       if (!curEnvName.value) return 0;
       return props.envInstances?.find(item => item.envName === curEnvName.value)?.currentVersion ?? 0;
     }
-    if (isFileMode.value) {
-      return props.currentVersion ?? props.currentFile?.currentVersion ?? 0;
-    }
-    const configFile = props.configFileList.find(item => item.envName === curEnvName.value);
-    return configFile?.currentVersion ?? 0;
+    return props.currentVersion ?? props.currentFile?.currentVersion ?? 0;
   });
 
   /** 版本列表（附加 isCurrent 标记，当前生效版本置顶） */
