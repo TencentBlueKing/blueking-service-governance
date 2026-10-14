@@ -178,6 +178,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 	}
 	if err = bkci.EnsureWorkspaceRepositories(
 		ctx,
+		h.registry.DB,
 		uriInput.WorkspaceID,
 		collectBKCIRepositoriesForCreateApp(input.Type, app.HelmSpec, buildConfig),
 	); err != nil {

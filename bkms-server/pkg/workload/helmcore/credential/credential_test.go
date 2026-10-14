@@ -25,32 +25,25 @@ import (
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 var _ = Describe("EnsureCredential", func() {
 	var (
 		ctx         context.Context
-		store       HelmRepoCredentialStore
+		db          *mongo.Database
+		credStore   *Store
 		workspaceID string
 	)
 
 	BeforeEach(func() {
-		var err error
 		ctx = context.Background()
-
-		secret, err := crypto.GenerateKey(32)
-		Expect(err).NotTo(HaveOccurred())
-		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
-
-		store, err = NewHelmRepoCredentialStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
+		credStore = setUpCredStore()
+		db = testutil.NewDB(GinkgoT())
 		workspaceID = "ws-ensure-test-" + stringx.Random(8)
 	})
 
@@ -60,13 +53,14 @@ var _ = Describe("EnsureCredential", func() {
 			stubClient := bkciapi.NewStub(auth.User{ID: "test-user"})
 			mockey.Mock(bkciapi.New).Return(stubClient, nil).Build()
 
-			err := EnsureCredential(ctx, store, workspaceID, "test-project", "admin", "password")
+			err := EnsureCredential(ctx, db, workspaceID, "test-project", "admin", "password")
 			Expect(err).NotTo(HaveOccurred())
 
 			// 验证凭证已写入 DB
-			cred, err := store.GetByWorkspace(ctx, workspaceID)
+			cred, err := credStore.Get(ctx, ByWorkspace(workspaceID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cred.CredentialID).To(Equal(helmRepoCredentialID))
+			Expect(cred.Password).To(Equal("password"))
 		})
 	})
 
@@ -77,12 +71,16 @@ var _ = Describe("EnsureCredential", func() {
 			mockey.Mock(bkciapi.New).Return(stubClient, nil).Build()
 
 			// 第一次调用
-			err := EnsureCredential(ctx, store, workspaceID, "test-project", "admin", "password")
+			err := EnsureCredential(ctx, db, workspaceID, "test-project", "admin", "password")
 			Expect(err).NotTo(HaveOccurred())
 
 			// 第二次调用应该直接跳过，不报错
-			err = EnsureCredential(ctx, store, workspaceID, "test-project", "admin", "password")
+			err = EnsureCredential(ctx, db, workspaceID, "test-project", "admin", "password")
 			Expect(err).NotTo(HaveOccurred())
+
+			n, err := credStore.Count(ctx, ByWorkspace(workspaceID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(1)))
 		})
 	})
 })

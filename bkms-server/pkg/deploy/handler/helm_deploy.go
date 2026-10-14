@@ -152,9 +152,7 @@ func (h *Handler) PreviewHelmDeploy(c *gin.Context) {
 	)
 	result, err := helmdeploy.PreviewHelmRelease(
 		ctx,
-		h.registry.BkCIProjectStore,
-		h.registry.BkRepoProjectStore,
-		h.registry.HelmRepoCredentialStore,
+		h.registry.DB,
 		envVarsReader,
 		app,
 		env,

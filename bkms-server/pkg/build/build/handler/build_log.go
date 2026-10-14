@@ -31,6 +31,7 @@ import (
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // buildLogDeps 构建日志请求的执行依赖
@@ -112,7 +113,8 @@ func (h *Handler) prepareBuildLogDeps(c *gin.Context) (*buildLogDeps, error) {
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get build record")
 	}
-	project, err := h.registry.BkCIProjectStore.GetByWorkspace(ctx, record.WorkspaceID)
+	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
+		Get(ctx, bkciproject.ByWorkspace(record.WorkspaceID))
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get bkci project")
 	}

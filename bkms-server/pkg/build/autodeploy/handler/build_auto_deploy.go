@@ -68,6 +68,7 @@ func (h *Handler) newBuildService() (*build.Service, error) {
 		h.registry.SnapshotStore,
 	)
 	return build.NewService(
+		h.registry.DB,
 		h.registry.BuildConfigStore,
 		h.registry.BuildRecordStore,
 		imageReferenceValidator,
