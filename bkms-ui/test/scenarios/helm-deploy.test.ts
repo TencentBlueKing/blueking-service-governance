@@ -35,6 +35,8 @@
  *   - use-helm-deploy.ts 导出模块级单例 ref（deployHistoryList/chartList/latestDeployStatus），
  *     测试间会泄漏 → beforeEach 手动重置
  */
+import type { PropType } from 'vue';
+
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
@@ -42,6 +44,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18nPlugin } from '../helpers/mock-i18n';
 import { installVxeShims } from '../helpers/mock-table';
+
+import type DeployHistory from '~/pages/application/detail/helm-deploy/deploy-history.vue';
+import type PreviewRollback from '~/pages/application/detail/helm-deploy/preview-rollback.vue';
 
 beforeAll(() => {
   installVxeShims();
@@ -54,7 +59,7 @@ const mocks = vi.hoisted(() => ({
   previewRollbackHelmDeploy: vi.fn(),
   rollbackHelmDeploy: vi.fn(),
   listEnvTrafficLanes: vi.fn(),
-  listAppConfigFiles: vi.fn(),
+  listDefaultFilesWithDef: vi.fn(),
   listDeployableImageTags: vi.fn(),
   message: vi.fn(),
 }));
@@ -70,7 +75,7 @@ vi.mock('~/api/modules/v1', () => ({
   },
   EnvService: { listEnvTrafficLanes: mocks.listEnvTrafficLanes },
   HelmChartsService: { listChartVersions: vi.fn().mockResolvedValue([]) },
-  AppConfigFilesService: { listAppConfigFiles: mocks.listAppConfigFiles },
+  AppConfigFileDefsService: { listDefaultFilesWithDef: mocks.listDefaultFilesWithDef },
   ImagesService: { listDeployableImageTags: mocks.listDeployableImageTags },
 }));
 
@@ -198,27 +203,32 @@ vi.mock('~/pages/application/detail/helm-deploy/deploy-history.vue', async () =>
 
 // —— vxe 表格 stub（conventions 模板，部署历史列为插槽渲染）——
 vi.mock('@blueking/table', async () => {
-  const { defineComponent, h, Comment } = await import('vue');
+  const { defineComponent, h, createCommentVNode } = await import('vue');
   const TableColumnStub = defineComponent({
     props: { field: String, label: String, type: String },
     setup(_p, { slots }) {
-      return () => (slots.default ? h('span', slots.default({ row: {}, rowIndex: 0 })) : h(Comment, ''));
+      return () => (slots.default ? h('span', slots.default({ row: {}, rowIndex: 0 })) : createCommentVNode());
     },
   });
   const TableStub = defineComponent({
-    props: { data: { type: Array, default: () => [] } },
+    props: { data: { type: Array as PropType<Record<string, unknown>[]>, default: () => [] } },
     setup(props, { slots }) {
       return () => {
         const columns = (slots.default?.() ?? []).filter(Boolean);
-        const rows = props.data as Record<string, unknown>[];
+        const rows = props.data;
         const body = rows.length
           ? rows.map((row, rowIndex) =>
               h(
                 'div',
                 { key: rowIndex, 'data-testid': 'table-row' },
-                columns.map((col: { children?: { default?: (s: unknown) => unknown } }, i: number) =>
-                  h('span', { key: i }, [col.children?.default ? col.children.default({ row, rowIndex }) : '']),
-                ),
+                columns.map((col, i) => {
+                  const children = col.children;
+                  const defaultSlot =
+                    children && typeof children === 'object' && !Array.isArray(children) ? children.default : undefined;
+                  return h('span', { key: i }, [
+                    typeof defaultSlot === 'function' ? defaultSlot({ row, rowIndex }) : '',
+                  ]);
+                }),
               ),
             )
           : slots.empty?.();
@@ -250,7 +260,7 @@ const latestRecord = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.listAppConfigFiles.mockResolvedValue({ items: [] });
+  mocks.listDefaultFilesWithDef.mockResolvedValue({ items: [] });
   mocks.listDeployableImageTags.mockResolvedValue({ results: [] });
   // useHelmDeploy 内部消费 pinia store，先激活
   setActivePinia(createPinia());
@@ -264,9 +274,9 @@ beforeEach(() => {
 /** 打开侧滑（isShow false → true 触发数据加载 watch），等数据加载完成后返回 */
 async function openDeployApplication() {
   const utils = await renderDeployApplication();
-  await utils.rerender({ isShow: true, deployType: 'RollingUpdate', envItem, laneName: '' } as never);
+  await utils.rerender({ isShow: true, deployType: 'RollingUpdate', envItem, laneName: '' });
   // 完成信号：侧滑打开时的两个列表请求都已发起
-  await waitFor(() => expect(mocks.listAppConfigFiles).toHaveBeenCalled());
+  await waitFor(() => expect(mocks.listDefaultFilesWithDef).toHaveBeenCalled());
   return utils;
 }
 
@@ -286,16 +296,16 @@ async function openFilledDeployApplication(previewResult: Record<string, unknown
 }
 
 async function renderDeployApplication() {
-  const { default: DeployApplication } = await import('~/pages/application/detail/helm-deploy/deploy-application.vue');
-  return render(DeployApplication as never, {
+  const { default: deployApplication } = await import('~/pages/application/detail/helm-deploy/deploy-application.vue');
+  return render(deployApplication, {
     props: { isShow: false, deployType: 'RollingUpdate', envItem, laneName: '' },
-    global: { plugins: [createPinia(), i18nPlugin] } as never,
+    global: { plugins: [createPinia(), i18nPlugin] },
   });
 }
 
 describe('Helm 部署/更新侧滑：部署流程', () => {
   it('当用户未选必填项点「下一步」时，应显示校验错误态且不调用预览接口', async () => {
-    const utils = await openDeployApplication();
+    await openDeployApplication();
     // 回填参数来自部署历史，此测试保持历史为空 → 表单三项均为空
     // 侧滑 wrapper 显隐由 bkui modal 内部 setTimeout 置位，findBy 自带重试
     await userEvent.click(await screen.findByRole('button', { name: '下一步：预览部署' }));
@@ -349,12 +359,12 @@ describe('部署历史与回滚：入口与确认', () => {
     const oldRecord = { ...latestRecord, id: 'deploy-0', chartVersion: '1.0.0', updatedAt: '2026-09-07T10:00:00Z' };
     mocks.listHelmDeployRecords.mockResolvedValue({ count: '2', results: [latestRecord, oldRecord] });
     // deploy-history 的文件级 stub 仅供 index 场景使用，此处取真实组件
-    const { default: DeployHistory } = await vi.importActual<
-      typeof import('~/pages/application/detail/helm-deploy/deploy-history.vue')
-    >('~/pages/application/detail/helm-deploy/deploy-history.vue');
-    render(DeployHistory as never, {
+    const { default: deployHistory } = await vi.importActual<{ default: typeof DeployHistory }>(
+      '~/pages/application/detail/helm-deploy/deploy-history.vue',
+    );
+    render(deployHistory, {
       props: { envName: 'env-1', laneName: '', skipInitialFetch: false },
-      global: { plugins: [createPinia(), i18nPlugin] } as never,
+      global: { plugins: [createPinia(), i18nPlugin] },
     });
     // 表格行渲染完成（stub 表格 + 插槽列）
     const rows = await screen.findAllByTestId('table-row');
@@ -369,12 +379,12 @@ describe('部署历史与回滚：入口与确认', () => {
   it('当用户在回滚弹窗确认时，应调用回滚接口、提示回滚成功并关闭弹窗', async () => {
     mocks.previewRollbackHelmDeploy.mockResolvedValue({ current: 'a: 1', target: 'a: 0' });
     // preview-rollback 的文件级 stub 仅供 deploy-history 场景使用，此处取真实组件
-    const { default: PreviewRollback } = await vi.importActual<
-      typeof import('~/pages/application/detail/helm-deploy/preview-rollback.vue')
-    >('~/pages/application/detail/helm-deploy/preview-rollback.vue');
-    const { emitted } = render(PreviewRollback as never, {
+    const { default: previewRollback } = await vi.importActual<{ default: typeof PreviewRollback }>(
+      '~/pages/application/detail/helm-deploy/preview-rollback.vue',
+    );
+    const { emitted } = render(previewRollback, {
       props: { isShow: true, appName: 'app-a', envName: 'env-1', deployID: 'deploy-0', trafficLaneName: '' },
-      global: { plugins: [createPinia(), i18nPlugin] } as never,
+      global: { plugins: [createPinia(), i18nPlugin] },
     });
     // 打开即拉取回滚预览（Dialog @shown），diff 就绪后确定按钮可用
     await waitFor(() => expect(mocks.previewRollbackHelmDeploy).toHaveBeenCalled());
@@ -401,9 +411,9 @@ describe('Helm 部署容器页：更新入口状态机', () => {
       count: '1',
       results: [{ ...latestRecord, status: 'pending-upgrade' }],
     });
-    const { default: HelmDeploy } = await import('~/pages/application/detail/helm-deploy/index.vue');
-    render(HelmDeploy as never, {
-      global: { plugins: [i18nPlugin] } as never,
+    const { default: helmDeploy } = await import('~/pages/application/detail/helm-deploy/index.vue');
+    render(helmDeploy, {
+      global: { plugins: [i18nPlugin] },
     });
     // 环境选择 stub 自动 emit → 拉泳道与部署历史 → latestDeployStatus = pending-upgrade
     const updateBtn = await screen.findByRole('button', { name: '更新' });
