@@ -388,6 +388,33 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(unchanged.MountDir).To(Equal("/old/path"))
 		})
 
+		It("should allow multiple plain files to share the same mountDir", func() {
+			first := f.createPlainFile("a.conf", "/etc/app", "a: 1")
+			second := f.createPlainFile("b.conf", "/etc/app", "b: 2")
+
+			Expect(first.Def.MountDir).To(Equal("/etc/app"))
+			Expect(second.Def.MountDir).To(Equal("/etc/app"))
+			Expect(first.Def.ID).NotTo(Equal(second.Def.ID))
+		})
+
+		It("should allow updating a plain mountDir to share another file directory", func() {
+			f.createPlainFile("keep.conf", "/etc/app", "keep")
+			movable := f.createPlainFile("move.conf", "/old/path", "move")
+			def, err := f.DefStore.GetByID(f.Ctx, movable.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			shared := "/etc/app"
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				MountDir: &shared,
+				Operator: "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.MountDir).To(Equal("/etc/app"))
+		})
+
 		It("should allow mountDir update for plain kind", func() {
 			result := f.createPlainFile("editable.conf", "/old/path", "content")
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)

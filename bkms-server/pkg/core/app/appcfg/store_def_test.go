@@ -97,6 +97,37 @@ var _ = Describe("AppConfigFileDefStoreMongo", func() {
 		})
 	})
 
+	Context("uniqueness", func() {
+		It("should allow the same mountDir with different names", func() {
+			first := newDef()
+			first.Name = "a.conf"
+			first.MountDir = "/etc/app"
+			_, err := store.Add(ctx, first)
+			Expect(err).NotTo(HaveOccurred())
+
+			second := newDef()
+			second.Name = "b.conf"
+			second.MountDir = "/etc/app"
+			_, err = store.Add(ctx, second)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should reject the same mountDir and name", func() {
+			first := newDef()
+			first.Name = "app.conf"
+			first.MountDir = "/etc/app"
+			_, err := store.Add(ctx, first)
+			Expect(err).NotTo(HaveOccurred())
+
+			second := newDef()
+			second.Name = "app.conf"
+			second.MountDir = "/etc/app"
+			_, err = store.Add(ctx, second)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("app config file def already exists"))
+		})
+	})
+
 	Context("Update", func() {
 		It("should update name, flat env config fields and enableEnvVarRender", func() {
 			def := newDef()

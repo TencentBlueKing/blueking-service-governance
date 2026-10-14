@@ -54,20 +54,29 @@
    - 删除嵌套字段 `envConfigMode`
    - 不使用 `envConfigMode.isUnifiedConfig`。旧代码把顶层文档解码成零值后再 Update，会把凭空的 `false` 写进嵌套字段
 
+4. 放宽挂载目录唯一约束：
+   - 删除 `appID_1_mountDir_1`（同一应用下 `mountDir` 单独唯一，禁止同目录多文件）
+   - 创建 `appID_1_mountDir_1_name_1`（unique，partial：`mountDir` 存在且非空）
+   - 最终容器挂载路径是 `filepath.Join(mountDir, name)`，同目录不同文件名合法；`appID + name` 唯一索引保留
+
 `isUnifiedConfig` 只由第 2 步按环境实例是否存在决定。嵌套字段只提供 `mountedEnvNames`。
 
 ## 已执行过旧版本时
 
-`schema_migrations` 已经是 18 的库不会再次执行修改后的 `up`。这些库需要先 `migrate force 17`，再 `migrate up`。`down` 是空操作，不能靠 down 恢复旧值。
+`schema_migrations` 已经是 18 的库不会再次执行修改后的 `up`（含本次并入的索引变更）。这些库需要先 `migrate force 17`，再 `migrate up`。数据回填不能靠 down 恢复旧值。
+
+若某库已经执行过已删除的 `000019`，游标会停在 19 而仓库里没有对应文件，需要 `migrate force 18` 把游标拉回。索引若已建好可不动；若还没有，再 `force 17` 后 `up`。
 
 ## down
 
-`down` 为 no-op。
+数据回填部分为 no-op，只回滚第 4 步的索引：删掉 `appID_1_mountDir_1_name_1`，重建 `appID_1_mountDir_1`。
 
-原因是该迁移属于存量数据统一，回滚到迁移前的旧值没有业务意义，且无法安全区分：
+`isUnifiedConfig` / `envConfigMode` 回滚到迁移前的旧值没有业务意义，且无法安全区分：
 
 - 哪些 `false` 是修复前误刷出来的错误值
 - 哪些 `false` 是本就正确的“按环境独立配置”值
+
+若 down 时已经写入「同目录多文件」，重建旧索引会失败，需先清掉冲突数据。
 
 ## 验证
 

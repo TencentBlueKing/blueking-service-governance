@@ -70,6 +70,10 @@ type AppConfigFileDefStoreMongo struct {
 // NewAppConfigFileDefStoreMongo 创建 MongoDB 驱动的 def store。
 func NewAppConfigFileDefStoreMongo(client *mongo.Client, dbName string) (*AppConfigFileDefStoreMongo, error) {
 	coll := client.Database(dbName).Collection(defCollectionName)
+	// 索引（由 golang-migrate 维护）：
+	// - 唯一：appID + name
+	// - 唯一（partial，mountDir 非空）：appID + mountDir + name，保证最终挂载路径 Join(mountDir, name) 不重复
+	// - 查询：appID + configKind
 	return &AppConfigFileDefStoreMongo{collection: coll}, nil
 }
 
@@ -151,6 +155,9 @@ func (s *AppConfigFileDefStoreMongo) Update(ctx context.Context, def AppConfigFi
 		},
 	})
 	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return 0, errors.New("app config file def already exists")
+		}
 		return 0, err
 	}
 	return result.ModifiedCount, nil
