@@ -36,19 +36,19 @@ export default class AppConfigPage extends AppDetailBase {
   }
 
   private getEnvPopover() {
-    return this.page.locator('.c-env-select-v2-popover').first();
+    return this.testId('env-perspective-options').filter({ visible: true }).first();
   }
 
   private getEnvSelect() {
-    return this.page.locator('xpath=//div[normalize-space()="环境视角"]/ancestor::div[1]');
+    return this.testId('deploy-config-env-select');
   }
 
   /** 等待环境选择器和配置卡片均更新到指定环境，避免在切换中的旧卡片上继续操作。 */
-  private async waitForEnvConfigReady(envSelect: Locator, envDisplayName: string) {
-    await expect(envSelect.getByText(envDisplayName, { exact: true })).toBeVisible({ timeout: 10000 });
-    await this.getResourceSection()
-      .getByText(`环境：${envDisplayName}`, { exact: true })
-      .waitFor({ state: 'visible', timeout: 15000 });
+  private async waitForEnvConfigReady(envSelect: Locator, envName: string) {
+    await expect(envSelect).toHaveAttribute('data-selected-env', envName, { timeout: 10000 });
+    const content = this.testId('deploy-config-content');
+    await expect(content).toHaveAttribute('data-env-name', envName, { timeout: 15000 });
+    await expect(content).toBeVisible({ timeout: 15000 });
     await this.safeWaitForNetworkIdle();
   }
 
@@ -256,15 +256,8 @@ export default class AppConfigPage extends AppDetailBase {
   /** 在部署配置的环境选择器中选择默认配置 */
   async selectConfigDefaultEnv() {
     const envSelect = this.getEnvSelect();
-    if (
-      await envSelect
-        .getByText('默认配置', { exact: true })
-        .isVisible()
-        .catch(() => false)
-    ) {
-      await this.getResourceSection()
-        .getByText('按环境', { exact: true })
-        .waitFor({ state: 'visible', timeout: 15000 });
+    if ((await envSelect.getAttribute('data-selected-env-type')) === 'default') {
+      await this.testId('deploy-config-content').waitFor({ state: 'visible', timeout: 15000 });
       return;
     }
 
@@ -272,13 +265,8 @@ export default class AppConfigPage extends AppDetailBase {
     const envPopover = this.getEnvPopover();
     await envPopover.waitFor({ state: 'visible', timeout: 10000 });
 
-    const defaultGroup = envPopover.locator(
-      'xpath=.//*[normalize-space()="默认"]/ancestor::div[contains(@class, "flex-1")][1]',
-    );
-    await defaultGroup.locator('.env-list-scroll > div').filter({ hasText: '默认配置' }).first().click();
-    await expect(envSelect.getByText('默认配置', { exact: true })).toBeVisible({ timeout: 10000 });
-    await this.getResourceSection().getByText('按环境', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
-    await this.safeWaitForNetworkIdle();
+    await envPopover.locator('[data-testid="env-perspective-option"][data-env-type="default"]').click();
+    await this.waitForEnvConfigReady(envSelect, '__default__');
   }
 
   /** 在部署配置的环境选择器中选择第一个类型=「测试」的环境 */
@@ -288,25 +276,17 @@ export default class AppConfigPage extends AppDetailBase {
     // 再触发选择，避免点击被忽略后仍停留在默认配置。
     await this.getResourceSection().waitFor({ state: 'visible', timeout: 15000 });
     // 页面刷新会保留已选环境；此时无需再次打开 Popover，避免把已就绪的选择器切回关闭状态。
-    if (
-      await envSelect
-        .getByText('测试', { exact: true })
-        .isVisible()
-        .catch(() => false)
-    )
-      return;
+    if ((await envSelect.getAttribute('data-selected-env-type')) === 'test') return;
 
     await envSelect.click();
     const envPopover = this.getEnvPopover();
     await envPopover.waitFor({ state: 'visible', timeout: 10000 });
 
-    const testEnvColumn = envPopover.locator(
-      'xpath=.//*[normalize-space()="测试"]/ancestor::div[contains(@class, "flex-1")][1]',
-    );
-    const option = testEnvColumn.locator('.env-list-scroll > div').first();
-    const envDisplayName = await option.locator('.text-ov').innerText();
+    const option = envPopover.locator('[data-testid="env-perspective-option"][data-env-type="test"]').first();
+    const envName = await option.getAttribute('data-env-name');
+    if (!envName) throw new Error('未找到测试环境');
     await option.click();
-    await this.waitForEnvConfigReady(envSelect, envDisplayName);
+    await this.waitForEnvConfigReady(envSelect, envName);
   }
 
   /** 环境级变量侧栏表格行（不含表头，兼容 bk-table / vxe-table） */

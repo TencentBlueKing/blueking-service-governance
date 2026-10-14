@@ -40,6 +40,8 @@
           'border-[#3a84ff] shadow-[0_0_3px_0_#a3c5fd]': isPopoverVisible && !isDarkTheme,
         },
       ]"
+      :data-selected-env="modelValue"
+      :data-selected-env-type="selectedEnvItem?.type ?? (isDefaultSelected ? 'default' : '')"
     >
       <div
         :class="[
@@ -97,7 +99,10 @@
 
     <!-- 下拉面板 -->
     <template #content>
-      <div class="min-h-[100px]">
+      <div
+        class="min-h-[100px]"
+        data-testid="env-perspective-options"
+      >
         <div class="flex items-center mb-[8px]">
           <Input
             v-model.trim="searchKeyword"
@@ -152,6 +157,9 @@
                   { '!bg-[#E1ECFF] !text-[#3a84ff]': isSelected(env) },
                   { 'hover:bg-[#F5F7FA]': !isSelected(env) },
                 ]"
+                :data-env-name="env.name"
+                :data-env-type="env.type"
+                data-testid="env-perspective-option"
                 @click="handleSelectEnv(env)"
               >
                 <span

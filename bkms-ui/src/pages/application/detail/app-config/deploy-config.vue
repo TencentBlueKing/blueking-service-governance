@@ -23,6 +23,7 @@
       class="bg-[#EAEBF0] shadow-[0_2px_4px_0_#0000001a] px-[12px] py-[8px] mx-[24px] mt-[20px] mb-[16px] flex items-center gap-[10px] flex-shrink-0"
     >
       <EnvPerspectiveSelect
+        data-testid="deploy-config-env-select"
         :env-list="envList"
         :model-value="currentEnvName"
         :modified-env-names="configuredEnvNames"
@@ -92,6 +93,8 @@
       <div
         v-show="!isLoading"
         class="flex flex-col gap-[16px] pb-[20px]"
+        :data-env-name="currentEnvName"
+        data-testid="deploy-config-content"
       >
         <!-- 启动配置 -->
         <ProgramConfig :current-env="currentExtendedEnv" />
