@@ -28,6 +28,7 @@ docs/superpowers
 !bkms-server/pkg/build/
 !bkms-server/pkg/build/build/
 !bkms-server/pkg/build/image/
+!bkms-cli/pkg/handler/build/
 !bkms-cli/cmd/app/build/
 
 # Unit test / coverage reports
