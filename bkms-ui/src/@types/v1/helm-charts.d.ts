@@ -126,14 +126,22 @@ export interface ListHelmChartBuildRecordsOutput {
 
 export interface CreateHelmChartBuildInput {
   /**
-   * Git 分支名称
+   * 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
    */
-  branch: string;
+  branch?: string;
   /**
    * semver 递增段类型（默认 patch）
    * 经典归零语义：递增 major 时 minor+patch 归零，递增 minor 时 patch 归零
    */
   bumpType: "patch" | "minor" | "major";
+  /**
+   * 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制），与 branch 至少填一个
+   */
+  revision?: string;
+  /**
+   * 代码来源类型（branch / tag / commit），缺省为 branch
+   */
+  revisionType?: "branch" | "tag" | "commit";
 }
 
 export interface CreateHelmChartBuildOutput {

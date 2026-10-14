@@ -64,7 +64,15 @@ export interface GetRecommendedImageTagRequest {
    */
   appID: string;
   /**
-   * 分支/Tag（仅 custom 类型使用）
+   * 代码来源类型 branch / tag / commit（仅 custom 类型使用）
+   */
+  revisionType?: string;
+  /**
+   * 分支名 / Tag 名 / CommitID（仅 custom 类型使用）
+   */
+  revision?: string;
+  /**
+   * 兼容字段：按分支检出，revision 为空时生效
    */
   branch?: string;
 }
@@ -108,13 +116,21 @@ export interface ListBuildRecordsOutput {
 
 export interface CreateBuildInput {
   /**
-   * 构建分支或标签
+   * 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
    */
   branch?: string;
   /**
    * 本次构建使用的镜像 Tag
    */
   imageTag?: string;
+  /**
+   * 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制）
+   */
+  revision?: string;
+  /**
+   * 代码来源类型（branch / tag / commit），缺省为 branch
+   */
+  revisionType?: "branch" | "tag" | "commit";
 }
 
 export interface CreateBuildOutput {
@@ -177,7 +193,7 @@ export interface BuildRecordOutputObj {
    */
   revision?: string;
   /**
-   * 代码来源类型 branch / tag / commit
+   * 代码来源类型（branch / tag / commit），本功能上线前的记录为 branch
    */
   revisionType?: string;
   /**

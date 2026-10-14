@@ -132,6 +132,10 @@ export interface CreateDefInput {
    */
   description?: string;
   /**
+   * 创建时可选设置环境变量渲染开关；不传时使用 ConfigKind 默认值
+   */
+  enableEnvVarRender?: boolean;
+  /**
    * 文件格式
    */
   fileFormat: "yaml" | "taf";
@@ -144,7 +148,11 @@ export interface CreateDefInput {
    */
   mountDir?: string;
   /**
-   * 文件名称
+   * 创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。环境名格式与路径参数 envName 相同。
+   */
+  mountedEnvNames?: string[];
+  /**
+   * 文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。
    */
   name: string;
 }
@@ -166,6 +174,9 @@ export interface UpdateDefInput {
   isUnifiedConfig?: boolean;
   mountDir?: string;
   mountedEnvNames?: string[];
+  /**
+   * 文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。
+   */
   name?: string;
 }
 
@@ -234,6 +245,7 @@ export interface DefSummaryObj {
 export interface DefDetailObj {
   baseAppConfigFileId?: string;
   baseContentInfo?: BaseContentInfoObj;
+  bscpConfig?: BSCPConfigObj;
   configKind?: string;
   content?: string;
   contentSourceType?: string;
@@ -268,6 +280,12 @@ export interface BaseContentInfoObj {
   holderId?: string;
   holderName?: string;
   isFromAnotherFile?: boolean;
+}
+
+export interface BSCPConfigObj {
+  bizID?: string;
+  id?: string;
+  serviceID?: string;
 }
 
 export interface BSCPConfigInput {

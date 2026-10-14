@@ -27,7 +27,7 @@ export type CreateTrpcBuildDeployRequest = CreateAppModelBuildDeployInput & {
 
 export interface CreateAppModelBuildDeployInput {
   /**
-   * 代码分支或标签，留空时由构建服务按默认逻辑处理
+   * 兼容字段：按分支检出，仅在 revision 为空且 revisionType 为空或 branch 时生效
    */
   branch?: string;
   /**
@@ -38,6 +38,14 @@ export interface CreateAppModelBuildDeployInput {
    * 自动部署时的副本数
    */
   replicas: number;
+  /**
+   * 代码修订：分支名、Tag 名或 CommitID（7–40 位十六进制）
+   */
+  revision?: string;
+  /**
+   * 代码来源类型（branch / tag / commit），缺省为 branch
+   */
+  revisionType?: "branch" | "tag" | "commit";
   /**
    * 泳道名称，空字符串表示默认泳道
    */
@@ -96,6 +104,10 @@ export interface BuildRecordOutputObj {
    * 代码版本
    */
   revision?: string;
+  /**
+   * 代码来源类型（branch / tag / commit），与构建记录列表同一推导口径
+   */
+  revisionType?: string;
   /**
    * 开始时间
    */
