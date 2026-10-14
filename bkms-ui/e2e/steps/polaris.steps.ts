@@ -15,6 +15,7 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
+
 /** 北极星配置页通用前置步骤。 */
 import { Given } from '../fixtures/fixtures';
 

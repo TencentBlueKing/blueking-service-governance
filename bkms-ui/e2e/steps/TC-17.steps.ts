@@ -15,6 +15,7 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
+
 /** TC-17 部署管理实例列表只读能力：业务语义步骤。 */
 import { Given, Then, When } from '../fixtures/fixtures';
 

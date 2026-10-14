@@ -15,6 +15,7 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
+
 import { expect } from '@playwright/test';
 
 import AppDetailBase from './app-detail-base.page';
@@ -432,7 +433,8 @@ export default class DeployInstancePage extends AppDetailBase {
     await expect(table.getByText('Healthy', { exact: true }).first()).toBeVisible();
     // 差异化数据：行 2 健康状态异常展示 UnHealthy；行 3 未注册北极星展示 --
     await expect(table.getByText('UnHealthy', { exact: true }).first()).toBeVisible();
-    await expect(table.getByText('--', { exact: true }).first()).toBeVisible();
+    const unregisteredRow = this.getVisibleInstanceRows().filter({ hasText: 'e2e-instance-03' });
+    await expect(unregisteredRow.locator('.vxe-body--column').nth(7)).toHaveText('--');
     for (const action of ['灰度', '日志', '监控', '登录', '调整权重']) {
       await expect(table.getByRole('button', { name: action }).first()).toBeVisible();
     }
@@ -500,7 +502,7 @@ export default class DeployInstancePage extends AppDetailBase {
   /** 断言调整权重弹窗可见 */
   async expectInstanceWeightDialogVisible() {
     await expect(this.getDialog().getByText('调整权重', { exact: true })).toBeVisible({ timeout: 10000 });
-    await expect(this.getDialog().getByText(/权重/).first()).toBeVisible();
+    await expect(this.getDialog().getByRole('spinbutton')).toHaveValue('100');
   }
 
   /** 获取实例列表主表的行，排除固定选择列和操作列复制出的 VXE 行 */

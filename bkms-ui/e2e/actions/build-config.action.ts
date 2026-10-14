@@ -37,7 +37,7 @@ import type { APIRequestContext } from '@playwright/test';
 
 type ApiContext = { request: APIRequestContext; testConfig: BkmsFixtures['testConfig'] };
 
-export async function discoverBuilderPipelines(context: ApiContext): Promise<BuilderPipeline[]> {
+export async function discoverBuilderPipelines(context: ApiContext, pipelineID?: string): Promise<BuilderPipeline[]> {
   const workspace = encodeURIComponent(context.testConfig.space);
   const pipelines: NonNullable<PaginatedBkCIPipelineOutput['results']> = [];
   let total = 0;
@@ -53,22 +53,35 @@ export async function discoverBuilderPipelines(context: ApiContext): Promise<Bui
   }
   const available = pipelines
     .filter(pipeline => pipeline.id && pipeline.name)
+    .filter(pipeline => !pipelineID || pipeline.id === pipelineID)
     .sort((a, b) => a.id!.localeCompare(b.id!));
-  return Promise.all(
-    available.map(async pipeline => {
-      const variables = await readData<BkCIPipelineVariableOutput[] | null>(
-        context,
-        `/workspaces/${workspace}/bkci-pipelines/${encodeURIComponent(pipeline.id!)}/variables`,
-      );
-      return {
-        id: pipeline.id!,
-        name: pipeline.name!,
-        variables: (variables ?? []).filter(
-          (variable): variable is BkCIPipelineVariableOutput & { id: string } => !!variable.id,
-        ),
-      };
-    }),
-  );
+  const discovered: BuilderPipeline[] = [];
+  for (const pipeline of available) {
+    const variables = await readData<BkCIPipelineVariableOutput[] | null>(
+      context,
+      `/workspaces/${workspace}/bkci-pipelines/${encodeURIComponent(pipeline.id!)}/variables`,
+    );
+    discovered.push({
+      id: pipeline.id!,
+      name: pipeline.name!,
+      variables: (variables ?? []).filter(
+        (variable): variable is BkCIPipelineVariableOutput & { id: string } => !!variable.id,
+      ),
+    });
+    if (pipelineID) break;
+
+    const primary = discovered.find(item => item.variables.some(variable => variable.required));
+    if (!primary || !discovered.some(item => !item.variables.length)) continue;
+    const primaryKeys = new Set(primary.variables.map(variable => variable.id));
+    const hasSecondary = discovered.some(
+      item =>
+        item.id !== primary.id &&
+        item.variables.some(variable => !primaryKeys.has(variable.id)) &&
+        primary.variables.some(variable => !item.variables.some(other => other.id === variable.id)),
+    );
+    if (hasSecondary) break;
+  }
+  return discovered;
 }
 
 export async function discoverBuilderRepositories(context: ApiContext): Promise<BuilderRepository[]> {

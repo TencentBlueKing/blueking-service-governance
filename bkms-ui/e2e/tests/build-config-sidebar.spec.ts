@@ -61,9 +61,9 @@ test.describe('构建配置侧栏', () => {
   test('源码仓库：选择切换、分支校验及保存回显', async ({ pages, request, testConfig, builderSnapshot }) => {
     const context = { request, testConfig };
     const [repositoryA, repositoryB] = await discoverBuilderRepositories(context);
-    const originalPipeline = (await discoverBuilderPipelines(context)).find(
-      pipeline => pipeline.id === builderSnapshot.buildConfig.pipelineBuildConfig?.pipelineID,
-    );
+    const originalPipeline = (
+      await discoverBuilderPipelines(context, builderSnapshot.buildConfig.pipelineBuildConfig?.pipelineID)
+    ).find(pipeline => pipeline.id === builderSnapshot.buildConfig.pipelineBuildConfig?.pipelineID);
     expect(originalPipeline, '源码仓库用例需要应用原有流水线可访问，以验证切回后清空仓库配置').toBeTruthy();
     const buildConfig = pages.appDetailPage.buildConfig;
     await buildConfig.gotoBaseInfo();

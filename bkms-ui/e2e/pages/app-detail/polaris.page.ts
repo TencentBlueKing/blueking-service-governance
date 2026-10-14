@@ -7,14 +7,15 @@
  *
  *  http://opensource.org/licenses/MIT
  *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
- * OF ANY KIND, either express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
+
 import { type Locator, type Route, expect } from '@playwright/test';
 
 import AppDetailBase from './app-detail-base.page';
@@ -159,23 +160,26 @@ export default class PolarisPage extends AppDetailBase {
     await route.fallback();
   }
 
-  private async getPolarisConfigEditor() {
-    return this.preferTestId('polaris-config-editor', this.getSideslider());
+  private getPolarisConfigEditor() {
+    return this.testId('polaris-config-editor');
   }
 
   private async getPolarisRowActionButton(actionName: string) {
-    const rowIndex = await this.getPolarisTable()
-      .locator('.vxe-body--row:visible')
-      .evaluateAll(
-        (rows, polarisName) => rows.findIndex(row => row.textContent?.includes(String(polarisName))),
-        this.primaryPolarisName,
-      );
-    expect(rowIndex, `未找到北极星配置行：${this.primaryPolarisName}`).toBeGreaterThanOrEqual(0);
-    return this.page.getByRole('button', { name: actionName }).nth(rowIndex);
+    const table = this.getPolarisTable();
+    const row = table.locator('.vxe-table--main-wrapper .vxe-body--row').filter({ hasText: this.primaryPolarisName });
+    await expect(row).toHaveCount(1);
+    const rowId = await row.getAttribute('rowid');
+    expect(rowId, `未找到北极星配置行 ID：${this.primaryPolarisName}`).toBeTruthy();
+    return table
+      .locator(`.vxe-table--fixed-right-wrapper .vxe-body--row[rowid="${rowId}"]`)
+      .getByRole('button', { name: actionName, exact: true });
   }
 
   private getPolarisTable() {
-    return this.page.locator('.vxe-table').first();
+    return this.page
+      .locator('.vxe-table')
+      .filter({ has: this.page.getByText('服务名', { exact: true }) })
+      .first();
   }
 
   private getSideFormItem(label: string) {
@@ -248,10 +252,6 @@ export default class PolarisPage extends AppDetailBase {
         servicePort: 9090,
       },
     ];
-  }
-
-  private async preferTestId(id: string, fallback: Locator) {
-    return (await this.testId(id).count()) > 0 ? this.testId(id) : fallback;
   }
 
   private async routeDeployStatuses() {
@@ -393,13 +393,10 @@ export default class PolarisPage extends AppDetailBase {
 
   /** 断言新增侧边栏展示平台自动生成模式字段 */
   async expectCreatePolarisAutoMode() {
-    const editor = await this.getPolarisConfigEditor();
-    const typeOptions = await this.preferTestId('polaris-config-type-options', this.getSideFormItem('类型'));
-    const ownerField = await this.preferTestId('polaris-config-auto-owner-field', this.getSideFormItem('北极星负责人'));
-    const weightFactorField = await this.preferTestId(
-      'polaris-config-auto-weight-factor-field',
-      this.getSideFormItem('权重因子'),
-    );
+    const editor = this.getPolarisConfigEditor();
+    const typeOptions = this.testId('polaris-config-type-options');
+    const ownerField = this.testId('polaris-config-auto-owner-field');
+    const weightFactorField = this.testId('polaris-config-auto-weight-factor-field');
 
     await expect(typeOptions.getByRole('radio', { name: '平台自动生成' })).toBeChecked();
     await expect(editor.getByText('北极星Token', { exact: true })).toHaveCount(0);
@@ -408,12 +405,9 @@ export default class PolarisPage extends AppDetailBase {
   }
   /** 断言新增侧边栏展示从现有引入模式字段 */
   async expectCreatePolarisImportMode() {
-    const editor = await this.getPolarisConfigEditor();
-    const typeOptions = await this.preferTestId('polaris-config-type-options', this.getSideFormItem('类型'));
-    const tokenField = await this.preferTestId(
-      'polaris-config-import-token-field',
-      this.getSideFormItem('北极星Token'),
-    );
+    const editor = this.getPolarisConfigEditor();
+    const typeOptions = this.testId('polaris-config-type-options');
+    const tokenField = this.testId('polaris-config-import-token-field');
 
     await expect(typeOptions.getByRole('radio', { name: '从现有引入' })).toBeChecked();
     await expect(tokenField).toBeVisible();
@@ -487,19 +481,10 @@ export default class PolarisPage extends AppDetailBase {
 
   /** 断言编辑侧边栏保留从现有引入模式，并限制不可编辑字段 */
   async expectPrimaryImportedPolarisEditMode() {
-    const typeOptions = await this.preferTestId('polaris-config-type-options', this.getSideFormItem('类型'));
-    const namespaceOptions = await this.preferTestId(
-      'polaris-config-namespace-options',
-      this.getSideFormItem('北极星环境类型'),
-    );
-    const serviceNameField = await this.preferTestId(
-      'polaris-config-service-name-field',
-      this.getSideFormItem('北极星服务名'),
-    );
-    const tokenField = await this.preferTestId(
-      'polaris-config-import-token-field',
-      this.getSideFormItem('北极星Token'),
-    );
+    const typeOptions = this.testId('polaris-config-type-options');
+    const namespaceOptions = this.testId('polaris-config-namespace-options');
+    const serviceNameField = this.testId('polaris-config-service-name-field');
+    const tokenField = this.testId('polaris-config-import-token-field');
     const importRadio = typeOptions.getByRole('radio', { name: '从现有引入' });
     const namespaceRadio = namespaceOptions.getByRole('radio', { name: 'Test' });
     const serviceNameInput = serviceNameField.locator('input');
@@ -523,27 +508,19 @@ export default class PolarisPage extends AppDetailBase {
 
   /** 打开新增侧边栏并选择平台自动生成模式 */
   async openCreatePolarisAutoSideslider() {
-    const addButton = await this.preferTestId(
-      'polaris-config-add-button',
-      this.page.getByRole('button', { name: '添加北极星' }),
-    );
-    await addButton.click();
-    const editor = await this.getPolarisConfigEditor();
+    await this.testId('polaris-config-add-button').click();
+    const editor = this.getPolarisConfigEditor();
     await expect(editor).toBeVisible({ timeout: 10000 });
-    const typeOptions = await this.preferTestId('polaris-config-type-options', this.getSideFormItem('类型'));
+    const typeOptions = this.testId('polaris-config-type-options');
     await typeOptions.getByText('平台自动生成', { exact: true }).click();
   }
 
   /** 打开新增侧边栏并选择从现有引入模式 */
   async openCreatePolarisImportSideslider() {
-    const addButton = await this.preferTestId(
-      'polaris-config-add-button',
-      this.page.getByRole('button', { name: '添加北极星' }),
-    );
-    await addButton.click();
-    const editor = await this.getPolarisConfigEditor();
+    await this.testId('polaris-config-add-button').click();
+    const editor = this.getPolarisConfigEditor();
     await expect(editor).toBeVisible({ timeout: 10000 });
-    const typeOptions = await this.preferTestId('polaris-config-type-options', this.getSideFormItem('类型'));
+    const typeOptions = this.testId('polaris-config-type-options');
     await typeOptions.getByText('从现有引入', { exact: true }).click();
   }
 
@@ -553,12 +530,11 @@ export default class PolarisPage extends AppDetailBase {
   }
   /** 打开首条从现有引入配置的编辑侧边栏 */
   async openPrimaryImportedPolarisEditor() {
-    const editButton = await this.preferTestId(
-      `polaris-config-edit-${this.primaryConfigName}`,
-      await this.getPolarisRowActionButton('编辑'),
-    );
-    await editButton.click();
-    await expect(await this.getPolarisConfigEditor()).toBeVisible({ timeout: 10000 });
+    await this.getPolarisTable()
+      .locator('.vxe-table--fixed-right-wrapper')
+      .getByTestId(`polaris-config-edit-${this.primaryConfigName}`)
+      .click();
+    await expect(this.getPolarisConfigEditor()).toBeVisible({ timeout: 10000 });
   }
 
   /** 配置北极星页面接口 mock */

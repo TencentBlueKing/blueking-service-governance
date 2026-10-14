@@ -15,6 +15,7 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
+
 /** TC-20 北极星关联环境侧栏：业务语义步骤。 */
 import { Then, When } from '../fixtures/fixtures';
 
