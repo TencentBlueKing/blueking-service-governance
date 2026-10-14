@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/spf13/cast"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -153,25 +154,14 @@ func ParseStatus(rollout map[string]any) (Status, error) {
 	return status, nil
 }
 
-// nestedInt64 兼容 unstructured 中整数的不同解码类型（JSON 解码为 int64，部分场景为 float64）；
-// 字段缺失或为 null 时第二个返回值为 false
+// nestedInt64 读取整数字段。对端保证为数字，用 cast.ToInt64 兼容 int64、float64 等解码类型。
+// 字段缺失或为 null 时第二个返回值为 false。
 func nestedInt64(obj map[string]any, fields ...string) (int64, bool, error) {
 	val, found, err := unstructured.NestedFieldNoCopy(obj, fields...)
 	if err != nil || !found || val == nil {
 		return 0, false, err
 	}
-	switch v := val.(type) {
-	case int64:
-		return v, true, nil
-	case int32:
-		return int64(v), true, nil
-	case int:
-		return int64(v), true, nil
-	case float64:
-		return int64(v), true, nil
-	default:
-		return 0, false, errors.Errorf("%v accessor error: %v is of the type %T, expected int64", fields, val, val)
-	}
+	return cast.ToInt64(val), true, nil
 }
 
 // BatchPhase 将 Rollout 状态映射为当前批次状态，workload 为 Rollout 所控制的主工作负载的当前状态。

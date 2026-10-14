@@ -21,6 +21,7 @@ package releasestrategy_test
 import (
 	"context"
 	"errors"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -72,6 +73,8 @@ var _ = Describe("Release strategy store", func() {
 		created := newStrategy("workspace-a", "生产谨慎发布")
 		Expect(store.Create(ctx, created)).To(Succeed())
 		Expect(created.ID.IsZero()).To(BeFalse())
+		// createdAt 入库只有毫秒精度，连续创建可能相同，列表顺序会不稳定
+		time.Sleep(5 * time.Millisecond)
 		Expect(store.Create(ctx, newStrategy("workspace-a", "fast"))).To(Succeed())
 		Expect(store.Create(ctx, newStrategy("workspace-b", "other"))).To(Succeed())
 

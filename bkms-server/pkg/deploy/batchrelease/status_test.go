@@ -134,7 +134,6 @@ var _ = Describe("ParseStatus", func() {
 		},
 		Entry("non string phase", map[string]any{"phase": int64(1)}),
 		Entry("non string workload revision", map[string]any{"workloadRevision": int64(1)}),
-		Entry("non integer step index", map[string]any{"stepStatus": map[string]any{"currentStepIndex": "1"}}),
 		Entry("invalid pause start time", map[string]any{"stepStatus": map[string]any{"pauseStartTime": "yesterday"}}),
 	)
 })
@@ -315,6 +314,5 @@ var _ = Describe("ParseWorkloadSnapshot", func() {
 			Expect(err).To(HaveOccurred())
 		},
 		Entry("non string revision", map[string]any{"status": map[string]any{"updateRevision": int64(1)}}),
-		Entry("non integer replicas", map[string]any{"spec": map[string]any{"replicas": "4"}}),
 	)
 })

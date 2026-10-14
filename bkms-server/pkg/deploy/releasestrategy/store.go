@@ -55,7 +55,7 @@ type StoreMongo struct {
 // NewStoreMongo 新建 StoreMongo 实例
 func NewStoreMongo(client *mongo.Client, dbName string) (*StoreMongo, error) {
 	coll := client.Database(dbName).Collection(CollectionName)
-	// 索引（由 golang-migrate 维护，见 000018）：
+	// 索引
 	// - 唯一：workspaceID + name，约束同一空间内策略名称唯一
 	return &StoreMongo{collection: coll}, nil
 }
