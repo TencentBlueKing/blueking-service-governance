@@ -18,6 +18,7 @@
 
 import { onScopeDispose, ref, watch } from 'vue';
 
+import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
 import { useAppDetail } from '~/stores/app-detail';
 
 import { useEnvVarPrecheck } from './use-env-var-precheck';
@@ -30,6 +31,7 @@ import type { EnvOutput } from '~/@types/v1/env';
 /** 将联邦资源硬阻断与环境变量警告汇总到同一次部署预检。 */
 export function useDeployPrecheck() {
   const appDetailStore = useAppDetail();
+  const { checkDeployEnv } = useAppVisibleEnvs();
   const envVarPrecheck = useEnvVarPrecheck();
   const federationPrecheck = useFederationResourcePrecheck();
   const isShowPrecheckDialog = ref(false);
@@ -60,7 +62,9 @@ export function useDeployPrecheck() {
     completePrecheck(true);
   }
 
-  async function precheck(envName: string, targetEnv?: EnvOutput): Promise<boolean> {
+  async function precheck(targetEnv: EnvOutput): Promise<boolean> {
+    if (!targetEnv.name || !checkDeployEnv(targetEnv)) return false;
+    const envName = targetEnv.name;
     // 新一轮检查开始时结束旧弹窗流程，并让尚未完成的旧请求结果失效。
     if (resolvePrecheck) {
       completePrecheck(false);

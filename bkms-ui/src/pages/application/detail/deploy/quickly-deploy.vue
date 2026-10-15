@@ -55,6 +55,8 @@
           class="w-full"
           :class="{ 'pointer-events-none opacity-60': confirmLoading }"
           :columns="2"
+          enable-visible-env-settings
+          filter-visible-envs
           :show-env-prefix="false"
           :show-only-deployed-filter="false"
           :sync-env-store="false"
@@ -191,7 +193,7 @@
       if (!env?.name) return;
 
       confirmLoading.value = true;
-      const submitted = await deployFormRef.value?.submit(env.name, env);
+      const submitted = await deployFormRef.value?.submit(env);
       if (!submitted) return;
 
       Message({

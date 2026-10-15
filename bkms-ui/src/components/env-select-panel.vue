@@ -150,7 +150,28 @@
 
     <!-- 下拉面板 -->
     <template #content>
-      <div class="min-h-[100px]">
+      <div
+        v-if="enableVisibleEnvSettings && isEditingVisibleEnvs"
+        class="px-[8px] pt-[8px]"
+      >
+        <div class="text-[14px] leading-[22px] font-medium text-[#313238]">{{ $t('设置可见环境') }}</div>
+        <p class="mt-[4px] mb-[8px] text-[12px] leading-[20px] text-[#979BA5]">
+          {{ $t('勾选要在下拉中显示的环境，全部不选则显示全部。特性环境始终可见。') }}
+        </p>
+        <div class="env-list-scroll max-h-[320px] overflow-y-auto">
+          <EnvGroupSelector
+            v-model="visibleEnvDraft"
+            :class="columns === 2 ? '!grid-cols-2' : ''"
+            :disabled="appDetailStore.savingVisibleEnvs"
+            :env-list="standardEnvList"
+            show-deploy-icon
+          />
+        </div>
+      </div>
+      <div
+        v-else
+        class="min-h-[100px]"
+      >
         <div class="flex items-center mb-[8px]">
           <Input
             v-model.trim="searchKeyword"
@@ -265,6 +286,56 @@
           </div>
         </div>
       </div>
+      <!-- 编辑态会替换操作按钮，避免同一次点击被误判为弹层外部点击。 -->
+      <div
+        v-if="enableVisibleEnvSettings"
+        class="flex items-center justify-between border-t border-[#DCDEE5] mt-[8px] px-[8px] pt-[8px]"
+        @click.stop
+      >
+        <template v-if="isEditingVisibleEnvs">
+          <Button
+            :disabled="appDetailStore.savingVisibleEnvs || !visibleEnvDraft.length"
+            text
+            theme="primary"
+            @click="visibleEnvDraft = []"
+            >{{ $t('恢复全部') }}</Button
+          >
+          <div class="flex gap-[8px]">
+            <Button
+              :loading="appDetailStore.savingVisibleEnvs"
+              size="small"
+              theme="primary"
+              @click="handleSaveVisibleEnvs"
+              >{{ $t('保存') }}</Button
+            >
+            <Button
+              :disabled="appDetailStore.savingVisibleEnvs"
+              size="small"
+              @click="isEditingVisibleEnvs = false"
+              >{{ $t('取消') }}</Button
+            >
+          </div>
+        </template>
+        <template v-else>
+          <span class="text-[12px] text-[#979BA5]">{{
+            isRestricted && filterVisibleEnvs
+              ? $t('已按可见环境筛选，共 {0} 个', [visibleStandardEnvCount])
+              : $t('显示全部环境')
+          }}</span>
+          <Button
+            :disabled="
+              isLoading ||
+              appDetailStore.loading ||
+              appDetailStore.savingVisibleEnvs ||
+              appDetailStore.appDetail?.id !== appDetailStore.appID
+            "
+            text
+            theme="primary"
+            @click="handleEditVisibleEnvs"
+            >{{ $t('设置可见环境') }}</Button
+          >
+        </template>
+      </div>
     </template>
   </Popover>
 </template>
@@ -272,15 +343,17 @@
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
 
-  import { Checkbox, Input, Popover, Select, Tag } from 'bkui-vue';
+  import { Button, Checkbox, Input, Message, Popover, Select, Tag } from 'bkui-vue';
   import { Done } from 'bkui-vue/lib/icon';
   import { AngleDownLine, Search } from 'bkui-vue/lib/icon';
   import { isEqual } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import { AppService } from '~/api/modules/v1/app';
   import { EnvService } from '~/api/modules/v1/env';
+  import EnvGroupSelector from '~/components/env-group-selector.vue';
   import OverflowTags from '~/components/overflow-tags.vue';
   import StatusDotIcon from '~/components/status-dot-icon.vue';
+  import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
   import {
     buildStandardEnvMap,
@@ -324,6 +397,10 @@
   interface IProps {
     /** 下拉面板列数，实例列表为 4 列，表单内收成 2 列 */
     columns?: 2 | 4;
+    /** 仅部署相关入口开启应用级名单配置，其他调用方保持原有行为。 */
+    enableVisibleEnvSettings?: boolean;
+    /** 查看历史时保留完整候选；部署目标及实例列表按名单筛选。 */
+    filterVisibleEnvs?: boolean;
     /** 当无选中值时是否自动选中第一个可用环境 */
     initFirstEnvWhenEmpty?: boolean;
     /** 只展示这些 kind 的环境，不传则全部展示 */
@@ -366,6 +443,9 @@
   const appDetailStore = useAppDetail();
   const { t } = useI18n();
   const { getDeployStatusInfo } = useDeployStatusMap();
+  const { isEnvVisible, isRestricted, visibleEnvNames } = useAppVisibleEnvs();
+  const isEditingVisibleEnvs = ref(false);
+  const visibleEnvDraft = ref<string[]>([]);
 
   const popoverRef = ref<InstanceType<typeof Popover> | null>(null);
   /** 数据加载状态 */
@@ -374,6 +454,8 @@
   const isPopoverVisible = ref(false);
   /** 全部环境列表 */
   const envList = ref<EnvOutput[]>([]);
+  let envListRequest = 0;
+  let reconciledVisibleEnvsVersion = appDetailStore.visibleEnvsVersion;
   /** 部署状态分别按环境 ID 和名称索引，ID 未命中时按名称兜底。 */
   const appDeployStatusByID = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
   const appDeployStatusByName = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
@@ -389,13 +471,19 @@
   const envTypeOrder = ['development', 'test', 'staging', 'production'];
   const FEATURE_ENV_KIND = 'feature';
   const panelWidth = computed(() => props.popoverWidth || (props.columns === 2 ? 560 : 800));
-  const selectableEnvList = computed(() => {
+  const kindEnvList = computed(() => {
     if (!props.kinds?.length) return envList.value;
     return envList.value.filter(env => props.kinds?.includes(env.kind || 'standard'));
   });
+  const selectableEnvList = computed(() =>
+    props.filterVisibleEnvs ? kindEnvList.value.filter(isEnvVisible) : kindEnvList.value,
+  );
+  const standardEnvList = computed(() => envList.value.filter(env => (env.kind || 'standard') === 'standard'));
+  const visibleStandardEnvCount = computed(() => standardEnvList.value.filter(isEnvVisible).length);
 
   /** 单选模式下当前选中的环境对象 */
-  const selectedEnvItem = computed(() => selectableEnvList.value.find(item => item.name === props.modelValue));
+  // 总览下钻可继续查看隐藏环境，触发器仍需显示当前查看对象。
+  const selectedEnvItem = computed(() => kindEnvList.value.find(item => item.name === props.modelValue));
   /** 多选模式下当前选中的所有环境对象 */
   const selectedMultiEnvItems = computed(() => {
     if (mode.value !== 'multi') return [];
@@ -603,21 +691,33 @@
 
   /** 获取环境列表，NotReady 环境排到末尾 */
   async function getEnvList() {
+    const request = ++envListRequest;
+    const appID = appDetailStore.appID;
     if (!appDetailStore.appID) {
       envList.value = [];
       emits('update:envList', []);
-      return;
+      return false;
     }
     const list = await EnvService.listAppEnvs({
-      appID: appDetailStore.appID,
+      appID,
     }).catch(() => []);
+    if (request !== envListRequest || appID !== appDetailStore.appID) return false;
     envList.value = sortEnvList(list);
     emits('update:envList', envList.value);
+    return true;
+  }
+
+  /** 按入口约定回退：部署表单清空，查看选择器优先缓存环境，再取首个可用环境。 */
+  function getFallbackEnvName(preferredName = '') {
+    if (!props.initFirstEnvWhenEmpty) return '';
+    const preferred = selectableEnvList.value.find(env => env.name === preferredName && !isEnvDisabled(env));
+    const first = preferred || selectableEnvList.value.find(env => !isEnvDisabled(env));
+    return first?.name || '';
   }
 
   /** 单选模式的选中值变更处理 */
   function handleEnvChange(env: string) {
-    const envItem = selectableEnvList.value.find(item => item.name === env && !isEnvDisabled(item));
+    const envItem = kindEnvList.value.find(item => item.name === env && !isEnvDisabled(item));
     if (props.syncEnvStore) {
       envStore.updateCurrentEnv(envItem?.name || '');
     }
@@ -627,10 +727,16 @@
 
   /** 组件初始化：拉取环境列表并根据选择模式初始化选中值 */
   async function handleGetEnvList() {
+    const appID = appDetailStore.appID;
+    const request = envListRequest + 1;
     isLoading.value = true;
     emits('update:loading', true);
     try {
-      await getEnvList();
+      const [loaded] = await Promise.all([
+        getEnvList(),
+        props.enableVisibleEnvSettings ? appDetailStore.fetchAppDetail() : Promise.resolve(),
+      ]);
+      if (!loaded || appID !== appDetailStore.appID) return;
       if (mode.value === 'multi') {
         // 多选模式初始化
         if (props.modelValues?.length) {
@@ -642,28 +748,32 @@
           }
         }
       } else {
-        // 单选模式初始化
-        if (props.modelValue) {
-          const selectedEnv = selectableEnvList.value.find(item => item.name === props.modelValue);
-          if (!selectedEnv && props.preserveMissingModelValue) {
-            emits('update:modelValue', props.modelValue);
-          } else {
-            handleEnvChange(props.modelValue);
-          }
-        } else if (props.initFirstEnvWhenEmpty) {
-          const currentEnvExists =
-            envStore.currentEnv &&
-            selectableEnvList.value.some(item => item.name === envStore.currentEnv && !isEnvDisabled(item));
-          const env = currentEnvExists
-            ? envStore.currentEnv
-            : selectableEnvList.value.find(item => !isEnvDisabled(item))?.name || '';
-          if (env) handleEnvChange(env);
-        }
+        initializeSingleSelection();
       }
     } finally {
-      isLoading.value = false;
-      emits('update:loading', false);
+      if (appID === appDetailStore.appID && request === envListRequest) {
+        isLoading.value = false;
+        emits('update:loading', false);
+        if (reconciledVisibleEnvsVersion !== appDetailStore.visibleEnvsVersion) reconcileVisibleSelection();
+      }
     }
+  }
+
+  /** 初始化单选；总览下钻等查看入口允许保留名单外的当前环境。 */
+  function initializeSingleSelection() {
+    const envName = props.modelValue;
+    if (!envName) {
+      const fallbackName = getFallbackEnvName(envStore.currentEnv);
+      if (fallbackName) handleEnvChange(fallbackName);
+      return;
+    }
+    const exists = selectableEnvList.value.some(env => env.name === envName);
+    if (!exists && props.preserveMissingModelValue && !kindEnvList.value.some(env => env.name === envName)) {
+      emits('update:modelValue', envName);
+      return;
+    }
+    const preserveCurrent = exists || props.preserveMissingModelValue || !props.filterVisibleEnvs;
+    handleEnvChange(preserveCurrent ? envName : getFallbackEnvName());
   }
 
   /** 主动刷新环境列表和部署状态，用于侧栏打开、页面刷新等需要最新数据的交互。 */
@@ -675,6 +785,11 @@
   watch(
     () => appDetailStore.appID,
     async appID => {
+      envListRequest += 1;
+      envList.value = [];
+      emits('update:envList', []);
+      isEditingVisibleEnvs.value = false;
+      visibleEnvDraft.value = [];
       if (appID) {
         await Promise.all([getDeployStatuses(), handleGetEnvList()]);
       } else {
@@ -704,6 +819,12 @@
       .filter(env => !isEnvDisabled(env))
       .map(env => env.name)
       .filter((name): name is string => !!name);
+  }
+
+  function handleEditVisibleEnvs() {
+    visibleEnvDraft.value = [...visibleEnvNames.value];
+    searchKeyword.value = '';
+    isEditingVisibleEnvs.value = true;
   }
 
   /** 分组全选/取消全选：选中时追加，取消时移除该分组内所有可选环境 */
@@ -738,6 +859,8 @@
   function handlePopoverHidden() {
     isPopoverVisible.value = false;
     searchKeyword.value = '';
+    isEditingVisibleEnvs.value = false;
+    visibleEnvDraft.value = [];
   }
 
   /** 下拉面板打开时刷新部署状态，避免状态图标和仅已部署过滤使用旧缓存。 */
@@ -754,6 +877,21 @@
     if (index > -1) {
       currentValues.splice(index, 1);
       emitMultiEnvChange(currentValues);
+    }
+  }
+
+  async function handleSaveVisibleEnvs() {
+    if (appDetailStore.savingVisibleEnvs) return;
+    try {
+      const result = await appDetailStore.updateVisibleEnvs(visibleEnvDraft.value);
+      if (result === 'stale') return;
+      if (result === 'refresh-failed') {
+        Message({ theme: 'warning', message: t('配置已保存，获取最新配置失败，请刷新页面重试') });
+      }
+      isEditingVisibleEnvs.value = false;
+      popoverRef.value?.hide();
+    } catch {
+      // 请求拦截器展示权限或校验错误；保留草稿便于修改后重试。
     }
   }
 
@@ -807,11 +945,31 @@
     return env.name === props.modelValue;
   }
 
+  /** 保存名单后清理失效选择；部署表单不自动选中其他目标。 */
+  function reconcileVisibleSelection() {
+    if (!props.filterVisibleEnvs || isLoading.value) return;
+    reconciledVisibleEnvsVersion = appDetailStore.visibleEnvsVersion;
+    if (mode.value === 'multi') {
+      emitMultiEnvChange(props.modelValues || []);
+      return;
+    }
+    const current = kindEnvList.value.find(env => env.name === props.modelValue);
+    if (!current || isEnvVisible(current)) return;
+    handleEnvChange(getFallbackEnvName());
+  }
+
   /** 同步多选模式的有效值：在 envList 加载完成或外部 props 变化后重新校验 */
   function syncValidMultiEnvValues() {
     if (mode.value !== 'multi' || envList.value.length === 0 || !props.modelValues?.length) return;
     emitMultiEnvChange(props.modelValues, { fallbackWhenEmpty: true });
   }
+
+  watch(
+    () => appDetailStore.visibleEnvsVersion,
+    () => {
+      if (props.enableVisibleEnvSettings) reconcileVisibleSelection();
+    },
+  );
 
   // 当 multiSelectable 变为 false 时强制回到单选模式
   watch(

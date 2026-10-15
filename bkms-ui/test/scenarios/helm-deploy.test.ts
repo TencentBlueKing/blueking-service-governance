@@ -18,7 +18,7 @@
 /**
  * 场景级测试：Helm 部署与预览回滚（路径清单见 docs/vitest/guides/TEST_SCENARIOS_ROUTES.md S15）
  *
- * 覆盖七条用户可感知路径 → V = 7：
+ * 覆盖九条用户可感知路径 → V = 9：
  *   1. 部署进行中时更新按钮禁用并提示（index.vue 状态机）
  *   2. 部署表单必填校验拦截（deploy-application.vue）
  *   3. 填写完整 → 预览 → 确定部署成功（deploy-application.vue 正向主路径）
@@ -26,6 +26,8 @@
  *   5. 预检弹窗「取消」停留配置步骤（deploy-application.vue）
  *   6. 部署历史第 1 页首行禁用回滚、非首行可点并弹出回滚弹窗（deploy-history.vue）
  *   7. 回滚弹窗确认成功（preview-rollback.vue）
+ *   8. 目标环境被移出可见名单时阻止预览
+ *   9. 预览后名单变化时阻止创建部署
  *
  * mock 边界：
  *   - bkui-vue 真实渲染（Form/Select/Button/Dialog/Sideslider）
@@ -304,6 +306,27 @@ async function renderDeployApplication() {
 }
 
 describe('Helm 部署/更新侧滑：部署流程', () => {
+  it('当目标环境被移出可见名单时，应阻止预览并提示不可部署', async () => {
+    await openFilledDeployApplication({ current: 'a: 1', target: 'a: 2' });
+    const store = useAppDetail();
+    store.updateAppID('app-a');
+    store.appDetail = { id: 'app-a', visibleEnvNames: ['other-env'] };
+    await userEvent.click(await screen.findByRole('button', { name: '下一步：预览部署' }));
+    expect(mocks.previewHelmDeploy).not.toHaveBeenCalled();
+    expect(mocks.message).toHaveBeenCalledWith(expect.objectContaining({ message: '该应用未配置部署到此环境' }));
+  });
+
+  it('当预览完成后目标环境被移出名单时，应阻止创建部署', async () => {
+    await openFilledDeployApplication({ current: 'a: 1', target: 'a: 2' });
+    await userEvent.click(await screen.findByRole('button', { name: '下一步：预览部署' }));
+    await screen.findByTestId('ms-editor-stub');
+    const store = useAppDetail();
+    store.updateAppID('app-a');
+    store.appDetail = { id: 'app-a', visibleEnvNames: ['other-env'] };
+    await userEvent.click(await screen.findByRole('button', { name: '确定部署' }));
+    expect(mocks.createHelmDeploy).not.toHaveBeenCalled();
+    expect(mocks.message).toHaveBeenCalledWith(expect.objectContaining({ message: '该应用未配置部署到此环境' }));
+  });
   it('当用户未选必填项点「下一步」时，应显示校验错误态且不调用预览接口', async () => {
     await openDeployApplication();
     // 回填参数来自部署历史，此测试保持历史为空 → 表单三项均为空

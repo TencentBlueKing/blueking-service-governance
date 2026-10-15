@@ -120,6 +120,7 @@
   import { Button, Form, Input, Select } from 'bkui-vue';
   import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
+  import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
   import { useAppDetail } from '~/stores/app-detail';
@@ -153,6 +154,7 @@
 
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
+  const { checkDeployEnv } = useAppVisibleEnvs();
   const {
     cancelDeploy,
     continueDeploy,
@@ -233,23 +235,22 @@
   }
 
   // 执行部署：根据镜像来源调用直接部署或构建+部署接口
-  async function deploy(targetEnvName: string) {
+  async function deploy(targetEnv: EnvOutput) {
+    if (!targetEnv.name || !checkDeployEnv(targetEnv)) return false;
     const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
     const params: DeployParams = {
       appID: appDetailStore.appID,
-      envName: targetEnvName,
+      envName: targetEnv.name,
       imageTag: formModel.imageTag,
       replicas: Number(formModel.replicas),
     };
     if (imageSource.value === 'image') {
       await deployAPIs.createDeployDirectly!(params);
     } else {
-      Object.assign(
-        params,
-        revisionRequestFields(showCodeSource.value, formModel.revisionType, formModel.revision),
-      );
+      Object.assign(params, revisionRequestFields(showCodeSource.value, formModel.revisionType, formModel.revision));
       await deployAPIs.buildAndCreateDeploy!(params);
     }
+    return true;
   }
 
   /** 切换镜像来源；源码模式 prepare 默认分支并预拉列表，镜像模式清空源码相关字段。 */
@@ -286,16 +287,16 @@
   }
 
   // 提交部署：内部完成校验、部署和脏标记清理
-  async function submit(targetEnvName: string, targetEnv?: EnvOutput) {
+  async function submit(targetEnv: EnvOutput) {
     const valid = await validate();
     if (!valid) return false;
 
     if (props.precheckBeforeSubmit) {
-      const precheckPassed = await precheck(targetEnvName, targetEnv);
+      const precheckPassed = await precheck(targetEnv);
       if (!precheckPassed) return false;
     }
 
-    await deploy(targetEnvName);
+    if (!(await deploy(targetEnv))) return false;
     forceCleanDirtyTag();
     return true;
   }

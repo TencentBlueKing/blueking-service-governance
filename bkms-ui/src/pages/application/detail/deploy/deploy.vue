@@ -78,6 +78,8 @@
                 v-model="curEnv"
                 v-model:model-values="curEnvs"
                 class="mr-[16px]"
+                enable-visible-env-settings
+                :filter-visible-envs="activeTab === 'instance' || activeTab === 'overview'"
                 init-first-env-when-empty
                 :mode="envSelectMode"
                 :multi-selectable="isEnvMultiSelectable"
@@ -120,6 +122,8 @@
           #right
         >
           <Button
+            v-bk-tooltips="{ content: fullUpdateDisabledReason, disabled: !fullUpdateDisabledReason }"
+            :disabled="!!fullUpdateDisabledReason"
             :loading="precheckLoading"
             theme="primary"
             @click="handleShowFullUpdateDialog"
@@ -300,7 +304,9 @@
                 <div class="text-[#4D4F56] text-[14px] leading-[22px]">{{ $t('该环境尚未部署应用') }}</div>
               </template>
               <Button
+                v-bk-tooltips="{ content: currentEnvDeployDisabledReason, disabled: !currentEnvDeployDisabledReason }"
                 class="mt-[8px]"
+                :disabled="!curEnv || !!currentEnvDeployDisabledReason"
                 :loading="precheckLoading"
                 theme="primary"
                 @click="handleShowQuicklyDeploy"
@@ -380,8 +386,10 @@
   import TabHeader from '~/components/tab-header.vue';
   import { isAppModelAppType, isHelmLikeAppType } from '~/composables/app-type';
   import { useAlertVisibility } from '~/composables/use-alert-visibility';
+  import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
   import { type DeployStatusInfo, useDeployStatusMap } from '~/composables/use-deploy-status';
   import useInterval from '~/composables/use-interval';
+  import useIsFederationEnv from '~/composables/use-is-federation-env';
   import { useUrlQuerySync } from '~/composables/use-url-query-sync';
   import ViewBuildLog from '~/pages/application/detail/components/view-build-log/index.vue';
   import { useAppDetail } from '~/stores/app-detail';
@@ -425,6 +433,11 @@
   const route = useRoute();
   const router = useRouter();
   const appDetailStore = useAppDetail();
+  const { getEnvDeployDisabledReason, isEnvVisible } = useAppVisibleEnvs();
+  const currentEnvDeployDisabledReason = computed(() => getEnvDeployDisabledReason(trpcDeployStore.curEnvItem));
+  const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
+  // 普通集群的隐藏环境仍可进入仅镜像维护；联邦集群不支持该操作。
+  const fullUpdateDisabledReason = computed(() => (isFederationEnv.value ? currentEnvDeployDisabledReason.value : ''));
   const { getAppDeployStatusInfo } = useDeployStatusMap();
   const { t } = useI18n();
   const {
@@ -455,8 +468,11 @@
   const showBuildLog = ref(false);
 
   // 是否有可用环境（有环境且至少一个不是 NotReady）
-  const hasAvailableEnv = computed(
-    () => envList.value.length > 0 && envList.value.some(env => env.status !== 'NotReady'),
+  const hasAvailableEnv = computed(() =>
+    envList.value.some(
+      env =>
+        env.status !== 'NotReady' && (activeTab.value !== 'instance' || isEnvVisible(env) || env.name === curEnv.value),
+    ),
   );
 
   // 该规格只服务实例页的部署/扩缩容操作；总览使用聚合接口中的资源数据，不应触发此请求。
@@ -922,17 +938,17 @@
 
   /** 从实例列表打开快速部署，并关闭总览入口专用的目标环境选择模式。 */
   async function handleShowQuicklyDeploy() {
-    const envName = trpcDeployStore.curEnvItem?.name;
-    if (!envName || precheckLoading.value) return;
+    const env = trpcDeployStore.curEnvItem;
+    if (!env?.name || precheckLoading.value || currentEnvDeployDisabledReason.value) return;
 
     precheckLoading.value = true;
     try {
-      const precheckPassed = await precheck(envName, trpcDeployStore.curEnvItem);
+      const precheckPassed = await precheck(env);
       if (!precheckPassed) return;
-      if (trpcDeployStore.curEnvItem?.name !== envName) return;
+      if (trpcDeployStore.curEnvItem?.name !== env.name) return;
 
       await fetchEffectiveDeploySpec();
-      if (trpcDeployStore.curEnvItem?.name !== envName) return;
+      if (trpcDeployStore.curEnvItem?.name !== env.name) return;
 
       // 清空总览目标是入口标记，保证实例列表仍读取当前环境，不显示目标环境选择器。
       overviewDeployTargets.value = undefined;
@@ -967,17 +983,17 @@
   const showFullUpdateDialog = ref(false);
   /** 打开当前环境的全量更新侧栏。 */
   async function handleShowFullUpdateDialog() {
-    const envName = trpcDeployStore.curEnvItem?.name;
-    if (!envName || precheckLoading.value) return;
+    const env = trpcDeployStore.curEnvItem;
+    if (!env?.name || precheckLoading.value || fullUpdateDisabledReason.value) return;
 
     precheckLoading.value = true;
     try {
-      const precheckPassed = await precheck(envName, trpcDeployStore.curEnvItem);
-      if (precheckPassed && trpcDeployStore.curEnvItem?.name === envName) {
-        await fetchEffectiveDeploySpec();
-        if (trpcDeployStore.curEnvItem?.name !== envName) return;
-        showFullUpdateDialog.value = true;
-      }
+      // 隐藏环境只允许实例镜像维护，不调用会被后端名单拦截的创建部署预检。
+      if (!currentEnvDeployDisabledReason.value && !(await precheck(env))) return;
+      if (trpcDeployStore.curEnvItem?.name !== env.name) return;
+      await fetchEffectiveDeploySpec();
+      if (trpcDeployStore.curEnvItem?.name !== env.name) return;
+      showFullUpdateDialog.value = true;
     } catch (error) {
       console.warn(error);
     } finally {
@@ -1062,7 +1078,7 @@
 
     precheckLoading.value = true;
     try {
-      const precheckPassed = await precheck(env.name, env);
+      const precheckPassed = await precheck(env);
       if (!precheckPassed) return;
 
       if (isFeatureEnvPage.value) await leaveFeatureEnvPage();
@@ -1091,6 +1107,7 @@
         displayName: env.displayName,
         id: env.id,
         kind: 'feature',
+        ownerAppID: appDetailStore.appID,
         name: env.name,
         status: env.status,
         type: env.type,

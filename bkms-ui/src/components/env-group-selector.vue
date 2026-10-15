@@ -21,7 +21,9 @@
     <div
       v-for="group in groupedEnvList"
       :key="group.type"
+      :aria-label="group.label"
       class="min-w-0"
+      role="group"
     >
       <div :class="['h-[32px] flex items-center justify-between px-[12px]', envTypeTagClassMap[group.type]]">
         <span class="text-[12px] font-bold">

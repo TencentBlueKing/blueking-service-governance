@@ -25,6 +25,8 @@
             v-model="curEnv"
             v-model:item="curEnvItem"
             class="w-[240px] mr-[16px]"
+            enable-visible-env-settings
+            :filter-visible-envs="activeTab !== TAB_NAMES.history"
             init-first-env-when-empty
             type="helm"
           />
@@ -103,7 +105,9 @@
         <ResourceTopology :env-name="curEnv">
           <template #empty-deploy>
             <Button
+              v-bk-tooltips="{ content: currentEnvDeployDisabledReason, disabled: !currentEnvDeployDisabledReason }"
               class="mt-[8px]"
+              :disabled="!curEnv || !!currentEnvDeployDisabledReason"
               theme="primary"
               @click="handleShowDeployDialog('RollingUpdate')"
             >
@@ -133,6 +137,8 @@
             <div class="text-[#4D4F56] text-[14px] leading-[22px]">{{ $t('该环境尚未部署应用') }}</div>
           </template>
           <Button
+            v-bk-tooltips="{ content: currentEnvDeployDisabledReason, disabled: !currentEnvDeployDisabledReason }"
+            :disabled="!curEnv || !!currentEnvDeployDisabledReason"
             theme="primary"
             @click="handleShowDeployDialog('RollingUpdate')"
             >{{ $t('立即部署') }}</Button
@@ -169,6 +175,7 @@
   import { EnvOutput } from '~/@types/v1/env';
   import { DeployService } from '~/api/modules/v1';
   import { isHelmLikeAppType } from '~/composables/app-type';
+  import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
   import { useUrlQuerySync } from '~/composables/use-url-query-sync';
   import { useAppDetail } from '~/stores/app-detail';
 
@@ -196,11 +203,18 @@
 
   const curEnv = ref('');
   const curEnvItem = ref<EnvOutput>();
+  const { getEnvDeployDisabledReason } = useAppVisibleEnvs();
+  const currentEnvDeployDisabledReason = computed(() => getEnvDeployDisabledReason(curEnvItem.value));
   const deployHistoryLoading = ref(false);
   const skipInitialFetch = ref(false);
   const hasSearchValue = ref(false);
   const isShowDeploy = ref(false);
   const curDeployType = ref<'Recreate' | 'RollingUpdate'>('Recreate');
+
+  // 环境失效或切换应用后关闭旧表单，避免把已预览的配置提交到新的目标环境。
+  watch([() => appDetailStore.appID, curEnv], () => {
+    isShowDeploy.value = false;
+  });
 
   // Tab 名称常量（模板与校验同源）
   const TAB_NAMES = {
@@ -236,12 +250,14 @@
   const moreOperationsRef = ref<InstanceType<typeof Popover>>();
 
   const isUpdateButtonDisabled = computed(() => {
+    if (currentEnvDeployDisabledReason.value || !curEnv.value) return true;
     const status = latestDeployStatus.value;
     return ['pending-upgrade', 'pending-install', 'pending-rollback', 'uninstalling'].includes(status);
   });
 
   // 禁用提示
   const updateButtonDisabledTip = computed(() => {
+    if (currentEnvDeployDisabledReason.value) return currentEnvDeployDisabledReason.value;
     const status = latestDeployStatus.value;
     const statusTips: Record<string, string> = {
       'pending-upgrade': t('部署进行中，请勿重复部署'),
@@ -254,7 +270,10 @@
 
   // 获取部署历史
   async function getDeployHistories() {
-    if (!appDetailStore.appID) return;
+    if (!appDetailStore.appID || !curEnv.value) {
+      deployHistoryList.value = [];
+      return;
+    }
     deployHistoryLoading.value = true;
     skipInitialFetch.value = true; // 标记跳过子组件初始化获取
     await handleListDeployHistories({
@@ -306,6 +325,7 @@
   }
   // 显示部署弹窗
   function handleShowDeployDialog(type: 'Recreate' | 'RollingUpdate') {
+    if (!curEnv.value || currentEnvDeployDisabledReason.value) return;
     isShowDeploy.value = true;
     curDeployType.value = type;
   }
@@ -314,6 +334,12 @@
   watch(
     () => curEnv.value,
     async (newEnv, oldEnv) => {
+      if (!newEnv) {
+        curLaneName.value = '';
+        laneList.value = [];
+        deployHistoryList.value = [];
+        return;
+      }
       if (newEnv && newEnv !== oldEnv) {
         curLaneName.value = '';
         // 重新获取泳道列表

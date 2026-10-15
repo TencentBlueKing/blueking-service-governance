@@ -16,10 +16,11 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 
 import { defineStore } from 'pinia';
 import { ApiServerService } from '~/api/modules/bkmsserver';
+import { AppService } from '~/api/modules/v1/app';
 
 import type { AppDetailOutputObj } from '~/@types/app';
 import type { IAppType } from '~/composables/app-type';
@@ -34,6 +35,17 @@ export const useAppDetail = defineStore('appDetail', () => {
   // 应用详情
   const appDetail = ref<AppDetailOutputObj | null>(null);
   const loading = ref(false);
+  const savingVisibleEnvs = ref(false);
+  const visibleEnvsVersion = ref(0);
+  let appRevision = 0;
+  watch(
+    appID,
+    () => {
+      appRevision += 1;
+      fetchPromiseCache.clear();
+    },
+    { flush: 'sync' },
+  );
   // 缓存请求 Promise,key 为 appID
   const fetchPromiseCache = new Map<string, Promise<AppDetailOutputObj | null>>();
   // 瞬态导航标记:用于跨路由跳转时,传递「去配置」的来源(source)
@@ -54,9 +66,39 @@ export const useAppDetail = defineStore('appDetail', () => {
     appID.value = id;
   }
 
+  /** 保存后使用独立详情请求，避免复用保存之前发出的在途请求。 */
+  async function updateVisibleEnvs(visibleEnvNames: string[]) {
+    if (!appID.value || savingVisibleEnvs.value) return 'stale';
+    const targetAppID = appID.value;
+    const revision = appRevision;
+    const isCurrent = () => targetAppID === appID.value && revision === appRevision;
+    savingVisibleEnvs.value = true;
+    try {
+      await AppService.updateAppVisibleEnvs({ appID: targetAppID, visibleEnvNames: [...visibleEnvNames] });
+      if (!isCurrent()) return 'stale';
+      // PUT 已成功，刷新失败时仍保留已保存的名单，避免前端继续允许旧部署目标。
+      if (appDetail.value?.id === targetAppID) {
+        appDetail.value = { ...appDetail.value, visibleEnvNames: [...visibleEnvNames] };
+      }
+      visibleEnvsVersion.value += 1;
+      try {
+        const detail = await AppService.getApp({ appID: targetAppID }, { interceptorErr: false });
+        if (!isCurrent()) return 'stale';
+        appDetail.value = detail;
+        return 'saved';
+      } catch {
+        return isCurrent() ? 'refresh-failed' : 'stale';
+      }
+    } finally {
+      savingVisibleEnvs.value = false;
+    }
+  }
+
   // 获取并保存应用详情
   async function fetchAppDetail(appId?: string) {
     const targetAppId = appId || appID.value;
+    const revision = appRevision;
+    const visibleEnvsRevision = visibleEnvsVersion.value;
 
     if (!targetAppId) return null;
 
@@ -76,11 +118,14 @@ export const useAppDetail = defineStore('appDetail', () => {
 
         // 快速切换应用 A→B 时，过期请求（A）晚返回会覆盖 B 的详情导致串台；
         // 返回时若当前 appID 已指向更新的应用，则丢弃本次结果，不写回 store
-        if (appID.value !== targetAppId) {
+        if (appID.value !== targetAppId || revision !== appRevision) {
           return null;
         }
 
         if (res) {
+          if (visibleEnvsRevision !== visibleEnvsVersion.value && appDetail.value?.id === targetAppId) {
+            res.visibleEnvNames = appDetail.value.visibleEnvNames;
+          }
           appDetail.value = res;
           updateAppName(res.name || '');
           updateAppID(res.id || '');
@@ -89,12 +134,18 @@ export const useAppDetail = defineStore('appDetail', () => {
         }
         return null;
       } catch {
-        appDetail.value = null;
+        if (
+          appID.value === targetAppId &&
+          revision === appRevision &&
+          visibleEnvsRevision === visibleEnvsVersion.value
+        ) {
+          appDetail.value = null;
+        }
         return null;
       } finally {
-        loading.value = false;
+        if (revision === appRevision) loading.value = false;
         // 请求完成后立即清除缓存
-        fetchPromiseCache.delete(targetAppId);
+        if (revision === appRevision) fetchPromiseCache.delete(targetAppId);
       }
     })();
 
@@ -131,6 +182,9 @@ export const useAppDetail = defineStore('appDetail', () => {
     appType,
     appDetail,
     loading,
+    savingVisibleEnvs,
+    visibleEnvsVersion,
+    updateVisibleEnvs,
     pendingBuilderSource,
     updateAppID,
     updateAppName,

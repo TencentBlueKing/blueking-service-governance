@@ -53,8 +53,18 @@
             v-model="formModel.updateContent"
             @change="handleUpdateContentChange"
           >
-            <Radio label="both">{{ $t('镜像+配置') }}</Radio>
-            <Radio label="config">{{ $t('仅配置') }}</Radio>
+            <Radio
+              v-bk-tooltips="{ content: deployDisabledReason, disabled: !deployDisabledReason }"
+              :disabled="!!deployDisabledReason"
+              label="both"
+              >{{ $t('镜像+配置') }}</Radio
+            >
+            <Radio
+              v-bk-tooltips="{ content: deployDisabledReason, disabled: !deployDisabledReason }"
+              :disabled="!!deployDisabledReason"
+              label="config"
+              >{{ $t('仅配置') }}</Radio
+            >
             <Radio
               :disabled="isFederationEnv"
               label="image"
@@ -207,6 +217,7 @@
   import { InstanceService } from '~/api/modules/v1';
   import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
+  import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
   import useIsFederationEnv from '~/composables/use-is-federation-env';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
@@ -237,6 +248,8 @@
   const { t } = useI18n();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
+  const { checkDeployEnv, getEnvDeployDisabledReason } = useAppVisibleEnvs();
+  const deployDisabledReason = computed(() => getEnvDeployDisabledReason(trpcDeployStore.curEnvItem));
   const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
 
   const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
@@ -367,21 +380,20 @@
    * 配置+镜像、仅配置
    */
   async function handleConfigAndImage() {
+    const env = trpcDeployStore.curEnvItem;
+    if (!env?.name || !checkDeployEnv(env)) return false;
     try {
       // 根据应用类型获取对应的部署 API
       const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
       // 根据镜像来源选择部署方式
       const params: DeployParams = {
         appID: appDetailStore.appID,
-        envName: trpcDeployStore.curEnvItem!.name ?? '',
+        envName: env.name,
         imageTag: formModel.imageTag,
         replicas: Number(formModel.replicas),
       };
       if (shouldBuildFromSource.value) {
-        Object.assign(
-          params,
-          revisionRequestFields(showCodeSource.value, formModel.revisionType, formModel.revision),
-        );
+        Object.assign(params, revisionRequestFields(showCodeSource.value, formModel.revisionType, formModel.revision));
         const buildRes = await deployAPIs.buildAndCreateDeploy!(params);
         // 后端状态类型为 string，这里收窄为 BuildTips 支持的状态。
         const validStatuses: BuildStatus[] = ['failed', 'pollingBroken', 'running', 'success', 'warning'];
@@ -489,6 +501,7 @@
     } else {
       // 打开弹窗时回填当前生效实例数；withPausedWatch 避免初始化赋值被标记为未保存修改。
       withPausedWatch(() => {
+        formModel.updateContent = deployDisabledReason.value ? 'image' : 'both';
         formModel.replicas = isValidReplicas(props.effectiveReplicas) ? props.effectiveReplicas : undefined;
       });
       // 打开弹窗时获取当前镜像 Tag
