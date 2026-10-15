@@ -109,8 +109,9 @@ func (s *DetailSyncer) syncDetailBatch(
 			gCtx := context.WithoutCancel(ctx)
 			detail, err := client.GetTagDetail(gCtx, repoName, tag)
 			if err != nil {
-				// tag 列表仍返回该名字，但 manifest 已不存在。留着快照会让一键同步反复写回这条脏数据。
-				if registry.IsTagNotFound(err) {
+				// GetTagDetail 后半段（子 manifest、config blob）的 404 不能当成 tag 已删除。
+				// 只有 manifest 本身也 HEAD 不到时才删快照。
+				if registry.IsTagNotFound(err) && manifestGone(gCtx, client, repoName, tag) {
 					if _, delErr := s.store.DeleteByRepoKeyAndTag(gCtx, repoKey, tag); delErr != nil {
 						log.Errorf(gCtx, "delete missing manifest snapshot %s:%s failed: %v", repoName, tag, delErr)
 						mu.Lock()
@@ -146,6 +147,20 @@ func (s *DetailSyncer) syncDetailBatch(
 
 	wg.Wait()
 	return firstErr
+}
+
+// manifestGone 用 HEAD 确认 tag 的 manifest 是否已经不存在。
+// HEAD 成功或返回非 404 时保留快照，避免把 config blob 等后续 404 误判成 tag 已删除。
+func manifestGone(ctx context.Context, client *registry.Client, repoName, tag string) bool {
+	err := client.HeadManifest(ctx, repoName, tag)
+	if err == nil {
+		return false
+	}
+	if registry.IsTagNotFound(err) {
+		return true
+	}
+	log.Errorf(ctx, "head manifest %s:%s failed, keep snapshot: %v", repoName, tag, err)
+	return false
 }
 
 // completeDetailSync 完成详情同步，更新状态

@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -276,18 +277,24 @@ var _ = Describe("Service", func() {
 			})
 		})
 
-		It("should skip tags whose remote manifest is already gone", func() {
+		It("should skip new tags whose remote manifest is already gone", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
-				err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "202604231525"}})
+				// 已在本地的 tag 不参与 HEAD；不在远端列表里的 tag 仍按差集删除。
+				err := store.UpsertSnapshots(ctx, repoKey, []Image{{Tag: "stale-local"}})
 				Expect(err).NotTo(HaveOccurred())
 
+				var headedTags []string
+				var headMu sync.Mutex
 				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).
 					Return([]string{"202604231525", "v1.0.3", "v1.0.4"}, nil).
 					Build()
 				mockey.Mock((*registry.Client).HeadManifest).To(
 					func(_ *registry.Client, _ context.Context, _, tag string) error {
+						headMu.Lock()
+						headedTags = append(headedTags, tag)
+						headMu.Unlock()
 						switch tag {
 						case "202604231525":
 							return pkgerrors.Wrap(
@@ -301,15 +308,13 @@ var _ = Describe("Service", func() {
 						}
 					},
 				).Build()
-				mockey.Mock((*SnapshotStoreMongo).ListUnsyncedDetailTags).
-					Return([]string{"v1.0.3", "v1.0.4"}, nil).
-					Build()
 				mockey.Mock(taskq.Enqueue).Return(nil).Build()
 
 				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.AddedTagCnt).To(BeEquivalentTo(2))
 				Expect(result.RemovedTagCnt).To(BeEquivalentTo(1))
+				Expect(headedTags).To(ConsistOf("202604231525", "v1.0.3", "v1.0.4"))
 
 				snapshots, total, err := store.ListByRepoKey(ctx, repoKey, "", 1, 10)
 				Expect(err).NotTo(HaveOccurred())

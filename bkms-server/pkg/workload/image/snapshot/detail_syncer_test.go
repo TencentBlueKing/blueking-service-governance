@@ -189,6 +189,12 @@ var _ = Describe("DetailSyncer", func() {
 					}, nil
 				}).
 				Build()
+			mockey.Mock((*registry.Client).HeadManifest).To(
+				func(_ *registry.Client, _ context.Context, _, tag string) error {
+					Expect(tag).To(Equal("v1.0.2"))
+					return errors.Wrap(&transport.Error{StatusCode: http.StatusNotFound}, "head manifest")
+				},
+			).Build()
 
 			err = syncer.SyncDetails(ctx, info)
 			Expect(err).NotTo(HaveOccurred())
@@ -204,6 +210,36 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 			Expect(status.LastError).To(BeEmpty())
+		})
+
+		It("should keep the snapshot when a later detail request returns 404", func() {
+			err := store.UpsertSnapshots(ctx, info.RepoKey, []Image{{Tag: "v1.0.2"}})
+			Expect(err).NotTo(HaveOccurred())
+
+			mockey.Mock((*registry.Client).GetTagDetail).
+				To(func(*registry.Client, context.Context, string, string) (registry.ImageDetail, error) {
+					return registry.ImageDetail{}, errors.Wrap(
+						&transport.Error{StatusCode: http.StatusNotFound},
+						"get image config file",
+					)
+				}).
+				Build()
+			mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
+
+			err = syncer.SyncDetails(ctx, info)
+			Expect(err).NotTo(HaveOccurred())
+
+			snapshots, total, listErr := store.ListByRepoKey(ctx, info.RepoKey, "", 1, 10)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(total).To(BeEquivalentTo(1))
+			Expect(snapshots).To(HaveLen(1))
+			Expect(snapshots[0].Tag).To(Equal("v1.0.2"))
+			Expect(snapshots[0].Digest).To(BeEmpty())
+
+			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.LastError).To(ContainSubstring("get detail for v1.0.2"))
+			Expect(status.LastError).To(ContainSubstring("get image config file"))
 		})
 
 		It("should finish cleanly when there is no tag to sync", func() {
