@@ -15,9 +15,9 @@ Feature: TC-18 部署管理实例列表特殊环境
     And 截图 "01-federation-instance-list"
 
   @space:default @app:trpc @appType:trpc
-  Scenario: 应用关联特性环境侧栏应展示部署入口和销毁保护
+  Scenario: 应用关联特性环境页面应展示配置入口和销毁保护
     Given 部署实例列表接口返回只读测试数据
     Given 我在当前应用的部署管理页
-    When 我打开应用关联特性环境侧栏
-    Then 特性环境侧栏应展示部署入口和销毁保护
-    And 截图 "02-feature-env-sideslider"
+    When 我打开应用关联特性环境页面
+    Then 特性环境页面应展示配置入口和销毁保护
+    And 截图 "02-feature-env-page"

@@ -23,15 +23,15 @@ Given('联邦环境部署实例列表接口返回测试数据', async ({ pages }
   await pages.appDetailPage.deployInstance.setupDeploymentInstanceMock({ federation: true });
 });
 
-When('我打开应用关联特性环境侧栏', async ({ pages }) => {
-  await pages.appDetailPage.deployInstance.openFeatureEnvSideslider();
+When('我打开应用关联特性环境页面', async ({ pages }) => {
+  await pages.appDetailPage.deployInstance.openFeatureEnvPage();
 });
 
 Then('联邦环境实例列表应通过轮询展示数据并禁用灰度', async ({ pages }) => {
   await pages.appDetailPage.deployInstance.expectFederationDeploymentInstanceListVisible();
 });
 
-Then('特性环境侧栏应展示部署入口和销毁保护', async ({ pages }) => {
-  await pages.appDetailPage.deployInstance.expectFeatureEnvSidesliderVisible();
+Then('特性环境页面应展示配置入口和销毁保护', async ({ pages }) => {
+  await pages.appDetailPage.deployInstance.expectFeatureEnvPageVisible();
   await pages.appDetailPage.deployInstance.expectFeatureEnvDestroyGuardVisible();
 });

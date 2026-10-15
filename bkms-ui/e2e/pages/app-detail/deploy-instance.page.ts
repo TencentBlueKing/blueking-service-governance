@@ -453,18 +453,21 @@ export default class DeployInstancePage extends AppDetailBase {
     await expect(this.page.getByText('立即移除部署')).toBeVisible();
   }
 
-  /** 断言应用关联特性环境侧栏展示列表与操作保护 */
-  async expectFeatureEnvSidesliderVisible() {
-    await expect(this.page.getByText('应用关联的特性环境', { exact: true })).toBeVisible({ timeout: 10000 });
+  /** 断言应用关联特性环境页面展示列表与操作保护 */
+  async expectFeatureEnvPageVisible() {
+    await expect(this.page.getByText('特性环境', { exact: true })).toBeVisible({ timeout: 10000 });
     await expect(this.page.getByText(`共 ${this.featureEnvs.length} 个`, { exact: true })).toBeVisible();
-    for (const column of ['环境展示名称', '部署状态', '来源环境', '命名空间', '创建时间', '操作']) {
+    for (const column of ['环境展示名', '环境名称', '部署状态', '来源环境', '创建时间', '操作']) {
       await expect(this.page.getByText(column, { exact: true }).last()).toBeVisible();
     }
     const waitingRow = this.getFeatureEnvRow('e2e-feature-waiting');
     const deployedRow = this.getFeatureEnvRow('e2e-feature-deployed');
     await expect(waitingRow).toBeVisible();
     await expect(waitingRow.getByText('待部署', { exact: true })).toBeVisible();
-    await expect(waitingRow.getByRole('button', { name: '部署', exact: true })).toBeVisible();
+    await expect(waitingRow.getByRole('button', { name: '部署', exact: true })).toHaveCount(0);
+    await expect(waitingRow.getByRole('button', { name: '环境变量', exact: true })).toBeVisible();
+    await expect(waitingRow.getByRole('button', { name: '去配置', exact: true })).toBeVisible();
+    await expect(waitingRow.getByRole('button', { name: '销毁', exact: true })).toBeEnabled();
     await expect(deployedRow).toBeVisible();
     await expect(deployedRow.getByText('已部署', { exact: true })).toBeVisible();
   }
@@ -510,11 +513,11 @@ export default class DeployInstancePage extends AppDetailBase {
     return this.page.locator('.instance-table .vxe-table--main-wrapper .vxe-table--body tr');
   }
 
-  /** 打开应用关联特性环境侧栏 */
-  async openFeatureEnvSideslider() {
+  /** 打开应用关联特性环境页面 */
+  async openFeatureEnvPage() {
     await this.page.locator('.feature-env-entry').click();
-    // 最小等待：侧栏标题出现即视为打开完成；完整断言交由 expectFeatureEnvSidesliderVisible
-    await expect(this.page.getByText('应用关联的特性环境', { exact: true })).toBeVisible({ timeout: 10000 });
+    // 页面标题出现即视为打开完成；完整断言交由 expectFeatureEnvPageVisible
+    await expect(this.page.getByText('特性环境', { exact: true })).toBeVisible({ timeout: 10000 });
   }
 
   /** 打开实例列表首行灰度弹窗 */
