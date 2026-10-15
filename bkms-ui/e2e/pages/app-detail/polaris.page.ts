@@ -443,7 +443,7 @@ export default class PolarisPage extends AppDetailBase {
     await expect(typeOptions.getByRole('radio', { name: '从现有引入' })).toBeChecked();
     await expect(tokenField).toBeVisible();
     await expect(editor.getByText('北极星负责人', { exact: true })).toHaveCount(0);
-    await expect(editor.getByText('权重因子', { exact: true })).toHaveCount(0);
+    await expect(this.getSideFormItem('权重因子')).toBeVisible();
   }
   /** 断言新增北极星配置请求参数 */
   async expectCreateRequestParams() {

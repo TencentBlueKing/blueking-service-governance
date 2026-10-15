@@ -1090,14 +1090,12 @@
   // 创建平台配置；引入服务省略权重因子，避免重复写入北极星。
   async function handleCreate() {
     const createNewService = !!formModel.value.createNewService;
-    const operator = createNewService && formModel.value.operator ? formModel.value.operator.join(',') : '';
-    const { enableWeightFactor, ...formData } = formModel.value;
+    const { enableWeightFactor, operator, polarisToken, ...formData } = formModel.value;
     const requestParams: CreateAppPolarisConfigRequest = {
       appID: appDetailStore.appID,
       ...(formData as FormModelType),
-      ...(createNewService ? { enableWeightFactor } : {}),
+      ...(createNewService ? { enableWeightFactor, operator: operator?.join(',') } : { polarisToken }),
       servicePort: normalizeServicePort(),
-      operator,
     } as CreateAppPolarisConfigRequest;
     await PolarisConfigService.createAppPolarisConfig(requestParams, { interceptorErr: false });
   }
