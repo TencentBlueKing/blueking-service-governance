@@ -566,20 +566,30 @@
           min-width="150"
         >
           <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <div class="multi-line-cell">
+            <!-- tooltip 覆盖整个网络单元格，仅在 Pod IP 或 Node IP 发生省略时启用。 -->
+            <div
+              v-bk-tooltips="{
+                content: getNetworkTooltip(row),
+                delay: 100,
+                disabled: !isNetworkOverflow(row),
+              }"
+              class="multi-line-cell"
+              @mouseenter="handleNetworkMouseEnter($event, row)"
+              @mouseleave="handleNetworkMouseLeave"
+            >
               <span class="cell-label">Pod IP</span>
               <HoverCopy
                 class="network-hover-copy"
                 :copy-value="row.ip || ''"
+                :disable-overflow-tooltip="true"
                 :text="row.ip || '--'"
-                :tooltip="getNetworkTooltip(row)"
               />
               <span class="cell-label">Node IP</span>
               <HoverCopy
                 class="network-hover-copy"
                 :copy-value="row.nodeIP || ''"
+                :disable-overflow-tooltip="true"
                 :text="row.nodeIP || '--'"
-                :tooltip="getNetworkTooltip(row)"
               />
             </div>
           </template>
@@ -829,6 +839,15 @@
     { field: 'image', label: window.i18n.t('镜像 Tag'), options: props.filterOptions.image ?? [] },
   ]);
 
+  type NetworkRowKey = string;
+  const hoveredNetworkRowKey = ref<NetworkRowKey | null>(null);
+  let hoveredNetworkCell: HTMLElement | null = null;
+  let networkResizeObserver: ResizeObserver | undefined;
+
+  function getNetworkRowKey(row: AppInstanceOutputObj): NetworkRowKey {
+    return row.id ?? `${row.ip ?? ''}|${row.nodeIP ?? ''}`;
+  }
+
   function getNetworkTooltip(row: AppInstanceOutputObj) {
     return `Pod IP: ${row.ip || '--'}\nNode IP: ${row.nodeIP || '--'}`;
   }
@@ -843,6 +862,55 @@
     if (status === 'success') return window.i18n.t('已更新');
     if (status === 'failed') return window.i18n.t('更新失败');
     return status || '--';
+  }
+
+  function handleNetworkMouseEnter(event: MouseEvent, row: AppInstanceOutputObj) {
+    const cell = event.currentTarget;
+    if (!(cell instanceof HTMLElement)) return;
+
+    networkResizeObserver?.disconnect();
+    hoveredNetworkCell = cell;
+    updateHoveredNetworkCell(cell, row);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      networkResizeObserver = new ResizeObserver(() => {
+        if (hoveredNetworkCell === cell) updateHoveredNetworkCell(cell, row, true);
+      });
+      networkResizeObserver.observe(cell);
+    }
+  }
+
+  function handleNetworkMouseLeave(event: MouseEvent) {
+    // 溢出状态变化时会补发合成 mouseleave，仅让 tooltip 隐藏，不能停止当前单元格的尺寸监听。
+    if (!event.isTrusted) return;
+
+    networkResizeObserver?.disconnect();
+    networkResizeObserver = undefined;
+    hoveredNetworkCell = null;
+    hoveredNetworkRowKey.value = null;
+  }
+
+  function isNetworkCellOverflow(cell: HTMLElement) {
+    return Array.from(cell.querySelectorAll<HTMLElement>('.network-hover-copy .text-ov')).some(
+      valueCell =>
+        valueCell.scrollWidth > valueCell.clientWidth + 1 || valueCell.scrollHeight > valueCell.clientHeight + 1,
+    );
+  }
+
+  function isNetworkOverflow(row: AppInstanceOutputObj) {
+    return hoveredNetworkRowKey.value === getNetworkRowKey(row);
+  }
+
+  // 调整列宽时重新测量当前悬停单元格，并同步 tooltip 的显示/隐藏状态。
+  function updateHoveredNetworkCell(cell: HTMLElement, row: AppInstanceOutputObj, refreshTooltip = false) {
+    const nextKey = isNetworkCellOverflow(cell) ? getNetworkRowKey(row) : null;
+    const changed = hoveredNetworkRowKey.value !== nextKey;
+    hoveredNetworkRowKey.value = nextKey;
+
+    // 指令只在 mouseenter 时触发，状态变化发生在悬停期间时需要补发事件让 tooltip 重新处理。
+    if (refreshTooltip && changed) {
+      cell.dispatchEvent(new MouseEvent(nextKey ? 'mouseenter' : 'mouseleave'));
+    }
   }
 
   // 特性环境

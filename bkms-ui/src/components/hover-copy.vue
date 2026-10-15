@@ -19,11 +19,20 @@
 <template>
   <div class="w-full flex items-center gap-[4px] content-hover">
     <div
-      v-bk-tooltips="{ content: tooltip, disabled: !tooltip }"
+      v-bk-tooltips="{ content: tooltip, disabled: disableOverflowTooltip || !tooltip }"
       class="max-w-[calc(100%-20px)]"
-      :class="{ 'border-b border-dashed border-[#979ba5] cursor-pointer': tooltip }"
+      :class="{ 'border-b border-dashed border-[#979ba5] cursor-pointer': tooltip && !disableOverflowTooltip }"
     >
-      <OverflowTitle :type="tooltip ? undefined : 'tips'">
+      <div
+        v-if="disableOverflowTooltip"
+        class="text-ov"
+      >
+        {{ text || emptyPlaceholder }}
+      </div>
+      <OverflowTitle
+        v-else
+        :type="tooltip ? undefined : 'tips'"
+      >
         {{ text || emptyPlaceholder }}
       </OverflowTitle>
     </div>
@@ -46,6 +55,8 @@
   import { copyText } from '~/common/util';
   interface IProps {
     copyValue: string;
+    /** 由外层统一处理 tooltip 时，关闭当前文本自身的提示。 */
+    disableOverflowTooltip?: boolean;
     emptyPlaceholder?: string;
     text: number | string;
     tooltip?: string;
@@ -53,5 +64,6 @@
 
   withDefaults(defineProps<IProps>(), {
     emptyPlaceholder: '--',
+    disableOverflowTooltip: false,
   });
 </script>
