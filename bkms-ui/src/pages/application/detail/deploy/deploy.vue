@@ -261,7 +261,7 @@
             <InstanceList
               v-if="!isMultiEnvMode"
               :key="curEnv"
-              :has-deploy-record="latestDeployStatus?.hasDeployRecord"
+              :has-deploy-record="instanceListHasDeployRecord"
               @remove-deploy="handleRemoveDeploy"
             />
             <!-- 多环境 -->
@@ -395,6 +395,7 @@
   import CreateFeatureEnv from './create-feature-env.vue';
   import DeployEvent from './deploy-event.vue';
   import DeployHistory from './deploy-history.vue';
+  import { resolveInstanceListHasDeployRecord, shouldResetDeployStatusOnEnvChange } from './deploy-status-rules';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
   import FeatureEnv from './feature-env.vue';
   import FullUpdate from './instance-list/full-update.vue';
@@ -729,6 +730,12 @@
 
   const latestDeployStatus = ref<LatestDeployStatus | null>(null);
 
+  /**
+   * 实例列表的「是否有部署记录」判定：build 阶段恒视为有记录（构建不删旧实例，
+   * 列表必须继续按上一轮部署记录查询），其余阶段透传 latest-status 的聚合结果。
+   */
+  const instanceListHasDeployRecord = computed(() => resolveInstanceListHasDeployRecord(latestDeployStatus.value));
+
   /** 构建状态 Alert 信息 */
   interface BuildAlertInfo {
     closable: boolean;
@@ -862,7 +869,11 @@
   /** 同步单环境选择到页面状态和部署 Store，并触发当前环境数据重新加载。 */
   function handleEnvChange(env?: EnvOutput) {
     curEnvs.value = env?.name ? [env.name] : [];
+    // 环境选择器 refresh 后会重抛当前环境；先取旧环境名再更新 Store，环境未变化时
+    // 保留最新部署状态与实例快照，只有真正切换环境（或清空选择）才允许重置。
+    const prevEnvName = trpcDeployStore.curEnvItem?.name;
     trpcDeployStore.updateCurEnvItem(env);
+    if (!shouldResetDeployStatusOnEnvChange(env, prevEnvName)) return;
     latestDeployStatus.value = null;
     initLoading.value = true;
   }
