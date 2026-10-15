@@ -25,6 +25,7 @@
   >
     <Form
       ref="formRef"
+      data-testid="helm-chart-create-form"
       form-type="vertical"
       :model="formData"
     >
@@ -74,6 +75,7 @@
     </Form>
     <template #footer>
       <Button
+        data-testid="helm-chart-submit"
         :loading="isSubmitting"
         theme="primary"
         @click="handleSubmit"

@@ -53,6 +53,7 @@
               disabled: !isNotGitRepo,
             }"
             class="mr-[8px]"
+            data-testid="helm-chart-create-version"
             :disabled="isNotGitRepo"
             theme="primary"
             @click="handleCreateVersion"

@@ -302,13 +302,13 @@ export default class ArtifactPage extends AppDetailBase {
 
   /** 新建 Helm Chart 版本并打开构建记录 */
   async createHelmChartVersionBuild() {
-    await this.closeVisibleSideslider('版本详情');
-    await this.page.getByRole('button', { name: '新建版本' }).click();
-    const dialog = this.getDialog();
-    await expect(dialog.getByText('新建版本', { exact: true })).toBeVisible({ timeout: 10000 });
-    await expect(dialog.getByRole('textbox').last()).toHaveValue(/1\.2\.4/, { timeout: 10000 });
+    await this.closeVisibleSideslider();
+    await this.testId('helm-chart-create-version').click();
+    const form = this.testId('helm-chart-create-form');
+    await expect(form).toBeVisible({ timeout: 10000 });
+    await expect(form.getByRole('textbox').last()).toHaveValue(/1\.2\.4/, { timeout: 10000 });
 
-    const branchFormItem = dialog.locator('.bk-form-item').filter({ hasText: '分支' }).first();
+    const branchFormItem = form.getByTestId('code-revision-field');
     const branchSelect = branchFormItem.locator('.repo-ref-select');
     if (await branchSelect.isVisible().catch(() => false)) {
       await branchSelect.click();
@@ -322,7 +322,7 @@ export default class ArtifactPage extends AppDetailBase {
       response => response.request().method() === 'POST' && response.url().includes('/charts/builds'),
       { timeout: 30000 },
     );
-    await dialog.getByRole('button', { name: '确定' }).click();
+    await this.testId('helm-chart-submit').click();
     await this.assertApiResponseOk(await responsePromise, '新建 Helm Chart 版本');
     await this.expectHelmChartBuildRecordVisible();
   }
