@@ -24,7 +24,7 @@
     placement="bottom-start"
     theme="light"
     trigger="click"
-    :width="800"
+    :width="popoverWidth"
     @after-hidden="handlePopoverHidden"
     @after-show="handlePopoverShown"
   >
@@ -77,7 +77,8 @@
         </Input>
         <div
           v-if="visibleEnvGroups.length"
-          class="grid grid-cols-4 gap-[8px] mt-[8px]"
+          class="grid gap-[8px] mt-[8px]"
+          :style="envGroupGridStyle"
         >
           <div
             v-for="group in visibleEnvGroups"
@@ -210,6 +211,10 @@
       }))
       .filter(group => group.envs.length > 0);
   });
+  const popoverWidth = computed(() => Math.max(500, visibleEnvGroups.value.length * 200));
+  const envGroupGridStyle = computed(() => ({
+    gridTemplateColumns: `repeat(${Math.max(visibleEnvGroups.value.length, 1)}, minmax(0, 1fr))`,
+  }));
 
   function handleBack() {
     popoverRef.value?.hide();

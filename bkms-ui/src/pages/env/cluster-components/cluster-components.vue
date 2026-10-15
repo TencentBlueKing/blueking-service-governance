@@ -28,6 +28,12 @@
         scene="part"
         type="empty"
       >
+        <template #type>
+          <img
+            class="h-[100px]"
+            src="/empty.svg"
+          />
+        </template>
       </Exception>
 
       <!-- 按应用类型分组 -->
@@ -571,8 +577,11 @@
   .comp-expand-icon {
     transition: transform 0.3s ease;
   }
+  :deep(.bk-exception) {
+    margin: 8px 0;
+  }
   :deep(.bk-exception-img) {
-    width: 220px;
-    height: 120px;
+    width: auto !important;
+    height: auto !important;
   }
 </style>
