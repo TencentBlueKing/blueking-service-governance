@@ -38,13 +38,16 @@ import (
 
 // Reader 列出某个应用在某个环境下由依赖服务绑定产出的环境变量。
 type Reader struct {
-	instStore model.ServiceInstanceStore
-	bindings  *model.ServiceBindingStore
+	insts    *model.ServiceInstanceStore
+	bindings *model.ServiceBindingStore
 }
 
 // NewReader 创建一个依赖服务环境变量读取器。
-func NewReader(instStore model.ServiceInstanceStore, db *mongo.Database) *Reader {
-	return &Reader{instStore: instStore, bindings: store.Of(db, model.ServiceBindingMeta)}
+func NewReader(db *mongo.Database) *Reader {
+	return &Reader{
+		insts:    store.Of(db, model.ServiceInstanceMeta),
+		bindings: store.Of(db, model.ServiceBindingMeta),
+	}
 }
 
 // ListEnvVarsForApp 返回该应用在指定环境下生效的依赖服务环境变量。
@@ -87,16 +90,19 @@ func (r *Reader) instancesByID(
 	ctx context.Context,
 	ids []bson.ObjectID,
 ) (map[bson.ObjectID]*model.ServiceInstance, error) {
-	if r.instStore == nil || len(ids) == 0 {
+	if len(ids) == 0 {
 		return map[bson.ObjectID]*model.ServiceInstance{}, nil
 	}
-	insts, err := r.instStore.ListByIDs(ctx, ids)
+	insts, err := r.insts.List(ctx, model.InstancesByIDs(ids))
 	if err != nil {
 		return nil, errors.Wrap(err, "list service instances by ids")
 	}
-	return lo.SliceToMap(insts, func(inst *model.ServiceInstance) (bson.ObjectID, *model.ServiceInstance) {
-		return inst.ID, inst
-	}), nil
+	return lo.SliceToMap(
+		lo.ToSlicePtr(insts),
+		func(inst *model.ServiceInstance) (bson.ObjectID, *model.ServiceInstance) {
+			return inst.ID, inst
+		},
+	), nil
 }
 
 // collectFromBindings 按指定环境从绑定产出实际注入的变量。

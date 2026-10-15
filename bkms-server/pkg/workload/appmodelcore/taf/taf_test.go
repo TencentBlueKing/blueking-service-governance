@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -18,6 +19,8 @@ import (
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -27,38 +30,28 @@ import (
 var _ = Describe("TAF application service", func() {
 	var ctx context.Context
 	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var appConfigFileStore appcfg.AppConfigFileStore
-	var envStore envmodel.EnvironmentStore
+	var appStore *bkmsapp.ApplicationStore
 	var envService *bkmsenv.EnvService
 	var workspaceStore *bkmsworkspace.WorkspaceStore
 	var ruleStore *appdefaults.RuleStore
-	var appModelStore appmodel.AppModelStore
-	var appSpecStore appspec.AppSpecStore
+	var db *mongo.Database
 	var workspace *bkmsworkspace.Workspace
 	var environment *envmodel.Environment
 	var application *bkmsapp.Application
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			appcfg.FxModule,
 			bkmsenv.FxModule,
-			bkmsworkspace.FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
 			fx.Populate(
-				&appStore,
-				&appConfigFileStore,
-				&envStore,
 				&envService,
-				&appModelStore,
-				&appSpecStore,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 		ruleStore = testutil.NewStore(GinkgoT(), appdefaults.RuleMeta)
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
@@ -70,13 +63,14 @@ var _ = Describe("TAF application service", func() {
 
 	AfterEach(func() {
 		if application != nil {
-			_ = appSpecStore.DeleteByApp(ctx, application.ID)
-			_ = appModelStore.DeleteAppModel(ctx, application.ID)
-			_, _ = appConfigFileStore.DeleteByApp(ctx, application.ID)
-			_ = appStore.DeleteAppByName(ctx, application.WorkspaceID, application.Name)
+			_, _ = store.Of(db, appspec.AppSpecMeta).DeleteMany(ctx, appspec.ByApp(application.ID))
+			_ = appmodel.DeleteAppModel(ctx, db, application.ID)
+			_, _ = store.Of(database.DB(), appcfg.AppConfigFileMeta).
+				DeleteMany(ctx, appcfg.FilesByApp(application.ID))
+			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(application.WorkspaceID, application.Name))
 		}
-		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
-		Expect(envStore.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(appdefaults.RuleMeta)).To(Succeed())
+		Expect(testutil.CleanupCollection("environments")).To(Succeed())
 		Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		diApp.RequireStop()
 	})
@@ -115,14 +109,7 @@ var _ = Describe("TAF application service", func() {
 			WorkspaceID: workspace.ID,
 			Type:        bkmsapp.AppTypeTAF,
 		}
-		err = taf.NewService(
-			appModelStore,
-			appSpecStore,
-			testutil.NewDB(GinkgoT()),
-			envStore,
-			appConfigFileStore,
-			appStore,
-		).Create(ctx, application, &taf.CreateParams{
+		err = taf.NewService(db).Create(ctx, application, &taf.CreateParams{
 			TafConfig: &taf.TafConfigParams{
 				FileName: "taf.conf",
 				FilePath: "/etc/taf",
@@ -130,7 +117,7 @@ var _ = Describe("TAF application service", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		persistedModel, err := appModelStore.GetAppModel(ctx, application.ID)
+		persistedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(application.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persistedModel.Workload.Type).To(Equal(appmodel.WorkloadTypeTaf))
 		Expect(*persistedModel.Replicas).To(Equal(int32(1)))
@@ -141,7 +128,8 @@ var _ = Describe("TAF application service", func() {
 		Expect(*persistedModel.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
 		Expect(*persistedModel.UpdateStrategy.MaxSurge).To(Equal("25%"))
 
-		defaultSpec, err := appSpecStore.Get(ctx, application.ID, appspec.DefaultEnvName)
+		defaultSpec, err := store.Of(db, appspec.AppSpecMeta).
+			Get(ctx, appspec.ByAppEnv(application.ID, appspec.DefaultEnvName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*defaultSpec.Resources.Replicas).To(Equal(int32(1)))
 		Expect(*defaultSpec.Resources.CPURequests).To(Equal("1"))
@@ -153,7 +141,7 @@ var _ = Describe("TAF application service", func() {
 		Expect(defaultSpec.Labels).To(BeNil())
 		Expect(defaultSpec.Annotations).To(BeNil())
 
-		envSpec, err := appSpecStore.Get(ctx, application.ID, environment.Name)
+		envSpec, err := store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(application.ID, environment.Name))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*envSpec.Resources.Replicas).To(Equal(int32(2)))
 		Expect(*envSpec.Resources.CPURequests).To(Equal("500m"))
@@ -174,14 +162,7 @@ var _ = Describe("TAF application service", func() {
 			WorkspaceID: workspace.ID,
 			Type:        bkmsapp.AppTypeTAF,
 		}
-		err = taf.NewService(
-			appModelStore,
-			appSpecStore,
-			testutil.NewDB(GinkgoT()),
-			envStore,
-			appConfigFileStore,
-			appStore,
-		).Create(ctx, application, &taf.CreateParams{
+		err = taf.NewService(db).Create(ctx, application, &taf.CreateParams{
 			TafConfig: &taf.TafConfigParams{
 				FileName: "taf.conf",
 				FilePath: "/etc/taf",
@@ -189,7 +170,7 @@ var _ = Describe("TAF application service", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		persistedModel, err := appModelStore.GetAppModel(ctx, application.ID)
+		persistedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(application.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persistedModel.Workload.Type).To(Equal(appmodel.WorkloadTypeTaf))
 		Expect(*persistedModel.Replicas).To(Equal(int32(1)))
@@ -200,14 +181,15 @@ var _ = Describe("TAF application service", func() {
 		Expect(*persistedModel.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
 		Expect(*persistedModel.UpdateStrategy.MaxSurge).To(Equal("25%"))
 
-		defaultSpec, err := appSpecStore.Get(ctx, application.ID, appspec.DefaultEnvName)
+		defaultSpec, err := store.Of(db, appspec.AppSpecMeta).
+			Get(ctx, appspec.ByAppEnv(application.ID, appspec.DefaultEnvName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaultSpec.AppID).To(Equal(application.ID))
 		Expect(defaultSpec.EnvName).To(Equal(appspec.DefaultEnvName))
 		Expect(*defaultSpec.Resources.Replicas).To(Equal(int32(1)))
 		Expect(*defaultSpec.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
 
-		_, err = appSpecStore.Get(ctx, application.ID, environment.Name)
+		_, err = store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(application.ID, environment.Name))
 		Expect(errors.Is(err, appspec.ErrAppSpecNotFound)).To(BeTrue())
 	})
 })

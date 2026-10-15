@@ -52,8 +52,8 @@ type MountableFileProvider interface {
 }
 
 // NewMountableFileProvider 构造一个 MountableFileProvider 实例。
-func NewMountableFileProvider(fileStore AppConfigFileStore, db *mongo.Database) MountableFileProvider {
-	return NewAppConfigFileService(fileStore, db)
+func NewMountableFileProvider(db *mongo.Database) MountableFileProvider {
+	return NewAppConfigFileService(db)
 }
 
 // GetFrameworkMountableFile 获取应用在指定环境下生效的框架可挂载文件。
@@ -112,7 +112,7 @@ func (s *AppCfgFileDefService) listEffectiveContents(
 
 	// 2. 查默认文件 + 目标环境文件
 	envNames := []AcfListOption{AcfFilterDefIDs(defIDs)}
-	configFiles, err := s.FileStore.List(ctx, appID, envNames...)
+	configFiles, err := ListFiles(ctx, s.FileStore, appID, envNames...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "list %s config files for app %s", configKind, appID)
 	}
@@ -171,7 +171,7 @@ func (s *AppCfgFileDefService) buildEffectiveContentItem(
 		targetFile = envFile
 	}
 
-	editor, err := NewAppConfigFileEditor(s.FileStore, s.db, targetFile)
+	editor, err := NewAppConfigFileEditor(s.db, targetFile)
 	if err != nil {
 		return MountableFile{}, errors.Wrapf(err, "creating editor for def %s", def.ID.Hex())
 	}

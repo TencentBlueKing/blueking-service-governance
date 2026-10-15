@@ -25,12 +25,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -38,10 +41,9 @@ var _ = Describe("CollectConfigWarnings", func() {
 	var (
 		ctx                   context.Context
 		diApp                 *fxtest.App
-		appModelStore         appmodel.AppModelStore
-		appConfigFileStore    appcfg.AppConfigFileStore
 		appConfigFileDefStore *appcfg.AppConfigFileDefStore
-		polarisConfigStore    polaris.PolarisConfigStore
+		configStore           *polaris.ConfigStore
+		db                    *mongo.Database
 		cfgProvider           appcfg.MountableFileProvider
 		testAppID             string
 	)
@@ -52,33 +54,31 @@ var _ = Describe("CollectConfigWarnings", func() {
 
 		diApp = fxtest.New(
 			GinkgoT(),
-			appmodel.FxModule,
 			appcfg.FxModule,
 			polaris.FxModule,
-			fx.Populate(
-				&appModelStore,
-				&appConfigFileStore,
-				&polarisConfigStore,
-			),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		configStore = store.Of(db, polaris.ConfigMeta)
 		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
-		cfgProvider = appcfg.NewMountableFileProvider(appConfigFileStore, testutil.NewDB(GinkgoT()))
+		cfgProvider = appcfg.NewMountableFileProvider(db)
 	})
 
 	AfterEach(func() {
 		// 清理测试数据
-		_ = appModelStore.DeleteAppModel(ctx, testAppID)
-		_, _ = appConfigFileStore.DeleteByApp(ctx, testAppID)
+		_ = appmodel.DeleteAppModel(ctx, db, testAppID)
+		_, _ = store.Of(database.DB(), appcfg.AppConfigFileMeta).
+			DeleteMany(ctx, appcfg.FilesByApp(testAppID))
 		_, _ = appConfigFileDefStore.DeleteMany(ctx, appcfg.DefsByApp(testAppID))
-		_ = polarisConfigStore.DeleteByApp(ctx, testAppID)
+		_, _ = configStore.DeleteMany(ctx, polaris.ByApp(testAppID))
 
 		diApp.RequireStop()
 	})
 
 	// 辅助函数：创建 tRPC 类型的 AppModel
 	createTrpcAppModel := func() {
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID: testAppID,
 			Workload: appmodel.Workload{
 				Type: appmodel.WorkloadTypeTrpc,
@@ -109,7 +109,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				Content:           &content,
 			},
 		}
-		_, err = appConfigFileStore.Add(ctx, acf)
+		err = store.Of(db, appcfg.AppConfigFileMeta).Create(ctx, &acf)
 		Expect(err).NotTo(HaveOccurred())
 		return defID
 	}
@@ -126,7 +126,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				Content:           &content,
 			},
 		}
-		_, err := appConfigFileStore.Add(ctx, acf)
+		err := store.Of(db, appcfg.AppConfigFileMeta).Create(ctx, &acf)
 		Expect(err).NotTo(HaveOccurred())
 	}
 
@@ -145,7 +145,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 			}
 			warnings := polaris.CollectConfigWarnings(
 				ctx,
-				appModelStore,
+				db,
 				cfgProvider,
 				config,
 			)
@@ -181,7 +181,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				}
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
-					appModelStore,
+					db,
 					cfgProvider,
 					config,
 				)
@@ -211,7 +211,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				}
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
-					appModelStore,
+					db,
 					cfgProvider,
 					config,
 				)
@@ -234,7 +234,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				}
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
-					appModelStore,
+					db,
 					cfgProvider,
 					config,
 				)
@@ -265,7 +265,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				}
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
-					appModelStore,
+					db,
 					cfgProvider,
 					config,
 				)
@@ -292,7 +292,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				}
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
-					appModelStore,
+					db,
 					cfgProvider,
 					config,
 				)
@@ -342,7 +342,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				}
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
-					appModelStore,
+					db,
 					cfgProvider,
 					config,
 				)
@@ -376,7 +376,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				}
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
-					appModelStore,
+					db,
 					cfgProvider,
 					config,
 				)
@@ -405,7 +405,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 				}
 				warnings := polaris.CollectConfigWarnings(
 					ctx,
-					appModelStore,
+					db,
 					cfgProvider,
 					config,
 				)

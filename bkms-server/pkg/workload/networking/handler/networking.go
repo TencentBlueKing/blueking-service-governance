@@ -28,7 +28,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking/serializer"
@@ -42,6 +42,10 @@ type Handler struct {
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
+}
+
+func (h *Handler) services() *networking.ServiceStore {
+	return store.Of(h.registry.DB, networking.ServiceMeta)
 }
 
 // CreateAppService 创建应用下的 Service
@@ -92,7 +96,7 @@ func (h *Handler) CreateAppService(c *gin.Context) {
 		svc.TrafficLaneEnabled = *input.TrafficLaneEnabled
 	}
 
-	if err = store.Of(h.registry.DB, networking.ServiceMeta).Create(ctx, svc); err != nil {
+	if err = h.services().Create(ctx, svc); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "create app service"))
 		return
 	}
@@ -127,7 +131,7 @@ func (h *Handler) ListAppServices(c *gin.Context) {
 		return
 	}
 
-	services, err := store.Of(h.registry.DB, networking.ServiceMeta).List(
+	services, err := h.services().List(
 		ctx, networking.ByApp(appObj.ID), store.Desc("createdAt"),
 	)
 	if err != nil {
@@ -189,7 +193,7 @@ func (h *Handler) UpdateAppService(c *gin.Context) {
 		TrafficLaneEnabled: input.TrafficLaneEnabled,
 	}
 
-	err = store.Of(h.registry.DB, networking.ServiceMeta).Update(
+	err = h.services().Update(
 		ctx, updateData.ToBSON(), networking.ByAppAndName(appObj.ID, uriInput.Name),
 	)
 	// 更新内容全为空时不做任何修改
@@ -229,7 +233,7 @@ func (h *Handler) DeleteAppService(c *gin.Context) {
 		return
 	}
 
-	err = store.Of(h.registry.DB, networking.ServiceMeta).DeleteIfExists(
+	err = h.services().DeleteIfExists(
 		ctx, networking.ByAppAndName(appObj.ID, uriInput.Name),
 	)
 	if err != nil {
@@ -267,19 +271,17 @@ func (h *Handler) ListTrafficLaneCandidateApps(c *gin.Context) {
 		return
 	}
 
-	apps, err := h.registry.AppStore.ListApps(ctx, &app.ListOpts{
-		WorkspaceID: ws.ID,
-	})
+	apps, err := store.Of(h.registry.DB, app.AppMeta).List(ctx, app.InWorkspace(ws.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list apps"))
 		return
 	}
 
-	appNames := lo.SliceToMap(apps, func(a *app.Application) (string, string) {
+	appNames := lo.SliceToMap(apps, func(a app.Application) (string, string) {
 		return a.ID, a.Name
 	})
 
-	grouped, err := networking.GroupByAppID(ctx, store.Of(h.registry.DB, networking.ServiceMeta), lo.Keys(appNames))
+	grouped, err := networking.GroupByAppID(ctx, h.services(), lo.Keys(appNames))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "group services by app id"))
 		return

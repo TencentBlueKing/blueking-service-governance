@@ -129,10 +129,10 @@ func UpdateInstanceCount(
 	default:
 		return errors.Errorf("invalid instance type: %s", instanceType)
 	}
-	// GenericStore 不提供 $inc，直接操作底层集合
-	filter := bson.M{"name": name, "version": DefaultComponentDefVersion}
-	update := bson.M{"$inc": bson.M{fieldName: delta}}
-	if _, err := defs.Collection().UpdateOne(ctx, filter, update); err != nil {
+	// 计数不是对组件定义的编辑，不刷新 updatedAt；组件定义不存在时静默忽略
+	_, err := defs.Modify(ctx, bson.M{"$inc": bson.M{fieldName: delta}},
+		store.Where("name", name), store.Where("version", DefaultComponentDefVersion), store.KeepUpdatedAt())
+	if err = store.IgnoreNotFound(err); err != nil {
 		return errors.Wrapf(err, "incr ref count for component def(%s) field(%s) delta(%d)", name, instanceType, delta)
 	}
 	return nil

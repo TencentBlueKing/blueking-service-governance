@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -29,6 +30,7 @@ import (
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -45,13 +47,13 @@ var (
 // GPAService 负责将 GPA 配置下发为 GeneralPodAutoscaler CR 并管理其生命周期。
 // 直接操作目标集群的 K8s ApiServer，状态完全以集群中的 CR 为准，不使用 DB 存储状态。
 type GPAService struct {
-	appModelStore appmodel.AppModelStore
+	appModels *appmodel.AppModelStore
 }
 
 // NewGPAService 创建 GPA 下发服务
-func NewGPAService(appModelStore appmodel.AppModelStore) *GPAService {
+func NewGPAService(db *mongo.Database) *GPAService {
 	return &GPAService{
-		appModelStore: appModelStore,
+		appModels: store.Of(db, appmodel.AppModelMeta),
 	}
 }
 
@@ -175,7 +177,7 @@ func (c *ClusterClient) GetStatus(ctx context.Context, namespace, name string) (
 
 // resolveScaleTargetName 解析 scaleTargetRef 指向的工作负载名（与应用工作负载名一致，见 workload builder）。
 func (s *GPAService) resolveScaleTargetName(ctx context.Context, appID string) (string, error) {
-	appModel, err := s.appModelStore.GetAppModel(ctx, appID)
+	appModel, err := s.appModels.Get(ctx, appmodel.ByApp(appID))
 	if err != nil {
 		return "", errors.Wrapf(err, "get app model for app %s", appID)
 	}

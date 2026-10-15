@@ -326,8 +326,8 @@ var strategyMu = strategyLockTable{
 // Service 告警策略业务逻辑层
 type Service struct {
 	strategies *Store
-	envStore   envmodel.EnvironmentStore
-	appStore   bkmsapp.ApplicationStore
+	envStore   *envmodel.EnvironmentStore
+	appStore   *bkmsapp.ApplicationStore
 	snapshots  *topology.ResourceSnapshotStore
 	newClient  alert.ClientFactory
 }

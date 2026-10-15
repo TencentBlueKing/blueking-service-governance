@@ -31,7 +31,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -54,18 +53,17 @@ var _ = Describe("Service", func() {
 		ctx = context.Background()
 		workspaceID = "ws-" + stringx.Random(8)
 
-		var envStore envmodel.EnvironmentStore
-		diApp := fxtest.New(GinkgoT(), bkmsenv.FxModule, fx.Populate(&envSvc, &envStore))
+		diApp := fxtest.New(GinkgoT(), bkmsenv.FxModule, fx.Populate(&envSvc))
 		diApp.RequireStart()
 		DeferCleanup(diApp.RequireStop)
 
 		db := testutil.NewDB(GinkgoT())
-		service = NewService(db, envStore)
+		service = NewService(db)
 		whitelist = store.Of(db, Meta)
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	Describe("Add", func() {

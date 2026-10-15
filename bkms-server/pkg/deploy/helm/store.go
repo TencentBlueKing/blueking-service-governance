@@ -20,22 +20,17 @@ package helm
 
 import (
 	"context"
-	"regexp"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
-
-// collectionName Helm 应用部署记录表名
-const collectionName = "helm_deploy_records"
 
 // ErrRecordNotFound 部署记录未找到。调用方据此区分「记录不可寻回」与 DB 瞬时故障
 // 记录不存在、以及非法 ObjectID（同样不可能查到记录）都 wrap 本哨兵错误
@@ -44,410 +39,138 @@ var ErrRecordNotFound = errors.New("helm deploy record not found")
 // ErrLatestDeployRecordNotFound 最新部署记录不存在
 var ErrLatestDeployRecordNotFound = errors.New("latest deploy record not found")
 
-// RecordStore 部署记录存储接口
-type RecordStore interface {
-	// Create 创建 Helm 应用部署记录
-	Create(ctx context.Context, record *Record) (string, error)
+// RecordStore Helm 应用部署记录存储
+type RecordStore = store.GenericStore[Record]
 
-	// Update 更新 Helm 应用部署记录
-	Update(ctx context.Context, record *Record) error
-
-	// List 列出 Helm 应用部署记录（支持分页）
-	List(
-		ctx context.Context,
-		appID, envName, trafficLaneName, keyword string,
-		page, pageSize int64,
-	) ([]Record, int64, error)
-
-	// ListByImageTag 按 appID 和 imageTag 查询部署记录（支持分页，按 createdAt 降序）
-	ListByImageTag(ctx context.Context, appID, imageTag string, page, pageSize int64) ([]Record, int64, error)
-
-	// Get 通过 ID 获取 Helm 应用部署记录
-	Get(ctx context.Context, appID, id string) (*Record, error)
-
-	// GetLatest 获取最新 Helm 应用部署记录
-	GetLatest(ctx context.Context, appID, envName, trafficLaneName string) (*Record, error)
-
-	// GetLatestByStatuses 获取指定状态集合中的最新 Helm 应用部署记录
-	GetLatestByStatuses(
-		ctx context.Context,
-		appID, envName, trafficLaneName string,
-		statuses []helmrelease.Status,
-	) (*Record, error)
-
-	// ListLatestByApps 按应用、环境返回一批应用在指定泳道下各环境最新的一条部署记录
-	ListLatestByApps(
-		ctx context.Context, appIDs []string, trafficLaneName string,
-	) (map[string]map[string]*Record, error)
-
-	// ListImageTagDeployedEnvs 获取指定应用各镜像标签的已部署环境列表（去重，仅统计部署成功的记录，默认查询所有环境）
-	ListImageTagDeployedEnvs(ctx context.Context, appID string) ([]deploytypes.ImageTagEnvPair, error)
-
-	// ListChartVersionDeployedEnvs 获取指定应用各 Chart 版本的已部署环境列表（去重，仅统计部署成功的记录，默认查询所有环境），用于「Helm Chart 制品列表」展示已部署环境
-	ListChartVersionDeployedEnvs(ctx context.Context, appID string) ([]deploytypes.ChartVersionEnvPair, error)
-
-	// HasActiveDeployments 检查是否存在活跃的部署（未卸载的部署）
-	HasActiveDeployments(ctx context.Context, appID string) (bool, error)
+// RecordMeta Helm 应用部署记录的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 查询提速：appID + envName + trafficLaneName + createdAt(倒序)
+// - 查询提速：appID + trafficLaneName + createdAt(倒序)
+var RecordMeta = store.Meta[Record]{
+	Collection: "helm_deploy_records",
+	NotFound:   ErrRecordNotFound,
 }
 
-var _ RecordStore = &RecordStoreMongo{}
-
-// RecordStoreMongo RecordStore 实现（基于 MongoDB）
-type RecordStoreMongo struct {
-	collection *mongo.Collection
+// imageTagHistoryStatuses 按镜像标签查询部署记录时关注的状态（经讨论确认该功能仅关注部分状态）
+var imageTagHistoryStatuses = []helmrelease.Status{
+	// 部署成功
+	helm.StatusDeployed,
+	// 部署中
+	helm.StatusPendingInstall,
+	helm.StatusPendingUpgrade,
+	// 部署失败（含超时、中断）
+	helm.StatusFailed,
+	helm.StatusPollingTimeout,
+	helm.StatusPollingBroken,
 }
 
-// NewRecordStoreMongo 创建 RecordStoreMongo 实例
-func NewRecordStoreMongo(client *mongo.Client, dbName string) (*RecordStoreMongo, error) {
-	coll := client.Database(dbName).Collection(collectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 查询提速：appID + envName + trafficLaneName + createdAt(倒序)
-	// - 查询提速：appID + trafficLaneName + createdAt(倒序)
-	return &RecordStoreMongo{collection: coll}, nil
+// activeStatuses 视为活跃部署（未卸载）的状态：已部署、部署中或卸载中
+var activeStatuses = []helmrelease.Status{
+	helmrelease.StatusDeployed,
+	helmrelease.StatusPendingInstall,
+	helmrelease.StatusPendingUpgrade,
+	helmrelease.StatusPendingRollback,
+	helmrelease.StatusUninstalling,
 }
 
-// Create 创建 Helm 应用部署记录
-func (s *RecordStoreMongo) Create(ctx context.Context, record *Record) (string, error) {
-	timeNow := time.Now()
-	record.CreatedAt, record.UpdatedAt = timeNow, timeNow
-	ret, err := s.collection.InsertOne(ctx, record)
-	if err != nil {
-		return "", err
-	}
-	if oid, ok := ret.InsertedID.(bson.ObjectID); ok {
-		return oid.Hex(), nil
-	}
-	return "", errors.New("failed to get inserted ID")
+// KeywordMatches 按 Chart 版本、镜像标签或操作人模糊匹配（不区分大小写），keyword 为空白时不过滤
+func KeywordMatches(keyword string) store.Opt {
+	return store.ContainsIgnoreCase(keyword, "chartVersion", "imageTag", "operator")
 }
 
-// Update 更新 Helm 应用部署记录
-func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
-	filter := bson.M{"_id": record.ID}
-	updateDoc := bson.M{"$set": bson.M{
-		"revision":  record.Revision,
-		"status":    record.Status,
-		"message":   record.Message,
-		"extras":    record.Extras,
-		"endedAt":   record.EndedAt,
-		"updatedAt": time.Now(),
-	}}
-	ret, err := s.collection.UpdateOne(ctx, filter, updateDoc)
-	if err != nil {
-		return errors.Wrapf(err, "update helm app deploy record %s failed", record.ID.Hex())
-	}
-	if ret.MatchedCount == 0 {
-		return errors.Wrapf(
-			ErrRecordNotFound, "workspace %s app %s deploy record %s",
-			record.WorkspaceID, record.AppID, record.ID.Hex(),
-		)
-	}
-	return nil
+// ByImageTag 匹配应用中使用指定镜像标签、且状态为部署成功、部署中或部署失败的记录
+func ByImageTag(appID, imageTag string) store.Opt {
+	return store.Combine(
+		store.Where("appID", appID),
+		store.Where("imageTag", imageTag),
+		store.Where("status", bson.M{"$in": imageTagHistoryStatuses}),
+	)
 }
 
-// ListByImageTag 按 appID 和 imageTag 查询部署记录（支持分页，按 createdAt 降序）
-func (s *RecordStoreMongo) ListByImageTag(
-	ctx context.Context, appID, imageTag string, page, pageSize int64,
-) ([]Record, int64, error) {
-	filter := bson.M{
-		"appID":    appID,
-		"imageTag": imageTag,
-		// 经讨论确认该功能仅关注部分状态
-		"status": bson.M{
-			"$in": []helmrelease.Status{
-				// 部署成功
-				helm.StatusDeployed,
-				// 部署中
-				helm.StatusPendingInstall,
-				helm.StatusPendingUpgrade,
-				// 部署失败（含超时、中断）
-				helm.StatusFailed,
-				helm.StatusPollingTimeout,
-				helm.StatusPollingBroken,
-			},
-		},
-	}
-
-	records, total, err := s.list(ctx, filter, page, pageSize)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "list app %s image tag %s deploy records", appID, imageTag)
-	}
-	return records, total, nil
-}
-
-// List 列出 Helm 应用部署记录（支持分页）
-func (s *RecordStoreMongo) List(
-	ctx context.Context,
-	appID, envName, trafficLaneName, keyword string,
-	page, pageSize int64,
-) ([]Record, int64, error) {
-	filter := bson.M{
-		"appID":           appID,
-		"envName":         envName,
-		"trafficLaneName": trafficLaneName,
-	}
-	// 支持 keyword 参数
-	if keyword != "" {
-		// 转义正则表达式特殊字符，防止注入攻击和语法错误
-		keyword = regexp.QuoteMeta(keyword)
-		// 模糊匹配：Chart 版本、Image Tag、操作人
-		filter["$or"] = []bson.M{
-			{"chartVersion": bson.M{"$regex": keyword, "$options": "i"}},
-			{"imageTag": bson.M{"$regex": keyword, "$options": "i"}},
-			{"operator": bson.M{"$regex": keyword, "$options": "i"}},
-		}
-	}
-
-	records, total, err := s.list(ctx, filter, page, pageSize)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "list app %s deploy records", appID)
-	}
-	return records, total, nil
-}
-
-// list 通用的分页查询方法
-func (s *RecordStoreMongo) list(
-	ctx context.Context,
-	filter bson.M,
-	page, pageSize int64,
-) ([]Record, int64, error) {
-	// 先统计总数
-	total, err := s.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// 分页参数
-	opts := options.Find().
-		SetLimit(pageSize).
-		SetSkip((page - 1) * pageSize).
-		SetSort(bson.D{{"createdAt", -1}})
-
-	cursor, err := s.collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer cursor.Close(ctx)
-
-	var records []Record
-	if err = cursor.All(ctx, &records); err != nil {
-		return nil, 0, err
-	}
-	return records, total, nil
-}
-
-// Get 通过 ID 获取 Helm 应用部署记录
-func (s *RecordStoreMongo) Get(ctx context.Context, appID, recordID string) (*Record, error) {
+// GetRecord 获取应用的一条部署记录；记录不存在或 recordID 不是合法的 ObjectID 时返回 ErrRecordNotFound
+func GetRecord(ctx context.Context, db *mongo.Database, appID, recordID string) (*Record, error) {
 	objID, err := bson.ObjectIDFromHex(recordID)
 	if err != nil {
 		return nil, errors.Wrapf(ErrRecordNotFound, "invalid record id %s", recordID)
 	}
-
-	var record Record
-	err = s.collection.FindOne(ctx, bson.M{"_id": objID, "appID": appID}).Decode(&record)
+	record, err := store.Of(db, RecordMeta).Get(ctx, store.ByID(objID), store.Where("appID", appID))
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errors.Wrapf(ErrRecordNotFound, "app %s deploy record %s", appID, recordID)
-		}
-		return nil, err
+		return nil, errors.Wrapf(err, "get app %s deploy record %s", appID, recordID)
 	}
-	return &record, err
+	return record, nil
 }
 
-// GetLatest 获取最新 Helm 应用部署记录
-func (s *RecordStoreMongo) GetLatest(
-	ctx context.Context,
-	appID, envName, trafficLaneName string,
+// UpdateRecord 更新部署记录的结果字段（revision、status、message、extras、endedAt），记录不存在时返回 ErrRecordNotFound
+func UpdateRecord(ctx context.Context, db *mongo.Database, record *Record) error {
+	err := store.Of(db, RecordMeta).Update(ctx, record,
+		store.UpdateSelected("revision", "status", "message", "extras", "endedAt"),
+		store.ByID(record.ID),
+	)
+	return errors.Wrapf(err, "update workspace %s app %s deploy record %s",
+		record.WorkspaceID, record.AppID, record.ID.Hex())
+}
+
+// GetLatest 获取应用在指定环境、泳道下最新的一条部署记录；传入 statuses 时只在这些状态中查找。
+// 不存在时返回 ErrLatestDeployRecordNotFound
+func GetLatest(
+	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string, statuses ...helmrelease.Status,
 ) (*Record, error) {
-	return s.getLatestByFilter(ctx, bson.M{
-		"appID":           appID,
-		"envName":         envName,
-		"trafficLaneName": trafficLaneName,
-	})
+	opts := []store.Opt{deploytypes.ByAppEnvLane(appID, envName, trafficLaneName), deploytypes.NewestFirst()}
+	if len(statuses) > 0 {
+		opts = append(opts, store.Where("status", bson.M{"$in": statuses}))
+	}
+	record, err := store.Of(db, RecordMeta).Get(ctx, opts...)
+	if errors.Is(err, ErrRecordNotFound) {
+		return nil, errors.Wrapf(
+			ErrLatestDeployRecordNotFound,
+			"app %s env %s lane %q",
+			appID,
+			envName,
+			trafficLaneName,
+		)
+	}
+	if err != nil {
+		return nil, errors.Wrapf(err, "get latest helm deploy record of app %s env %s", appID, envName)
+	}
+	return record, nil
 }
 
-// GetLatestByStatuses 获取指定状态集合中的最新 Helm 应用部署记录
-func (s *RecordStoreMongo) GetLatestByStatuses(
-	ctx context.Context,
-	appID, envName, trafficLaneName string,
-	statuses []helmrelease.Status,
-) (*Record, error) {
-	return s.getLatestByFilter(ctx, bson.M{
-		"appID":           appID,
-		"envName":         envName,
-		"trafficLaneName": trafficLaneName,
-		"status":          bson.M{"$in": statuses},
-	})
-}
-
-// ListLatestByApps 返回一批 app 在指定泳道下各环境最新部署记录（按 createdAt 倒序取每组第一条）。
+// ListLatestByApps 返回一批应用在指定泳道下各环境最新的一条部署记录。
 // 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
-// 用于批量聚合部署状态，往返次数与应用数、环境数无关。
-func (s *RecordStoreMongo) ListLatestByApps(
-	ctx context.Context,
-	appIDs []string, trafficLaneName string,
+func ListLatestByApps(
+	ctx context.Context, db *mongo.Database, appIDs []string, trafficLaneName string,
 ) (map[string]map[string]*Record, error) {
-	out := make(map[string]map[string]*Record, len(appIDs))
-	if len(appIDs) == 0 {
-		return out, nil
-	}
-
-	pipeline := bson.A{
-		bson.M{"$match": bson.M{
-			"appID":           bson.M{"$in": lo.Uniq(appIDs)},
-			"trafficLaneName": trafficLaneName,
-		}},
-		bson.M{"$sort": bson.D{
-			{Key: "appID", Value: 1},
-			{Key: "trafficLaneName", Value: 1},
-			{Key: "createdAt", Value: -1},
-		}},
-		bson.M{"$group": bson.M{
-			"_id": bson.M{"appID": "$appID", "envName": "$envName"},
-			"doc": bson.M{"$first": "$$ROOT"},
-		}},
-		bson.M{"$replaceRoot": bson.M{"newRoot": "$doc"}},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, errors.Wrap(err, "aggregate latest helm deploy records for apps")
-	}
-	defer cursor.Close(ctx)
-
-	for cursor.Next(ctx) {
-		var record Record
-		if err := cursor.Decode(&record); err != nil {
-			return nil, errors.Wrap(err, "decode latest helm deploy record for apps")
-		}
-		rec := record
-		if _, ok := out[rec.AppID]; !ok {
-			out[rec.AppID] = make(map[string]*Record)
-		}
-		out[rec.AppID][rec.EnvName] = &rec
-	}
-	if err := cursor.Err(); err != nil {
-		return nil, errors.Wrap(err, "iterate latest helm deploy records for apps")
-	}
-	return out, nil
-}
-
-func (s *RecordStoreMongo) getLatestByFilter(ctx context.Context, filter bson.M) (*Record, error) {
-	opts := options.FindOne().SetSort(bson.D{{"createdAt", -1}})
-
-	var record Record
-	err := s.collection.FindOne(ctx, filter, opts).Decode(&record)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrLatestDeployRecordNotFound
-		}
-		return nil, errors.Wrapf(err, "find latest helm deploy record (filter: %v)", filter)
-	}
-	return &record, nil
+	return deploytypes.ListLatestByApps(ctx, store.Of(db, RecordMeta), appIDs, trafficLaneName,
+		func(r *Record) (string, string) { return r.AppID, r.EnvName },
+	)
 }
 
 // ListImageTagDeployedEnvs 获取指定应用各镜像标签的已部署环境列表（去重，仅统计部署成功的记录，默认查询所有环境）
-func (s *RecordStoreMongo) ListImageTagDeployedEnvs(
+func ListImageTagDeployedEnvs(
 	ctx context.Context,
+	db *mongo.Database,
 	appID string,
 ) ([]deploytypes.ImageTagEnvPair, error) {
-	pipeline := bson.A{
-		// Stage 1: 按 appID 和 status 过滤，只保留成功部署的记录
-		bson.M{"$match": bson.M{"appID": appID, "status": string(helmrelease.StatusDeployed)}},
-		// Stage 2: 按 (imageTag, envName) 复合键分组去重
-		bson.M{"$group": bson.M{
-			"_id": bson.M{"imageTag": "$imageTag", "envName": "$envName"},
-		}},
-		// Stage 3: 将分组 _id 中的字段提升为顶层字段，输出扁平结构
-		bson.M{"$project": bson.M{
-			"imageTag": "$_id.imageTag",
-			"envName":  "$_id.envName",
-			"_id":      0,
-		}},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, errors.Wrapf(err, "aggregate distinct image tag envs for app %s", appID)
-	}
-	defer cursor.Close(ctx)
-
-	var results []deploytypes.ImageTagEnvPair
-	if err = cursor.All(ctx, &results); err != nil {
-		return nil, errors.Wrapf(err, "decode distinct image tag envs for app %s", appID)
-	}
-	return results, nil
+	return deploytypes.ListDeployedEnvPairs[deploytypes.ImageTagEnvPair](
+		ctx, store.Of(db, RecordMeta), appID, string(helmrelease.StatusDeployed), "imageTag",
+	)
 }
 
-// ListChartVersionDeployedEnvs 获取指定应用各 Chart 版本的已部署环境列表（去重，仅统计部署成功的记录，默认查询所有环境），用于「Helm Chart 制品列表」展示已部署环境
-func (s *RecordStoreMongo) ListChartVersionDeployedEnvs(
-	ctx context.Context,
-	appID string,
+// ListChartVersionDeployedEnvs 获取指定应用各 Chart 版本的已部署环境列表（去重，仅统计部署成功的记录，默认查询所有环境），
+// 用于「Helm Chart 制品列表」展示已部署环境
+func ListChartVersionDeployedEnvs(
+	ctx context.Context, db *mongo.Database, appID string,
 ) ([]deploytypes.ChartVersionEnvPair, error) {
-	pipeline := bson.A{
-		// Stage 1: 按 appID 和 status 过滤，只保留成功部署的记录
-		bson.M{"$match": bson.M{"appID": appID, "status": string(helmrelease.StatusDeployed)}},
-		// Stage 2: 按 (chartVersion, envName) 复合键分组去重
-		bson.M{"$group": bson.M{
-			"_id": bson.M{"chartVersion": "$chartVersion", "envName": "$envName"},
-		}},
-		// Stage 3: 将分组 _id 中的字段提升为顶层字段，输出扁平结构
-		bson.M{"$project": bson.M{
-			"chartVersion": "$_id.chartVersion",
-			"envName":      "$_id.envName",
-			"_id":          0,
-		}},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, errors.Wrapf(err, "aggregate distinct chart version envs for app %s", appID)
-	}
-	defer cursor.Close(ctx)
-
-	var results []deploytypes.ChartVersionEnvPair
-	if err = cursor.All(ctx, &results); err != nil {
-		return nil, errors.Wrapf(err, "decode distinct chart version envs for app %s", appID)
-	}
-	return results, nil
+	return deploytypes.ListDeployedEnvPairs[deploytypes.ChartVersionEnvPair](
+		ctx, store.Of(db, RecordMeta), appID, string(helmrelease.StatusDeployed), "chartVersion",
+	)
 }
 
-// HasActiveDeployments 检查是否存在活跃的部署（已部署、部署中或卸载中）
-// 判断逻辑：按环境+泳道分组，获取每组最新记录，检查最新记录是否为活跃状态
-func (s *RecordStoreMongo) HasActiveDeployments(ctx context.Context, appID string) (bool, error) {
-	activeStatuses := bson.A{
-		string(helmrelease.StatusDeployed),
-		string(helmrelease.StatusPendingInstall),
-		string(helmrelease.StatusPendingUpgrade),
-		string(helmrelease.StatusPendingRollback),
-		string(helmrelease.StatusUninstalling),
-	}
-
-	// 使用聚合查询：按 (envName, trafficLaneName) 分组，获取每组最新记录
-	pipeline := bson.A{
-		// Stage 1: 按 appID 过滤
-		bson.M{"$match": bson.M{"appID": appID}},
-		// Stage 2: 按 (envName, trafficLaneName) 分组，获取每组最新记录
-		bson.M{"$sort": bson.M{"createdAt": -1}},
-		bson.M{"$group": bson.M{
-			"_id":    bson.M{"envName": "$envName", "trafficLaneName": "$trafficLaneName"},
-			"status": bson.M{"$first": "$status"},
-		}},
-		// Stage 3: 检查最新记录是否为活跃状态
-		bson.M{"$match": bson.M{"status": bson.M{"$in": activeStatuses}}},
-		// Stage 4: 限制返回 1 条记录（只要有一条活跃部署即可）
-		bson.M{"$limit": 1},
-	}
-
-	cursor, err := s.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return false, errors.Wrapf(err, "aggregate active deployments for app %s", appID)
-	}
-	defer cursor.Close(ctx)
-
-	var results []bson.M
-	if err = cursor.All(ctx, &results); err != nil {
-		return false, errors.Wrapf(err, "decode active deployments for app %s", appID)
-	}
-
-	return len(results) > 0, nil
+// HasActiveDeployments 检查是否存在活跃的部署（已部署、部署中或卸载中）：
+// 按环境 + 泳道分组获取每组最新记录，检查最新记录是否为活跃状态
+func HasActiveDeployments(ctx context.Context, db *mongo.Database, appID string) (bool, error) {
+	return deploytypes.HasActiveDeployment(ctx, store.Of(db, RecordMeta), appID, func(r *Record) bool {
+		return lo.Contains(activeStatuses, r.Status)
+	})
 }

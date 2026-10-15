@@ -29,7 +29,7 @@ import (
 
 // HelmApplicationStores 创建 Helm 应用所需的 store 集合
 type HelmApplicationStores struct {
-	AppStore bkmsapp.ApplicationStore
+	AppStore *bkmsapp.ApplicationStore
 }
 
 // HelmApplicationOpts 定义创建 Helm 应用时的可选参数
@@ -75,7 +75,7 @@ func HelmApplication(
 		app.HelmSpec.HelmSource = opts.HelmSource
 	}
 
-	err := stores.AppStore.CreateApp(ctx, app)
+	err := stores.AppStore.Create(ctx, app)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	return app
 }

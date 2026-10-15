@@ -487,16 +487,14 @@ func buildExportFilename(workspaceID string, parts ...string) string {
 }
 
 func (h *Handler) newImportService() *importer.Service {
-	return importer.NewService(h.registry.ScopedEnvVarStore, h.registry.AppModelStore)
+	return importer.NewService(h.registry.DB)
 }
 
 func (h *Handler) newExportService() *exporter.Service {
 	return exporter.NewService(
-		h.registry.ScopedEnvVarStore,
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
+		h.registry.DB,
 		envvars.NewUnifiedEnvVarsReader(
-			h.registry.ScopedEnvVarStore,
+			h.registry.DB,
 			h.registry.AppDepsVarReader,
 			h.registry.PolarisVarReader,
 		),

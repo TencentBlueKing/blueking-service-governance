@@ -156,7 +156,7 @@ func ValidateEnvByID(
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid env id")
 	}
 
-	env, err := registry.EnvStore.Get(ctx, envBsonID)
+	env, err := store.Of(registry.DB, envmodel.EnvMeta).GetByID(ctx, envBsonID)
 	if err != nil {
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", envID)
@@ -204,7 +204,7 @@ func ValidateAppByID(
 		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "appID is required")
 	}
 
-	app, err := registry.AppStore.GetApp(ctx, appID)
+	app, err := store.Of(registry.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		if errors.Is(err, bkmsapp.ErrAppNotFound) {
 			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", appID)
@@ -256,7 +256,8 @@ func ValidateAppEnvByName(
 		return nil, nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "envName is required")
 	}
 
-	env, err := registry.EnvStore.GetByName(ctx, app.WorkspaceID, app.ID, envName)
+	env, err := store.Of(registry.DB, envmodel.EnvMeta).
+		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, envName))
 	if err != nil {
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", envName)

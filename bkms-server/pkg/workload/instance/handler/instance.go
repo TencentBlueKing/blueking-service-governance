@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -37,6 +38,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	instanceroute "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance"
@@ -55,9 +57,12 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
+func (h *Handler) envs() *envmodel.EnvironmentStore {
+	return store.Of(h.registry.DB, envmodel.EnvMeta)
+}
+
 func (h *Handler) newMountableFileProvider() appcfg.MountableFileProvider {
 	return appcfg.NewMountableFileProvider(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 }
@@ -238,8 +243,7 @@ func (h *Handler) ScaleAppInstances(c *gin.Context) {
 	// 获取应用当前环境生效的部署规格
 	spec, err := appspec.GetEnvEffective(
 		ctx,
-		h.registry.AppSpecStore,
-		h.registry.AppModelStore,
+		h.registry.DB,
 		app.ID,
 		uriInput.EnvName,
 	)
@@ -427,26 +431,15 @@ func (h *Handler) validateEditableAppModel(ctx context.Context, appID string) (*
 // newDeployer 创建 AppModel 应用部署器。
 func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer {
 	return appmodeldeploy.NewDeployer(
-		h.registry.AppModelDeployRecordStore,
-		h.registry.BuildAutoDeployRecordStore,
-		h.registry.AppModelStore,
 		workload.NewBuilderService(
-			h.registry.ScopedEnvVarStore,
 			h.registry.AppDepsVarReader,
 			h.registry.PolarisVarReader,
-			h.registry.WorkspaceCompsStore,
-			h.registry.PolarisConfigStore,
-			h.registry.HostPortStore,
-			h.registry.AppModelStore,
-			h.registry.AppSpecStore,
 			h.registry.DB,
 			h.newMountableFileProvider(),
 		),
-		h.registry.AppSpecStore,
 		h.registry.DB,
-		h.registry.AppConfigFileStore,
-		polaris.NewPolarisEnvStateManager(h.registry.PolarisConfigStore),
-		hostport.NewEnvStateManager(h.registry.HostPortStore),
+		polaris.NewPolarisEnvStateManager(h.registry.DB),
+		hostport.NewEnvStateManager(h.registry.DB),
 		app,
 	)
 }

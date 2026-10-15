@@ -30,7 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/serializer"
 )
@@ -78,8 +78,7 @@ func getDefaultSection[T, O any](
 
 	sectionValue, err := appspec.GetDefaultSection(
 		ctx,
-		h.registry.AppSpecStore,
-		h.registry.AppModelStore,
+		h.registry.DB,
 		app.ID,
 		section,
 	)
@@ -117,8 +116,7 @@ func setDefaultSection[T, I any](
 
 	oldSection, err := appspec.GetDefaultSection(
 		ctx,
-		h.registry.AppSpecStore,
-		h.registry.AppModelStore,
+		h.registry.DB,
 		app.ID,
 		section,
 	)
@@ -133,8 +131,7 @@ func setDefaultSection[T, I any](
 
 	if err = appspec.SetDefaultSection(
 		ctx,
-		h.registry.AppSpecStore,
-		h.registry.AppModelStore,
+		h.registry.DB,
 		app.ID,
 		section,
 		newSection,
@@ -175,7 +172,7 @@ func getEnvSection[T, O any](
 		return
 	}
 
-	sectionValue, err := appspec.GetEnvSection(ctx, h.registry.AppSpecStore, app.ID, env.Name, section)
+	sectionValue, err := appspec.GetEnvSection(ctx, h.registry.DB, app.ID, env.Name, section)
 	if err != nil {
 		if errors.Is(err, appspec.ErrAppSpecNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "env %s not found", sectionName))
@@ -217,8 +214,7 @@ func getEnvEffectiveSection[T, O any](
 
 	sectionValue, err := appspec.GetEnvEffectiveSection(
 		ctx,
-		h.registry.AppSpecStore,
-		h.registry.AppModelStore,
+		h.registry.DB,
 		app.ID,
 		env.Name,
 		section,
@@ -255,7 +251,7 @@ func setEnvSection[T, I any](
 		return
 	}
 
-	oldSection, err := appspec.GetEnvSection(ctx, h.registry.AppSpecStore, app.ID, env.Name, section)
+	oldSection, err := appspec.GetEnvSection(ctx, h.registry.DB, app.ID, env.Name, section)
 	if err != nil && !errors.Is(err, appspec.ErrAppSpecNotFound) {
 		bkerrs.AbortWithErr(
 			c,
@@ -267,7 +263,7 @@ func setEnvSection[T, I any](
 
 	if err = appspec.SetEnvSection(
 		ctx,
-		h.registry.AppSpecStore,
+		h.registry.DB,
 		app.ID,
 		env.Name,
 		section,
@@ -305,7 +301,7 @@ func deleteEnvSection[T any](
 		return
 	}
 
-	oldSection, err := appspec.GetEnvSection(ctx, h.registry.AppSpecStore, app.ID, env.Name, section)
+	oldSection, err := appspec.GetEnvSection(ctx, h.registry.DB, app.ID, env.Name, section)
 	if err != nil && !errors.Is(err, appspec.ErrAppSpecNotFound) {
 		bkerrs.AbortWithErr(
 			c,
@@ -316,7 +312,7 @@ func deleteEnvSection[T any](
 
 	if err = appspec.SetEnvSection(
 		ctx,
-		h.registry.AppSpecStore,
+		h.registry.DB,
 		app.ID,
 		env.Name,
 		section,

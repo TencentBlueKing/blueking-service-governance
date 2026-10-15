@@ -29,28 +29,21 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const CleanupPlainEnvInstancesHookName = "appcfg.cleanup_plain_env_instances"
 
 // RegisterDeleteHooks 注册配置文件模块的环境删除 Hook。
-func RegisterDeleteHooks(
-	appStore bkmsapp.ApplicationStore,
-	fileStore appcfg.AppConfigFileStore,
-	db *mongo.Database,
-) {
+func RegisterDeleteHooks(db *mongo.Database) {
 	bkmsenv.RegisterDeleteHook(
 		CleanupPlainEnvInstancesHookName,
-		NewCleanupPlainEnvInstancesHook(appStore, fileStore, db),
+		NewCleanupPlainEnvInstancesHook(db),
 	)
 }
 
 // NewCleanupPlainEnvInstancesHook 创建一个在环境删除前清理 plain 环境实例的 Hook。
-func NewCleanupPlainEnvInstancesHook(
-	appStore bkmsapp.ApplicationStore,
-	fileStore appcfg.AppConfigFileStore,
-	db *mongo.Database,
-) bkmsenv.DeleteHook {
+func NewCleanupPlainEnvInstancesHook(db *mongo.Database) bkmsenv.DeleteHook {
 	return func(ctx context.Context, environment envmodel.Environment) error {
 		appIDs := make([]string, 0)
 		if environment.IsFeatureEnv() {
@@ -59,7 +52,7 @@ func NewCleanupPlainEnvInstancesHook(
 			}
 			appIDs = append(appIDs, environment.OwnerAppID)
 		} else {
-			apps, err := appStore.ListApps(ctx, &bkmsapp.ListOpts{WorkspaceID: environment.WorkspaceID})
+			apps, err := store.Of(db, bkmsapp.AppMeta).List(ctx, bkmsapp.InWorkspace(environment.WorkspaceID))
 			if err != nil {
 				return errors.Wrap(err, "list apps for workspace")
 			}
@@ -68,7 +61,7 @@ func NewCleanupPlainEnvInstancesHook(
 			}
 		}
 
-		cfgService := appcfg.NewAppConfigFileService(fileStore, db)
+		cfgService := appcfg.NewAppConfigFileService(db)
 		for _, appID := range appIDs {
 			if err := cfgService.CleanupPlainEnvInstancesByEnv(ctx, appID, environment.Name); err != nil {
 				return errors.Wrapf(err, "cleanup plain env instances for app %s env %s", appID, environment.Name)

@@ -162,6 +162,35 @@ type Ambiguous struct {
 
 var ambiguousMeta = store.Meta[Ambiguous]{Collection: "store_test_ambiguous"}
 
+// Board 模拟以 map 保存各环境状态（如北极星配置的 envStates）、以结构体数组保存子元素（如应用模型的 components）
+// 并带有计数器的模型，用于验证嵌套 Upsert、删除 map 条目与 Modify
+type Board struct {
+	ID        bson.ObjectID         `bson:"_id,omitempty"`
+	OwnerID   string                `bson:"ownerID"`
+	Name      string                `bson:"name"`
+	States    map[string]BoardState `bson:"states,omitempty"`
+	Cards     []Card                `bson:"cards"`
+	Hits      int64                 `bson:"hits"`
+	CreatedAt time.Time             `bson:"createdAt"`
+	UpdatedAt time.Time             `bson:"updatedAt"`
+}
+
+// BoardState 一个环境的状态
+type BoardState struct {
+	Status  string `bson:"status"`
+	Message string `bson:"message"`
+}
+
+// Card Board 中的子元素，以 Name 区分
+type Card struct {
+	Name  string `bson:"name"`
+	Title string `bson:"title"`
+}
+
+const boardCollection = "store_test_boards"
+
+var boardMeta = store.Meta[Board]{Collection: boardCollection}
+
 // storeFixture 汇总测试用例需要的依赖
 type storeFixture struct {
 	ctx     context.Context
@@ -170,6 +199,7 @@ type storeFixture struct {
 	widgets *store.GenericStore[Widget]
 	items   *store.GenericStore[Item]
 	notes   *store.GenericStore[Note]
+	boards  *store.GenericStore[Board]
 	// owner 当前用例的 ownerID，让过滤条件贴近领域包中 byXxx 的真实用法；
 	// 用例之间的隔离依靠每个用例开始前清空测试集合
 	owner string
@@ -184,12 +214,13 @@ func setUpStores() *storeFixture {
 		store.Provide(widgetMeta),
 		store.Provide(itemMeta),
 		store.Provide(noteMeta),
-		fx.Populate(&f.db, &f.widgets, &f.items, &f.notes),
+		store.Provide(boardMeta),
+		fx.Populate(&f.db, &f.widgets, &f.items, &f.notes, &f.boards),
 	)
 	f.app.RequireStart()
 
 	for _, coll := range []*mongo.Collection{
-		f.widgets.Collection(), f.items.Collection(), f.notes.Collection(),
+		f.widgets.Collection(), f.items.Collection(), f.notes.Collection(), f.boards.Collection(),
 	} {
 		_, err := coll.DeleteMany(f.ctx, bson.M{})
 		Expect(err).NotTo(HaveOccurred())
@@ -301,4 +332,25 @@ func (f *storeFixture) byOwner() store.Opt {
 // byName 匹配当前 owner 下指定名称的 Widget，演示在已有 Opt 上组合新的 Opt
 func (f *storeFixture) byName(name string) store.Opt {
 	return store.Combine(f.byOwner(), store.Where("name", name))
+}
+
+// mustCreateBoard 创建一个属于当前 owner、带有 prod 环境状态与一张卡片的 Board，
+// createdAt、updatedAt 均为 longAgo
+func (f *storeFixture) mustCreateBoard(name string) *Board {
+	b := &Board{
+		OwnerID:   f.owner,
+		Name:      name,
+		States:    map[string]BoardState{"prod": {Status: "ok"}},
+		Cards:     []Card{{Name: "c1", Title: "first"}},
+		CreatedAt: longAgo,
+	}
+	Expect(f.boards.Create(f.ctx, b)).To(Succeed())
+	return b
+}
+
+// mustGetBoard 读取当前 owner 下指定名称的 Board
+func (f *storeFixture) mustGetBoard(name string) *Board {
+	b, err := f.boards.Get(f.ctx, f.byName(name))
+	Expect(err).NotTo(HaveOccurred())
+	return b
 }

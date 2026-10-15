@@ -55,6 +55,14 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
+func (h *Handler) configFiles() *appcfg.AppConfigFileStore {
+	return store.Of(h.registry.DB, appcfg.AppConfigFileMeta)
+}
+
+func (h *Handler) configFileDefs() *appcfg.AppConfigFileDefStore {
+	return store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta)
+}
+
 // CreateAppConfigFile 创建一个应用配置文件。
 // ⚠️ 存量接口：仅用于创建 framework 类型文件。创建 plain 文件或新的 framework 文件
 // 请使用新接口 POST /app-config-file-defs。
@@ -106,7 +114,6 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	}
 	creator := auth.MustGetUser(ctx).ID
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 	params := appcfg.CreateCfgFileParams{
@@ -212,7 +219,6 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 
 	operator := auth.MustGetUser(ctx).ID
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 	if err = acfService.UpdateFile(
@@ -285,7 +291,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 	// 存量接口只返回 framework 类型，过滤掉 plain 文件。
 	frameworkDefs, err := appcfg.ListDefsByApp(
 		ctx,
-		store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta),
+		h.configFileDefs(),
 		app.ID,
 		appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 	)
@@ -305,7 +311,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 		return
 	}
 
-	appConfigFiles, err := h.registry.AppConfigFileStore.List(ctx, app.ID, opts...)
+	appConfigFiles, err := appcfg.ListFiles(ctx, h.configFiles(), app.ID, opts...)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing app config files"))
 		return
@@ -315,7 +321,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 	defNameMap := make(map[bson.ObjectID]string)
 	for _, acf := range appConfigFiles {
 		if _, ok := defNameMap[acf.DefID]; !ok {
-			if def, dErr := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, acf.DefID); dErr == nil {
+			if def, dErr := h.configFileDefs().GetByID(ctx, acf.DefID); dErr == nil {
 				defNameMap[acf.DefID] = def.Name
 			}
 		}
@@ -375,8 +381,8 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 
 	// 先查 def 获取 name
 	defName := ""
-	if acf, gErr := h.registry.AppConfigFileStore.GetByID(ctx, id); gErr == nil {
-		if def, dErr := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, acf.DefID); dErr == nil {
+	if acf, gErr := h.configFiles().GetByID(ctx, id); gErr == nil {
+		if def, dErr := h.configFileDefs().GetByID(ctx, acf.DefID); dErr == nil {
 			defName = def.Name
 			// 禁止通过旧接口删除 plain 环境实例
 			if def.ConfigKind == appcfg.ConfigKindPlain && acf.EnvName != appcfg.EnvNameDefault {
@@ -391,7 +397,6 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 	}
 
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 	oldAcf, err := acfService.DeleteFile(ctx, app.ID, id)
@@ -441,7 +446,6 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 	}
 
 	provider, err := appcfg.NewBaseContentProvider(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 		acf,
 	)
@@ -466,7 +470,7 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 		}
 	}
 
-	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, h.registry.DB, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(h.registry.DB, acf)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating values file editor"))
 		return
@@ -601,7 +605,7 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse app config file ID"))
 		return
 	}
-	baseFile, err := h.registry.AppConfigFileStore.GetByID(ctx, baseID)
+	baseFile, err := h.configFiles().GetByID(ctx, baseID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get base app config file"))
 		return
@@ -622,7 +626,6 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 	}
 
 	editor, err := appcfg.NewAppConfigFileEditor(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 		virtualConfig,
 	)
@@ -666,7 +669,7 @@ func (h *Handler) updateContentOrOverlay(
 		return nil, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate file content")
 	}
 
-	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, h.registry.DB, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(h.registry.DB, acf)
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "creating values file editor")
 	}
@@ -685,7 +688,7 @@ func (h *Handler) updateContentOrOverlay(
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "compiling new content")
 	}
 
-	arranger := arrangement.NewAppArranger(h.registry.AppStore)
+	arranger := arrangement.NewAppArranger()
 	validatedRet, err := arranger.ValidateFileContent(ctx, app, []byte(compiledContent), acf.GetConfigFormat())
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating file content")
@@ -722,11 +725,10 @@ func (h *Handler) persistContentUpdate(
 ) error {
 	// TODO: 老接口 Name 从 def 获取，迁移后可简化
 	defName := ""
-	if def, dErr := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, acf.DefID); dErr == nil {
+	if def, dErr := h.configFileDefs().GetByID(ctx, acf.DefID); dErr == nil {
 		defName = def.Name
 	}
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 	if err := acfService.UpdateFile(
@@ -753,7 +755,7 @@ func (h *Handler) persistContentUpdate(
 // resolveDefName 从 def 获取文件名称，def 不存在时返回空字符串。
 // TODO: 老接口兼容辅助，迁移新接口后可删除。
 func (h *Handler) resolveDefName(ctx context.Context, defID bson.ObjectID) string {
-	def, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, defID)
+	def, err := h.configFileDefs().GetByID(ctx, defID)
 	if err != nil {
 		return ""
 	}
@@ -766,10 +768,10 @@ func (h *Handler) syncDefName(ctx context.Context, defID bson.ObjectID, newName,
 	if newName == oldName {
 		return
 	}
-	def, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, defID)
+	def, err := h.configFileDefs().GetByID(ctx, defID)
 	if err != nil {
 		return
 	}
 	def.Name = newName
-	_ = appcfg.UpdateDef(ctx, store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta), def)
+	_ = appcfg.UpdateDef(ctx, h.configFileDefs(), def)
 }

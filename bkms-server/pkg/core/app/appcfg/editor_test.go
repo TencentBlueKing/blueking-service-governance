@@ -28,12 +28,12 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Local Editor", func() {
 	var ctx context.Context
-	var store *AppConfigFileStoreMongo
+	var files *AppConfigFileStore
 	var defStore *AppConfigFileDefStore
 	var db *mongo.Database
 
@@ -44,8 +44,7 @@ var _ = Describe("Local Editor", func() {
 		ctx = context.Background()
 
 		var err error
-		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		files = testutil.NewStore(GinkgoT(), AppConfigFileMeta)
 		db = testutil.NewDB(GinkgoT())
 		defStore = testutil.NewStore(GinkgoT(), AppConfigFileDefMeta)
 
@@ -77,31 +76,31 @@ var _ = Describe("Local Editor", func() {
 				ContentSourceType: ContentSourceTypeLocal,
 			},
 		}
-		normalAcf.ID, err = store.Add(ctx, *normalAcf)
+		err = files.Create(ctx, normalAcf)
 		Expect(err).NotTo(HaveOccurred())
-		overlayAcf.ID, err = store.Add(ctx, *overlayAcf)
+		err = files.Create(ctx, overlayAcf)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	Context("GetEditableContentField", func() {
 		It("should return Content for normal file", func() {
-			field := newLocalAppConfigFileEditor(store, nil, normalAcf).GetEditableContentField()
+			field := newLocalAppConfigFileEditor(nil, normalAcf).GetEditableContentField()
 			Expect(field).To(Equal(EditableContentFieldContent))
 		})
 		It("should return OverlayContent for overlay file", func() {
-			field := newLocalAppConfigFileEditor(store, nil, overlayAcf).GetEditableContentField()
+			field := newLocalAppConfigFileEditor(nil, overlayAcf).GetEditableContentField()
 			Expect(field).To(Equal(EditableContentFieldOverlayContent))
 		})
 	})
 
 	Context("SetContent", func() {
 		It("should success for normal file", func() {
-			err := newLocalAppConfigFileEditor(store, nil, normalAcf).SetContent("test: content")
+			err := newLocalAppConfigFileEditor(nil, normalAcf).SetContent("test: content")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(normalAcf.Content).To(Equal(lo.ToPtr("test: content")))
 		})
 		It("should fail for overlay file", func() {
-			err := newLocalAppConfigFileEditor(store, nil, overlayAcf).SetContent("test: content")
+			err := newLocalAppConfigFileEditor(nil, overlayAcf).SetContent("test: content")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("only normal app config file can set"))
 		})
@@ -109,12 +108,12 @@ var _ = Describe("Local Editor", func() {
 
 	Context("SetOverlayContent", func() {
 		It("should fail for normal file", func() {
-			err := newLocalAppConfigFileEditor(store, nil, normalAcf).SetOverlayContent("test: content")
+			err := newLocalAppConfigFileEditor(nil, normalAcf).SetOverlayContent("test: content")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("only overlay app config file can set"))
 		})
 		It("should success for overlay file", func() {
-			err := newLocalAppConfigFileEditor(store, nil, overlayAcf).SetOverlayContent("overlay: true")
+			err := newLocalAppConfigFileEditor(nil, overlayAcf).SetOverlayContent("overlay: true")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(overlayAcf.OverlayContent).To(Equal(lo.ToPtr("overlay: true")))
 		})
@@ -143,8 +142,9 @@ var _ = Describe("Local Editor", func() {
 				Content:           &baseContent,
 			},
 		}
-		oid, err := store.Add(ctx, baseAcf)
+		err = files.Create(ctx, &baseAcf)
 		Expect(err).NotTo(HaveOccurred())
+		oid := baseAcf.ID
 
 		overlayContent := `overlayVersion: "2"
 patches:
@@ -161,7 +161,7 @@ patches:
 				OverlayContent:      &overlayContent,
 			},
 		}
-		_, err = store.Add(ctx, overlayAcfNew)
+		err = files.Create(ctx, &overlayAcfNew)
 		Expect(err).NotTo(HaveOccurred())
 
 		return baseAcf, overlayAcfNew
@@ -171,7 +171,7 @@ patches:
 		It("overlay type with base should work", func() {
 			_, overlayAcfNew := setUpAppConfigFixture()
 
-			result, err := newLocalAppConfigFileEditor(store, db, &overlayAcfNew).GetCompiledContent(ctx)
+			result, err := newLocalAppConfigFileEditor(db, &overlayAcfNew).GetCompiledContent(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Compare the result with the expected merged content
@@ -192,7 +192,7 @@ patches:
 			normalAcf.Content = &content
 			normalAcf.OverlayContent = nil
 
-			result, err := newLocalAppConfigFileEditor(nil, nil, normalAcf).GetCompiledContent(ctx)
+			result, err := newLocalAppConfigFileEditor(nil, normalAcf).GetCompiledContent(ctx)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result).To(Equal(content))
 		})
@@ -220,10 +220,10 @@ patches:
 			normalAcf.Content = &baseContent
 			overlayAcf.OverlayContent = &overlayContent
 			overlayAcf.BaseAppConfigFileID = &normalAcf.ID
-			_, _ = store.Update(ctx, *normalAcf)
-			_, _ = store.Update(ctx, *overlayAcf)
+			_ = files.Replace(ctx, normalAcf, store.ByID(normalAcf.ID))
+			_ = files.Replace(ctx, overlayAcf, store.ByID(overlayAcf.ID))
 
-			result, err := newLocalAppConfigFileEditor(store, db, overlayAcf).GetCompiledContent(ctx)
+			result, err := newLocalAppConfigFileEditor(db, overlayAcf).GetCompiledContent(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Compare the result with the expected merged content
@@ -261,10 +261,10 @@ patches:
 			normalAcf.Content = &baseContent
 			overlayAcf.OverlayContent = &overlayContent
 			overlayAcf.BaseAppConfigFileID = &normalAcf.ID
-			_, _ = store.Update(ctx, *normalAcf)
-			_, _ = store.Update(ctx, *overlayAcf)
+			_ = files.Replace(ctx, normalAcf, store.ByID(normalAcf.ID))
+			_ = files.Replace(ctx, overlayAcf, store.ByID(overlayAcf.ID))
 
-			result, err := newLocalAppConfigFileEditor(store, db, overlayAcf).GetCompiledContent(ctx)
+			result, err := newLocalAppConfigFileEditor(db, overlayAcf).GetCompiledContent(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Compare the result with the expected merged content
@@ -280,7 +280,7 @@ patches:
 		It("should return error when Content is nil", func() {
 			normalAcf.Content = nil
 
-			_, err := newLocalAppConfigFileEditor(store, nil, normalAcf).GetCompiledContent(ctx)
+			_, err := newLocalAppConfigFileEditor(nil, normalAcf).GetCompiledContent(ctx)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("app config file content is empty"))
 		})
@@ -288,17 +288,10 @@ patches:
 })
 
 var _ = Describe("BSCP Editor", func() {
-	var store *AppConfigFileStoreMongo
-
 	var appID string
 	var normalAcf, overlayAcf *AppConfigFile
 
 	BeforeEach(func() {
-		var err error
-
-		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
 		appID = "test-app-" + stringx.Random(6)
 
 		normalAcf = &AppConfigFile{
@@ -319,23 +312,23 @@ var _ = Describe("BSCP Editor", func() {
 
 	Context("GetEditableContentField", func() {
 		It("should return OverlayContent for normal file", func() {
-			field := newBSCPAppConfigFileEditor(store, nil, normalAcf).GetEditableContentField()
+			field := newBSCPAppConfigFileEditor(nil, normalAcf).GetEditableContentField()
 			Expect(field).To(Equal(EditableContentFieldOverlayContent))
 		})
 		It("should return None for overlay file", func() {
-			field := newBSCPAppConfigFileEditor(store, nil, overlayAcf).GetEditableContentField()
+			field := newBSCPAppConfigFileEditor(nil, overlayAcf).GetEditableContentField()
 			Expect(field).To(Equal(EditableContentFieldNone))
 		})
 	})
 
 	Context("SetContent", func() {
 		It("should fail for normal file", func() {
-			err := newBSCPAppConfigFileEditor(store, nil, normalAcf).SetContent("test: content")
+			err := newBSCPAppConfigFileEditor(nil, normalAcf).SetContent("test: content")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unable to set content"))
 		})
 		It("should fail for overlay file", func() {
-			err := newBSCPAppConfigFileEditor(store, nil, overlayAcf).SetContent("test: content")
+			err := newBSCPAppConfigFileEditor(nil, overlayAcf).SetContent("test: content")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unable to set content"))
 		})
@@ -343,12 +336,12 @@ var _ = Describe("BSCP Editor", func() {
 
 	Context("SetOverlayContent", func() {
 		It("should success for normal file", func() {
-			err := newBSCPAppConfigFileEditor(store, nil, normalAcf).SetOverlayContent("overlay: true")
+			err := newBSCPAppConfigFileEditor(nil, normalAcf).SetOverlayContent("overlay: true")
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(normalAcf.OverlayContent).To(Equal(lo.ToPtr("overlay: true")))
 		})
 		It("should success for overlay file", func() {
-			err := newBSCPAppConfigFileEditor(store, nil, overlayAcf).SetOverlayContent("overlay: true")
+			err := newBSCPAppConfigFileEditor(nil, overlayAcf).SetOverlayContent("overlay: true")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("only normal app config file can set overlay content"))
 		})

@@ -42,7 +42,7 @@ var _ = Describe("Runtime image store", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	It("creates a runtime image with a hex ID and trimmed name", func() {

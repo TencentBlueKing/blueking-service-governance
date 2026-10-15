@@ -32,7 +32,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
@@ -60,22 +59,14 @@ type AppComponentApplier struct {
 //
 // TODO: Maybe we should introduce a DI framework to manage these dependencies to avoid
 // the boilerplate code.
-func CreateDefaultApplier() (*AppComponentApplier, error) {
-	envStore, err := envmodel.NewEnvironmentStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "creating environment store")
-	}
-	envSvc := env.NewEnvService(envStore)
-	return NewAppComponentApplier(database.DB(), envSvc), nil
+func CreateDefaultApplier() *AppComponentApplier {
+	return NewAppComponentApplier(database.DB())
 }
 
 // NewAppComponentApplier creates a new AppComponentApplier instance.
-func NewAppComponentApplier(
-	db *mongo.Database,
-	envService *env.EnvService,
-) *AppComponentApplier {
+func NewAppComponentApplier(db *mongo.Database) *AppComponentApplier {
 	return &AppComponentApplier{
-		builder: NewAppPropertiesBuilder(db, envService),
+		builder: NewAppPropertiesBuilder(db),
 		defs:    store.Of(db, ComponentDefMeta),
 	}
 }
@@ -151,18 +142,15 @@ func renderMappingTemplate(fragment string, props map[string]any) (map[string]an
 // AppPropertiesBuilder helps with building the "properties" for an application when
 // instantiating components.
 type AppPropertiesBuilder struct {
-	defs       *ComponentDefStore
-	envService *env.EnvService
+	defs *ComponentDefStore
+	envs *envmodel.EnvironmentStore
 }
 
 // NewAppPropertiesBuilder creates a new AppPropertiesBuilder instance.
-func NewAppPropertiesBuilder(
-	db *mongo.Database,
-	envService *env.EnvService,
-) *AppPropertiesBuilder {
+func NewAppPropertiesBuilder(db *mongo.Database) *AppPropertiesBuilder {
 	return &AppPropertiesBuilder{
-		defs:       store.Of(db, ComponentDefMeta),
-		envService: envService,
+		defs: store.Of(db, ComponentDefMeta),
+		envs: store.Of(db, envmodel.EnvMeta),
 	}
 }
 
@@ -237,7 +225,7 @@ func (b *AppPropertiesBuilder) BuildRaw(
 		}
 	}
 	// Add the basic built-in properties
-	env, err := b.envService.Get(ctx, envID)
+	env, err := b.envs.GetByID(ctx, envID)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting environment")
 	}

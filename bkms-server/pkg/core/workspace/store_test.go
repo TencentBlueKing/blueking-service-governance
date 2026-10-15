@@ -51,7 +51,7 @@ var _ = Describe("WorkspaceStore", func() {
 	BeforeEach(func() {
 		store = testutil.NewStore(GinkgoT(), Meta)
 		ctx = context.Background()
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 		ResetLifecycleHooksForTest()
 
 		workspaceA = Workspace{
@@ -85,7 +85,7 @@ var _ = Describe("WorkspaceStore", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 		ResetLifecycleHooksForTest()
 	})
 
@@ -189,6 +189,10 @@ var _ = Describe("WorkspaceStore", func() {
 		It("should page workspaces by updatedAt desc", func() {
 			Expect(store.Create(ctx, &workspaceA)).To(Succeed())
 			Expect(store.Create(ctx, &workspaceB)).To(Succeed())
+			// 把 B 的更新时间提前，避免与 A 落在同一毫秒时按 id 排序导致结果不稳定
+			Expect(store.Update(
+				ctx, map[string]any{"updatedAt": time.Now().Add(-time.Hour)}, ByWorkspaceID(workspaceB.ID),
+			)).To(Succeed())
 			// 更新 A 使其成为最近更新的工作空间
 			Expect(Update(ctx, store, &workspaceA)).To(Succeed())
 

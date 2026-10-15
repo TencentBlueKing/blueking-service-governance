@@ -59,7 +59,7 @@ var _ = Describe("HelmAppComponent store", func() {
 		comps = testutil.NewStore(GinkgoT(), Meta)
 
 		// 清理测试数据
-		Expect(testutil.CleanupCollection(helmAppComponentCollectionName)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	Describe("Create", func() {
@@ -159,40 +159,6 @@ var _ = Describe("HelmAppComponent store", func() {
 			Expect(list[0].Name).To(Equal("comp-a"))
 			Expect(list[1].Name).To(Equal("comp-b"))
 			Expect(list[2].Name).To(Equal("comp-c"))
-		})
-	})
-
-	Describe("UpdateData", func() {
-		It("should update properties, target and priority", func() {
-			comp := &HelmAppComponent{
-				AppID:   "app-004",
-				EnvName: "prod",
-				Component: appcomponent.Component{
-					Name:          "updatable",
-					ComponentInst: appcomponent.ComponentInst{Type: "x", Version: "v1.0.0"},
-				},
-				Target: TargetResourceSelector{Kind: "Deployment", Name: "old"},
-			}
-			Expect(comps.Create(ctx, comp)).To(Succeed())
-
-			newPriority := 5
-			data := &UpdateData{
-				Properties: map[string]any{"key": "value"},
-				Target:     &TargetResourceSelector{Kind: "StatefulSet", Name: "new"},
-				Priority:   &newPriority,
-			}
-			Expect(comps.Update(ctx, data.ToBSON(), store.ByID(comp.ID))).To(Succeed())
-
-			got, err := comps.GetByID(ctx, comp.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Properties).To(HaveKeyWithValue("key", "value"))
-			Expect(got.Target.Kind).To(Equal("StatefulSet"))
-			Expect(got.Target.Name).To(Equal("new"))
-			Expect(got.Priority).To(Equal(5))
-		})
-
-		It("should only include fields to be updated", func() {
-			Expect((&UpdateData{}).ToBSON()).To(BeEmpty())
 		})
 	})
 

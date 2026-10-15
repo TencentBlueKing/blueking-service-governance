@@ -2,7 +2,7 @@
 
 > 状态：阶段 5 已完成，A、B 两类 Store 全部迁移（见「阶段 4 迁移结果」与「阶段 5 计划」下的 5a～5e 结果）；
 > v1.1 的 `ListPage` / `WithoutTotal` / `OmitFields` 已实现；Update / Upsert 已统一为同一套字段语义（决策 13）。
-> Registry 剩 17 个 C 类 Store，留待阶段 6。
+> 阶段 6 已完成，项目中全部 Store 迁移为 GenericStore，Registry 只保留 `DB` 与两个环境变量 Reader（见「阶段 6 计划」与 6b～6f 结果）。
 > 维护方式：每完成一个阶段，更新「进度跟踪」与对应章节，结论变化时直接改写正文，不追加流水账。
 
 ## 背景与目标
@@ -101,7 +101,7 @@ AppModelDeployRecordStore、PublishRecordStore、DepSvcInstStore、ApmInstConfig
 * v1.1（加分页、计数器、投影）：再覆盖 3～5 个，可达 **52%～56%**。
 * A 类 Store 的实现代码合计约 4000 行（含注释与 license 头），迁移后预计可删除一半以上。
 
-## API（v1 + v1.1，已实现于 `pkg/store`）
+## API（v1 + v1.1 + 阶段 6a，已实现于 `pkg/store`）
 
 ```go
 type Meta[T any] struct {
@@ -125,15 +125,16 @@ func ByID(id any) CondOpt                   // 按 _id 匹配，id 类型须与�
 func ContainsIgnoreCase(keyword, field string, moreFields ...string) CondOpt // 忽略大小写模糊匹配，多字段为 OR；
                                             // keyword 去首尾空白、转义正则元字符，空白时不产生条件
 func All() CondOpt                          // 写操作显式声明作用于全部文档
-func Asc(field string) SortOpt / Desc(field string) SortOpt // 仅 Get / List / ListPage / GetAndDelete 支持
+func Asc(field string) SortOpt / Desc(field string) SortOpt // 仅 Get / List / ListPage / ListLatestBy / GetAndDelete 支持
 func Limit(n int64) LimitOpt                // 仅 List 支持
-func OmitFields(fields ...string) ProjectOpt // 读取时不取回指定字段（被排除的字段为零值），仅 Get / List / ListPage 支持；
+func OmitFields(fields ...string) ProjectOpt // 读取时不取回指定字段（被排除的字段为零值），仅 Get / List / ListPage / ListLatestBy 支持；
                                             // 字段必须存在于模型中，互为父子的字段直接报错
 func WithoutTotal() PageOpt                 // 仅 ListPage 支持，不统计总数
-// 以下仅 Update / Upsert 传入 *T 时支持，决定写入哪些字段（见决策 13）
+// 以下仅 Update / UpdateMany / Upsert / UpsertMany 传入 *T 时支持，决定写入哪些字段（见决策 13）
 func UpdateSelected(fields ...string) UpdateOpt // 指定字段，"*" 表示全部顶层字段
 func UpdateOmit(fields ...string) UpdateOpt     // 从候选字段中去掉指定字段
-func UpdateNonZero() UpdateOpt                  // 只保留对象中值非零的字段
+func KeepUpdatedAt() TimestampOpt           // 不刷新 updatedAt，仅 Update / UpdateMany / Modify / ModifyMany 支持（见决策 15）
+func ArrayFilters(filters ...bson.M) ArrayFilterOpt // "$[id]" 位置路径的过滤条件，仅 Modify / ModifyMany 支持
 func Combine(opts ...Opt) Opt               // 组合多个 Opt，供领域包定义 ByWorkspaceAndType 之类的复合条件
 
 // 读（不传条件即匹配全部）
@@ -141,23 +142,31 @@ Get(ctx, opts ...Opt) (*T, error)                           // 未命中返回 N
 GetByID(ctx, id any) (*T, error)                            // 等价于 Get(ctx, ByID(id))
 List(ctx, opts ...Opt) ([]T, error)                         // 无结果返回空切片
 ListPage(ctx, page, size int64, opts ...Opt) (*Page[T], error) // page 从 1 开始；Page{Items, Total, HasNext}，见「v1.1 能力」
+ListLatestBy(ctx, groupBy []string, opts ...Opt) ([]T, error) // 每组按 SortOpt 取第一条（须传 SortOpt），结果经过 Decode（见决策 16）
 Exists(ctx, opts ...Opt) (bool, error)
 Count(ctx, opts ...Opt) (int64, error)
+func Aggregate[R, T any](ctx, s *GenericStore[T], pipeline mongo.Pipeline) ([]R, error) // 统计类管道，结果不经过 Decode
 // 写
 Create(ctx, obj *T) error                                   // 回填 _id 与时间戳
 CreateMany(ctx, objs []*T) error
 CreateManyIfAbsent(ctx, objs []*T) error                    // 跳过唯一键冲突的文档
-Update(ctx, target any, opts ...Opt) error                  // target 为 map 或 *T（须带 UpdateOpt），经 Encode 后 $set / $unset
+Update(ctx, target any, opts ...Opt) error                  // target 为 map 或 *T（须带 UpdateOpt），经 Encode 后 $set / $unset；
+                                                            // map 中值为 nil 的 map 条目会被删除
+UpdateMany(ctx, target any, opts ...Opt) (matched int64, err error) // 同 Update，作用于全部匹配文档，未命中不报错
 Upsert(ctx, target any, opts ...Opt) (inserted bool, err error) // 同 Update，*T 默认全部顶层字段；未选中的字段放入 $setOnInsert
-var ErrNoFieldsToUpdate                                     // 没有任何待写入的字段（空 map、UpdateNonZero 时全为零值等）
+UpsertMany(ctx, objs []*T, key func(*T) Opt, opts ...Opt) (inserted int64, err error) // 每个对象同 Upsert，一次 BulkWrite
+var ErrNoFieldsToUpdate                                     // 没有任何待写入的字段（空 map、UpdateOmit 去掉了全部字段等）
+Modify(ctx, update bson.M, opts ...Opt) (ModifyResult, error)     // 数组与计数类操作符，未命中返回 NotFound（见决策 14）
+ModifyMany(ctx, update bson.M, opts ...Opt) (ModifyResult, error) // 同 Modify，作用于全部匹配文档；ModifyResult{Matched, Modified}
 Replace(ctx, obj *T, opts ...Opt) error                     // 整体替换，保留原 _id；未命中返回 NotFound
 // 删
 Delete(ctx, opts ...Opt) error                              // 未命中返回 NotFound
 DeleteIfExists(ctx, opts ...Opt) error                      // 未命中静默成功
 DeleteMany(ctx, opts ...Opt) (int64, error)
 GetAndDelete(ctx, opts ...Opt) (*T, error)                  // 原子删除并返回被删文档（经过 Decode），可配合 Desc 指定删除哪条
+func IgnoreNotFound(err error) error                        // NotFound 时返回 nil，用于「目标不存在即完成」的写操作
 // 逃生口
-Collection() *mongo.Collection                              // 聚合、$inc 等未覆盖的操作
+Collection() *mongo.Collection                              // 未覆盖的操作，如建立索引、FindOneAndUpdate（semver 计数）
 
 // 计数器
 func NewCounter(db *mongo.Database, collection string) *Counter // Next(ctx, key) (int64, error)
@@ -213,7 +222,7 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
   可变字段直接写在调用处的 UpdateOpt 中，不再单独定义字段列表变量。
 * 局部更新（PATCH 语义）直接用 `map[string]any` 表达待更新的字段，由 serializer 生成、经 service 传给 `Update`，
   key 与值类型由 store 在写入前校验（见 bscpcfg 的 `PatchMetadataInput.ToUpdateFields`）。
-  networking、helm 组件、dashboard、gpa 中仍有历史遗留的 `XxxUpdateData.ToBSON()`，后续按同样方式收敛。
+  networking、dashboard、gpa 中仍有历史遗留的 `XxxUpdateData.ToBSON()`，后续按同样方式收敛。
 * 可选过滤条件在入参为空时让具名 Opt 返回 nil，`parseOpts` 会跳过 nil；写操作仍会因缺少条件而报错，不会误作用于全量。
   关键字模糊匹配直接用 `store.ContainsIgnoreCase`（空白关键字同样不产生条件），不再各自拼 `$regex` + `QuoteMeta`，
   如 `runtime.KeywordMatches`、`admin.UsernameContains`。
@@ -245,6 +254,9 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
    `Upsert` 中非零的 obj `_id` 本身也是过滤条件。
 7. **Store 的获取方式**（阶段 3 后调整）：领域函数与 Manager 不再接收若干个 Store，而是显式接收 `db *mongo.Database`，
    在用到时 `store.Of(db, XxxMeta)`；handler、taskq 任务传入 `storereg.Registry.DB`。
+   同一 handler 中多次（约 3 次及以上）用到的模型，在 Handler 上封装返回 Store 的私有方法（如 networking 的
+   `h.services()`），偶尔用到的直接写 `store.Of(h.registry.DB, XxxMeta)`。没有提供 `registry.Store(XxxMeta)`
+   这样的统一入口，因为 Go 的方法不能带类型参数。
    没有选择「领域代码内部直接取全局 `database.DB()`」，是为了让依赖在签名上可见，单测也能传入测试库。
    例外：`bkci.NewTriggerPipelineManager(workspaceID)` 是 `build_trigger_contract.md` 中的 W1 契约，签名不变，内部使用 `database.DB()`。
    只操作单个模型的辅助函数（如 `bkci.UpdateBuiltinTemplateVersion(ctx, pipelineStore, p)`）仍接收 Store。
@@ -264,7 +276,7 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
    因按字段路径反射定位、校验路径形态、处理 `Update` 中父字段写入等逻辑过于复杂而撤回。
    原先的代价是 `Update` 会绕过加密，决策 13 中 `Update` 传入的 map 也会先转换为 T 再经过 Encode，该问题已不存在。
 9. **选项类型**（评审 Upsert 语义后确定）：`Opt` 是只能由 `pkg/store` 实现的接口，按用途分为 `CondOpt`（Where / Filter / All）、
-   `SortOpt`（Asc / Desc）、`LimitOpt`（Limit）、`UpdateOpt`（UpdateSelected / UpdateOmit / UpdateNonZero）。每个操作声明自己接受的类别，
+   `SortOpt`（Asc / Desc）、`LimitOpt`（Limit）、`UpdateOpt`（UpdateSelected / UpdateOmit）。每个操作声明自己接受的类别，
    遇到其它类别（含 `Combine` 组合出的）时返回错误，取代原先散落在各处的「排序与 Limit 仅 Get / List 可用」判断；
    新增行为开关时只需新增类型并登记到对应的操作，其它操作不会被动接受它。
    仍保留统一的 `...Opt` 参数而非为每个操作定义不同的参数接口，好处是领域包的具名 Opt 可以返回 `store.Opt` 并自由组合，
@@ -287,17 +299,42 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
     * `Update` / `Upsert` 的 target 为 `map[string]any` 或 `*T`。map 的 key 即字段，值按字段类型赋给一个新的 T
       （可直接赋值的直接赋值，否则借助 bson 转换，不整体做 bson 往返，以免 `map[string]any` 中的嵌套文档变成 `bson.D`）；
       `*T` 的字段由 UpdateOpt 计算：候选为 `UpdateSelected` 指定的字段（未指定或 `"*"` 时为全部顶层字段），
-      去掉 `UpdateOmit` 的字段，再按 `UpdateNonZero` 过滤零值。
+      再去掉 `UpdateOmit` 的字段。
     * 对象经过 Encode 后，字段存在的 `$set`、缺失的 `$unset`。`UnsetOmitted` 因此不再需要：`UpdateSelected("*")`
       下 omitempty 的零值本来就会被 `$unset`。没有任何待写入字段时返回 `ErrNoFieldsToUpdate`。
     * `Update` 传入 `*T` 时必须显式给出 UpdateOpt。没有采用「默认只更新非零值」：迁移前的 `*T` 调用方全都需要写入
       false / 0 / 空值，非零默认会静默丢失这类修改；对 Upsert 还会导致 `ClusterAddonDef.UnsupportedOnFederation`
-      由 true 改为 false 时被跳过。
+      由 true 改为 false 时被跳过。曾提供的 `UpdateNonZero` 选项同样无法写入零值，且没有调用方，已移除；
+      局部更新改用 map 形式的 `Update`。
     * `Upsert` 传入 `*T` 时默认 `"*"`，现有调用方的模型除 `_id` 外没有 omitempty 字段，行为不变。未被选中的字段放入
       `$setOnInsert`，从而支持「不存在时插入完整文档，已存在时只更新部分字段」；过滤条件中的等值字段不放入
-      `$setOnInsert`（插入时由 MongoDB 取过滤条件中的值，避免被零值覆盖）；字段只能是顶层字段，避免与 `$setOnInsert` 冲突。
+      `$setOnInsert`（插入时由 MongoDB 取过滤条件中的值，避免被零值覆盖）；嵌套字段的处理见决策 17。
     * BeforeSave 只在 `Upsert` 传入 `*T` 时执行：`Update` 的对象可能只填写了部分字段，传入 map 的 `Upsert`
       事先无法知道是插入还是更新，校验类钩子都可能误判。
+14. **`Modify`：受控的操作符入口**（阶段 6a 确定）：C 类 Store 中约 20 处 `$push` / `$pull` / `$addToSet` / `$inc` 与数组位置更新，
+    无法用「T 对象 + 字段」表达。没有直接让调用方用 `Collection()`，因为那样字段名不校验、updatedAt 无人维护、唯一键冲突不翻译；
+    也没有为每个操作符设计类型化 API（`Push(field, v)` 等），因为操作符组合（如 `$inc` + `$set` 归零）与 `$not $elemMatch`
+    之类的条件写法多样，类型化只会把 MongoDB 的更新语法再抄一遍。折中为接收 `bson.M` 的 `Modify`：
+    * 只接受数组与计数类操作符；`$set` / `$unset` 只能用于含 `$`、`$[]`、`$[id]` 段的路径，普通字段必须走 `Update`，
+      保证决策 13 中「写入都经过 Encode」不被绕过。数组元素不经过 Encode，需要加密的元素（appmodel 敏感变量）由领域层先处理。
+    * 字段名按模型解析（位置操作符视为数组下标），`_id` / `createdAt` 不能修改；值原样传递。
+    * 返回 `ModifyResult{Matched, Modified}`：`Modified` 让领域层区分「元素不存在」与「文档不存在」（后者为 NotFound）。
+      刷新 updatedAt 也算修改，需要据此判断时须同时传 `KeepUpdatedAt`。
+15. **`KeepUpdatedAt`**（阶段 6a 确定）：北极星配置的顶层 updatedAt 是乐观锁版本号，环境级状态的写入与清理不能推进它，
+    否则并发的整体更新会被误判为冲突；组件定义的实例计数也不应改变定义的 updatedAt。做成独立的选项类型，
+    只登记到 Update / UpdateMany / Modify / ModifyMany：Upsert 插入时需要写入 updatedAt，目前也没有调用方需要。
+16. **`ListLatestBy` 与 `Aggregate`**（阶段 6a 确定）：「每组取最新一条」在三个部署记录 Store 与 devmode 中有 6 份几乎相同的
+    `$match` / `$sort` / `$group $first` / `$replaceRoot` 管道，且结果都要经过 Decode，因此进入 GenericStore；
+    结果再按 SortOpt 排序一次，使返回顺序确定。其余统计管道（按工作空间计数、去重组合、取最大值）口径各不相同，
+    只提供 `Aggregate[R]` 负责执行与解码，管道留在领域层；结果不是模型，不执行 Decode。
+17. **嵌套字段的 Upsert、删除 map 条目与 `UpsertMany`**（阶段 6a 确定，调整决策 13）：
+    * Upsert 原先只允许顶层字段，是为了不与 `$setOnInsert` 冲突。现在改为：被 `$set` / `$unset` 的字段与过滤条件中的
+      等值字段，其顶层上级字段不进入 `$setOnInsert`，插入的文档中上级字段只包含被写入的子字段。
+      `appspec` 的 section Patch、`hostport` 的环境状态都依赖这一点；过滤条件中的嵌套等值字段原先会触发路径冲突，也一并解决。
+    * `Update(map)` 中值为 nil 的 map 条目（如 `"envStates.prod": nil`）原先写入零值结构体，改为删除条目，即 `$unset`，
+      与「nil 指针字段被 `$unset`」一致；结构体字段赋 nil 仍表示零值。
+    * `UpsertMany` 对每个对象执行与 `Upsert(*T)` 相同的准备（BeforeSave、Encode、`$setOnInsert`），一次 BulkWrite，
+      key 函数给出每个对象的匹配条件；快照批量写入、环境变量批量写入（需要加密）都依赖它。
 
 ## 阶段 2 API 回顾
 
@@ -318,6 +355,9 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 5. ~~**fx 装配约束**~~：已由决策 10 取代。
 6. **字段名拼写错误**：字段名为纯字符串，`Update` / `Upsert` 会按模型校验字段，但 filter、排序中的拼写错误不会报错
    （需要兼容模型中已删除的旧字段），只会表现为查不到，需要靠单测覆盖。
+7. **写入失败时调用方对象已被修改**（暂以文档说明）：`Create` / `Update(*T)` / `Upsert` / `Replace` 在写库之前就把
+   BeforeSave 的修改与时间戳（`Create` 还有 `_id`）作用到传入的对象上，写入失败（如 NotFound、Duplicate）时不会还原。
+   调用方失败后通常直接返回错误，影响很小；备选是在写库成功后再回填。
 
 确认无问题的部分：错误同时匹配通用与业务哨兵、`errors.As` 仍可取到驱动原始错误；每个模型只需一个 `Meta` 变量即可接入。
 
@@ -330,7 +370,7 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 | 3 | 试点：bkrepo ×2、bkci ×4、HelmRepoCredential（覆盖加解密 hook 路径）；`build/trigger` 暂缓 | ✅ 已完成（见下节） |
 | 4 | 迁移剩余 A 类，引用多的（BuildConfig、AppConfigFileDef）放最后 | ✅ 已完成（见下节） |
 | 5 | v1.1：分页、投影；迁移 B 类（分 5a～5e 五批，见「阶段 5 计划」） | ✅ 已完成 |
-| 6 | Registry 收敛；评估 C 类内嵌 GenericStore 复用基础 CRUD | 未开始 |
+| 6 | 补齐 GenericStore 能力，迁移全部 C 类 Store，收敛 Registry（分 6a～6f，见「阶段 6 计划」） | ✅ 已完成 |
 
 ## 阶段 3 试点结果
 
@@ -637,6 +677,264 @@ Registry 中的 `WorkspaceStore` 已删除，原接口、`WorkspaceStoreMongo`�
 测试改造：`workspace/store_test` 按具名 Opt 与具名函数重写，并补充 `Update` 未命中、删除钩子顺序与失败、分页排序的用例；
 其余约 10 个测试文件改用 `testutil.NewStore(GinkgoT(), workspace.Meta)`，不再经 fx 注入工作空间 Store。
 
+## 阶段 6 计划
+
+目标：Registry 中剩余的 17 个 C 类 Store 全部迁移为 GenericStore，Registry 只保留 `DB` 与少量 Reader。
+精读后的结论是：没有必须保留自定义 Store 实现的模型，阻塞点只有五类操作，补进 `pkg/store` 后其余都是领域语义，
+按阶段 4、5 的约定写成具名函数与具名 Opt。
+
+### 6a：GenericStore 新增能力
+
+| 能力 | 用途（调用点） | 要点 |
+|---|---|---|
+| `ListLatestBy(ctx, groupBy, opts...)` | 三个部署记录的 `ListLatestByApps`、devmode `ListLatestByInstance`、两个 `HasActiveDeployments`（共 6 处同构管道） | 按 SortOpt 排序后每组取第一条，结果经过 Decode；分组成 map、判断状态留给领域层 |
+| Upsert 支持嵌套字段 | `appspec` 的 section Patch、`hostport.UpsertEnvState` | 被写入字段的上级字段不进入 `$setOnInsert`，避免路径冲突 |
+| `KeepUpdatedAt()` | 北极星环境状态的写入与清理 | 北极星顶层 `updatedAt` 是乐观锁版本号（`UpsertEnvStateIfUpdatedAtMatch`），环境级写入不能推进它 |
+| map 条目值为 nil 时删除 | 北极星 `RemoveEnvStates` / `RemoveEnvSettings`、`hostport.RemoveEnvState` | `Update(map{"envStates.prod": nil})` 原先写入零值结构体，改为删除条目，即 `$unset`；与「nil 指针字段 `$unset`」一致 |
+| `UpdateMany(ctx, target, opts...)` | 快照 `MarkDetailSyncPending` | 与 `Update` 相同的字段语义，作用于全部匹配文档，返回匹配数，不返回 NotFound |
+| `Modify` / `ModifyMany` + `ArrayFilters` | `$addToSet`（env、apm）、`$pull`（env、app、apm、appmodel）、`$push`（appmodel）、数组位置更新（appmodel）、`$inc`（component） | 受控的操作符入口；semver 需要原子取回新值，仍用 `Collection()` |
+| `UpsertMany(ctx, objs, key, opts...)` | 快照 `UpsertSnapshots`、`envvars.BatchUpsertByKey` | 每个对象的语义同 `Upsert(*T)`，一次 BulkWrite；后者需要 Encode 加密，不能用 `Collection()` 绕过 |
+| `IgnoreNotFound(err)`、`Aggregate[R](ctx, s, pipeline)` | 约 6 处「未命中静默」的写操作；约 7 条统计管道 | 小工具：管道本身（统计口径）留在领域层 |
+
+各能力的取舍见决策 14～17。不进入 GenericStore 的：写后生命周期钩子（`AfterAdd` / `AfterRemove`，见下文）、FindOneAndUpdate（唯一调用点 `ReplacePorts`
+改为 Upsert 后 Get）、包含式投影（`List` 后取字段）、带 upsert 的整体替换（`Upsert` 默认选中全部顶层字段，效果等价）。
+
+### 留在领域层的
+
+* **跨集合副作用写成具名函数**：组件引用计数由 `workspace.AddComponents` / `appmodel.AddComponent` 等函数直接调用
+  `component.UpdateInstanceCount`，删除 `ComponentHooks` 与 `SetComponentHooks`。原先钩子挂在 Store 实例上，
+  `store.Of` 无状态无法承载；且 fx 注入、postrenderer 自建的实例都没有设钩子，结构上就可能漏计数。
+* **带业务含义的失败判别**：appmodel 匹配失败后判断是模型不存在、元素不存在还是重名；乐观锁冲突（appcfg 版本、北极星 updatedAt）；
+  快照状态抢占失败；应用 id 与 name 冲突的区分。
+* **「未找到返回 nil」**沿用 `topology.FindSnapshot` 的约定写成具名函数（`env` 按集群命名空间查找、快照状态）。
+* **读改写合并**（ServiceInstance 的 `PatchConfig` / `PatchCredentials`）、输入校验（环境名作为 map key、部分 AppSpec 的校验、组件 ScopeType）、
+  统计管道，以及解耦用的窄接口 `env.FeatureEnvVarStore`（由 envvars 提供基于 db 的实现）。
+
+### 分批
+
+| 批次 | 内容 | 状态 |
+|---|---|---|
+| 6a | 实现上表能力与单测；component 实例计数改用 `Modify`（保持不刷新 updatedAt、定义不存在时静默） | ✅ 已完成 |
+| 6b | PublishRecord、ApmInstConfig、OperationRecord、HostPort、DepSvcInst、Snapshot | ✅ 已完成，见「6b 结果」 |
+| 6c | 三个部署记录 Store（autodeploy、helm、appmodel），连同 mock 改造 | ✅ 已完成，见「6c 结果」 |
+| 6d | Polaris、ScopedEnvVar、AppSpec | ✅ 已完成，见「6d 结果」 |
+| 6e | Env、App、AppConfigFile | ✅ 已完成，见「6e 结果」 |
+| 6f | WorkspaceComps 与 AppModel（共用引用计数设计），最后收敛 Registry | ✅ 已完成，见「6f 结果」 |
+
+### 6b 结果
+
+Registry 中的 6 个 Store 已删除，原接口、`*StoreMongo` 与 fx provider 一并删除；`devmode.FxModule`、`depservice/model.FxModule`、
+`snapshot.FxModule` 只提供 Store，随之删除，测试改用 `testutil.NewStore` / `testutil.NewDB`。
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `devmode.PublishRecordStore` | `devmode.PublishRecordMeta` | 具名 Opt `ByAppEnv` / `KeywordMatches` / `NewestFirst`；`ListLatestByInstance` 改用 `ListLatestBy`；批量创建用 `CreateMany` |
+| `bkmonitor.ApmInstConfigStore` | `bkmonitor.ApmInstConfigMeta` | `BeforeSave` 做结构体校验；`BindEnv`（`$addToSet`）、`UnbindEnvFromAll`（`$pull`）改用 `Modify` / `ModifyMany`；`GetApmIDMap` |
+| `audit.OperationRecordStore` | `audit.OperationRecordMeta` | `ListOptions.Cond()` 生成筛选条件，`ListRecords` 分页；两个「用户最近操作时间」统计管道用 `Aggregate` |
+| `hostport.HostPortStore` | `hostport.HostPortConfigMeta` | Decode 钩子补齐空切片与空 map；`ReplacePorts` / `UpsertEnvState` 用 `Upsert` + `UpdateSelected`（后者选中嵌套字段 `envStates.<env>`）；`RemoveEnvState` 用「map 条目置 nil」删除 |
+| `depsvcmodel.ServiceInstanceStore` | `depsvcmodel.ServiceInstanceMeta` | `BeforeSave` 校验作用域；Encode / Decode 钩子负责 config 的 JSON 包装与 credentials 的 AES 加解密；`SvcInstQueryOptions.Cond()`、`InstancesByIDs`、`RecentlyUpdatedFirst`；具名函数 `UpdateInstanceStatus`、`PatchInstanceConfig` / `PatchInstanceCredentials`（读改写合并） |
+| `snapshot.SnapshotStore` | `snapshot.ImageMeta`、`snapshot.RepoStatusMeta` | 一个 Store 拆为两个模型；具名 Opt `InRepo` / `ByRepoTag` / `TagIn`；`UpsertTags` 用 `UpsertMany`，`MarkDetailSyncPending` 用 `UpdateMany` + `KeepUpdatedAt`；`TrySetRefreshing` / `TrySetDetailSyncing` 用「带状态条件的 Upsert + 唯一索引冲突」实现抢占，冲突即未抢到 |
+
+按决策 7 改为接收 db 的有：`depservice.New(db, envStore)`、`depenvvars.NewReader(db)`、`polaris.NewPolarisPlatformManager(db, polarisConfigStore)`、
+`depsvcredis.Init(db)`、`snapshot.NewService(db, appStore)`、`snapshot.NewDetailSyncer(db)`、`snapshot.NewDetailSyncManager(db)`、
+`runtime.NewImageReferenceValidator(db)`、`tagdeletion.NewService(db, ...)`。`hostport.ReplacePorts` 改为返回落库后的端口列表（调用方只用到端口）。
+
+行为变化（调用方需要知道的）：
+
+1. **列表排序补充 `_id` 倒序**作为次级键（发布记录、操作记录、依赖服务实例），同一时间戳的记录翻页稳定。
+2. **关键字去首尾空白**（发布记录、操作记录的用户名、镜像快照的 tag）。
+3. **重复创建 APM 实例配置**返回哨兵 `ErrApmInstConfigExists`（原先是无类型的错误）。
+4. **依赖服务实例未找到**返回哨兵 `ErrInstanceNotFound`，`AsNotFoundError` 仍能识别；未使用的 `Update` / `SvcInstUpdateData` 删除；
+   depsvcredis 销毁任务改用 `Delete`，「实例已被删除」分支从此可达。
+5. **镜像快照**：查询结果为空时返回空切片而不是 nil；`UpdateDetail` 与 `UpsertRepoStatus` 遇到零值字段（空 digest、size 为 0、空 lastError）
+   改为 `$unset`，不再写入空值，读取结果不变；`UpsertSnapshots(ctx, repoKey, []Image)` 改为 `UpsertTags(ctx, db, repoKey, []string)`。
+6. `HostPort` 的 `UpsertEnvState` 整体写入 `envStates.<env>` 条目（原先分别 `$set` 其下两个字段），条目只有这两个字段，结果相同。
+
+测试改造：各 Store 的单测按具名函数重写；`depservice` 的 `memoryInstStore` 与 snapshot、runtime 测试中对 `*SnapshotStoreMongo` 的 mockey 打桩
+全部改为在测试库中预置数据。
+
+### 6c 结果
+
+Registry 中的 `BuildAutoDeployRecordStore`、`HelmDeployRecordStore`、`AppModelDeployRecordStore` 已删除，原接口、`*StoreMongo`
+与只提供 Store 的 `autodeploy.FxModule`、`helmdeploy.FxModule`、`appmodeldeploy.FxModule` 一并删除。
+
+三种部署记录共用的查询条件与查询函数放到 `pkg/deploy/types`（`deploytypes`）：具名 Opt `ByAppEnvLane`、`NewestFirst`，
+泛型函数 `ListLatestByApps`（基于 `ListLatestBy`）、`HasActiveDeployment`（基于 `ListLatestBy`）、`ListDeployedEnvPairs`（基于 `Aggregate`）。
+各模型包只保留自身的语义：
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `autodeploy.RecordStore` | `autodeploy.RecordMeta` | 具名 Opt `ByBuild` / `ByDeploy`；`UpdateRecord`（选中原 `$set` 的 5 个字段）、`GetLatest`、`ListLatestByApps` |
+| `helmdeploy.RecordStore` | `helmdeploy.RecordMeta` | 具名 Opt `KeywordMatches`、`ByImageTag`（含状态白名单）；`GetRecord`、`UpdateRecord`、`GetLatest(..., statuses...)`、`ListLatestByApps`、`ListImageTagDeployedEnvs` / `ListChartVersionDeployedEnvs`、`HasActiveDeployments` |
+| `appmodeldeploy.RecordStore` | `appmodeldeploy.RecordMeta` | 与 helm 相同的一组具名 Opt 与函数（无 Chart 版本统计） |
+
+列表接口不再有 `List` / `ListByImageTag` 方法，handler 直接组合：
+
+```go
+store.Of(h.registry.DB, appmodeldeploy.RecordMeta).ListPage(ctx, input.Page, input.PageSize,
+    deploytypes.ByAppEnvLane(app.ID, envName, laneName),
+    appmodeldeploy.KeywordMatches(input.Keyword),
+    deploytypes.NewestFirst(),
+)
+```
+
+按决策 7 改为接收 db 的有：`appmodeldeploy.NewDeployer(..., db, ...)`、`status.NewDeployStatusService(appStore, envStore, db)`、
+`overview.NewService(envStore, appStore, appModelStore, db)`、`deploy.NewPreDeployChecker(envStore, db, snapshotSvc)`、
+`instancestats.NewCollector(db)`、`portforward.NewService(db, ...)`、`instancelog.NewLogManager(ctx, db, ...)`、
+taf `AdminServiceStores.DB`、trpc `NewAdminService(..., db, ...)`、`tagdeletion.NewService(db, appStore, envStore)`、
+`autodeploy.NewOperator(db)`、`appmodeldeploypoll.NewPoller(db)`、`helmdeploypoll.NewPoller(db)`；
+构建的 `build.StartOptions` 新增 `DB`，设置 `AutoDeploy` 时必填。
+
+行为变化（调用方需要知道的）：
+
+1. **「最新一条」与列表排序补充 `_id` 倒序**（`NewestFirst`），同一 createdAt 的记录取最新与翻页都稳定。
+2. **关键字去首尾空白**（helm、appmodel 列表的 keyword）。
+3. **`GetLatestByStatuses` 并入 `GetLatest`**：可变参数 `statuses` 为空时不过滤状态。
+4. **一键构建部署记录总是同步**：Deployer 与两个部署轮询任务原先在「未注入 autodeploy Store」时跳过同步，现在直接用 db，该分支删除。
+5. **Create 回填 `_id`**：创建部署记录后用 `record.ID.Hex()` 取得部署 ID，不再由 Store 返回字符串。
+6. `autodeploy.UpdateRecord` 遇到空 `deployID`（`omitempty`）改为 `$unset`，读取结果不变，也不会与「deployID 非空」的条件唯一索引冲突。
+
+测试改造：三个 Store 的单测按具名函数重写；`deployer_test` 的 `fakeBuildAutoDeployStore`、`instancelog` 与 `pre_checker` 对
+`*RecordStoreMongo.GetLatest` 的 mockey 打桩全部改为在测试库中预置数据（`instancelog` 套件随之接入测试库）；
+两个部署轮询任务中「落库失败」的用例改为打桩驱动层的 `(*mongo.Collection).UpdateOne`。
+
+### 6d 结果
+
+Registry 中的 `ScopedEnvVarStore`、`AppSpecStore` 与北极星配置 Store 已删除，原接口、`*StoreMongo` 与 fx provider 一并删除；
+只提供 Store 的 `appspec.FxModule` 随之删除，`polaris/envvars.FxModule` 改为引入 `database.PrivateFxModule`。
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `polaris.PolarisConfigStore` | `polaris.ConfigMeta` | BeforeSave 补默认名称、初始化 `ServiceLabels`；具名 Opt `ByApp` / `ByName`；`ListByEnv`、`UpdateConfig`、`UpsertEnvState`、`UpsertEnvStateIfUpdatedAtMatch`（乐观锁，环境级写入用 `KeepUpdatedAt`）、`UpsertEnvWeight`、`RemoveEnvStates` / `RemoveEnvSettings` |
+| `envvars.ScopedEnvVarStore` | `envvars.ScopedEnvVarMeta` | Encode / Decode 钩子负责值的 AES 加解密；具名 Opt `InWorkspace` / `InScopes` / `ByID(workspaceID, id)`；`List` / `ListPublic`、`CopyEnvVars`、`CreateSimpleEnvScopeVar`、`BatchUpsertByKey`（`UpsertMany`）、`UpdateByID`、`DeleteByEnv`；`NewFeatureEnvVarCopier(db)` 实现窄接口 `env.FeatureEnvVarStore` |
+| `appspec.AppSpecStore` | `appspec.AppSpecMeta` | BeforeSave 复用 `appspec.Validate`；Encode / Decode 钩子经过 `Clone`，空 section 统一折叠为 nil；具名 Opt `ByApp` / `ByAppEnv`；`ListEnvNamesByApp`；`Patch` 把各 section 给出的嵌套路径（如 `resources.replicas`）交给 `Upsert`；`SetSections` 整块写入或删除 section，只删除时不创建文档 |
+
+`appspec` 的领域函数（`GetDefault` / `SetDefault`、`GetEnv` / `SetEnv` / `DeleteEnv`、`GetEnvEffective`、`ModelForEnv`、
+`SetReplicas` 与各 `*Section` 函数）改为接收 db，原有的错误包装与校验保持不变。
+
+按决策 7 改为接收 db（或删除 Store 参数、改用已有 db）的有：`polaris.NewPolarisPlatformManager(db)`、`polaris.NewWorkloadBuilder(db)`、
+`polarisenvvars.NewReader(db)`、`envvars.NewUnifiedEnvVarsReader(db, ...)`、`bkmonitor.NewApmService(db)`、
+envfile 的 preview / export / import 服务、`workload.NewBuilderService`、`topology.NewService`、`appmodeldeploy.NewDeployer`、
+`appmodel/service.ServiceDeps`、trpc / taf 的 `NewService` 与 `NewAdminService`、`polaris.NewPolarisConfigService`、
+`polaris.NewDynamicApplyService`、`appspecmigrate.New`。
+
+行为变化（调用方需要知道的）：
+
+1. **北极星配置**：`Create` 不再保留调用方传入的 updatedAt；空的 `lastError` 与空的 envWeights 改为 `$unset`，读取结果不变；
+   `ListByApp` 改为 `List` + `ByApp`，`DeleteByApp` 改为 `DeleteMany`。
+2. **作用域环境变量**：NotFound 与唯一键冲突错误改为包装后的哨兵错误，`errors.Is` 仍然成立；`BatchUpsertByKey` 忽略调用方传入的
+   ID 与时间；空值仍然加密存储；`GetByID` / `DeleteByID` / `Create` 改用 `store.Of` 加 `envvars.ByID`；`DeleteAll` 删除，测试改用 `CleanupCollection`。
+3. **AppSpec**：
+   * 重复创建返回新增的哨兵 `ErrAppSpecAlreadyExists`（原先是无类型的错误），Store 层的校验失败满足 `errors.Is(err, ErrAppSpecValidation)`。
+   * 整体写入由 `ReplaceOne` 改为 `Upsert`（默认选中全部顶层字段），nil section 照常删除，但模型中已不存在的旧字段不会被清理。
+   * `ListByApp` 与 `Create` 只有测试在用，改为通用的 `List(ByApp)` 与 `Create`；`DeleteByApp` 改为 `DeleteMany(ByApp)`。
+   * 读取时也经过 `Clone`，库中残留的空 section（如 `labels: {}`）读出为 nil，`ListEnvNamesByApp` 不再把它当作已配置。
+
+测试改造：三个 Store 的单测按具名函数重写，AppSpec 补充了「重复创建」「空 section 折叠」「只删除不建档」「Patch 建档时取过滤条件中的
+appID / envName」四个用例；各套件不再通过 fx 注入这三个 Store，改用 `testutil.NewDB` / `testutil.NewStore`。
+全量测试中暴露出 `workspace` 的一个不稳定用例（两个工作空间在同一毫秒内更新时按 id 排序），改为先把其中一个的 updatedAt 提前。
+
+### 6e 结果
+
+Registry 中的 `EnvStore`、`AppStore`、`AppConfigFileStore` 已删除，原接口、`*StoreMongo` 与 fx provider 一并删除；
+只提供 Store 的 `app.FxModule` 随之删除，`env.FxModule` 改为引入 `database.PrivateFxModule`，只提供 `EnvService` 与特性环境相关服务。
+需要长期持有 Store 的结构体（如 `strategy.Service`、`overview.Service`、`PreDeployChecker`）改为持有 `store.Of(db, Meta)` 得到的
+`*bkmsapp.ApplicationStore` / `*envmodel.EnvironmentStore`。
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `bkmsapp.ApplicationStore` | `bkmsapp.AppMeta` | BeforeSave 做结构体校验，Encode / Decode 钩子负责 Helm 仓库密码的加解密；具名 Opt `ByID`（业务主键 `id`，不是 `_id`）/ `InWorkspace` / `ByName` / `OfType`；`CreateApp`（区分 id 与名称冲突）、`GetAppsByIDs`、`RemoveVisibleEnvName`（`ModifyMany` + `$pull`）、`CountByWorkspaceIDs`（`Aggregate`） |
+| `envmodel.EnvironmentStore` | `envmodel.EnvMeta` | BeforeSave 补齐 kind 与 appIDs，Decode 钩子根据集群信息计算 Status；具名 Opt `InWorkspace` / `ByName` / `AppEnvByName` / `StdEnvs` / `StdEnvsIn` / `FeatEnvsOf` / `VisibleToApp` / `BoundToApp` / `NewestFirst`；`ListBatchAppEnvs`、`UpdateEnv`、`AddApp` / `RemoveApp`（`Modify` + `KeepUpdatedAt`）、`FindByClusterNamespace`（未找到返回 nil）、`GetEnvTypeMap`、`CountByWorkspaceIDs` |
+| `appcfg.AppConfigFileStore` | `appcfg.AppConfigFileMeta` | 具名 Opt `FilesByApp` / `FilesByDef` / `FileByDefEnv`；`ListFiles`（保留 `AcfListOption`）、`UpdateFileIfVersionMatches`（乐观锁，未命中即版本冲突）、`DeleteFile`（被 overlay 引用时拒绝删除） |
+
+原先的 `ListAppEnvsByIDs` / `ListAppEnvsByTypes` / `ListAppFeatEnvs`、`GetByName` / `GetStdEnvByName` / `GetByWorkspaceAndName`、
+`IsOwnedByApp`、`GetByDefIDAndEnv`、`ListApps(ListOpts)` 等只是条件组合，调用方直接用 `List` / `Get` / `Exists` 加具名 Opt 表达，例如：
+
+```go
+envs.List(ctx, envmodel.InWorkspace(ws), store.Where("type", bson.M{"$in": types}), envmodel.BoundToApp(appID), envmodel.NewestFirst())
+```
+
+按决策 7 改为接收 db（或删除 Store 参数）的有：`EnvService`（`NewEnvService(db)`）、`appcfg.NewAppConfigFileService(db)`、
+`NewBaseAppCfgFileService(db)`、`NewMountableFileProvider(db)`、`NewAppConfigFileEditor(db, acf)`、`NewBaseContentProvider(db, acf)`、
+app / appcfg / env 的删除与更新钩子、`snapshot.NewService(db)`、`tagdeletion.NewService(db)`、`strategy.NewService(db)`、
+`status.NewDeployStatusService(db)`、`overview.NewService(db)`、`deploy.NewPreDeployChecker(db, snapshotSvc)`、
+`depservice.New(db)`、`hostport.NewService(db)`、`portforward.NewService(db)`、`NewUserGroupService(db)`、`platmgt/workspace.NewService(db)`、
+`workspace.NewComponentRefResolver(db)`、`component.NewAppComponentApplier(db)` / `NewAppPropertiesBuilder(db)`、
+北极星的 `NewPolarisConfigService` / `NewDynamicApplyService`、`deploy.TrackEnvAddApp` / `TrackEnvRemoveApp`、`app.ListSortByOpTime`、
+`appdefaults.Resolve`、`appspecmigrate.New(db)`（以上为 6f 完成后的最终签名）。`build.StartOptions.EnvStore`、trpc / taf AdminService 与 `appmodel/service.ServiceDeps`
+中的 App / Env Store 字段删除，统一使用已有的 db。`arrangement.NewAppArranger()` 不再需要参数，`component.CreateDefaultApplier()` 不再返回 error。
+
+行为变化（调用方需要知道的）：
+
+1. **应用**：
+   * 重复创建返回包装后的哨兵 `ErrAppAlreadyExists`（原先是无类型的错误），错误信息仍指明冲突的是 id 还是名称。
+   * 加密只作用于待写入的副本，`CreateApp` 不再把调用方对象中的 Helm 仓库密码改为密文。
+   * 清空 `visibleEnvNames` 改为 `$unset`（原先写入空数组），读取结果不变。
+   * `ListOpts` 与 `app.FxModule` 删除。
+2. **环境**：
+   * 重复创建（同名或集群命名空间已被占用）返回哨兵 `ErrEnvAlreadyExists`。
+   * 所有读取都经过 Decode 计算 Status（原先只有部分查询方法会填）。
+   * `AddApp` / `RemoveApp` 不再刷新 updatedAt。
+   * `EnvService.Create` 只返回 error，ID 回填到传入的对象；`EnvService` 不再提供 `Get` / `ListStdEnvs` / `AddApp`。
+   * `DeleteAll` 删除，测试改用 `CleanupCollection`。
+   * 依赖服务绑定总是查询环境、校验其存在（原先未注入 env Store 时跳过查询，环境类型为空）。
+3. **配置文件**：
+   * 重复创建返回新增的哨兵 `ErrAppConfigFileAlreadyExists`（原先是无类型的错误）。
+   * `Add(acf) (id, error)` 改为 `Create(&acf)`，ID 回填到对象。
+   * `Update` / `DeleteByID` 不再返回影响行数；版本不匹配仍返回 `ErrAppConfigFileVersionConflict`。
+
+测试改造：
+* 三个 Store 的单测按具名函数与具名 Opt 重写，补充了「创建不修改调用方对象」「环境重名」「AddApp 不刷新 updatedAt」
+  「UpdateEnv 空字段为 no-op」「按集群命名空间查找」等用例。
+* 约 50 个套件不再通过 fx 注入这三个 Store，改用 `testutil.NewDB` / `testutil.NewStore`。
+* `pre_checker_test` 与 helm `deploy_test` 对 `*EnvironmentStoreMongo.GetByName` / `*AppConfigFileStoreMongo` 的 mockey 打桩，
+  改为在测试库中预置数据；`status_test` 中「列出环境失败」的用例改为打桩领域函数 `envmodel.ListBatchAppEnvs`。
+* depservice 的绑定用例原先依赖「未注入 env Store 时跳过校验」，改为预置环境，并补充「绑定到不存在的环境被拒绝」用例。
+
+### 6f 结果
+
+Registry 中最后两个 Store `WorkspaceCompsStore`、`AppModelStore` 已删除，原接口、`*StoreMongo`、`ComponentHooks` /
+`SetComponentHooks` / `NewComponentRefCountHooks` 与 fx provider 一并删除；只提供 Store 的 `workspace.FxModule` 与
+`appmodel.FxModule` 随之删除，`gpa.FxModule` 不再嵌套 `appmodel.FxModule`。Registry 收敛为 `DB`、`AppDepsVarReader`、
+`PolarisVarReader` 三个字段，`mustInit` 等初始化辅助函数一并删除。
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `workspace.WorkspaceCompsStore` | `workspace.ComponentMeta` | BeforeSave 补齐名称与 Properties，Decode 规范化 Properties；具名 Opt `ComponentsIn` / `ComponentByName`；`AddComponents`、`UpdateComponent`、`RemoveComponents`、`DeleteComponentsOf` |
+| `appmodel.AppModelStore` | `appmodel.AppModelMeta` | BeforeSave 补齐组件名称并校验，Encode / Decode 负责敏感环境变量的加解密与组件 Properties 规范化；具名 Opt `ByApp`；`CreateAppModel`、`UpdateAppModel`（`Replace`）、`DeleteAppModel`（`GetAndDelete`）、`AddComponent` / `UpdateComponent` / `RemoveComponent`、`AddAppDefinedEnvVar` / `UpdateAppDefinedEnvVar` / `RemoveAppDefinedEnvVar` / `ListAppDefinedEnvVars` |
+
+组件引用计数按「留在领域层的」第一条落地：会增删组件的具名函数在写入成功后调用 `component.UpdateInstanceCount`
+（工作空间组件计入 `workspaceCompInstanceCount`，应用组件计入 `appCompInstanceCount`，引用空间组件的应用组件不计入）。
+appmodel 的组件与环境变量操作仍是带元素条件的 `Modify`（`$push` / `$pull` / `$set` + `ArrayFilters`），未命中后由
+`classifyMiss` / `classifyElemMiss` 区分「模型不存在」「元素不存在」「重名」；`Modify` 不经过 Encode，敏感环境变量在函数内自行加密。
+
+按决策 7 改为接收 db（或删除 Store 参数、改用已有 db）的有：`appmodel.NewAppEnvVarService(db)`、`gpa.NewGPAService(db)`、
+`overview.NewService(db)`、`workspace.NewComponentRefResolver(db)`、`deploy.NewDeployPreChecker(builderService, db)`、
+`workload.NewBuilderService(appDepsVarReader, polarisVarReader, db, mfp)`、`topology.NewService(db, ...)`、`appmodeldeploy.NewDeployer`、
+北极星的 `NewDynamicApplyService` / `NewPolarisConfigService`、trpc / taf 的 `NewService(db)`、envfile 的 preview / import / export 服务、
+`appspecmigrate.New(db)`；`appspec` 的 `SetDefault` / `SetDefaultSection` 等函数去掉了 AppModel Store 参数。
+`appmodel/service.ServiceDeps`、trpc / taf AdminService 与 dbfactory 的 `TrpcApplicationStores` / `TafApplicationStores` 中的
+`AppModelStore`、`WorkspaceCompsStore` 字段删除。
+
+行为变化（调用方需要知道的）：
+
+1. **工作空间组件**：
+   * 同一工作空间内重名返回哨兵 `ErrComponentAlreadyExists`（原先是驱动层的唯一键错误）。
+   * 更新未命中返回包装后的 `ErrComponentNotFound`（原先是无类型的 "component not found"）。
+   * 所有读取都规范化 Properties（原先只有 `ListByWorkspace` 会做）。
+   * 引用计数总是生效：postrenderer 自建的实例与迁移工具原先没有挂钩子，现在统一走具名函数。
+2. **应用模型**：
+   * 重复创建返回哨兵 `ErrAppModelAlreadyExists`（原先是无类型的错误）；Store 层的其余错误均为包装后的哨兵，`errors.Is` 仍然成立。
+   * 加密只作用于待写入的副本，`CreateAppModel` / `UpdateAppModel` 不再把调用方对象中的敏感环境变量改为密文。
+   * `UpdateComponent` 指定的组件不存在时返回 `ErrComponentNotFound`（原先静默返回 nil）。
+   * 引用计数总是生效（原先只有设置了钩子的实例才计数）；`DeleteAppModel` 改用 `GetAndDelete`，查询与删除不再分两步。
+   * `ListAppDefinedEnvVars` 读取完整文档后取环境变量（原先是投影），结果相同。
+
+测试改造：
+* 两个 Store 的单测按具名函数重写，补充了「重复创建」「创建不修改调用方对象」「整体替换补齐组件名称」「更新不存在的组件」
+  「环境变量的模型不存在 / 变量不存在 / key 冲突」「批量删除」「按工作空间隔离」等用例；引用计数用例不再手动设置钩子。
+* 相关套件不再通过 fx 注入这两个 Store，改用 `testutil.NewDB` / `testutil.NewStore`；只剩这两个模块的 `fxtest.New` 随之删除。
+
 ## 扫描中顺带发现的问题
 
 迁移时应一并修复，或单独提交：
@@ -645,5 +943,8 @@ Registry 中的 `WorkspaceStore` 已删除，原接口、`WorkspaceStoreMongo`�
 2. ~~加密在调用方对象上就地进行~~（bkrepo 于阶段 3、build/image 于阶段 4 修复）。
 3. NotFound 语义不一致：appcfg def、构建配置、networking 已在阶段 4 统一为哨兵错误；
    拓扑快照未找到时返回 `nil, nil` 是调用方依赖的语义，阶段 5a 由具名函数 `topology.FindSnapshot` 显式保留。
-4. 不少 Store 直接 `return err` 不加 Wrap；`appdefaults` 中 Store 及其调用方的 `fmt.Errorf("%w")` 已在阶段 4 随迁移改为 `errors.Wrap`，
-   其余未迁移的 Store 仍需处理。
+4. ~~不少 Store 直接 `return err` 不加 Wrap~~（随阶段 4～6 的迁移逐个改为 `errors.Wrap`，阶段 6 完成后已无自定义 Store 实现）。
+5. 应用模型的引用计数不对称（迁移前即如此，6f 保持原样）：`CreateAppModel` / `UpdateAppModel` 写入的组件不增加 `appCompInstanceCount`，
+   但 `DeleteAppModel` / `RemoveComponent` 会按组件扣减。生产代码中 `CreateAppModel` 不带组件，`UpdateAppModel` 都是读出后整体写回、
+   组件列表不变，所以目前不会漂移；只有 dbfactory 会带组件创建。若以后出现带组件创建或替换组件列表的调用方，
+   应让 `CreateAppModel` 计入初始组件、`UpdateAppModel` 按新旧组件的差集调整。

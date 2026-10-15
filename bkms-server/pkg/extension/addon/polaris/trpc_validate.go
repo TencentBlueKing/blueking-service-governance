@@ -23,9 +23,11 @@ import (
 	"fmt"
 
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -38,7 +40,7 @@ import (
 // 5. 检查 PolarisName 是否在服务名列表中，不在则生成 warning
 func CollectConfigWarnings(
 	ctx context.Context,
-	appModelStore appmodel.AppModelStore,
+	db *mongo.Database,
 	cfgProvider appcfg.MountableFileProvider,
 	config *PolarisConfig,
 ) (warnings []string) {
@@ -47,7 +49,7 @@ func CollectConfigWarnings(
 	}
 
 	// 获取应用模型
-	model, err := appModelStore.GetAppModel(ctx, config.AppID)
+	model, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(config.AppID))
 	if err != nil {
 		log.Warnf(ctx, "get app model for polaris validation failed: app=%s, err=%v", config.AppID, err)
 		return nil

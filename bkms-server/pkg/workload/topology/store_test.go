@@ -54,7 +54,7 @@ var _ = Describe("ResourceSnapshotStore", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(ResourceSnapshotMeta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(ResourceSnapshotMeta)).To(Succeed())
 	})
 
 	Describe("SaveWithVersion", func() {

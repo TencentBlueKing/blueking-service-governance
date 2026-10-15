@@ -21,296 +21,92 @@ package bkmonitor
 
 import (
 	"context"
-	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// apmInstConfigCollectionName is the MongoDB collection name for storing APM instance config data.
-const apmInstConfigCollectionName = "bkmonitor_apm_inst_config"
+var (
+	// ErrApmInstConfigNotFound is returned when an APM instance config record is not found.
+	ErrApmInstConfigNotFound = errors.New("ApmInstConfig not found")
+	// ErrApmInstConfigExists is returned when an APM instance config with the same apmID already exists.
+	ErrApmInstConfigExists = errors.New("ApmInstConfig already exists")
+)
 
-// ErrApmInstConfigNotFound is returned when an APM instance config record is not found.
-var ErrApmInstConfigNotFound = errors.New("ApmInstConfig not found")
+// ApmInstConfigStore APM 实例配置存储
+type ApmInstConfigStore = store.GenericStore[ApmInstConfig]
 
-// ApmInstConfigStoreMongo implements ApmInstConfigStore interface with MongoDB.
-var _ ApmInstConfigStore = &ApmInstConfigStoreMongo{}
-
-// ApmInstConfigStore defines the storage interface for APM instance config data.
-type ApmInstConfigStore interface {
-	// Create creates a new APM instance config record.
-	Create(ctx context.Context, apm *ApmInstConfig) (bson.ObjectID, error)
-
-	// List returns APM instance config records by workspace ID.
-	List(ctx context.Context, workspaceID string) ([]ApmInstConfig, error)
-
-	// GetApmIDMap returns APM instance config records by workspace ID as a map keyed by ApmID.
-	GetApmIDMap(ctx context.Context, workspaceID string) (map[int64]ApmInstConfig, error)
-
-	// GetByApmID returns an APM instance config record by its APM ID.
-	GetByApmID(ctx context.Context, apmID int64) (*ApmInstConfig, error)
-
-	// GetByEnvID returns an APM instance config record by associated environment ID.
-	GetByEnvID(ctx context.Context, envID bson.ObjectID) (*ApmInstConfig, error)
-
-	// GetByName returns an APM instance config record by name and workspace ID.
-	GetByName(ctx context.Context, workspaceID, name string) (*ApmInstConfig, error)
-
-	// UnbindEnvFromAll unbinds the specified environment from all APM instance config records.
-	UnbindEnvFromAll(ctx context.Context, envID bson.ObjectID) error
-
-	// Update updates an APM instance config record.
-	Update(ctx context.Context, id bson.ObjectID, updateData *ApmInstConfigUpdateData) error
-
-	// UnbindEnv unbinds the specified environment from an APM instance config record.
-	UnbindEnv(ctx context.Context, id, envID bson.ObjectID) error
-
-	// BindEnv binds an environment to an APM instance config record.
-	BindEnv(ctx context.Context, id, envID bson.ObjectID, envName string) error
-
-	// Delete deletes an APM instance config record by ID.
-	Delete(ctx context.Context, id bson.ObjectID) error
+// ApmInstConfigMeta APM 实例配置的存储元数据，写入完整文档前会校验必填字段。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：apmID
+var ApmInstConfigMeta = store.Meta[ApmInstConfig]{
+	Collection: "bkmonitor_apm_inst_config",
+	NotFound:   ErrApmInstConfigNotFound,
+	Duplicate:  ErrApmInstConfigExists,
+	BeforeSave: []func(*ApmInstConfig) error{validateApmInstConfig},
 }
 
-// ApmInstConfigStoreMongo implements ApmInstConfigStore interface with MongoDB.
-type ApmInstConfigStoreMongo struct {
-	collection *mongo.Collection
-}
-
-// NewApmInstConfigStoreMongo creates a new ApmInstConfigStore instance.
-func NewApmInstConfigStoreMongo(client *mongo.Client, dbName string) (ApmInstConfigStore, error) {
-	coll := client.Database(dbName).Collection(apmInstConfigCollectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：apmID
-	return &ApmInstConfigStoreMongo{collection: coll}, nil
-}
-
-// Create creates a new APM instance config record.
-func (s *ApmInstConfigStoreMongo) Create(ctx context.Context, apm *ApmInstConfig) (bson.ObjectID, error) {
-	validate := validator.New(validator.WithRequiredStructEnabled())
-	if err := validate.Struct(apm); err != nil {
-		return bson.NilObjectID, errors.Wrap(err, "ApmInstConfig validation failed")
+func validateApmInstConfig(apm *ApmInstConfig) error {
+	if err := validator.New(validator.WithRequiredStructEnabled()).Struct(apm); err != nil {
+		return errors.Wrap(err, "ApmInstConfig validation failed")
 	}
-
-	if apm.CreatedAt.IsZero() {
-		apm.CreatedAt = time.Now()
-	}
-	apm.UpdatedAt = apm.CreatedAt
-
+	// 存为空数组而不是 null，$addToSet / $pull 不能作用于 null
 	if apm.AssociatedEnvs == nil {
-		apm.AssociatedEnvs = make([]EnvInfo, 0)
+		apm.AssociatedEnvs = []EnvInfo{}
 	}
-
-	ret, err := s.collection.InsertOne(ctx, apm)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return bson.NilObjectID, errors.Errorf("ApmInstConfig with ID %d already exists", apm.ApmID)
-		}
-		return bson.NilObjectID, err
-	}
-	return ret.InsertedID.(bson.ObjectID), nil
-}
-
-// List returns APM instance config records by workspace ID.
-func (s *ApmInstConfigStoreMongo) List(ctx context.Context, workspaceID string) ([]ApmInstConfig, error) {
-	filter := bson.M{"workspaceID": workspaceID}
-	sort := bson.D{{Key: "createdAt", Value: -1}}
-	findOptions := options.Find().SetSort(sort)
-
-	cursor, err := s.collection.Find(ctx, filter, findOptions)
-	if err != nil {
-		return nil, err
-	}
-
-	defer cursor.Close(ctx) // nolint
-
-	apmList := make([]ApmInstConfig, 0)
-	if err = cursor.All(ctx, &apmList); err != nil {
-		return nil, err
-	}
-
-	return apmList, nil
-}
-
-// GetApmIDMap returns APM instance config records by workspace ID as a map keyed by ApmID.
-func (s *ApmInstConfigStoreMongo) GetApmIDMap(
-	ctx context.Context,
-	workspaceID string,
-) (map[int64]ApmInstConfig, error) {
-	list, err := s.List(ctx, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	apmMap := lo.SliceToMap(list, func(item ApmInstConfig) (int64, ApmInstConfig) {
-		return item.ApmID, item
-	})
-
-	return apmMap, nil
-}
-
-// GetByApmID returns an APM instance config record by its APM ID.
-func (s *ApmInstConfigStoreMongo) GetByApmID(ctx context.Context, apmID int64) (*ApmInstConfig, error) {
-	return s.findOne(ctx, bson.M{"apmID": apmID})
-}
-
-// GetByEnvID returns an APM instance config record by associated environment ID.
-func (s *ApmInstConfigStoreMongo) GetByEnvID(ctx context.Context, envID bson.ObjectID) (*ApmInstConfig, error) {
-	// Query for APM records whose associatedEnvs array contains the specified envID.
-	filter := bson.M{
-		"associatedEnvs": bson.M{
-			"$elemMatch": bson.M{
-				"envID": envID,
-			},
-		},
-	}
-
-	return s.findOne(ctx, filter)
-}
-
-// GetByName returns an APM instance config record by name and workspace ID.
-func (s *ApmInstConfigStoreMongo) GetByName(
-	ctx context.Context,
-	workspaceID, name string,
-) (*ApmInstConfig, error) {
-	return s.findOne(ctx, bson.M{"workspaceID": workspaceID, "name": name})
-}
-
-// Update updates an APM instance config record.
-func (s *ApmInstConfigStoreMongo) Update(
-	ctx context.Context,
-	id bson.ObjectID,
-	updateData *ApmInstConfigUpdateData,
-) error {
-	if updateData == nil {
-		return nil
-	}
-
-	filter := bson.M{"_id": id}
-	update, isEmpty := updateData.ToBSON()
-
-	if !isEmpty {
-		update["updatedAt"] = time.Now()
-		return s.updateOne(ctx, filter, bson.M{"$set": update})
-	}
-
 	return nil
 }
 
-// Delete deletes an APM instance config record by ID.
-func (s *ApmInstConfigStoreMongo) Delete(ctx context.Context, id bson.ObjectID) error {
-	_, err := s.collection.DeleteOne(ctx, bson.M{"_id": id})
-	return err
+// ApmInWorkspace 按所属工作空间匹配
+func ApmInWorkspace(workspaceID string) store.Opt {
+	return store.Where("workspaceID", workspaceID)
 }
 
-// BindEnv binds an environment to an APM instance config record.
-func (s *ApmInstConfigStoreMongo) BindEnv(ctx context.Context, id, envID bson.ObjectID, envName string) error {
-	filter := bson.M{"_id": id}
-
-	envInfo := EnvInfo{
-		EnvID:   envID,
-		EnvName: envName,
-	}
-
-	// Use $addToSet to add the element while ensuring uniqueness.
-	update := bson.M{
-		"$addToSet": bson.M{
-			"associatedEnvs": envInfo,
-		},
-		"$set": bson.M{
-			"updatedAt": time.Now(),
-		},
-	}
-
-	return s.updateOne(ctx, filter, update)
+// ApmByApmID 按蓝鲸监控中的 APM ID 匹配
+func ApmByApmID(apmID int64) store.Opt {
+	return store.Where("apmID", apmID)
 }
 
-// UnbindEnv unbinds the specified environment from an APM instance config record.
-func (s *ApmInstConfigStoreMongo) UnbindEnv(ctx context.Context, id, envID bson.ObjectID) error {
-	filter := bson.M{"_id": id}
-
-	// Use $pull to remove the element.
-	update := bson.M{
-		"$pull": bson.M{
-			"associatedEnvs": bson.M{"envID": envID},
-		},
-		"$set": bson.M{
-			"updatedAt": time.Now(),
-		},
-	}
-
-	return s.updateOne(ctx, filter, update)
+// ApmByName 按工作空间与 APM 名称匹配
+func ApmByName(workspaceID, name string) store.Opt {
+	return store.Combine(ApmInWorkspace(workspaceID), store.Where("name", name))
 }
 
-// UnbindEnvFromAll unbinds the specified environment from all APM instance config records.
-func (s *ApmInstConfigStoreMongo) UnbindEnvFromAll(ctx context.Context, envID bson.ObjectID) error {
-	filter := bson.M{
-		"associatedEnvs": bson.M{
-			"$elemMatch": bson.M{
-				"envID": envID,
-			},
-		},
-	}
-
-	update := bson.M{
-		"$pull": bson.M{
-			"associatedEnvs": bson.M{"envID": envID},
-		},
-		"$set": bson.M{
-			"updatedAt": time.Now(),
-		},
-	}
-
-	_, err := s.collection.UpdateMany(ctx, filter, update)
-	return err
+// ApmBoundToEnv 匹配关联了指定环境的 APM
+func ApmBoundToEnv(envID bson.ObjectID) store.Opt {
+	return store.Where("associatedEnvs.envID", envID)
 }
 
-// ToBSON converts ApmInstConfigUpdateData to bson.M for update operations.
-func (d *ApmInstConfigUpdateData) ToBSON() (bson.M, bool) {
-	data := bson.M{}
-	isEmpty := true
-
-	if d.WorkspaceID != nil {
-		data["workspaceID"] = *d.WorkspaceID
-		isEmpty = false
+// GetApmIDMap 返回工作空间下的全部 APM 实例配置，key 为 APM ID
+func GetApmIDMap(ctx context.Context, db *mongo.Database, workspaceID string) (map[int64]ApmInstConfig, error) {
+	list, err := store.Of(db, ApmInstConfigMeta).List(ctx, ApmInWorkspace(workspaceID))
+	if err != nil {
+		return nil, errors.Wrapf(err, "list apm inst configs of workspace %s", workspaceID)
 	}
-	if d.ApmID != nil {
-		data["apmID"] = *d.ApmID
-		isEmpty = false
-	}
-	if d.Name != nil {
-		data["name"] = *d.Name
-		isEmpty = false
-	}
-	if d.Token != nil {
-		data["token"] = *d.Token
-		isEmpty = false
-	}
-
-	return data, isEmpty
+	return lo.SliceToMap(list, func(item ApmInstConfig) (int64, ApmInstConfig) { return item.ApmID, item }), nil
 }
 
-// findOne returns a single APM instance config record matching the given filter.
-func (s *ApmInstConfigStoreMongo) findOne(ctx context.Context, filter bson.M) (*ApmInstConfig, error) {
-	apm := new(ApmInstConfig)
-	if err := s.collection.FindOne(ctx, filter).Decode(apm); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrApmInstConfigNotFound
-		}
-		return nil, err
-	}
-	return apm, nil
+// BindEnv 将环境关联到指定的 APM 实例配置，已关联时不重复添加；APM 不存在时返回 ErrApmInstConfigNotFound
+func BindEnv(ctx context.Context, db *mongo.Database, id, envID bson.ObjectID, envName string) error {
+	_, err := store.Of(db, ApmInstConfigMeta).Modify(ctx,
+		bson.M{"$addToSet": bson.M{"associatedEnvs": EnvInfo{EnvID: envID, EnvName: envName}}},
+		store.ByID(id),
+	)
+	return errors.Wrapf(err, "bind env %s to apm %s", envID.Hex(), id.Hex())
 }
 
-// updateOne updates a single APM instance config record matching the given filter.
-func (s *ApmInstConfigStoreMongo) updateOne(ctx context.Context, filter, update bson.M) error {
-	opts := options.UpdateOne().SetUpsert(false)
-	ret, err := s.collection.UpdateOne(ctx, filter, update, opts)
-	if ret != nil && ret.MatchedCount == 0 {
-		return ErrApmInstConfigNotFound
-	}
-	return err
+// UnbindEnvFromAll 解除环境与所有 APM 实例配置的关联。
+// 正常情况下一个环境只关联一个 APM，这里作用于全部匹配的记录，以便清理历史脏数据
+func UnbindEnvFromAll(ctx context.Context, db *mongo.Database, envID bson.ObjectID) error {
+	_, err := store.Of(db, ApmInstConfigMeta).ModifyMany(ctx,
+		bson.M{"$pull": bson.M{"associatedEnvs": bson.M{"envID": envID}}},
+		ApmBoundToEnv(envID),
+	)
+	return errors.Wrapf(err, "unbind env %s from all apms", envID.Hex())
 }

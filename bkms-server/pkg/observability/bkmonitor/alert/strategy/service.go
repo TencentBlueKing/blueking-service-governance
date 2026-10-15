@@ -41,24 +41,15 @@ import (
 var ErrDisplayNameAlreadyExists = errors.New("alert strategy displayName already exists in app")
 
 // NewService 创建 Service 实例。
-func NewService(
-	db *mongo.Database,
-	envStore envmodel.EnvironmentStore,
-	appStore bkmsapp.ApplicationStore,
-) *Service {
-	return newServiceWithClientFactory(db, envStore, appStore, bkmapi.NewMonitorClient)
+func NewService(db *mongo.Database) *Service {
+	return newServiceWithClientFactory(db, bkmapi.NewMonitorClient)
 }
 
-func newServiceWithClientFactory(
-	db *mongo.Database,
-	envStore envmodel.EnvironmentStore,
-	appStore bkmsapp.ApplicationStore,
-	newClient alert.ClientFactory,
-) *Service {
+func newServiceWithClientFactory(db *mongo.Database, newClient alert.ClientFactory) *Service {
 	return &Service{
 		strategies: store.Of(db, Meta),
-		envStore:   envStore,
-		appStore:   appStore,
+		envStore:   store.Of(db, envmodel.EnvMeta),
+		appStore:   store.Of(db, bkmsapp.AppMeta),
 		snapshots:  store.Of(db, topology.ResourceSnapshotMeta),
 		newClient:  newClient,
 	}

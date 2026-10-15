@@ -39,8 +39,11 @@ func NewNotFoundError(target string) *NotFoundError {
 }
 
 // AsNotFoundError 检查给定的错误 err 是否（或其错误链中是否）表示资源未找到：
-// 包含 *NotFoundError 类型的错误，或者是依赖服务、服务绑定的 NotFound 哨兵错误
+// 包含 *NotFoundError 类型的错误，或者是依赖服务、服务实例、服务绑定的 NotFound 哨兵错误
 func AsNotFoundError(err error) bool {
 	var notFoundErr *NotFoundError
-	return errors.As(err, &notFoundErr) || errors.Is(err, ErrServiceNotFound) || errors.Is(err, ErrBindingNotFound)
+	return errors.As(err, &notFoundErr) ||
+		errors.Is(err, ErrServiceNotFound) ||
+		errors.Is(err, ErrInstanceNotFound) ||
+		errors.Is(err, ErrBindingNotFound)
 }

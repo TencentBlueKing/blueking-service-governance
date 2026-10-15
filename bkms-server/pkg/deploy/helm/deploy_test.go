@@ -31,15 +31,15 @@ import (
 	helmrelease "helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage/driver"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	bkmshelm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
@@ -570,15 +570,10 @@ var _ = Describe("genHelmDeployValues", func() {
 		db           *mongo.Database
 	)
 
-	// mockDatabaseAndAppConfigFileStore mocks database client and app config file store
-	mockDatabaseAndAppConfigFileStore := func() *appcfg.AppConfigFileStoreMongo {
-		mockey.Mock(database.Client).Return(&mongo.Client{}).Build()
-		mockey.Mock(database.Name).Return("testdb").Build()
-
-		mockStore := &appcfg.AppConfigFileStoreMongo{}
-		mockey.Mock(appcfg.NewAppConfigFileStoreMongo).Return(mockStore, nil).Build()
-
-		return mockStore
+	// saveAppConfigFile persists the app config file and uses it as the values file
+	saveAppConfigFile := func(acf *appcfg.AppConfigFile) {
+		Expect(store.Of(db, appcfg.AppConfigFileMeta).Create(ctx, acf)).To(Succeed())
+		valuesFileID = acf.ID.Hex()
 	}
 
 	// mockListVars mocks the env vars reader to return the given list.
@@ -601,20 +596,22 @@ var _ = Describe("genHelmDeployValues", func() {
 		imageTag = "v1.0.0"
 	})
 
+	AfterEach(func() {
+		_, err := store.Of(db, appcfg.AppConfigFileMeta).DeleteMany(ctx, appcfg.FilesByApp(app.ID))
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	Context("when all parameters are valid", func() {
 		It("should successfully generate helm deploy values", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				// Mock database and app config file store
-				mockDatabaseAndAppConfigFileStore()
-
-				// Mock app config file
+				// Create app config file
 				content := `image:
   registry: ${{ bkms.ARTIFACT_IMAGE_REGISTRY }}
   repository: ${{ bkms.ARTIFACT_IMAGE_REPOSITORY }}
   tag: ${{ bkms.ARTIFACT_IMAGE_TAG }}
 imagePullSecrets:
   - name: ${{ bkms.APP_IMAGE_PULL_SECRET }}`
-				mockAppConfigFile := &appcfg.AppConfigFile{
+				acf := &appcfg.AppConfigFile{
 					AppID: app.ID,
 					Type:  appcfg.AppConfigFileTypeNormal,
 					VersionedContent: appcfg.VersionedContent{
@@ -622,10 +619,10 @@ imagePullSecrets:
 						Content:           &content,
 					},
 				}
-				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
+				saveAppConfigFile(acf)
 
 				// Mock AppConfigFileEditor
-				mockEditor := &mockAppConfigFileEditor{content: content}
+				mockEditor := &acfEditor{content: content}
 				mockey.Mock(appcfg.NewAppConfigFileEditor).Return(mockEditor, nil).Build()
 				mockListVars(nil)
 
@@ -659,16 +656,14 @@ imagePullSecrets:
 
 		It("should handle overlay app config file type", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndAppConfigFileStore()
-
-				// Mock overlay app config file
+				// Create overlay app config file
 				baseContent := `image:
   registry: base-registry
   tag: base-tag`
 				overlayContent := `image:
   registry: ${{ bkms.ARTIFACT_IMAGE_REGISTRY }}
   tag: ${{ bkms.ARTIFACT_IMAGE_TAG }}`
-				mockAppConfigFile := &appcfg.AppConfigFile{
+				acf := &appcfg.AppConfigFile{
 					AppID: app.ID,
 					Type:  appcfg.AppConfigFileTypeOverlay,
 					VersionedContent: appcfg.VersionedContent{
@@ -676,11 +671,11 @@ imagePullSecrets:
 						OverlayContent:    &overlayContent,
 					},
 				}
-				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
+				saveAppConfigFile(acf)
 
 				// Mock AppConfigFileEditor to return merged content
 				mergedContent := baseContent + "\n" + overlayContent
-				mockEditor := &mockAppConfigFileEditor{content: mergedContent}
+				mockEditor := &acfEditor{content: mergedContent}
 				mockey.Mock(appcfg.NewAppConfigFileEditor).Return(mockEditor, nil).Build()
 				mockListVars(nil)
 
@@ -699,19 +694,17 @@ imagePullSecrets:
 
 		It("should render both bkms and env references in one pass", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndAppConfigFileStore()
-
 				content := `image: ${{ bkms.ARTIFACT_IMAGE }}
 custom: ${{ env.MY_VAR }}`
-				mockAppConfigFile := &appcfg.AppConfigFile{
+				acf := &appcfg.AppConfigFile{
 					AppID: app.ID, Type: appcfg.AppConfigFileTypeNormal,
 					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
 					},
 				}
-				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
+				saveAppConfigFile(acf)
 				mockey.Mock(appcfg.NewAppConfigFileEditor).
-					Return(&mockAppConfigFileEditor{content: content}, nil).
+					Return(&acfEditor{content: content}, nil).
 					Build()
 				mockey.Mock(genValuesVariables).Return(map[string]string{
 					arrangement.BkmsArtifactImage: "docker.example.com/test-app:v1.0.0",
@@ -732,18 +725,16 @@ custom: ${{ env.MY_VAR }}`
 
 		It("should mask sensitive env vars when maskSensitive is true and keep real value otherwise", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndAppConfigFileStore()
-
 				content := `secret: ${{ env.SECRET }}`
-				mockAppConfigFile := &appcfg.AppConfigFile{
+				acf := &appcfg.AppConfigFile{
 					AppID: app.ID, Type: appcfg.AppConfigFileTypeNormal,
 					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
 					},
 				}
-				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
+				saveAppConfigFile(acf)
 				mockey.Mock(appcfg.NewAppConfigFileEditor).
-					Return(&mockAppConfigFileEditor{content: content}, nil).
+					Return(&acfEditor{content: content}, nil).
 					Build()
 				mockey.Mock(genValuesVariables).Return(map[string]string{}, nil).Build()
 				mockListVars(envvartypes.EnvVariableList{{Key: "SECRET", Value: "supersecret", IsSensitive: true}})
@@ -763,18 +754,16 @@ custom: ${{ env.MY_VAR }}`
 
 		It("should not error on undefined env vars and report them via missing list", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndAppConfigFileStore()
-
 				content := `a: ${{ env.UNKNOWN }}`
-				mockAppConfigFile := &appcfg.AppConfigFile{
+				acf := &appcfg.AppConfigFile{
 					AppID: app.ID, Type: appcfg.AppConfigFileTypeNormal,
 					VersionedContent: appcfg.VersionedContent{
 						ContentSourceType: appcfg.ContentSourceTypeLocal, Content: &content,
 					},
 				}
-				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
+				saveAppConfigFile(acf)
 				mockey.Mock(appcfg.NewAppConfigFileEditor).
-					Return(&mockAppConfigFileEditor{content: content}, nil).
+					Return(&acfEditor{content: content}, nil).
 					Build()
 				mockey.Mock(genValuesVariables).Return(map[string]string{}, nil).Build()
 				mockListVars(nil)
@@ -794,8 +783,6 @@ custom: ${{ env.MY_VAR }}`
 	Context("when app config file ID is invalid", func() {
 		It("should return error for invalid ObjectID format", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndAppConfigFileStore()
-
 				invalidID := "invalid-object-id"
 				values, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, invalidID, imageTag, false)
 				Expect(err).To(HaveOccurred())
@@ -808,11 +795,6 @@ custom: ${{ env.MY_VAR }}`
 	Context("when getting app config file fails", func() {
 		It("should return error", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndAppConfigFileStore()
-				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(
-					nil, errors.New("app config file not found"),
-				).Build()
-
 				values, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, valuesFileID, imageTag, false)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("get app config file"))
@@ -825,10 +807,8 @@ custom: ${{ env.MY_VAR }}`
 	Context("when getting compiled content fails", func() {
 		It("should return error", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndAppConfigFileStore()
-
 				content := "test content"
-				mockAppConfigFile := &appcfg.AppConfigFile{
+				acf := &appcfg.AppConfigFile{
 					AppID: app.ID,
 					Type:  appcfg.AppConfigFileTypeNormal,
 					VersionedContent: appcfg.VersionedContent{
@@ -836,9 +816,9 @@ custom: ${{ env.MY_VAR }}`
 						Content:           &content,
 					},
 				}
-				mockey.Mock((*appcfg.AppConfigFileStoreMongo).GetByID).Return(mockAppConfigFile, nil).Build()
+				saveAppConfigFile(acf)
 
-				mockEditor := &mockAppConfigFileEditor{err: errors.New("failed to compile content")}
+				mockEditor := &acfEditor{err: errors.New("failed to compile content")}
 				mockey.Mock(appcfg.NewAppConfigFileEditor).Return(mockEditor, nil).Build()
 
 				values, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, valuesFileID, imageTag, false)
@@ -1026,31 +1006,31 @@ var _ = Describe("UninstallHelmRelease", func() {
 	})
 })
 
-// mockAppConfigFileEditor is a mock implementation of AppConfigFileEditor for testing
-type mockAppConfigFileEditor struct {
+// acfEditor is a mock implementation of AppConfigFileEditor for testing
+type acfEditor struct {
 	content string
 	err     error
 }
 
 // GetEditableContentField ...
-func (m *mockAppConfigFileEditor) GetEditableContentField() appcfg.EditableContentField {
+func (m *acfEditor) GetEditableContentField() appcfg.EditableContentField {
 	return appcfg.EditableContentFieldContent
 }
 
 // SetContent ...
-func (m *mockAppConfigFileEditor) SetContent(content string) error {
+func (m *acfEditor) SetContent(content string) error {
 	m.content = content
 	return nil
 }
 
 // SetOverlayContent ...
-func (m *mockAppConfigFileEditor) SetOverlayContent(content string) error {
+func (m *acfEditor) SetOverlayContent(content string) error {
 	m.content = content
 	return nil
 }
 
 // GetCompiledContent ...
-func (m *mockAppConfigFileEditor) GetCompiledContent(ctx context.Context) (string, error) {
+func (m *acfEditor) GetCompiledContent(ctx context.Context) (string, error) {
 	if m.err != nil {
 		return "", m.err
 	}

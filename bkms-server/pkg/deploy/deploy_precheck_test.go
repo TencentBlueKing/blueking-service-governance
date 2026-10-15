@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -41,10 +42,9 @@ import (
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -75,15 +75,13 @@ var _ = Describe("DeployPreChecker Check", func() {
 		statusMock            *mockey.Mocker
 		clusterAddonDefStore  *clusteraddon.ClusterAddonDefStore
 		ctx                   context.Context
+		db                    *mongo.Database
 		fxApp                 *fxtest.App
-		appStore              bkmsapp.ApplicationStore
-		appModelStore         appmodel.AppModelStore
-		appConfigFileStore    appcfg.AppConfigFileStore
+		appStore              *bkmsapp.ApplicationStore
 		appConfigFileDefStore *appcfg.AppConfigFileDefStore
 		componentDefStore     *component.ComponentDefStore
-		polarisConfigStore    polaris.PolarisConfigStore
+		configStore           *polaris.ConfigStore
 		buildConfigStore      *build.ConfigStore
-		workspaceCompsStore   workspace.WorkspaceCompsStore
 		workspaceStore        *workspace.WorkspaceStore
 		createdWorkspaces     []string
 		envService            *env.EnvService
@@ -93,41 +91,34 @@ var _ = Describe("DeployPreChecker Check", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		db = testutil.NewDB(GinkgoT())
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		fxApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
 			appcfg.FxModule,
-			appspec.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
 			env.FxModule,
 			envvars.FxModule,
-			workspace.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			workload.FxModule,
 			store.FxModule,
 			fx.Provide(NewDeployPreChecker),
 			fx.Populate(
-				&appStore,
-				&appModelStore,
-				&appConfigFileStore,
-				&polarisConfigStore,
-				&workspaceCompsStore,
 				&envService,
 				&checker,
 			),
 		)
 		fxApp.RequireStart()
+		configStore = testutil.NewStore(GinkgoT(), polaris.ConfigMeta)
 		workspaceStore = testutil.NewStore(GinkgoT(), workspace.Meta)
 		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 		buildConfigStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
 		componentDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 		clusterAddonDefStore = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 		workload.InitPlugin(
-			appcfg.NewMountableFileProvider(appConfigFileStore, testutil.NewDB(GinkgoT())),
-			polarisConfigStore,
+			appcfg.NewMountableFileProvider(testutil.NewDB(GinkgoT())),
+			testutil.NewDB(GinkgoT()),
 		)
 		statusMock = mockey.Mock(clusteraddon.InspectRequiredAddons).
 			Return(nil, nil).
@@ -144,9 +135,7 @@ var _ = Describe("DeployPreChecker Check", func() {
 			createdWorkspaces = append(createdWorkspaces, ws.ID)
 			opts.WorkspaceID = ws.ID
 			app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:           appStore,
-				AppModelStore:      appModelStore,
-				AppConfigFileStore: appConfigFileStore,
+				AppStore: appStore,
 			}, opts)
 			return app, dbfactory.Env(ctx, envService, app.WorkspaceID)
 		}
@@ -194,7 +183,7 @@ ignored: ${LEGACY}
 			},
 			Components: []*component.Component{comp},
 		})
-		Expect(polarisConfigStore.Create(ctx, newTestPolarisConfig(
+		Expect(configStore.Create(ctx, newTestPolarisConfig(
 			app.ID,
 			"polaris-main",
 			[]string{appEnv.Name},
@@ -248,17 +237,17 @@ ignored: ${LEGACY}
 
 	It("builds the pre-check report when the persisted workload image is empty", func() {
 		app, appEnv := newApp(nil)
-		model, err := appModelStore.GetAppModel(ctx, app.ID)
+		model, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		model.Workload.Image = ""
-		Expect(appModelStore.UpdateAppModel(ctx, model)).To(Succeed())
+		Expect(appmodel.UpdateAppModel(ctx, db, model)).To(Succeed())
 
 		result, err := checker.Check(ctx, app, appEnv)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.UndefinedVars).To(BeEmpty())
 		Expect(result.UndefinedVars).NotTo(BeNil())
-		persistedModel, err := appModelStore.GetAppModel(ctx, app.ID)
+		persistedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persistedModel.Workload.Image).To(BeEmpty())
 	})
@@ -272,7 +261,7 @@ ignored: ${LEGACY}
 				FileContent: "default: ${{ env.DEFAULT_ONLY }}\n",
 			},
 		})
-		svc := appcfg.NewAppConfigFileService(appConfigFileStore, testutil.NewDB(GinkgoT()))
+		svc := appcfg.NewAppConfigFileService(testutil.NewDB(GinkgoT()))
 		defs, err := appcfg.ListDefsByApp(
 			ctx,
 			appConfigFileDefStore,
@@ -395,7 +384,7 @@ ignored: ${LEGACY}
 				},
 			},
 		} {
-			Expect(workspaceCompsStore.Add(ctx, comp)).To(Succeed())
+			Expect(workspace.AddComponents(ctx, testutil.NewDB(GinkgoT()), comp)).To(Succeed())
 		}
 
 		result, err := checker.Check(ctx, app, appEnv)
@@ -423,7 +412,7 @@ ignored: ${LEGACY}
 		config.PolarisName = "${{ env.IGNORED_POLARIS_NAME }}"
 		config.PolarisNamespace = "${{ env.IGNORED_POLARIS_NAMESPACE }}"
 		config.PolarisToken = "${{ env.IGNORED_POLARIS_TOKEN }}"
-		Expect(polarisConfigStore.Create(ctx, config)).To(Succeed())
+		Expect(configStore.Create(ctx, config)).To(Succeed())
 
 		result, err := checker.Check(ctx, app, appEnv)
 
@@ -454,7 +443,7 @@ ignored: ${LEGACY}
 				map[string]string{"env": "${{ env.HIDDEN_POLARIS }}"},
 			),
 		} {
-			Expect(polarisConfigStore.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 		}
 
 		result, err := checker.Check(ctx, app, appEnv)
@@ -514,7 +503,8 @@ ignored: ${LEGACY}
 		})
 
 		It("returns an error when the effective app config is missing", func() {
-			_, err := appConfigFileStore.DeleteByApp(ctx, app.ID)
+			_, err := store.Of(database.DB(), appcfg.AppConfigFileMeta).
+				DeleteMany(ctx, appcfg.FilesByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = checker.Check(ctx, app, appEnv)

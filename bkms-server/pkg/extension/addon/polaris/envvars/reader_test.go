@@ -27,6 +27,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -40,9 +41,9 @@ var _ = Describe("Reader", func() {
 	var (
 		ctx         context.Context
 		diApp       *fxtest.App
-		appStore    bkmsapp.ApplicationStore
+		appStore    *bkmsapp.ApplicationStore
 		envService  *env.EnvService
-		store       polaris.PolarisConfigStore
+		configStore *polaris.ConfigStore
 		reader      *polarisenvvars.Reader
 		app         *bkmsapp.Application
 		environment *envmodel.Environment
@@ -50,15 +51,16 @@ var _ = Describe("Reader", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
-			fx.Populate(&appStore, &envService, &store, &reader),
+			fx.Populate(&envService, &reader),
 		)
 		diApp.RequireStart()
+		configStore = testutil.NewStore(GinkgoT(), polaris.ConfigMeta)
 
 		app = dbfactory.Application(ctx, appStore)
 		environment = dbfactory.Env(ctx, envService, app.WorkspaceID)
@@ -73,11 +75,11 @@ var _ = Describe("Reader", func() {
 			},
 			ScopeEnvNames: []string{environment.Name},
 		}
-		Expect(store.Create(ctx, config)).To(Succeed())
+		Expect(configStore.Create(ctx, config)).To(Succeed())
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteByApp(ctx, app.ID)).To(Succeed())
+		Expect(configStore.DeleteMany(ctx, polaris.ByApp(app.ID))).Error().NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -140,7 +142,7 @@ var _ = Describe("Reader", func() {
 				},
 				ScopeEnvNames: []string{environment.Name},
 			}
-			Expect(store.Create(ctx, immediate)).To(Succeed())
+			Expect(configStore.Create(ctx, immediate)).To(Succeed())
 		})
 
 		It("produces no environment variables of its own", func() {

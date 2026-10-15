@@ -28,7 +28,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// 字段选择规则（UpdateSelected / UpdateOmit / UpdateNonZero 的组合与非法输入）在 field_selection_test.go 中
+// 字段选择规则（UpdateSelected / UpdateOmit 的组合与非法输入）在 field_selection_test.go 中
 // 逐条覆盖，这里只验证它们与数据库写入的配合
 var _ = Describe("GenericStore Update", func() {
 	var f *storeFixture
@@ -134,7 +134,7 @@ var _ = Describe("GenericStore Update", func() {
 		})
 
 		It("should not accept UpdateOpt", func() {
-			err := f.widgets.Update(f.ctx, bson.M{"priority": 1}, f.byName("w1"), store.UpdateNonZero())
+			err := f.widgets.Update(f.ctx, bson.M{"priority": 1}, f.byName("w1"), store.UpdateOmit("tags"))
 			Expect(err).To(MatchError(ContainSubstring("not accepted when the target is a map")))
 		})
 
@@ -214,37 +214,9 @@ var _ = Describe("GenericStore Update", func() {
 			Expect(got.Secret).To(Equal(&Credential{Username: "u", Password: plainPassword}))
 		})
 
-		It("should only write non-zero fields with UpdateNonZero", func() {
-			mustCreateFullWidget("w1")
-
-			patch := &Widget{Tags: []string{}, Secret: &Credential{Username: "u2"}}
-			Expect(f.widgets.Update(f.ctx, patch, store.UpdateNonZero(), f.byName("w1"))).To(Succeed())
-
-			got := f.mustGetWidget("w1")
-			Expect(got.Name).To(Equal("w1"))
-			Expect(got.Priority).To(Equal(1))
-			Expect(got.Spec).To(Equal(WidgetSpec{Color: "red", Size: 1}))
-			// 空切片不是零值，会被写入；嵌套对象非零时整体写入
-			Expect(got.Tags).To(BeEmpty())
-			Expect(got.Secret).To(Equal(&Credential{Username: "u2"}))
-		})
-
-		It("should combine UpdateSelected with UpdateNonZero", func() {
-			f.mustCreateWidget("w1")
-
-			patch := &Widget{Priority: 6}
-			err := f.widgets.Update(f.ctx, patch, store.UpdateSelected("priority", "tags"), store.UpdateNonZero(),
-				f.byName("w1"))
-			Expect(err).NotTo(HaveOccurred())
-
-			got := f.mustGetWidget("w1")
-			Expect(got.Priority).To(Equal(6))
-			Expect(got.Tags).To(Equal([]string{"a"}))
-		})
-
 		It("should return ErrNoFieldsToUpdate when no field is left", func() {
 			f.mustCreateWidget("w1")
-			err := f.widgets.Update(f.ctx, &Widget{}, store.UpdateNonZero(), f.byName("w1"))
+			err := f.widgets.Update(f.ctx, &Widget{}, store.UpdateSelected(), f.byName("w1"))
 			Expect(err).To(MatchError(store.ErrNoFieldsToUpdate))
 		})
 
@@ -258,6 +230,101 @@ var _ = Describe("GenericStore Update", func() {
 		It("should return NotFound when nothing matches", func() {
 			err := f.widgets.Update(f.ctx, f.newWidget("x"), store.UpdateSelected("priority"), f.byName("missing"))
 			Expect(err).To(MatchError(ErrWidgetNotFound))
+		})
+	})
+
+	Describe("map entries", func() {
+		BeforeEach(func() { f.mustCreateBoard("b1") })
+
+		It("should set one entry and keep the others", func() {
+			err := f.boards.Update(f.ctx, map[string]any{"states.test": BoardState{Status: "new"}}, f.byName("b1"))
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(f.mustGetBoard("b1").States).To(Equal(map[string]BoardState{
+				"prod": {Status: "ok"},
+				"test": {Status: "new"},
+			}))
+		})
+
+		It("should remove an entry whose value is nil", func() {
+			Expect(f.boards.Update(f.ctx, map[string]any{"states.prod": nil}, f.byName("b1"))).To(Succeed())
+
+			raw, err := f.boards.Collection().FindOne(f.ctx, bson.M{"ownerID": f.owner, "name": "b1"}).Raw()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rawHas(raw, "states", "prod")).To(BeFalse())
+		})
+	})
+
+	Describe("with KeepUpdatedAt", func() {
+		It("should not refresh updatedAt of the document or the object", func() {
+			f.mustCreateStaleWidget("w1")
+
+			Expect(f.widgets.Update(f.ctx, bson.M{"priority": 5}, f.byName("w1"), store.KeepUpdatedAt())).To(Succeed())
+
+			patch := &Widget{Priority: 6}
+			Expect(f.widgets.Update(f.ctx, patch, store.UpdateSelected("priority"), store.KeepUpdatedAt(),
+				f.byName("w1"))).To(Succeed())
+			Expect(patch.UpdatedAt).To(BeZero())
+
+			got := f.mustGetWidget("w1")
+			Expect(got.Priority).To(Equal(6))
+			Expect(got.UpdatedAt).To(beStoredTime(longAgo))
+		})
+
+		It("should not be accepted by Upsert", func() {
+			_, err := f.widgets.Upsert(f.ctx, bson.M{"priority": 5}, f.byName("w1"), store.KeepUpdatedAt())
+			Expect(err).To(MatchError(ContainSubstring("keep updatedAt")))
+		})
+	})
+
+	Describe("UpdateMany", func() {
+		It("should update all matching documents and return the matched count", func() {
+			f.mustCreateStaleWidget("w1")
+			f.mustCreateStaleWidget("w2")
+			f.mustCreateWidget("other")
+
+			n, err := f.widgets.UpdateMany(f.ctx, bson.M{"priority": 8},
+				f.byOwner(), store.Where("name", bson.M{"$in": bson.A{"w1", "w2"}}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(2)))
+
+			for _, name := range []string{"w1", "w2"} {
+				got := f.mustGetWidget(name)
+				Expect(got.Priority).To(Equal(8))
+				Expect(got.UpdatedAt).To(BeTemporally("~", time.Now(), time.Second))
+			}
+			Expect(f.mustGetWidget("other").Priority).To(Equal(1))
+		})
+
+		It("should encode the written fields", func() {
+			f.mustCreateWidget("w1")
+
+			_, err := f.widgets.UpdateMany(f.ctx, bson.M{"secret": Credential{Password: "p"}}, f.byOwner())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(f.rawPassword("w1")).To(Equal(encPrefix + "p"))
+		})
+
+		It("should not return an error when nothing matches", func() {
+			n, err := f.widgets.UpdateMany(f.ctx, bson.M{"priority": 8}, f.byName("missing"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(BeZero())
+		})
+
+		It("should require a filter", func() {
+			_, err := f.widgets.UpdateMany(f.ctx, bson.M{"priority": 8})
+			Expect(err).To(MatchError(ContainSubstring("filter is required")))
+		})
+	})
+
+	Describe("IgnoreNotFound", func() {
+		It("should drop NotFound errors only", func() {
+			Expect(store.IgnoreNotFound(f.widgets.Update(f.ctx, bson.M{"priority": 1}, f.byName("missing")))).
+				To(Succeed())
+
+			f.mustCreateWidget("w1")
+			f.mustCreateWidget("w2")
+			err := store.IgnoreNotFound(f.widgets.Update(f.ctx, bson.M{"name": "w1"}, f.byName("w2")))
+			Expect(err).To(MatchError(ErrWidgetExists))
 		})
 	})
 

@@ -25,41 +25,30 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
 
 var _ = Describe("Default AppSpec", func() {
 	var ctx context.Context
-	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var appModelStore appmodel.AppModelStore
-	var appSpecStore AppSpecStore
+	var appStore *bkmsapp.ApplicationStore
+	var db *mongo.Database
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		diApp = fxtest.New(
-			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
-			FxModule,
-			fx.Populate(&appStore, &appModelStore, &appSpecStore),
-		)
-		diApp.RequireStart()
-	})
-
-	AfterEach(func() {
-		diApp.RequireStop()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		db = testutil.NewDB(GinkgoT())
 	})
 
 	It("lazily creates the default spec from AppModel", func() {
 		app := dbfactory.Application(ctx, appStore)
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID:    app.ID,
 			Replicas: lo.ToPtr(int32(3)),
 			UpdateStrategy: &appmodel.UpdateStrategy{
@@ -75,7 +64,7 @@ var _ = Describe("Default AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		spec, err := GetDefault(ctx, appSpecStore, appModelStore, app.ID)
+		spec, err := GetDefault(ctx, db, app.ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*spec.Resources.Replicas).To(Equal(int32(3)))
 		Expect(*spec.Resources.CPURequests).To(Equal("100m"))
@@ -86,14 +75,14 @@ var _ = Describe("Default AppSpec", func() {
 		Expect(*spec.UpdateStrategy.MaxSurge).To(Equal("0"))
 		Expect(spec.DevMode).To(BeNil())
 
-		saved, err := appSpecStore.Get(ctx, app.ID, DefaultEnvName)
+		saved, err := store.Of(db, AppSpecMeta).Get(ctx, ByAppEnv(app.ID, DefaultEnvName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*saved.Resources.Replicas).To(Equal(int32(3)))
 	})
 
 	It("sets the default spec and syncs AppModel-backed sections", func() {
 		app := dbfactory.Application(ctx, appStore)
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID: app.ID,
 			UpdateStrategy: &appmodel.UpdateStrategy{
 				Type: "RollingUpdate",
@@ -102,7 +91,7 @@ var _ = Describe("Default AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+		err = SetDefault(ctx, db, app.ID, &AppSpec{
 			Resources: &ResourcesSpec{
 				Replicas:       lo.ToPtr(int32(6)),
 				CPURequests:    lo.ToPtr("300m"),
@@ -119,7 +108,7 @@ var _ = Describe("Default AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		savedSpec, err := appSpecStore.Get(ctx, app.ID, DefaultEnvName)
+		savedSpec, err := store.Of(db, AppSpecMeta).Get(ctx, ByAppEnv(app.ID, DefaultEnvName))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*savedSpec.Resources.Replicas).To(Equal(int32(6)))
 		Expect(*savedSpec.UpdateStrategy.MaxUnavailable).To(Equal("10%"))
@@ -129,7 +118,7 @@ var _ = Describe("Default AppSpec", func() {
 		Expect(savedSpec.DevMode.WorkPath).To(BeNil())
 		Expect(savedSpec.DevMode.MountPath).To(BeNil())
 
-		savedModel, err := appModelStore.GetAppModel(ctx, app.ID)
+		savedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*savedModel.Replicas).To(Equal(int32(6)))
 		Expect(savedModel.Workload.Resources).To(Equal(map[string]string{
@@ -143,13 +132,13 @@ var _ = Describe("Default AppSpec", func() {
 
 	It("returns a validation sentinel on invalid default spec", func() {
 		app := dbfactory.Application(ctx, appStore)
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID:    app.ID,
 			Workload: appmodel.Workload{},
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+		err = SetDefault(ctx, db, app.ID, &AppSpec{
 			DevMode: &DevModeSpec{
 				Enabled:  lo.ToPtr(true),
 				WorkPath: lo.ToPtr("/tmp/dev-mode"),
@@ -162,13 +151,13 @@ var _ = Describe("Default AppSpec", func() {
 
 	It("rejects CPU requests larger than limits", func() {
 		app := dbfactory.Application(ctx, appStore)
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID:    app.ID,
 			Workload: appmodel.Workload{},
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+		err = SetDefault(ctx, db, app.ID, &AppSpec{
 			Resources: &ResourcesSpec{
 				CPURequests: lo.ToPtr("1500m"),
 				CPULimits:   lo.ToPtr("1200m"),
@@ -182,7 +171,7 @@ var _ = Describe("Default AppSpec", func() {
 
 	It("sets the default spec with partial values", func() {
 		app := dbfactory.Application(ctx, appStore)
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID: app.ID,
 			UpdateStrategy: &appmodel.UpdateStrategy{
 				Type: "RollingUpdate",
@@ -196,21 +185,21 @@ var _ = Describe("Default AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+		err = SetDefault(ctx, db, app.ID, &AppSpec{
 			UpdateStrategy: &UpdateStrategySpec{
 				MaxUnavailable: lo.ToPtr("35%"),
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		spec, err := GetDefault(ctx, appSpecStore, appModelStore, app.ID)
+		spec, err := GetDefault(ctx, db, app.ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*spec.UpdateStrategy.MaxUnavailable).To(Equal("35%"))
 		// SetDefault 默认就是全量写入，其他未提供值的将被复位为 nil
 		Expect(spec.UpdateStrategy.MaxSurge).To(BeNil())
 		Expect(spec.Resources).To(BeNil())
 
-		savedModel, err := appModelStore.GetAppModel(ctx, app.ID)
+		savedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(savedModel.Replicas).To(BeNil())
 		Expect(savedModel.UpdateStrategy.Type).To(Equal("RollingUpdate"))

@@ -61,7 +61,7 @@ func Setup(mux *asynq.ServeMux) error {
 	// Workspace 初始化
 	mux.Handle(workspace.Initialization.Name(), workspace.Initialization.Handler())
 	// Redis 生命周期 tasks
-	if err := depsvcredis.Init(storereg.G().DepSvcInstStore); err != nil {
+	if err := depsvcredis.Init(storereg.G().DB); err != nil {
 		return errors.Wrap(err, "init depsvcredis")
 	}
 	mux.Handle(depsvcredis.CreateTask.Name(), depsvcredis.CreateTask.Handler())

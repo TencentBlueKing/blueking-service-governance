@@ -20,7 +20,6 @@ package helmcomponent
 
 import (
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -60,26 +59,4 @@ func ByAppAndEnv(appID, envName string) store.Opt {
 // InExecutionOrder 按执行顺序排序：priority 升序，相同时按创建时间升序
 func InExecutionOrder() store.Opt {
 	return store.Combine(store.Asc("priority"), store.Asc("createdAt"))
-}
-
-// UpdateData 定义更新组件引用时允许修改的字段，nil 表示不修改
-type UpdateData struct {
-	Properties map[string]any
-	Target     *TargetResourceSelector
-	Priority   *int
-}
-
-// ToBSON 将需要修改的字段转换为 Update 使用的 $set 内容
-func (d *UpdateData) ToBSON() bson.M {
-	set := bson.M{}
-	if d.Properties != nil {
-		set["properties"] = d.Properties
-	}
-	if d.Target != nil {
-		set["target"] = *d.Target
-	}
-	if d.Priority != nil {
-		set["priority"] = *d.Priority
-	}
-	return set
 }

@@ -26,34 +26,33 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("ListSortByOpTime", func() {
 	var ctx context.Context
-	var appStore *bkmsapp.ApplicationStoreMongo
-	var opStore audit.OperationRecordStore
+	var appStore *bkmsapp.ApplicationStore
+	var db *mongo.Database
+	var opStore *audit.OperationRecordStore
 	var workspaceID string
 
 	BeforeEach(func() {
-		var err error
 		ctx = context.Background()
 		workspaceID = "test-ws-" + stringx.Random(6)
 
-		appStore, err = bkmsapp.NewApplicationStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 
-		opStore, err = audit.NewOperationRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		opStore = store.Of(db, audit.OperationRecordMeta)
 	})
 
 	It("should return nil when no apps exist", func() {
-		result, err := bkmsapp.ListSortByOpTime(
-			ctx, appStore, opStore, "nonexistent-ws", "some-user",
-		)
+		result, err := bkmsapp.ListSortByOpTime(ctx, db, "nonexistent-ws", "some-user")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(BeNil())
 	})
@@ -74,9 +73,9 @@ var _ = Describe("ListSortByOpTime", func() {
 			Name: "app-middle", DisplayName: "middle",
 		}
 
-		Expect(appStore.CreateApp(ctx, app1)).To(Succeed())
-		Expect(appStore.CreateApp(ctx, app2)).To(Succeed())
-		Expect(appStore.CreateApp(ctx, app3)).To(Succeed())
+		Expect(appStore.Create(ctx, app1)).To(Succeed())
+		Expect(appStore.Create(ctx, app2)).To(Succeed())
+		Expect(appStore.Create(ctx, app3)).To(Succeed())
 
 		now := time.Now()
 		createOpRecord := func(appID string, createdAt time.Time) {
@@ -88,7 +87,7 @@ var _ = Describe("ListSortByOpTime", func() {
 				Group:     audit.OperationGroup{WorkspaceID: workspaceID, AppID: appID},
 				CreatedAt: createdAt, UpdatedAt: createdAt,
 			}
-			_, err := opStore.Create(ctx, record)
+			err := opStore.Create(ctx, record)
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -96,9 +95,7 @@ var _ = Describe("ListSortByOpTime", func() {
 		createOpRecord(app2.ID, now.Add(-1*time.Hour))
 		createOpRecord(app3.ID, now.Add(-2*time.Hour))
 
-		result, err := bkmsapp.ListSortByOpTime(
-			ctx, appStore, opStore, workspaceID, username,
-		)
+		result, err := bkmsapp.ListSortByOpTime(ctx, db, workspaceID, username)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(3))
 
@@ -119,8 +116,8 @@ var _ = Describe("ListSortByOpTime", func() {
 			Name: "app-no-op", DisplayName: "no op",
 		}
 
-		Expect(appStore.CreateApp(ctx, appWithOp)).To(Succeed())
-		Expect(appStore.CreateApp(ctx, appNoOp)).To(Succeed())
+		Expect(appStore.Create(ctx, appWithOp)).To(Succeed())
+		Expect(appStore.Create(ctx, appNoOp)).To(Succeed())
 
 		record := &audit.OperationRecord{
 			ID: bson.NewObjectID(), Username: username,
@@ -130,12 +127,10 @@ var _ = Describe("ListSortByOpTime", func() {
 			Group:     audit.OperationGroup{WorkspaceID: workspaceID, AppID: appWithOp.ID},
 			CreatedAt: time.Now(), UpdatedAt: time.Now(),
 		}
-		_, err := opStore.Create(ctx, record)
+		err := opStore.Create(ctx, record)
 		Expect(err).NotTo(HaveOccurred())
 
-		result, err := bkmsapp.ListSortByOpTime(
-			ctx, appStore, opStore, workspaceID, username,
-		)
+		result, err := bkmsapp.ListSortByOpTime(ctx, db, workspaceID, username)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(HaveLen(2))
 		Expect(result[0].ID).To(Equal(appWithOp.ID))

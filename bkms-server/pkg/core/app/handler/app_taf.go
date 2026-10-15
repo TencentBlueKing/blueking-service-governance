@@ -33,14 +33,7 @@ import (
 )
 
 func (h *Handler) newTafService() *tafapp.Service {
-	return tafapp.NewService(
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
-		h.registry.DB,
-		h.registry.EnvStore,
-		h.registry.AppConfigFileStore,
-		h.registry.AppStore,
-	)
+	return tafapp.NewService(h.registry.DB)
 }
 
 // UpdateAppTafSpec 更新应用 Taf 配置。

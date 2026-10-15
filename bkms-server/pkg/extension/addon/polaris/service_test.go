@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -39,71 +40,55 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
-	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
 var _ = Describe("PolarisConfigService", func() {
 	var (
-		ctx               context.Context
-		diApp             *fxtest.App
-		appStore          bkmsapp.ApplicationStore
-		envStore          bkmsenv.EnvironmentStore
-		envService        *env.EnvService
-		store             polaris.PolarisConfigStore
-		appModelStore     appmodel.AppModelStore
-		appSpecStore      appspec.AppSpecStore
-		scopedEnvVarStore envvars.ScopedEnvVarStore
-		appDepsVarReader  *depenvvars.Reader
-		polarisVarReader  *polarisenvvars.Reader
-		depSvcInstStore   depsvcmodel.ServiceInstanceStore
-		envStateManager   *polaris.PolarisEnvStateManager
-		service           *polaris.PolarisConfigService
-		app               *bkmsapp.Application
-		environment       *bkmsenv.Environment
-		otherEnvironment  *bkmsenv.Environment
+		ctx              context.Context
+		diApp            *fxtest.App
+		appStore         *bkmsapp.ApplicationStore
+		envService       *env.EnvService
+		configStore      *polaris.ConfigStore
+		db               *mongo.Database
+		appDepsVarReader *depenvvars.Reader
+		polarisVarReader *polarisenvvars.Reader
+		envStateManager  *polaris.PolarisEnvStateManager
+		service          *polaris.PolarisConfigService
+		app              *bkmsapp.Application
+		environment      *bkmsenv.Environment
+		otherEnvironment *bkmsenv.Environment
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
 			envvars.FxModule,
-			depsvcmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
 			fx.Populate(
-				&appStore,
-				&envStore,
 				&envService,
-				&store,
-				&appModelStore,
-				&appSpecStore,
-				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
-				&depSvcInstStore,
 				&envStateManager,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		configStore = store.Of(db, polaris.ConfigMeta)
 
 		service = polaris.NewPolarisConfigService(
-			store,
-			polaris.NewPolarisPlatformManager(testutil.NewDB(GinkgoT()), depSvcInstStore, store),
+			db,
+			polaris.NewPolarisPlatformManager(db),
 			envStateManager,
-			envStore,
-			appModelStore,
-			appSpecStore,
-			envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+			envvars.NewUnifiedEnvVarsReader(db, appDepsVarReader, polarisVarReader),
 			nil,
 		)
 		app = dbfactory.Application(ctx, appStore)
@@ -112,7 +97,7 @@ var _ = Describe("PolarisConfigService", func() {
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, app.ID)
+		_, _ = configStore.DeleteMany(ctx, polaris.ByApp(app.ID))
 		diApp.RequireStop()
 	})
 
@@ -128,7 +113,7 @@ var _ = Describe("PolarisConfigService", func() {
 			}
 			Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).To(BeEmpty())
 			Expect(stored.GetEnvState(environment.Name).AppliedFields).To(BeNil())
@@ -149,7 +134,7 @@ var _ = Describe("PolarisConfigService", func() {
 			}
 			Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).To(BeEmpty())
 			Expect(stored.EnvWeights).To(BeEmpty())
@@ -177,7 +162,7 @@ var _ = Describe("PolarisConfigService", func() {
 				}
 				Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
-				stored, err := store.Get(ctx, app.ID, config.Name)
+				stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.EnableWeightFactor).To(BeFalse())
 				Expect(stored.DepSvcInstID.IsZero()).To(BeTrue())
@@ -211,7 +196,7 @@ var _ = Describe("PolarisConfigService", func() {
 				}
 				Expect(service.Create(ctx, app, config, true)).To(Succeed())
 
-				stored, err := store.Get(ctx, app.ID, config.Name)
+				stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.DepSvcInstID).To(Equal(serviceInstanceID))
 				Expect(stored.PolarisToken).To(Equal("managed-token"))
@@ -337,7 +322,7 @@ var _ = Describe("PolarisConfigService", func() {
 	Describe("Update", func() {
 		It("should wait for deploy before creating a state for a newly scoped environment", func() {
 			config := newTestConfig(app.ID, "cfg-update", nil, nil)
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
 				ScopeEnvNames: []string{environment.Name},
@@ -351,13 +336,13 @@ var _ = Describe("PolarisConfigService", func() {
 			config := newTestConfig(app.ID, "cfg-operator-empty", nil, nil)
 			config.DepSvcInstID = bson.NewObjectID()
 			config.Operator = "zhangsan"
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			empty := ""
 			_, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{Operator: &empty})
 			Expect(err).To(MatchError(polaris.ErrOperatorEmpty))
 
-			stored, getErr := store.Get(ctx, app.ID, config.Name)
+			stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.Operator).To(Equal("zhangsan"))
 		})
@@ -365,13 +350,13 @@ var _ = Describe("PolarisConfigService", func() {
 		It("should reject operator updates for imported polaris services", func() {
 			config := newTestConfig(app.ID, "cfg-operator-imported", nil, nil)
 			config.Operator = "zhangsan"
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			operator := "lisi"
 			_, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{Operator: &operator})
 			Expect(err).To(MatchError(polaris.ErrNotManaged))
 
-			stored, getErr := store.Get(ctx, app.ID, config.Name)
+			stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.Operator).To(Equal("zhangsan"))
 		})
@@ -380,7 +365,7 @@ var _ = Describe("PolarisConfigService", func() {
 			mockey.PatchConvey("patch imported polaris weight factor", GinkgoT(), func() {
 				config := newTestConfig(app.ID, "cfg-weight-factor-imported", nil, nil)
 				config.EnableWeightFactor = true
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 
 				enabled := true
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).To(func(
@@ -408,7 +393,7 @@ var _ = Describe("PolarisConfigService", func() {
 		It("should not touch polaris when patching unrelated fields of an imported config", func() {
 			mockey.PatchConvey("patch imported polaris unrelated field", GinkgoT(), func() {
 				config := newTestConfig(app.ID, "cfg-imported-unrelated", nil, nil)
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateImportedService).To(func(
 					*polaris.PolarisPlatformManager,
@@ -434,7 +419,7 @@ var _ = Describe("PolarisConfigService", func() {
 				config := newTestConfig(app.ID, "cfg-operator-managed", nil, nil)
 				config.DepSvcInstID = bson.NewObjectID()
 				config.Operator = "zhangsan"
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).To(func(
 					_ *polaris.PolarisPlatformManager,
@@ -459,13 +444,10 @@ var _ = Describe("PolarisConfigService", func() {
 			mockey.PatchConvey("operator-only update skips dynamic apply", GinkgoT(), func() {
 				enqueued := 0
 				service = polaris.NewPolarisConfigService(
-					store,
-					polaris.NewPolarisPlatformManager(testutil.NewDB(GinkgoT()), depSvcInstStore, store),
+					db,
+					polaris.NewPolarisPlatformManager(db),
 					envStateManager,
-					envStore,
-					appModelStore,
-					appSpecStore,
-					envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+					envvars.NewUnifiedEnvVarsReader(db, appDepsVarReader, polarisVarReader),
 					func(_ context.Context, _, _, _ string) error {
 						enqueued++
 						return nil
@@ -483,7 +465,7 @@ var _ = Describe("PolarisConfigService", func() {
 				)
 				config.DepSvcInstID = bson.NewObjectID()
 				config.Operator = "zhangsan"
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).Return(nil).Build()
 
@@ -499,7 +481,7 @@ var _ = Describe("PolarisConfigService", func() {
 				config := newTestConfig(app.ID, "cfg-operator-sync-fail", nil, nil)
 				config.DepSvcInstID = bson.NewObjectID()
 				config.Operator = "zhangsan"
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).Return(
 					errors.New("invalid owners"),
@@ -510,7 +492,7 @@ var _ = Describe("PolarisConfigService", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid owners"))
 
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.Operator).To(Equal("zhangsan"))
 			})
@@ -533,7 +515,7 @@ var _ = Describe("PolarisConfigService", func() {
 				}).Build()
 				Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
-				stored, err := store.Get(ctx, app.ID, config.Name)
+				stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.EnableWeightFactor).To(BeFalse())
 				Expect(stored.DepSvcInstID.IsZero()).To(BeTrue())
@@ -561,7 +543,7 @@ var _ = Describe("PolarisConfigService", func() {
 				config.Operator = "owner"
 				Expect(service.Create(ctx, app, config, true)).To(Succeed())
 
-				stored, err := store.Get(ctx, app.ID, config.Name)
+				stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(stored.EnableWeightFactor).To(BeFalse())
 				Expect(stored.DepSvcInstID).To(Equal(serviceInstanceID))
@@ -573,7 +555,7 @@ var _ = Describe("PolarisConfigService", func() {
 			config := newTestConfig(app.ID, "cfg-weight-factor-default", []string{environment.Name}, nil)
 			Expect(service.Create(ctx, app, config, false)).To(Succeed())
 
-			stored, err := store.Get(ctx, app.ID, config.Name)
+			stored, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stored.EnableWeightFactor).To(BeFalse())
 		})
@@ -582,13 +564,10 @@ var _ = Describe("PolarisConfigService", func() {
 			mockey.PatchConvey("weight factor update skips dynamic apply", GinkgoT(), func() {
 				enqueued := 0
 				service = polaris.NewPolarisConfigService(
-					store,
-					polaris.NewPolarisPlatformManager(testutil.NewDB(GinkgoT()), depSvcInstStore, store),
+					db,
+					polaris.NewPolarisPlatformManager(db),
 					envStateManager,
-					envStore,
-					appModelStore,
-					appSpecStore,
-					envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
+					envvars.NewUnifiedEnvVarsReader(db, appDepsVarReader, polarisVarReader),
 					func(_ context.Context, _, _, _ string) error {
 						enqueued++
 						return nil
@@ -603,7 +582,7 @@ var _ = Describe("PolarisConfigService", func() {
 					map[string]polaris.PolarisEnvState{environment.Name: envState(applied)},
 				)
 				config.DepSvcInstID = bson.NewObjectID()
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).Return(nil).Build()
 
 				enabled := true
@@ -632,7 +611,7 @@ var _ = Describe("PolarisConfigService", func() {
 					environment.Name:      true,
 					otherEnvironment.Name: true,
 				}
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).Return(nil).Build()
 
 				disabled := false
@@ -653,7 +632,7 @@ var _ = Describe("PolarisConfigService", func() {
 				config := newTestConfig(app.ID, "cfg-weight-factor-managed-on", []string{environment.Name}, nil)
 				config.DepSvcInstID = bson.NewObjectID()
 				config.Operator = "zhangsan"
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 
 				enabled := true
 				mockey.Mock((*polaris.PolarisPlatformManager).UpdateService).To(func(
@@ -682,7 +661,7 @@ var _ = Describe("PolarisConfigService", func() {
 				config.DepSvcInstID = bson.NewObjectID()
 				config.Operator = "zhangsan"
 				config.EnableWeightFactor = true
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 
 				disabled := false
 				operator := "lisi"
@@ -724,7 +703,7 @@ var _ = Describe("PolarisConfigService", func() {
 			Expect(updated.EnvWeights).To(Equal(map[string]int32{environment.Name: 0}))
 			Expect(updated.GetEnvState(environment.Name).AppliedFields).To(BeNil())
 			Consistently(func(g Gomega) {
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				g.Expect(getErr).NotTo(HaveOccurred())
 				g.Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 			}).WithTimeout(200 * time.Millisecond).Should(Succeed())
@@ -738,7 +717,7 @@ var _ = Describe("PolarisConfigService", func() {
 				nil,
 			)
 			config.EnvWeights = map[string]int32{environment.Name: 35}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
 				ScopeEnvNames: []string{},
@@ -758,7 +737,7 @@ var _ = Describe("PolarisConfigService", func() {
 				},
 			)
 			config.EnvWeights = map[string]int32{environment.Name: 35}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
 				ScopeEnvNames: []string{},
@@ -779,7 +758,7 @@ var _ = Describe("PolarisConfigService", func() {
 				},
 			)
 			config.EnvWeights = map[string]int32{environment.Name: 35}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			removed, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
 				ScopeEnvNames: []string{},
@@ -806,7 +785,7 @@ var _ = Describe("PolarisConfigService", func() {
 				},
 			)
 			config.EnvWeights = map[string]int32{otherEnvironment.Name: 20}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
 				mockPolarisDiscoveryFailure()
@@ -814,7 +793,7 @@ var _ = Describe("PolarisConfigService", func() {
 				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 0, nil)
 				Expect(err).To(MatchError(ContainSubstring("patch env weight")))
 				Expect(updated).To(BeNil())
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.EnvWeights).NotTo(HaveKey(environment.Name))
 				Expect(stored.EnvWeights[otherEnvironment.Name]).To(Equal(int32(20)))
@@ -836,7 +815,7 @@ var _ = Describe("PolarisConfigService", func() {
 				},
 			)
 			config.EnvWeights = map[string]int32{environment.Name: 20}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
 				mockPolarisDiscoveryFailure()
@@ -844,7 +823,7 @@ var _ = Describe("PolarisConfigService", func() {
 				updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 25, nil)
 				Expect(err).To(MatchError(ContainSubstring("patch env weight")))
 				Expect(updated).To(BeNil())
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.EnvWeights[environment.Name]).To(Equal(int32(20)))
 				Expect(stored.GetEnvState(environment.Name).LastError).To(BeEmpty())
@@ -856,7 +835,7 @@ var _ = Describe("PolarisConfigService", func() {
 		It("should persist the switch of an undeployed environment without any cluster call", func() {
 			config := newTestConfig(app.ID, "cfg-dynamic-weight-pending", []string{environment.Name}, nil)
 			config.EnableWeightFactor = true
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 80, lo.ToPtr(true))
 
@@ -872,7 +851,7 @@ var _ = Describe("PolarisConfigService", func() {
 			config := newTestConfig(app.ID, "cfg-dynamic-weight-omitted", []string{environment.Name}, nil)
 			config.EnableWeightFactor = true
 			config.EnvDynamicWeights = map[string]bool{environment.Name: true}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.UpdateEnvWeight(ctx, app, config, environment.Name, 60, nil)
 
@@ -885,7 +864,7 @@ var _ = Describe("PolarisConfigService", func() {
 			config := newTestConfig(app.ID, "cfg-dynamic-weight-drop", []string{environment.Name}, nil)
 			config.EnableWeightFactor = true
 			config.EnvDynamicWeights = map[string]bool{environment.Name: true}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
 				ScopeEnvNames: []string{},
@@ -905,7 +884,7 @@ var _ = Describe("PolarisConfigService", func() {
 			)
 			config.EnableWeightFactor = true
 			config.EnvDynamicWeights = map[string]bool{environment.Name: true}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			removed, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
 				ScopeEnvNames: []string{},
@@ -936,7 +915,7 @@ var _ = Describe("PolarisConfigService", func() {
 			if stored != nil {
 				config.EnvDynamicWeights = map[string]bool{environment.Name: *stored}
 			}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			var patched bool
 			mockey.Mock((*polaris.CRApplier).PatchWeight).To(func(
@@ -984,7 +963,7 @@ var _ = Describe("PolarisConfigService", func() {
 		It("should not pre-create a default switch for an environment joining scope", func() {
 			config := newTestConfig(app.ID, "cfg-dynamic-weight-no-default", []string{environment.Name}, nil)
 			config.EnableWeightFactor = true
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			updated, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
 				ScopeEnvNames: []string{environment.Name, otherEnvironment.Name},
@@ -999,8 +978,8 @@ var _ = Describe("PolarisConfigService", func() {
 	Describe("Immediate register mode", func() {
 		BeforeEach(func() {
 			// 即时下发要读取应用模型来渲染环境变量
-			Expect(appModelStore.CreateAppModel(ctx, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
-			DeferCleanup(func() { _ = appModelStore.DeleteAppModel(ctx, app.ID) })
+			Expect(appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{AppID: app.ID})).To(Succeed())
+			DeferCleanup(func() { _ = appmodel.DeleteAppModel(ctx, db, app.ID) })
 		})
 
 		newImmediateConfig := func(name string, scopeEnvNames []string) *polaris.PolarisConfig {
@@ -1010,14 +989,14 @@ var _ = Describe("PolarisConfigService", func() {
 		}
 
 		It("should not write per-env lastError when reading the app model fails", func() {
-			Expect(appModelStore.DeleteAppModel(ctx, app.ID)).To(Succeed())
+			Expect(appmodel.DeleteAppModel(ctx, db, app.ID)).To(Succeed())
 			config := newImmediateConfig("cfg-immediate-no-model", []string{environment.Name, otherEnvironment.Name})
 
 			err := service.Create(ctx, app, config, false)
 			Expect(err).To(MatchError(polaris.ErrClusterSyncFailed))
 			Expect(err).To(MatchError(ContainSubstring("get app model")))
 
-			stored, getErr := store.Get(ctx, app.ID, config.Name)
+			stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.EnvStates).To(BeEmpty())
 		})
@@ -1033,7 +1012,7 @@ var _ = Describe("PolarisConfigService", func() {
 				Expect(err).To(MatchError(ContainSubstring(environment.Name)))
 				Expect(err).To(MatchError(ContainSubstring(otherEnvironment.Name)))
 
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				for _, envName := range []string{environment.Name, otherEnvironment.Name} {
 					state := stored.GetEnvState(envName)
@@ -1052,7 +1031,7 @@ var _ = Describe("PolarisConfigService", func() {
 				mockPolarisDiscoveryFailure()
 
 				Expect(service.Create(ctx, app, config, false)).To(Succeed())
-				stored, getErr := store.Get(ctx, app.ID, config.Name)
+				stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(stored.EnvStates).To(BeEmpty())
 			})
@@ -1064,7 +1043,7 @@ var _ = Describe("PolarisConfigService", func() {
 			config.EnvStates = map[string]polaris.PolarisEnvState{
 				environment.Name: envState(redeployFields("k1", "t1", 8080)),
 			}
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
 				mockPolarisDiscoveryFailure()
@@ -1082,13 +1061,13 @@ var _ = Describe("PolarisConfigService", func() {
 
 		It("should refuse to delete the config while its cluster resources remain", func() {
 			config := newImmediateConfig("cfg-immediate-delete-blocked", []string{environment.Name})
-			Expect(store.Create(ctx, config)).To(Succeed())
+			Expect(configStore.Create(ctx, config)).To(Succeed())
 
 			mockey.PatchConvey("cluster discovery fails", GinkgoT(), func() {
 				mockPolarisDiscoveryFailure()
 
 				Expect(service.Delete(ctx, app, config)).To(MatchError(polaris.ErrClusterSyncFailed))
-				_, err := store.Get(ctx, app.ID, config.Name)
+				_, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
@@ -1102,7 +1081,7 @@ var _ = Describe("PolarisConfigService", func() {
 				// on_deploy 配置在部署前无需下发，创建不会触碰集群，也就不会失败
 				Expect(service.Create(ctx, app, config, false)).To(Succeed())
 				Consistently(func(g Gomega) {
-					stored, getErr := store.Get(ctx, app.ID, config.Name)
+					stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 					g.Expect(getErr).NotTo(HaveOccurred())
 					g.Expect(stored.EnvStates).NotTo(HaveKey(environment.Name))
 				}).WithTimeout(200 * time.Millisecond).Should(Succeed())
@@ -1127,9 +1106,9 @@ var _ = Describe("PolarisConfigService", func() {
 				config := &polaris.PolarisConfig{
 					AppID: app.ID, Name: "cfg-delete", DepSvcInstID: serviceInstanceID,
 				}
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 				Expect(service.Delete(ctx, app, config)).To(Succeed())
-				_, err := store.Get(ctx, app.ID, config.Name)
+				_, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(err).To(MatchError(polaris.ErrConfigNotFound))
 			})
 		})
@@ -1143,9 +1122,9 @@ var _ = Describe("PolarisConfigService", func() {
 				config := &polaris.PolarisConfig{
 					AppID: app.ID, Name: "cfg-delete-blocked", DepSvcInstID: serviceInstanceID,
 				}
-				Expect(store.Create(ctx, config)).To(Succeed())
+				Expect(configStore.Create(ctx, config)).To(Succeed())
 				Expect(service.Delete(ctx, app, config)).To(MatchError(ContainSubstring("some instances existed")))
-				_, err := store.Get(ctx, app.ID, config.Name)
+				_, err := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})

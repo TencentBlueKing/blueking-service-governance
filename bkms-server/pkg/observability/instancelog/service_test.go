@@ -24,14 +24,16 @@ import (
 	"io"
 	"strings"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
@@ -76,60 +78,45 @@ var _ = Describe("NewLogManager", func() {
 	})
 
 	It("returns deploy record not found errors from the store", func() {
-		mockey.PatchConvey("test GetLatest returns not found error", GinkgoT(), func() {
-			mockey.Mock((*appmodeldeploy.RecordStoreMongo).GetLatest).
-				Return(nil, appmodeldeploy.ErrDeployRecordNotFound).
-				Build()
-
-			_, err := NewLogManager(
-				context.Background(),
-				&appmodeldeploy.RecordStoreMongo{},
-				&bkmsapp.Application{ID: "app-1", Type: bkmsapp.AppTypeTRPC},
-				&envmodel.Environment{
-					Name: "t",
-					Cluster: envmodel.BizCluster{
-						ClusterID: "cluster-1",
-						Namespace: "default",
-					},
+		_, err := NewLogManager(
+			context.Background(),
+			testutil.NewDB(GinkgoT()),
+			&bkmsapp.Application{ID: "app-" + stringx.Random(6), Type: bkmsapp.AppTypeTRPC},
+			&envmodel.Environment{
+				Name: "t",
+				Cluster: envmodel.BizCluster{
+					ClusterID: "cluster-1",
+					Namespace: "default",
 				},
-				"",
-				"pod-1",
-			)
+			},
+			"",
+			"pod-1",
+		)
 
-			Expect(err).To(HaveOccurred())
-			Expect(stderrors.Is(err, appmodeldeploy.ErrDeployRecordNotFound)).To(BeTrue())
-			Expect(err.Error()).To(ContainSubstring("get latest deploy record for app app-1"))
-		})
+		Expect(err).To(HaveOccurred())
+		Expect(stderrors.Is(err, appmodeldeploy.ErrDeployRecordNotFound)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("get latest deploy record for app app-"))
 	})
 
 	It("rejects appmodel deploy records without label selectors", func() {
-		mockey.PatchConvey("test GetLatest returns record with empty label selector", GinkgoT(), func() {
-			mockey.Mock((*appmodeldeploy.RecordStoreMongo).GetLatest).
-				Return(&appmodeldeploy.Record{
-					ID:            bson.NewObjectID(),
-					AppID:         "app-1",
-					EnvName:       "test",
-					Namespace:     "record-ns",
-					LabelSelector: map[string]string{},
-				}, nil).Build()
-
-			_, err := NewLogManager(
-				context.Background(),
-				&appmodeldeploy.RecordStoreMongo{},
-				&bkmsapp.Application{ID: "app-1", Type: bkmsapp.AppTypeTRPC},
-				&envmodel.Environment{
-					Name: "test",
-					Cluster: envmodel.BizCluster{
-						ClusterID: "cluster-1",
-						Namespace: "default",
-					},
-				},
-				"",
-				"pod-1",
-			)
-
-			Expect(err).To(MatchError("deploy record label selector is empty"))
+		ctx := context.Background()
+		db := testutil.NewDB(GinkgoT())
+		app := &bkmsapp.Application{ID: "app-" + stringx.Random(6), Type: bkmsapp.AppTypeTRPC}
+		env := &envmodel.Environment{
+			Name: "test",
+			Cluster: envmodel.BizCluster{
+				ClusterID: "cluster-1",
+				Namespace: "default",
+			},
+		}
+		dbfactory.AppModelDeployRecord(ctx, db, app, env, &dbfactory.AppModelDeployRecordOpts{
+			Namespace:     "record-ns",
+			LabelSelector: map[string]string{},
 		})
+
+		_, err := NewLogManager(ctx, db, app, env, "", "pod-1")
+
+		Expect(err).To(MatchError("deploy record label selector is empty"))
 	})
 })
 

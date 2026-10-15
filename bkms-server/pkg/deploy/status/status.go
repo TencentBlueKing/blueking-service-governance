@@ -26,6 +26,7 @@ import (
 	"github.com/hashicorp/go-set/v3"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -71,29 +72,15 @@ type LatestDeployStatus struct {
 // - 查询某个环境下所有已部署的应用的部署状态
 // - 查询某个工作空间内指定应用在各环境上的部署状态
 type DeployStatusService struct {
-	AppStore                   app.ApplicationStore
-	EnvStore                   envmodel.EnvironmentStore
-	BuildAutoDeployRecordStore autodeploy.RecordStore
-	AppModelDeployRecordStore  appmodel.RecordStore
-	HelmDeployRecordStore      helm.RecordStore
-	TrafficManager             trafficmanager.TrafficManager
+	DB             *mongo.Database
+	TrafficManager trafficmanager.TrafficManager
 }
 
 // NewDeployStatusService 构造部署状态服务
-func NewDeployStatusService(
-	appStore app.ApplicationStore,
-	envStore envmodel.EnvironmentStore,
-	buildAutoDeployRecordStore autodeploy.RecordStore,
-	appModelDeployRecordStore appmodel.RecordStore,
-	helmDeployRecordStore helm.RecordStore,
-) *DeployStatusService {
+func NewDeployStatusService(db *mongo.Database) *DeployStatusService {
 	return &DeployStatusService{
-		AppStore:                   appStore,
-		EnvStore:                   envStore,
-		BuildAutoDeployRecordStore: buildAutoDeployRecordStore,
-		AppModelDeployRecordStore:  appModelDeployRecordStore,
-		HelmDeployRecordStore:      helmDeployRecordStore,
-		TrafficManager:             trafficmanager.New(),
+		DB:             db,
+		TrafficManager: trafficmanager.New(),
 	}
 }
 
@@ -102,7 +89,7 @@ func (s *DeployStatusService) ListForEnvironment(
 	ctx context.Context,
 	environment *envmodel.Environment,
 ) ([]AppDeployStatus, error) {
-	apps, err := s.AppStore.GetAppsByIDs(ctx, environment.AppIDs)
+	apps, err := app.GetAppsByIDs(ctx, s.DB, environment.AppIDs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "list for environment %s", environment.Name)
 	}
@@ -121,7 +108,7 @@ func (s *DeployStatusService) ListForAppsInWorkspace(
 	appMap := lo.SliceToMap(apps, func(app *app.Application) (string, *app.Application) { return app.ID, app })
 	appIDs := lo.Keys(appMap)
 
-	envs, err := s.EnvStore.ListBatchAppEnvs(ctx, workspaceID, appIDs)
+	envs, err := envmodel.ListBatchAppEnvs(ctx, s.DB, workspaceID, appIDs)
 	if err != nil {
 		return nil, errors.Wrap(err, "list batch app environments")
 	}
@@ -428,11 +415,11 @@ func (s *DeployStatusService) prefetchLatestStatuses(
 
 	for laneName, appIDs := range appModelIDsByLane {
 		// AppModel 应用可能存在一键构建部署记录；优先根据记录关联关系和创建时间选择真正最新的状态。
-		buildByApp, err := s.BuildAutoDeployRecordStore.ListLatestByApps(ctx, appIDs, laneName)
+		buildByApp, err := autodeploy.ListLatestByApps(ctx, s.DB, appIDs, laneName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "list latest build auto deploy records for lane %s", laneName)
 		}
-		deployByApp, err := s.AppModelDeployRecordStore.ListLatestByApps(ctx, appIDs, laneName)
+		deployByApp, err := appmodel.ListLatestByApps(ctx, s.DB, appIDs, laneName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "list latest appmodel deploy records for lane %s", laneName)
 		}
@@ -445,7 +432,7 @@ func (s *DeployStatusService) prefetchLatestStatuses(
 
 	for laneName, appIDs := range helmIDsByLane {
 		// Helm 应用没有一键构建部署记录，直接读取 Helm 部署记录即可。
-		recordsByApp, err := s.HelmDeployRecordStore.ListLatestByApps(ctx, appIDs, laneName)
+		recordsByApp, err := helm.ListLatestByApps(ctx, s.DB, appIDs, laneName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "list latest helm deploy records for lane %s", laneName)
 		}
@@ -557,12 +544,12 @@ func (s *DeployStatusService) ListLatestByAppLane(
 	}
 
 	// 一次聚合拉齐该泳道下各环境最新的一键构建部署记录与 AppModel 部署记录。
-	buildByApp, err := s.BuildAutoDeployRecordStore.ListLatestByApps(ctx, []string{appID}, laneName)
+	buildByApp, err := autodeploy.ListLatestByApps(ctx, s.DB, []string{appID}, laneName)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "list latest build auto deploy records")
 	}
 	buildByEnv := buildByApp[appID]
-	deployByApp, err := s.AppModelDeployRecordStore.ListLatestByApps(ctx, []string{appID}, laneName)
+	deployByApp, err := appmodel.ListLatestByApps(ctx, s.DB, []string{appID}, laneName)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "list latest appmodel deploy records")
 	}
@@ -576,7 +563,7 @@ func (s *DeployStatusService) getLatestBuildAutoDeployRecord(
 	ctx context.Context,
 	appID, envName, laneName string,
 ) (*autodeploy.Record, error) {
-	record, err := s.BuildAutoDeployRecordStore.GetLatest(ctx, appID, envName, laneName)
+	record, err := autodeploy.GetLatest(ctx, s.DB, appID, envName, laneName)
 	if err != nil {
 		if errors.Is(err, autodeploy.ErrRecordNotFound) {
 			return nil, nil
@@ -590,7 +577,7 @@ func (s *DeployStatusService) getLatestAppModelDeployRecord(
 	ctx context.Context,
 	appID, envName, laneName string,
 ) (*appmodel.Record, error) {
-	record, err := s.AppModelDeployRecordStore.GetLatest(ctx, appID, envName, laneName)
+	record, err := appmodel.GetLatest(ctx, s.DB, appID, envName, laneName)
 	if err != nil {
 		if errors.Is(err, appmodel.ErrDeployRecordNotFound) {
 			return nil, nil
@@ -604,7 +591,7 @@ func (s *DeployStatusService) getLatestHelmDeployRecord(
 	ctx context.Context,
 	appID, envName, laneName string,
 ) (*helm.Record, error) {
-	record, err := s.HelmDeployRecordStore.GetLatest(ctx, appID, envName, laneName)
+	record, err := helm.GetLatest(ctx, s.DB, appID, envName, laneName)
 	if err != nil {
 		if errors.Is(err, helm.ErrLatestDeployRecordNotFound) {
 			return nil, nil

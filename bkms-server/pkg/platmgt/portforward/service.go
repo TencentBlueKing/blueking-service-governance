@@ -45,12 +45,12 @@ var (
 // Service 提供 port-forward 白名单业务操作。
 type Service struct {
 	whitelist *Store
-	envStore  envmodel.EnvironmentStore
+	envStore  *envmodel.EnvironmentStore
 }
 
 // NewService 创建白名单 Service 实例。
-func NewService(db *mongo.Database, envStore envmodel.EnvironmentStore) *Service {
-	return &Service{whitelist: store.Of(db, Meta), envStore: envStore}
+func NewService(db *mongo.Database) *Service {
+	return &Service{whitelist: store.Of(db, Meta), envStore: store.Of(db, envmodel.EnvMeta)}
 }
 
 // Add 将环境 ID 添加到白名单中，添加前校验环境存在性和非 production 类型；已在白名单中的环境 ID 会被跳过。
@@ -113,7 +113,7 @@ func (s *Service) validateEnvIDs(ctx context.Context, envIDs []string) error {
 			return errors.Wrapf(err, "invalid environment ID %q", envID)
 		}
 
-		env, err := s.envStore.Get(ctx, objID)
+		env, err := s.envStore.GetByID(ctx, objID)
 		if err != nil {
 			if errors.Is(err, envmodel.ErrEnvNotFound) {
 				return errors.Wrapf(ErrEnvNotFound, "environment %q", envID)

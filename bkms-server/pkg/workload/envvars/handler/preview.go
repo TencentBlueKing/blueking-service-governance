@@ -34,8 +34,7 @@ import (
 
 func (h *Handler) newImportPreviewService() *previewsvc.ImportPreviewService {
 	return previewsvc.NewPreviewService(
-		h.registry.ScopedEnvVarStore,
-		h.registry.AppModelStore,
+		h.registry.DB,
 	)
 }
 

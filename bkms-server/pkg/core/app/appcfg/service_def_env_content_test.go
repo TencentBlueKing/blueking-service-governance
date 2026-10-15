@@ -36,10 +36,6 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 		f = setupDefServiceFixture()
 	})
 
-	AfterEach(func() {
-		f.DiApp.RequireStop()
-	})
-
 	Context("UpdateEnvContent", func() {
 		It("should create framework env overlay for independent config", func() {
 			content := "base: default\nkeep: true\n"

@@ -21,38 +21,38 @@ package model
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const serviceInstanceCollName = "depservice_instances"
 
 const configValueKey = "value"
 
-// ErrInstanceNameExists 同一 workspace / serviceName 下实例名已存在
-var ErrInstanceNameExists = errors.New("service instance name already exists")
+var (
+	// ErrInstanceNameExists 同一 workspace / serviceName 下实例名已存在
+	ErrInstanceNameExists = errors.New("service instance name already exists")
+	// ErrInstanceNotFound 服务实例不存在，AsNotFoundError 同样将其视为未找到
+	ErrInstanceNotFound = errors.New("service instance not found")
+)
 
 // use a single instance of Validate, it caches struct info
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
 func init() {
-	validate.RegisterStructValidation(validateServiceInstance, ServiceInstance{})
-	validate.RegisterStructValidation(validateSvcInstUpdateData, SvcInstUpdateData{})
+	validate.RegisterStructValidation(validateServiceInstanceScope, ServiceInstance{})
 }
 
-func validateServiceInstance(sl validator.StructLevel) {
+func validateServiceInstanceScope(sl validator.StructLevel) {
 	inst, ok := sl.Current().Interface().(ServiceInstance)
 	if !ok {
 		return
@@ -62,14 +62,64 @@ func validateServiceInstance(sl validator.StructLevel) {
 	}
 }
 
-func validateSvcInstUpdateData(sl validator.StructLevel) {
-	data, ok := sl.Current().Interface().(SvcInstUpdateData)
-	if !ok {
-		return
+// ServiceInstanceStore 依赖服务实例存储
+type ServiceInstanceStore = store.GenericStore[ServiceInstance]
+
+// ServiceInstanceMeta 依赖服务实例的存储元数据。
+//
+// MongoDB 中直接存储 map[string]any 会被解码为 bson.D，读回后不便使用，因此由 Encode / Decode 钩子转换：
+// - config 在库中保存为 {"value": "<config 的 json 串>"}
+// - credentials 在库中保存为 {"value": "<credentials 的 json 串加密后的结果>"}
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：workspaceID + serviceName + name
+var ServiceInstanceMeta = store.Meta[ServiceInstance]{
+	Collection: serviceInstanceCollName,
+	NotFound:   ErrInstanceNotFound,
+	Duplicate:  ErrInstanceNameExists,
+	BeforeSave: []func(*ServiceInstance) error{validateServiceInstance},
+	Encode:     []func(*ServiceInstance) error{encodeInstanceSecrets},
+	Decode:     []func(*ServiceInstance) error{decodeInstanceSecrets},
+}
+
+func validateServiceInstance(inst *ServiceInstance) error {
+	return errors.Wrap(validate.Struct(inst), "service instance validation failed")
+}
+
+// encodeInstanceSecrets 也会在只填写了部分字段的对象上执行（Update），此时未写入的字段的编码结果会被丢弃
+func encodeInstanceSecrets(inst *ServiceInstance) error {
+	cfg, err := json.Marshal(inst.Config)
+	if err != nil {
+		return errors.Wrap(err, "marshal config")
 	}
-	if err := validateScope(data.ScopeType, data.ScopeValue); err != nil {
-		sl.ReportError(data.ScopeValue, "ScopeValue", "scopeValue", "invalid_scope", err.Error())
+	creds, err := json.Marshal(inst.Credentials)
+	if err != nil {
+		return errors.Wrap(err, "marshal credentials")
 	}
+	encryptedCreds, err := crypto.AESEncrypt(config.G.Encrypt.Secret, string(creds))
+	if err != nil {
+		return errors.Wrap(err, "encrypt credentials")
+	}
+	inst.Config = map[string]any{configValueKey: string(cfg)}
+	inst.Credentials = map[string]any{configValueKey: encryptedCreds}
+	return nil
+}
+
+func decodeInstanceSecrets(inst *ServiceInstance) error {
+	cfg := make(map[string]any)
+	if err := json.Unmarshal([]byte(cast.ToString(inst.Config[configValueKey])), &cfg); err != nil {
+		return errors.Wrap(err, "unmarshal config")
+	}
+	creds, err := crypto.AESDecrypt(config.G.Encrypt.Secret, cast.ToString(inst.Credentials[configValueKey]))
+	if err != nil {
+		return errors.Wrap(err, "decrypt credentials")
+	}
+	credsMap := make(map[string]any)
+	if err = json.Unmarshal([]byte(creds), &credsMap); err != nil {
+		return errors.Wrap(err, "unmarshal credentials")
+	}
+	inst.Config, inst.Credentials = cfg, credsMap
+	return nil
 }
 
 // SvcInstQueryOptions is the query options for service instance
@@ -91,490 +141,107 @@ type SvcInstQueryOptions struct {
 	ScopeType ScopeType
 }
 
-// SvcInstUpdateData is the update data for service instance
-type SvcInstUpdateData struct {
-	ScopeType   ScopeType      `bson:"scopeType"`
-	ScopeValue  string         `bson:"scopeValue"`
-	Config      map[string]any `bson:"config"`
-	Credentials map[string]any `bson:"credentials"`
-	Operator    string         `bson:"operator"`
-}
-
-// ServiceInstanceStore defines persistence operations for service instances.
-type ServiceInstanceStore interface {
-	// Create creates a new service instance
-	//
-	// - ctx: The context object for cancellation and timeout
-	// - inst: The service instance to create
-	//
-	// Return the id of the created service instance and an error if the operation fails.
-	Create(ctx context.Context, inst *ServiceInstance) (bson.ObjectID, error)
-	// Get gets a service instance by id
-	//
-	// - ctx: The context object for cancellation and timeout
-	// - id: The id of the service instance
-	//
-	// Return the service instance and an error if the operation fails.
-	Get(ctx context.Context, id bson.ObjectID) (*ServiceInstance, error)
-	// ListByIDs 按 ID 批量查询服务实例；找不到的 ID 不会出现在结果中。
-	ListByIDs(ctx context.Context, ids []bson.ObjectID) ([]*ServiceInstance, error)
-	// List lists service instances
-	//
-	// - ctx: The context object for cancellation and timeout
-	// - opts: The query options
-	//
-	// Return the list of service instances and an error if any.
-	List(ctx context.Context, opts *SvcInstQueryOptions) ([]*ServiceInstance, error)
-	// Update updates a service instance
-	//
-	// - ctx: The context object for cancellation and timeout
-	// - id: The id of the service instance
-	// - updateData: The update data for the service instance
-	//
-	// Return an error if the operation fails.
-	Update(ctx context.Context, id bson.ObjectID, updateData *SvcInstUpdateData) error
-	// UpdateConfig 整量替换服务实例的 Config。
-	//
-	// - ctx: The context object for cancellation and timeout
-	// - id: The id of the service instance
-	// - config: The config of the service instance to update
-	//
-	// Return an error if the operation fails.
-	UpdateConfig(ctx context.Context, id bson.ObjectID, config map[string]any) error
-	// PatchConfig 将 patch 合并进现有 Config（同名 key 覆盖），再写回。
-	// Config 在库中以 JSON blob 存储，因此实现为读改写，而非 Mongo 点路径原子更新。
-	PatchConfig(ctx context.Context, id bson.ObjectID, patch map[string]any) error
-	// UpdateCredentials 整量替换服务实例的 Credentials。
-	//
-	// - ctx: The context object for cancellation and timeout
-	// - id: The id of the service instance
-	// - credentials: The credentials of the service instance to update
-	//
-	// Return an error if the operation fails.
-	UpdateCredentials(ctx context.Context, id bson.ObjectID, credentials map[string]any) error
-	// PatchCredentials 将 patch 合并进现有 Credentials（同名 key 覆盖），再写回。
-	// Credentials 加密后整段存储，因此实现为读改写。
-	PatchCredentials(ctx context.Context, id bson.ObjectID, patch map[string]any) error
-	// UpdateStatus updates the status of a service instance
-	//
-	// - ctx: The context object for cancellation and timeout
-	// - id: The id of the service instance
-	// - status: The status of the service instance to update
-	// - message: The message of the service instance to update
-	//
-	// Return an error if the operation fails.
-	UpdateStatus(ctx context.Context, id bson.ObjectID, status InstanceStatus, message string) error
-	// Delete deletes a service instance
-	//
-	// - ctx: The context object for cancellation and timeout
-	// - id: The id of the service instance to delete
-	//
-	// Return an error if the operation fails.
-	Delete(ctx context.Context, id bson.ObjectID) error
-	// DeleteAll deletes all service instances while preserving the collection and its indexes.
-	// Attention: only used in unit test
-	DeleteAll(ctx context.Context) error
-}
-
-var _ ServiceInstanceStore = &ServiceInstanceStoreMongo{}
-
-// ServiceInstanceStoreMongo implements ServiceInstanceStore interface with mongodb
-type ServiceInstanceStoreMongo struct {
-	collection *mongo.Collection
-}
-
-// NewServiceInstanceStoreMongo creates a new ServiceInstanceStoreMongo
-func NewServiceInstanceStoreMongo(client *mongo.Client, dbName string) (ServiceInstanceStore, error) {
-	coll := client.Database(dbName).Collection(serviceInstanceCollName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：workspaceID + serviceName + name
-	return &ServiceInstanceStoreMongo{collection: coll}, nil
-}
-
-// Create creates a new service instance
-//
-// - ctx: The context object for cancellation and timeout
-// - inst: The service instance to create
-//
-// Return the id of the created service instance and an error if the operation fails.
-func (s *ServiceInstanceStoreMongo) Create(ctx context.Context, inst *ServiceInstance) (bson.ObjectID, error) {
-	if err := validate.Struct(inst); err != nil {
-		return bson.NilObjectID, errors.Wrap(err, "service instance validation failed")
-	}
-
-	if inst.CreatedAt.IsZero() {
-		inst.CreatedAt = time.Now()
-	}
-	inst.UpdatedAt = inst.CreatedAt
-
-	dbValue, err := serviceInstancePrepDBValue(inst)
-	if err != nil {
-		return bson.NilObjectID, errors.Wrap(err, "prep db value")
-	}
-
-	result, err := s.collection.InsertOne(ctx, dbValue)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return bson.NilObjectID, ErrInstanceNameExists
-		}
-		return bson.NilObjectID, err
-	}
-	return result.InsertedID.(bson.ObjectID), nil
-}
-
-// Get gets a service instance by id
-//
-// - ctx: The context object for cancellation and timeout
-// - id: The id of the service instance
-//
-// Return the service instance and an error if the operation fails.
-func (s *ServiceInstanceStoreMongo) Get(ctx context.Context, id bson.ObjectID) (*ServiceInstance, error) {
-	instance := new(ServiceInstance)
-
-	err := s.collection.FindOne(ctx, bson.M{"_id": id}).Decode(instance)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, NewNotFoundError(fmt.Sprintf("service instance(id:%s)", id))
-		}
-		return nil, err
-	}
-
-	dbValue, err := serviceInstanceFromDBValue(instance)
-	if err != nil {
-		return nil, errors.Wrap(err, "from db value")
-	}
-
-	return dbValue, nil
-}
-
-// ListByIDs 按 ID 批量查询服务实例
-func (s *ServiceInstanceStoreMongo) ListByIDs(
-	ctx context.Context,
-	ids []bson.ObjectID,
-) ([]*ServiceInstance, error) {
-	ids = lo.Uniq(lo.Filter(ids, func(id bson.ObjectID, _ int) bool {
-		return !id.IsZero()
-	}))
-	if len(ids) == 0 {
-		return []*ServiceInstance{}, nil
-	}
-
-	cursor, err := s.collection.Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx) // nolint
-
-	insts := make([]*ServiceInstance, 0)
-	if err = cursor.All(ctx, &insts); err != nil {
-		return nil, err
-	}
-
-	result := make([]*ServiceInstance, 0, len(insts))
-	for _, inst := range insts {
-		dbValue, err := serviceInstanceFromDBValue(inst)
-		if err != nil {
-			return nil, errors.Wrap(err, "from db value")
-		}
-		result = append(result, dbValue)
-	}
-	return result, nil
-}
-
-// List lists service instances
-//
-// - ctx: The context object for cancellation and timeout
-// - opts: The query options
-//
-// Return the list of service instances and an error if any.
-func (s *ServiceInstanceStoreMongo) List(
-	ctx context.Context,
-	opts *SvcInstQueryOptions,
-) ([]*ServiceInstance, error) {
+// Cond 将查询选项转换为查询条件，为空的选项不参与过滤
+func (o *SvcInstQueryOptions) Cond() store.Opt {
 	filter := bson.M{}
-
-	if opts == nil {
-		opts = &SvcInstQueryOptions{}
+	if o == nil {
+		return store.Filter(filter)
 	}
-
-	if opts.WorkspaceID != "" {
-		filter["workspaceID"] = opts.WorkspaceID
+	if o.WorkspaceID != "" {
+		filter["workspaceID"] = o.WorkspaceID
 	}
-	if opts.ServiceName != "" {
-		filter["serviceName"] = opts.ServiceName
+	if o.ServiceName != "" {
+		filter["serviceName"] = o.ServiceName
 	}
-	if opts.Status != "" {
-		filter["status"] = opts.Status
+	if o.Status != "" {
+		filter["status"] = o.Status
 	}
-	if opts.ScopeType != "" {
-		filter["scopeType"] = opts.ScopeType
+	if o.ScopeType != "" {
+		filter["scopeType"] = o.ScopeType
 	}
 	// 按环境维度过滤可见实例: workspace 全局可见、envType 命中、env 命中, 三者任一即可
-	if opts.EnvName != "" || opts.EnvType != "" {
+	if o.EnvName != "" || o.EnvType != "" {
 		scopeOr := []bson.M{
 			{"scopeType": ScopeTypeWorkspace},
 		}
-		if opts.EnvType != "" {
+		if o.EnvType != "" {
 			scopeOr = append(scopeOr, bson.M{
 				"scopeType":  ScopeTypeEnvType,
-				"scopeValue": opts.EnvType,
+				"scopeValue": o.EnvType,
 			})
 		}
-		if opts.EnvName != "" {
+		if o.EnvName != "" {
 			scopeOr = append(scopeOr, bson.M{
 				"scopeType":  ScopeTypeEnv,
-				"scopeValue": opts.EnvName,
+				"scopeValue": o.EnvName,
 			})
 		}
 		filter["$or"] = scopeOr
 	}
-
-	sort := bson.D{{Key: "updatedAt", Value: -1}}
-	findOptions := options.Find().SetSort(sort)
-
-	cursor, err := s.collection.Find(ctx, filter, findOptions)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx) // nolint
-
-	insts := make([]*ServiceInstance, 0)
-	if err = cursor.All(ctx, &insts); err != nil {
-		return nil, err
-	}
-
-	result := make([]*ServiceInstance, 0, len(insts))
-	for _, inst := range insts {
-		dbValue, err := serviceInstanceFromDBValue(inst)
-		if err != nil {
-			return nil, errors.Wrap(err, "from db value")
-		}
-		result = append(result, dbValue)
-	}
-
-	return result, nil
+	return store.Filter(filter)
 }
 
-// Update updates a service instance
-//
-// - ctx: The context object for cancellation and timeout
-// - id: The id of the service instance
-// - updateData: The update data for the service instance
-//
-// Return an error if the operation fails.
-func (s *ServiceInstanceStoreMongo) Update(
-	ctx context.Context,
-	id bson.ObjectID,
-	updateData *SvcInstUpdateData,
-) error {
-	if err := validate.Struct(updateData); err != nil {
-		return errors.Wrap(err, "service instance update data validation failed")
-	}
-
-	inst := &ServiceInstance{Config: updateData.Config, Credentials: updateData.Credentials}
-	dbValue, err := serviceInstancePrepDBValue(inst)
-	if err != nil {
-		return errors.Wrap(err, "prep db value")
-	}
-
-	filter := bson.M{"_id": id}
-	update := bson.M{
-		"$set": bson.M{
-			"scopeType":   updateData.ScopeType,
-			"scopeValue":  updateData.ScopeValue,
-			"config":      dbValue.Config,
-			"credentials": dbValue.Credentials,
-			"operator":    updateData.Operator,
-			"updatedAt":   time.Now(),
-		},
-	}
-	opts := options.UpdateOne().SetUpsert(false)
-
-	ret, err := s.collection.UpdateOne(ctx, filter, update, opts)
-	if ret != nil && ret.MatchedCount == 0 {
-		return NewNotFoundError(fmt.Sprintf("service instance(id:%s)", id))
-	}
-	return err
+// InstancesByIDs 按 ID 批量匹配服务实例，找不到的 ID 不会出现在结果中
+func InstancesByIDs(ids []bson.ObjectID) store.Opt {
+	// $in 不接受 null，lo.Uniq 总是返回非 nil 的切片
+	return store.ByID(bson.M{"$in": lo.Uniq(ids)})
 }
 
-// UpdateConfig 整量替换服务实例的 Config。
-func (s *ServiceInstanceStoreMongo) UpdateConfig(
-	ctx context.Context,
-	id bson.ObjectID,
-	config map[string]any,
-) error {
-	inst := &ServiceInstance{Config: config}
-	dbValue, err := serviceInstancePrepDBValue(inst)
-	if err != nil {
-		return errors.Wrap(err, "prep db value")
-	}
-
-	filter := bson.M{"_id": id}
-	update := bson.M{"$set": bson.M{"config": dbValue.Config, "updatedAt": time.Now()}}
-	opts := options.UpdateOne().SetUpsert(false)
-
-	ret, err := s.collection.UpdateOne(ctx, filter, update, opts)
-	if ret != nil && ret.MatchedCount == 0 {
-		return NewNotFoundError(fmt.Sprintf("service instance(id:%s)", id))
-	}
-	return err
+// RecentlyUpdatedFirst 按更新时间倒序排列服务实例
+func RecentlyUpdatedFirst() store.Opt {
+	return store.Combine(store.Desc("updatedAt"), store.Desc("_id"))
 }
 
-// PatchConfig 将 patch 合并进现有 Config 后写回。
-func (s *ServiceInstanceStoreMongo) PatchConfig(
+// UpdateInstanceStatus 更新服务实例的状态与状态详情
+func UpdateInstanceStatus(
 	ctx context.Context,
-	id bson.ObjectID,
-	patch map[string]any,
-) error {
-	if len(patch) == 0 {
-		return nil
-	}
-	inst, err := s.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-	return s.UpdateConfig(ctx, id, lo.Assign(map[string]any{}, inst.Config, patch))
-}
-
-// UpdateCredentials 整量替换服务实例的 Credentials。
-func (s *ServiceInstanceStoreMongo) UpdateCredentials(
-	ctx context.Context,
-	id bson.ObjectID,
-	credentials map[string]any,
-) error {
-	inst := &ServiceInstance{Credentials: credentials}
-	dbValue, err := serviceInstancePrepDBValue(inst)
-	if err != nil {
-		return errors.Wrap(err, "prep db value")
-	}
-
-	filter := bson.M{"_id": id}
-	update := bson.M{"$set": bson.M{"credentials": dbValue.Credentials, "updatedAt": time.Now()}}
-	opts := options.UpdateOne().SetUpsert(false)
-
-	ret, err := s.collection.UpdateOne(ctx, filter, update, opts)
-	if ret != nil && ret.MatchedCount == 0 {
-		return NewNotFoundError(fmt.Sprintf("service instance(id:%s)", id))
-	}
-	return err
-}
-
-// PatchCredentials 将 patch 合并进现有 Credentials 后写回。
-func (s *ServiceInstanceStoreMongo) PatchCredentials(
-	ctx context.Context,
-	id bson.ObjectID,
-	patch map[string]any,
-) error {
-	if len(patch) == 0 {
-		return nil
-	}
-	inst, err := s.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-	return s.UpdateCredentials(ctx, id, lo.Assign(map[string]any{}, inst.Credentials, patch))
-}
-
-// UpdateStatus updates the status of a service instance
-//
-// - ctx: The context object for cancellation and timeout
-// - id: The id of the service instance
-// - status: The status of the service instance to update
-// - message: The message of the service instance to update
-//
-// Return an error if the operation fails.
-func (s *ServiceInstanceStoreMongo) UpdateStatus(
-	ctx context.Context,
+	db *mongo.Database,
 	id bson.ObjectID,
 	status InstanceStatus,
 	message string,
 ) error {
-	filter := bson.M{"_id": id}
-	update := bson.M{"$set": bson.M{"status": status, "message": message, "updatedAt": time.Now()}}
-	opts := options.UpdateOne().SetUpsert(false)
-
-	ret, err := s.collection.UpdateOne(ctx, filter, update, opts)
-	if ret != nil && ret.MatchedCount == 0 {
-		return NewNotFoundError(fmt.Sprintf("service instance(id:%s)", id))
-	}
-	return err
+	return store.Of(db, ServiceInstanceMeta).Update(
+		ctx,
+		map[string]any{"status": status, "message": message},
+		store.ByID(id),
+	)
 }
 
-// Delete deletes a service instance
-//
-// - ctx: The context object for cancellation and timeout
-// - id: The id of the service instance to delete
-//
-// Return an error if the operation fails.
-func (s *ServiceInstanceStoreMongo) Delete(ctx context.Context, id bson.ObjectID) error {
-	_, err := s.collection.DeleteOne(ctx, bson.M{"_id": id})
-	return err
+// PatchInstanceConfig 将 patch 合并进现有 Config（同名 key 覆盖），再写回。
+// Config 在库中以 JSON blob 存储，因此实现为读改写，而非 Mongo 点路径原子更新。
+func PatchInstanceConfig(ctx context.Context, db *mongo.Database, id bson.ObjectID, patch map[string]any) error {
+	return patchInstanceField(ctx, db, id, "config", patch, func(inst *ServiceInstance) map[string]any {
+		return inst.Config
+	})
 }
 
-// DeleteAll deletes all service instances while preserving the collection and its indexes.
-// Attention: only used in unit test
-func (s *ServiceInstanceStoreMongo) DeleteAll(ctx context.Context) error {
-	_, err := s.collection.DeleteMany(ctx, bson.M{})
-	return err
+// PatchInstanceCredentials 将 patch 合并进现有 Credentials（同名 key 覆盖），再写回。
+// Credentials 加密后整段存储，因此实现为读改写。
+func PatchInstanceCredentials(ctx context.Context, db *mongo.Database, id bson.ObjectID, patch map[string]any) error {
+	return patchInstanceField(ctx, db, id, "credentials", patch, func(inst *ServiceInstance) map[string]any {
+		return inst.Credentials
+	})
 }
 
-// serviceInstancePrepDBValue prepares the service instance to save in db
-// Storing a map[string]any directly in MongoDB converts it to bson.D,
-// unmarshalling this back can be inconvenient, so we serialize it to a json string first.
-// - marshals the config to map {"value": "config json string"} to save in db
-// - marshals and encrypts the credentials to map {"value": "credentials json string"} to save in db
-func serviceInstancePrepDBValue(instance *ServiceInstance) (*ServiceInstance, error) {
-	dbValue := new(ServiceInstance)
-	if err := copier.CopyWithOption(dbValue, instance, copier.Option{IgnoreEmpty: true, DeepCopy: true}); err != nil {
-		return nil, err
+func patchInstanceField(
+	ctx context.Context,
+	db *mongo.Database,
+	id bson.ObjectID,
+	field string,
+	patch map[string]any,
+	current func(*ServiceInstance) map[string]any,
+) error {
+	if len(patch) == 0 {
+		return nil
 	}
-
-	if c, err := json.Marshal(instance.Config); err != nil {
-		return nil, err
-	} else {
-		dbValue.Config = map[string]any{configValueKey: string(c)}
-	}
-
-	creds, err := json.Marshal(instance.Credentials)
+	insts := store.Of(db, ServiceInstanceMeta)
+	inst, err := insts.Get(ctx, store.ByID(id))
 	if err != nil {
-		return nil, err
+		return errors.Wrapf(err, "get service instance %s", id.Hex())
 	}
-
-	encryptCreds, err := crypto.AESEncrypt(config.G.Encrypt.Secret, string(creds))
-	if err != nil {
-		return nil, err
-	}
-	dbValue.Credentials = map[string]any{configValueKey: encryptCreds}
-
-	return dbValue, nil
-}
-
-// serviceInstanceFromDBValue converts the service instance from db service instance value. it is the reverse of
-// serviceInstancePrepDBValue.
-// - unmarshals the config from map {"value": "config json string"} to map[string]any
-// - decrypts and unmarshals the credentials from map {"value": "credentials json string"} to map[string]any
-func serviceInstanceFromDBValue(dbValue *ServiceInstance) (*ServiceInstance, error) {
-	instance := new(ServiceInstance)
-	if err := copier.CopyWithOption(instance, dbValue, copier.Option{IgnoreEmpty: true, DeepCopy: true}); err != nil {
-		return nil, err
-	}
-	c := make(map[string]any)
-
-	if err := json.Unmarshal([]byte(cast.ToString(instance.Config[configValueKey])), &c); err != nil {
-		return nil, err
-	} else {
-		instance.Config = c
-	}
-
-	creds, err := crypto.AESDecrypt(config.G.Encrypt.Secret, cast.ToString(instance.Credentials[configValueKey]))
-	if err != nil {
-		return nil, err
-	}
-	credsMap := make(map[string]any)
-	if err = json.Unmarshal([]byte(creds), &credsMap); err != nil {
-		return nil, err
-	}
-	instance.Credentials = credsMap
-
-	return instance, nil
+	merged := lo.Assign(map[string]any{}, current(inst), patch)
+	return errors.Wrapf(
+		insts.Update(ctx, map[string]any{field: merged}, store.ByID(id)),
+		"update %s of service instance %s", field, id.Hex(),
+	)
 }

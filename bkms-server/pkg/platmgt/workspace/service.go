@@ -34,20 +34,14 @@ import (
 // Service provides platform workspace query capabilities.
 type Service struct {
 	workspaceStore *bkmsworkspace.WorkspaceStore
-	appStore       bkmsapp.ApplicationStore
-	envStore       envmodel.EnvironmentStore
+	db             *mongo.Database
 }
 
 // NewService creates a platform workspace service.
-func NewService(
-	db *mongo.Database,
-	appStore bkmsapp.ApplicationStore,
-	envStore envmodel.EnvironmentStore,
-) *Service {
+func NewService(db *mongo.Database) *Service {
 	return &Service{
 		workspaceStore: store.Of(db, bkmsworkspace.Meta),
-		appStore:       appStore,
-		envStore:       envStore,
+		db:             db,
 	}
 }
 
@@ -67,11 +61,11 @@ func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*Workspa
 	workspaceIDs := lo.Map(workspaces, func(ws bkmsworkspace.Workspace, _ int) string {
 		return ws.ID
 	})
-	appCounts, err := s.appStore.CountByWorkspaceIDs(ctx, workspaceIDs)
+	appCounts, err := bkmsapp.CountByWorkspaceIDs(ctx, s.db, workspaceIDs)
 	if err != nil {
 		return nil, errors.Wrap(err, "count applications by workspace IDs")
 	}
-	envCounts, err := s.envStore.CountByWorkspaceIDs(ctx, workspaceIDs)
+	envCounts, err := envmodel.CountByWorkspaceIDs(ctx, s.db, workspaceIDs)
 	if err != nil {
 		return nil, errors.Wrap(err, "count environments by workspace IDs")
 	}

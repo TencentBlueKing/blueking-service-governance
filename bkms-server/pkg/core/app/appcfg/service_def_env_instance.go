@@ -34,7 +34,7 @@ func (s *AppCfgFileDefService) FindEnvInstance(
 	defID bson.ObjectID,
 	envName string,
 ) (*AppConfigFile, error) {
-	acf, err := s.FileStore.GetByDefIDAndEnv(ctx, defID, envName)
+	acf, err := s.FileStore.Get(ctx, FileByDefEnv(defID, envName))
 	if err != nil {
 		if errors.Is(err, ErrAppConfigFileNotFound) {
 			return nil, nil
@@ -157,7 +157,7 @@ func (s *AppCfgFileDefService) applyMountedEnvNamesChange(
 	// 旧值为 nil：原先全环境生效，没有白名单可做差集。
 	// 只能扫该 def 下已有文件，删掉不在 newEnvNames 里的环境实例（默认文件保留）。
 	if oldEnvNames == nil {
-		files, err := s.FileStore.ListByDefID(ctx, def.ID)
+		files, err := s.FileStore.List(ctx, FilesByDef(def.ID))
 		if err != nil {
 			return errors.Wrap(err, "listing env instances for mountedEnvNames cleanup")
 		}
@@ -241,14 +241,14 @@ func (s *AppCfgFileDefService) deleteEnvInstanceByName(
 	appID string,
 	envName string,
 ) (*AppConfigFile, error) {
-	acf, err := s.FileStore.GetByDefIDAndEnv(ctx, defID, envName)
+	acf, err := s.FileStore.Get(ctx, FileByDefEnv(defID, envName))
 	if err != nil {
 		if errors.Is(err, ErrAppConfigFileNotFound) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	if _, err = s.FileStore.DeleteByID(ctx, appID, acf.ID); err != nil {
+	if err = DeleteFile(ctx, s.FileStore, appID, acf.ID); err != nil {
 		return nil, errors.Wrap(err, "delete env instance")
 	}
 	if _, err = s.VersionStore.DeleteMany(ctx, VersionsByFile(acf.ID)); err != nil {

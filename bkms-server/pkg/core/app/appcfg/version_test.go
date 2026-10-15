@@ -39,8 +39,8 @@ import (
 
 var _ = Describe("AppConfigFileVersion", func() {
 	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var fileStore appcfg.AppConfigFileStore
+	var appStore *bkmsapp.ApplicationStore
+	var fileStore *appcfg.AppConfigFileStore
 	var versions *appcfg.AppConfigFileVersionStore
 	var base *appcfg.BaseAppCfgFileService
 	var ctx context.Context
@@ -67,24 +67,25 @@ var _ = Describe("AppConfigFileVersion", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		Expect(testutil.CleanupCollection(appcfg.AppConfigFileVersionMeta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(appcfg.AppConfigFileVersionMeta)).To(Succeed())
 		Expect(testutil.CleanupCollection("app_config_files")).To(Succeed())
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &fileStore),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
 		db := testutil.NewDB(GinkgoT())
 		versions = store.Of(db, appcfg.AppConfigFileVersionMeta)
-		base = appcfg.NewBaseAppCfgFileService(db, fileStore)
+		base = appcfg.NewBaseAppCfgFileService(db)
+		fileStore = base.FileStore
 
 		app := dbfactory.Application(ctx, appStore)
 		appID = app.ID
 		fileID = bson.NewObjectID()
-		_, err := fileStore.Add(ctx, appcfg.AppConfigFile{
+		err := fileStore.Create(ctx, &appcfg.AppConfigFile{
 			ID:             fileID,
 			AppID:          appID,
 			EnvName:        appcfg.EnvNameDefault,

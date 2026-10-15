@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/dbm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // DisableArgs 禁用 Redis 任务参数
@@ -52,7 +53,7 @@ func disableHandler(ctx context.Context, args DisableArgs) error {
 }
 
 func disableSubmit(ctx context.Context, objID bson.ObjectID, args DisableArgs) error {
-	inst, err := instStore.Get(ctx, objID)
+	inst, err := insts.Get(ctx, store.ByID(objID))
 	if err != nil {
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 	}
@@ -77,7 +78,7 @@ func disableSubmit(ctx context.Context, objID bson.ObjectID, args DisableArgs) e
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, err)
 	}
 
-	if err = instStore.PatchConfig(ctx, objID, map[string]any{configKeyDisableTicketID: ticketID}); err != nil {
+	if err = model.PatchInstanceConfig(ctx, db, objID, map[string]any{configKeyDisableTicketID: ticketID}); err != nil {
 		persistErr := errors.Wrapf(err, "persist disableTicketID=%d after DBM submit", ticketID)
 		return failWithStopErr(ctx, args.InstanceID, model.DeleteFailedStatus, persistErr)
 	}

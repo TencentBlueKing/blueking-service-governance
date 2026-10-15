@@ -22,7 +22,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -36,13 +35,15 @@ import (
 // 选项按用途分为不同的类型，每个操作只接受其中一部分。传入不支持的选项会返回错误而不是被静默忽略，
 // 否则可能违背调用方预期，例如 DeleteMany(..., Limit(10)) 实际会删除全部匹配文档：
 //
-//	类型         创建方式                                          支持的操作
-//	CondOpt     Where / Filter / ByID / ContainsIgnoreCase / All  全部操作
-//	SortOpt     Asc / Desc                                       Get、List、ListPage、GetAndDelete
-//	LimitOpt    Limit                                            List
-//	ProjectOpt  OmitFields                                       Get、List、ListPage
-//	PageOpt     WithoutTotal                                     ListPage
-//	UpdateOpt   UpdateSelected / UpdateOmit / UpdateNonZero      Update、Upsert
+//	类型            创建方式                                          支持的操作
+//	CondOpt        Where / Filter / ByID / ContainsIgnoreCase / All  全部操作
+//	SortOpt        Asc / Desc                                       Get、List、ListPage、ListLatestBy、GetAndDelete
+//	LimitOpt       Limit                                            List
+//	ProjectOpt     OmitFields                                       Get、List、ListPage、ListLatestBy
+//	PageOpt        WithoutTotal                                     ListPage
+//	UpdateOpt      UpdateSelected / UpdateOmit                      Update、UpdateMany、Upsert、UpsertMany
+//	TimestampOpt   KeepUpdatedAt                                    Update、UpdateMany、Modify、ModifyMany
+//	ArrayFilterOpt ArrayFilters                                     Modify、ModifyMany
 //
 // 只有 CondOpt 影响匹配哪些文档，其余选项只决定结果的顺序、数量、读出哪些字段或写入哪些字段。
 //
@@ -73,20 +74,27 @@ const (
 	kindUpdate
 	kindProject
 	kindPage
+	kindTimestamp
+	kindArrayFilter
 )
 
 // 各操作支持的选项类别
 const (
 	getOpts          = kindCond | kindSort | kindProject
 	listOpts         = kindCond | kindSort | kindLimit | kindProject
+	latestOpts       = kindCond | kindSort | kindProject
 	pageOpts         = kindCond | kindSort | kindProject | kindPage
 	getAndDeleteOpts = kindCond | kindSort
 	condOpts         = kindCond
-	updateOpts       = kindCond | kindUpdate
+	updateOpts       = kindCond | kindUpdate | kindTimestamp
+	upsertOpts       = kindCond | kindUpdate
+	modifyOpts       = kindCond | kindTimestamp | kindArrayFilter
 )
 
 // kindNames 按位序排列，与上面的 kindXxx 一一对应
-var kindNames = []string{"condition", "sort", "limit", "update fields", "omitted fields", "page"}
+var kindNames = []string{
+	"condition", "sort", "limit", "update fields", "omitted fields", "page", "keep updatedAt", "array filters",
+}
 
 func (k optKind) String() string {
 	var names []string
@@ -160,7 +168,7 @@ func All() CondOpt {
 // SortOpt：排序
 // -----------------------------------------------------------------------------
 
-// SortOpt 排序条件，由 Asc / Desc 创建，仅 Get / List / GetAndDelete 支持；多个排序条件按传入顺序生效
+// SortOpt 排序条件，由 Asc / Desc 创建，仅 Get / List / ListPage / ListLatestBy / GetAndDelete 支持；多个排序条件按传入顺序生效
 type SortOpt struct {
 	elem bson.E
 }
@@ -243,19 +251,17 @@ func WithoutTotal() PageOpt {
 // UpdateOpt：Update / Upsert 写入的字段
 // -----------------------------------------------------------------------------
 
-// UpdateOpt 指定 Update / Upsert 传入对象（*T）时写入哪些字段，由 UpdateSelected / UpdateOmit / UpdateNonZero
-// 创建，仅 Update / Upsert 支持；传入 map 时字段已由 key 确定，不接受 UpdateOpt。字段集合按以下顺序计算：
+// UpdateOpt 指定 Update / Upsert 传入对象（*T）时写入哪些字段，由 UpdateSelected / UpdateOmit
+// 创建，仅 Update / UpdateMany / Upsert / UpsertMany 支持；传入 map 时字段已由 key 确定，不接受 UpdateOpt。字段集合按以下顺序计算：
 //
 //  1. 候选字段：UpdateSelected 指定的字段；未指定或指定 "*" 时为模型的全部顶层字段
 //  2. 去掉 UpdateOmit 指定的字段
-//  3. 传入了 UpdateNonZero 时，只保留对象中值非零的字段
 //
 // 多个 UpdateOpt 会合并。_id、createdAt 不会被更新，updatedAt 总会被刷新，详见 Update
 type UpdateOpt struct {
 	selecting bool
 	selected  []string
 	omitted   []string
-	nonZero   bool
 }
 
 func (UpdateOpt) kind() optKind { return kindUpdate }
@@ -267,7 +273,6 @@ func (o UpdateOpt) apply(q *query) {
 	q.fields.selecting = q.fields.selecting || o.selecting
 	q.fields.selected = append(q.fields.selected, o.selected...)
 	q.fields.omitted = append(q.fields.omitted, o.omitted...)
-	q.fields.nonZero = q.fields.nonZero || o.nonZero
 }
 
 // UpdateSelected 指定写入的字段，"*" 表示模型的全部顶层字段（不能与其它字段同时指定）。
@@ -281,10 +286,44 @@ func UpdateOmit(fields ...string) UpdateOpt {
 	return UpdateOpt{omitted: fields}
 }
 
-// UpdateNonZero 只写入对象中值非零（reflect.Value.IsZero 为 false）的字段，因此无法用它把字段改为
-// false、0 或空串；空切片、空 map 不是零值，会被写入。嵌套结构体按整体判断，非零时整体写入
-func UpdateNonZero() UpdateOpt {
-	return UpdateOpt{nonZero: true}
+// -----------------------------------------------------------------------------
+// TimestampOpt：写操作对 updatedAt 的维护
+// -----------------------------------------------------------------------------
+
+// TimestampOpt 调整写操作对 updatedAt 的维护，由 KeepUpdatedAt 创建，仅 Update / UpdateMany / Modify / ModifyMany 支持
+type TimestampOpt struct{}
+
+func (TimestampOpt) kind() optKind { return kindTimestamp }
+
+func (TimestampOpt) apply(q *query) { q.keepUpdatedAt = true }
+
+// KeepUpdatedAt 让写操作不刷新 updatedAt。用于 updatedAt 承载了业务含义的模型，例如作为乐观锁的版本号时，
+// 只改动文档局部的写入不应推进版本，否则会让并发的整体更新误判为冲突。
+// 显式写入 updatedAt 字段（如 Update 的 map 中包含 updatedAt）不受影响
+func KeepUpdatedAt() TimestampOpt {
+	return TimestampOpt{}
+}
+
+// -----------------------------------------------------------------------------
+// ArrayFilterOpt：数组元素过滤条件
+// -----------------------------------------------------------------------------
+
+// ArrayFilterOpt 数组元素的过滤条件，由 ArrayFilters 创建，仅 Modify / ModifyMany 支持；多个 ArrayFilterOpt 会合并
+type ArrayFilterOpt struct {
+	filters []any
+}
+
+func (ArrayFilterOpt) kind() optKind { return kindArrayFilter }
+
+func (o ArrayFilterOpt) apply(q *query) { q.arrayFilters = append(q.arrayFilters, o.filters...) }
+
+// ArrayFilters 为 Modify 中 "$[id]" 形式的数组位置路径指定过滤条件，原样传给 MongoDB（字段名不做转换）。例如：
+//
+//	// 修改名为 name 的组件的类型
+//	models.Modify(ctx, bson.M{"$set": bson.M{"components.$[c].type": typ}}, ByApp(appID),
+//		store.ArrayFilters(bson.M{"c.name": name}))
+func ArrayFilters(filters ...bson.M) ArrayFilterOpt {
+	return ArrayFilterOpt{filters: lo.Map(filters, func(f bson.M, _ int) any { return f })}
 }
 
 // -----------------------------------------------------------------------------
@@ -319,126 +358,4 @@ func (c combinedOpt) apply(q *query) {
 			opt.apply(q)
 		}
 	}
-}
-
-// =============================================================================
-// Query 对象与解析
-// =============================================================================
-
-// query 汇总从 Opt 中解析出的操作参数
-type query struct {
-	conds    bson.D
-	matchAll bool
-	sort     bson.D
-	limit    int64
-	// fields 仅 Update / Upsert 使用，nil 表示没有传入任何 UpdateOpt
-	fields *fieldSelection
-	// omitted 读操作不读出的字段，parseOpts 之后为 bson 路径
-	omitted []string
-	// withoutTotal 仅 ListPage 使用
-	withoutTotal bool
-}
-
-var (
-	// errNoFilter 写操作必须带过滤条件，避免漏传条件时误改、误删整个集合
-	errNoFilter = errors.New("filter is required for write operations, use store.All() to match all documents")
-	// errUnsupportedOpt 操作收到了它不支持的选项
-	errUnsupportedOpt = errors.New("option not supported by this operation")
-)
-
-// filter 生成过滤条件。同一字段出现多次时（如分别指定上下限）改用 $and，避免后者覆盖前者
-func (q *query) filter() bson.D {
-	if len(q.conds) == 0 {
-		return bson.D{}
-	}
-	keys := lo.Map(q.conds, func(e bson.E, _ int) string { return e.Key })
-	if len(lo.Uniq(keys)) == len(keys) {
-		return q.conds
-	}
-	return bson.D{{Key: "$and", Value: lo.Map(q.conds, func(e bson.E, _ int) bson.D { return bson.D{e} })}}
-}
-
-func (q *query) hasKey(key string) bool {
-	return documentHasKey(q.conds, key)
-}
-
-// projection 生成排除 omitted 字段的投影，没有要排除的字段时返回 nil（读出全部字段）
-func (q *query) projection() bson.D {
-	if len(q.omitted) == 0 {
-		return nil
-	}
-	return lo.Map(q.omitted, func(f string, _ int) bson.E { return bson.E{Key: f, Value: 0} })
-}
-
-// parseOpts 依次应用 opts，遇到 accepted 之外类别的选项时返回错误；
-// 过滤条件与排序中的字段名会被转换为 bson 路径
-func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*query, error) {
-	q := &query{}
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		if k := opt.kind() &^ accepted; k != 0 {
-			return nil, errors.Wrapf(errUnsupportedOpt, "%s %s: %s", op, s.coll.Name(), k)
-		}
-		opt.apply(q)
-	}
-	resolve := func(path string) (string, error) { return resolveKey(s.schema.typ, path) }
-	var err error
-	if q.conds, err = mapFilterKeys(q.conds, resolve); err != nil {
-		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
-	}
-	for i := range q.sort {
-		if q.sort[i].Key, err = resolve(q.sort[i].Key); err != nil {
-			return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
-		}
-	}
-	if q.omitted, err = s.resolveOmitted(q.omitted); err != nil {
-		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
-	}
-	return q, nil
-}
-
-// resolveOmitted 将 OmitFields 的字段转换为 bson 路径：字段必须存在于模型中，重复的字段只保留一个，
-// 互为父子的字段会被 MongoDB 判定为路径冲突，提前拒绝
-func (s *GenericStore[T]) resolveOmitted(fields []string) ([]string, error) {
-	if len(fields) == 0 {
-		return nil, nil
-	}
-	paths := make([]fieldPath, 0, len(fields))
-	for _, f := range fields {
-		p, err := resolvePath(s.schema.typ, f)
-		if err != nil {
-			return nil, err
-		}
-		if !p.known {
-			return nil, errors.Wrapf(errUnknownField, "omitted field %q", f)
-		}
-		paths = append(paths, p)
-	}
-	paths, err := dedupePaths(paths)
-	if err != nil {
-		return nil, err
-	}
-	return lo.Map(paths, func(p fieldPath, _ int) string { return p.String() }), nil
-}
-
-// requireFilter 要求写操作必须带过滤条件（或显式 All）
-func (s *GenericStore[T]) requireFilter(op string, q *query) error {
-	if len(q.conds) == 0 && !q.matchAll {
-		return errors.Wrapf(errNoFilter, "%s %s", op, s.coll.Name())
-	}
-	return nil
-}
-
-// writeQuery 用于写操作：在 parseOpts 的基础上要求必须带过滤条件（或显式 All）
-func (s *GenericStore[T]) writeQuery(op string, opts []Opt, accepted optKind) (*query, error) {
-	q, err := s.parseOpts(op, opts, accepted)
-	if err != nil {
-		return nil, err
-	}
-	if err = s.requireFilter(op, q); err != nil {
-		return nil, err
-	}
-	return q, nil
 }

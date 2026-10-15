@@ -104,10 +104,9 @@ func NewWebServerCmd() *cobra.Command {
 			}
 			workload.InitPlugin(
 				appcfg.NewMountableFileProvider(
-					reg.AppConfigFileStore,
 					reg.DB,
 				),
-				reg.PolarisConfigStore,
+				reg.DB,
 			)
 
 			// 加载流水线模板

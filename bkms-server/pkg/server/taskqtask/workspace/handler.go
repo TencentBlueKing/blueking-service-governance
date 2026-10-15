@@ -37,7 +37,6 @@ import (
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
 // maxWaitDuration 等待 BKM Project 就绪的最长时间, 自 workspace 创建起算
@@ -93,7 +92,6 @@ func activateWorkspace(
 	ws *workspace.Workspace,
 	bkmProject *bkmonitor.Space,
 ) error {
-	mongoCli, dbName := database.Client(), database.Name()
 	permMgr := perm.NewManager()
 
 	// 给空间角色加上权限
@@ -125,22 +123,11 @@ func activateWorkspace(
 	}
 
 	// 确保空间下的所有环境都有对应 ApmApp, 并添加 APM 相关环境变量
-	envStore, err := envmodel.NewEnvironmentStoreMongo(mongoCli, dbName)
-	if err != nil {
-		return errors.Wrapf(err, "create env store")
-	}
-	scopedEnvVarStore, err := envvars.NewScopedEnvVarStoreMongo(mongoCli, dbName)
-	if err != nil {
-		return errors.Wrapf(err, "create scoped env var store")
-	}
-	apmStore, err := bkmmodel.NewApmInstConfigStoreMongo(mongoCli, dbName)
-	if err != nil {
-		return errors.Wrapf(err, "create apm store")
-	}
-	userGroupService := bkmmodel.NewUserGroupService(envStore)
-	apmService := bkmmodel.NewApmService(apmStore, scopedEnvVarStore)
+	db := database.DB()
+	userGroupService := bkmmodel.NewUserGroupService(db)
+	apmService := bkmmodel.NewApmService(db)
 
-	envs, err := envStore.ListStdEnvs(ctx, ws.ID)
+	envs, err := store.Of(db, envmodel.EnvMeta).List(ctx, envmodel.StdEnvsIn(ws.ID), envmodel.NewestFirst())
 	if err != nil {
 		return errors.Wrapf(err, "list envs for workspace %s", ws.ID)
 	}

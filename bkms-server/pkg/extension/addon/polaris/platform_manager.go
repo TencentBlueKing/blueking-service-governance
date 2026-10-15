@@ -74,22 +74,12 @@ type UpdateServiceParams struct {
 
 // PolarisPlatformManager 北极星平台服务管理器，封装创建和删除能力
 type PolarisPlatformManager struct {
-	db                 *mongo.Database
-	instStore          depsvcmodel.ServiceInstanceStore
-	polarisConfigStore PolarisConfigStore
+	db *mongo.Database
 }
 
 // NewPolarisPlatformManager 创建北极星平台管理器。
-func NewPolarisPlatformManager(
-	db *mongo.Database,
-	instStore depsvcmodel.ServiceInstanceStore,
-	polarisConfigStore PolarisConfigStore,
-) *PolarisPlatformManager {
-	return &PolarisPlatformManager{
-		db:                 db,
-		instStore:          instStore,
-		polarisConfigStore: polarisConfigStore,
-	}
+func NewPolarisPlatformManager(db *mongo.Database) *PolarisPlatformManager {
+	return &PolarisPlatformManager{db: db}
 }
 
 // CreateService 由平台创建北极星服务
@@ -103,7 +93,7 @@ func (m *PolarisPlatformManager) CreateService(
 	}
 
 	// 按需创建 ServiceManager
-	svcMgr := depservice.New(m.db, m.instStore, nil)
+	svcMgr := depservice.New(m.db)
 
 	var metadata map[string]string
 	if params.EnableWeightFactor {
@@ -166,7 +156,7 @@ func (m *PolarisPlatformManager) DeleteService(
 	}
 
 	// 按需创建 ServiceManager
-	svcMgr := depservice.New(m.db, m.instStore, nil)
+	svcMgr := depservice.New(m.db)
 
 	if err := svcMgr.DeleteServiceInstance(ctx, params.ServiceInstanceID); err != nil {
 		return errors.Wrap(err, "delete polaris service instance")
@@ -181,7 +171,7 @@ func (m *PolarisPlatformManager) UpdateService(
 	config *PolarisConfig,
 	params *UpdateServiceParams,
 ) error {
-	svcMgr := depservice.New(m.db, m.instStore, nil)
+	svcMgr := depservice.New(m.db)
 	if err := svcMgr.UpdateServiceInstance(ctx, config.DepSvcInstID, toPolarisUpdateParams(params)); err != nil {
 		return errors.Wrap(err, "update polaris service")
 	}
@@ -257,7 +247,7 @@ func (m *PolarisPlatformManager) ListPolarisServiceInstances(
 	ctx context.Context,
 	appID, envName string,
 ) ([]*PolarisServiceInstances, error) {
-	activeConfigs, err := m.polarisConfigStore.ListByEnv(ctx, appID, envName)
+	activeConfigs, err := ListByEnv(ctx, m.db, appID, envName)
 	if err != nil {
 		return nil, errors.Wrap(err, "list polaris configs")
 	}

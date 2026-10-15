@@ -34,6 +34,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
@@ -231,7 +233,7 @@ func (h *Handler) ListAppHelmCharts(c *gin.Context) {
 		queryInput.PageSize,
 	)
 
-	envTypeMap, err := h.registry.EnvStore.GetEnvTypeMap(ctx, app.WorkspaceID)
+	envTypeMap, err := envmodel.GetEnvTypeMap(ctx, h.registry.DB, app.WorkspaceID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list environments"))
 		return
@@ -481,7 +483,7 @@ func (h *Handler) buildHelmChartDeployedEnvsMap(
 	appID string,
 	envTypeMap map[string]string,
 ) (map[string][]*serializer.DeployedEnvInfo, error) {
-	pairs, err := h.registry.HelmDeployRecordStore.ListChartVersionDeployedEnvs(ctx, appID)
+	pairs, err := helmdeploy.ListChartVersionDeployedEnvs(ctx, h.registry.DB, appID)
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list chart version deploy envs")
 	}

@@ -45,6 +45,10 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
+func (h *Handler) addonDefs() *clusteraddon.ClusterAddonDefStore {
+	return store.Of(h.registry.DB, clusteraddon.ClusterAddonDefMeta)
+}
+
 // ListClusterAddons 查询可安装的集群插件列表。
 //
 //	@ID			ListClusterAddons
@@ -81,7 +85,7 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 		return
 	}
 
-	addonDefs, err := clusteraddon.ListDefs(ctx, store.Of(h.registry.DB, clusteraddon.ClusterAddonDefMeta))
+	addonDefs, err := clusteraddon.ListDefs(ctx, h.addonDefs())
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list cluster addon defs"))
 		return
@@ -146,7 +150,7 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 		return
 	}
 
-	addonDef, err := store.Of(h.registry.DB, clusteraddon.ClusterAddonDefMeta).Get(
+	addonDef, err := h.addonDefs().Get(
 		ctx, clusteraddon.ByName(uriInput.AddonName),
 	)
 	if err != nil {
@@ -236,7 +240,7 @@ func (h *Handler) DeleteClusterAddon(c *gin.Context) {
 		return
 	}
 
-	addonDef, err := store.Of(h.registry.DB, clusteraddon.ClusterAddonDefMeta).Get(
+	addonDef, err := h.addonDefs().Get(
 		ctx, clusteraddon.ByName(uriInput.AddonName),
 	)
 	if err != nil {

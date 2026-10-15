@@ -213,7 +213,7 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 
 // deleteEnvInstances 删除指定 def 下所有非默认的环境实例及其版本记录。
 func (s *AppCfgFileDefService) deleteEnvInstances(ctx context.Context, defID bson.ObjectID) error {
-	files, err := s.FileStore.ListByDefID(ctx, defID)
+	files, err := s.FileStore.List(ctx, FilesByDef(defID))
 	if err != nil {
 		return errors.Wrap(err, "listing env instances for cleanup")
 	}
@@ -221,7 +221,7 @@ func (s *AppCfgFileDefService) deleteEnvInstances(ctx context.Context, defID bso
 		if f.EnvName == EnvNameDefault {
 			continue
 		}
-		if _, err = s.FileStore.DeleteByID(ctx, f.AppID, f.ID); err != nil {
+		if err = DeleteFile(ctx, s.FileStore, f.AppID, f.ID); err != nil {
 			return errors.Wrapf(err, "delete env instance %s", f.ID.Hex())
 		}
 		if _, err = s.VersionStore.DeleteMany(ctx, VersionsByFile(f.ID)); err != nil {

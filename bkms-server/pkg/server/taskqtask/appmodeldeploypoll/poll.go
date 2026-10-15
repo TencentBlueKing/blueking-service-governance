@@ -25,6 +25,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -35,15 +36,14 @@ import (
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
-// handle asynq 入口：store 未初始化则 ErrStopRetry
-// auto deploy store 允许为 nil，普通部署 save 时跳过同步
+// handle asynq 入口：数据库未初始化则 ErrStopRetry
 func handle(ctx context.Context, args Args) error {
 	reg := storereg.G()
-	if reg == nil || reg.AppModelDeployRecordStore == nil {
+	if reg == nil || reg.DB == nil {
 		log.Errorf(ctx, "appmodel deploy poll stores not initialized, stop task: %s", args)
 		return errors.Wrap(taskq.ErrStopRetry, "appmodel deploy poll stores not initialized")
 	}
-	return NewPoller(reg.AppModelDeployRecordStore, reg.BuildAutoDeployRecordStore).Handle(ctx, args)
+	return NewPoller(reg.DB).Handle(ctx, args)
 }
 
 // onExhausted tick 重试耗尽后兜底标 StatusPollingBroken，避免记录永久停在 deploying
@@ -53,12 +53,12 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 	log.Errorf(ctx, "appmodel deploy poll %s exhausted, try mark pollingBroken: %v", args, lastErr)
 
 	reg := storereg.G()
-	if reg == nil || reg.AppModelDeployRecordStore == nil {
+	if reg == nil || reg.DB == nil {
 		log.Errorf(ctx, "appmodel deploy poll stores not initialized, skip mark pollingBroken: %s", args)
 		return
 	}
-	p := NewPoller(reg.AppModelDeployRecordStore, reg.BuildAutoDeployRecordStore)
-	record, err := p.recordStore.Get(ctx, args.AppID, args.DeployID)
+	p := NewPoller(reg.DB)
+	record, err := appmodeldeploy.GetRecord(ctx, p.db, args.AppID, args.DeployID)
 	if err != nil {
 		log.Errorf(ctx, "get deploy record %s failed, skip mark pollingBroken: %v", args, err)
 		return
@@ -81,13 +81,12 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 
 // Poller 执行一次 AppModel 部署状态轮询 tick
 type Poller struct {
-	recordStore     appmodeldeploy.RecordStore
-	autoDeployStore autodeploy.RecordStore
+	db *mongo.Database
 }
 
-// NewPoller 注入部署轮询所需 store，供 asynq handler 与单测共用
-func NewPoller(recordStore appmodeldeploy.RecordStore, autoDeployStore autodeploy.RecordStore) *Poller {
-	return &Poller{recordStore: recordStore, autoDeployStore: autoDeployStore}
+// NewPoller 注入部署轮询所需的数据库，供 asynq handler 与单测共用
+func NewPoller(db *mongo.Database) *Poller {
+	return &Poller{db: db}
 }
 
 // Handle 执行一次部署状态轮询 tick
@@ -95,12 +94,12 @@ func NewPoller(recordStore appmodeldeploy.RecordStore, autoDeployStore autodeplo
 // asynq MaxRetry 只约束本 tick 意外失败；轮询窗口与连续查状态失败分别由 pollingTimeout、FailureRetryRemain 截断
 // 记录不存在 wrap ErrStopRetry，瞬时错误交回 asynq 重试
 func (p *Poller) Handle(ctx context.Context, args Args) error {
-	// store / 记录缺失无法自行恢复，停掉 asynq 重试
-	if p.recordStore == nil {
+	// 数据库 / 记录缺失无法自行恢复，停掉 asynq 重试
+	if p.db == nil {
 		return errors.Wrap(taskq.ErrStopRetry, "appmodel deploy poll stores not initialized")
 	}
 
-	record, err := p.recordStore.Get(ctx, args.AppID, args.DeployID)
+	record, err := appmodeldeploy.GetRecord(ctx, p.db, args.AppID, args.DeployID)
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
 			return errors.Wrapf(taskq.ErrStopRetry, "get deploy record: %v", err)
@@ -194,7 +193,7 @@ func (p *Poller) onFetchFailed(
 // markCanceledIfSuperseded 同环境出现更新部署时把当前记录标取消
 // 查最新记录失败只打日志，不影响本 tick 状态推进
 func (p *Poller) markCanceledIfSuperseded(ctx context.Context, record *appmodeldeploy.Record, args Args) {
-	latest, err := p.recordStore.GetLatest(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
+	latest, err := appmodeldeploy.GetLatest(ctx, p.db, args.AppID, args.EnvName, args.TrafficLaneName)
 	if err != nil {
 		log.Errorf(ctx, "failed to get latest deploy record: %v", err)
 		return
@@ -249,7 +248,7 @@ func (p *Poller) finishIfStable(ctx context.Context, record *appmodeldeploy.Reco
 	return p.onStable(ctx, record, args)
 }
 
-// save 落部署记录，有 auto deploy store 时同步其状态
+// save 落部署记录，并同步关联的构建自动部署记录状态
 // 库中已卸载则改回内存 status 并返回，不写库；随后 finishIfStable 按卸载收尾
 // 部署记录写失败才返回 error；auto deploy 同步失败只打日志
 func (p *Poller) save(ctx context.Context, record *appmodeldeploy.Record, args Args) error {
@@ -257,7 +256,7 @@ func (p *Poller) save(ctx context.Context, record *appmodeldeploy.Record, args A
 	defer cancel()
 
 	fromStatus := appmodeldeploy.Status("unknown")
-	dbRecord, err := p.recordStore.Get(saveCtx, args.AppID, args.DeployID)
+	dbRecord, err := appmodeldeploy.GetRecord(saveCtx, p.db, args.AppID, args.DeployID)
 	if err != nil {
 		log.Errorf(saveCtx, "failed to get appmodel deploy record: %v", err)
 	} else if dbRecord.Status.IsUninstall() {
@@ -275,14 +274,10 @@ func (p *Poller) save(ctx context.Context, record *appmodeldeploy.Record, args A
 		saveCtx, "appmodel deploy %s status changed from %s to %s, message: %s",
 		args, fromStatus, record.Status, record.Message,
 	)
-	if err = p.recordStore.Update(saveCtx, record); err != nil {
+	if err = appmodeldeploy.UpdateRecord(saveCtx, p.db, record); err != nil {
 		return err
 	}
-	if p.autoDeployStore == nil {
-		log.Warnf(saveCtx, "deploy %s auto deploy store is nil, skip sync", args)
-		return nil
-	}
-	operator, err := autodeploy.NewOperator(p.autoDeployStore)
+	operator, err := autodeploy.NewOperator(p.db)
 	if err != nil {
 		log.Errorf(saveCtx, "failed to init build auto deploy operator: %v", err)
 		return nil

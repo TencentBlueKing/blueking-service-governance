@@ -89,22 +89,17 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 		diApp      *fxtest.App
 		db         *mongo.Database
 		strategies *Store
-		envStore   envmodel.EnvironmentStore
-		appStore   bkmsapp.ApplicationStore
+		envStore   *envmodel.EnvironmentStore
+		appStore   *bkmsapp.ApplicationStore
 		snapshots  *topology.ResourceSnapshotStore
 		svc        *Service
 		client     *captureAlertStrategyClient
 	)
 
 	buildService := func() *Service {
-		return newServiceWithClientFactory(
-			db,
-			envStore,
-			appStore,
-			func(_ string) (bkmapi.MonitorClient, error) {
-				return client, nil
-			},
-		)
+		return newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+			return client, nil
+		})
 	}
 
 	buildWorkspace := func(workspaceID string) *workspace.Workspace {
@@ -127,9 +122,8 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			AppIDs:      appIDs,
 			Cluster:     cluster,
 		}
-		envID, err := envStore.Create(ctx, env)
-		Expect(err).NotTo(HaveOccurred())
-		created, err := envStore.Get(ctx, envID)
+		Expect(envStore.Create(ctx, env)).To(Succeed())
+		created, err := envStore.GetByID(ctx, env.ID)
 		Expect(err).NotTo(HaveOccurred())
 		return created
 	}
@@ -160,20 +154,18 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 		ctx = context.Background()
 		client = &captureAlertStrategyClient{StubClient: bkmapi.NewStub("test-user")}
 
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 		Expect(testutil.CleanupCollection("environments")).To(Succeed())
 		Expect(testutil.CleanupCollection("applications")).To(Succeed())
-		Expect(testutil.CleanupCollection(topology.ResourceSnapshotMeta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(topology.ResourceSnapshotMeta)).To(Succeed())
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
 			FxModule,
 			database.PrivateFxModule,
-			fx.Provide(
-				envmodel.NewEnvironmentStoreMongo,
-				fx.Annotate(bkmsapp.NewApplicationStoreMongo, fx.As(new(bkmsapp.ApplicationStore))),
-			),
-			fx.Populate(&envStore, &appStore),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
 		db = testutil.NewDB(GinkgoT())
@@ -433,14 +425,9 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 				envmodel.BizCluster{ClusterID: "BCS-K8S-100018", Namespace: "ieg-bkms-pd-stage"},
 			)
 			recoverClient := &recreateOnMissingRemoteClient{StubClient: bkmapi.NewStub("test-user")}
-			recoverSvc := newServiceWithClientFactory(
-				db,
-				envStore,
-				appStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return recoverClient, nil
-				},
-			)
+			recoverSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return recoverClient, nil
+			})
 			strategyID := createStrategy(&AlertStrategy{
 				WorkspaceID:   "test-ws",
 				AppID:         "app-1",
@@ -712,8 +699,8 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 			})
 
 			newType := "staging"
-			Expect(envStore.Update(ctx, env.ID, &envmodel.EnvironmentUpdateData{Type: &newType})).To(Succeed())
-			after, err := envStore.Get(ctx, env.ID)
+			Expect(envmodel.UpdateEnv(ctx, db, env.ID, &envmodel.EnvironmentUpdateData{Type: &newType})).To(Succeed())
+			after, err := envStore.GetByID(ctx, env.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(

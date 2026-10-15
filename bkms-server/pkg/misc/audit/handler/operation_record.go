@@ -27,7 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
 var _ audit.Handler = (*Handler)(nil)
@@ -86,20 +86,20 @@ func (h *Handler) ListOperationRecords(c *gin.Context) {
 		return
 	}
 
-	records, total, err := h.registry.OperationRecordStore.List(ctx, opts)
+	page, err := audit.ListRecords(ctx, h.registry.DB, opts)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list operation records"))
 		return
 	}
 
-	results := make([]*serializer.OperationRecordOutputObj, 0, len(records))
-	for _, record := range records {
+	results := make([]*serializer.OperationRecordOutputObj, 0, len(page.Items))
+	for _, record := range page.Items {
 		results = append(results, new(serializer.OperationRecordOutputObj).FromModel(record))
 	}
 
 	ginutils.OK(c, serializer.ListOperationRecordsOutput{
 		Data: &serializer.PaginatedOperationRecordOutputObj{
-			Count:   total,
+			Count:   page.Total,
 			Results: results,
 		},
 	})

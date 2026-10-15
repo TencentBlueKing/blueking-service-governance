@@ -41,7 +41,7 @@ var _ = Describe("ServiceBinding store", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(serviceBindingCollName)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(ServiceBindingMeta)).To(Succeed())
 	})
 
 	newBinding := func(appID, name string, envMap map[string]bson.ObjectID) *ServiceBinding {

@@ -27,27 +27,28 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/instancestats"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Collector", func() {
 	var (
 		ctx     context.Context
 		appID   string
-		store   appmodeldeploy.RecordStore
+		db      *mongo.Database
+		records *appmodeldeploy.RecordStore
 		config  *polaris.PolarisConfig
-		diApp   *fxtest.App
 		mockers []*mockey.Mocker
 	)
 
@@ -55,12 +56,8 @@ var _ = Describe("Collector", func() {
 		ctx = context.Background()
 		appID = "test-app-" + stringx.Random(6)
 
-		diApp = fxtest.New(
-			GinkgoT(),
-			appmodeldeploy.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, appmodeldeploy.RecordMeta)
 
 		config = &polaris.PolarisConfig{
 			AppID: appID,
@@ -86,11 +83,10 @@ var _ = Describe("Collector", func() {
 		for _, mocker := range mockers {
 			mocker.Release()
 		}
-		diApp.RequireStop()
 	})
 
 	It("counts matched healthy, isolated and total instances", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:           appID,
 			EnvName:         "stable",
 			TrafficLaneName: "",
@@ -130,7 +126,7 @@ var _ = Describe("Collector", func() {
 			}, nil).
 			Build())
 
-		result, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
+		result, err := instancestats.NewCollector(db).Collect(ctx, appID, config)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.EnvStats["stable"]).To(Equal(instancestats.Stats{
@@ -146,7 +142,7 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("counts pods carrying the polaris weight annotation", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:           appID,
 			EnvName:         "stable",
 			TrafficLaneName: "",
@@ -186,7 +182,7 @@ var _ = Describe("Collector", func() {
 			}, nil).
 			Build())
 
-		result, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
+		result, err := instancestats.NewCollector(db).Collect(ctx, appID, config)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.EnvStats["stable"].WeightOverriddenInstanceCount).To(Equal(1))
@@ -194,8 +190,8 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("uses the latest deploy record even when its status is not deployed", func() {
-		// 较早的成功记录：若误用 GetLatestByStatuses(Deployed) 会落到这里
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		// 较早的成功记录：若误按 StatusDeployed 过滤 GetLatest 会落到这里
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:           appID,
 			EnvName:         "stable",
 			TrafficLaneName: "",
@@ -209,7 +205,7 @@ var _ = Describe("Collector", func() {
 		// MongoDB DateTime 精度为毫秒，保证 failed 记录成为 GetLatest 结果
 		time.Sleep(5 * time.Millisecond)
 
-		_, err = store.Create(ctx, &appmodeldeploy.Record{
+		err = records.Create(ctx, &appmodeldeploy.Record{
 			AppID:           appID,
 			EnvName:         "stable",
 			TrafficLaneName: "",
@@ -246,7 +242,7 @@ var _ = Describe("Collector", func() {
 			}, nil).
 			Build())
 
-		result, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
+		result, err := instancestats.NewCollector(db).Collect(ctx, appID, config)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(listedNamespace).To(Equal("new-ns"))
@@ -262,7 +258,7 @@ var _ = Describe("Collector", func() {
 	It("returns zeros without querying dependencies for undeployed environments", func() {
 		config.EnvStates = nil
 
-		result, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
+		result, err := instancestats.NewCollector(db).Collect(ctx, appID, config)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(Equal(&instancestats.Result{
@@ -276,7 +272,7 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("returns zeros when the deployed environment has no deploy record", func() {
-		result, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
+		result, err := instancestats.NewCollector(db).Collect(ctx, appID, config)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.EnvStats["stable"]).To(Equal(instancestats.Stats{}))
@@ -294,7 +290,7 @@ var _ = Describe("Collector", func() {
 			},
 		}
 
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:           appID,
 			EnvName:         "stable",
 			TrafficLaneName: "",
@@ -328,7 +324,7 @@ var _ = Describe("Collector", func() {
 			}, nil).
 			Build())
 
-		result, err := instancestats.NewCollector(store).Collect(ctx, appID, config)
+		result, err := instancestats.NewCollector(db).Collect(ctx, appID, config)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.EnvStats["stable"]).To(Equal(instancestats.Stats{
@@ -342,7 +338,7 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("returns an error when listing pods fails", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:           appID,
 			EnvName:         "stable",
 			TrafficLaneName: "",
@@ -361,14 +357,14 @@ var _ = Describe("Collector", func() {
 			Return(nil, errors.New("list pods failed")).
 			Build())
 
-		_, err = instancestats.NewCollector(store).Collect(ctx, appID, config)
+		_, err = instancestats.NewCollector(db).Collect(ctx, appID, config)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("list pod IPs for env stable"))
 	})
 
 	It("returns an error when listing Polaris instances fails", func() {
-		_, err := store.Create(ctx, &appmodeldeploy.Record{
+		err := records.Create(ctx, &appmodeldeploy.Record{
 			AppID:           appID,
 			EnvName:         "stable",
 			TrafficLaneName: "",
@@ -390,7 +386,7 @@ var _ = Describe("Collector", func() {
 			Return(nil, errors.New("list Polaris instances failed")).
 			Build())
 
-		_, err = instancestats.NewCollector(store).Collect(ctx, appID, config)
+		_, err = instancestats.NewCollector(db).Collect(ctx, appID, config)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("get polaris instances for service Production/service-a"))

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strings"
 
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -49,12 +50,12 @@ type WorkloadResult struct {
 
 // WorkloadBuilder applies environment-specific Polaris configs to a workload payload.
 type WorkloadBuilder struct {
-	store PolarisConfigStore
+	db *mongo.Database
 }
 
 // NewWorkloadBuilder creates a Polaris workload builder.
-func NewWorkloadBuilder(store PolarisConfigStore) *WorkloadBuilder {
-	return &WorkloadBuilder{store: store}
+func NewWorkloadBuilder(db *mongo.Database) *WorkloadBuilder {
+	return &WorkloadBuilder{db: db}
 }
 
 // Build builds polaris related extra resources.
@@ -67,7 +68,7 @@ func (b *WorkloadBuilder) Build(
 	podSpec corev1.PodSpec,
 	collector *envvarrefs.Collector,
 ) (*WorkloadResult, error) {
-	configs, err := b.store.ListByEnv(ctx, app.ID, env.Name)
+	configs, err := ListByEnv(ctx, b.db, app.ID, env.Name)
 	if err != nil {
 		return nil, fmt.Errorf("list polaris configs: %w", err)
 	}

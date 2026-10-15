@@ -42,7 +42,7 @@ import (
 // AppConfigFileService 仍作为兼容门面内嵌场景层，CLI 切完后会撤掉。
 type BaseAppCfgFileService struct {
 	DefStore     *AppConfigFileDefStore
-	FileStore    AppConfigFileStore
+	FileStore    *AppConfigFileStore
 	VersionStore *AppConfigFileVersionStore
 
 	// db 供编辑器、内容提供者等按需读取 def 记录
@@ -50,10 +50,10 @@ type BaseAppCfgFileService struct {
 }
 
 // NewBaseAppCfgFileService 创建底层服务实例。
-func NewBaseAppCfgFileService(db *mongo.Database, fileStore AppConfigFileStore) *BaseAppCfgFileService {
+func NewBaseAppCfgFileService(db *mongo.Database) *BaseAppCfgFileService {
 	return &BaseAppCfgFileService{
 		DefStore:     store.Of(db, AppConfigFileDefMeta),
-		FileStore:    fileStore,
+		FileStore:    store.Of(db, AppConfigFileMeta),
 		VersionStore: store.Of(db, AppConfigFileVersionMeta),
 		db:           db,
 	}
@@ -102,7 +102,7 @@ func (s *BaseAppCfgFileService) UpdateFile(
 		return err
 	}
 
-	if _, err = s.FileStore.UpdateIfVersionMatches(ctx, *acf, curVersion); err != nil {
+	if err = UpdateFileIfVersionMatches(ctx, s.FileStore, acf, curVersion); err != nil {
 		return err
 	}
 
@@ -160,7 +160,7 @@ func (s *BaseAppCfgFileService) DeleteFile(
 		return nil, err
 	}
 
-	if _, err = s.FileStore.DeleteByID(ctx, appID, fileID); err != nil {
+	if err = DeleteFile(ctx, s.FileStore, appID, fileID); err != nil {
 		return nil, errors.Wrap(err, "delete app config file")
 	}
 	if _, err = s.VersionStore.DeleteMany(ctx, VersionsByFile(fileID)); err != nil {
@@ -170,12 +170,12 @@ func (s *BaseAppCfgFileService) DeleteFile(
 	// 若删除的是默认实例，同时清理同 def 下的环境实例和 def 记录，不区分 configKind。
 	if acf.EnvName == EnvNameDefault {
 		var siblings []AppConfigFile
-		siblings, err = s.FileStore.ListByDefID(ctx, acf.DefID)
+		siblings, err = s.FileStore.List(ctx, FilesByDef(acf.DefID))
 		if err != nil {
 			return nil, errors.Wrap(err, "listing sibling env instances")
 		}
 		for _, sib := range siblings {
-			if _, err = s.FileStore.DeleteByID(ctx, appID, sib.ID); err != nil {
+			if err = DeleteFile(ctx, s.FileStore, appID, sib.ID); err != nil {
 				return nil, errors.Wrapf(err, "delete sibling env instance %s", sib.ID.Hex())
 			}
 			if _, err = s.VersionStore.DeleteMany(ctx, VersionsByFile(sib.ID)); err != nil {
@@ -189,7 +189,7 @@ func (s *BaseAppCfgFileService) DeleteFile(
 	}
 
 	// 若没有关联文件，def 定义一并删除
-	remaining, err := s.FileStore.ListByDefID(ctx, acf.DefID)
+	remaining, err := s.FileStore.List(ctx, FilesByDef(acf.DefID))
 	if err != nil {
 		return nil, errors.Wrap(err, "listing remaining files for def cleanup")
 	}
@@ -299,11 +299,9 @@ func (s *BaseAppCfgFileService) CreateFileWithVersion(
 	description string,
 	creator string,
 ) (*AppConfigFile, error) {
-	fileID, err := s.FileStore.Add(ctx, acf)
-	if err != nil {
+	if err := s.FileStore.Create(ctx, &acf); err != nil {
 		return nil, errors.Wrap(err, "adding file record")
 	}
-	acf.ID = fileID
 
 	version, err := s.buildVersionRecord(
 		ctx, acf, name,
@@ -365,7 +363,7 @@ func (s *BaseAppCfgFileService) GetDefaultFileWithDef(
 	if err != nil {
 		return nil, errors.Wrap(err, "loading def")
 	}
-	acf, err := s.FileStore.GetByDefIDAndEnv(ctx, defID, EnvNameDefault)
+	acf, err := s.FileStore.Get(ctx, FileByDefEnv(defID, EnvNameDefault))
 	if err != nil {
 		return nil, errors.Wrap(err, "loading default file for def")
 	}

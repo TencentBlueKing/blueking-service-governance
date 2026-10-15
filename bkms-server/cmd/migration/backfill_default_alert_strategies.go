@@ -60,7 +60,7 @@ type backfillDefaultAlertStrategiesSummary struct {
 }
 
 type backfillDefaultAlertStrategiesDeps struct {
-	appStore              bkmsapp.ApplicationStore
+	appStore              *bkmsapp.ApplicationStore
 	workspaceStore        *workspace.WorkspaceStore
 	strategies            *alertstrategy.Store
 	resolveNoticeGroupIDs func(ctx context.Context, ws *workspace.Workspace) ([]int64, error)
@@ -91,7 +91,7 @@ func NewBackfillDefaultAlertStrategiesCmd() *cobra.Command {
 
 			operator := auth.MustGetUser(ctx).ID
 			summary, err := runBackfillDefaultAlertStrategies(ctx, backfillDefaultAlertStrategiesDeps{
-				appStore:       storereg.G().AppStore,
+				appStore:       store.Of(storereg.G().DB, bkmsapp.AppMeta),
 				workspaceStore: store.Of(storereg.G().DB, workspace.Meta),
 				strategies:     store.Of(storereg.G().DB, alertstrategy.Meta),
 				resolveNoticeGroupIDs: func(ctx context.Context, ws *workspace.Workspace) ([]int64, error) {
@@ -109,11 +109,7 @@ func NewBackfillDefaultAlertStrategiesCmd() *cobra.Command {
 					app *bkmsapp.Application,
 					noticeGroupIDs []int64,
 				) error {
-					return alertstrategy.NewService(
-						storereg.G().DB,
-						storereg.G().EnvStore,
-						storereg.G().AppStore,
-					).InitDefaultAlertStrategiesForApp(
+					return alertstrategy.NewService(storereg.G().DB).InitDefaultAlertStrategiesForApp(
 						ctx,
 						app.WorkspaceID,
 						app.ID,
@@ -155,7 +151,7 @@ func runBackfillDefaultAlertStrategies(
 		return nil, errors.New("app-id is required")
 	}
 
-	app, err := deps.appStore.GetApp(ctx, opts.AppID)
+	app, err := deps.appStore.Get(ctx, bkmsapp.ByID(opts.AppID))
 	if err != nil {
 		return nil, errors.Wrap(err, "get app")
 	}

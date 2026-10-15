@@ -51,63 +51,55 @@ var _ = Describe("Field selection", func() {
 		}
 		return q.fields
 	}
-	pathsOf := func(obj selDoc, opts ...UpdateOpt) ([]string, error) {
-		paths, err := selection(opts...).paths(sc, reflect.ValueOf(&obj).Elem())
+	pathsOf := func(opts ...UpdateOpt) ([]string, error) {
+		paths, err := selection(opts...).paths(sc)
 		return lo.Map(paths, func(p fieldPath, _ int) string { return p.String() }), err
 	}
 
 	DescribeTable("selects fields",
-		func(obj selDoc, opts []UpdateOpt, expected []string) {
-			Expect(pathsOf(obj, opts...)).To(Equal(expected))
+		func(opts []UpdateOpt, expected []string) {
+			Expect(pathsOf(opts...)).To(Equal(expected))
 		},
 		Entry("all top-level fields except _id and timestamps without UpdateSelected",
-			selDoc{}, nil, []string{"name", "enabled", "spec", "labels"},
+			nil, []string{"name", "enabled", "spec", "labels"},
 		),
 		Entry("all top-level fields with \"*\"",
-			selDoc{}, []UpdateOpt{UpdateSelected("*")}, []string{"name", "enabled", "spec", "labels"},
+			[]UpdateOpt{UpdateSelected("*")}, []string{"name", "enabled", "spec", "labels"},
+		),
+		Entry("all top-level fields when merged opts repeat \"*\"",
+			[]UpdateOpt{UpdateSelected("*"), UpdateSelected("*")}, []string{"name", "enabled", "spec", "labels"},
 		),
 		Entry("selected fields by bson key or Go name, in the given order",
-			selDoc{}, []UpdateOpt{UpdateSelected("Spec.Color", "name")}, []string{"spec.color", "name"},
+			[]UpdateOpt{UpdateSelected("Spec.Color", "name")}, []string{"spec.color", "name"},
 		),
 		Entry("updatedAt when it is selected explicitly",
-			selDoc{}, []UpdateOpt{UpdateSelected("updatedAt")}, []string{"updatedAt"},
+			[]UpdateOpt{UpdateSelected("updatedAt")}, []string{"updatedAt"},
 		),
 		Entry("all fields except the omitted ones",
-			selDoc{}, []UpdateOpt{UpdateOmit("Enabled", "labels")}, []string{"name", "spec"},
+			[]UpdateOpt{UpdateOmit("Enabled", "labels")}, []string{"name", "spec"},
 		),
 		Entry("selected fields except the omitted ones",
-			selDoc{}, []UpdateOpt{UpdateSelected("name", "enabled"), UpdateOmit("enabled")}, []string{"name"},
-		),
-		Entry("non-zero top-level fields, judging nested structs as a whole",
-			selDoc{Name: "a", Spec: pathSpec{Size: 1}}, []UpdateOpt{UpdateNonZero()}, []string{"name", "spec"},
-		),
-		Entry("non-zero selected nested fields",
-			selDoc{Spec: pathSpec{Color: "red"}},
-			[]UpdateOpt{UpdateSelected("spec.color", "spec.size"), UpdateNonZero()},
-			[]string{"spec.color"},
-		),
-		Entry("non-zero map entries",
-			selDoc{Labels: map[string]string{"env": "prod"}},
-			[]UpdateOpt{UpdateSelected("labels.env", "labels.team"), UpdateNonZero()},
-			[]string{"labels.env"},
+			[]UpdateOpt{UpdateSelected("name", "enabled"), UpdateOmit("enabled")}, []string{"name"},
 		),
 		Entry("each field once when merged opts repeat it",
-			selDoc{}, []UpdateOpt{UpdateSelected("name"), UpdateSelected("Name")}, []string{"name"},
+			[]UpdateOpt{UpdateSelected("name"), UpdateSelected("Name")}, []string{"name"},
 		),
 	)
 
 	DescribeTable("rejects invalid selections",
 		func(opts []UpdateOpt, errMatcher any) {
-			_, err := pathsOf(selDoc{}, opts...)
+			_, err := pathsOf(opts...)
 			Expect(err).To(MatchError(errMatcher))
 		},
 		Entry("UpdateSelected without fields", []UpdateOpt{UpdateSelected()}, ErrNoFieldsToUpdate),
 		Entry("all fields omitted",
 			[]UpdateOpt{UpdateOmit("name", "enabled", "spec", "labels")}, ErrNoFieldsToUpdate,
 		),
-		Entry("all fields are zero with UpdateNonZero", []UpdateOpt{UpdateNonZero()}, ErrNoFieldsToUpdate),
 		Entry("\"*\" with other fields",
 			[]UpdateOpt{UpdateSelected("*", "name")}, ContainSubstring("cannot be combined"),
+		),
+		Entry("\"*\" with other fields across merged opts",
+			[]UpdateOpt{UpdateSelected("*"), UpdateSelected("*", "name")}, ContainSubstring("cannot be combined"),
 		),
 		Entry("unknown selected field", []UpdateOpt{UpdateSelected("missing")}, errUnknownField),
 		Entry("unknown omitted field", []UpdateOpt{UpdateOmit("missing")}, errUnknownField),

@@ -39,7 +39,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
@@ -56,23 +56,20 @@ type Handler struct {
 
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
-	snapshotService := snapshot.NewService(
-		registry.SnapshotStore,
-		registry.DB,
-		registry.AppStore,
-	)
+	snapshotService := snapshot.NewService(registry.DB)
 	return &Handler{
 		registry:   registry,
 		persistMgr: customruntime.NewPersistManager(registry.DB, snapshotService),
 	}
 }
 
+func (h *Handler) buildConfigs() *imagebuild.ConfigStore {
+	return store.Of(h.registry.DB, imagebuild.ConfigMeta)
+}
+
 // newBuildService 装配构建服务，并注入平台构建镜像引用校验器
 func (h *Handler) newBuildService() (*build.Service, error) {
-	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.DB,
-		h.registry.SnapshotStore,
-	)
+	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(h.registry.DB)
 	return build.NewService(
 		h.registry.DB,
 		imageReferenceValidator,
@@ -111,7 +108,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		return
 	}
 
-	dataBefore, err := store.Of(h.registry.DB, imagebuild.ConfigMeta).Get(ctx, imagebuild.ByApp(app.ID))
+	dataBefore, err := h.buildConfigs().Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get app %s build config", app.ID))
 		return
@@ -135,7 +132,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		return
 	}
 
-	if err = imagebuild.UpdateConfig(ctx, store.Of(h.registry.DB, imagebuild.ConfigMeta), cfg); err != nil {
+	if err = imagebuild.UpdateConfig(ctx, h.buildConfigs(), cfg); err != nil {
 		bkerrs.AbortWithErr(
 			c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "update app %s build config", app.ID),
 		)
@@ -154,10 +151,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 func (h *Handler) validatePlatformBuildImages(
 	ctx context.Context, workspaceID string, cfg *imagebuild.Config,
 ) error {
-	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.DB,
-		h.registry.SnapshotStore,
-	)
+	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(h.registry.DB)
 	err := build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, h.persistMgr, cfg, workspaceID)
 	if err == nil {
 		return nil
@@ -381,7 +375,7 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 		return
 	}
 
-	cfg, err := store.Of(h.registry.DB, imagebuild.ConfigMeta).Get(ctx, imagebuild.ByApp(app.ID))
+	cfg, err := h.buildConfigs().Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get app %s build config", app.ID))
 		return
@@ -429,7 +423,7 @@ func (h *Handler) triggerSnapshotRefreshOnConfigChange(
 	appID string,
 	oldCfg, newCfg *imagebuild.Config,
 ) error {
-	app, err := h.registry.AppStore.GetApp(ctx, appID)
+	app, err := store.Of(h.registry.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		return pkgerrors.Wrapf(err, "get app %s", appID)
 	}
@@ -446,7 +440,7 @@ func (h *Handler) triggerSnapshotRefreshOnConfigChange(
 		return nil
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.DB, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.DB)
 	if _, err = snapshotService.RefreshAppSnapshots(context.WithoutCancel(ctx), appID); err != nil {
 		return pkgerrors.Wrapf(err, "refresh snapshots on config change for app %s", appID)
 	}

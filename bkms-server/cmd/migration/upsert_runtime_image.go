@@ -77,11 +77,6 @@ func NewUpsertRuntimeImageCmd() *cobra.Command {
 			database.InitClient(ctx, cfg.Mongo)
 
 			images := store.Of(database.DB(), workloadruntime.Meta)
-			snapshotStore, err := snapshot.NewSnapshotStoreMongo(database.Client(), database.Name())
-			if err != nil {
-				log.Fatalf("init snapshot store failed: %v", err)
-			}
-
 			image.Type = workloadruntime.ImageType(imageType)
 
 			// 判断是否已存在，决定走新增还是幂等分支
@@ -116,7 +111,7 @@ func NewUpsertRuntimeImageCmd() *cobra.Command {
 				log.Fatalf("check runtime image existence failed: %v", err)
 			}
 
-			result, err := snapshot.NewService(snapshotStore, nil, nil).RefreshRepositorySnapshots(ctx, image.Name)
+			result, err := snapshot.NewService(database.DB()).RefreshRepositorySnapshots(ctx, image.Name)
 			if err != nil {
 				log.Fatalf("sync runtime image tags failed: %v", err)
 			}

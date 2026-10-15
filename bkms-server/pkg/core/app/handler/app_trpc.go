@@ -33,14 +33,7 @@ import (
 )
 
 func (h *Handler) newTrpcService() *trpcapp.Service {
-	return trpcapp.NewService(
-		h.registry.AppModelStore,
-		h.registry.AppSpecStore,
-		h.registry.DB,
-		h.registry.EnvStore,
-		h.registry.AppConfigFileStore,
-		h.registry.AppStore,
-	)
+	return trpcapp.NewService(h.registry.DB)
 }
 
 // UpdateAppTrpcSpec 更新应用 Trpc 配置。

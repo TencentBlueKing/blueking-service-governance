@@ -172,7 +172,7 @@ func (h *Handler) DeleteEnvAppSpecProbeByType(c *gin.Context) {
 		return
 	}
 
-	probes, err := appspec.GetEnvSection(ctx, h.registry.AppSpecStore, app.ID, env.Name, appspec.ProbeSection)
+	probes, err := appspec.GetEnvSection(ctx, h.registry.DB, app.ID, env.Name, appspec.ProbeSection)
 	if err != nil {
 		if errors.Is(err, appspec.ErrAppSpecNotFound) {
 			ginutils.OK(c, serializer.EmptyOutput{})
@@ -215,7 +215,7 @@ func (h *Handler) DeleteEnvAppSpecProbeByType(c *gin.Context) {
 
 	if err = appspec.SetEnvSection(
 		ctx,
-		h.registry.AppSpecStore,
+		h.registry.DB,
 		app.ID,
 		env.Name,
 		appspec.ProbeSection,

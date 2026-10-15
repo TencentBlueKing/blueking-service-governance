@@ -372,5 +372,30 @@ var _ = Describe("ComponentDefStore", func() {
 				Expect(retrieved.AppCompInstanceCount).To(Equal(int32(1)))
 			})
 		})
+
+		It("should not refresh updatedAt of the definition", func() {
+			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
+			before, err := get(compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = component.UpdateInstanceCount(
+				ctx,
+				compDefStore,
+				compDef.Name,
+				component.FieldWorkspaceCompInstance,
+				1,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			after, err := get(compDef.Name, compDef.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(after.WorkspaceCompInstanceCount).To(Equal(before.WorkspaceCompInstanceCount + 1))
+			Expect(after.UpdatedAt).To(Equal(before.UpdatedAt))
+		})
+
+		It("should ignore a missing definition", func() {
+			err := component.UpdateInstanceCount(ctx, compDefStore, "not-exists", component.FieldAppCompInstance, 1)
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 })

@@ -42,7 +42,7 @@ var _ = Describe("Custom runtime image store", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	Describe("Register", func() {

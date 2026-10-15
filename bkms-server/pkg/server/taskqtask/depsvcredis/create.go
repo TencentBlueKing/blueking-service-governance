@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/dbm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // CreateArgs 创建 Redis 任务参数。
@@ -64,7 +65,7 @@ func createHandler(ctx context.Context, args CreateArgs) error {
 		return err
 	}
 
-	inst, err := instStore.Get(ctx, objID)
+	inst, err := insts.Get(ctx, store.ByID(objID))
 	if err != nil {
 		if model.AsNotFoundError(err) {
 			return errors.Wrapf(taskq.ErrStopRetry, "instance %s already gone", args.InstanceID)
@@ -100,7 +101,7 @@ func createSubmit(ctx context.Context, objID bson.ObjectID, inst *model.ServiceI
 	}
 
 	// 先持久化 ticketID，再入队 Poll。Enqueue 失败时 asynq 重试会走上面的恢复分支，不会重复 CreateRedis。
-	if err = instStore.PatchConfig(ctx, objID, map[string]any{configKeyCreateTicketID: ticketID}); err != nil {
+	if err = model.PatchInstanceConfig(ctx, db, objID, map[string]any{configKeyCreateTicketID: ticketID}); err != nil {
 		// 工单已创建但未能落库：停止重试以免重复开单，错误信息中保留 ticketID 便于人工恢复
 		persistErr := errors.Wrapf(err, "persist createTicketID=%d after DBM submit", ticketID)
 		return failWithStopErr(ctx, args.InstanceID, model.CreateFailedStatus, persistErr)
@@ -160,7 +161,7 @@ func createPoll(ctx context.Context, objID bson.ObjectID, args CreateArgs) error
 		return errors.Wrapf(taskq.ErrFixedRetry, "find cluster by name %s: %v", clusterName, err)
 	}
 
-	if err = instStore.PatchConfig(ctx, objID, map[string]any{
+	if err = model.PatchInstanceConfig(ctx, db, objID, map[string]any{
 		configKeyClusterID:   clusterInfo.ID,
 		configKeyClusterName: clusterName,
 		configKeyClusterType: string(args.DBMParams.ClusterType),
@@ -181,11 +182,11 @@ func createPoll(ctx context.Context, objID bson.ObjectID, args CreateArgs) error
 	if args.DBMParams.RedisPwd != "" {
 		credentials[CredPwd] = args.DBMParams.RedisPwd
 	}
-	if err = instStore.PatchCredentials(ctx, objID, credentials); err != nil {
+	if err = model.PatchInstanceCredentials(ctx, db, objID, credentials); err != nil {
 		return errors.Wrapf(taskq.ErrFixedRetry, "persist credentials after create ticket: %v", err)
 	}
 
-	if err = instStore.UpdateStatus(ctx, objID, model.AvailableStatus, ""); err != nil {
+	if err = model.UpdateInstanceStatus(ctx, db, objID, model.AvailableStatus, ""); err != nil {
 		return errors.Wrapf(taskq.ErrFixedRetry, "mark instance available after create ticket: %v", err)
 	}
 

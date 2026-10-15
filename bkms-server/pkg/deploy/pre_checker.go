@@ -50,7 +50,8 @@ type PreDeployCheckParams struct {
 
 // PreDeployChecker 部署前检查器
 type PreDeployChecker struct {
-	envStore    envmodel.EnvironmentStore
+	envStore    *envmodel.EnvironmentStore
+	db          *mongo.Database
 	promotions  *promotion.Store
 	snapshotSvc *snapshot.Service
 }
@@ -60,12 +61,12 @@ type PreDeployChecker struct {
 //   - 检查基线泳道是否已部署
 //   - 检查部署到生产环境的镜像是否已晋级
 func NewPreDeployChecker(
-	envStore envmodel.EnvironmentStore,
 	db *mongo.Database,
 	snapshotSvc *snapshot.Service,
 ) *PreDeployChecker {
 	return &PreDeployChecker{
-		envStore:    envStore,
+		envStore:    store.Of(db, envmodel.EnvMeta),
+		db:          db,
 		promotions:  store.Of(db, promotion.Meta),
 		snapshotSvc: snapshotSvc,
 	}
@@ -92,7 +93,7 @@ func (c *PreDeployChecker) checkIfImagePromoted(ctx context.Context, params *Pre
 	}
 
 	// 查询目标环境信息，获取环境类型
-	env, err := c.envStore.GetByName(ctx, params.WorkspaceID, params.AppID, params.EnvName)
+	env, err := c.envStore.Get(ctx, envmodel.AppEnvByName(params.WorkspaceID, params.AppID, params.EnvName))
 	if err != nil {
 		return errors.Wrapf(err, "get env %s in workspace %s", params.EnvName, params.WorkspaceID)
 	}
@@ -146,9 +147,15 @@ func (c *PreDeployChecker) checkIfBaselineLaneDeployed(ctx context.Context, para
 
 	switch params.AppType {
 	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:
-		return helmdeploy.CheckIfTrafficLaneDeployed(ctx, params.AppID, params.EnvName, baselineLane.LaneName)
+		return helmdeploy.CheckIfTrafficLaneDeployed(ctx, c.db, params.AppID, params.EnvName, baselineLane.LaneName)
 	case bkmsapp.AppTypeTRPC, bkmsapp.AppTypeTAF:
-		return appmodeldeploy.CheckIfTrafficLaneDeployed(ctx, params.AppID, params.EnvName, baselineLane.LaneName)
+		return appmodeldeploy.CheckIfTrafficLaneDeployed(
+			ctx,
+			c.db,
+			params.AppID,
+			params.EnvName,
+			baselineLane.LaneName,
+		)
 	default:
 		return errors.Errorf("pre deploy checker not support app type %s", params.AppType)
 	}

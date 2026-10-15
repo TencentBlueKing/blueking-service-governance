@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
@@ -31,12 +32,12 @@ import (
 
 // DetailSyncer 详情同步器
 type DetailSyncer struct {
-	store SnapshotStore
+	db *mongo.Database
 }
 
 // NewDetailSyncer 创建 DetailSyncer 实例
-func NewDetailSyncer(store SnapshotStore) *DetailSyncer {
-	return &DetailSyncer{store: store}
+func NewDetailSyncer(db *mongo.Database) *DetailSyncer {
+	return &DetailSyncer{db: db}
 }
 
 // SyncDetails 执行详情同步
@@ -45,9 +46,9 @@ func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo) error
 	repoName := info.RepoName
 
 	// 原子性尝试获取详情同步权（仅当状态为 idle 时成功）
-	acquired, err := s.store.TrySetDetailSyncing(ctx, repoKey)
+	acquired, err := TrySetDetailSyncing(ctx, s.db, repoKey)
 	if err != nil {
-		return errors.Wrap(err, "try set detail syncing")
+		return err
 	}
 	if !acquired {
 		log.Infof(ctx, "detail sync for %s skipped: status is not idle", repoKey)
@@ -57,9 +58,9 @@ func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo) error
 	client := registry.New(info.Username, info.Password, true)
 
 	// 获取需要补全详情的标签
-	tags, err := s.store.ListUnsyncedDetailTags(ctx, repoKey)
+	tags, err := ListUnsyncedDetailTags(ctx, s.db, repoKey)
 	if err != nil {
-		return errors.Wrap(err, "list unsynced detail tags")
+		return err
 	}
 
 	if len(tags) == 0 {
@@ -119,7 +120,7 @@ func (s *DetailSyncer) syncDetailBatch(
 			}
 
 			// 更新快照详情
-			if err = s.store.UpdateDetail(gCtx, repoKey, tag, &detail); err != nil {
+			if err = UpdateDetail(gCtx, s.db, repoKey, tag, &detail); err != nil {
 				log.Errorf(gCtx, "update detail for %s:%s failed: %v", repoKey, tag, err)
 				mu.Lock()
 				if firstErr == nil {
@@ -143,5 +144,5 @@ func (s *DetailSyncer) completeDetailSync(ctx context.Context, repoKey, lastErro
 		LastDetailSyncedAt: &detailSyncedAt,
 		LastError:          lastError,
 	}
-	return s.store.UpsertStatus(ctx, status)
+	return UpsertRepoStatus(ctx, s.db, status)
 }

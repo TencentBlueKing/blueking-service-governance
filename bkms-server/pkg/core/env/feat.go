@@ -62,7 +62,7 @@ const (
 
 // FeatureEnvService 负责特性环境领域动作。
 type FeatureEnvService struct {
-	environmentStore     model.EnvironmentStore
+	db                   *mongo.Database
 	indexCounter         *store.Counter
 	envVarStore          FeatureEnvVarStore
 	namespaceInitializer FeatureEnvNamespaceInitializer
@@ -144,13 +144,12 @@ type CreateFeatureEnvInput struct {
 
 // NewFeatureEnvService 创建特性环境服务。
 func NewFeatureEnvService(
-	environmentStore model.EnvironmentStore,
 	db *mongo.Database,
 	envVarStore FeatureEnvVarStore,
 	namespaceInitializer FeatureEnvNamespaceInitializer,
 ) *FeatureEnvService {
 	return &FeatureEnvService{
-		environmentStore:     environmentStore,
+		db:                   db,
 		indexCounter:         model.NewFeatureEnvCounter(db),
 		envVarStore:          envVarStore,
 		namespaceInitializer: namespaceInitializer,
@@ -164,10 +163,10 @@ func NewFeatureEnvService(
 //	特性环境切片，map[envName]sourceEnv；由于来源环境可以独立删除，map 不保证包含每个特性环境。
 func ListAppFeatEnvs(
 	ctx context.Context,
-	environmentStore model.EnvironmentStore,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 ) ([]model.Environment, map[string]*model.Environment, error) {
-	featureEnvs, err := environmentStore.ListAppFeatEnvs(ctx, app.ID)
+	featureEnvs, err := store.Of(db, model.EnvMeta).List(ctx, model.FeatEnvsOf(app.ID), model.NewestFirst())
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "list app feature environments")
 	}
@@ -176,7 +175,7 @@ func ListAppFeatEnvs(
 	}
 
 	// 构建来源环境的 map
-	standardEnvs, err := environmentStore.ListStdEnvs(ctx, app.WorkspaceID)
+	standardEnvs, err := store.Of(db, model.EnvMeta).List(ctx, model.StdEnvsIn(app.WorkspaceID))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "list feature environment sources")
 	}
@@ -236,17 +235,15 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	}
 
 	if conflictErr := findClusterNamespaceOccupant(
-		ctx, s.environmentStore, env.Cluster, bson.NilObjectID,
+		ctx, s.db, env.Cluster, bson.NilObjectID,
 	); conflictErr != nil {
 		return nil, errors.Wrap(conflictErr, "check feature environment cluster namespace conflict")
 	}
 
-	envID, err := s.environmentStore.Create(ctx, env)
-	if err != nil {
-		err = rewriteWriteErrIfClusterOccupied(ctx, s.environmentStore, env.Cluster, bson.NilObjectID, err)
+	if err = store.Of(s.db, model.EnvMeta).Create(ctx, env); err != nil {
+		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, env.Cluster, bson.NilObjectID, err)
 		return nil, errors.Wrap(err, "create feature environment")
 	}
-	env.ID = envID
 
 	if input.CopyEnvVars {
 		if err = s.copyEnvVars(ctx, *input.SourceEnv, *env); err != nil {
@@ -294,7 +291,7 @@ func (s *FeatureEnvService) copyEnvVars(ctx context.Context, source, target mode
 			target.ID.Hex(),
 		)
 	}
-	if cleanupErr := s.environmentStore.Delete(cleanupCtx, target.ID); cleanupErr != nil {
+	if cleanupErr := store.Of(s.db, model.EnvMeta).DeleteIfExists(cleanupCtx, store.ByID(target.ID)); cleanupErr != nil {
 		return errors.Wrapf(
 			cleanupErr,
 			"copy variables failed (%v); delete feature environment %s (id: %s); delete this environment before retrying",

@@ -43,19 +43,18 @@ var _ = Describe("PlatWorkspaceService", func() {
 		diApp          *fxtest.App
 		service        *Service
 		workspaceStore *bkmsworkspace.WorkspaceStore
-		appStore       bkmsapp.ApplicationStore
+		appStore       *bkmsapp.ApplicationStore
 		envSvc         *env.EnvService
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsworkspace.FxModule,
-			bkmsapp.FxModule,
 			env.FxModule,
 			FxModule,
-			fx.Populate(&service, &appStore, &envSvc),
+			fx.Populate(&service, &envSvc),
 		)
 		diApp.RequireStart()
 		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
@@ -80,9 +79,9 @@ var _ = Describe("PlatWorkspaceService", func() {
 		appA2 := dbfactory.HelmApplication(ctx, helmStores, &dbfactory.HelmApplicationOpts{WorkspaceID: wsA.ID})
 		appB1 := dbfactory.HelmApplication(ctx, helmStores, &dbfactory.HelmApplicationOpts{WorkspaceID: wsB.ID})
 		defer func() {
-			_ = appStore.DeleteAppByName(ctx, wsA.ID, appA1.Name)
-			_ = appStore.DeleteAppByName(ctx, wsA.ID, appA2.Name)
-			_ = appStore.DeleteAppByName(ctx, wsB.ID, appB1.Name)
+			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsA.ID, appA1.Name))
+			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsA.ID, appA2.Name))
+			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsB.ID, appB1.Name))
 		}()
 
 		envA1 := dbfactory.Env(ctx, envSvc, wsA.ID)

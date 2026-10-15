@@ -10,11 +10,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	appspecmigrate "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/migrate"
 )
 
@@ -60,23 +56,5 @@ func initializeTkeRouteEniMigration(ctx context.Context, srvCfg string) (*appspe
 	database.InitClient(ctx, cfg.Mongo)
 
 	client, dbName := database.Client(), database.Name()
-	appStore, err := bkmsapp.NewApplicationStoreMongo(client, dbName)
-	if err != nil {
-		return nil, err
-	}
-	appSpecStore, err := appspec.NewAppSpecStoreMongo(client, dbName)
-	if err != nil {
-		return nil, err
-	}
-	appModelStore, err := appmodel.NewAppModelStoreMongo(client, dbName)
-	if err != nil {
-		return nil, err
-	}
-	wsCompStore, err := workspace.NewWorkspaceCompsStoreMongo(client, dbName)
-	if err != nil {
-		return nil, err
-	}
-	return appspecmigrate.New(
-		client.Database(dbName), appStore, appSpecStore, appModelStore, wsCompStore,
-	), nil
+	return appspecmigrate.New(client.Database(dbName)), nil
 }

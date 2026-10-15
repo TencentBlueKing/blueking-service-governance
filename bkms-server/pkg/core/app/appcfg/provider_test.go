@@ -31,11 +31,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 var _ = Describe("Local Provider", func() {
-	var store *AppConfigFileStoreMongo
+	var files *AppConfigFileStore
 	var defStore *AppConfigFileDefStore
 	var db *mongo.Database
 	var ctx context.Context
@@ -45,10 +44,7 @@ var _ = Describe("Local Provider", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-
-		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		files = testutil.NewStore(GinkgoT(), AppConfigFileMeta)
 		db = testutil.NewDB(GinkgoT())
 		defStore = testutil.NewStore(GinkgoT(), AppConfigFileDefMeta)
 
@@ -72,7 +68,7 @@ var _ = Describe("Local Provider", func() {
 
 	Context("GetBaseContentInfo", func() {
 		It("should return nil for normal file", func() {
-			info, err := newLocalBaseContentProvider(store, db, normalAcf).GetInfo(ctx)
+			info, err := newLocalBaseContentProvider(db, normalAcf).GetInfo(ctx)
 			Expect(errors.Is(err, ErrBaseContentEmpty)).To(BeTrue())
 			Expect(info).To(BeNil())
 		})
@@ -97,12 +93,13 @@ var _ = Describe("Local Provider", func() {
 					Content:           &baseContent,
 				},
 			}
-			baseID, err := store.Add(ctx, *baseAcf)
+			err = files.Create(ctx, baseAcf)
 			Expect(err).ToNot(HaveOccurred())
+			baseID := baseAcf.ID
 
 			overlayAcf.BaseAppConfigFileID = &baseID
 
-			baseInfo, err := newLocalBaseContentProvider(store, db, overlayAcf).GetInfo(ctx)
+			baseInfo, err := newLocalBaseContentProvider(db, overlayAcf).GetInfo(ctx)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(baseInfo).To(Equal(&BaseContentInfo{
 				HolderID:                baseID,
@@ -116,7 +113,7 @@ var _ = Describe("Local Provider", func() {
 })
 
 var _ = Describe("BSCP Provider", func() {
-	var store *AppConfigFileStoreMongo
+	var files *AppConfigFileStore
 	var defStore *AppConfigFileDefStore
 	var db *mongo.Database
 	var ctx context.Context
@@ -126,10 +123,7 @@ var _ = Describe("BSCP Provider", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-
-		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		files = testutil.NewStore(GinkgoT(), AppConfigFileMeta)
 		db = testutil.NewDB(GinkgoT())
 		defStore = testutil.NewStore(GinkgoT(), AppConfigFileDefMeta)
 
@@ -169,7 +163,7 @@ var _ = Describe("BSCP Provider", func() {
 				normalAcf.BSCPConfig = &BSCPConfig{BizID: "123", ServiceID: "456", VersionID: "789", ConfigID: "666"}
 				normalAcf.OverlayContent = &overlayContent
 
-				baseInfo, err := newBSCPBaseContentProvider(store, db, normalAcf).GetInfo(ctx)
+				baseInfo, err := newBSCPBaseContentProvider(db, normalAcf).GetInfo(ctx)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(baseInfo).To(Equal(&BaseContentInfo{
 					HolderID:                normalAcf.ID,
@@ -201,12 +195,13 @@ var _ = Describe("BSCP Provider", func() {
 					Content:           &baseContent,
 				},
 			}
-			baseID, err := store.Add(ctx, *baseAcf)
+			err = files.Create(ctx, baseAcf)
 			Expect(err).ToNot(HaveOccurred())
+			baseID := baseAcf.ID
 
 			overlayAcf.BaseAppConfigFileID = &baseID
 
-			baseInfo, err := newBSCPBaseContentProvider(store, db, overlayAcf).GetInfo(ctx)
+			baseInfo, err := newBSCPBaseContentProvider(db, overlayAcf).GetInfo(ctx)
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(baseInfo).To(Equal(&BaseContentInfo{
 				HolderID:                baseID,

@@ -24,7 +24,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/onsi/gomega"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
@@ -84,7 +84,7 @@ func TrpcApplication(
 		app.WorkspaceID = opts.WorkspaceID
 	}
 
-	err := stores.AppStore.CreateApp(ctx, app)
+	err := stores.AppStore.Create(ctx, app)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// 设置默认镜像
@@ -116,13 +116,12 @@ func TrpcApplication(
 		Components: opts.Components,
 		Replicas:   opts.Replicas,
 	}
-	err = stores.AppModelStore.CreateAppModel(ctx, model)
+	err = appmodel.CreateAppModel(ctx, database.DB(), model)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// 创建 app-level 默认 AppConfigFile（tRPC plugin 需要）
 	// def.Name 使用 tRPC 配置中的实际文件名，与 app model 保持一致
 	acfService := appcfg.NewAppConfigFileService(
-		stores.AppConfigFileStore,
 		database.DB(),
 	)
 	_, err = acfService.Create(
@@ -167,9 +166,7 @@ func TrpcApplication(
 
 // TafApplicationStores 创建 TAF 应用所需的 store 集合
 type TafApplicationStores struct {
-	AppStore           bkmsapp.ApplicationStore
-	AppModelStore      appmodel.AppModelStore
-	AppConfigFileStore appcfg.AppConfigFileStore
+	AppStore *bkmsapp.ApplicationStore
 }
 
 // TafApplicationOpts 定义创建 TAF 应用时的可选参数
@@ -223,7 +220,7 @@ func TafApplication(
 		app.WorkspaceID = opts.WorkspaceID
 	}
 
-	err := stores.AppStore.CreateApp(ctx, app)
+	err := stores.AppStore.Create(ctx, app)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// 设置默认镜像
@@ -262,13 +259,12 @@ func TafApplication(
 		Components: opts.Components,
 		Replicas:   opts.Replicas,
 	}
-	err = stores.AppModelStore.CreateAppModel(ctx, model)
+	err = appmodel.CreateAppModel(ctx, database.DB(), model)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// 创建 app-level 默认 AppConfigFile（TAF plugin 需要）
 	// def.Name 使用 TAF 配置中的实际文件名，与 app model 保持一致
 	acfService := appcfg.NewAppConfigFileService(
-		stores.AppConfigFileStore,
 		database.DB(),
 	)
 	_, err = acfService.Create(

@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -36,7 +37,7 @@ import (
 // If am is not nil, workload resource limit variables are appended after them.
 func ListBuiltinVars(
 	ctx context.Context,
-	store ScopedEnvVarStore,
+	db *mongo.Database,
 	environment envmodel.Environment,
 	app *bkmsapp.Application,
 	am *appmodel.AppModel,
@@ -44,7 +45,7 @@ func ListBuiltinVars(
 	envVars := make(envvartypes.EnvVariableList, 0)
 	envVars = append(envVars, getEnvBuiltinVars(environment)...)
 
-	scopedVars, err := ListBuiltinScoped(ctx, store, environment)
+	scopedVars, err := ListBuiltinScoped(ctx, db, environment)
 	if err != nil {
 		return nil, errors.Wrap(err, "list built-in scoped env vars")
 	}
@@ -156,10 +157,10 @@ func getAppBuiltinVars(app bkmsapp.Application) envvartypes.EnvVariableList {
 
 // ListBuiltinScoped returns built-in scoped env vars matched by the given environment.
 func ListBuiltinScoped(
-	ctx context.Context, store ScopedEnvVarStore, environment envmodel.Environment,
+	ctx context.Context, db *mongo.Database, environment envmodel.Environment,
 ) ([]ScopedEnvVar, error) {
-	matchedVars, err := store.List(
-		ctx,
+	matchedVars, err := List(
+		ctx, db,
 		environment.WorkspaceID,
 		WithScopes(
 			envvartypes.ScopeWorkspace,

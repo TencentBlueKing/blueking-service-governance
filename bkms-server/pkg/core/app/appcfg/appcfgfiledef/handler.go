@@ -44,10 +44,13 @@ func NewHandler(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
+func (h *Handler) configFiles() *appcfg.AppConfigFileStore {
+	return store.Of(h.registry.DB, appcfg.AppConfigFileMeta)
+}
+
 func (h *Handler) newAppCfgFileDefService() *appcfg.AppCfgFileDefService {
 	base := appcfg.NewBaseAppCfgFileService(
 		h.registry.DB,
-		h.registry.AppConfigFileStore,
 	)
 	return appcfg.NewAppCfgFileDefService(base)
 }
@@ -96,8 +99,8 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 	for _, d := range defs {
 		defIDs = append(defIDs, d.ID)
 	}
-	defaultFiles, err := h.registry.AppConfigFileStore.List(
-		ctx, app.ID,
+	defaultFiles, err := appcfg.ListFiles(
+		ctx, h.configFiles(), app.ID,
 		appcfg.AcfFilterDefIDs(defIDs),
 		appcfg.AcfFilterEnvName(appcfg.EnvNameDefault),
 	)
@@ -345,7 +348,7 @@ func (h *Handler) DeleteAppCfgFileDef(c *gin.Context) {
 
 	// 查默认文件并通过 base service 删除（级联删 sibling / def）
 	svc := h.newAppCfgFileDefService()
-	defaultFile, fErr := h.registry.AppConfigFileStore.GetByDefIDAndEnv(ctx, def.ID, appcfg.EnvNameDefault)
+	defaultFile, fErr := h.configFiles().Get(ctx, appcfg.FileByDefEnv(def.ID, appcfg.EnvNameDefault))
 	if fErr != nil {
 		bkerrs.AbortWithErr(
 			c,
@@ -396,7 +399,7 @@ func (h *Handler) ListEnvInstances(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	files, err := h.registry.AppConfigFileStore.ListByDefID(ctx, def.ID)
+	files, err := h.configFiles().List(ctx, appcfg.FilesByDef(def.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing env instances"))
 		return
@@ -462,7 +465,7 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 			if def.ConfigKind != appcfg.ConfigKindFramework {
 				return nil
 			}
-			arranger := arrangement.NewAppArranger(h.registry.AppStore)
+			arranger := arrangement.NewAppArranger()
 			_, validateErr := arranger.ValidateFileContent(
 				ctx,
 				app,

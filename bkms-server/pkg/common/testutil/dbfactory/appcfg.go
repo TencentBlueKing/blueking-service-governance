@@ -27,6 +27,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // AppConfigFileOpts defines options for creating a test AppConfigFile.
@@ -42,11 +44,7 @@ type AppConfigFileOpts struct {
 }
 
 // AppConfigFile creates and persists an AppConfigFile for tests.
-func AppConfigFile(
-	ctx context.Context,
-	store appcfg.AppConfigFileStore,
-	opts *AppConfigFileOpts,
-) *appcfg.AppConfigFile {
+func AppConfigFile(ctx context.Context, opts *AppConfigFileOpts) *appcfg.AppConfigFile {
 	validateOpts(opts)
 
 	if opts.Name == "" {
@@ -71,9 +69,8 @@ func AppConfigFile(
 			BaseAppConfigFileID: opts.BaseAppConfigFileID,
 		},
 	}
-	id, err := store.Add(ctx, *acf)
+	err := store.Of(database.DB(), appcfg.AppConfigFileMeta).Create(ctx, acf)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	acf.ID = id
 	return acf
 }
 

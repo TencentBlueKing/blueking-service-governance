@@ -30,7 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
 // downloadAppInstanceLogsURIInput is the path input for downloading app instance logs.
@@ -98,7 +98,7 @@ func (h *Handler) DownloadAppInstanceLogs(c *gin.Context) {
 
 	mgr, err := instancelog.NewLogManager(
 		ctx,
-		h.registry.AppModelDeployRecordStore,
+		h.registry.DB,
 		app,
 		env,
 		queryInput.TrafficLaneName,

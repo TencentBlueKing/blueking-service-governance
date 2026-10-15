@@ -48,33 +48,26 @@ import (
 
 // Service 拓扑服务，对外提供拓扑图查询能力
 type Service struct {
-	snapshots         *ResourceSnapshotStore
-	builder           *Builder
-	appModelStore     appmodel.AppModelStore
-	appSpecStore      appspec.AppSpecStore
-	scopedEnvVarStore envvars.ScopedEnvVarStore
-	appDepsVarReader  *depenvvars.Reader
-	polarisVarReader  *polarisenvvars.Reader
+	snapshots        *ResourceSnapshotStore
+	builder          *Builder
+	db               *mongo.Database
+	appDepsVarReader *depenvvars.Reader
+	polarisVarReader *polarisenvvars.Reader
 }
 
 // NewService 创建 Service 实例
 func NewService(
 	db *mongo.Database,
 	builder *Builder,
-	appModelStore appmodel.AppModelStore,
-	appSpecStore appspec.AppSpecStore,
-	scopedEnvVarStore envvars.ScopedEnvVarStore,
 	appDepsVarReader *depenvvars.Reader,
 	polarisVarReader *polarisenvvars.Reader,
 ) *Service {
 	return &Service{
-		snapshots:         store.Of(db, ResourceSnapshotMeta),
-		builder:           builder,
-		appModelStore:     appModelStore,
-		appSpecStore:      appSpecStore,
-		scopedEnvVarStore: scopedEnvVarStore,
-		appDepsVarReader:  appDepsVarReader,
-		polarisVarReader:  polarisVarReader,
+		snapshots:        store.Of(db, ResourceSnapshotMeta),
+		builder:          builder,
+		db:               db,
+		appDepsVarReader: appDepsVarReader,
+		polarisVarReader: polarisVarReader,
 	}
 }
 
@@ -248,18 +241,18 @@ func (s *Service) maskManifestSensitiveValues(
 		k8smanifest.NewMasker(nil, envvartypes.SensitiveValueMask).Mask(obj)
 		return nil
 	}
-	appModel, err := s.appModelStore.GetAppModel(ctx, app.ID)
+	appModel, err := store.Of(s.db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		return errors.Wrap(err, "get app model")
 	}
-	appModel, _, err = appspec.ModelForEnv(ctx, s.appSpecStore, s.appModelStore, app.ID, env.Name, appModel)
+	appModel, _, err = appspec.ModelForEnv(ctx, s.db, app.ID, env.Name, appModel)
 	if err != nil {
 		return errors.Wrap(err, "apply env app spec")
 	}
 
 	appEnvVars, err := envvars.BuildAppEnvVars(
 		ctx, app, appModel, env,
-		envvars.NewUnifiedEnvVarsReader(s.scopedEnvVarStore, s.appDepsVarReader, s.polarisVarReader),
+		envvars.NewUnifiedEnvVarsReader(s.db, s.appDepsVarReader, s.polarisVarReader),
 	)
 	if err != nil {
 		return errors.Wrap(err, "build app env vars")

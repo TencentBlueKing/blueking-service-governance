@@ -30,7 +30,6 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
@@ -39,7 +38,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
@@ -50,12 +48,8 @@ import (
 // and reused for multiple build requests.
 type BuilderService struct {
 	envVarsReader          *envvars.UnifiedEnvVarsReader
-	workspaceCompsStore    workspace.WorkspaceCompsStore
 	workspaceStore         *workspace.WorkspaceStore
 	polarisWorkloadBuilder *polaris.WorkloadBuilder
-	hostPortStore          hostport.HostPortStore
-	appModelStore          appmodel.AppModelStore
-	appSpecStore           appspec.AppSpecStore
 	db                     *mongo.Database
 	mountableFileProvider  appcfg.MountableFileProvider
 }
@@ -164,25 +158,15 @@ func (r *BuildResult) mainInfo() (workloadMeta, bool) {
 
 // NewBuilderService creates a BuilderService from the dependencies that can be injected by fx.
 func NewBuilderService(
-	scopedEnvVarStore envvars.ScopedEnvVarStore,
 	appDepsVarReader *depenvvars.Reader,
 	polarisVarReader *polarisenvvars.Reader,
-	workspaceCompsStore workspace.WorkspaceCompsStore,
-	polarisConfigStore polaris.PolarisConfigStore,
-	hostPortStore hostport.HostPortStore,
-	appModelStore appmodel.AppModelStore,
-	appSpecStore appspec.AppSpecStore,
 	db *mongo.Database,
 	mountableFileProvider appcfg.MountableFileProvider,
 ) *BuilderService {
 	return &BuilderService{
-		envVarsReader:          envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
-		workspaceCompsStore:    workspaceCompsStore,
+		envVarsReader:          envvars.NewUnifiedEnvVarsReader(db, appDepsVarReader, polarisVarReader),
 		workspaceStore:         store.Of(db, workspace.Meta),
-		polarisWorkloadBuilder: polaris.NewWorkloadBuilder(polarisConfigStore),
-		hostPortStore:          hostPortStore,
-		appModelStore:          appModelStore,
-		appSpecStore:           appSpecStore,
+		polarisWorkloadBuilder: polaris.NewWorkloadBuilder(db),
 		db:                     db,
 		mountableFileProvider:  mountableFileProvider,
 	}

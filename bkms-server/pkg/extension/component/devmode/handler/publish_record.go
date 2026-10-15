@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // CreateDevModePublishRecords 上报开发模式发布结果。
@@ -69,8 +70,8 @@ func (h *Handler) CreateDevModePublishRecords(c *gin.Context) {
 	}
 	operator := auth.MustGetUser(ctx).ID
 
-	records := lo.Map(input.Results, func(result slz.PublishInstanceResult, _ int) devmode.PublishRecord {
-		return devmode.PublishRecord{
+	records := lo.Map(input.Results, func(result slz.PublishInstanceResult, _ int) *devmode.PublishRecord {
+		return &devmode.PublishRecord{
 			AppID:      app.ID,
 			EnvName:    uriInput.EnvName,
 			Instance:   result.Instance,
@@ -83,11 +84,11 @@ func (h *Handler) CreateDevModePublishRecords(c *gin.Context) {
 		}
 	})
 
-	recordIDs, err := h.registry.PublishRecordStore.Create(ctx, records)
-	if err != nil {
+	if err = store.Of(h.registry.DB, devmode.PublishRecordMeta).CreateMany(ctx, records); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create devmode publish records"))
 		return
 	}
+	recordIDs := lo.Map(records, func(r *devmode.PublishRecord, _ int) string { return r.ID.Hex() })
 
 	// 写入操作审计记录
 	recordCtx := context.WithoutCancel(ctx)
@@ -148,8 +149,8 @@ func (h *Handler) ListDevModePublishRecords(c *gin.Context) {
 		return
 	}
 
-	records, total, err := h.registry.PublishRecordStore.List(
-		ctx, app.ID, uriInput.EnvName, input.Keyword, input.Page, input.PageSize,
+	page, err := store.Of(h.registry.DB, devmode.PublishRecordMeta).ListPage(ctx, input.Page, input.PageSize,
+		devmode.ByAppEnv(app.ID, uriInput.EnvName), devmode.KeywordMatches(input.Keyword), devmode.NewestFirst(),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
@@ -159,11 +160,11 @@ func (h *Handler) ListDevModePublishRecords(c *gin.Context) {
 		return
 	}
 
-	outputRecords := lo.Map(records, func(record devmode.PublishRecord, _ int) *slz.PublishRecordOutputObj {
+	outputRecords := lo.Map(page.Items, func(record devmode.PublishRecord, _ int) *slz.PublishRecordOutputObj {
 		return new(slz.PublishRecordOutputObj).FromModel(record)
 	})
 	ginutils.OK(c, slz.ListPublishRecordsOutput{
-		Data: slz.PaginatedPublishRecords{Count: total, Results: outputRecords},
+		Data: slz.PaginatedPublishRecords{Count: page.Total, Results: outputRecords},
 	})
 }
 

@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -77,7 +78,7 @@ type LogEntry struct {
 // 包括：获取集群环境信息、创建 PodClient、确定容器名称
 func NewLogManager(
 	ctx context.Context,
-	deployRecordStore appmodeldeploy.RecordStore,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 	trafficLaneName string,
@@ -87,7 +88,7 @@ func NewLogManager(
 	namespace := env.Cluster.Namespace
 	containerName := defaults.WorkloadMainContainerName
 	if bkmsapp.IsAppModelType(app.Type) {
-		record, err := deployRecordStore.GetLatest(ctx, app.ID, env.Name, trafficLaneName)
+		record, err := appmodeldeploy.GetLatest(ctx, db, app.ID, env.Name, trafficLaneName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "get latest deploy record for app %s", app.ID)
 		}

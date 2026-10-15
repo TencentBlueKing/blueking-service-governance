@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	corev1 "k8s.io/api/core/v1"
@@ -48,6 +49,7 @@ import (
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model/initdata"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -95,17 +97,13 @@ var workloadTestCases = []WorkloadTestCase{
 
 // SharedTestStores 聚合共享测试依赖，避免测试主体到处传递 store 参数。
 type SharedTestStores struct {
-	AppStore              bkmsapp.ApplicationStore
-	AppModelStore         appmodel.AppModelStore
+	AppStore              *bkmsapp.ApplicationStore
 	CompDefStore          *component.ComponentDefStore
-	WorkspaceCompsStore   workspace.WorkspaceCompsStore
-	PolarisConfigStore    polaris.PolarisConfigStore
-	AppSpecStore          appspec.AppSpecStore
-	AppConfigFileStore    appcfg.AppConfigFileStore
+	PolarisConfigStore    *polaris.ConfigStore
 	AppConfigFileDefStore *appcfg.AppConfigFileDefStore
-	ScopedEnvVarStore     envvars.ScopedEnvVarStore
+	DB                    *mongo.Database
 	SvcStore              *depmodel.ServiceStore
-	SvcInstStore          depmodel.ServiceInstanceStore
+	SvcInstStore          *depmodel.ServiceInstanceStore
 	BindingStore          *depmodel.ServiceBindingStore
 }
 
@@ -125,9 +123,7 @@ func createApplication(
 			FileContent: tc.ConfigContent,
 		}
 		return dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:           stores.AppStore,
-			AppModelStore:      stores.AppModelStore,
-			AppConfigFileStore: stores.AppConfigFileStore,
+			AppStore: stores.AppStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			TrpcConfig:  trpcConfig,
 			EnvVars:     envVars,
@@ -141,9 +137,7 @@ func createApplication(
 			FileContent: tc.ConfigContent,
 		}
 		return dbfactory.TafApplication(ctx, &dbfactory.TafApplicationStores{
-			AppStore:           stores.AppStore,
-			AppModelStore:      stores.AppModelStore,
-			AppConfigFileStore: stores.AppConfigFileStore,
+			AppStore: stores.AppStore,
 		}, &dbfactory.TafApplicationOpts{
 			TafConfig:   tafConfig,
 			EnvVars:     envVars,
@@ -167,33 +161,24 @@ var _ = Describe("Builder Shared Tests", func() {
 		stores = &SharedTestStores{}
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
 			workload.FxModule,
 			polaris.FxModule,
-			appspec.FxModule,
 			appcfg.FxModule,
 			env.FxModule,
 			envvars.FxModule,
-			workspace.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polarisenvvars.FxModule,
 			fx.Populate(
-				&stores.AppStore,
-				&stores.AppModelStore,
-				&stores.WorkspaceCompsStore,
-				&stores.PolarisConfigStore,
-				&stores.AppSpecStore,
-				&stores.AppConfigFileStore,
-				&stores.ScopedEnvVarStore,
-				&stores.SvcInstStore,
 				&envSvc,
 				&builderSvc,
 			),
 		)
 		diApp.RequireStart()
+		stores.DB = testutil.NewDB(GinkgoT())
+		stores.AppStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		stores.PolarisConfigStore = testutil.NewStore(GinkgoT(), polaris.ConfigMeta)
 		stores.AppConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		stores.SvcInstStore = testutil.NewStore(GinkgoT(), depmodel.ServiceInstanceMeta)
 		stores.BindingStore = testutil.NewStore(GinkgoT(), depmodel.ServiceBindingMeta)
 		stores.SvcStore = testutil.NewStore(GinkgoT(), depmodel.ServiceMeta)
 		stores.CompDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
@@ -202,7 +187,7 @@ var _ = Describe("Builder Shared Tests", func() {
 		dbfactory.LoadBuiltinComponents(ctx, database.Client(), "../../../extension/component/assets/comps")
 
 		// Seed depservice init data (mysql, polaris, fake service definitions)
-		Expect(initdata.Do(testutil.NewDB(GinkgoT()))).To(Succeed())
+		Expect(initdata.Do(stores.DB)).To(Succeed())
 	})
 
 	AfterEach(func() {
@@ -220,7 +205,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			// Add env vars
-			_, err := stores.ScopedEnvVarStore.CreateSimpleEnvScopeVar(ctx, *testEnv, "ENV_VAR", "env_var", "")
+			_, err := envvars.CreateSimpleEnvScopeVar(ctx, stores.DB, *testEnv, "ENV_VAR", "env_var", "")
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -260,10 +245,10 @@ var _ = Describe("Builder Shared Tests", func() {
 				"cpu":    "1-2",
 				"memory": "2Gi-4Gi",
 			}
-			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
+			err := appmodel.UpdateAppModel(ctx, stores.DB, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = stores.AppSpecStore.Create(ctx, &appspec.AppSpec{
+			err = store.Of(stores.DB, appspec.AppSpecMeta).Create(ctx, &appspec.AppSpec{
 				AppID:   app.ID,
 				EnvName: testEnv.Name,
 				Resources: &appspec.ResourcesSpec{
@@ -320,10 +305,10 @@ var _ = Describe("Builder Shared Tests", func() {
 
 			// Replicas is outside the update-strategy override and should be preserved.
 			appModel.Replicas = lo.ToPtr(int32(1))
-			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
+			err := appmodel.UpdateAppModel(ctx, stores.DB, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = stores.AppSpecStore.Create(ctx, &appspec.AppSpec{
+			err = store.Of(stores.DB, appspec.AppSpecMeta).Create(ctx, &appspec.AppSpec{
 				AppID:   app.ID,
 				EnvName: testEnv.Name,
 				UpdateStrategy: &appspec.UpdateStrategySpec{
@@ -353,7 +338,7 @@ var _ = Describe("Builder Shared Tests", func() {
 		testEnv.Type = componentdevmode.EnvTypeDevelopment
 		appModel.Workload.Command = []string{"./server"}
 
-		err := stores.AppSpecStore.Create(ctx, &appspec.AppSpec{
+		err := store.Of(stores.DB, appspec.AppSpecMeta).Create(ctx, &appspec.AppSpec{
 			AppID:   app.ID,
 			EnvName: testEnv.Name,
 			DevMode: &appspec.DevModeSpec{
@@ -384,7 +369,7 @@ var _ = Describe("Builder Shared Tests", func() {
 		testEnv.Type = componentdevmode.EnvTypeProduction
 		appModel.Workload.Command = []string{"./server"}
 
-		err := stores.AppSpecStore.Create(ctx, &appspec.AppSpec{
+		err := store.Of(stores.DB, appspec.AppSpecMeta).Create(ctx, &appspec.AppSpec{
 			AppID:   app.ID,
 			EnvName: testEnv.Name,
 			DevMode: &appspec.DevModeSpec{
@@ -415,7 +400,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			// Add env vars
-			_, err := stores.ScopedEnvVarStore.CreateSimpleEnvScopeVar(ctx, *testEnv, "ENV_VAR", "env_var", "")
+			_, err := envvars.CreateSimpleEnvScopeVar(ctx, stores.DB, *testEnv, "ENV_VAR", "env_var", "")
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -631,7 +616,7 @@ spec:
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			workspaceCompName := "workspace-replicas-foo"
-			err := stores.WorkspaceCompsStore.Add(ctx, &workspace.Component{
+			err := workspace.AddComponents(ctx, stores.DB, &workspace.Component{
 				Name:        workspaceCompName,
 				WorkspaceID: testEnv.WorkspaceID,
 				ScopeType:   component.ScopeTypeGlobal,
@@ -680,7 +665,7 @@ spec:
 			workspaceCompName := "workspace-replicas-foo"
 			workspaceCompNameEnv1 := workspaceCompName + "-env1"
 			workspaceCompNameEnv2 := workspaceCompName + "-env2"
-			err := stores.WorkspaceCompsStore.Add(ctx, &workspace.Component{
+			err := workspace.AddComponents(ctx, stores.DB, &workspace.Component{
 				Name:          workspaceCompNameEnv1,
 				WorkspaceID:   testEnv.WorkspaceID,
 				ScopeType:     component.ScopeTypeEnvironment,
@@ -695,7 +680,7 @@ spec:
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = stores.WorkspaceCompsStore.Add(ctx, &workspace.Component{
+			err = workspace.AddComponents(ctx, stores.DB, &workspace.Component{
 				Name:          workspaceCompNameEnv2,
 				WorkspaceID:   testEnv.WorkspaceID,
 				ScopeType:     component.ScopeTypeEnvironment,
@@ -764,7 +749,7 @@ spec:
 				"cpu":    "100m-200m",
 				"memory": "512Mi",
 			}
-			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
+			err := appmodel.UpdateAppModel(ctx, stores.DB, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -820,7 +805,7 @@ spec:
 				},
 				InitialDelaySeconds: 5,
 			}
-			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
+			err := appmodel.UpdateAppModel(ctx, stores.DB, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -859,7 +844,7 @@ spec:
 					ExecAction:  &appmodel.ExecAction{Command: []string{"sh", "-c", "sleep 1"}},
 				},
 			}
-			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
+			err := appmodel.UpdateAppModel(ctx, stores.DB, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -896,7 +881,7 @@ spec:
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			appModel.Workload.TerminationGracePeriodSeconds = lo.ToPtr(int64(60))
-			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
+			err := appmodel.UpdateAppModel(ctx, stores.DB, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -930,7 +915,7 @@ spec:
 					},
 				},
 			}
-			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
+			err := appmodel.UpdateAppModel(ctx, stores.DB, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -968,7 +953,7 @@ spec:
 				MaxUnavailable: lo.ToPtr("2"),
 				MaxSurge:       lo.ToPtr("50%"),
 			}
-			err := stores.AppModelStore.UpdateAppModel(ctx, appModel)
+			err := appmodel.UpdateAppModel(ctx, stores.DB, appModel)
 			Expect(err).NotTo(HaveOccurred())
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
@@ -994,7 +979,7 @@ spec:
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			// Add env vars
-			_, err := stores.ScopedEnvVarStore.CreateSimpleEnvScopeVar(ctx, *testEnv, "ENV_VAR", "env_var", "")
+			_, err := envvars.CreateSimpleEnvScopeVar(ctx, stores.DB, *testEnv, "ENV_VAR", "env_var", "")
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a polaris config for the app
@@ -1016,7 +1001,7 @@ spec:
 			}
 			err = stores.PolarisConfigStore.Create(ctx, polarisConfig)
 			Expect(err).NotTo(HaveOccurred())
-			defer func() { _ = stores.PolarisConfigStore.DeleteByApp(ctx, app.ID) }()
+			defer func() { _, _ = stores.PolarisConfigStore.DeleteMany(ctx, polaris.ByApp(app.ID)) }()
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
 
@@ -1090,7 +1075,7 @@ spec:
 			}
 			err := stores.PolarisConfigStore.Create(ctx, polarisConfig)
 			Expect(err).NotTo(HaveOccurred())
-			defer func() { _ = stores.PolarisConfigStore.DeleteByApp(ctx, app.ID) }()
+			defer func() { _, _ = stores.PolarisConfigStore.DeleteMany(ctx, polaris.ByApp(app.ID)) }()
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
 
@@ -1132,7 +1117,7 @@ spec:
 			}
 			err := stores.PolarisConfigStore.Create(ctx, polarisConfig)
 			Expect(err).NotTo(HaveOccurred())
-			defer func() { _ = stores.PolarisConfigStore.DeleteByApp(ctx, app.ID) }()
+			defer func() { _, _ = stores.PolarisConfigStore.DeleteMany(ctx, polaris.ByApp(app.ID)) }()
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
 
@@ -1186,7 +1171,7 @@ spec:
 			Expect(err).NotTo(HaveOccurred())
 			err = stores.PolarisConfigStore.Create(ctx, config2)
 			Expect(err).NotTo(HaveOccurred())
-			defer func() { _ = stores.PolarisConfigStore.DeleteByApp(ctx, app.ID) }()
+			defer func() { _, _ = stores.PolarisConfigStore.DeleteMany(ctx, polaris.ByApp(app.ID)) }()
 
 			builder := workload.NewBuilder(builderSvc, app, appModel)
 
@@ -1236,16 +1221,15 @@ spec:
 				Status:   depmodel.AvailableStatus,
 				Operator: "test-operator",
 			}
-			instID, err := stores.SvcInstStore.Create(ctx, inst)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(stores.SvcInstStore.Create(ctx, inst)).To(Succeed())
 
-			err = stores.BindingStore.Create(ctx, &depmodel.ServiceBinding{
+			err := stores.BindingStore.Create(ctx, &depmodel.ServiceBinding{
 				Name:        "mysql",
 				AppID:       app.ID,
 				WorkspaceID: app.WorkspaceID,
 				ServiceName: "fake",
 				EnvInstanceMap: map[string]bson.ObjectID{
-					testEnv.Name: instID,
+					testEnv.Name: inst.ID,
 				},
 				EnvVars: map[string]string{
 					"MYSQL_HOST":     "${{env.MYSQL_HOST}}",
@@ -1294,7 +1278,7 @@ spec:
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			cfgSvc := appcfg.NewAppConfigFileService(
-				stores.AppConfigFileStore, testutil.NewDB(GinkgoT()),
+				testutil.NewDB(GinkgoT()),
 			)
 			plainContent := "worker_processes 4;\n"
 			created, err := cfgSvc.Create(ctx, appcfg.CreateCfgFileParams{

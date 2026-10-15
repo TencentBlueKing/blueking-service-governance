@@ -28,26 +28,26 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 )
 
 var _ = Describe("DetailSyncer", func() {
 	var (
 		ctx    context.Context
-		store  SnapshotStore
+		db     *mongo.Database
 		syncer *DetailSyncer
 		info   *RepoKeyInfo
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-		store, err = NewSnapshotStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		DeferCleanup(cleanupSnapshotCollections)
 
-		syncer = NewDetailSyncer(store)
+		syncer = NewDetailSyncer(db)
 		info = &RepoKeyInfo{
 			RepoKey:  "repo-key-%s" + stringx.Random(24),
 			RepoName: "fixture/sample",
@@ -64,15 +64,14 @@ var _ = Describe("DetailSyncer", func() {
 
 	AfterEach(func() {
 		mockey.UnPatchAll()
-		Expect(store.DeleteAll(ctx)).To(Succeed())
 	})
 
 	Describe("SyncDetails", func() {
 		It("should sync details and converge status on success", func() {
-			err := store.UpsertSnapshots(ctx, info.RepoKey, []Image{
-				{Tag: TagLatest},
-				{Tag: "v1.0.0"},
-				{Tag: "v1.1.0"},
+			err := UpsertTags(ctx, db, info.RepoKey, []string{
+				TagLatest,
+				"v1.0.0",
+				"v1.1.0",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -92,7 +91,7 @@ var _ = Describe("DetailSyncer", func() {
 			err = syncer.SyncDetails(ctx, info)
 			Expect(err).NotTo(HaveOccurred())
 
-			snapshots, total, listErr := store.ListByRepoKey(ctx, info.RepoKey, "", 1, 10)
+			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
 			Expect(listErr).NotTo(HaveOccurred())
 			Expect(total).To(BeEquivalentTo(3))
 			Expect(snapshots).To(HaveLen(3))
@@ -110,7 +109,7 @@ var _ = Describe("DetailSyncer", func() {
 				Expect(snapshot.Size).To(Equal(int64(len(tag))))
 			}
 
-			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 			Expect(status.LastDetailSyncedAt).NotTo(BeNil())
@@ -118,10 +117,10 @@ var _ = Describe("DetailSyncer", func() {
 		})
 
 		It("should keep syncing remaining tags when one detail request fails", func() {
-			err := store.UpsertSnapshots(ctx, info.RepoKey, []Image{
-				{Tag: "v1.0.0"},
-				{Tag: "v1.1.0"},
-				{Tag: "v2.0.0"},
+			err := UpsertTags(ctx, db, info.RepoKey, []string{
+				"v1.0.0",
+				"v1.1.0",
+				"v2.0.0",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -142,7 +141,7 @@ var _ = Describe("DetailSyncer", func() {
 			err = syncer.SyncDetails(ctx, info)
 			Expect(err).NotTo(HaveOccurred())
 
-			snapshots, total, listErr := store.ListByRepoKey(ctx, info.RepoKey, "", 1, 10)
+			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
 			Expect(listErr).NotTo(HaveOccurred())
 			Expect(total).To(BeEquivalentTo(3))
 			Expect(snapshots).To(HaveLen(3))
@@ -158,20 +157,20 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(snapshotsByTag["v1.1.0"].Digest).To(BeEmpty())
 			Expect(snapshotsByTag["v1.1.0"].BuiltAt).To(BeNil())
 
-			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 			Expect(status.LastError).To(ContainSubstring("get detail for v1.1.0"))
 		})
 
 		It("should finish cleanly when there is no tag to sync", func() {
-			// UpsertSnapshots 不会写入 builtAt，需要额外调用 UpdateDetail 设置详情
-			err := store.UpsertSnapshots(ctx, info.RepoKey, []Image{
-				{Tag: "v0.9.0"},
+			// UpsertTags 不会写入 builtAt，需要额外调用 UpdateDetail 设置详情
+			err := UpsertTags(ctx, db, info.RepoKey, []string{
+				"v0.9.0",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			builtAt := time.Now().Add(-time.Hour)
-			err = store.UpdateDetail(ctx, info.RepoKey, "v0.9.0", &registry.ImageDetail{
+			err = UpdateDetail(ctx, db, info.RepoKey, "v0.9.0", &registry.ImageDetail{
 				Tag:     "v0.9.0",
 				Digest:  "sha256:v0.9.0",
 				Size:    64,
@@ -188,7 +187,7 @@ var _ = Describe("DetailSyncer", func() {
 			err = syncer.SyncDetails(ctx, info)
 			Expect(err).NotTo(HaveOccurred())
 
-			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 			Expect(status.LastDetailSyncedAt).NotTo(BeNil())
@@ -196,20 +195,20 @@ var _ = Describe("DetailSyncer", func() {
 		})
 
 		It("should re-fetch pending tags and keep stale details on lookup failure", func() {
-			err := store.UpsertSnapshots(ctx, info.RepoKey, []Image{
-				{Tag: "core-test-01"},
-				{Tag: "core-test-02"},
+			err := UpsertTags(ctx, db, info.RepoKey, []string{
+				"core-test-01",
+				"core-test-02",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			staleBuiltAt := time.Date(2026, 4, 13, 14, 32, 31, 0, time.UTC)
-			err = store.UpdateDetail(ctx, info.RepoKey, "core-test-01", &registry.ImageDetail{
+			err = UpdateDetail(ctx, db, info.RepoKey, "core-test-01", &registry.ImageDetail{
 				Tag:     "core-test-01",
 				Digest:  "sha256:a376477a",
 				Size:    317,
 				BuiltAt: staleBuiltAt,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			err = store.UpdateDetail(ctx, info.RepoKey, "core-test-02", &registry.ImageDetail{
+			err = UpdateDetail(ctx, db, info.RepoKey, "core-test-02", &registry.ImageDetail{
 				Tag:     "core-test-02",
 				Digest:  "sha256:old02",
 				Size:    128,
@@ -218,7 +217,7 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 两个标签详情均已补全，只有被标记为待刷新才会重新拉取
-			err = store.MarkDetailSyncPending(ctx, info.RepoKey, []string{"core-test-01", "core-test-02"})
+			err = MarkDetailSyncPending(ctx, db, info.RepoKey, []string{"core-test-01", "core-test-02"})
 			Expect(err).NotTo(HaveOccurred())
 
 			freshBuiltAt := time.Date(2026, 4, 23, 11, 52, 14, 0, time.UTC)
@@ -239,7 +238,7 @@ var _ = Describe("DetailSyncer", func() {
 			err = syncer.SyncDetails(ctx, info)
 			Expect(err).NotTo(HaveOccurred())
 
-			snapshots, _, listErr := store.ListByRepoKey(ctx, info.RepoKey, "", 1, 10)
+			snapshots, _, listErr := listSnapshots(ctx, db, info.RepoKey)
 			Expect(listErr).NotTo(HaveOccurred())
 			Expect(snapshots).To(HaveLen(2))
 			snapshotsByTag := make(map[string]Image, len(snapshots))
@@ -256,7 +255,7 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(snapshotsByTag["core-test-01"].DetailSyncPending).To(BeFalse())
 			Expect(snapshotsByTag["core-test-02"].DetailSyncPending).To(BeTrue())
 
-			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 			Expect(status.LastError).To(ContainSubstring("get detail for core-test-02"))
@@ -264,7 +263,7 @@ var _ = Describe("DetailSyncer", func() {
 
 		It("should skip sync when status is refreshing", func() {
 			// 先将状态设为 refreshing
-			err := store.UpsertStatus(ctx, &RepoSnapshotStatus{
+			err := UpsertRepoStatus(ctx, db, &RepoSnapshotStatus{
 				RepoKey:       info.RepoKey,
 				RefreshStatus: RefreshStatusRefreshing,
 			})
@@ -281,7 +280,7 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 状态不应被修改，仍为 refreshing
-			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status).NotTo(BeNil())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusRefreshing))
@@ -289,7 +288,7 @@ var _ = Describe("DetailSyncer", func() {
 
 		It("should skip sync when status is detail_syncing", func() {
 			// 先将状态设为 detail_syncing
-			err := store.UpsertStatus(ctx, &RepoSnapshotStatus{
+			err := UpsertRepoStatus(ctx, db, &RepoSnapshotStatus{
 				RepoKey:       info.RepoKey,
 				RefreshStatus: RefreshStatusDetailSyncing,
 			})
@@ -306,7 +305,7 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 状态不应被修改，仍为 detail_syncing
-			status, getErr := store.GetStatus(ctx, info.RepoKey)
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status).NotTo(BeNil())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusDetailSyncing))

@@ -35,6 +35,7 @@ import (
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
@@ -76,11 +77,11 @@ func handleDeploySucceeded(ctx context.Context, args Args, record *appmodeldeplo
 		ctx, "deploy succeeded, start post-deploy hooks for workspace=%s app=%s env=%s lane=%s operator=%s",
 		args.WorkspaceID, args.AppID, args.EnvName, args.TrafficLaneName, record.Creator,
 	)
-	// 记录应用到环境的部署关联，envStore 未初始化时只打日志，不阻断后续告警同步
-	if reg.EnvStore == nil {
-		log.Errorf(ctx, "track env add app: env store is not initialized")
+	// 记录应用到环境的部署关联，DB 未初始化时只打日志，不阻断后续告警同步
+	if reg.DB == nil {
+		log.Errorf(ctx, "track env add app: db is not initialized")
 	} else {
-		deploy.TrackEnvAddApp(ctx, reg.EnvStore, args.WorkspaceID, args.EnvName, args.AppID)
+		deploy.TrackEnvAddApp(ctx, reg.DB, args.WorkspaceID, args.EnvName, args.AppID)
 	}
 
 	// 异步把应用关联的告警策略同步到当前环境，失败只打日志，不改部署结果、不让本 tick 失败
@@ -143,12 +144,13 @@ func loadApmServiceConfigContext(
 	reg *storereg.Registry,
 	args Args,
 ) (*bkmsapp.Application, *envmodel.Environment, *workspace.Workspace, bool) {
-	app, err := reg.AppStore.GetApp(ctx, args.AppID)
+	app, err := store.Of(reg.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(args.AppID))
 	if err != nil {
 		log.Errorf(ctx, "sync apm service config: get app %s: %v", args.AppID, err)
 		return nil, nil, nil, false
 	}
-	env, err := reg.EnvStore.GetByName(ctx, args.WorkspaceID, args.AppID, args.EnvName)
+	env, err := store.Of(reg.DB, envmodel.EnvMeta).
+		Get(ctx, envmodel.AppEnvByName(args.WorkspaceID, args.AppID, args.EnvName))
 	if err != nil {
 		log.Errorf(ctx, "sync apm service config: get env %s: %v", args.EnvName, err)
 		return nil, nil, nil, false
@@ -176,7 +178,7 @@ func newApmServiceConfigRequest(
 		return nil
 	}
 	// 查询环境绑定的 APM 名称
-	apm, err := reg.ApmInstConfigStore.GetByEnvID(ctx, env.ID)
+	apm, err := store.Of(reg.DB, bkmmodel.ApmInstConfigMeta).Get(ctx, bkmmodel.ApmBoundToEnv(env.ID))
 	if err != nil {
 		if errors.Is(err, bkmmodel.ErrApmInstConfigNotFound) {
 			log.Infof(ctx, "env %s not bound to any apm, skip sync apm service config, app=%s", env.Name, app.ID)
@@ -224,18 +226,17 @@ func resolveApmServiceName(
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 ) string {
-	appModel, err := reg.AppModelStore.GetAppModel(ctx, app.ID)
+	appModel, err := store.Of(reg.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		log.Errorf(ctx, "sync apm service config: get app model failed, app=%s env=%s: %v", app.ID, env.Name, err)
 		return ""
 	}
-	appModel, _, err = appspec.ModelForEnv(ctx, reg.AppSpecStore, reg.AppModelStore, app.ID, env.Name, appModel)
+	appModel, _, err = appspec.ModelForEnv(ctx, reg.DB, app.ID, env.Name, appModel)
 	if err != nil {
 		log.Errorf(ctx, "sync apm service config: apply env app spec failed, app=%s env=%s: %v", app.ID, env.Name, err)
 		return ""
 	}
 	cfgProvider := appcfg.NewMountableFileProvider(
-		reg.AppConfigFileStore,
 		reg.DB,
 	)
 	frameworkFile, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
@@ -251,7 +252,7 @@ func resolveApmServiceName(
 	}
 	appEnvVars, err := envvars.BuildAppEnvVars(
 		ctx, app, appModel, env,
-		envvars.NewUnifiedEnvVarsReader(reg.ScopedEnvVarStore, reg.AppDepsVarReader, reg.PolarisVarReader),
+		envvars.NewUnifiedEnvVarsReader(reg.DB, reg.AppDepsVarReader, reg.PolarisVarReader),
 	)
 	if err != nil {
 		log.Errorf(ctx, "sync apm service config: build app env vars failed, app=%s env=%s: %v", app.ID, env.Name, err)

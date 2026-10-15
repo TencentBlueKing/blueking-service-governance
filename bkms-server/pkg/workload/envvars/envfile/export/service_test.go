@@ -25,14 +25,16 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	coreapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	envvarsstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -41,37 +43,26 @@ import (
 
 var _ = Describe("ExportService", func() {
 	var (
-		diApp              *fxtest.App
-		ctx                context.Context
-		workspaceID        string
-		environment        envmodel.Environment
-		scopedEnvVarStore  envvarsstore.ScopedEnvVarStore
-		appStore           coreapp.ApplicationStore
-		appModelStore      appmodel.AppModelStore
-		appSpecStore       appspec.AppSpecStore
-		appConfigFileStore appcfg.AppConfigFileStore
-		service            *Service
+		diApp       *fxtest.App
+		ctx         context.Context
+		workspaceID string
+		environment envmodel.Environment
+		db          *mongo.Database
+		appStore    *coreapp.ApplicationStore
+		service     *Service
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		appStore = testutil.NewStore(GinkgoT(), coreapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvarsstore.FxModule,
-			depmodel.FxModule,
-			coreapp.FxModule,
-			appmodel.FxModule,
-			appspec.FxModule,
 			appcfg.FxModule,
-			fx.Populate(
-				&scopedEnvVarStore,
-				&appStore,
-				&appModelStore,
-				&appSpecStore,
-				&appConfigFileStore,
-			),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 
 		// 为每条用例准备稳定的目标环境，让导出测试专注验证 scope 如何被渲染成
 		// dotenv 元数据。
@@ -86,16 +77,14 @@ var _ = Describe("ExportService", func() {
 			},
 		}
 		service = NewService(
-			scopedEnvVarStore,
-			appModelStore,
-			appSpecStore,
-			envvarsstore.NewUnifiedEnvVarsReader(scopedEnvVarStore, nil, nil),
+			db,
+			envvarsstore.NewUnifiedEnvVarsReader(db, nil, nil),
 		)
 	})
 
 	AfterEach(func() {
-		if scopedEnvVarStore != nil {
-			Expect(scopedEnvVarStore.DeleteAll(ctx)).NotTo(HaveOccurred())
+		if db != nil {
+			Expect(testutil.CleanupMetaColl(envvarsstore.ScopedEnvVarMeta)).NotTo(HaveOccurred())
 		}
 		if diApp != nil {
 			diApp.RequireStop()
@@ -103,7 +92,7 @@ var _ = Describe("ExportService", func() {
 	})
 
 	It("exports public vars as import-compatible dotenv text", func() {
-		_, err := scopedEnvVarStore.Create(ctx, envvarsstore.ScopedEnvVar{
+		err := store.Of(db, envvarsstore.ScopedEnvVarMeta).Create(ctx, &envvarsstore.ScopedEnvVar{
 			WorkspaceID: workspaceID,
 			ScopeType:   envvartypes.ScopeTypeWorkspace,
 			Key:         "WORKSPACE_KEY",
@@ -111,7 +100,7 @@ var _ = Describe("ExportService", func() {
 			Description: "workspace desc",
 		})
 		Expect(err).NotTo(HaveOccurred())
-		_, err = scopedEnvVarStore.Create(ctx, envvarsstore.ScopedEnvVar{
+		err = store.Of(db, envvarsstore.ScopedEnvVarMeta).Create(ctx, &envvarsstore.ScopedEnvVar{
 			WorkspaceID: workspaceID,
 			ScopeType:   envvartypes.ScopeTypeEnvType,
 			ScopeValue:  "production",
@@ -132,8 +121,8 @@ var _ = Describe("ExportService", func() {
 	})
 
 	It("exports env vars without scope metadata", func() {
-		_, err := scopedEnvVarStore.CreateSimpleEnvScopeVar(
-			ctx,
+		_, err := envvarsstore.CreateSimpleEnvScopeVar(
+			ctx, db,
 			environment,
 			"ENV_ONLY_KEY",
 			"env-only-value",
@@ -151,9 +140,7 @@ var _ = Describe("ExportService", func() {
 
 	It("exports app-defined vars without scope metadata", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:           appStore,
-			AppModelStore:      appModelStore,
-			AppConfigFileStore: appConfigFileStore,
+			AppStore: appStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -169,7 +156,7 @@ var _ = Describe("ExportService", func() {
 	})
 
 	It("exports effective app env vars for a target environment", func() {
-		_, err := scopedEnvVarStore.Create(ctx, envvarsstore.ScopedEnvVar{
+		err := store.Of(db, envvarsstore.ScopedEnvVarMeta).Create(ctx, &envvarsstore.ScopedEnvVar{
 			WorkspaceID: workspaceID,
 			ScopeType:   envvartypes.ScopeTypeWorkspace,
 			Key:         "PUBLIC_KEY",
@@ -179,9 +166,7 @@ var _ = Describe("ExportService", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:           appStore,
-			AppModelStore:      appModelStore,
-			AppConfigFileStore: appConfigFileStore,
+			AppStore: appStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -200,16 +185,14 @@ var _ = Describe("ExportService", func() {
 
 	It("exports the env-overridden resource limit instead of the stored default", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:           appStore,
-			AppModelStore:      appModelStore,
-			AppConfigFileStore: appConfigFileStore,
+			AppStore: appStore,
 		}, &dbfactory.TrpcApplicationOpts{WorkspaceID: workspaceID})
 
-		am, err := appModelStore.GetAppModel(ctx, app.ID)
+		am, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		Expect(err).NotTo(HaveOccurred())
 		am.Workload.Resources = map[string]string{"cpu": "1-2", "memory": "2Gi-4Gi"}
-		Expect(appModelStore.UpdateAppModel(ctx, am)).To(Succeed())
-		Expect(appspec.SetEnv(ctx, appSpecStore, &appspec.AppSpec{
+		Expect(appmodel.UpdateAppModel(ctx, db, am)).To(Succeed())
+		Expect(appspec.SetEnv(ctx, db, &appspec.AppSpec{
 			AppID:   app.ID,
 			EnvName: environment.Name,
 			Resources: &appspec.ResourcesSpec{

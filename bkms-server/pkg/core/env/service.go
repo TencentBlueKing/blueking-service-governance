@@ -23,21 +23,21 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // EnvService 环境基础配置服务
 type EnvService struct {
-	model.EnvironmentStore
+	db *mongo.Database
 }
 
 // NewEnvService 创建环境基础配置服务
-func NewEnvService(environmentStore model.EnvironmentStore) *EnvService {
-	return &EnvService{
-		EnvironmentStore: environmentStore,
-	}
+func NewEnvService(db *mongo.Database) *EnvService {
+	return &EnvService{db: db}
 }
 
 // ImageRegistryInfoInput 镜像仓库信息
@@ -50,18 +50,17 @@ type ImageRegistryInfoInput struct {
 	Password string
 }
 
-// Create 创建环境数据.
-func (s *EnvService) Create(ctx context.Context, environment *model.Environment) (bson.ObjectID, error) {
-	if err := findClusterNamespaceOccupant(ctx, s.EnvironmentStore, environment.Cluster, bson.NilObjectID); err != nil {
-		return bson.NilObjectID, errors.Wrap(err, "check environment cluster namespace conflict")
+// Create 创建环境数据，成功后 environment.ID 为新环境的 ID.
+func (s *EnvService) Create(ctx context.Context, environment *model.Environment) error {
+	if err := findClusterNamespaceOccupant(ctx, s.db, environment.Cluster, bson.NilObjectID); err != nil {
+		return errors.Wrap(err, "check environment cluster namespace conflict")
 	}
 
-	envID, err := s.EnvironmentStore.Create(ctx, environment)
-	if err != nil {
-		err = rewriteWriteErrIfClusterOccupied(ctx, s.EnvironmentStore, environment.Cluster, bson.NilObjectID, err)
-		return bson.NilObjectID, errors.Wrap(err, "create environment")
+	if err := store.Of(s.db, model.EnvMeta).Create(ctx, environment); err != nil {
+		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, environment.Cluster, bson.NilObjectID, err)
+		return errors.Wrapf(err, "create environment %s", environment.Name)
 	}
-	return envID, nil
+	return nil
 }
 
 // Update 更新指定环境。
@@ -70,7 +69,7 @@ func (s *EnvService) Update(
 	envID bson.ObjectID,
 	updateData *model.EnvironmentUpdateData,
 ) error {
-	environment, err := s.Get(ctx, envID)
+	environment, err := store.Of(s.db, model.EnvMeta).GetByID(ctx, envID)
 	if err != nil {
 		return errors.Wrap(err, "get environment")
 	}
@@ -84,19 +83,19 @@ func (s *EnvService) Update(
 			return errors.Errorf("environment has %d apps, cannot update cluster", appCount)
 		}
 
-		if err = findClusterNamespaceOccupant(ctx, s.EnvironmentStore, finalCluster, envID); err != nil {
+		if err = findClusterNamespaceOccupant(ctx, s.db, finalCluster, envID); err != nil {
 			return errors.Wrap(err, "check environment cluster namespace conflict")
 		}
 	}
 
-	if err = s.EnvironmentStore.Update(ctx, envID, updateData); err != nil {
+	if err = model.UpdateEnv(ctx, s.db, envID, updateData); err != nil {
 		if updateData.ClusterID != nil || updateData.Namespace != nil {
-			err = rewriteWriteErrIfClusterOccupied(ctx, s.EnvironmentStore, finalCluster, envID, err)
+			err = rewriteWriteErrIfClusterOccupied(ctx, s.db, finalCluster, envID, err)
 		}
 		return errors.Wrap(err, "update environment")
 	}
 
-	updatedEnv, err := s.Get(ctx, envID)
+	updatedEnv, err := store.Of(s.db, model.EnvMeta).GetByID(ctx, envID)
 	if err != nil {
 		return errors.Wrap(err, "get updated environment")
 	}
@@ -137,7 +136,7 @@ func applyClusterUpdate(cluster model.BizCluster, updateData *model.EnvironmentU
 
 // Delete 删除环境
 func (s *EnvService) Delete(ctx context.Context, envID bson.ObjectID) error {
-	environment, err := s.Get(ctx, envID)
+	environment, err := store.Of(s.db, model.EnvMeta).GetByID(ctx, envID)
 	if err != nil {
 		return errors.Wrap(err, "get environment")
 	}
@@ -154,8 +153,8 @@ func (s *EnvService) Delete(ctx context.Context, envID bson.ObjectID) error {
 		return err
 	}
 
-	if err = s.EnvironmentStore.Delete(ctx, envID); err != nil {
-		return err
+	if err = store.Of(s.db, model.EnvMeta).DeleteIfExists(ctx, store.ByID(envID)); err != nil {
+		return errors.Wrapf(err, "delete environment %s", environment.Name)
 	}
 
 	return nil

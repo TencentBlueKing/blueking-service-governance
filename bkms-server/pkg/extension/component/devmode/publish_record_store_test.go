@@ -25,141 +25,85 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	devmode "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("PublishRecordStoreMongo", func() {
-	var store devmode.PublishRecordStore
-	var ctx context.Context
-	var diApp *fxtest.App
+var _ = Describe("PublishRecord store", func() {
+	const envName = "staging"
+	var (
+		ctx     context.Context
+		db      *mongo.Database
+		records *devmode.PublishRecordStore
+		appID   string
+	)
 
 	BeforeEach(func() {
-		diApp = fxtest.New(
-			GinkgoT(),
-			devmode.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
 		ctx = context.Background()
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, devmode.PublishRecordMeta)
+		appID = "test-app-" + stringx.Random(6)
 	})
 
-	AfterEach(func() {
-		diApp.RequireStop()
-	})
+	newRecord := func(instance, binary string, status devmode.PublishStatus) *devmode.PublishRecord {
+		return &devmode.PublishRecord{
+			AppID: appID, EnvName: envName, Instance: instance,
+			BinaryName: binary, MD5: "m-" + binary, Status: status, Operator: "admin",
+		}
+	}
 
-	Describe("Create", func() {
-		It("creates one record per instance", func() {
-			appID := "test-app-" + stringx.Random(6)
-			envName := "staging"
+	mustCreate := func(objs ...*devmode.PublishRecord) {
+		Expect(records.CreateMany(ctx, objs)).To(Succeed())
+	}
 
-			ids, err := store.Create(ctx, []devmode.PublishRecord{
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-1",
-					BinaryName: "server", MD5: "m1",
-					Status: devmode.PublishStatusSuccess, Operator: "admin",
-				},
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-2",
-					BinaryName: "server", MD5: "m1",
-					Status: devmode.PublishStatusFailed, Message: "boom", Operator: "admin",
-				},
-			})
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ids).To(HaveLen(2))
-			Expect(ids[0]).NotTo(BeEmpty())
-			Expect(ids[1]).NotTo(BeEmpty())
-		})
-	})
-
-	Describe("List", func() {
-		It("lists records with pagination", func() {
-			appID := "test-app-" + stringx.Random(6)
-			envName := "staging"
-
-			_, err := store.Create(ctx, []devmode.PublishRecord{
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-1",
-					BinaryName: "alpha", MD5: "m1",
-					Status: devmode.PublishStatusSuccess, Operator: "u1",
-				},
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-2",
-					BinaryName: "beta", MD5: "m2",
-					Status: devmode.PublishStatusSuccess, Operator: "u2",
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			records, total, err := store.List(ctx, appID, envName, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(2)))
-			Expect(records).To(HaveLen(2))
+	Describe("listing by app and env", func() {
+		BeforeEach(func() {
+			mustCreate(
+				newRecord("pod-1", "alpha", devmode.PublishStatusSuccess),
+				newRecord("pod-2", "beta", devmode.PublishStatusSuccess),
+			)
+			// 其它环境的记录不应被列出
+			other := newRecord("pod-1", "alpha", devmode.PublishStatusSuccess)
+			other.EnvName = "prod"
+			mustCreate(other)
 		})
 
-		It("filters records by keyword", func() {
-			appID := "test-app-" + stringx.Random(6)
-			envName := "staging"
-
-			_, err := store.Create(ctx, []devmode.PublishRecord{
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-1",
-					BinaryName: "alpha", MD5: "m1",
-					Status: devmode.PublishStatusSuccess, Operator: "u1",
-				},
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-2",
-					BinaryName: "beta", MD5: "m2",
-					Status: devmode.PublishStatusSuccess, Operator: "u2",
-				},
-			})
+		list := func(keyword string) *store.Page[devmode.PublishRecord] {
+			page, err := records.ListPage(ctx, 1, 10,
+				devmode.ByAppEnv(appID, envName), devmode.KeywordMatches(keyword), devmode.NewestFirst())
 			Expect(err).NotTo(HaveOccurred())
+			return page
+		}
 
-			records, total, err := store.List(ctx, appID, envName, "beta", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(records).To(HaveLen(1))
-			Expect(records[0].BinaryName).To(Equal("beta"))
+		It("should list the records of the env in a stable newest-first order", func() {
+			page := list("")
+			Expect(page.Total).To(Equal(int64(2)))
+			// 同一次上报的记录创建时间相同，按 _id 倒序
+			Expect(lo.Map(page.Items, func(r devmode.PublishRecord, _ int) string { return r.Instance })).
+				To(Equal([]string{"pod-2", "pod-1"}))
+		})
+
+		It("should filter by binary name, operator or instance ignoring case", func() {
+			Expect(list("BETA").Items).To(HaveLen(1))
+			Expect(list("pod-1").Items[0].BinaryName).To(Equal("alpha"))
+			Expect(list("admin").Total).To(Equal(int64(2)))
 		})
 	})
 
 	Describe("ListLatestByInstance", func() {
-		It("returns the latest record for each instance", func() {
-			appID := "test-app-" + stringx.Random(6)
-			envName := "staging"
-
-			// pod-1 第一次 push 成功
-			_, err := store.Create(ctx, []devmode.PublishRecord{
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-1",
-					BinaryName: "v1", MD5: "m1",
-					Status: devmode.PublishStatusSuccess, Operator: "admin",
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
+		It("should return the latest record for each instance", func() {
+			mustCreate(newRecord("pod-1", "v1", devmode.PublishStatusSuccess))
 			// 间隔一段时间，确保第二次 push 的 createdAt 更晚
 			time.Sleep(10 * time.Millisecond)
+			failed := newRecord("pod-1", "v2", devmode.PublishStatusFailed)
+			failed.Message = "boom"
+			mustCreate(failed, newRecord("pod-2", "v1", devmode.PublishStatusSuccess))
 
-			// pod-1 第二次 push 失败；pod-2 首次 push 成功
-			_, err = store.Create(ctx, []devmode.PublishRecord{
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-1",
-					BinaryName: "v2", MD5: "m2",
-					Status: devmode.PublishStatusFailed, Message: "boom", Operator: "admin",
-				},
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-2",
-					BinaryName: "v1", MD5: "m1",
-					Status: devmode.PublishStatusSuccess, Operator: "admin",
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			latest, err := store.ListLatestByInstance(ctx, appID, envName, []string{"pod-1", "pod-2"})
+			latest, err := devmode.ListLatestByInstance(ctx, db, appID, envName, []string{"pod-1", "pod-2"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest).To(HaveLen(2))
 			Expect(latest["pod-1"].Status).To(Equal(devmode.PublishStatusFailed))
@@ -167,23 +111,19 @@ var _ = Describe("PublishRecordStoreMongo", func() {
 			Expect(latest["pod-2"].Status).To(Equal(devmode.PublishStatusSuccess))
 		})
 
-		It("omits instances without records", func() {
-			appID := "test-app-" + stringx.Random(6)
-			envName := "staging"
+		It("should omit instances without records", func() {
+			mustCreate(newRecord("pod-1", "v1", devmode.PublishStatusSuccess))
 
-			_, err := store.Create(ctx, []devmode.PublishRecord{
-				{
-					AppID: appID, EnvName: envName, Instance: "pod-1",
-					BinaryName: "v1", MD5: "m1",
-					Status: devmode.PublishStatusSuccess, Operator: "admin",
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			latest, err := store.ListLatestByInstance(ctx, appID, envName, []string{"pod-1", "pod-2"})
+			latest, err := devmode.ListLatestByInstance(ctx, db, appID, envName, []string{"pod-1", "pod-2"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest).To(HaveLen(1))
 			Expect(latest).To(HaveKey("pod-1"))
+		})
+
+		It("should return an empty map for no instances", func() {
+			latest, err := devmode.ListLatestByInstance(ctx, db, appID, envName, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(latest).To(BeEmpty())
 		})
 	})
 })

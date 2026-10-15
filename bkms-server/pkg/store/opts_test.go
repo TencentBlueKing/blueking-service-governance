@@ -99,9 +99,9 @@ var _ = Describe("Options", func() {
 	})
 
 	It("should merge multiple UpdateOpts", func() {
-		q := apply(UpdateSelected("a"), UpdateOmit("b"), UpdateSelected("c"), UpdateNonZero())
+		q := apply(UpdateSelected("a"), UpdateOmit("b"), UpdateSelected("c"))
 		Expect(q.fields).To(Equal(&fieldSelection{
-			selecting: true, selected: []string{"a", "c"}, omitted: []string{"b"}, nonZero: true,
+			selecting: true, selected: []string{"a", "c"}, omitted: []string{"b"},
 		}))
 	})
 })

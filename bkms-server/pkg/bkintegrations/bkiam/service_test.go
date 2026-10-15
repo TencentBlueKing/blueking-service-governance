@@ -214,8 +214,8 @@ var _ = Describe("IAMService", func() {
 
 	AfterEach(func() {
 		config.G = originCfg
-		Expect(testutil.CleanupCollection(role.GradeManagerMeta.Collection)).To(Succeed())
-		Expect(testutil.CleanupCollection(role.RoleMeta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(role.GradeManagerMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(role.RoleMeta)).To(Succeed())
 	})
 
 	Context("workspace admin lifecycle", func() {

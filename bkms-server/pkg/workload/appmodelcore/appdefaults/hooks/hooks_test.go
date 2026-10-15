@@ -35,7 +35,7 @@ var _ = Describe("Application default lifecycle hooks", func() {
 		if workspace != nil {
 			Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		}
-		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(appdefaults.RuleMeta)).To(Succeed())
 		bkmsworkspace.ResetLifecycleHooksForTest()
 	})
 

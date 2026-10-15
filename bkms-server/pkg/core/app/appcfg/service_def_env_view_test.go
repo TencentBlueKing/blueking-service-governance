@@ -34,10 +34,6 @@ var _ = Describe("AppCfgFileDefService — Env View", func() {
 		f = setupDefServiceFixture()
 	})
 
-	AfterEach(func() {
-		f.DiApp.RequireStop()
-	})
-
 	Context("GetEnvFileDetail", func() {
 		It("should return default file for unified config", func() {
 			result := f.createFrameworkFile("values.yaml")

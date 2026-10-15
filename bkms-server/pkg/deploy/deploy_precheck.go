@@ -43,19 +43,18 @@ type DeployPreCheckResult struct {
 
 // DeployPreChecker collects deployment pre-check findings for an app and environment.
 type DeployPreChecker struct {
-	appModelStore    appmodel.AppModelStore
+	appModels        *appmodel.AppModelStore
 	builderService   *workload.BuilderService
 	clusterAddonDefs *clusteraddon.ClusterAddonDefStore
 }
 
 // NewDeployPreChecker creates a DeployPreChecker.
 func NewDeployPreChecker(
-	appModelStore appmodel.AppModelStore,
 	builderService *workload.BuilderService,
 	db *mongo.Database,
 ) *DeployPreChecker {
 	return &DeployPreChecker{
-		appModelStore:    appModelStore,
+		appModels:        store.Of(db, appmodel.AppModelMeta),
 		builderService:   builderService,
 		clusterAddonDefs: store.Of(db, clusteraddon.ClusterAddonDefMeta),
 	}
@@ -67,7 +66,7 @@ func (c *DeployPreChecker) Check(
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 ) (*DeployPreCheckResult, error) {
-	appModel, err := c.appModelStore.GetAppModel(ctx, app.ID)
+	appModel, err := c.appModels.Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app %s model", app.ID)
 	}

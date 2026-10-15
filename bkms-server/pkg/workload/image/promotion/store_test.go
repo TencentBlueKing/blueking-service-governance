@@ -40,7 +40,7 @@ var _ = Describe("Promotion store", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	promote := func(appID, repoKey, tag, operator string) {

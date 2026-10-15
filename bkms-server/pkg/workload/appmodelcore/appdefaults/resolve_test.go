@@ -13,7 +13,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
@@ -26,7 +25,6 @@ var _ = Describe("Application default resolution", func() {
 	var ruleStore *appdefaults.RuleStore
 	var db *mongo.Database
 	var envService *bkmsenv.EnvService
-	var envStore envmodel.EnvironmentStore
 	var workspaceStore *bkmsworkspace.WorkspaceStore
 	var workspace *bkmsworkspace.Workspace
 
@@ -38,8 +36,7 @@ var _ = Describe("Application default resolution", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsenv.FxModule,
-			bkmsworkspace.FxModule,
-			fx.Populate(&envService, &envStore),
+			fx.Populate(&envService),
 		)
 		diApp.RequireStart()
 		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
@@ -50,8 +47,8 @@ var _ = Describe("Application default resolution", func() {
 
 	AfterEach(func() {
 		// Clear documents without Drop so migration-managed unique indexes survive.
-		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
-		Expect(envStore.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(appdefaults.RuleMeta)).To(Succeed())
+		Expect(testutil.CleanupCollection("environments")).To(Succeed())
 		Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		bkmsworkspace.ResetLifecycleHooksForTest()
 		bkmsenv.ResetHooksForTest()
@@ -59,7 +56,7 @@ var _ = Describe("Application default resolution", func() {
 	})
 
 	It("uses platform defaults without persisting rules", func() {
-		resolved, err := appdefaults.Resolve(ctx, db, envStore, workspace.ID, "app-without-rules")
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-without-rules")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Default.AppID).To(Equal("app-without-rules"))
 		Expect(resolved.Default.EnvName).To(Equal(appspec.DefaultEnvName))
@@ -80,7 +77,7 @@ var _ = Describe("Application default resolution", func() {
 		Expect(ruleStore.Create(ctx, resourcesRule(workspace.ID, "production"))).To(Succeed())
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "production", true))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(ctx, db, envStore, workspace.ID, "app-combined-defaults")
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-combined-defaults")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(1))
 		spec := resolved.Environments[0]
@@ -105,7 +102,7 @@ var _ = Describe("Application default resolution", func() {
 		})
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "production", true))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(ctx, db, envStore, workspace.ID, "app-matching-envs")
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-matching-envs")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(2))
 
@@ -134,7 +131,7 @@ var _ = Describe("Application default resolution", func() {
 		})
 		Expect(ruleStore.Create(ctx, resourcesRule(workspace.ID, "production", "staging"))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(ctx, db, envStore, workspace.ID, "app-multi-env-types")
+		resolved, err := appdefaults.Resolve(ctx, db, workspace.ID, "app-multi-env-types")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(2))
 

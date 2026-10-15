@@ -27,7 +27,6 @@ import (
 var FxModule = fx.Module("appcfg",
 	database.PrivateFxModule,
 	fx.Provide(
-		fx.Annotate(NewAppConfigFileStoreMongo, fx.As(new(AppConfigFileStore))),
 		NewMountableFileProvider,
 	),
 )

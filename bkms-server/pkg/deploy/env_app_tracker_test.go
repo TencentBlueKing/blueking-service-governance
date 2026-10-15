@@ -28,6 +28,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -99,17 +100,17 @@ var _ = Describe("TrackEnvAddApp", func() {
 	var (
 		ctx      context.Context
 		diApp    *fxtest.App
-		envStore envmodel.EnvironmentStore
+		envStore *envmodel.EnvironmentStore
 		envSvc   *bkmsenv.EnvService
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsenv.FxModule,
 			fx.Populate(
-				&envStore,
 				&envSvc,
 			),
 		)
@@ -117,7 +118,7 @@ var _ = Describe("TrackEnvAddApp", func() {
 	})
 
 	AfterEach(func() {
-		Expect(envStore.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupCollection("environments")).To(Succeed())
 		diApp.RequireStop()
 	})
 
@@ -125,10 +126,10 @@ var _ = Describe("TrackEnvAddApp", func() {
 		env := dbfactory.Env(ctx, envSvc, "workspace-track-add")
 		appID := "app-track-add"
 
-		TrackEnvAddApp(ctx, envStore, env.WorkspaceID, env.Name, appID)
-		TrackEnvAddApp(ctx, envStore, env.WorkspaceID, env.Name, appID)
+		TrackEnvAddApp(ctx, testutil.NewDB(GinkgoT()), env.WorkspaceID, env.Name, appID)
+		TrackEnvAddApp(ctx, testutil.NewDB(GinkgoT()), env.WorkspaceID, env.Name, appID)
 
-		got, err := envStore.Get(ctx, env.ID)
+		got, err := envStore.GetByID(ctx, env.ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(got.AppIDs).To(Equal([]string{appID}))
 	})

@@ -352,7 +352,7 @@ var _ = Describe("Refresher", func() {
 		})
 
 		AfterEach(func() {
-			Expect(testutil.CleanupCollection(ResourceSnapshotMeta.Collection)).To(Succeed())
+			Expect(testutil.CleanupMetaColl(ResourceSnapshotMeta)).To(Succeed())
 		})
 
 		It("should generate success snapshot when all declared resources exist", func() {

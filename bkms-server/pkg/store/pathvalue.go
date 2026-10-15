@@ -26,6 +26,7 @@ import (
 )
 
 // setPath 将 val 赋给结构体 v 中 steps 所指的位置，途经的 nil 指针与 nil map 会被初始化。
+// steps 指向 map 条目且 val 为 nil 时删除该条目，使它在编码结果中不存在，从而被 Update 视为 $unset。
 // steps 必须来自 assignable 的 fieldPath
 func setPath(v reflect.Value, steps []pathStep, val any) error {
 	for v.Kind() == reflect.Pointer {
@@ -48,6 +49,10 @@ func setPath(v reflect.Value, steps []pathStep, val any) error {
 		v.Set(reflect.MakeMap(v.Type()))
 	}
 	key := reflect.ValueOf(st.key).Convert(v.Type().Key())
+	if len(rest) == 0 && val == nil {
+		v.SetMapIndex(key, reflect.Value{})
+		return nil
+	}
 	elem := reflect.New(v.Type().Elem()).Elem()
 	var err error
 	if len(rest) == 0 {
@@ -66,7 +71,7 @@ func setPath(v reflect.Value, steps []pathStep, val any) error {
 }
 
 // assignValue 将 val 赋给 dst（必须可寻址）：
-//   - 类型可以直接赋值时直接赋值，nil 表示零值
+//   - 类型可以直接赋值时直接赋值，nil 表示零值（map 条目除外，见 setPath）
 //   - 指针字段可以直接传入元素值，如 *bool 字段传入 true
 //   - 底层类型相同的标量直接转换，如 string 写入 type SourceType string
 //   - 其余情况借助 bson 编解码转换为字段类型，如 int 写入 int64、[]any 写入 []string；
@@ -109,26 +114,4 @@ func isScalarKind(k reflect.Kind) bool {
 		return true
 	}
 	return false
-}
-
-// valueAt 返回结构体 v 中 steps 所指的值，途经 nil 指针或不存在的 map 条目时返回 false。
-// steps 必须来自 assignable 的 fieldPath
-func valueAt(v reflect.Value, steps []pathStep) (reflect.Value, bool) {
-	for _, st := range steps {
-		for v.Kind() == reflect.Pointer {
-			if v.IsNil() {
-				return reflect.Value{}, false
-			}
-			v = v.Elem()
-		}
-		if st.kind == stepField {
-			v = v.FieldByIndex(st.index)
-			continue
-		}
-		v = v.MapIndex(reflect.ValueOf(st.key).Convert(v.Type().Key()))
-		if !v.IsValid() {
-			return reflect.Value{}, false
-		}
-	}
-	return v, true
 }

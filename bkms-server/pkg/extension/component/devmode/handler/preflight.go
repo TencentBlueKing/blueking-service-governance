@@ -35,6 +35,7 @@ import (
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
@@ -170,7 +171,7 @@ func (h *Handler) getEffectiveDevMode(
 	ctx context.Context, appID, envName string,
 ) (*appspec.DevModeSpec, error) {
 	devModeSpec, err := appspec.GetEnvEffectiveSection(
-		ctx, h.registry.AppSpecStore, h.registry.AppModelStore,
+		ctx, h.registry.DB,
 		appID, envName, appspec.DevModeSection,
 	)
 	if err != nil {
@@ -238,7 +239,7 @@ func (h *Handler) resolveInstanceIDs(
 	ctx context.Context, appID, envName string, input slz.PreflightBodyInput,
 ) ([]string, error) {
 	// 获取最新部署记录
-	record, err := h.registry.AppModelDeployRecordStore.GetLatest(ctx, appID, envName, "")
+	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, appID, envName, "")
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "no deploy record found for this environment")
 	}

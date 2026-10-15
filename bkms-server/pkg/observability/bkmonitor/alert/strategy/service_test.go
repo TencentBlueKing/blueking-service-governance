@@ -103,7 +103,7 @@ var _ = Describe("AlertStrategyService", func() {
 		diApp      *fxtest.App
 		db         *mongo.Database
 		strategies *Store
-		envStore   envmodel.EnvironmentStore
+		envStore   *envmodel.EnvironmentStore
 		svc        *Service
 	)
 
@@ -134,37 +134,29 @@ var _ = Describe("AlertStrategyService", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 
-		err := testutil.CleanupCollection(Meta.Collection)
+		err := testutil.CleanupMetaColl(Meta)
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("environments")
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("applications")
 		Expect(err).NotTo(HaveOccurred())
-		err = testutil.CleanupCollection(topology.ResourceSnapshotMeta.Collection)
+		err = testutil.CleanupMetaColl(topology.ResourceSnapshotMeta)
 		Expect(err).NotTo(HaveOccurred())
 
+		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
 			FxModule,
 			database.PrivateFxModule,
-			fx.Provide(
-				envmodel.NewEnvironmentStoreMongo,
-				fx.Annotate(bkmsapp.NewApplicationStoreMongo, fx.As(new(bkmsapp.ApplicationStore))),
-			),
-			fx.Populate(&svc, &envStore),
+			fx.Populate(&svc),
 		)
 		diApp.RequireStart()
 		db = testutil.NewDB(GinkgoT())
 		strategies = testutil.NewStore(GinkgoT(), Meta)
 
-		svc = newServiceWithClientFactory(
-			db,
-			svc.envStore,
-			svc.appStore,
-			func(_ string) (bkmapi.MonitorClient, error) {
-				return bkmapi.NewStub("test-user"), nil
-			},
-		)
+		svc = newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+			return bkmapi.NewStub("test-user"), nil
+		})
 	})
 
 	AfterEach(func() {
@@ -248,7 +240,7 @@ var _ = Describe("AlertStrategyService", func() {
 			ws.BkSystems.BkMonitorProjectID = "-100"
 			createApp("test-ws", "app-1", "demo-app")
 
-			_, err := envStore.Create(ctx, &envmodel.Environment{
+			err := envStore.Create(ctx, &envmodel.Environment{
 				Name:        "create-env",
 				Type:        "production",
 				WorkspaceID: "test-ws",
@@ -281,7 +273,7 @@ var _ = Describe("AlertStrategyService", func() {
 			ws.BkSystems.BkMonitorProjectID = "-100"
 			createApp("test-ws", "app-1", "demo-app")
 
-			_, err := envStore.Create(ctx, &envmodel.Environment{
+			err := envStore.Create(ctx, &envmodel.Environment{
 				Name:        "create-fail-env",
 				Type:        "production",
 				WorkspaceID: "test-ws",
@@ -294,17 +286,12 @@ var _ = Describe("AlertStrategyService", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			failSvc := newServiceWithClientFactory(
-				db,
-				svc.envStore,
-				svc.appStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return &failAlertStrategyClient{
-						StubClient: bkmapi.NewStub("test-user"),
-						saveErr:    bkmapi.ErrApmAppNotFound,
-					}, nil
-				},
-			)
+			failSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return &failAlertStrategyClient{
+					StubClient: bkmapi.NewStub("test-user"),
+					saveErr:    bkmapi.ErrApmAppNotFound,
+				}, nil
+			})
 
 			req := newCreateReq()
 			req.StrategyCode = "create_sync_fail_test"
@@ -324,7 +311,7 @@ var _ = Describe("AlertStrategyService", func() {
 			ws.BkSystems.BkMonitorProjectID = "-100"
 			createApp("test-ws", "app-1", "demo-app")
 
-			_, err := envStore.Create(ctx, &envmodel.Environment{
+			err := envStore.Create(ctx, &envmodel.Environment{
 				Name:        "create-store-fail-env",
 				Type:        "production",
 				WorkspaceID: "test-ws",
@@ -356,14 +343,9 @@ var _ = Describe("AlertStrategyService", func() {
 					EffectiveScope: EffectiveScope{Type: EffectiveScopeAll},
 				})).To(Succeed())
 			}
-			failSvc := newServiceWithClientFactory(
-				db,
-				svc.envStore,
-				svc.appStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return client, nil
-				},
-			)
+			failSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return client, nil
+			})
 
 			_, err = failSvc.CreateAndSync(ctx, ws, req)
 
@@ -400,11 +382,11 @@ var _ = Describe("AlertStrategyService", func() {
 				AppIDs:      []string{"app-1"},
 			}
 			var err error
-			envDev.ID, err = envStore.Create(ctx, &envDev)
+			err = envStore.Create(ctx, &envDev)
 			Expect(err).NotTo(HaveOccurred())
-			envTest.ID, err = envStore.Create(ctx, &envTest)
+			err = envStore.Create(ctx, &envTest)
 			Expect(err).NotTo(HaveOccurred())
-			envProd.ID, err = envStore.Create(ctx, &envProd)
+			err = envStore.Create(ctx, &envProd)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -479,7 +461,7 @@ var _ = Describe("AlertStrategyService", func() {
 					Namespace: "ns-dev",
 				},
 			}
-			_, err := envStore.Create(ctx, envDev)
+			err := envStore.Create(ctx, envDev)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -510,14 +492,9 @@ var _ = Describe("AlertStrategyService", func() {
 		})
 
 		It("should mark failed when client returns error", func() {
-			failSvc := newServiceWithClientFactory(
-				db,
-				svc.envStore,
-				svc.appStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return nil, bkmapi.ErrApmAppNotFound
-				},
-			)
+			failSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return nil, bkmapi.ErrApmAppNotFound
+			})
 
 			req := newCreateReq()
 			req.AppName = "order-svc"
@@ -563,12 +540,7 @@ var _ = Describe("AlertStrategyService", func() {
 			mockey.PatchConvey("switch enabled", GinkgoT(), func() {
 				mockClient := bkmapi.NewStub("test-user")
 				mockey.Mock(bkmapi.NewMonitorClient).Return(mockClient, nil).Build()
-				switchSvc := newServiceWithClientFactory(
-					db,
-					svc.envStore,
-					svc.appStore,
-					bkmapi.NewMonitorClient,
-				)
+				switchSvc := newServiceWithClientFactory(db, bkmapi.NewMonitorClient)
 
 				ws := &workspace.Workspace{ID: "test-ws"}
 				ws.BkSystems.BkMonitorProjectID = "-100"
@@ -594,18 +566,13 @@ var _ = Describe("AlertStrategyService", func() {
 			mockey.PatchConvey("first enable auto sync", GinkgoT(), func() {
 				mockClient := bkmapi.NewStub("test-user")
 				mockey.Mock(bkmapi.NewMonitorClient).Return(mockClient, nil).Build()
-				switchSvc := newServiceWithClientFactory(
-					db,
-					svc.envStore,
-					svc.appStore,
-					bkmapi.NewMonitorClient,
-				)
+				switchSvc := newServiceWithClientFactory(db, bkmapi.NewMonitorClient)
 
 				ws := &workspace.Workspace{ID: "test-ws"}
 				ws.BkSystems.BkMonitorProjectID = "-100"
 				createApp("test-ws", "app-1", "demo-app")
 
-				_, envErr := envStore.Create(ctx, &envmodel.Environment{
+				envErr := envStore.Create(ctx, &envmodel.Environment{
 					Name:        "switch-env",
 					Type:        "production",
 					WorkspaceID: "test-ws",
@@ -642,17 +609,12 @@ var _ = Describe("AlertStrategyService", func() {
 		It("should keep local state unchanged when remote switch fails", func() {
 			ws := &workspace.Workspace{ID: "test-ws"}
 			ws.BkSystems.BkMonitorProjectID = "-100"
-			failSvc := newServiceWithClientFactory(
-				db,
-				svc.envStore,
-				svc.appStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return &failAlertStrategyClient{
-						StubClient: bkmapi.NewStub("test-user"),
-						switchErr:  bkmapi.ErrApmAppNotFound,
-					}, nil
-				},
-			)
+			failSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return &failAlertStrategyClient{
+					StubClient: bkmapi.NewStub("test-user"),
+					switchErr:  bkmapi.ErrApmAppNotFound,
+				}, nil
+			})
 
 			ruleID := bson.NewObjectID()
 			err := strategies.Create(ctx, &AlertStrategy{
@@ -693,7 +655,7 @@ var _ = Describe("AlertStrategyService", func() {
 			ws.BkSystems.BkMonitorProjectID = "-100"
 			createApp("test-ws", "app-1", "demo-app")
 
-			_, err := envStore.Create(ctx, &envmodel.Environment{
+			err := envStore.Create(ctx, &envmodel.Environment{
 				Name:        "update-env",
 				Type:        "production",
 				WorkspaceID: "test-ws",
@@ -706,17 +668,12 @@ var _ = Describe("AlertStrategyService", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			failSvc := newServiceWithClientFactory(
-				db,
-				svc.envStore,
-				svc.appStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return &failAlertStrategyClient{
-						StubClient: bkmapi.NewStub("test-user"),
-						saveErr:    bkmapi.ErrApmAppNotFound,
-					}, nil
-				},
-			)
+			failSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return &failAlertStrategyClient{
+					StubClient: bkmapi.NewStub("test-user"),
+					saveErr:    bkmapi.ErrApmAppNotFound,
+				}, nil
+			})
 
 			req := newCreateReq()
 			req.StrategyCode = "update_sync_fail_test"
@@ -744,12 +701,7 @@ var _ = Describe("AlertStrategyService", func() {
 			mockey.PatchConvey("delete with cleanup", GinkgoT(), func() {
 				mockClient := bkmapi.NewStub("test-user")
 				mockey.Mock(bkmapi.NewMonitorClient).Return(mockClient, nil).Build()
-				deleteSvc := newServiceWithClientFactory(
-					db,
-					svc.envStore,
-					svc.appStore,
-					bkmapi.NewMonitorClient,
-				)
+				deleteSvc := newServiceWithClientFactory(db, bkmapi.NewMonitorClient)
 
 				ws := &workspace.Workspace{ID: "test-ws"}
 				ws.BkSystems.BkMonitorProjectID = "-100"
@@ -773,17 +725,12 @@ var _ = Describe("AlertStrategyService", func() {
 		It("should keep local strategy when remote cleanup fails", func() {
 			ws := &workspace.Workspace{ID: "test-ws"}
 			ws.BkSystems.BkMonitorProjectID = "-100"
-			failSvc := newServiceWithClientFactory(
-				db,
-				svc.envStore,
-				svc.appStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return &failAlertStrategyClient{
-						StubClient: bkmapi.NewStub("test-user"),
-						deleteErr:  bkmapi.ErrApmAppNotFound,
-					}, nil
-				},
-			)
+			failSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return &failAlertStrategyClient{
+					StubClient: bkmapi.NewStub("test-user"),
+					deleteErr:  bkmapi.ErrApmAppNotFound,
+				}, nil
+			})
 
 			ruleID := bson.NewObjectID()
 			err := strategies.Create(ctx, &AlertStrategy{
@@ -880,14 +827,9 @@ var _ = Describe("AlertStrategyService", func() {
 				failAtCall: 1,
 				deleteErr:  bkmapi.ErrApmAppNotFound,
 			}
-			failSvc := newServiceWithClientFactory(
-				db,
-				svc.envStore,
-				svc.appStore,
-				func(_ string) (bkmapi.MonitorClient, error) {
-					return failClient, nil
-				},
-			)
+			failSvc := newServiceWithClientFactory(db, func(_ string) (bkmapi.MonitorClient, error) {
+				return failClient, nil
+			})
 
 			err := strategies.Create(ctx, &AlertStrategy{
 				WorkspaceID:  "test-ws",

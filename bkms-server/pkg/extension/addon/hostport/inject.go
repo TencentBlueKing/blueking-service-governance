@@ -23,6 +23,7 @@ import (
 	"maps"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -40,17 +41,16 @@ import (
 // so deploy reconcile can record the same applied set without a second ListPorts.
 func InjectFromStore(
 	ctx context.Context,
-	store HostPortStore,
+	db *mongo.Database,
 	appID string,
 	meta *metav1.ObjectMeta,
 	containers []corev1.Container,
 	mainContainerName string,
 ) ([]int32, error) {
-	ports, err := store.ListPorts(ctx, appID)
+	ports, err := ListPorts(ctx, db, appID)
 	if err != nil {
 		return nil, errors.Wrap(err, "listing hostport mappings")
 	}
-	ports = NormalizePorts(ports)
 	if len(ports) == 0 {
 		return ports, nil
 	}

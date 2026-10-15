@@ -22,11 +22,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 var FxModule = fx.Module("snapshot-tagdeletion",
 	database.PrivateFxModule,
-	snapshot.FxModule,
 	fx.Provide(NewService),
 )

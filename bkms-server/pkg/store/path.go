@@ -160,7 +160,7 @@ func dedupePaths(paths []fieldPath) ([]fieldPath, error) {
 // resolvePath 将以 "." 分隔的字段路径转换为 bson 路径。每一段既可以写 bson key，也可以写 Go 字段名，
 // inline 嵌入结构体中的字段直接写字段本身的名字，例如 Widget 的 "Spec.Color" 与 "spec.color" 等价。
 //
-// 数组按 MongoDB 点号路径的规则穿透：数字段是下标，其余段作用于数组元素。
+// 数组按 MongoDB 点号路径的规则穿透：数字段与位置操作符（$、$[]、$[id]）指向元素，其余段作用于数组元素。
 // 进入 interface 或 key 不是字符串的 map 后无法静态解析，剩余的段原样保留。
 // 遇到模型中不存在的段时 known 为 false，不返回错误，由调用方决定是否接受；只有歧义时返回错误
 func resolvePath(typ reflect.Type, path string) (fieldPath, error) {
@@ -220,7 +220,13 @@ func isArrayType(typ reflect.Type) bool {
 	return typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array
 }
 
+// isArrayIndex 判断 seg 是否指向数组中的元素：数字下标，或更新操作中的位置操作符（$、$[]、$[id]）
 func isArrayIndex(seg string) bool {
 	_, err := strconv.ParseUint(seg, 10, 64)
-	return err == nil
+	return err == nil || isPositional(seg)
+}
+
+// isPositional 判断 seg 是否是更新操作中的位置操作符：$、$[] 或 $[id]
+func isPositional(seg string) bool {
+	return seg == "$" || (strings.HasPrefix(seg, "$[") && strings.HasSuffix(seg, "]"))
 }

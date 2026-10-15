@@ -27,7 +27,6 @@ import (
 var FxModule = fx.Module("polaris",
 	database.PrivateFxModule,
 	fx.Provide(
-		NewPolarisConfigStoreMongo,
 		NewPolarisEnvStateManager,
 		NewWorkloadBuilder,
 	),

@@ -28,7 +28,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ListBkCIOAuthGitProjects 获取蓝盾授权 Git 项目列表
@@ -53,8 +52,7 @@ func (h *Handler) ListBkCIOAuthGitProjects(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
-		Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
+	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
 		return
@@ -100,8 +98,7 @@ func (h *Handler) GetBkCIOAuthUrl(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
-		Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
+	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
 		return
@@ -146,8 +143,7 @@ func (h *Handler) ListBkCIPipelines(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
-		Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
+	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
 		return
@@ -199,8 +195,7 @@ func (h *Handler) GetBkCIPipeline(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
-		Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
+	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bkci project"))
 		return
@@ -242,8 +237,7 @@ func (h *Handler) GetBkCIPipelineVariables(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
-		Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
+	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
 		return
@@ -297,8 +291,7 @@ func (h *Handler) ListBkCIRepositoryBranches(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
-		Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
+	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
 		return
@@ -353,8 +346,7 @@ func (h *Handler) ListBkCIRepositoryTags(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
-		Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
+	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
 		return

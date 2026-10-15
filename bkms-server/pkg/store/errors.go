@@ -32,6 +32,17 @@ var (
 	ErrDuplicate = errors.New("duplicate key")
 )
 
+// IgnoreNotFound 在 err 是 NotFound 错误时返回 nil，否则原样返回 err，
+// 用于「目标不存在即视为完成」的写操作，例如：
+//
+//	return store.IgnoreNotFound(records.Update(ctx, fields, ByID(id)))
+func IgnoreNotFound(err error) error {
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
 // storeError 让同一个错误既能匹配通用哨兵错误，也能匹配 Meta 中的业务错误，
 // 这样调用方可以按需选择 errors.Is(err, store.ErrNotFound) 或 errors.Is(err, ErrXxxNotFound)
 type storeError struct {

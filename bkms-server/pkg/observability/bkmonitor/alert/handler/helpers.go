@@ -34,7 +34,7 @@ import (
 )
 
 func (h *Handler) alertStrategyService() *alertstrategy.Service {
-	return alertstrategy.NewService(h.registry.DB, h.registry.EnvStore, h.registry.AppStore)
+	return alertstrategy.NewService(h.registry.DB)
 }
 
 func (h *Handler) loadStrategyContext(
@@ -46,7 +46,7 @@ func (h *Handler) loadStrategyContext(
 	if err != nil {
 		return nil, nil, bson.NilObjectID, err
 	}
-	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
+	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return nil, nil, bson.NilObjectID, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
 	}

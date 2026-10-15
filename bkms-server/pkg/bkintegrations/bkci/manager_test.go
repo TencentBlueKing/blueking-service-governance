@@ -55,9 +55,9 @@ func mockProject() *Project {
 }
 
 func setupManagerTestStores() (*ProjectStore, *PipelineStore, *PipelineTemplateStore) {
-	Expect(testutil.CleanupCollection(ProjectMeta.Collection)).To(Succeed())
-	Expect(testutil.CleanupCollection(PipelineMeta.Collection)).To(Succeed())
-	Expect(testutil.CleanupCollection(PipelineTemplateMeta.Collection)).To(Succeed())
+	Expect(testutil.CleanupMetaColl(ProjectMeta)).To(Succeed())
+	Expect(testutil.CleanupMetaColl(PipelineMeta)).To(Succeed())
+	Expect(testutil.CleanupMetaColl(PipelineTemplateMeta)).To(Succeed())
 
 	return testutil.NewStore(GinkgoT(), ProjectMeta),
 		testutil.NewStore(GinkgoT(), PipelineMeta),

@@ -161,7 +161,7 @@ var _ = Describe("GenericStore query options", func() {
 				return err
 			}),
 			Entry("UpdateOpt on List", func(*Widget) error {
-				_, err := f.widgets.List(f.ctx, f.byOwner(), store.UpdateNonZero())
+				_, err := f.widgets.List(f.ctx, f.byOwner(), store.UpdateOmit("tags"))
 				return err
 			}),
 			Entry("Limit on Exists", func(*Widget) error {
@@ -187,7 +187,7 @@ var _ = Describe("GenericStore query options", func() {
 				return f.widgets.Update(f.ctx, w, store.UpdateSelected("priority"), f.byOwner(), store.Limit(1))
 			}),
 			Entry("UpdateOpt on Replace", func(w *Widget) error {
-				return f.widgets.Replace(f.ctx, w, f.byName("w1"), store.UpdateNonZero())
+				return f.widgets.Replace(f.ctx, w, f.byName("w1"), store.UpdateOmit("tags"))
 			}),
 			Entry("sort on Upsert", func(w *Widget) error {
 				_, err := f.widgets.Upsert(f.ctx, w, f.byName("w1"), store.Desc("name"))
@@ -236,7 +236,7 @@ var _ = Describe("GenericStore query options", func() {
 			}),
 			// 仅包含非过滤条件的 Opt 同样视为没有过滤条件
 			Entry("Upsert with only an UpdateOpt", func(w *Widget) error {
-				_, err := f.widgets.Upsert(f.ctx, w, store.UpdateNonZero())
+				_, err := f.widgets.Upsert(f.ctx, w, store.UpdateOmit("tags"))
 				return err
 			}),
 		)

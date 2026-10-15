@@ -24,12 +24,13 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("InjectFromStore", func() {
@@ -37,29 +38,21 @@ var _ = Describe("InjectFromStore", func() {
 
 	var (
 		ctx       context.Context
-		diApp     *fxtest.App
-		store     hostport.HostPortStore
+		db        *mongo.Database
 		testAppID string
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		diApp = fxtest.New(
-			GinkgoT(),
-			hostport.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 		testAppID = "hostport-inject-" + stringx.Random(6)
-	})
-
-	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, testAppID)
-		diApp.RequireStop()
+		DeferCleanup(func() {
+			_ = store.Of(db, hostport.HostPortConfigMeta).DeleteIfExists(ctx, hostport.ByApp(testAppID))
+		})
 	})
 
 	It("merges webhook annotations and containerPorts", func() {
-		_, err := store.ReplacePorts(ctx, testAppID, []int32{8080, 80})
+		_, err := hostport.ReplacePorts(ctx, db, testAppID, []int32{8080, 80})
 		Expect(err).NotTo(HaveOccurred())
 
 		meta := &metav1.ObjectMeta{Annotations: map[string]string{"keep": "1"}}
@@ -74,7 +67,7 @@ var _ = Describe("InjectFromStore", func() {
 				}},
 			},
 		}
-		ports, err := hostport.InjectFromStore(ctx, store, testAppID, meta, containers, mainContainerName)
+		ports, err := hostport.InjectFromStore(ctx, db, testAppID, meta, containers, mainContainerName)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ports).To(Equal([]int32{80, 8080}))
 		Expect(meta.Annotations).To(Equal(map[string]string{
@@ -92,7 +85,7 @@ var _ = Describe("InjectFromStore", func() {
 	It("writes nothing when there are no declared ports", func() {
 		meta := &metav1.ObjectMeta{}
 		containers := []corev1.Container{{Name: mainContainerName}}
-		ports, err := hostport.InjectFromStore(ctx, store, testAppID, meta, containers, mainContainerName)
+		ports, err := hostport.InjectFromStore(ctx, db, testAppID, meta, containers, mainContainerName)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ports).To(Equal([]int32{}))
 		Expect(meta.Annotations).To(BeNil())

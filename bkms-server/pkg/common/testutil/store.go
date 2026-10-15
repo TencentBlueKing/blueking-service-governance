@@ -44,6 +44,11 @@ func NewStore[T any](t StoreTB, meta store.Meta[T]) *store.GenericStore[T] {
 	return s
 }
 
+// CleanupMetaColl 清空 meta 描述的集合中的全部文档。清理有 Meta 的集合时优先使用它，
+func CleanupMetaColl[T any](meta store.Meta[T]) error {
+	return CleanupCollection(meta.Collection)
+}
+
 // NewDB 通过 fx 获取 SetUpGlobalDatabase 初始化的测试数据库，供接收 *mongo.Database 的函数使用，
 // fx 应用在测试结束时自动停止。用法：
 //

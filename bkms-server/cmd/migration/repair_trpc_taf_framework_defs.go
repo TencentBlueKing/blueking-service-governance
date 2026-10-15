@@ -26,6 +26,7 @@ import (
 	"slices"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -120,9 +121,9 @@ type repairTrpcTafFrameworkDefsSummary struct {
 
 // repairTrpcTafFrameworkDefsDeps 命令依赖的 store，便于单测注入。
 type repairTrpcTafFrameworkDefsDeps struct {
-	appStore  bkmsapp.ApplicationStore
+	appStore  *bkmsapp.ApplicationStore
 	defStore  *appcfg.AppConfigFileDefStore
-	fileStore appcfg.AppConfigFileStore
+	fileStore *appcfg.AppConfigFileStore
 }
 
 // NewRepairTrpcTafFrameworkDefsCmd 创建一个一次性 Mongo 数据治理命令，
@@ -171,9 +172,9 @@ func NewRepairTrpcTafFrameworkDefsCmd() *cobra.Command {
 			storereg.Init(ctx)
 
 			summary, err := runRepairTrpcTafFrameworkDefs(ctx, repairTrpcTafFrameworkDefsDeps{
-				appStore:  storereg.G().AppStore,
+				appStore:  store.Of(storereg.G().DB, bkmsapp.AppMeta),
 				defStore:  store.Of(storereg.G().DB, appcfg.AppConfigFileDefMeta),
-				fileStore: storereg.G().AppConfigFileStore,
+				fileStore: store.Of(storereg.G().DB, appcfg.AppConfigFileMeta),
 			}, opts)
 			if err != nil {
 				return err
@@ -237,11 +238,11 @@ func runRepairTrpcTafFrameworkDefs(
 // 指定了 --app-id 时仍会装载该应用，由 build 阶段按 type 跳过非 trpc/taf。
 func listTrpcTafAppsForRepair(
 	ctx context.Context,
-	appStore bkmsapp.ApplicationStore,
+	appStore *bkmsapp.ApplicationStore,
 	opts repairTrpcTafFrameworkDefsOptions,
 ) ([]*bkmsapp.Application, error) {
 	if opts.AppID != "" {
-		app, err := appStore.GetApp(ctx, opts.AppID)
+		app, err := appStore.Get(ctx, bkmsapp.ByID(opts.AppID))
 		if err != nil {
 			return nil, errors.Wrap(err, "get app")
 		}
@@ -251,16 +252,17 @@ func listTrpcTafAppsForRepair(
 		return []*bkmsapp.Application{app}, nil
 	}
 
+	var workspaceOpt store.Opt
+	if opts.WorkspaceID != "" {
+		workspaceOpt = bkmsapp.InWorkspace(opts.WorkspaceID)
+	}
 	var apps []*bkmsapp.Application
 	for _, appType := range []string{bkmsapp.AppTypeTRPC, bkmsapp.AppTypeTAF} {
-		listed, err := appStore.ListApps(ctx, &bkmsapp.ListOpts{
-			WorkspaceID: opts.WorkspaceID,
-			AppType:     appType,
-		})
+		listed, err := appStore.List(ctx, workspaceOpt, bkmsapp.OfType(appType))
 		if err != nil {
 			return nil, errors.Wrapf(err, "list %s apps", appType)
 		}
-		apps = append(apps, listed...)
+		apps = append(apps, lo.ToSlicePtr(listed)...)
 	}
 	slices.SortFunc(apps, func(a, b *bkmsapp.Application) int {
 		if a.ID < b.ID {
@@ -307,12 +309,12 @@ func buildRepairTrpcTafFrameworkDefsAppPlan(
 	}
 
 	defIDs := loMapDefIDs(defs)
-	files, err := deps.fileStore.List(ctx, app.ID, appcfg.AcfFilterDefIDs(defIDs))
+	files, err := appcfg.ListFiles(ctx, deps.fileStore, app.ID, appcfg.AcfFilterDefIDs(defIDs))
 	if err != nil {
 		return nil, errors.Wrap(err, "list framework files")
 	}
 
-	allFiles, err := deps.fileStore.List(ctx, app.ID)
+	allFiles, err := appcfg.ListFiles(ctx, deps.fileStore, app.ID)
 	if err != nil {
 		return nil, errors.Wrap(err, "list app config files")
 	}
@@ -339,12 +341,7 @@ func applyRepairTrpcTafFrameworkDefsAppPlan(
 		if err != nil {
 			return errors.Wrapf(err, "parse file id %s", move.FileID)
 		}
-		file, err := deps.fileStore.GetByID(ctx, fileID)
-		if err != nil {
-			return errors.Wrapf(err, "load file %s", move.FileID)
-		}
-		file.DefID = primaryID
-		if _, err = deps.fileStore.Update(ctx, *file); err != nil {
+		if err = deps.fileStore.Update(ctx, map[string]any{"defID": primaryID}, store.ByID(fileID)); err != nil {
 			return errors.Wrapf(err, "repoint file %s to primary def", move.FileID)
 		}
 	}
@@ -365,7 +362,7 @@ func applyRepairTrpcTafFrameworkDefsAppPlan(
 		if err != nil {
 			return errors.Wrapf(err, "parse orphan def id %s", defIDHex)
 		}
-		remaining, err := deps.fileStore.ListByDefID(ctx, defID)
+		remaining, err := deps.fileStore.List(ctx, appcfg.FilesByDef(defID))
 		if err != nil {
 			return errors.Wrapf(err, "list files of orphan def %s", defIDHex)
 		}

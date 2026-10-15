@@ -72,7 +72,7 @@ var _ = Describe("PersistManager", func() {
 
 	AfterEach(func() {
 		mockey.UnPatchAll()
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	newManager := func() *PersistManager {

@@ -25,6 +25,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -36,14 +37,14 @@ import (
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
-// handle asynq 入口：store 未初始化则 ErrStopRetry
+// handle asynq 入口：数据库未初始化则 ErrStopRetry
 func handle(ctx context.Context, args Args) error {
 	reg := storereg.G()
-	if reg == nil || reg.HelmDeployRecordStore == nil {
+	if reg == nil || reg.DB == nil {
 		log.Errorf(ctx, "helm deploy poll stores not initialized, stop task: %s", args)
 		return errors.Wrap(taskq.ErrStopRetry, "helm deploy poll stores not initialized")
 	}
-	return NewPoller(reg.HelmDeployRecordStore).Handle(ctx, args)
+	return NewPoller(reg.DB).Handle(ctx, args)
 }
 
 // onExhausted tick 重试耗尽后兜底标 StatusPollingBroken 并放锁，避免记录永久停在 pending
@@ -53,12 +54,12 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 	log.Errorf(ctx, "helm deploy poll %s exhausted, try mark pollingBroken: %v", args, lastErr)
 
 	reg := storereg.G()
-	if reg == nil || reg.HelmDeployRecordStore == nil {
+	if reg == nil || reg.DB == nil {
 		log.Errorf(ctx, "helm deploy poll stores not initialized, skip mark pollingBroken: %s", args)
 		return
 	}
-	p := NewPoller(reg.HelmDeployRecordStore)
-	record, err := p.recordStore.Get(ctx, args.AppID, args.DeployID)
+	p := NewPoller(reg.DB)
+	record, err := helmdeploy.GetRecord(ctx, p.db, args.AppID, args.DeployID)
 	if err != nil {
 		log.Errorf(ctx, "get deploy record %s failed, skip mark pollingBroken: %v", args, err)
 		return
@@ -81,12 +82,12 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 
 // Poller 执行一次 Helm 部署状态轮询 tick
 type Poller struct {
-	recordStore helmdeploy.RecordStore
+	db *mongo.Database
 }
 
-// NewPoller 注入部署轮询所需 store，供 asynq handler 与单测共用
-func NewPoller(recordStore helmdeploy.RecordStore) *Poller {
-	return &Poller{recordStore: recordStore}
+// NewPoller 注入部署轮询所需的数据库，供 asynq handler 与单测共用
+func NewPoller(db *mongo.Database) *Poller {
+	return &Poller{db: db}
 }
 
 // Handle 执行一次部署状态轮询 tick
@@ -94,11 +95,11 @@ func NewPoller(recordStore helmdeploy.RecordStore) *Poller {
 // asynq MaxRetry 只约束本 tick 意外失败；轮询窗口与连续查状态失败分别由 pollingTimeout、FailureRetryRemain 截断
 // 记录不存在 wrap ErrStopRetry，瞬时错误交回 asynq 重试
 func (p *Poller) Handle(ctx context.Context, args Args) error {
-	if p.recordStore == nil {
+	if p.db == nil {
 		return errors.Wrap(taskq.ErrStopRetry, "helm deploy poll stores not initialized")
 	}
 
-	record, err := p.recordStore.Get(ctx, args.AppID, args.DeployID)
+	record, err := helmdeploy.GetRecord(ctx, p.db, args.AppID, args.DeployID)
 	if err != nil {
 		if errors.Is(err, helmdeploy.ErrRecordNotFound) {
 			return errors.Wrapf(taskq.ErrStopRetry, "get deploy record: %v", err)
@@ -238,7 +239,7 @@ func (p *Poller) save(ctx context.Context, record *helmdeploy.Record, args Args)
 	defer cancel()
 
 	fromStatus := helm.StatusUnknown
-	dbRecord, err := p.recordStore.Get(saveCtx, args.AppID, args.DeployID)
+	dbRecord, err := helmdeploy.GetRecord(saveCtx, p.db, args.AppID, args.DeployID)
 	if err != nil {
 		log.Errorf(saveCtx, "failed to get helm deploy record: %v", err)
 	} else if dbRecord.Status == helm.StatusUninstalled {
@@ -256,7 +257,7 @@ func (p *Poller) save(ctx context.Context, record *helmdeploy.Record, args Args)
 		saveCtx, "helm deploy %s status changed from %s to %s, message: %s",
 		args, fromStatus, record.Status, record.Message,
 	)
-	return p.recordStore.Update(saveCtx, record)
+	return helmdeploy.UpdateRecord(saveCtx, p.db, record)
 }
 
 // onStable 终态副作用失败只打日志，不改部署结果
@@ -285,7 +286,7 @@ func (p *Poller) onStable(ctx context.Context, record *helmdeploy.Record, args A
 
 // releaseLockIfLatest 仅当 latest 仍是本 deployID 时放锁，避免误放更新部署的锁
 func (p *Poller) releaseLockIfLatest(ctx context.Context, args Args) {
-	latest, err := p.recordStore.GetLatest(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
+	latest, err := helmdeploy.GetLatest(ctx, p.db, args.AppID, args.EnvName, args.TrafficLaneName)
 	if err != nil {
 		log.Errorf(ctx, "skip release helm deploy lock for %s: get latest: %v", args, err)
 		return

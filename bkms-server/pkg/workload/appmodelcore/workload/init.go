@@ -22,8 +22,9 @@ package workload
 import (
 	"sync"
 
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/standard"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/taf"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/trpc"
@@ -36,13 +37,13 @@ var initOnce sync.Once
 // This function must be called after database initialization and before the server starts.
 func InitPlugin(
 	mountableFileProvider appcfg.MountableFileProvider,
-	polarisConfigStore polaris.PolarisConfigStore,
+	db *mongo.Database,
 ) {
 	initOnce.Do(func() {
 		plugin.MustRegisterWorkloadPlugin(standard.Plugin{})
 		plugin.MustRegisterWorkloadPlugin(trpc.NewPlugin(
 			mountableFileProvider,
-			polarisConfigStore,
+			db,
 		))
 		plugin.MustRegisterWorkloadPlugin(taf.NewPlugin(mountableFileProvider))
 	})

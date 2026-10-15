@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -37,6 +38,7 @@ import (
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model/initdata"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
@@ -45,7 +47,7 @@ import (
 var _ = Describe("UnifiedEnvVarsReader", func() {
 	var (
 		diApp       *fxtest.App
-		store       envvars.ScopedEnvVarStore
+		db          *mongo.Database
 		ctx         context.Context
 		workspaceID string
 		environment envmodel.Environment
@@ -57,13 +59,13 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
-			fx.Populate(&store, &reader),
+			fx.Populate(&reader),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		environment = envmodel.Environment{
@@ -78,7 +80,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteAll(ctx)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(envvars.ScopedEnvVarMeta)).NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -99,14 +101,14 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	}
 
 	It("keeps standard and feature environment variable scopes isolated", func() {
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 		featureEnv := environment
 		featureEnv.Name = "feat-env"
 		featureEnv.Kind = envmodel.EnvironmentKindFeature
 		featureEnv.OwnerAppID = "feature-app"
 		app := &bkmsapp.Application{ID: featureEnv.OwnerAppID, WorkspaceID: workspaceID, Type: bkmsapp.AppTypeTRPC}
 
-		_, err := store.CreateSimpleEnvScopeVar(ctx, featureEnv, "SHARED_KEY", "feature-value", "")
+		_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, featureEnv, "SHARED_KEY", "feature-value", "")
 		Expect(err).NotTo(HaveOccurred())
 		vars, err := envvars.BuildAppEnvVars(ctx, app, nil, &featureEnv, reader)
 		Expect(err).NotTo(HaveOccurred())
@@ -119,7 +121,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	})
 
 	It("should list env background vars sorted by source priority", func() {
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 
 		bgVars, err := reader.ListEnvBgVars(ctx, environment)
 		Expect(err).NotTo(HaveOccurred())
@@ -128,7 +130,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	})
 
 	It("should list app background vars and include env scoped vars", func() {
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 
 		bgVars, err := reader.ListAppBgVars(ctx, environment, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -146,7 +148,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	})
 
 	It("should list app background vars with app-level builtins when app is provided", func() {
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 
 		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
 		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp, nil)
@@ -185,7 +187,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	})
 
 	It("should list available env vars with duplicate keys deduplicated by priority", func() {
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 
 		envVars, err := reader.ListEnvVars(ctx, environment)
 		Expect(err).NotTo(HaveOccurred())
@@ -205,7 +207,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 		}))
 	})
 	It("should list deployable app vars from scoped env vars and app model vars", func() {
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 
 		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
 		am := &appmodel.AppModel{
@@ -315,16 +317,16 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	)
 
 	It("lets scoped public vars and app vars override builtin resource limits", func() {
-		seedScopedEnvVars(ctx, store, workspaceID)
-		_, err := store.Create(ctx, envvars.ScopedEnvVar{
+		seedScopedEnvVars(ctx, db, workspaceID)
+		err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 			WorkspaceID: workspaceID,
 			ScopeType:   envvartypes.ScopeTypeWorkspace,
 			Key:         "BKMS_CPU_LIMIT",
 			Value:       "from-workspace",
 		})
 		Expect(err).NotTo(HaveOccurred())
-		_, err = store.CreateSimpleEnvScopeVar(
-			ctx,
+		_, err = envvars.CreateSimpleEnvScopeVar(
+			ctx, db,
 			environment,
 			"BKMS_MEMORY_LIMIT",
 			"from-env",
@@ -350,7 +352,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 var _ = Describe("BuildEnvConflictedInfoByKeys", func() {
 	var (
 		diApp       *fxtest.App
-		store       envvars.ScopedEnvVarStore
+		db          *mongo.Database
 		ctx         context.Context
 		workspaceID string
 		environment envmodel.Environment
@@ -362,13 +364,13 @@ var _ = Describe("BuildEnvConflictedInfoByKeys", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
-			fx.Populate(&store, &reader),
+			fx.Populate(&reader),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		environment = envmodel.Environment{
@@ -380,11 +382,11 @@ var _ = Describe("BuildEnvConflictedInfoByKeys", func() {
 				Namespace: "prod-ns",
 			},
 		}
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteAll(ctx)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(envvars.ScopedEnvVarMeta)).NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -413,7 +415,7 @@ var _ = Describe("BuildEnvConflictedInfoByKeys", func() {
 	})
 
 	It("should mask sensitive values in conflict detail", func() {
-		_, err := store.Create(ctx, envvars.ScopedEnvVar{
+		err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 			WorkspaceID: workspaceID,
 			ScopeType:   envvartypes.ScopeTypeWorkspace,
 			ScopeValue:  "",
@@ -464,7 +466,7 @@ var _ = Describe("BuildEnvConflictedInfoByKeys", func() {
 var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 	var (
 		diApp       *fxtest.App
-		store       envvars.ScopedEnvVarStore
+		db          *mongo.Database
 		ctx         context.Context
 		workspaceID string
 		reader      *envvars.UnifiedEnvVarsReader
@@ -476,21 +478,21 @@ var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
-			fx.Populate(&store, &reader),
+			fx.Populate(&reader),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
 
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		testApp = &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteAll(ctx)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(envvars.ScopedEnvVarMeta)).NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -578,8 +580,8 @@ var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 })
 
 // A helper function to seed scoped env vars for testing.
-func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, workspaceID string) {
-	_, err := store.Create(ctx, envvars.ScopedEnvVar{
+func seedScopedEnvVars(ctx context.Context, db *mongo.Database, workspaceID string) {
+	err := store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 		WorkspaceID: workspaceID,
 		ScopeType:   envvartypes.ScopeTypeWorkspace,
 		ScopeValue:  "",
@@ -588,7 +590,7 @@ func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, wor
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.Create(ctx, envvars.ScopedEnvVar{
+	err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 		WorkspaceID: workspaceID,
 		ScopeType:   envvartypes.ScopeTypeWorkspace,
 		ScopeValue:  "",
@@ -598,7 +600,7 @@ func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, wor
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.Create(ctx, envvars.ScopedEnvVar{
+	err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 		WorkspaceID: workspaceID,
 		ScopeType:   envvartypes.ScopeTypeEnvType,
 		ScopeValue:  "production",
@@ -607,7 +609,7 @@ func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, wor
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.Create(ctx, envvars.ScopedEnvVar{
+	err = store.Of(db, envvars.ScopedEnvVarMeta).Create(ctx, &envvars.ScopedEnvVar{
 		WorkspaceID: workspaceID,
 		ScopeType:   envvartypes.ScopeTypeEnvType,
 		ScopeValue:  "production",
@@ -616,8 +618,8 @@ func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, wor
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.CreateSimpleEnvScopeVar(
-		ctx,
+	_, err = envvars.CreateSimpleEnvScopeVar(
+		ctx, db,
 		envmodel.Environment{WorkspaceID: workspaceID, Name: "prod-env"},
 		"SHARED_KEY",
 		"env-value",
@@ -625,8 +627,8 @@ func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, wor
 	)
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.CreateSimpleEnvScopeVar(
-		ctx,
+	_, err = envvars.CreateSimpleEnvScopeVar(
+		ctx, db,
 		envmodel.Environment{WorkspaceID: workspaceID, Name: "prod-env"},
 		"ENV_ONLY_KEY",
 		"env-only-value",
@@ -634,8 +636,8 @@ func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, wor
 	)
 	Expect(err).NotTo(HaveOccurred())
 
-	_, err = store.CreateSimpleEnvScopeVar(
-		ctx,
+	_, err = envvars.CreateSimpleEnvScopeVar(
+		ctx, db,
 		envmodel.Environment{WorkspaceID: workspaceID, Name: "other-env"},
 		"OTHER_ENV_KEY",
 		"ignored",
@@ -647,8 +649,8 @@ func seedScopedEnvVars(ctx context.Context, store envvars.ScopedEnvVarStore, wor
 var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader + fake.Provider)", func() {
 	var (
 		diApp        *fxtest.App
-		store        envvars.ScopedEnvVarStore
-		instStore    depmodel.ServiceInstanceStore
+		db           *mongo.Database
+		insts        *depmodel.ServiceInstanceStore
 		bindingStore *depmodel.ServiceBindingStore
 		ctx          context.Context
 		workspaceID  string
@@ -661,13 +663,14 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,
-			depmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
-			fx.Populate(&store, &instStore, &reader),
+			fx.Populate(&reader),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		insts = testutil.NewStore(GinkgoT(), depmodel.ServiceInstanceMeta)
 		bindingStore = testutil.NewStore(GinkgoT(), depmodel.ServiceBindingMeta)
 
 		workspaceID = "test-workspace-" + stringx.Random(6)
@@ -680,16 +683,16 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 				Namespace: "prod-ns",
 			},
 		}
-		seedScopedEnvVars(ctx, store, workspaceID)
+		seedScopedEnvVars(ctx, db, workspaceID)
 
 		// Seed fake service definition (含 providerType=user-defined, 对应 fake.Provider)
-		Expect(initdata.Do(testutil.NewDB(GinkgoT()))).To(Succeed())
+		Expect(initdata.Do(db)).To(Succeed())
 	})
 
 	AfterEach(func() {
-		Expect(store.DeleteAll(ctx)).NotTo(HaveOccurred())
-		Expect(instStore.DeleteAll(ctx)).NotTo(HaveOccurred())
-		Expect(testutil.CleanupCollection(depmodel.ServiceBindingMeta.Collection)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(envvars.ScopedEnvVarMeta)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(depmodel.ServiceInstanceMeta)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupMetaColl(depmodel.ServiceBindingMeta)).NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -712,8 +715,8 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 			Status:       depmodel.AvailableStatus,
 			Operator:     "test-operator",
 		}
-		id, err := instStore.Create(ctx, inst)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(insts.Create(ctx, inst)).To(Succeed())
+		id := inst.ID
 
 		envVars := make(map[string]string, len(credentials)+len(extraEnvVars))
 		for k := range credentials {
@@ -726,7 +729,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 		for _, name := range envNames {
 			envMap[name] = id
 		}
-		err = bindingStore.Create(ctx, &depmodel.ServiceBinding{
+		err := bindingStore.Create(ctx, &depmodel.ServiceBinding{
 			Name:           "binding-" + stringx.Random(6),
 			AppID:          appID,
 			WorkspaceID:    workspaceID,

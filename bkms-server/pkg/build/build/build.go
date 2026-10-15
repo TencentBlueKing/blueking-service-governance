@@ -25,22 +25,23 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // StartOptions describes optional build follow-up workflow.
 type StartOptions struct {
-	AutoDeploy            *buildpoll.AutoDeployArgs
-	EnvStore              envmodel.EnvironmentStore
-	AutoDeployRecordStore autodeploy.RecordStore
+	AutoDeploy *buildpoll.AutoDeployArgs
+	// DB 用于读写构建自动部署记录，AutoDeploy 非空时必填
+	DB *mongo.Database
 }
 
 // StartAndScheduleBuild 同步触发蓝盾构建后，投递镜像构建状态轮询任务
@@ -64,14 +65,11 @@ func StartAndScheduleBuild(
 		BuildID:      result.Record.BuildID,
 	}
 	if opts.AutoDeploy != nil {
-		if opts.AutoDeployRecordStore == nil {
-			return nil, errors.New("build auto deploy record store is nil")
-		}
-		if opts.EnvStore == nil {
-			return nil, errors.New("environment store is nil")
+		if opts.DB == nil {
+			return nil, errors.New("database is nil")
 		}
 		taskArgs.AutoDeploy = opts.AutoDeploy
-		if err = opts.AutoDeployRecordStore.Create(ctx, &autodeploy.Record{
+		if err = store.Of(opts.DB, autodeploy.RecordMeta).Create(ctx, &autodeploy.Record{
 			WorkspaceID:     app.WorkspaceID,
 			AppID:           app.ID,
 			AppType:         app.Type,
@@ -90,7 +88,7 @@ func StartAndScheduleBuild(
 		}); err != nil {
 			return nil, errors.Wrap(err, "create build auto deploy record")
 		}
-		deploypkg.TrackEnvAddApp(ctx, opts.EnvStore, app.WorkspaceID, opts.AutoDeploy.EnvName, app.ID)
+		deploypkg.TrackEnvAddApp(ctx, opts.DB, app.WorkspaceID, opts.AutoDeploy.EnvName, app.ID)
 	}
 
 	err = taskq.Enqueue(
@@ -100,12 +98,14 @@ func StartAndScheduleBuild(
 	)
 	if err != nil {
 		if opts.AutoDeploy != nil {
-			record, getErr := opts.AutoDeployRecordStore.GetByBuildID(ctx, app.ID, result.Record.BuildID)
+			record, getErr := store.Of(opts.DB, autodeploy.RecordMeta).Get(
+				ctx, autodeploy.ByBuild(app.ID, result.Record.BuildID),
+			)
 			if getErr == nil {
 				record.Status = string(imagebuild.StatusFailed)
 				record.Message = "apply polling build status task failed"
 				record.EndedAt = result.Record.CreatedAt
-				if updateErr := opts.AutoDeployRecordStore.Update(ctx, record); updateErr != nil {
+				if updateErr := autodeploy.UpdateRecord(ctx, opts.DB, record); updateErr != nil {
 					err = errors.Wrap(updateErr, "update build auto deploy record")
 				}
 			}

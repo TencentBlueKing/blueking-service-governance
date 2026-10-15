@@ -40,7 +40,7 @@ var _ = Describe("AppDashboard store", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 
 		diApp := fxtest.New(GinkgoT(), FxModule, fx.Populate(&service))
 		diApp.RequireStart()

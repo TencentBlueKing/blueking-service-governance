@@ -73,7 +73,7 @@ func (h *Handler) ListAppConfigFileVersions(c *gin.Context) {
 		return
 	}
 
-	acfService := appcfg.NewAppConfigFileService(h.registry.AppConfigFileStore, h.registry.DB)
+	acfService := appcfg.NewAppConfigFileService(h.registry.DB)
 	versions, err := acfService.ListVersions(ctx, app.ID, queryInput.Page, queryInput.PageSize, filter)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app config file versions"))
@@ -126,7 +126,6 @@ func (h *Handler) GetAppConfigFileVersion(c *gin.Context) {
 	}
 
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 	version, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
@@ -175,7 +174,6 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 	}
 
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 	previous, current, err := acfService.CompareVersions(ctx, app.ID, previousID, currentID)
@@ -234,7 +232,6 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 	}
 
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 	targetVersion, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
@@ -242,7 +239,7 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get rollback target version"))
 		return
 	}
-	acf, err := h.registry.AppConfigFileStore.GetByID(ctx, targetVersion.AppConfigFileID)
+	acf, err := h.configFiles().GetByID(ctx, targetVersion.AppConfigFileID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app config file"))
 		return
@@ -318,7 +315,6 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 
 	deleter := auth.MustGetUser(ctx).ID
 	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
 		h.registry.DB,
 	)
 	version, _, err := acfService.DeleteVersion(ctx, app.ID, id, deleter)

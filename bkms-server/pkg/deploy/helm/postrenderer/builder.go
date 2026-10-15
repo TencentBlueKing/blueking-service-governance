@@ -34,7 +34,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	helmcomp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/helm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
@@ -89,21 +88,21 @@ func buildComponentPostRenderer(
 		return nil, nil
 	}
 
-	workspaceCompsStore, err := workspace.NewWorkspaceCompsStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create workspace component store")
-	}
-	workspaceComps, err := workspaceCompsStore.ListByWorkspace(ctx, app.WorkspaceID)
+	workspaceComps, err := store.Of(db, workspace.ComponentMeta).List(ctx, workspace.ComponentsIn(app.WorkspaceID))
 	if err != nil {
 		return nil, errors.Wrap(err, "list workspace components")
 	}
 
-	compApplier, err := component.CreateDefaultApplier()
-	if err != nil {
-		return nil, errors.Wrap(err, "create component applier")
-	}
+	compApplier := component.CreateDefaultApplier()
 
-	items, err := buildComponentPatches(ctx, app, env, lo.ToSlicePtr(comps), workspaceComps, compApplier)
+	items, err := buildComponentPatches(
+		ctx,
+		app,
+		env,
+		lo.ToSlicePtr(comps),
+		lo.ToSlicePtr(workspaceComps),
+		compApplier,
+	)
 	if err != nil {
 		return nil, err
 	}

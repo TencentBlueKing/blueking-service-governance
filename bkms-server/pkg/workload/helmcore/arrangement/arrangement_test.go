@@ -25,22 +25,21 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 var _ = Describe("Test AppArranger", func() {
-	var appStore *bkmsapp.ApplicationStoreMongo
+	var appStore *bkmsapp.ApplicationStore
 	var ctx context.Context
 	var app bkmsapp.Application
 
 	BeforeEach(func() {
 		var err error
 
-		appStore, err = bkmsapp.NewApplicationStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 
 		ctx = context.Background()
 		appName := "test-app-" + stringx.Random(6)
@@ -51,13 +50,13 @@ var _ = Describe("Test AppArranger", func() {
 		}
 
 		// Create the application first to make the further operations such as saving override values file work
-		err = appStore.CreateApp(ctx, &app)
+		err = appStore.Create(ctx, &app)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	Context("Validate file content", func() {
 		It("should return error if the YAML is malformed", func() {
-			arranger := NewAppArranger(appStore)
+			arranger := NewAppArranger()
 			// Malformed YAML, a list instead of a map
 			malformedYaml := []byte("[1, 2, 3]")
 
@@ -69,7 +68,7 @@ var _ = Describe("Test AppArranger", func() {
 		})
 
 		It("Should validate YAML with all placeholders correctly", func() {
-			arranger := NewAppArranger(appStore)
+			arranger := NewAppArranger()
 
 			// YAML with all required placeholders
 			yamlWithAllPlaceholders := []byte(`
@@ -96,7 +95,7 @@ global:
 		})
 
 		It("Should detect missing placeholders during validation", func() {
-			arranger := NewAppArranger(appStore)
+			arranger := NewAppArranger()
 
 			// YAML without any of the required placeholders
 			yamlWithoutPlaceholders := []byte(`

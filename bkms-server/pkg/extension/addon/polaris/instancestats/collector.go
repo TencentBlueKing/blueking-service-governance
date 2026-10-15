@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -66,12 +67,12 @@ type Result struct {
 
 // Collector 拉取并汇总北极星配置在各环境下的实例统计。
 type Collector struct {
-	deployRecordStore appmodeldeploy.RecordStore
+	db *mongo.Database
 }
 
 // NewCollector 创建统计器。
-func NewCollector(deployRecordStore appmodeldeploy.RecordStore) *Collector {
-	return &Collector{deployRecordStore: deployRecordStore}
+func NewCollector(db *mongo.Database) *Collector {
+	return &Collector{db: db}
 }
 
 // Collect 返回配置关联各环境的实例统计，以及北极星服务全量健康实例数 / 权重。
@@ -100,7 +101,7 @@ func (c *Collector) Collect(
 
 		// 仅统计主部署（空泳道），与实例列表默认视图一致。
 		// 配置已记为部署、但主部署记录不存在时（环境已清理或记录缺失），该环境按 0 返回，
-		record, err := c.deployRecordStore.GetLatest(ctx, appID, envName, "")
+		record, err := appmodeldeploy.GetLatest(ctx, c.db, appID, envName, "")
 		if err != nil {
 			// immediate 模式下，如果用户绑定了未部署的环境，会导致配置标记为已部署，但实际没有主部署记录，
 			if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {

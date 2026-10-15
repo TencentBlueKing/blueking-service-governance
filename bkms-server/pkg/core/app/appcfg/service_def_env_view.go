@@ -97,7 +97,7 @@ func (s *AppCfgFileDefService) loadPolicyAndEnvFiles(
 		return nil, nil, nil, err
 	}
 
-	defaultFile, err = s.FileStore.GetByDefIDAndEnv(ctx, def.ID, EnvNameDefault)
+	defaultFile, err = s.FileStore.Get(ctx, FileByDefEnv(def.ID, EnvNameDefault))
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "loading default file")
 	}
@@ -122,14 +122,14 @@ func (s *AppCfgFileDefService) fillEditorInfo(ctx context.Context, result *EnvFi
 		result.EditableContentField = string(EditableContentFieldNone)
 		return
 	}
-	editor, err := NewAppConfigFileEditor(s.FileStore, s.db, result.DisplayFile)
+	editor, err := NewAppConfigFileEditor(s.db, result.DisplayFile)
 	if err != nil {
 		result.EditableContentField = string(EditableContentFieldNone)
 		return
 	}
 	result.EditableContentField = string(editor.GetEditableContentField())
 
-	provider, err := NewBaseContentProvider(s.FileStore, s.db, result.DisplayFile)
+	provider, err := NewBaseContentProvider(s.db, result.DisplayFile)
 	if err != nil {
 		return
 	}
@@ -174,7 +174,7 @@ func (s *AppCfgFileDefService) GetMountPreview(
 		item := MountPreviewItem{Def: def, ContentSource: AppConfigFileTypeNormal, HasEnvFile: false}
 
 		// 查找该环境是否有独立实例
-		envFile, fErr := s.FileStore.GetByDefIDAndEnv(ctx, def.ID, envName)
+		envFile, fErr := s.FileStore.Get(ctx, FileByDefEnv(def.ID, envName))
 		if fErr != nil && !errors.Is(fErr, ErrAppConfigFileNotFound) {
 			return nil, errors.Wrapf(fErr, "querying env instance for def %s", def.ID.Hex())
 		}

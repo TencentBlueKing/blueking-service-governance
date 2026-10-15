@@ -25,9 +25,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -36,30 +36,18 @@ import (
 
 var _ = Describe("Env AppSpec", func() {
 	var ctx context.Context
-	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var appModelStore appmodel.AppModelStore
-	var appSpecStore AppSpecStore
+	var appStore *bkmsapp.ApplicationStore
+	var db *mongo.Database
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		diApp = fxtest.New(
-			GinkgoT(),
-			bkmsapp.FxModule,
-			appmodel.FxModule,
-			FxModule,
-			fx.Populate(&appStore, &appModelStore, &appSpecStore),
-		)
-		diApp.RequireStart()
-	})
-
-	AfterEach(func() {
-		diApp.RequireStop()
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
+		db = testutil.NewDB(GinkgoT())
 	})
 
 	It("merges env spec into the default spec", func() {
 		app := dbfactory.Application(ctx, appStore)
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID:    app.ID,
 			Replicas: lo.ToPtr(int32(2)),
 			UpdateStrategy: &appmodel.UpdateStrategy{
@@ -75,7 +63,7 @@ var _ = Describe("Env AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+		err = SetDefault(ctx, db, app.ID, &AppSpec{
 			Resources: &ResourcesSpec{
 				Replicas:       lo.ToPtr(int32(2)),
 				CPURequests:    lo.ToPtr("100m"),
@@ -91,7 +79,7 @@ var _ = Describe("Env AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetEnv(ctx, appSpecStore, &AppSpec{
+		err = SetEnv(ctx, db, &AppSpec{
 			AppID:   app.ID,
 			EnvName: "stag",
 			Resources: &ResourcesSpec{
@@ -108,7 +96,7 @@ var _ = Describe("Env AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		effective, err := GetEnvEffective(ctx, appSpecStore, appModelStore, app.ID, "stag")
+		effective, err := GetEnvEffective(ctx, db, app.ID, "stag")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*effective.Resources.Replicas).To(Equal(int32(5)))
 		Expect(*effective.Resources.CPURequests).To(Equal("100m"))
@@ -125,7 +113,7 @@ var _ = Describe("Env AppSpec", func() {
 
 	It("keeps default resource limits when env override only sets requests", func() {
 		app := dbfactory.Application(ctx, appStore)
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID: app.ID,
 			Workload: appmodel.Workload{
 				Resources: map[string]string{
@@ -136,7 +124,7 @@ var _ = Describe("Env AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+		err = SetDefault(ctx, db, app.ID, &AppSpec{
 			Resources: &ResourcesSpec{
 				Replicas:       lo.ToPtr(int32(1)),
 				CPURequests:    lo.ToPtr("0.1"),
@@ -147,7 +135,7 @@ var _ = Describe("Env AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetEnv(ctx, appSpecStore, &AppSpec{
+		err = SetEnv(ctx, db, &AppSpec{
 			AppID:   app.ID,
 			EnvName: "stag",
 			Resources: &ResourcesSpec{
@@ -159,7 +147,7 @@ var _ = Describe("Env AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		effective, err := GetEnvEffective(ctx, appSpecStore, appModelStore, app.ID, "stag")
+		effective, err := GetEnvEffective(ctx, db, app.ID, "stag")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*effective.Resources.Replicas).To(Equal(int32(1)))
 		Expect(*effective.Resources.CPURequests).To(Equal("0.1"))
@@ -170,7 +158,7 @@ var _ = Describe("Env AppSpec", func() {
 
 	It("falls back to the default spec when env override is missing", func() {
 		app := dbfactory.Application(ctx, appStore)
-		err := appModelStore.CreateAppModel(ctx, &appmodel.AppModel{
+		err := appmodel.CreateAppModel(ctx, db, &appmodel.AppModel{
 			AppID:    app.ID,
 			Replicas: lo.ToPtr(int32(4)),
 			Workload: appmodel.Workload{
@@ -181,7 +169,7 @@ var _ = Describe("Env AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = SetDefault(ctx, appSpecStore, appModelStore, app.ID, &AppSpec{
+		err = SetDefault(ctx, db, app.ID, &AppSpec{
 			Resources: &ResourcesSpec{
 				Replicas:    lo.ToPtr(int32(4)),
 				CPURequests: lo.ToPtr("250m"),
@@ -191,7 +179,7 @@ var _ = Describe("Env AppSpec", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		effective, err := GetEnvEffective(ctx, appSpecStore, appModelStore, app.ID, "prod")
+		effective, err := GetEnvEffective(ctx, db, app.ID, "prod")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(effective.EnvName).To(Equal("prod"))
 		Expect(*effective.Resources.Replicas).To(Equal(int32(4)))
@@ -209,16 +197,16 @@ var _ = Describe("Env AppSpec", func() {
 				Resources: map[string]string{"cpu": "1-2", "memory": "2Gi-4Gi"},
 			},
 		}
-		Expect(appModelStore.CreateAppModel(ctx, base)).To(Succeed())
+		Expect(appmodel.CreateAppModel(ctx, db, base)).To(Succeed())
 
-		Expect(SetEnv(ctx, appSpecStore, &AppSpec{
+		Expect(SetEnv(ctx, db, &AppSpec{
 			AppID:   app.ID,
 			EnvName: "stag",
 			Resources: &ResourcesSpec{
 				CPULimits: lo.ToPtr("4"),
 			},
 		})).To(Succeed())
-		Expect(SetEnv(ctx, appSpecStore, &AppSpec{
+		Expect(SetEnv(ctx, db, &AppSpec{
 			AppID:   app.ID,
 			EnvName: "prod",
 			Resources: &ResourcesSpec{
@@ -226,9 +214,9 @@ var _ = Describe("Env AppSpec", func() {
 			},
 		})).To(Succeed())
 
-		stag, _, err := ModelForEnv(ctx, appSpecStore, appModelStore, app.ID, "stag", base)
+		stag, _, err := ModelForEnv(ctx, db, app.ID, "stag", base)
 		Expect(err).NotTo(HaveOccurred())
-		prod, _, err := ModelForEnv(ctx, appSpecStore, appModelStore, app.ID, "prod", base)
+		prod, _, err := ModelForEnv(ctx, db, app.ID, "prod", base)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(base.Workload.Resources["cpu"]).To(Equal("1-2"))

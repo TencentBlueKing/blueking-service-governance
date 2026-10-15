@@ -22,7 +22,7 @@
 // 通过 handler 末尾硬编码 Enqueue 实现串联（禁用完成后自动触发销毁）。
 //
 // TaskType 在包加载时完成注册，投递侧（webserver）无需任何初始化；消费侧（worker）
-// 在启动阶段调用一次 Init，准备执行任务所需的 DBM client 与 ServiceInstanceStore。
+// 在启动阶段调用一次 Init，准备执行任务所需的 DBM client 与数据库。
 package depsvcredis
 
 import (
@@ -33,28 +33,31 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/dbm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var (
 	dbmClient dbm.Client
-	instStore model.ServiceInstanceStore
+	db        *mongo.Database
+	insts     *model.ServiceInstanceStore
 )
 
 // Init 初始化 depsvcredis 包依赖。在 worker 启动阶段（store 初始化之后）调用一次。
 //
 // DBM client 在此构造而非首次执行任务时惰性构造，让配置缺失等问题在启动阶段就暴露。
-func Init(store model.ServiceInstanceStore) error {
+func Init(database *mongo.Database) error {
 	client, err := dbm.New()
 	if err != nil {
 		return err
 	}
-	dbmClient, instStore = client, store
+	dbmClient, db, insts = client, database, store.Of(database, model.ServiceInstanceMeta)
 	return nil
 }
 
@@ -86,7 +89,7 @@ func failWithStopErr(ctx context.Context, instID string, status model.InstanceSt
 		log.Errorf(ctx, "depsvcredis: invalid instID %q: %v", instID, parseErr)
 		return errors.Wrap(taskq.ErrStopRetry, "invalid instID")
 	}
-	if updateErr := instStore.UpdateStatus(ctx, objID, status, err.Error()); updateErr != nil {
+	if updateErr := model.UpdateInstanceStatus(ctx, db, objID, status, err.Error()); updateErr != nil {
 		log.Errorf(ctx, "depsvcredis: update status for %s: %v", instID, updateErr)
 	}
 	return errors.Wrap(taskq.ErrStopRetry, err.Error())
@@ -101,7 +104,7 @@ func failOnExhausted(ctx context.Context, instID string, status model.InstanceSt
 		return
 	}
 	msg := fmt.Sprintf("task exhausted: %v", lastErr)
-	if updateErr := instStore.UpdateStatus(ctx, objID, status, msg); updateErr != nil {
+	if updateErr := model.UpdateInstanceStatus(ctx, db, objID, status, msg); updateErr != nil {
 		log.Errorf(ctx, "depsvcredis exhausted: update status for %s: %v", instID, updateErr)
 	}
 }

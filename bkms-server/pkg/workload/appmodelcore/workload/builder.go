@@ -353,7 +353,7 @@ func (b *Builder) applyPostProcessing(
 	var hostPortAppliedPorts []int32
 	if in.env.Cluster.IsFederation {
 		appliedPorts, err := hostport.InjectFromStore(
-			in.ctx, b.hostPortStore, b.app.ID,
+			in.ctx, b.db, b.app.ID,
 			&gd.Spec.Template.ObjectMeta,
 			gd.Spec.Template.Spec.Containers,
 			defaults.WorkloadMainContainerName,
@@ -380,10 +380,7 @@ func (b *Builder) applyPostProcessing(
 	if err != nil {
 		return gd, extraObjs, nil, errors.Wrap(err, "listing components")
 	}
-	compApplier, err := component.CreateDefaultApplier()
-	if err != nil {
-		return gd, extraObjs, nil, errors.Wrap(err, "creating component applier")
-	}
+	compApplier := component.CreateDefaultApplier()
 	evaluatedComps := make([]*component.EvaluatedComponent, 0, len(comps))
 	for _, comp := range comps {
 		evaluated, evaluateErr := compApplier.Evaluate(
@@ -744,12 +741,12 @@ func (b *Builder) resolveWorkspaceComps(
 	}
 
 	// Load the workspace components and build a lookup map
-	workspaceComps, err := b.workspaceCompsStore.ListByWorkspace(ctx, env.WorkspaceID)
+	workspaceComps, err := store.Of(b.db, workspace.ComponentMeta).List(ctx, workspace.ComponentsIn(env.WorkspaceID))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting workspace comps")
 	}
 	workspaceCompMap := make(map[string]*workspace.Component, len(workspaceComps))
-	for _, comp := range workspaceComps {
+	for _, comp := range lo.ToSlicePtr(workspaceComps) {
 		workspaceCompMap[comp.Name] = comp
 	}
 
@@ -831,7 +828,7 @@ func (b *Builder) ComputeAppModel(
 	env *envmodel.Environment,
 ) (*appmodel.AppModel, error) {
 	appModel, effectiveAppSpec, err := appspec.ModelForEnv(
-		ctx, b.appSpecStore, b.appModelStore, b.app.ID, env.Name, b.appModel,
+		ctx, b.db, b.app.ID, env.Name, b.appModel,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "applying env app spec for app %s env %s", b.app.ID, env.Name)

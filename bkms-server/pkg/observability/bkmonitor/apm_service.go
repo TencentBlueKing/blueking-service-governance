@@ -24,11 +24,13 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
@@ -36,17 +38,16 @@ import (
 // ApmService encapsulates APM instance config business logic, including remote fetching,
 // local persistence, environment binding, and environment variable management.
 type ApmService struct {
-	store ApmInstConfigStore
-
-	scopedEnvVarStore envvars.ScopedEnvVarStore
+	db *mongo.Database
 }
 
 // NewApmService creates a new ApmService instance.
-func NewApmService(store ApmInstConfigStore, scopedEnvVarStore envvars.ScopedEnvVarStore) *ApmService {
-	return &ApmService{
-		store:             store,
-		scopedEnvVarStore: scopedEnvVarStore,
-	}
+func NewApmService(db *mongo.Database) *ApmService {
+	return &ApmService{db: db}
+}
+
+func (s *ApmService) apms() *ApmInstConfigStore {
+	return store.Of(s.db, ApmInstConfigMeta)
 }
 
 // Get retrieves an APM instance config record from local store by apmID.
@@ -57,7 +58,7 @@ func (s *ApmService) Get(
 	param CreateApmInstParams,
 ) (*ApmInstConfig, error) {
 	// Try local store first
-	apm, err := s.store.GetByApmID(ctx, apmID)
+	apm, err := s.apms().Get(ctx, ApmByApmID(apmID))
 	if err == nil {
 		return apm, nil
 	}
@@ -81,12 +82,9 @@ func (s *ApmService) Get(
 		Name:        targetApmApp.AppName,
 		Token:       targetApmApp.Token,
 	}
-	apmObjID, err := s.store.Create(ctx, newApm)
-	if err != nil {
+	if err = s.apms().Create(ctx, newApm); err != nil {
 		return nil, errors.Wrap(err, "create apm in store")
 	}
-	newApm.ID = apmObjID
-
 	return newApm, nil
 }
 
@@ -102,13 +100,13 @@ func (s *ApmService) BindToEnv(
 	envName string,
 ) error {
 	// 1. Clear old associations
-	if err := s.store.UnbindEnvFromAll(ctx, envID); err != nil {
+	if err := UnbindEnvFromAll(ctx, s.db, envID); err != nil {
 		metrics.BindEnvApmFailed(apm.WorkspaceID, envName, "unbind_old_failed")
 		return errors.Wrap(err, "remove env from all apms")
 	}
 
 	// 2. Establish new association
-	if err := s.store.BindEnv(ctx, apm.ID, envID, envName); err != nil {
+	if err := BindEnv(ctx, s.db, apm.ID, envID, envName); err != nil {
 		metrics.BindEnvApmFailed(apm.WorkspaceID, envName, "bindenv_failed")
 		return errors.Wrap(err, "add env to apm")
 	}
@@ -165,7 +163,7 @@ func (s *ApmService) upsertApmEnvVars(
 		Description: "APM 采集 token",
 	})
 
-	return s.scopedEnvVarStore.BatchUpsertByKey(ctx, workspaceID, envvartypes.ScopeEnv(envName), envVars)
+	return envvars.BatchUpsertByKey(ctx, s.db, workspaceID, envvartypes.ScopeEnv(envName), envVars)
 }
 
 // CreateAndBindToEnv creates (or reuses) an APM app for the given environment and binds it.
@@ -180,7 +178,7 @@ func (s *ApmService) CreateAndBindToEnv(
 	param CreateApmInstParams,
 ) (*ApmInstConfig, error) {
 	// 1. Check local store for existing APM with same name
-	apm, err := s.store.GetByName(ctx, param.WorkspaceID, envName)
+	apm, err := s.apms().Get(ctx, ApmByName(param.WorkspaceID, envName))
 	if err != nil && !errors.Is(err, ErrApmInstConfigNotFound) {
 		return nil, errors.Wrap(err, "get apm by name")
 	}
@@ -215,7 +213,7 @@ func (s *ApmService) CreateAndBindToEnv(
 	}
 
 	// 4. Re-read the latest record (BindToEnv has updated associatedEnvs) to ensure consistent return data
-	apm, err = s.store.GetByApmID(ctx, apm.ApmID)
+	apm, err = s.apms().Get(ctx, ApmByApmID(apm.ApmID))
 	if err != nil {
 		return nil, errors.Wrap(err, "get apm after binding")
 	}

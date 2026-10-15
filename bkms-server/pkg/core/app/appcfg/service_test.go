@@ -37,8 +37,8 @@ import (
 
 var _ = Describe("AppConfigFileService", func() {
 	var diApp *fxtest.App
-	var appStore bkmsapp.ApplicationStore
-	var fileStore appcfg.AppConfigFileStore
+	var appStore *bkmsapp.ApplicationStore
+	var fileStore *appcfg.AppConfigFileStore
 	var versionStore *appcfg.AppConfigFileVersionStore
 	var service *appcfg.AppConfigFileService
 	var ctx context.Context
@@ -57,11 +57,11 @@ var _ = Describe("AppConfigFileService", func() {
 		err = testutil.CleanupCollection("applications")
 		Expect(err).NotTo(HaveOccurred())
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &fileStore),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
 		db := testutil.NewDB(GinkgoT())
@@ -70,7 +70,8 @@ var _ = Describe("AppConfigFileService", func() {
 		app := dbfactory.Application(ctx, appStore)
 		appID = app.ID
 
-		service = appcfg.NewAppConfigFileService(fileStore, db)
+		service = appcfg.NewAppConfigFileService(db)
+		fileStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileMeta)
 	})
 
 	AfterEach(func() {

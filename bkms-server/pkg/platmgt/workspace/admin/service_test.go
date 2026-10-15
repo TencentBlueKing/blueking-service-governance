@@ -53,7 +53,6 @@ var _ = Describe("WorkspaceAdminService", func() {
 
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsworkspace.FxModule,
 			FxModule,
 			fx.Provide(
 				func() perm.Manager { return roleMgr },
@@ -262,7 +261,7 @@ func cleanupWorkspaceAdminCollections() error {
 	if err := testutil.CleanupCollection("workspaces"); err != nil {
 		return err
 	}
-	return testutil.CleanupCollection(collectionName)
+	return testutil.CleanupMetaColl(Meta)
 }
 
 func loadLatestRecord(

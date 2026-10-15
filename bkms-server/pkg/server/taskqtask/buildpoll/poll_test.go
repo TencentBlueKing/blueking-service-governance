@@ -37,7 +37,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -75,7 +74,7 @@ var _ = Describe("Poller RunTick", func() {
 		rec             *build.Record
 		db              *mongo.Database
 		pipelineStore   *bkci.PipelineStore
-		autoDeployStore autodeploy.RecordStore
+		autoDeployStore *autodeploy.RecordStore
 		enqCount        int
 		enqDelay        time.Duration
 		plr             *poller
@@ -95,12 +94,10 @@ var _ = Describe("Poller RunTick", func() {
 	}
 
 	BeforeEach(func() {
-		var err error
 		ctx = auth.WithUser(context.Background(), auth.User{ID: "alice"})
 		db = testutil.NewDB(GinkgoT())
 		pipelineStore = store.Of(db, bkci.PipelineMeta)
-		autoDeployStore, err = autodeploy.NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		autoDeployStore = store.Of(db, autodeploy.RecordMeta)
 
 		workspaceID := "ws-" + stringx.Random(8)
 		appID := "app-" + stringx.Random(8)
@@ -109,7 +106,7 @@ var _ = Describe("Poller RunTick", func() {
 		args = Args{WorkspaceID: workspaceID, PipelineType: "build", AppID: appID, BuildID: buildID}
 		enqCount = 0
 		enqDelay = 0
-		plr = newPoller(db, autoDeployStore)
+		plr = newPoller(db)
 		deployHook = nil
 		snapshotHook = nil
 

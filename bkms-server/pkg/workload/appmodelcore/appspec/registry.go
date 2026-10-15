@@ -76,8 +76,8 @@ type registeredSection interface {
 	// cloneTo 负责克隆一份新数据并设置到给定的 AppSpec 中。
 	cloneTo(src, dst *AppSpec)
 
-	// appendWholeUpdate 定义了 section 在整块替换/删除场景下如何生成 MongoDB 更新语句。
-	appendWholeUpdate(set, unset *bson.D, spec *AppSpec)
+	// wholeValue 定义了 section 在整块替换/删除场景下的待写入值，返回 nil 表示删除该 section。
+	wholeValue(spec *AppSpec) any
 	// appendPatch 定义了如何将配置块数据转换成 MongoDB 更新语句的一部分，此函数定义了部分更新（Patch）的语义。
 	appendPatch(set *bson.D, spec *AppSpec)
 	// registerValidation 负责注册配置块数据的验证规则。
@@ -120,13 +120,13 @@ func (h SectionHandle[T]) cloneTo(src, dst *AppSpec) {
 	h.setCloned(dst, h.getRaw(src))
 }
 
-func (h SectionHandle[T]) appendWholeUpdate(set, unset *bson.D, spec *AppSpec) {
+func (h SectionHandle[T]) wholeValue(spec *AppSpec) any {
 	value := h.getCloned(spec)
 	if value == nil {
-		*unset = append(*unset, bson.E{Key: h.sectionID.String(), Value: ""})
-		return
+		// 返回无类型的 nil，避免带类型的 nil 指针被当作待写入的值
+		return nil
 	}
-	*set = append(*set, bson.E{Key: h.sectionID.String(), Value: value})
+	return value
 }
 
 func (h SectionHandle[T]) appendPatch(set *bson.D, spec *AppSpec) {

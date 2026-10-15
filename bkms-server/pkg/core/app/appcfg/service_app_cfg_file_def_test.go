@@ -35,10 +35,6 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 		f = setupDefServiceFixture()
 	})
 
-	AfterEach(func() {
-		f.DiApp.RequireStop()
-	})
-
 	Context("Create", func() {
 		It("should create def, file and initial version", func() {
 			result := f.createFrameworkFile("values.yaml")
@@ -597,7 +593,8 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 				Updater:        "tester",
 				CurrentVersion: 1,
 			}
-			envFileID, err := f.FileStore.Add(f.Ctx, envFile)
+			err = f.FileStore.Create(f.Ctx, &envFile)
+			envFileID := envFile.ID
 			Expect(err).NotTo(HaveOccurred())
 
 			// 切回统一配置
@@ -641,7 +638,8 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 				Updater:        "tester",
 				CurrentVersion: 1,
 			}
-			envFileID, err := f.FileStore.Add(f.Ctx, envFile)
+			err := f.FileStore.Create(f.Ctx, &envFile)
+			envFileID := envFile.ID
 			Expect(err).NotTo(HaveOccurred())
 
 			// 删除默认文件
@@ -680,7 +678,8 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 				Updater:        "tester",
 				CurrentVersion: 1,
 			}
-			envFileID, err := f.FileStore.Add(f.Ctx, envFile)
+			err := f.FileStore.Create(f.Ctx, &envFile)
+			envFileID := envFile.ID
 			Expect(err).NotTo(HaveOccurred())
 
 			// 仅删除环境实例

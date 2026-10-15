@@ -116,7 +116,7 @@ func (h *Handler) ListPlatformBuildImageTags(c *gin.Context) {
 		return
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, nil, nil)
+	snapshotService := snapshot.NewService(nil)
 	snapshots, total, status, err := snapshotService.ListRepositorySnapshots(
 		ctx,
 		runtimeImage.Name,

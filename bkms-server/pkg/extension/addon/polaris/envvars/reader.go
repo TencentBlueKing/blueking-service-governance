@@ -26,10 +26,13 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
@@ -37,12 +40,12 @@ import (
 //
 // 它产出的富列表会被注入到 envvars.UnifiedEnvVarsReader 中以接入统一的 envvars 链路。
 type Reader struct {
-	polarisConfigStore polaris.PolarisConfigStore
+	db *mongo.Database
 }
 
 // NewReader 创建一个 PolarisConfig 的环境变量读取器。
-func NewReader(polarisConfigStore polaris.PolarisConfigStore) *Reader {
-	return &Reader{polarisConfigStore: polarisConfigStore}
+func NewReader(db *mongo.Database) *Reader {
+	return &Reader{db: db}
 }
 
 // ListEnvVarsForApp 返回 attach 到给定 app 且对该 environment 生效的全部 polaris 配置所产出的环境变量。
@@ -58,7 +61,7 @@ func (r *Reader) ListEnvVarsForApp(
 		return envvartypes.EnvVariableRichList{}, nil
 	}
 
-	configs, err := r.polarisConfigStore.ListByEnv(ctx, app.ID, environment.Name)
+	configs, err := polaris.ListByEnv(ctx, r.db, app.ID, environment.Name)
 	if err != nil {
 		return envvartypes.EnvVariableRichList{}, errors.Wrap(err, "list polaris configs for app")
 	}
@@ -78,12 +81,12 @@ func (r *Reader) ListAppVarsForConflicts(
 		return envvartypes.EnvVariableRichList{}, nil
 	}
 
-	configs, err := r.polarisConfigStore.ListByApp(ctx, app.ID)
+	configs, err := store.Of(r.db, polaris.ConfigMeta).List(ctx, polaris.ByApp(app.ID))
 	if err != nil {
 		return envvartypes.EnvVariableRichList{}, errors.Wrap(err, "list polaris configs for app in workspace")
 	}
 
-	return r.collect(configs), nil
+	return r.collect(lo.ToSlicePtr(configs)), nil
 }
 
 // collect 对 configs 中的每条配置产出环境变量，并以 EnvVarSourcePolaris 包装 source 后扁平拼接。

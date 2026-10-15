@@ -42,7 +42,7 @@ var _ = Describe("ProjectStore", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		// 清理测试数据
-		err := testutil.CleanupCollection(ProjectMeta.Collection)
+		err := testutil.CleanupMetaColl(ProjectMeta)
 		Expect(err).NotTo(HaveOccurred())
 
 		// 创建 store 实例
@@ -230,7 +230,7 @@ var _ = Describe("RepositoryStore", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		// 清理测试数据
-		err := testutil.CleanupCollection(RepositoryMeta.Collection)
+		err := testutil.CleanupMetaColl(RepositoryMeta)
 		Expect(err).NotTo(HaveOccurred())
 
 		// 创建 store 实例

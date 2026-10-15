@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Handler handles Gin HostPort API requests.
@@ -44,7 +45,7 @@ func New(registry *storereg.Registry) *Handler {
 }
 
 func (h *Handler) service() *hostport.Service {
-	return hostport.NewService(h.registry.HostPortStore, h.registry.EnvStore)
+	return hostport.NewService(h.registry.DB)
 }
 
 // ListHostPorts 获取应用 HostPort 列表及联邦环境待部署状态。
@@ -111,7 +112,7 @@ func (h *Handler) PutHostPorts(c *gin.Context) {
 	}
 
 	var before *hostport.HostPortConfig
-	if existing, gErr := h.registry.HostPortStore.Get(ctx, app.ID); gErr == nil {
+	if existing, gErr := store.Of(h.registry.DB, hostport.HostPortConfigMeta).Get(ctx, hostport.ByApp(app.ID)); gErr == nil {
 		before = existing
 	} else if !errors.Is(gErr, hostport.ErrConfigNotFound) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(gErr, bkerrs.ErrCodeInternalServerError, "get hostports"))

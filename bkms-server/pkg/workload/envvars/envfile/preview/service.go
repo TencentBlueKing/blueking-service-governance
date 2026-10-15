@@ -23,6 +23,7 @@ import (
 
 	pkgerrors "github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -35,8 +36,7 @@ import (
 // ImportPreviewService 提供环境变量导入预览的共享逻辑，
 // 支持公共（workspace/envType）、单环境、应用三种导入上下文
 type ImportPreviewService struct {
-	scopedEnvVarStore envvars.ScopedEnvVarStore
-	appModelStore     appmodel.AppModelStore
+	db *mongo.Database
 }
 
 type existingVarSnapshot struct {
@@ -57,12 +57,10 @@ type publicScopeKey struct {
 
 // NewPreviewService 创建一个环境变量导入预览服务实例
 func NewPreviewService(
-	scopedEnvVarStore envvars.ScopedEnvVarStore,
-	appModelStore appmodel.AppModelStore,
+	db *mongo.Database,
 ) *ImportPreviewService {
 	return &ImportPreviewService{
-		scopedEnvVarStore: scopedEnvVarStore,
-		appModelStore:     appModelStore,
+		db: db,
 	}
 }
 
@@ -79,7 +77,7 @@ func (s *ImportPreviewService) PreviewPublic(
 	}
 
 	// 查询工作空间下已有的公共环境变量，用于判断新增还是覆盖
-	existingVars, err := s.scopedEnvVarStore.ListPublic(ctx, workspaceID)
+	existingVars, err := envvars.ListPublic(ctx, s.db, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +108,8 @@ func (s *ImportPreviewService) PreviewEnv(
 	// 仅查询目标 env scope 下直接定义的变量，用于判断 overwrite。
 	// 这里不读取当前环境的“最终生效变量”，避免把继承自 workspace / envType
 	// 的公共变量误判成 overwrite。
-	existingVars, err := s.scopedEnvVarStore.List(
-		ctx,
+	existingVars, err := envvars.List(
+		ctx, s.db,
 		environment.WorkspaceID,
 		envvars.WithScopes(envvartypes.ScopeEnv(environment.Name)),
 	)
@@ -143,7 +141,7 @@ func (s *ImportPreviewService) PreviewApp(
 	}
 
 	// 仅查询应用自身已定义的环境变量，用于判断 overwrite。
-	appEnvVars, err := s.appModelStore.ListAppDefinedEnvVars(ctx, app.ID)
+	appEnvVars, err := appmodel.ListAppDefinedEnvVars(ctx, s.db, app.ID)
 	if err != nil && !pkgerrors.Is(err, appmodel.ErrAppModelNotFound) {
 		return nil, err
 	}

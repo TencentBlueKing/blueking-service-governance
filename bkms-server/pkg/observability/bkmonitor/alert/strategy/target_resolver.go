@@ -24,11 +24,13 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
@@ -52,7 +54,12 @@ func (s *Service) resolveEffectiveEnvs(ctx context.Context, strategy *AlertStrat
 	// 1. 按策略生效范围类型分别查询环境集合。
 	switch strategy.EffectiveScope.Type {
 	case EffectiveScopeAll:
-		allEnvs, err := s.envStore.ListAppEnvs(ctx, strategy.WorkspaceID, strategy.AppID)
+		allEnvs, err := s.envStore.List(
+			ctx,
+			envmodel.InWorkspace(strategy.WorkspaceID),
+			envmodel.VisibleToApp(strategy.AppID),
+			envmodel.NewestFirst(),
+		)
 		if err != nil {
 			return nil, errors.Wrap(err, "list envs")
 		}
@@ -62,22 +69,24 @@ func (s *Service) resolveEffectiveEnvs(ctx context.Context, strategy *AlertStrat
 		})
 		return allEnvs, nil
 	case EffectiveScopeEnvType:
-		envs, err := s.envStore.ListAppEnvsByTypes(
+		envs, err := s.envStore.List(
 			ctx,
-			strategy.WorkspaceID,
-			strategy.AppID,
-			strategy.EffectiveScope.EnvTypes,
+			envmodel.InWorkspace(strategy.WorkspaceID),
+			store.Where("type", bson.M{"$in": strategy.EffectiveScope.EnvTypes}),
+			envmodel.BoundToApp(strategy.AppID),
+			envmodel.NewestFirst(),
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "list envs by types")
 		}
 		return envs, nil
 	case EffectiveScopeSpecificEnvs:
-		envs, err := s.envStore.ListAppEnvsByIDs(
+		envs, err := s.envStore.List(
 			ctx,
-			strategy.WorkspaceID,
-			strategy.AppID,
-			strategy.EffectiveScope.EnvIDs,
+			envmodel.InWorkspace(strategy.WorkspaceID),
+			store.Where("_id", bson.M{"$in": strategy.EffectiveScope.EnvIDs}),
+			envmodel.BoundToApp(strategy.AppID),
+			envmodel.NewestFirst(),
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "list envs by ids")
@@ -182,7 +191,7 @@ func (s *Service) resolveStrategyWorkloads(
 		return nil, errors.New("app store is nil")
 	}
 	// 2. 优先读取应用信息；读取失败时直接返回错误，避免误同步到错误 workload。
-	app, err := s.appStore.GetApp(ctx, strategy.AppID)
+	app, err := s.appStore.Get(ctx, bkmsapp.ByID(strategy.AppID))
 	if err != nil || app == nil {
 		log.Errorf(
 			ctx,

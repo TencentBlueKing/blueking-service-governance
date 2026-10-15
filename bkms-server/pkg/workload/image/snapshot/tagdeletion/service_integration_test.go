@@ -29,6 +29,7 @@ import (
 	. "github.com/onsi/gomega"
 	pkgerrors "github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	helmrelease "helm.sh/helm/v3/pkg/release"
@@ -47,6 +48,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -60,11 +62,11 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		diApp           *fxtest.App
 		service         *Service
 		workspaceStore  *bkmsworkspace.WorkspaceStore
-		appStore        bkmsapp.ApplicationStore
+		appStore        *bkmsapp.ApplicationStore
 		envSvc          *bkmsenv.EnvService
 		cfgStore        *build.ConfigStore
-		helmDeployStore helmdeploy.RecordStore
-		snapshotStore   snapshot.SnapshotStore
+		helmDeployStore *helmdeploy.RecordStore
+		db              *mongo.Database
 		promotionStore  *promotion.Store
 		oldConfig       *config.Config
 	)
@@ -79,23 +81,19 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 			Encrypt: config.EncryptConfig{Secret: secret},
 		}
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsworkspace.FxModule,
-			bkmsapp.FxModule,
-			appmodeldeploy.FxModule,
-			helmdeploy.FxModule,
 			bkmsenv.FxModule,
 			FxModule,
 			fx.Populate(
 				&service,
-				&appStore,
 				&envSvc,
-				&helmDeployStore,
-				&snapshotStore,
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		helmDeployStore = store.Of(db, helmdeploy.RecordMeta)
 		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 		cfgStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
 		promotionStore = testutil.NewStore(GinkgoT(), promotion.Meta)
@@ -111,10 +109,10 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 
 	It("should report usage when the latest deployed record still uses the tag", func() {
 		// Helm 应用：最新部署记录直接命中目标 tag，应返回当前 release 名称。
-		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, snapshotStore)
+		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
-		_, err := helmDeployStore.Create(ctx, &helmdeploy.Record{
+		err := helmDeployStore.Create(ctx, &helmdeploy.Record{
 			WorkspaceID: fixture.workspace.ID,
 			AppID:       fixture.app.ID,
 			EnvName:     fixture.env.Name,
@@ -139,10 +137,10 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 	It("should report app model workload usage when the latest deployed record still uses the tag", func() {
 		// AppModel 应用：从 ResourceKeys 中提取 workload 名称，
 		// 并忽略 service 等非 workload 资源。
-		fixture := newAppModelTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, snapshotStore)
+		fixture := newAppModelTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
-		_, err := service.appModelDeployStore.Create(ctx, &appmodeldeploy.Record{
+		err := store.Of(db, appmodeldeploy.RecordMeta).Create(ctx, &appmodeldeploy.Record{
 			WorkspaceID: fixture.workspace.ID,
 			AppID:       fixture.app.ID,
 			EnvName:     fixture.env.Name,
@@ -171,10 +169,10 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 	It("should delete the image even when the latest deployed record still uses the tag", func() {
 		// 删除接口不依赖 usage-check 做拦截；
 		// 这里只验证远端删除被调用，以及本地快照/晋级记录被清理。
-		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, snapshotStore)
+		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
-		_, err := helmDeployStore.Create(ctx, &helmdeploy.Record{
+		err := helmDeployStore.Create(ctx, &helmdeploy.Record{
 			WorkspaceID: fixture.workspace.ID,
 			AppID:       fixture.app.ID,
 			EnvName:     fixture.env.Name,
@@ -205,11 +203,9 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		Expect(deletedRepoName).To(Equal(fixture.repoName))
 		Expect(deletedTag).To(Equal(fixture.inUseTag))
 
-		snapshots, total, err := snapshotStore.ListByRepoKey(ctx, fixture.repoKey, "", 1, 10)
+		tags, err := snapshot.ListAllTags(ctx, db, fixture.repoKey)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(total).To(BeEquivalentTo(1))
-		Expect(snapshots).To(HaveLen(1))
-		Expect(snapshots[0].Tag).To(Equal(fixture.safeToDeleteTag))
+		Expect(tags).To(Equal([]string{fixture.safeToDeleteTag}))
 
 		isPromoted, err := promotionStore.Exists(
 			ctx,
@@ -220,7 +216,7 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 	})
 
 	It("should classify delete errors when image repository credential is missing", func() {
-		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, snapshotStore)
+		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
 		Expect(build.UpdateConfig(ctx, cfgStore, &build.Config{
@@ -236,7 +232,7 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 	})
 
 	It("should classify delete errors when registry returns authentication required", func() {
-		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, snapshotStore)
+		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
 		mockey.Mock(registry.New).Return(&registry.Client{}).Build()
@@ -254,10 +250,10 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 	It("should report no usage when only historical records use the tag", func() {
 		// 先插入一个使用旧 tag 的成功记录，再插入一个更新后的成功记录；
 		// 当前生效的是最新记录，因此旧 tag 不应再被报告为占用。
-		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, snapshotStore)
+		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
-		_, err := helmDeployStore.Create(ctx, &helmdeploy.Record{
+		err := helmDeployStore.Create(ctx, &helmdeploy.Record{
 			WorkspaceID: fixture.workspace.ID,
 			AppID:       fixture.app.ID,
 			EnvName:     fixture.env.Name,
@@ -270,7 +266,7 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 
 		time.Sleep(tagDeletionTimestampPrecisionWait)
 
-		_, err = helmDeployStore.Create(ctx, &helmdeploy.Record{
+		err = helmDeployStore.Create(ctx, &helmdeploy.Record{
 			WorkspaceID: fixture.workspace.ID,
 			AppID:       fixture.app.ID,
 			EnvName:     fixture.env.Name,
@@ -300,10 +296,10 @@ type tagDeletionFixture struct {
 func newTagDeletionFixture(
 	ctx context.Context,
 	workspaceStore *bkmsworkspace.WorkspaceStore,
-	appStore bkmsapp.ApplicationStore,
+	appStore *bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
 	cfgStore *build.ConfigStore,
-	snapshotStore snapshot.SnapshotStore,
+	db *mongo.Database,
 ) *tagDeletionFixture {
 	// Helm 场景的最小测试夹具：工作空间、应用、环境、镜像构建配置和两条快照。
 	workspace := dbfactory.Workspace(ctx, workspaceStore)
@@ -328,10 +324,7 @@ func newTagDeletionFixture(
 	})).To(Succeed())
 
 	repoKey := snapshot.GenerateRepoKey(repoName, "alice", "secret")
-	Expect(snapshotStore.UpsertSnapshots(ctx, repoKey, []snapshot.Image{
-		{Tag: "v1.0.0"},
-		{Tag: "v2.0.0"},
-	})).To(Succeed())
+	Expect(snapshot.UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v2.0.0"})).To(Succeed())
 
 	return &tagDeletionFixture{
 		workspace:       workspace,
@@ -347,10 +340,10 @@ func newTagDeletionFixture(
 func newAppModelTagDeletionFixture(
 	ctx context.Context,
 	workspaceStore *bkmsworkspace.WorkspaceStore,
-	appStore bkmsapp.ApplicationStore,
+	appStore *bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
 	cfgStore *build.ConfigStore,
-	snapshotStore snapshot.SnapshotStore,
+	db *mongo.Database,
 ) *tagDeletionFixture {
 	// AppModel 场景复用同一份返回结构，仅把应用类型切为 TRPC。
 	workspace := dbfactory.Workspace(ctx, workspaceStore)
@@ -361,7 +354,7 @@ func newAppModelTagDeletionFixture(
 		WorkspaceID: workspace.ID,
 		Type:        bkmsapp.AppTypeTRPC,
 	}
-	Expect(appStore.CreateApp(ctx, app)).To(Succeed())
+	Expect(appStore.Create(ctx, app)).To(Succeed())
 
 	env := dbfactory.EnvWithOpts(ctx, envSvc, &dbfactory.EnvOpts{
 		WorkspaceID: workspace.ID,
@@ -379,10 +372,7 @@ func newAppModelTagDeletionFixture(
 	})).To(Succeed())
 
 	repoKey := snapshot.GenerateRepoKey(repoName, "alice", "secret")
-	Expect(snapshotStore.UpsertSnapshots(ctx, repoKey, []snapshot.Image{
-		{Tag: "v1.0.0"},
-		{Tag: "v2.0.0"},
-	})).To(Succeed())
+	Expect(snapshot.UpsertTags(ctx, db, repoKey, []string{"v1.0.0", "v2.0.0"})).To(Succeed())
 
 	return &tagDeletionFixture{
 		workspace:       workspace,
@@ -398,7 +388,7 @@ func newAppModelTagDeletionFixture(
 func (f *tagDeletionFixture) cleanup(
 	ctx context.Context,
 	workspaceStore *bkmsworkspace.WorkspaceStore,
-	appStore bkmsapp.ApplicationStore,
+	appStore *bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
 	cfgStore *build.ConfigStore,
 	promotionStore *promotion.Store,
@@ -425,8 +415,8 @@ func (f *tagDeletionFixture) cleanup(
 	_, err = promotionStore.DeleteMany(ctx, promotion.ByApp(f.app.ID))
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfgStore.DeleteIfExists(ctx, build.ByApp(f.app.ID))).To(Succeed())
-	Expect(envSvc.RemoveApp(ctx, f.env.ID, f.app.ID)).To(Succeed())
+	Expect(envmodel.RemoveApp(ctx, db, f.env.ID, f.app.ID)).To(Succeed())
 	Expect(envSvc.Delete(ctx, f.env.ID)).To(Succeed())
-	Expect(appStore.DeleteAppByName(ctx, f.workspace.ID, f.app.Name)).To(Succeed())
+	Expect(appStore.DeleteIfExists(ctx, bkmsapp.ByName(f.workspace.ID, f.app.Name))).To(Succeed())
 	Expect(bkmsworkspace.Delete(ctx, workspaceStore, f.workspace.ID)).To(Succeed())
 }

@@ -24,23 +24,27 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("EnvStateManager", func() {
 	var (
 		ctx        context.Context
 		diApp      *fxtest.App
-		appStore   bkmsapp.ApplicationStore
+		appStore   *bkmsapp.ApplicationStore
 		envService *env.EnvService
-		store      hostport.HostPortStore
+		db         *mongo.Database
+		configs    *hostport.HostPortStore
 		manager    *hostport.EnvStateManager
 		app        *bkmsapp.Application
 		federation *envmodel.Environment
@@ -50,12 +54,14 @@ var _ = Describe("EnvStateManager", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		suffix := stringx.Random(6)
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
 			hostport.FxModule,
-			fx.Populate(&appStore, &envService, &store, &manager),
+			store.FxModule,
+			store.Provide(hostport.HostPortConfigMeta),
+			fx.Populate(&envService, &db, &configs, &manager),
 		)
 		diApp.RequireStart()
 
@@ -84,7 +90,7 @@ var _ = Describe("EnvStateManager", func() {
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, app.ID)
+		_ = configs.DeleteIfExists(ctx, hostport.ByApp(app.ID))
 		diApp.RequireStop()
 	})
 
@@ -92,14 +98,14 @@ var _ = Describe("EnvStateManager", func() {
 		It("is a no-op for non-federation environments", func() {
 			Expect(manager.ReconcileAfterDeploy(ctx, app, nonFedEnv, []int32{80})).To(Succeed())
 
-			_, err := store.Get(ctx, app.ID)
+			_, err := configs.Get(ctx, hostport.ByApp(app.ID))
 			Expect(err).To(MatchError(hostport.ErrConfigNotFound))
 		})
 
 		It("persists the provided applied ports for federation environments", func() {
 			Expect(manager.ReconcileAfterDeploy(ctx, app, federation, []int32{8080, 80})).To(Succeed())
 
-			config, err := store.Get(ctx, app.ID)
+			config, err := configs.Get(ctx, hostport.ByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(config.EnvStates[federation.Name].AppliedPorts).To(Equal([]int32{80, 8080}))
 		})
@@ -108,21 +114,21 @@ var _ = Describe("EnvStateManager", func() {
 			Expect(manager.ReconcileAfterDeploy(ctx, app, federation, []int32{80})).To(Succeed())
 			Expect(manager.ReconcileAfterDeploy(ctx, app, federation, nil)).To(Succeed())
 
-			config, err := store.Get(ctx, app.ID)
+			config, err := configs.Get(ctx, hostport.ByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(config.EnvStates[federation.Name].AppliedPorts).To(Equal([]int32{}))
 		})
 
 		It("does not re-list declared ports (avoids mid-deploy race)", func() {
-			_, err := store.ReplacePorts(ctx, app.ID, []int32{80})
+			_, err := hostport.ReplacePorts(ctx, db, app.ID, []int32{80})
 			Expect(err).NotTo(HaveOccurred())
 			// Snapshot at build/inject time was only 80; declared ports changed after inject.
-			_, err = store.ReplacePorts(ctx, app.ID, []int32{80, 443})
+			_, err = hostport.ReplacePorts(ctx, db, app.ID, []int32{80, 443})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(manager.ReconcileAfterDeploy(ctx, app, federation, []int32{80})).To(Succeed())
 
-			config, err := store.Get(ctx, app.ID)
+			config, err := configs.Get(ctx, hostport.ByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(config.EnvStates[federation.Name].AppliedPorts).To(Equal([]int32{80}))
 		})
@@ -133,7 +139,7 @@ var _ = Describe("EnvStateManager", func() {
 			Expect(manager.ReconcileAfterDeploy(ctx, app, federation, []int32{80})).To(Succeed())
 			Expect(manager.ReconcileAfterUninstall(ctx, app, federation)).To(Succeed())
 
-			config, err := store.Get(ctx, app.ID)
+			config, err := configs.Get(ctx, hostport.ByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 			_, ok := config.EnvStates[federation.Name]
 			Expect(ok).To(BeFalse())
@@ -143,7 +149,7 @@ var _ = Describe("EnvStateManager", func() {
 			Expect(manager.ReconcileAfterDeploy(ctx, app, federation, []int32{80})).To(Succeed())
 			Expect(manager.ReconcileAfterUninstall(ctx, app, nonFedEnv)).To(Succeed())
 
-			config, err := store.Get(ctx, app.ID)
+			config, err := configs.Get(ctx, hostport.ByApp(app.ID))
 			Expect(err).NotTo(HaveOccurred())
 			_, ok := config.EnvStates[federation.Name]
 			Expect(ok).To(BeTrue())

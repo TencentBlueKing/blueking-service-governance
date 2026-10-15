@@ -34,10 +34,6 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 		f = setupDefServiceFixture()
 	})
 
-	AfterEach(func() {
-		f.DiApp.RequireStop()
-	})
-
 	Context("FindEnvInstance", func() {
 		It("should return nil when no env instance exists", func() {
 			result := f.createFrameworkFile("values.yaml")

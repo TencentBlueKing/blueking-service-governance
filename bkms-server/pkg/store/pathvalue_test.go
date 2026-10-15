@@ -76,6 +76,18 @@ var _ = Describe("Field path values", func() {
 			Expect(doc.Specs).To(Equal(map[string]pathSpec{"prod": {Color: "red"}}))
 		})
 
+		It("deletes a map entry for nil", func() {
+			doc.Specs = map[string]pathSpec{"prod": {Color: "red"}, "dev": {Color: "gray"}}
+			Expect(set("specs.prod", nil)).To(Succeed())
+			Expect(doc.Specs).To(Equal(map[string]pathSpec{"dev": {Color: "gray"}}))
+		})
+
+		It("sets the zero value for nil on a field inside a map entry", func() {
+			doc.Specs = map[string]pathSpec{"prod": {Color: "red", Size: 1}}
+			Expect(set("specs.prod.color", nil)).To(Succeed())
+			Expect(doc.Specs).To(Equal(map[string]pathSpec{"prod": {Size: 1}}))
+		})
+
 		It("returns the conversion error with the target type", func() {
 			err := set("title", []int{1})
 			Expect(err).To(MatchError(ContainSubstring("convert []int to string")))
@@ -124,41 +136,6 @@ var _ = Describe("Field path values", func() {
 		It("keeps a map assigned to an interface field as is", func() {
 			Expect(set("extra", map[string]any{"a": 1})).To(Succeed())
 			Expect(doc.Extra).To(Equal(map[string]any{"a": 1}))
-		})
-	})
-
-	Describe("valueAt", func() {
-		has := func(path string) bool {
-			_, ok := valueAt(reflect.ValueOf(doc).Elem(), mustResolvePath(pathDocType, path).steps)
-			return ok
-		}
-		get := func(path string) any {
-			v, ok := valueAt(reflect.ValueOf(doc).Elem(), mustResolvePath(pathDocType, path).steps)
-			Expect(ok).To(BeTrue(), "value at %s", path)
-			return v.Interface()
-		}
-
-		It("returns nested and map values", func() {
-			doc.Spec.Color = "red"
-			doc.Specs = map[string]pathSpec{"prod": {Size: 1}}
-			Expect(get("Spec.Color")).To(Equal(pathColor("red")))
-			Expect(get("specs.prod")).To(Equal(pathSpec{Size: 1}))
-			Expect(get("specs.prod.size")).To(Equal(1))
-		})
-
-		It("returns the zero value of a field that is not set", func() {
-			Expect(get("title")).To(Equal(""))
-			Expect(get("enabled")).To(Equal((*bool)(nil)))
-		})
-
-		It("returns false when passing through a nil pointer", func() {
-			Expect(has("specPtr.color")).To(BeFalse())
-		})
-
-		It("returns false for an absent map entry", func() {
-			doc.Specs = map[string]pathSpec{"prod": {}}
-			Expect(has("specs.dev.color")).To(BeFalse())
-			Expect(has("specs.prod.color")).To(BeTrue())
 		})
 	})
 })

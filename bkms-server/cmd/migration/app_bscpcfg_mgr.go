@@ -180,7 +180,7 @@ func enableBscpCfgForApp(
 	user auth.User,
 	appID string,
 ) error {
-	app, err := reg.AppStore.GetApp(ctx, appID)
+	app, err := store.Of(reg.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		return errors.Wrapf(err, "get app %s", appID)
 	}

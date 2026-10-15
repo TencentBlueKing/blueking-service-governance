@@ -102,7 +102,8 @@ func isOperatorDoc(v any) bool {
 	return ok && lo.ContainsBy(d, func(e bson.E) bool { return isOperatorKey(e.Key) })
 }
 
-// equalityKeys 返回过滤条件中以等值方式出现的字段（含 $and 中的），upsert 插入文档时 MongoDB 会写入这些字段
+// equalityKeys 返回过滤条件中以等值方式出现的字段（含 $and 中的），upsert 插入文档时 MongoDB 会写入这些字段。
+// 只识别直接写值的条件，{"$eq": v} 等操作符形式有意不识别，见 Upsert 的说明
 func equalityKeys(conds bson.D) map[string]bool {
 	keys := map[string]bool{}
 	for _, e := range conds {

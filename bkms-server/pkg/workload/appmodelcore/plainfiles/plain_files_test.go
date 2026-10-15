@@ -38,8 +38,8 @@ import (
 var _ = Describe("BuildPlainConfigFiles", func() {
 	var diApp *fxtest.App
 	var ctx context.Context
-	var appStore bkmsapp.ApplicationStore
-	var store appcfg.AppConfigFileStore
+	var appStore *bkmsapp.ApplicationStore
+	var files *appcfg.AppConfigFileStore
 	var defStore *appcfg.AppConfigFileDefStore
 	var app *bkmsapp.Application
 	var provider appcfg.MountableFileProvider
@@ -55,17 +55,17 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 		err = testutil.CleanupCollection("applications")
 		Expect(err).NotTo(HaveOccurred())
 
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
-			appcfg.FxModule,
-			fx.Populate(&appStore, &store),
+			fx.Populate(),
 		)
 		diApp.RequireStart()
 		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		files = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileMeta)
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()))
+		provider = appcfg.NewMountableFileProvider(testutil.NewDB(GinkgoT()))
 	})
 
 	AfterEach(func() {
@@ -87,7 +87,7 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 	}
 
 	addDefaultFile := func(defID bson.ObjectID, content string) {
-		_, err := store.Add(ctx, appcfg.AppConfigFile{
+		err := files.Create(ctx, &appcfg.AppConfigFile{
 			DefID:   defID,
 			AppID:   app.ID,
 			EnvName: appcfg.EnvNameDefault,

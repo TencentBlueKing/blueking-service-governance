@@ -61,7 +61,8 @@ func Next(ctx context.Context, db *mongo.Database, appID string, bumpType BumpTy
 		SetUpsert(true).
 		SetReturnDocument(options.After)
 
-	// 按段递增并归零其余段，GenericStore 不提供 $inc，直接操作底层集合
+	// 按段递增并归零其余段，且需要原子地取回递增后的值（FindOneAndUpdate + upsert），
+	// GenericStore 不提供这类操作，直接操作底层集合
 	coll := store.Of(db, CounterMeta).Collection()
 	var c Counter
 	if err := coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&c); err != nil {

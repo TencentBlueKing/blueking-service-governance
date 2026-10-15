@@ -28,7 +28,9 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Test EnvService", func() {
@@ -37,7 +39,6 @@ var _ = Describe("Test EnvService", func() {
 
 	var err error
 	var ctx context.Context
-	var envStore model.EnvironmentStore
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -47,14 +48,13 @@ var _ = Describe("Test EnvService", func() {
 			FxModule,
 			fx.Populate(
 				&envSvc,
-				&envStore,
 			),
 		)
 		diApp.RequireStart()
 	})
 
 	AfterEach(func() {
-		Expect(envStore.DeleteAll(ctx)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupCollection("environments")).NotTo(HaveOccurred())
 		ResetHooksForTest()
 		diApp.RequireStop()
 	})
@@ -76,17 +76,16 @@ var _ = Describe("Test EnvService", func() {
 				Namespace:   stringx.Random(10),
 			}
 			// test: create environment
-			envID, err = envSvc.Create(
-				ctx,
-				&model.Environment{
-					Name:        envName,
-					WorkspaceID: workspaceID,
-					Cluster:     Cluster,
-					Type:        envType,
-					Description: stringx.Random(10),
-				},
-			)
+			env := &model.Environment{
+				Name:        envName,
+				WorkspaceID: workspaceID,
+				Cluster:     Cluster,
+				Type:        envType,
+				Description: stringx.Random(10),
+			}
+			err = envSvc.Create(ctx, env)
 			Expect(err).NotTo(HaveOccurred())
+			envID = env.ID
 		})
 		AfterEach(func() {
 			// test: delete environment
@@ -94,7 +93,8 @@ var _ = Describe("Test EnvService", func() {
 		})
 
 		It("test list environments", func() {
-			environments, _ := envSvc.ListStdEnvs(ctx, workspaceID)
+			environments, _ := store.Of(testutil.NewDB(GinkgoT()), model.EnvMeta).
+				List(ctx, model.StdEnvsIn(workspaceID))
 			Expect(environments).To(HaveLen(1))
 			Expect(environments[0].Name).To(Equal(envName))
 			Expect(environments[0].Status).To(Equal(model.EnvStatusReady))
@@ -102,7 +102,7 @@ var _ = Describe("Test EnvService", func() {
 
 		It("test update cluster namespace failed when app already deployed", func() {
 			appID := stringx.Random(10)
-			Expect(envSvc.AddApp(ctx, envID, appID)).NotTo(HaveOccurred())
+			Expect(model.AddApp(ctx, testutil.NewDB(GinkgoT()), envID, appID)).NotTo(HaveOccurred())
 
 			newNamespace := stringx.Random(10)
 			updateErr := envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{
@@ -112,7 +112,7 @@ var _ = Describe("Test EnvService", func() {
 		})
 
 		It("returns domain conflict error when creating an env with occupied cluster namespace", func() {
-			_, createErr := envSvc.Create(ctx, &model.Environment{
+			createErr := envSvc.Create(ctx, &model.Environment{
 				Name:        "conflict-" + stringx.Random(6),
 				DisplayName: "conflict",
 				Type:        "test",
@@ -137,7 +137,7 @@ var _ = Describe("Test EnvService", func() {
 			}
 			occupiedEnvName := "occupied-" + stringx.Random(6)
 			occupiedWorkspaceID := "ws-" + stringx.Random(6)
-			_, createErr := envSvc.Create(ctx, &model.Environment{
+			createErr := envSvc.Create(ctx, &model.Environment{
 				Name:        occupiedEnvName,
 				DisplayName: occupiedEnvName,
 				Type:        "test",

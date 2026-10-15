@@ -209,11 +209,11 @@ func (h *Handler) RefreshCustomBuildImageTags(c *gin.Context) {
 
 // newTagQueryManager 组装自定义镜像 tag 查询依赖。
 //
-// 工作空间口径的 repoKey 只依赖镜像源账密，不读应用，故快照服务的 appStore 传 nil
+// 工作空间口径的 repoKey 只依赖镜像源账密，不读应用
 func (h *Handler) newTagQueryManager() *customruntime.TagQueryManager {
 	return customruntime.NewTagQueryManager(
 		h.registry.DB,
-		snapshot.NewService(h.registry.SnapshotStore, h.registry.DB, nil),
+		snapshot.NewService(h.registry.DB),
 	)
 }
 

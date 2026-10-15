@@ -52,11 +52,7 @@ func New(registry *storereg.Registry) *Handler {
 }
 
 func (h *Handler) serviceManager() *depservice.ServiceManager {
-	return depservice.New(
-		h.registry.DB,
-		h.registry.DepSvcInstStore,
-		h.registry.EnvStore,
-	)
+	return depservice.New(h.registry.DB)
 }
 
 // CreateRedisInstance 申请创建 Redis 依赖服务实例。

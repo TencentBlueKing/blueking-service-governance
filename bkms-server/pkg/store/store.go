@@ -35,6 +35,8 @@ import (
 //   - 过滤条件、排序、数量限制等均通过 Opt 传入，各操作只接受部分类型的 Opt（见 Opt）；
 //     读操作不带过滤条件时匹配全部文档
 //   - bson tag 为 "_id"、"createdAt"、"updatedAt" 的字段（含 inline 嵌入）会被自动维护
+//   - 写操作传入 *T 时，BeforeSave 的修改与时间戳（Create 还包括 _id）在写库之前就会作用到该对象上，
+//     写入失败（如 NotFound、Duplicate）时对象同样已被修改，不能据此判断是否写入成功
 //   - 返回的错误均已附带集合名等上下文，NotFound / Duplicate 可用 errors.Is 判断
 type GenericStore[T any] struct {
 	coll   *mongo.Collection
@@ -78,7 +80,8 @@ func schemaOf(typ reflect.Type) (*schema, error) {
 	return actual.(*schema), nil
 }
 
-// Collection 返回底层集合，用于 GenericStore 未覆盖的操作（如聚合、$inc）
+// Collection 返回底层集合，用于 GenericStore 未覆盖的操作（如建立索引）。
+// 聚合请使用 Aggregate，数组与计数类的修改请使用 Modify，它们会校验字段并维护 updatedAt
 func (s *GenericStore[T]) Collection() *mongo.Collection {
 	return s.coll
 }
@@ -144,6 +147,11 @@ func (s *GenericStore[T]) find(ctx context.Context, q *query, findOpts *options.
 	if err != nil {
 		return nil, errors.Wrapf(err, "find in %s, filter %v", s.coll.Name(), q.filter())
 	}
+	return s.decodeAll(ctx, cur)
+}
+
+// decodeAll 读出游标中的全部文档并执行 Decode，无结果时返回空切片而非 nil
+func (s *GenericStore[T]) decodeAll(ctx context.Context, cur *mongo.Cursor) ([]T, error) {
 	objs := []T{}
 	if err := cur.All(ctx, &objs); err != nil {
 		return nil, errors.Wrapf(err, "decode documents from %s", s.coll.Name())

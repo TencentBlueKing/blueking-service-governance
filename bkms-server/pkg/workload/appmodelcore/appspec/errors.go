@@ -27,6 +27,9 @@ import (
 // ErrAppSpecNotFound is returned when app spec is not found in store.
 var ErrAppSpecNotFound = stderrors.New("app spec not found")
 
+// ErrAppSpecAlreadyExists is returned when the app spec of the app and env already exists.
+var ErrAppSpecAlreadyExists = stderrors.New("app spec already exists")
+
 // ErrAppSpecValidation is a sentinel error for validation failures.
 var ErrAppSpecValidation = stderrors.New("app spec validation failed")
 

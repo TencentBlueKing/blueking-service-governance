@@ -50,7 +50,7 @@ func (h *Handler) validateAndGetAppConfigFile(
 	if err != nil {
 		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parsing ID")
 	}
-	acf, err := h.registry.AppConfigFileStore.GetByID(ctx, oid)
+	acf, err := h.configFiles().GetByID(ctx, oid)
 	if err != nil {
 		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting values file")
 	}
@@ -74,7 +74,7 @@ func (h *Handler) validateBaseAppConfigFileID(
 	if err != nil {
 		return nil, pkgerrors.Wrap(err, "invalid baseAppConfigFileID")
 	}
-	obj, err := h.registry.AppConfigFileStore.GetByID(ctx, baseObjID)
+	obj, err := h.configFiles().GetByID(ctx, baseObjID)
 	if err != nil {
 		return nil, pkgerrors.Wrap(err, "getting the base app config file")
 	}

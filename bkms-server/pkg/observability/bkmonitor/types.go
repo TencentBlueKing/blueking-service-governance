@@ -178,14 +178,3 @@ type CreateApmInstParams struct {
 	Username     string
 	BkmProjectID int64
 }
-
-// ApmInstConfigUpdateData APM 实例配置的可更新字段
-type ApmInstConfigUpdateData struct {
-	WorkspaceID *string
-
-	ApmID *int64
-
-	Name *string
-
-	Token *string
-}

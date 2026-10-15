@@ -27,7 +27,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // PreviewComponentDef 试运行预览组件定义：
@@ -88,7 +87,7 @@ func (h *Handler) PreviewComponentInst(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	compDef, err := store.Of(h.registry.DB, component.ComponentDefMeta).
+	compDef, err := h.componentDefs().
 		Get(ctx, component.ByNameVersion(input.Type, component.DefaultComponentDefVersion))
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {

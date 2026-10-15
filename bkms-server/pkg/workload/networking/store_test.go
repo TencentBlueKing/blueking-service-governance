@@ -64,7 +64,7 @@ var _ = Describe("Networking service store", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(ServiceMeta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(ServiceMeta)).To(Succeed())
 	})
 
 	It("create fail when appID is missing", func() {

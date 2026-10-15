@@ -27,20 +27,22 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Service", func() {
 	var (
 		ctx        context.Context
 		diApp      *fxtest.App
-		appStore   bkmsapp.ApplicationStore
+		appStore   *bkmsapp.ApplicationStore
 		envService *env.EnvService
-		store      hostport.HostPortStore
+		configs    *hostport.HostPortStore
 		manager    *hostport.EnvStateManager
 		svc        *hostport.Service
 		app        *bkmsapp.Application
@@ -51,13 +53,15 @@ var _ = Describe("Service", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		suffix := stringx.Random(6)
+		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
-			bkmsapp.FxModule,
 			env.FxModule,
 			hostport.FxModule,
+			store.FxModule,
+			store.Provide(hostport.HostPortConfigMeta),
 			fx.Provide(hostport.NewService),
-			fx.Populate(&appStore, &envService, &store, &manager, &svc),
+			fx.Populate(&envService, &configs, &manager, &svc),
 		)
 		diApp.RequireStart()
 
@@ -86,7 +90,7 @@ var _ = Describe("Service", func() {
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteByApp(ctx, app.ID)
+		_ = configs.DeleteIfExists(ctx, hostport.ByApp(app.ID))
 		diApp.RequireStop()
 	})
 

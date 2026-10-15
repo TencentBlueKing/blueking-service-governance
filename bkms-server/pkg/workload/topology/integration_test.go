@@ -247,7 +247,7 @@ var _ = Describe("Integration - HelmRelease Topology", func() {
 		snapshots = testutil.NewStore(GinkgoT(), ResourceSnapshotMeta)
 
 		builder := NewBuilder()
-		topologySvc = NewService(testutil.NewDB(GinkgoT()), builder, nil, nil, nil, nil, nil)
+		topologySvc = NewService(testutil.NewDB(GinkgoT()), builder, nil, nil)
 	})
 
 	AfterEach(func() {
@@ -259,7 +259,7 @@ var _ = Describe("Integration - HelmRelease Topology", func() {
 		}
 
 		// 清理 MongoDB 数据
-		Expect(testutil.CleanupCollection(ResourceSnapshotMeta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(ResourceSnapshotMeta)).To(Succeed())
 	})
 
 	It("should build complete topology graph for HelmRelease scenario", func() {

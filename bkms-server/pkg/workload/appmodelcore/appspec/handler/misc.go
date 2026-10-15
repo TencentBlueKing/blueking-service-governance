@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/serializer"
 )
 
@@ -54,7 +55,7 @@ func (h *Handler) GetAppSpecOverview(c *gin.Context) {
 		return
 	}
 
-	envNames, err := h.registry.AppSpecStore.ListEnvNamesByApp(ctx, app.ID)
+	envNames, err := appspec.ListEnvNamesByApp(ctx, h.registry.DB, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app spec overview"))
 		return

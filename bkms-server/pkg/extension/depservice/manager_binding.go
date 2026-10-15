@@ -27,6 +27,7 @@ import (
 
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // CreateServiceBinding 创建一个依赖服务和应用间的绑定
@@ -163,19 +164,16 @@ func (m *ServiceManager) validateEnvInstanceMap(
 			return errors.Wrapf(ErrInvalidArgument, "instance id for env %q must not be empty", envName)
 		}
 
-		envType := ""
-		if m.envStore != nil {
-			environment, err := m.envStore.GetByName(ctx, workspaceID, appID, envName)
-			if err != nil {
-				if errors.Is(err, envmodel.ErrEnvNotFound) {
-					return errors.Wrapf(ErrInvalidArgument, "environment %q not found", envName)
-				}
-				return errors.Wrapf(err, "get environment %s", envName)
+		environment, err := m.envs.Get(ctx, envmodel.AppEnvByName(workspaceID, appID, envName))
+		if err != nil {
+			if errors.Is(err, envmodel.ErrEnvNotFound) {
+				return errors.Wrapf(ErrInvalidArgument, "environment %q not found", envName)
 			}
-			envType = environment.Type
+			return errors.Wrapf(err, "get environment %s", envName)
 		}
+		envType := environment.Type
 
-		inst, err := m.instStore.Get(ctx, instID)
+		inst, err := m.insts.Get(ctx, store.ByID(instID))
 		if err != nil {
 			if model.AsNotFoundError(err) {
 				return errors.Wrapf(ErrInvalidArgument, "service instance %s not found", instID.Hex())

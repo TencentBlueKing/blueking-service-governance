@@ -88,7 +88,7 @@ func (s *Service) syncStrategyStateToRemote(
 		if ref.TrafficLaneName == "" {
 			continue
 		}
-		env, envErr := s.envStore.Get(ctx, ref.EnvID)
+		env, envErr := s.envStore.GetByID(ctx, ref.EnvID)
 		if envErr != nil {
 			log.Warnf(
 				ctx,
@@ -224,7 +224,7 @@ func (s *Service) SyncStrategiesForAppInEnv(
 	operator string,
 ) {
 	// 1. 先获取目标环境，并查询该应用下命中该环境的启用策略。
-	env, err := s.envStore.Get(ctx, envID)
+	env, err := s.envStore.GetByID(ctx, envID)
 	if err != nil {
 		log.Errorf(ctx, "get env %s for alert sync failed: %v", envID.Hex(), err)
 		return
@@ -438,7 +438,7 @@ func (s *Service) cleanupSingleStrategy(
 		targets := make([]remoteTargetContext, 0, len(keepRefs))
 		validKeepRefs := make([]RemoteStrategyRef, 0, len(keepRefs))
 		for _, ref := range keepRefs {
-			keepEnv, getErr := s.envStore.Get(ctx, ref.EnvID)
+			keepEnv, getErr := s.envStore.GetByID(ctx, ref.EnvID)
 			if getErr != nil {
 				log.Warnf(ctx,
 					"drop stale ref during cleanup: get env %s failed: %v, strategyID=%s code=%s",
@@ -522,7 +522,7 @@ func (s *Service) syncStrategyToEnv(
 			if sameRemoteRefTarget(ref, env.ID, trafficLaneName) {
 				continue
 			}
-			refEnv, getErr := s.envStore.Get(ctx, ref.EnvID)
+			refEnv, getErr := s.envStore.GetByID(ctx, ref.EnvID)
 			if getErr != nil {
 				log.Warnf(ctx,
 					"drop stale ref during sync: get env %s failed: %v, strategyID=%s code=%s",

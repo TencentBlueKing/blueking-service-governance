@@ -59,7 +59,7 @@ var _ = Describe("AlertStrategyStore", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
 	Describe("Create and Get", func() {

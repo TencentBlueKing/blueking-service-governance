@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
@@ -40,7 +41,8 @@ func handleSync(ctx context.Context, args Args) error {
 		return err
 	}
 
-	env, err := reg.EnvStore.GetByName(ctx, args.WorkspaceID, args.AppID, args.EnvName)
+	env, err := store.Of(reg.DB, envmodel.EnvMeta).
+		Get(ctx, envmodel.AppEnvByName(args.WorkspaceID, args.AppID, args.EnvName))
 	if err != nil {
 		return errors.Wrapf(err, "get env %s", args.EnvName)
 	}
@@ -50,7 +52,7 @@ func handleSync(ctx context.Context, args Args) error {
 	}
 
 	log.Infof(ctx, "alert strategy sync start: %s envID=%s", args, env.ID.Hex())
-	alertstrategy.NewService(reg.DB, reg.EnvStore, reg.AppStore).SyncStrategiesForAppInEnv(
+	alertstrategy.NewService(reg.DB).SyncStrategiesForAppInEnv(
 		ctx, ws, args.AppID, env.ID, args.TrafficLaneName, operatorFromCtx(ctx),
 	)
 	return nil
@@ -64,7 +66,8 @@ func handleCleanup(ctx context.Context, args Args) error {
 		return err
 	}
 
-	env, err := reg.EnvStore.GetByName(ctx, args.WorkspaceID, args.AppID, args.EnvName)
+	env, err := store.Of(reg.DB, envmodel.EnvMeta).
+		Get(ctx, envmodel.AppEnvByName(args.WorkspaceID, args.AppID, args.EnvName))
 	if err != nil {
 		return errors.Wrapf(err, "get env %s", args.EnvName)
 	}
@@ -74,7 +77,7 @@ func handleCleanup(ctx context.Context, args Args) error {
 	}
 
 	log.Infof(ctx, "alert strategy cleanup start: %s envID=%s", args, env.ID.Hex())
-	alertstrategy.NewService(reg.DB, reg.EnvStore, reg.AppStore).CleanupStrategiesForAppInEnv(
+	alertstrategy.NewService(reg.DB).CleanupStrategiesForAppInEnv(
 		ctx, ws, args.AppID, env.ID, args.TrafficLaneName, operatorFromCtx(ctx),
 	)
 	return nil
@@ -93,7 +96,7 @@ func onCleanupExhausted(ctx context.Context, args Args, lastErr error) {
 // resolveContext 获取 store registry 和 workspace，返回 ErrStopRetry 代表不可恢复
 func resolveContext(ctx context.Context, args Args) (*storereg.Registry, *workspace.Workspace, error) {
 	reg := storereg.G()
-	if reg == nil || reg.DB == nil || reg.EnvStore == nil || reg.AppStore == nil {
+	if reg == nil || reg.DB == nil {
 		return nil, nil, errors.Wrap(taskq.ErrStopRetry, "required store not initialized")
 	}
 

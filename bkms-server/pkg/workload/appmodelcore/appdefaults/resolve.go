@@ -26,14 +26,14 @@ type ResolvedAppSpec struct {
 func Resolve(
 	ctx context.Context,
 	db *mongo.Database,
-	envStore envmodel.EnvironmentStore,
 	workspaceID, appID string,
 ) (*ResolvedAppSpec, error) {
 	rules, err := store.Of(db, RuleMeta).List(ctx, ByWorkspace(workspaceID))
 	if err != nil {
 		return nil, errors.Wrap(err, "list workspace application defaults")
 	}
-	environments, err := envStore.ListStdEnvs(ctx, workspaceID)
+	environments, err := store.Of(db, envmodel.EnvMeta).
+		List(ctx, envmodel.StdEnvsIn(workspaceID), envmodel.NewestFirst())
 	if err != nil {
 		return nil, errors.Wrap(err, "list standard environments")
 	}

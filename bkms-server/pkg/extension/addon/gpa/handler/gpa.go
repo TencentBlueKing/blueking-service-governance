@@ -45,7 +45,7 @@ func New(registry *storereg.Registry) *Handler {
 
 // gpaService 构造 GPA 下发服务（仅持有 Store，Service 在 handler 内构造）。
 func (h *Handler) gpaService() *gpa.GPAService {
-	return gpa.NewGPAService(h.registry.AppModelStore)
+	return gpa.NewGPAService(h.registry.DB)
 }
 
 func (h *Handler) gpaConfigs() *gpa.ConfigStore {

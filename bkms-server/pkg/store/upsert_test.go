@@ -154,16 +154,149 @@ var _ = Describe("GenericStore Upsert", func() {
 				Expect(got.Priority).To(Equal(2))
 			})
 
-			It("should reject nested fields", func() {
-				_, err := f.widgets.Upsert(
-					f.ctx,
-					f.newWidget("w1"),
-					store.UpdateSelected("spec.color"),
-					f.byName("w1"),
-				)
-				Expect(err).To(MatchError(ContainSubstring("nested field")))
+			Describe("nested fields", func() {
+				newColored := func() *Widget {
+					w := f.newWidget("w1")
+					w.Priority = 5
+					w.Spec = WidgetSpec{Color: "blue", Size: 3}
+					return w
+				}
+
+				It("should only update the nested field of an existing document", func() {
+					w := f.newWidget("w1")
+					w.Spec = WidgetSpec{Color: "red", Size: 1}
+					Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
+
+					mustUpsert(newColored(), false, store.UpdateSelected("spec.color"), f.byName("w1"))
+
+					got := f.mustGetWidget("w1")
+					Expect(got.Spec).To(Equal(WidgetSpec{Color: "blue", Size: 1}))
+					Expect(got.Priority).To(Equal(1))
+				})
+
+				It("should insert the parent with the selected nested field only", func() {
+					mustUpsert(newColored(), true, store.UpdateSelected("spec.color"), f.byName("w1"))
+
+					got := f.mustGetWidget("w1")
+					Expect(got.Spec).To(Equal(WidgetSpec{Color: "blue"}))
+					Expect(got.Priority).To(Equal(5))
+				})
 			})
 		})
+	})
+
+	Describe("with a map of nested fields", func() {
+		It("should insert a document containing only the given map entry", func() {
+			inserted, err := f.boards.Upsert(
+				f.ctx,
+				map[string]any{"states.prod": BoardState{Status: "ok"}},
+				f.byName("b1"),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(inserted).To(BeTrue())
+
+			got := f.mustGetBoard("b1")
+			Expect(got.States).To(Equal(map[string]BoardState{"prod": {Status: "ok"}}))
+			Expect(got.OwnerID).To(Equal(f.owner))
+		})
+
+		It("should keep the other entries of an existing document", func() {
+			f.mustCreateBoard("b1")
+
+			inserted, err := f.boards.Upsert(
+				f.ctx,
+				map[string]any{"states.test": BoardState{Status: "new"}},
+				f.byName("b1"),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(inserted).To(BeFalse())
+
+			got := f.mustGetBoard("b1")
+			Expect(got.States).To(HaveKeyWithValue("prod", BoardState{Status: "ok"}))
+			Expect(got.States).To(HaveKeyWithValue("test", BoardState{Status: "new"}))
+			Expect(got.Cards).To(HaveLen(1))
+		})
+
+		It("should not write the parent of a nested equality field from the filter on insert", func() {
+			mustUpsert(map[string]any{"priority": 2}, true, f.byName("w1"), store.Where("spec.color", "green"))
+
+			got := f.mustGetWidget("w1")
+			Expect(got.Spec.Color).To(Equal("green"))
+			Expect(got.Priority).To(Equal(2))
+		})
+	})
+
+	Describe("UpsertMany", func() {
+		byObjectName := func(w *Widget) store.Opt { return f.byName(w.Name) }
+
+		It("should insert absent objects, update present ones and fill back inserted IDs", func() {
+			existing := f.mustCreateStaleWidget("w1")
+
+			upd, absent := f.newSecretWidget("w1"), f.newSecretWidget("w2")
+			upd.Priority, absent.Priority = 7, 8
+			n, err := f.widgets.UpsertMany(
+				f.ctx,
+				[]*Widget{upd, absent},
+				byObjectName,
+				store.UpdateSelected("priority"),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(1)))
+
+			Expect(upd.ID).To(BeZero())
+			Expect(absent.ID).NotTo(BeZero())
+
+			got := f.mustGetWidget("w1")
+			Expect(got.ID).To(Equal(existing.ID))
+			Expect(got.Priority).To(Equal(7))
+			// 已存在的文档只更新选中的字段
+			Expect(got.Secret).To(BeNil())
+			Expect(got.UpdatedAt).To(BeTemporally("~", time.Now(), time.Second))
+
+			inserted := f.mustGetWidget("w2")
+			Expect(inserted.ID).To(Equal(absent.ID))
+			Expect(inserted.Priority).To(Equal(8))
+			// 插入的文档包含全部字段，且经过 BeforeSave 与 Encode
+			Expect(inserted.Spec.Color).To(Equal(defaultColor))
+			Expect(f.rawPassword("w2")).To(Equal(encPrefix + plainPassword))
+		})
+
+		It("should do nothing for an empty list", func() {
+			n, err := f.widgets.UpsertMany(f.ctx, nil, byObjectName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(BeZero())
+		})
+
+		It("should return a duplicate error on unique key conflict", func() {
+			byPriority := func(w *Widget) store.Opt {
+				return store.Combine(f.byOwner(), store.Where("priority", w.Priority))
+			}
+			a, b := f.newWidget("same"), f.newWidget("same")
+			a.Priority, b.Priority = 1, 2
+
+			_, err := f.widgets.UpsertMany(f.ctx, []*Widget{a, b}, byPriority)
+			Expect(err).To(MatchError(ErrWidgetExists))
+			Expect(f.countWidgets()).To(Equal(int64(1)))
+		})
+
+		DescribeTable(
+			"should reject invalid input before writing",
+			func(objs func() []*Widget, key func(*Widget) store.Opt, msg string) {
+				_, err := f.widgets.UpsertMany(f.ctx, objs(), key)
+				Expect(err).To(MatchError(ContainSubstring(msg)))
+				Expect(f.countWidgets()).To(BeZero())
+			},
+			Entry("nil object", func() []*Widget { return []*Widget{f.newWidget("w1"), nil} },
+				byObjectName, "object 1 is nil"),
+			Entry("key that is not a condition", func() []*Widget { return []*Widget{f.newWidget("w1")} },
+				func(*Widget) store.Opt { return store.Asc("name") }, "must be a condition"),
+			Entry(
+				"object failing BeforeSave",
+				func() []*Widget { return []*Widget{f.newWidget("w1"), {OwnerID: "x"}} },
+				func(w *Widget) store.Opt { return store.Where("ownerID", w.OwnerID) },
+				"object 1",
+			),
+		)
 	})
 
 	Describe("with a map", func() {
@@ -192,7 +325,7 @@ var _ = Describe("GenericStore Upsert", func() {
 		})
 
 		It("should not accept UpdateOpt", func() {
-			_, err := f.widgets.Upsert(f.ctx, map[string]any{"priority": 5}, store.UpdateNonZero(), f.byName("w1"))
+			_, err := f.widgets.Upsert(f.ctx, map[string]any{"priority": 5}, store.UpdateOmit("tags"), f.byName("w1"))
 			Expect(err).To(MatchError(ContainSubstring("not accepted when the target is a map")))
 		})
 	})

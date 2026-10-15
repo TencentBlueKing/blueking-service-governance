@@ -43,8 +43,8 @@ var _ = Describe("RoleStore", func() {
 	})
 
 	AfterEach(func() {
-		Expect(testutil.CleanupCollection(GradeManagerMeta.Collection)).To(Succeed())
-		Expect(testutil.CleanupCollection(RoleMeta.Collection)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(GradeManagerMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(RoleMeta)).To(Succeed())
 	})
 
 	Describe("WorkspaceGradeManager operations", func() {

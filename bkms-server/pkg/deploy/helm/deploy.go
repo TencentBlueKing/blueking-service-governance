@@ -47,7 +47,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm/postrenderer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -512,21 +511,17 @@ func genHelmDeployValues(
 	maskSensitive bool,
 ) (string, []string, []string, error) {
 	// 1. 从数据库中获取 AppConfigFile
-	fileStore, err := appcfg.NewAppConfigFileStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return "", nil, nil, errors.Wrap(err, "initial app config file store")
-	}
 	acfID, err := bson.ObjectIDFromHex(appConfigFileID)
 	if err != nil {
 		return "", nil, nil, errors.Wrapf(err, "invalid app config file id %s", appConfigFileID)
 	}
-	acf, err := fileStore.GetByID(ctx, acfID)
+	acf, err := store.Of(db, appcfg.AppConfigFileMeta).GetByID(ctx, acfID)
 	if err != nil {
 		return "", nil, nil, errors.Wrapf(err, "get app config file %s", appConfigFileID)
 	}
 
 	// 2. 获取 AppConfigFile 内容
-	editor, err := appcfg.NewAppConfigFileEditor(fileStore, db, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(db, acf)
 	if err != nil {
 		return "", nil, nil, errors.Wrap(err, "creating app config file editor")
 	}

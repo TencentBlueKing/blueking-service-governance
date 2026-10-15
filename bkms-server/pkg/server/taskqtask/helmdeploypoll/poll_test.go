@@ -30,13 +30,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func newPendingRecord(appID string) *helmdeploy.Record {
@@ -72,7 +74,8 @@ var _ = Describe("Poller Handle", func() {
 		ctx        context.Context
 		args       Args
 		rec        *helmdeploy.Record
-		store      helmdeploy.RecordStore
+		db         *mongo.Database
+		records    *helmdeploy.RecordStore
 		enqCount   int
 		releaseCnt int
 		topoCount  atomic.Int32
@@ -81,22 +84,20 @@ var _ = Describe("Poller Handle", func() {
 	)
 
 	insert := func() {
-		id, err := store.Create(ctx, rec)
-		Expect(err).NotTo(HaveOccurred())
-		args.DeployID = id
+		Expect(records.Create(ctx, rec)).To(Succeed())
+		args.DeployID = rec.ID.Hex()
 	}
 
 	reload := func() *helmdeploy.Record {
-		got, err := store.Get(ctx, rec.AppID, args.DeployID)
+		got, err := helmdeploy.GetRecord(ctx, db, rec.AppID, args.DeployID)
 		Expect(err).NotTo(HaveOccurred())
 		return got
 	}
 
 	BeforeEach(func() {
-		var err error
 		ctx = context.Background()
-		store, err = helmdeploy.NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, helmdeploy.RecordMeta)
 
 		appID := "app-" + stringx.Random(8)
 		rec = newPendingRecord(appID)
@@ -105,7 +106,7 @@ var _ = Describe("Poller Handle", func() {
 		releaseCnt = 0
 		topoCount.Store(0)
 		hookCount.Store(0)
-		plr = NewPoller(store)
+		plr = NewPoller(db)
 
 		mockey.Mock(taskq.Enqueue).To(func(context.Context, *taskq.Task, ...asynq.Option) error {
 			enqCount++
@@ -147,8 +148,7 @@ var _ = Describe("Poller Handle", func() {
 			insert()
 			if newerLatest {
 				time.Sleep(5 * time.Millisecond)
-				_, err := store.Create(ctx, newPendingRecord(rec.AppID))
-				Expect(err).NotTo(HaveOccurred())
+				Expect(records.Create(ctx, newPendingRecord(rec.AppID))).To(Succeed())
 			}
 			Expect(plr.Handle(ctx, args)).To(Succeed())
 			Expect(enqCount).To(Equal(0))
@@ -213,7 +213,7 @@ var _ = Describe("Poller Handle", func() {
 		insert()
 		stubFetch(helm.StatusDeployed, "5")
 		// 只在本例模拟落库失败，其余用例走真实 Mongo Update
-		mockey.Mock((*helmdeploy.RecordStoreMongo).Update).Return(errors.New("db down")).Build()
+		mockey.Mock((*mongo.Collection).UpdateOne).Return(nil, errors.New("db down")).Build()
 		err := plr.Handle(ctx, args)
 		Expect(err).To(HaveOccurred())
 		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeFalse())
