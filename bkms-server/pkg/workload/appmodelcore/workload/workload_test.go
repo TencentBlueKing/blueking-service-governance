@@ -95,19 +95,18 @@ var workloadTestCases = []WorkloadTestCase{
 
 // SharedTestStores 聚合共享测试依赖，避免测试主体到处传递 store 参数。
 type SharedTestStores struct {
-	AppStore                  bkmsapp.ApplicationStore
-	AppModelStore             appmodel.AppModelStore
-	CompDefStore              component.ComponentDefStore
-	WorkspaceCompsStore       workspace.WorkspaceCompsStore
-	PolarisConfigStore        polaris.PolarisConfigStore
-	AppSpecStore              appspec.AppSpecStore
-	AppConfigFileStore        appcfg.AppConfigFileStore
-	AppConfigFileDefStore     *appcfg.AppConfigFileDefStore
-	ScopedEnvVarStore         envvars.ScopedEnvVarStore
-	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	SvcStore                  *depmodel.ServiceStore
-	SvcInstStore              depmodel.ServiceInstanceStore
-	BindingStore              *depmodel.ServiceBindingStore
+	AppStore              bkmsapp.ApplicationStore
+	AppModelStore         appmodel.AppModelStore
+	CompDefStore          *component.ComponentDefStore
+	WorkspaceCompsStore   workspace.WorkspaceCompsStore
+	PolarisConfigStore    polaris.PolarisConfigStore
+	AppSpecStore          appspec.AppSpecStore
+	AppConfigFileStore    appcfg.AppConfigFileStore
+	AppConfigFileDefStore *appcfg.AppConfigFileDefStore
+	ScopedEnvVarStore     envvars.ScopedEnvVarStore
+	SvcStore              *depmodel.ServiceStore
+	SvcInstStore          depmodel.ServiceInstanceStore
+	BindingStore          *depmodel.ServiceBindingStore
 }
 
 // createApplication 根据测试用例创建应用
@@ -126,10 +125,9 @@ func createApplication(
 			FileContent: tc.ConfigContent,
 		}
 		return dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  stores.AppStore,
-			AppModelStore:             stores.AppModelStore,
-			AppConfigFileStore:        stores.AppConfigFileStore,
-			AppConfigFileVersionStore: stores.AppConfigFileVersionStore,
+			AppStore:           stores.AppStore,
+			AppModelStore:      stores.AppModelStore,
+			AppConfigFileStore: stores.AppConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			TrpcConfig:  trpcConfig,
 			EnvVars:     envVars,
@@ -143,10 +141,9 @@ func createApplication(
 			FileContent: tc.ConfigContent,
 		}
 		return dbfactory.TafApplication(ctx, &dbfactory.TafApplicationStores{
-			AppStore:                  stores.AppStore,
-			AppModelStore:             stores.AppModelStore,
-			AppConfigFileStore:        stores.AppConfigFileStore,
-			AppConfigFileVersionStore: stores.AppConfigFileVersionStore,
+			AppStore:           stores.AppStore,
+			AppModelStore:      stores.AppModelStore,
+			AppConfigFileStore: stores.AppConfigFileStore,
 		}, &dbfactory.TafApplicationOpts{
 			TafConfig:   tafConfig,
 			EnvVars:     envVars,
@@ -173,7 +170,6 @@ var _ = Describe("Builder Shared Tests", func() {
 			bkmsapp.FxModule,
 			appmodel.FxModule,
 			workload.FxModule,
-			component.FxModule,
 			polaris.FxModule,
 			appspec.FxModule,
 			appcfg.FxModule,
@@ -186,12 +182,10 @@ var _ = Describe("Builder Shared Tests", func() {
 			fx.Populate(
 				&stores.AppStore,
 				&stores.AppModelStore,
-				&stores.CompDefStore,
 				&stores.WorkspaceCompsStore,
 				&stores.PolarisConfigStore,
 				&stores.AppSpecStore,
 				&stores.AppConfigFileStore,
-				&stores.AppConfigFileVersionStore,
 				&stores.ScopedEnvVarStore,
 				&stores.SvcInstStore,
 				&envSvc,
@@ -202,6 +196,7 @@ var _ = Describe("Builder Shared Tests", func() {
 		stores.AppConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 		stores.BindingStore = testutil.NewStore(GinkgoT(), depmodel.ServiceBindingMeta)
 		stores.SvcStore = testutil.NewStore(GinkgoT(), depmodel.ServiceMeta)
+		stores.CompDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 
 		// Load builtin components
 		dbfactory.LoadBuiltinComponents(ctx, database.Client(), "../../../extension/component/assets/comps")
@@ -1299,7 +1294,7 @@ spec:
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			cfgSvc := appcfg.NewAppConfigFileService(
-				stores.AppConfigFileStore, testutil.NewDB(GinkgoT()), stores.AppConfigFileVersionStore,
+				stores.AppConfigFileStore, testutil.NewDB(GinkgoT()),
 			)
 			plainContent := "worker_processes 4;\n"
 			created, err := cfgSvc.Create(ctx, appcfg.CreateCfgFileParams{

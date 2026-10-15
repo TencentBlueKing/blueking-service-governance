@@ -28,8 +28,6 @@ import (
 var FxModule = fx.Module("topology",
 	database.PrivateFxModule,
 	fx.Provide(
-		NewResourceSnapshotStoreMongo,
-		func(store *ResourceSnapshotStoreMongo) ResourceSnapshotStore { return store },
 		NewBuilder,
 		NewService,
 	),

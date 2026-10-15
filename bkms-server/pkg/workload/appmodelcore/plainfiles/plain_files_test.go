@@ -41,7 +41,6 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 	var appStore bkmsapp.ApplicationStore
 	var store appcfg.AppConfigFileStore
 	var defStore *appcfg.AppConfigFileDefStore
-	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
 	var provider appcfg.MountableFileProvider
 
@@ -60,13 +59,13 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &store, &versionStore),
+			fx.Populate(&appStore, &store),
 		)
 		diApp.RequireStart()
 		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()), versionStore)
+		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()))
 	})
 
 	AfterEach(func() {

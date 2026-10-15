@@ -60,17 +60,11 @@ func PollingInterval(elapsed time.Duration) time.Duration {
 // handle asynq 入口：registry / 必要 store 缺失则打日志并 ErrStopRetry，否则交给 poller
 func handle(ctx context.Context, args Args) error {
 	reg := storereg.G()
-	if reg == nil ||
-		reg.BuildRecordStore == nil ||
-		reg.BuildAutoDeployRecordStore == nil {
+	if reg == nil || reg.DB == nil || reg.BuildAutoDeployRecordStore == nil {
 		log.Errorf(ctx, "build poll stores not initialized, stop task: %s", args)
 		return errors.Wrap(taskq.ErrStopRetry, "build poll stores not initialized")
 	}
-	return newPoller(
-		reg.BuildRecordStore,
-		reg.DB,
-		reg.BuildAutoDeployRecordStore,
-	).runTick(ctx, args)
+	return newPoller(reg.DB, reg.BuildAutoDeployRecordStore).runTick(ctx, args)
 }
 
 // onExhausted tick 重试耗尽（如 Redis 抖动导致连续投递失败）意味着轮询链已断，后续不会再有 tick
@@ -79,12 +73,12 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 	log.Errorf(ctx, "build poll %s exhausted, try mark pollingBroken: %v", args, lastErr)
 
 	reg := storereg.G()
-	if reg == nil || reg.BuildRecordStore == nil {
+	if reg == nil || reg.DB == nil {
 		log.Errorf(ctx, "build poll stores not initialized, skip mark pollingBroken: %s", args)
 		return
 	}
-	p := newPoller(reg.BuildRecordStore, reg.DB, reg.BuildAutoDeployRecordStore)
-	record, err := p.recordStore.Get(ctx, args.AppID, args.BuildID)
+	p := newPoller(reg.DB, reg.BuildAutoDeployRecordStore)
+	record, err := p.records.Get(ctx, build.ByBuild(args.AppID, args.BuildID))
 	if err != nil {
 		log.Errorf(ctx, "get build record %s failed, skip mark pollingBroken: %v", args, err)
 		return
@@ -100,19 +94,15 @@ func onExhausted(ctx context.Context, args Args, lastErr error) {
 
 // poller 执行一次构建状态轮询 tick
 type poller struct {
-	recordStore     build.RecordStore
+	records         *build.RecordStore
 	db              *mongo.Database
 	autoDeployStore autodeploy.RecordStore
 }
 
-// newPoller 注入构建轮询所需 store 与数据库，供 asynq handler 与单测共用
-func newPoller(
-	recordStore build.RecordStore,
-	db *mongo.Database,
-	autoDeployStore autodeploy.RecordStore,
-) *poller {
+// newPoller 注入构建轮询所需数据库与 store，供 asynq handler 与单测共用，db 不能为 nil
+func newPoller(db *mongo.Database, autoDeployStore autodeploy.RecordStore) *poller {
 	return &poller{
-		recordStore:     recordStore,
+		records:         store.Of(db, build.RecordMeta),
 		db:              db,
 		autoDeployStore: autoDeployStore,
 	}
@@ -125,12 +115,8 @@ func newPoller(
 // 仅记录 / 流水线不存在等不可恢复错误 wrap taskq.ErrStopRetry；瞬时错误交回 asynq 退避重试，
 // 否则一次 DB 抖动就会断掉轮询链，让构建记录永久停在 running。
 func (p *poller) runTick(ctx context.Context, args Args) error {
-	// store / 记录缺失无法自行恢复，停掉 asynq 重试
-	if p.recordStore == nil || p.db == nil {
-		return errors.Wrap(taskq.ErrStopRetry, "build poll stores not initialized")
-	}
-
-	record, err := p.recordStore.Get(ctx, args.AppID, args.BuildID)
+	// 记录缺失无法自行恢复，停掉 asynq 重试
+	record, err := p.records.Get(ctx, build.ByBuild(args.AppID, args.BuildID))
 	if err != nil {
 		if errors.Is(err, build.ErrRecordNotFound) {
 			return errors.Wrapf(taskq.ErrStopRetry, "get build record: %v", err)
@@ -234,7 +220,7 @@ func (p *poller) save(ctx context.Context, record *build.Record, args Args) erro
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveStatusTimeout)
 	defer cancel()
 
-	if err := p.recordStore.Update(saveCtx, record); err != nil {
+	if err := build.UpdateRecord(saveCtx, p.records, record); err != nil {
 		return err
 	}
 	if args.AutoDeploy == nil {

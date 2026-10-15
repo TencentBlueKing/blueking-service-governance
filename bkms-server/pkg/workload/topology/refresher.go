@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"golang.org/x/sync/errgroup"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,6 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // 并发控制相关常量，用于 Refresher 和 Builder 中 errgroup.SetLimit
@@ -49,12 +51,12 @@ var ErrNoRefreshableResources = errors.New("no refreshable topology resources")
 
 // Refresher 资源范围刷新器
 type Refresher struct {
-	store ResourceSnapshotStore
+	snapshots *ResourceSnapshotStore
 }
 
 // NewRefresher 创建 Refresher 实例
-func NewRefresher(store ResourceSnapshotStore) *Refresher {
-	return &Refresher{store: store}
+func NewRefresher(db *mongo.Database) *Refresher {
+	return &Refresher{snapshots: store.Of(db, ResourceSnapshotMeta)}
 }
 
 // TriggerRefresh 触发异步资源范围刷新
@@ -78,14 +80,14 @@ func (r *Refresher) Refresh(ctx context.Context, args RefreshArgs) error {
 	snapshotKey := args.SnapshotKey()
 	log.Infof(ctx, "topology refresher: starting refresh for snapshot %s", snapshotKey)
 
-	existingSnapshot, err := r.store.Get(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
+	existingSnapshot, err := FindSnapshot(ctx, r.snapshots, args.AppID, args.EnvName, args.TrafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get existing snapshot before refresh")
 	}
 
 	// 标记为 pending（仅更新状态，保留已有的 resources 和 extensionRelations）
-	if err = r.store.UpdateStatus(
-		ctx, args.AppID, args.EnvName, args.TrafficLaneName, RefreshStatusProgressing, "",
+	if err = UpdateRefreshStatus(
+		ctx, r.snapshots, args.AppID, args.EnvName, args.TrafficLaneName, RefreshStatusProgressing, "",
 	); err != nil {
 		return errors.Wrap(err, "set pending status")
 	}
@@ -109,8 +111,8 @@ func (r *Refresher) Refresh(ctx context.Context, args RefreshArgs) error {
 			if existingSnapshot == nil {
 				return nil
 			}
-			if restoreErr := r.store.UpsertWithVersion(
-				ctx, existingSnapshot, existingSnapshot.DataVersion,
+			if restoreErr := SaveWithVersion(
+				ctx, r.snapshots, existingSnapshot, existingSnapshot.DataVersion,
 			); restoreErr != nil {
 				if errors.Is(restoreErr, ErrVersionConflict) {
 					log.Infof(
@@ -124,8 +126,8 @@ func (r *Refresher) Refresh(ctx context.Context, args RefreshArgs) error {
 			return nil
 		}
 
-		uErr := r.store.UpdateStatus(
-			ctx, args.AppID, args.EnvName, args.TrafficLaneName, RefreshStatusFailed, err.Error(),
+		uErr := UpdateRefreshStatus(
+			ctx, r.snapshots, args.AppID, args.EnvName, args.TrafficLaneName, RefreshStatusFailed, err.Error(),
 		)
 		if uErr != nil {
 			return errors.Wrapf(uErr, "mark failed status for snapshot %s", args.SnapshotKey())
@@ -136,7 +138,7 @@ func (r *Refresher) Refresh(ctx context.Context, args RefreshArgs) error {
 	// 刷新成功，带乐观锁原子更新
 	// 若版本冲突说明已有更新的刷新完成，当前结果可安全丢弃
 	snapshot.RefreshedAt = time.Now()
-	if err = r.store.UpsertWithVersion(ctx, snapshot, expectedVersion); err != nil {
+	if err = SaveWithVersion(ctx, r.snapshots, snapshot, expectedVersion); err != nil {
 		if errors.Is(err, ErrVersionConflict) {
 			log.Infof(
 				ctx, "topology refresher: version conflict for "+
@@ -425,7 +427,7 @@ func (r *Refresher) buildSnapshotWithVersion(
 ) (*ResourceSnapshot, int64, error) {
 	var expectedVersion int64
 	dataVersion := int64(1)
-	existing, err := r.store.Get(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
+	existing, err := FindSnapshot(ctx, r.snapshots, args.AppID, args.EnvName, args.TrafficLaneName)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "get existing resource snapshot for version")
 	}

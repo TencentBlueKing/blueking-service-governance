@@ -24,6 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
 
@@ -56,7 +58,8 @@ var _ = Describe("evaluate tests", func() {
 	var polarisVarReader *polarisenvvars.Reader
 
 	// component definition related fixtures
-	var compDefStore component.ComponentDefStore
+	var db *mongo.Database
+	var compDefStore *component.ComponentDefStore
 	var compDef *component.ComponentDef
 	var propsBuilder *component.AppPropertiesBuilder
 
@@ -66,7 +69,6 @@ var _ = Describe("evaluate tests", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			bkmsapp.FxModule,
-			component.FxModule,
 			env.FxModule,
 			envvars.FxModule,
 			depmodel.FxModule,
@@ -75,7 +77,6 @@ var _ = Describe("evaluate tests", func() {
 			polarisenvvars.FxModule,
 			fx.Populate(
 				&appStore,
-				&compDefStore,
 				&envSvc,
 				&scopedEnvVarStore,
 				&appDepsVarReader,
@@ -83,6 +84,8 @@ var _ = Describe("evaluate tests", func() {
 			),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		compDefStore = store.Of(db, component.ComponentDefMeta)
 
 		// Create fixtures
 		app = dbfactory.Application(ctx, appStore)
@@ -97,18 +100,18 @@ var _ = Describe("evaluate tests", func() {
 		})
 		appenv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-		propsBuilder = component.NewAppPropertiesBuilder(compDefStore, envSvc)
+		propsBuilder = component.NewAppPropertiesBuilder(db, envSvc)
 	})
 
 	AfterEach(func() {
-		_, _ = compDefStore.Delete(ctx, compDef.Name, compDef.Version)
+		Expect(compDefStore.DeleteIfExists(ctx, component.ByNameVersion(compDef.Name, compDef.Version))).To(Succeed())
 		diApp.RequireStop()
 	})
 
 	Describe("AppComponentApplier", func() {
 		Context("Evaluate", func() {
 			It("renders template with overrides, env vars, and builtin props", func() {
-				applier := component.NewAppComponentApplier(compDefStore, envSvc)
+				applier := component.NewAppComponentApplier(db, envSvc)
 				comp := component.Component{
 					Name: "foobar",
 					ComponentInst: component.ComponentInst{

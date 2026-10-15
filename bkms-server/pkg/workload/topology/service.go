@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -38,6 +39,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 	k8smanifest "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/manifest"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -46,7 +48,7 @@ import (
 
 // Service 拓扑服务，对外提供拓扑图查询能力
 type Service struct {
-	store             ResourceSnapshotStore
+	snapshots         *ResourceSnapshotStore
 	builder           *Builder
 	appModelStore     appmodel.AppModelStore
 	appSpecStore      appspec.AppSpecStore
@@ -57,7 +59,7 @@ type Service struct {
 
 // NewService 创建 Service 实例
 func NewService(
-	store ResourceSnapshotStore,
+	db *mongo.Database,
 	builder *Builder,
 	appModelStore appmodel.AppModelStore,
 	appSpecStore appspec.AppSpecStore,
@@ -66,7 +68,7 @@ func NewService(
 	polarisVarReader *polarisenvvars.Reader,
 ) *Service {
 	return &Service{
-		store:             store,
+		snapshots:         store.Of(db, ResourceSnapshotMeta),
 		builder:           builder,
 		appModelStore:     appModelStore,
 		appSpecStore:      appSpecStore,
@@ -79,7 +81,7 @@ func NewService(
 // GetTopology 获取指定应用环境的资源拓扑图
 // 流程：从 Store 读取 ResourceSnapshot → 调用 Builder 构建拓扑 → 处理无数据场景
 func (s *Service) GetTopology(ctx context.Context, appID, envName, trafficLaneName string) (*Graph, error) {
-	snapshot, err := s.store.Get(ctx, appID, envName, trafficLaneName)
+	snapshot, err := FindSnapshot(ctx, s.snapshots, appID, envName, trafficLaneName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get resource snapshot for %s/%s/%s", appID, envName, trafficLaneName)
 	}
@@ -282,7 +284,7 @@ func (s *Service) maskManifestSensitiveValues(
 func (s *Service) resolveAndValidateNode(
 	ctx context.Context, appID, envName, trafficLaneName, nodeID string,
 ) (*ResourceSnapshot, *cluster.Config, string, string, string, error) {
-	snapshot, err := s.store.Get(ctx, appID, envName, trafficLaneName)
+	snapshot, err := FindSnapshot(ctx, s.snapshots, appID, envName, trafficLaneName)
 	if err != nil {
 		return nil, nil, "", "", "", errors.Wrapf(
 			err,

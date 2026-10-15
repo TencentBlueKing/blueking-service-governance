@@ -27,7 +27,6 @@ import (
 var FxModule = fx.Module("workspace",
 	database.PrivateFxModule,
 	fx.Provide(
-		fx.Annotate(NewWorkspaceStoreMongo, fx.As(new(WorkspaceStore))),
 		NewWorkspaceCompsStoreMongo,
 	),
 )

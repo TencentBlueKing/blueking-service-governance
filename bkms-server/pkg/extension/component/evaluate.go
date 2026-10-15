@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gopkg.in/yaml.v3"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -35,6 +36,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
 )
@@ -49,8 +51,8 @@ type EvaluatedComponent struct {
 
 // AppComponentApplier helps applying a component instance to an application.
 type AppComponentApplier struct {
-	builder      *AppPropertiesBuilder
-	compDefStore ComponentDefStore
+	builder *AppPropertiesBuilder
+	defs    *ComponentDefStore
 }
 
 // CreateDefaultApplier creates a default AppComponentApplier instance which uses the
@@ -59,27 +61,22 @@ type AppComponentApplier struct {
 // TODO: Maybe we should introduce a DI framework to manage these dependencies to avoid
 // the boilerplate code.
 func CreateDefaultApplier() (*AppComponentApplier, error) {
-	mongoClient, dbName := database.Client(), database.Name()
-	compDefStore, err := NewComponentDefStoreMongo(mongoClient, dbName)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating component-def store")
-	}
-	envStore, err := envmodel.NewEnvironmentStoreMongo(mongoClient, dbName)
+	envStore, err := envmodel.NewEnvironmentStoreMongo(database.Client(), database.Name())
 	if err != nil {
 		return nil, errors.Wrap(err, "creating environment store")
 	}
 	envSvc := env.NewEnvService(envStore)
-	return NewAppComponentApplier(compDefStore, envSvc), nil
+	return NewAppComponentApplier(database.DB(), envSvc), nil
 }
 
 // NewAppComponentApplier creates a new AppComponentApplier instance.
 func NewAppComponentApplier(
-	compDefStore ComponentDefStore,
+	db *mongo.Database,
 	envService *env.EnvService,
 ) *AppComponentApplier {
 	return &AppComponentApplier{
-		builder:      NewAppPropertiesBuilder(compDefStore, envService),
-		compDefStore: compDefStore,
+		builder: NewAppPropertiesBuilder(db, envService),
+		defs:    store.Of(db, ComponentDefMeta),
 	}
 }
 
@@ -101,7 +98,7 @@ func (a *AppComponentApplier) Evaluate(
 		return nil, errors.Wrap(err, "building properties")
 	}
 
-	compDef, err := a.compDefStore.Get(ctx, comp.Type, comp.Version)
+	compDef, err := a.defs.Get(ctx, ByNameVersion(comp.Type, comp.Version))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting component definition")
 	}
@@ -154,18 +151,18 @@ func renderMappingTemplate(fragment string, props map[string]any) (map[string]an
 // AppPropertiesBuilder helps with building the "properties" for an application when
 // instantiating components.
 type AppPropertiesBuilder struct {
-	compDefStore ComponentDefStore
-	envService   *env.EnvService
+	defs       *ComponentDefStore
+	envService *env.EnvService
 }
 
 // NewAppPropertiesBuilder creates a new AppPropertiesBuilder instance.
 func NewAppPropertiesBuilder(
-	compDefStore ComponentDefStore,
+	db *mongo.Database,
 	envService *env.EnvService,
 ) *AppPropertiesBuilder {
 	return &AppPropertiesBuilder{
-		compDefStore: compDefStore,
-		envService:   envService,
+		defs:       store.Of(db, ComponentDefMeta),
+		envService: envService,
 	}
 }
 
@@ -216,7 +213,7 @@ func (b *AppPropertiesBuilder) BuildRaw(
 	comp Component,
 	envID bson.ObjectID,
 ) (map[string]PropValue, error) {
-	compDef, err := b.compDefStore.Get(ctx, comp.Type, comp.Version)
+	compDef, err := b.defs.Get(ctx, ByNameVersion(comp.Type, comp.Version))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting component definition")
 	}

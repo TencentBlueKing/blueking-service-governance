@@ -109,7 +109,8 @@ func (h *Handler) prepareBuildLogDeps(c *gin.Context) (*buildLogDeps, error) {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init bkci client")
 	}
 
-	record, err := h.registry.BuildRecordStore.Get(ctx, app.ID, uriInput.BuildID)
+	record, err := store.Of(h.registry.DB, imagebuild.RecordMeta).
+		Get(ctx, imagebuild.ByBuild(app.ID, uriInput.BuildID))
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get build record")
 	}

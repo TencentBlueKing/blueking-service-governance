@@ -90,6 +90,14 @@ var _ = Describe("Options", func() {
 		})
 	})
 
+	It("should merge OmitFields and WithoutTotal", func() {
+		q := apply(OmitFields("a"), Combine(OmitFields("b", "c"), WithoutTotal()))
+		Expect(q.omitted).To(Equal([]string{"a", "b", "c"}))
+		Expect(q.withoutTotal).To(BeTrue())
+		Expect(q.projection()).To(Equal(bson.D{{Key: "a", Value: 0}, {Key: "b", Value: 0}, {Key: "c", Value: 0}}))
+		Expect(apply().projection()).To(BeNil())
+	})
+
 	It("should merge multiple UpdateOpts", func() {
 		q := apply(UpdateSelected("a"), UpdateOmit("b"), UpdateSelected("c"), UpdateNonZero())
 		Expect(q.fields).To(Equal(&fieldSelection{

@@ -83,7 +83,6 @@ func NewService(
 	db *mongo.Database,
 	envStore envmodel.EnvironmentStore,
 	appConfigFileStore appcfg.AppConfigFileStore,
-	appConfigFileVersionStore appcfg.AppConfigFileVersionStore,
 	appStore bkmsapp.ApplicationStore,
 ) *Service {
 	return &Service{
@@ -95,7 +94,6 @@ func NewService(
 		appConfigFileService: appcfg.NewAppConfigFileService(
 			appConfigFileStore,
 			db,
-			appConfigFileVersionStore,
 		),
 	}
 }

@@ -65,7 +65,6 @@ const AnnotationKeyDeployID = "bkms.tencent.com/deploy-id"
 // Deployer appmodel 应用部署器
 type Deployer struct {
 	recordStore             RecordStore
-	resourceSnapshotStore   ResourceSnapshotStore
 	buildDeployStore        autodeploy.RecordStore
 	appModelStore           appmodel.AppModelStore
 	builderService          *workload.BuilderService
@@ -83,7 +82,6 @@ type Deployer struct {
 // NewDeployer 创建 appmodel 应用部署器
 func NewDeployer(
 	recordStore RecordStore,
-	resourceSnapshotStore ResourceSnapshotStore,
 	buildDeployStore autodeploy.RecordStore,
 	appModelStore appmodel.AppModelStore,
 	builderService *workload.BuilderService,
@@ -96,7 +94,6 @@ func NewDeployer(
 ) *Deployer {
 	return &Deployer{
 		recordStore:             recordStore,
-		resourceSnapshotStore:   resourceSnapshotStore,
 		buildDeployStore:        buildDeployStore,
 		appModelStore:           appModelStore,
 		builderService:          builderService,
@@ -197,7 +194,7 @@ func (d *Deployer) Deploy(
 	// 持久化已下发资源清单
 	go saveResourceSnapshots(
 		ctx,
-		d.resourceSnapshotStore,
+		d.db,
 		appModel.AppID,
 		deployID,
 		buildResult.MainWorkload,

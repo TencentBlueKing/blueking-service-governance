@@ -223,11 +223,7 @@ func buildBscpPostRenderer(
 	app *bkmsapp.Application,
 	envName string,
 ) (*BscpPostRenderer, error) {
-	wsStore, err := workspace.NewWorkspaceStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create workspace store")
-	}
-	ws, err := wsStore.Get(ctx, app.WorkspaceID)
+	ws, err := store.Of(db, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get workspace %s", app.WorkspaceID)
 	}

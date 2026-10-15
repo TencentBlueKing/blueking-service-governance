@@ -39,10 +39,10 @@ const builtinCompCreator = "admin"
 // LoadBuiltinFromFolder loads component definitions from files in the specified folder.
 //
 // Args:
-//   - store: The component definition store to save loaded component definitions.
+//   - defs: The component definition store to save loaded component definitions.
 //   - folderPath: The path to the folder containing component definition files, it can also be a path
 //     of a single file, in that case, only the file will be loaded.
-func LoadBuiltinFromFolder(ctx context.Context, store ComponentDefStore, folderPath string) error {
+func LoadBuiltinFromFolder(ctx context.Context, defs *ComponentDefStore, folderPath string) error {
 	compDefs := make([]*ComponentDef, 0)
 
 	fileInfo, err := os.Stat(folderPath)
@@ -87,8 +87,8 @@ func LoadBuiltinFromFolder(ctx context.Context, store ComponentDefStore, folderP
 
 	// Save the components to the store
 	for _, compDef := range compDefs {
-		if err := store.Upsert(ctx, compDef); err != nil {
-			return errors.Wrapf(err, "upserting builtin componentDef %s:%s", compDef.Name, compDef.Version)
+		if err := UpsertDef(ctx, defs, compDef); err != nil {
+			return errors.Wrap(err, "upserting builtin componentDef")
 		}
 	}
 

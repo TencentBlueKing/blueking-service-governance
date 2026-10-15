@@ -31,11 +31,13 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -723,7 +725,7 @@ var _ = Describe("AppModelStoreMongo", func() {
 
 var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 	var diApp *fxtest.App
-	var compDefStore component.ComponentDefStore
+	var compDefStore *component.ComponentDefStore
 	var appModelStore appmodel.AppModelStore
 	var appStore bkmsapp.ApplicationStore
 	var ctx context.Context
@@ -742,13 +744,14 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appmodel.FxModule,
-			component.FxModule,
-			fx.Populate(&appStore, &appModelStore, &compDefStore),
+			fx.Populate(&appStore, &appModelStore),
 		)
 		diApp.RequireStart()
+		db := testutil.NewDB(GinkgoT())
+		compDefStore = store.Of(db, component.ComponentDefMeta)
 		// 设置 hooks
 		appModelStore.SetComponentHooks(
-			appmodel.NewComponentRefCountHooks(compDefStore),
+			appmodel.NewComponentRefCountHooks(db),
 		)
 
 		compDef := dbfactory.CompDef(ctx, compDefStore, &dbfactory.ComponentDefOpts{
@@ -762,7 +765,7 @@ var _ = Describe("ComponentDef RefCount with AppModel hooks", func() {
 	})
 
 	getAppCompInstanceCount := func() int32 {
-		def, err := compDefStore.Get(ctx, compDefName, component.DefaultComponentDefVersion)
+		def, err := compDefStore.Get(ctx, component.ByNameVersion(compDefName, component.DefaultComponentDefVersion))
 		Expect(err).NotTo(HaveOccurred())
 		return def.AppCompInstanceCount
 	}

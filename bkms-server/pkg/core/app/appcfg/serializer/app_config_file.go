@@ -26,10 +26,12 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func init() {
@@ -298,26 +300,29 @@ type PreviewOverlayMergeOutput struct {
 	Data string `json:"data"`
 }
 
-// ToVersionListOptions converts query input into version list options.
-func (i ListAppConfigFileVersionsQueryInput) ToVersionListOptions(
-	appID string,
-) (appcfg.AppConfigFileVersionListOptions, error) {
-	opts := appcfg.AppConfigFileVersionListOptions{
-		AppID:       appID,
-		EnvName:     i.EnvName,
-		Name:        i.Name,
-		Version:     i.Version,
-		Creator:     i.Creator,
-		Description: i.Description,
-		Page:        i.Page,
-		PageSize:    i.PageSize,
+// ToVersionListOpt converts query input into version list filters; unset fields are not filtered.
+func (i ListAppConfigFileVersionsQueryInput) ToVersionListOpt() (store.Opt, error) {
+	opts := []store.Opt{
+		whereIfSet("envName", i.EnvName),
+		whereIfSet("name", i.Name),
+		whereIfSet("version", i.Version),
+		whereIfSet("creator", i.Creator),
+		store.ContainsIgnoreCase(lo.FromPtr(i.Description), "description"),
 	}
 	if i.AppConfigFileID != nil && *i.AppConfigFileID != "" {
 		id, err := bson.ObjectIDFromHex(*i.AppConfigFileID)
 		if err != nil {
-			return appcfg.AppConfigFileVersionListOptions{}, errors.Wrap(err, "parse appConfigFileID")
+			return nil, errors.Wrap(err, "parse appConfigFileID")
 		}
-		opts.AppConfigFileID = &id
+		opts = append(opts, appcfg.VersionsByFile(id))
 	}
-	return opts, nil
+	return store.Combine(opts...), nil
+}
+
+// whereIfSet 在 value 非 nil 时按字段精确匹配，否则不产生条件
+func whereIfSet[V any](field string, value *V) store.Opt {
+	if value == nil {
+		return nil
+	}
+	return store.Where(field, *value)
 }

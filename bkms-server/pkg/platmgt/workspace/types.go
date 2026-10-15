@@ -21,9 +21,8 @@ package workspace
 import (
 	"time"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
-
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // WorkspaceWithStats is a workspace with aggregated statistics for platform workspace listing.
@@ -84,48 +83,36 @@ type WorkspaceListOptions struct {
 	PageSize int64
 }
 
-// ToWorkspaceStoreListOptions converts list options to workspace store list options.
-func (o WorkspaceListOptions) ToWorkspaceStoreListOptions() *bkmsworkspace.ListOptions {
-	opts := &bkmsworkspace.ListOptions{Keyword: o.Keyword}
+// ToWorkspaceStoreListOpt converts list options to workspace store filter and sort options.
+func (o WorkspaceListOptions) ToWorkspaceStoreListOpt() store.Opt {
+	opts := []store.Opt{o.ToWorkspaceStoreStatisticsOpt(), o.sortOpt()}
 	if o.State != "" {
-		state := bkmsworkspace.State(o.State)
-		opts.State = &state
+		opts = append(opts, bkmsworkspace.InState(bkmsworkspace.State(o.State)))
 	}
-	// 构建排序字段
-	order := int64(-1)
+	return store.Combine(opts...)
+}
+
+// sortOpt 构建排序字段
+func (o WorkspaceListOptions) sortOpt() store.Opt {
+	order := store.Desc
 	if o.SortOrder == "asc" {
-		order = 1
+		order = store.Asc
 	}
 	switch o.SortBy {
 	case "id":
-		opts.Sort = bson.D{
-			{Key: "id", Value: order},
-		}
+		return order("id")
 	case "displayName", "updatedAt":
-		opts.Sort = bson.D{
-			{Key: o.SortBy, Value: order},
-			{Key: "id", Value: 1},
-		}
+		return store.Combine(order(o.SortBy), store.Asc("id"))
 	default:
 		// 未指定或非白名单字段时回退到 store 默认排序，避免未来上层校验缺失时透传非法字段。
-		return opts
+		return bkmsworkspace.DefaultOrder()
 	}
-	return opts
 }
 
-// ToWorkspaceStoreStatisticsOptions 将列表查询参数转换为顶部状态统计卡片使用的过滤条件。
+// ToWorkspaceStoreStatisticsOpt 将列表查询参数转换为顶部状态统计卡片使用的过滤条件。
 // 统计跟随关键字（Keyword）过滤，但与当前选中的状态标签页相互独立。
-func (o WorkspaceListOptions) ToWorkspaceStoreStatisticsOptions() *bkmsworkspace.ListOptions {
-	return &bkmsworkspace.ListOptions{Keyword: o.Keyword}
-}
-
-// ToWorkspaceStoreListPageOptions converts list options to workspace store page options.
-func (o WorkspaceListOptions) ToWorkspaceStoreListPageOptions() *bkmsworkspace.ListPageOptions {
-	return &bkmsworkspace.ListPageOptions{
-		ListOptions: *o.ToWorkspaceStoreListOptions(),
-		Page:        o.Page,
-		PageSize:    o.PageSize,
-	}
+func (o WorkspaceListOptions) ToWorkspaceStoreStatisticsOpt() store.Opt {
+	return bkmsworkspace.KeywordMatches(o.Keyword)
 }
 
 // WorkspaceStateStatistics is the aggregated workspace state statistics for matched workspaces.

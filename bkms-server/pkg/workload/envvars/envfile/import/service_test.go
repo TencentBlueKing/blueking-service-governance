@@ -40,16 +40,15 @@ import (
 
 var _ = Describe("ImportService", func() {
 	var (
-		diApp                 *fxtest.App
-		ctx                   context.Context
-		workspaceID           string
-		environment           envmodel.Environment
-		scopedEnvVarStore     envvarsstore.ScopedEnvVarStore
-		appStore              coreapp.ApplicationStore
-		appModelStore         appmodel.AppModelStore
-		appConfigFileStore    appcfg.AppConfigFileStore
-		appConfigVersionStore appcfg.AppConfigFileVersionStore
-		service               *importer.Service
+		diApp              *fxtest.App
+		ctx                context.Context
+		workspaceID        string
+		environment        envmodel.Environment
+		scopedEnvVarStore  envvarsstore.ScopedEnvVarStore
+		appStore           coreapp.ApplicationStore
+		appModelStore      appmodel.AppModelStore
+		appConfigFileStore appcfg.AppConfigFileStore
+		service            *importer.Service
 	)
 
 	BeforeEach(func() {
@@ -66,7 +65,6 @@ var _ = Describe("ImportService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigVersionStore,
 			),
 		)
 		diApp.RequireStart()
@@ -160,10 +158,9 @@ ANOTHER_ENV_KEY=another-value
 
 	It("imports app-defined vars by overwriting and appending in one batch", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{

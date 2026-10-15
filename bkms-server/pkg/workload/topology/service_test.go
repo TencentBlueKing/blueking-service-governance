@@ -58,7 +58,7 @@ var _ = Describe("Service", func() {
 	var (
 		diApp             *fxtest.App
 		svc               *Service
-		store             *ResourceSnapshotStoreMongo
+		snapshots         *ResourceSnapshotStore
 		scopedEnvVarStore envvars.ScopedEnvVarStore
 		appModelStore     appmodel.AppModelStore
 		testApp           *bkmsapp.Application
@@ -81,11 +81,12 @@ var _ = Describe("Service", func() {
 			depenvvars.FxModule,
 			polarisenvvars.FxModule,
 			polaris.FxModule,
-			fx.Populate(&svc, &store, &appModelStore, &scopedEnvVarStore),
+			fx.Populate(&svc, &appModelStore, &scopedEnvVarStore),
 		)
 		diApp.RequireStart()
+		snapshots = testutil.NewStore(GinkgoT(), ResourceSnapshotMeta)
 
-		err := testutil.CleanupCollection(ResourceSnapshotsCollection)
+		err := testutil.CleanupCollection(ResourceSnapshotMeta.Collection)
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("app_models")
 		Expect(err).NotTo(HaveOccurred())
@@ -123,7 +124,7 @@ var _ = Describe("Service", func() {
 		if mocker != nil {
 			mocker.Release()
 		}
-		_ = testutil.CleanupCollection(ResourceSnapshotsCollection)
+		_ = testutil.CleanupCollection(ResourceSnapshotMeta.Collection)
 		_ = testutil.CleanupCollection("app_models")
 		_ = testutil.CleanupCollection("scoped_env_vars")
 		if diApp != nil {
@@ -158,7 +159,7 @@ var _ = Describe("Service", func() {
 				Resources:       []ResourceEntry{},
 				Relations:       []ResourceRelation{},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			graph, err := svc.GetTopology(testCtx, "test-app", "dev", "")
@@ -190,7 +191,7 @@ var _ = Describe("Service", func() {
 				},
 				Relations: []ResourceRelation{},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			graph, err := svc.GetTopology(testCtx, "test-app", "dev", "")
@@ -243,7 +244,7 @@ var _ = Describe("Service", func() {
 				},
 				Relations: []ResourceRelation{},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -313,7 +314,7 @@ var _ = Describe("Service", func() {
 					{Kind: "CustomResource", Namespace: "default", Name: "my-cr"},
 				},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshotWithCustom, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshotWithCustom, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			nodeID := EncodeNodeID("CustomResource", "default", "my-cr")
@@ -366,7 +367,7 @@ var _ = Describe("Service", func() {
 					},
 				},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -517,7 +518,7 @@ var _ = Describe("Service", func() {
 					},
 				},
 			}
-			err := store.UpsertWithVersion(testCtx, snapshot, 0)
+			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 		})
 

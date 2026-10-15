@@ -25,27 +25,28 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("RecordStoreMongo", func() {
+var _ = Describe("RecordStore", func() {
 	var (
-		store *RecordStoreMongo
-		ctx   context.Context
-		appID string
+		db      *mongo.Database
+		records *RecordStore
+		ctx     context.Context
+		appID   string
 	)
 
 	BeforeEach(func() {
-		var err error
-		store, err = NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, RecordMeta)
 		ctx = context.Background()
 		appID = "store-test-app-" + stringx.Random(8)
 	})
 
-	Describe("Create", func() {
+	Describe("CreateRecord", func() {
 		It("should create a record with auto-incrementing build num and reject duplicate appID+buildID", func() {
 			// 第一条记录：自动分配序号 1
 			record := &Record{
@@ -57,7 +58,7 @@ var _ = Describe("RecordStoreMongo", func() {
 				Status:       StatusRunning,
 				Operator:     "test-user",
 			}
-			err := store.Create(ctx, record)
+			err := CreateRecord(ctx, db, record)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(record.Num).To(Equal(int64(1)))
 			Expect(record.StartedAt).NotTo(BeZero())
@@ -73,7 +74,7 @@ var _ = Describe("RecordStoreMongo", func() {
 					Status:       StatusRunning,
 					Operator:     "test-user",
 				}
-				err = store.Create(ctx, r)
+				err = CreateRecord(ctx, db, r)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(r.Num).To(Equal(i))
 			}
@@ -89,13 +90,12 @@ var _ = Describe("RecordStoreMongo", func() {
 				Status:       StatusRunning,
 				Operator:     "test-user",
 			}
-			err = store.Create(ctx, dup)
+			err = CreateRecord(ctx, db, dup)
 			Expect(err).NotTo(HaveOccurred())
 
 			dup.ChartVersion = "0.0.2"
-			err = store.Create(ctx, dup)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("already exists"))
+			err = CreateRecord(ctx, db, dup)
+			Expect(err).To(MatchError(store.ErrDuplicate))
 		})
 	})
 
@@ -111,10 +111,10 @@ var _ = Describe("RecordStoreMongo", func() {
 				Status:       StatusRunning,
 				Operator:     "test-user",
 			}
-			err := store.Create(ctx, record)
+			err := CreateRecord(ctx, db, record)
 			Expect(err).NotTo(HaveOccurred())
 
-			got, err := store.Get(ctx, appID, buildID)
+			got, err := records.Get(ctx, ByBuild(appID, buildID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.AppID).To(Equal(appID))
 			Expect(got.BuildID).To(Equal(buildID))
@@ -125,13 +125,15 @@ var _ = Describe("RecordStoreMongo", func() {
 		})
 
 		It("should return ErrRecordNotFound when record does not exist", func() {
-			_, err := store.Get(ctx, appID, "non-existent-build-id")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring(ErrRecordNotFound.Error()))
+			_, err := records.Get(ctx, ByBuild(appID, "non-existent-build-id"))
+			Expect(err).To(MatchError(ErrRecordNotFound))
+
+			err = UpdateRecord(ctx, records, &Record{AppID: appID, BuildID: "non-existent-build-id"})
+			Expect(err).To(MatchError(ErrRecordNotFound))
 		})
 	})
 
-	Describe("Update", func() {
+	Describe("UpdateRecord", func() {
 		It("should update status, extras and endedAt of an existing record", func() {
 			buildID := "b-upd-" + stringx.Random(8)
 			record := &Record{
@@ -143,17 +145,17 @@ var _ = Describe("RecordStoreMongo", func() {
 				Status:       StatusRunning,
 				Operator:     "test-user",
 			}
-			err := store.Create(ctx, record)
+			err := CreateRecord(ctx, db, record)
 			Expect(err).NotTo(HaveOccurred())
 
 			now := time.Now()
 			record.Status = StatusSuccess
 			record.EndedAt = &now
 			record.Extras = map[string]string{"BK_CI_GIT_REPO_HEAD_COMMIT_ID": "abc1234"}
-			err = store.Update(ctx, record)
+			err = UpdateRecord(ctx, records, record)
 			Expect(err).NotTo(HaveOccurred())
 
-			got, err := store.Get(ctx, appID, buildID)
+			got, err := records.Get(ctx, ByBuild(appID, buildID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.Status).To(Equal(StatusSuccess))
 			Expect(got.EndedAt).NotTo(BeNil())
@@ -174,11 +176,17 @@ var _ = Describe("RecordStoreMongo", func() {
 				r.Operator = "test-user"
 			}
 			time.Sleep(5 * time.Millisecond)
-			Expect(store.Create(ctx, r)).To(Succeed())
+			Expect(CreateRecord(ctx, db, r)).To(Succeed())
 		}
 	}
 
-	Describe("List", func() {
+	listPage := func(keyword string, page, size int64) *store.Page[Record] {
+		result, err := records.ListPage(ctx, page, size, ByApp(appID), KeywordMatches(keyword), NewestFirst())
+		Expect(err).NotTo(HaveOccurred())
+		return result
+	}
+
+	Describe("ListPage", func() {
 		It("should list records ordered by startedAt desc with pagination and keyword filter", func() {
 			createRecords([]*Record{
 				{BuildID: "b1-" + stringx.Random(4), ChartVersion: "0.0.1", Operator: "alice"},
@@ -187,30 +195,28 @@ var _ = Describe("RecordStoreMongo", func() {
 				{BuildID: "b4-" + stringx.Random(4), ChartVersion: "0.0.4", Operator: "carol"},
 			})
 
-			records, total, err := store.List(ctx, appID, "", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(4)))
-			Expect(records).To(HaveLen(4))
+			page := listPage("", 1, 10)
+			Expect(page.Total).To(Equal(int64(4)))
+			Expect(page.Items).To(HaveLen(4))
 			// 倒序：最后插入的版本在最前
-			Expect(records[0].ChartVersion).To(Equal("0.0.4"))
+			Expect(page.Items[0].ChartVersion).To(Equal("0.0.4"))
 
 			// keyword 命中 operator
-			records, total, err = store.List(ctx, appID, "alice", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(2)))
-			Expect(records).To(HaveLen(2))
+			page = listPage("alice", 1, 10)
+			Expect(page.Total).To(Equal(int64(2)))
+			Expect(page.Items).To(HaveLen(2))
 
 			// keyword 命中 chartVersion
-			records, total, err = store.List(ctx, appID, "0.0.2", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(records[0].ChartVersion).To(Equal("0.0.2"))
+			page = listPage("0.0.2", 1, 10)
+			Expect(page.Total).To(Equal(int64(1)))
+			Expect(page.Items[0].ChartVersion).To(Equal("0.0.2"))
 
 			// 分页
-			records, total, err = store.List(ctx, appID, "", 1, 2)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(4)))
-			Expect(records).To(HaveLen(2))
+			page = listPage("", 2, 3)
+			Expect(page.Total).To(Equal(int64(4)))
+			Expect(page.HasNext).To(BeFalse())
+			Expect(page.Items).To(HaveLen(1))
+			Expect(page.Items[0].ChartVersion).To(Equal("0.0.1"))
 		})
 	})
 })

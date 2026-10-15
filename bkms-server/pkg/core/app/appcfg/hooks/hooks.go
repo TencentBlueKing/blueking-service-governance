@@ -38,11 +38,10 @@ func RegisterDeleteHooks(
 	appStore bkmsapp.ApplicationStore,
 	fileStore appcfg.AppConfigFileStore,
 	db *mongo.Database,
-	versionStore appcfg.AppConfigFileVersionStore,
 ) {
 	bkmsenv.RegisterDeleteHook(
 		CleanupPlainEnvInstancesHookName,
-		NewCleanupPlainEnvInstancesHook(appStore, fileStore, db, versionStore),
+		NewCleanupPlainEnvInstancesHook(appStore, fileStore, db),
 	)
 }
 
@@ -51,7 +50,6 @@ func NewCleanupPlainEnvInstancesHook(
 	appStore bkmsapp.ApplicationStore,
 	fileStore appcfg.AppConfigFileStore,
 	db *mongo.Database,
-	versionStore appcfg.AppConfigFileVersionStore,
 ) bkmsenv.DeleteHook {
 	return func(ctx context.Context, environment envmodel.Environment) error {
 		appIDs := make([]string, 0)
@@ -70,7 +68,7 @@ func NewCleanupPlainEnvInstancesHook(
 			}
 		}
 
-		cfgService := appcfg.NewAppConfigFileService(fileStore, db, versionStore)
+		cfgService := appcfg.NewAppConfigFileService(fileStore, db)
 		for _, appID := range appIDs {
 			if err := cfgService.CleanupPlainEnvInstancesByEnv(ctx, appID, environment.Name); err != nil {
 				return errors.Wrapf(err, "cleanup plain env instances for app %s env %s", appID, environment.Name)

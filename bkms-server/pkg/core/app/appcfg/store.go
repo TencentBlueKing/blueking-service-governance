@@ -91,19 +91,6 @@ type AppConfigFileStore interface {
 	DeleteByDefID(ctx context.Context, defID bson.ObjectID) (int64, error)
 }
 
-// AppValuesConfigStore defines the interface for storing app values configurations.
-type AppValuesConfigStore interface {
-	// Get gets the app values configuration by workspaceID and app ID.
-	// It returns a default configuration event if not exists.
-	Get(ctx context.Context, appID string) (AppValuesConfig, error)
-
-	// SetDefaultValuesFile sets the default values file ID for an app.
-	SetDefaultValuesFile(ctx context.Context, appID string, defaultValuesFileID bson.ObjectID) error
-
-	// DeleteByApp deletes the app values configuration by appID.
-	DeleteByApp(ctx context.Context, appID string) error
-}
-
 var _ AppConfigFileStore = &AppConfigFileStoreMongo{}
 
 // AppConfigFileStoreMongo is the MongoDB implementation of AppConfigFileStore.

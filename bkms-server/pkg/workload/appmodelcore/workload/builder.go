@@ -364,7 +364,7 @@ func (b *Builder) applyPostProcessing(
 		hostPortAppliedPorts = appliedPorts
 	}
 
-	ws, err := b.workspaceStore.Get(in.ctx, b.app.WorkspaceID)
+	ws, err := b.workspaceStore.Get(in.ctx, workspace.ByWorkspaceID(b.app.WorkspaceID))
 	if err != nil {
 		return gd, extraObjs, nil, errors.Wrapf(err, "get workspace %s", b.app.WorkspaceID)
 	}

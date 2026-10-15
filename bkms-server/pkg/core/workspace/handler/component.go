@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // CreateWorkspaceComponent 创建工作空间组件。
@@ -57,7 +58,8 @@ func (h *Handler) CreateWorkspaceComponent(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	newComp := input.ToModel(uriInput.WorkspaceID)
-	if _, err := h.registry.ComponentDefStore.Get(ctx, newComp.Type, newComp.Version); err != nil {
+	if _, err := store.Of(h.registry.DB, component.ComponentDefMeta).
+		Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version)); err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			bkerrs.AbortWithErr(
 				c,

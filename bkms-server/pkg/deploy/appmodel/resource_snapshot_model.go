@@ -25,12 +25,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-// resourceSnapshotCollectionName AppModel 部署资源清单快照集合
-const resourceSnapshotCollectionName = "app_model_resource_snapshots"
-
-// ErrResourceSnapshotNotFound 该部署记录下无任何资源清单快照
-var ErrResourceSnapshotNotFound = errors.New("app model resource snapshot not found")
-
 // ErrResourceSnapshotRowNotFound 指定快照行不存在或不属于该应用
 var ErrResourceSnapshotRowNotFound = errors.New("app model resource snapshot row not found")
 

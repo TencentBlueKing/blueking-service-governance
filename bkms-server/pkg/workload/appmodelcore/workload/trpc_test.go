@@ -56,8 +56,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 	var builderSvc *workload.BuilderService
 	var appConfigFileStore appcfg.AppConfigFileStore
 	var appConfigFileDefStore *appcfg.AppConfigFileDefStore
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	var componentDefStore component.ComponentDefStore
+	var componentDefStore *component.ComponentDefStore
 	var polarisConfigStore polaris.PolarisConfigStore
 
 	BeforeEach(func() {
@@ -67,7 +66,6 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			bkmsapp.FxModule,
 			appmodel.FxModule,
 			workload.FxModule,
-			component.FxModule,
 			appcfg.FxModule,
 			env.FxModule,
 			polaris.FxModule,
@@ -79,8 +77,6 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
-				&componentDefStore,
 				&envSvc,
 				&builderSvc,
 				&polarisConfigStore,
@@ -88,6 +84,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 		)
 		diApp.RequireStart()
 		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		componentDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 
 		// Load builtin components
 		dbfactory.LoadBuiltinComponents(ctx, database.Client(), "../../../extension/component/assets/comps")
@@ -126,10 +123,9 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			// 使用 dbfactory.TrpcApplication 创建应用和模型
 			// TrpcConfig.FileContent 会作为默认配置文件内容
 			app, appModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, &dbfactory.TrpcApplicationOpts{
 				TrpcConfig: &appmodel.TrpcConfig{
 					FileName:    "trpc_go.yaml",
@@ -157,7 +153,6 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			cfgSvc := appcfg.NewAppConfigFileService(
 				appConfigFileStore,
 				testutil.NewDB(GinkgoT()),
-				appConfigFileVersionStore,
 			)
 
 			// 切换为独立配置模式
@@ -261,10 +256,9 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			// - tRPC 运行时格式：${SOME_VAR} 原样保留
 			// - 运行时变量占位符：${{env.BKMS_POD_IP}}, ${{env.BKMS_NODE_IP}}
 			app, appModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, &dbfactory.TrpcApplicationOpts{
 				TrpcConfig: &appmodel.TrpcConfig{
 					FileName:    "trpc_go.yaml",
@@ -307,10 +301,9 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 
 		It("should return an error when the tRPC config template is invalid", func() {
 			app, appModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, &dbfactory.TrpcApplicationOpts{
 				TrpcConfig: &appmodel.TrpcConfig{
 					FileName:    "trpc_go.yaml",
@@ -330,10 +323,9 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 
 	It("should collect undefined env vars from every workload render source", func() {
 		app, appModel := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			TrpcConfig: &appmodel.TrpcConfig{
 				FileName:    "trpc_go.yaml",
@@ -400,10 +392,9 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 
 		BeforeEach(func() {
 			app, appModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, &dbfactory.TrpcApplicationOpts{
 				TrpcConfig: &appmodel.TrpcConfig{
 					FileName:    "trpc_go.yaml",

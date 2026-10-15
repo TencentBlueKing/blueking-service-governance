@@ -31,10 +31,12 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bscpapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // NewListBscpProjectsCmd 创建 list-bscp-projects 命令，列出 workspace 对应 bizID 下的 BSCP 项目。
@@ -87,7 +89,7 @@ func runListBscpProjects(ctx context.Context, srvCfg, workspaceID, operator stri
 	storereg.Init(ctx)
 	reg := storereg.G()
 
-	ws, err := reg.WorkspaceStore.Get(ctx, workspaceID)
+	ws, err := store.Of(reg.DB, bkmsworkspace.Meta).Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", workspaceID)
 	}

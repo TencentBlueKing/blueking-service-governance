@@ -59,7 +59,7 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		ctx             context.Context
 		diApp           *fxtest.App
 		service         *Service
-		workspaceStore  bkmsworkspace.WorkspaceStore
+		workspaceStore  *bkmsworkspace.WorkspaceStore
 		appStore        bkmsapp.ApplicationStore
 		envSvc          *bkmsenv.EnvService
 		cfgStore        *build.ConfigStore
@@ -89,7 +89,6 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 			FxModule,
 			fx.Populate(
 				&service,
-				&workspaceStore,
 				&appStore,
 				&envSvc,
 				&helmDeployStore,
@@ -97,6 +96,7 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 			),
 		)
 		diApp.RequireStart()
+		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 		cfgStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
 		promotionStore = testutil.NewStore(GinkgoT(), promotion.Meta)
 	})
@@ -299,7 +299,7 @@ type tagDeletionFixture struct {
 
 func newTagDeletionFixture(
 	ctx context.Context,
-	workspaceStore bkmsworkspace.WorkspaceStore,
+	workspaceStore *bkmsworkspace.WorkspaceStore,
 	appStore bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
 	cfgStore *build.ConfigStore,
@@ -346,7 +346,7 @@ func newTagDeletionFixture(
 
 func newAppModelTagDeletionFixture(
 	ctx context.Context,
-	workspaceStore bkmsworkspace.WorkspaceStore,
+	workspaceStore *bkmsworkspace.WorkspaceStore,
 	appStore bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
 	cfgStore *build.ConfigStore,
@@ -397,7 +397,7 @@ func newAppModelTagDeletionFixture(
 
 func (f *tagDeletionFixture) cleanup(
 	ctx context.Context,
-	workspaceStore bkmsworkspace.WorkspaceStore,
+	workspaceStore *bkmsworkspace.WorkspaceStore,
 	appStore bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
 	cfgStore *build.ConfigStore,
@@ -428,5 +428,5 @@ func (f *tagDeletionFixture) cleanup(
 	Expect(envSvc.RemoveApp(ctx, f.env.ID, f.app.ID)).To(Succeed())
 	Expect(envSvc.Delete(ctx, f.env.ID)).To(Succeed())
 	Expect(appStore.DeleteAppByName(ctx, f.workspace.ID, f.app.Name)).To(Succeed())
-	Expect(workspaceStore.Delete(ctx, f.workspace.ID)).To(Succeed())
+	Expect(bkmsworkspace.Delete(ctx, workspaceStore, f.workspace.ID)).To(Succeed())
 }

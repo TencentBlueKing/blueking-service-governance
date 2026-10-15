@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // NewBindBscpProjectCmd 创建 bind-bscp-project 命令，按 projectKey 将 workspace 绑定到 BSCP 项目。
@@ -94,7 +95,7 @@ func runBindBscpProject(
 	storereg.Init(ctx)
 	reg := storereg.G()
 
-	ws, err := reg.WorkspaceStore.Get(ctx, workspaceID)
+	ws, err := store.Of(reg.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", workspaceID)
 	}
@@ -117,7 +118,7 @@ func runBindBscpProject(
 	ws.BkSystems.BkBSCPProjectKey = strings.TrimSpace(binding.ProjectKey)
 	ws.BkSystems.BscpCredentialID = binding.CredentialID
 	ws.BkSystems.BscpToken = binding.Token
-	if err = reg.WorkspaceStore.Update(ctx, ws); err != nil {
+	if err = workspace.Update(ctx, store.Of(reg.DB, workspace.Meta), ws); err != nil {
 		return errors.Wrap(err, "update workspace bk systems")
 	}
 

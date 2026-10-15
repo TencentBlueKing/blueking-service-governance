@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ListBCSAuthorizedProjects 获取有权限的 BCS 项目列表
@@ -75,7 +76,7 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 		return item.Code, true
 	})
 
-	workspaces, err := h.registry.WorkspaceStore.List(ctx, &workspace.ListOptions{})
+	workspaces, err := store.Of(h.registry.DB, workspace.Meta).List(ctx)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspaces"))
 		return

@@ -32,12 +32,10 @@ import (
 func newWorkloadPluginDependencies() (
 	appcfg.AppConfigFileStore,
 	*mongo.Database,
-	appcfg.AppConfigFileVersionStore,
 	polaris.PolarisConfigStore,
 ) {
 	var appConfigFileStore appcfg.AppConfigFileStore
 	var db *mongo.Database
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var polarisConfigStore polaris.PolarisConfigStore
 
 	diApp := fxtest.New(
@@ -48,12 +46,11 @@ func newWorkloadPluginDependencies() (
 		fx.Populate(
 			&appConfigFileStore,
 			&db,
-			&appConfigFileVersionStore,
 			&polarisConfigStore,
 		),
 	)
 	diApp.RequireStart()
 	diApp.RequireStop()
 
-	return appConfigFileStore, db, appConfigFileVersionStore, polarisConfigStore
+	return appConfigFileStore, db, polarisConfigStore
 }

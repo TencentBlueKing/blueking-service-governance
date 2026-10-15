@@ -50,18 +50,12 @@ type ChartBuildResult struct {
 
 // ChartBuildService Helm Chart 构建服务，收敛所有外部依赖
 type ChartBuildService struct {
-	db          *mongo.Database
-	semverStore semver.CounterStore
-	recordStore RecordStore
+	db *mongo.Database
 }
 
 // NewChartBuildService 创建 ChartBuildService 实例
-func NewChartBuildService(
-	db *mongo.Database,
-	semverStore semver.CounterStore,
-	recordStore RecordStore,
-) *ChartBuildService {
-	return &ChartBuildService{db: db, semverStore: semverStore, recordStore: recordStore}
+func NewChartBuildService(db *mongo.Database) *ChartBuildService {
+	return &ChartBuildService{db: db}
 }
 
 // validate 校验阶段：纯检查，无副作用
@@ -128,7 +122,7 @@ func (s *ChartBuildService) buildPipelineParams(
 	ctx context.Context, app *bkmsapp.Application, bumpType string, rev revision.CodeRevision, helmRepoURL string,
 ) (map[string]string, string, error) {
 	// 生成 semver 版本号（原子操作，并发安全；尽量延后，避免前序失败浪费版本号）
-	chartVersion, err := s.semverStore.Next(ctx, app.ID, semver.BumpType(bumpType))
+	chartVersion, err := semver.Next(ctx, s.db, app.ID, semver.BumpType(bumpType))
 	if err != nil {
 		return nil, "", errors.Wrapf(err, "generate semver for app %s", app.String())
 	}
@@ -199,8 +193,8 @@ func (s *ChartBuildService) execute(
 		Operator:     auth.MustGetUser(ctx).ID,
 		Params:       params,
 	}
-	if err = s.recordStore.Create(ctx, record); err != nil {
-		return nil, errors.Wrapf(err, "create helm chart build record for app %s", appInfo)
+	if err = CreateRecord(ctx, s.db, record); err != nil {
+		return nil, err
 	}
 
 	return &ChartBuildResult{

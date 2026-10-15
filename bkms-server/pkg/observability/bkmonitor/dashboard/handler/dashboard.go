@@ -22,12 +22,14 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/dashboard"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/dashboard/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ListAppDashboards 获取应用绑定的仪表盘列表
@@ -56,7 +58,7 @@ func (h *Handler) ListAppDashboards(c *gin.Context) {
 		return
 	}
 
-	ws, err := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
 		return
@@ -101,7 +103,7 @@ func (h *Handler) CreateAppDashboard(c *gin.Context) {
 		return
 	}
 
-	ws, err := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
 		return
@@ -156,7 +158,7 @@ func (h *Handler) UpdateAppDashboard(c *gin.Context) {
 		return
 	}
 
-	ws, err := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
 		return
@@ -206,7 +208,7 @@ func (h *Handler) DeleteAppDashboard(c *gin.Context) {
 		return
 	}
 
-	ws, err := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
 		return

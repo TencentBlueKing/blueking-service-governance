@@ -81,6 +81,8 @@ const (
 var (
 	// ErrAppCfgFileVersionNotFound indicates the requested version record does not exist.
 	ErrAppCfgFileVersionNotFound = errors.New("app config file version not found")
+	// ErrAppCfgFileVersionAlreadyExists indicates the version number of the file is already taken.
+	ErrAppCfgFileVersionAlreadyExists = errors.New("app config file version already exists")
 	// ErrComparedVersionsBelongToDifferentFiles indicates compare inputs are from different files.
 	ErrComparedVersionsBelongToDifferentFiles = errors.New("two versions must belong to same app config file")
 	// ErrUsingVersionCannotBeDeleted indicates the live version cannot be soft deleted.

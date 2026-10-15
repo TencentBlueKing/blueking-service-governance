@@ -24,7 +24,6 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
@@ -37,12 +36,7 @@ func triggerTopologyRefresh(ctx context.Context, args Args, record *helmdeploy.R
 		return
 	}
 
-	store, err := topology.NewResourceSnapshotStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		log.Errorf(ctx, "topology refresh (helm): create store: %v", err)
-		return
-	}
-	topology.NewRefresher(store).TriggerRefresh(ctx, topology.RefreshArgs{
+	topology.NewRefresher(storereg.G().DB).TriggerRefresh(ctx, topology.RefreshArgs{
 		AppID:           args.AppID,
 		EnvName:         args.EnvName,
 		TrafficLaneName: args.TrafficLaneName,

@@ -29,6 +29,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
@@ -72,7 +73,7 @@ var _ = Describe("Poller RunTick", func() {
 		ctx             context.Context
 		args            Args
 		rec             *build.Record
-		recordStore     build.RecordStore
+		db              *mongo.Database
 		pipelineStore   *bkci.PipelineStore
 		autoDeployStore autodeploy.RecordStore
 		enqCount        int
@@ -83,12 +84,12 @@ var _ = Describe("Poller RunTick", func() {
 	)
 
 	createRecord := func() {
-		Expect(recordStore.Create(ctx, rec)).To(Succeed())
+		Expect(build.CreateRecord(ctx, db, rec)).To(Succeed())
 		args.BuildID = rec.BuildID
 	}
 
 	reloadRecord := func() *build.Record {
-		got, err := recordStore.Get(ctx, rec.AppID, rec.BuildID)
+		got, err := plr.records.Get(ctx, build.ByBuild(rec.AppID, rec.BuildID))
 		Expect(err).NotTo(HaveOccurred())
 		return got
 	}
@@ -96,9 +97,7 @@ var _ = Describe("Poller RunTick", func() {
 	BeforeEach(func() {
 		var err error
 		ctx = auth.WithUser(context.Background(), auth.User{ID: "alice"})
-		recordStore, err = build.NewRecordStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		db := testutil.NewDB(GinkgoT())
+		db = testutil.NewDB(GinkgoT())
 		pipelineStore = store.Of(db, bkci.PipelineMeta)
 		autoDeployStore, err = autodeploy.NewRecordStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
@@ -110,7 +109,7 @@ var _ = Describe("Poller RunTick", func() {
 		args = Args{WorkspaceID: workspaceID, PipelineType: "build", AppID: appID, BuildID: buildID}
 		enqCount = 0
 		enqDelay = 0
-		plr = newPoller(recordStore, db, autoDeployStore)
+		plr = newPoller(db, autoDeployStore)
 		deployHook = nil
 		snapshotHook = nil
 

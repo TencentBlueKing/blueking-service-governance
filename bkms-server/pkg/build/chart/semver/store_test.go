@@ -24,27 +24,26 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
-var _ = Describe("CounterStoreMongo", func() {
+var _ = Describe("Counter", func() {
 	var (
 		ctx   context.Context
-		store CounterStore
+		db    *mongo.Database
 		appID string
 	)
 
 	BeforeEach(func() {
-		var err error
 		ctx = context.Background()
-		store, err = NewCounterStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
 		appID = "semver-test-" + stringx.Random(8)
 	})
 
 	expectNext := func(bump BumpType, expected string) {
-		v, err := store.Next(ctx, appID, bump)
+		v, err := Next(ctx, db, appID, bump)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(v).To(Equal(expected))
 	}
@@ -94,7 +93,7 @@ var _ = Describe("CounterStoreMongo", func() {
 			expectNext(BumpPatch, "0.0.2")
 
 			otherID := "semver-test-" + stringx.Random(8)
-			v, err := store.Next(ctx, otherID, BumpPatch)
+			v, err := Next(ctx, db, otherID, BumpPatch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(v).To(Equal("0.0.1"))
 
@@ -104,7 +103,7 @@ var _ = Describe("CounterStoreMongo", func() {
 
 	Describe("unknown bump type", func() {
 		It("should return error", func() {
-			_, err := store.Next(ctx, appID, BumpType("unknown"))
+			_, err := Next(ctx, db, appID, BumpType("unknown"))
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unknown bump type"))
 		})
@@ -127,7 +126,7 @@ var _ = Describe("CounterStoreMongo", func() {
 
 	Describe("Get", func() {
 		It("should return zero-value counter when no record exists", func() {
-			c, err := store.Get(ctx, appID)
+			c, err := Get(ctx, db, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Major).To(Equal(int64(0)))
 			Expect(c.Minor).To(Equal(int64(0)))
@@ -136,14 +135,14 @@ var _ = Describe("CounterStoreMongo", func() {
 		})
 
 		It("should return current counter value after Next calls", func() {
-			_, err := store.Next(ctx, appID, BumpPatch)
+			_, err := Next(ctx, db, appID, BumpPatch)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Next(ctx, appID, BumpPatch)
+			_, err = Next(ctx, db, appID, BumpPatch)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = store.Next(ctx, appID, BumpMinor)
+			_, err = Next(ctx, db, appID, BumpMinor)
 			Expect(err).NotTo(HaveOccurred())
 
-			c, err := store.Get(ctx, appID)
+			c, err := Get(ctx, db, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Major).To(Equal(int64(0)))
 			Expect(c.Minor).To(Equal(int64(1)))
@@ -152,12 +151,12 @@ var _ = Describe("CounterStoreMongo", func() {
 		})
 
 		It("should not increment counter on Get", func() {
-			_, err := store.Next(ctx, appID, BumpPatch)
+			_, err := Next(ctx, db, appID, BumpPatch)
 			Expect(err).NotTo(HaveOccurred())
 
-			c1, err := store.Get(ctx, appID)
+			c1, err := Get(ctx, db, appID)
 			Expect(err).NotTo(HaveOccurred())
-			c2, err := store.Get(ctx, appID)
+			c2, err := Get(ctx, db, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c1.Patch).To(Equal(c2.Patch))
 		})

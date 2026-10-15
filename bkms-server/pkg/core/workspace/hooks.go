@@ -22,13 +22,16 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // NewComponentRefCountHooks 构建 WorkspaceCompsStore 的组件引用计数 Hook。
 // 在组件增删后自动维护 ComponentDef.WorkspaceCompInstanceCount 字段。
-func NewComponentRefCountHooks(compDefStore component.ComponentDefStore) *ComponentHooks {
+func NewComponentRefCountHooks(db *mongo.Database) *ComponentHooks {
+	defs := store.Of(db, component.ComponentDefMeta)
 	return &ComponentHooks{
 		AfterAdd: func(ctx context.Context, comps []*Component) error {
 			typeCounts := map[string]int{}
@@ -38,8 +41,8 @@ func NewComponentRefCountHooks(compDefStore component.ComponentDefStore) *Compon
 				}
 			}
 			for compType, count := range typeCounts {
-				if err := compDefStore.UpdateInstanceCount(
-					ctx,
+				if err := component.UpdateInstanceCount(
+					ctx, defs,
 					compType,
 					component.FieldWorkspaceCompInstance,
 					count,
@@ -57,8 +60,8 @@ func NewComponentRefCountHooks(compDefStore component.ComponentDefStore) *Compon
 				}
 			}
 			for compType, count := range typeCounts {
-				if err := compDefStore.UpdateInstanceCount(
-					ctx, compType, component.FieldWorkspaceCompInstance, -count,
+				if err := component.UpdateInstanceCount(
+					ctx, defs, compType, component.FieldWorkspaceCompInstance, -count,
 				); err != nil {
 					return errors.Wrapf(err, "decrement workspaceCompInstanceCount for %s", compType)
 				}

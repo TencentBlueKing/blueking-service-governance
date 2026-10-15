@@ -35,6 +35,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
@@ -49,8 +50,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/alertstrategysync"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
 // listAppModelDeployRecords 获取 AppModel 应用部署记录列表
@@ -136,7 +139,6 @@ func (h *Handler) newDeployPreChecker() *deploypkg.DeployPreChecker {
 		h.registry.AppDepsVarReader,
 		h.registry.PolarisVarReader,
 		h.registry.WorkspaceCompsStore,
-		h.registry.WorkspaceStore,
 		h.registry.PolarisConfigStore,
 		h.registry.HostPortStore,
 		h.registry.AppModelStore,
@@ -273,7 +275,7 @@ func (h *Handler) handleAppModelDeployUninstalled(
 
 	// 应用已从环境卸载，需同步清理该应用在该环境下关联的告警策略，避免残留的无效告警。
 	// 先查询 workspace 信息（清理时需要其标识），查询失败仅记录日志，不影响卸载主流程。
-	if ws, wsErr := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID); wsErr != nil {
+	if ws, wsErr := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID)); wsErr != nil {
 		log.Errorf(ctx, "get workspace %s for alert cleanup failed: %v", app.WorkspaceID, wsErr)
 	} else {
 		// 异步执行清理，避免阻塞卸载接口的响应
@@ -298,7 +300,8 @@ func (h *Handler) handleAppModelDeployUninstalled(
 	}
 
 	// 清理资源拓扑快照（失败不阻塞主流程）
-	if err := h.registry.ResourceSnapshotStore.Delete(ctx, app.ID, envName, trafficLaneName); err != nil {
+	snapshots := store.Of(h.registry.DB, topology.ResourceSnapshotMeta)
+	if err := snapshots.DeleteIfExists(ctx, topology.ByScope(app.ID, envName, trafficLaneName)); err != nil {
 		log.Errorf(
 			ctx, "delete resource snapshot for app %s env %s lane %s failed: %v",
 			app.ID, envName, trafficLaneName, err,
@@ -336,8 +339,9 @@ func (h *Handler) listAppModelResourceSnapshots(c *gin.Context) {
 	}
 
 	// 获取资源清单快照元数据（分页）
-	rows, total, err := h.registry.AppModelDeployResourceSnapshotStore.ListMetaByDeployRecord(
-		ctx, app.ID, uriInput.DeployID, input.Page, input.PageSize,
+	snapshots := store.Of(h.registry.DB, appmodeldeploy.ResourceSnapshotMeta)
+	page, err := appmodeldeploy.ListSnapshotMeta(
+		ctx, snapshots, app.ID, uriInput.DeployID, input.Page, input.PageSize,
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(
@@ -345,12 +349,12 @@ func (h *Handler) listAppModelResourceSnapshots(c *gin.Context) {
 		))
 		return
 	}
-	outputs := make([]*serializer.AppModelResourceSnapshot, 0, len(rows))
-	for _, row := range rows {
+	outputs := make([]*serializer.AppModelResourceSnapshot, 0, len(page.Items))
+	for _, row := range page.Items {
 		outputs = append(outputs, new(serializer.AppModelResourceSnapshot).FromModel(row, false))
 	}
 	ginutils.OK(c, serializer.ListAppModelResourceSnapshotsOutput{
-		Data: serializer.PaginatedAppModelResourceSnapshotsOutputObjs{Count: total, Results: outputs},
+		Data: serializer.PaginatedAppModelResourceSnapshotsOutputObjs{Count: page.Total, Results: outputs},
 	})
 }
 
@@ -371,9 +375,8 @@ func (h *Handler) getAppModelResourceSnapshot(c *gin.Context) {
 	}
 
 	// 获取资源清单快照
-	row, err := h.registry.AppModelDeployResourceSnapshotStore.GetByID(
-		ctx, app.ID, uriInput.DeployID, uriInput.SnapshotID,
-	)
+	snapshots := store.Of(h.registry.DB, appmodeldeploy.ResourceSnapshotMeta)
+	row, err := appmodeldeploy.GetSnapshot(ctx, snapshots, app.ID, uriInput.DeployID, uriInput.SnapshotID)
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrResourceSnapshotRowNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotFound, "resource snapshot not found"))
@@ -462,24 +465,21 @@ func (h *Handler) newAppModelDeployService() (*appmodeldeploysvc.Service, error)
 	snapshotService := snapshot.NewService(reg.SnapshotStore, reg.DB, reg.AppStore)
 
 	return appmodeldeploysvc.NewService(appmodeldeploysvc.ServiceDeps{
-		DB:                                  reg.DB,
-		AppStore:                            reg.AppStore,
-		EnvStore:                            reg.EnvStore,
-		SnapshotService:                     snapshotService,
-		AppModelStore:                       reg.AppModelStore,
-		WorkspaceStore:                      reg.WorkspaceStore,
-		ScopedEnvVarStore:                   reg.ScopedEnvVarStore,
-		AppDepsVarReader:                    reg.AppDepsVarReader,
-		PolarisVarReader:                    reg.PolarisVarReader,
-		WorkspaceCompsStore:                 reg.WorkspaceCompsStore,
-		PolarisConfigStore:                  reg.PolarisConfigStore,
-		HostPortStore:                       reg.HostPortStore,
-		AppSpecStore:                        reg.AppSpecStore,
-		BuildAutoDeployRecordStore:          reg.BuildAutoDeployRecordStore,
-		AppModelDeployRecordStore:           reg.AppModelDeployRecordStore,
-		AppModelDeployResourceSnapshotStore: reg.AppModelDeployResourceSnapshotStore,
-		AppConfigFileStore:                  reg.AppConfigFileStore,
-		AppConfigFileVersionStore:           reg.AppConfigFileVersionStore,
+		DB:                         reg.DB,
+		AppStore:                   reg.AppStore,
+		EnvStore:                   reg.EnvStore,
+		SnapshotService:            snapshotService,
+		AppModelStore:              reg.AppModelStore,
+		ScopedEnvVarStore:          reg.ScopedEnvVarStore,
+		AppDepsVarReader:           reg.AppDepsVarReader,
+		PolarisVarReader:           reg.PolarisVarReader,
+		WorkspaceCompsStore:        reg.WorkspaceCompsStore,
+		PolarisConfigStore:         reg.PolarisConfigStore,
+		HostPortStore:              reg.HostPortStore,
+		AppSpecStore:               reg.AppSpecStore,
+		BuildAutoDeployRecordStore: reg.BuildAutoDeployRecordStore,
+		AppModelDeployRecordStore:  reg.AppModelDeployRecordStore,
+		AppConfigFileStore:         reg.AppConfigFileStore,
 	})
 }
 
@@ -487,7 +487,6 @@ func (h *Handler) newAppModelDeployService() (*appmodeldeploysvc.Service, error)
 func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer {
 	return appmodeldeploy.NewDeployer(
 		h.registry.AppModelDeployRecordStore,
-		h.registry.AppModelDeployResourceSnapshotStore,
 		h.registry.BuildAutoDeployRecordStore,
 		h.registry.AppModelStore,
 		workload.NewBuilderService(
@@ -495,7 +494,6 @@ func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer
 			h.registry.AppDepsVarReader,
 			h.registry.PolarisVarReader,
 			h.registry.WorkspaceCompsStore,
-			h.registry.WorkspaceStore,
 			h.registry.PolarisConfigStore,
 			h.registry.HostPortStore,
 			h.registry.AppModelStore,

@@ -24,8 +24,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -39,7 +37,7 @@ var _ = Describe("GetWorkspaceImageRegistry", func() {
 	var (
 		ctx            context.Context
 		db             *mongo.Database
-		workspaceStore WorkspaceStore
+		workspaceStore *WorkspaceStore
 		registries     *bkmsreg.ImageRegistryStore
 		ws             *Workspace
 		oldConfig      *svccfg.Config
@@ -52,9 +50,7 @@ var _ = Describe("GetWorkspaceImageRegistry", func() {
 		Expect(err).NotTo(HaveOccurred())
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
-		diApp := fxtest.New(GinkgoT(), FxModule, fx.Populate(&workspaceStore))
-		diApp.RequireStart()
-		DeferCleanup(diApp.RequireStop)
+		workspaceStore = testutil.NewStore(GinkgoT(), Meta)
 		db = testutil.NewDB(GinkgoT())
 		registries = testutil.NewStore(GinkgoT(), bkmsreg.ImageRegistryMeta)
 
@@ -80,13 +76,13 @@ var _ = Describe("GetWorkspaceImageRegistry", func() {
 	AfterEach(func() {
 		_, err := registries.DeleteMany(ctx, bkmsreg.ByWorkspace(ws.ID))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(workspaceStore.Delete(ctx, ws.ID)).To(Succeed())
+		Expect(Delete(ctx, workspaceStore, ws.ID)).To(Succeed())
 		svccfg.G = oldConfig
 	})
 
 	setRegistryType := func(registryType bkmsreg.ImageRegistryType) {
 		ws.ImageRegistryType = registryType
-		Expect(workspaceStore.Update(ctx, ws)).To(Succeed())
+		Expect(Update(ctx, workspaceStore, ws)).To(Succeed())
 	}
 
 	It("should return the builtin image registry of the workspace", func() {

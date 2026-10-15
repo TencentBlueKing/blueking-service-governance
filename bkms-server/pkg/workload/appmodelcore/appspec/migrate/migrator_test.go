@@ -30,7 +30,7 @@ var _ = Describe("tkeRouteEni component migration", func() {
 		appModelStore appmodel.AppModelStore
 		appSpecStore  appspec.AppSpecStore
 		wsCompStore   workspace.WorkspaceCompsStore
-		compDefStore  component.ComponentDefStore
+		compDefStore  *component.ComponentDefStore
 		migrator      *migrate.Migrator
 	)
 
@@ -47,14 +47,14 @@ var _ = Describe("tkeRouteEni component migration", func() {
 			appmodel.FxModule,
 			appspec.FxModule,
 			workspace.FxModule,
-			component.FxModule,
-			fx.Populate(&appStore, &appModelStore, &appSpecStore, &wsCompStore, &compDefStore),
+			fx.Populate(&appStore, &appModelStore, &appSpecStore, &wsCompStore),
 		)
 		diApp.RequireStart()
+		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 
 		migrator = migrate.New(
 			database.Client().Database(database.Name()),
-			appStore, appSpecStore, appModelStore, wsCompStore, compDefStore,
+			appStore, appSpecStore, appModelStore, wsCompStore,
 		)
 		Expect(compDefStore.Create(ctx, &component.ComponentDef{
 			Name:    tkeRouteEniName,

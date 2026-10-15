@@ -47,7 +47,7 @@ func New(registry *storereg.Registry) *GinHandler {
 
 func (h *GinHandler) service() *platmgtworkspace.Service {
 	return platmgtworkspace.NewService(
-		h.registry.WorkspaceStore,
+		h.registry.DB,
 		h.registry.AppStore,
 		h.registry.EnvStore,
 	)

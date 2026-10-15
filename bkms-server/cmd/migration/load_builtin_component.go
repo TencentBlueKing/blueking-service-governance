@@ -28,6 +28,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // NewLoadBuiltinComponentCmd 从指定目录加载内置组件定义到数据库
@@ -69,12 +70,6 @@ func NewLoadBuiltinComponentCmd() *cobra.Command {
 
 // runLoadBuiltinComponent 执行加载内置组件操作
 func runLoadBuiltinComponent(ctx context.Context, folderPath string) error {
-	// 初始化 ComponentDefStore
-	store, err := component.NewComponentDefStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return err
-	}
-
 	// 从指定目录加载组件定义
-	return component.LoadBuiltinFromFolder(ctx, store, folderPath)
+	return component.LoadBuiltinFromFolder(ctx, store.Of(database.DB(), component.ComponentDefMeta), folderPath)
 }

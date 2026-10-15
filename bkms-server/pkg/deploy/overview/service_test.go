@@ -59,7 +59,6 @@ var _ = Describe("overview.Service", func() {
 		appModelStore              appmodel.AppModelStore
 		appSpecStore               appspec.AppSpecStore
 		appConfigFileStore         appcfg.AppConfigFileStore
-		appConfigFileVersionStore  appcfg.AppConfigFileVersionStore
 		buildAutoDeployRecordStore autodeploy.RecordStore
 		envStore                   envmodel.EnvironmentStore
 		envSvc                     *bkmsenv.EnvService
@@ -88,7 +87,6 @@ var _ = Describe("overview.Service", func() {
 				&appModelStore,
 				&appSpecStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
 				&envStore,
 				&envSvc,
 				&buildAutoDeployRecordStore,
@@ -117,10 +115,9 @@ var _ = Describe("overview.Service", func() {
 
 	newTrpcApp := func() *bkmsapp.Application {
 		trpcApp, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, nil)
 		return trpcApp
 	}

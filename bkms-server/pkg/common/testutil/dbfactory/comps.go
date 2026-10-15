@@ -26,6 +26,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // LoadBuiltinComponents loads builtin component definitions from files, it's useful for tests
@@ -34,9 +35,6 @@ import (
 // Args:
 // - path: the folder path where the component definitions are stored.
 func LoadBuiltinComponents(ctx context.Context, client *mongo.Client, path string) {
-	compDefStore, err := component.NewComponentDefStoreMongo(database.Client(), database.Name())
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-	err = component.LoadBuiltinFromFolder(ctx, compDefStore, path)
+	err := component.LoadBuiltinFromFolder(ctx, store.Of(database.DB(), component.ComponentDefMeta), path)
 	gomega.Expect(err).To(gomega.Not(gomega.HaveOccurred()))
 }

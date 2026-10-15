@@ -93,7 +93,6 @@ func NewWorkerCmd() *cobra.Command {
 				appcfg.NewMountableFileProvider(
 					storereg.G().AppConfigFileStore,
 					storereg.G().DB,
-					storereg.G().AppConfigFileVersionStore,
 				),
 				storereg.G().PolarisConfigStore,
 			)

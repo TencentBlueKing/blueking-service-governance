@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/migrate"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const (
@@ -160,17 +161,14 @@ var _ = Describe("Component patch migration", func() {
 		Expect(migratedImportPolaris.Specs).To(HaveLen(2))
 		Expect(migratedImportPolaris.Specs[0]).To(ContainSubstring("{{- if .serviceLabels }}"))
 
-		store, err := component.NewComponentDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		defs := store.Of(db, component.ComponentDefMeta)
 		Expect(component.LoadBuiltinFromFolder(
 			ctx,
-			store,
+			defs,
 			"../assets/comps/ImportPolaris_v1.0.0.yaml",
 		)).To(Succeed())
-		loadedImportPolaris, err := store.Get(
-			ctx,
-			importPolarisComponentName,
-			component.DefaultComponentDefVersion,
+		loadedImportPolaris, err := defs.Get(
+			ctx, component.ByNameVersion(importPolarisComponentName, component.DefaultComponentDefVersion),
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(loadedImportPolaris.Patchers).To(Equal(migratedImportPolaris.Patchers))
@@ -183,9 +181,7 @@ var _ = Describe("Component patch migration", func() {
 	})
 
 	It("skips a one-sided definition persisted by the component store", func() {
-		store, err := component.NewComponentDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		Expect(store.Create(ctx, &component.ComponentDef{
+		Expect(store.Of(db, component.ComponentDefMeta).Create(ctx, &component.ComponentDef{
 			Name:     "PatchOnly",
 			Version:  component.DefaultComponentDefVersion,
 			Patchers: []string{"spec:\n  replicas: 1\n"},

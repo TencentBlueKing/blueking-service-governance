@@ -29,6 +29,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
 var managedWorkloadKinds = map[string]struct{}{
@@ -239,19 +240,8 @@ func (s *Service) resolveStrategyWorkloads(
 
 // resolveHelmWorkloads 从资源快照中提取当前 Helm 应用受管的 workload 名称列表。
 func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, trafficLaneName string) []string {
-	// 1. 没有快照存储时无法解析真实 workload，直接返回空让上层决定是否回退。
-	if s.snapshotStore == nil {
-		log.Warnf(
-			ctx,
-			"snapshot store is nil when resolving helm workloads, appID=%s env=%s lane=%s",
-			appID,
-			envName,
-			trafficLaneName,
-		)
-		return nil
-	}
-	// 2. 读取指定环境与泳道的资源快照，读取失败或快照缺失时返回空。
-	snapshot, err := s.snapshotStore.Get(ctx, appID, envName, trafficLaneName)
+	// 1. 读取指定环境与泳道的资源快照，读取失败或快照缺失时返回空，让上层决定是否回退。
+	snapshot, err := topology.FindSnapshot(ctx, s.snapshots, appID, envName, trafficLaneName)
 	if err != nil || snapshot == nil {
 		log.Warnf(
 			ctx,
@@ -264,7 +254,7 @@ func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, traf
 		)
 		return nil
 	}
-	// 3. 只保留受平台托管且属于工作负载类型的资源名称。
+	// 2. 只保留受平台托管且属于工作负载类型的资源名称。
 	workloads := make([]string, 0)
 	for _, resource := range snapshot.Resources {
 		if !resource.IsManaged {
@@ -275,7 +265,7 @@ func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, traf
 		}
 		workloads = append(workloads, resource.Name)
 	}
-	// 4. 对 workload 名称去重排序，保证下游同步结果稳定可复现。
+	// 3. 对 workload 名称去重排序，保证下游同步结果稳定可复现。
 	workloads = lo.Uniq(workloads)
 	sort.Strings(workloads)
 	log.Infof(

@@ -70,12 +70,8 @@ type Handler struct {
 func New(registry *storereg.Registry) *Handler {
 	snapshotService := snapshot.NewService(registry.SnapshotStore, registry.DB, registry.AppStore)
 	return &Handler{
-		registry: registry,
-		persistMgr: customruntime.NewPersistManager(
-			registry.CustomRuntimeImageStore,
-			registry.DB,
-			snapshotService,
-		),
+		registry:   registry,
+		persistMgr: customruntime.NewPersistManager(registry.DB, snapshotService),
 	}
 }
 
@@ -214,7 +210,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 	// 创建应用后，异步为该应用初始化默认监控告警策略，应用部署后真正下发到监控平台
 	go func() {
 		bgCtx := context.WithoutCancel(ctx)
-		ws, wsErr := h.registry.WorkspaceStore.Get(bgCtx, app.WorkspaceID)
+		ws, wsErr := store.Of(h.registry.DB, workspace.Meta).Get(bgCtx, workspace.ByWorkspaceID(app.WorkspaceID))
 		if wsErr != nil {
 			log.Errorf(bgCtx, "get workspace %s for default alert strategies failed: %v", app.WorkspaceID, wsErr)
 			return
@@ -236,10 +232,9 @@ func (h *Handler) CreateApp(c *gin.Context) {
 			return
 		}
 		initErr := alertstrategy.NewService(
-			storereg.G().AlertStrategyStore,
+			storereg.G().DB,
 			storereg.G().EnvStore,
 			storereg.G().AppStore,
-			storereg.G().ResourceSnapshotStore,
 		).InitDefaultAlertStrategiesForApp(
 			bgCtx, app.WorkspaceID, app.ID, app.Name, auth.MustGetUser(ctx).ID, noticeGroupIDs,
 		)
@@ -867,7 +862,7 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(ctx, appcfg.DefsByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config file defs", app.Name)
 	}
-	if _, err := h.registry.AppConfigFileVersionStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileVersionMeta).DeleteMany(ctx, appcfg.VersionsByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config file versions", app.Name)
 	}
 
@@ -914,17 +909,16 @@ func (h *Handler) cleanupAlertStrategiesAsync(
 ) {
 	go func() {
 		bgCtx := context.WithoutCancel(ctx)
-		ws, err := h.registry.WorkspaceStore.Get(bgCtx, app.WorkspaceID)
+		ws, err := store.Of(h.registry.DB, workspace.Meta).Get(bgCtx, workspace.ByWorkspaceID(app.WorkspaceID))
 		if err != nil {
 			log.Errorf(bgCtx, "get workspace %s for app %s alert cleanup failed: %v", app.WorkspaceID, app.ID, err)
 			return
 		}
 
 		err = alertstrategy.NewService(
-			h.registry.AlertStrategyStore,
+			h.registry.DB,
 			h.registry.EnvStore,
 			h.registry.AppStore,
-			h.registry.ResourceSnapshotStore,
 		).DeleteByApp(bgCtx, ws, app.WorkspaceID, app.ID, operator)
 		if err != nil {
 			log.Errorf(bgCtx, "cleanup alert strategies for deleted app %s failed: %v", app.ID, err)

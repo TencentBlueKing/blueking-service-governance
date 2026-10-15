@@ -18,12 +18,14 @@
 
 package strategy
 
-import "go.uber.org/fx"
+import (
+	"go.uber.org/fx"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+)
 
 // FxModule provides alert strategy dependencies via uber fx.
 var FxModule = fx.Module("bkmonitor-alert-strategy",
-	fx.Provide(
-		NewStoreMongo,
-		NewService,
-	),
+	database.PrivateFxModule,
+	fx.Provide(NewService),
 )

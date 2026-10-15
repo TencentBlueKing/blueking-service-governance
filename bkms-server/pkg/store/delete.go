@@ -56,7 +56,7 @@ func (s *GenericStore[T]) DeleteIfExists(ctx context.Context, opts ...Opt) error
 // GetAndDelete 原子地删除匹配的一个文档并返回被删除的文档（已经过 Decode），可通过 Asc / Desc 指定删除哪一个；
 // 不存在时返回 NotFound 错误。适用于删除后仍需使用原文档的场景（如记录审计）。支持的选项：CondOpt、SortOpt
 func (s *GenericStore[T]) GetAndDelete(ctx context.Context, opts ...Opt) (*T, error) {
-	q, err := s.writeQuery("find and delete from", opts, getOpts)
+	q, err := s.writeQuery("find and delete from", opts, getAndDeleteOpts)
 	if err != nil {
 		return nil, err
 	}

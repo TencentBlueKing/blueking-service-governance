@@ -26,22 +26,19 @@ import (
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 var _ = Describe("Builtin ComponentDefs Tests", func() {
 	// The path containing test component definition files
 	const testCompsPath = "./assets/testcomps"
-	var compDefStore component.ComponentDefStore
+	var compDefStore *component.ComponentDefStore
 	var ctx context.Context
-	var err error
 
 	BeforeEach(func() {
-		compDefStore, err = component.NewComponentDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
+		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 		ctx = context.Background()
 	})
 
@@ -51,7 +48,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			Expect(err).To(Not(HaveOccurred()))
 
 			// Get the loaded component and verify its content
-			compDef, err := compDefStore.Get(ctx, "MemLimits", "v1.0.0")
+			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("MemLimits", "v1.0.0"))
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(compDef.Name).To(Equal("MemLimits"))
 			Expect(len(compDef.Properties)).To(Equal(2))
@@ -65,7 +62,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			compDef, err := compDefStore.Get(ctx, "VolumeConfigMap", "v1.0.0")
+			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("VolumeConfigMap", "v1.0.0"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(compDef.Specs).To(HaveLen(1))
 			Expect(component.ValidateFragmentTemplate(compDef.Specs[0])).To(Succeed())
@@ -91,7 +88,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			compDef, err := compDefStore.Get(ctx, "ImportPolaris", "v1.0.0")
+			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("ImportPolaris", "v1.0.0"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(compDef.Patchers).To(HaveLen(1))
 			Expect(compDef.Specs).To(HaveLen(2))

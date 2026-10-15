@@ -39,6 +39,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/chartbuildpoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	helmrepo "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/source"
 )
 
@@ -87,9 +88,7 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 		return
 	}
 
-	buildSvc := helmchartbuild.NewChartBuildService(
-		h.registry.DB, h.registry.HelmChartSemverCounterStore, h.registry.HelmChartBuildRecordStore,
-	)
+	buildSvc := helmchartbuild.NewChartBuildService(h.registry.DB)
 	result, err := buildSvc.ExecuteChartBuild(ctx, app, input.BumpType, rev)
 	if err != nil {
 		errCode := lo.Ternary(
@@ -153,7 +152,7 @@ func (h *Handler) GetHelmChartSemver(c *gin.Context) {
 		return
 	}
 
-	counter, err := h.registry.HelmChartSemverCounterStore.Get(ctx, app.ID)
+	counter, err := semver.Get(ctx, h.registry.DB, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get helm chart semver"))
 		return
@@ -286,8 +285,9 @@ func (h *Handler) ListHelmChartBuildRecords(c *gin.Context) {
 		return
 	}
 
-	records, total, err := h.registry.HelmChartBuildRecordStore.List(
-		ctx, app.ID, queryInput.Keyword, queryInput.Page, queryInput.PageSize,
+	page, err := store.Of(h.registry.DB, helmchartbuild.RecordMeta).ListPage(
+		ctx, queryInput.Page, queryInput.PageSize,
+		helmchartbuild.ByApp(app.ID), helmchartbuild.KeywordMatches(queryInput.Keyword), helmchartbuild.NewestFirst(),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
@@ -298,9 +298,9 @@ func (h *Handler) ListHelmChartBuildRecords(c *gin.Context) {
 
 	ginutils.OK(c, serializer.ListHelmChartBuildRecordsOutput{
 		Data: &serializer.PaginatedHelmChartBuildRecordOutputObjs{
-			Count: total,
+			Count: page.Total,
 			Results: lo.Map(
-				records,
+				page.Items,
 				func(record helmchartbuild.Record, _ int) *serializer.HelmChartBuildRecordOutputObj {
 					return new(serializer.HelmChartBuildRecordOutputObj).FromBuildRecord(record)
 				},
