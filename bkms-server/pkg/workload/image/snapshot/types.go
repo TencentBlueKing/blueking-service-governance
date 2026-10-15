@@ -33,6 +33,8 @@ const (
 	DetailSyncBatchSize = 10
 	// DetailSyncMaxConcurrency 最大并发同步数
 	DetailSyncMaxConcurrency = 3
+	// manifestCheckConcurrency 刷新时检查新增 tag manifest 的并发上限
+	manifestCheckConcurrency = 10
 )
 
 // 标签常量

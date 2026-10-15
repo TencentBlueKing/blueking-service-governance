@@ -26,6 +26,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -381,11 +382,16 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		return nil, errors.Wrap(err, "list all tags")
 	}
 
-	// 计算 diff：找出新增标签
+	// 计算 diff：找出新增标签。已在本地的 tag 不再 HEAD，避免每次刷新都按历史标签数打仓库。
 	localTagSet := set.NewStringSetWithValues(localTags)
 	newTags := lo.Filter(remoteTags, func(tag string, _ int) bool {
 		return !localTagSet.Has(tag)
 	})
+	// 删除后本地快照已清掉，tag 列表里残留的名字会被当成新增。manifest 已不存在的不写回。
+	newTags, err = newTagsWithManifest(ctx, client, info.RepoName, newTags)
+	if err != nil {
+		return nil, errors.Wrapf(err, "check manifests for %s", info.RepoName)
+	}
 
 	// 只对新增标签进行插入
 	var addedCount int64
@@ -452,4 +458,54 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		AddedTagCnt:   addedCount,
 		RemovedTagCnt: removedCount,
 	}, nil
+}
+
+// newTagsWithManifest 去掉新增 tag 中 manifest 已不存在的名字，并保持原顺序。
+// HEAD 出现非 404 错误时保留该 tag，避免仓库短暂不可用时丢掉新标签。
+func newTagsWithManifest(
+	ctx context.Context, client *registry.Client, repoName string, tags []string,
+) ([]string, error) {
+	if len(tags) == 0 {
+		return tags, nil
+	}
+
+	keep := make([]bool, len(tags))
+	headFailures := make([]string, len(tags))
+	g := new(errgroup.Group)
+	g.SetLimit(manifestCheckConcurrency)
+	for i, tag := range tags {
+		g.Go(func() error {
+			err := client.HeadManifest(ctx, repoName, tag)
+			if err != nil && registry.IsTagNotFound(err) {
+				log.Infof(ctx, "skip new tag %s:%s because the remote manifest is gone", repoName, tag)
+				return nil
+			}
+			if err != nil {
+				headFailures[i] = tag
+			}
+			keep[i] = true
+			return nil
+		})
+	}
+	_ = g.Wait()
+	if failed := lo.Filter(headFailures, func(tag string, _ int) bool { return tag != "" }); len(failed) > 0 {
+		log.Errorf(
+			ctx,
+			"head manifest failed for %d new tags of %s, keep them: %s",
+			len(failed),
+			repoName,
+			strings.Join(failed, ", "),
+		)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Wrap(err, "check manifests of new tags")
+	}
+
+	present := make([]string, 0, len(tags))
+	for i, tag := range tags {
+		if keep[i] {
+			present = append(present, tag)
+		}
+	}
+	return present, nil
 }

@@ -21,10 +21,12 @@ package tagdeletion
 import (
 	"context"
 	stderrors "errors"
+	"net/http"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	pkgerrors "github.com/pkg/errors"
@@ -204,6 +206,36 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(deletedRepoName).To(Equal(fixture.repoName))
 		Expect(deletedTag).To(Equal(fixture.inUseTag))
+
+		snapshots, total, err := snapshotStore.ListByRepoKey(ctx, fixture.repoKey, "", 1, 10)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(total).To(BeEquivalentTo(1))
+		Expect(snapshots).To(HaveLen(1))
+		Expect(snapshots[0].Tag).To(Equal(fixture.safeToDeleteTag))
+
+		isPromoted, err := promotionStore.IsTagPromoted(ctx, fixture.app.ID, fixture.repoKey, fixture.inUseTag)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(isPromoted).To(BeFalse())
+	})
+
+	It("should clear local records when the remote manifest is already gone", func() {
+		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, snapshotStore)
+		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
+
+		Expect(promotionStore.Upsert(ctx, fixture.app.ID, fixture.repoKey, fixture.inUseTag, "admin")).To(Succeed())
+
+		mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+		mockey.Mock((*registry.Client).DeleteTag).To(
+			func(_ *registry.Client, _ context.Context, _, _ string) error {
+				return pkgerrors.Wrap(
+					&transport.Error{StatusCode: http.StatusNotFound},
+					"head manifest",
+				)
+			},
+		).Build()
+
+		err := service.DeleteImageTag(ctx, fixture.app.ID, fixture.inUseTag)
+		Expect(err).NotTo(HaveOccurred())
 
 		snapshots, total, err := snapshotStore.ListByRepoKey(ctx, fixture.repoKey, "", 1, 10)
 		Expect(err).NotTo(HaveOccurred())
