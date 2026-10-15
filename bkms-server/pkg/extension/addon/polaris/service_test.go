@@ -31,6 +31,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -58,7 +59,6 @@ var _ = Describe("PolarisConfigService", func() {
 		scopedEnvVarStore envvars.ScopedEnvVarStore
 		appDepsVarReader  *depenvvars.Reader
 		polarisVarReader  *polarisenvvars.Reader
-		depSvcStore       depsvcmodel.ServiceStore
 		depSvcInstStore   depsvcmodel.ServiceInstanceStore
 		envStateManager   *polaris.PolarisEnvStateManager
 		service           *polaris.PolarisConfigService
@@ -90,7 +90,6 @@ var _ = Describe("PolarisConfigService", func() {
 				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
-				&depSvcStore,
 				&depSvcInstStore,
 				&envStateManager,
 			),
@@ -99,7 +98,7 @@ var _ = Describe("PolarisConfigService", func() {
 
 		service = polaris.NewPolarisConfigService(
 			store,
-			polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+			polaris.NewPolarisPlatformManager(testutil.NewDB(GinkgoT()), depSvcInstStore, store),
 			envStateManager,
 			envStore,
 			appModelStore,
@@ -461,7 +460,7 @@ var _ = Describe("PolarisConfigService", func() {
 				enqueued := 0
 				service = polaris.NewPolarisConfigService(
 					store,
-					polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+					polaris.NewPolarisPlatformManager(testutil.NewDB(GinkgoT()), depSvcInstStore, store),
 					envStateManager,
 					envStore,
 					appModelStore,
@@ -584,7 +583,7 @@ var _ = Describe("PolarisConfigService", func() {
 				enqueued := 0
 				service = polaris.NewPolarisConfigService(
 					store,
-					polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+					polaris.NewPolarisPlatformManager(testutil.NewDB(GinkgoT()), depSvcInstStore, store),
 					envStateManager,
 					envStore,
 					appModelStore,

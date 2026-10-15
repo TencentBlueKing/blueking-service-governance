@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -14,6 +15,7 @@ import (
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
@@ -21,7 +23,8 @@ import (
 var _ = Describe("Application default resolution", func() {
 	var ctx context.Context
 	var diApp *fxtest.App
-	var ruleStore appdefaults.RuleStore
+	var ruleStore *appdefaults.RuleStore
+	var db *mongo.Database
 	var envService *bkmsenv.EnvService
 	var envStore envmodel.EnvironmentStore
 	var workspaceStore bkmsworkspace.WorkspaceStore
@@ -34,12 +37,13 @@ var _ = Describe("Application default resolution", func() {
 
 		diApp = fxtest.New(
 			GinkgoT(),
-			appdefaults.FxModule,
 			bkmsenv.FxModule,
 			bkmsworkspace.FxModule,
-			fx.Populate(&ruleStore, &envService, &envStore, &workspaceStore),
+			fx.Populate(&envService, &envStore, &workspaceStore),
 		)
 		diApp.RequireStart()
+		db = testutil.NewDB(GinkgoT())
+		ruleStore = store.Of(db, appdefaults.RuleMeta)
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
 	})
 
@@ -54,7 +58,7 @@ var _ = Describe("Application default resolution", func() {
 	})
 
 	It("uses platform defaults without persisting rules", func() {
-		resolved, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-without-rules")
+		resolved, err := appdefaults.Resolve(ctx, db, envStore, workspace.ID, "app-without-rules")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Default.AppID).To(Equal("app-without-rules"))
 		Expect(resolved.Default.EnvName).To(Equal(appspec.DefaultEnvName))
@@ -62,7 +66,7 @@ var _ = Describe("Application default resolution", func() {
 		Expect(*resolved.Default.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
 		Expect(resolved.Environments).To(BeEmpty())
 
-		persisted, err := ruleStore.List(ctx, workspace.ID)
+		persisted, err := ruleStore.List(ctx, appdefaults.ByWorkspace(workspace.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persisted).To(BeEmpty())
 	})
@@ -75,7 +79,7 @@ var _ = Describe("Application default resolution", func() {
 		Expect(ruleStore.Create(ctx, resourcesRule(workspace.ID, "production"))).To(Succeed())
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "production", true))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-combined-defaults")
+		resolved, err := appdefaults.Resolve(ctx, db, envStore, workspace.ID, "app-combined-defaults")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(1))
 		spec := resolved.Environments[0]
@@ -100,7 +104,7 @@ var _ = Describe("Application default resolution", func() {
 		})
 		Expect(ruleStore.Create(ctx, devModeRule(workspace.ID, "production", true))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-matching-envs")
+		resolved, err := appdefaults.Resolve(ctx, db, envStore, workspace.ID, "app-matching-envs")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(2))
 
@@ -129,7 +133,7 @@ var _ = Describe("Application default resolution", func() {
 		})
 		Expect(ruleStore.Create(ctx, resourcesRule(workspace.ID, "production", "staging"))).To(Succeed())
 
-		resolved, err := appdefaults.Resolve(ctx, ruleStore, envStore, workspace.ID, "app-multi-env-types")
+		resolved, err := appdefaults.Resolve(ctx, db, envStore, workspace.ID, "app-multi-env-types")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resolved.Environments).To(HaveLen(2))
 

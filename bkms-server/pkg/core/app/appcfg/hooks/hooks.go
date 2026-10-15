@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -36,12 +37,12 @@ const CleanupPlainEnvInstancesHookName = "appcfg.cleanup_plain_env_instances"
 func RegisterDeleteHooks(
 	appStore bkmsapp.ApplicationStore,
 	fileStore appcfg.AppConfigFileStore,
-	defStore appcfg.AppConfigFileDefStore,
+	db *mongo.Database,
 	versionStore appcfg.AppConfigFileVersionStore,
 ) {
 	bkmsenv.RegisterDeleteHook(
 		CleanupPlainEnvInstancesHookName,
-		NewCleanupPlainEnvInstancesHook(appStore, fileStore, defStore, versionStore),
+		NewCleanupPlainEnvInstancesHook(appStore, fileStore, db, versionStore),
 	)
 }
 
@@ -49,7 +50,7 @@ func RegisterDeleteHooks(
 func NewCleanupPlainEnvInstancesHook(
 	appStore bkmsapp.ApplicationStore,
 	fileStore appcfg.AppConfigFileStore,
-	defStore appcfg.AppConfigFileDefStore,
+	db *mongo.Database,
 	versionStore appcfg.AppConfigFileVersionStore,
 ) bkmsenv.DeleteHook {
 	return func(ctx context.Context, environment envmodel.Environment) error {
@@ -69,7 +70,7 @@ func NewCleanupPlainEnvInstancesHook(
 			}
 		}
 
-		cfgService := appcfg.NewAppConfigFileService(fileStore, defStore, versionStore)
+		cfgService := appcfg.NewAppConfigFileService(fileStore, db, versionStore)
 		for _, appID := range appIDs {
 			if err := cfgService.CleanupPlainEnvInstancesByEnv(ctx, appID, environment.Name); err != nil {
 				return errors.Wrapf(err, "cleanup plain env instances for app %s env %s", appID, environment.Name)

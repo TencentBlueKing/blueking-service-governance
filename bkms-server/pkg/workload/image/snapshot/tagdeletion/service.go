@@ -27,10 +27,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"golang.org/x/sync/errgroup"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -38,6 +38,7 @@ import (
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	trafficMgr "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -59,8 +60,8 @@ var ErrImageRepoAuthRequired = errors.New("image repository authentication requi
 // Service 提供镜像占用检查与镜像删除能力
 type Service struct {
 	snapshotStore         snapshot.SnapshotStore
-	promotionStore        promotion.PromotionStore
-	buildConfigStore      build.ConfigStore
+	db                    *mongo.Database
+	promotions            *promotion.Store
 	appStore              bkmsapp.ApplicationStore
 	envStore              envmodel.EnvironmentStore
 	appModelDeployStore   appmodeldeploy.RecordStore
@@ -70,8 +71,7 @@ type Service struct {
 // NewService 创建删除服务。
 func NewService(
 	snapshotStore snapshot.SnapshotStore,
-	promotionStore promotion.PromotionStore,
-	buildConfigStore build.ConfigStore,
+	db *mongo.Database,
 	appStore bkmsapp.ApplicationStore,
 	envStore envmodel.EnvironmentStore,
 	appModelDeployStore appmodeldeploy.RecordStore,
@@ -79,8 +79,8 @@ func NewService(
 ) *Service {
 	return &Service{
 		snapshotStore:         snapshotStore,
-		promotionStore:        promotionStore,
-		buildConfigStore:      buildConfigStore,
+		db:                    db,
+		promotions:            store.Of(db, promotion.Meta),
 		appStore:              appStore,
 		envStore:              envStore,
 		appModelDeployStore:   appModelDeployStore,
@@ -91,7 +91,7 @@ func NewService(
 // DeleteImageTag 删除指定应用下的镜像标签，并同步清理本地记录
 // 该接口不再额外校验镜像标签是否仍被当前工作负载引用，直接删除，如遇到问题直接抛出错误
 func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
-	repoResolver := snapshot.NewService(s.snapshotStore, s.buildConfigStore, s.appStore)
+	repoResolver := snapshot.NewService(s.snapshotStore, s.db, s.appStore)
 	info, err := repoResolver.ResolveRepoKeyForApp(ctx, appID)
 	if err != nil {
 		return errors.Wrapf(err, "resolve repo key for app %s", appID)
@@ -113,7 +113,7 @@ func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
 	if _, err = s.snapshotStore.DeleteByRepoKeyAndTag(ctx, info.RepoKey, tag); err != nil {
 		return errors.Wrapf(err, "delete local snapshot %s:%s", info.RepoKey, tag)
 	}
-	if err = s.promotionStore.DeleteTag(ctx, appID, info.RepoKey, tag); err != nil {
+	if err = s.promotions.DeleteIfExists(ctx, promotion.ByTag(appID, info.RepoKey, tag)); err != nil {
 		return errors.Wrapf(err, "delete promotion %s:%s", info.RepoKey, tag)
 	}
 	return nil

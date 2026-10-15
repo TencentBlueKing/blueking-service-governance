@@ -33,6 +33,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -59,9 +60,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 		appModelStore     appmodel.AppModelStore
 		appSpecStore      appspec.AppSpecStore
 		scopedEnvVarStore envvars.ScopedEnvVarStore
-		depSvcStore       depsvcmodel.ServiceStore
 		depSvcInstStore   depsvcmodel.ServiceInstanceStore
-		depSvcBindStore   depsvcmodel.ServiceBindingStore
 		envStateManager   *polaris.PolarisEnvStateManager
 		service           *polaris.PolarisConfigService
 		app               *bkmsapp.Application
@@ -88,9 +87,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 				&appModelStore,
 				&appSpecStore,
 				&scopedEnvVarStore,
-				&depSvcStore,
 				&depSvcInstStore,
-				&depSvcBindStore,
 				&envStateManager,
 			),
 		)
@@ -103,7 +100,7 @@ var _ = Describe("Polaris dynamic apply task", func() {
 			AppSpecStore:       appSpecStore,
 			ScopedEnvVarStore:  scopedEnvVarStore,
 			PolarisConfigStore: store,
-			AppDepsVarReader:   depenvvars.NewReader(depSvcInstStore, depSvcBindStore),
+			AppDepsVarReader:   depenvvars.NewReader(depSvcInstStore, testutil.NewDB(GinkgoT())),
 			PolarisVarReader:   polarisenvvars.NewReader(store),
 		}
 		registryMock := mockey.Mock(storereg.G).Return(registry).Build()
@@ -111,14 +108,14 @@ var _ = Describe("Polaris dynamic apply task", func() {
 
 		service = polaris.NewPolarisConfigService(
 			store,
-			polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+			polaris.NewPolarisPlatformManager(testutil.NewDB(GinkgoT()), depSvcInstStore, store),
 			envStateManager,
 			envStore,
 			appModelStore,
 			appSpecStore,
 			envvars.NewUnifiedEnvVarsReader(
 				scopedEnvVarStore,
-				depenvvars.NewReader(depSvcInstStore, depSvcBindStore),
+				depenvvars.NewReader(depSvcInstStore, testutil.NewDB(GinkgoT())),
 				polarisenvvars.NewReader(store),
 			),
 			Enqueue,

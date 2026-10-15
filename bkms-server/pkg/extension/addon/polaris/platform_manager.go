@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice"
@@ -36,6 +37,7 @@ import (
 	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const (
@@ -72,19 +74,19 @@ type UpdateServiceParams struct {
 
 // PolarisPlatformManager 北极星平台服务管理器，封装创建和删除能力
 type PolarisPlatformManager struct {
-	svcStore           depsvcmodel.ServiceStore
+	db                 *mongo.Database
 	instStore          depsvcmodel.ServiceInstanceStore
 	polarisConfigStore PolarisConfigStore
 }
 
 // NewPolarisPlatformManager 创建北极星平台管理器。
 func NewPolarisPlatformManager(
-	svcStore depsvcmodel.ServiceStore,
+	db *mongo.Database,
 	instStore depsvcmodel.ServiceInstanceStore,
 	polarisConfigStore PolarisConfigStore,
 ) *PolarisPlatformManager {
 	return &PolarisPlatformManager{
-		svcStore:           svcStore,
+		db:                 db,
 		instStore:          instStore,
 		polarisConfigStore: polarisConfigStore,
 	}
@@ -101,7 +103,7 @@ func (m *PolarisPlatformManager) CreateService(
 	}
 
 	// 按需创建 ServiceManager
-	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
+	svcMgr := depservice.New(m.db, m.instStore, nil)
 
 	var metadata map[string]string
 	if params.EnableWeightFactor {
@@ -164,7 +166,7 @@ func (m *PolarisPlatformManager) DeleteService(
 	}
 
 	// 按需创建 ServiceManager
-	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
+	svcMgr := depservice.New(m.db, m.instStore, nil)
 
 	if err := svcMgr.DeleteServiceInstance(ctx, params.ServiceInstanceID); err != nil {
 		return errors.Wrap(err, "delete polaris service instance")
@@ -179,7 +181,7 @@ func (m *PolarisPlatformManager) UpdateService(
 	config *PolarisConfig,
 	params *UpdateServiceParams,
 ) error {
-	svcMgr := depservice.New(m.svcStore, m.instStore, nil, nil)
+	svcMgr := depservice.New(m.db, m.instStore, nil)
 	if err := svcMgr.UpdateServiceInstance(ctx, config.DepSvcInstID, toPolarisUpdateParams(params)); err != nil {
 		return errors.Wrap(err, "update polaris service")
 	}
@@ -332,7 +334,7 @@ func (m *PolarisPlatformManager) extractToken(inst *depsvcmodel.ServiceInstance)
 }
 
 func (m *PolarisPlatformManager) importedProvider(ctx context.Context) (*polarisprovider.Provider, error) {
-	svc, err := m.svcStore.Get(ctx, depprovider.ServiceNamePolaris)
+	svc, err := store.Of(m.db, depsvcmodel.ServiceMeta).Get(ctx, depsvcmodel.ByName(depprovider.ServiceNamePolaris))
 	if err != nil {
 		return nil, errors.Wrap(err, "get polaris dependency service")
 	}

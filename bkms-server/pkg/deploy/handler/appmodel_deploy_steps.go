@@ -139,16 +139,15 @@ func (h *Handler) newDeployPreChecker() *deploypkg.DeployPreChecker {
 		h.registry.WorkspaceStore,
 		h.registry.PolarisConfigStore,
 		h.registry.HostPortStore,
-		h.registry.BscpCfgStore,
 		h.registry.AppModelStore,
 		h.registry.AppSpecStore,
-		h.registry.BuildConfigStore,
+		h.registry.DB,
 		h.newMountableFileProvider(),
 	)
 	return deploypkg.NewDeployPreChecker(
 		h.registry.AppModelStore,
 		builderService,
-		h.registry.ClusterAddonDefStore,
+		h.registry.DB,
 	)
 }
 
@@ -460,32 +459,27 @@ func (h *Handler) latestAppModelDeployStatus(
 // newAppModelDeployService 创建 AppModel 部署编排服务
 func (h *Handler) newAppModelDeployService() (*appmodeldeploysvc.Service, error) {
 	reg := h.registry
-	snapshotService := snapshot.NewService(reg.SnapshotStore, reg.BuildConfigStore, reg.AppStore)
+	snapshotService := snapshot.NewService(reg.SnapshotStore, reg.DB, reg.AppStore)
 
 	return appmodeldeploysvc.NewService(appmodeldeploysvc.ServiceDeps{
+		DB:                                  reg.DB,
 		AppStore:                            reg.AppStore,
 		EnvStore:                            reg.EnvStore,
-		PromotionStore:                      reg.PromotionStore,
 		SnapshotService:                     snapshotService,
 		AppModelStore:                       reg.AppModelStore,
 		WorkspaceStore:                      reg.WorkspaceStore,
-		ImageRegistryStore:                  reg.ImageRegistryStore,
 		ScopedEnvVarStore:                   reg.ScopedEnvVarStore,
 		AppDepsVarReader:                    reg.AppDepsVarReader,
 		PolarisVarReader:                    reg.PolarisVarReader,
 		WorkspaceCompsStore:                 reg.WorkspaceCompsStore,
 		PolarisConfigStore:                  reg.PolarisConfigStore,
 		HostPortStore:                       reg.HostPortStore,
-		BscpCfgStore:                        reg.BscpCfgStore,
 		AppSpecStore:                        reg.AppSpecStore,
-		BuildConfigStore:                    reg.BuildConfigStore,
 		BuildAutoDeployRecordStore:          reg.BuildAutoDeployRecordStore,
 		AppModelDeployRecordStore:           reg.AppModelDeployRecordStore,
 		AppModelDeployResourceSnapshotStore: reg.AppModelDeployResourceSnapshotStore,
 		AppConfigFileStore:                  reg.AppConfigFileStore,
-		AppConfigFileDefStore:               reg.AppConfigFileDefStore,
 		AppConfigFileVersionStore:           reg.AppConfigFileVersionStore,
-		ClusterAddonDefStore:                reg.ClusterAddonDefStore,
 	})
 }
 
@@ -504,14 +498,13 @@ func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer
 			h.registry.WorkspaceStore,
 			h.registry.PolarisConfigStore,
 			h.registry.HostPortStore,
-			h.registry.BscpCfgStore,
 			h.registry.AppModelStore,
 			h.registry.AppSpecStore,
-			h.registry.BuildConfigStore,
+			h.registry.DB,
 			h.newMountableFileProvider(),
 		),
 		h.registry.AppSpecStore,
-		h.registry.BuildConfigStore,
+		h.registry.DB,
 		h.registry.AppConfigFileStore,
 		polaris.NewPolarisEnvStateManager(h.registry.PolarisConfigStore),
 		hostport.NewEnvStateManager(h.registry.HostPortStore),

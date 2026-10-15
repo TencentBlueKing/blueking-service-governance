@@ -85,7 +85,7 @@ func (h *Handler) bindOptionalJSON(c *gin.Context, obj any) error {
 
 // newSnapshotService 创建镜像快照服务，用于 Helm 部署前检查镜像晋级状态
 func (h *Handler) newSnapshotService() *snapshot.Service {
-	return snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	return snapshot.NewService(h.registry.SnapshotStore, h.registry.DB, h.registry.AppStore)
 }
 
 // genDeployInfo 生成部署信息（用于日志输出标识部署详情）

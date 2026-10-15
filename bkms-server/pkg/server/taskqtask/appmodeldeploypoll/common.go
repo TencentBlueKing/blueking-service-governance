@@ -241,7 +241,7 @@ func resolveApmServiceName(
 	}
 	cfgProvider := appcfg.NewMountableFileProvider(
 		reg.AppConfigFileStore,
-		reg.AppConfigFileDefStore,
+		reg.DB,
 		reg.AppConfigFileVersionStore,
 	)
 	frameworkFile, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)

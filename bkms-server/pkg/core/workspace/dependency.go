@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -120,7 +121,7 @@ func CreateExternalImageRegistry(
 	ctx context.Context,
 	workspaceID string,
 	bkciProjectID string,
-	store bkmsreg.ImageRegistryStore,
+	db *mongo.Database,
 	registry, username, password string,
 ) error {
 	if registry == "" || username == "" || password == "" {
@@ -147,7 +148,7 @@ func CreateExternalImageRegistry(
 		Password:         password,
 		BkCICredentialID: credID,
 	}
-	if _, err = store.Create(ctx, imageReg); err != nil {
+	if err = store.Of(db, bkmsreg.ImageRegistryMeta).Create(ctx, imageReg); err != nil {
 		return errors.Wrap(err, "create image registry")
 	}
 	return nil

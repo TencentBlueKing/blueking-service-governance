@@ -26,6 +26,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -33,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // 快照陈旧阈值
@@ -45,21 +47,22 @@ const (
 
 // Service 镜像快照服务
 type Service struct {
-	snapshotStore    SnapshotStore
-	buildConfigStore build.ConfigStore
-	appStore         bkmsapp.ApplicationStore
+	snapshotStore SnapshotStore
+	db            *mongo.Database
+	appStore      bkmsapp.ApplicationStore
 }
 
-// NewService 创建 Service 实例
+// NewService 创建 Service 实例。db 与 appStore 仅用于解析应用 / 工作空间的镜像仓库信息，
+// 只按镜像仓库名称解析（ResolveRepoKeyForRepository）时可以为 nil
 func NewService(
 	snapshotStore SnapshotStore,
-	buildConfigStore build.ConfigStore,
+	db *mongo.Database,
 	appStore bkmsapp.ApplicationStore,
 ) *Service {
 	return &Service{
-		snapshotStore:    snapshotStore,
-		buildConfigStore: buildConfigStore,
-		appStore:         appStore,
+		snapshotStore: snapshotStore,
+		db:            db,
+		appStore:      appStore,
 	}
 }
 
@@ -95,12 +98,12 @@ func (s *Service) ResolveRepoKeyForApp(
 		return nil, errors.Wrapf(err, "get app %s", appID)
 	}
 
-	cfg, err := s.buildConfigStore.Get(ctx, app.ID)
+	cfg, err := store.Of(s.db, build.ConfigMeta).Get(ctx, build.ByApp(app.ID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app %s build config", app.ID)
 	}
 
-	info, rErr := build.ResolveImageRepoInfo(ctx, cfg, app.WorkspaceID, app.Name)
+	info, rErr := build.ResolveImageRepoInfo(ctx, s.db, cfg, app.WorkspaceID, app.Name)
 	if rErr != nil {
 		return nil, errors.Wrap(rErr, "resolve image repo info")
 	}
@@ -133,7 +136,7 @@ func (s *Service) ResolveRepoKeyForWorkspace(
 		return nil, errors.New("image name is required")
 	}
 
-	reg, err := workspace.GetWorkspaceImageRegistry(ctx, workspaceID)
+	reg, err := workspace.GetWorkspaceImageRegistry(ctx, s.db, workspaceID)
 	if err != nil {
 		return nil, errors.Wrap(err, "get workspace image registry")
 	}

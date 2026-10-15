@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	workloadappmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -48,7 +50,7 @@ const maxConcurrentK8sRequests = 10
 // Service 组装应用部署总览。
 type Service struct {
 	envStore            envmodel.EnvironmentStore
-	gpaConfigStore      gpa.GPAConfigStore
+	gpaConfigs          *gpa.ConfigStore
 	gpaService          *gpa.GPAService
 	deployStatusService *deploystatus.DeployStatusService
 }
@@ -63,12 +65,12 @@ func NewService(
 	// helmDeployRecordStore 总览只处理 AppModel 类型应用，用不到 helm 记录，
 	// 但它是 deploystatus.NewDeployStatusService 的必需依赖，需原样透传。
 	helmDeployRecordStore helm.RecordStore,
-	gpaConfigStore gpa.GPAConfigStore,
+	db *mongo.Database,
 ) *Service {
 	return &Service{
-		envStore:       envStore,
-		gpaConfigStore: gpaConfigStore,
-		gpaService:     gpa.NewGPAService(appModelStore),
+		envStore:   envStore,
+		gpaConfigs: store.Of(db, gpa.ConfigMeta),
+		gpaService: gpa.NewGPAService(appModelStore),
 		deployStatusService: deploystatus.NewDeployStatusService(
 			appStore,
 			envStore,

@@ -109,6 +109,12 @@ func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
 	return &obj, nil
 }
 
+// GetByID 按 _id 获取文档，等价于 Get(ctx, ByID(id))；不存在时返回 NotFound 错误。
+// 需要附加范围条件时（如 _id 须属于某个工作空间）改用 Get 并组合 ByID 与其它条件
+func (s *GenericStore[T]) GetByID(ctx context.Context, id any) (*T, error) {
+	return s.Get(ctx, ByID(id))
+}
+
 // List 获取所有匹配的文档，可通过 Asc / Desc / Limit 指定排序与数量；无结果时返回空切片而非 nil。
 // 支持的选项：CondOpt、SortOpt、LimitOpt
 func (s *GenericStore[T]) List(ctx context.Context, opts ...Opt) ([]T, error) {

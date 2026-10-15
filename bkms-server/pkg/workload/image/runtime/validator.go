@@ -22,7 +22,9 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
@@ -31,18 +33,18 @@ var ErrRuntimeImageTagNotFound = errors.New("runtime image tag not found")
 
 // ImageReferenceValidator 校验运行时镜像引用与快照 tag 是否存在
 type ImageReferenceValidator struct {
-	runtimeImageStore Store
-	snapshotStore     snapshot.SnapshotStore
+	images        *Store
+	snapshotStore snapshot.SnapshotStore
 }
 
 // NewImageReferenceValidator 创建运行时镜像引用校验器
 func NewImageReferenceValidator(
-	runtimeImageStore Store,
+	db *mongo.Database,
 	snapshotStore snapshot.SnapshotStore,
 ) *ImageReferenceValidator {
 	return &ImageReferenceValidator{
-		runtimeImageStore: runtimeImageStore,
-		snapshotStore:     snapshotStore,
+		images:        store.Of(db, Meta),
+		snapshotStore: snapshotStore,
 	}
 }
 
@@ -60,15 +62,15 @@ func (v *ImageReferenceValidator) ValidateTaggedReference(
 	if v == nil {
 		return ref, errors.New("image reference validator is nil")
 	}
-	if v.runtimeImageStore == nil {
+	if v.images == nil {
 		return ref, errors.New("runtime image store is nil")
 	}
 	if v.snapshotStore == nil {
 		return ref, errors.New("snapshot store is nil")
 	}
 
-	if _, err = v.runtimeImageStore.GetByTypeAndName(ctx, imageType, ref.Name); err != nil {
-		return ref, err
+	if _, err = v.images.Get(ctx, ByTypeAndName(imageType, ref.Name)); err != nil {
+		return ref, errors.Wrapf(err, "get %s runtime image %s", imageType, ref.Name)
 	}
 
 	info, err := snapshot.NewService(v.snapshotStore, nil, nil).ResolveRepoKeyForRepository(ref.Name)

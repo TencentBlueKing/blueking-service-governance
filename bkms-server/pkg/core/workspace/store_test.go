@@ -28,8 +28,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	genericstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -372,8 +374,11 @@ func cleanupWorkspaceCollection(ctx context.Context) error {
 	return err
 }
 
+// registryUpdateFields 更新镜像仓库时允许修改的字段
+var registryUpdateFields = genericstore.UpdateSelected("registry", "username", "password", "bkCICredentialID")
+
 var _ = Describe("ImageRegistryStore", func() {
-	var store registry.ImageRegistryStore
+	var store *registry.ImageRegistryStore
 	var ctx context.Context
 
 	var workspaceID string
@@ -387,8 +392,7 @@ var _ = Describe("ImageRegistryStore", func() {
 		Expect(err).NotTo(HaveOccurred())
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
-		store, err = registry.NewImageRegistryStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		store = testutil.NewStore(GinkgoT(), registry.ImageRegistryMeta)
 
 		ctx = context.Background()
 		workspaceID = "workspace-" + stringx.Random(6)
@@ -412,20 +416,18 @@ var _ = Describe("ImageRegistryStore", func() {
 		}
 	})
 
-	Context("Create GetByWorkspaceAndType Update", func() {
+	Context("Create Get Update", func() {
 		It("should create, get and update image registry successfully", func() {
 			// Create registryA
-			registryAID, err := store.Create(ctx, &registryA)
+			err := store.Create(ctx, &registryA)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(registryAID).NotTo(Equal(bson.NilObjectID))
 
 			// Create registryB
-			registryBID, err := store.Create(ctx, &registryB)
+			err = store.Create(ctx, &registryB)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(registryBID).NotTo(Equal(bson.NilObjectID))
 
 			// List
-			regs, err := store.List(ctx, workspaceID)
+			regs, err := store.List(ctx, registry.ByWorkspace(workspaceID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(regs).To(HaveLen(2))
 			for _, reg := range regs {
@@ -438,7 +440,7 @@ var _ = Describe("ImageRegistryStore", func() {
 			}
 
 			// GetByWorkspaceAndType - registryA
-			reg, err := store.GetByWorkspaceAndType(ctx, workspaceID, registry.ImageRegistryTypeBuiltin)
+			reg, err := store.Get(ctx, registry.ByWorkspaceAndType(workspaceID, registry.ImageRegistryTypeBuiltin))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reg).NotTo(BeNil())
 			Expect(reg.WorkspaceID).To(Equal(workspaceID))
@@ -450,7 +452,7 @@ var _ = Describe("ImageRegistryStore", func() {
 			Expect(reg.BkCICredentialID).To(Equal(""))
 
 			// GetByWorkspaceAndType - registryB
-			reg, err = store.GetByWorkspaceAndType(ctx, workspaceID, registry.ImageRegistryTypeExternal)
+			reg, err = store.Get(ctx, registry.ByWorkspaceAndType(workspaceID, registry.ImageRegistryTypeExternal))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reg).NotTo(BeNil())
 			Expect(reg.WorkspaceID).To(Equal(workspaceID))
@@ -464,11 +466,16 @@ var _ = Describe("ImageRegistryStore", func() {
 			registryA.Registry = "gcr.io"
 			registryA.Username = "newUser"
 			registryA.Password = "newpassword"
-			err = store.Update(ctx, &registryA)
+			err = store.Update(
+				ctx,
+				&registryA,
+				registryUpdateFields,
+				registry.ByWorkspaceAndType(registryA.WorkspaceID, registryA.Type),
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get updated registryA
-			reg, err = store.GetByWorkspaceAndType(ctx, workspaceID, registry.ImageRegistryTypeBuiltin)
+			reg, err = store.Get(ctx, registry.ByWorkspaceAndType(workspaceID, registry.ImageRegistryTypeBuiltin))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reg.Registry).To(Equal("gcr.io"))
 			Expect(reg.Username).To(Equal("newUser"))
@@ -478,8 +485,9 @@ var _ = Describe("ImageRegistryStore", func() {
 
 	Context("Get Non-existent Registry", func() {
 		It("should return error when registry not found", func() {
-			reg, err := store.GetByWorkspaceAndType(
-				ctx, "non-existent-workspace", registry.ImageRegistryTypeBuiltin,
+			reg, err := store.Get(
+				ctx,
+				registry.ByWorkspaceAndType("non-existent-workspace", registry.ImageRegistryTypeBuiltin),
 			)
 			Expect(err).To(HaveOccurred())
 			Expect(reg).To(BeNil())
@@ -489,13 +497,13 @@ var _ = Describe("ImageRegistryStore", func() {
 	Context("Create Duplicate Registry", func() {
 		It("should return error when creating registry with duplicate workspaceID and type", func() {
 			// Create registryA
-			_, err := store.Create(ctx, &registryA)
+			err := store.Create(ctx, &registryA)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to create another registry with same workspaceID and type
 			duplicateRegistry := registryA
 			duplicateRegistry.Registry = "another-registry.com"
-			_, err = store.Create(ctx, &duplicateRegistry)
+			err = store.Create(ctx, &duplicateRegistry)
 			Expect(err).To(HaveOccurred())
 		})
 	})
@@ -505,7 +513,7 @@ var _ = Describe("ImageRegistryStore", func() {
 			workspace2ID := "workspace-" + stringx.Random(6)
 
 			// Create registry for workspace1
-			_, err := store.Create(ctx, &registryA)
+			err := store.Create(ctx, &registryA)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create registry for workspace2 with same type
@@ -516,16 +524,16 @@ var _ = Describe("ImageRegistryStore", func() {
 				Username:    "user2",
 				Password:    "pass2",
 			}
-			_, err = store.Create(ctx, &registry2)
+			err = store.Create(ctx, &registry2)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get registry for workspace1
-			reg1, err := store.GetByWorkspaceAndType(ctx, workspaceID, registry.ImageRegistryTypeBuiltin)
+			reg1, err := store.Get(ctx, registry.ByWorkspaceAndType(workspaceID, registry.ImageRegistryTypeBuiltin))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reg1.Registry).To(Equal("docker.io"))
 
 			// Get registry for workspace2
-			reg2, err := store.GetByWorkspaceAndType(ctx, workspace2ID, registry.ImageRegistryTypeBuiltin)
+			reg2, err := store.Get(ctx, registry.ByWorkspaceAndType(workspace2ID, registry.ImageRegistryTypeBuiltin))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reg2.Registry).To(Equal("quay.io"))
 		})
@@ -543,11 +551,11 @@ var _ = Describe("ImageRegistryStore", func() {
 				Password:    randomPassword,
 			}
 
-			_, err := store.Create(ctx, &registryWithPassword)
+			err := store.Create(ctx, &registryWithPassword)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get registry - password should be decrypted
-			reg, err := store.GetByWorkspaceAndType(ctx, workspaceID, registry.ImageRegistryTypeBuiltin)
+			reg, err := store.Get(ctx, registry.ByWorkspaceAndType(workspaceID, registry.ImageRegistryTypeBuiltin))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reg.Password).To(Equal(randomPassword))
 		})
@@ -563,11 +571,11 @@ var _ = Describe("ImageRegistryStore", func() {
 				BkCICredentialID: "credential-456",
 			}
 
-			_, err := store.Create(ctx, &registryWithoutPassword)
+			err := store.Create(ctx, &registryWithoutPassword)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get registry - password should remain empty
-			reg, err := store.GetByWorkspaceAndType(ctx, workspaceID, registry.ImageRegistryTypeBuiltin)
+			reg, err := store.Get(ctx, registry.ByWorkspaceAndType(workspaceID, registry.ImageRegistryTypeBuiltin))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reg.Password).To(Equal(""))
 			Expect(reg.BkCICredentialID).To(Equal("credential-456"))
@@ -589,7 +597,7 @@ var _ = Describe("ImageRegistryStore", func() {
 			// 记录原始值
 			originalRegistry := registry
 
-			_, err := store.Create(ctx, &registry)
+			err := store.Create(ctx, &registry)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 验证入参没有被修改
@@ -605,7 +613,7 @@ var _ = Describe("ImageRegistryStore", func() {
 
 		It("Update should not modify input parameter", func() {
 			// 先创建一个 registry
-			_, err := store.Create(ctx, &registryA)
+			err := store.Create(ctx, &registryA)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 准备更新数据
@@ -622,7 +630,12 @@ var _ = Describe("ImageRegistryStore", func() {
 			// 记录原始值
 			originalRegistry := updateRegistry
 
-			err = store.Update(ctx, &updateRegistry)
+			err = store.Update(
+				ctx,
+				&updateRegistry,
+				registryUpdateFields,
+				registry.ByWorkspaceAndType(updateRegistry.WorkspaceID, updateRegistry.Type),
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 验证入参没有被修改

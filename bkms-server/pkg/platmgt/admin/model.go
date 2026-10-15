@@ -35,9 +35,3 @@ type RoleBinding struct {
 	// Updater is the operator who last updated this administrator.
 	Updater string `bson:"updater" json:"updater"`
 }
-
-// ListOptions controls platform administrator list behavior.
-type ListOptions struct {
-	// Keyword fuzzy matches username case-insensitively.
-	Keyword string
-}

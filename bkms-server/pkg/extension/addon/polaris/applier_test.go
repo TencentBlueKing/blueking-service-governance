@@ -62,7 +62,6 @@ var _ = Describe("Polaris CR applier", func() {
 		scopedEnvVarStore envvars.ScopedEnvVarStore
 		appDepsVarReader  *depenvvars.Reader
 		polarisVarReader  *polarisenvvars.Reader
-		depSvcStore       depsvcmodel.ServiceStore
 		depSvcInstStore   depsvcmodel.ServiceInstanceStore
 		envStateManager   *polaris.PolarisEnvStateManager
 		service           *polaris.PolarisConfigService
@@ -93,7 +92,6 @@ var _ = Describe("Polaris CR applier", func() {
 				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
-				&depSvcStore,
 				&depSvcInstStore,
 				&envStateManager,
 			),
@@ -102,7 +100,7 @@ var _ = Describe("Polaris CR applier", func() {
 
 		service = polaris.NewPolarisConfigService(
 			store,
-			polaris.NewPolarisPlatformManager(depSvcStore, depSvcInstStore, store),
+			polaris.NewPolarisPlatformManager(testutil.NewDB(GinkgoT()), depSvcInstStore, store),
 			envStateManager,
 			envStore,
 			appModelStore,

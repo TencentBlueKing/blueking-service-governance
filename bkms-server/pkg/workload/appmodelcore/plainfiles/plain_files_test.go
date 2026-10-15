@@ -40,7 +40,7 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 	var ctx context.Context
 	var appStore bkmsapp.ApplicationStore
 	var store appcfg.AppConfigFileStore
-	var defStore appcfg.AppConfigFileDefStore
+	var defStore *appcfg.AppConfigFileDefStore
 	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
 	var provider appcfg.MountableFileProvider
@@ -60,12 +60,13 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &store, &defStore, &versionStore),
+			fx.Populate(&appStore, &store, &versionStore),
 		)
 		diApp.RequireStart()
+		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewMountableFileProvider(store, defStore, versionStore)
+		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()), versionStore)
 	})
 
 	AfterEach(func() {
@@ -73,13 +74,15 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 	})
 
 	createPlainDef := func(name, mountDir string) bson.ObjectID {
-		id, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+		def := &appcfg.AppConfigFileDef{
 			AppID:      app.ID,
 			Name:       name,
 			ConfigKind: appcfg.ConfigKindPlain,
 			MountDir:   mountDir,
 			Creator:    "tester",
-		})
+		}
+		err := defStore.Create(ctx, def)
+		id := def.ID
 		Expect(err).NotTo(HaveOccurred())
 		return id
 	}
@@ -100,14 +103,16 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 	}
 
 	createPlainDefWithRender := func(name, mountDir string, enableRender bool) bson.ObjectID {
-		id, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+		def := &appcfg.AppConfigFileDef{
 			AppID:              app.ID,
 			Name:               name,
 			ConfigKind:         appcfg.ConfigKindPlain,
 			MountDir:           mountDir,
 			EnableEnvVarRender: enableRender,
 			Creator:            "tester",
-		})
+		}
+		err := defStore.Create(ctx, def)
+		id := def.ID
 		Expect(err).NotTo(HaveOccurred())
 		return id
 	}

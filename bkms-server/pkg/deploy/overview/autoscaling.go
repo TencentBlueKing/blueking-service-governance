@@ -42,14 +42,11 @@ func (s *Service) listAutoscalingConfigsByEnv(
 	appID string,
 ) (map[string]*AutoscalingInfo, error) {
 	out := map[string]*AutoscalingInfo{}
-	configs, err := s.gpaConfigStore.ListByApp(ctx, appID)
+	configs, err := s.gpaConfigs.List(ctx, gpa.ByApp(appID))
 	if err != nil {
 		return nil, errors.Wrap(err, "list gpa configs")
 	}
 	for _, cfg := range configs {
-		if cfg == nil {
-			continue
-		}
 		out[cfg.EnvName] = &AutoscalingInfo{
 			Enabled:     cfg.Enabled,
 			CRName:      cfg.Name,

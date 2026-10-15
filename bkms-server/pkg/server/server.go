@@ -223,7 +223,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		v1,
 		bkmdashboardhandler.New(
 			storereg.G(),
-			bkmdashboard.NewService(storereg.G().AppDashboardStore),
+			bkmdashboard.NewService(storereg.G().DB),
 		),
 	)
 	clusteraddon.Register(v1, clusteraddonhandler.New(storereg.G()))
@@ -237,18 +237,18 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	user.Register(v1, user.New(storereg.G()))
 	admin.Register(
 		v1,
-		adminhandler.New(storereg.G().PlatAdminStore),
-		platmgt.RequirePlatformRole(storereg.G().PlatAdminStore, admin.RoleCodeAdmin),
+		adminhandler.New(storereg.G().DB),
+		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
 	)
 	platmgtworkspace.Register(
 		v1,
 		platmgtworkspacehandler.New(storereg.G()),
-		platmgt.RequirePlatformRole(storereg.G().PlatAdminStore, admin.RoleCodeAdmin),
+		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
 	)
 	platworkspaceadmin.Register(
 		v1,
 		platworkspaceadminhandler.New(storereg.G()),
-		platmgt.RequirePlatformRole(storereg.G().PlatAdminStore, admin.RoleCodeAdmin),
+		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
 	)
 
 	return r, nil

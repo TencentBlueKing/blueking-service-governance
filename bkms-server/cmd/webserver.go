@@ -105,7 +105,7 @@ func NewWebServerCmd() *cobra.Command {
 			workload.InitPlugin(
 				appcfg.NewMountableFileProvider(
 					reg.AppConfigFileStore,
-					reg.AppConfigFileDefStore,
+					reg.DB,
 					reg.AppConfigFileVersionStore,
 				),
 				reg.PolarisConfigStore,
@@ -122,7 +122,7 @@ func NewWebServerCmd() *cobra.Command {
 
 			// 加载内置集群 Addon 定义
 			// 与 ReloadPipelineTemplates 保持一致，避免绕过 shutdownAPM defer
-			if err = clusteraddon.ReloadBuiltinClusterAddons(cmd.Context()); err != nil {
+			if err = clusteraddon.ReloadBuiltinClusterAddons(cmd.Context(), reg.DB); err != nil {
 				log.Errorf(ctx, "failed to reload builtin cluster addons: %v", err)
 				return err
 			}

@@ -42,7 +42,7 @@ func New(registry *storereg.Registry) *Handler {
 func (h *Handler) newManager(c *gin.Context) (*svc.Manager, error) {
 	ctx := c.Request.Context()
 	user := auth.MustGetUser(ctx)
-	mgr, err := svc.NewManager(user, h.registry.BscpCfgStore)
+	mgr, err := svc.NewManager(user, h.registry.DB)
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create bscp cfg service manager")
 	}

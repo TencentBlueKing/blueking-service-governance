@@ -1,7 +1,7 @@
 # GenericStore：基于泛型的通用 Store
 
-> 状态：阶段 3 试点已完成，并据试点反馈做了两项调整（钩子改为切片、`store.Of` + 领域函数只接收 db），
-> 见「阶段 3 后续调整」；下一步是阶段 4，迁移剩余 A 类 Store。
+> 状态：阶段 4 已完成，A 类 Store 全部迁移（见「阶段 4 迁移结果」）；Update / Upsert 已统一为同一套字段语义（决策 13）；
+> 下一步是阶段 5（v1.1 能力 + B 类）。
 > 维护方式：每完成一个阶段，更新「进度跟踪」与对应章节，结论变化时直接改写正文，不追加流水账。
 
 ## 背景与目标
@@ -108,8 +108,8 @@ type Meta[T any] struct {
 	Duplicate  error  // 同上，对应 store.ErrDuplicate
 
 	// 钩子均可配置多个，按顺序执行
-	BeforeSave []func(*T) error // 作用于调用方对象：补默认值、校验；仅完整文档写入时执行
-	Encode     []func(*T) error // 作用于深拷贝：加密、序列化等；所有基于对象的写入都执行（含 UpdateFields）
+	BeforeSave []func(*T) error // 作用于调用方对象：补默认值、校验；仅完整文档写入时执行（不含 Update、传入 map 的 Upsert）
+	Encode     []func(*T) error // 作用于深拷贝：加密、序列化等；所有写入都执行，Update 传入的 map 也会先转换为 T
 	Decode     []func(*T) error // 作用于每条读出的记录：解密、反序列化等（Get / List）
 }
 
@@ -119,14 +119,21 @@ func New[T any](db *mongo.Database, meta Meta[T]) (*GenericStore[T], error) // �
 // 选项（Opt 接口，按用途分为不同类型，见决策 9）：多个过滤条件按 AND 合并
 func Where(field string, value any) CondOpt // 单字段条件，value 可以是 bson.M{"$gte": 1} 等操作符文档
 func Filter(m bson.M) CondOpt               // 一次传入多个条件，按 key 排序以保证生成的 filter 稳定
+func ByID(id any) CondOpt                   // 按 _id 匹配，id 类型须与模型 _id 字段一致（ObjectID 与 hex 串不能混用）
+func ContainsIgnoreCase(keyword, field string, moreFields ...string) CondOpt // 忽略大小写模糊匹配，多字段为 OR；
+                                            // keyword 去首尾空白、转义正则元字符，空白时不产生条件
 func All() CondOpt                          // 写操作显式声明作用于全部文档
-func Asc(field string) SortOpt / Desc(field string) SortOpt // 仅 Get / List 支持
+func Asc(field string) SortOpt / Desc(field string) SortOpt // 仅 Get / List / GetAndDelete 支持
 func Limit(n int64) LimitOpt                // 仅 List 支持
-func UnsetOmitted() UpsertOpt               // 仅 Upsert 支持：$unset 编码结果中缺失的模型字段
+// 以下仅 Update / Upsert 传入 *T 时支持，决定写入哪些字段（见决策 13）
+func UpdateSelected(fields ...string) UpdateOpt // 指定字段，"*" 表示全部顶层字段
+func UpdateOmit(fields ...string) UpdateOpt     // 从候选字段中去掉指定字段
+func UpdateNonZero() UpdateOpt                  // 只保留对象中值非零的字段
 func Combine(opts ...Opt) Opt               // 组合多个 Opt，供领域包定义 ByWorkspaceAndType 之类的复合条件
 
 // 读（不传条件即匹配全部）
 Get(ctx, opts ...Opt) (*T, error)                           // 未命中返回 NotFound；可配合 Desc 取最新一条
+GetByID(ctx, id any) (*T, error)                            // 等价于 Get(ctx, ByID(id))
 List(ctx, opts ...Opt) ([]T, error)                         // 无结果返回空切片
 Exists(ctx, opts ...Opt) (bool, error)
 Count(ctx, opts ...Opt) (int64, error)
@@ -134,23 +141,25 @@ Count(ctx, opts ...Opt) (int64, error)
 Create(ctx, obj *T) error                                   // 回填 _id 与时间戳
 CreateMany(ctx, objs []*T) error
 CreateManyIfAbsent(ctx, objs []*T) error                    // 跳过唯一键冲突的文档
-Update(ctx, set bson.M, opts ...Opt) error                  // $set + updatedAt，不经过钩子
-UpdateFields(ctx, obj *T, fields []string, opts ...Opt) error // 从 Encode 后的 obj 中取指定字段 $set
-Upsert(ctx, obj *T, opts ...Opt) (inserted bool, err error) // $set 编码出的字段 + $setOnInsert _id/createdAt；插入时回填二者
+Update(ctx, target any, opts ...Opt) error                  // target 为 map 或 *T（须带 UpdateOpt），经 Encode 后 $set / $unset
+Upsert(ctx, target any, opts ...Opt) (inserted bool, err error) // 同 Update，*T 默认全部顶层字段；未选中的字段放入 $setOnInsert
+var ErrNoFieldsToUpdate                                     // 没有任何待写入的字段（空 map、UpdateNonZero 时全为零值等）
 Replace(ctx, obj *T, opts ...Opt) error                     // 整体替换，保留原 _id；未命中返回 NotFound
 // 删
 Delete(ctx, opts ...Opt) error                              // 未命中返回 NotFound
 DeleteIfExists(ctx, opts ...Opt) error                      // 未命中静默成功
 DeleteMany(ctx, opts ...Opt) (int64, error)
+GetAndDelete(ctx, opts ...Opt) (*T, error)                  // 原子删除并返回被删文档（经过 Decode），可配合 Desc 指定删除哪条
 // 逃生口
 Collection() *mongo.Collection                              // 聚合、分页等未覆盖的查询
 
 // 计数器
 func NewCounter(db *mongo.Database, collection string) *Counter // Next(ctx, key) (int64, error)
 
-// fx
-store.FxModule          // 提供 *mongo.Database，一个 fx 应用只引入一次
-store.Provide(meta)     // 提供 *GenericStore[T]，启动时即构造，Meta 配置错误在启动阶段暴露
+// fx（见决策 10）
+database.PrivateFxModule // 功能模块内私有地提供 *mongo.Database（以及 client、库名），各模块可各自引入
+store.FxModule           // 向整个应用公开提供 *mongo.Database，一个 fx 应用只引入一次，主要供测试 Populate
+store.Provide(meta)      // 提供 *GenericStore[T]，启动时即构造，Meta 配置错误在启动阶段暴露
 ```
 
 自动维护的约定：
@@ -159,12 +168,13 @@ store.Provide(meta)     // 提供 *GenericStore[T]，启动时即构造，Meta �
   反射分析结果按模型类型缓存在进程内，`Of` / `New` 只在首次遇到某个模型时反射，之后的构造只是组装结构体。
 * `_id` 为零值时在写入前生成：`bson.ObjectID` 生成 ObjectID，string 生成 ObjectID 的 hex，其它类型交给 MongoDB。
 * Create 时 `createdAt` 为零值则取当前时间，`updatedAt` 与之相同；其余写操作刷新 `updatedAt`。
-* 写操作（Update / UpdateFields / Replace / Delete*）必须带条件，确需作用于全部文档时显式传 `store.All()`；
+* 写操作（Update / Replace / Delete*）必须带条件，确需作用于全部文档时显式传 `store.All()`；
   `Upsert` 在 obj 已有 `_id` 时会自动把它追加到过滤条件，因此此时可以不额外传条件；obj 的 `_id` 为零值时仍须传条件；
   每个操作只接受部分类型的 Opt（如 Limit 只用于 List），传入不支持的 Opt 直接报错，避免被静默忽略。
 * 同一字段出现在多个 Opt 中时（如 `Where("n", {"$gte": 1})` 与 `Where("n", {"$lte": 9})`）改用 `$and` 合并，不会互相覆盖。
-* `UpdateFields` 会校验字段路径是否存在于模型中；字段在编码结果中缺失（omitempty 的零值）时 `$unset`。
-字段名直接写 bson 字段名字符串，嵌套字段用 `"a.b"`；更新内容仍使用 driver 原生的 `bson.M`。
+* Update / Upsert 的字段必须存在于模型中，`_id` 与 `createdAt` 不能更新；字段在编码结果中缺失（omitempty 的零值）时 `$unset`。
+字段名可以写 bson 字段名或 Go 字段名（如 `"spec.color"` 与 `"Spec.Color"`），嵌套字段用 `"a.b"`；代码中优先写 bson 字段名。
+过滤、排序中模型不存在的字段原样保留，只有歧义（某一段既是一个字段的 bson key、又是另一个字段的 Go 字段名）时报错。
 领域包把常用条件定义为具名 Opt，调用方读起来接近原先的具名方法：
 
 ```go
@@ -184,13 +194,31 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 ```
 
 模型包的约定：导出 `XxxMeta`（索引说明注释写在 Meta 上方）、`type XxxStore = store.GenericStore[Xxx]` 类型别名、
-具名 Opt；业务哨兵错误保留原名，调用方的 `errors.Is` 无需改动。
+具名 Opt；业务哨兵错误保留原名，调用方的 `errors.Is` 无需改动。阶段 4 中沉淀的补充约定：
+
+* 按主键查询直接用 `GetByID`，其它操作用 `store.ByID`，不在模型包中定义只包装 `_id` 的具名 Opt（原 `appcfg.DefByID` 已删除）。
+  主键需要附加范围约束时（如 `appdefaults.ByID` 要求规则属于指定工作空间与配置类型，防止越权访问），
+  仍定义具名 Opt，并用 `store.Combine(..., store.ByID(id))` 组合。
+
+* 结构体校验（`validate.Struct`）、补默认名称等写入前处理放进 `BeforeSave`；只在「新建」时成立的默认值
+  （如 GPA 新建即启用）不放进钩子，而是由模型包的具名函数（`gpa.CreateConfig`）或调用方处理，避免 `Upsert` / `Replace` 时被误用。
+* 语义不平凡的操作提供接收单个 Store 的具名函数，例如「读出、合并、整体校验后再写回」的 `gpa.UpdateConfig`、
+  按自然键幂等 upsert 的 `promotion.Promote`、全量替换可变字段的 `appcfg.UpdateDef`（`UpdateSelected`）/ `build.UpdateConfig`（`UpdateOmit`）。
+  可变字段直接写在调用处的 UpdateOpt 中，不再单独定义字段列表变量。
+* 局部更新（PATCH 语义）直接用 `map[string]any` 表达待更新的字段，由 serializer 生成、经 service 传给 `Update`，
+  key 与值类型由 store 在写入前校验（见 bscpcfg 的 `PatchMetadataInput.ToUpdateFields`）。
+  networking、helm 组件、dashboard、gpa 中仍有历史遗留的 `XxxUpdateData.ToBSON()`，后续按同样方式收敛。
+* 可选过滤条件在入参为空时让具名 Opt 返回 nil，`parseOpts` 会跳过 nil；写操作仍会因缺少条件而报错，不会误作用于全量。
+  关键字模糊匹配直接用 `store.ContainsIgnoreCase`（空白关键字同样不产生条件），不再各自拼 `$regex` + `QuoteMeta`，
+  如 `runtime.KeywordMatches`、`admin.UsernameContains`。
+* 列表接口原先返回 `[]*T` 的，调用方需要时用 `lo.ToSlicePtr` 转换，不为此扩展 GenericStore。
 
 ## 决策记录
 
 1. **调用方面向什么接口**（已定）：调用方直接使用 `*GenericStore[T]`，不为每个模型定义 Store 接口。
    少数方法语义不平凡的场景（如「仅用于内置流水线」的更新），在模型包内提供具名函数或薄包装，而不是恢复整套领域接口。
-2. **字段名写法**（已定）：过滤、排序、更新直接用 `bson.M`，字段名只支持 bson 字段名字符串。
+2. **字段名写法**（决策 13 调整）：字段名仍是字符串，但除 bson 字段名外也接受 Go 字段名，由 `resolvePath` 按模型
+   逐段转换（bson key 优先、两者指向不同字段时报歧义），过滤、排序与更新共用；约定代码中优先写 bson 字段名。
    曾尝试过两种由结构体字段推导字段名的方案，均已放弃：类型化字段描述符（`store.Field[T, V]` + `FieldsOf`）语法偏重、
    需要为每个模型额外声明；基于探针实例取址反查的 `store.F(&store.Of[T]().Field)` 依赖内存地址与反射，机制隐晦、
    误用只能在运行时发现，收益不足以抵消理解成本。
@@ -227,14 +255,43 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 
    `OnDemand` 对空字符串直接返回（敏感字段未设置），其余情况调用传入的加解密函数并原样返回错误。
    曾实现过声明式方案（`Meta.Encrypted` 按 bson 路径声明字段 + `Cipher` 接口，`Update` 也能自动加密），
-   因按字段路径反射定位、校验路径形态、处理 `Update` 中父字段写入等逻辑过于复杂而撤回；代价是 `Update` 仍会绕过加密（见 API 回顾问题 1）。
+   因按字段路径反射定位、校验路径形态、处理 `Update` 中父字段写入等逻辑过于复杂而撤回。
+   原先的代价是 `Update` 会绕过加密，决策 13 中 `Update` 传入的 map 也会先转换为 T 再经过 Encode，该问题已不存在。
 9. **选项类型**（评审 Upsert 语义后确定）：`Opt` 是只能由 `pkg/store` 实现的接口，按用途分为 `CondOpt`（Where / Filter / All）、
-   `SortOpt`（Asc / Desc）、`LimitOpt`（Limit）、`UpsertOpt`（UnsetOmitted）。每个操作声明自己接受的类别，
+   `SortOpt`（Asc / Desc）、`LimitOpt`（Limit）、`UpdateOpt`（UpdateSelected / UpdateOmit / UpdateNonZero）。每个操作声明自己接受的类别，
    遇到其它类别（含 `Combine` 组合出的）时返回错误，取代原先散落在各处的「排序与 Limit 仅 Get / List 可用」判断；
    新增行为开关时只需新增类型并登记到对应的操作，其它操作不会被动接受它。
    仍保留统一的 `...Opt` 参数而非为每个操作定义不同的参数接口，好处是领域包的具名 Opt 可以返回 `store.Opt` 并自由组合，
    代价是不支持的选项只能在运行时发现（与决策 6 相同的取舍）。随之 `Get` 不再静默忽略 `Limit`。
-   `UnsetOmitted` 做成可选项而非默认行为：多数调用方传入的是完整对象，默认的 `$set` 已足够，且不会意外清掉库中由其它途径写入的字段。
+   原先的 `UpsertOpt`（`UnsetOmitted`）已由决策 13 的 `UpdateOpt` 取代。
+10. **fx 装配方式**（阶段 4 确定，取代阶段 2 的「`store.FxModule` 一个应用只引入一次、功能模块单测另外引入」）：
+    `database.PrivateFxModule` 额外以 `fx.Private` 提供 `*mongo.Database`，功能模块（如 `gpa.FxModule`）因此可以自包含地
+    构造接收 db 的 Service；`store.FxModule` 改为直接公开提供 db，只在需要 `fx.Populate` db 或在根上 `fx.Provide`
+    接收 db 的构造函数时（如 `deploy_precheck_test`）引入。已验证模块内私有的 db 与根上公开的 db 共存、嵌套模块各自私有均不冲突。
+    迁移后的功能模块不再提供被迁移的 Store（只剩 Store 的模块直接删除，如 promotion、networking、appdefaults），
+    测试统一用 `testutil.NewStore` / `testutil.NewDB` 获取。
+11. **类型化的 NotFound 错误**（阶段 4 确定）：depservice 以 `*NotFoundError` 类型 + `errors.As`（`AsNotFoundError`）判断未找到。
+    没有让 `storeError` 支持 `errors.As` 委托给业务错误，而是为迁移的模型新增哨兵 `ErrServiceNotFound` / `ErrBindingNotFound`
+    放进 Meta，并让 `AsNotFoundError` 同时识别这两个哨兵；仍保留自定义 Store 的 `ServiceInstance` 继续返回 `*NotFoundError`。
+12. **`GetAndDelete`**（阶段 4 新增，原计划在 v1.1）：`AppDefaultRule` 删除后需要被删文档写审计，
+    「先 `Get` 再 `Delete`」不是原子的，因此提供基于 `FindOneAndDelete` 的 `GetAndDelete`，支持 CondOpt 与 SortOpt。
+13. **Update / Upsert 统一语义**（阶段 4 后确定）：原先有三种更新入口——不经过钩子的 `Update(bson.M)`、
+    按字段列表取值的 `UpdateFields(obj, fields)`、只针对 Upsert 的 `UnsetOmitted()`，各自语义不同，`Update` 还会绕过加密。
+    现统一为「一个 T 对象 + 一组字段」：
+    * `Update` / `Upsert` 的 target 为 `map[string]any` 或 `*T`。map 的 key 即字段，值按字段类型赋给一个新的 T
+      （可直接赋值的直接赋值，否则借助 bson 转换，不整体做 bson 往返，以免 `map[string]any` 中的嵌套文档变成 `bson.D`）；
+      `*T` 的字段由 UpdateOpt 计算：候选为 `UpdateSelected` 指定的字段（未指定或 `"*"` 时为全部顶层字段），
+      去掉 `UpdateOmit` 的字段，再按 `UpdateNonZero` 过滤零值。
+    * 对象经过 Encode 后，字段存在的 `$set`、缺失的 `$unset`。`UnsetOmitted` 因此不再需要：`UpdateSelected("*")`
+      下 omitempty 的零值本来就会被 `$unset`。没有任何待写入字段时返回 `ErrNoFieldsToUpdate`。
+    * `Update` 传入 `*T` 时必须显式给出 UpdateOpt。没有采用「默认只更新非零值」：迁移前的 `*T` 调用方全都需要写入
+      false / 0 / 空值，非零默认会静默丢失这类修改；对 Upsert 还会导致 `ClusterAddonDef.UnsupportedOnFederation`
+      由 true 改为 false 时被跳过。
+    * `Upsert` 传入 `*T` 时默认 `"*"`，现有调用方的模型除 `_id` 外没有 omitempty 字段，行为不变。未被选中的字段放入
+      `$setOnInsert`，从而支持「不存在时插入完整文档，已存在时只更新部分字段」；过滤条件中的等值字段不放入
+      `$setOnInsert`（插入时由 MongoDB 取过滤条件中的值，避免被零值覆盖）；字段只能是顶层字段，避免与 `$setOnInsert` 冲突。
+    * BeforeSave 只在 `Upsert` 传入 `*T` 时执行：`Update` 的对象可能只填写了部分字段，传入 map 的 `Upsert`
+      事先无法知道是插入还是更新，校验类钩子都可能误判。
 
 ## 阶段 2 API 回顾
 
@@ -244,18 +301,17 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 
 需要在试点前确认的问题：
 
-1. **`Update` 绕过 `Encode`，会写入明文**：涉及加密字段的更新必须使用 `UpdateFields`；
-   目前试点模型中没有用 `Update` 写加密字段的调用方，靠评审与单测保证。
+1. ~~**`Update` 绕过 `Encode`，会写入明文**~~（已解决，决策 13）：传入的 map 会先转换为 T 再经过 Encode。
 2. ~~`Upsert` 无法区分插入还是更新~~（已解决）：改为返回 `(inserted bool, err error)`，插入时把 `_id`（取自 `UpsertedID`）
    与 `createdAt` 回填到 obj；更新时库中已有的值未知，obj 中的这两个字段保持不变。
 3. **`Replace` 原样写入 `obj.CreatedAt`**：传入零值会把创建时间覆盖为零。约定 `obj` 来自 `Get`；
    备选是在 `createdAt` 为零值时拒绝替换。
-4. **A 类中仍未覆盖的能力**：`AppDefaultRuleStore` 需要 `FindOneAndDelete`；B 类需要分页（`Skip` + `Count`）与投影。
-   计划在 v1.1 加入 `store.Skip(n)` 与 `GetAndDelete`，迁移到对应 Store 时再实现，避免预先设计。
-5. **fx 装配约束**：`store.FxModule` 一个应用只能引入一次，各功能模块只写 `store.Provide(meta)`；
-   功能模块的单测需要同时引入 `store.FxModule`。非 fx 代码通过 `store.Of(db, meta)` 取用（决策 7）。
-6. **字段名拼写错误**：字段名为纯字符串，`UpdateFields` 会按模型校验路径，但 filter、`Update`、排序中的拼写错误不会报错，
-   只会表现为查不到或写入多余字段，需要靠单测覆盖。
+4. **A 类中仍未覆盖的能力**：~~`AppDefaultRuleStore` 需要 `FindOneAndDelete`~~（阶段 4 已加入 `GetAndDelete`，决策 12）；
+   B 类需要分页（`Skip` + `Count`）与投影，计划在 v1.1 加入 `store.Skip(n)`，迁移到对应 Store 时再实现，避免预先设计。
+   `Promotion` 的「只取 tag 列表」原先用投影，A 类迁移中改为 `List` 后取字段，记录很小，暂不需要投影。
+5. ~~**fx 装配约束**~~：已由决策 10 取代。
+6. **字段名拼写错误**：字段名为纯字符串，`Update` / `Upsert` 会按模型校验字段，但 filter、排序中的拼写错误不会报错
+   （需要兼容模型中已删除的旧字段），只会表现为查不到，需要靠单测覆盖。
 
 确认无问题的部分：错误同时匹配通用与业务哨兵、`errors.As` 仍可取到驱动原始错误；每个模型只需一个 `Meta` 变量即可接入。
 
@@ -266,7 +322,7 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 | 1 | 扫描全部 Store，分类并评估覆盖率 | ✅ 已完成 |
 | 2 | 实现 `pkg/store` GenericStore v1、Counter、fx 集成，基于真实 DB 的单测 | ✅ 已完成 |
 | 3 | 试点：bkrepo ×2、bkci ×4、HelmRepoCredential（覆盖加解密 hook 路径）；`build/trigger` 暂缓 | ✅ 已完成（见下节） |
-| 4 | 迁移剩余 A 类，引用多的（BuildConfig、AppConfigFileDef）放最后 | 未开始 |
+| 4 | 迁移剩余 A 类，引用多的（BuildConfig、AppConfigFileDef）放最后 | ✅ 已完成（见下节） |
 | 5 | v1.1：分页、投影、FindOneAndUpdate；迁移 B 类 | 未开始 |
 | 6 | Registry 收敛；评估 C 类内嵌 GenericStore 复用基础 CRUD | 未开始 |
 
@@ -286,8 +342,8 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 2. **唯一键冲突**统一返回 `store.ErrDuplicate`（可同时匹配 Meta 中的 `Duplicate`），不再是各 Store 自拼的 "already exists" 文案。
 3. **NotFound 错误**带上 collection 与 filter，便于排查；业务哨兵（如 `bkci.ErrPipelineNotFound`）照常匹配。
 4. **`bkci.UpdateBuiltinTemplateVersion`** 基于 `UpdateFields`：`templateVersion` 为空时会 `$unset`，原实现写入空字符串；读出后两者都是空字符串。
-5. **流水线模板 reload** 由 `ReplaceOne(upsert)` 改为 `Upsert(..., store.UnsetOmitted())`：模型中定义的字段与模板文件保持一致，
-   但模型中删掉的字段不会从库中清除。目前模板字段固定，无影响；如需整体替换，可改为「`Get` 后 `Replace`，未命中再 `Create`」。
+5. **流水线模板 reload** 由 `ReplaceOne(upsert)` 改为 `Upsert(..., store.UnsetOmitted())`（决策 13 后 Upsert 默认即此行为，
+   已去掉该选项）：模型中定义的字段与模板文件保持一致，但模型中删掉的字段不会从库中清除。目前模板字段固定，无影响；如需整体替换，可改为「`Get` 后 `Replace`，未命中再 `Create`」。
 
 测试改造：上述包的单测全部改为针对测试库，移除了对这些 Store 的 mockey mock。原先 mock `Create` 返回错误来验证
 「本地落库失败时回滚远端流水线」的用例，改为预先写入相同流水线 ID 的记录、制造真实的唯一键冲突。
@@ -313,14 +369,79 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
    这些调用链的顶端都是持有 `storereg.Registry` 的 handler、taskq 任务或 `cmd/webserver.go`，均传入 `Registry.DB`。
    原先领域代码中 19 处 `store.New(database.DB(), XxxMeta)` 及其错误处理样板已全部消除。
 
+## 阶段 4 迁移结果
+
+A 类剩余的 18 个 Store 全部迁移，`storereg.Registry` 中对应字段已删除，原 Store 接口、`*StoreMongo` 实现与只提供 Store 的 FxModule 一并删除：
+
+| 原 Store（Registry 字段） | Meta | 要点 |
+|---|---|---|
+| ImageRegistryStore | `registry.ImageRegistryMeta` | 密码经 Encode / Decode 加解密 |
+| ClusterAddonDefStore | `clusteraddon.ClusterAddonDefMeta` | `SaveDef` 按 name upsert；`ListDefs` 按名称排序并返回 `[]*T` |
+| BscpCfgStore | `bscpcfg/model.MetadataMeta`、`EnvBindingMeta` | 门面 Store 删除，聚合改为 `model.GetSnapshot(ctx, db, appID, envName)` |
+| AppDashboardStore | `dashboard.Meta` | 校验进 BeforeSave；按 uid 局部更新的逻辑移到 Service |
+| HelmAppComponentStore | `helmcomponent.Meta` | `EnsureName` 进 BeforeSave；`InExecutionOrder()` 用 `Combine` 组合两个排序 |
+| GPAConfigStore | `gpa.ConfigMeta` | `Validate` 进 BeforeSave；`CreateConfig`（补默认值）、`UpdateConfig`（合并后整体校验） |
+| AppServiceStore | `networking.ServiceMeta` | `GroupByAppID`；`SvcUpdateData.ToBSON` |
+| RuntimeImageStore | `runtime.Meta` | 校验与名称 trim 进 BeforeSave；`UpdateDescription` 先校验描述再更新 |
+| AppDefaultRuleStore | `appdefaults.RuleMeta` | 更新用 `Replace`；删除用 `GetAndDelete` |
+| DepSvcStore | `depservice/model.ServiceMeta` | plan config 的 JSON 编解码进 Encode / Decode |
+| DepSvcBindingStore | `depservice/model.ServiceBindingMeta` | `SyncInstanceIDs` 进 BeforeSave；`UpdateBinding`；`ByBindingQuery` |
+| PromotionStore | `promotion.Meta` | `Promote`（按 appID + repoKey + tag upsert）、`ListPromotedTags` |
+| TempAdminRecordStore | `platmgt/workspace/admin.Meta` | 「整体更新但排除不可变字段」改为对可变字段 `UpdateFields` |
+| PlatAdminStore | `platmgt/admin.RoleBindingMeta` | `CreateManyIfAbsent`；默认更新人进 BeforeSave |
+| PortForwardWhitelistStore | `portforward.Meta` | `CreateManyIfAbsent`；文档 `_id` 即 envID |
+| FeatureEnvCounterStore | — | 改用 `store.Counter`（`envmodel.NewFeatureEnvCounter(db)`） |
+| BuildConfigStore | `build.ConfigMeta` | 镜像凭证密码加解密；`UpdateConfig` 全量替换可变字段 |
+| AppConfigFileDefStore | `appcfg.AppConfigFileDefMeta` | `ListDefsByApp`、`UpdateDef`；`DefFilterConfigKind` 改为具名 Opt，调用写法不变 |
+
+按决策 7，原先接收上述 Store 的构造函数与领域函数改为接收 `db *mongo.Database`（参数位置不变），主要有：
+appmodel 部署的 `ServiceDeps`（新增 `DB` 字段）、`workload.NewBuilderService`、`appmodeldeploy.NewDeployer`、`snapshot.NewService`、
+`tagdeletion.NewService`、`deploy.NewPreDeployChecker` / `NewDeployPreChecker`、`overview.NewService`、`depservice.New`、
+`polaris.NewPolarisPlatformManager`、`depenvvars.NewReader`、`initdata.Do`、`bscpcfg/service.NewManager`、
+`trpc` / `taf` 的 `NewService`、appcfg 的 `NewAppConfigFileService` / `NewBaseAppCfgFileService` / `NewMountableFileProvider` /
+`NewAppConfigFileEditor` / `NewBaseContentProvider`、`appcfghooks.RegisterDeleteHooks`、`appdefaultshooks.RegisterPreDeleteHooks`、
+`workspace.GetWorkspaceImageRegistry` / `CreateExternalImageRegistry`、`build.ResolveImageRepoInfo`、`secret.NewImagePullSecretSyncer`、
+`customruntime.NewExistenceChecker` / `NewPersistManager` / `NewTagQueryManager`、`postrenderer.Build`、`wlbscpcfg.InjectFromStore` /
+`BuildFromStore`、`clusteraddon.ReloadBuiltinClusterAddons`，以及平台管理员、port-forward 白名单、临时管理员、仪表盘、
+GPA、特性环境等 Service。原先在函数内部用全局 `database.Client()` 构造 Store 的（如 `GetWorkspaceImageRegistry`、
+helm 部署的 values 渲染、post renderer）也随之改为使用传入的 db。
+
+行为变化（调用方需要知道的）：
+
+1. **唯一键冲突**统一返回 `store.ErrDuplicate`，原先只返回自拼文案的模型新增了业务哨兵：
+   `networking.ErrServiceAlreadyExists`、`appcfg.ErrAppConfigFileDefAlreadyExists`（depservice 服务、构建配置只匹配 `store.ErrDuplicate`）。
+2. **NotFound** 新增业务哨兵：`build.ErrConfigNotFound`、`appcfg.ErrAppConfigFileDefNotFound`、
+   `depsvcmodel.ErrServiceNotFound` / `ErrBindingNotFound`（`AsNotFoundError` 可识别，决策 11）。原先返回 `errors.Errorf` 文案的不再依赖字符串。
+3. **未命中由静默改为 NotFound**：networking 的 Service 更新（原先返回字符串错误）、`appcfg.UpdateDef`（原先返回 `ModifiedCount` 0）；
+   networking 更新内容为空时直接返回，不再刷新 `updatedAt`。
+4. **加密只作用于落库副本**：构建配置的 Create / Update 不再把调用方对象中的镜像密码改成密文（「顺带发现的问题」第 2 条已全部修复）。
+5. **depservice 服务的 `List` 也会解码 plan config**（「顺带发现的问题」第 1 条已修复）；`Upsert` 不再跳过空的 displayName / description / category，
+   内置初始化数据字段齐全，无影响。
+6. **`UpdateFields` 对 omitempty 的空值 `$unset`**：构建配置清空 codeRepo / image / pipeline、配置文件 def 清空 mountDir 时，
+   原先写入 null / 空串，现在删除字段，读出结果一致；mountDir 的条件唯一索引对两种形态都不生效。
+7. **depservice.ServiceManager 总是检查绑定引用**：原先北极星路径传入 nil binding store 以跳过检查，现在删除北极星实例时也会查询绑定；
+   北极星实例不会被应用绑定，结果不变，只多一次查询。
+8. **运行时镜像的查询不再预校验入参**：`GetByID` 不再对非法 hex 提前返回，自然未命中返回 NotFound；按类型 + 名称查询不再校验 type / name，
+   新建时由 BeforeSave 校验。
+
+测试改造：移除了对这些 Store 的 mock 与内存实现，改为写入测试库：`bkrepo/manager_test`（镜像源）、`workspace/facade_test`
+（原先 mock 工作空间与镜像源 Store 的构造函数与方法）、`deploy/helm/deploy_test`（构建配置）、`deploy/pre_checker_test`（晋级记录）、
+`runtime/validator_test`、depservice `envvars/reader_test` 的内存 binding store（为此给该套件补上了测试库初始化）。
+dbfactory 的 `TrpcApplicationStores` / `TafApplicationStores` 不再需要 `BuildConfigStore` / `AppConfigFileDefStore` 字段。
+
+遗留：
+
+* `workspace.GetWorkspaceImageRegistry` 内部仍用传入的 db 构造 `WorkspaceStore`（C 类），等工作空间迁移后再收敛。
+* depservice `envvars/reader_test` 中 ServiceInstance 的内存实现仍保留（C 类，不在本次范围）。
+* `bkiam/role.RoleStore`、`appcfg.AppValuesConfigStore` 未精读，未纳入本次迁移。
+
 ## 扫描中顺带发现的问题
 
 迁移时应一并修复，或单独提交：
 
-1. `depservice/model/service_store.go` 的 `List` 未调用 `serviceFromDBValue`，返回的 plan config 仍是 `{"value": "<json 串>"}`，
-   与 `Get` 不一致。目前只有测试调用 `List`，属于潜在 bug。统一的 `Decode` 钩子可以根除这类问题。
-2. （bkrepo 部分已在阶段 3 修复）加密在调用方对象上就地进行：`bkrepo` 的 `ProjectStoreMongo.Create`、`build/image` 的 `ConfigStoreMongo.Create/Update`
-   会把调用方对象中的密码替换为密文；而 `credential`、`registry` 的实现先复制再加密。`Encode` 作用于深拷贝可统一行为。
-3. NotFound 语义不一致：`AppConfigFileDefStoreMongo.GetByID`、`ConfigStoreMongo.Get/Update` 返回不带哨兵的 `errors.Errorf`；
-   `networking` 的 `Update` 返回字符串错误；拓扑 `ResourceSnapshotStoreMongo.Get` 未找到时返回 `nil, nil`。迁移时须保持调用方依赖的语义。
-4. 不少 Store 直接 `return err` 不加 Wrap；`appdefaults/store.go` 使用 `fmt.Errorf("%w")`，均违反 AGENTS.md 的错误处理规范。
+1. ~~`depservice/model/service_store.go` 的 `List` 未调用 `serviceFromDBValue`~~（阶段 4 已修复：plan config 编解码改为 Decode 钩子）。
+2. ~~加密在调用方对象上就地进行~~（bkrepo 于阶段 3、build/image 于阶段 4 修复）。
+3. NotFound 语义不一致：appcfg def、构建配置、networking 已在阶段 4 统一为哨兵错误；
+   拓扑 `ResourceSnapshotStoreMongo.Get` 未找到时返回 `nil, nil`（B 类，迁移时须保持调用方依赖的语义）。
+4. 不少 Store 直接 `return err` 不加 Wrap；`appdefaults` 中 Store 及其调用方的 `fmt.Errorf("%w")` 已在阶段 4 随迁移改为 `errors.Wrap`，
+   其余未迁移的 Store 仍需处理。

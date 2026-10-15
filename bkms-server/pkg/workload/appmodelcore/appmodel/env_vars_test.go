@@ -28,7 +28,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
@@ -44,9 +43,7 @@ var _ = Describe("AppEnvVarService", func() {
 		appStore                  bkmsapp.ApplicationStore
 		appModelStore             appmodel.AppModelStore
 		appConfigFileStore        appcfg.AppConfigFileStore
-		appConfigFileDefStore     appcfg.AppConfigFileDefStore
 		appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-		buildConfigStore          imagebuild.ConfigStore
 		service                   *appmodel.AppEnvVarService
 	)
 
@@ -61,14 +58,11 @@ var _ = Describe("AppEnvVarService", func() {
 			bkmsapp.FxModule,
 			appmodel.FxModule,
 			appcfg.FxModule,
-			imagebuild.FxModule,
 			fx.Populate(
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
-				&buildConfigStore,
 				&service,
 			),
 		)
@@ -84,9 +78,7 @@ var _ = Describe("AppEnvVarService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigFileVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			EnvVars: envVars,
 		})

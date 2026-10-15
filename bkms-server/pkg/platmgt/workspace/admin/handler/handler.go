@@ -146,7 +146,7 @@ func (h *Handler) RevokeWorkspaceAdmin(c *gin.Context) {
 func (h *Handler) workspaceAdminService() *workspaceadmin.Service {
 	return workspaceadmin.NewService(
 		h.registry.WorkspaceStore,
-		h.registry.TempAdminRecordStore,
+		h.registry.DB,
 		perm.NewManager(),
 	)
 }

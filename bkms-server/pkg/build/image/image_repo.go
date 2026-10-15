@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 )
@@ -40,7 +41,12 @@ type ImageRepoInfo struct {
 // ResolveImageRepoInfo 根据构建配置解析应用的镜像仓库信息
 // 当 cfg.Image != nil 时，直接使用外部镜像源配置；
 // 当 cfg.Image == nil 时，从工作空间的 imageRegistry 获取平台仓库信息。
-func ResolveImageRepoInfo(ctx context.Context, cfg *Config, workspaceID, appName string) (*ImageRepoInfo, error) {
+func ResolveImageRepoInfo(
+	ctx context.Context,
+	db *mongo.Database,
+	cfg *Config,
+	workspaceID, appName string,
+) (*ImageRepoInfo, error) {
 	if cfg != nil && cfg.Image != nil {
 		return &ImageRepoInfo{
 			RepoName: cfg.Image.Name,
@@ -50,7 +56,7 @@ func ResolveImageRepoInfo(ctx context.Context, cfg *Config, workspaceID, appName
 	}
 
 	// 平台仓库：从工作空间获取实际使用的镜像仓库
-	reg, err := workspace.GetWorkspaceImageRegistry(ctx, workspaceID)
+	reg, err := workspace.GetWorkspaceImageRegistry(ctx, db, workspaceID)
 	if err != nil {
 		return nil, errors.Wrap(err, "get workspace image registry")
 	}

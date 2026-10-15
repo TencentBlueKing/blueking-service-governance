@@ -20,21 +20,23 @@ package workload_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 func newWorkloadPluginDependencies() (
 	appcfg.AppConfigFileStore,
-	appcfg.AppConfigFileDefStore,
+	*mongo.Database,
 	appcfg.AppConfigFileVersionStore,
 	polaris.PolarisConfigStore,
 ) {
 	var appConfigFileStore appcfg.AppConfigFileStore
-	var appConfigFileDefStore appcfg.AppConfigFileDefStore
+	var db *mongo.Database
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var polarisConfigStore polaris.PolarisConfigStore
 
@@ -42,9 +44,10 @@ func newWorkloadPluginDependencies() (
 		GinkgoT(),
 		appcfg.FxModule,
 		polaris.FxModule,
+		store.FxModule,
 		fx.Populate(
 			&appConfigFileStore,
-			&appConfigFileDefStore,
+			&db,
 			&appConfigFileVersionStore,
 			&polarisConfigStore,
 		),
@@ -52,5 +55,5 @@ func newWorkloadPluginDependencies() (
 	diApp.RequireStart()
 	diApp.RequireStop()
 
-	return appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore, polarisConfigStore
+	return appConfigFileStore, db, appConfigFileVersionStore, polarisConfigStore
 }

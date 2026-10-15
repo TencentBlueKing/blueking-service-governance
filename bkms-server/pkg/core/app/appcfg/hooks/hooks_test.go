@@ -44,7 +44,7 @@ var _ = Describe("Env delete hooks from appcfg", func() {
 	var appStore bkmsapp.ApplicationStore
 	var envStore envmodel.EnvironmentStore
 	var fileStore appcfg.AppConfigFileStore
-	var defStore appcfg.AppConfigFileDefStore
+	var defStore *appcfg.AppConfigFileDefStore
 	var versionStore appcfg.AppConfigFileVersionStore
 
 	BeforeEach(func() {
@@ -61,11 +61,11 @@ var _ = Describe("Env delete hooks from appcfg", func() {
 				&appStore,
 				&envStore,
 				&fileStore,
-				&defStore,
 				&versionStore,
 			),
 		)
 		diApp.RequireStart()
+		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 	})
 
 	AfterEach(func() {
@@ -79,7 +79,7 @@ var _ = Describe("Env delete hooks from appcfg", func() {
 	})
 
 	createMountedPlainEnvInstance := func(app *bkmsapp.Application, envName string) appcfg.AppConfigFileDef {
-		base := appcfg.NewBaseAppCfgFileService(defStore, fileStore, versionStore)
+		base := appcfg.NewBaseAppCfgFileService(testutil.NewDB(GinkgoT()), fileStore, versionStore)
 		cfgSvc := appcfg.NewAppCfgFileDefService(base)
 		defaultContent := "key: default\n"
 		result, err := cfgSvc.Create(ctx, appcfg.CreateCfgFileParams{
@@ -134,7 +134,7 @@ var _ = Describe("Env delete hooks from appcfg", func() {
 		defA := createMountedPlainEnvInstance(appA, environment.Name)
 		defB := createMountedPlainEnvInstance(appB, environment.Name)
 
-		appcfghooks.RegisterDeleteHooks(appStore, fileStore, defStore, versionStore)
+		appcfghooks.RegisterDeleteHooks(appStore, fileStore, testutil.NewDB(GinkgoT()), versionStore)
 
 		err := envSvc.Delete(ctx, environment.ID)
 		Expect(err).NotTo(HaveOccurred())
@@ -154,7 +154,12 @@ var _ = Describe("Env delete hooks from appcfg", func() {
 	})
 
 	It("should fail fast when feature env owner app id is missing", func() {
-		hook := appcfghooks.NewCleanupPlainEnvInstancesHook(appStore, fileStore, defStore, versionStore)
+		hook := appcfghooks.NewCleanupPlainEnvInstancesHook(
+			appStore,
+			fileStore,
+			testutil.NewDB(GinkgoT()),
+			versionStore,
+		)
 
 		err := hook(ctx, envmodel.Environment{
 			Kind:        envmodel.EnvironmentKindFeature,

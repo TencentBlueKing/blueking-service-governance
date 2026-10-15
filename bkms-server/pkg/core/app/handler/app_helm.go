@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // UpdateHelmSpec 更新应用 Helm Chart 配置。
@@ -126,7 +127,7 @@ func (h *Handler) createHelmApp(ctx context.Context, app *bkmsapp.Application) e
 	// 新应用默认拥有一个名为 default 的本地普通 values 文件
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	if _, err := acfService.Create(
@@ -159,7 +160,7 @@ func (h *Handler) deleteHelmApp(ctx context.Context, app *bkmsapp.Application) e
 	if _, err := h.registry.AppConfigFileStore.DeleteByApp(ctx, app.ID); err != nil {
 		return errors.Wrap(err, "delete values files")
 	}
-	if _, err := h.registry.AppConfigFileDefStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(ctx, appcfg.DefsByApp(app.ID)); err != nil {
 		return errors.Wrap(err, "delete values file metas")
 	}
 	if _, err := h.registry.AppConfigFileVersionStore.DeleteByApp(ctx, app.ID); err != nil {

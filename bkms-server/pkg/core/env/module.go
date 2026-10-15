@@ -29,7 +29,6 @@ var FxModule = fx.Module("env",
 	database.PrivateFxModule,
 	fx.Provide(
 		envmodel.NewEnvironmentStoreMongo,
-		envmodel.NewFeatureEnvCounterStoreMongo,
 		NewEnvService,
 		NewFeatureEnvNamespaceInitializer,
 		NewFeatureEnvService,

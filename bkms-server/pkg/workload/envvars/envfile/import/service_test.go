@@ -27,7 +27,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	coreapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -49,9 +48,7 @@ var _ = Describe("ImportService", func() {
 		appStore              coreapp.ApplicationStore
 		appModelStore         appmodel.AppModelStore
 		appConfigFileStore    appcfg.AppConfigFileStore
-		appConfigFileDefStore appcfg.AppConfigFileDefStore
 		appConfigVersionStore appcfg.AppConfigFileVersionStore
-		buildConfigStore      build.ConfigStore
 		service               *importer.Service
 	)
 
@@ -64,15 +61,12 @@ var _ = Describe("ImportService", func() {
 			coreapp.FxModule,
 			appmodel.FxModule,
 			appcfg.FxModule,
-			build.FxModule,
 			fx.Populate(
 				&scopedEnvVarStore,
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigVersionStore,
-				&buildConfigStore,
 			),
 		)
 		diApp.RequireStart()
@@ -169,9 +163,7 @@ ANOTHER_ENV_KEY=another-value
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{

@@ -36,6 +36,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // NewAppBscpCfgMgrCmd 创建 app-bscpcfg-mgr 命令，用于启用或停用应用的 bscp 配置。
@@ -164,8 +165,8 @@ func setBscpCfgForApp(
 		return enableBscpCfgForApp(ctx, reg, user, appID)
 	}
 
-	disabled := false
-	if err := reg.BscpCfgStore.UpdateMetadata(ctx, appID, &model.MetadataUpdate{Enable: &disabled}); err != nil {
+	update := map[string]any{"enable": false}
+	if err := store.Of(reg.DB, model.MetadataMeta).Update(ctx, update, model.ByApp(appID)); err != nil {
 		return errors.Wrapf(err, "disable bscp config for app %s", appID)
 	}
 	return nil
@@ -194,7 +195,7 @@ func enableBscpCfgForApp(
 		return errors.Errorf("workspace %s missing BkBSCPProjectID, run bind-bscp-project first", ws.ID)
 	}
 
-	mgr, err := svc.NewManager(user, reg.BscpCfgStore)
+	mgr, err := svc.NewManager(user, reg.DB)
 	if err != nil {
 		return errors.Wrap(err, "create manager")
 	}
@@ -217,8 +218,8 @@ func enableBscpCfgForApp(
 	}
 
 	// 已存在的 Metadata 幂等返回时 enable 可能仍为 false，这里显式置为 true
-	enabled := true
-	if err := reg.BscpCfgStore.UpdateMetadata(ctx, appID, &model.MetadataUpdate{Enable: &enabled}); err != nil {
+	update := map[string]any{"enable": true}
+	if err := store.Of(reg.DB, model.MetadataMeta).Update(ctx, update, model.ByApp(appID)); err != nil {
 		return errors.Wrapf(err, "enable bscp config for app %s", appID)
 	}
 

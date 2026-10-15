@@ -33,7 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -102,13 +102,12 @@ type SharedTestStores struct {
 	PolarisConfigStore        polaris.PolarisConfigStore
 	AppSpecStore              appspec.AppSpecStore
 	AppConfigFileStore        appcfg.AppConfigFileStore
-	AppConfigFileDefStore     appcfg.AppConfigFileDefStore
+	AppConfigFileDefStore     *appcfg.AppConfigFileDefStore
 	ScopedEnvVarStore         envvars.ScopedEnvVarStore
 	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	BuildConfigStore          build.ConfigStore
-	SvcStore                  depmodel.ServiceStore
+	SvcStore                  *depmodel.ServiceStore
 	SvcInstStore              depmodel.ServiceInstanceStore
-	BindingStore              depmodel.ServiceBindingStore
+	BindingStore              *depmodel.ServiceBindingStore
 }
 
 // createApplication 根据测试用例创建应用
@@ -130,9 +129,7 @@ func createApplication(
 			AppStore:                  stores.AppStore,
 			AppModelStore:             stores.AppModelStore,
 			AppConfigFileStore:        stores.AppConfigFileStore,
-			AppConfigFileDefStore:     stores.AppConfigFileDefStore,
 			AppConfigFileVersionStore: stores.AppConfigFileVersionStore,
-			BuildConfigStore:          stores.BuildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			TrpcConfig:  trpcConfig,
 			EnvVars:     envVars,
@@ -149,9 +146,7 @@ func createApplication(
 			AppStore:                  stores.AppStore,
 			AppModelStore:             stores.AppModelStore,
 			AppConfigFileStore:        stores.AppConfigFileStore,
-			AppConfigFileDefStore:     stores.AppConfigFileDefStore,
 			AppConfigFileVersionStore: stores.AppConfigFileVersionStore,
-			BuildConfigStore:          stores.BuildConfigStore,
 		}, &dbfactory.TafApplicationOpts{
 			TafConfig:   tafConfig,
 			EnvVars:     envVars,
@@ -185,7 +180,6 @@ var _ = Describe("Builder Shared Tests", func() {
 			env.FxModule,
 			envvars.FxModule,
 			workspace.FxModule,
-			build.FxModule,
 			depmodel.FxModule,
 			depenvvars.FxModule,
 			polarisenvvars.FxModule,
@@ -197,24 +191,23 @@ var _ = Describe("Builder Shared Tests", func() {
 				&stores.PolarisConfigStore,
 				&stores.AppSpecStore,
 				&stores.AppConfigFileStore,
-				&stores.AppConfigFileDefStore,
 				&stores.AppConfigFileVersionStore,
-				&stores.BuildConfigStore,
 				&stores.ScopedEnvVarStore,
-				&stores.SvcStore,
 				&stores.SvcInstStore,
-				&stores.BindingStore,
 				&envSvc,
 				&builderSvc,
 			),
 		)
 		diApp.RequireStart()
+		stores.AppConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		stores.BindingStore = testutil.NewStore(GinkgoT(), depmodel.ServiceBindingMeta)
+		stores.SvcStore = testutil.NewStore(GinkgoT(), depmodel.ServiceMeta)
 
 		// Load builtin components
 		dbfactory.LoadBuiltinComponents(ctx, database.Client(), "../../../extension/component/assets/comps")
 
 		// Seed depservice init data (mysql, polaris, fake service definitions)
-		Expect(initdata.Do(stores.SvcStore)).To(Succeed())
+		Expect(initdata.Do(testutil.NewDB(GinkgoT()))).To(Succeed())
 	})
 
 	AfterEach(func() {
@@ -1251,7 +1244,7 @@ spec:
 			instID, err := stores.SvcInstStore.Create(ctx, inst)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = stores.BindingStore.Create(ctx, &depmodel.ServiceBinding{
+			err = stores.BindingStore.Create(ctx, &depmodel.ServiceBinding{
 				Name:        "mysql",
 				AppID:       app.ID,
 				WorkspaceID: app.WorkspaceID,
@@ -1306,7 +1299,7 @@ spec:
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			cfgSvc := appcfg.NewAppConfigFileService(
-				stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
+				stores.AppConfigFileStore, testutil.NewDB(GinkgoT()), stores.AppConfigFileVersionStore,
 			)
 			plainContent := "worker_processes 4;\n"
 			created, err := cfgSvc.Create(ctx, appcfg.CreateCfgFileParams{

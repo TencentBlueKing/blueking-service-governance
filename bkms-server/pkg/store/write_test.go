@@ -41,25 +41,24 @@ var _ = Describe("GenericStore write operations", func() {
 			w := f.newWidget("w1")
 			Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
 
-			Expect(w.ID.IsZero()).To(BeFalse())
+			Expect(w.ID).NotTo(BeZero())
 			Expect(w.CreatedAt).To(BeTemporally("~", time.Now(), time.Second))
 			Expect(w.UpdatedAt).To(Equal(w.CreatedAt))
 
 			got, err := f.widgets.Get(f.ctx, store.Where("_id", w.ID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.Name).To(Equal("w1"))
-			Expect(got.CreatedAt).To(BeTemporally("~", w.CreatedAt, time.Millisecond))
+			Expect(got.CreatedAt).To(beStoredTime(w.CreatedAt))
 		})
 
-		It("should keep a preset CreatedAt", func() {
-			preset := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+		It("should keep a preset createdAt and use it as updatedAt", func() {
 			w := f.newWidget("w1")
-			w.CreatedAt = preset
+			w.CreatedAt = longAgo
 			Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
 
-			got, err := f.widgets.Get(f.ctx, f.byName("w1"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.CreatedAt.Equal(preset)).To(BeTrue())
+			got := f.mustGetWidget("w1")
+			Expect(got.CreatedAt).To(beStoredTime(longAgo))
+			Expect(got.UpdatedAt).To(beStoredTime(longAgo))
 		})
 
 		It("should generate a hex string _id when the string ID is empty", func() {
@@ -79,15 +78,15 @@ var _ = Describe("GenericStore write operations", func() {
 		It("should recognize timestamps embedded inline", func() {
 			n := &Note{Body: "hello"}
 			Expect(f.notes.Create(f.ctx, n)).To(Succeed())
-			Expect(n.CreatedAt.IsZero()).To(BeFalse())
-			Expect(n.UpdatedAt.IsZero()).To(BeFalse())
+			Expect(n.CreatedAt).NotTo(BeZero())
+			Expect(n.UpdatedAt).To(Equal(n.CreatedAt))
 		})
 
 		It("should wrap both the domain sentinel and store.ErrDuplicate on unique key conflict", func() {
 			f.mustCreateWidget("w1")
 			err := f.widgets.Create(f.ctx, f.newWidget("w1"))
-			Expect(errors.Is(err, ErrWidgetExists)).To(BeTrue())
-			Expect(errors.Is(err, store.ErrDuplicate)).To(BeTrue())
+			Expect(err).To(MatchError(ErrWidgetExists))
+			Expect(err).To(MatchError(store.ErrDuplicate))
 
 			// 仍可取到驱动的原始错误，以便查看冲突的键
 			var we mongo.WriteException
@@ -96,8 +95,7 @@ var _ = Describe("GenericStore write operations", func() {
 
 		It("should fall back to store.ErrDuplicate when meta has no Duplicate", func() {
 			Expect(f.items.Create(f.ctx, &Item{ID: "dup"})).To(Succeed())
-			err := f.items.Create(f.ctx, &Item{ID: "dup"})
-			Expect(errors.Is(err, store.ErrDuplicate)).To(BeTrue())
+			Expect(f.items.Create(f.ctx, &Item{ID: "dup"})).To(MatchError(store.ErrDuplicate))
 		})
 	})
 
@@ -107,22 +105,23 @@ var _ = Describe("GenericStore write operations", func() {
 			Expect(f.widgets.CreateMany(f.ctx, ws)).To(Succeed())
 
 			for _, w := range ws {
-				Expect(w.ID.IsZero()).To(BeFalse())
-				Expect(w.CreatedAt.IsZero()).To(BeFalse())
+				Expect(w.ID).NotTo(BeZero())
+				Expect(w.CreatedAt).NotTo(BeZero())
 			}
-			n, err := f.widgets.Count(f.ctx, f.byOwner())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(n).To(Equal(int64(2)))
+			Expect(f.countWidgets()).To(Equal(int64(2)))
 		})
 
 		It("should do nothing for an empty slice", func() {
 			Expect(f.widgets.CreateMany(f.ctx, nil)).To(Succeed())
 		})
 
-		It("should return a duplicate error on unique key conflict", func() {
-			f.mustCreateWidget("w1")
-			err := f.widgets.CreateMany(f.ctx, []*Widget{f.newWidget("w1")})
-			Expect(errors.Is(err, ErrWidgetExists)).To(BeTrue())
+		It("should stop at the first conflict and keep the documents inserted before it", func() {
+			f.mustCreateWidget("w2")
+			err := f.widgets.CreateMany(f.ctx, []*Widget{f.newWidget("w1"), f.newWidget("w2"), f.newWidget("w3")})
+			Expect(err).To(MatchError(ErrWidgetExists))
+
+			Expect(f.widgetExists("w1")).To(BeTrue())
+			Expect(f.widgetExists("w3")).To(BeFalse())
 		})
 	})
 
@@ -138,112 +137,29 @@ var _ = Describe("GenericStore write operations", func() {
 			e1, err := f.items.Get(f.ctx, store.Where("_id", "e1"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(e1.Value).To(Equal("old"))
-			_, err = f.items.Get(f.ctx, store.Where("_id", "e2"))
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
-
-	Describe("Update", func() {
-		It("should $set the given fields and refresh updatedAt only", func() {
-			w := f.mustCreateWidget("w1")
-			time.Sleep(10 * time.Millisecond)
-
-			Expect(f.widgets.Update(f.ctx, bson.M{"priority": 5}, f.byName("w1"))).To(Succeed())
-
-			got, err := f.widgets.Get(f.ctx, f.byName("w1"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Priority).To(Equal(5))
-			Expect(got.Tags).To(Equal([]string{"a"}))
-			Expect(got.CreatedAt).To(BeTemporally("~", w.CreatedAt, time.Millisecond))
-			Expect(got.UpdatedAt).To(BeTemporally(">", w.UpdatedAt))
+			Expect(f.items.Exists(f.ctx, store.Where("_id", "e2"))).To(BeTrue())
 		})
 
-		It("should return NotFound when nothing matches", func() {
-			err := f.widgets.Update(f.ctx, bson.M{"priority": 5}, f.byName("missing"))
-			Expect(errors.Is(err, ErrWidgetNotFound)).To(BeTrue())
-		})
-
-		It("should return a duplicate error on unique key conflict", func() {
-			f.mustCreateWidget("w1")
-			f.mustCreateWidget("w2")
-			err := f.widgets.Update(f.ctx, bson.M{"name": "w1"}, f.byName("w2"))
-			Expect(errors.Is(err, ErrWidgetExists)).To(BeTrue())
-		})
-
-		It("should be a no-op for an empty set", func() {
-			Expect(f.widgets.Update(f.ctx, bson.M{}, f.byName("missing"))).To(Succeed())
-		})
-	})
-
-	Describe("UpdateFields", func() {
-		It("should only update the selected fields from the object", func() {
-			f.mustCreateWidget("w1")
-
-			patch := f.newWidget("w1")
-			patch.Priority = 9
-			patch.Tags = []string{"changed"}
-			Expect(f.widgets.UpdateFields(f.ctx, patch, []string{"priority"}, f.byName("w1"))).To(Succeed())
-
-			got, err := f.widgets.Get(f.ctx, f.byName("w1"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Priority).To(Equal(9))
-			Expect(got.Tags).To(Equal([]string{"a"}))
-		})
-
-		It("should support nested field paths", func() {
-			w := f.newWidget("w1")
-			w.Spec = WidgetSpec{Color: "red", Size: 1}
-			Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
-
-			patch := &Widget{Spec: WidgetSpec{Color: "blue", Size: 2}}
-			Expect(f.widgets.UpdateFields(f.ctx, patch, []string{"spec.color"}, f.byName("w1"))).To(Succeed())
-
-			got, err := f.widgets.Get(f.ctx, f.byName("w1"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Spec).To(Equal(WidgetSpec{Color: "blue", Size: 1}))
-		})
-
-		It("should unset a field that is omitted as empty", func() {
-			w := f.newWidget("w1")
-			w.Secret = &Credential{Username: "u", Password: "p"}
-			Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
-
-			Expect(f.widgets.UpdateFields(f.ctx, &Widget{}, []string{"secret"}, f.byName("w1"))).To(Succeed())
-
-			_, err := f.rawWidget("w1").LookupErr("secret")
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("should reject unknown field paths", func() {
-			f.mustCreateWidget("w1")
-			err := f.widgets.UpdateFields(f.ctx, f.newWidget("w1"), []string{"nonexistent"}, f.byName("w1"))
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("nonexistent"))
-		})
-
-		It("should return NotFound when nothing matches", func() {
-			err := f.widgets.UpdateFields(f.ctx, f.newWidget("x"), []string{"priority"}, f.byName("missing"))
-			Expect(errors.Is(err, ErrWidgetNotFound)).To(BeTrue())
+		It("should do nothing for an empty slice", func() {
+			Expect(f.items.CreateManyIfAbsent(f.ctx, nil)).To(Succeed())
 		})
 	})
 
 	Describe("Replace", func() {
 		It("should replace the whole document and refresh updatedAt", func() {
-			created := f.mustCreateWidget("w1")
-			time.Sleep(10 * time.Millisecond)
+			created := f.mustCreateStaleWidget("w1")
 
-			got, err := f.widgets.Get(f.ctx, f.byName("w1"))
-			Expect(err).NotTo(HaveOccurred())
+			got := f.mustGetWidget("w1")
 			got.Priority = 8
 			got.Tags = nil
 			Expect(f.widgets.Replace(f.ctx, got, store.Where("_id", got.ID))).To(Succeed())
+			Expect(got.UpdatedAt).To(BeTemporally("~", time.Now(), time.Second))
 
-			replaced, err := f.widgets.Get(f.ctx, store.Where("_id", created.ID))
-			Expect(err).NotTo(HaveOccurred())
+			replaced := f.mustGetWidget("w1")
 			Expect(replaced.Priority).To(Equal(8))
 			Expect(replaced.Tags).To(BeEmpty())
-			Expect(replaced.CreatedAt).To(BeTemporally("~", created.CreatedAt, time.Millisecond))
-			Expect(replaced.UpdatedAt).To(BeTemporally(">", created.UpdatedAt))
+			Expect(replaced.CreatedAt).To(beStoredTime(created.CreatedAt))
+			Expect(replaced.UpdatedAt).To(beStoredTime(got.UpdatedAt))
 		})
 
 		It("should ignore the _id of the object and keep the stored one", func() {
@@ -252,14 +168,21 @@ var _ = Describe("GenericStore write operations", func() {
 			w.ID = bson.NewObjectID()
 			Expect(f.widgets.Replace(f.ctx, w, f.byName("w1"))).To(Succeed())
 
-			got, err := f.widgets.Get(f.ctx, f.byName("w1"))
+			Expect(f.mustGetWidget("w1").ID).To(Equal(created.ID))
+		})
+
+		It("should replace documents of models without timestamps", func() {
+			Expect(f.items.Create(f.ctx, &Item{ID: "e1", Value: "old"})).To(Succeed())
+			Expect(f.items.Replace(f.ctx, &Item{Value: "new"}, store.Where("_id", "e1"))).To(Succeed())
+
+			got, err := f.items.Get(f.ctx, store.Where("_id", "e1"))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.ID).To(Equal(created.ID))
+			Expect(got.Value).To(Equal("new"))
 		})
 
 		It("should return NotFound when nothing matches", func() {
 			err := f.widgets.Replace(f.ctx, f.newWidget("missing"), f.byName("missing"))
-			Expect(errors.Is(err, ErrWidgetNotFound)).To(BeTrue())
+			Expect(err).To(MatchError(ErrWidgetNotFound))
 		})
 	})
 })
@@ -270,40 +193,85 @@ var _ = Describe("GenericStore delete operations", func() {
 	BeforeEach(func() { f = setUpStores() })
 	AfterEach(func() { f.tearDown() })
 
-	It("Delete should remove the matching document", func() {
-		f.mustCreateWidget("w1")
-		Expect(f.widgets.Delete(f.ctx, f.byName("w1"))).To(Succeed())
+	Describe("Delete", func() {
+		It("should remove the matching document", func() {
+			f.mustCreateWidget("w1")
+			Expect(f.widgets.Delete(f.ctx, f.byName("w1"))).To(Succeed())
+			Expect(f.widgetExists("w1")).To(BeFalse())
+		})
 
-		ok, err := f.widgets.Exists(f.ctx, f.byName("w1"))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(ok).To(BeFalse())
+		It("should remove only one document when several match", func() {
+			f.mustCreateWidget("w1")
+			f.mustCreateWidget("w2")
+			Expect(f.widgets.Delete(f.ctx, f.byOwner())).To(Succeed())
+			Expect(f.countWidgets()).To(Equal(int64(1)))
+		})
+
+		It("should return NotFound when nothing matches", func() {
+			err := f.widgets.Delete(f.ctx, f.byName("missing"))
+			Expect(err).To(MatchError(ErrWidgetNotFound))
+			Expect(err).To(MatchError(store.ErrNotFound))
+		})
 	})
 
-	It("Delete should return NotFound when nothing matches", func() {
-		err := f.widgets.Delete(f.ctx, f.byName("missing"))
-		Expect(errors.Is(err, ErrWidgetNotFound)).To(BeTrue())
-		Expect(errors.Is(err, store.ErrNotFound)).To(BeTrue())
+	Describe("DeleteIfExists", func() {
+		It("should remove the matching document", func() {
+			f.mustCreateWidget("w1")
+			Expect(f.widgets.DeleteIfExists(f.ctx, f.byName("w1"))).To(Succeed())
+			Expect(f.widgetExists("w1")).To(BeFalse())
+		})
+
+		It("should succeed silently when nothing matches", func() {
+			Expect(f.widgets.DeleteIfExists(f.ctx, f.byName("missing"))).To(Succeed())
+		})
 	})
 
-	It("DeleteIfExists should succeed silently when nothing matches", func() {
-		Expect(f.widgets.DeleteIfExists(f.ctx, f.byName("missing"))).To(Succeed())
+	Describe("DeleteMany", func() {
+		It("should remove all matching documents and report the count", func() {
+			f.mustCreateWidget("w1")
+			f.mustCreateWidget("w2")
+			f.mustCreateWidget("other")
+
+			n, err := f.widgets.DeleteMany(f.ctx, f.byOwner(), store.Where("name", bson.M{"$in": bson.A{"w1", "w2"}}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(2)))
+			Expect(f.widgetExists("other")).To(BeTrue())
+		})
+
+		It("should report zero when nothing matches", func() {
+			Expect(f.widgets.DeleteMany(f.ctx, f.byName("missing"))).To(BeZero())
+		})
 	})
 
-	It("DeleteIfExists should remove the matching document", func() {
-		f.mustCreateWidget("w1")
-		Expect(f.widgets.DeleteIfExists(f.ctx, f.byName("w1"))).To(Succeed())
+	Describe("GetAndDelete", func() {
+		It("should remove the matching document and return it decoded", func() {
+			w := f.newSecretWidget("w1")
+			Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
 
-		ok, err := f.widgets.Exists(f.ctx, f.byName("w1"))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(ok).To(BeFalse())
-	})
+			deleted, err := f.widgets.GetAndDelete(f.ctx, f.byName("w1"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deleted.ID).To(Equal(w.ID))
+			Expect(deleted.Secret.Password).To(Equal(plainPassword))
+			Expect(f.widgetExists("w1")).To(BeFalse())
+		})
 
-	It("DeleteMany should remove all matching documents and report the count", func() {
-		f.mustCreateWidget("w1")
-		f.mustCreateWidget("w2")
+		It("should delete the first document in the given sort order", func() {
+			for i, name := range []string{"a", "b"} {
+				w := f.newWidget(name)
+				w.Priority = i
+				Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
+			}
 
-		n, err := f.widgets.DeleteMany(f.ctx, f.byOwner())
-		Expect(err).NotTo(HaveOccurred())
-		Expect(n).To(Equal(int64(2)))
+			deleted, err := f.widgets.GetAndDelete(f.ctx, f.byOwner(), store.Desc("priority"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deleted.Name).To(Equal("b"))
+			Expect(f.widgetExists("a")).To(BeTrue())
+		})
+
+		It("should return NotFound when nothing matches", func() {
+			_, err := f.widgets.GetAndDelete(f.ctx, f.byName("missing"))
+			Expect(err).To(MatchError(ErrWidgetNotFound))
+			Expect(err).To(MatchError(store.ErrNotFound))
+		})
 	})
 })

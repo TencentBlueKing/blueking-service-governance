@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
@@ -47,11 +48,11 @@ func mockTrafficManagerAndGetBaseline(baselineLaneName string) {
 	mockey.Mock((*trafficmanager.StubTrafficManager).GetBaselineTrafficLane).Return(baselineLane, nil).Build()
 }
 
-// newTestChecker 创建用于测试的 PreDeployChecker，注入空依赖
+// newTestChecker 创建用于测试的 PreDeployChecker，晋级记录使用测试库，其余注入空依赖
 func newTestChecker() *PreDeployChecker {
 	return NewPreDeployChecker(
 		&envmodel.EnvironmentStoreMongo{},
-		&promotion.PromotionStoreMongo{},
+		testutil.NewDB(GinkgoT()),
 		&snapshot.Service{},
 	)
 }
@@ -199,7 +200,12 @@ var _ = Describe("PreDeployChecker", func() {
 				mockey.Mock((*snapshot.Service).ResolveRepoKeyForApp).Return(
 					&snapshot.RepoKeyInfo{RepoKey: "repo-key-abc"}, nil,
 				).Build()
-				mockey.Mock((*promotion.PromotionStoreMongo).IsTagPromoted).Return(true, nil).Build()
+				promotions := testutil.NewStore(GinkgoT(), promotion.Meta)
+				Expect(promotion.Promote(ctx, promotions, appID, "repo-key-abc", "v1.0.0", "admin")).To(Succeed())
+				DeferCleanup(func() {
+					_, err := promotions.DeleteMany(ctx, promotion.ByApp(appID))
+					Expect(err).NotTo(HaveOccurred())
+				})
 
 				err := checker.Do(ctx, params)
 				Expect(err).NotTo(HaveOccurred())
@@ -215,7 +221,6 @@ var _ = Describe("PreDeployChecker", func() {
 				mockey.Mock((*snapshot.Service).ResolveRepoKeyForApp).Return(
 					&snapshot.RepoKeyInfo{RepoKey: "repo-key-abc"}, nil,
 				).Build()
-				mockey.Mock((*promotion.PromotionStoreMongo).IsTagPromoted).Return(false, nil).Build()
 
 				err := checker.Do(ctx, params)
 				Expect(err).To(HaveOccurred())

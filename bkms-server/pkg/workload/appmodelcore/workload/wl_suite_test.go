@@ -88,9 +88,9 @@ func cleanupWorkspaces(ctx context.Context) {
 }
 
 func initWorkloadPlugin() {
-	appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore, polarisConfigStore := newWorkloadPluginDependencies()
+	appConfigFileStore, db, appConfigFileVersionStore, polarisConfigStore := newWorkloadPluginDependencies()
 	workload.InitPlugin(
-		appcfg.NewMountableFileProvider(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore),
+		appcfg.NewMountableFileProvider(appConfigFileStore, db, appConfigFileVersionStore),
 		polarisConfigStore,
 	)
 }

@@ -22,6 +22,7 @@ import (
 	"slices"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -29,8 +30,8 @@ import (
 )
 
 // RequirePlatformRole returns a middleware that ensures current user has one of the allowed platform roles.
-func RequirePlatformRole(store platmgtadmin.Store, allowedRoles ...platmgtadmin.RoleCode) gin.HandlerFunc {
-	platAdminService := platmgtadmin.NewService(store)
+func RequirePlatformRole(db *mongo.Database, allowedRoles ...platmgtadmin.RoleCode) gin.HandlerFunc {
+	platAdminService := platmgtadmin.NewService(db)
 
 	return func(c *gin.Context) {
 		username := auth.MustGetUser(c.Request.Context()).ID

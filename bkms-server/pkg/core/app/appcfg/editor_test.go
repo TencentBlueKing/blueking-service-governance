@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
@@ -33,7 +34,8 @@ import (
 var _ = Describe("Local Editor", func() {
 	var ctx context.Context
 	var store *AppConfigFileStoreMongo
-	var defStore *AppConfigFileDefStoreMongo
+	var defStore *AppConfigFileDefStore
+	var db *mongo.Database
 
 	var appID string
 	var normalAcf, overlayAcf *AppConfigFile
@@ -44,16 +46,18 @@ var _ = Describe("Local Editor", func() {
 		var err error
 		store, err = NewAppConfigFileStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
-		defStore, err = NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		db = testutil.NewDB(GinkgoT())
+		defStore = testutil.NewStore(GinkgoT(), AppConfigFileDefMeta)
 
 		appID = "test-app-" + stringx.Random(6)
-		defID, err := defStore.Add(ctx, AppConfigFileDef{
+		def := &AppConfigFileDef{
 			AppID:      appID,
 			Name:       "values.yaml",
 			ConfigKind: ConfigKindFramework,
 			Creator:    "tester",
-		})
+		}
+		err = defStore.Create(ctx, def)
+		defID := def.ID
 		Expect(err).NotTo(HaveOccurred())
 
 		normalAcf = &AppConfigFile{
@@ -117,12 +121,14 @@ var _ = Describe("Local Editor", func() {
 	})
 
 	setUpAppConfigFixture := func() (base, overlay AppConfigFile) {
-		defID, err := defStore.Add(ctx, AppConfigFileDef{
+		def := &AppConfigFileDef{
 			AppID:      appID,
 			Name:       "fixture-values.yaml",
 			ConfigKind: ConfigKindFramework,
 			Creator:    "tester",
-		})
+		}
+		err := defStore.Create(ctx, def)
+		defID := def.ID
 		Expect(err).NotTo(HaveOccurred())
 
 		baseContent := `global:
@@ -165,7 +171,7 @@ patches:
 		It("overlay type with base should work", func() {
 			_, overlayAcfNew := setUpAppConfigFixture()
 
-			result, err := newLocalAppConfigFileEditor(store, defStore, &overlayAcfNew).GetCompiledContent(ctx)
+			result, err := newLocalAppConfigFileEditor(store, db, &overlayAcfNew).GetCompiledContent(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Compare the result with the expected merged content
@@ -217,7 +223,7 @@ patches:
 			_, _ = store.Update(ctx, *normalAcf)
 			_, _ = store.Update(ctx, *overlayAcf)
 
-			result, err := newLocalAppConfigFileEditor(store, defStore, overlayAcf).GetCompiledContent(ctx)
+			result, err := newLocalAppConfigFileEditor(store, db, overlayAcf).GetCompiledContent(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Compare the result with the expected merged content
@@ -258,7 +264,7 @@ patches:
 			_, _ = store.Update(ctx, *normalAcf)
 			_, _ = store.Update(ctx, *overlayAcf)
 
-			result, err := newLocalAppConfigFileEditor(store, defStore, overlayAcf).GetCompiledContent(ctx)
+			result, err := newLocalAppConfigFileEditor(store, db, overlayAcf).GetCompiledContent(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Compare the result with the expected merged content

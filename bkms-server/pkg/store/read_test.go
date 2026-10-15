@@ -21,7 +21,6 @@ package store_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -35,27 +34,125 @@ var _ = Describe("GenericStore read operations", func() {
 	Describe("Get", func() {
 		It("should return the document matching the filter", func() {
 			created := f.mustCreateWidget("w1")
+			f.mustCreateWidget("w2")
 
 			got, err := f.widgets.Get(f.ctx, f.byName("w1"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.ID).To(Equal(created.ID))
-			Expect(got.Priority).To(Equal(1))
+			Expect(got.Name).To(Equal("w1"))
 		})
 
 		It("should wrap both the domain sentinel and store.ErrNotFound when missing", func() {
 			_, err := f.widgets.Get(f.ctx, f.byName("missing"))
-			Expect(errors.Is(err, ErrWidgetNotFound)).To(BeTrue())
-			Expect(errors.Is(err, store.ErrNotFound)).To(BeTrue())
-			Expect(err.Error()).To(ContainSubstring(widgetCollection))
+			Expect(err).To(MatchError(ErrWidgetNotFound))
+			Expect(err).To(MatchError(store.ErrNotFound))
+			Expect(err).To(MatchError(ContainSubstring(widgetCollection)))
 		})
 
 		It("should fall back to store.ErrNotFound when meta has no NotFound", func() {
 			_, err := f.items.Get(f.ctx, store.Where("_id", "missing"))
-			Expect(errors.Is(err, store.ErrNotFound)).To(BeTrue())
+			Expect(err).To(MatchError(store.ErrNotFound))
+		})
+	})
+
+	Describe("GetByID", func() {
+		It("should return the document with the given ObjectID", func() {
+			created := f.mustCreateWidget("w1")
+			f.mustCreateWidget("w2")
+
+			got, err := f.widgets.GetByID(f.ctx, created.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Name).To(Equal("w1"))
+		})
+
+		It("should return the document with the given string ID", func() {
+			Expect(f.items.Create(f.ctx, &Item{ID: "e1", Value: "v"})).To(Succeed())
+
+			got, err := f.items.GetByID(f.ctx, "e1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Value).To(Equal("v"))
+		})
+
+		It("should return NotFound when the ID type differs from the model", func() {
+			created := f.mustCreateWidget("w1")
+
+			_, err := f.widgets.GetByID(f.ctx, created.ID.Hex())
+			Expect(err).To(MatchError(ErrWidgetNotFound))
+			Expect(err).To(MatchError(store.ErrNotFound))
+		})
+	})
+
+	Describe("ContainsIgnoreCase", func() {
+		BeforeEach(func() {
+			for name, color := range map[string]string{"Alpha-Prod": "red", "beta": "Crimson-RED", "a.c": "blue"} {
+				w := f.newWidget(name)
+				w.Spec.Color = color
+				Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
+			}
+		})
+
+		listNames := func(opts ...store.Opt) []string {
+			list, err := f.widgets.List(f.ctx, append([]store.Opt{f.byOwner()}, opts...)...)
+			Expect(err).NotTo(HaveOccurred())
+			return widgetNames(list)
+		}
+
+		It("should match a substring regardless of case", func() {
+			Expect(listNames(store.ContainsIgnoreCase(" PROD ", "name"))).To(ConsistOf("Alpha-Prod"))
+		})
+
+		It("should match regex metacharacters literally", func() {
+			// 未转义时 "a.c" 会被当作正则，"." 可以匹配任意字符
+			Expect(listNames(store.ContainsIgnoreCase(".", "name"))).To(ConsistOf("a.c"))
+		})
+
+		It("should match documents where any of the fields contains the keyword", func() {
+			// 字段既可以写 bson 路径，也可以写 Go 字段名
+			opt := store.ContainsIgnoreCase("red", "name", "Spec.Color")
+			Expect(listNames(opt)).To(ConsistOf("Alpha-Prod", "beta"))
+		})
+
+		It("should keep both conditions when combined with another one on the same fields", func() {
+			opts := []store.Opt{
+				store.ContainsIgnoreCase("red", "name", "spec.color"),
+				store.ContainsIgnoreCase("prod", "name", "spec.color"),
+			}
+			Expect(listNames(opts...)).To(ConsistOf("Alpha-Prod"))
+		})
+
+		It("should not filter when the keyword is blank", func() {
+			Expect(listNames(store.ContainsIgnoreCase("  ", "name"))).To(HaveLen(3))
+		})
+
+		It("should not count as a filter for write operations when the keyword is blank", func() {
+			_, err := f.widgets.DeleteMany(f.ctx, store.ContainsIgnoreCase("", "name"))
+			Expect(err).To(MatchError(ContainSubstring("filter is required")))
+		})
+	})
+
+	Describe("ByID", func() {
+		It("should narrow the match when combined with other conditions", func() {
+			created := f.mustCreateWidget("w1")
+
+			Expect(f.widgets.Exists(f.ctx, store.ByID(created.ID), f.byOwner())).To(BeTrue())
+			Expect(f.widgets.Exists(f.ctx, store.ByID(created.ID), store.Where("ownerID", "nobody"))).To(BeFalse())
+		})
+
+		It("should work as the filter of write operations", func() {
+			created := f.mustCreateWidget("w1")
+
+			Expect(f.widgets.Update(f.ctx, map[string]any{"priority": 9}, store.ByID(created.ID))).To(Succeed())
+			got, err := f.widgets.GetByID(f.ctx, created.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Priority).To(Equal(9))
+
+			Expect(f.widgets.Delete(f.ctx, store.ByID(created.ID))).To(Succeed())
+			Expect(f.widgets.Exists(f.ctx, store.ByID(created.ID))).To(BeFalse())
 		})
 	})
 
 	Describe("List", func() {
+		// 名称顺序 c a b，priority 依次为 3 2 1，便于区分按名称与按 priority 排序的结果
 		BeforeEach(func() {
 			for i, name := range []string{"c", "a", "b"} {
 				w := f.newWidget(name)
@@ -67,27 +164,26 @@ var _ = Describe("GenericStore read operations", func() {
 		It("should return all documents matching the filter", func() {
 			list, err := f.widgets.List(f.ctx, f.byOwner())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(list).To(HaveLen(3))
+			Expect(widgetNames(list)).To(ConsistOf("a", "b", "c"))
 		})
 
-		It("should sort by the given keys in order", func() {
-			list, err := f.widgets.List(f.ctx, f.byOwner(), store.Asc("name"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(widgetNames(list)).To(Equal([]string{"a", "b", "c"}))
+		DescribeTable("should sort by the given keys in order",
+			func(expected []string, sorts ...store.Opt) {
+				list, err := f.widgets.List(f.ctx, append([]store.Opt{f.byOwner()}, sorts...)...)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(widgetNames(list)).To(Equal(expected))
+			},
+			Entry("ascending", []string{"a", "b", "c"}, store.Asc("name")),
+			Entry("descending", []string{"c", "a", "b"}, store.Desc("priority")),
+		)
 
-			list, err = f.widgets.List(f.ctx, f.byOwner(), store.Desc("priority"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(widgetNames(list)).To(Equal([]string{"c", "a", "b"}))
-		})
+		It("should use the next sort key when the previous one ties", func() {
+			// d 与 c 的 priority 相同，由第二个排序键决定先后
+			d := f.newWidget("d")
+			d.Priority = 3
+			Expect(f.widgets.Create(f.ctx, d)).To(Succeed())
 
-		It("should support multiple sort keys", func() {
-			w := f.newWidget("d")
-			w.Priority = 3
-			Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
-
-			list, err := f.widgets.List(
-				f.ctx, f.byOwner(), store.Desc("priority"), store.Desc("name"),
-			)
+			list, err := f.widgets.List(f.ctx, f.byOwner(), store.Desc("priority"), store.Desc("name"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(widgetNames(list)).To(Equal([]string{"d", "c", "a", "b"}))
 		})
@@ -98,6 +194,12 @@ var _ = Describe("GenericStore read operations", func() {
 			Expect(widgetNames(list)).To(Equal([]string{"a", "b"}))
 		})
 
+		It("should not limit the results when the limit is not positive", func() {
+			list, err := f.widgets.List(f.ctx, f.byOwner(), store.Limit(0))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list).To(HaveLen(3))
+		})
+
 		It("should return an empty non-nil slice when nothing matches", func() {
 			list, err := f.widgets.List(f.ctx, store.Where("ownerID", "nobody"))
 			Expect(err).NotTo(HaveOccurred())
@@ -105,37 +207,27 @@ var _ = Describe("GenericStore read operations", func() {
 			Expect(list).To(BeEmpty())
 		})
 
-		It("should treat a nil filter as matching all documents", func() {
+		It("should treat a nil opt as no condition", func() {
 			list, err := f.widgets.List(f.ctx, nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(list)).To(BeNumerically(">=", 3))
+			Expect(list).To(HaveLen(3))
 		})
 	})
 
-	Describe("Exists and Count", func() {
-		It("should report existence and count of matching documents", func() {
+	Describe("Exists", func() {
+		It("should report whether any document matches", func() {
+			f.mustCreateWidget("w1")
+			Expect(f.widgets.Exists(f.ctx, f.byName("w1"))).To(BeTrue())
+			Expect(f.widgets.Exists(f.ctx, f.byName("missing"))).To(BeFalse())
+		})
+	})
+
+	Describe("Count", func() {
+		It("should count the matching documents", func() {
 			f.mustCreateWidget("w1")
 			f.mustCreateWidget("w2")
-
-			ok, err := f.widgets.Exists(f.ctx, f.byName("w1"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ok).To(BeTrue())
-
-			ok, err = f.widgets.Exists(f.ctx, f.byName("missing"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ok).To(BeFalse())
-
-			n, err := f.widgets.Count(f.ctx, f.byOwner())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(n).To(Equal(int64(2)))
+			Expect(f.widgets.Count(f.ctx, f.byOwner())).To(Equal(int64(2)))
+			Expect(f.widgets.Count(f.ctx, f.byName("w1"))).To(Equal(int64(1)))
 		})
 	})
 })
-
-func widgetNames(list []Widget) []string {
-	names := make([]string, 0, len(list))
-	for _, w := range list {
-		names = append(names, w.Name)
-	}
-	return names
-}

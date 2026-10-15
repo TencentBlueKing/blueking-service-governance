@@ -39,6 +39,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/arrangement"
 )
 
@@ -106,7 +107,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	creator := auth.MustGetUser(ctx).ID
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	params := appcfg.CreateCfgFileParams{
@@ -213,7 +214,7 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	operator := auth.MustGetUser(ctx).ID
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	if err = acfService.UpdateFile(
@@ -284,8 +285,11 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 	}
 
 	// 存量接口只返回 framework 类型，过滤掉 plain 文件。
-	frameworkDefs, err := h.registry.AppConfigFileDefStore.ListByApp(
-		ctx, app.ID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+	frameworkDefs, err := appcfg.ListDefsByApp(
+		ctx,
+		store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta),
+		app.ID,
+		appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing framework defs"))
@@ -313,7 +317,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 	defNameMap := make(map[bson.ObjectID]string)
 	for _, acf := range appConfigFiles {
 		if _, ok := defNameMap[acf.DefID]; !ok {
-			if def, dErr := h.registry.AppConfigFileDefStore.GetByID(ctx, acf.DefID); dErr == nil {
+			if def, dErr := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, acf.DefID); dErr == nil {
 				defNameMap[acf.DefID] = def.Name
 			}
 		}
@@ -374,7 +378,7 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 	// 先查 def 获取 name
 	defName := ""
 	if acf, gErr := h.registry.AppConfigFileStore.GetByID(ctx, id); gErr == nil {
-		if def, dErr := h.registry.AppConfigFileDefStore.GetByID(ctx, acf.DefID); dErr == nil {
+		if def, dErr := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, acf.DefID); dErr == nil {
 			defName = def.Name
 			// 禁止通过旧接口删除 plain 环境实例
 			if def.ConfigKind == appcfg.ConfigKindPlain && acf.EnvName != appcfg.EnvNameDefault {
@@ -390,7 +394,7 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	oldAcf, err := acfService.DeleteFile(ctx, app.ID, id)
@@ -441,7 +445,7 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 
 	provider, err := appcfg.NewBaseContentProvider(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		acf,
 	)
 	if err != nil {
@@ -465,7 +469,7 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 		}
 	}
 
-	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, h.registry.AppConfigFileDefStore, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, h.registry.DB, acf)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating values file editor"))
 		return
@@ -622,7 +626,7 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 
 	editor, err := appcfg.NewAppConfigFileEditor(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		virtualConfig,
 	)
 	if err != nil {
@@ -665,7 +669,7 @@ func (h *Handler) updateContentOrOverlay(
 		return nil, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate file content")
 	}
 
-	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, h.registry.AppConfigFileDefStore, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(h.registry.AppConfigFileStore, h.registry.DB, acf)
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "creating values file editor")
 	}
@@ -721,12 +725,12 @@ func (h *Handler) persistContentUpdate(
 ) error {
 	// TODO: 老接口 Name 从 def 获取，迁移后可简化
 	defName := ""
-	if def, dErr := h.registry.AppConfigFileDefStore.GetByID(ctx, acf.DefID); dErr == nil {
+	if def, dErr := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, acf.DefID); dErr == nil {
 		defName = def.Name
 	}
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	if err := acfService.UpdateFile(
@@ -753,7 +757,7 @@ func (h *Handler) persistContentUpdate(
 // resolveDefName 从 def 获取文件名称，def 不存在时返回空字符串。
 // TODO: 老接口兼容辅助，迁移新接口后可删除。
 func (h *Handler) resolveDefName(ctx context.Context, defID bson.ObjectID) string {
-	def, err := h.registry.AppConfigFileDefStore.GetByID(ctx, defID)
+	def, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, defID)
 	if err != nil {
 		return ""
 	}
@@ -766,10 +770,10 @@ func (h *Handler) syncDefName(ctx context.Context, defID bson.ObjectID, newName,
 	if newName == oldName {
 		return
 	}
-	def, err := h.registry.AppConfigFileDefStore.GetByID(ctx, defID)
+	def, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx, defID)
 	if err != nil {
 		return
 	}
 	def.Name = newName
-	_, _ = h.registry.AppConfigFileDefStore.Update(ctx, *def)
+	_ = appcfg.UpdateDef(ctx, store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta), def)
 }

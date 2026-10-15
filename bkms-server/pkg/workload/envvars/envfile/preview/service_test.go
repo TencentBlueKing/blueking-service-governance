@@ -29,7 +29,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	coreapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -52,9 +51,7 @@ var _ = Describe("ImportPreviewService", func() {
 		appStore              coreapp.ApplicationStore
 		appModelStore         appmodel.AppModelStore
 		appConfigFileStore    appcfg.AppConfigFileStore
-		appConfigFileDefStore appcfg.AppConfigFileDefStore
 		appConfigVersionStore appcfg.AppConfigFileVersionStore
-		buildConfigStore      build.ConfigStore
 		service               *previewpkg.ImportPreviewService
 	)
 
@@ -67,15 +64,12 @@ var _ = Describe("ImportPreviewService", func() {
 			coreapp.FxModule,
 			appmodel.FxModule,
 			appcfg.FxModule,
-			build.FxModule,
 			fx.Populate(
 				&scopedEnvVarStore,
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigVersionStore,
-				&buildConfigStore,
 			),
 		)
 		diApp.RequireStart()
@@ -247,9 +241,7 @@ SENSITIVE_PUBLIC_KEY=updated-secret
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -288,9 +280,7 @@ BKMS_APP_NAME=custom-app-name
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -418,9 +408,7 @@ ENV_ONLY_KEY=env-override-value
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 		})

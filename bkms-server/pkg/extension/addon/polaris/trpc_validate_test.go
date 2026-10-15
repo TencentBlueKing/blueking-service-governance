@@ -28,6 +28,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -39,7 +40,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 		diApp                 *fxtest.App
 		appModelStore         appmodel.AppModelStore
 		appConfigFileStore    appcfg.AppConfigFileStore
-		appConfigFileDefStore appcfg.AppConfigFileDefStore
+		appConfigFileDefStore *appcfg.AppConfigFileDefStore
 		versionStore          appcfg.AppConfigFileVersionStore
 		polarisConfigStore    polaris.PolarisConfigStore
 		cfgProvider           appcfg.MountableFileProvider
@@ -58,20 +59,20 @@ var _ = Describe("CollectConfigWarnings", func() {
 			fx.Populate(
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&versionStore,
 				&polarisConfigStore,
 			),
 		)
 		diApp.RequireStart()
-		cfgProvider = appcfg.NewMountableFileProvider(appConfigFileStore, appConfigFileDefStore, versionStore)
+		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		cfgProvider = appcfg.NewMountableFileProvider(appConfigFileStore, testutil.NewDB(GinkgoT()), versionStore)
 	})
 
 	AfterEach(func() {
 		// 清理测试数据
 		_ = appModelStore.DeleteAppModel(ctx, testAppID)
 		_, _ = appConfigFileStore.DeleteByApp(ctx, testAppID)
-		_, _ = appConfigFileDefStore.DeleteByApp(ctx, testAppID)
+		_, _ = appConfigFileDefStore.DeleteMany(ctx, appcfg.DefsByApp(testAppID))
 		_ = polarisConfigStore.DeleteByApp(ctx, testAppID)
 
 		diApp.RequireStop()
@@ -91,11 +92,13 @@ var _ = Describe("CollectConfigWarnings", func() {
 
 	// 辅助函数：创建 framework def + 默认文件，返回 defID
 	createDefAndDefaultFile := func(content string) bson.ObjectID {
-		defID, err := appConfigFileDefStore.Add(ctx, appcfg.AppConfigFileDef{
+		def := &appcfg.AppConfigFileDef{
 			AppID:      testAppID,
 			Name:       appcfg.DefaultAppConfigFileName,
 			ConfigKind: appcfg.ConfigKindFramework,
-		})
+		}
+		err := appConfigFileDefStore.Create(ctx, def)
+		defID := def.ID
 		Expect(err).NotTo(HaveOccurred())
 
 		acf := appcfg.AppConfigFile{

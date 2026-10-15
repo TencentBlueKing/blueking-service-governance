@@ -33,7 +33,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkrepo"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	helmchartcred "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
@@ -179,13 +178,11 @@ func (m *ProjectManager) initImageRegistryCredentials(ctx context.Context, proje
 		return errors.Wrap(err, "generate image registry from config")
 	}
 
-	regStore, err := bkmsreg.NewImageRegistryStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return errors.Wrap(err, "create image registry store")
-	}
+	regStore := store.Of(m.db, bkmsreg.ImageRegistryMeta)
 
 	// 1. 查询 DB，确认是否有关联记录，若存在，直接返回
-	if _, err = regStore.GetByWorkspaceAndType(ctx, m.workspaceID, bkmsreg.ImageRegistryTypeBuiltin); err == nil {
+	_, err = regStore.Get(ctx, bkmsreg.ByWorkspaceAndType(m.workspaceID, bkmsreg.ImageRegistryTypeBuiltin))
+	if err == nil {
 		return nil
 	} else if !errors.Is(err, bkmsreg.ErrImageRegistryNotFound) {
 		return errors.Wrapf(err, "get builtin image registry of workspace %s", m.workspaceID)
@@ -216,7 +213,7 @@ func (m *ProjectManager) initImageRegistryCredentials(ctx context.Context, proje
 		Password:         m.password,
 		BkCICredentialID: credentialID,
 	}
-	if _, err = regStore.Create(ctx, imageReg); err != nil {
+	if err = regStore.Create(ctx, imageReg); err != nil {
 		return errors.Wrap(err, "insert image registry")
 	}
 

@@ -44,6 +44,7 @@ import (
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	workspacetask "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -231,7 +232,9 @@ func (h *Handler) GetWorkspace(c *gin.Context) {
 		return
 	}
 
-	imageRegistry, err := h.registry.ImageRegistryStore.GetByWorkspaceAndType(ctx, ws.ID, ws.ImageRegistryType)
+	imageRegistry, err := store.Of(h.registry.DB, bkmsreg.ImageRegistryMeta).Get(
+		ctx, bkmsreg.ByWorkspaceAndType(ws.ID, ws.ImageRegistryType),
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get image registry"))
 		return
@@ -549,7 +552,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 			ctx,
 			input.ID,
 			bkSystem.BkCIProjectID,
-			h.registry.ImageRegistryStore,
+			h.registry.DB,
 			reg.Registry,
 			reg.Username,
 			reg.Password,
@@ -584,7 +587,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 	}
 
 	// 创建工作空间默认环境（production, development, test 等）
-	imageRegistry, err := workspace.GetWorkspaceImageRegistry(ctx, ws.ID)
+	imageRegistry, err := workspace.GetWorkspaceImageRegistry(ctx, h.registry.DB, ws.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get image registry"))
 		return

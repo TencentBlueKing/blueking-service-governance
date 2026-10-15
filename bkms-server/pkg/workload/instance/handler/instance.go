@@ -58,7 +58,7 @@ func New(registry *storereg.Registry) *Handler {
 func (h *Handler) newMountableFileProvider() appcfg.MountableFileProvider {
 	return appcfg.NewMountableFileProvider(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 }
@@ -440,14 +440,13 @@ func (h *Handler) newDeployer(app *bkmsapp.Application) *appmodeldeploy.Deployer
 			h.registry.WorkspaceStore,
 			h.registry.PolarisConfigStore,
 			h.registry.HostPortStore,
-			h.registry.BscpCfgStore,
 			h.registry.AppModelStore,
 			h.registry.AppSpecStore,
-			h.registry.BuildConfigStore,
+			h.registry.DB,
 			h.newMountableFileProvider(),
 		),
 		h.registry.AppSpecStore,
-		h.registry.BuildConfigStore,
+		h.registry.DB,
 		h.registry.AppConfigFileStore,
 		polaris.NewPolarisEnvStateManager(h.registry.PolarisConfigStore),
 		hostport.NewEnvStateManager(h.registry.HostPortStore),

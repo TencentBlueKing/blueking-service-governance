@@ -23,20 +23,22 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Service 提供应用仪表盘绑定管理能力。
 type Service struct {
-	store     AppDashboardStore
-	newClient func(operator string) (bkmapi.MonitorClient, error)
+	dashboards *Store
+	newClient  func(operator string) (bkmapi.MonitorClient, error)
 }
 
 // NewService 创建应用仪表盘绑定服务。
-func NewService(store AppDashboardStore) *Service {
-	return &Service{store: store, newClient: bkmapi.NewMonitorClient}
+func NewService(db *mongo.Database) *Service {
+	return &Service{dashboards: store.Of(db, Meta), newClient: bkmapi.NewMonitorClient}
 }
 
 // List 获取应用绑定的仪表盘列表
@@ -45,7 +47,7 @@ func (s *Service) List(
 	ws *workspace.Workspace,
 	appID, operator string,
 ) ([]*bkmapi.DashboardItem, error) {
-	records, err := s.store.ListByApp(ctx, appID)
+	records, err := s.dashboards.List(ctx, ByApp(appID), store.Desc("createdAt"))
 	if err != nil {
 		return nil, errors.Wrapf(err, "list app dashboard bindings, appID=%s", appID)
 	}
@@ -70,7 +72,7 @@ func (s *Service) Create(
 	if err != nil {
 		return err
 	}
-	if _, err := s.store.Create(ctx, &AppDashboard{
+	if err := s.dashboards.Create(ctx, &AppDashboard{
 		AppID:   appID,
 		UID:     uid,
 		Title:   detail.Title,
@@ -96,7 +98,12 @@ func (s *Service) Update(
 		// 变更 uid 时同步刷新标题，避免与新仪表盘不一致
 		updateData.Title = &detail.Title
 	}
-	if err := s.store.Update(ctx, appID, uid, operator, updateData); err != nil {
+	update, isEmpty := updateData.ToBSON()
+	if isEmpty {
+		return nil
+	}
+	update["updater"] = operator
+	if err := s.dashboards.Update(ctx, update, ByAppAndUID(appID, uid)); err != nil {
 		return errors.Wrapf(err, "update app dashboard binding, appID=%s, uid=%s", appID, uid)
 	}
 	return nil
@@ -104,7 +111,7 @@ func (s *Service) Update(
 
 // Delete 删除应用仪表盘绑定。
 func (s *Service) Delete(ctx context.Context, appID, uid string) error {
-	if err := s.store.Delete(ctx, appID, uid); err != nil {
+	if err := s.dashboards.Delete(ctx, ByAppAndUID(appID, uid)); err != nil {
 		return errors.Wrapf(err, "delete app dashboard binding, appID=%s, uid=%s", appID, uid)
 	}
 	return nil

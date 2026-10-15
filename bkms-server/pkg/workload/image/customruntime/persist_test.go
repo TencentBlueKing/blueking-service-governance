@@ -32,6 +32,7 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
@@ -87,7 +88,7 @@ var _ = Describe("PersistManager", func() {
 		mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(
 			&bkmsreg.ImageRegistry{Registry: registryAddr}, nil,
 		).Build()
-		return NewPersistManager(store, snapshotSvc)
+		return NewPersistManager(store, testutil.NewDB(GinkgoT()), snapshotSvc)
 	}
 
 	// mockSnapshotStatus 模拟快照状态：refreshedAt 为 nil 表示该镜像从未成功刷新过

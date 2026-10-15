@@ -38,7 +38,7 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 	var ctx context.Context
 	var appStore bkmsapp.ApplicationStore
 	var store appcfg.AppConfigFileStore
-	var defStore appcfg.AppConfigFileDefStore
+	var defStore *appcfg.AppConfigFileDefStore
 	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
 	var provider appcfg.MountableFileProvider
@@ -59,23 +59,26 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &store, &defStore, &versionStore),
+			fx.Populate(&appStore, &store, &versionStore),
 		)
 		diApp.RequireStart()
+		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewMountableFileProvider(store, defStore, versionStore)
-		base := appcfg.NewBaseAppCfgFileService(defStore, store, versionStore)
+		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()), versionStore)
+		base := appcfg.NewBaseAppCfgFileService(testutil.NewDB(GinkgoT()), store, versionStore)
 		svc = appcfg.NewAppCfgFileDefService(base)
 	})
 
 	createDef := func(name string) bson.ObjectID {
-		id, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+		def := &appcfg.AppConfigFileDef{
 			AppID:      app.ID,
 			Name:       name,
 			ConfigKind: appcfg.ConfigKindFramework,
 			Creator:    "tester",
-		})
+		}
+		err := defStore.Create(ctx, def)
+		id := def.ID
 		Expect(err).NotTo(HaveOccurred())
 		return id
 	}
@@ -258,7 +261,7 @@ var _ = Describe("ListPlainMountableFiles", func() {
 	var ctx context.Context
 	var appStore bkmsapp.ApplicationStore
 	var store appcfg.AppConfigFileStore
-	var defStore appcfg.AppConfigFileDefStore
+	var defStore *appcfg.AppConfigFileDefStore
 	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
 	var provider appcfg.MountableFileProvider
@@ -278,12 +281,13 @@ var _ = Describe("ListPlainMountableFiles", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &store, &defStore, &versionStore),
+			fx.Populate(&appStore, &store, &versionStore),
 		)
 		diApp.RequireStart()
+		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewMountableFileProvider(store, defStore, versionStore)
+		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()), versionStore)
 	})
 
 	AfterEach(func() {
@@ -291,13 +295,15 @@ var _ = Describe("ListPlainMountableFiles", func() {
 	})
 
 	createPlainDef := func(name, mountDir string) bson.ObjectID {
-		id, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+		def := &appcfg.AppConfigFileDef{
 			AppID:      app.ID,
 			Name:       name,
 			ConfigKind: appcfg.ConfigKindPlain,
 			MountDir:   mountDir,
 			Creator:    "tester",
-		})
+		}
+		err := defStore.Create(ctx, def)
+		id := def.ID
 		Expect(err).NotTo(HaveOccurred())
 		return id
 	}
@@ -378,7 +384,7 @@ var _ = Describe("ListPlainMountableFiles", func() {
 	})
 
 	It("should return empty when mounted env names is explicitly empty", func() {
-		defID, err := defStore.Add(ctx, appcfg.AppConfigFileDef{
+		def := &appcfg.AppConfigFileDef{
 			AppID:      app.ID,
 			Name:       "app.conf",
 			ConfigKind: appcfg.ConfigKindPlain,
@@ -388,7 +394,9 @@ var _ = Describe("ListPlainMountableFiles", func() {
 				IsUnifiedConfig: true,
 				MountedEnvNames: []string{},
 			},
-		})
+		}
+		err := defStore.Create(ctx, def)
+		defID := def.ID
 		Expect(err).NotTo(HaveOccurred())
 		addDefaultFile(defID, "default-content")
 

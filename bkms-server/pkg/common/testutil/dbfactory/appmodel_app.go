@@ -28,6 +28,8 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -120,7 +122,7 @@ func TrpcApplication(
 	// 创建 app-level 默认 AppConfigFile（tRPC plugin 需要）
 	// def.Name 使用 tRPC 配置中的实际文件名，与 app model 保持一致
 	acfService := appcfg.NewAppConfigFileService(
-		stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
+		stores.AppConfigFileStore, database.DB(), stores.AppConfigFileVersionStore,
 	)
 	_, err = acfService.Create(
 		ctx,
@@ -156,7 +158,7 @@ func TrpcApplication(
 			},
 		}
 	}
-	err = stores.BuildConfigStore.Create(ctx, buildCfg)
+	err = store.Of(database.DB(), build.ConfigMeta).Create(ctx, buildCfg)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	return app, model
@@ -167,9 +169,7 @@ type TafApplicationStores struct {
 	AppStore                  bkmsapp.ApplicationStore
 	AppModelStore             appmodel.AppModelStore
 	AppConfigFileStore        appcfg.AppConfigFileStore
-	AppConfigFileDefStore     appcfg.AppConfigFileDefStore
 	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	BuildConfigStore          build.ConfigStore
 }
 
 // TafApplicationOpts 定义创建 TAF 应用时的可选参数
@@ -268,7 +268,7 @@ func TafApplication(
 	// 创建 app-level 默认 AppConfigFile（TAF plugin 需要）
 	// def.Name 使用 TAF 配置中的实际文件名，与 app model 保持一致
 	acfService := appcfg.NewAppConfigFileService(
-		stores.AppConfigFileStore, stores.AppConfigFileDefStore, stores.AppConfigFileVersionStore,
+		stores.AppConfigFileStore, database.DB(), stores.AppConfigFileVersionStore,
 	)
 	_, err = acfService.Create(
 		ctx,
@@ -304,7 +304,7 @@ func TafApplication(
 			},
 		}
 	}
-	err = stores.BuildConfigStore.Create(ctx, buildCfg)
+	err = store.Of(database.DB(), build.ConfigMeta).Create(ctx, buildCfg)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	return app, model

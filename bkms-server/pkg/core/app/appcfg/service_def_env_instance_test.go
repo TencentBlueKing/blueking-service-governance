@@ -324,7 +324,7 @@ var _ = Describe("AppCfgFileDefService — Env Instance", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// framework def 不应被删除
-			defs, err := f.DefStore.ListByApp(f.Ctx, f.AppID)
+			defs, err := appcfg.ListDefsByApp(f.Ctx, f.DefStore, f.AppID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defs).To(HaveLen(2))
 		})

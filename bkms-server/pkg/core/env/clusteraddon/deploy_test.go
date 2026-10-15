@@ -37,7 +37,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
@@ -139,7 +138,7 @@ var _ = Describe("Deploy", func() {
 		addonDef     *clusteraddon.ClusterAddonDef
 		repoIndex    *clusteraddon.RepoIndex
 		chartVersion string
-		store        clusteraddon.ClusterAddonDefStore
+		store        *clusteraddon.ClusterAddonDefStore
 		mocker       *mockey.Mocker
 		clusterCfg   *cluster.Config
 	)
@@ -157,14 +156,13 @@ var _ = Describe("Deploy", func() {
 		mocker = mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 
 		// 初始化 store 并通过 LoadBuiltinFromFolder 加载测试 addon 定义
-		store, err = clusteraddon.NewClusterAddonDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		store = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 
 		err = clusteraddon.LoadBuiltinFromFolder(ctx, store, "assets/testaddons/valid")
 		Expect(err).NotTo(HaveOccurred())
 
 		// 从 DB 中获取测试 addon 定义
-		addonDef, err = store.Get(ctx, "bkms-test-chart")
+		addonDef, err = store.Get(ctx, clusteraddon.ByName("bkms-test-chart"))
 		Expect(err).NotTo(HaveOccurred())
 
 		// 检查 Helm 仓库是否可达并获取可用 chart 版本
@@ -200,7 +198,7 @@ var _ = Describe("Deploy", func() {
 		}
 
 		// 清理测试 addon 定义
-		_, _ = store.Delete(ctx, addonDef.Name)
+		_ = store.DeleteIfExists(ctx, clusteraddon.ByName(addonDef.Name))
 	})
 
 	Describe("Full addon lifecycle: list → install → upgrade → uninstall", func() {

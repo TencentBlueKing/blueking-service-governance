@@ -1,0 +1,134 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
+package store
+
+import (
+	"reflect"
+
+	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
+
+// setPath 将 val 赋给结构体 v 中 steps 所指的位置，途经的 nil 指针与 nil map 会被初始化。
+// steps 必须来自 assignable 的 fieldPath
+func setPath(v reflect.Value, steps []pathStep, val any) error {
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		v = v.Elem()
+	}
+	st, rest := steps[0], steps[1:]
+	if st.kind == stepField {
+		f := v.FieldByIndex(st.index)
+		if len(rest) == 0 {
+			return assignValue(f, val)
+		}
+		return setPath(f, rest, val)
+	}
+
+	// map 中的条目不可寻址，在副本上修改后再写回
+	if v.IsNil() {
+		v.Set(reflect.MakeMap(v.Type()))
+	}
+	key := reflect.ValueOf(st.key).Convert(v.Type().Key())
+	elem := reflect.New(v.Type().Elem()).Elem()
+	var err error
+	if len(rest) == 0 {
+		err = assignValue(elem, val)
+	} else {
+		if old := v.MapIndex(key); old.IsValid() {
+			elem.Set(old)
+		}
+		err = setPath(elem, rest, val)
+	}
+	if err != nil {
+		return err
+	}
+	v.SetMapIndex(key, elem)
+	return nil
+}
+
+// assignValue 将 val 赋给 dst（必须可寻址）：
+//   - 类型可以直接赋值时直接赋值，nil 表示零值
+//   - 指针字段可以直接传入元素值，如 *bool 字段传入 true
+//   - 底层类型相同的标量直接转换，如 string 写入 type SourceType string
+//   - 其余情况借助 bson 编解码转换为字段类型，如 int 写入 int64、[]any 写入 []string；
+//     注意经过 bson 转换后，interface 中的嵌套文档会变成 bson.D
+func assignValue(dst reflect.Value, val any) error {
+	if val == nil {
+		dst.SetZero()
+		return nil
+	}
+	src, dt := reflect.ValueOf(val), dst.Type()
+	switch {
+	case src.Type().AssignableTo(dt):
+		dst.Set(src)
+		return nil
+	case dt.Kind() == reflect.Pointer && src.Type().AssignableTo(dt.Elem()):
+		ptr := reflect.New(dt.Elem())
+		ptr.Elem().Set(src)
+		dst.Set(ptr)
+		return nil
+	case src.Kind() == dt.Kind() && isScalarKind(src.Kind()) && src.Type().ConvertibleTo(dt):
+		dst.Set(src.Convert(dt))
+		return nil
+	}
+	typ, data, err := bson.MarshalValue(val)
+	if err != nil {
+		return errors.Wrapf(err, "marshal %T", val)
+	}
+	if err = (bson.RawValue{Type: typ, Value: data}).Unmarshal(dst.Addr().Interface()); err != nil {
+		return errors.Wrapf(err, "convert %T to %s", val, dt)
+	}
+	return nil
+}
+
+func isScalarKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	}
+	return false
+}
+
+// valueAt 返回结构体 v 中 steps 所指的值，途经 nil 指针或不存在的 map 条目时返回 false。
+// steps 必须来自 assignable 的 fieldPath
+func valueAt(v reflect.Value, steps []pathStep) (reflect.Value, bool) {
+	for _, st := range steps {
+		for v.Kind() == reflect.Pointer {
+			if v.IsNil() {
+				return reflect.Value{}, false
+			}
+			v = v.Elem()
+		}
+		if st.kind == stepField {
+			v = v.FieldByIndex(st.index)
+			continue
+		}
+		v = v.MapIndex(reflect.ValueOf(st.key).Convert(v.Type().Key()))
+		if !v.IsValid() {
+			return reflect.Value{}, false
+		}
+	}
+	return v, true
+}

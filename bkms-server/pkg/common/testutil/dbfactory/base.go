@@ -27,7 +27,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/onsi/gomega"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -250,7 +249,5 @@ type TrpcApplicationStores struct {
 	AppStore                  bkmsapp.ApplicationStore
 	AppModelStore             appmodel.AppModelStore
 	AppConfigFileStore        appcfg.AppConfigFileStore
-	AppConfigFileDefStore     appcfg.AppConfigFileDefStore
 	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	BuildConfigStore          build.ConfigStore
 }

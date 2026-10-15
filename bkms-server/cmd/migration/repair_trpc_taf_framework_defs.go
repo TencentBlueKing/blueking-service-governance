@@ -36,6 +36,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const (
@@ -120,7 +121,7 @@ type repairTrpcTafFrameworkDefsSummary struct {
 // repairTrpcTafFrameworkDefsDeps 命令依赖的 store，便于单测注入。
 type repairTrpcTafFrameworkDefsDeps struct {
 	appStore  bkmsapp.ApplicationStore
-	defStore  appcfg.AppConfigFileDefStore
+	defStore  *appcfg.AppConfigFileDefStore
 	fileStore appcfg.AppConfigFileStore
 }
 
@@ -171,7 +172,7 @@ func NewRepairTrpcTafFrameworkDefsCmd() *cobra.Command {
 
 			summary, err := runRepairTrpcTafFrameworkDefs(ctx, repairTrpcTafFrameworkDefsDeps{
 				appStore:  storereg.G().AppStore,
-				defStore:  storereg.G().AppConfigFileDefStore,
+				defStore:  store.Of(storereg.G().DB, appcfg.AppConfigFileDefMeta),
 				fileStore: storereg.G().AppConfigFileStore,
 			}, opts)
 			if err != nil {
@@ -293,7 +294,9 @@ func buildRepairTrpcTafFrameworkDefsAppPlan(
 		return plan, nil
 	}
 
-	defs, err := deps.defStore.ListByApp(ctx, app.ID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
+	defs, err := appcfg.ListDefsByApp(
+		ctx, deps.defStore, app.ID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "list framework defs")
 	}
@@ -352,7 +355,7 @@ func applyRepairTrpcTafFrameworkDefsAppPlan(
 			return errors.Wrap(err, "load primary def")
 		}
 		def.EnvConfigMode.IsUnifiedConfig = false
-		if _, err = deps.defStore.Update(ctx, *def); err != nil {
+		if err = appcfg.UpdateDef(ctx, deps.defStore, def); err != nil {
 			return errors.Wrap(err, "set primary def independent")
 		}
 	}
@@ -369,7 +372,7 @@ func applyRepairTrpcTafFrameworkDefsAppPlan(
 		if len(remaining) > 0 {
 			continue
 		}
-		if _, err = deps.defStore.DeleteByID(ctx, defID); err != nil {
+		if err = deps.defStore.DeleteIfExists(ctx, store.ByID(defID)); err != nil {
 			return errors.Wrapf(err, "delete orphan def %s", defIDHex)
 		}
 	}

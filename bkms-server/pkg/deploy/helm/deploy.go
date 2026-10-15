@@ -49,6 +49,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/arrangement"
@@ -86,7 +87,7 @@ func PreviewHelmRelease(
 
 	// 获取 Values 配置（预览场景下敏感 env 变量渲染为掩码）
 	values, missingVars, missingEnvVars, err := genHelmDeployValues(
-		ctx, envVarsReader, app, env, valuesFileID, imageTag, true,
+		ctx, db, envVarsReader, app, env, valuesFileID, imageTag, true,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "generate release %s helm deploy values", spec.ReleaseName)
@@ -124,7 +125,7 @@ func PreviewHelmRelease(
 	}
 
 	// 构建 PostRenderer（组件 + 泳道）
-	postRenderer, err := postrenderer.Build(ctx, app, env, trafficLaneName)
+	postRenderer, err := postrenderer.Build(ctx, db, app, env, trafficLaneName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "build post renderer for preview %s", spec.ReleaseName)
 	}
@@ -182,7 +183,7 @@ func UpgradeOrInstallHelmChart(
 	}
 
 	// 获取 Values 配置（正式部署下发真实 env 值，不掩码；忽略未定义变量提示）
-	values, _, _, err := genHelmDeployValues(ctx, envVarsReader, app, env, valuesFileID, imageTag, false)
+	values, _, _, err := genHelmDeployValues(ctx, db, envVarsReader, app, env, valuesFileID, imageTag, false)
 	if err != nil {
 		return nil, errors.Wrapf(err, "generate release %s helm deploy values", spec.ReleaseName)
 	}
@@ -195,7 +196,7 @@ func UpgradeOrInstallHelmChart(
 	}
 
 	// 构建 PostRenderer（组件 + 泳道）
-	postRenderer, err := postrenderer.Build(ctx, app, env, trafficLaneName)
+	postRenderer, err := postrenderer.Build(ctx, db, app, env, trafficLaneName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "build post renderer for %s", spec.ReleaseName)
 	}
@@ -503,6 +504,7 @@ func genHelmReleaseSpec(
 //   - error 遇到的错误
 func genHelmDeployValues(
 	ctx context.Context,
+	db *mongo.Database,
 	envVarsReader *envvars.UnifiedEnvVarsReader,
 	app *bkmsapp.Application,
 	env *bkmsenv.Environment,
@@ -510,25 +512,21 @@ func genHelmDeployValues(
 	maskSensitive bool,
 ) (string, []string, []string, error) {
 	// 1. 从数据库中获取 AppConfigFile
-	store, err := appcfg.NewAppConfigFileStoreMongo(database.Client(), database.Name())
+	fileStore, err := appcfg.NewAppConfigFileStoreMongo(database.Client(), database.Name())
 	if err != nil {
 		return "", nil, nil, errors.Wrap(err, "initial app config file store")
-	}
-	defStore, err := appcfg.NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return "", nil, nil, errors.Wrap(err, "initial app config file def store")
 	}
 	acfID, err := bson.ObjectIDFromHex(appConfigFileID)
 	if err != nil {
 		return "", nil, nil, errors.Wrapf(err, "invalid app config file id %s", appConfigFileID)
 	}
-	acf, err := store.GetByID(ctx, acfID)
+	acf, err := fileStore.GetByID(ctx, acfID)
 	if err != nil {
 		return "", nil, nil, errors.Wrapf(err, "get app config file %s", appConfigFileID)
 	}
 
 	// 2. 获取 AppConfigFile 内容
-	editor, err := appcfg.NewAppConfigFileEditor(store, defStore, acf)
+	editor, err := appcfg.NewAppConfigFileEditor(fileStore, db, acf)
 	if err != nil {
 		return "", nil, nil, errors.Wrap(err, "creating app config file editor")
 	}
@@ -538,7 +536,7 @@ func genHelmDeployValues(
 	}
 
 	// 3. 生成 bkms 命名空间变量（构建/镜像相关）
-	buildVars, err := genValuesVariables(ctx, app.WorkspaceID, app.ID, app.Name, imageTag)
+	buildVars, err := genValuesVariables(ctx, db, app.WorkspaceID, app.ID, app.Name, imageTag)
 	if err != nil {
 		return "", nil, nil, errors.Wrap(err, "generate values variables")
 	}
@@ -625,12 +623,12 @@ func collectMissingVars(content string, contexts map[string]map[string]string) (
 }
 
 // genValuesVariables 生成 Helm 部署的 bkms 命名空间变量（用于 Gonja 引擎渲染 ${{ bkms.* }} 模板）
-func genValuesVariables(ctx context.Context, workspaceID, appID, appName, imageTag string) (map[string]string, error) {
-	buildCfgStore, err := build.NewConfigStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "initial build config store")
-	}
-	buildCfg, err := buildCfgStore.Get(ctx, appID)
+func genValuesVariables(
+	ctx context.Context,
+	db *mongo.Database,
+	workspaceID, appID, appName, imageTag string,
+) (map[string]string, error) {
+	buildCfg, err := store.Of(db, build.ConfigMeta).Get(ctx, build.ByApp(appID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get build config for %s", appID)
 	}
@@ -639,7 +637,7 @@ func genValuesVariables(ctx context.Context, workspaceID, appID, appName, imageT
 	var registry, repository string
 	if buildCfg.SourceType == build.SourceTypeCodeRepository {
 		// 镜像来源是代码仓库时，使用内建镜像源（bkrepo），镜像名称即为 AppName
-		imageRegistry, gErr := workspace.GetWorkspaceImageRegistry(ctx, workspaceID)
+		imageRegistry, gErr := workspace.GetWorkspaceImageRegistry(ctx, db, workspaceID)
 		if gErr != nil {
 			return nil, errors.Wrapf(gErr, "get image registry for workspace %s", workspaceID)
 		}

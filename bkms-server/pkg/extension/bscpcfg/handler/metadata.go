@@ -31,6 +31,7 @@ import (
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // InitMetadata 初始化配置管理（幂等）。
@@ -129,7 +130,7 @@ func (h *Handler) PatchMetadata(c *gin.Context) {
 		return
 	}
 
-	updateData, err := input.ToUpdateModel()
+	fields, err := input.ToUpdateFields()
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -148,25 +149,22 @@ func (h *Handler) PatchMetadata(c *gin.Context) {
 		return
 	}
 
-	appConfig, err := h.registry.BscpCfgStore.GetMetadata(ctx, app.ID)
-	if err != nil {
+	if err = mgr.PatchMetadata(ctx, app.ID, fields); err != nil {
 		if errors.Is(err, cfgmodel.ErrMetadataNotFound) {
 			bkerrs.AbortWithErr(
 				c, bkerrs.New(bkerrs.ErrCodeNotFound, "bscpcfg metadata not found, please init first"),
 			)
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscpcfg metadata"))
-		return
-	}
-
-	if err = mgr.PatchMetadata(ctx, app.ID, updateData); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update metadata"))
 		return
 	}
 
-	// 将更新后的值反映到返回结果
-	updateData.ApplyTo(appConfig)
+	appConfig, err := store.Of(h.registry.DB, cfgmodel.MetadataMeta).Get(ctx, cfgmodel.ByApp(app.ID))
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscpcfg metadata"))
+		return
+	}
 	ginutils.OK(c, &slz.MetadataResponse{Data: new(slz.MetadataOutput).FromModel(appConfig)})
 }
 
@@ -238,7 +236,7 @@ func (h *Handler) GetMetadata(c *gin.Context) {
 		return
 	}
 
-	appConfig, err := h.registry.BscpCfgStore.GetMetadata(ctx, app.ID)
+	appConfig, err := store.Of(h.registry.DB, cfgmodel.MetadataMeta).Get(ctx, cfgmodel.ByApp(app.ID))
 	if err != nil {
 		if errors.Is(err, cfgmodel.ErrMetadataNotFound) {
 			bkerrs.AbortWithErr(

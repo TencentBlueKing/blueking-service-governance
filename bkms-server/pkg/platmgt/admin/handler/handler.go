@@ -23,6 +23,7 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -35,16 +36,16 @@ var _ admin.Handler = (*Handler)(nil)
 
 // Handler handles Gin platform administrator API requests.
 type Handler struct {
-	store admin.Store
+	db *mongo.Database
 }
 
 // New creates a Handler.
-func New(store admin.Store) *Handler {
-	return &Handler{store: store}
+func New(db *mongo.Database) *Handler {
+	return &Handler{db: db}
 }
 
 func (h *Handler) platAdminService() *admin.Service {
-	return admin.NewService(h.store)
+	return admin.NewService(h.db)
 }
 
 // ListRoles 查询可分配的平台管理员角色列表

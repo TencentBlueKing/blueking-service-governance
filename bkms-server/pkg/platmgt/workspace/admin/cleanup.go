@@ -26,6 +26,7 @@ import (
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // systemUpdater 权限过期平台统一回收更新人。
@@ -33,9 +34,11 @@ const systemUpdater = "system"
 
 // CleanupExpiredGrants 扫描并清理所有未回收且已过期的临时管理员授权记录。
 func (s *Service) CleanupExpiredGrants(ctx context.Context) error {
-	records, err := s.recordStore.ListExpiredGrants(ctx, time.Now())
+	records, err := s.records.List(
+		ctx, ExpiredGrants(time.Now()), store.Asc("expiresAt"), store.Asc("updatedAt"), store.Asc("_id"),
+	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "find expired temporary admin records")
 	}
 
 	var firstErr error
@@ -83,7 +86,7 @@ func (s *Service) cleanupExpiredGrant(ctx context.Context, record *WorkspaceTemp
 
 	record.IsRecycled = true
 	record.Updater = systemUpdater
-	if err := s.recordStore.Update(ctx, record); err != nil {
+	if err := updateRecord(ctx, s.records, record); err != nil {
 		return errors.Wrap(err, "update temp admin record as recycled")
 	}
 	return nil

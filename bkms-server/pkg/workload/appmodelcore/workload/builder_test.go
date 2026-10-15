@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -51,7 +52,7 @@ var _ = Describe("Builder", func() {
 	var appStore bkmsapp.ApplicationStore
 	var appModelStore appmodel.AppModelStore
 	var appSpecStore appspec.AppSpecStore
-	var buildConfigStore build.ConfigStore
+	var buildConfigStore *build.ConfigStore
 	var envSvc *env.EnvService
 	var scopedEnvVarStore envvars.ScopedEnvVarStore
 	var builderSvc *workload.BuilderService
@@ -67,7 +68,6 @@ var _ = Describe("Builder", func() {
 			workload.FxModule,
 			env.FxModule,
 			envvars.FxModule,
-			build.FxModule,
 			depmodel.FxModule,
 			depenvvars.FxModule,
 			polarisenvvars.FxModule,
@@ -76,13 +76,13 @@ var _ = Describe("Builder", func() {
 				&appStore,
 				&appModelStore,
 				&appSpecStore,
-				&buildConfigStore,
 				&envSvc,
 				&scopedEnvVarStore,
 				&builderSvc,
 			),
 		)
 		diApp.RequireStart()
+		buildConfigStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
 	})
 
 	AfterEach(func() {

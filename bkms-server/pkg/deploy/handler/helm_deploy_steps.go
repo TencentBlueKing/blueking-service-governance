@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
@@ -35,7 +36,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
+	appnetworking "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking"
 )
 
 // attachHelmDeployRecordsValues 给部署记录添加 Values 相关信息。
@@ -91,7 +94,7 @@ func (h *Handler) execHelmAppDeploySteps(
 	deployInfo := genDeployInfo(app.WorkspaceID, app.ID, env.Name, trafficLaneName)
 	// 1. 部署前检查
 	if err := deploypkg.NewPreDeployChecker(
-		h.registry.EnvStore, h.registry.PromotionStore, h.newSnapshotService(),
+		h.registry.EnvStore, h.registry.DB, h.newSnapshotService(),
 	).Do(ctx, &deploypkg.PreDeployCheckParams{
 		WorkspaceID:     app.WorkspaceID,
 		EnvName:         env.Name,
@@ -104,16 +107,18 @@ func (h *Handler) execHelmAppDeploySteps(
 	}
 
 	// 2. 确保部署环境存在相应的 ImagePullSecret
-	buildCfg, err := h.registry.BuildConfigStore.Get(ctx, app.ID)
+	buildCfg, err := store.Of(h.registry.DB, imagebuild.ConfigMeta).Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
 		return "", errors.Wrapf(err, "get build config for %s", deployInfo)
 	}
-	if err = secret.NewImagePullSecretSyncer(env, app.ID, buildCfg).Sync(ctx); err != nil {
+	if err = secret.NewImagePullSecretSyncer(h.registry.DB, env, app.ID, buildCfg).Sync(ctx); err != nil {
 		return "", errors.Wrapf(err, "ensure image pull secret for %s", deployInfo)
 	}
 
 	// 3. 同步 app services 到集群中
-	services, err := h.registry.AppServiceStore.ListByApp(ctx, app.ID)
+	services, err := store.Of(h.registry.DB, appnetworking.ServiceMeta).List(
+		ctx, appnetworking.ByApp(app.ID), store.Desc("createdAt"),
+	)
 	if err != nil {
 		return "", errors.Wrapf(err, "list app services for %s", deployInfo)
 	}
@@ -192,7 +197,7 @@ func (h *Handler) execHelmAppRollbackSteps(ctx context.Context, record *helmdepl
 	deployInfo := genDeployInfo(record.WorkspaceID, record.AppID, record.EnvName, record.TrafficLaneName)
 	// 1. 部署前检查
 	if err := deploypkg.NewPreDeployChecker(
-		h.registry.EnvStore, h.registry.PromotionStore, h.newSnapshotService(),
+		h.registry.EnvStore, h.registry.DB, h.newSnapshotService(),
 	).Do(ctx, &deploypkg.PreDeployCheckParams{
 		WorkspaceID:     record.WorkspaceID,
 		EnvName:         record.EnvName,

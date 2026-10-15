@@ -122,14 +122,14 @@ func (s *AppCfgFileDefService) fillEditorInfo(ctx context.Context, result *EnvFi
 		result.EditableContentField = string(EditableContentFieldNone)
 		return
 	}
-	editor, err := NewAppConfigFileEditor(s.FileStore, s.DefStore, result.DisplayFile)
+	editor, err := NewAppConfigFileEditor(s.FileStore, s.db, result.DisplayFile)
 	if err != nil {
 		result.EditableContentField = string(EditableContentFieldNone)
 		return
 	}
 	result.EditableContentField = string(editor.GetEditableContentField())
 
-	provider, err := NewBaseContentProvider(s.FileStore, s.DefStore, result.DisplayFile)
+	provider, err := NewBaseContentProvider(s.FileStore, s.db, result.DisplayFile)
 	if err != nil {
 		return
 	}
@@ -155,7 +155,7 @@ func (s *AppCfgFileDefService) GetMountPreview(
 	ctx context.Context,
 	appID, envName string,
 ) ([]MountPreviewItem, error) {
-	defs, err := s.DefStore.ListByApp(ctx, appID)
+	defs, err := ListDefsByApp(ctx, s.DefStore, appID)
 	if err != nil {
 		return nil, errors.Wrap(err, "listing defs for mount preview")
 	}

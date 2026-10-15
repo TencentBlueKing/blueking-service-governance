@@ -23,6 +23,7 @@ import (
 	stderrors "errors"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -38,10 +39,10 @@ type PersistManager struct {
 }
 
 // NewPersistManager 创建 PersistManager，内部同时装配路径判定与仓库存在性校验
-func NewPersistManager(store Store, snapshotSvc *snapshot.Service) *PersistManager {
+func NewPersistManager(store Store, db *mongo.Database, snapshotSvc *snapshot.Service) *PersistManager {
 	return &PersistManager{
 		store:       store,
-		checker:     NewExistenceChecker(snapshotSvc),
+		checker:     NewExistenceChecker(db, snapshotSvc),
 		snapshotSvc: snapshotSvc,
 	}
 }

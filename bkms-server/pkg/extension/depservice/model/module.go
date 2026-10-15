@@ -27,8 +27,6 @@ import (
 var FxModule = fx.Module("depservice",
 	database.PrivateFxModule,
 	fx.Provide(
-		fx.Annotate(NewServiceStoreMongo, fx.As(new(ServiceStore))),
 		NewServiceInstanceStoreMongo,
-		NewServiceBindingStoreMongo,
 	),
 )

@@ -29,6 +29,7 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -41,7 +42,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
@@ -72,17 +73,17 @@ func newTestPolarisConfig(
 var _ = Describe("DeployPreChecker Check", func() {
 	var (
 		statusMock                *mockey.Mocker
-		clusterAddonDefStore      clusteraddon.ClusterAddonDefStore
+		clusterAddonDefStore      *clusteraddon.ClusterAddonDefStore
 		ctx                       context.Context
 		fxApp                     *fxtest.App
 		appStore                  bkmsapp.ApplicationStore
 		appModelStore             appmodel.AppModelStore
 		appConfigFileStore        appcfg.AppConfigFileStore
-		appConfigFileDefStore     appcfg.AppConfigFileDefStore
+		appConfigFileDefStore     *appcfg.AppConfigFileDefStore
 		appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 		componentDefStore         component.ComponentDefStore
 		polarisConfigStore        polaris.PolarisConfigStore
-		buildConfigStore          build.ConfigStore
+		buildConfigStore          *build.ConfigStore
 		workspaceCompsStore       workspace.WorkspaceCompsStore
 		workspaceStore            workspace.WorkspaceStore
 		createdWorkspaces         []string
@@ -105,33 +106,30 @@ var _ = Describe("DeployPreChecker Check", func() {
 			env.FxModule,
 			envvars.FxModule,
 			workspace.FxModule,
-			build.FxModule,
 			depmodel.FxModule,
 			depenvvars.FxModule,
 			workload.FxModule,
-			fx.Provide(func() (clusteraddon.ClusterAddonDefStore, error) {
-				return clusteraddon.NewClusterAddonDefStoreMongo(database.Client(), database.Name())
-			}),
+			store.FxModule,
 			fx.Provide(NewDeployPreChecker),
 			fx.Populate(
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&componentDefStore,
 				&polarisConfigStore,
-				&buildConfigStore,
 				&workspaceCompsStore,
 				&workspaceStore,
 				&envService,
 				&checker,
-				&clusterAddonDefStore,
 			),
 		)
 		fxApp.RequireStart()
+		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
+		buildConfigStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
+		clusterAddonDefStore = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 		workload.InitPlugin(
-			appcfg.NewMountableFileProvider(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore),
+			appcfg.NewMountableFileProvider(appConfigFileStore, testutil.NewDB(GinkgoT()), appConfigFileVersionStore),
 			polarisConfigStore,
 		)
 		statusMock = mockey.Mock(clusteraddon.InspectRequiredAddons).
@@ -152,9 +150,7 @@ var _ = Describe("DeployPreChecker Check", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
 			}, opts)
 			return app, dbfactory.Env(ctx, envService, app.WorkspaceID)
 		}
@@ -280,9 +276,10 @@ ignored: ${LEGACY}
 				FileContent: "default: ${{ env.DEFAULT_ONLY }}\n",
 			},
 		})
-		svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
-		defs, err := appConfigFileDefStore.ListByApp(
+		svc := appcfg.NewAppConfigFileService(appConfigFileStore, testutil.NewDB(GinkgoT()), appConfigFileVersionStore)
+		defs, err := appcfg.ListDefsByApp(
 			ctx,
+			appConfigFileDefStore,
 			app.ID,
 			appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 		)
@@ -530,7 +527,7 @@ ignored: ${LEGACY}
 		})
 
 		It("returns workload build errors", func() {
-			Expect(buildConfigStore.Delete(ctx, app.ID)).To(Succeed())
+			Expect(buildConfigStore.DeleteIfExists(ctx, build.ByApp(app.ID))).To(Succeed())
 
 			_, err := checker.Check(ctx, app, appEnv)
 
@@ -545,11 +542,10 @@ ignored: ${LEGACY}
 				Name: "precheck-test-addon", DisplayName: "Test operator",
 				RequiredForAppTypes: []string{bkmsapp.AppTypeTRPC},
 			}
-			Expect(clusterAddonDefStore.Create(ctx, addon)).To(Succeed())
+			Expect(clusteraddon.SaveDef(ctx, clusterAddonDefStore, addon)).To(Succeed())
 		})
 		AfterEach(func() {
-			_, err := clusterAddonDefStore.Delete(ctx, addon.Name)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(clusterAddonDefStore.Delete(ctx, clusteraddon.ByName(addon.Name))).To(Succeed())
 		})
 		It("returns missing addon identities", func() {
 			app, appEnv := newApp(nil)

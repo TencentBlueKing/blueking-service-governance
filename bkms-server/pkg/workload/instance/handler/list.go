@@ -180,7 +180,7 @@ func (h *Handler) attachPolarisToListedAppInstances(
 
 	// 按应用 + 环境拉北极星实例，分页与全量共用同一条失败口径
 	mgr := polaris.NewPolarisPlatformManager(
-		h.registry.DepSvcStore,
+		h.registry.DB,
 		h.registry.DepSvcInstStore,
 		h.registry.PolarisConfigStore,
 	)

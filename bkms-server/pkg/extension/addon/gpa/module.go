@@ -29,8 +29,5 @@ import (
 var FxModule = fx.Module("gpa",
 	database.PrivateFxModule,
 	appmodel.FxModule,
-	fx.Provide(
-		NewGPAConfigStoreMongo,
-		NewGPAService,
-	),
+	fx.Provide(NewGPAService),
 )

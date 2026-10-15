@@ -33,9 +33,11 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
+	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -50,8 +52,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -64,11 +68,12 @@ type Handler struct {
 
 // New creates a Handler.
 func New(registry *storereg.Registry) *Handler {
-	snapshotService := snapshot.NewService(registry.SnapshotStore, registry.BuildConfigStore, registry.AppStore)
+	snapshotService := snapshot.NewService(registry.SnapshotStore, registry.DB, registry.AppStore)
 	return &Handler{
 		registry: registry,
 		persistMgr: customruntime.NewPersistManager(
 			registry.CustomRuntimeImageStore,
+			registry.DB,
 			snapshotService,
 		),
 	}
@@ -162,7 +167,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 		return
 	}
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.RuntimeImageStore,
+		h.registry.DB,
 		h.registry.SnapshotStore,
 	)
 	if err = build.ValidatePlatformBuildImages(
@@ -185,7 +190,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"))
 		return
 	}
-	if err = h.registry.BuildConfigStore.Create(ctx, buildConfig); err != nil {
+	if err = store.Of(h.registry.DB, imagebuild.ConfigMeta).Create(ctx, buildConfig); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create build config"))
 		return
 	}
@@ -368,7 +373,7 @@ func (h *Handler) GetApp(c *gin.Context) {
 		return
 	}
 
-	buildConfig, err := h.registry.BuildConfigStore.Get(ctx, app.ID)
+	buildConfig, err := store.Of(h.registry.DB, imagebuild.ConfigMeta).Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get build config"))
 		return
@@ -810,7 +815,7 @@ func (h *Handler) GetAppDeployOverview(c *gin.Context) {
 		h.registry.BuildAutoDeployRecordStore,
 		h.registry.AppModelDeployRecordStore,
 		h.registry.HelmDeployRecordStore,
-		h.registry.GPAConfigStore,
+		h.registry.DB,
 	)
 	result, err := svc.GetOverview(ctx, app)
 	if err != nil {
@@ -859,7 +864,7 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 	if _, err := h.registry.AppConfigFileStore.DeleteByApp(ctx, app.ID); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config files", app.Name)
 	}
-	if _, err := h.registry.AppConfigFileDefStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(ctx, appcfg.DefsByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config file defs", app.Name)
 	}
 	if _, err := h.registry.AppConfigFileVersionStore.DeleteByApp(ctx, app.ID); err != nil {
@@ -889,12 +894,12 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 func (h *Handler) cleanupAppResources(ctx context.Context, appID string) error {
 	// TODO 确认是否需要删除蓝盾侧数据
 	// 删除构建配置
-	if err := h.registry.BuildConfigStore.Delete(ctx, appID); err != nil {
+	if err := store.Of(h.registry.DB, imagebuild.ConfigMeta).DeleteIfExists(ctx, imagebuild.ByApp(appID)); err != nil {
 		return errors.Wrap(err, "delete build config")
 	}
 
 	// 删除镜像晋级记录
-	if err := h.registry.PromotionStore.DeleteByApp(ctx, appID); err != nil {
+	if _, err := store.Of(h.registry.DB, promotion.Meta).DeleteMany(ctx, promotion.ByApp(appID)); err != nil {
 		return errors.Wrap(err, "delete promotions")
 	}
 

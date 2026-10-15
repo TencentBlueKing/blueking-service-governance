@@ -91,7 +91,7 @@ func (h *Handler) PortForward(c *gin.Context) {
 	}
 
 	// 校验 port-forward 白名单权限
-	pfService := pfwhitelist.NewService(h.registry.PortForwardWhitelistStore, h.registry.EnvStore)
+	pfService := pfwhitelist.NewService(h.registry.DB, h.registry.EnvStore)
 	if err = pfService.CheckPermission(ctx, envInfo.ID.Hex()); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.New(
 			bkerrs.ErrCodeNoPermission, pfwhitelist.ErrPermissionDenied.Error(),

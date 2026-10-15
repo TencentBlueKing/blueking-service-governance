@@ -38,7 +38,6 @@ var _ = Describe("AppConfigFileService", func() {
 	var diApp *fxtest.App
 	var appStore bkmsapp.ApplicationStore
 	var fileStore appcfg.AppConfigFileStore
-	var defStore appcfg.AppConfigFileDefStore
 	var versionStore appcfg.AppConfigFileVersionStore
 	var service *appcfg.AppConfigFileService
 	var ctx context.Context
@@ -61,14 +60,14 @@ var _ = Describe("AppConfigFileService", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &fileStore, &defStore, &versionStore),
+			fx.Populate(&appStore, &fileStore, &versionStore),
 		)
 		diApp.RequireStart()
 
 		app := dbfactory.Application(ctx, appStore)
 		appID = app.ID
 
-		service = appcfg.NewAppConfigFileService(fileStore, defStore, versionStore)
+		service = appcfg.NewAppConfigFileService(fileStore, testutil.NewDB(GinkgoT()), versionStore)
 	})
 
 	AfterEach(func() {

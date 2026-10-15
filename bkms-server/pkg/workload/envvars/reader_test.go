@@ -29,6 +29,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -647,9 +648,8 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	var (
 		diApp        *fxtest.App
 		store        envvars.ScopedEnvVarStore
-		svcStore     depmodel.ServiceStore
 		instStore    depmodel.ServiceInstanceStore
-		bindingStore depmodel.ServiceBindingStore
+		bindingStore *depmodel.ServiceBindingStore
 		ctx          context.Context
 		workspaceID  string
 		environment  envmodel.Environment
@@ -665,9 +665,10 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 			depenvvars.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
-			fx.Populate(&store, &svcStore, &instStore, &bindingStore, &reader),
+			fx.Populate(&store, &instStore, &reader),
 		)
 		diApp.RequireStart()
+		bindingStore = testutil.NewStore(GinkgoT(), depmodel.ServiceBindingMeta)
 
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		environment = envmodel.Environment{
@@ -682,13 +683,13 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 		seedScopedEnvVars(ctx, store, workspaceID)
 
 		// Seed fake service definition (含 providerType=user-defined, 对应 fake.Provider)
-		Expect(initdata.Do(svcStore)).To(Succeed())
+		Expect(initdata.Do(testutil.NewDB(GinkgoT()))).To(Succeed())
 	})
 
 	AfterEach(func() {
 		Expect(store.DeleteAll(ctx)).NotTo(HaveOccurred())
 		Expect(instStore.DeleteAll(ctx)).NotTo(HaveOccurred())
-		Expect(bindingStore.DeleteAll(ctx)).NotTo(HaveOccurred())
+		Expect(testutil.CleanupCollection(depmodel.ServiceBindingMeta.Collection)).NotTo(HaveOccurred())
 		diApp.RequireStop()
 	})
 
@@ -725,7 +726,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 		for _, name := range envNames {
 			envMap[name] = id
 		}
-		_, err = bindingStore.Create(ctx, &depmodel.ServiceBinding{
+		err = bindingStore.Create(ctx, &depmodel.ServiceBinding{
 			Name:           "binding-" + stringx.Random(6),
 			AppID:          appID,
 			WorkspaceID:    workspaceID,

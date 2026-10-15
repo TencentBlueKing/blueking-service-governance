@@ -35,6 +35,7 @@ import (
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -61,10 +62,10 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		workspaceStore  bkmsworkspace.WorkspaceStore
 		appStore        bkmsapp.ApplicationStore
 		envSvc          *bkmsenv.EnvService
-		cfgStore        build.ConfigStore
+		cfgStore        *build.ConfigStore
 		helmDeployStore helmdeploy.RecordStore
 		snapshotStore   snapshot.SnapshotStore
-		promotionStore  promotion.PromotionStore
+		promotionStore  *promotion.Store
 		oldConfig       *config.Config
 	)
 
@@ -82,24 +83,22 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 			GinkgoT(),
 			bkmsworkspace.FxModule,
 			bkmsapp.FxModule,
-			build.FxModule,
 			appmodeldeploy.FxModule,
 			helmdeploy.FxModule,
 			bkmsenv.FxModule,
-			promotion.FxModule,
 			FxModule,
 			fx.Populate(
 				&service,
 				&workspaceStore,
 				&appStore,
 				&envSvc,
-				&cfgStore,
 				&helmDeployStore,
 				&snapshotStore,
-				&promotionStore,
 			),
 		)
 		diApp.RequireStart()
+		cfgStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
+		promotionStore = testutil.NewStore(GinkgoT(), promotion.Meta)
 	})
 
 	AfterEach(func() {
@@ -186,7 +185,8 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(promotionStore.Upsert(ctx, fixture.app.ID, fixture.repoKey, fixture.inUseTag, "admin")).To(Succeed())
+		Expect(promotion.Promote(ctx, promotionStore, fixture.app.ID, fixture.repoKey, fixture.inUseTag, "admin")).
+			To(Succeed())
 
 		var deletedRepoName string
 		var deletedTag string
@@ -211,7 +211,10 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		Expect(snapshots).To(HaveLen(1))
 		Expect(snapshots[0].Tag).To(Equal(fixture.safeToDeleteTag))
 
-		isPromoted, err := promotionStore.IsTagPromoted(ctx, fixture.app.ID, fixture.repoKey, fixture.inUseTag)
+		isPromoted, err := promotionStore.Exists(
+			ctx,
+			promotion.ByTag(fixture.app.ID, fixture.repoKey, fixture.inUseTag),
+		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(isPromoted).To(BeFalse())
 	})
@@ -220,7 +223,7 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, snapshotStore)
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
-		Expect(cfgStore.Update(ctx, &build.Config{
+		Expect(build.UpdateConfig(ctx, cfgStore, &build.Config{
 			AppID: fixture.app.ID,
 			Image: &build.ImageConfig{
 				Name: fixture.repoName,
@@ -299,7 +302,7 @@ func newTagDeletionFixture(
 	workspaceStore bkmsworkspace.WorkspaceStore,
 	appStore bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
-	cfgStore build.ConfigStore,
+	cfgStore *build.ConfigStore,
 	snapshotStore snapshot.SnapshotStore,
 ) *tagDeletionFixture {
 	// Helm 场景的最小测试夹具：工作空间、应用、环境、镜像构建配置和两条快照。
@@ -346,7 +349,7 @@ func newAppModelTagDeletionFixture(
 	workspaceStore bkmsworkspace.WorkspaceStore,
 	appStore bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
-	cfgStore build.ConfigStore,
+	cfgStore *build.ConfigStore,
 	snapshotStore snapshot.SnapshotStore,
 ) *tagDeletionFixture {
 	// AppModel 场景复用同一份返回结构，仅把应用类型切为 TRPC。
@@ -397,8 +400,8 @@ func (f *tagDeletionFixture) cleanup(
 	workspaceStore bkmsworkspace.WorkspaceStore,
 	appStore bkmsapp.ApplicationStore,
 	envSvc *bkmsenv.EnvService,
-	cfgStore build.ConfigStore,
-	promotionStore promotion.PromotionStore,
+	cfgStore *build.ConfigStore,
+	promotionStore *promotion.Store,
 ) {
 	// 这些测试会落真实数据库，结束后按 app/repoKey 定向清理，避免互相污染。
 	db := database.Client().Database(database.Name())
@@ -419,8 +422,9 @@ func (f *tagDeletionFixture) cleanup(
 		"repoKey": f.repoKey,
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Expect(promotionStore.DeleteByApp(ctx, f.app.ID)).To(Succeed())
-	Expect(cfgStore.Delete(ctx, f.app.ID)).To(Succeed())
+	_, err = promotionStore.DeleteMany(ctx, promotion.ByApp(f.app.ID))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(cfgStore.DeleteIfExists(ctx, build.ByApp(f.app.ID))).To(Succeed())
 	Expect(envSvc.RemoveApp(ctx, f.env.ID, f.app.ID)).To(Succeed())
 	Expect(envSvc.Delete(ctx, f.env.ID)).To(Succeed())
 	Expect(appStore.DeleteAppByName(ctx, f.workspace.ID, f.app.Name)).To(Succeed())
