@@ -43,6 +43,7 @@ import (
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
+	releasestrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/hooks"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -295,6 +296,7 @@ func (r *Registry) registerStoreHooks() {
 		r.ResourceSnapshotStore,
 	)
 	appdefaultshooks.RegisterPreDeleteHooks(r.AppDefaultRuleStore)
+	releasestrategyhooks.RegisterPreDeleteHooks(r.ReleaseStrategyStore)
 }
 
 // initStoreData 初始化 Store 中的基础数据，例如依赖服务的数据。

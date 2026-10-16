@@ -43,6 +43,8 @@ type Store interface {
 	Update(ctx context.Context, strategy *ReleaseStrategy) error
 	// Delete 删除并返回空间内指定 ID 的发布策略，不存在时返回 ErrStrategyNotFound
 	Delete(ctx context.Context, workspaceID, id string) (*ReleaseStrategy, error)
+	// DeleteByWorkspace 删除空间内全部发布策略，空间删除时调用
+	DeleteByWorkspace(ctx context.Context, workspaceID string) error
 }
 
 var _ Store = (*StoreMongo)(nil)
@@ -156,4 +158,12 @@ func (s *StoreMongo) Delete(ctx context.Context, workspaceID, id string) (*Relea
 		return nil, errors.Wrapf(err, "delete release strategy %s in workspace %s", id, workspaceID)
 	}
 	return strategy, nil
+}
+
+// DeleteByWorkspace 删除空间内全部发布策略
+func (s *StoreMongo) DeleteByWorkspace(ctx context.Context, workspaceID string) error {
+	if _, err := s.collection.DeleteMany(ctx, bson.M{"workspaceID": workspaceID}); err != nil {
+		return errors.Wrapf(err, "delete release strategies in workspace %s", workspaceID)
+	}
+	return nil
 }

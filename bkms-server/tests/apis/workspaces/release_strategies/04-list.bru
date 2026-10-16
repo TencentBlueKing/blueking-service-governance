@@ -1,0 +1,33 @@
+meta {
+  name: list-release-strategies
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{releaseStrategyWorkspaceID}}/release-strategies
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should list the updated strategy", () => {
+    const strategies = res.body.data;
+    expect(strategies).to.have.lengthOf(1);
+    expect(strategies[0].id).to.equal(bru.getVar("releaseStrategyID"));
+    expect(strategies[0].batches).to.deep.equal([
+      {target: "2", pauseMode: "permanent", pauseSeconds: 0},
+      {target: "100%", pauseMode: "none", pauseSeconds: 0}
+    ]);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -1,0 +1,36 @@
+meta {
+  name: reject-duplicate-release-strategy-name
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{releaseStrategyWorkspaceID}}/release-strategies
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "生产谨慎发布",
+    "batches": [
+      {"target": "100%", "pauseMode": "none"}
+    ]
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject a duplicated name", () => {
+    expect(res.body.error.code).to.equal("INVALID_ARGUMENT");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -154,4 +154,21 @@ var _ = Describe("Release strategy store", func() {
 		_, err = store.Get(ctx, "workspace-a", created.ID.Hex())
 		Expect(err).NotTo(HaveOccurred())
 	})
+
+	It("deletes all strategies of a workspace and frees their names", func() {
+		Expect(store.Create(ctx, newStrategy("workspace-a", "first"))).To(Succeed())
+		Expect(store.Create(ctx, newStrategy("workspace-a", "second"))).To(Succeed())
+		Expect(store.Create(ctx, newStrategy("workspace-b", "first"))).To(Succeed())
+
+		Expect(store.DeleteByWorkspace(ctx, "workspace-a")).To(Succeed())
+
+		strategies, err := store.List(ctx, "workspace-a")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strategies).To(BeEmpty())
+		strategies, err = store.List(ctx, "workspace-b")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strategies).To(HaveLen(1))
+		// 空间内名称唯一索引不再被旧记录占用
+		Expect(store.Create(ctx, newStrategy("workspace-a", "first"))).To(Succeed())
+	})
 })

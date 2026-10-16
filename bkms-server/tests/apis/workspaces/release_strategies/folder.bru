@@ -1,0 +1,18 @@
+meta {
+  name: release_strategies
+  seq: 4
+}
+
+auth {
+  mode: inherit
+}
+
+script:pre-request {
+  const common = require("./common")
+
+  if (!bru.getVar("releaseStrategyWorkspaceID")) {
+    const suffix = bru.getVar("randomSuffix");
+    const ws = await common.createWorkspace({id: `release-strategy-ws-${suffix}`});
+    bru.setVar("releaseStrategyWorkspaceID", ws.id);
+  }
+}
