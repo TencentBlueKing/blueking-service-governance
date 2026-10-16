@@ -29,19 +29,17 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
 )
 
-// ListDeploy 查询部署记录，支持多环境（逗号分隔）。
+// ListDeploy 查询部署记录，支持多环境（逗号分隔名称）或按环境类型批量查询。
 // 多环境时将各环境的记录合并为一个扁平数组返回，保持与单环境一致的表格输出格式。
-func ListDeploy(ctx context.Context, workspaceID, appID, envName, trafficLane, keyword string) (interface{}, error) {
-	// 解析多环境名称
-	envNames := parseEnvNames(envName)
-	if len(envNames) == 0 {
-		return nil, errors.New("env name is required")
-	}
-
+func ListDeploy(
+	ctx context.Context,
+	workspaceID, appID, envName, envType, trafficLane, keyword string,
+) (interface{}, error) {
 	cli := client.New()
 
-	// 校验所有环境名称合法性
-	if err := validateEnvNames(ctx, cli, appID, envNames); err != nil {
+	// 解析并校验查询目标环境：envName 与 envType 二选一
+	envNames, err := ResolveAndValidateEnvNames(ctx, cli, appID, envName, envType)
+	if err != nil {
 		return nil, err
 	}
 

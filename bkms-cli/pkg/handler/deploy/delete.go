@@ -20,19 +20,40 @@ package deploy
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/clierr"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
-// DeleteDeploy 根据应用类型路由到对应的删除接口，执行部署删除并打印成功消息。
-// appType 由调用方传入（cmd 层已为确认提示取过 app 信息，避免重复 API 调用）。
-func DeleteDeploy(ctx context.Context, appType, appID, envName, deployID string) error {
-	cli := client.New()
+// DeleteDeployBatch 批量卸载指定环境，逐个执行并汇总失败。
+func DeleteDeployBatch(
+	ctx context.Context,
+	cli client.Client,
+	appType, appID string,
+	envNames []string,
+	deployID string,
+) error {
+	var errs []string
+	for _, env := range envNames {
+		if err := deleteDeploy(ctx, cli, appType, appID, env, deployID); err != nil {
+			errs = append(errs, fmt.Sprintf("env %s: %v", env, err))
+			console.Error("✗ Deployment delete failed for env: %s (%v)", env, err)
+		}
+	}
+	if len(errs) > 0 {
+		return clierr.Reportedf("delete deploy failed for some envs:\n  %s", strings.Join(errs, "\n  "))
+	}
+	return nil
+}
 
+// deleteDeploy 根据应用类型路由到对应的删除接口，执行部署删除并打印成功消息
+func deleteDeploy(ctx context.Context, cli client.Client, appType, appID, envName, deployID string) error {
 	var err error
 	switch appType {
 	case constant.AppTypeHelm:

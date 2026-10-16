@@ -38,6 +38,10 @@ When multiple environments are specified, the deploy will be executed for each e
 Environment names are validated against the application's available environments, including its feature
 environments, before deployment.
 
+The --env-type flag deploys to every environment of the given type(s), separated by commas
+(e.g. --env-type test,development). Valid types: development | test | staging | production.
+--env and --env-type are mutually exclusive; exactly one of them must be provided.
+
 If you have set a default workspace using 'workspace set', the --workspace flag
 is optional. Otherwise, you must specify it explicitly.
 
@@ -87,12 +91,15 @@ Deploy file fields by type:
 
   # 4. Deploy to multiple environments at once
   bkms-cli app deploy create --app my-app --env prod,staging,test -f trpc-deploy.yaml
+
+  # 5. Deploy to all environments of given types at once
+  bkms-cli app deploy create --app my-app --env-type test,development -f trpc-deploy.yaml
 `
 )
 
 // NewCreateCmd returns a Command instance for 'app deploy create' sub command
 func NewCreateCmd() *cobra.Command {
-	var appID, envName, deploySpecFile, workspaceID string
+	var appID, envName, envType, deploySpecFile, workspaceID string
 
 	cmd := &cobra.Command{
 		Use:     "create",
@@ -102,7 +109,7 @@ func NewCreateCmd() *cobra.Command {
 		PreRunE: cmdutil.ResolveAppPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := deploy.CreateDeploy(
-				cmd.Context(), cmdutil.GetWorkspaceID(workspaceID), appID, envName, deploySpecFile,
+				cmd.Context(), cmdutil.GetWorkspaceID(workspaceID), appID, envName, envType, deploySpecFile,
 			); err != nil {
 				return errors.Wrap(err, "create app deploy")
 			}
@@ -113,10 +120,14 @@ func NewCreateCmd() *cobra.Command {
 	cmdutil.AddWorkspaceFlag(cmd, &workspaceID)
 	cmd.Flags().StringVar(&appID, "app", "", "application ID or name")
 	cmd.Flags().StringVar(&envName, "env", "", "environment name")
+	cmd.Flags().
+		StringVar(&envType, "env-type", "", "environment type (comma-separated): development | test | staging | production")
 	cmd.Flags().StringVarP(&deploySpecFile, "deploy-spec-file", "f", "", "deploy spec file path")
 
 	_ = cmd.MarkFlagRequired("app")
-	_ = cmd.MarkFlagRequired("env")
+	// --env 与 --env-type 二选一，在发起请求前校验
+	cmd.MarkFlagsOneRequired("env", "env-type")
+	cmd.MarkFlagsMutuallyExclusive("env", "env-type")
 	_ = cmd.MarkFlagRequired("deploy-spec-file")
 
 	return cmd

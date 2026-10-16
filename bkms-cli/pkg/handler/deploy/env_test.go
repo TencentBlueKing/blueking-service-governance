@@ -131,4 +131,134 @@ var _ = Describe("Env", func() {
 				&envListResult{envs: []client.Env{}}, []string{"prod"}, true, []string{"prod"}),
 		)
 	})
+
+	// ==================== resolveEnvNames ====================
+	Describe("resolveEnvNames", func() {
+		ctx := context.Background()
+
+		It("returns env names when only envName is provided", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			names, err := resolveEnvNames(ctx, cli, "app-1", "prod,staging", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(names).To(Equal([]string{"prod", "staging"}))
+		})
+
+		It("returns error when envName and envType are both provided", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			_, err := resolveEnvNames(ctx, cli, "app-1", "prod", "test")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("mutually exclusive"))
+		})
+
+		It("returns error when neither envName nor envType is provided", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			_, err := resolveEnvNames(ctx, cli, "app-1", "", "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("required"))
+		})
+
+		It("expands env names by type when only envType is provided", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			cli.EXPECT().ListAppEnvs(ctx, "app-1").Return([]client.Env{
+				{Name: "dev-1", Type: "development"},
+				{Name: "test-1", Type: "test"},
+				{Name: "prod-1", Type: "production"},
+			}, nil).Once()
+			names, err := resolveEnvNames(ctx, cli, "app-1", "", "test,development")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(names).To(Equal([]string{"dev-1", "test-1"}))
+		})
+	})
+
+	// ==================== ResolveAndValidateEnvNames ====================
+	Describe("ResolveAndValidateEnvNames", func() {
+		ctx := context.Background()
+
+		It("validates env names when only envName is provided", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			cli.EXPECT().ListAppEnvs(ctx, "app-1").Return([]client.Env{
+				{Name: "prod"},
+				{Name: "staging"},
+			}, nil).Once()
+			names, err := ResolveAndValidateEnvNames(ctx, cli, "app-1", "prod,staging", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(names).To(Equal([]string{"prod", "staging"}))
+		})
+
+		It("returns error when an env name does not exist", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			cli.EXPECT().ListAppEnvs(ctx, "app-1").Return([]client.Env{
+				{Name: "prod"},
+			}, nil).Once()
+			_, err := ResolveAndValidateEnvNames(ctx, cli, "app-1", "prod,nonexistent", "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+
+		It("skips name validation when envType is provided", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			cli.EXPECT().ListAppEnvs(ctx, "app-1").Return([]client.Env{
+				{Name: "dev-1", Type: "development"},
+			}, nil).Once()
+			names, err := ResolveAndValidateEnvNames(ctx, cli, "app-1", "", "development")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(names).To(Equal([]string{"dev-1"}))
+		})
+	})
+
+	// ==================== resolveEnvNamesByTypes ====================
+	Describe("resolveEnvNamesByTypes", func() {
+		ctx := context.Background()
+
+		It("returns error for an invalid env type", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			_, err := resolveEnvNamesByTypes(ctx, cli, "app-1", []string{"prod"})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid env type"))
+		})
+
+		It("returns error when no envs match the given types", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			cli.EXPECT().ListAppEnvs(ctx, "app-1").Return([]client.Env{
+				{Name: "prod-1", Type: "production"},
+			}, nil).Once()
+			_, err := resolveEnvNamesByTypes(ctx, cli, "app-1", []string{"test"})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("no envs found"))
+		})
+
+		It("propagates error when ListAppEnvs fails", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			cli.EXPECT().ListAppEnvs(ctx, "app-1").Return(nil, context.DeadlineExceeded).Once()
+			_, err := resolveEnvNamesByTypes(ctx, cli, "app-1", []string{"test"})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to list envs"))
+		})
+
+		It("includes feature environments whose type matches", func() {
+			cli := mocks.NewMockClient(GinkgoT())
+			cli.EXPECT().ListAppEnvs(ctx, "app-1").Return([]client.Env{
+				{Name: "staging", Type: "staging", Kind: "standard"},
+				{Name: "feat-1", Type: "staging", Kind: "feature", OwnerAppID: "app-1"},
+			}, nil).Once()
+			names, err := resolveEnvNamesByTypes(ctx, cli, "app-1", []string{"staging"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(names).To(Equal([]string{"staging", "feat-1"}))
+		})
+	})
+
+	// ==================== isValidEnvType ====================
+	Describe("isValidEnvType", func() {
+		DescribeTable("validates env type strings",
+			func(input string, expected bool) {
+				Expect(isValidEnvType(input)).To(Equal(expected))
+			},
+			Entry("development", "development", true),
+			Entry("test", "test", true),
+			Entry("staging", "staging", true),
+			Entry("production", "production", true),
+			Entry("invalid shorthand", "prod", false),
+			Entry("empty string", "", false),
+		)
+	})
 })

@@ -19,6 +19,8 @@
 package deploy
 
 import (
+	"strings"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -32,16 +34,21 @@ import (
 
 // NewDeployDeleteCmd returns a Command instance for 'app deploy delete' sub command
 func NewDeployDeleteCmd() *cobra.Command {
-	var appID, envName, deployID string
+	var appID, envName, envType, deployID string
 	var yes bool
 
 	cmd := &cobra.Command{
 		Use:   "delete",
 		Short: "Delete (undeploy) an application from an environment",
-		Long: `Remove the deployment of an application from an environment.
+		Long: `Remove the deployment of an application from one or more environments.
 
-For helm applications, you must specify --deploy-id (from 'deploy list').
-For trpc and taf applications, the entire environment deployment is removed.`,
+For helm applications, you must specify --deploy-id (from 'deploy list') and a single
+environment. For trpc and taf applications, the entire environment deployment is removed.
+
+The --env flag supports multiple environment names separated by commas (e.g. --env test,staging).
+The --env-type flag removes deployments from every environment of the given type(s), separated by
+commas (e.g. --env-type test,development). Valid types: development | test | staging | production.
+--env and --env-type are mutually exclusive; exactly one of them must be provided.`,
 		Example: `  # Delete trpc/taf deployment
   bkms-cli app deploy delete --app myapp --env test
 
@@ -49,10 +56,18 @@ For trpc and taf applications, the entire environment deployment is removed.`,
   bkms-cli app deploy delete --app myapp --env test --deploy-id deploy1
 
   # Delete without confirmation prompt
-  bkms-cli app deploy delete --app myapp --env test --yes`,
+  bkms-cli app deploy delete --app myapp --env test --yes
+
+  # Delete deployments from multiple environments
+  bkms-cli app deploy delete --app myapp --env test,staging
+
+  # Delete deployments from all environments of given types
+  bkms-cli app deploy delete --app myapp --env-type test,development`,
 		PreRunE: cmdutil.ResolveAppPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := client.New().GetApp(cmd.Context(), appID)
+			cli := client.New()
+
+			app, err := cli.GetApp(cmd.Context(), appID)
 			if err != nil {
 				return errors.Wrap(err, "get app")
 			}
@@ -61,7 +76,18 @@ For trpc and taf applications, the entire environment deployment is removed.`,
 				return clierr.Usagef("--deploy-id is required for helm applications (see 'app deploy list')")
 			}
 
-			printDeployDeleteConfirmInfo(app, envName, deployID)
+			// 解析并校验卸载目标环境
+			envNames, err := deployhandler.ResolveAndValidateEnvNames(cmd.Context(), cli, appID, envName, envType)
+			if err != nil {
+				return err
+			}
+
+			// helm 卸载需针对单个环境（deploy-id 绑定单个部署记录）
+			if app.Type == constant.AppTypeHelm && len(envNames) > 1 {
+				return clierr.Usagef("helm applications support deleting a single environment at a time")
+			}
+
+			printDeployDeleteConfirmInfo(app, envNames, deployID)
 
 			confirmed, confirmErr := cmdutil.PromptConfirm("Confirm delete deployment? (yes/no): ", yes)
 			if confirmErr != nil {
@@ -71,24 +97,28 @@ For trpc and taf applications, the entire environment deployment is removed.`,
 				return clierr.ErrCancelled
 			}
 
-			return deployhandler.DeleteDeploy(cmd.Context(), app.Type, appID, envName, deployID)
+			return deployhandler.DeleteDeployBatch(cmd.Context(), cli, app.Type, appID, envNames, deployID)
 		},
 	}
 
 	cmdutil.AddAppFlags(cmd, &appID)
-	cmd.Flags().StringVar(&envName, "env", "", "environment name (required)")
+	cmd.Flags().StringVar(&envName, "env", "", "environment name")
+	cmd.Flags().
+		StringVar(&envType, "env-type", "", "environment type (comma-separated): development | test | staging | production")
 	cmd.Flags().StringVar(&deployID, "deploy-id", "", "deploy record ID (required for helm apps)")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip confirmation prompt")
 
 	_ = cmd.MarkFlagRequired("app")
-	_ = cmd.MarkFlagRequired("env")
+	// --env 与 --env-type 二选一，在发起请求前校验
+	cmd.MarkFlagsOneRequired("env", "env-type")
+	cmd.MarkFlagsMutuallyExclusive("env", "env-type")
 
 	return cmd
 }
 
-func printDeployDeleteConfirmInfo(app *client.AppFull, envName, deployID string) {
+func printDeployDeleteConfirmInfo(app *client.AppFull, envNames []string, deployID string) {
 	console.Info("  App:  %s (%s)", app.Name, app.ID)
-	console.Info("  Env:  %s", envName)
+	console.Info("  Env:  %s", strings.Join(envNames, ", "))
 	console.Info("  Type: %s", app.Type)
 	if deployID != "" {
 		console.Info("  DeployID: %s", deployID)

@@ -33,18 +33,16 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/clierr"
 )
 
-// CreateDeploy 创建部署，支持多环境（逗号分隔）
-func CreateDeploy(ctx context.Context, workspaceID, appID, envName, deploySpecFile string) error {
-	// 解析多环境名称
-	envNames := parseEnvNames(envName)
-	if len(envNames) == 0 {
-		return errors.New("env name is required")
-	}
-
+// CreateDeploy 创建部署，支持多环境（逗号分隔名称）或按环境类型批量部署
+func CreateDeploy(
+	ctx context.Context,
+	workspaceID, appID, envName, envType, deploySpecFile string,
+) error {
 	cli := client.New()
 
-	// 校验所有环境名称合法性
-	if err := validateEnvNames(ctx, cli, appID, envNames); err != nil {
+	// 解析并校验部署目标环境：envName 与 envType 二选一
+	envNames, err := ResolveAndValidateEnvNames(ctx, cli, appID, envName, envType)
+	if err != nil {
 		return err
 	}
 

@@ -35,6 +35,10 @@ When multiple environments are specified, the update will be executed for each e
 sequentially. Environment names are validated against the application's available environments,
 including its feature environments, before updating.
 
+The --env-type flag updates every environment of the given type(s), separated by commas
+(e.g. --env-type test,development). Valid types: development | test | staging | production.
+--env and --env-type are mutually exclusive; exactly one of them must be provided.
+
 If you have set a default workspace using 'workspace set', the --workspace flag
 is optional. Otherwise, you must specify it explicitly.
 
@@ -101,6 +105,9 @@ This command supports four update modes, specified via the 'updateMode' field in
 
   # 5. Update multiple environments at once
   bkms-cli app deploy update --app my-app --env prod,staging,test -f update-image.yaml
+
+  # 6. Update all environments of given types at once
+  bkms-cli app deploy update --app my-app --env-type test,development -f update-image.yaml
 `
 )
 
@@ -111,7 +118,7 @@ This command supports four update modes, specified via the 'updateMode' field in
 // Image update： 全量更新；更新内容：仅镜像Tag + 更新策略，策略：RollingUpdate（滚动更新，重建 Pod）、InplaceUpdate（原地更新，重启 Pod）
 // Grayscale update： 灰度更新，更新内容：镜像Tag + 实例名称，默认为 InplaceUpdate（原地更新，重启 Pod）
 func NewUpdateCmd() *cobra.Command {
-	var appID, envName, updateSpecFile, workspaceID string
+	var appID, envName, envType, updateSpecFile, workspaceID string
 
 	cmd := &cobra.Command{
 		Use:     "update",
@@ -121,7 +128,7 @@ func NewUpdateCmd() *cobra.Command {
 		PreRunE: cmdutil.ResolveAppPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := deploy.UpdateDeploy(
-				cmd.Context(), cmdutil.GetWorkspaceID(workspaceID), appID, envName, updateSpecFile,
+				cmd.Context(), cmdutil.GetWorkspaceID(workspaceID), appID, envName, envType, updateSpecFile,
 			); err != nil {
 				return errors.Wrap(err, "update app deploy")
 			}
@@ -132,10 +139,14 @@ func NewUpdateCmd() *cobra.Command {
 	cmdutil.AddWorkspaceFlag(cmd, &workspaceID)
 	cmd.Flags().StringVar(&appID, "app", "", "application ID or name")
 	cmd.Flags().StringVar(&envName, "env", "", "environment name")
+	cmd.Flags().
+		StringVar(&envType, "env-type", "", "environment type (comma-separated): development | test | staging | production")
 	cmd.Flags().StringVarP(&updateSpecFile, "update-spec-file", "f", "", "update spec file path")
 
 	_ = cmd.MarkFlagRequired("app")
-	_ = cmd.MarkFlagRequired("env")
+	// --env 与 --env-type 二选一，在发起请求前校验
+	cmd.MarkFlagsOneRequired("env", "env-type")
+	cmd.MarkFlagsMutuallyExclusive("env", "env-type")
 	_ = cmd.MarkFlagRequired("update-spec-file")
 
 	return cmd

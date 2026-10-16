@@ -2,7 +2,7 @@
 
 `bkms-cli app deploy` 用于管理应用的部署，包括创建部署、查看部署记录、更新已有部署、删除部署以及部署前检查。支持 helm、trpc、taf 三种应用类型。
 
-`--env` 参数支持多环境（逗号分隔），部署操作将对每个环境依次执行。
+`--env` 参数支持多环境（逗号分隔），操作将对每个环境依次执行。`create`、`update`、`delete`、`list` 还支持 `--env-type` 参数按环境类型批量操作（如 `--env-type test,development`），将对指定类型下的所有环境依次执行。二者互斥，必须提供其一。
 
 ## precheck
 
@@ -78,6 +78,9 @@ bkms-cli app deploy create --app myapp --env prod -f trpc-deploy.yaml
 # 同时部署到多个环境
 bkms-cli app deploy create --app myapp --env prod,staging,test -f trpc-deploy.yaml
 
+# 按环境类型批量部署（test、development 类型下的所有环境）
+bkms-cli app deploy create --app myapp --env-type test,development -f trpc-deploy.yaml
+
 # helm 应用部署
 bkms-cli app deploy create --app myapp --env prod -f helm-deploy.yaml
 
@@ -90,7 +93,8 @@ bkms-cli app deploy create --workspace ws-demo --app myapp --env prod -f deploy.
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `--app` | 是 | 应用 ID |
-| `--env` | 是 | 环境名称（支持逗号分隔多环境） |
+| `--env` | 二选一 | 环境名称（支持逗号分隔多环境） |
+| `--env-type` | 二选一 | 环境类型（支持逗号分隔）：development / test / staging / production，展开为该类型下所有环境 |
 | `-f, --deploy-spec-file` | 是 | 部署 spec 文件路径 |
 | `--workspace` | 否 | 工作空间 ID |
 
@@ -118,6 +122,9 @@ bkms-cli app deploy list --app myapp --env prod
 # 列出多环境部署记录
 bkms-cli app deploy list --app myapp --env prod,staging
 
+# 按环境类型列出部署记录
+bkms-cli app deploy list --app myapp --env-type test,development
+
 # 按关键字过滤
 bkms-cli app deploy list --app myapp --env prod --keyword v1.0
 
@@ -133,7 +140,8 @@ bkms-cli app deploy list --app myapp --env prod -o 'jq=.[0].imageTag'
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `--app` | 是 | 应用 ID |
-| `--env` | 是 | 环境名称（支持逗号分隔多环境） |
+| `--env` | 二选一 | 环境名称（支持逗号分隔多环境） |
+| `--env-type` | 二选一 | 环境类型（支持逗号分隔）：development / test / staging / production，展开为该类型下所有环境 |
 | `--keyword` | 否 | 关键字过滤 |
 | `--trafficLane` | 否 | 泳道名称过滤 |
 | `-o, --output` | 否 | 输出格式 |
@@ -164,6 +172,9 @@ bkms-cli app deploy update --app myapp --env prod -f update-grayscale.yaml
 
 # 多环境同步更新
 bkms-cli app deploy update --app myapp --env prod,staging -f update-image.yaml
+
+# 按环境类型批量更新（test、development 类型下的所有环境）
+bkms-cli app deploy update --app myapp --env-type test,development -f update-image.yaml
 ```
 
 ### YAML 示例
@@ -205,15 +216,16 @@ instanceIDs: "pod1;pod2"
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `--app` | 是 | 应用 ID |
-| `--env` | 是 | 环境名称（支持逗号分隔多环境） |
+| `--env` | 二选一 | 环境名称（支持逗号分隔多环境） |
+| `--env-type` | 二选一 | 环境类型（支持逗号分隔）：development / test / staging / production，展开为该类型下所有环境 |
 | `-f, --update-spec-file` | 是 | 更新 spec 文件路径 |
 | `--workspace` | 否 | 工作空间 ID |
 
 ## delete
 
-删除（卸载）应用在指定环境的部署。此操作会从集群中移除工作负载。
+删除（卸载）应用在指定环境的部署。此操作会从集群中移除工作负载。`--env` 支持逗号分隔多环境，`--env-type` 支持按环境类型批量卸载。
 
-- **helm 应用**：需通过 `--deploy-id` 指定要删除的部署记录 ID（从 `deploy list` 获取）。
+- **helm 应用**：需通过 `--deploy-id` 指定要删除的部署记录 ID（从 `deploy list` 获取），且一次仅支持单个环境。
 - **trpc / taf 应用**：删除整个环境部署，无需 `--deploy-id`。
 
 ### 常用场景
@@ -224,6 +236,12 @@ bkms-cli app deploy delete --app myapp --env test
 
 # 删除 helm 应用的指定部署
 bkms-cli app deploy delete --app myapp --env test --deploy-id deploy1
+
+# 删除多个环境部署
+bkms-cli app deploy delete --app myapp --env test,staging
+
+# 按环境类型批量卸载
+bkms-cli app deploy delete --app myapp --env-type test,development
 ```
 
 ### 参数说明
@@ -231,5 +249,6 @@ bkms-cli app deploy delete --app myapp --env test --deploy-id deploy1
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `--app` | 是 | 应用 ID |
-| `--env` | 是 | 环境名称 |
+| `--env` | 二选一 | 环境名称（支持逗号分隔多环境） |
+| `--env-type` | 二选一 | 环境类型（支持逗号分隔）：development / test / staging / production，展开为该类型下所有环境 |
 | `--deploy-id` | helm 必填 | 部署记录 ID（helm 应用必须指定，从 `deploy list` 获取） |

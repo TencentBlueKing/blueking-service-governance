@@ -37,3 +37,23 @@ stderr 'required flag\(s\) "app" not set'
 
 # delete 不存在的环境
 ! exec $BKMS_CLI_BIN app deploy delete --app $BKMS_APP_ID --env nonexistent-env-12345 --yes
+
+# --env 与 --env-type 均未传：create/update/list/delete 在发起请求前失败
+! exec $BKMS_CLI_BIN app deploy create --app $BKMS_APP_ID -f /tmp/nonexistent.yaml
+stderr 'at least one of the flags in the group \[env env-type\] is required'
+! exec $BKMS_CLI_BIN app deploy update --app $BKMS_APP_ID -f /tmp/nonexistent.yaml
+stderr 'at least one of the flags in the group \[env env-type\] is required'
+! exec $BKMS_CLI_BIN app deploy list --app $BKMS_APP_ID
+stderr 'at least one of the flags in the group \[env env-type\] is required'
+! exec $BKMS_CLI_BIN app deploy delete --app $BKMS_APP_ID --yes
+stderr 'at least one of the flags in the group \[env env-type\] is required'
+
+# --env 与 --env-type 同时传：互斥失败
+! exec $BKMS_CLI_BIN app deploy create --app $BKMS_APP_ID --env $BKMS_ENV_NAME --env-type test -f /tmp/nonexistent.yaml
+stderr 'if any flags in the group \[env env-type\] are set none of the others can be'
+! exec $BKMS_CLI_BIN app deploy update --app $BKMS_APP_ID --env $BKMS_ENV_NAME --env-type test -f /tmp/nonexistent.yaml
+stderr 'if any flags in the group \[env env-type\] are set none of the others can be'
+! exec $BKMS_CLI_BIN app deploy list --app $BKMS_APP_ID --env $BKMS_ENV_NAME --env-type test
+stderr 'if any flags in the group \[env env-type\] are set none of the others can be'
+! exec $BKMS_CLI_BIN app deploy delete --app $BKMS_APP_ID --env $BKMS_ENV_NAME --env-type test --yes
+stderr 'if any flags in the group \[env env-type\] are set none of the others can be'

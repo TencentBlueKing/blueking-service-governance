@@ -32,7 +32,7 @@ import (
 
 // NewListCmd returns a Command instance for 'app deploy list' sub command
 func NewListCmd() *cobra.Command {
-	var appID, envName, trafficLaneName, keyword, outputFormat, workspaceID string
+	var appID, envName, envType, trafficLaneName, keyword, outputFormat, workspaceID string
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -46,6 +46,10 @@ The --env flag supports multiple environment names separated by commas (e.g. --e
 When multiple environments are specified, records will be retrieved for each environment
 and grouped by environment name. Environment names are validated against the application's available
 environments, including its feature environments.
+
+The --env-type flag lists records for every environment of the given type(s), separated by commas
+(e.g. --env-type test,development). Valid types: development | test | staging | production.
+--env and --env-type are mutually exclusive; exactly one of them must be provided.
 
 If you have set a default workspace using 'workspace set', the --workspace flag
 is optional. Otherwise, you must specify it explicitly.`,
@@ -65,11 +69,16 @@ is optional. Otherwise, you must specify it explicitly.`,
   bkms-cli app deploy list --app demo --env prod -o json
 
   # List deploy records for multiple environments
-  bkms-cli app deploy list --app demo --env prod,staging,test`,
+  bkms-cli app deploy list --app demo --env prod,staging,test
+
+  # List deploy records for all environments of given types
+  bkms-cli app deploy list --app demo --env-type test,development`,
 		PreRunE: cmdutil.ResolveAppPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID = cmdutil.GetWorkspaceID(workspaceID)
-			records, err := deploy.ListDeploy(cmd.Context(), workspaceID, appID, envName, trafficLaneName, keyword)
+			records, err := deploy.ListDeploy(
+				cmd.Context(), workspaceID, appID, envName, envType, trafficLaneName, keyword,
+			)
 			if records != nil {
 				formatted, formatErr := output.FormatData(cmd.Context(), records, outputFormat)
 				if formatErr != nil {
@@ -88,12 +97,16 @@ is optional. Otherwise, you must specify it explicitly.`,
 	cmdutil.AddWorkspaceFlag(cmd, &workspaceID)
 	cmd.Flags().StringVar(&appID, "app", "", "application ID or name")
 	cmd.Flags().StringVar(&envName, "env", "", "environment name")
+	cmd.Flags().
+		StringVar(&envType, "env-type", "", "environment type (comma-separated): development | test | staging | production")
 	cmd.Flags().StringVar(&trafficLaneName, "trafficLane", "", "traffic lane name")
 	cmd.Flags().StringVar(&keyword, "keyword", "", "filter by keyword")
 	output.AddFormatFlag(cmd, &outputFormat)
 
 	_ = cmd.MarkFlagRequired("app")
-	_ = cmd.MarkFlagRequired("env")
+	// --env 与 --env-type 二选一，在发起请求前校验
+	cmd.MarkFlagsOneRequired("env", "env-type")
+	cmd.MarkFlagsMutuallyExclusive("env", "env-type")
 
 	return cmd
 }

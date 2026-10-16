@@ -61,6 +61,9 @@ const (
 	rollingUpdateStrategy strategy = "RollingUpdate"
 )
 
+// errNotDeployed 环境未部署（无部署记录或已卸载），更新时跳过
+var errNotDeployed = errors.New("app is not deployed in env")
+
 // appModelUpdateSpec AppModel 更新配置
 type appModelUpdateSpec struct {
 	// UpdateMode 更新模式
@@ -86,18 +89,16 @@ type appModelUpdateSpec struct {
 	appType string
 }
 
-// UpdateDeploy 更新部署，支持多环境（逗号分隔）
-func UpdateDeploy(ctx context.Context, workspaceID, appID, envName, updateSpecFilePath string) error {
-	// 解析多环境名称
-	envNames := parseEnvNames(envName)
-	if len(envNames) == 0 {
-		return errors.New("env name is required")
-	}
-
+// UpdateDeploy 更新部署，支持多环境（逗号分隔名称）或按环境类型批量部署
+func UpdateDeploy(
+	ctx context.Context,
+	workspaceID, appID, envName, envType, updateSpecFilePath string,
+) error {
 	cli := client.New()
 
-	// 校验所有环境名称合法性
-	if err := validateEnvNames(ctx, cli, appID, envNames); err != nil {
+	// 解析并校验部署目标环境：envName 与 envType 二选一
+	envNames, err := ResolveAndValidateEnvNames(ctx, cli, appID, envName, envType)
+	if err != nil {
 		return err
 	}
 
@@ -131,13 +132,17 @@ func UpdateDeploy(ctx context.Context, workspaceID, appID, envName, updateSpecFi
 			return err
 		}
 
-		// 对每个环境依次执行更新
+		// 对每个环境依次执行更新，未部署的环境跳过
 		var errs []string
 		for _, env := range envNames {
-			if updateErr := spec.handler(ctx, appID, env); updateErr != nil {
+			updateErr := spec.handler(ctx, cli, appID, env)
+			switch {
+			case errors.Is(updateErr, errNotDeployed):
+				fmt.Printf("- Deploy update skipped for env: %s (not deployed)\n", env)
+			case updateErr != nil:
 				errs = append(errs, fmt.Sprintf("env %s: %v", env, updateErr))
 				fmt.Printf("✗ Deploy update failed for env: %s (%v)\n", env, updateErr)
-			} else {
+			default:
 				fmt.Printf("✓ Deploy updated successfully for env: %s\n", env)
 			}
 		}
@@ -158,23 +163,24 @@ func UpdateDeploy(ctx context.Context, workspaceID, appID, envName, updateSpecFi
 // 3. 镜像更新，走实例更新接口，参数：imageTag、strategy；对应页面的仅镜像更新功能（全量更新）
 // 4. 灰度更新，走实例更新接口，参数：imageTag、instanceIDs(pod名称)；对应页面的灰度更新功能（灰度更新）
 // NOTE: 目前通过 switch-case 来处理不同 appType 的差异，后续如果还有新增 AppType， 考虑在下层抽象一层来屏蔽差异。
-func (s *appModelUpdateSpec) handler(ctx context.Context, appID, envName string) error {
+func (s *appModelUpdateSpec) handler(ctx context.Context, cli client.Client, appID, envName string) error {
 	var records []client.AppModelDeployRecord
 	var err error
 
 	switch s.appType {
 	case constant.AppTypeTrpc:
-		records, err = client.New().ListTrpcDeployRecords(ctx, appID, envName, "", "")
+		records, err = cli.ListTrpcDeployRecords(ctx, appID, envName, "", "")
 	case constant.AppTypeTaf:
-		records, err = client.New().ListTafDeployRecords(ctx, appID, envName, "", "")
+		records, err = cli.ListTafDeployRecords(ctx, appID, envName, "", "")
 	default:
 		return errors.Errorf("unknown app type: %s", s.appType)
 	}
 	if err != nil {
 		return err
 	}
-	if len(records) == 0 {
-		return errors.Errorf("app %s has no deploy record in env %s", appID, envName)
+	// 从未部署或已卸载的环境不做更新
+	if len(records) == 0 || records[0].Status == constant.DeployStatusUninstalled {
+		return errNotDeployed
 	}
 	release := records[0]
 
@@ -186,9 +192,9 @@ func (s *appModelUpdateSpec) handler(ctx context.Context, appID, envName string)
 		}
 		switch s.appType {
 		case constant.AppTypeTrpc:
-			return client.New().CreateAppTrpcDeploy(ctx, appID, envName, opts)
+			return cli.CreateAppTrpcDeploy(ctx, appID, envName, opts)
 		case constant.AppTypeTaf:
-			return client.New().CreateAppTafDeploy(ctx, appID, envName, opts)
+			return cli.CreateAppTafDeploy(ctx, appID, envName, opts)
 		default:
 			return errors.Errorf("unknown app type: %s", s.appType)
 		}
@@ -200,18 +206,18 @@ func (s *appModelUpdateSpec) handler(ctx context.Context, appID, envName string)
 		}
 		switch s.appType {
 		case constant.AppTypeTrpc:
-			return client.New().CreateAppTrpcDeploy(ctx, appID, envName, opts)
+			return cli.CreateAppTrpcDeploy(ctx, appID, envName, opts)
 		case constant.AppTypeTaf:
-			return client.New().CreateAppTafDeploy(ctx, appID, envName, opts)
+			return cli.CreateAppTafDeploy(ctx, appID, envName, opts)
 		default:
 			return errors.Errorf("unknown app type: %s", s.appType)
 		}
 
 	case imageUpdateMode:
-		return client.New().BatchUpdateInstance(ctx, appID, envName, s.ImageTag, string(s.Strategy))
+		return cli.BatchUpdateInstance(ctx, appID, envName, s.ImageTag, string(s.Strategy))
 
 	case grayscaleUpdateMode:
-		return client.New().GrayscaleUpdateInstance(ctx, appID, envName, s.ImageTag, s.podNames,
+		return cli.GrayscaleUpdateInstance(ctx, appID, envName, s.ImageTag, s.podNames,
 			string(inplaceUpdateStrategy))
 
 	default:
