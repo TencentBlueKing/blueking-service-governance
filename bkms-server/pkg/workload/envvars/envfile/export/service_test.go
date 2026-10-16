@@ -28,7 +28,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	coreapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -51,9 +50,7 @@ var _ = Describe("ExportService", func() {
 		appModelStore         appmodel.AppModelStore
 		appSpecStore          appspec.AppSpecStore
 		appConfigFileStore    appcfg.AppConfigFileStore
-		appConfigFileDefStore appcfg.AppConfigFileDefStore
 		appConfigVersionStore appcfg.AppConfigFileVersionStore
-		buildConfigStore      build.ConfigStore
 		service               *Service
 	)
 
@@ -67,16 +64,13 @@ var _ = Describe("ExportService", func() {
 			appmodel.FxModule,
 			appspec.FxModule,
 			appcfg.FxModule,
-			build.FxModule,
 			fx.Populate(
 				&scopedEnvVarStore,
 				&appStore,
 				&appModelStore,
 				&appSpecStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigVersionStore,
-				&buildConfigStore,
 			),
 		)
 		diApp.RequireStart()
@@ -162,9 +156,7 @@ var _ = Describe("ExportService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -193,9 +185,7 @@ var _ = Describe("ExportService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -217,9 +207,7 @@ var _ = Describe("ExportService", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{WorkspaceID: workspaceID})
 
 		am, err := appModelStore.GetAppModel(ctx, app.ID)

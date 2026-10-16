@@ -75,7 +75,7 @@ func (h *Handler) ListAppConfigFileVersions(c *gin.Context) {
 
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	versions, total, err := acfService.ListVersions(ctx, opts)
@@ -131,7 +131,7 @@ func (h *Handler) GetAppConfigFileVersion(c *gin.Context) {
 
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	version, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
@@ -181,7 +181,7 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	previous, current, err := acfService.CompareVersions(ctx, app.ID, previousID, currentID)
@@ -241,7 +241,7 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	targetVersion, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
@@ -326,7 +326,7 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 	deleter := auth.MustGetUser(ctx).ID
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	version, _, err := acfService.DeleteVersion(ctx, app.ID, id, deleter)

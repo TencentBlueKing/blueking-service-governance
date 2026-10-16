@@ -52,24 +52,23 @@ type Handler struct {
 func New(registry *storereg.Registry) *Handler {
 	snapshotService := snapshot.NewService(
 		registry.SnapshotStore,
-		registry.BuildConfigStore,
+		registry.DB,
 		registry.AppStore,
 	)
 	return &Handler{
 		registry:           registry,
-		customImageChecker: customruntime.NewExistenceChecker(snapshotService),
+		customImageChecker: customruntime.NewExistenceChecker(registry.DB, snapshotService),
 	}
 }
 
 // newBuildService 装配构建服务，并注入平台构建镜像引用校验器
 func (h *Handler) newBuildService() (*build.Service, error) {
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.RuntimeImageStore,
+		h.registry.DB,
 		h.registry.SnapshotStore,
 	)
 	return build.NewService(
 		h.registry.DB,
-		h.registry.BuildConfigStore,
 		h.registry.BuildRecordStore,
 		imageReferenceValidator,
 		h.customImageChecker,

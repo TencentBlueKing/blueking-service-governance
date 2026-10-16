@@ -32,21 +32,24 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/xeipuuv/gojsonschema"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// Do initialize service data into database
-func Do(store model.ServiceStore) error {
-	services, err := parseServices()
+// Do initialize service data into database, existing services with the same name are updated
+func Do(db *mongo.Database) error {
+	parsed, err := parseServices()
 	if err != nil {
 		return errors.Wrap(err, "parse services")
 	}
 
 	ctx := context.Background()
 
-	for _, svc := range services {
-		if err = store.Upsert(ctx, svc); err != nil {
+	services := store.Of(db, model.ServiceMeta)
+	for _, svc := range parsed {
+		if _, err = services.Upsert(ctx, svc, model.ByName(svc.Name)); err != nil {
 			return errors.Wrapf(err, "upsert service %s", svc.Name)
 		}
 	}

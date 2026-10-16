@@ -32,6 +32,7 @@ import (
 	"helm.sh/helm/v3/pkg/storage/driver"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -324,24 +325,15 @@ var _ = Describe("validateApp", func() {
 var _ = Describe("genValuesVariables", func() {
 	var (
 		ctx         context.Context
+		db          *mongo.Database
+		configs     *build.ConfigStore
 		workspaceID string
 		appID       string
 		appName     string
 		imageTag    string
 	)
 
-	// mockDatabaseAndBuildStore mocks database client and build config store
-	mockDatabaseAndBuildStore := func() *build.ConfigStoreMongo {
-		mockey.Mock(database.Client).Return(&mongo.Client{}).Build()
-		mockey.Mock(database.Name).Return("testdb").Build()
-
-		mockStore := &build.ConfigStoreMongo{}
-		mockey.Mock(build.NewConfigStoreMongo).Return(mockStore, nil).Build()
-
-		return mockStore
-	}
-
-	// mockBuildConfigWithCodeRepo mocks build config with code repository source type
+	// mockBuildConfigWithCodeRepo creates build config with code repository source type
 	mockBuildConfigWithCodeRepo := func(appID string) {
 		mockBuildCfg := &build.Config{
 			AppID:      appID,
@@ -352,10 +344,10 @@ var _ = Describe("genValuesVariables", func() {
 				RepoURL:   "https://git.example.com/test/repo.git",
 			},
 		}
-		mockey.Mock((*build.ConfigStoreMongo).Get).Return(mockBuildCfg, nil).Build()
+		Expect(configs.Create(ctx, mockBuildCfg)).To(Succeed())
 	}
 
-	// mockBuildConfigWithImageRegistry mocks build config with image registry source type
+	// mockBuildConfigWithImageRegistry creates build config with image registry source type
 	mockBuildConfigWithImageRegistry := func(appID, imageName string) {
 		mockBuildCfg := &build.Config{
 			AppID:      appID,
@@ -366,7 +358,7 @@ var _ = Describe("genValuesVariables", func() {
 				Password: "pass",
 			},
 		}
-		mockey.Mock((*build.ConfigStoreMongo).Get).Return(mockBuildCfg, nil).Build()
+		Expect(configs.Create(ctx, mockBuildCfg)).To(Succeed())
 	}
 
 	mockBuildConfigWithImageRegistryNoCredential := func(appID, imageName string) {
@@ -377,21 +369,26 @@ var _ = Describe("genValuesVariables", func() {
 				Name: imageName,
 			},
 		}
-		mockey.Mock((*build.ConfigStoreMongo).Get).Return(mockBuildCfg, nil).Build()
+		Expect(configs.Create(ctx, mockBuildCfg)).To(Succeed())
 	}
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		db = testutil.NewDB(GinkgoT())
+		configs = testutil.NewStore(GinkgoT(), build.ConfigMeta)
 		workspaceID = "test-workspace"
 		appID = "test-app-id-" + stringx.Random(6)
 		appName = "test-app"
 		imageTag = "v1.0.0"
 	})
 
+	AfterEach(func() {
+		Expect(configs.DeleteIfExists(ctx, build.ByApp(appID))).To(Succeed())
+	})
+
 	Context("when build config source type is code repository", func() {
 		It("should generate correct variables with bkrepo registry", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndBuildStore()
 				mockBuildConfigWithCodeRepo(appID)
 
 				// Mock workspace.GetWorkspaceImageRegistry
@@ -404,7 +401,7 @@ var _ = Describe("genValuesVariables", func() {
 					BkCICredentialID: "abcdefgh",
 				}, nil).Build()
 
-				variables, err := genValuesVariables(ctx, workspaceID, appID, appName, imageTag)
+				variables, err := genValuesVariables(ctx, db, workspaceID, appID, appName, imageTag)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(variables).To(HaveLen(7))
 
@@ -426,10 +423,9 @@ var _ = Describe("genValuesVariables", func() {
 		Context("with full registry URL (registry.example.com/group/repository)", func() {
 			It("should parse registry and repository correctly", func() {
 				mockey.PatchConvey("test", GinkgoT(), func() {
-					mockDatabaseAndBuildStore()
 					mockBuildConfigWithImageRegistry(appID, "registry.example.com/mygroup/myapp")
 
-					variables, err := genValuesVariables(ctx, workspaceID, appID, appName, imageTag)
+					variables, err := genValuesVariables(ctx, db, workspaceID, appID, appName, imageTag)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(variables).To(HaveLen(7))
 
@@ -458,10 +454,9 @@ var _ = Describe("genValuesVariables", func() {
 		Context("with registry and port (registry.example.com:5000/repository)", func() {
 			It("should parse registry with port correctly", func() {
 				mockey.PatchConvey("test", GinkgoT(), func() {
-					mockDatabaseAndBuildStore()
 					mockBuildConfigWithImageRegistry(appID, "registry.example.com:5000/myapp")
 
-					variables, err := genValuesVariables(ctx, workspaceID, appID, appName, imageTag)
+					variables, err := genValuesVariables(ctx, db, workspaceID, appID, appName, imageTag)
 					Expect(err).NotTo(HaveOccurred())
 
 					// Verify registry with port is parsed correctly
@@ -487,10 +482,9 @@ var _ = Describe("genValuesVariables", func() {
 		Context("with group/repository format", func() {
 			It("should use empty registry", func() {
 				mockey.PatchConvey("test", GinkgoT(), func() {
-					mockDatabaseAndBuildStore()
 					mockBuildConfigWithImageRegistry(appID, "mygroup/myapp")
 
-					variables, err := genValuesVariables(ctx, workspaceID, appID, appName, imageTag)
+					variables, err := genValuesVariables(ctx, db, workspaceID, appID, appName, imageTag)
 					Expect(err).NotTo(HaveOccurred())
 
 					// Verify no registry is extracted
@@ -514,10 +508,9 @@ var _ = Describe("genValuesVariables", func() {
 		Context("with repository only", func() {
 			It("should use empty registry", func() {
 				mockey.PatchConvey("test", GinkgoT(), func() {
-					mockDatabaseAndBuildStore()
 					mockBuildConfigWithImageRegistry(appID, "myapp")
 
-					variables, err := genValuesVariables(ctx, workspaceID, appID, appName, imageTag)
+					variables, err := genValuesVariables(ctx, db, workspaceID, appID, appName, imageTag)
 					Expect(err).NotTo(HaveOccurred())
 
 					// Verify no registry is extracted
@@ -540,10 +533,9 @@ var _ = Describe("genValuesVariables", func() {
 		Context("without custom image credential", func() {
 			It("should use workspace image pull secret", func() {
 				mockey.PatchConvey("test", GinkgoT(), func() {
-					mockDatabaseAndBuildStore()
 					mockBuildConfigWithImageRegistryNoCredential(appID, "registry.example.com/mygroup/myapp")
 
-					variables, err := genValuesVariables(ctx, workspaceID, appID, appName, imageTag)
+					variables, err := genValuesVariables(ctx, db, workspaceID, appID, appName, imageTag)
 					Expect(err).NotTo(HaveOccurred())
 
 					Expect(
@@ -554,15 +546,10 @@ var _ = Describe("genValuesVariables", func() {
 		})
 	})
 
-	Context("when getting build config fails", func() {
+	Context("when build config does not exist", func() {
 		It("should return error", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
-				mockDatabaseAndBuildStore()
-				mockey.Mock((*build.ConfigStoreMongo).Get).Return(
-					nil, errors.New("build config not found"),
-				).Build()
-
-				variables, err := genValuesVariables(ctx, workspaceID, appID, appName, imageTag)
+				variables, err := genValuesVariables(ctx, db, workspaceID, appID, appName, imageTag)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("get build config for"))
 				Expect(err.Error()).To(ContainSubstring("build config not found"))
@@ -580,6 +567,7 @@ var _ = Describe("genHelmDeployValues", func() {
 		reader       *envvars.UnifiedEnvVarsReader
 		valuesFileID string
 		imageTag     string
+		db           *mongo.Database
 	)
 
 	// mockDatabaseAndAppConfigFileStore mocks database client and app config file store
@@ -600,6 +588,7 @@ var _ = Describe("genHelmDeployValues", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		db = testutil.NewDB(GinkgoT())
 		app = &bkmsapp.Application{
 			WorkspaceID: "test-workspace",
 			ID:          "test-app",
@@ -653,7 +642,7 @@ imagePullSecrets:
 				mockey.Mock(genValuesVariables).Return(mockVariables, nil).Build()
 
 				values, missing, missingEnv, err := genHelmDeployValues(
-					ctx, reader, app, env, valuesFileID, imageTag, false,
+					ctx, db, reader, app, env, valuesFileID, imageTag, false,
 				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(values).NotTo(BeEmpty())
@@ -702,7 +691,7 @@ imagePullSecrets:
 				}
 				mockey.Mock(genValuesVariables).Return(mockVariables, nil).Build()
 
-				values, _, _, err := genHelmDeployValues(ctx, reader, app, env, valuesFileID, imageTag, false)
+				values, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, valuesFileID, imageTag, false)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(values).NotTo(BeEmpty())
 			})
@@ -730,7 +719,7 @@ custom: ${{ env.MY_VAR }}`
 				mockListVars(envvartypes.EnvVariableList{{Key: "MY_VAR", Value: "foo"}})
 
 				values, missing, missingEnv, err := genHelmDeployValues(
-					ctx, reader, app, env, valuesFileID, imageTag, false,
+					ctx, db, reader, app, env, valuesFileID, imageTag, false,
 				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(missing).To(BeEmpty())
@@ -760,13 +749,13 @@ custom: ${{ env.MY_VAR }}`
 				mockListVars(envvartypes.EnvVariableList{{Key: "SECRET", Value: "supersecret", IsSensitive: true}})
 
 				// AC-005: preview masks the sensitive value
-				preview, _, _, err := genHelmDeployValues(ctx, reader, app, env, valuesFileID, imageTag, true)
+				preview, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, valuesFileID, imageTag, true)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(preview).To(ContainSubstring("secret: " + envvartypes.SensitiveValueMask))
 				Expect(preview).NotTo(ContainSubstring("supersecret"))
 
 				// AC-005: deploy uses the real value
-				deployed, _, _, err := genHelmDeployValues(ctx, reader, app, env, valuesFileID, imageTag, false)
+				deployed, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, valuesFileID, imageTag, false)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deployed).To(ContainSubstring("secret: supersecret"))
 			})
@@ -792,7 +781,7 @@ custom: ${{ env.MY_VAR }}`
 
 				// AC-002: undefined env var does not fail, reported in missing env vars.
 				values, missing, missingEnv, err := genHelmDeployValues(
-					ctx, reader, app, env, valuesFileID, imageTag, true,
+					ctx, db, reader, app, env, valuesFileID, imageTag, true,
 				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(missing).To(BeEmpty())
@@ -808,7 +797,7 @@ custom: ${{ env.MY_VAR }}`
 				mockDatabaseAndAppConfigFileStore()
 
 				invalidID := "invalid-object-id"
-				values, _, _, err := genHelmDeployValues(ctx, reader, app, env, invalidID, imageTag, false)
+				values, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, invalidID, imageTag, false)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid app config file id"))
 				Expect(values).To(BeEmpty())
@@ -824,7 +813,7 @@ custom: ${{ env.MY_VAR }}`
 					nil, errors.New("app config file not found"),
 				).Build()
 
-				values, _, _, err := genHelmDeployValues(ctx, reader, app, env, valuesFileID, imageTag, false)
+				values, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, valuesFileID, imageTag, false)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("get app config file"))
 				Expect(err.Error()).To(ContainSubstring("app config file not found"))
@@ -852,7 +841,7 @@ custom: ${{ env.MY_VAR }}`
 				mockEditor := &mockAppConfigFileEditor{err: errors.New("failed to compile content")}
 				mockey.Mock(appcfg.NewAppConfigFileEditor).Return(mockEditor, nil).Build()
 
-				values, _, _, err := genHelmDeployValues(ctx, reader, app, env, valuesFileID, imageTag, false)
+				values, _, _, err := genHelmDeployValues(ctx, db, reader, app, env, valuesFileID, imageTag, false)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("compiling app config file"))
 				Expect(err.Error()).To(ContainSubstring("failed to compile content"))

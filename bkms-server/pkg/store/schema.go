@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -51,50 +50,31 @@ type schema struct {
 	keys []string
 }
 
+// newSchema 扫描顶层与 inline 的值类型结构体字段，因为这些是 _id、时间戳等顶层字段可能出现的位置
 func newSchema(typ reflect.Type) (*schema, error) {
 	if typ.Kind() != reflect.Struct {
 		return nil, errors.Errorf("model must be a struct, got %s", typ)
 	}
 	s := &schema{typ: typ}
-	if err := s.scan(typ, nil); err != nil {
-		return nil, errors.Wrapf(err, "scan model %s", typ)
+	for _, f := range structFields(typ) {
+		s.keys = append(s.keys, f.key)
+		switch f.key {
+		case keyID:
+			s.id = f.index
+		case keyCreatedAt, keyUpdatedAt:
+			if f.typ != timeType {
+				return nil, errors.Errorf(
+					"scan model %s: field %s (%s) must be time.Time, got %s", typ, f.name, f.key, f.typ,
+				)
+			}
+			if f.key == keyCreatedAt {
+				s.createdAt = f.index
+			} else {
+				s.updatedAt = f.index
+			}
+		}
 	}
 	return s, nil
-}
-
-// scan 只扫描顶层与 inline 的值类型结构体字段，因为这些是 _id、时间戳等顶层字段可能出现的位置
-func (s *schema) scan(typ reflect.Type, index []int) error {
-	for i := range typ.NumField() {
-		sf := typ.Field(i)
-		key, inline, ok := bsonKey(sf)
-		if !ok {
-			continue
-		}
-		idx := append(slices.Clone(index), i)
-		if inline {
-			if sf.Type.Kind() == reflect.Struct {
-				if err := s.scan(sf.Type, idx); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-		s.keys = append(s.keys, key)
-		switch key {
-		case keyID:
-			s.id = idx
-		case keyCreatedAt, keyUpdatedAt:
-			if sf.Type != timeType {
-				return errors.Errorf("field %s (%s) must be time.Time, got %s", sf.Name, key, sf.Type)
-			}
-			if key == keyCreatedAt {
-				s.createdAt = idx
-			} else {
-				s.updatedAt = idx
-			}
-		}
-	}
-	return nil
 }
 
 // fillID 当 _id 为零值时生成新的 ID：ObjectID 类型生成 ObjectID，string 类型生成其 hex 形式。
@@ -171,53 +151,6 @@ func (s *schema) idOf(v reflect.Value) (any, bool) {
 	}
 	f := v.FieldByIndex(s.id)
 	return f.Interface(), !f.IsZero()
-}
-
-// omittedFields 返回模型中定义、但不在编码结果 doc 中的顶层字段；
-// _id 与 createdAt 只在插入时写入，不会被删除
-func (s *schema) omittedFields(doc bson.D) []string {
-	present := append(lo.Map(doc, func(e bson.E, _ int) string { return e.Key }), keyID, keyCreatedAt)
-	return lo.Without(s.keys, present...)
-}
-
-// hasPath 判断以 "." 分隔的 bson 路径是否是模型中合法的字段，用于在更新前拦截拼写错误。
-// 路径进入 map、interface、slice、array 后无法静态校验，视为合法
-func (s *schema) hasPath(path string) bool {
-	return typeHasPath(s.typ, strings.Split(path, "."))
-}
-
-func typeHasPath(typ reflect.Type, segs []string) bool {
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if len(segs) == 0 {
-		return true
-	}
-	switch typ.Kind() {
-	case reflect.Map, reflect.Interface, reflect.Slice, reflect.Array:
-		return true
-	case reflect.Struct:
-		if typ == timeType {
-			return false
-		}
-		for i := range typ.NumField() {
-			sf := typ.Field(i)
-			key, inline, ok := bsonKey(sf)
-			if !ok {
-				continue
-			}
-			if inline {
-				if typeHasPath(sf.Type, segs) {
-					return true
-				}
-				continue
-			}
-			if key == segs[0] {
-				return typeHasPath(sf.Type, segs[1:])
-			}
-		}
-	}
-	return false
 }
 
 // bsonKey 解析结构体字段的 bson key，规则与 mongo-driver 默认的 struct tag 解析（parseStructTags）

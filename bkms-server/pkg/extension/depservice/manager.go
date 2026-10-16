@@ -26,12 +26,14 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // use a single instance of Validate, it caches struct info
@@ -39,25 +41,24 @@ var validate = validator.New(validator.WithRequiredStructEnabled())
 
 // ServiceManager is the manager for app dependency services
 type ServiceManager struct {
-	svcStore     model.ServiceStore
-	instStore    model.ServiceInstanceStore
-	bindingStore model.ServiceBindingStore
-	envStore     envmodel.EnvironmentStore
+	services  *model.ServiceStore
+	instStore model.ServiceInstanceStore
+	bindings  *model.ServiceBindingStore
+	envStore  envmodel.EnvironmentStore
 }
 
 // New creates a new app dependency services manager.
-// bindingStore / envStore 在北极星等不走绑定的路径上可以为 nil。
+// envStore 在北极星等不走绑定的路径上可以为 nil。
 func New(
-	svcStore model.ServiceStore,
+	db *mongo.Database,
 	instStore model.ServiceInstanceStore,
-	bindingStore model.ServiceBindingStore,
 	envStore envmodel.EnvironmentStore,
 ) *ServiceManager {
 	return &ServiceManager{
-		svcStore:     svcStore,
-		instStore:    instStore,
-		bindingStore: bindingStore,
-		envStore:     envStore,
+		services:  store.Of(db, model.ServiceMeta),
+		instStore: instStore,
+		bindings:  store.Of(db, model.ServiceBindingMeta),
+		envStore:  envStore,
 	}
 }
 
@@ -167,7 +168,7 @@ func (m *ServiceManager) getPlanAndProvider(
 	ctx context.Context,
 	serviceName, planName string,
 ) (*model.ServicePlan, provider.ServiceProvider, error) {
-	svc, err := m.svcStore.Get(ctx, serviceName)
+	svc, err := m.services.Get(ctx, model.ByName(serviceName))
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "get service %s", serviceName)
 	}

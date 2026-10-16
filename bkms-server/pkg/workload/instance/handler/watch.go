@@ -124,7 +124,7 @@ func (h *Handler) newWatchManager(clusterID, appID, envName string) *watch.Manag
 		k8sclient.NewPodClient(cluster.NewConfig(clusterID)),
 		polarisplugin.New(func(ctx context.Context) ([]*polaris.PolarisServiceInstances, error) {
 			mgr := polaris.NewPolarisPlatformManager(
-				h.registry.DepSvcStore,
+				h.registry.DB,
 				h.registry.DepSvcInstStore,
 				h.registry.PolarisConfigStore,
 			)

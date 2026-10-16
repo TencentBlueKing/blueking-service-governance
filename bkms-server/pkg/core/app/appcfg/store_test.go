@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/dbutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
@@ -34,7 +35,6 @@ import (
 
 var _ = Describe("AppConfigFileStoreMongo", func() {
 	var store *appcfg.AppConfigFileStoreMongo
-	var defStore *appcfg.AppConfigFileDefStoreMongo
 	var versionStore *appcfg.AppConfigFileVersionStoreMongo
 	var ctx context.Context
 
@@ -47,8 +47,6 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		var err error
 
 		store, err = appcfg.NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		defStore, err = appcfg.NewAppConfigFileDefStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 		versionStore, err = appcfg.NewAppConfigFileVersionStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
@@ -253,7 +251,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Add an overlay app config file that references the normal file
-			_, err = appcfg.NewAppConfigFileService(store, defStore, versionStore).Create(
+			_, err = appcfg.NewAppConfigFileService(store, testutil.NewDB(GinkgoT()), versionStore).Create(
 				ctx,
 				appcfg.CreateCfgFileParams{
 					AppID:               appID,

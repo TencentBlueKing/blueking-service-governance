@@ -20,6 +20,8 @@ package appcfg
 
 import (
 	"context"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // AppConfigFileService 向后兼容的门面，内嵌 AppCfgFileDefService。
@@ -36,10 +38,10 @@ var _ MountableFileProvider = (*AppCfgFileDefService)(nil)
 // NewAppConfigFileService 内部构造分层服务。
 func NewAppConfigFileService(
 	fileStore AppConfigFileStore,
-	defStore AppConfigFileDefStore,
+	db *mongo.Database,
 	versionStore AppConfigFileVersionStore,
 ) *AppConfigFileService {
-	base := NewBaseAppCfgFileService(defStore, fileStore, versionStore)
+	base := NewBaseAppCfgFileService(db, fileStore, versionStore)
 	inner := NewAppCfgFileDefService(base)
 	return &AppConfigFileService{AppCfgFileDefService: inner}
 }

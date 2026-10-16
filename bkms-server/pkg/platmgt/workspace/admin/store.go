@@ -24,8 +24,8 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var (
@@ -36,135 +36,38 @@ var (
 )
 
 // Store 持久化临时管理员记录。
-type Store interface {
-	GetLatestActiveGrant(ctx context.Context, workspaceID, username string) (*WorkspaceTempAdmin, error)
-	Create(ctx context.Context, record *WorkspaceTempAdmin) error
-	Update(ctx context.Context, record *WorkspaceTempAdmin) error
-	ListExpiredGrants(ctx context.Context, now time.Time) ([]WorkspaceTempAdmin, error)
-}
+type Store = store.GenericStore[WorkspaceTempAdmin]
 
-var _ Store = (*StoreMongo)(nil)
-
-// StoreMongo 持久化管理员临时授权记录。
-type StoreMongo struct {
-	collection *mongo.Collection
-}
-
-// NewStoreMongo 创建 StoreMongo。
-func NewStoreMongo(client *mongo.Client, dbName string) (*StoreMongo, error) {
-	coll := client.Database(dbName).Collection(collectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 条件唯一：workspaceID + username（仅 isRecycled = false）
-	// - 查询提速：isRecycled + expiresAt
-	return &StoreMongo{collection: coll}, nil
-}
-
-// GetLatestActiveGrant 返回某个空间/用户当前仍生效的临时管理员授权记录。
+// Meta 临时管理员授权记录的存储元数据。
 //
-// 对同一个 workspaceID + username，未回收记录受 partial unique index 约束，
-// 因此查询结果至多一条，这里无需额外排序。
-func (s *StoreMongo) GetLatestActiveGrant(
-	ctx context.Context,
-	workspaceID, username string,
-) (*WorkspaceTempAdmin, error) {
-	filter := bson.M{
-		"workspaceID": workspaceID,
-		"username":    username,
-		"isRecycled":  false,
-	}
-
-	var record WorkspaceTempAdmin
-	// 活跃记录由唯一索引保证至多一条，按过滤条件直接查询即可
-	err := s.collection.FindOne(
-		ctx,
-		filter,
-	).Decode(&record)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrRecordNotFound
-		}
-		return nil, errors.Wrap(err, "find latest active temporary admin grant")
-	}
-	return &record, nil
+// 索引（由 golang-migrate 维护）：
+// - 条件唯一：workspaceID + username（仅 isRecycled = false）
+// - 查询提速：isRecycled + expiresAt
+var Meta = store.Meta[WorkspaceTempAdmin]{
+	Collection: collectionName,
+	NotFound:   ErrRecordNotFound,
+	Duplicate:  ErrRecordAlreadyExists,
 }
 
-// Create 插入一条新的临时管理员记录。
-func (s *StoreMongo) Create(ctx context.Context, record *WorkspaceTempAdmin) error {
-	now := time.Now()
-	if record.CreatedAt.IsZero() {
-		record.CreatedAt = now
-	}
-	record.UpdatedAt = now
-	result, err := s.collection.InsertOne(ctx, record)
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return ErrRecordAlreadyExists
-		}
-		return errors.Wrap(err, "insert temporary admin record")
-	}
-	insertedID, ok := result.InsertedID.(bson.ObjectID)
-	if !ok {
-		return errors.New("failed to get inserted ID")
-	}
-	record.ID = insertedID
-	return nil
+// ByActiveGrant 匹配某个空间/用户当前仍生效（未回收）的临时管理员授权记录。
+// 未回收记录受 partial unique index 约束，因此至多匹配一条。
+func ByActiveGrant(workspaceID, username string) store.Opt {
+	return store.Filter(bson.M{"workspaceID": workspaceID, "username": username, "isRecycled": false})
 }
 
-var immutableFields = map[string]struct{}{
-	"_id":         {},
-	"workspaceID": {},
-	"username":    {},
-	"creator":     {},
-	"createdAt":   {},
-}
-
-// Update 按 ID 更新一条临时管理员记录的全部可变字段。
-func (s *StoreMongo) Update(ctx context.Context, record *WorkspaceTempAdmin) error {
-	record.UpdatedAt = time.Now()
-
-	raw, err := bson.Marshal(record)
-	if err != nil {
-		return errors.Wrap(err, "marshal temporary admin record")
-	}
-	var doc bson.M
-	if unmarshalErr := bson.Unmarshal(raw, &doc); unmarshalErr != nil {
-		return errors.Wrap(unmarshalErr, "unmarshal temporary admin record to bson.M")
-	}
-	for key := range immutableFields {
-		delete(doc, key)
-	}
-
-	result, err := s.collection.UpdateOne(ctx, bson.M{"_id": record.ID}, bson.M{"$set": doc})
-	if err != nil {
-		return errors.Wrap(err, "update temporary admin record")
-	}
-	if result.MatchedCount == 0 {
-		return ErrRecordNotFound
-	}
-	return nil
-}
-
-// ListExpiredGrants 列出待清理的已过期且未回收记录。
-func (s *StoreMongo) ListExpiredGrants(ctx context.Context, now time.Time) ([]WorkspaceTempAdmin, error) {
-	filter := bson.M{
+// ExpiredGrants 匹配截至 now 已过期且未回收的记录，未设置过期时间（零值）的记录不在其列。
+func ExpiredGrants(now time.Time) store.Opt {
+	return store.Filter(bson.M{
 		"isRecycled": false,
-		"expiresAt": bson.M{
-			"$lte": now,
-			"$ne":  time.Time{},
-		},
-	}
-	findOpts := options.Find().
-		SetSort(bson.D{{Key: "expiresAt", Value: 1}, {Key: "updatedAt", Value: 1}, {Key: "_id", Value: 1}})
+		"expiresAt":  bson.M{"$lte": now, "$ne": time.Time{}},
+	})
+}
 
-	cursor, err := s.collection.Find(ctx, filter, findOpts)
-	if err != nil {
-		return nil, errors.Wrap(err, "find expired temporary admin records")
+// updateRecord 按 ID 更新一条临时管理员记录的全部可变字段，workspaceID、username、creator 不可变。
+func updateRecord(ctx context.Context, records *Store, record *WorkspaceTempAdmin) error {
+	mutable := store.UpdateSelected("expiresAt", "isRecycled", "updater")
+	if err := records.Update(ctx, record, mutable, store.ByID(record.ID)); err != nil {
+		return errors.Wrapf(err, "update temporary admin record %s", record.ID.Hex())
 	}
-	defer cursor.Close(ctx)
-
-	var records []WorkspaceTempAdmin
-	if err := cursor.All(ctx, &records); err != nil {
-		return nil, errors.Wrap(err, "decode expired temporary admin records")
-	}
-	return records, nil
+	return nil
 }

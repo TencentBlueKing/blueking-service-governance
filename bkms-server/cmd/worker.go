@@ -92,7 +92,7 @@ func NewWorkerCmd() *cobra.Command {
 			workload.InitPlugin(
 				appcfg.NewMountableFileProvider(
 					storereg.G().AppConfigFileStore,
-					storereg.G().AppConfigFileDefStore,
+					storereg.G().DB,
 					storereg.G().AppConfigFileVersionStore,
 				),
 				storereg.G().PolarisConfigStore,

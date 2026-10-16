@@ -24,6 +24,7 @@ import (
 
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -71,7 +72,7 @@ type UpdateParams struct {
 type Service struct {
 	appModelStore        appmodel.AppModelStore
 	appSpecStore         appspec.AppSpecStore
-	appDefaultRuleStore  appdefaults.RuleStore
+	db                   *mongo.Database
 	envStore             envmodel.EnvironmentStore
 	appStore             bkmsapp.ApplicationStore
 	appConfigFileService *appcfg.AppConfigFileService
@@ -81,22 +82,21 @@ type Service struct {
 func NewService(
 	appModelStore appmodel.AppModelStore,
 	appSpecStore appspec.AppSpecStore,
-	appDefaultRuleStore appdefaults.RuleStore,
+	db *mongo.Database,
 	envStore envmodel.EnvironmentStore,
 	appConfigFileStore appcfg.AppConfigFileStore,
-	appConfigFileDefStore appcfg.AppConfigFileDefStore,
 	appConfigFileVersionStore appcfg.AppConfigFileVersionStore,
 	appStore bkmsapp.ApplicationStore,
 ) *Service {
 	return &Service{
-		appModelStore:       appModelStore,
-		appSpecStore:        appSpecStore,
-		appDefaultRuleStore: appDefaultRuleStore,
-		envStore:            envStore,
-		appStore:            appStore,
+		appModelStore: appModelStore,
+		appSpecStore:  appSpecStore,
+		db:            db,
+		envStore:      envStore,
+		appStore:      appStore,
 		appConfigFileService: appcfg.NewAppConfigFileService(
 			appConfigFileStore,
-			appConfigFileDefStore,
+			db,
 			appConfigFileVersionStore,
 		),
 	}
@@ -107,7 +107,7 @@ func (s *Service) Create(ctx context.Context, app *bkmsapp.Application, params *
 	// 在写入任何应用数据前读取初始化规则，避免读取失败时留下部分应用数据。
 	resolved, err := appdefaults.Resolve(
 		ctx,
-		s.appDefaultRuleStore,
+		s.db,
 		s.envStore,
 		app.WorkspaceID,
 		app.ID,

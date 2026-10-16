@@ -27,7 +27,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -50,9 +50,8 @@ var _ = Describe("TrpcAdminService", func() {
 	// Store instances
 	var appStore bkmsapp.ApplicationStore
 	var appConfigFileStore appcfg.AppConfigFileStore
-	var appConfigFileDefStore appcfg.AppConfigFileDefStore
+	var appConfigFileDefStore *appcfg.AppConfigFileDefStore
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	var buildConfigStore build.ConfigStore
 	var scopedEnvVarStore envvars.ScopedEnvVarStore
 	var appDepsVarReader *depenvvars.Reader
 	var polarisVarReader *polarisenvvars.Reader
@@ -73,7 +72,6 @@ var _ = Describe("TrpcAdminService", func() {
 			appmodel.FxModule,
 			bkmsenv.FxModule,
 			envvars.FxModule,
-			build.FxModule,
 			depmodel.FxModule,
 			depenvvars.FxModule,
 			polaris.FxModule,
@@ -81,9 +79,7 @@ var _ = Describe("TrpcAdminService", func() {
 			fx.Populate(
 				&appStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
-				&buildConfigStore,
 				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
@@ -92,15 +88,14 @@ var _ = Describe("TrpcAdminService", func() {
 			),
 		)
 		diApp.RequireStart()
+		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		// 使用 dbfactory 创建测试用 tRPC 应用（包含 App、AppModel 和 AppConfigFile）
 		testApp, testAppModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigFileVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			EnvVars: []appmodel.Variable{
 				{Key: "MODEL_ADMIN_PORT", Value: "7070"},
@@ -116,7 +111,7 @@ var _ = Describe("TrpcAdminService", func() {
 		adminService = &admincmd.TrpcAdminService{
 			MountableFileProvider: appcfg.NewMountableFileProvider(
 				appConfigFileStore,
-				appConfigFileDefStore,
+				testutil.NewDB(GinkgoT()),
 				appConfigFileVersionStore,
 			),
 			AppModelStore: appModelStore,
@@ -149,11 +144,12 @@ var _ = Describe("TrpcAdminService", func() {
 
 				svc := appcfg.NewAppConfigFileService(
 					appConfigFileStore,
-					appConfigFileDefStore,
+					testutil.NewDB(GinkgoT()),
 					appConfigFileVersionStore,
 				)
-				defs, err := appConfigFileDefStore.ListByApp(
+				defs, err := appcfg.ListDefsByApp(
 					ctx,
+					appConfigFileDefStore,
 					testApp.ID,
 					appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 				)
@@ -295,9 +291,14 @@ var _ = Describe("TrpcAdminService", func() {
 	Describe("Precheck", func() {
 		// 辅助函数：更新已有框架配置文件的内容
 		createConfigFile := func(content string) {
-			svc := appcfg.NewAppConfigFileService(appConfigFileStore, appConfigFileDefStore, appConfigFileVersionStore)
-			defs, err := appConfigFileDefStore.ListByApp(
+			svc := appcfg.NewAppConfigFileService(
+				appConfigFileStore,
+				testutil.NewDB(GinkgoT()),
+				appConfigFileVersionStore,
+			)
+			defs, err := appcfg.ListDefsByApp(
 				ctx,
+				appConfigFileDefStore,
 				testApp.ID,
 				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 			)

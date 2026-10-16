@@ -207,7 +207,7 @@ func (s *AppCfgFileDefService) CleanupPlainEnvInstancesByEnv(
 	ctx context.Context,
 	appID, envName string,
 ) error {
-	plainDefs, err := s.DefStore.ListByApp(ctx, appID, DefFilterConfigKind(ConfigKindPlain))
+	plainDefs, err := ListDefsByApp(ctx, s.DefStore, appID, DefFilterConfigKind(ConfigKindPlain))
 	if err != nil {
 		return errors.Wrap(err, "listing plain defs for env cleanup")
 	}
@@ -225,7 +225,7 @@ func (s *AppCfgFileDefService) CleanupPlainEnvInstancesByEnv(
 				}
 			}
 			def.EnvConfigMode.MountedEnvNames = newNames
-			if _, err = s.DefStore.Update(ctx, def); err != nil {
+			if err = UpdateDef(ctx, s.DefStore, &def); err != nil {
 				return errors.Wrapf(err, "update def %s after removing env %s", def.ID.Hex(), envName)
 			}
 		}

@@ -25,12 +25,11 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
-// FxModule 提供基于全局数据库连接的 *mongo.Database，一个 fx 应用中只应引入一次
+// FxModule 向整个 fx 应用公开提供基于全局数据库连接的 *mongo.Database，一个 fx 应用中只应引入一次，
+// 主要供测试通过 fx.Populate 获取 db 或 Store。
+// 功能模块无需依赖它：database.PrivateFxModule 已在模块内部私有地提供 *mongo.Database
 var FxModule = fx.Module("store",
-	database.PrivateFxModule,
-	fx.Provide(func(client *mongo.Client, dbName string) *mongo.Database {
-		return client.Database(dbName)
-	}),
+	fx.Provide(database.DB),
 )
 
 // Provide 以 *GenericStore[T] 的形式向 fx 提供模型 T 的 Store。

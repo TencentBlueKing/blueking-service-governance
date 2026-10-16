@@ -11,6 +11,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	appdefaultshooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/hooks"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -19,7 +20,7 @@ import (
 var _ = Describe("Application default lifecycle hooks", func() {
 	var ctx context.Context
 	var diApp *fxtest.App
-	var ruleStore appdefaults.RuleStore
+	var ruleStore *appdefaults.RuleStore
 	var workspaceStore bkmsworkspace.WorkspaceStore
 	var workspace *bkmsworkspace.Workspace
 
@@ -29,12 +30,13 @@ var _ = Describe("Application default lifecycle hooks", func() {
 
 		diApp = fxtest.New(
 			GinkgoT(),
-			appdefaults.FxModule,
 			bkmsworkspace.FxModule,
-			fx.Populate(&ruleStore, &workspaceStore),
+			fx.Populate(&workspaceStore),
 		)
 		diApp.RequireStart()
-		appdefaultshooks.RegisterPreDeleteHooks(ruleStore)
+		db := testutil.NewDB(GinkgoT())
+		ruleStore = store.Of(db, appdefaults.RuleMeta)
+		appdefaultshooks.RegisterPreDeleteHooks(db)
 	})
 
 	AfterEach(func() {
@@ -62,7 +64,7 @@ var _ = Describe("Application default lifecycle hooks", func() {
 		Expect(workspaceStore.Delete(ctx, workspaceID)).To(Succeed())
 		workspace = nil
 
-		rules, err := ruleStore.List(ctx, workspaceID)
+		rules, err := ruleStore.List(ctx, appdefaults.ByWorkspace(workspaceID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rules).To(BeEmpty())
 	})

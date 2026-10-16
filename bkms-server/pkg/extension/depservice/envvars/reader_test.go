@@ -21,11 +21,13 @@ package envvars_test
 import (
 	"context"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
@@ -101,60 +103,26 @@ func (s *memoryInstStore) UpdateStatus(context.Context, bson.ObjectID, model.Ins
 func (s *memoryInstStore) Delete(context.Context, bson.ObjectID) error { panic("unexpected") }
 func (s *memoryInstStore) DeleteAll(context.Context) error             { panic("unexpected") }
 
-type memoryBindingStore struct {
-	items []*model.ServiceBinding
-}
-
-func (s *memoryBindingStore) Create(_ context.Context, binding *model.ServiceBinding) (bson.ObjectID, error) {
-	if binding.ID.IsZero() {
-		binding.ID = bson.NewObjectID()
-	}
-	s.items = append(s.items, binding)
-	return binding.ID, nil
-}
-
-func (s *memoryBindingStore) List(
-	_ context.Context,
-	opts *model.BindingQueryOptions,
-) ([]*model.ServiceBinding, error) {
-	var result []*model.ServiceBinding
-	for _, b := range s.items {
-		if opts != nil && opts.AppID != "" && b.AppID != opts.AppID {
-			continue
-		}
-		result = append(result, b)
-	}
-	return result, nil
-}
-
-func (s *memoryBindingStore) Get(context.Context, string, string, string) (*model.ServiceBinding, error) {
-	panic("unexpected")
-}
-
-func (s *memoryBindingStore) Update(context.Context, string, string, string, *model.ServiceBindingUpdateData) error {
-	panic("unexpected")
-}
-
-func (s *memoryBindingStore) Delete(context.Context, string, string, string) error {
-	panic("unexpected")
-}
-func (s *memoryBindingStore) DeleteAll(context.Context) error { panic("unexpected") }
-
 var _ = Describe("Reader", func() {
 	var (
-		ctx          context.Context
-		instStore    *memoryInstStore
-		bindingStore *memoryBindingStore
-		reader       *depenvvars.Reader
-		app          *bkmsapp.Application
+		ctx       context.Context
+		instStore *memoryInstStore
+		bindings  *model.ServiceBindingStore
+		reader    *depenvvars.Reader
+		app       *bkmsapp.Application
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		instStore = &memoryInstStore{byID: map[bson.ObjectID]*model.ServiceInstance{}}
-		bindingStore = &memoryBindingStore{}
-		reader = depenvvars.NewReader(instStore, bindingStore)
-		app = &bkmsapp.Application{ID: "app-1", Name: "test-app"}
+		bindings = testutil.NewStore(GinkgoT(), model.ServiceBindingMeta)
+		reader = depenvvars.NewReader(instStore, testutil.NewDB(GinkgoT()))
+		app = &bkmsapp.Application{ID: "app-" + stringx.Random(8), Name: "test-app"}
+	})
+
+	AfterEach(func() {
+		_, err := bindings.DeleteMany(ctx, model.ByBindingQuery(&model.BindingQueryOptions{AppID: app.ID}))
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	createInst := func(status model.InstanceStatus, credentials map[string]any) bson.ObjectID {
@@ -167,9 +135,10 @@ var _ = Describe("Reader", func() {
 	}
 
 	createBinding := func(name string, envMap map[string]bson.ObjectID, envVars map[string]string) {
-		_, err := bindingStore.Create(ctx, &model.ServiceBinding{
+		err := bindings.Create(ctx, &model.ServiceBinding{
 			Name:           name,
 			AppID:          app.ID,
+			WorkspaceID:    "ws-test",
 			ServiceName:    "redis",
 			EnvInstanceMap: envMap,
 			EnvVars:        envVars,

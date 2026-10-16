@@ -34,7 +34,6 @@ import (
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -85,9 +84,7 @@ var _ = Describe("DeployStatusService", func() {
 		appStore                   bkmsapp.ApplicationStore
 		appModelStore              appmodel.AppModelStore
 		appConfigFileStore         appcfg.AppConfigFileStore
-		appConfigFileDefStore      appcfg.AppConfigFileDefStore
 		appConfigFileVersionStore  appcfg.AppConfigFileVersionStore
-		buildConfigStore           build.ConfigStore
 		buildAutoDeployRecordStore autodeploy.RecordStore
 		envStore                   envmodel.EnvironmentStore
 		envSvc                     *bkmsenv.EnvService
@@ -107,14 +104,11 @@ var _ = Describe("DeployStatusService", func() {
 			autodeploy.FxModule,
 			appmodeldeploy.FxModule,
 			helmdeploy.FxModule,
-			build.FxModule,
 			fx.Populate(
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
-				&buildConfigStore,
 				&envStore,
 				&envSvc,
 				&buildAutoDeployRecordStore,
@@ -151,9 +145,7 @@ var _ = Describe("DeployStatusService", func() {
 					AppStore:                  appStore,
 					AppModelStore:             appModelStore,
 					AppConfigFileStore:        appConfigFileStore,
-					AppConfigFileDefStore:     appConfigFileDefStore,
 					AppConfigFileVersionStore: appConfigFileVersionStore,
-					BuildConfigStore:          buildConfigStore,
 				}, nil)
 				testEnv = dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
 				Expect(envStore.AddApp(ctx, testEnv.ID, trpcApp.ID)).To(Succeed())
@@ -441,9 +433,7 @@ var _ = Describe("DeployStatusService", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
 			}, nil)
 			workspaceID = trpcApp.WorkspaceID
 			envStaging = dbfactory.Env(ctx, envSvc, workspaceID)
@@ -520,9 +510,7 @@ var _ = Describe("DeployStatusService", func() {
 					AppStore:                  appStore,
 					AppModelStore:             appModelStore,
 					AppConfigFileStore:        appConfigFileStore,
-					AppConfigFileDefStore:     appConfigFileDefStore,
 					AppConfigFileVersionStore: appConfigFileVersionStore,
-					BuildConfigStore:          buildConfigStore,
 				}, &dbfactory.TrpcApplicationOpts{WorkspaceID: workspaceID})
 				helmApp = dbfactory.HelmApplication(ctx, &dbfactory.HelmApplicationStores{
 					AppStore: appStore,
@@ -734,17 +722,13 @@ var _ = Describe("DeployStatusService", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
 			}, nil)
 			otherApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TrpcApplicationOpts{WorkspaceID: trpcApp.WorkspaceID})
 			sourceEnv = dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
 			featureEnv = dbfactory.FeatEnv(ctx, envSvc, trpcApp, sourceEnv)

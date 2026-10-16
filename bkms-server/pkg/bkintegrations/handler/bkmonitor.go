@@ -85,7 +85,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 
 	cfgProvider := appcfg.NewMountableFileProvider(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	frameworkFile, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)

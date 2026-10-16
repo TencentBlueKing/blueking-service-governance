@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
@@ -68,10 +69,10 @@ type TagQueryManager struct {
 }
 
 // NewTagQueryManager 创建 TagQueryManager
-func NewTagQueryManager(store Store, snapshotSvc *snapshot.Service) *TagQueryManager {
+func NewTagQueryManager(store Store, db *mongo.Database, snapshotSvc *snapshot.Service) *TagQueryManager {
 	return &TagQueryManager{
 		store:       store,
-		checker:     NewExistenceChecker(snapshotSvc),
+		checker:     NewExistenceChecker(db, snapshotSvc),
 		snapshotSvc: snapshotSvc,
 	}
 }

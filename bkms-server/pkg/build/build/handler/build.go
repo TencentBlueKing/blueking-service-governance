@@ -25,6 +25,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	pkgerrors "github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
@@ -39,6 +40,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
@@ -56,13 +58,14 @@ type Handler struct {
 func New(registry *storereg.Registry) *Handler {
 	snapshotService := snapshot.NewService(
 		registry.SnapshotStore,
-		registry.BuildConfigStore,
+		registry.DB,
 		registry.AppStore,
 	)
 	return &Handler{
 		registry: registry,
 		persistMgr: customruntime.NewPersistManager(
 			registry.CustomRuntimeImageStore,
+			registry.DB,
 			snapshotService,
 		),
 	}
@@ -71,12 +74,11 @@ func New(registry *storereg.Registry) *Handler {
 // newBuildService 装配构建服务，并注入平台构建镜像引用校验器
 func (h *Handler) newBuildService() (*build.Service, error) {
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.RuntimeImageStore,
+		h.registry.DB,
 		h.registry.SnapshotStore,
 	)
 	return build.NewService(
 		h.registry.DB,
-		h.registry.BuildConfigStore,
 		h.registry.BuildRecordStore,
 		imageReferenceValidator,
 		h.persistMgr,
@@ -114,7 +116,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		return
 	}
 
-	dataBefore, err := h.registry.BuildConfigStore.Get(ctx, app.ID)
+	dataBefore, err := store.Of(h.registry.DB, imagebuild.ConfigMeta).Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get app %s build config", app.ID))
 		return
@@ -138,7 +140,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.BuildConfigStore.Update(ctx, cfg); err != nil {
+	if err = imagebuild.UpdateConfig(ctx, store.Of(h.registry.DB, imagebuild.ConfigMeta), cfg); err != nil {
 		bkerrs.AbortWithErr(
 			c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "update app %s build config", app.ID),
 		)
@@ -158,7 +160,7 @@ func (h *Handler) validatePlatformBuildImages(
 	ctx context.Context, workspaceID string, cfg *imagebuild.Config,
 ) error {
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(
-		h.registry.RuntimeImageStore,
+		h.registry.DB,
 		h.registry.SnapshotStore,
 	)
 	err := build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, h.persistMgr, cfg, workspaceID)
@@ -387,7 +389,7 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 		return
 	}
 
-	cfg, err := h.registry.BuildConfigStore.Get(ctx, app.ID)
+	cfg, err := store.Of(h.registry.DB, imagebuild.ConfigMeta).Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get app %s build config", app.ID))
 		return
@@ -396,7 +398,7 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 	var imageTag string
 	switch cfg.TagConfig.Type {
 	case imagebuild.VersionTypeSemver:
-		repoInfo, repoErr := imagebuild.ResolveImageRepoInfo(ctx, cfg, app.WorkspaceID, app.Name)
+		repoInfo, repoErr := imagebuild.ResolveImageRepoInfo(ctx, h.registry.DB, cfg, app.WorkspaceID, app.Name)
 		if repoErr != nil {
 			bkerrs.AbortWithErr(
 				c,
@@ -440,11 +442,11 @@ func (h *Handler) triggerSnapshotRefreshOnConfigChange(
 		return pkgerrors.Wrapf(err, "get app %s", appID)
 	}
 
-	oldRepoKey, err := computeRepoKeyFromConfig(ctx, oldCfg, app)
+	oldRepoKey, err := computeRepoKeyFromConfig(ctx, h.registry.DB, oldCfg, app)
 	if err != nil {
 		return pkgerrors.Wrapf(err, "compute old repoKey for app %s", appID)
 	}
-	newRepoKey, err := computeRepoKeyFromConfig(ctx, newCfg, app)
+	newRepoKey, err := computeRepoKeyFromConfig(ctx, h.registry.DB, newCfg, app)
 	if err != nil {
 		return pkgerrors.Wrapf(err, "compute new repoKey for app %s", appID)
 	}
@@ -452,7 +454,7 @@ func (h *Handler) triggerSnapshotRefreshOnConfigChange(
 		return nil
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.DB, h.registry.AppStore)
 	if _, err = snapshotService.RefreshAppSnapshots(context.WithoutCancel(ctx), appID); err != nil {
 		return pkgerrors.Wrapf(err, "refresh snapshots on config change for app %s", appID)
 	}
@@ -463,6 +465,7 @@ func (h *Handler) triggerSnapshotRefreshOnConfigChange(
 // config and turns it into the repo key used by snapshot storage.
 func computeRepoKeyFromConfig(
 	ctx context.Context,
+	db *mongo.Database,
 	cfg *imagebuild.Config,
 	app *bkmsapp.Application,
 ) (string, error) {
@@ -473,7 +476,7 @@ func computeRepoKeyFromConfig(
 		return "", pkgerrors.New("app is nil")
 	}
 
-	info, err := imagebuild.ResolveImageRepoInfo(ctx, cfg, app.WorkspaceID, app.Name)
+	info, err := imagebuild.ResolveImageRepoInfo(ctx, db, cfg, app.WorkspaceID, app.Name)
 	if err != nil {
 		return "", pkgerrors.Wrap(err, "resolve image repo info")
 	}

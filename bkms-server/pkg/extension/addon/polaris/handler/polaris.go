@@ -54,7 +54,7 @@ func (h *Handler) polarisConfigService() *polaris.PolarisConfigService {
 	return polaris.NewPolarisConfigService(
 		h.registry.PolarisConfigStore,
 		polaris.NewPolarisPlatformManager(
-			h.registry.DepSvcStore,
+			h.registry.DB,
 			h.registry.DepSvcInstStore,
 			h.registry.PolarisConfigStore,
 		),
@@ -106,7 +106,7 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 
 	cfgProvider := appcfg.NewMountableFileProvider(
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileVersionStore,
 	)
 	outputList := lo.Map(configs, func(config *polaris.PolarisConfig, _ int) *serializer.PolarisConfigOutputObj {
@@ -465,7 +465,7 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 		h.registry.AppModelStore,
 		appcfg.NewMountableFileProvider(
 			h.registry.AppConfigFileStore,
-			h.registry.AppConfigFileDefStore,
+			h.registry.DB,
 			h.registry.AppConfigFileVersionStore,
 		),
 		config,

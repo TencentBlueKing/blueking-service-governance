@@ -43,12 +43,11 @@ func (fakeProvisionParams) Validate() error { return nil }
 
 var _ = Describe("ServiceManager", func() {
 	var (
-		ctx          context.Context
-		diApp        *fxtest.App
-		svcStore     model.ServiceStore
-		instStore    model.ServiceInstanceStore
-		bindingStore model.ServiceBindingStore
-		mgr          *depservice.ServiceManager
+		ctx       context.Context
+		diApp     *fxtest.App
+		svcStore  *model.ServiceStore
+		instStore model.ServiceInstanceStore
+		mgr       *depservice.ServiceManager
 
 		planName string
 	)
@@ -60,10 +59,11 @@ var _ = Describe("ServiceManager", func() {
 		diApp = fxtest.New(
 			GinkgoT(),
 			model.FxModule,
-			fx.Populate(&svcStore, &instStore, &bindingStore),
+			fx.Populate(&instStore),
 		)
 		diApp.RequireStart()
-		mgr = depservice.New(svcStore, instStore, bindingStore, nil)
+		svcStore = testutil.NewStore(GinkgoT(), model.ServiceMeta)
+		mgr = depservice.New(testutil.NewDB(GinkgoT()), instStore, nil)
 		Expect(testutil.CleanupCollection("depservice_bindings")).To(Succeed())
 		Expect(testutil.CleanupCollection("depservice_instances")).To(Succeed())
 		Expect(testutil.CleanupCollection("depservice_services")).To(Succeed())
@@ -84,8 +84,8 @@ var _ = Describe("ServiceManager", func() {
 	AfterEach(func() {
 		fake.Reset()
 		Expect(instStore.DeleteAll(ctx)).To(Succeed())
-		Expect(bindingStore.DeleteAll(ctx)).To(Succeed())
-		Expect(svcStore.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupCollection(model.ServiceBindingMeta.Collection)).To(Succeed())
+		Expect(testutil.CleanupCollection(model.ServiceMeta.Collection)).To(Succeed())
 		diApp.RequireStop()
 	})
 

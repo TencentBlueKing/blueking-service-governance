@@ -27,7 +27,7 @@ import (
 	"go.uber.org/fx/fxtest"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -52,9 +52,8 @@ var _ = Describe("TafWorkloadBuilder", func() {
 	var envSvc *env.EnvService
 	var builderSvc *workload.BuilderService
 	var appConfigFileStore appcfg.AppConfigFileStore
-	var appConfigFileDefStore appcfg.AppConfigFileDefStore
+	var appConfigFileDefStore *appcfg.AppConfigFileDefStore
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-	var buildConfigStore build.ConfigStore
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -65,7 +64,6 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			workload.FxModule,
 			appcfg.FxModule,
 			env.FxModule,
-			build.FxModule,
 			envvars.FxModule,
 			depmodel.FxModule,
 			depenvvars.FxModule,
@@ -75,14 +73,13 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
-				&buildConfigStore,
 				&envSvc,
 				&builderSvc,
 			),
 		)
 		diApp.RequireStart()
+		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 	})
 
 	AfterEach(func() {
@@ -121,9 +118,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TafApplicationOpts{
 				TafConfig: &appmodel.TafConfig{
 					FileName:    "taf_config.conf",
@@ -138,8 +133,9 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			testEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
 			// 切换到独立配置后，为 prod 创建 env-specific overlay。
-			defs, err := appConfigFileDefStore.ListByApp(
+			defs, err := appcfg.ListDefsByApp(
 				ctx,
+				appConfigFileDefStore,
 				app.ID,
 				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 			)
@@ -148,7 +144,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 
 			cfgSvc := appcfg.NewAppConfigFileService(
 				appConfigFileStore,
-				appConfigFileDefStore,
+				testutil.NewDB(GinkgoT()),
 				appConfigFileVersionStore,
 			)
 
@@ -259,9 +255,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TafApplicationOpts{
 				TafConfig: &appmodel.TafConfig{
 					FileName:    "taf_config.conf",
@@ -299,9 +293,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				AppStore:                  appStore,
 				AppModelStore:             appModelStore,
 				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileDefStore:     appConfigFileDefStore,
 				AppConfigFileVersionStore: appConfigFileVersionStore,
-				BuildConfigStore:          buildConfigStore,
 			}, &dbfactory.TafApplicationOpts{
 				TafConfig: &appmodel.TafConfig{
 					FileName:    "taf_config.conf",

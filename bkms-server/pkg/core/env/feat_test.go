@@ -30,6 +30,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -45,7 +46,6 @@ var _ = Describe("FeatureEnvService", func() {
 		appStore      bkmsapp.ApplicationStore
 		envSvc        *bkmsenv.EnvService
 		envStore      model.EnvironmentStore
-		counterStore  model.FeatureEnvCounterStore
 		variableStore envvars.ScopedEnvVarStore
 		service       *bkmsenv.FeatureEnvService
 		nsInitializer *MockFeatureEnvNamespaceInitializer
@@ -65,7 +65,7 @@ var _ = Describe("FeatureEnvService", func() {
 				nsInitializer,
 				fx.As(new(bkmsenv.FeatureEnvNamespaceInitializer)),
 			)),
-			fx.Populate(&appStore, &envSvc, &envStore, &counterStore, &variableStore, &service),
+			fx.Populate(&appStore, &envSvc, &envStore, &variableStore, &service),
 		)
 		diApp.RequireStart()
 
@@ -76,7 +76,7 @@ var _ = Describe("FeatureEnvService", func() {
 	AfterEach(func() {
 		bkmsenv.ResetHooksForTest()
 		Expect(envStore.DeleteAll(ctx)).To(Succeed())
-		Expect(counterStore.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupCollection(model.FeatureEnvCounterCollection)).To(Succeed())
 		Expect(variableStore.DeleteAll(ctx)).To(Succeed())
 		diApp.RequireStop()
 	})

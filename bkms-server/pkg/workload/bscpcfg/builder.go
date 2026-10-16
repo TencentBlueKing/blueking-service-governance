@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -159,16 +160,16 @@ func Build(params Params) *PodFragment {
 	}
 }
 
-// BuildFromStore 从 Store 获取配置快照并装配 pod 片段。
+// BuildFromStore 从数据库获取配置快照并装配 pod 片段。
 //
 // 当指定 app+env 未配置、或配置管理未启用时返回 nil, nil。
 func BuildFromStore(
 	ctx context.Context,
-	store bscpcfg.Store,
+	db *mongo.Database,
 	appID, envName string,
 	ws *workspace.Workspace,
 ) (*PodFragment, error) {
-	snapshot, err := store.GetSnapshot(ctx, appID, envName)
+	snapshot, err := bscpcfg.GetSnapshot(ctx, db, appID, envName)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting bscp config snapshot")
 	}

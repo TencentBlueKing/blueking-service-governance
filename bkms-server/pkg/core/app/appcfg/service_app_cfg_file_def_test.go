@@ -83,7 +83,12 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(*created.BaseAppConfigFileID).To(Equal(base.ID))
 			Expect(lo.FromPtr(created.OverlayContent)).To(Equal(overlay))
 
-			defs, err := f.DefStore.ListByApp(f.Ctx, f.AppID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
+			defs, err := appcfg.ListDefsByApp(
+				f.Ctx,
+				f.DefStore,
+				f.AppID,
+				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defs).To(HaveLen(1))
 			Expect(defs[0].EnvConfigMode.IsUnifiedConfig).To(BeFalse())
@@ -121,7 +126,12 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(second.ID).To(Equal(first.ID))
 			Expect(second.DefID).To(Equal(base.DefID))
 
-			defs, err := f.DefStore.ListByApp(f.Ctx, f.AppID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
+			defs, err := appcfg.ListDefsByApp(
+				f.Ctx,
+				f.DefStore,
+				f.AppID,
+				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defs).To(HaveLen(1))
 		})
@@ -164,7 +174,12 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(second.Def.Name).To(Equal("prod-values.yaml"))
 
-			defs, err := f.DefStore.ListByApp(f.Ctx, f.AppID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework))
+			defs, err := appcfg.ListDefsByApp(
+				f.Ctx,
+				f.DefStore,
+				f.AppID,
+				appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defs).To(HaveLen(2))
 		})
@@ -359,7 +374,7 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 		})
 
 		It("should reject mountDir update for unsupported config kind", func() {
-			defID, err := f.DefStore.Add(f.Ctx, appcfg.AppConfigFileDef{
+			def := &appcfg.AppConfigFileDef{
 				AppID:      f.AppID,
 				Name:       "legacy.yaml",
 				ConfigKind: "",
@@ -368,10 +383,12 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 				EnvConfigMode: appcfg.EnvConfigMode{
 					IsUnifiedConfig: true,
 				},
-			})
+			}
+			err := f.DefStore.Create(f.Ctx, def)
+			defID := def.ID
 			Expect(err).NotTo(HaveOccurred())
 
-			def, err := f.DefStore.GetByID(f.Ctx, defID)
+			def, err = f.DefStore.GetByID(f.Ctx, defID)
 			Expect(err).NotTo(HaveOccurred())
 
 			newDir := "/new/path"

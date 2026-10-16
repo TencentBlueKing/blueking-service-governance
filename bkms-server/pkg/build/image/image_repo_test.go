@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
@@ -51,7 +52,7 @@ var _ = Describe("ResolveImageRepoInfo", func() {
 				},
 			}
 
-			info, err := ResolveImageRepoInfo(ctx, cfg, "ws-1", "my-app")
+			info, err := ResolveImageRepoInfo(ctx, nil, cfg, "ws-1", "my-app")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(info.RepoName).To(Equal("docker.io/library/nginx"))
 			Expect(info.Username).To(Equal("alice"))
@@ -63,7 +64,7 @@ var _ = Describe("ResolveImageRepoInfo", func() {
 		It("should resolve from workspace image registry", func() {
 			mockey.PatchConvey("mock GetWorkspaceImageRegistry", GinkgoT(), func() {
 				mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
-					func(_ context.Context, workspaceID string) (*bkmsreg.ImageRegistry, error) {
+					func(_ context.Context, _ *mongo.Database, workspaceID string) (*bkmsreg.ImageRegistry, error) {
 						Expect(workspaceID).To(Equal("ws-1"))
 						return &bkmsreg.ImageRegistry{
 							Registry: "mirrors.tencent.com/bkpaas",
@@ -77,7 +78,7 @@ var _ = Describe("ResolveImageRepoInfo", func() {
 					SourceType: SourceTypeCodeRepository,
 				}
 
-				info, err := ResolveImageRepoInfo(ctx, cfg, "ws-1", "my-app")
+				info, err := ResolveImageRepoInfo(ctx, nil, cfg, "ws-1", "my-app")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(info.RepoName).To(Equal("mirrors.tencent.com/bkpaas/my-app"))
 				Expect(info.Username).To(Equal("bk-user"))
@@ -88,7 +89,7 @@ var _ = Describe("ResolveImageRepoInfo", func() {
 		It("should propagate error when GetWorkspaceImageRegistry fails", func() {
 			mockey.PatchConvey("mock GetWorkspaceImageRegistry error", GinkgoT(), func() {
 				mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
-					func(_ context.Context, _ string) (*bkmsreg.ImageRegistry, error) {
+					func(_ context.Context, _ *mongo.Database, _ string) (*bkmsreg.ImageRegistry, error) {
 						return nil, errors.New("workspace not found")
 					},
 				).Build()
@@ -97,7 +98,7 @@ var _ = Describe("ResolveImageRepoInfo", func() {
 					SourceType: SourceTypeCodeRepository,
 				}
 
-				info, err := ResolveImageRepoInfo(ctx, cfg, "ws-1", "my-app")
+				info, err := ResolveImageRepoInfo(ctx, nil, cfg, "ws-1", "my-app")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("workspace not found"))
 				Expect(info).To(BeNil())

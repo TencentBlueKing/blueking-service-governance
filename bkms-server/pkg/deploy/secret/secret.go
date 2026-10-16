@@ -26,22 +26,24 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
 // ImagePullSecretSyncer 是镜像仓库拉取凭证的 Secret 同步器，用于管理集群内的 ImagePullSecret 资源
 type ImagePullSecretSyncer struct {
+	db          *mongo.Database
 	workspaceID string
 	clusterID   string
 	namespace   string
@@ -50,8 +52,14 @@ type ImagePullSecretSyncer struct {
 }
 
 // NewImagePullSecretSyncer 创建 ImagePullSecretSyncer 实例
-func NewImagePullSecretSyncer(env *bkmsenv.Environment, appID string, buildCfg *build.Config) *ImagePullSecretSyncer {
+func NewImagePullSecretSyncer(
+	db *mongo.Database,
+	env *bkmsenv.Environment,
+	appID string,
+	buildCfg *build.Config,
+) *ImagePullSecretSyncer {
 	return &ImagePullSecretSyncer{
+		db:          db,
 		workspaceID: env.WorkspaceID,
 		clusterID:   env.Cluster.ClusterID,
 		namespace:   env.Cluster.Namespace,
@@ -127,12 +135,7 @@ func (m *ImagePullSecretSyncer) validateNamespace(ctx context.Context) error {
 
 // genAuthsData 生成镜像仓库的凭证信息
 func (m *ImagePullSecretSyncer) genAuthsData(ctx context.Context) (map[string]any, error) {
-	store, err := registry.NewImageRegistryStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrapf(err, "get image registry store")
-	}
-
-	imageRegistries, err := store.List(ctx, m.workspaceID)
+	imageRegistries, err := store.Of(m.db, registry.ImageRegistryMeta).List(ctx, registry.ByWorkspace(m.workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "list image registry for workspace: %s", m.workspaceID)
 	}

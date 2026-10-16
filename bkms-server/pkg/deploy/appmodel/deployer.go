@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,6 +51,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	k8sworkload "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/workload"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -68,7 +70,7 @@ type Deployer struct {
 	appModelStore           appmodel.AppModelStore
 	builderService          *workload.BuilderService
 	appSpecStore            appspec.AppSpecStore
-	buildConfigStore        build.ConfigStore
+	db                      *mongo.Database
 	appConfigFileStore      appcfg.AppConfigFileStore
 	polarisEnvStateManager  *polaris.PolarisEnvStateManager
 	hostPortEnvStateManager *hostport.EnvStateManager
@@ -86,7 +88,7 @@ func NewDeployer(
 	appModelStore appmodel.AppModelStore,
 	builderService *workload.BuilderService,
 	appSpecStore appspec.AppSpecStore,
-	buildConfigStore build.ConfigStore,
+	db *mongo.Database,
 	appConfigFileStore appcfg.AppConfigFileStore,
 	polarisEnvStateManager *polaris.PolarisEnvStateManager,
 	hostPortEnvStateManager *hostport.EnvStateManager,
@@ -99,7 +101,7 @@ func NewDeployer(
 		appModelStore:           appModelStore,
 		builderService:          builderService,
 		appSpecStore:            appSpecStore,
-		buildConfigStore:        buildConfigStore,
+		db:                      db,
 		appConfigFileStore:      appConfigFileStore,
 		polarisEnvStateManager:  polarisEnvStateManager,
 		hostPortEnvStateManager: hostPortEnvStateManager,
@@ -170,13 +172,13 @@ func (d *Deployer) Deploy(
 		}
 	}()
 
-	buildCfg, err := d.buildConfigStore.Get(ctx, d.app.ID)
+	buildCfg, err := store.Of(d.db, build.ConfigMeta).Get(ctx, build.ByApp(d.app.ID))
 	if err != nil {
 		return "", errors.Wrap(err, "get build config")
 	}
 
 	// 确保待部署环境中已经存在对应的 ImagePullSecret
-	if err = secret.NewImagePullSecretSyncer(env, d.app.ID, buildCfg).Sync(ctx); err != nil {
+	if err = secret.NewImagePullSecretSyncer(d.db, env, d.app.ID, buildCfg).Sync(ctx); err != nil {
 		return "", errors.Wrap(err, "sync image pull secret")
 	}
 

@@ -86,7 +86,7 @@ func ExecuteBKCIPipelineBuild(
 			return nil, nil, errors.Wrap(err, "init builtin dockerfile pipeline")
 		}
 		// 根据配置生成流水线参数
-		params, err = genPipelineBuildParams(ctx, app, cfg, rev, imageTag)
+		params, err = genPipelineBuildParams(ctx, db, app, cfg, rev, imageTag)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "generate pipeline build params for %s", appInfo)
 		}
@@ -101,7 +101,7 @@ func ExecuteBKCIPipelineBuild(
 			return nil, nil, errors.Wrapf(err, "init pipeline")
 		}
 		// 根据配置生成流水线参数（镜像相关）
-		params, err = genPipelineBuildRepoAndImageParams(ctx, app, rev, imageTag)
+		params, err = genPipelineBuildRepoAndImageParams(ctx, db, app, rev, imageTag)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "generate pipeline build image params for %s", appInfo)
 		}
@@ -142,7 +142,12 @@ func ExecuteBKCIPipelineBuild(
 
 // genPipelineBuildParams 生成蓝盾流水线构建参数
 func genPipelineBuildParams(
-	ctx context.Context, app *bkmsapp.Application, cfg *Config, rev revision.CodeRevision, imageTag string,
+	ctx context.Context,
+	db *mongo.Database,
+	app *bkmsapp.Application,
+	cfg *Config,
+	rev revision.CodeRevision,
+	imageTag string,
 ) (map[string]string, error) {
 	// 如果没有代码仓库配置，则无法生成蓝盾流水线参数
 	if cfg.CodeRepo == nil {
@@ -171,7 +176,7 @@ func genPipelineBuildParams(
 	}
 
 	// 镜像相关参数
-	params, err := genPipelineBuildRepoAndImageParams(ctx, app, rev, imageTag)
+	params, err := genPipelineBuildRepoAndImageParams(ctx, db, app, rev, imageTag)
 	if err != nil {
 		return nil, errors.Wrapf(err, "generate pipeline build image params for %s", app.ID)
 	}
@@ -307,9 +312,9 @@ func getPlatformDockerfileLanguage(app *bkmsapp.Application) (string, error) {
 
 // genPipelineBuildRepoAndImageParams 生成蓝盾流水线构建参数（镜像和仓库版本信息相关）
 func genPipelineBuildRepoAndImageParams(
-	ctx context.Context, app *bkmsapp.Application, rev revision.CodeRevision, imageTag string,
+	ctx context.Context, db *mongo.Database, app *bkmsapp.Application, rev revision.CodeRevision, imageTag string,
 ) (map[string]string, error) {
-	registry, err := workspace.GetWorkspaceImageRegistry(ctx, app.WorkspaceID)
+	registry, err := workspace.GetWorkspaceImageRegistry(ctx, db, app.WorkspaceID)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get workspace image registry")
 	}

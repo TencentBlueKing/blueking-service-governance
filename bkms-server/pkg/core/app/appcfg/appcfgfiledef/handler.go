@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/arrangement"
 )
 
@@ -45,7 +46,7 @@ func NewHandler(registry *storereg.Registry) *Handler {
 
 func (h *Handler) newAppCfgFileDefService() *appcfg.AppCfgFileDefService {
 	base := appcfg.NewBaseAppCfgFileService(
-		h.registry.AppConfigFileDefStore,
+		h.registry.DB,
 		h.registry.AppConfigFileStore,
 		h.registry.AppConfigFileVersionStore,
 	)
@@ -85,7 +86,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 		return
 	}
 
-	defs, err := h.registry.AppConfigFileDefStore.ListByApp(ctx, app.ID)
+	defs, err := appcfg.ListDefsByApp(ctx, store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta), app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing defs"))
 		return
@@ -619,7 +620,7 @@ func (h *Handler) getAppCfgFileDef(ctx *gin.Context, uri DefURIInput) (*appcfg.A
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parsing def ID")
 	}
-	def, err := h.registry.AppConfigFileDefStore.GetByID(ctx.Request.Context(), defID)
+	def, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx.Request.Context(), defID)
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "config file def not found")
 	}

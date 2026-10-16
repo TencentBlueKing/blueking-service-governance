@@ -131,7 +131,7 @@ func (r *PipelineTemplatesReloader) reloadOne(
 	}
 
 	pipelineTmplInfo := fmt.Sprintf("pipeline template %s (id: %s, type: %s)", tmpl.Name, tmpl.ID, tmpl.Type)
-	if _, err = r.tmplStore.Upsert(ctx, &tmpl, ByType(tmpl.Type), store.UnsetOmitted()); err != nil {
+	if _, err = r.tmplStore.Upsert(ctx, &tmpl, ByType(tmpl.Type)); err != nil {
 		return errors.Wrapf(err, "upsert %s", pipelineTmplInfo)
 	}
 	log.Infof(ctx, "load %s success", pipelineTmplInfo)

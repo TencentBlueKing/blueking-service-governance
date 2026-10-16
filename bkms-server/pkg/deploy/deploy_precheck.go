@@ -22,10 +22,12 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
@@ -41,21 +43,21 @@ type DeployPreCheckResult struct {
 
 // DeployPreChecker collects deployment pre-check findings for an app and environment.
 type DeployPreChecker struct {
-	appModelStore        appmodel.AppModelStore
-	builderService       *workload.BuilderService
-	clusterAddonDefStore clusteraddon.ClusterAddonDefStore
+	appModelStore    appmodel.AppModelStore
+	builderService   *workload.BuilderService
+	clusterAddonDefs *clusteraddon.ClusterAddonDefStore
 }
 
 // NewDeployPreChecker creates a DeployPreChecker.
 func NewDeployPreChecker(
 	appModelStore appmodel.AppModelStore,
 	builderService *workload.BuilderService,
-	clusterAddonDefStore clusteraddon.ClusterAddonDefStore,
+	db *mongo.Database,
 ) *DeployPreChecker {
 	return &DeployPreChecker{
-		appModelStore:        appModelStore,
-		builderService:       builderService,
-		clusterAddonDefStore: clusterAddonDefStore,
+		appModelStore:    appModelStore,
+		builderService:   builderService,
+		clusterAddonDefs: store.Of(db, clusteraddon.ClusterAddonDefMeta),
 	}
 }
 
@@ -77,9 +79,9 @@ func (c *DeployPreChecker) Check(
 	if err != nil {
 		return nil, errors.Wrap(err, "building workload for deployment pre-check")
 	}
-	defs, err := c.clusterAddonDefStore.List(ctx)
+	defs, err := clusteraddon.ListDefs(ctx, c.clusterAddonDefs)
 	if err != nil {
-		return nil, errors.Wrap(err, "list cluster addon defs")
+		return nil, err
 	}
 	missing, err := clusteraddon.InspectRequiredAddons(
 		ctx, defs, app.Type, env, "",

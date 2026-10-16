@@ -24,41 +24,36 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/service"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Manager", func() {
-	var store model.Store
+	var metas *model.MetadataStore
+	var bindings *model.EnvBindingStore
 	var mgr *service.Manager
 	var ctx context.Context
 	var testAppID string
-	var diApp *fxtest.App
 
 	BeforeEach(func() {
-		diApp = fxtest.New(
-			GinkgoT(),
-			model.FxModule,
-			fx.Populate(&store),
-		)
-		diApp.RequireStart()
+		metas = testutil.NewStore(GinkgoT(), model.MetadataMeta)
+		bindings = testutil.NewStore(GinkgoT(), model.EnvBindingMeta)
 
 		ctx = context.Background()
 		testAppID = "test-app-" + stringx.Random(5)
 
 		var err error
-		mgr, err = service.NewManager(auth.User{ID: "test-user"}, store)
+		mgr, err = service.NewManager(auth.User{ID: "test-user"}, testutil.NewDB(GinkgoT()))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
-		_ = store.DeleteEnvBindingsByApp(ctx, testAppID)
-		_ = store.DeleteMetadata(ctx, testAppID)
-		diApp.RequireStop()
+		_, _ = bindings.DeleteMany(ctx, model.ByApp(testAppID))
+		_, _ = metas.DeleteMany(ctx, model.ByApp(testAppID))
 	})
 
 	// newInitParams 构造一个 InitMetadata 入参。
@@ -121,8 +116,8 @@ var _ = Describe("Manager", func() {
 
 	Describe("GetSnapshot", func() {
 		BeforeEach(func() {
-			createTestMetadata(ctx, store, testAppID)
-			createTestEnvBinding(ctx, store, testAppID, "dev")
+			createTestMetadata(ctx, metas, testAppID)
+			createTestEnvBinding(ctx, bindings, testAppID, "dev")
 		})
 
 		Context("when both metadata and env binding exist", func() {
@@ -138,9 +133,9 @@ var _ = Describe("Manager", func() {
 
 	Describe("ListSnapshots", func() {
 		BeforeEach(func() {
-			createTestMetadata(ctx, store, testAppID)
-			createTestEnvBinding(ctx, store, testAppID, "dev")
-			createTestEnvBinding(ctx, store, testAppID, "prod")
+			createTestMetadata(ctx, metas, testAppID)
+			createTestEnvBinding(ctx, bindings, testAppID, "dev")
+			createTestEnvBinding(ctx, bindings, testAppID, "prod")
 		})
 
 		Context("when the app has multiple env bindings", func() {
@@ -162,10 +157,35 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
+	Describe("PatchMetadata", func() {
+		BeforeEach(func() {
+			createTestMetadata(ctx, metas, testAppID)
+		})
+
+		It("should only update the given fields", func() {
+			Expect(mgr.PatchMetadata(ctx, testAppID, map[string]any{"workloadKind": "StatefulSet"})).To(Succeed())
+
+			meta, err := metas.Get(ctx, model.ByApp(testAppID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(meta.WorkloadKind).To(Equal("StatefulSet"))
+			Expect(meta.WorkloadName).To(Equal("test-workload"))
+		})
+
+		It("should return ErrNoFieldsToUpdate when there is nothing to update", func() {
+			err := mgr.PatchMetadata(ctx, testAppID, nil)
+			Expect(err).To(MatchError(store.ErrNoFieldsToUpdate))
+		})
+
+		It("should return ErrMetadataNotFound when metadata does not exist", func() {
+			err := mgr.PatchMetadata(ctx, "non-existent-app", map[string]any{"enable": false})
+			Expect(err).To(MatchError(model.ErrMetadataNotFound))
+		})
+	})
+
 	Describe("DeleteEnvBinding", func() {
 		BeforeEach(func() {
-			createTestMetadata(ctx, store, testAppID)
-			createTestEnvBinding(ctx, store, testAppID, "dev")
+			createTestMetadata(ctx, metas, testAppID)
+			createTestEnvBinding(ctx, bindings, testAppID, "dev")
 		})
 
 		Context("when the env binding exists", func() {
@@ -173,7 +193,14 @@ var _ = Describe("Manager", func() {
 				err := mgr.DeleteEnvBinding(ctx, testAppID, "dev")
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = store.GetEnvBinding(ctx, testAppID, "dev")
+				_, err = bindings.Get(ctx, model.ByAppAndEnv(testAppID, "dev"))
+				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
+			})
+		})
+
+		Context("when the env binding does not exist", func() {
+			It("should return ErrEnvBindingNotFound", func() {
+				err := mgr.DeleteEnvBinding(ctx, testAppID, "staging")
 				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
 			})
 		})
@@ -181,8 +208,8 @@ var _ = Describe("Manager", func() {
 
 	Describe("DeleteByApp", func() {
 		BeforeEach(func() {
-			createTestMetadata(ctx, store, testAppID)
-			createTestEnvBinding(ctx, store, testAppID, "dev")
+			createTestMetadata(ctx, metas, testAppID)
+			createTestEnvBinding(ctx, bindings, testAppID, "dev")
 		})
 
 		Context("when the app has metadata and env bindings", func() {
@@ -190,20 +217,20 @@ var _ = Describe("Manager", func() {
 				err := mgr.DeleteByApp(ctx, testAppID)
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = store.GetMetadata(ctx, testAppID)
+				_, err = metas.Get(ctx, model.ByApp(testAppID))
 				Expect(err).To(MatchError(model.ErrMetadataNotFound))
 
-				bindings, err := store.ListEnvBindingsByApp(ctx, testAppID)
+				list, err := bindings.List(ctx, model.ByApp(testAppID))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(bindings).To(BeEmpty())
+				Expect(list).To(BeEmpty())
 			})
 		})
 	})
 })
 
 // createTestMetadata 创建一个满足 MetadataStore 校验的 Metadata。
-func createTestMetadata(ctx context.Context, store model.Store, appID string) {
-	err := store.CreateMetadata(ctx, &model.Metadata{
+func createTestMetadata(ctx context.Context, metas *model.MetadataStore, appID string) {
+	err := metas.Create(ctx, &model.Metadata{
 		AppID:        appID,
 		Enable:       true,
 		MountPath:    "/data/bscp",
@@ -214,8 +241,8 @@ func createTestMetadata(ctx context.Context, store model.Store, appID string) {
 }
 
 // createTestEnvBinding 创建一个满足 EnvBindingStore 校验的 EnvBinding。
-func createTestEnvBinding(ctx context.Context, store model.Store, appID, envName string) {
-	err := store.CreateEnvBinding(ctx, &model.EnvBinding{
+func createTestEnvBinding(ctx context.Context, bindings *model.EnvBindingStore, appID, envName string) {
+	err := bindings.Create(ctx, &model.EnvBinding{
 		AppID:       appID,
 		EnvName:     envName,
 		BscpEnvID:   "1",

@@ -26,7 +26,9 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -68,7 +70,11 @@ const (
 	widgetCollection = "store_test_widgets"
 	encPrefix        = "enc:"
 	defaultColor     = "gray"
+	plainPassword    = "plain"
 )
+
+// longAgo 是 mustCreateStaleWidget 使用的时间戳，早于任何写操作的当前时间
+var longAgo = time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
 
 var (
 	ErrWidgetNotFound = errors.New("widget not found")
@@ -148,6 +154,14 @@ const noteCollection = "store_test_notes"
 
 var noteMeta = store.Meta[Note]{Collection: noteCollection}
 
+// Ambiguous 模拟 Go 字段名与另一个字段的 bson key 相同的模型："Label" 无法判断指的是哪个字段
+type Ambiguous struct {
+	Title string `bson:"Label"`
+	Label string `bson:"title"`
+}
+
+var ambiguousMeta = store.Meta[Ambiguous]{Collection: "store_test_ambiguous"}
+
 // storeFixture 汇总测试用例需要的依赖
 type storeFixture struct {
 	ctx     context.Context
@@ -156,11 +170,12 @@ type storeFixture struct {
 	widgets *store.GenericStore[Widget]
 	items   *store.GenericStore[Item]
 	notes   *store.GenericStore[Note]
-	// owner 每个用例使用独立的 ownerID，避免用例之间的数据互相影响
+	// owner 当前用例的 ownerID，让过滤条件贴近领域包中 byXxx 的真实用法；
+	// 用例之间的隔离依靠每个用例开始前清空测试集合
 	owner string
 }
 
-// setUpStores 通过 fx 提供测试模型的 Store，同时清理测试集合、确保唯一索引存在
+// setUpStores 通过 fx 提供测试模型的 Store，同时清空测试集合、确保唯一索引存在
 func setUpStores() *storeFixture {
 	f := &storeFixture{ctx: context.Background(), owner: "owner-" + stringx.Random(8)}
 	f.app = fxtest.New(
@@ -197,11 +212,49 @@ func (f *storeFixture) newWidget(name string) *Widget {
 	return &Widget{OwnerID: f.owner, Name: name, Priority: 1, Tags: []string{"a"}}
 }
 
+// newSecretWidget 构造一个带凭证的 Widget，凭证密码为 plainPassword
+func (f *storeFixture) newSecretWidget(name string) *Widget {
+	w := f.newWidget(name)
+	w.Secret = &Credential{Username: "u", Password: plainPassword}
+	return w
+}
+
 // mustCreateWidget 创建并返回一个 Widget
 func (f *storeFixture) mustCreateWidget(name string) *Widget {
 	w := f.newWidget(name)
 	Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
 	return w
+}
+
+// mustCreateStaleWidget 创建一个 createdAt、updatedAt 均为 longAgo 的 Widget，
+// 用于断言写操作刷新了 updatedAt，而不必 sleep 等待时间前进
+func (f *storeFixture) mustCreateStaleWidget(name string) *Widget {
+	w := f.newWidget(name)
+	w.CreatedAt = longAgo
+	Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
+	Expect(w.UpdatedAt).To(Equal(longAgo))
+	return w
+}
+
+// mustGetWidget 读取当前 owner 下指定名称的 Widget
+func (f *storeFixture) mustGetWidget(name string) *Widget {
+	w, err := f.widgets.Get(f.ctx, f.byName(name))
+	Expect(err).NotTo(HaveOccurred())
+	return w
+}
+
+// widgetExists 判断当前 owner 下是否存在指定名称的 Widget
+func (f *storeFixture) widgetExists(name string) bool {
+	ok, err := f.widgets.Exists(f.ctx, f.byName(name))
+	Expect(err).NotTo(HaveOccurred())
+	return ok
+}
+
+// countWidgets 统计当前 owner 下的 Widget 数量
+func (f *storeFixture) countWidgets() int64 {
+	n, err := f.widgets.Count(f.ctx, f.byOwner())
+	Expect(err).NotTo(HaveOccurred())
+	return n
 }
 
 // rawWidget 绕过 GenericStore 直接读取数据库中的原始文档，用于断言实际存储的内容。
@@ -212,11 +265,32 @@ func (f *storeFixture) rawWidget(name string) bson.Raw {
 	return raw
 }
 
+// rawPassword 读取库中实际存储的凭证密码（即 Encode 之后的值）
+func (f *storeFixture) rawPassword(name string) string {
+	return rawString(f.rawWidget(name), "secret", "password")
+}
+
 // rawString 读取原始文档中指定路径的字符串值
 func rawString(raw bson.Raw, path ...string) string {
 	v, err := raw.LookupErr(path...)
 	Expect(err).NotTo(HaveOccurred())
 	return v.StringValue()
+}
+
+// rawHas 判断原始文档中是否存在指定路径，用于断言字段被 $unset 而不是写入了零值
+func rawHas(raw bson.Raw, path ...string) bool {
+	_, err := raw.LookupErr(path...)
+	return err == nil
+}
+
+// widgetNames 按顺序返回 Widget 的名称，用于断言列表内容与排序
+func widgetNames(list []Widget) []string {
+	return lo.Map(list, func(w Widget, _ int) string { return w.Name })
+}
+
+// beStoredTime 匹配写入数据库后再读出的时间：MongoDB 只保存毫秒精度
+func beStoredTime(t time.Time) types.GomegaMatcher {
+	return BeTemporally("~", t, time.Millisecond)
 }
 
 // byOwner 匹配当前 owner 下的全部 Widget，模拟领域包中定义的具名 Opt

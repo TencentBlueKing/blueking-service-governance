@@ -43,14 +43,10 @@ var _ = Describe("Of", func() {
 		s := store.Of(f.db, widgetMeta)
 		Expect(s.Collection().Name()).To(Equal(widgetCollection))
 
-		w := f.newWidget("w1")
-		w.Secret = &Credential{Username: "u", Password: "p"}
-		Expect(s.Create(f.ctx, w)).To(Succeed())
+		Expect(s.Create(f.ctx, f.newSecretWidget("w1"))).To(Succeed())
 
-		got, err := f.widgets.Get(f.ctx, store.Where("name", "w1"))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(got.Secret.Password).To(Equal("p"))
-		Expect(rawString(f.rawWidget("w1"), "secret", "password")).To(Equal(encPrefix + "p"))
+		Expect(f.mustGetWidget("w1").Secret.Password).To(Equal(plainPassword))
+		Expect(f.rawPassword("w1")).To(Equal(encPrefix + plainPassword))
 	})
 
 	It("should not share hooks between metas of the same model", func() {
@@ -59,10 +55,8 @@ var _ = Describe("Of", func() {
 		// 先用带钩子的 Meta 构造一次，确保模型的反射分析结果已被缓存
 		_ = store.Of(f.db, widgetMeta)
 
-		w := f.newWidget("w1")
-		w.Secret = &Credential{Username: "u", Password: "p"}
-		Expect(store.Of(f.db, plainMeta).Create(f.ctx, w)).To(Succeed())
-		Expect(rawString(f.rawWidget("w1"), "secret", "password")).To(Equal("p"))
+		Expect(store.Of(f.db, plainMeta).Create(f.ctx, f.newSecretWidget("w1"))).To(Succeed())
+		Expect(f.rawPassword("w1")).To(Equal(plainPassword))
 	})
 
 	It("should panic on invalid meta", func() {

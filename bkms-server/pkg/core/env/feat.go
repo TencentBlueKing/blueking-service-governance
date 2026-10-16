@@ -29,6 +29,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -39,6 +40,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const featureEnvNamePrefix = "feat"
@@ -60,10 +62,10 @@ const (
 
 // FeatureEnvService 负责特性环境领域动作。
 type FeatureEnvService struct {
-	environmentStore       model.EnvironmentStore
-	featureEnvCounterStore model.FeatureEnvCounterStore
-	envVarStore            FeatureEnvVarStore
-	namespaceInitializer   FeatureEnvNamespaceInitializer
+	environmentStore     model.EnvironmentStore
+	indexCounter         *store.Counter
+	envVarStore          FeatureEnvVarStore
+	namespaceInitializer FeatureEnvNamespaceInitializer
 }
 
 // FeatureEnvVarStore 提供创建特性环境时的变量复制，避免环境模块依赖变量模块。
@@ -143,15 +145,15 @@ type CreateFeatureEnvInput struct {
 // NewFeatureEnvService 创建特性环境服务。
 func NewFeatureEnvService(
 	environmentStore model.EnvironmentStore,
-	featureEnvCounterStore model.FeatureEnvCounterStore,
+	db *mongo.Database,
 	envVarStore FeatureEnvVarStore,
 	namespaceInitializer FeatureEnvNamespaceInitializer,
 ) *FeatureEnvService {
 	return &FeatureEnvService{
-		environmentStore:       environmentStore,
-		featureEnvCounterStore: featureEnvCounterStore,
-		envVarStore:            envVarStore,
-		namespaceInitializer:   namespaceInitializer,
+		environmentStore:     environmentStore,
+		indexCounter:         model.NewFeatureEnvCounter(db),
+		envVarStore:          envVarStore,
+		namespaceInitializer: namespaceInitializer,
 	}
 }
 
@@ -208,7 +210,7 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 		)
 	}
 
-	index, err := s.featureEnvCounterStore.Next(ctx, input.App.ID)
+	index, err := s.indexCounter.Next(ctx, input.App.ID)
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate feature environment index")
 	}

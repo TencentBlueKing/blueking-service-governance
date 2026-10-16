@@ -20,20 +20,19 @@ package workload
 
 import (
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
@@ -54,10 +53,9 @@ type BuilderService struct {
 	workspaceStore         workspace.WorkspaceStore
 	polarisWorkloadBuilder *polaris.WorkloadBuilder
 	hostPortStore          hostport.HostPortStore
-	bscpCfgStore           bscpcfg.Store
 	appModelStore          appmodel.AppModelStore
 	appSpecStore           appspec.AppSpecStore
-	buildConfigStore       build.ConfigStore
+	db                     *mongo.Database
 	mountableFileProvider  appcfg.MountableFileProvider
 }
 
@@ -172,10 +170,9 @@ func NewBuilderService(
 	workspaceStore workspace.WorkspaceStore,
 	polarisConfigStore polaris.PolarisConfigStore,
 	hostPortStore hostport.HostPortStore,
-	bscpCfgStore bscpcfg.Store,
 	appModelStore appmodel.AppModelStore,
 	appSpecStore appspec.AppSpecStore,
-	buildConfigStore build.ConfigStore,
+	db *mongo.Database,
 	mountableFileProvider appcfg.MountableFileProvider,
 ) *BuilderService {
 	return &BuilderService{
@@ -184,10 +181,9 @@ func NewBuilderService(
 		workspaceStore:         workspaceStore,
 		polarisWorkloadBuilder: polaris.NewWorkloadBuilder(polarisConfigStore),
 		hostPortStore:          hostPortStore,
-		bscpCfgStore:           bscpCfgStore,
 		appModelStore:          appModelStore,
 		appSpecStore:           appSpecStore,
-		buildConfigStore:       buildConfigStore,
+		db:                     db,
 		mountableFileProvider:  mountableFileProvider,
 	}
 }

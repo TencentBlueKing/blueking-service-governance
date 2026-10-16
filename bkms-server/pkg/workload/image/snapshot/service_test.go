@@ -30,9 +30,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -48,7 +50,7 @@ var _ = Describe("Service", func() {
 		ctx              context.Context
 		store            SnapshotStore
 		appStore         *bkmsapp.ApplicationStoreMongo
-		cfgStore         *build.ConfigStoreMongo
+		cfgStore         *build.ConfigStore
 		service          *Service
 		oldConfig        *config.Config
 		testAppID1       string
@@ -65,10 +67,8 @@ var _ = Describe("Service", func() {
 
 		appStore, err = bkmsapp.NewApplicationStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
-		cfgStore, err = build.NewConfigStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-
-		service = NewService(store, cfgStore, appStore)
+		cfgStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
+		service = NewService(store, testutil.NewDB(GinkgoT()), appStore)
 
 		secret, err := crypto.GenerateKey(32)
 		Expect(err).NotTo(HaveOccurred())
@@ -132,7 +132,7 @@ var _ = Describe("Service", func() {
 		It("should resolve platform registry config for non-image source", func() {
 			mockey.PatchConvey("mock workspace image registry", GinkgoT(), func() {
 				mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
-					func(_ context.Context, wsID string) (*bkmsreg.ImageRegistry, error) {
+					func(_ context.Context, _ *mongo.Database, wsID string) (*bkmsreg.ImageRegistry, error) {
 						Expect(wsID).To(Equal(testWorkspaceID2))
 						return &bkmsreg.ImageRegistry{
 							Registry: "mirrors.tencent.com/bkpaas",
@@ -178,7 +178,7 @@ var _ = Describe("Service", func() {
 		It("should resolve workspace registry credentials with the given image name", func() {
 			mockey.PatchConvey("mock workspace image registry", GinkgoT(), func() {
 				mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
-					func(_ context.Context, wsID string) (*bkmsreg.ImageRegistry, error) {
+					func(_ context.Context, _ *mongo.Database, wsID string) (*bkmsreg.ImageRegistry, error) {
 						Expect(wsID).To(Equal(testWorkspaceID1))
 						return &bkmsreg.ImageRegistry{
 							Registry: "docker.bkrepo.example.com/demo",

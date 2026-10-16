@@ -24,17 +24,19 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"helm.sh/helm/v3/pkg/postrender"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	helmcomp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 )
 
@@ -42,16 +44,17 @@ import (
 // 按顺序依次执行，如果全部为 nil，返回 nil
 func Build(
 	ctx context.Context,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 	trafficLaneName string,
 ) (postrender.PostRenderer, error) {
-	compRenderer, err := buildComponentPostRenderer(ctx, app, env)
+	compRenderer, err := buildComponentPostRenderer(ctx, db, app, env)
 	if err != nil {
 		return nil, errors.Wrap(err, "build component post renderer")
 	}
 
-	bscpRenderer, err := buildBscpPostRenderer(ctx, app, env.Name)
+	bscpRenderer, err := buildBscpPostRenderer(ctx, db, app, env.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "build bscp post renderer")
 	}
@@ -72,15 +75,13 @@ func Build(
 // 如果没有配置组件，返回 nil
 func buildComponentPostRenderer(
 	ctx context.Context,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 ) (*ComponentPostRenderer, error) {
-	compStore, err := helmcomp.NewDbHelmAppComponentStore(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create helm app component store")
-	}
-
-	comps, err := compStore.ListByAppAndEnv(ctx, app.ID, env.Name)
+	comps, err := store.Of(db, helmcomp.Meta).List(
+		ctx, helmcomp.ByAppAndEnv(app.ID, env.Name), helmcomp.InExecutionOrder(),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "list helm app components")
 	}
@@ -102,7 +103,7 @@ func buildComponentPostRenderer(
 		return nil, errors.Wrap(err, "create component applier")
 	}
 
-	items, err := buildComponentPatches(ctx, app, env, comps, workspaceComps, compApplier)
+	items, err := buildComponentPatches(ctx, app, env, lo.ToSlicePtr(comps), workspaceComps, compApplier)
 	if err != nil {
 		return nil, err
 	}
@@ -218,14 +219,10 @@ func buildPatch(
 // 如果应用未配置 BSCP 配置管理，返回 nil
 func buildBscpPostRenderer(
 	ctx context.Context,
+	db *mongo.Database,
 	app *bkmsapp.Application,
 	envName string,
 ) (*BscpPostRenderer, error) {
-	store, err := bscpcfg.NewStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create bscp config store")
-	}
-
 	wsStore, err := workspace.NewWorkspaceStoreMongo(database.Client(), database.Name())
 	if err != nil {
 		return nil, errors.Wrap(err, "create workspace store")
@@ -235,7 +232,7 @@ func buildBscpPostRenderer(
 		return nil, errors.Wrapf(err, "get workspace %s", app.WorkspaceID)
 	}
 
-	return NewBscpPostRendererFromStore(ctx, store, app.ID, envName, ws)
+	return NewBscpPostRendererFromStore(ctx, db, app.ID, envName, ws)
 }
 
 // buildLanePostRenderer 根据泳道配置构建 PostRenderer

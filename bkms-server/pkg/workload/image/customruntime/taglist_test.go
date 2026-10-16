@@ -29,9 +29,11 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
@@ -70,7 +72,8 @@ var _ = Describe("TagQueryManager", func() {
 		snapshotStore, err = snapshot.NewSnapshotStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 
-		manager = NewTagQueryManager(store, snapshot.NewService(snapshotStore, nil, nil))
+		db := testutil.NewDB(GinkgoT())
+		manager = NewTagQueryManager(store, db, snapshot.NewService(snapshotStore, db, nil))
 		repoKey = snapshot.GenerateRepoKey(imageName, "ws-user", "ws-pass")
 		listAllCalls = 0
 		remoteTags, remoteErr = nil, nil
@@ -79,7 +82,7 @@ var _ = Describe("TagQueryManager", func() {
 		}
 
 		mockey.Mock(workspace.GetWorkspaceImageRegistry).To(
-			func(context.Context, string) (*bkmsreg.ImageRegistry, error) {
+			func(context.Context, *mongo.Database, string) (*bkmsreg.ImageRegistry, error) {
 				if boundRegistry == nil {
 					return nil, bkmsreg.ErrImageRegistryNotFound
 				}

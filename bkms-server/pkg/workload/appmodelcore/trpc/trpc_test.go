@@ -29,12 +29,11 @@ var _ = Describe("tRPC application service", func() {
 	var diApp *fxtest.App
 	var appStore bkmsapp.ApplicationStore
 	var appConfigFileStore appcfg.AppConfigFileStore
-	var appConfigFileDefStore appcfg.AppConfigFileDefStore
 	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var envStore envmodel.EnvironmentStore
 	var envService *bkmsenv.EnvService
 	var workspaceStore bkmsworkspace.WorkspaceStore
-	var ruleStore appdefaults.RuleStore
+	var ruleStore *appdefaults.RuleStore
 	var appModelStore appmodel.AppModelStore
 	var appSpecStore appspec.AppSpecStore
 	var workspace *bkmsworkspace.Workspace
@@ -51,21 +50,19 @@ var _ = Describe("tRPC application service", func() {
 			bkmsworkspace.FxModule,
 			appmodel.FxModule,
 			appspec.FxModule,
-			appdefaults.FxModule,
 			fx.Populate(
 				&appStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
 				&envStore,
 				&envService,
 				&workspaceStore,
-				&ruleStore,
 				&appModelStore,
 				&appSpecStore,
 			),
 		)
 		diApp.RequireStart()
+		ruleStore = testutil.NewStore(GinkgoT(), appdefaults.RuleMeta)
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
 		environment = dbfactory.EnvWithOpts(ctx, envService, &dbfactory.EnvOpts{
 			WorkspaceID: workspace.ID,
@@ -123,10 +120,9 @@ var _ = Describe("tRPC application service", func() {
 		err = trpc.NewService(
 			appModelStore,
 			appSpecStore,
-			ruleStore,
+			testutil.NewDB(GinkgoT()),
 			envStore,
 			appConfigFileStore,
-			appConfigFileDefStore,
 			appConfigFileVersionStore,
 			appStore,
 		).Create(ctx, application, &trpc.CreateParams{
@@ -170,7 +166,7 @@ var _ = Describe("tRPC application service", func() {
 	})
 
 	It("persists platform defaults when the workspace has no rules", func() {
-		rules, err := ruleStore.List(ctx, workspace.ID)
+		rules, err := ruleStore.List(ctx, appdefaults.ByWorkspace(workspace.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rules).To(BeEmpty())
 
@@ -185,10 +181,9 @@ var _ = Describe("tRPC application service", func() {
 		err = trpc.NewService(
 			appModelStore,
 			appSpecStore,
-			ruleStore,
+			testutil.NewDB(GinkgoT()),
 			envStore,
 			appConfigFileStore,
-			appConfigFileDefStore,
 			appConfigFileVersionStore,
 			appStore,
 		).Create(ctx, application, &trpc.CreateParams{

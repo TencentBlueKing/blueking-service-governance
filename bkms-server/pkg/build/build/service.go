@@ -38,6 +38,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 )
@@ -56,7 +57,6 @@ type BuildResult struct {
 // Service 负责构建相关业务编排
 type Service struct {
 	db                      *mongo.Database
-	buildConfigStore        imgbuild.ConfigStore
 	buildRecordStore        imgbuild.RecordStore
 	imageReferenceValidator ImageReferenceValidator
 	customImageChecker      CustomImageChecker
@@ -67,12 +67,11 @@ type Service struct {
 // 避免运行时才发现依赖缺失。
 func NewService(
 	db *mongo.Database,
-	buildConfigStore imgbuild.ConfigStore,
 	buildRecordStore imgbuild.RecordStore,
 	imageReferenceValidator ImageReferenceValidator,
 	customImageChecker CustomImageChecker,
 ) (*Service, error) {
-	if db == nil || buildConfigStore == nil || buildRecordStore == nil {
+	if db == nil || buildRecordStore == nil {
 		return nil, errors.New("build service dependencies not initialized")
 	}
 	if imageReferenceValidator == nil {
@@ -83,7 +82,6 @@ func NewService(
 	}
 	return &Service{
 		db:                      db,
-		buildConfigStore:        buildConfigStore,
 		buildRecordStore:        buildRecordStore,
 		imageReferenceValidator: imageReferenceValidator,
 		customImageChecker:      customImageChecker,
@@ -144,7 +142,7 @@ func (s *Service) validateCustomImageCredential(
 	if !usesCustom {
 		return nil
 	}
-	registry, err := workspace.GetWorkspaceImageRegistry(ctx, app.WorkspaceID)
+	registry, err := workspace.GetWorkspaceImageRegistry(ctx, s.db, app.WorkspaceID)
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s image registry", app.WorkspaceID)
 	}
@@ -182,7 +180,7 @@ func (s *Service) usesCustomBuildImage(ctx context.Context, workspaceID string, 
 func (s *Service) Build(
 	ctx context.Context, app *bkmsapp.Application, rev revision.CodeRevision, imageTag string,
 ) (*BuildResult, error) {
-	cfg, err := s.buildConfigStore.Get(ctx, app.ID)
+	cfg, err := store.Of(s.db, imgbuild.ConfigMeta).Get(ctx, imgbuild.ByApp(app.ID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get app %s build config", app.ID)
 	}

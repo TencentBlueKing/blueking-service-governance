@@ -20,17 +20,10 @@
 package model
 
 import (
-	"context"
-	"time"
-
-	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-)
 
-// metadataCollectionName MongoDB 集合名称，用于存储 Metadata。
-const metadataCollectionName = "bscpcfg_metadata"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
 
 // 错误定义
 var (
@@ -41,125 +34,25 @@ var (
 	ErrMetadataAlreadyExists = errors.New("bscpcfg metadata already exists")
 )
 
-var _ MetadataStore = new(MetadataStoreMongo)
+// MetadataStore Metadata 存储，一个 app 一条记录
+type MetadataStore = store.GenericStore[Metadata]
 
-// MetadataStore Metadata 存储接口
-type MetadataStore interface {
-	// Create 创建 Metadata（一个 app 一条记录）
-	Create(ctx context.Context, meta *Metadata) error
-
-	// Get 获取指定 app 的 Metadata
-	Get(ctx context.Context, appID string) (*Metadata, error)
-
-	// Update 更新 Metadata（可更新 mountPath、token、credentialID、credential）
-	Update(ctx context.Context, appID string, updateData *MetadataUpdate) error
-
-	// Delete 删除指定 app 的 Metadata
-	Delete(ctx context.Context, appID string) error
+// MetadataMeta Metadata 的存储元数据，写入完整文档前会校验必填字段。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：appID
+var MetadataMeta = store.Meta[Metadata]{
+	Collection: "bscpcfg_metadata",
+	NotFound:   ErrMetadataNotFound,
+	Duplicate:  ErrMetadataAlreadyExists,
+	BeforeSave: []func(*Metadata) error{validateMetadata},
 }
 
-// MetadataStoreMongo Metadata 的 MongoDB 存储实现
-type MetadataStoreMongo struct {
-	collection *mongo.Collection
+func validateMetadata(meta *Metadata) error {
+	return errors.Wrap(validate.Struct(meta), "metadata validation failed")
 }
 
-// NewMetadataStoreMongo 创建 Metadata 存储
-func NewMetadataStoreMongo(client *mongo.Client, dbName string) (MetadataStore, error) {
-	coll := client.Database(dbName).Collection(metadataCollectionName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：appID
-	return &MetadataStoreMongo{collection: coll}, nil
-}
-
-// Create 创建 Metadata
-func (s *MetadataStoreMongo) Create(ctx context.Context, meta *Metadata) error {
-	if err := validator.New(validator.WithRequiredStructEnabled()).Struct(meta); err != nil {
-		return errors.Wrap(err, "metadata validation failed")
-	}
-	if meta.CreatedAt.IsZero() {
-		meta.CreatedAt = time.Now()
-	}
-	if meta.UpdatedAt.IsZero() {
-		meta.UpdatedAt = time.Now()
-	}
-
-	if _, err := s.collection.InsertOne(ctx, meta); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return ErrMetadataAlreadyExists
-		}
-		return errors.Wrap(err, "insert metadata")
-	}
-	return nil
-}
-
-// Get 获取指定 app 的 Metadata
-func (s *MetadataStoreMongo) Get(ctx context.Context, appID string) (*Metadata, error) {
-	meta := new(Metadata)
-
-	if err := s.collection.FindOne(ctx, bson.M{"appID": appID}).Decode(meta); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrMetadataNotFound
-		}
-		return nil, errors.Wrap(err, "find metadata")
-	}
-
-	return meta, nil
-}
-
-// Update 更新 Metadata（支持 mountPath、token、credentialID、credential）
-func (s *MetadataStoreMongo) Update(
-	ctx context.Context,
-	appID string,
-	updateData *MetadataUpdate,
-) error {
-	if updateData == nil {
-		return nil
-	}
-	needUpdate := false
-	updateSet := bson.M{}
-
-	if updateData.MountPath != nil {
-		updateSet["mountPath"] = *updateData.MountPath
-		needUpdate = true
-	}
-	if updateData.WorkloadName != nil {
-		updateSet["workloadName"] = *updateData.WorkloadName
-		needUpdate = true
-	}
-	if updateData.WorkloadKind != nil {
-		updateSet["workloadKind"] = *updateData.WorkloadKind
-		needUpdate = true
-	}
-	if updateData.Enable != nil {
-		updateSet["enable"] = *updateData.Enable
-		needUpdate = true
-	}
-	if !needUpdate {
-		return nil
-	}
-	updateSet["updatedAt"] = time.Now()
-
-	filter := bson.M{"appID": appID}
-	result, err := s.collection.UpdateOne(ctx, filter, bson.M{"$set": updateSet})
-	if err != nil {
-		return errors.Wrap(err, "update metadata")
-	}
-	if result.MatchedCount == 0 {
-		return ErrMetadataNotFound
-	}
-
-	return nil
-}
-
-// Delete 删除指定 app 的 Metadata
-func (s *MetadataStoreMongo) Delete(ctx context.Context, appID string) error {
-	filter := bson.M{"appID": appID}
-	result, err := s.collection.DeleteOne(ctx, filter)
-	if err != nil {
-		return errors.Wrap(err, "delete metadata")
-	}
-	if result.DeletedCount == 0 {
-		return ErrMetadataNotFound
-	}
-	return nil
+// ByApp 按应用 ID 匹配，适用于 Metadata 与 EnvBinding
+func ByApp(appID string) store.Opt {
+	return store.Where("appID", appID)
 }

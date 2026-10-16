@@ -224,7 +224,7 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 
 	svc := bkmsenv.NewFeatureEnvService(
 		h.registry.EnvStore,
-		h.registry.FeatureEnvCounterStore,
+		h.registry.DB,
 		h.registry.ScopedEnvVarStore,
 		bkmsenv.NewFeatureEnvNamespaceInitializer(),
 	)

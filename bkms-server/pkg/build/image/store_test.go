@@ -24,14 +24,17 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("ConfigStore", func() {
-	var store ConfigStore
+	var configs *ConfigStore
 	var ctx context.Context
 
 	var codeRepoAppID, imageAppID string
@@ -45,9 +48,7 @@ var _ = Describe("ConfigStore", func() {
 		Expect(err).NotTo(HaveOccurred())
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
-		// Create a new ConfigStore
-		store, err = NewConfigStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		configs = testutil.NewStore(GinkgoT(), ConfigMeta)
 
 		ctx = context.Background()
 		codeRepoAppID = "code-repo-app-id-" + stringx.Random(6)
@@ -98,11 +99,11 @@ var _ = Describe("ConfigStore", func() {
 
 	Context("Create", func() {
 		It("should create and get build config successfully", func() {
-			err := store.Create(ctx, &codeRepoBuildCfg)
+			err := configs.Create(ctx, &codeRepoBuildCfg)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get the application back from the database
-			cfg, err := store.Get(ctx, codeRepoAppID)
+			cfg, err := configs.Get(ctx, ByApp(codeRepoAppID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.AppID).To(Equal(codeRepoAppID))
 			Expect(cfg.CodeRepo.DockerBuildArgs).To(Equal(map[string]string{
@@ -124,19 +125,33 @@ var _ = Describe("ConfigStore", func() {
 
 		It("should return error when build config with same appID already exists", func() {
 			// First call should succeed
-			err := store.Create(ctx, &imageBuildCfg)
+			err := configs.Create(ctx, &imageBuildCfg)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Second call with same name should fail
-			err = store.Create(ctx, &imageBuildCfg)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("build config with the same appID already exists"))
+			err = configs.Create(ctx, &imageBuildCfg)
+			Expect(err).To(MatchError(store.ErrDuplicate))
+		})
+
+		It("should encrypt the image password in db without touching the caller's object", func() {
+			Expect(configs.Create(ctx, &imageBuildCfg)).To(Succeed())
+			Expect(imageBuildCfg.Image.Password).To(Equal("password"))
+
+			// 绕过 Decode 钩子直接读取库中的原始文档
+			var raw Config
+			Expect(configs.Collection().FindOne(ctx, bson.M{"appID": imageAppID}).Decode(&raw)).To(Succeed())
+			Expect(raw.Image.Password).NotTo(BeEmpty())
+			Expect(raw.Image.Password).NotTo(Equal("password"))
+
+			cfg, err := configs.Get(ctx, ByApp(imageAppID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Image.Password).To(Equal("password"))
 		})
 	})
 
-	Context("Update", func() {
+	Context("UpdateConfig", func() {
 		It("should update build config successfully", func() {
-			err := store.Create(ctx, &codeRepoBuildCfg)
+			err := configs.Create(ctx, &codeRepoBuildCfg)
 			Expect(err).NotTo(HaveOccurred())
 
 			codeRepoBuildCfg.CodeRepo.SourceDir = "test-dir"
@@ -153,10 +168,10 @@ var _ = Describe("ConfigStore", func() {
 				},
 				ExtraFiles: []string{"data/*.pem"},
 			}
-			err = store.Update(ctx, &codeRepoBuildCfg)
+			err = UpdateConfig(ctx, configs, &codeRepoBuildCfg)
 			Expect(err).NotTo(HaveOccurred())
 
-			cfg, err := store.Get(ctx, codeRepoAppID)
+			cfg, err := configs.Get(ctx, ByApp(codeRepoAppID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.CodeRepo.SourceDir).To(Equal("test-dir"))
 			Expect(cfg.CodeRepo.Dockerfile).To(Equal("Dockerfile"))
@@ -175,11 +190,31 @@ var _ = Describe("ConfigStore", func() {
 		})
 	})
 
+	Context("UpdateConfig with cleared optional configs", func() {
+		It("should remove optional configs that are cleared in the update", func() {
+			Expect(configs.Create(ctx, &imageBuildCfg)).To(Succeed())
+
+			imageBuildCfg.SourceType = SourceTypeCodeRepository
+			imageBuildCfg.Image = nil
+			imageBuildCfg.CodeRepo = codeRepoBuildCfg.CodeRepo
+			Expect(UpdateConfig(ctx, configs, &imageBuildCfg)).To(Succeed())
+
+			cfg, err := configs.Get(ctx, ByApp(imageAppID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.SourceType).To(Equal(SourceTypeCodeRepository))
+			Expect(cfg.Image).To(BeNil())
+			Expect(cfg.CodeRepo.RepoURL).To(Equal("https://github.com/octocat/hello-world"))
+		})
+	})
+
 	Context("Get", func() {
-		It("should return error when build config with given appName does not exist", func() {
-			cfg, err := store.Get(ctx, "non-existent-app-id")
-			Expect(err).To(HaveOccurred())
+		It("should return ErrConfigNotFound when build config with given appID does not exist", func() {
+			cfg, err := configs.Get(ctx, ByApp("non-existent-app-id"))
+			Expect(err).To(MatchError(ErrConfigNotFound))
 			Expect(cfg).To(BeNil())
+
+			err = UpdateConfig(ctx, configs, &Config{AppID: "non-existent-app-id"})
+			Expect(err).To(MatchError(ErrConfigNotFound))
 		})
 	})
 })

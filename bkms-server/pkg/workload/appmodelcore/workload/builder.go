@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -46,6 +47,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
@@ -248,7 +250,7 @@ func (b *Builder) appendPluginAndConfigResources(in *buildInputs, pod *podConten
 
 // buildGameDeployment 构造 GameDeployment 资源对象（含 strategy、secrets、PodTemplate）。
 func (b *Builder) buildGameDeployment(in *buildInputs, pod *podContents) (tkex.GameDeployment, error) {
-	buildCfg, err := b.buildConfigStore.Get(in.ctx, b.app.ID)
+	buildCfg, err := store.Of(b.db, build.ConfigMeta).Get(in.ctx, build.ByApp(b.app.ID))
 	if err != nil {
 		return tkex.GameDeployment{}, errors.Wrap(err, "get build config")
 	}
@@ -368,7 +370,7 @@ func (b *Builder) applyPostProcessing(
 	}
 
 	if err = bscpcfg.InjectFromStore(
-		in.ctx, b.bscpCfgStore, b.app.ID, in.env.Name,
+		in.ctx, b.db, b.app.ID, in.env.Name,
 		defaults.WorkloadMainContainerName, ws, &gd.Spec.Template.Spec,
 	); err != nil {
 		return gd, extraObjs, nil, errors.Wrap(err, "injecting bscp config")

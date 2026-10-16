@@ -119,8 +119,8 @@ func ByWorkspaceAndAlias(workspaceID, alias string) store.Opt {
 // 名称/描述由模板决定）。禁止用于用户自定义流水线，否则会用本地陈旧的 name/description
 // 覆盖蓝盾侧用户维护的最新值。
 func UpdateBuiltinTemplateVersion(ctx context.Context, pipelineStore *PipelineStore, pipeline *Pipeline) error {
-	err := pipelineStore.UpdateFields(
-		ctx, pipeline, []string{"name", "description", "templateVersion"},
+	err := pipelineStore.Update(
+		ctx, pipeline, store.UpdateSelected("name", "description", "templateVersion"),
 		ByWorkspaceAndType(pipeline.WorkspaceID, pipeline.Type),
 	)
 	return errors.Wrapf(err, "update template version of pipeline %s", pipeline.Type)

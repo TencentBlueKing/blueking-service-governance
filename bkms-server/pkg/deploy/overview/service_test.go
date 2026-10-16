@@ -34,7 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
-	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -59,15 +59,13 @@ var _ = Describe("overview.Service", func() {
 		appModelStore              appmodel.AppModelStore
 		appSpecStore               appspec.AppSpecStore
 		appConfigFileStore         appcfg.AppConfigFileStore
-		appConfigFileDefStore      appcfg.AppConfigFileDefStore
 		appConfigFileVersionStore  appcfg.AppConfigFileVersionStore
-		buildConfigStore           build.ConfigStore
 		buildAutoDeployRecordStore autodeploy.RecordStore
 		envStore                   envmodel.EnvironmentStore
 		envSvc                     *bkmsenv.EnvService
 		appModelDeployRecordStore  appmodeldeploy.RecordStore
 		helmDeployRecordStore      helmdeploy.RecordStore
-		gpaConfigStore             gpa.GPAConfigStore
+		gpaConfigs                 *gpa.ConfigStore
 		svc                        *Service
 	)
 
@@ -85,24 +83,21 @@ var _ = Describe("overview.Service", func() {
 			autodeploy.FxModule,
 			appmodeldeploy.FxModule,
 			helmdeploy.FxModule,
-			build.FxModule,
 			fx.Populate(
 				&appStore,
 				&appModelStore,
 				&appSpecStore,
 				&appConfigFileStore,
-				&appConfigFileDefStore,
 				&appConfigFileVersionStore,
-				&buildConfigStore,
 				&envStore,
 				&envSvc,
 				&buildAutoDeployRecordStore,
 				&appModelDeployRecordStore,
 				&helmDeployRecordStore,
-				&gpaConfigStore,
 			),
 		)
 		diApp.RequireStart()
+		gpaConfigs = testutil.NewStore(GinkgoT(), gpa.ConfigMeta)
 
 		svc = NewService(
 			envStore,
@@ -111,7 +106,7 @@ var _ = Describe("overview.Service", func() {
 			buildAutoDeployRecordStore,
 			appModelDeployRecordStore,
 			helmDeployRecordStore,
-			gpaConfigStore,
+			testutil.NewDB(GinkgoT()),
 		)
 	})
 
@@ -125,9 +120,7 @@ var _ = Describe("overview.Service", func() {
 			AppStore:                  appStore,
 			AppModelStore:             appModelStore,
 			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileDefStore:     appConfigFileDefStore,
 			AppConfigFileVersionStore: appConfigFileVersionStore,
-			BuildConfigStore:          buildConfigStore,
 		}, nil)
 		return trpcApp
 	}
@@ -245,7 +238,7 @@ var _ = Describe("overview.Service", func() {
 					{Resource: gpa.ResourceMemory, AverageUtilization: 70},
 				},
 			}
-			Expect(gpaConfigStore.Create(ctx, cfg)).To(Succeed())
+			Expect(gpa.CreateConfig(ctx, gpaConfigs, cfg)).To(Succeed())
 
 			mockey.PatchConvey("gpa CR absent in cluster", GinkgoT(), func() {
 				mockGPAClusterClientChain()
@@ -455,7 +448,7 @@ var _ = Describe("overview.Service", func() {
 					{Resource: gpa.ResourceCPU, AverageUtilization: 60},
 				},
 			}
-			Expect(gpaConfigStore.Create(ctx, cfg)).To(Succeed())
+			Expect(gpa.CreateConfig(ctx, gpaConfigs, cfg)).To(Succeed())
 
 			mockey.PatchConvey("gpa status failed", GinkgoT(), func() {
 				mockGPAClusterClientChain()

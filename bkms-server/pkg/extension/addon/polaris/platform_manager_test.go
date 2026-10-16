@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	depsvcmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model"
 	polarisinfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
+	gstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("PolarisPlatformManager", func() {
@@ -51,6 +52,7 @@ var _ = Describe("PolarisPlatformManager", func() {
 			bkmsapp.FxModule,
 			polaris.FxModule,
 			depsvcmodel.FxModule,
+			gstore.FxModule,
 			fx.Provide(polaris.NewPolarisPlatformManager),
 			fx.Populate(&appStore, &store, &manager),
 		)

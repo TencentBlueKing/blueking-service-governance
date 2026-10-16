@@ -25,6 +25,9 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // BaseAppCfgFileService 是三表模型（def / file / version）的底层 CRUD 服务。
@@ -37,21 +40,25 @@ import (
 // ConfigKind 相关规则由上层 AppCfgFileDefService 通过 ConfigKindPolicy 处理。
 // AppConfigFileService 仍作为兼容门面内嵌场景层，CLI 切完后会撤掉。
 type BaseAppCfgFileService struct {
-	DefStore     AppConfigFileDefStore
+	DefStore     *AppConfigFileDefStore
 	FileStore    AppConfigFileStore
 	VersionStore AppConfigFileVersionStore
+
+	// db 供编辑器、内容提供者等按需读取 def 记录
+	db *mongo.Database
 }
 
 // NewBaseAppCfgFileService 创建底层服务实例。
 func NewBaseAppCfgFileService(
-	defStore AppConfigFileDefStore,
+	db *mongo.Database,
 	fileStore AppConfigFileStore,
 	versionStore AppConfigFileVersionStore,
 ) *BaseAppCfgFileService {
 	return &BaseAppCfgFileService{
-		DefStore:     defStore,
+		DefStore:     store.Of(db, AppConfigFileDefMeta),
 		FileStore:    fileStore,
 		VersionStore: versionStore,
+		db:           db,
 	}
 }
 
@@ -176,7 +183,7 @@ func (s *BaseAppCfgFileService) DeleteFile(
 				return nil, errors.Wrapf(err, "delete versions for sibling %s", sib.ID.Hex())
 			}
 		}
-		if _, err = s.DefStore.DeleteByID(ctx, acf.DefID); err != nil {
+		if err = s.DefStore.DeleteIfExists(ctx, store.ByID(acf.DefID)); err != nil {
 			return nil, errors.Wrap(err, "delete def record")
 		}
 		return acf, nil
@@ -188,7 +195,7 @@ func (s *BaseAppCfgFileService) DeleteFile(
 		return nil, errors.Wrap(err, "listing remaining files for def cleanup")
 	}
 	if len(remaining) == 0 {
-		if _, err = s.DefStore.DeleteByID(ctx, acf.DefID); err != nil {
+		if err = s.DefStore.DeleteIfExists(ctx, store.ByID(acf.DefID)); err != nil {
 			return nil, errors.Wrap(err, "delete orphan def record")
 		}
 	}

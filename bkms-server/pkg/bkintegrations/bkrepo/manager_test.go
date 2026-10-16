@@ -26,7 +26,6 @@ import (
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -99,26 +98,17 @@ func dockerInitRepos() []config.InitBKRepoConfig {
 	}
 }
 
-// mockImageRegistry creates a mock image registry
-func mockImageRegistry() *registry.ImageRegistry {
+// seedImageRegistry 写入工作空间已有的内置镜像源记录
+func seedImageRegistry(ctx context.Context, m *ProjectManager) {
 	// nosec G101
-	return &registry.ImageRegistry{
-		WorkspaceID:      "test-workspace",
+	Expect(testutil.NewStore(GinkgoT(), registry.ImageRegistryMeta).Create(ctx, &registry.ImageRegistry{
+		WorkspaceID:      m.workspaceID,
 		Type:             registry.ImageRegistryTypeBuiltin,
 		Registry:         "docker.example.com",
-		Username:         "g_bkms_test_workspace",
-		Password:         "test-password-32-chars-long-123",
+		Username:         m.username,
+		Password:         m.password,
 		BkCICredentialID: "test-credential-id",
-	}
-}
-
-// mockExistingImageRegistry 镜像源 Store 不在本次 GenericStore 改造范围内，沿用原有的 mock 方式
-func mockExistingImageRegistry() {
-	mockStore := &registry.ImageRegistryStoreMongo{}
-	mockey.Mock(registry.NewImageRegistryStoreMongo).Return(mockStore, nil).Build()
-	mockey.Mock(
-		(*registry.ImageRegistryStoreMongo).GetByWorkspaceAndType,
-	).Return(mockImageRegistry(), nil).Build()
+	})).To(Succeed())
 }
 
 var _ = Describe("NewProjectManager", func() {
@@ -265,7 +255,9 @@ var _ = Describe("initImageRegistryCredentials", func() {
 	It("should skip creation when image registry already exists", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
 			overrideConfig(func(cfg *config.Config) { cfg.BKRepo.InitRepos = dockerInitRepos() })
-			mockExistingImageRegistry()
+			seedImageRegistry(ctx, manager)
+			// 已有记录时不应再创建蓝盾凭证
+			mockey.Mock((*bkciapi.StubApiClient).CreateCredential).Return(errors.New("should not be called")).Build()
 
 			err := manager.initImageRegistryCredentials(ctx, "test-project")
 			Expect(err).NotTo(HaveOccurred())
@@ -299,16 +291,19 @@ var _ = Describe("initImageRegistryCredentials", func() {
 				cfg.Development.UseStubBkRepo = true
 			})
 
-			mockStore := &registry.ImageRegistryStoreMongo{}
-			mockey.Mock(registry.NewImageRegistryStoreMongo).Return(mockStore, nil).Build()
-			mockey.Mock(
-				(*registry.ImageRegistryStoreMongo).GetByWorkspaceAndType,
-			).Return(nil, registry.ErrImageRegistryNotFound).Build()
-			mockey.Mock((*registry.ImageRegistryStoreMongo).Create).Return(bson.NilObjectID, nil).Build()
 			mockey.Mock(auth.MustGetUser).Return(auth.User{ID: "test-user"}).Build()
 
 			err := manager.initImageRegistryCredentials(ctx, "test-project")
 			Expect(err).NotTo(HaveOccurred())
+
+			// 镜像源记录落库，密码可正常解密
+			reg, err := testutil.NewStore(GinkgoT(), registry.ImageRegistryMeta).
+				Get(ctx, registry.ByWorkspaceAndType(manager.workspaceID, registry.ImageRegistryTypeBuiltin))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reg.Registry).To(Equal("docker.example.com/test-project/docker"))
+			Expect(reg.Username).To(Equal(manager.username))
+			Expect(reg.Password).To(Equal(manager.password))
+			Expect(reg.BkCICredentialID).NotTo(BeEmpty())
 		})
 	})
 })
@@ -370,7 +365,7 @@ var _ = Describe("Initialize", func() {
 				cfg.Development.UseStubBkRepo = true
 			})
 			bkciProj := seedBkciProject(ctx, manager.workspaceID)
-			mockExistingImageRegistry()
+			seedImageRegistry(ctx, manager)
 			mockey.Mock(auth.MustGetUser).Return(auth.User{ID: "test-user"}).Build()
 
 			err := manager.Initialize(ctx)
@@ -448,7 +443,7 @@ var _ = Describe("Initialize", func() {
 				cfg.Development.UseStubBkRepo = true
 			})
 			seedBkciProject(ctx, manager.workspaceID)
-			mockExistingImageRegistry()
+			seedImageRegistry(ctx, manager)
 			mockey.Mock(auth.MustGetUser).Return(auth.User{ID: "test-user"}).Build()
 			mockey.Mock((*bkciapi.StubApiClient).CreateCredential).
 				Return(errors.New("helm credential api error")).

@@ -37,7 +37,7 @@ type defServiceFixture struct {
 	DiApp        *fxtest.App
 	AppStore     bkmsapp.ApplicationStore
 	FileStore    appcfg.AppConfigFileStore
-	DefStore     appcfg.AppConfigFileDefStore
+	DefStore     *appcfg.AppConfigFileDefStore
 	VersionStore appcfg.AppConfigFileVersionStore
 	Svc          *appcfg.AppCfgFileDefService
 	Ctx          context.Context
@@ -57,14 +57,15 @@ func setupDefServiceFixture() *defServiceFixture {
 		GinkgoT(),
 		bkmsapp.FxModule,
 		appcfg.FxModule,
-		fx.Populate(&f.AppStore, &f.FileStore, &f.DefStore, &f.VersionStore),
+		fx.Populate(&f.AppStore, &f.FileStore, &f.VersionStore),
 	)
 	f.DiApp.RequireStart()
 
 	app := dbfactory.Application(f.Ctx, f.AppStore)
 	f.AppID = app.ID
 
-	base := appcfg.NewBaseAppCfgFileService(f.DefStore, f.FileStore, f.VersionStore)
+	base := appcfg.NewBaseAppCfgFileService(testutil.NewDB(GinkgoT()), f.FileStore, f.VersionStore)
+	f.DefStore = base.DefStore
 	f.Svc = appcfg.NewAppCfgFileDefService(base)
 	return f
 }

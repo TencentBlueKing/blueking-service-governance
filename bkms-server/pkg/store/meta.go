@@ -20,16 +20,18 @@
 //
 // 只需要通用 CRUD 的数据模型无需再定义自己的 Store，只要通过 Meta 描述集合名、
 // 业务错误与读写钩子，再通过 Of(db, meta) 即可获得 GenericStore[T]。
-// 过滤、排序、更新中的字段名直接使用 bson 字段名字符串，嵌套字段使用 "a.b" 形式。
+// 过滤、排序、更新中的字段名既可以写 bson 字段名，也可以写 Go 字段名，嵌套字段使用 "a.b" 形式；
+// 两种写法等价，代码中优先使用 bson 字段名。
 package store
 
 // Meta 描述一个数据模型的存储元信息
 //
 // 三类钩子的分工（每类可以有多个，按顺序执行，任一失败即中止）：
 //   - BeforeSave 作用于调用方传入的对象，用于补默认值、校验等，修改对调用方可见；
-//     仅在写入完整文档时执行（Create / CreateMany / Upsert / Replace）
+//     仅在写入完整文档时执行（Create / CreateMany / Replace，以及传入 *T 的 Upsert）
 //   - Encode 作用于对象的深拷贝，用于加密、序列化等不应泄露给调用方的转换；
-//     在所有基于对象的写入前执行（含 UpdateFields）
+//     在所有写入前执行，Update / Upsert 传入 map 时作用于由 map 构造出的对象，
+//     因此 Encode 需要能处理只填写了部分字段的对象
 //   - Decode 作用于从数据库读出的每一个对象（Get / List），通常是 Encode 的逆操作
 //
 // 敏感字段的加解密可借助 crypto.OnDemand 写成一行钩子，见 pkg/workload/helmcore/credential。

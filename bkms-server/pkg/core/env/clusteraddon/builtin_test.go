@@ -25,33 +25,31 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
 var _ = Describe("Builtin ClusterAddonDefs Tests", func() {
 	const testAddonsPath = "./assets/testaddons"
-	var store clusteraddon.ClusterAddonDefStore
+	var store *clusteraddon.ClusterAddonDefStore
 	var ctx context.Context
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		var err error
-		store, err = clusteraddon.NewClusterAddonDefStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		store = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 	})
 
 	Context("LoadBuiltinFromFolder valid input", func() {
 		AfterEach(func() {
-			_, _ = store.Delete(ctx, "bkms-test-chart")
-			_, _ = store.Delete(ctx, "no-namespace-addon")
+			_ = store.DeleteIfExists(ctx, clusteraddon.ByName("bkms-test-chart"))
+			_ = store.DeleteIfExists(ctx, clusteraddon.ByName("no-namespace-addon"))
 		})
 
 		It("should load valid addon defs from directory successfully", func() {
 			err := clusteraddon.LoadBuiltinFromFolder(ctx, store, filepath.Join(testAddonsPath, "valid"))
 			Expect(err).NotTo(HaveOccurred())
 
-			got, err := store.Get(ctx, "bkms-test-chart")
+			got, err := store.Get(ctx, clusteraddon.ByName("bkms-test-chart"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.Name).To(Equal("bkms-test-chart"))
 			Expect(got.DisplayName).To(Equal("测试集群插件"))

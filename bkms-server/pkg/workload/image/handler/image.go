@@ -37,6 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/promotion"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
@@ -88,7 +89,7 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 		return
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.DB, h.registry.AppStore)
 	snapshots, total, status, err := snapshotService.ListAppSnapshots(
 		ctx,
 		uriInput.AppID,
@@ -187,7 +188,7 @@ func (h *Handler) RefreshAppImages(c *gin.Context) {
 		metrics.ImageSnapshotRefreshFinished(metricStatus, startedAt)
 	}()
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.DB, h.registry.AppStore)
 	result, err := snapshotService.RefreshAppSnapshots(ctx, uriInput.AppID)
 	if err != nil {
 		metricStatus = metrics.StatusErr
@@ -229,7 +230,7 @@ func (h *Handler) PromoteAppImage(c *gin.Context) {
 		return
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.DB, h.registry.AppStore)
 	info, err := snapshotService.ResolveRepoKeyForApp(ctx, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(
@@ -239,8 +240,8 @@ func (h *Handler) PromoteAppImage(c *gin.Context) {
 		return
 	}
 
-	if err = h.registry.PromotionStore.Upsert(
-		ctx, app.ID, info.RepoKey, uriInput.Tag, auth.MustGetUser(ctx).ID,
+	if err = promotion.Promote(
+		ctx, store.Of(h.registry.DB, promotion.Meta), app.ID, info.RepoKey, uriInput.Tag, auth.MustGetUser(ctx).ID,
 	); err != nil {
 		bkerrs.AbortWithErr(
 			c,
@@ -284,8 +285,7 @@ func (h *Handler) ListAppImageUsages(c *gin.Context) {
 
 	svc := tagdeletion.NewService(
 		h.registry.SnapshotStore,
-		h.registry.PromotionStore,
-		h.registry.BuildConfigStore,
+		h.registry.DB,
 		h.registry.AppStore,
 		h.registry.EnvStore,
 		h.registry.AppModelDeployRecordStore,
@@ -349,8 +349,7 @@ func (h *Handler) DeleteAppImage(c *gin.Context) {
 
 	svc := tagdeletion.NewService(
 		h.registry.SnapshotStore,
-		h.registry.PromotionStore,
-		h.registry.BuildConfigStore,
+		h.registry.DB,
 		h.registry.AppStore,
 		h.registry.EnvStore,
 		h.registry.AppModelDeployRecordStore,
@@ -514,7 +513,7 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 		return
 	}
 
-	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.BuildConfigStore, h.registry.AppStore)
+	snapshotService := snapshot.NewService(h.registry.SnapshotStore, h.registry.DB, h.registry.AppStore)
 	repoInfo, err := snapshotService.ResolveRepoKeyForApp(ctx, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(
@@ -532,7 +531,9 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 		total     int64
 	)
 	if bkmsenv.IsProductionType(bkmsenv.Type(env.Type)) {
-		promotedTags, listErr := h.registry.PromotionStore.ListTagsByAppAndRepoKey(ctx, app.ID, repoInfo.RepoKey)
+		promotedTags, listErr := promotion.ListPromotedTags(
+			ctx, store.Of(h.registry.DB, promotion.Meta), app.ID, repoInfo.RepoKey,
+		)
 		if listErr != nil {
 			bkerrs.AbortWithErr(
 				c,
@@ -584,9 +585,11 @@ func (h *Handler) buildPromotionMap(
 		return nil, nil
 	}
 
-	promotions, err := h.registry.PromotionStore.ListByAppAndRepoKey(ctx, appID, status.RepoKey)
+	promotions, err := store.Of(h.registry.DB, promotion.Meta).List(
+		ctx, promotion.ByAppAndRepoKey(appID, status.RepoKey),
+	)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "list promotions of app %s", appID)
 	}
 	result := make(map[string]*promotion.Image, len(promotions))
 	for i := range promotions {

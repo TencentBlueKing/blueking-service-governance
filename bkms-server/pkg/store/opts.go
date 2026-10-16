@@ -19,7 +19,7 @@
 package store
 
 import (
-	"slices"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -36,11 +36,14 @@ import (
 // 选项按用途分为不同的类型，每个操作只接受其中一部分。传入不支持的选项会返回错误而不是被静默忽略，
 // 否则可能违背调用方预期，例如 DeleteMany(..., Limit(10)) 实际会删除全部匹配文档：
 //
-//	类型        创建方式                 支持的操作
-//	CondOpt    Where / Filter / All    全部操作
-//	SortOpt    Asc / Desc              Get、List
-//	LimitOpt   Limit                   List
-//	UpsertOpt  UnsetOmitted            Upsert
+//	类型        创建方式                                          支持的操作
+//	CondOpt    Where / Filter / ByID / ContainsIgnoreCase / All  全部操作
+//	SortOpt    Asc / Desc                                       Get、List、GetAndDelete
+//	LimitOpt   Limit                                            List
+//	UpdateOpt  UpdateSelected / UpdateOmit / UpdateNonZero      Update、Upsert
+//
+// 过滤条件、排序中的字段名既可以写 bson 路径，也可以写 Go 字段名（见 resolvePath），
+// 模型中不存在的字段原样保留；Update / Upsert 的字段则必须存在于模型中。
 //
 // 领域包可基于 Where / Filter 定义具名的 Opt，让字段名只出现在一处，例如：
 //
@@ -63,7 +66,7 @@ const (
 	kindCond optKind = 1 << iota
 	kindSort
 	kindLimit
-	kindUpsert
+	kindUpdate
 )
 
 // 各操作支持的选项类别
@@ -71,11 +74,11 @@ const (
 	getOpts    = kindCond | kindSort
 	listOpts   = kindCond | kindSort | kindLimit
 	condOpts   = kindCond
-	upsertOpts = kindCond | kindUpsert
+	updateOpts = kindCond | kindUpdate
 )
 
 // kindNames 按位序排列，与上面的 kindXxx 一一对应
-var kindNames = []string{"condition", "sort", "limit", "upsert"}
+var kindNames = []string{"condition", "sort", "limit", "update fields"}
 
 func (k optKind) String() string {
 	var names []string
@@ -91,7 +94,7 @@ func (k optKind) String() string {
 // CondOpt：过滤条件
 // -----------------------------------------------------------------------------
 
-// CondOpt 过滤条件，由 Where / Filter / All 创建，所有操作都支持
+// CondOpt 过滤条件，由 Where / Filter / ByID / ContainsIgnoreCase / All 创建，所有操作都支持
 type CondOpt struct {
 	conds    bson.D
 	matchAll bool
@@ -112,9 +115,32 @@ func Where(field string, value any) CondOpt {
 // Filter 将 m 中的每个条件加入过滤条件
 func Filter(m bson.M) CondOpt {
 	// 按 key 排序，保证生成的过滤条件与错误信息稳定
-	keys := lo.Keys(m)
-	slices.Sort(keys)
-	return CondOpt{conds: lo.Map(keys, func(k string, _ int) bson.E { return bson.E{Key: k, Value: m[k]} })}
+	return CondOpt{conds: sortedDoc(m)}
+}
+
+// ByID 按 _id 匹配文档，适用于所有操作，也可与其它条件 Combine 以限定范围（如只在某个工作空间内查找）。
+// id 的类型须与模型 _id 字段一致，例如 bson.ObjectID 与它的 hex 字符串不能混用，否则只会表现为查不到
+func ByID(id any) CondOpt {
+	return Where(keyID, id)
+}
+
+// ContainsIgnoreCase 忽略大小写的模糊匹配：任一字段包含 keyword 即命中，多个字段之间是 OR 关系。
+// keyword 去掉首尾空白并转义正则元字符后按字面量匹配；为空白时不产生任何条件，读操作因此不做过滤，
+// 写操作仍须另带条件。正则匹配用不上普通索引，只适合数据量有限的列表筛选。例如：
+//
+//	// 名称或描述中包含 "go"（不区分大小写）的镜像
+//	images.List(ctx, store.ContainsIgnoreCase(keyword, "name", "description"))
+func ContainsIgnoreCase(keyword, field string, moreFields ...string) CondOpt {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return CondOpt{}
+	}
+	match := bson.M{"$regex": regexp.QuoteMeta(keyword), "$options": "i"}
+	if len(moreFields) == 0 {
+		return Where(field, match)
+	}
+	fields := append([]string{field}, moreFields...)
+	return Where("$or", lo.Map(fields, func(f string, _ int) bson.D { return bson.D{{Key: f, Value: match}} }))
 }
 
 // All 显式声明匹配全部文档，写操作在没有任何过滤条件时必须使用它
@@ -126,7 +152,7 @@ func All() CondOpt {
 // SortOpt：排序
 // -----------------------------------------------------------------------------
 
-// SortOpt 排序条件，由 Asc / Desc 创建，仅 Get / List 支持；多个排序条件按传入顺序生效
+// SortOpt 排序条件，由 Asc / Desc 创建，仅 Get / List / GetAndDelete 支持；多个排序条件按传入顺序生效
 type SortOpt struct {
 	elem bson.E
 }
@@ -164,22 +190,51 @@ func Limit(n int64) LimitOpt {
 }
 
 // -----------------------------------------------------------------------------
-// UpsertOpt：Upsert 写入方式
+// UpdateOpt：Update / Upsert 写入的字段
 // -----------------------------------------------------------------------------
 
-// UpsertOpt 调整 Upsert 的写入方式，由 UnsetOmitted 创建，仅 Upsert 支持
-type UpsertOpt struct {
-	unsetOmitted bool
+// UpdateOpt 指定 Update / Upsert 传入对象（*T）时写入哪些字段，由 UpdateSelected / UpdateOmit / UpdateNonZero
+// 创建，仅 Update / Upsert 支持；传入 map 时字段已由 key 确定，不接受 UpdateOpt。字段集合按以下顺序计算：
+//
+//  1. 候选字段：UpdateSelected 指定的字段；未指定或指定 "*" 时为模型的全部顶层字段
+//  2. 去掉 UpdateOmit 指定的字段
+//  3. 传入了 UpdateNonZero 时，只保留对象中值非零的字段
+//
+// 多个 UpdateOpt 会合并。_id、createdAt 不会被更新，updatedAt 总会被刷新，详见 Update
+type UpdateOpt struct {
+	selecting bool
+	selected  []string
+	omitted   []string
+	nonZero   bool
 }
 
-func (UpsertOpt) kind() optKind { return kindUpsert }
+func (UpdateOpt) kind() optKind { return kindUpdate }
 
-func (o UpsertOpt) apply(q *query) { q.unsetOmitted = q.unsetOmitted || o.unsetOmitted }
+func (o UpdateOpt) apply(q *query) {
+	if q.fields == nil {
+		q.fields = &fieldSelection{}
+	}
+	q.fields.selecting = q.fields.selecting || o.selecting
+	q.fields.selected = append(q.fields.selected, o.selected...)
+	q.fields.omitted = append(q.fields.omitted, o.omitted...)
+	q.fields.nonZero = q.fields.nonZero || o.nonZero
+}
 
-// UnsetOmitted 让 Upsert 删除模型中定义、但 obj 编码结果中没有的顶层字段（如 omitempty 的零值），
-// 使 obj 中被清空的字段在库中同样被清除。用法与适用场景见 Upsert
-func UnsetOmitted() UpsertOpt {
-	return UpsertOpt{unsetOmitted: true}
+// UpdateSelected 指定写入的字段，"*" 表示模型的全部顶层字段（不能与其它字段同时指定）。
+// 字段可以写 bson 路径（如 "spec.color"），也可以写 Go 字段名（如 "Spec.Color"）
+func UpdateSelected(fields ...string) UpdateOpt {
+	return UpdateOpt{selecting: true, selected: fields}
+}
+
+// UpdateOmit 从候选字段中去掉指定的字段，适合「除不可变字段外全部更新」，模型新增的字段会自动参与更新
+func UpdateOmit(fields ...string) UpdateOpt {
+	return UpdateOpt{omitted: fields}
+}
+
+// UpdateNonZero 只写入对象中值非零（reflect.Value.IsZero 为 false）的字段，因此无法用它把字段改为
+// false、0 或空串；空切片、空 map 不是零值，会被写入。嵌套结构体按整体判断，非零时整体写入
+func UpdateNonZero() UpdateOpt {
+	return UpdateOpt{nonZero: true}
 }
 
 // -----------------------------------------------------------------------------
@@ -226,8 +281,8 @@ type query struct {
 	matchAll bool
 	sort     bson.D
 	limit    int64
-	// unsetOmitted 仅 Upsert 使用，见 UnsetOmitted
-	unsetOmitted bool
+	// fields 仅 Update / Upsert 使用，nil 表示没有传入任何 UpdateOpt
+	fields *fieldSelection
 }
 
 var (
@@ -253,7 +308,8 @@ func (q *query) hasKey(key string) bool {
 	return documentHasKey(q.conds, key)
 }
 
-// parseOpts 依次应用 opts，遇到 accepted 之外类别的选项时返回错误
+// parseOpts 依次应用 opts，遇到 accepted 之外类别的选项时返回错误；
+// 过滤条件与排序中的字段名会被转换为 bson 路径
 func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*query, error) {
 	q := &query{}
 	for _, opt := range opts {
@@ -264,6 +320,16 @@ func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*q
 			return nil, errors.Wrapf(errUnsupportedOpt, "%s %s: %s", op, s.coll.Name(), k)
 		}
 		opt.apply(q)
+	}
+	resolve := func(path string) (string, error) { return resolveKey(s.schema.typ, path) }
+	var err error
+	if q.conds, err = mapFilterKeys(q.conds, resolve); err != nil {
+		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
+	}
+	for i := range q.sort {
+		if q.sort[i].Key, err = resolve(q.sort[i].Key); err != nil {
+			return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
+		}
 	}
 	return q, nil
 }

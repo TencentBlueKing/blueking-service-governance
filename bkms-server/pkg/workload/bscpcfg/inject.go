@@ -23,10 +23,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 )
 
 // MergePodSpec 相关的 sentinel error 变量
@@ -38,17 +38,17 @@ var (
 	ErrMainContainerNotFound = errors.New("main container not found in PodSpec.Containers")
 )
 
-// InjectFromStore 从 Store 获取配置快照并将产物后置注入到 PodSpec 中。
+// InjectFromStore 从数据库获取配置快照并将产物后置注入到 PodSpec 中。
 //
 // 当指定 app+env 未配置时不做任何修改，直接返回 nil。
 func InjectFromStore(
 	ctx context.Context,
-	store bscpcfg.Store,
+	db *mongo.Database,
 	appID, envName, mainContainerName string,
 	ws *workspace.Workspace,
 	podSpec *corev1.PodSpec,
 ) error {
-	fragment, err := BuildFromStore(ctx, store, appID, envName, ws)
+	fragment, err := BuildFromStore(ctx, db, appID, envName, ws)
 	if err != nil {
 		return errors.Wrapf(err, "build bscp fragment for app %s, env %s", appID, envName)
 	}

@@ -25,26 +25,29 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 var _ = Describe("ImageReferenceValidator", func() {
 	var (
-		ctx           context.Context
-		runtimeStore  *StoreMongo
-		snapshotStore *snapshot.SnapshotStoreMongo
-		validator     *ImageReferenceValidator
+		ctx       context.Context
+		images    *Store
+		validator *ImageReferenceValidator
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		runtimeStore = &StoreMongo{}
-		snapshotStore = &snapshot.SnapshotStoreMongo{}
-		validator = NewImageReferenceValidator(runtimeStore, snapshotStore)
+		images = testutil.NewStore(GinkgoT(), Meta)
+		validator = NewImageReferenceValidator(testutil.NewDB(GinkgoT()), &snapshot.SnapshotStoreMongo{})
 	})
 
-	mockRuntimeImage := func(imageType ImageType, name string, err error) {
-		mockey.Mock((*StoreMongo).GetByTypeAndName).Return(&Image{Type: imageType, Name: name}, err).Build()
+	AfterEach(func() {
+		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
+	})
+
+	createRuntimeImage := func(imageType ImageType, name string) {
+		Expect(images.Create(ctx, &Image{Type: imageType, Name: name})).To(Succeed())
 	}
 
 	mockSnapshotTag := func(exists bool, err error) {
@@ -53,7 +56,7 @@ var _ = Describe("ImageReferenceValidator", func() {
 
 	It("accepts an existing runtime image and snapshot tag", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockRuntimeImage(ImageTypeBuilder, "golang", nil)
+			createRuntimeImage(ImageTypeBuilder, "golang")
 			mockSnapshotTag(true, nil)
 
 			ref, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
@@ -64,28 +67,22 @@ var _ = Describe("ImageReferenceValidator", func() {
 	})
 
 	It("returns not found when runtime image name does not exist", func() {
-		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockRuntimeImage(ImageTypeBuilder, "golang", ErrRuntimeImageNotFound)
+		_, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
 
-			_, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
-
-			Expect(err).To(MatchError(ErrRuntimeImageNotFound))
-		})
+		Expect(err).To(MatchError(ErrRuntimeImageNotFound))
 	})
 
 	It("returns not found when runtime image type does not match", func() {
-		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockRuntimeImage(ImageTypeRunner, "golang", ErrRuntimeImageNotFound)
+		createRuntimeImage(ImageTypeRunner, "golang")
 
-			_, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
+		_, err := validator.ValidateTaggedReference(ctx, ImageTypeBuilder, "golang:1.24")
 
-			Expect(err).To(MatchError(ErrRuntimeImageNotFound))
-		})
+		Expect(err).To(MatchError(ErrRuntimeImageNotFound))
 	})
 
 	It("returns tag not found when snapshot tag does not exist", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockRuntimeImage(ImageTypeRunner, "debian", nil)
+			createRuntimeImage(ImageTypeRunner, "debian")
 			mockSnapshotTag(false, nil)
 
 			_, err := validator.ValidateTaggedReference(ctx, ImageTypeRunner, "debian:12")
