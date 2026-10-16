@@ -20,10 +20,8 @@ package rules
 
 import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/serializer"
 
-// Hit 某条规则命中后交给自己的 Render 使用的证据
-type Hit interface {
-	evidenceLines() []string
-}
+// Hit 规则命中后交给 Render 的证据，具体类型由规则自己断言
+type Hit any
 
 // InstanceRule 针对单个异常实例。规则集按顺序调用 Match，命中后只调这一条的 Render
 type InstanceRule interface {

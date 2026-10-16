@@ -45,8 +45,6 @@ type configFileHit struct {
 	logPath string
 }
 
-func (h configFileHit) evidenceLines() []string { return h.lines }
-
 type configFileRule struct{}
 
 func (configFileRule) ID() string { return IDConfigFileNotFound }
@@ -129,7 +127,7 @@ func (configFileRule) isConfigPath(path, configuredName string) bool {
 
 func (r configFileRule) relatedConfigs(fw Framework, logPath string) []*serializer.RelatedConfigRowObj {
 	configured := r.joinPath(fw.FilePath, fw.FileName)
-	// 只有两边都是绝对路径且不完全一致才标红；相对路径对不上工作目录，不能当成同一路径
+	// 配置路径是绝对路径，且日志路径与之不同（相对路径视为不同）时标红
 	danger := logPath != "" && strings.HasPrefix(configured, "/") && !r.samePath(logPath, configured)
 	hint := ""
 	if danger {

@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
@@ -102,9 +103,18 @@ func (d *Diagnoser) collectSnapshot(
 		)
 	}
 	snap.Instances = instances
-	// 日志或事件失败本波次仍给结论，partial 恒为 false
-	d.fillInstanceLogs(ctx, latest, snap.Instances)
-	snap.Events = d.listRelatedEvents(ctx, env, latest, snap.Instances)
+	snap.InstancesListed = true
+	// 日志或事件失败仍给结论，未取全的数据源写入 PartialReasons
+	reasons := make([]string, 0, 2)
+	if d.fillInstanceLogs(ctx, latest, snap.Instances) {
+		reasons = append(reasons, serializer.PartialReasonLogs)
+	}
+	events, eventsPartial := d.listRelatedEvents(ctx, env, latest, snap.Instances)
+	snap.Events = events
+	if eventsPartial {
+		reasons = append(reasons, serializer.PartialReasonEvents)
+	}
+	snap.PartialReasons = reasons
 	return snap, nil
 }
 
@@ -190,8 +200,10 @@ func (d *Diagnoser) loadFrameworkConfig(ctx context.Context, app *bkmsapp.Applic
 	if !bkmsapp.IsAppModelType(app.Type) {
 		return diag.Framework{}
 	}
+	// 读的是应用当前配置，不是该次部署的资源快照。配置已改但未重新部署时，路径比对可能对不上正在跑的实例
 	am, err := store.Of(d.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
+		logging.Warnf(ctx, "load app model for diagnosis app %s: %v", app.ID, err)
 		return diag.Framework{}
 	}
 	return frameworkFromAppModel(app.Type, am)
@@ -238,8 +250,8 @@ func (d *Diagnoser) listInstances(ctx context.Context, latest *latestDeploy) ([]
 	return instances, nil
 }
 
-// fillInstanceLogs 只给重启次数最高的若干异常实例拉日志
-func (d *Diagnoser) fillInstanceLogs(ctx context.Context, latest *latestDeploy, instances []*diag.Instance) {
+// fillInstanceLogs 只给重启次数最高的若干异常实例拉日志。返回 true 表示日志未取全
+func (d *Diagnoser) fillInstanceLogs(ctx context.Context, latest *latestDeploy, instances []*diag.Instance) bool {
 	abnormal := make([]*diag.Instance, 0, len(instances))
 	for _, inst := range instances {
 		if !inst.IsHealthy {
@@ -249,37 +261,53 @@ func (d *Diagnoser) fillInstanceLogs(ctx context.Context, latest *latestDeploy, 
 	sort.SliceStable(abnormal, func(i, j int) bool {
 		return abnormal[i].RestartCount > abnormal[j].RestartCount
 	})
-	if len(abnormal) > maxLogInstances {
+	// 超出上限的实例不再拉日志，响应里标成 logs 未取全
+	truncated := len(abnormal) > maxLogInstances
+	if truncated {
 		abnormal = abnormal[:maxLogInstances]
 	}
 
 	client := k8sclient.NewPodClient(cluster.NewConfig(latest.clusterID))
+	failed := false
 	for _, inst := range abnormal {
-		d.fillOneInstanceLogs(ctx, client, latest.namespace, inst)
+		if !d.fillOneInstanceLogs(ctx, client, latest.namespace, inst) {
+			failed = true
+		}
 	}
+	return truncated || failed
 }
 
-// fillOneInstanceLogs 优先取重启前日志，没有再取当前日志
+// fillOneInstanceLogs 优先取重启前日志，没有再取当前日志。接口失败返回 false，空日志不算失败
 func (d *Diagnoser) fillOneInstanceLogs(
 	ctx context.Context,
 	client *k8sclient.PodClient,
 	namespace string,
 	inst *diag.Instance,
-) {
+) bool {
+	sawError := false
 	// previous 优先：有重启才值得读退出前日志
 	if inst.RestartCount > 0 {
-		if lines, ok := d.readLogLines(ctx, client, namespace, inst.ID, true); ok && len(lines) > 0 {
+		lines, ok := d.readLogLines(ctx, client, namespace, inst.ID, true)
+		if !ok {
+			sawError = true
+		} else if len(lines) > 0 {
 			inst.LogSource = serializer.LogSourcePrevious
 			inst.LogHint = previousLogHint
 			inst.LogLines = lines
-			return
+			return true
 		}
 	}
-	if lines, ok := d.readLogLines(ctx, client, namespace, inst.ID, false); ok && len(lines) > 0 {
+	lines, ok := d.readLogLines(ctx, client, namespace, inst.ID, false)
+	if !ok {
+		return false
+	}
+	if len(lines) > 0 {
 		inst.LogSource = serializer.LogSourceCurrent
 		inst.LogHint = currentLogHint
 		inst.LogLines = lines
 	}
+	// previous 失败但 current 成功时，优先日志没取到，仍算未取全
+	return !sawError
 }
 
 // readLogLines 读取主容器末尾日志；失败时返回未取到，不中断诊断
@@ -296,6 +324,7 @@ func (d *Diagnoser) readLogLines(
 		TailLines: &tail,
 	})
 	if err != nil {
+		logging.Warnf(ctx, "list logs for pod %s previous=%t: %v", podName, previous, err)
 		return nil, false
 	}
 	lines := make([]string, 0, len(entries))
@@ -308,58 +337,123 @@ func (d *Diagnoser) readLogLines(
 	return lines, true
 }
 
-// listRelatedEvents 拉取本次部署开始后、与工作负载和 Pod 相关的事件；失败则返回空列表
+// listRelatedEvents 分两次拉取 Pod 事件和工作负载事件，避免工作负载事件占满第一页后把 Pod 事件挤掉
+// 失败或条数超过一页时 partial 为 true，已取到的事件仍然返回
 func (d *Diagnoser) listRelatedEvents(
 	ctx context.Context,
 	env *envmodel.Environment,
 	latest *latestDeploy,
 	instances []*diag.Instance,
-) []diag.Event {
+) ([]diag.Event, bool) {
 	user, err := auth.GetUser(ctx)
 	if err != nil {
-		return []diag.Event{}
+		logging.Warnf(ctx, "get user for diagnosis events deploy %s: %v", latest.deployID, err)
+		return []diag.Event{}, true
 	}
 	client, err := clusterresources.New(user)
 	if err != nil {
-		return []diag.Event{}
+		logging.Warnf(ctx, "create cluster resources client for diagnosis events deploy %s: %v", latest.deployID, err)
+		return []diag.Event{}, true
 	}
 
-	resourceKinds := make([]string, 0, len(latest.resourceKeys)+len(instances))
-	resourceNames := make([]string, 0, len(latest.resourceKeys)+len(instances))
-	for _, rk := range latest.resourceKeys {
-		resourceKinds = append(resourceKinds, rk.Kind)
-		resourceNames = append(resourceNames, rk.Name)
-	}
+	podNames := make([]string, 0, len(instances))
+	podNameSet := make(map[string]struct{}, len(instances))
 	for _, inst := range instances {
-		resourceKinds = append(resourceKinds, k8skind.Po)
-		resourceNames = append(resourceNames, inst.ID)
+		podNames = append(podNames, inst.ID)
+		podNameSet[inst.ID] = struct{}{}
 	}
 
-	paginated, err := client.ListEvents(
+	events := make([]diag.Event, 0)
+	partial := false
+	if len(podNames) > 0 {
+		page, pageErr := listEventPage(ctx, client, env, latest, []string{k8skind.Po}, podNames)
+		if pageErr != nil {
+			logging.Warnf(ctx, "list pod events for diagnosis deploy %s: %v", latest.deployID, pageErr)
+			partial = true
+		} else {
+			events = append(events, eventsFromPage(page, podNameSet)...)
+			partial = partial || eventPageTruncated(page)
+		}
+	}
+	if len(latest.resourceKeys) > 0 {
+		kinds := make([]string, 0, len(latest.resourceKeys))
+		names := make([]string, 0, len(latest.resourceKeys))
+		for _, rk := range latest.resourceKeys {
+			kinds = append(kinds, rk.Kind)
+			names = append(names, rk.Name)
+		}
+		page, pageErr := listEventPage(ctx, client, env, latest, kinds, names)
+		if pageErr != nil {
+			logging.Warnf(ctx, "list workload events for diagnosis deploy %s: %v", latest.deployID, pageErr)
+			partial = true
+		} else {
+			events = append(events, eventsFromPage(page, podNameSet)...)
+			partial = partial || eventPageTruncated(page)
+		}
+	}
+	return events, partial
+}
+
+func listEventPage(
+	ctx context.Context,
+	client *clusterresources.ApiClient,
+	env *envmodel.Environment,
+	latest *latestDeploy,
+	kinds, names []string,
+) (*clusterresources.PaginatedEvents, error) {
+	page, err := client.ListEvents(
 		ctx,
 		env.Cluster.ProjectCode,
 		env.Cluster.ClusterID,
 		clusterresources.ListEventParams{
 			Namespace:     latest.namespace,
-			ResourceKinds: resourceKinds,
-			ResourceNames: resourceNames,
+			ResourceKinds: kinds,
+			ResourceNames: names,
 			StartedAt:     latest.startedAtUnix,
 			Page:          1,
 			PageSize:      maxEvents,
 		},
 	)
-	if err != nil || paginated == nil {
+	if err != nil {
+		return nil, errors.Wrapf(err, "list events in namespace %s", latest.namespace)
+	}
+	return page, nil
+}
+
+func eventsFromPage(page *clusterresources.PaginatedEvents, podNames map[string]struct{}) []diag.Event {
+	if page == nil {
 		return []diag.Event{}
 	}
-
-	events := make([]diag.Event, 0, len(paginated.Data))
-	for _, e := range paginated.Data {
+	events := make([]diag.Event, 0, len(page.Data))
+	for _, e := range page.Data {
 		events = append(events, diag.Event{
-			InstanceID: e.ResourcesName,
-			CreatedAt:  e.CreatedAt,
-			Level:      e.Level,
-			Content:    e.Content,
+			InstanceID:   instanceIDForEvent(e.ResourceKind, e.ResourcesName, podNames),
+			ResourceKind: e.ResourceKind,
+			ResourceName: e.ResourcesName,
+			CreatedAt:    e.CreatedAt,
+			Level:        e.Level,
+			Content:      e.Content,
 		})
 	}
 	return events
+}
+
+func eventPageTruncated(page *clusterresources.PaginatedEvents) bool {
+	if page == nil {
+		return false
+	}
+	return page.Count > int64(len(page.Data))
+}
+
+// instanceIDForEvent Pod 事件挂到实例；类型为空时仅当名称就是本次 Pod 才挂上，其余视为工作负载事件
+func instanceIDForEvent(kind, name string, podNames map[string]struct{}) string {
+	if kind == k8skind.Po {
+		return name
+	}
+	if kind == "" {
+		if _, ok := podNames[name]; ok {
+			return name
+		}
+	}
+	return ""
 }

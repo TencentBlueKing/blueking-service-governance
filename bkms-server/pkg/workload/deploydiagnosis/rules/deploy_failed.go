@@ -38,6 +38,7 @@ func (r deployFailedRule) Render(snap *Snapshot) *serializer.DiagnosisGroupObj {
 		Solutions:      append([]string{}, rule.solutions...),
 		Actions:        buildActions(rule),
 		RelatedConfigs: []*serializer.RelatedConfigRowObj{},
+		RelatedEvents:  workloadEvents(snap.Events),
 		Instances:      []*serializer.DiagnosisInstanceObj{},
 	}
 }
@@ -48,7 +49,7 @@ func (deployFailedRule) spec(noInstance bool) spec {
 		causeDetail = "当前环境没有实例，最近一次部署也没有成功。请对照部署记录说明，确认失败发生在哪一步。"
 	}
 	return spec{
-		id:          IDUnknown,
+		id:          IDDeployFailed,
 		name:        "未识别的部署失败",
 		category:    "部署失败",
 		confidence:  "low",

@@ -29,8 +29,18 @@ import (
 const (
 	// EmptyReasonAllHealthy 实例均已启动并通过健康检查，无需处理
 	EmptyReasonAllHealthy = "all_healthy"
-	// EmptyReasonNoInstance 当前环境没有可诊断的实例
+	// EmptyReasonNoInstance 已经列过实例，当前环境没有可诊断的实例
 	EmptyReasonNoInstance = "no_instance"
+	// EmptyReasonInstancesUnavailable 有部署记录，但本波次不能列出实例，例如 Helm
+	EmptyReasonInstancesUnavailable = "instances_unavailable"
+)
+
+// 部分结果的数据源，没有则为空数组
+const (
+	// PartialReasonLogs 日志未取全：接口失败，或异常实例超过采集上限
+	PartialReasonLogs = "logs"
+	// PartialReasonEvents 事件未取全：接口失败，或条数超过第一页
+	PartialReasonEvents = "events"
 )
 
 // 日志来源
@@ -47,7 +57,7 @@ const (
 const (
 	// ActionFrameworkConfig 前往框架配置文件
 	ActionFrameworkConfig = "frameworkConfig"
-	// ActionEnvVarConfig 前往环境变量
+	// ActionEnvVarConfig 前往环境变量。本波次没有规则使用，保留给后续规则
 	ActionEnvVarConfig = "envVarConfig"
 	// ActionDeployConfig 前往部署配置
 	ActionDeployConfig = "deployConfig"
@@ -76,13 +86,13 @@ type GetDeployDiagnosisOutput struct {
 type DeployDiagnosisOutputObj struct {
 	// GeneratedAt 诊断计算完成时间
 	GeneratedAt time.Time `json:"generatedAt"`
-	// CacheHit 是否直接返回缓存结果，面板不强制展示
+	// CacheHit 是否直接返回缓存结果。本波次没有缓存，恒为 false
 	CacheHit bool `json:"cacheHit"`
 	// Partial 日志或事件未取全时为 true，面板提示「部分证据未取到」
 	Partial bool `json:"partial"`
 	// PartialReasons 未取全的数据源，取值为 logs / events；没有则为空数组
 	PartialReasons []string `json:"partialReasons"`
-	// EmptyReason groups 为空时的空态：all_healthy / no_instance；有结论时为空字符串
+	// EmptyReason groups 为空时的空态：all_healthy / no_instance / instances_unavailable；有结论时为空字符串
 	EmptyReason string `json:"emptyReason"`
 	// Deploy 最新部署记录，DeployID 只供查看完整资源 YAML
 	Deploy DeployOutputObj `json:"deploy"`
@@ -132,6 +142,8 @@ type DiagnosisGroupObj struct {
 	RelatedConfigs []*RelatedConfigRowObj `json:"relatedConfigs"`
 	// Instances 命中该规则的实例，已按重启次数降序；无实例的结论为空数组
 	Instances []*DiagnosisInstanceObj `json:"instances"`
+	// RelatedEvents 不归属某个实例的工作负载事件，如副本创建失败、配额不足
+	RelatedEvents []*DiagnosisEventObj `json:"relatedEvents"`
 }
 
 // DiagnosisActionObj 解决方案区按钮

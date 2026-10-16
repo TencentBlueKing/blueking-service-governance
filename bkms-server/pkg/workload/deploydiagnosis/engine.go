@@ -43,6 +43,11 @@ func (d *Diagnoser) diagnose(snap *rules.Snapshot) *serializer.DeployDiagnosisOu
 			out.Groups = []*serializer.DiagnosisGroupObj{group}
 			return out
 		}
+		// 有部署但没列 Pod（Helm 等）不能说成没有实例
+		if snap.Deploy.DeployID != "" && !snap.InstancesListed {
+			out.EmptyReason = serializer.EmptyReasonInstancesUnavailable
+			return out
+		}
 		if len(snap.Instances) == 0 {
 			out.EmptyReason = serializer.EmptyReasonNoInstance
 			return out
@@ -77,11 +82,16 @@ func (d *Diagnoser) diagnose(snap *rules.Snapshot) *serializer.DeployDiagnosisOu
 }
 
 func emptyDiagnosis(snap *rules.Snapshot) *serializer.DeployDiagnosisOutputObj {
+	reasons := snap.PartialReasons
+	if reasons == nil {
+		reasons = []string{}
+	}
 	return &serializer.DeployDiagnosisOutputObj{
-		GeneratedAt:    time.Now().UTC(),
+		GeneratedAt: time.Now().UTC(),
+		// 本波次没有缓存
 		CacheHit:       false,
-		Partial:        false,
-		PartialReasons: []string{},
+		Partial:        len(reasons) > 0,
+		PartialReasons: reasons,
 		EmptyReason:    "",
 		Deploy:         snap.Deploy,
 		Summary: serializer.DiagnosisSummaryObj{

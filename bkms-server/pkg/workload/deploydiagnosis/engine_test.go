@@ -35,11 +35,12 @@ func requiredTopLevelFields(out *serializer.DeployDiagnosisOutputObj) {
 }
 
 var _ = Describe("diagnose", func() {
-	It("returns no_instance when there are no pods and deploy has not failed", func() {
+	It("returns no_instance when pods were listed and none remain", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType:   bkmsapp.AppTypeTRPC,
-			Deploy:    serializer.DeployOutputObj{Status: "deployed"},
-			Instances: []*rules.Instance{},
+			AppType:         bkmsapp.AppTypeTRPC,
+			Deploy:          serializer.DeployOutputObj{DeployID: "d-1", Status: "deployed"},
+			InstancesListed: true,
+			Instances:       []*rules.Instance{},
 		})
 
 		requiredTopLevelFields(out)
@@ -59,7 +60,7 @@ var _ = Describe("diagnose", func() {
 		requiredTopLevelFields(out)
 		Expect(out.EmptyReason).To(BeEmpty())
 		Expect(out.Groups).To(HaveLen(1))
-		Expect(out.Groups[0].RuleID).To(Equal(rules.IDUnknown))
+		Expect(out.Groups[0].RuleID).To(Equal(rules.IDDeployFailed))
 		Expect(out.Groups[0].Instances).To(BeEmpty())
 		Expect(out.Groups[0].Cause).NotTo(BeEmpty())
 	})
@@ -78,8 +79,19 @@ var _ = Describe("diagnose", func() {
 		Expect(out.Summary.TotalCount).To(Equal(1))
 		Expect(out.Summary.AbnormalCount).To(Equal(0))
 		Expect(out.Groups).To(HaveLen(1))
-		Expect(out.Groups[0].RuleID).To(Equal(rules.IDUnknown))
+		Expect(out.Groups[0].RuleID).To(Equal(rules.IDDeployFailed))
 		Expect(out.Groups[0].Instances).To(BeEmpty())
+	})
+
+	It("returns instances_unavailable when a deploy exists but pods were not listed", func() {
+		out := new(Diagnoser).diagnose(&rules.Snapshot{
+			AppType: bkmsapp.AppTypeHelm,
+			Deploy:  serializer.DeployOutputObj{DeployID: "d-helm", Status: "deployed"},
+		})
+
+		requiredTopLevelFields(out)
+		Expect(out.EmptyReason).To(Equal(serializer.EmptyReasonInstancesUnavailable))
+		Expect(out.Groups).To(BeEmpty())
 	})
 
 	It("returns all_healthy when every instance is Ready and deploy has not failed", func() {
@@ -253,5 +265,59 @@ var _ = Describe("diagnose", func() {
 
 		Expect(out.Groups).To(HaveLen(1))
 		Expect(out.Groups[0].RuleID).To(Equal(rules.IDUnknown))
+	})
+
+	It("keeps pod events on the instance and workload events on the group", func() {
+		out := new(Diagnoser).diagnose(&rules.Snapshot{
+			AppType:         bkmsapp.AppTypeTRPC,
+			InstancesListed: true,
+			Events: []rules.Event{
+				{InstanceID: "pod-a", Content: "pod event", Level: "Warning"},
+				{InstanceID: "pod-b", Content: "other pod", Level: "Warning"},
+				{Content: "quota exceeded", Level: "Warning"},
+			},
+			Instances: []*rules.Instance{{
+				ID:        "pod-a",
+				IsHealthy: false,
+				Status:    "CrashLoopBackOff",
+			}},
+		})
+
+		Expect(out.Groups).To(HaveLen(1))
+		Expect(out.Groups[0].Instances[0].RelatedEvents).To(Equal([]*serializer.DiagnosisEventObj{
+			{Level: "Warning", Content: "pod event"},
+		}))
+		Expect(out.Groups[0].RelatedEvents).To(Equal([]*serializer.DiagnosisEventObj{
+			{Level: "Warning", Content: "quota exceeded"},
+		}))
+	})
+
+	It("attaches workload events when deploy failed and there is no instance", func() {
+		out := new(Diagnoser).diagnose(&rules.Snapshot{
+			Deploy: serializer.DeployOutputObj{Status: "failed"},
+			Events: []rules.Event{{Content: "quota exceeded", Level: "Warning"}},
+		})
+
+		Expect(out.Groups).To(HaveLen(1))
+		Expect(out.Groups[0].RuleID).To(Equal(rules.IDDeployFailed))
+		Expect(out.Groups[0].RelatedEvents).To(Equal([]*serializer.DiagnosisEventObj{
+			{Level: "Warning", Content: "quota exceeded"},
+		}))
+	})
+
+	It("copies partial reasons from the snapshot", func() {
+		out := new(Diagnoser).diagnose(&rules.Snapshot{
+			InstancesListed: true,
+			PartialReasons:  []string{serializer.PartialReasonLogs, serializer.PartialReasonEvents},
+			Deploy:          serializer.DeployOutputObj{Status: "deployed"},
+			Instances: []*rules.Instance{{
+				ID:        "pod-a",
+				IsHealthy: true,
+			}},
+		})
+
+		Expect(out.Partial).To(BeTrue())
+		Expect(out.PartialReasons).To(Equal([]string{serializer.PartialReasonLogs, serializer.PartialReasonEvents}))
+		Expect(out.EmptyReason).To(Equal(serializer.EmptyReasonAllHealthy))
 	})
 })

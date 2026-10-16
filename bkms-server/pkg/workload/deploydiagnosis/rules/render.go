@@ -63,6 +63,7 @@ func buildGroup(
 		Solutions:      append([]string{}, rule.solutions...),
 		Actions:        buildActions(rule),
 		RelatedConfigs: []*serializer.RelatedConfigRowObj{},
+		RelatedEvents:  workloadEvents(snap.Events),
 		Instances: []*serializer.DiagnosisInstanceObj{
 			{
 				ID:             inst.ID,
@@ -90,9 +91,17 @@ func buildActions(rule spec) []*serializer.DiagnosisActionObj {
 }
 
 func relatedEvents(events []Event, instanceID string) []*serializer.DiagnosisEventObj {
+	return pickEvents(events, func(ev Event) bool { return ev.InstanceID == instanceID })
+}
+
+func workloadEvents(events []Event) []*serializer.DiagnosisEventObj {
+	return pickEvents(events, func(ev Event) bool { return ev.InstanceID == "" })
+}
+
+func pickEvents(events []Event, keep func(Event) bool) []*serializer.DiagnosisEventObj {
 	out := make([]*serializer.DiagnosisEventObj, 0)
 	for _, ev := range events {
-		if ev.InstanceID != "" && ev.InstanceID != instanceID {
+		if !keep(ev) {
 			continue
 		}
 		out = append(out, &serializer.DiagnosisEventObj{

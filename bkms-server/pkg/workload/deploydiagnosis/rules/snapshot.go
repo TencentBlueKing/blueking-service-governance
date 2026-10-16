@@ -29,6 +29,8 @@ import (
 const (
 	// IDConfigFileNotFound 框架配置文件读取失败的规则标识
 	IDConfigFileNotFound = "config-file-not-found"
+	// IDDeployFailed 部署已失败但没有匹配到更具体原因
+	IDDeployFailed = "deploy-failed"
 	// IDUnknown 未命中具体规则时的兜底标识
 	IDUnknown = "unknown"
 
@@ -48,8 +50,12 @@ type Snapshot struct {
 	Deploy serializer.DeployOutputObj
 	// Instances 当前环境的全部实例，含健康实例和没拉到日志的实例
 	Instances []*Instance
-	// Events 本次部署开始后的环境事件，匹配时按资源名挂到实例上
+	// InstancesListed 为 true 表示已经按部署记录列过 Pod。有部署 ID 但仍为 false 时，不能当成没有实例
+	InstancesListed bool
+	// Events 本次部署开始后的事件。InstanceID 为空的是工作负载事件，挂到分组上
 	Events []Event
+	// PartialReasons 采集未取全的数据源，取值为 logs / events
+	PartialReasons []string
 	// Framework 应用模型里的框架配置，用来和日志中的读取路径比对
 	Framework Framework
 }
@@ -72,10 +78,14 @@ type Instance struct {
 	LogLines []string
 }
 
-// Event 一条集群事件，用来填进实例的相关事件
+// Event 一条集群事件。Pod 事件挂到对应实例，工作负载事件挂到分组
 type Event struct {
-	// InstanceID 事件关联的资源名，通常是 Pod 名；空表示归不到某个实例
+	// InstanceID 关联的 Pod 名。空表示工作负载级事件，不归属某个实例
 	InstanceID string
+	// ResourceKind 事件关联的资源类型，如 Pod、Deployment
+	ResourceKind string
+	// ResourceName 事件关联的资源名
+	ResourceName string
 	// CreatedAt 事件发生时间
 	CreatedAt time.Time
 	// Level 事件级别，如 Normal、Warning

@@ -20,16 +20,12 @@ package rules
 
 import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/serializer"
 
-type unknownHit struct{}
-
-func (unknownHit) evidenceLines() []string { return nil }
-
 type unknownRule struct{}
 
 func (unknownRule) ID() string { return IDUnknown }
 
 func (unknownRule) Match(*Snapshot, *Instance) (Hit, bool) {
-	return unknownHit{}, true
+	return nil, true
 }
 
 func (r unknownRule) Render(snap *Snapshot, inst *Instance, _ Hit) *serializer.DiagnosisGroupObj {
