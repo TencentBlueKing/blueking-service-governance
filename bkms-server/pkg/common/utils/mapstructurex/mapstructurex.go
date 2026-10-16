@@ -60,6 +60,24 @@ func TimeToTimestamppbHook() mapstructure.DecodeHookFunc {
 	}
 }
 
+// BsonDocToMapHook 将 bson.D 转换为 map[string]any。
+// 从 MongoDB 读回 map[string]any 时，其中的嵌套文档是 bson.D，即 []bson.E 切片；
+// mapstructure 会把它当成 slice，无法写入 struct 或 map 字段。
+func BsonDocToMapHook() mapstructure.DecodeHookFunc {
+	return func(f, t reflect.Type, data any) (any, error) {
+		doc, ok := data.(bson.D)
+		if !ok {
+			return data, nil
+		}
+
+		m := make(map[string]any, len(doc))
+		for _, elem := range doc {
+			m[elem.Key] = elem.Value
+		}
+		return m, nil
+	}
+}
+
 // BsonIDToStringHook 将 bson.ObjectId 转换为 string
 func BsonIDToStringHook() mapstructure.DecodeHookFunc {
 	return func(f, t reflect.Type, data any) (any, error) {

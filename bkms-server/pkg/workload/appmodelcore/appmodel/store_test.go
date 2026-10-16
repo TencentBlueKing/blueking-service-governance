@@ -20,6 +20,7 @@ package appmodel_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -93,6 +95,57 @@ var _ = Describe("AppModelStoreMongo", func() {
 				am, err := appModelStore.GetAppModel(ctx, app.ID)
 				Expect(err).To(Not(HaveOccurred()))
 				Expect(am.Labels).To(Equal(appModel.Labels))
+			})
+
+			It("round-trips old TrpcConfig and new frameworkConfig including integers", func() {
+				app := dbfactory.Application(ctx, appStore)
+				appModel := &appmodel.AppModel{
+					AppID: app.ID,
+					Workload: appmodel.Workload{
+						Type: appmodel.WorkloadTypeTrpc,
+						TrpcConfig: appmodel.TrpcConfig{
+							FileName:    "trpc_go.yaml",
+							FilePath:    "/etc/",
+							FileContent: "server:\n  port: 8080\n",
+							Language:    appmodel.LanguageGo,
+						},
+						FrameworkConfig: map[string]any{
+							"fileName": "trpc_go.yaml",
+							"filePath": "/etc/",
+							"retries":  3,
+							"nested":   map[string]any{"ok": true},
+							"tags":     []any{"a"},
+						},
+						FrameworkConfigVersion: 1,
+					},
+				}
+				err := appModelStore.CreateAppModel(ctx, appModel)
+				Expect(err).NotTo(HaveOccurred())
+
+				got, err := appModelStore.GetAppModel(ctx, app.ID)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got.Workload.TrpcConfig.FileName).To(Equal("trpc_go.yaml"))
+				Expect(got.Workload.TrpcConfig.FileContent).To(Equal("server:\n  port: 8080\n"))
+				Expect(got.Workload.TrpcConfig.Language).To(Equal(appmodel.LanguageGo))
+				Expect(got.Workload.FrameworkConfigVersion).To(Equal(1))
+				Expect(got.Workload.FrameworkConfig["fileName"]).To(Equal("trpc_go.yaml"))
+
+				// The driver must not widen stored integers into float64 on read back.
+				Expect(got.Workload.FrameworkConfig["retries"]).NotTo(BeAssignableToTypeOf(float64(0)))
+				Expect(fmt.Sprint(got.Workload.FrameworkConfig["retries"])).To(Equal("3"))
+
+				snap := got.Workload.RuntimeSnapshot(appruntime.Snapshot{
+					AppID:            app.ID,
+					AppType:          appruntime.AppTypeTRPC,
+					TrpcSpecLanguage: appruntime.LanguageGo,
+				})
+				report := appruntime.Inspect(snap)
+				Expect(report.Blocking()).To(BeFalse())
+				Expect(report.Stack).To(Equal(appruntime.Stack{
+					Type:      appruntime.AppTypeBKMSApp,
+					Framework: appruntime.FrameworkTRPC,
+					Language:  appruntime.LanguageGo,
+				}))
 			})
 
 			It("encrypts sensitive env vars at rest but returns plaintext on read", func() {
