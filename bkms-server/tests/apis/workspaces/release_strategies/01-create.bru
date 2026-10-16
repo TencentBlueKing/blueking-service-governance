@@ -1,0 +1,46 @@
+meta {
+  name: create-release-strategy
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{releaseStrategyWorkspaceID}}/release-strategies
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "生产谨慎发布",
+    "batches": [
+      {"target": "1", "pauseMode": "permanent"},
+      {"target": "25%", "pauseMode": "none"},
+      {"target": "50%", "pauseMode": "duration", "pauseSeconds": 1800}
+    ]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should create a release strategy", () => {
+    const strategy = res.body.data;
+    expect(strategy.id).to.be.a("string").and.not.be.empty;
+    expect(strategy.batches).to.deep.equal([
+      {target: "1", pauseMode: "permanent", pauseSeconds: 0},
+      {target: "25%", pauseMode: "none", pauseSeconds: 0},
+      {target: "50%", pauseMode: "duration", pauseSeconds: 1800}
+    ]);
+
+    bru.setVar("releaseStrategyID", strategy.id);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

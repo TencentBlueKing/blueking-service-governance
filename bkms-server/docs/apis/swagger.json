@@ -18485,6 +18485,290 @@
                 }
             }
         },
+        "/workspaces/{workspaceID}/release-strategies": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "release-strategies"
+                ],
+                "summary": "查询空间内全部发布策略",
+                "operationId": "ListReleaseStrategies",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListReleaseStrategiesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "release-strategies"
+                ],
+                "summary": "新建发布策略",
+                "operationId": "CreateReleaseStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "发布策略",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ReleaseStrategyInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ReleaseStrategyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/release-strategies/{strategyID}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "release-strategies"
+                ],
+                "summary": "查询发布策略详情",
+                "operationId": "GetReleaseStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "发布策略 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ReleaseStrategyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "release-strategies"
+                ],
+                "summary": "修改发布策略",
+                "operationId": "UpdateReleaseStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "发布策略 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "发布策略",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ReleaseStrategyInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ReleaseStrategyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "release-strategies"
+                ],
+                "summary": "删除发布策略",
+                "operationId": "DeleteReleaseStrategy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "发布策略 ID",
+                        "name": "strategyID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_releasestrategy_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/role-member-groups": {
             "get": {
                 "security": [
@@ -19239,7 +19523,7 @@
                     "type": "string"
                 },
                 "mountedEnvNames": {
-                    "description": "创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。环境名格式与路径参数 envName 相同。",
+                    "description": "创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。\n环境名格式与路径参数 envName 相同。",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -20807,6 +21091,9 @@
             }
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput": {
+            "type": "object"
+        },
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_releasestrategy_serializer.EmptyOutput": {
             "type": "object"
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput": {
@@ -22554,6 +22841,51 @@
                 },
                 "trafficLaneName": {
                     "description": "部署的泳道名称（空字符串表示不使用泳道）",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.BatchInput": {
+            "type": "object",
+            "required": [
+                "pauseMode",
+                "target"
+            ],
+            "properties": {
+                "pauseMode": {
+                    "description": "本批完成后的暂停方式：none 不暂停 / duration 定时暂停 / permanent 永久暂停（需人工继续）",
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "duration",
+                        "permanent"
+                    ]
+                },
+                "pauseSeconds": {
+                    "description": "定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，范围 60 ~ 86400",
+                    "type": "integer",
+                    "maximum": 86400,
+                    "minimum": 60
+                },
+                "target": {
+                    "description": "本批\"累计更新到\"的实例数：正整数（如 \"1\"）或百分比（如 \"25%\"），百分比范围 1% ~ 100%",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.BatchOutputObj": {
+            "type": "object",
+            "properties": {
+                "pauseMode": {
+                    "description": "本批完成后的暂停方式：none / duration / permanent",
+                    "type": "string"
+                },
+                "pauseSeconds": {
+                    "description": "定时暂停时长（秒），pauseMode 不为 duration 时为 0",
+                    "type": "integer"
+                },
+                "target": {
+                    "description": "本批\"累计更新到\"的实例数：正整数或百分比",
                     "type": "string"
                 }
             }
@@ -28283,6 +28615,18 @@
                 }
             }
         },
+        "serializer.ListReleaseStrategiesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "空间内全部发布策略，按创建时间升序，不分页",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.ReleaseStrategyOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListResourcesRulesOutput": {
             "type": "object",
             "properties": {
@@ -30597,6 +30941,91 @@
                     "type": "string"
                 },
                 "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ReleaseStrategyInput": {
+            "type": "object",
+            "required": [
+                "batches",
+                "name"
+            ],
+            "properties": {
+                "batches": {
+                    "description": "批次列表，1 ~ 10 个；不校验跨批次递增",
+                    "type": "array",
+                    "maxItems": 10,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/serializer.BatchInput"
+                    }
+                },
+                "description": {
+                    "description": "策略描述，不超过 200 个字符",
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "name": {
+                    "description": "策略名称，1 ~ 32 个字符，同一空间内唯一",
+                    "type": "string",
+                    "maxLength": 32
+                }
+            }
+        },
+        "serializer.ReleaseStrategyOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "发布策略",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.ReleaseStrategyOutputObj"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.ReleaseStrategyOutputObj": {
+            "type": "object",
+            "properties": {
+                "batches": {
+                    "description": "批次列表",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BatchOutputObj"
+                    }
+                },
+                "createdAt": {
+                    "description": "创建时间",
+                    "type": "string"
+                },
+                "creator": {
+                    "description": "创建人",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "策略描述",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "策略 ID",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "策略名称",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "最近更新时间",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近更新人",
+                    "type": "string"
+                },
+                "workspaceID": {
+                    "description": "所属工作空间 ID",
                     "type": "string"
                 }
             }

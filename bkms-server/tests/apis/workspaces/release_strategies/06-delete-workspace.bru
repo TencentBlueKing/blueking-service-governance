@@ -1,0 +1,21 @@
+meta {
+  name: delete-release-strategy-workspace
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{serviceURL}}/workspaces/{{releaseStrategyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
