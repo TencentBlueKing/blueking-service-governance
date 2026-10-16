@@ -28,6 +28,7 @@ import (
 	apphooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/hooks"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	releasestrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/hooks"
 	alertstrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/hooks"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	appdefaultshooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/hooks"
@@ -54,6 +55,9 @@ var _ = Describe("Store registry", func() {
 		Expect(
 			bkmsworkspace.IsPreDeleteHookRegistered(appdefaultshooks.CleanupRulesByWorkspaceHookName),
 		).To(BeTrue(), "workspace AppSpec rule cleanup hook must be registered by store registry")
+		Expect(
+			bkmsworkspace.IsPreDeleteHookRegistered(releasestrategyhooks.CleanupStrategiesByWorkspaceHookName),
+		).To(BeTrue(), "workspace release strategy cleanup hook must be registered by store registry")
 	})
 
 	It("should register alert strategy env update hook during initialization", func() {

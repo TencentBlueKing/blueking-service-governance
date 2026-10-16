@@ -29,6 +29,7 @@ import (
 	apphooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/hooks"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	releasestrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/hooks"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depinit "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model/initdata"
@@ -112,6 +113,7 @@ func (r *Registry) registerStoreHooks() {
 	appcfghooks.RegisterDeleteHooks(r.DB)
 	alertstrategyhooks.RegisterUpdateHooks(r.DB)
 	appdefaultshooks.RegisterPreDeleteHooks(r.DB)
+	releasestrategyhooks.RegisterPreDeleteHooks(r.DB)
 }
 
 // initStoreData 初始化 Store 中的基础数据，例如依赖服务的数据。
