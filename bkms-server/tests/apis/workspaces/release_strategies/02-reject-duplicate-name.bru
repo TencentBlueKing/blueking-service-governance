@@ -26,7 +26,7 @@ assert {
 
 tests {
   test("should reject a duplicated name", () => {
-    expect(res.body.error.message).to.include("名称已存在");
+    expect(res.body.error.code).to.equal("INVALID_ARGUMENT");
   });
 }
 

@@ -21,11 +21,11 @@ package handler
 
 import (
 	"context"
-	"errors"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -73,7 +73,7 @@ func (h *Handler) ListReleaseStrategies(c *gin.Context) {
 
 	strategies, err := h.registry.ReleaseStrategyStore.List(ctx, workspace.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "list release strategies"))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "list release strategies"))
 		return
 	}
 	data := make([]*serializer.ReleaseStrategyOutputObj, 0, len(strategies))
@@ -112,7 +112,7 @@ func (h *Handler) GetReleaseStrategy(c *gin.Context) {
 
 	strategy, err := h.registry.ReleaseStrategyStore.Get(ctx, workspace.ID, uri.StrategyID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "get release strategy"))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "get release strategy"))
 		return
 	}
 	ginutils.OK(c, serializer.ReleaseStrategyOutput{
@@ -153,7 +153,7 @@ func (h *Handler) CreateReleaseStrategy(c *gin.Context) {
 	username := auth.MustGetUser(ctx).ID
 	created.Creator, created.Updater = username, username
 	if err = h.registry.ReleaseStrategyStore.Create(ctx, created); err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "create release strategy"))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "create release strategy"))
 		return
 	}
 	recordAudit(ctx, workspace.ID, audit.OperationTypeCreate, nil, created)
@@ -196,7 +196,7 @@ func (h *Handler) UpdateReleaseStrategy(c *gin.Context) {
 
 	before, err := h.registry.ReleaseStrategyStore.Get(ctx, workspace.ID, uri.StrategyID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "update release strategy"))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "update release strategy"))
 		return
 	}
 	updated := input.ToModel(workspace.ID)
@@ -204,7 +204,7 @@ func (h *Handler) UpdateReleaseStrategy(c *gin.Context) {
 	updated.Creator, updated.CreatedAt = before.Creator, before.CreatedAt
 	updated.Updater = auth.MustGetUser(ctx).ID
 	if err = h.registry.ReleaseStrategyStore.Update(ctx, updated); err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "update release strategy"))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "update release strategy"))
 		return
 	}
 	recordAudit(ctx, workspace.ID, audit.OperationTypeUpdate, before, updated)
@@ -244,22 +244,11 @@ func (h *Handler) DeleteReleaseStrategy(c *gin.Context) {
 
 	deleted, err := h.registry.ReleaseStrategyStore.Delete(ctx, workspace.ID, uri.StrategyID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "delete release strategy"))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "delete release strategy"))
 		return
 	}
 	recordAudit(ctx, workspace.ID, audit.OperationTypeDelete, deleted, nil)
 	ginutils.OK(c, serializer.EmptyOutput{})
-}
-
-func apiError(err error, operation string) error {
-	switch {
-	case errors.Is(err, releasestrategy.ErrStrategyNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, operation)
-	case errors.Is(err, releasestrategy.ErrStrategyNameConflict):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, operation+" already exists")
-	default:
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, operation)
-	}
 }
 
 func recordAudit(
