@@ -8010,6 +8010,62 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/envs/{envName}/deploy-diagnosis": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deploy-diagnosis"
+                ],
+                "summary": "获取部署诊断结论",
+                "operationId": "GetDeployDiagnosis",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署的泳道名称（空字符串表示不使用泳道）",
+                        "name": "trafficLaneName",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetDeployDiagnosisOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/envs/{envName}/deployable-image-tags": {
             "get": {
                 "security": [
@@ -24870,6 +24926,74 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.DeployDiagnosisOutputObj": {
+            "type": "object",
+            "properties": {
+                "cacheHit": {
+                    "description": "CacheHit 是否直接返回缓存结果，面板不强制展示",
+                    "type": "boolean"
+                },
+                "deploy": {
+                    "description": "Deploy 最新部署记录，DeployID 只供查看完整资源 YAML",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.DeployOutputObj"
+                        }
+                    ]
+                },
+                "emptyReason": {
+                    "description": "EmptyReason groups 为空时的空态：all_healthy / no_instance；有结论时为空字符串",
+                    "type": "string"
+                },
+                "generatedAt": {
+                    "description": "GeneratedAt 诊断计算完成时间",
+                    "type": "string"
+                },
+                "groups": {
+                    "description": "Groups 按规则分组的结论，多条时前端做标签，默认第一组",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.DiagnosisGroupObj"
+                    }
+                },
+                "partial": {
+                    "description": "Partial 日志或事件未取全时为 true，面板提示「部分证据未取到」",
+                    "type": "boolean"
+                },
+                "partialReasons": {
+                    "description": "PartialReasons 未取全的数据源，取值为 logs / events；没有则为空数组",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "summary": {
+                    "description": "Summary 实例计数",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.DiagnosisSummaryObj"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.DeployOutputObj": {
+            "type": "object",
+            "properties": {
+                "deployID": {
+                    "description": "DeployID 最新部署记录 ID",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "Message 部署记录上的补充说明",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status 部署状态，如 deployed / failed",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.DeployOverviewAutoscalingMetricObj": {
             "type": "object",
             "properties": {
@@ -25159,6 +25283,159 @@ const docTemplate = `{
             "properties": {
                 "enabled": {
                     "type": "boolean"
+                }
+            }
+        },
+        "serializer.DiagnosisActionObj": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "ID 按钮行为，仅 frameworkConfig / envVarConfig / deployConfig / redeploy",
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Label 按钮文案",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.DiagnosisEventObj": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "description": "Content 事件内容",
+                    "type": "string"
+                },
+                "createdAt": {
+                    "description": "CreatedAt 事件发生时间",
+                    "type": "string"
+                },
+                "level": {
+                    "description": "Level 事件级别，如 Normal / Warning",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.DiagnosisGroupObj": {
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "description": "Actions 解决方案按钮，ID 决定跳转，Label 是按钮文案",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.DiagnosisActionObj"
+                    }
+                },
+                "category": {
+                    "description": "Category 出错原因旁的分类，如「配置下发」",
+                    "type": "string"
+                },
+                "cause": {
+                    "description": "Cause 出错原因主句，原样展示",
+                    "type": "string"
+                },
+                "causeDetail": {
+                    "description": "CauseDetail 主句下的说明，原样展示",
+                    "type": "string"
+                },
+                "confidence": {
+                    "description": "Confidence 置信度，面板不展示",
+                    "type": "string"
+                },
+                "instances": {
+                    "description": "Instances 命中该规则的实例，已按重启次数降序；无实例的结论为空数组",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.DiagnosisInstanceObj"
+                    }
+                },
+                "relatedConfigs": {
+                    "description": "RelatedConfigs 无实例时的相关配置；有实例时改读实例上的同名字段",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RelatedConfigRowObj"
+                    }
+                },
+                "ruleId": {
+                    "description": "RuleID 规则标识，作标签 key，不直接展示",
+                    "type": "string"
+                },
+                "ruleName": {
+                    "description": "RuleName 标签文案，展示为「规则名 · 实例数」",
+                    "type": "string"
+                },
+                "solutions": {
+                    "description": "Solutions 处理步骤，按数组顺序编号展示",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.DiagnosisInstanceObj": {
+            "type": "object",
+            "properties": {
+                "evidence": {
+                    "description": "Evidence 命中规则的日志行，空则不展示",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "description": "ID Pod 名，下载日志时传给现有日志接口",
+                    "type": "string"
+                },
+                "logHint": {
+                    "description": "LogHint 日志区说明，空则不展示",
+                    "type": "string"
+                },
+                "logLines": {
+                    "description": "LogLines 日志正文，空则前端展示未取到该实例日志",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "logSource": {
+                    "description": "LogSource 日志来源：previous / current / none",
+                    "type": "string"
+                },
+                "relatedConfigs": {
+                    "description": "RelatedConfigs 该实例的相关配置，路径比对结果已算好",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RelatedConfigRowObj"
+                    }
+                },
+                "relatedEvents": {
+                    "description": "RelatedEvents 本次部署开始后与该实例相关的事件，空则前端展示没有相关事件",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.DiagnosisEventObj"
+                    }
+                },
+                "restartCount": {
+                    "description": "RestartCount 重启次数，分组内已按它降序",
+                    "type": "integer"
+                },
+                "status": {
+                    "description": "Status 实例状态，如 CrashLoopBackOff",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.DiagnosisSummaryObj": {
+            "type": "object",
+            "properties": {
+                "abnormalCount": {
+                    "description": "AbnormalCount 异常实例数，与部署入口的异常数对齐",
+                    "type": "integer"
+                },
+                "totalCount": {
+                    "description": "TotalCount 当前环境实例总数，用于判断「有实例但都健康」",
+                    "type": "integer"
                 }
             }
         },
@@ -26388,6 +26665,14 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/serializer.BkCIPipelineVariableOutput"
                     }
+                }
+            }
+        },
+        "serializer.GetDeployDiagnosisOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.DeployDiagnosisOutputObj"
                 }
             }
         },
@@ -30584,6 +30869,27 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.RelatedConfigRowObj": {
+            "type": "object",
+            "properties": {
+                "danger": {
+                    "description": "Danger 为 true 时 Value 标红，表示与日志中的路径不一致",
+                    "type": "boolean"
+                },
+                "hint": {
+                    "description": "Hint Value 旁的提示，空则不展示",
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Label 左列名称",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "Value 右列取值，环境变量只放变量名",
                     "type": "string"
                 }
             }
