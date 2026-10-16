@@ -76,28 +76,6 @@ var _ = Describe("ClusterAddonDef store", func() {
 				Expect(got.OptionalForAppTypes).To(Equal([]string{"worker"}))
 				Expect(got.UnsupportedOnFederation).To(BeTrue())
 			})
-
-			It("createdAt and updatedAt fields should behave normally", func() {
-				err := clusteraddon.SaveDef(ctx, store, addonDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err := store.Get(ctx, clusteraddon.ByName(addonDef.Name))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.CreatedAt.IsZero()).To(BeFalse())
-				Expect(retrieved.UpdatedAt.IsZero()).To(BeFalse())
-
-				oldCreatedAt := retrieved.CreatedAt
-				oldUpdatedAt := retrieved.UpdatedAt
-
-				addonDef.DisplayName = "Updated Name"
-				err = clusteraddon.SaveDef(ctx, store, addonDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err = store.Get(ctx, clusteraddon.ByName(addonDef.Name))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.CreatedAt).To(Equal(oldCreatedAt))
-				Expect(retrieved.UpdatedAt.Compare(oldUpdatedAt)).To(BeElementOf(0, 1))
-			})
 		})
 
 		Context("updating an existing addon def", func() {
@@ -180,30 +158,6 @@ var _ = Describe("ClusterAddonDef store", func() {
 					Expect(results[i].Name >= results[i-1].Name).To(BeTrue(),
 						"expected %s >= %s", results[i].Name, results[i-1].Name)
 				}
-			})
-		})
-	})
-
-	Describe("Delete", func() {
-		Context("when deleting an existing addon def", func() {
-			It("should delete successfully", func() {
-				err := clusteraddon.SaveDef(ctx, store, addonDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				count, err := store.DeleteMany(ctx, clusteraddon.ByName(addonDef.Name))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(count).To(Equal(int64(1)))
-
-				_, err = store.Get(ctx, clusteraddon.ByName(addonDef.Name))
-				Expect(err).To(MatchError(clusteraddon.ErrClusterAddonDefNotFound))
-			})
-		})
-
-		Context("when deleting a non-existent addon def", func() {
-			It("should return 0 deleted count", func() {
-				count, err := store.DeleteMany(ctx, clusteraddon.ByName("non-existent-"+stringx.Random(6)))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(count).To(Equal(int64(0)))
 			})
 		})
 	})

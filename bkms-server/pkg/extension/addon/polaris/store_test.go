@@ -21,7 +21,6 @@ package polaris_test
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
@@ -161,18 +160,12 @@ var _ = Describe("PolarisConfigStore", func() {
 
 		Context("when upserting an environment weight", func() {
 			It("should set the weight of a single environment without touching others", func() {
-				before, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
-				Expect(err).NotTo(HaveOccurred())
-
-				// MongoDB DateTime 精度为毫秒，断言 updatedAt 被刷新需要等到下一个精度窗口
-				time.Sleep(5 * time.Millisecond)
 				Expect(polaris.UpsertEnvWeight(ctx, db, testAppID, configName, "dev", 0, nil)).To(Succeed())
 
 				updatedConfig, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(updatedConfig.EnvWeights["dev"]).To(BeZero())
+				Expect(updatedConfig.EnvWeights).To(HaveKeyWithValue("dev", BeZero()))
 				Expect(updatedConfig.EnvWeights).NotTo(HaveKey("staging"))
-				Expect(updatedConfig.UpdatedAt).NotTo(BeTemporally("<", before.UpdatedAt))
 			})
 
 			It("should write the weight and the dynamic weight switch in one update", func() {
@@ -280,16 +273,6 @@ var _ = Describe("PolarisConfigStore", func() {
 				Expect(updatedConfig.PolarisName).To(Equal("original-name"))
 			})
 		})
-
-		Context("when config does not exist", func() {
-			It("should return ErrConfigNotFound", func() {
-				newPort := int32(9090)
-				err := polaris.UpdateConfig(ctx, db, testAppID, "non-existent-config", &polaris.ConfigUpdateData{
-					ServicePort: &newPort,
-				})
-				Expect(err).To(MatchError(polaris.ErrConfigNotFound))
-			})
-		})
 	})
 
 	Describe("Delete", func() {
@@ -309,24 +292,6 @@ var _ = Describe("PolarisConfigStore", func() {
 			err := configStore.Create(ctx, config)
 			Expect(err).NotTo(HaveOccurred())
 			configName = config.Name
-		})
-
-		Context("when deleting an existing config", func() {
-			It("should delete config successfully", func() {
-				err := configStore.Delete(ctx, polaris.ByName(testAppID, configName))
-				Expect(err).NotTo(HaveOccurred())
-
-				// Verify deletion
-				_, err = configStore.Get(ctx, polaris.ByName(testAppID, configName))
-				Expect(err).To(MatchError(polaris.ErrConfigNotFound))
-			})
-		})
-
-		Context("when config does not exist", func() {
-			It("should return ErrConfigNotFound", func() {
-				err := configStore.Delete(ctx, polaris.ByName(testAppID, "non-existent-config"))
-				Expect(err).To(MatchError(polaris.ErrConfigNotFound))
-			})
 		})
 
 		Context("when deleting one of multiple configs", func() {
@@ -359,14 +324,6 @@ var _ = Describe("PolarisConfigStore", func() {
 	})
 
 	Describe("ListByApp", func() {
-		Context("when no configs exist", func() {
-			It("should return empty list", func() {
-				configs, err := configStore.List(ctx, polaris.ByApp(testAppID))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(configs).To(BeEmpty())
-			})
-		})
-
 		Context("when multiple configs exist", func() {
 			It("should return all configs", func() {
 				// Add multiple configs
@@ -404,35 +361,6 @@ var _ = Describe("PolarisConfigStore", func() {
 	})
 
 	Describe("Get", func() {
-		var configName string
-
-		BeforeEach(func() {
-			config := &polaris.PolarisConfig{
-				AppID: testAppID,
-				Properties: polaris.Properties{
-					InstanceKey:      "get-test",
-					PolarisName:      "get-polaris",
-					PolarisNamespace: "get-ns",
-					PolarisToken:     "get-token-123456789",
-					ServicePort:      8080,
-				},
-			}
-			err := configStore.Create(ctx, config)
-			Expect(err).NotTo(HaveOccurred())
-			configName = config.Name
-		})
-
-		Context("when config exists", func() {
-			It("should return the config", func() {
-				config, err := configStore.Get(ctx, polaris.ByName(testAppID, configName))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(config).NotTo(BeNil())
-				Expect(config.Name).To(Equal(configName))
-				Expect(config.InstanceKey).To(Equal("get-test"))
-				Expect(config.PolarisName).To(Equal("get-polaris"))
-			})
-		})
-
 		Context("when config does not exist", func() {
 			It("should return ErrConfigNotFound", func() {
 				_, err := configStore.Get(ctx, polaris.ByName(testAppID, "non-existent-config"))

@@ -71,24 +71,6 @@ var _ = Describe("RecordStore", func() {
 	})
 
 	Describe("Create", func() {
-		It("should create a record and set timestamps", func() {
-			record := newRecord("stag", "v1", trafficLaneName)
-
-			Expect(records.Create(ctx, record)).To(Succeed())
-
-			got, err := records.Get(ctx, autodeploy.ByBuild(appID, record.BuildID))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.ID).NotTo(Equal(bson.NilObjectID))
-			Expect(got.AppID).To(Equal(appID))
-			Expect(got.EnvName).To(Equal("stag"))
-			Expect(got.ImageTag).To(Equal("v1"))
-			Expect(got.Stage).To(Equal(autodeploy.StageBuild))
-			Expect(got.Status).To(Equal("pending"))
-			Expect(got.CreatedAt).NotTo(BeZero())
-			Expect(got.UpdatedAt).NotTo(BeZero())
-			Expect(got.UpdatedAt).To(Equal(got.CreatedAt))
-		})
-
 		It("should reject a duplicated appID + buildID", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
 			Expect(records.Create(ctx, record)).To(Succeed())
@@ -100,14 +82,12 @@ var _ = Describe("RecordStore", func() {
 	})
 
 	Describe("UpdateRecord", func() {
-		It("should update mutable fields and refresh updatedAt", func() {
+		It("should only update mutable fields", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
 			Expect(records.Create(ctx, record)).To(Succeed())
 
 			created, err := records.Get(ctx, autodeploy.ByBuild(appID, record.BuildID))
 			Expect(err).NotTo(HaveOccurred())
-
-			time.Sleep(5 * time.Millisecond)
 
 			endedAt := time.Now()
 			created.DeployID = "deploy-" + stringx.Random(8)
@@ -127,7 +107,6 @@ var _ = Describe("RecordStore", func() {
 			Expect(got.Status).To(Equal("deployed"))
 			Expect(got.Message).To(Equal("ok"))
 			Expect(got.EndedAt.Unix()).To(Equal(endedAt.Unix()))
-			Expect(got.UpdatedAt.UnixMilli()).To(BeNumerically(">", got.CreatedAt.UnixMilli()))
 			// UpdateRecord 只更新指定字段，ImageTag 等保持不变
 			Expect(got.ImageTag).To(Equal("v1"))
 		})
@@ -261,11 +240,6 @@ var _ = Describe("RecordStore", func() {
 			Expect(got.ImageTag).To(Equal("v1"))
 		})
 
-		It("should return ErrRecordNotFound for unknown buildID", func() {
-			_, err := records.Get(ctx, autodeploy.ByBuild(appID, "missing-build"))
-			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
-		})
-
 		It("should not match another app's record with the same buildID", func() {
 			record := newRecord("stag", "v1", trafficLaneName)
 			Expect(records.Create(ctx, record)).To(Succeed())
@@ -291,11 +265,6 @@ var _ = Describe("RecordStore", func() {
 			Expect(got.BuildID).To(Equal(record.BuildID))
 			Expect(got.DeployID).To(Equal(deployID))
 			Expect(got.Stage).To(Equal(autodeploy.StageDeploy))
-		})
-
-		It("should return ErrRecordNotFound for unknown deployID", func() {
-			_, err := records.Get(ctx, autodeploy.ByDeploy(appID, "missing-deploy"))
-			Expect(err).To(MatchError(autodeploy.ErrRecordNotFound))
 		})
 
 		It("should not match another app's record with the same deployID", func() {

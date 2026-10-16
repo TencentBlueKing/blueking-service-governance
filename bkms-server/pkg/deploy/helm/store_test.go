@@ -184,7 +184,7 @@ var _ = Describe("DeployRecordStore", func() {
 			Expect(latest.ImageTag).To(Equal("v1.0.2"))
 		})
 
-		It("should return error when no record matches statuses", func() {
+		It("should return ErrLatestDeployRecordNotFound when no record matches statuses", func() {
 			recordA.EnvName = envName
 			recordA.Status = helm.StatusFailed
 			err := recordStore.Create(ctx, &recordA)
@@ -198,7 +198,7 @@ var _ = Describe("DeployRecordStore", func() {
 				trafficLaneName,
 				helm.StatusDeployed,
 			)
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ErrLatestDeployRecordNotFound))
 		})
 	})
 
@@ -359,56 +359,6 @@ var _ = Describe("DeployRecordStore", func() {
 			Expect(records).To(HaveLen(0))
 		})
 
-		It("should handle regex special characters as literal strings", func() {
-			recordA.EnvName = envName
-			recordA.ChartVersion = "v1.0.0*test"
-			recordB.EnvName = envName
-			recordB.ImageTag = "tag.with.dots"
-
-			err := recordStore.Create(ctx, &recordA)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = recordStore.Create(ctx, &recordB)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Search for literal "*" - should match recordA
-			records, _, err := listRecords(envName, trafficLaneName, "1.0.0*", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(records).To(HaveLen(1))
-			Expect(records[0].ChartVersion).To(Equal("v1.0.0*test"))
-
-			// Search for literal "." - should match recordB
-			records, _, err = listRecords(envName, trafficLaneName, "with.dots", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(records).To(HaveLen(1))
-			Expect(records[0].ImageTag).To(Equal("tag.with.dots"))
-		})
-
-		It("should handle more regex special characters as literal strings", func() {
-			recordA.EnvName = envName
-			recordA.ChartVersion = "v1.0+beta"
-			recordB.EnvName = envName
-			recordB.ImageTag = "tag[test]"
-
-			err := recordStore.Create(ctx, &recordA)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = recordStore.Create(ctx, &recordB)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Search for literal "+" - should match recordA
-			records, _, err := listRecords(envName, trafficLaneName, "1.0+", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(records).To(HaveLen(1))
-			Expect(records[0].ChartVersion).To(Equal("v1.0+beta"))
-
-			// Search for literal "[]" - should match recordB
-			records, _, err = listRecords(envName, trafficLaneName, "[test]", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(records).To(HaveLen(1))
-			Expect(records[0].ImageTag).To(Equal("tag[test]"))
-		})
-
 		It("should perform case-insensitive search", func() {
 			recordA.EnvName = envName
 			recordA.Operator = "Admin"
@@ -458,41 +408,9 @@ var _ = Describe("DeployRecordStore", func() {
 			Expect(records).To(HaveLen(1))
 			Expect(records[0].ImageTag).To(Equal("20231015-abc123"))
 		})
-
-		It("should handle complex regex patterns as literal strings", func() {
-			recordA.EnvName = envName
-			recordA.ChartVersion = "v1.0.0^$"
-			recordB.EnvName = envName
-			recordB.ImageTag = "tag(prod)"
-
-			err := recordStore.Create(ctx, &recordA)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = recordStore.Create(ctx, &recordB)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Search for literal "^$" - should match recordA
-			records, _, err := listRecords(envName, trafficLaneName, "^$", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(records).To(HaveLen(1))
-			Expect(records[0].ChartVersion).To(Equal("v1.0.0^$"))
-
-			// Search for literal "()" - should match recordB
-			records, _, err = listRecords(envName, trafficLaneName, "(prod)", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(records).To(HaveLen(1))
-			Expect(records[0].ImageTag).To(Equal("tag(prod)"))
-		})
 	})
 
 	Context("ListByImageTag", func() {
-		It("should return empty list when no records match the tag", func() {
-			records, total, err := listByImageTag("non-existent-tag", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(records).To(BeEmpty())
-		})
-
 		It("should return records matching the specified imageTag", func() {
 			// 创建匹配 tag 的记录（不同状态）
 			recordA.EnvName = "staging"

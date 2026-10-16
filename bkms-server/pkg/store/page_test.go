@@ -24,6 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -73,6 +74,22 @@ var _ = Describe("GenericStore ListPage", func() {
 		Entry("last full page", int64(1), int64(5), []string{"w1", "w2", "w3", "w4", "w5"}, false),
 		Entry("page beyond the end", int64(4), int64(2), []string{}, false),
 	)
+
+	It("should order items by several sort keys across pages", func() {
+		Expect(f.widgets.UpdateMany(f.ctx, map[string]any{"priority": 2},
+			f.byOwner(), store.Where("name", bson.M{"$in": bson.A{"w2", "w4"}}),
+		)).To(Equal(int64(2)))
+
+		var names []string
+		for page := int64(1); page <= 3; page++ {
+			result, err := f.widgets.ListPage(f.ctx, page, 2, f.byOwner(), store.Desc("priority"), store.Asc("name"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Total).To(Equal(int64(5)))
+			Expect(result.HasNext).To(Equal(page < 3))
+			names = append(names, widgetNames(result.Items)...)
+		}
+		Expect(names).To(Equal([]string{"w2", "w4", "w1", "w3", "w5"}))
+	})
 
 	It("should return an empty non-nil page when nothing matches", func() {
 		result, err := f.widgets.ListPage(f.ctx, 1, 10, store.Where("ownerID", "nobody"))

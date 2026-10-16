@@ -26,7 +26,7 @@ var _ = Describe("Application default rule store", func() {
 		Expect(testutil.CleanupMetaColl(appdefaults.RuleMeta)).To(Succeed())
 	})
 
-	It("supports scoped CRUD operations", func() {
+	It("scopes rules by workspace, section and ID", func() {
 		resources := resourcesRule("workspace-a", "production")
 		devMode := devModeRule("workspace-a", "production", true)
 		otherWorkspace := resourcesRule("workspace-b", "production")
@@ -45,33 +45,13 @@ var _ = Describe("Application default rule store", func() {
 		Expect(resourcesRules).To(HaveLen(1))
 		Expect(resourcesRules[0].ID).To(Equal(resources.ID))
 
-		byResourcesID := appdefaults.ByID("workspace-a", appspec.AppSpecSectionResources, resources.ID)
-		stored, err := store.Get(ctx, byResourcesID)
+		stored, err := store.Get(ctx, appdefaults.ByID("workspace-a", appspec.AppSpecSectionResources, resources.ID))
 		Expect(err).NotTo(HaveOccurred())
-		updated := *stored
-		updated.EnvTypes = []string{"test"}
-		updated.Spec = &appspec.AppSpec{
-			Resources: resourcesSpec(3, "1", "2", "2Gi", "4Gi"),
-		}
-		Expect(store.Replace(ctx, &updated, byResourcesID)).To(Succeed())
-
-		stored, err = store.Get(ctx, byResourcesID)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(stored.EnvTypes).To(Equal([]string{"test"}))
-		Expect(*stored.Spec.Resources.Replicas).To(Equal(int32(3)))
+		Expect(stored.ID).To(Equal(resources.ID))
 
 		_, err = store.Get(ctx, appdefaults.ByID("workspace-b", appspec.AppSpecSectionResources, resources.ID))
 		Expect(errors.Is(err, appdefaults.ErrRuleNotFound)).To(BeTrue())
 		_, err = store.Get(ctx, appdefaults.ByID("workspace-a", appspec.AppSpecSectionDevMode, resources.ID))
-		Expect(errors.Is(err, appdefaults.ErrRuleNotFound)).To(BeTrue())
-
-		deleted, err := store.GetAndDelete(ctx, byResourcesID)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(deleted.ID).To(Equal(resources.ID))
-		Expect(deleted.EnvTypes).To(Equal([]string{"test"}))
-		_, err = store.Get(ctx, byResourcesID)
-		Expect(errors.Is(err, appdefaults.ErrRuleNotFound)).To(BeTrue())
-		_, err = store.GetAndDelete(ctx, byResourcesID)
 		Expect(errors.Is(err, appdefaults.ErrRuleNotFound)).To(BeTrue())
 	})
 

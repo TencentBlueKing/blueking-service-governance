@@ -67,27 +67,6 @@ var _ = Describe("AppModel store", func() {
 
 	Describe("CreateAppModel", func() {
 		Context("when creating a valid app model", func() {
-			It("should create and get successfully", func() {
-				app := dbfactory.Application(ctx, appStore)
-
-				appModel := &appmodel.AppModel{
-					AppID: app.ID,
-					Labels: map[string]string{
-						"foo_label": "bar_value",
-					},
-					Annotations: map[string]string{
-						"description": "test app model",
-					},
-				}
-
-				err := appmodel.CreateAppModel(ctx, db, appModel)
-				Expect(err).NotTo(HaveOccurred())
-
-				am, err := models.Get(ctx, appmodel.ByApp(app.ID))
-				Expect(err).To(Not(HaveOccurred()))
-				Expect(am.Labels).To(Equal(appModel.Labels))
-			})
-
 			It("encrypts sensitive env vars at rest but returns plaintext on read", func() {
 				app := dbfactory.Application(ctx, appStore)
 

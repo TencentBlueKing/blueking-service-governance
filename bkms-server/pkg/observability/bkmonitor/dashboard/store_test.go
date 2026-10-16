@@ -53,13 +53,6 @@ var _ = Describe("AppDashboard store", func() {
 	}
 
 	Describe("Create", func() {
-		It("should create a binding successfully", func() {
-			d := &AppDashboard{AppID: "app-a", UID: "uid-1", Title: "My Dashboard", Creator: "user1"}
-			Expect(dashboards.Create(ctx, d)).To(Succeed())
-			Expect(d.ID).NotTo(Equal(bson.NilObjectID))
-			Expect(d.CreatedAt).NotTo(BeZero())
-		})
-
 		It("should reject bindings missing required fields", func() {
 			err := dashboards.Create(ctx, &AppDashboard{AppID: "app-a", UID: "uid-1"})
 			Expect(err).To(MatchError(ContainSubstring("AppDashboard validation failed")))

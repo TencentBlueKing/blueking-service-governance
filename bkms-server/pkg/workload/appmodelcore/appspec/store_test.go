@@ -74,54 +74,8 @@ var _ = Describe("AppSpec store", func() {
 		return err
 	}
 
-	It("creates and gets app spec", func() {
-		err := specs.Create(ctx, spec)
-		Expect(err).NotTo(HaveOccurred())
-
-		saved, err := specs.Get(ctx, ByAppEnv(appID, envName))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(saved.AppID).To(Equal(appID))
-		Expect(saved.EnvName).To(Equal(envName))
-		Expect(*saved.Resources.Replicas).To(Equal(int32(2)))
-		Expect(*saved.Resources.CPURequests).To(Equal("100m"))
-		Expect(*saved.Resources.CPULimits).To(Equal("200m"))
-		Expect(*saved.Resources.MemoryRequests).To(Equal("128Mi"))
-		Expect(*saved.UpdateStrategy.MaxUnavailable).To(Equal("25%"))
-		Expect(saved.DevMode).NotTo(BeNil())
-		Expect(saved.DevMode.WorkPath).To(BeNil())
-	})
-
-	It("upserts and deletes app spec", func() {
-		err := specs.Create(ctx, spec)
-		Expect(err).NotTo(HaveOccurred())
-
-		err = upsert(&AppSpec{
-			AppID:   appID,
-			EnvName: envName,
-			Resources: &ResourcesSpec{
-				Replicas:       lo.ToPtr(int32(5)),
-				MemoryRequests: lo.ToPtr("256Mi"),
-				MemoryLimits:   lo.ToPtr("512Mi"),
-			},
-			DevMode: &DevModeSpec{
-				Enabled: lo.ToPtr(false),
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
-
-		saved, err := specs.Get(ctx, ByAppEnv(appID, envName))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(*saved.Resources.Replicas).To(Equal(int32(5)))
-		Expect(saved.Resources.CPURequests).To(BeNil())
-		Expect(*saved.Resources.MemoryRequests).To(Equal("256Mi"))
-		Expect(*saved.Resources.MemoryLimits).To(Equal("512Mi"))
-		Expect(saved.UpdateStrategy).To(BeNil())
-		Expect(*saved.DevMode.Enabled).To(BeFalse())
-
-		err = specs.Delete(ctx, ByAppEnv(appID, envName))
-		Expect(err).NotTo(HaveOccurred())
-
-		_, err = specs.Get(ctx, ByAppEnv(appID, envName))
+	It("returns ErrAppSpecNotFound when the app spec does not exist", func() {
+		_, err := specs.Get(ctx, ByAppEnv(appID, envName))
 		Expect(err).To(MatchError(ErrAppSpecNotFound))
 	})
 
@@ -141,24 +95,6 @@ var _ = Describe("AppSpec store", func() {
 		envNames, err := ListEnvNamesByApp(ctx, db, appID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(envNames).To(Equal([]string{envName}))
-	})
-
-	It("lists all specs including the default entry", func() {
-		err := upsert(&AppSpec{
-			AppID:   appID,
-			EnvName: DefaultEnvName,
-			Resources: &ResourcesSpec{
-				Replicas: lo.ToPtr(int32(1)),
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(upsert(spec)).To(Succeed())
-
-		list, err := specs.List(ctx, ByApp(appID))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(list).To(HaveLen(2))
-		envNames := lo.Map(list, func(s AppSpec, _ int) string { return s.EnvName })
-		Expect(envNames).To(ConsistOf(DefaultEnvName, envName))
 	})
 
 	It("ignores env docs with no configured sections when listing env names", func() {

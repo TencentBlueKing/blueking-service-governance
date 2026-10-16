@@ -127,7 +127,6 @@ var _ = Describe("AppConfigFileVersion", func() {
 				RollbackFromVersion: lo.ToPtr(int64(1)),
 			}
 			id := addVersion(version)
-			Expect(version.CreatedAt).NotTo(BeZero())
 
 			got, err := versions.GetByID(ctx, id)
 			Expect(err).NotTo(HaveOccurred())

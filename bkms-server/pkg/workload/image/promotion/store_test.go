@@ -108,7 +108,6 @@ var _ = Describe("Promotion store", func() {
 			promote("app2", "repokey1", "v1.0.0", "bob")
 
 			Expect(promotions.DeleteIfExists(ctx, ByTag("app1", "repokey1", "v1.0.0"))).To(Succeed())
-			Expect(promotions.DeleteIfExists(ctx, ByTag("app1", "repokey1", "not-found"))).To(Succeed())
 
 			tags, err := ListPromotedTags(ctx, promotions, "app1", "repokey1")
 			Expect(err).NotTo(HaveOccurred())

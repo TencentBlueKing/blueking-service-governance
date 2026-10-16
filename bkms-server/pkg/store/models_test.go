@@ -191,15 +191,31 @@ const boardCollection = "store_test_boards"
 
 var boardMeta = store.Meta[Board]{Collection: boardCollection}
 
+// Profile 模拟不声明 _id 字段、以业务字段作为唯一键的模型（如工作空间以 id 字段为唯一键），
+// 文档的 _id 由 MongoDB 生成，对模型不可见
+type Profile struct {
+	Key       string    `bson:"key"`
+	Title     string    `bson:"title"`
+	CreatedAt time.Time `bson:"createdAt"`
+	UpdatedAt time.Time `bson:"updatedAt"`
+}
+
+const profileCollection = "store_test_profiles"
+
+var ErrProfileNotFound = errors.New("profile not found")
+
+var profileMeta = store.Meta[Profile]{Collection: profileCollection, NotFound: ErrProfileNotFound}
+
 // storeFixture 汇总测试用例需要的依赖
 type storeFixture struct {
-	ctx     context.Context
-	app     *fxtest.App
-	db      *mongo.Database
-	widgets *store.GenericStore[Widget]
-	items   *store.GenericStore[Item]
-	notes   *store.GenericStore[Note]
-	boards  *store.GenericStore[Board]
+	ctx      context.Context
+	app      *fxtest.App
+	db       *mongo.Database
+	widgets  *store.GenericStore[Widget]
+	items    *store.GenericStore[Item]
+	notes    *store.GenericStore[Note]
+	boards   *store.GenericStore[Board]
+	profiles *store.GenericStore[Profile]
 	// owner 当前用例的 ownerID，让过滤条件贴近领域包中 byXxx 的真实用法；
 	// 用例之间的隔离依靠每个用例开始前清空测试集合
 	owner string
@@ -215,12 +231,14 @@ func setUpStores() *storeFixture {
 		store.Provide(itemMeta),
 		store.Provide(noteMeta),
 		store.Provide(boardMeta),
-		fx.Populate(&f.db, &f.widgets, &f.items, &f.notes, &f.boards),
+		store.Provide(profileMeta),
+		fx.Populate(&f.db, &f.widgets, &f.items, &f.notes, &f.boards, &f.profiles),
 	)
 	f.app.RequireStart()
 
 	for _, coll := range []*mongo.Collection{
 		f.widgets.Collection(), f.items.Collection(), f.notes.Collection(), f.boards.Collection(),
+		f.profiles.Collection(),
 	} {
 		_, err := coll.DeleteMany(f.ctx, bson.M{})
 		Expect(err).NotTo(HaveOccurred())
@@ -228,6 +246,11 @@ func setUpStores() *storeFixture {
 	// 测试集合不在数据库迁移中，这里补上唯一索引，用于验证唯一键冲突的处理
 	_, err := f.widgets.Collection().Indexes().CreateOne(f.ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "ownerID", Value: 1}, {Key: "name", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	})
+	Expect(err).NotTo(HaveOccurred())
+	_, err = f.profiles.Collection().Indexes().CreateOne(f.ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "key", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
 	Expect(err).NotTo(HaveOccurred())

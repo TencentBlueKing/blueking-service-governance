@@ -59,7 +59,6 @@ var _ = Describe("ServiceBinding store", func() {
 		instID := bson.NewObjectID()
 		binding := newBinding("app-1", "session", map[string]bson.ObjectID{"prod": instID})
 		Expect(bindings.Create(ctx, binding)).To(Succeed())
-		Expect(binding.ID.IsZero()).To(BeFalse())
 		Expect(binding.InstanceIDs).To(Equal([]bson.ObjectID{instID}))
 
 		got, err := bindings.Get(ctx, ByBindingName("app-1", "redis", "session"))

@@ -22,6 +22,8 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -81,15 +83,25 @@ func Delete(ctx context.Context, workspaces *WorkspaceStore, id string) error {
 	return nil
 }
 
-// CountByState 按生命周期状态统计满足 opts 条件的工作空间数量，只统计已定义的状态
+type stateCount struct {
+	State State `bson:"_id"`
+	Count int64 `bson:"count"`
+}
+
+// CountByState 按生命周期状态统计满足 opts 条件的工作空间数量。结果固定包含已定义的三个状态（可为 0），
+// 其它状态值忽略。必须用一次聚合完成：分状态多次计数时，期间切换状态的工作空间会被重复计入或漏计
 func CountByState(ctx context.Context, workspaces *WorkspaceStore, opts ...store.Opt) (map[State]int64, error) {
-	counts := make(map[State]int64, 3)
-	for _, state := range []State{StateReady, StateProcessing, StateDisabled} {
-		n, err := workspaces.Count(ctx, append([]store.Opt{InState(state)}, opts...)...)
-		if err != nil {
-			return nil, errors.Wrapf(err, "count %s workspaces", state)
+	rows, err := store.Aggregate[stateCount](ctx, workspaces, mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{"_id": "$state", "count": bson.M{"$sum": 1}}}},
+	}, opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "count workspaces by state")
+	}
+	counts := map[State]int64{StateReady: 0, StateProcessing: 0, StateDisabled: 0}
+	for _, r := range rows {
+		if _, ok := counts[r.State]; ok {
+			counts[r.State] = r.Count
 		}
-		counts[state] = n
 	}
 	return counts, nil
 }

@@ -78,20 +78,16 @@ var _ = Describe("HostPortStore", func() {
 			Expect(config.AppID).To(Equal(testAppID))
 			Expect(config.Ports).To(Equal([]int32{80, 8080}))
 			Expect(config.EnvStates).To(BeEmpty())
-			Expect(config.CreatedAt).NotTo(BeZero())
 		})
 
 		It("replaces the full ports list", func() {
 			_, err := hostport.ReplacePorts(ctx, db, testAppID, []int32{80, 8080})
 			Expect(err).NotTo(HaveOccurred())
-			createdAt := mustGet().CreatedAt
 
 			ports, err := hostport.ReplacePorts(ctx, db, testAppID, []int32{443})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ports).To(Equal([]int32{443}))
-			config := mustGet()
-			Expect(config.Ports).To(Equal([]int32{443}))
-			Expect(config.CreatedAt).To(Equal(createdAt))
+			Expect(mustGet().Ports).To(Equal([]int32{443}))
 		})
 
 		It("clears ports with an empty list and keeps envStates", func() {

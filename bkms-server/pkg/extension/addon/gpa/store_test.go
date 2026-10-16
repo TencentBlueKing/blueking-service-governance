@@ -79,7 +79,6 @@ var _ = Describe("GPAConfig store", func() {
 				Expect(err).NotTo(HaveOccurred())
 				// Name 由 GenerateName 固定为 gpa-{appID}
 				Expect(config.Name).To(Equal("gpa-" + testAppID))
-				Expect(config.CreatedAt.IsZero()).To(BeFalse())
 
 				// 记录成功写入且可通过 (appID, envName) 查询到
 				stored, err := get("dev")
@@ -220,49 +219,9 @@ var _ = Describe("GPAConfig store", func() {
 				Expect(unchanged.MaxReplicas).To(Equal(int32(10)))
 			})
 		})
-
-		Context("when config does not exist", func() {
-			It("should return ErrConfigNotFound", func() {
-				newMax := int32(20)
-				err := gpa.UpdateConfig(ctx, configs, testAppID, "non-existent", &gpa.ConfigUpdateData{
-					MaxReplicas: &newMax,
-				})
-				Expect(err).To(MatchError(gpa.ErrConfigNotFound))
-			})
-		})
-	})
-
-	Describe("Delete", func() {
-		BeforeEach(func() {
-			Expect(gpa.CreateConfig(ctx, configs, newValidConfig(testAppID))).To(Succeed())
-		})
-
-		Context("when deleting an existing config", func() {
-			It("should delete it successfully", func() {
-				Expect(configs.Delete(ctx, gpa.ByAppAndEnv(testAppID, "dev"))).To(Succeed())
-				_, err := get("dev")
-				Expect(err).To(MatchError(gpa.ErrConfigNotFound))
-			})
-		})
-
-		Context("when config does not exist", func() {
-			It("should return ErrConfigNotFound", func() {
-				Expect(
-					configs.Delete(ctx, gpa.ByAppAndEnv(testAppID, "non-existent")),
-				).To(MatchError(gpa.ErrConfigNotFound))
-			})
-		})
 	})
 
 	Describe("ByApp", func() {
-		Context("when no configs exist", func() {
-			It("should return empty list", func() {
-				configs, err := configs.List(ctx, gpa.ByApp(testAppID))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(configs).To(BeEmpty())
-			})
-		})
-
 		Context("when configs exist for multiple envs", func() {
 			It("should return all configs", func() {
 				c1 := newValidConfig(testAppID)

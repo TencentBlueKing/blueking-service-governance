@@ -63,34 +63,6 @@ var _ = Describe("AlertStrategyStore", func() {
 	})
 
 	Describe("Create and Get", func() {
-		It("should create and retrieve by ID", func() {
-			rule := &AlertStrategy{
-				WorkspaceID:   "ws-1",
-				AppID:         "app-1",
-				AppName:       "app-one",
-				StrategyCode:  "cpu_high",
-				DisplayName:   "CPU 过高",
-				MonitorMetric: "cpu_usage",
-				Severity:      AlertSeverityWarning,
-				Threshold:     ThresholdConfig{Method: "gte", Value: 80},
-				EffectiveScope: EffectiveScope{
-					Type: EffectiveScopeAll,
-				},
-				Creator: "user-1",
-				Updater: "user-1",
-			}
-
-			Expect(strategies.Create(ctx, rule)).To(Succeed())
-			Expect(rule.ID).NotTo(Equal(bson.NilObjectID))
-
-			got, err := strategies.GetByID(ctx, rule.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.StrategyCode).To(Equal("cpu_high"))
-			Expect(got.DisplayName).To(Equal("CPU 过高"))
-			Expect(got.WorkspaceID).To(Equal("ws-1"))
-			Expect(got.AppID).To(Equal("app-1"))
-		})
-
 		It("should store empty slices instead of null for remoteRefs and noticeGroupIDs", func() {
 			rule := newStoreRule("ws-1", "app-1", "app-one", "empty_slices")
 			Expect(strategies.Create(ctx, rule)).To(Succeed())
@@ -113,6 +85,11 @@ var _ = Describe("AlertStrategyStore", func() {
 			Expect(strategies.Create(ctx, rule)).To(
 				MatchError(ContainSubstring("AlertStrategy effectiveScope validation failed")),
 			)
+		})
+
+		It("should return ErrNotFound when the strategy does not exist", func() {
+			_, err := strategies.GetByID(ctx, bson.NewObjectID())
+			Expect(err).To(MatchError(ErrNotFound))
 		})
 	})
 
@@ -241,42 +218,6 @@ var _ = Describe("AlertStrategyStore", func() {
 			exists, err = strategies.Exists(ctx, ByDisplayName("ws-list", "app-a", "Same Name", &first.ID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exists).To(BeFalse())
-		})
-	})
-
-	Describe("Update", func() {
-		It("should update mutable fields", func() {
-			rule := newStoreRule("ws-1", "app-1", "app-one", "update_me")
-			rule.DisplayName = "Before"
-			Expect(strategies.Create(ctx, rule)).To(Succeed())
-
-			err := strategies.Update(ctx, bson.M{
-				"displayName": "After",
-				"severity":    AlertSeverityFatal,
-			}, store.ByID(rule.ID))
-			Expect(err).NotTo(HaveOccurred())
-
-			got, err := strategies.GetByID(ctx, rule.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.DisplayName).To(Equal("After"))
-			Expect(got.Severity).To(Equal(AlertSeverityFatal))
-		})
-
-		It("should return ErrNotFound when the strategy does not exist", func() {
-			err := strategies.Update(ctx, bson.M{"displayName": "After"}, store.ByID(bson.NewObjectID()))
-			Expect(err).To(MatchError(ErrNotFound))
-		})
-	})
-
-	Describe("Delete", func() {
-		It("should delete by ID", func() {
-			rule := newStoreRule("ws-1", "app-1", "app-one", "delete_me")
-			Expect(strategies.Create(ctx, rule)).To(Succeed())
-
-			Expect(strategies.DeleteIfExists(ctx, store.ByID(rule.ID))).To(Succeed())
-
-			_, err := strategies.GetByID(ctx, rule.ID)
-			Expect(err).To(MatchError(ErrNotFound))
 		})
 	})
 

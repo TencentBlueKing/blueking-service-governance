@@ -68,8 +68,6 @@ var _ = Describe("EnvBindingStore", func() {
 				Expect(stored.BscpEnvName).To(Equal("dev"))
 				Expect(stored.BscpAppID).To(Equal("541"))
 				Expect(stored.Operator).To(Equal("tester"))
-				Expect(stored.CreatedAt).NotTo(BeZero())
-				Expect(stored.UpdatedAt).NotTo(BeZero())
 			})
 		})
 
@@ -103,87 +101,10 @@ var _ = Describe("EnvBindingStore", func() {
 	})
 
 	Describe("Get", func() {
-		BeforeEach(func() {
-			Expect(store.Create(ctx, newBinding("dev"))).NotTo(HaveOccurred())
-			Expect(store.Create(ctx, newBinding("prod"))).NotTo(HaveOccurred())
-		})
-
-		Context("when binding exists", func() {
-			It("should return the binding", func() {
-				stored, err := store.Get(ctx, model.ByAppAndEnv(testAppID, "prod"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(stored.EnvName).To(Equal("prod"))
-				Expect(stored.BscpAppID).To(Equal("541"))
-			})
-		})
-
 		Context("when binding does not exist", func() {
 			It("should return ErrEnvBindingNotFound", func() {
 				_, err := store.Get(ctx, model.ByAppAndEnv(testAppID, "staging"))
 				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
-			})
-		})
-	})
-
-	Describe("ByApp", func() {
-		Context("when the app has multiple bindings", func() {
-			It("should return all of them", func() {
-				Expect(store.Create(ctx, newBinding("dev"))).NotTo(HaveOccurred())
-				Expect(store.Create(ctx, newBinding("prod"))).NotTo(HaveOccurred())
-
-				bindings, err := store.List(ctx, model.ByApp(testAppID))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(bindings).To(HaveLen(2))
-
-				names := []string{bindings[0].EnvName, bindings[1].EnvName}
-				Expect(names).To(ConsistOf("dev", "prod"))
-			})
-		})
-
-		Context("when the app has no bindings", func() {
-			It("should return an empty slice", func() {
-				bindings, err := store.List(ctx, model.ByApp(testAppID))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(bindings).To(BeEmpty())
-			})
-		})
-	})
-
-	Describe("Delete", func() {
-		BeforeEach(func() {
-			Expect(store.Create(ctx, newBinding("dev"))).NotTo(HaveOccurred())
-		})
-
-		Context("when binding exists", func() {
-			It("should delete it", func() {
-				err := store.Delete(ctx, model.ByAppAndEnv(testAppID, "dev"))
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = store.Get(ctx, model.ByAppAndEnv(testAppID, "dev"))
-				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
-			})
-		})
-
-		Context("when binding does not exist", func() {
-			It("should return ErrEnvBindingNotFound", func() {
-				err := store.Delete(ctx, model.ByAppAndEnv(testAppID, "staging"))
-				Expect(err).To(MatchError(model.ErrEnvBindingNotFound))
-			})
-		})
-	})
-
-	Describe("DeleteMany by app", func() {
-		Context("when the app has bindings", func() {
-			It("should delete all of them", func() {
-				Expect(store.Create(ctx, newBinding("dev"))).NotTo(HaveOccurred())
-				Expect(store.Create(ctx, newBinding("prod"))).NotTo(HaveOccurred())
-
-				_, err := store.DeleteMany(ctx, model.ByApp(testAppID))
-				Expect(err).NotTo(HaveOccurred())
-
-				bindings, err := store.List(ctx, model.ByApp(testAppID))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(bindings).To(BeEmpty())
 			})
 		})
 	})

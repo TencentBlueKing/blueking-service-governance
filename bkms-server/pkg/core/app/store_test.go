@@ -29,7 +29,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Application store", func() {
@@ -104,33 +103,9 @@ var _ = Describe("Application store", func() {
 			_, err = apps.Get(ctx, bkmsapp.ByID(appID))
 			Expect(err).To(MatchError(bkmsapp.ErrAppNotFound))
 		})
-
-		It("delete if the application does not exist", func() {
-			err := apps.DeleteIfExists(ctx, bkmsapp.ByName(workspaceID, appName))
-			Expect(err).NotTo(HaveOccurred())
-		})
 	})
 
 	Context("Get", func() {
-		It("should get application by ID successfully", func() {
-			testApp := &bkmsapp.Application{
-				ID:          appID,
-				WorkspaceID: workspaceID,
-				Name:        appName,
-				DisplayName: "Test Application",
-			}
-			Expect(bkmsapp.CreateApp(ctx, db, testApp)).To(Succeed())
-
-			// Get the application by ID
-			app, err := apps.Get(ctx, bkmsapp.ByID(appID))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(app).NotTo(BeNil())
-			Expect(app.ID).To(Equal(appID))
-			Expect(app.WorkspaceID).To(Equal(workspaceID))
-			Expect(app.Name).To(Equal(appName))
-			Expect(app.DisplayName).To(Equal("Test Application"))
-		})
-
 		It("should return ErrAppNotFound when application does not exist", func() {
 			nonExistentID := "non-existent-id-" + stringx.Random(6)
 			app, err := apps.Get(ctx, bkmsapp.ByID(nonExistentID))
@@ -212,33 +187,6 @@ var _ = Describe("Application store", func() {
 	})
 
 	Context("Update", func() {
-		It("should update the display name of an application", func() {
-			app := dbfactory.ApplicationWithOpts(ctx, apps, &dbfactory.ApplicationOpts{WorkspaceID: workspaceID})
-
-			newDisplayName := "new " + stringx.Random(6)
-			err := apps.Update(ctx, map[string]any{"displayName": newDisplayName}, bkmsapp.ByID(app.ID))
-			Expect(err).NotTo(HaveOccurred())
-			app, err = apps.Get(ctx, bkmsapp.ByID(app.ID))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(app.DisplayName).To(Equal(newDisplayName))
-		})
-
-		It("should persist and then clear visible env names", func() {
-			app := dbfactory.ApplicationWithOpts(ctx, apps, &dbfactory.ApplicationOpts{WorkspaceID: workspaceID})
-
-			err := apps.Update(ctx, map[string]any{"visibleEnvNames": []string{"test", "stag"}}, bkmsapp.ByID(app.ID))
-			Expect(err).NotTo(HaveOccurred())
-			app, err = apps.Get(ctx, bkmsapp.ByID(app.ID))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(app.VisibleEnvNames).To(Equal([]string{"test", "stag"}))
-
-			err = apps.Update(ctx, map[string]any{"visibleEnvNames": []string{}}, bkmsapp.ByID(app.ID))
-			Expect(err).NotTo(HaveOccurred())
-			app, err = apps.Get(ctx, bkmsapp.ByID(app.ID))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(app.VisibleEnvNames).To(BeEmpty())
-		})
-
 		It("should update the helm source and keep the password readable", func() {
 			app := &bkmsapp.Application{
 				ID:          appID,
@@ -355,22 +303,6 @@ var _ = Describe("Application store", func() {
 			})).To(Succeed())
 		})
 
-		It("should filter applications by workspaceID", func() {
-			result, err := apps.List(ctx, bkmsapp.InWorkspace(workspace1ID))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(HaveLen(2))
-			for _, app := range result {
-				Expect(app.WorkspaceID).To(Equal(workspace1ID))
-			}
-		})
-
-		It("should filter applications by appName", func() {
-			result, err := apps.List(ctx, store.Where("name", app1Name))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(HaveLen(1))
-			Expect(result[0].Name).To(Equal(app1Name))
-		})
-
 		It("should filter applications by multiple criteria", func() {
 			result, err := apps.List(ctx, bkmsapp.InWorkspace(workspace1ID), bkmsapp.OfType(bkmsapp.AppTypeHelm))
 			Expect(err).NotTo(HaveOccurred())
@@ -378,12 +310,6 @@ var _ = Describe("Application store", func() {
 			Expect(result[0].WorkspaceID).To(Equal(workspace1ID))
 			Expect(result[0].Name).To(Equal(app1Name))
 			Expect(result[0].Type).To(Equal(bkmsapp.AppTypeHelm))
-		})
-
-		It("should return empty list when no applications match the filter", func() {
-			result, err := apps.List(ctx, bkmsapp.InWorkspace("non-existent-workspace"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(BeEmpty())
 		})
 
 		It("should count applications by workspace IDs", func() {

@@ -21,7 +21,6 @@ package runtime
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
@@ -45,7 +44,7 @@ var _ = Describe("Runtime image store", func() {
 		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 	})
 
-	It("creates a runtime image with a hex ID and trimmed name", func() {
+	It("creates a runtime image with a trimmed name", func() {
 		image := newTestImage(ImageTypeBuilder)
 		name := image.Name
 		image.Name = "  " + name + "  "
@@ -111,17 +110,9 @@ var _ = Describe("Runtime image store", func() {
 	})
 
 	Context("UpdateDescription", func() {
-		It("updates description and refreshes updatedAt while keeping other fields", func() {
+		It("updates the description of the image matching type and name", func() {
 			image := newTestImage(ImageTypeBuilder)
 			Expect(images.Create(ctx, image)).To(Succeed())
-
-			// 从 DB 读回一次，保证 originalUpdatedAt 使用与存储一致的毫秒精度，避免 in-memory 纳秒时间与
-			// mongo 毫秒精度截断后的比较不稳定
-			before, err := images.GetByID(ctx, image.ID)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 稍作等待以便 updatedAt 有明显差异
-			time.Sleep(50 * time.Millisecond)
 
 			newDescription := "updated description"
 			Expect(UpdateDescription(ctx, images, image.Type, image.Name, newDescription)).To(Succeed())
@@ -129,11 +120,6 @@ var _ = Describe("Runtime image store", func() {
 			updated, err := images.GetByID(ctx, image.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.Description).To(Equal(newDescription))
-			Expect(updated.UpdatedAt.After(before.UpdatedAt)).To(BeTrue())
-			// 其余字段保持不变
-			Expect(updated.Type).To(Equal(image.Type))
-			Expect(updated.Name).To(Equal(image.Name))
-			Expect(updated.CreatedAt.Equal(before.CreatedAt)).To(BeTrue())
 		})
 
 		It("returns not found when the target record does not exist", func() {

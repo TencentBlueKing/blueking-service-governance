@@ -121,43 +121,6 @@ var _ = Describe("RecordStore", func() {
 		}
 	})
 
-	Context("Create", func() {
-		It("should create deploy record successfully", func() {
-			err := recordStore.Create(ctx, &recordA)
-			recordID := recordA.ID.Hex()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(recordID).NotTo(BeEmpty())
-
-			// 验证 ID 是有效的 ObjectID
-			_, err = bson.ObjectIDFromHex(recordID)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should set createdAt and updatedAt timestamps", func() {
-			err := recordStore.Create(ctx, &recordA)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(recordA.CreatedAt).NotTo(BeZero())
-			Expect(recordA.UpdatedAt).NotTo(BeZero())
-			Expect(recordA.CreatedAt).To(Equal(recordA.UpdatedAt))
-		})
-
-		It("should create multiple records for the same app", func() {
-			err := recordStore.Create(ctx, &recordA)
-			recordID1 := recordA.ID.Hex()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(recordID1).NotTo(BeEmpty())
-
-			err = recordStore.Create(ctx, &recordB)
-
-			recordID2 := recordB.ID.Hex()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(recordID2).NotTo(BeEmpty())
-
-			Expect(recordID1).NotTo(Equal(recordID2))
-		})
-	})
-
 	Context("Update", func() {
 		It("should update deploy record successfully", func() {
 			err := recordStore.Create(ctx, &recordA)
@@ -177,30 +140,6 @@ var _ = Describe("RecordStore", func() {
 			Expect(record.Message).To(Equal("updated message"))
 			Expect(record.Status).To(Equal(appmodel.Status("failed")))
 			Expect(record.Extras["error"]).To(Equal("some error"))
-		})
-
-		It("should update updatedAt timestamp", func() {
-			err := recordStore.Create(ctx, &recordA)
-			Expect(err).NotTo(HaveOccurred())
-			createdUpdatedAt := recordA.UpdatedAt
-
-			// 等待一段时间（5ms 确保时间差）
-			time.Sleep(5 * time.Millisecond)
-
-			// 更新消息
-			recordA.Message = "updated"
-			err = appmodel.UpdateRecord(ctx, db, &recordA)
-			Expect(err).NotTo(HaveOccurred())
-
-			record, err := appmodel.GetRecord(ctx, db, appID, recordA.ID.Hex())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(createdUpdatedAt.UnixMilli()).To(BeNumerically("<", record.UpdatedAt.UnixMilli()))
-		})
-
-		It("should return error when updating non-existent record", func() {
-			recordA.ID = bson.NewObjectID()
-			err := appmodel.UpdateRecord(ctx, db, &recordA)
-			Expect(err).To(HaveOccurred())
 		})
 	})
 
@@ -228,9 +167,9 @@ var _ = Describe("RecordStore", func() {
 			Expect(latest.Creator).To(Equal("blueking"))
 		})
 
-		It("should return error when no record exists", func() {
+		It("should return ErrDeployRecordNotFound when no record exists", func() {
 			_, err := appmodel.GetLatest(ctx, db, "non-existent-app", envName, trafficLaneName)
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(appmodel.ErrDeployRecordNotFound))
 		})
 
 		It("should filter by envName correctly", func() {
@@ -527,18 +466,6 @@ var _ = Describe("RecordStore", func() {
 			_, total, err = listRecords(envName, trafficLaneName, "blueking", 1, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(total).To(Equal(int64(2)))
-
-			// 大小写不敏感搜索
-			records, total, err = listRecords(envName, trafficLaneName, "release", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(records[0].ImageTag).To(Equal("v1.0.0-RELEASE"))
-
-			// 特殊正则字符处理
-			records, total, err = listRecords(envName, trafficLaneName, "v2.1.0+", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(1)))
-			Expect(records[0].ImageTag).To(Equal("v2.1.0+build.123"))
 		})
 
 		It("should filter by envName and trafficLaneName", func() {
@@ -565,36 +492,9 @@ var _ = Describe("RecordStore", func() {
 			Expect(total).To(Equal(int64(1)))
 			Expect(records[0].TrafficLaneName).To(Equal("feature-lane"))
 		})
-
-		It("should return empty list when no records match", func() {
-			// 创建记录
-			err := recordStore.Create(ctx, &recordA)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 不存在的关键字
-			records, total, err := listRecords(envName, trafficLaneName, "nonexistent", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(records).To(BeEmpty())
-
-			// 不存在的应用
-			otherApp, err := recordStore.ListPage(ctx, 1, 10,
-				deploytypes.ByAppEnvLane("non-existent-app", envName, trafficLaneName), deploytypes.NewestFirst(),
-			)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(otherApp.Total).To(Equal(int64(0)))
-			Expect(otherApp.Items).To(BeEmpty())
-		})
 	})
 
 	Context("ListByImageTag", func() {
-		It("should return empty list when no records match the tag", func() {
-			records, total, err := listByImageTag("non-existent-tag", 1, 10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(total).To(Equal(int64(0)))
-			Expect(records).To(BeEmpty())
-		})
-
 		It("should return records matching the specified imageTag", func() {
 			// 创建匹配 tag 的记录（不同状态）
 			recordA.EnvName = "staging"

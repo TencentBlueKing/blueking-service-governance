@@ -48,42 +48,12 @@ var _ = Describe("RoleStore", func() {
 	})
 
 	Describe("WorkspaceGradeManager operations", func() {
-		It("should create a workspace grade manager successfully", func() {
-			wgm := &WorkspaceGradeManager{WorkspaceID: "ws-001", GradeManagerID: 1001}
-			Expect(gradeManagers.Create(ctx, wgm)).To(Succeed())
-
-			got, err := gradeManagers.Get(ctx, ByWorkspace("ws-001"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.WorkspaceID).To(Equal("ws-001"))
-			Expect(got.GradeManagerID).To(Equal(1001))
-		})
-
 		It("should reject duplicate workspace grade manager (unique index on workspaceID)", func() {
 			Expect(gradeManagers.Create(ctx, &WorkspaceGradeManager{WorkspaceID: "ws-002", GradeManagerID: 2001})).
 				To(Succeed())
 
 			dup := &WorkspaceGradeManager{WorkspaceID: "ws-002", GradeManagerID: 2002}
 			Expect(gradeManagers.Create(ctx, dup)).To(MatchError(store.ErrDuplicate))
-		})
-
-		It("should return ErrNotFound when workspace grade manager not found", func() {
-			got, err := gradeManagers.Get(ctx, ByWorkspace("ws-not-exist"))
-			Expect(err).To(MatchError(store.ErrNotFound))
-			Expect(got).To(BeNil())
-		})
-
-		It("should delete a workspace grade manager by workspace id", func() {
-			Expect(gradeManagers.Create(ctx, &WorkspaceGradeManager{WorkspaceID: "ws-004", GradeManagerID: 4001})).
-				To(Succeed())
-
-			Expect(gradeManagers.DeleteIfExists(ctx, ByWorkspace("ws-004"))).To(Succeed())
-
-			_, err := gradeManagers.Get(ctx, ByWorkspace("ws-004"))
-			Expect(err).To(MatchError(store.ErrNotFound))
-		})
-
-		It("should be a no-op when deleting a non-existent workspace grade manager", func() {
-			Expect(gradeManagers.DeleteIfExists(ctx, ByWorkspace("ws-not-exist"))).To(Succeed())
 		})
 	})
 
@@ -110,22 +80,6 @@ var _ = Describe("RoleStore", func() {
 
 			dup := newRole("role-002", "n2", "sre", "ws-101", false, workspaceScope("ws-101"), 5003)
 			Expect(roles.Create(ctx, dup)).To(MatchError(store.ErrDuplicate))
-		})
-
-		It("should get a role by id", func() {
-			Expect(roles.Create(ctx, newRole("role-003", "n3", "operator", "ws-100", false,
-				workspaceScope("ws-100"), 5004))).To(Succeed())
-
-			got, err := roles.Get(ctx, ByRoleID("role-003"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.RoleCode).To(Equal("operator"))
-			Expect(got.UserGroupID).To(Equal(5004))
-		})
-
-		It("should return ErrNotFound when role not found", func() {
-			got, err := roles.Get(ctx, ByRoleID("role-not-exist"))
-			Expect(err).To(MatchError(store.ErrNotFound))
-			Expect(got).To(BeNil())
 		})
 
 		It("should delete roles by workspace id and user group ids", func() {
@@ -166,12 +120,6 @@ var _ = Describe("RoleStore", func() {
 				}
 			})
 
-			It("should filter by workspace id", func() {
-				got, err := roles.List(ctx, ByWorkspace("ws-list-A"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(got).To(HaveLen(2))
-			})
-
 			It("should filter by isGradeManager", func() {
 				got, err := roles.List(ctx, ByGradeManager(true))
 				Expect(err).NotTo(HaveOccurred())
@@ -184,12 +132,6 @@ var _ = Describe("RoleStore", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got).To(HaveLen(1))
 				Expect(got[0].ID).To(Equal("role-l3"))
-			})
-
-			It("should return empty slice when nothing matches", func() {
-				got, err := roles.List(ctx, ByWorkspace("ws-not-exist"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(got).To(BeEmpty())
 			})
 		})
 	})

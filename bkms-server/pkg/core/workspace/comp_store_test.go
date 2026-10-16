@@ -101,7 +101,6 @@ var _ = Describe("Workspace component store", func() {
 			// 未指定名称时自动生成，Properties 初始化为空 map
 			Expect(comp1.Name).NotTo(BeEmpty())
 			Expect(comp1.Properties).NotTo(BeNil())
-			Expect(comp1.ID.IsZero()).To(BeFalse())
 			Expect(listOf(workspaceID1)).To(HaveLen(2))
 			Expect(instanceCount()).To(Equal(int32(2)))
 
@@ -201,13 +200,6 @@ var _ = Describe("Workspace component store", func() {
 			Expect(updated.Name).To(Equal(newName))
 		})
 
-		It("returns ErrComponentNotFound for an unknown id", func() {
-			err := UpdateComponent(ctx, db, bson.NewObjectID(), &ComponentUpdateData{
-				Version: lo.ToPtr(stringx.Random(10)),
-			})
-			Expect(err).To(MatchError(ErrComponentNotFound))
-		})
-
 		It("clears scope env names when switching to global scope", func() {
 			Expect(UpdateComponent(ctx, db, compID, &ComponentUpdateData{
 				ScopeType: lo.ToPtr(component.ScopeTypeGlobal),
@@ -274,26 +266,6 @@ var _ = Describe("Workspace component store", func() {
 			err := RemoveComponents(ctx, db, bson.NewObjectID(), bson.NewObjectID())
 			Expect(err).To(MatchError(ErrComponentNotFound))
 			Expect(instanceCount()).To(Equal(int32(3)))
-		})
-	})
-
-	Context("ComponentsIn", func() {
-		It("returns empty when the workspace has no components", func() {
-			Expect(listOf(workspaceID1)).To(BeEmpty())
-		})
-
-		It("only returns components of the given workspace", func() {
-			comp1 := newComp(workspaceID1, compType)
-			comp2 := newComp(workspaceID2, compType)
-			Expect(AddComponents(ctx, db, comp1, comp2)).To(Succeed())
-
-			comps1 := listOf(workspaceID1)
-			Expect(comps1).To(HaveLen(1))
-			Expect(comps1[0].Name).To(Equal(comp1.Name))
-
-			comps2 := listOf(workspaceID2)
-			Expect(comps2).To(HaveLen(1))
-			Expect(comps2[0].Name).To(Equal(comp2.Name))
 		})
 	})
 

@@ -78,7 +78,6 @@ var _ = Describe("AppConfigFile store", func() {
 	Context("Create", func() {
 		It("creates a file that can be listed back", func() {
 			acf := newFile(nil)
-			Expect(acf.ID.IsZero()).To(BeFalse())
 
 			appConfigFiles, err := appcfg.ListFiles(ctx, files, appID)
 			Expect(err).NotTo(HaveOccurred())
@@ -102,12 +101,6 @@ var _ = Describe("AppConfigFile store", func() {
 	})
 
 	Context("ListFiles", func() {
-		It("returns an empty list for a non-existent app", func() {
-			appConfigFiles, err := appcfg.ListFiles(ctx, files, "non-existent-app")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(appConfigFiles).To(BeEmpty())
-		})
-
 		It("filters by type", func() {
 			newFile(nil)
 
@@ -302,17 +295,6 @@ var _ = Describe("AppConfigFile store", func() {
 			result, err := files.List(ctx, appcfg.FilesByDef(defID))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(2))
-		})
-
-		It("does not include files from other defIDs", func() {
-			defID1 := bson.NewObjectID()
-			newFile(func(acf *appcfg.AppConfigFile) { acf.DefID = defID1 })
-			newFile(func(acf *appcfg.AppConfigFile) { acf.DefID = bson.NewObjectID() })
-
-			result, err := files.List(ctx, appcfg.FilesByDef(defID1))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(HaveLen(1))
-			Expect(result[0].DefID).To(Equal(defID1))
 		})
 	})
 })

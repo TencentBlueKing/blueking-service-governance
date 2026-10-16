@@ -135,5 +135,28 @@ var _ = Describe("GenericStore aggregation", func() {
 			Expect(rows).NotTo(BeNil())
 			Expect(rows).To(BeEmpty())
 		})
+
+		It("should apply the conditions in opts before the pipeline", func() {
+			mustCreateColored("r1", "red", 1)
+			mustCreateColored("r3", "red", 3)
+			mustCreateColored("b1", "blue", 1)
+
+			// 条件中使用 Go 字段名，验证字段名按模型解析
+			rows, err := store.Aggregate[colorCount](f.ctx, f.widgets, mongo.Pipeline{
+				{{Key: "$group", Value: bson.M{"_id": "$spec.color", "count": bson.M{"$sum": 1}}}},
+				{{Key: "$sort", Value: bson.M{"_id": 1}}},
+			}, f.byOwner(), store.Where("Priority", bson.M{"$lt": 3}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rows).To(Equal([]colorCount{{Color: "blue", Count: 1}, {Color: "red", Count: 1}}))
+		})
+
+		DescribeTable("should reject options other than conditions",
+			func(opt store.Opt, msg string) {
+				_, err := store.Aggregate[colorCount](f.ctx, f.widgets, mongo.Pipeline{}, f.byOwner(), opt)
+				Expect(err).To(MatchError(ContainSubstring(msg)))
+			},
+			Entry("with a sort option", store.Asc("name"), "sort"),
+			Entry("with a limit", store.Limit(1), "limit"),
+		)
 	})
 })

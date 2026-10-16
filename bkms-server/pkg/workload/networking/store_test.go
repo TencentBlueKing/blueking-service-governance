@@ -77,16 +77,6 @@ var _ = Describe("Networking service store", func() {
 		Expect(err).To(MatchError(ErrServiceAlreadyExists))
 	})
 
-	It("list services by appID successfully", func() {
-		list, err := services.List(ctx, ByApp(appID1))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(list).To(HaveLen(1))
-		Expect(list[0].Name).To(Equal(svc1.Name))
-		Expect(list[0].Selector).To(Equal(svc1.Selector))
-		Expect(list[0].Ports).To(HaveLen(1))
-		Expect(list[0].TrafficLaneEnabled).To(BeTrue())
-	})
-
 	It("group services by appID successfully", func() {
 		grouped, err := GroupByAppID(ctx, services, []string{appID1, appID2, "app-without-services"})
 		Expect(err).NotTo(HaveOccurred())

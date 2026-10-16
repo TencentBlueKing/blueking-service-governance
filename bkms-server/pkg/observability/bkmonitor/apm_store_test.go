@@ -62,10 +62,8 @@ var _ = Describe("ApmInstConfigStore", func() {
 	})
 
 	Describe("Create", func() {
-		It("should backfill ID and store associatedEnvs as an empty array", func() {
+		It("should store associatedEnvs as an empty array", func() {
 			apm := mustCreate(newApm("ws", 1001, "apm"))
-			Expect(apm.ID).NotTo(Equal(bson.NilObjectID))
-			Expect(apm.CreatedAt).NotTo(BeZero())
 
 			raw := bson.M{}
 			Expect(db.Collection(ApmInstConfigMeta.Collection).

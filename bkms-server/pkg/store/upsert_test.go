@@ -330,6 +330,34 @@ var _ = Describe("GenericStore Upsert", func() {
 		})
 	})
 
+	// 乐观锁写法：过滤条件除唯一键外还带有版本等守卫条件，守卫不满足时 Upsert 会转为插入并撞上唯一键
+	Describe("with a guard condition on top of the unique key", func() {
+		guarded := func(w *Widget, maxPriority int) (bool, error) {
+			return f.widgets.Upsert(f.ctx, w, f.byName(w.Name), store.Where("priority", bson.M{"$lte": maxPriority}))
+		}
+
+		It("should update the document when the guard matches", func() {
+			f.mustCreateWidget("w1")
+			w := f.newWidget("w1")
+			w.Priority = 5
+
+			Expect(guarded(w, 1)).To(BeFalse())
+			Expect(f.mustGetWidget("w1").Priority).To(Equal(5))
+		})
+
+		It("should return a duplicate error without writing when the guard misses", func() {
+			f.mustCreateWidget("w1")
+			w := f.newWidget("w1")
+			w.Priority = 5
+
+			_, err := guarded(w, 0)
+			Expect(err).To(MatchError(ErrWidgetExists))
+			Expect(err).To(MatchError(store.ErrDuplicate))
+			Expect(f.mustGetWidget("w1").Priority).To(Equal(1))
+			Expect(f.countWidgets()).To(Equal(int64(1)))
+		})
+	})
+
 	Describe("_id of the inserted document", func() {
 		It("should generate a string _id for string-keyed models", func() {
 			item := &Item{Value: "only"}

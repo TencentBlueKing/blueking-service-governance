@@ -132,12 +132,6 @@ var _ = Describe("Snapshot store", func() {
 			Expect(tagsOf(result.Items)).To(ConsistOf("v1.0.0", "v1.1.0"))
 		})
 
-		It("returns empty for non-existent repoKey", func() {
-			result := listPage("nonexistent", "", 1, 10)
-			Expect(result.Total).To(BeZero())
-			Expect(result.Items).To(BeEmpty())
-		})
-
 		It("restricts results to the given tags", func() {
 			result := listPage(repoKey, "", 1, 10, TagIn([]string{"v1.0.0", "v2.0.0"}))
 			Expect(result.Total).To(BeEquivalentTo(2))

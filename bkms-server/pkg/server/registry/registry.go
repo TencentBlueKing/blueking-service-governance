@@ -77,8 +77,8 @@ func Init(ctx context.Context) {
 
 // G 返回进程内全局 Store 注册中心。
 //
-// IMPORTANT: 它只适合在项目上层如 handler、task 层使用；领域核心层应直接依赖
-// 明确的 Store 接口，而不是直接访问全局 Registry。
+// IMPORTANT: 它只适合在项目上层如 handler、task 层使用；领域核心层应显式接收
+// *mongo.Database 并用 store.Of(db, Meta) 获取 Store，而不是直接访问全局 Registry。
 func G() *Registry {
 	if GlobalRegistry == nil {
 		panic("store registry is not initialized")

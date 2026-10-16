@@ -93,7 +93,22 @@ func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, op
 //		{{Key: "$match", Value: bson.M{"workspaceID": bson.M{"$in": ids}}}},
 //		{{Key: "$group", Value: bson.M{"_id": "$workspaceID", "count": bson.M{"$sum": 1}}}},
 //	})
-func Aggregate[R, T any](ctx context.Context, s *GenericStore[T], pipeline mongo.Pipeline) ([]R, error) {
+//
+// opts 中的条件会作为管道的第一个 $match 阶段（字段名按模型解析），便于复用领域层的具名 Opt，例如：
+//
+//	rows, err := store.Aggregate[stateCount](ctx, workspaces, mongo.Pipeline{
+//		{{Key: "$group", Value: bson.M{"_id": "$state", "count": bson.M{"$sum": 1}}}},
+//	}, workspace.KeywordMatches(keyword))
+//
+// 支持的选项：CondOpt
+func Aggregate[R, T any](ctx context.Context, s *GenericStore[T], pipeline mongo.Pipeline, opts ...Opt) ([]R, error) {
+	q, err := s.parseOpts("aggregate", opts, condOpts)
+	if err != nil {
+		return nil, err
+	}
+	if filter := q.filter(); len(filter) > 0 {
+		pipeline = append(mongo.Pipeline{{{Key: "$match", Value: filter}}}, pipeline...)
+	}
 	cur, err := s.coll.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, errors.Wrapf(err, "aggregate %s", s.coll.Name())

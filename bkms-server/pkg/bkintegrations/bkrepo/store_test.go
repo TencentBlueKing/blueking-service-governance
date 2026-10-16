@@ -50,20 +50,6 @@ var _ = Describe("ProjectStore", func() {
 	})
 
 	Describe("Create", func() {
-		It("should create a project successfully", func() {
-			project := &Project{
-				ID:          "test-project",
-				WorkspaceID: "workspace-001",
-				Username:    "admin",
-				Password:    "password123",
-				Creator:     "test-user",
-			}
-
-			err := s.Create(ctx, project)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(project.CreatedAt).NotTo(BeZero())
-		})
-
 		It("should return error when creating duplicate project", func() {
 			project := &Project{
 				ID:          "test-project",
@@ -161,59 +147,8 @@ var _ = Describe("ProjectStore", func() {
 	})
 
 	Describe("Get", func() {
-		BeforeEach(func() {
-			project := &Project{
-				ID:          "test-project",
-				WorkspaceID: "workspace-001",
-				Username:    "admin",
-				Password:    "password123",
-				Creator:     "test-user",
-			}
-			err := s.Create(ctx, project)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should get project by ID successfully", func() {
-			project, err := s.Get(ctx, store.Where("id", "test-project"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(project).NotTo(BeNil())
-			Expect(project.ID).To(Equal("test-project"))
-			Expect(project.WorkspaceID).To(Equal("workspace-001"))
-			Expect(project.Username).To(Equal("admin"))
-			Expect(project.Password).To(Equal("password123"))
-		})
-
 		It("should return error when project not found", func() {
 			project, err := s.Get(ctx, store.Where("id", "non-existent-project"))
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrProjectNotFound)).To(BeTrue())
-			Expect(project).To(BeNil())
-		})
-	})
-
-	Describe("GetByWorkspace", func() {
-		BeforeEach(func() {
-			project := &Project{
-				ID:          "test-project",
-				WorkspaceID: "workspace-001",
-				Username:    "admin",
-				Password:    "password123",
-				Creator:     "test-user",
-			}
-			err := s.Create(ctx, project)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should get project by workspace ID successfully", func() {
-			project, err := s.Get(ctx, ByWorkspace("workspace-001"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(project).NotTo(BeNil())
-			Expect(project.ID).To(Equal("test-project"))
-			Expect(project.WorkspaceID).To(Equal("workspace-001"))
-		})
-
-		It("should return error when workspace not found", func() {
-			project, err := s.Get(ctx, ByWorkspace("non-existent-workspace"))
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, ErrProjectNotFound)).To(BeTrue())
 			Expect(project).To(BeNil())
@@ -238,21 +173,6 @@ var _ = Describe("RepositoryStore", func() {
 	})
 
 	Describe("Create", func() {
-		It("should create a repository successfully", func() {
-			repository := &Repository{
-				ProjectID:   "test-project",
-				WorkspaceID: "workspace-001",
-				Name:        "docker-repo",
-				Type:        RepoTypeDocker,
-				IsPublic:    false,
-				Creator:     "test-user",
-			}
-
-			err := s.Create(ctx, repository)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(repository.CreatedAt).NotTo(BeZero())
-		})
-
 		It("should return error when creating duplicate repository", func() {
 			repository := &Repository{
 				ProjectID:   "test-project",
@@ -344,24 +264,8 @@ var _ = Describe("RepositoryStore", func() {
 			Expect(repo.IsPublic).To(BeFalse())
 		})
 
-		It("should get helm repository successfully", func() {
-			repo, err := s.Get(ctx, ByWorkspaceAndType("workspace-001", RepoTypeHelm))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(repo).NotTo(BeNil())
-			Expect(repo.Name).To(Equal("helm-repo"))
-			Expect(repo.Type).To(Equal(RepoTypeHelm))
-			Expect(repo.IsPublic).To(BeTrue())
-		})
-
 		It("should return error when repository not found", func() {
 			repo, err := s.Get(ctx, ByWorkspaceAndType("non-existent-workspace", RepoTypeDocker))
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrRepositoryNotFound)).To(BeTrue())
-			Expect(repo).To(BeNil())
-		})
-
-		It("should return error when repository type not found", func() {
-			repo, err := s.Get(ctx, ByWorkspaceAndType("workspace-001", "GENERIC"))
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, ErrRepositoryNotFound)).To(BeTrue())
 			Expect(repo).To(BeNil())

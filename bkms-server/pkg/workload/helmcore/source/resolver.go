@@ -32,7 +32,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 )
 
-// ResolveConfig 根据应用的 HelmSource.RepoType，将不同类型的配置统一转换为 HelmRepoConfig
+// ResolveConfig 根据应用的 HelmSource.RepoType，将不同类型的配置统一转换为 HelmRepoConfig。
+// HelmGitRepo 类型会读取 bkci.Project、bkrepo.Project，并读写 credential.HelmRepoCredential（缺失时初始化）
 func ResolveConfig(
 	ctx context.Context,
 	db *mongo.Database,

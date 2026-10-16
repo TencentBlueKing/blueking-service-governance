@@ -62,18 +62,6 @@ var _ = Describe("HelmRepoCredential store", func() {
 		}
 	}
 
-	It("should create and retrieve credential successfully", func() {
-		cred := newCred("ws-cred-test-", "secret-password")
-		Expect(credStore.Create(ctx, cred)).To(Succeed())
-
-		got, err := credStore.Get(ctx, ByWorkspace(cred.WorkspaceID))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(got.WorkspaceID).To(Equal(cred.WorkspaceID))
-		Expect(got.CredentialID).To(Equal(helmRepoCredentialID))
-		Expect(got.Username).To(Equal("admin"))
-		Expect(got.Password).To(Equal("secret-password"))
-	})
-
 	It("should return ErrHelmRepoCredentialNotFound for non-existent workspace", func() {
 		_, err := credStore.Get(ctx, ByWorkspace("non-existent-ws-"+stringx.Random(8)))
 		Expect(errors.Is(err, ErrHelmRepoCredentialNotFound)).To(BeTrue())

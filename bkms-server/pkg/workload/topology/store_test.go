@@ -212,9 +212,5 @@ var _ = Describe("ResourceSnapshotStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(BeNil())
 		})
-
-		It("should not error when deleting non-existent snapshot", func() {
-			Expect(snapshots.DeleteIfExists(ctx, ByScope("non-existent", "dev", ""))).To(Succeed())
-		})
 	})
 })

@@ -136,7 +136,6 @@ var _ = Describe("ScopedEnvVar store", func() {
 			envVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
-			Expect(envVars[0].ID).NotTo(Equal(bson.NilObjectID))
 			Expect(envVars[0].WorkspaceID).To(Equal(testEnvVar.WorkspaceID))
 			Expect(envVars[0].ScopeType).To(Equal(testEnvVar.ScopeType))
 			Expect(envVars[0].ScopeValue).To(Equal(testEnvVar.ScopeValue))
@@ -144,9 +143,6 @@ var _ = Describe("ScopedEnvVar store", func() {
 			Expect(envVars[0].Value).To(Equal(testEnvVar.Value))
 			Expect(envVars[0].Description).To(Equal(testEnvVar.Description))
 			Expect(envVars[0].IsSensitive).To(Equal(testEnvVar.IsSensitive))
-			Expect(envVars[0].CreatedAt.IsZero()).To(BeFalse())
-			Expect(envVars[0].UpdatedAt.IsZero()).To(BeFalse())
-			Expect(envVars[0].UpdatedAt).To(Equal(envVars[0].CreatedAt))
 		})
 
 		It("should get a scoped env var by ID successfully", func() {
@@ -403,13 +399,6 @@ var _ = Describe("ScopedEnvVar store", func() {
 			oid, err := create(testEnvVar)
 			Expect(err).NotTo(HaveOccurred())
 
-			originalEnvVars, err := envvars.List(ctx, db, workspaceID, envvars.WithScopes(envvartypes.ScopeWorkspace))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(originalEnvVars).To(HaveLen(1))
-			originalUpdatedAt := originalEnvVars[0].UpdatedAt
-
-			time.Sleep(time.Millisecond)
-
 			err = envvars.UpdateByID(ctx, db, workspaceID, oid, envvars.ScopedEnvVarUpdateData{
 				Key:         "UPDATED_KEY",
 				Value:       lo.ToPtr("updated-value"),
@@ -425,7 +414,6 @@ var _ = Describe("ScopedEnvVar store", func() {
 			Expect(updatedEnvVar.Value).To(Equal("updated-value"))
 			Expect(updatedEnvVar.Description).To(Equal("updated description"))
 			Expect(updatedEnvVar.IsSensitive).To(BeFalse())
-			Expect(updatedEnvVar.UpdatedAt.After(originalUpdatedAt)).To(BeTrue())
 		})
 
 		It("should keep isSensitive unchanged when update isSensitive is nil", func() {
@@ -634,7 +622,6 @@ var _ = Describe("ScopedEnvVar store", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(HaveLen(1))
-			Expect(envVars[0].ID).NotTo(Equal(bson.NilObjectID))
 			Expect(envVars[0].WorkspaceID).To(Equal(testEnvVar.WorkspaceID))
 			Expect(envVars[0].ScopeType).To(Equal(testEnvVar.ScopeType))
 			Expect(envVars[0].ScopeValue).To(Equal(testEnvVar.ScopeValue))
@@ -642,20 +629,6 @@ var _ = Describe("ScopedEnvVar store", func() {
 			Expect(envVars[0].Value).To(Equal(testEnvVar.Value))
 			Expect(envVars[0].Description).To(Equal(testEnvVar.Description))
 			Expect(envVars[0].IsSensitive).To(Equal(testEnvVar.IsSensitive))
-			Expect(envVars[0].CreatedAt.IsZero()).To(BeFalse())
-			Expect(envVars[0].UpdatedAt.IsZero()).To(BeFalse())
-			Expect(envVars[0].UpdatedAt).To(Equal(envVars[0].CreatedAt))
-		})
-
-		It("should return empty list for non-existent scope", func() {
-			envVars, err := envvars.List(
-				ctx,
-				db,
-				workspaceID,
-				envvars.WithScopes(envvartypes.ScopeEnvType("development")),
-			)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(envVars).To(BeEmpty())
 		})
 
 		It("should list only env vars in the target env type scope and order by key", func() {

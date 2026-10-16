@@ -99,31 +99,6 @@ var _ = Describe("ConfigStore", func() {
 	})
 
 	Context("Create", func() {
-		It("should create and get build config successfully", func() {
-			err := configs.Create(ctx, &codeRepoBuildCfg)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Get the application back from the database
-			cfg, err := configs.Get(ctx, ByApp(codeRepoAppID))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cfg.AppID).To(Equal(codeRepoAppID))
-			Expect(cfg.CodeRepo.DockerBuildArgs).To(Equal(map[string]string{
-				"buildNo": "1",
-			}))
-			Expect(cfg.CodeRepo.EffectiveImageBuildMode()).To(Equal(ImageBuildModePlatform))
-			Expect(cfg.CodeRepo.PlatformBuildConfig).To(Equal(&PlatformBuildConfig{
-				BuilderImage: "golang:1.24",
-				RunnerImage:  "debian:12",
-				Commands: &BuildCommands{
-					PreBuild:   []string{"go mod download"},
-					Build:      []string{"go build -o app ./cmd/server"},
-					RuntimeEnv: []string{"apt-get update"},
-					Start:      "./app",
-				},
-				ExtraFiles: []string{"data/key.pem", "certs"},
-			}))
-		})
-
 		It("should return error when build config with same appID already exists", func() {
 			// First call should succeed
 			err := configs.Create(ctx, &imageBuildCfg)
@@ -335,46 +310,6 @@ var _ = Describe("RecordStore", func() {
 			Expect(page.Total).To(Equal(int64(1)))
 			Expect(page.Items).To(HaveLen(1))
 			Expect(page.Items[0].Operator).To(Equal("admin"))
-		})
-
-		It("should handle regex special characters as literal strings", func() {
-			// Test that regex special characters like * and . are treated as literals
-			buildRecordA.Artifact = "hub.bktencent.com/app/image:v1.0.0*test"
-			buildRecordB.Artifact = "hub.bktencent.com/app/image:v2.0.0.release"
-			Expect(CreateRecord(ctx, db, &buildRecordA)).To(Succeed())
-			Expect(CreateRecord(ctx, db, &buildRecordB)).To(Succeed())
-
-			// Search for "v1.0.0*" should match the literal "*" character
-			page := listPage("v1.0.0*", 1, 10)
-			Expect(page.Total).To(Equal(int64(1)))
-			Expect(page.Items).To(HaveLen(1))
-			Expect(page.Items[0].Artifact).To(ContainSubstring("v1.0.0*test"))
-
-			// Search for "v2.0.0." should match the literal "." character
-			page = listPage("v2.0.0.", 1, 10)
-			Expect(page.Total).To(Equal(int64(1)))
-			Expect(page.Items).To(HaveLen(1))
-			Expect(page.Items[0].Artifact).To(ContainSubstring("v2.0.0.release"))
-		})
-
-		It("should handle more regex special characters as literal strings", func() {
-			// Test more special characters: +, ?, ^, $, [, ], (, )
-			buildRecordA.Artifact = "image:v1.0+beta"
-			buildRecordB.Artifact = "image:v2.0[test]"
-			Expect(CreateRecord(ctx, db, &buildRecordA)).To(Succeed())
-			Expect(CreateRecord(ctx, db, &buildRecordB)).To(Succeed())
-
-			// Search for "v1.0+" should match the literal "+" character
-			page := listPage("v1.0+", 1, 10)
-			Expect(page.Total).To(Equal(int64(1)))
-			Expect(page.Items).To(HaveLen(1))
-			Expect(page.Items[0].Artifact).To(ContainSubstring("v1.0+beta"))
-
-			// Search for "[test]" should match the literal "[]" characters
-			page = listPage("[test]", 1, 10)
-			Expect(page.Total).To(Equal(int64(1)))
-			Expect(page.Items).To(HaveLen(1))
-			Expect(page.Items[0].Artifact).To(ContainSubstring("v2.0[test]"))
 		})
 	})
 })

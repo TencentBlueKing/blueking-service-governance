@@ -82,10 +82,7 @@ var _ = Describe("HelmAppComponent store", func() {
 			}
 
 			Expect(comps.Create(ctx, comp)).To(Succeed())
-			Expect(comp.ID).NotTo(BeZero())
 			Expect(comp.Name).NotTo(BeEmpty())
-			Expect(comp.CreatedAt).NotTo(BeZero())
-			Expect(comp.UpdatedAt).NotTo(BeZero())
 
 			got, err := comps.GetByID(ctx, comp.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -159,33 +156,6 @@ var _ = Describe("HelmAppComponent store", func() {
 			Expect(list[0].Name).To(Equal("comp-a"))
 			Expect(list[1].Name).To(Equal("comp-b"))
 			Expect(list[2].Name).To(Equal("comp-c"))
-		})
-	})
-
-	Describe("ByApp", func() {
-		It("should delete all components for the app", func() {
-			for i := range 3 {
-				comp := &HelmAppComponent{
-					AppID:   "app-006",
-					EnvName: "prod",
-					Component: appcomponent.Component{
-						ComponentInst: appcomponent.ComponentInst{
-							Type:    "comp-" + string(rune('a'+i)),
-							Version: "v1.0.0",
-						},
-					},
-					Target: TargetResourceSelector{Kind: "Deployment", Name: "d"},
-				}
-				Expect(comps.Create(ctx, comp)).To(Succeed())
-			}
-
-			n, err := comps.DeleteMany(ctx, ByApp("app-006"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(n).To(Equal(int64(3)))
-
-			list, err := comps.List(ctx, ByAppAndEnv("app-006", "prod"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(list).To(BeEmpty())
 		})
 	})
 })

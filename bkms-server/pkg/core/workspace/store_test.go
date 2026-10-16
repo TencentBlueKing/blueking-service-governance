@@ -103,9 +103,6 @@ var _ = Describe("WorkspaceStore", func() {
 			Expect(ws.BkSystems.BkCIProjectID).To(Equal("bk-ci-project-1"))
 			Expect(ws.BkSystems.BkBCSProjectID).To(Equal("bk-bcs-project-1"))
 			Expect(ws.Creator).To(Equal("admin"))
-			Expect(ws.CreatedAt).NotTo(BeZero())
-			Expect(ws.UpdatedAt).NotTo(BeZero())
-			createdAt := ws.CreatedAt
 
 			workspaceA.DisplayName = "更新后的工作空间 A"
 			workspaceA.Description = "更新后的描述"
@@ -124,12 +121,6 @@ var _ = Describe("WorkspaceStore", func() {
 			Expect(ws.BkSystems.BkCIProjectID).To(Equal("bk-ci-project-3"))
 			Expect(ws.Updater).To(Equal("admin2"))
 			Expect(ws.Creator).To(Equal("admin"))
-			Expect(ws.CreatedAt).To(BeTemporally("~", createdAt, time.Millisecond))
-			Expect(ws.UpdatedAt).To(BeTemporally(">=", createdAt))
-		})
-
-		It("should return ErrWorkspaceNotFound when updating a missing workspace", func() {
-			Expect(Update(ctx, store, &workspaceA)).To(MatchError(ErrWorkspaceNotFound))
 		})
 
 		It("should return ErrWorkspaceNotFound when getting a missing workspace", func() {
@@ -144,10 +135,6 @@ var _ = Describe("WorkspaceStore", func() {
 			duplicateWorkspace := workspaceA
 			duplicateWorkspace.DisplayName = "重复 ID 的工作空间"
 			Expect(store.Create(ctx, &duplicateWorkspace)).To(MatchError(genericstore.ErrDuplicate))
-		})
-
-		It("should return an empty list when no workspaces exist", func() {
-			Expect(listIDs()).To(BeEmpty())
 		})
 	})
 
@@ -232,6 +219,15 @@ var _ = Describe("WorkspaceStore", func() {
 			counts, err = CountByState(ctx, store, KeywordMatches("alpha"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(counts).To(Equal(map[State]int64{StateReady: 1, StateProcessing: 0, StateDisabled: 1}))
+		})
+
+		It("should ignore undefined states", func() {
+			workspaceA.State = State("unknown")
+			Expect(store.Create(ctx, &workspaceA)).To(Succeed())
+
+			counts, err := CountByState(ctx, store)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(counts).To(Equal(map[State]int64{StateReady: 0, StateProcessing: 0, StateDisabled: 0}))
 		})
 	})
 

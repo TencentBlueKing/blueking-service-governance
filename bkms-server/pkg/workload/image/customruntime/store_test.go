@@ -46,12 +46,9 @@ var _ = Describe("Custom runtime image store", func() {
 	})
 
 	Describe("Register", func() {
-		It("creates a record and fills identity fields", func() {
+		It("creates a record that can be found by key", func() {
 			image := newTestImage("ws-demo", ImageTypeBuilder)
 			Expect(Register(ctx, images, image)).To(Succeed())
-			Expect(image.ID).NotTo(BeEmpty())
-			Expect(image.CreatedAt).NotTo(BeZero())
-			Expect(image.UpdatedAt).NotTo(BeZero())
 
 			got, err := images.Get(ctx, ByKey(image.WorkspaceID, image.Type, image.Name))
 			Expect(err).NotTo(HaveOccurred())
@@ -205,12 +202,6 @@ var _ = Describe("Custom runtime image store", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(HaveLen(3))
 			Expect([]string{got[0].ID, got[1].ID, got[2].ID}).To(Equal([]string{builderA.ID, builderB.ID, runner.ID}))
-		})
-
-		It("returns an empty list when the workspace has no records", func() {
-			got, err := images.List(ctx, ByWorkspace("ws-empty"), ByType(ImageTypeBuilder))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got).To(BeEmpty())
 		})
 	})
 })

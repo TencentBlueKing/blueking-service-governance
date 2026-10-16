@@ -8,7 +8,8 @@ description: "在 bkms-server 中开发新的 Gin REST API 时使用；聚焦 ro
 ## 核心规则
 
 - 路由注册放在模块的 `router.go`，handler 文件只放视图逻辑。
-- Handler 应是带依赖的结构体方法；当前默认直接注入 `*store.Registry`。
+- Handler 应是带依赖的结构体方法；当前默认直接注入 `*storereg.Registry`（`pkg/server/registry`），
+  需要模型的 Store 时用 `store.Of(h.registry.DB, XxxMeta)`，见 `design_notes/generic_store.md`。
 - 注意 import cycle。安全模式是：
   - `pkg/<domain>/router.go` 只定义路由和小型 handler interface。
   - `handler.New(registry)` 在上层完成构造后，再调用 `domain.Register(...)`。
@@ -48,10 +49,10 @@ Handler 推荐结构：
 
 ```go
 type Handler struct {
-    registry *store.Registry
+    registry *storereg.Registry
 }
 
-func New(registry *store.Registry) *Handler {
+func New(registry *storereg.Registry) *Handler {
     return &Handler{registry: registry}
 }
 ```
@@ -62,7 +63,7 @@ func New(registry *store.Registry) *Handler {
 2. 有 body 时用 `ginutils.BindJSON` 绑定请求体。
 3. 用 `ginutils/perm` 做可复用的权限和资源校验。
 4. 处理当前接口特有的业务校验。
-5. 调用 `h.registry` 下的 store / service。
+5. 通过 `store.Of(h.registry.DB, XxxMeta)` 或领域 service 读写数据。
 6. 把领域模型转换为 serializer output。
 7. 用 `ginutils.JSON` 或 `ginutils.OK` 返回成功响应。
 8. 出错时用 `bkerrs.AbortErr(c, err)`。

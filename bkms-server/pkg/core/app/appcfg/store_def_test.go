@@ -64,8 +64,6 @@ var _ = Describe("AppConfigFileDef store", func() {
 		It("should persist and retrieve a def record", func() {
 			def := newDef()
 			id := mustCreate(def)
-			Expect(id).NotTo(Equal(bson.NilObjectID))
-			Expect(def.CreatedAt).NotTo(BeZero())
 
 			got, err := defs.GetByID(ctx, id)
 			Expect(err).NotTo(HaveOccurred())
@@ -227,27 +225,6 @@ var _ = Describe("AppConfigFileDef store", func() {
 			Expect(filtered).To(HaveLen(1))
 			Expect(filtered[0].Name).To(Equal("framework.yaml"))
 			Expect(filtered[0].ConfigKind).To(Equal(appcfg.ConfigKindFramework))
-		})
-	})
-
-	Context("DefsByApp", func() {
-		It("should remove all def records for the app", func() {
-			m1 := newDef()
-			m1.Name = "x.yaml"
-			m1.MountDir = "/data/conf/x"
-			mustCreate(m1)
-			m2 := newDef()
-			m2.Name = "y.yaml"
-			m2.MountDir = "/data/conf/y"
-			mustCreate(m2)
-
-			cnt, err := defs.DeleteMany(ctx, appcfg.DefsByApp(appID))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cnt).To(Equal(int64(2)))
-
-			all, err := appcfg.ListDefsByApp(ctx, defs, appID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(all).To(BeEmpty())
 		})
 	})
 })

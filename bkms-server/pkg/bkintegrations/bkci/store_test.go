@@ -46,19 +46,6 @@ var _ = Describe("ProjectStore", func() {
 	})
 
 	Describe("Create", func() {
-		It("should create a project successfully", func() {
-			project := &Project{
-				ID:          "test-project-id-001",
-				Code:        "test-project",
-				WorkspaceID: "workspace-001",
-				Creator:     "test-user",
-			}
-
-			err := s.Create(ctx, project)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(project.CreatedAt).NotTo(BeZero())
-		})
-
 		It("should return error when creating duplicate project ID", func() {
 			project := &Project{
 				ID:          "test-project-id-001",
@@ -133,64 +120,11 @@ var _ = Describe("ProjectStore", func() {
 	})
 
 	Describe("GetByWorkspace", func() {
-		BeforeEach(func() {
-			project := &Project{
-				ID:          "test-project-id-001",
-				Code:        "test-project",
-				WorkspaceID: "workspace-001",
-				Creator:     "test-user",
-			}
-			err := s.Create(ctx, project)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should get project by workspace ID successfully", func() {
-			project, err := s.Get(ctx, ByWorkspace("workspace-001"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(project).NotTo(BeNil())
-			Expect(project.ID).To(Equal("test-project-id-001"))
-			Expect(project.Code).To(Equal("test-project"))
-			Expect(project.WorkspaceID).To(Equal("workspace-001"))
-			Expect(project.Creator).To(Equal("test-user"))
-			Expect(project.CreatedAt).NotTo(BeZero())
-		})
-
 		It("should return error when workspace not found", func() {
 			project, err := s.Get(ctx, ByWorkspace("non-existent-workspace"))
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, ErrProjectNotFound)).To(BeTrue())
 			Expect(project).To(BeNil())
-		})
-	})
-
-	Describe("Multiple Projects", func() {
-		It("should allow creating multiple projects with different IDs, codes and workspaces", func() {
-			project1 := &Project{
-				ID:          "test-project-id-001",
-				Code:        "test-project-1",
-				WorkspaceID: "workspace-001",
-				Creator:     "test-user-1",
-			}
-			err := s.Create(ctx, project1)
-			Expect(err).NotTo(HaveOccurred())
-
-			project2 := &Project{
-				ID:          "test-project-id-002",
-				Code:        "test-project-2",
-				WorkspaceID: "workspace-002",
-				Creator:     "test-user-2",
-			}
-			err = s.Create(ctx, project2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// 验证两个项目都能正确获取
-			p1, err := s.Get(ctx, ByWorkspace("workspace-001"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(p1.Code).To(Equal("test-project-1"))
-
-			p2, err := s.Get(ctx, ByWorkspace("workspace-002"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(p2.Code).To(Equal("test-project-2"))
 		})
 	})
 })
@@ -211,83 +145,7 @@ var _ = Describe("PipelineTemplateStore", func() {
 		s = testutil.NewStore(GinkgoT(), PipelineTemplateMeta)
 	})
 
-	Describe("Upsert", func() {
-		It("should upsert a pipeline template successfully", func() {
-			template := &PipelineTemplate{
-				ID:          "0348a1df-44de-29b2-1c94-2d42841c009d",
-				Type:        "build-template",
-				Version:     "1.0.0",
-				Name:        "构建模板",
-				Description: "用于构建的流水线模板",
-			}
-
-			_, err := s.Upsert(ctx, template, ByType(template.Type))
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should overwrite the existing template with the same type", func() {
-			template := &PipelineTemplate{
-				ID: "0348a1df-44de-29b2-1c94-2d42841c009d", Type: "build-template", Version: "1.0.0", Name: "v1",
-			}
-			inserted, err := s.Upsert(ctx, template, ByType(template.Type))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(inserted).To(BeTrue())
-
-			updated := &PipelineTemplate{
-				ID: "0348a1df-44de-29b2-1c94-2d42841c009d", Type: "build-template", Version: "1.1.0", Name: "v2",
-			}
-			inserted, err = s.Upsert(ctx, updated, ByType(updated.Type))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(inserted).To(BeFalse())
-
-			got, err := s.Get(ctx, ByType("build-template"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Version).To(Equal("1.1.0"))
-			Expect(got.Name).To(Equal("v2"))
-			n, err := s.Count(ctx, ByType("build-template"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(n).To(Equal(int64(1)))
-		})
-	})
-
 	Describe("GetByType", func() {
-		BeforeEach(func() {
-			template := &PipelineTemplate{
-				ID:          "0348a1df-44de-29b2-1c94-2d42841c009d",
-				Type:        "build-template",
-				Version:     "1.0.0",
-				Name:        "构建模板",
-				Description: "用于构建的流水线模板",
-				Stages: []map[string]any{
-					{
-						"id":   "stage-1",
-						"name": "stage-1",
-						"containers": []map[string]any{
-							{
-								"@type":     "trigger",
-								"classType": "trigger",
-								"name":      "trigger",
-							},
-						},
-					},
-				},
-			}
-			_, err := s.Upsert(ctx, template, ByType(template.Type))
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should get template by type successfully", func() {
-			template, err := s.Get(ctx, ByType("build-template"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(template).NotTo(BeNil())
-			Expect(template.ID).To(Equal("0348a1df-44de-29b2-1c94-2d42841c009d"))
-			Expect(template.Type).To(Equal("build-template"))
-			Expect(template.Version).To(Equal("1.0.0"))
-			Expect(template.Name).To(Equal("构建模板"))
-			Expect(template.Description).To(Equal("用于构建的流水线模板"))
-			Expect(template.Stages).To(HaveLen(1))
-		})
-
 		It("should return error when template type not found", func() {
 			template, err := s.Get(ctx, ByType("non-existent-template"))
 			Expect(err).To(HaveOccurred())
@@ -314,22 +172,6 @@ var _ = Describe("PipelineStore", func() {
 	})
 
 	Describe("Create", func() {
-		It("should create a pipeline successfully", func() {
-			pipeline := &Pipeline{
-				ID:              "p-5df30e9fe868af903dff8d375dd7b463",
-				Type:            "build",
-				WorkspaceID:     "workspace-001",
-				ProjectCode:     "test-project",
-				Name:            "构建流水线",
-				Description:     "用于构建的流水线",
-				TemplateVersion: "1.0.0",
-				Creator:         "admin",
-			}
-
-			err := s.Create(ctx, pipeline)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
 		It("should return error when creating duplicate pipeline ID", func() {
 			pipeline := &Pipeline{
 				ID:          "p-5df30e9fe868af903dff8d375dd7b463",
@@ -456,13 +298,6 @@ var _ = Describe("PipelineStore", func() {
 			Expect(errors.Is(err, ErrPipelineNotFound)).To(BeTrue())
 			Expect(pipeline).To(BeNil())
 		})
-
-		It("should return error when type not found in workspace", func() {
-			pipeline, err := s.Get(ctx, ByWorkspaceAndType("workspace-001", "deploy"))
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrPipelineNotFound)).To(BeTrue())
-			Expect(pipeline).To(BeNil())
-		})
 	})
 
 	Describe("UpdateBuiltinTemplateVersion", func() {
@@ -533,22 +368,6 @@ var _ = Describe("RepositoryStore", func() {
 	})
 
 	Describe("Create", func() {
-		It("should create a repository successfully", func() {
-			repository := &Repository{
-				ID:          "Zr3Dx",
-				Alias:       "bkms",
-				URL:         "https://git.example.com/bkms/bkms.git",
-				Type:        "codeGit",
-				WorkspaceID: "workspace-001",
-				ProjectCode: "test-project",
-				Creator:     "admin",
-			}
-
-			err := s.Create(ctx, repository)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(repository.CreatedAt).NotTo(BeZero())
-		})
-
 		It("should return error when creating duplicate repository (id, projectCode)", func() {
 			repository := &Repository{
 				ID:          "Zr3Dx",

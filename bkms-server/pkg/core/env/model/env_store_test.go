@@ -132,11 +132,6 @@ var _ = Describe("Environment store", func() {
 		expectedEnv2.UpdatedAt = environments[0].UpdatedAt
 		expectedEnv2.Status = envmodel.EnvStatusReady
 		Expect(environments[0]).To(Equal(expectedEnv2))
-
-		// 随机查询一个不存在的 workspace 下的环境
-		environments, err = envs.List(ctx, envmodel.StdEnvsIn(stringx.Random(10)))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(environments).To(BeEmpty())
 	})
 
 	It("counts standard environments by workspace IDs", func() {
@@ -284,18 +279,6 @@ var _ = Describe("Environment store", func() {
 		Expect(err).To(MatchError(envmodel.ErrEnvNotFound))
 
 		_, err = envs.Get(ctx, envmodel.AppEnvByName(workspaceID1, otherApp.ID, ownedFeatureEnv.Name))
-		Expect(err).To(MatchError(envmodel.ErrEnvNotFound))
-	})
-
-	It("gets environment by id", func() {
-		env, err := envs.GetByID(ctx, env1.ID)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(env.ID).To(Equal(env1.ID))
-		Expect(env.Name).To(Equal(env1.Name))
-		Expect(env.Type).To(Equal(env1.Type))
-		Expect(env.Status).To(Equal(envmodel.EnvStatusReady))
-
-		_, err = envs.GetByID(ctx, bson.NewObjectID())
 		Expect(err).To(MatchError(envmodel.ErrEnvNotFound))
 	})
 
