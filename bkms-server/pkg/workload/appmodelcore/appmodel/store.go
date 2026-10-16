@@ -218,13 +218,15 @@ func RemoveComponent(ctx context.Context, db *mongo.Database, appID, compName st
 		return errors.Wrapf(ErrComponentNotFound, "component %s of app %s", compName, appID)
 	}
 
-	res, err := models.Modify(ctx, bson.M{"$pull": bson.M{"components": bson.M{"name": compName}}}, ByApp(appID))
+	// 过滤条件要求组件仍存在：查询与删除之间组件被并发删除时不会匹配，避免重复扣减引用计数。
+	// 不依赖 Modified == 0 判断：模型一旦带上 updatedAt，刷新时间戳也会计入 Modified
+	_, err = models.Modify(ctx, bson.M{"$pull": bson.M{"components": bson.M{"name": compName}}},
+		ByApp(appID), store.Where("components.name", compName))
+	if errors.Is(err, ErrAppModelNotFound) {
+		err = classifyMiss(ctx, models, appID, ErrComponentNotFound)
+	}
 	if err != nil {
 		return errors.Wrapf(err, "remove component %s from app model of app %s", compName, appID)
-	}
-	if res.Modified == 0 {
-		// 查询与删除之间组件已被并发删除
-		return errors.Wrapf(ErrComponentNotFound, "component %s of app %s", compName, appID)
 	}
 	return adjustInstanceCounts(ctx, db, []*component.Component{removed}, -1)
 }

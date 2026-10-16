@@ -98,6 +98,12 @@ var _ = Describe("Options", func() {
 		Expect(apply().projection()).To(BeNil())
 	})
 
+	It("should merge SelectFields into an inclusion projection", func() {
+		q := apply(SelectFields("a"), Combine(SelectFields("b", "c")))
+		Expect(q.selected).To(Equal([]string{"a", "b", "c"}))
+		Expect(q.projection()).To(Equal(bson.D{{Key: "a", Value: 1}, {Key: "b", Value: 1}, {Key: "c", Value: 1}}))
+	})
+
 	It("should merge multiple UpdateOpts", func() {
 		q := apply(UpdateSelected("a"), UpdateOmit("b"), UpdateSelected("c"))
 		Expect(q.fields).To(Equal(&fieldSelection{

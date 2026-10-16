@@ -21,6 +21,7 @@ package store_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -265,10 +266,77 @@ var _ = Describe("GenericStore read operations", func() {
 
 		It("should not be accepted by Count or write operations", func() {
 			_, err := f.widgets.Count(f.ctx, f.byOwner(), store.OmitFields("tags"))
-			Expect(err).To(MatchError(ContainSubstring("omitted fields")))
+			Expect(err).To(MatchError(ContainSubstring("projection")))
 			_, err = f.widgets.GetAndDelete(f.ctx, f.byName("w1"), store.OmitFields("tags"))
-			Expect(err).To(MatchError(ContainSubstring("omitted fields")))
+			Expect(err).To(MatchError(ContainSubstring("projection")))
 		})
+	})
+
+	Describe("SelectFields", func() {
+		var created *Widget
+
+		BeforeEach(func() {
+			created = f.newSecretWidget("w1")
+			created.Spec = WidgetSpec{Color: "red", Size: 3}
+			Expect(f.widgets.Create(f.ctx, created)).To(Succeed())
+		})
+
+		It("should only read the selected fields and _id in Get and List", func() {
+			got, err := f.widgets.Get(f.ctx, f.byName("w1"), store.SelectFields("name", "Spec.Color"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*got).To(Equal(Widget{ID: created.ID, Name: "w1", Spec: WidgetSpec{Color: "red"}}))
+
+			// 多个 SelectFields 会合并
+			list, err := f.widgets.List(f.ctx, f.byOwner(), store.SelectFields("name"), store.SelectFields("priority"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list).To(Equal([]Widget{{ID: created.ID, Name: "w1", Priority: 1}}))
+		})
+
+		It("should not affect which documents match or how they are sorted", func() {
+			mustCreate := func(name string, priority int) {
+				w := f.newWidget(name)
+				w.Priority = priority
+				Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
+			}
+			mustCreate("w2", 3)
+			mustCreate("w3", 2)
+
+			list, err := f.widgets.List(f.ctx, f.byOwner(), store.Where("priority", bson.M{"$gt": 1}),
+				store.Desc("priority"), store.SelectFields("name"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(widgetNames(list)).To(Equal([]string{"w2", "w3"}))
+			Expect(list[0].Priority).To(BeZero())
+		})
+
+		It("should apply to ListPage and ListLatestBy", func() {
+			page, err := f.widgets.ListPage(f.ctx, 1, 10, f.byOwner(), store.SelectFields("name"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(page.Items).To(Equal([]Widget{{ID: created.ID, Name: "w1"}}))
+
+			latest, err := f.widgets.ListLatestBy(f.ctx, []string{"spec.color"},
+				f.byOwner(), store.Desc("priority"), store.SelectFields("name"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(latest).To(Equal([]Widget{{ID: created.ID, Name: "w1"}}))
+		})
+
+		It("should still run Decode hooks", func() {
+			got, err := f.widgets.Get(f.ctx, f.byName("w1"), store.SelectFields("secret"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Secret.Password).To(Equal(plainPassword))
+		})
+
+		DescribeTable("should reject invalid fields",
+			func(opts []store.Opt, msg string) {
+				_, err := f.widgets.List(f.ctx, append([]store.Opt{f.byOwner()}, opts...)...)
+				Expect(err).To(MatchError(ContainSubstring(msg)))
+			},
+			Entry("a field not defined in the model",
+				[]store.Opt{store.SelectFields("manifest")}, "unknown field"),
+			Entry("conflicting parent and child fields",
+				[]store.Opt{store.SelectFields("spec", "spec.color")}, "conflicting fields"),
+			Entry("combined with OmitFields",
+				[]store.Opt{store.SelectFields("name"), store.OmitFields("tags")}, "cannot be combined"),
+		)
 	})
 
 	Describe("Exists", func() {

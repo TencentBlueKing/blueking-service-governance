@@ -86,7 +86,9 @@ func (s *GenericStore[T]) Upsert(ctx context.Context, target any, opts ...Opt) (
 //		InScope(scope), store.UpdateSelected("value", "description"))
 //
 // 全部写入在一次 BulkWrite 中按顺序执行，遇到错误即停止（之前的对象已写入），唯一键冲突时返回 Duplicate 错误。
-// 返回插入的文档数量，插入的对象会回填 _id 与 createdAt。支持的选项：CondOpt、UpdateOpt
+// 返回插入的文档数量，插入的对象会回填 _id 与 createdAt。
+// 出错时不做回填且返回的数量为 0：出错前已插入的对象也拿不到 _id 与 createdAt，
+// 需要它们时请按 key 重新查询。支持的选项：CondOpt、UpdateOpt
 func (s *GenericStore[T]) UpsertMany(ctx context.Context, objs []*T, key func(*T) Opt, opts ...Opt) (int64, error) {
 	if len(objs) == 0 {
 		return 0, nil

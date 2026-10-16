@@ -36,8 +36,9 @@ type query struct {
 	limit    int64
 	// fields 仅 Update / Upsert 使用，nil 表示没有传入任何 UpdateOpt
 	fields *fieldSelection
-	// omitted 读操作不读出的字段，parseOpts 之后为 bson 路径
-	omitted []string
+	// selected / omitted 读操作只读出 / 不读出的字段，两者不能同时非空，parseOpts 之后为 bson 路径
+	selected []string
+	omitted  []string
 	// withoutTotal 仅 ListPage 使用
 	withoutTotal bool
 	// keepUpdatedAt 写操作不刷新 updatedAt，见 KeepUpdatedAt
@@ -69,12 +70,16 @@ func (q *query) hasKey(key string) bool {
 	return documentHasKey(q.conds, key)
 }
 
-// projection 生成排除 omitted 字段的投影，没有要排除的字段时返回 nil（读出全部字段）
+// projection 生成只包含 selected 或排除 omitted 字段的投影，两者都为空时返回 nil（读出全部字段）
 func (q *query) projection() bson.D {
-	if len(q.omitted) == 0 {
+	fields, value := q.selected, 1
+	if len(fields) == 0 {
+		fields, value = q.omitted, 0
+	}
+	if len(fields) == 0 {
 		return nil
 	}
-	return lo.Map(q.omitted, func(f string, _ int) bson.E { return bson.E{Key: f, Value: 0} })
+	return lo.Map(fields, func(f string, _ int) bson.E { return bson.E{Key: f, Value: value} })
 }
 
 // parseOpts 依次应用 opts，遇到 accepted 之外类别的选项时返回错误；
@@ -99,7 +104,13 @@ func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*q
 			return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 		}
 	}
-	if q.omitted, err = s.schema.resolveOmitted(q.omitted); err != nil {
+	if len(q.selected) > 0 && len(q.omitted) > 0 {
+		return nil, errors.Errorf("%s %s: SelectFields cannot be combined with OmitFields", op, s.coll.Name())
+	}
+	if q.selected, err = s.schema.resolveProjected(q.selected, "selected field"); err != nil {
+		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
+	}
+	if q.omitted, err = s.schema.resolveProjected(q.omitted, "omitted field"); err != nil {
 		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 	}
 	return q, nil

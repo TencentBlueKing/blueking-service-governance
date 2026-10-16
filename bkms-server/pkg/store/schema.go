@@ -89,9 +89,9 @@ func (s *schema) resolveKey(field string) (string, error) {
 	return p.String(), nil
 }
 
-// resolveOmitted 将 OmitFields 的字段转换为 bson 路径：字段必须存在于模型中，重复的字段只保留一个，
-// 互为父子的字段会被 MongoDB 判定为路径冲突，提前拒绝
-func (s *schema) resolveOmitted(fields []string) ([]string, error) {
+// resolveProjected 将 SelectFields / OmitFields 的字段转换为 bson 路径，label 用于错误信息：
+// 字段必须存在于模型中，重复的字段只保留一个，互为父子的字段会被 MongoDB 判定为路径冲突，提前拒绝
+func (s *schema) resolveProjected(fields []string, label string) ([]string, error) {
 	if len(fields) == 0 {
 		return nil, nil
 	}
@@ -99,7 +99,7 @@ func (s *schema) resolveOmitted(fields []string) ([]string, error) {
 	for _, f := range fields {
 		p, err := s.fields.ResolveKnown(f)
 		if err != nil {
-			return nil, errors.Wrap(err, "omitted field")
+			return nil, errors.Wrap(err, label)
 		}
 		paths = append(paths, p)
 	}

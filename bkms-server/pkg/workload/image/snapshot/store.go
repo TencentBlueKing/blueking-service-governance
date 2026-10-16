@@ -170,8 +170,10 @@ func ListAllTags(ctx context.Context, db *mongo.Database, repoKey string) ([]str
 	return tags, errors.Wrapf(err, "list all tags of %s", repoKey)
 }
 
+// listTags 获取匹配快照的标签，只读出 tag 字段
 func listTags(ctx context.Context, db *mongo.Database, conds ...store.Opt) ([]string, error) {
-	images, err := store.Of(db, ImageMeta).List(ctx, conds...)
+	opts := append([]store.Opt{store.SelectFields("tag")}, conds...)
+	images, err := store.Of(db, ImageMeta).List(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}

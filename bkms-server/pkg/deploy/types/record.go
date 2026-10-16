@@ -80,7 +80,9 @@ func ListLatestByApps[T any](
 }
 
 // HasActiveDeployment 判断应用是否存在活跃的部署：按（环境, 泳道）分组取各自最新的一条记录，
-// 任意一条满足 isActive 即为活跃
+// 任意一条满足 isActive 即为活跃。
+//
+// 记录只读出了 status 字段，isActive 只能依据 status 判断，读取其它字段只会得到零值
 func HasActiveDeployment[T any](
 	ctx context.Context, s *store.GenericStore[T], appID string, isActive func(*T) bool,
 ) (bool, error) {
@@ -88,6 +90,7 @@ func HasActiveDeployment[T any](
 	records, err := s.ListLatestBy(ctx, []string{"envName", "trafficLaneName"},
 		store.Where("appID", appID),
 		store.Asc("envName"), store.Asc("trafficLaneName"), store.Desc("createdAt"),
+		store.SelectFields("status"),
 	)
 	if err != nil {
 		return false, errors.Wrapf(err, "list latest records of app %s", appID)

@@ -30,8 +30,10 @@ package store
 //   - BeforeSave 作用于调用方传入的对象，用于补默认值、校验等，修改对调用方可见；
 //     仅在写入完整文档时执行（Create / CreateMany / Replace，以及传入 *T 的 Upsert）
 //   - Encode 作用于对象的深拷贝，用于加密、序列化等不应泄露给调用方的转换；
-//     在所有写入前执行，Update / Upsert 传入 map 时作用于由 map 构造出的对象，
-//     因此 Encode 需要能处理只填写了部分字段的对象
+//     在所有写入前执行，Update / Upsert 传入 map 时作用于由 map 构造出的对象，其余字段均为零值，
+//     最终只写入 map 中的字段。因此 Encode 必须逐字段独立转换、能处理零值：
+//     不做校验（交给 BeforeSave），也不依据其它字段决定如何转换（如按 isSensitive 决定是否加密 value），
+//     否则局部更新时其它字段为零值会得到错误的结果
 //   - Decode 作用于从数据库读出的每一个对象（Get / List），通常是 Encode 的逆操作
 //
 // 敏感字段的加解密可借助 crypto.OnDemand 写成一行钩子，见 pkg/workload/helmcore/credential。

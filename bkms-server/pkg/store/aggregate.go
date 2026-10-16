@@ -33,6 +33,8 @@ import (
 //
 // 必须传入 SortOpt，返回的文档同样按它排序，无结果时返回空切片；分组字段在文档中不存在时这些文档归为一组。
 // 排序发生在分组之前，让 SortOpt 以分组字段开头并为（分组字段, 排序字段）建立索引，可以避免内存排序。
+// 聚合没有显式设置 allowDiskUse：用不上索引时，$sort 的数据超过内存限制（默认 100MB）后是落盘还是报错
+// 取决于服务端配置（MongoDB 6.0 起默认落盘，更早的版本报错），匹配的文档较多时应建立上述索引或用 CondOpt 缩小范围。
 // 支持的选项：CondOpt、SortOpt、ProjectOpt
 func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, opts ...Opt) ([]T, error) {
 	q, err := s.parseOpts("list latest in", opts, latestOpts)

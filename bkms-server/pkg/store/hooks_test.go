@@ -130,6 +130,20 @@ var _ = Describe("GenericStore hooks", func() {
 				return nil, f.widgets.Update(f.ctx, bson.M{"secret.password": plainPassword}, f.byName("w1"))
 			}),
 		)
+
+		// map 局部更新时 Encode 作用于其余字段均为零值的对象，已加密的字段不应被覆盖、清除或重复加密
+		DescribeTable("should leave encoded fields absent from a partial update untouched",
+			func(fields map[string]any) {
+				Expect(f.widgets.Create(f.ctx, f.newSecretWidget("w1"))).To(Succeed())
+
+				Expect(f.widgets.Update(f.ctx, fields, f.byName("w1"))).To(Succeed())
+
+				Expect(f.rawPassword("w1")).To(Equal(encPrefix + plainPassword))
+				Expect(f.mustGetWidget("w1").Secret.Password).To(Equal(plainPassword))
+			},
+			Entry("an unrelated top-level field", map[string]any{"priority": 2}),
+			Entry("a sibling of the encoded field", map[string]any{"secret.username": "u2"}),
+		)
 	})
 
 	Describe("Decode", func() {

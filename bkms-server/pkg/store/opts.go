@@ -39,7 +39,7 @@ import (
 //	CondOpt        Where / Filter / ByID / ContainsIgnoreCase / All  全部操作
 //	SortOpt        Asc / Desc                                       Get、List、ListPage、ListLatestBy、GetAndDelete
 //	LimitOpt       Limit                                            List
-//	ProjectOpt     OmitFields                                       Get、List、ListPage、ListLatestBy
+//	ProjectOpt     SelectFields / OmitFields                        Get、List、ListPage、ListLatestBy
 //	PageOpt        WithoutTotal                                     ListPage
 //	UpdateOpt      UpdateSelected / UpdateOmit                      Update、UpdateMany、Upsert、UpsertMany
 //	TimestampOpt   KeepUpdatedAt                                    Update、UpdateMany、Modify、ModifyMany
@@ -93,7 +93,7 @@ const (
 
 // kindNames 按位序排列，与上面的 kindXxx 一一对应
 var kindNames = []string{
-	"condition", "sort", "limit", "update fields", "omitted fields", "page", "keep updatedAt", "array filters",
+	"condition", "sort", "limit", "update fields", "projection", "page", "keep updatedAt", "array filters",
 }
 
 func (k optKind) String() string {
@@ -209,18 +209,33 @@ func Limit(n int64) LimitOpt {
 // ProjectOpt：读出的字段
 // -----------------------------------------------------------------------------
 
-// ProjectOpt 指定读操作不读出哪些字段，由 OmitFields 创建，仅 Get / List / ListPage 支持；多个 ProjectOpt 会合并
+// ProjectOpt 指定读操作读出哪些字段，由 SelectFields / OmitFields 创建，仅 Get / List / ListPage / ListLatestBy 支持。
+// 多个 ProjectOpt 会合并，但 SelectFields 与 OmitFields 不能同时使用（MongoDB 不允许混用包含与排除）。
+//
+// 两者都不影响匹配哪些文档：没有读出的字段在返回的对象中为零值，Decode 钩子照常执行，须能处理这些零值。
+// 字段可以写 bson 路径或 Go 字段名，必须存在于模型中，避免拼错时静默读出全部字段（或什么都读不出）
 type ProjectOpt struct {
-	omitted []string
+	selected []string
+	omitted  []string
 }
 
 func (ProjectOpt) kind() optKind { return kindProject }
 
-func (o ProjectOpt) apply(q *query) { q.omitted = append(q.omitted, o.omitted...) }
+func (o ProjectOpt) apply(q *query) {
+	q.selected = append(q.selected, o.selected...)
+	q.omitted = append(q.omitted, o.omitted...)
+}
 
-// OmitFields 读取时不从数据库取回指定的字段，用于跳过体积大、列表页用不到的字段（如完整的资源清单）。
-// 它不影响匹配哪些文档：被跳过的字段在返回的对象中为零值，Decode 钩子照常执行，须能处理这些零值。
-// 字段可以写 bson 路径或 Go 字段名，必须存在于模型中，避免拼错时静默读出全部字段。例如：
+// SelectFields 读取时只从数据库取回指定的字段，用于只需要个别字段的查询（如只取标签名）。
+// 与 MongoDB 的包含式投影一致，_id 总会被读出。例如：
+//
+//	// 只读出仓库中全部快照的 tag
+//	images.List(ctx, InRepo(repoKey), store.SelectFields("tag"))
+func SelectFields(field string, moreFields ...string) ProjectOpt {
+	return ProjectOpt{selected: append([]string{field}, moreFields...)}
+}
+
+// OmitFields 读取时不从数据库取回指定的字段，用于跳过体积大、列表页用不到的字段（如完整的资源清单）。例如：
 //
 //	// 列出部署记录的资源快照，但不读取 manifest
 //	snapshots.List(ctx, ByDeployRecord(recordID), store.OmitFields("manifest"))
