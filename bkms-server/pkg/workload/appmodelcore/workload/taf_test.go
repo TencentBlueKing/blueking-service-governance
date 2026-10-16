@@ -53,7 +53,6 @@ var _ = Describe("TafWorkloadBuilder", func() {
 	var builderSvc *workload.BuilderService
 	var appConfigFileStore appcfg.AppConfigFileStore
 	var appConfigFileDefStore *appcfg.AppConfigFileDefStore
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -73,7 +72,6 @@ var _ = Describe("TafWorkloadBuilder", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
 				&envSvc,
 				&builderSvc,
 			),
@@ -115,10 +113,9 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			// 使用 dbfactory.TafApplication 创建应用和模型
 			// TafConfig.FileContent 会作为默认配置文件内容
 			app, appModel = dbfactory.TafApplication(ctx, &dbfactory.TafApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, &dbfactory.TafApplicationOpts{
 				TafConfig: &appmodel.TafConfig{
 					FileName:    "taf_config.conf",
@@ -145,7 +142,6 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			cfgSvc := appcfg.NewAppConfigFileService(
 				appConfigFileStore,
 				testutil.NewDB(GinkgoT()),
-				appConfigFileVersionStore,
 			)
 
 			// 切换为独立配置模式
@@ -252,10 +248,9 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			// - 新格式自定义变量：${{env.MY_REGION}}
 			// - 运行时变量占位符：${{env.BKMS_POD_IP}}, ${{env.BKMS_NODE_IP}}
 			app, appModel = dbfactory.TafApplication(ctx, &dbfactory.TafApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, &dbfactory.TafApplicationOpts{
 				TafConfig: &appmodel.TafConfig{
 					FileName:    "taf_config.conf",
@@ -290,10 +285,9 @@ var _ = Describe("TafWorkloadBuilder", func() {
 
 		It("should collect undefined env vars from the TAF config", func() {
 			app, appModel = dbfactory.TafApplication(ctx, &dbfactory.TafApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, &dbfactory.TafApplicationOpts{
 				TafConfig: &appmodel.TafConfig{
 					FileName:    "taf_config.conf",

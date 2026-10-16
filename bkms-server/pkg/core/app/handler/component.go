@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
@@ -68,7 +69,8 @@ func (h *Handler) CreateAppComponent(c *gin.Context) {
 			return
 		}
 	} else {
-		def, iErr := h.registry.ComponentDefStore.Get(ctx, newComp.Type, newComp.Version)
+		def, iErr := store.Of(h.registry.DB, component.ComponentDefMeta).
+			Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version))
 		if iErr != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(iErr, bkerrs.ErrCodeInternalServerError, "get component def"))
 			return

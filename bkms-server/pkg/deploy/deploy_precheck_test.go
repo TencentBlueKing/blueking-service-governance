@@ -72,24 +72,23 @@ func newTestPolarisConfig(
 
 var _ = Describe("DeployPreChecker Check", func() {
 	var (
-		statusMock                *mockey.Mocker
-		clusterAddonDefStore      *clusteraddon.ClusterAddonDefStore
-		ctx                       context.Context
-		fxApp                     *fxtest.App
-		appStore                  bkmsapp.ApplicationStore
-		appModelStore             appmodel.AppModelStore
-		appConfigFileStore        appcfg.AppConfigFileStore
-		appConfigFileDefStore     *appcfg.AppConfigFileDefStore
-		appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-		componentDefStore         component.ComponentDefStore
-		polarisConfigStore        polaris.PolarisConfigStore
-		buildConfigStore          *build.ConfigStore
-		workspaceCompsStore       workspace.WorkspaceCompsStore
-		workspaceStore            workspace.WorkspaceStore
-		createdWorkspaces         []string
-		envService                *env.EnvService
-		checker                   *DeployPreChecker
-		newApp                    func(*dbfactory.TrpcApplicationOpts) (*bkmsapp.Application, *envmodel.Environment)
+		statusMock            *mockey.Mocker
+		clusterAddonDefStore  *clusteraddon.ClusterAddonDefStore
+		ctx                   context.Context
+		fxApp                 *fxtest.App
+		appStore              bkmsapp.ApplicationStore
+		appModelStore         appmodel.AppModelStore
+		appConfigFileStore    appcfg.AppConfigFileStore
+		appConfigFileDefStore *appcfg.AppConfigFileDefStore
+		componentDefStore     *component.ComponentDefStore
+		polarisConfigStore    polaris.PolarisConfigStore
+		buildConfigStore      *build.ConfigStore
+		workspaceCompsStore   workspace.WorkspaceCompsStore
+		workspaceStore        *workspace.WorkspaceStore
+		createdWorkspaces     []string
+		envService            *env.EnvService
+		checker               *DeployPreChecker
+		newApp                func(*dbfactory.TrpcApplicationOpts) (*bkmsapp.Application, *envmodel.Environment)
 	)
 
 	BeforeEach(func() {
@@ -100,7 +99,6 @@ var _ = Describe("DeployPreChecker Check", func() {
 			appmodel.FxModule,
 			appcfg.FxModule,
 			appspec.FxModule,
-			component.FxModule,
 			polaris.FxModule,
 			polarisenvvars.FxModule,
 			env.FxModule,
@@ -115,21 +113,20 @@ var _ = Describe("DeployPreChecker Check", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
-				&componentDefStore,
 				&polarisConfigStore,
 				&workspaceCompsStore,
-				&workspaceStore,
 				&envService,
 				&checker,
 			),
 		)
 		fxApp.RequireStart()
+		workspaceStore = testutil.NewStore(GinkgoT(), workspace.Meta)
 		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 		buildConfigStore = testutil.NewStore(GinkgoT(), build.ConfigMeta)
+		componentDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
 		clusterAddonDefStore = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 		workload.InitPlugin(
-			appcfg.NewMountableFileProvider(appConfigFileStore, testutil.NewDB(GinkgoT()), appConfigFileVersionStore),
+			appcfg.NewMountableFileProvider(appConfigFileStore, testutil.NewDB(GinkgoT())),
 			polarisConfigStore,
 		)
 		statusMock = mockey.Mock(clusteraddon.InspectRequiredAddons).
@@ -147,10 +144,9 @@ var _ = Describe("DeployPreChecker Check", func() {
 			createdWorkspaces = append(createdWorkspaces, ws.ID)
 			opts.WorkspaceID = ws.ID
 			app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, opts)
 			return app, dbfactory.Env(ctx, envService, app.WorkspaceID)
 		}
@@ -159,7 +155,7 @@ var _ = Describe("DeployPreChecker Check", func() {
 	AfterEach(func() {
 		statusMock.UnPatch()
 		for _, id := range createdWorkspaces {
-			_ = workspaceStore.Delete(ctx, id)
+			_ = workspace.Delete(ctx, workspaceStore, id)
 		}
 		fxApp.RequireStop()
 	})
@@ -276,7 +272,7 @@ ignored: ${LEGACY}
 				FileContent: "default: ${{ env.DEFAULT_ONLY }}\n",
 			},
 		})
-		svc := appcfg.NewAppConfigFileService(appConfigFileStore, testutil.NewDB(GinkgoT()), appConfigFileVersionStore)
+		svc := appcfg.NewAppConfigFileService(appConfigFileStore, testutil.NewDB(GinkgoT()))
 		defs, err := appcfg.ListDefsByApp(
 			ctx,
 			appConfigFileDefStore,

@@ -39,7 +39,6 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 	var appStore bkmsapp.ApplicationStore
 	var store appcfg.AppConfigFileStore
 	var defStore *appcfg.AppConfigFileDefStore
-	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
 	var provider appcfg.MountableFileProvider
 	var svc *appcfg.AppCfgFileDefService
@@ -59,14 +58,14 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &store, &versionStore),
+			fx.Populate(&appStore, &store),
 		)
 		diApp.RequireStart()
 		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()), versionStore)
-		base := appcfg.NewBaseAppCfgFileService(testutil.NewDB(GinkgoT()), store, versionStore)
+		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()))
+		base := appcfg.NewBaseAppCfgFileService(testutil.NewDB(GinkgoT()), store)
 		svc = appcfg.NewAppCfgFileDefService(base)
 	})
 
@@ -262,7 +261,6 @@ var _ = Describe("ListPlainMountableFiles", func() {
 	var appStore bkmsapp.ApplicationStore
 	var store appcfg.AppConfigFileStore
 	var defStore *appcfg.AppConfigFileDefStore
-	var versionStore appcfg.AppConfigFileVersionStore
 	var app *bkmsapp.Application
 	var provider appcfg.MountableFileProvider
 
@@ -281,13 +279,13 @@ var _ = Describe("ListPlainMountableFiles", func() {
 			GinkgoT(),
 			bkmsapp.FxModule,
 			appcfg.FxModule,
-			fx.Populate(&appStore, &store, &versionStore),
+			fx.Populate(&appStore, &store),
 		)
 		diApp.RequireStart()
 		defStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 
 		app = dbfactory.Application(ctx, appStore)
-		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()), versionStore)
+		provider = appcfg.NewMountableFileProvider(store, testutil.NewDB(GinkgoT()))
 	})
 
 	AfterEach(func() {

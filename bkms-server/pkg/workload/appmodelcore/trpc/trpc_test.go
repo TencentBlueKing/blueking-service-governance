@@ -29,10 +29,9 @@ var _ = Describe("tRPC application service", func() {
 	var diApp *fxtest.App
 	var appStore bkmsapp.ApplicationStore
 	var appConfigFileStore appcfg.AppConfigFileStore
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var envStore envmodel.EnvironmentStore
 	var envService *bkmsenv.EnvService
-	var workspaceStore bkmsworkspace.WorkspaceStore
+	var workspaceStore *bkmsworkspace.WorkspaceStore
 	var ruleStore *appdefaults.RuleStore
 	var appModelStore appmodel.AppModelStore
 	var appSpecStore appspec.AppSpecStore
@@ -53,15 +52,14 @@ var _ = Describe("tRPC application service", func() {
 			fx.Populate(
 				&appStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
 				&envStore,
 				&envService,
-				&workspaceStore,
 				&appModelStore,
 				&appSpecStore,
 			),
 		)
 		diApp.RequireStart()
+		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 		ruleStore = testutil.NewStore(GinkgoT(), appdefaults.RuleMeta)
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
 		environment = dbfactory.EnvWithOpts(ctx, envService, &dbfactory.EnvOpts{
@@ -79,7 +77,7 @@ var _ = Describe("tRPC application service", func() {
 		}
 		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
 		Expect(envStore.DeleteAll(ctx)).To(Succeed())
-		Expect(workspaceStore.Delete(ctx, workspace.ID)).To(Succeed())
+		Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		diApp.RequireStop()
 	})
 
@@ -123,7 +121,6 @@ var _ = Describe("tRPC application service", func() {
 			testutil.NewDB(GinkgoT()),
 			envStore,
 			appConfigFileStore,
-			appConfigFileVersionStore,
 			appStore,
 		).Create(ctx, application, &trpc.CreateParams{
 			TrpcConfig: &trpc.TrpcConfigParams{
@@ -184,7 +181,6 @@ var _ = Describe("tRPC application service", func() {
 			testutil.NewDB(GinkgoT()),
 			envStore,
 			appConfigFileStore,
-			appConfigFileVersionStore,
 			appStore,
 		).Create(ctx, application, &trpc.CreateParams{
 			TrpcConfig: &trpc.TrpcConfigParams{

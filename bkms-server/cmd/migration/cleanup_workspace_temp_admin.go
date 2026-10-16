@@ -63,11 +63,7 @@ func NewCleanupExpiredWorkspaceTempAdminsCmd() *cobra.Command {
 			database.InitClient(ctx, cfg.Mongo)
 			storereg.Init(ctx)
 
-			service := workspaceadmin.NewService(
-				storereg.G().WorkspaceStore,
-				storereg.G().DB,
-				perm.NewManager(),
-			)
+			service := workspaceadmin.NewService(storereg.G().DB, perm.NewManager())
 			if err = service.CleanupExpiredGrants(context.Background()); err != nil {
 				log.Fatalf("cleanup expired workspace temp admins failed: %v", err)
 			}

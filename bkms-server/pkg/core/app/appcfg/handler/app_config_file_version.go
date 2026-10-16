@@ -67,30 +67,26 @@ func (h *Handler) ListAppConfigFileVersions(c *gin.Context) {
 		return
 	}
 
-	opts, err := queryInput.ToVersionListOptions(app.ID)
+	filter, err := queryInput.ToVersionListOpt()
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse appConfigFileID"))
 		return
 	}
 
-	acfService := appcfg.NewAppConfigFileService(
-		h.registry.AppConfigFileStore,
-		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
-	)
-	versions, total, err := acfService.ListVersions(ctx, opts)
+	acfService := appcfg.NewAppConfigFileService(h.registry.AppConfigFileStore, h.registry.DB)
+	versions, err := acfService.ListVersions(ctx, app.ID, queryInput.Page, queryInput.PageSize, filter)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app config file versions"))
 		return
 	}
 
-	items := make([]*serializer.AppConfigFileVersionOutputObj, 0, len(versions))
-	for _, version := range versions {
+	items := make([]*serializer.AppConfigFileVersionOutputObj, 0, len(versions.Items))
+	for _, version := range versions.Items {
 		items = append(items, new(serializer.AppConfigFileVersionOutputObj).FromModel(version))
 	}
 	ginutils.OK(c, serializer.ListAppConfigFileVersionsOutput{
 		Data: &serializer.PaginatedAppConfigFileVersionOutputObjs{
-			Count:   total,
+			Count:   versions.Total,
 			Results: items,
 		},
 	})
@@ -132,7 +128,6 @@ func (h *Handler) GetAppConfigFileVersion(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	version, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
 	if err != nil {
@@ -182,7 +177,6 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	previous, current, err := acfService.CompareVersions(ctx, app.ID, previousID, currentID)
 	if err != nil {
@@ -242,7 +236,6 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	targetVersion, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
 	if err != nil {
@@ -327,7 +320,6 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	version, _, err := acfService.DeleteVersion(ctx, app.ID, id, deleter)
 	if err != nil {

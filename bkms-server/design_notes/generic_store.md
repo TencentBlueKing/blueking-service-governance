@@ -1,7 +1,8 @@
 # GenericStore：基于泛型的通用 Store
 
-> 状态：阶段 4 已完成，A 类 Store 全部迁移（见「阶段 4 迁移结果」）；Update / Upsert 已统一为同一套字段语义（决策 13）；
-> 下一步是阶段 5（v1.1 能力 + B 类）。
+> 状态：阶段 5 已完成，A、B 两类 Store 全部迁移（见「阶段 4 迁移结果」与「阶段 5 计划」下的 5a～5e 结果）；
+> v1.1 的 `ListPage` / `WithoutTotal` / `OmitFields` 已实现；Update / Upsert 已统一为同一套字段语义（决策 13）。
+> Registry 剩 17 个 C 类 Store，留待阶段 6。
 > 维护方式：每完成一个阶段，更新「进度跟踪」与对应章节，结论变化时直接改写正文，不追加流水账。
 
 ## 背景与目标
@@ -80,6 +81,7 @@ CustomRuntimeImageStore（FindOneAndUpdate upsert 并返回文档）、
 ResourceSnapshotStore（拓扑；5 个方法中仅 `UpsertWithVersion` 需自定义）、
 HelmChartSemverCounterStore（多字段 `$inc`，体量小可保留）、
 ComponentDefStore、WorkspaceStore、AppConfigFileVersionStore、AlertStrategyStore（后两者未精读）。
+阶段 5 精读后重新分组，其中 4 个只需 v1 能力，见「阶段 5 计划」。
 
 **C 类（17 个）**
 
@@ -99,7 +101,7 @@ AppModelDeployRecordStore、PublishRecordStore、DepSvcInstStore、ApmInstConfig
 * v1.1（加分页、计数器、投影）：再覆盖 3～5 个，可达 **52%～56%**。
 * A 类 Store 的实现代码合计约 4000 行（含注释与 license 头），迁移后预计可删除一半以上。
 
-## API（v1，已实现于 `pkg/store`）
+## API（v1 + v1.1，已实现于 `pkg/store`）
 
 ```go
 type Meta[T any] struct {
@@ -123,8 +125,11 @@ func ByID(id any) CondOpt                   // 按 _id 匹配，id 类型须与�
 func ContainsIgnoreCase(keyword, field string, moreFields ...string) CondOpt // 忽略大小写模糊匹配，多字段为 OR；
                                             // keyword 去首尾空白、转义正则元字符，空白时不产生条件
 func All() CondOpt                          // 写操作显式声明作用于全部文档
-func Asc(field string) SortOpt / Desc(field string) SortOpt // 仅 Get / List / GetAndDelete 支持
+func Asc(field string) SortOpt / Desc(field string) SortOpt // 仅 Get / List / ListPage / GetAndDelete 支持
 func Limit(n int64) LimitOpt                // 仅 List 支持
+func OmitFields(fields ...string) ProjectOpt // 读取时不取回指定字段（被排除的字段为零值），仅 Get / List / ListPage 支持；
+                                            // 字段必须存在于模型中，互为父子的字段直接报错
+func WithoutTotal() PageOpt                 // 仅 ListPage 支持，不统计总数
 // 以下仅 Update / Upsert 传入 *T 时支持，决定写入哪些字段（见决策 13）
 func UpdateSelected(fields ...string) UpdateOpt // 指定字段，"*" 表示全部顶层字段
 func UpdateOmit(fields ...string) UpdateOpt     // 从候选字段中去掉指定字段
@@ -135,6 +140,7 @@ func Combine(opts ...Opt) Opt               // 组合多个 Opt，供领域包�
 Get(ctx, opts ...Opt) (*T, error)                           // 未命中返回 NotFound；可配合 Desc 取最新一条
 GetByID(ctx, id any) (*T, error)                            // 等价于 Get(ctx, ByID(id))
 List(ctx, opts ...Opt) ([]T, error)                         // 无结果返回空切片
+ListPage(ctx, page, size int64, opts ...Opt) (*Page[T], error) // page 从 1 开始；Page{Items, Total, HasNext}，见「v1.1 能力」
 Exists(ctx, opts ...Opt) (bool, error)
 Count(ctx, opts ...Opt) (int64, error)
 // 写
@@ -151,7 +157,7 @@ DeleteIfExists(ctx, opts ...Opt) error                      // 未命中静默�
 DeleteMany(ctx, opts ...Opt) (int64, error)
 GetAndDelete(ctx, opts ...Opt) (*T, error)                  // 原子删除并返回被删文档（经过 Decode），可配合 Desc 指定删除哪条
 // 逃生口
-Collection() *mongo.Collection                              // 聚合、分页等未覆盖的查询
+Collection() *mongo.Collection                              // 聚合、$inc 等未覆盖的操作
 
 // 计数器
 func NewCounter(db *mongo.Database, collection string) *Counter // Next(ctx, key) (int64, error)
@@ -248,8 +254,8 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 
    ```go
    func encryptPassword(c *HelmRepoCredential) (err error) {
-   	c.Password, err = crypto.OnDemand(config.G.Encrypt.Secret, crypto.AESEncrypt, c.Password)
-   	return errors.Wrap(err, "encrypt password")
+       c.Password, err = crypto.OnDemand(config.G.Encrypt.Secret, crypto.AESEncrypt, c.Password)
+       return errors.Wrap(err, "encrypt password")
    }
    ```
 
@@ -307,7 +313,7 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 3. **`Replace` 原样写入 `obj.CreatedAt`**：传入零值会把创建时间覆盖为零。约定 `obj` 来自 `Get`；
    备选是在 `createdAt` 为零值时拒绝替换。
 4. **A 类中仍未覆盖的能力**：~~`AppDefaultRuleStore` 需要 `FindOneAndDelete`~~（阶段 4 已加入 `GetAndDelete`，决策 12）；
-   B 类需要分页（`Skip` + `Count`）与投影，计划在 v1.1 加入 `store.Skip(n)`，迁移到对应 Store 时再实现，避免预先设计。
+   B 类需要分页与投影，v1.1 以 `ListPage` 与 `store.OmitFields` 提供（见「阶段 5 计划」），已随阶段 5b 实现。
    `Promotion` 的「只取 tag 列表」原先用投影，A 类迁移中改为 `List` 后取字段，记录很小，暂不需要投影。
 5. ~~**fx 装配约束**~~：已由决策 10 取代。
 6. **字段名拼写错误**：字段名为纯字符串，`Update` / `Upsert` 会按模型校验字段，但 filter、排序中的拼写错误不会报错
@@ -323,7 +329,7 @@ repo, err := repoStore.Get(ctx, bkrepo.ByWorkspaceAndType(wsID, bkrepo.RepoTypeH
 | 2 | 实现 `pkg/store` GenericStore v1、Counter、fx 集成，基于真实 DB 的单测 | ✅ 已完成 |
 | 3 | 试点：bkrepo ×2、bkci ×4、HelmRepoCredential（覆盖加解密 hook 路径）；`build/trigger` 暂缓 | ✅ 已完成（见下节） |
 | 4 | 迁移剩余 A 类，引用多的（BuildConfig、AppConfigFileDef）放最后 | ✅ 已完成（见下节） |
-| 5 | v1.1：分页、投影、FindOneAndUpdate；迁移 B 类 | 未开始 |
+| 5 | v1.1：分页、投影；迁移 B 类（分 5a～5e 五批，见「阶段 5 计划」） | ✅ 已完成 |
 | 6 | Registry 收敛；评估 C 类内嵌 GenericStore 复用基础 CRUD | 未开始 |
 
 ## 阶段 3 试点结果
@@ -431,9 +437,205 @@ dbfactory 的 `TrpcApplicationStores` / `TafApplicationStores` 不再需要 `Bui
 
 遗留：
 
-* `workspace.GetWorkspaceImageRegistry` 内部仍用传入的 db 构造 `WorkspaceStore`（C 类），等工作空间迁移后再收敛。
+* ~~`workspace.GetWorkspaceImageRegistry` 内部仍用传入的 db 构造 `WorkspaceStore`（C 类）~~（阶段 5e 已收敛为 `store.Of(db, workspace.Meta)`）。
 * depservice `envvars/reader_test` 中 ServiceInstance 的内存实现仍保留（C 类，不在本次范围）。
-* `bkiam/role.RoleStore`、`appcfg.AppValuesConfigStore` 未精读，未纳入本次迁移。
+* ~~`bkiam/role.RoleStore`、`appcfg.AppValuesConfigStore` 未精读，未纳入本次迁移~~（阶段 5a 已迁移 / 删除）。
+
+## 阶段 5 计划
+
+### 重新分组
+
+精读 B 类与阶段 1 未精读的 Store 后，按迁移实际需要的能力重新分组：
+
+| 分组 | Store | 要点 |
+|---|---|---|
+| 只需 v1 | `customruntime.Store` | 原实现用 FindOneAndUpdate 返回文档，但唯一调用方 `persist.upsertRecord` 不使用返回值；「命中时只刷新 updatedAt」用 `Upsert` + `UpdateSelected("updatedAt")` 表达，模型函数先设置 `UpdatedAt`（显式选中时取对象中的值）；`Validate` 与 trim 进 BeforeSave |
+| 只需 v1 | `alertstrategy.Store` | 查询均为 Where / `$or` / `$elemMatch` + 排序；`Create` 返回的 ObjectID 改由 `obj.ID` 回填；校验与 nil 切片默认值进 BeforeSave；`Delete` 用 `DeleteIfExists` |
+| 只需 v1 | `topology.ResourceSnapshotStore` | `UpsertWithVersion` 改为一次带 `dataVersion $lte` 条件的 `Upsert`，唯一索引冲突即版本冲突；`Get` 有 5 处调用方依赖「未找到返回 `nil, nil`」，由具名函数 `FindSnapshot` 保持该语义；`UpdateStatus`、`Delete` 未命中保持静默 |
+| 只需 v1 | `bkiam/role.RoleStore` | 两个集合各一个 Meta；`Get` 未命中由包装后的 `ErrNoDocuments` 改为 `store.ErrNotFound`（无调用方依赖）；`bkiam/service_test` 的 `fakeRoleStore` 改为测试库 |
+| 删除 | `appcfg.AppValuesConfigStore` | 只有接口、没有实现与调用方 |
+| 需要分页 | `build/image.RecordStore`、`build/chart.RecordStore` | 计数器集合结构即 `{_id: appID, seq}`，直接用 `store.Counter`；chart 记录没有时间戳字段，`StartedAt` 在具名函数中赋值 |
+| 需要分页 + 投影 | `appmodeldeploy.ResourceSnapshotStore` | 元数据列表排除 `manifest`（单条可达 5MB）；非法 hex 视为未找到的约定保留在具名函数中 |
+| 需要分页 | `appcfg.AppConfigFileVersionStore` | 接口注入面广（29 个文件）；`page <= 0` 时不分页的分支留在具名函数中；`GetByFileAndVersion` 新增哨兵 |
+| 需要分页 | `workspace.WorkspaceStore` | 引用最多；`CountByState` 聚合用 `Collection()`；`Delete` 内的 `runPreDeleteHooks` 移到具名函数；`Update` 未命中改为 NotFound |
+| 需要 `$inc` | `component.ComponentDefStore` | 除 `UpdateInstanceCount` 外均为 v1：Upsert 用 `UpdateOmit` 排除两个计数字段，nil 的 patchers / specs 在 Encode 中转为 `[]`；关键字改用 `ContainsIgnoreCase`（原实现未转义正则元字符） |
+| 需要 `$inc` | `semver.CounterStore` | 改为模型包具名函数：`Next`（`$inc` + `$set` + FindOneAndUpdate）用 `Collection()`，`Get` 用 GenericStore，从 Registry 移除 |
+
+`build/trigger` 的两个 Store 仍属 W1 契约，继续暂缓。
+
+### v1.1 能力
+
+1. **分页 `ListPage`**：分页参数是位置参数，结果是结构体，取代曾考虑的 `Skip` / `Page` 选项 + `ListAndCount`
+   （后者统计总数时静默忽略分页选项，两者的关系从签名上看不出来）。现有 10 处 `SetSkip` 均按 `(page - 1) * pageSize` 计算，不需要原始偏移量。
+
+   ```go
+   type Page[T any] struct {
+       Items   []T   // 无结果时为空切片
+       Total   int64 // 匹配的总数；传入 WithoutTotal 时不统计，恒为 0
+       HasNext bool  // 是否还有下一页，两种模式下均有效
+   }
+
+   // page 从 1 开始、size >= 1，否则返回错误。支持的选项：CondOpt、SortOpt、ProjectOpt、PageOpt（不接受 LimitOpt）
+   func (s *GenericStore[T]) ListPage(ctx context.Context, page, size int64, opts ...Opt) (*Page[T], error)
+
+   func WithoutTotal() PageOpt // 仅 ListPage 支持
+   ```
+
+   * 默认先 `Count` 再 `Find`，总数为 0 时跳过 `Find`，`HasNext = page*size < Total`：现有分页调用点全部需要返回总数。
+   * `WithoutTotal()` 不执行 `Count`，多取一条（limit = size + 1）判断 `HasNext`。`Total` 保持 `int64` 而不是指针，
+     避免所有统计总数的调用方解引用，代价是此时 0 不代表没有数据，需看注释。
+   * 不自动追加 `_id` 作为二级排序：现有索引多为 `appID + createdAt` 形态，追加后可能无法走索引排序；
+     由调用方保证排序最终落在唯一字段上（如 workspace 的 `id`、version 的 `_id`）。
+2. **投影 `store.OmitFields(fields...)`**：新增 `ProjectOpt`，Get / List / ListPage 支持；只提供排除不提供包含，
+   被排除的字段为零值，Decode 钩子照常执行（钩子须能处理被排除的字段）。目前只有 appmodel 资源快照使用。
+   命名上不用 `Exclude`，避免被理解为过滤条件（「排除某些文档」）；`Omit` 与写操作的 `UpdateOmit` 呼应，都表示「不碰这些字段」。
+   字段按模型校验，拼错直接报错：否则会静默地读回本想跳过的大字段（如 5MB 的 manifest）。
+3. **`$inc` 不进 GenericStore**：两处写法差异大，在模型包内基于 `Collection()` 实现具名函数。
+4. **FindOneAndUpdate 从 v1.1 中删除**：唯一候选 customruntime 并不需要返回的文档。
+
+### 分批
+
+| 批次 | 内容 | 状态 |
+|---|---|---|
+| 5a | 只需 v1 的 4 个 Store；删除 `AppValuesConfigStore` | 已完成，见「5a 结果」 |
+| 5b | 实现 `ListPage`、`OmitFields`；迁移两个构建记录 Store 与 appmodel 资源快照 | 已完成，见「5b 结果」 |
+| 5c | `ComponentDefStore`（含组件引用计数钩子装配）、semver | 已完成，见「5c 结果」 |
+| 5d | `AppConfigFileVersionStore` | 已完成，见「5d 结果」 |
+| 5e | `WorkspaceStore`，并收敛阶段 4 遗留的 `GetWorkspaceImageRegistry` | 已完成，见「5e 结果」 |
+
+每批沿用阶段 4 的做法：删除 Registry 字段、原接口与 `*StoreMongo`，构造函数改为接收 db，测试改为针对测试库并移除 fake / stub，
+完成后把结果与行为变化写入本节。全部完成后 Registry 剩 17 个 C 类 Store（已核实）。
+
+### 5a 结果
+
+Registry 中的 `CustomRuntimeImageStore`、`AlertStrategyStore`、`ResourceSnapshotStore` 已删除（role 不在 Registry 中），
+原接口、`*StoreMongo` 与只提供 Store 的 FxModule（customruntime）一并删除；`appcfg.AppValuesConfigStore` 及其模型直接删除。
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `customruntime.Store` | `customruntime.Meta` | `Register` 按 workspaceID + type + name 做 `Upsert` + `UpdateSelected("updatedAt")`；`Validate` 与 trim 进 BeforeSave；具名 Opt `ByWorkspace` / `ByType` / `ByKey` / `NameContains` / `InListOrder` |
+| `alertstrategy.Store` | `strategy.Meta` | `Duplicate` 设为 `ErrDisplayNameAlreadyExists`（集合唯一的唯一索引就是策略名称）；校验与 nil 切片默认值进 BeforeSave；具名 Opt `ByApp` / `ByDisplayName` / `ByRemoteEnv` / `EnabledMatchingEnv` / `NewestFirst` |
+| `topology.ResourceSnapshotStore` | `topology.ResourceSnapshotMeta` | `FindSnapshot`（未找到返回 `nil, nil`）、`SaveWithVersion`、`UpdateRefreshStatus`、`ByScope` |
+| `bkiam/role.RoleStore` | `role.RoleMeta`、`role.GradeManagerMeta` | 模型没有 `_id` 字段；`RoleQueryParams` 改为具名 Opt `ByWorkspace` / `ByGradeManager` / `ByScope` / `ByRoleID` / `ByUserGroupIDs` |
+
+按决策 7 改为接收 `db *mongo.Database` 的有：`customruntime.NewPersistManager` / `NewTagQueryManager`、`topology.NewService` /
+`NewRefresher`、`strategy.NewService`（不再接收 snapshot store，由 db 构造）、`strategyhooks.RegisterUpdateHooks`、
+`bkiam.NewIAMService`（`ListRoles` 等仍返回 `[]*role.Role`）。部署 handler 删除拓扑快照改为 `DeleteIfExists(topology.ByScope(...))`；
+helm / appmodel 部署轮询任务中触发拓扑刷新改用 `storereg.G().DB`，不再自行构造 Store。
+
+行为变化（调用方需要知道的）：
+
+1. **拓扑快照的乐观锁改为一次原子 upsert**：过滤条件带 `dataVersion <= expected`，版本已被推进时匹配不到文档，MongoDB 转而插入，
+   因作用域唯一索引冲突而失败，转为 `ErrVersionConflict`；回写读出的旧快照（带 `_id`）同理。原实现分两步（先确保文档存在、再带版本更新），
+   同一作用域首次刷新并发时两者都能通过版本检查、后写覆盖先写；现在后到者得到冲突并被 refresher 丢弃，两次结果的版本号相同，无实际影响。
+2. **告警策略名称冲突**：`Create` / `Update` 的唯一键冲突返回包装后的错误，`errors.Is(err, ErrDisplayNameAlreadyExists)` 仍成立
+   （handler 本就用 `errors.Is`），不再是裸哨兵。`Update` 未命中改为 NotFound（原实现同样返回 `ErrNotFound`）。
+3. **告警策略的应用范围校验放进查询条件**：handler 的 `getAlertStrategyInApp` 用 `ByID` + `ByApp` 查询，跨应用的策略与不存在的策略一样返回 `ErrNotFound`。
+4. **默认告警策略初始化失败不再在内部打日志**：改为带模板 code 包装后返回，由调用方记录一次。
+5. **customruntime**：`Register` 命中已有记录时不再把 ID / createdAt 回填到调用方对象（无调用方使用）；`Exists` / `List` 不再拒绝空 workspaceID，
+   自然匹配不到；查询不再预校验 type（handler 已用 `oneof=builder runner` 绑定）。
+6. **role**：`Get` 未命中返回 `store.ErrNotFound`；`ByUserGroupIDs` 把 nil 切片转为空数组，避免 `$in: null` 报错。
+
+测试改造：`bkiam/service_test` 的 `fakeRoleStore` 删除，改为测试库（为此给 bkiam 套件补上了测试库初始化）；告警策略 `service_test`
+中包装 Store 让 `Create` 失败的 `failingCreateStore` 删除，改为在远端同步回调中插入同名策略，模拟并发创建导致本地持久化失败；
+告警策略测试原先清理的集合名 `resource_snapshots` 有误，改为 `topology.ResourceSnapshotMeta.Collection`。
+
+### 5b 结果
+
+`pkg/store` 新增 `ListPage` / `Page[T]`、`WithoutTotal`（`PageOpt`）与 `OmitFields`（`ProjectOpt`），设计见「v1.1 能力」；
+`ListPage` 额外拒绝 `page * size` 溢出的参数。Registry 中的 `BuildRecordStore`、`HelmChartBuildRecordStore`、
+`AppModelDeployResourceSnapshotStore` 已删除；semver 因 `NewChartBuildService` 依赖它，提前在本批一并迁移（见 5c）。
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `build/image.RecordStore` | `build.RecordMeta` | `CreateRecord(ctx, db, record)` 用 `store.Counter`（集合 `build_counters`，文档结构不变）分配序号后创建；`UpdateRecord` 用 `UpdateSelected("num", "status", "extras", "endedAt")`；具名 Opt `ByApp`（与构建配置共用）/ `ByBuild` / `RecordKeywordMatches` |
+| `build/chart.RecordStore` | `chart.RecordMeta` | 同上，计数器集合 `helm_chart_build_counters`；模型没有时间戳字段，`CreateRecord` 设置 `StartedAt`；具名 Opt `ByApp` / `ByBuild` / `KeywordMatches` / `NewestFirst` |
+| `appmodeldeploy.ResourceSnapshotStore` | `appmodeldeploy.ResourceSnapshotMeta` | `ListSnapshotMeta` 用 `ListPage` + `OmitFields("manifest")`；`GetSnapshot` 保留「非法 hex 视为未找到」；写入用 `CreateMany`，具名 Opt `ByDeployRecord` / `InKindNameOrder` |
+
+按决策 7 改为接收 db 的有：`build/build.NewService`（去掉 record store 参数）、`chart.NewChartBuildService(db)`（原先 3 个参数）、
+`buildpoll` / `chartbuildpoll` 的 `newPoller`。
+
+行为变化（调用方需要知道的）：
+
+1. **构建记录唯一键冲突**返回 `store.ErrDuplicate`，不再是自拼的 "already exists" 文案；未命中照常匹配 `ErrRecordNotFound`。
+2. **列表关键字去首尾空白**：原实现已转义正则元字符，现在额外 trim，空白关键字不再过滤。
+3. **资源快照分页追加 `_id` 作为末级排序**：原实现只按 kind + name 排序，同名资源跨页时顺序不稳定；非法 deployID 返回空页
+   （原先返回 `nil, 0, nil`，handler 的输出一致）。
+4. 无调用方的 `ListByDeployRecord` 与 `ErrResourceSnapshotNotFound` 已删除。
+
+### 5c 结果
+
+Registry 中的 `ComponentDefStore`、`HelmChartSemverCounterStore` 已删除，`component.FxModule`（只提供 Store）一并删除。
+
+| 原 Store | Meta / 函数 | 要点 |
+|---|---|---|
+| `component.ComponentDefStore` | `component.ComponentDefMeta` | 校验进 BeforeSave，nil 的 patchers / specs 在 Encode 中转为 `[]`；`UpsertDef` 用 `UpdateOmit` 保留两个实例计数；`UpdateInstanceCount` 基于 `Collection()` 执行 `$inc`；`ListOptions` 改为具名 Opt `ByNameVersion` / `ExcludeInvisible` / `UsableInWorkspace` / `ManagedByWorkspace` / `KeywordMatches`，serializer 的 `ToModel` 改为 `ToListOpt` |
+| `semver.CounterStore` | `semver.CounterMeta`、`semver.Next` / `semver.Get` | `Next` 的「按段 `$inc` 并归零其余段」基于 `Collection()` 的 FindOneAndUpdate；`Get` 未命中仍返回零值 counter |
+
+按决策 7 改为接收 db 的有：`workspace.NewComponentRefCountHooks(db)`、`appmodel.NewComponentRefCountHooks(db)`、
+`component.NewAppPropertiesBuilder(db, envSvc)`、`NewAppComponentApplier(db, envSvc)`、appspec 的 `migrate.New`（去掉 component def store）；
+`LoadBuiltinFromFolder` 与 dbfactory 的 `CompDef` 改为接收 `*component.ComponentDefStore`。
+
+行为变化（调用方需要知道的）：
+
+1. **关键字按字面匹配**：原实现把 keyword 直接作为 `$regex`，未转义元字符；现在用 `ContainsIgnoreCase`，并去首尾空白。
+2. **重复创建**返回包装后的错误，`errors.Is(err, ErrComponentDefAlreadyExists)` 仍成立，不再是裸哨兵；未命中同理匹配 `ErrComponentDefNotFound`。
+3. `List` 返回 `[]ComponentDef`（原先 `[]*ComponentDef`）；删除改用 `DeleteIfExists`，handler 原本就不使用删除数量。
+
+### 5d 结果
+
+Registry 中的 `AppConfigFileVersionStore` 已删除，`appcfg.FxModule` 不再提供它；`trpc` / `taf` 的 `NewService`、
+appmodel 部署的 `ServiceDeps`、`buildpoll`、dbfactory 的 `TrpcApplicationStores` 等不再需要该 Store。
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `appcfg.AppConfigFileVersionStore` | `appcfg.AppConfigFileVersionMeta` | 具名 Opt `VersionsByApp` / `VersionsByFile` / `VersionNotDeleted` / `VersionsNewestFirst`（createdAt、_id 倒序）；`BaseAppCfgFileService.ListVersions` 用 `ListPage` 并固定追加应用范围、未删除与排序条件；软删除用 `Update(map)`；按文件 / 应用清理用 `DeleteMany` |
+
+构造函数变化：`NewBaseAppCfgFileService(db, fileStore)`、`NewAppConfigFileService(fileStore, db)`、`NewMountableFileProvider(fileStore, db)`、
+`appcfghooks.RegisterDeleteHooks(appStore, fileStore, db)`；serializer 的 `ToVersionListOptions` 改为 `ToVersionListOpt() (store.Opt, error)`
+（文件 ID 非法 hex 时返回错误）。删除应用时由 handler 直接 `DeleteMany(appcfg.VersionsByApp(appID))`。
+
+与计划的出入：
+
+* `GetByFileAndVersion` 没有调用方，直接删除，未新增哨兵。
+* `page <= 0` 时不分页的分支只有测试使用，删除；handler 的分页参数本就要求 `page >= 1`。
+
+行为变化（调用方需要知道的）：
+
+1. **描述关键字按字面匹配并去首尾空白**。
+2. **软删除时版本已不存在**返回 `ErrAppCfgFileVersionNotFound`（原先静默成功）；`DeleteVersion` 会先读出目标版本，只有并发物理删除时才会遇到。
+3. **唯一键冲突**新增业务哨兵 `ErrAppCfgFileVersionAlreadyExists`。
+4. 只有 `ListVersions` 排除已软删除的版本；`GetVersionByAppAndID` 与 `CompareVersions` 仍能读到它们（与原实现一致）。
+
+### 5e 结果
+
+Registry 中的 `WorkspaceStore` 已删除，原接口、`WorkspaceStoreMongo`、`ListOptions` / `ListPageOptions` 一并删除，
+`workspace.FxModule` 只剩 `WorkspaceCompsStore`。
+
+| 原 Store | Meta | 要点 |
+|---|---|---|
+| `workspace.WorkspaceStore` | `workspace.Meta` | 模型没有 `_id`，按 ID 查询须用 `ByWorkspaceID`（不能用 `GetByID`）；具名 Opt `InState` / `KeywordMatches` / `DefaultOrder`（updatedAt 倒序、id 正序）；具名函数 `Update`（`UpdateSelected` 可变字段）、`Delete`（先执行 pre-delete 钩子再 `DeleteIfExists`）、`CountByState` |
+
+调用方统一写作 `store.Of(db, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(id))`，不再定义 `workspace.Get`（决策 7）。
+按决策 7 改为接收 db 的有：`workload.NewBuilderService`（去掉 workspace store 参数）、`strategyhooks.RegisterUpdateHooks(db, envStore, appStore)`、
+`platmgt/workspace.NewService(db, appStore, envStore)`（其 FxModule 为此引入 `database.PrivateFxModule`）、
+`platmgt/workspace/admin.NewService(db, permMgr)`；`ListSortByOpTime` 与 dbfactory 的 `Workspace` 改为接收 `*workspace.WorkspaceStore`。
+平台管理的工作空间列表用 `ListPage`，筛选条件由 `WorkspaceListOptions.ToWorkspaceStoreListOpt()` / `ToWorkspaceStoreStatisticsOpt()` 生成。
+
+与计划的出入：
+
+* `CountByState` 没有改用 `Collection()` 聚合，而是对三个已知状态各执行一次 `Count`：工作空间数量很少，代码更直观；
+  结果固定包含这三个状态（数量可为 0），库中的其它状态值不再出现（原聚合只返回出现过的状态值，调用方只读取这三个）。
+
+行为变化（调用方需要知道的）：
+
+1. **`Update` 未命中**返回 `ErrWorkspaceNotFound`（原先静默成功）；`Get` 未命中返回包装后的错误，调用方均已使用 `errors.Is`。
+2. **`Create` 时 `updatedAt` 与 `createdAt` 相同**：原实现中的兼容性 FIXME 随旧代码删除。
+3. **关键字去首尾空白**（原实现已转义正则元字符）。
+4. `Delete` 行为不变：工作空间不存在时静默成功，pre-delete 钩子失败时不删除。
+
+测试改造：`workspace/store_test` 按具名 Opt 与具名函数重写，并补充 `Update` 未命中、删除钩子顺序与失败、分页排序的用例；
+其余约 10 个测试文件改用 `testutil.NewStore(GinkgoT(), workspace.Meta)`，不再经 fx 注入工作空间 Store。
 
 ## 扫描中顺带发现的问题
 
@@ -442,6 +644,6 @@ dbfactory 的 `TrpcApplicationStores` / `TafApplicationStores` 不再需要 `Bui
 1. ~~`depservice/model/service_store.go` 的 `List` 未调用 `serviceFromDBValue`~~（阶段 4 已修复：plan config 编解码改为 Decode 钩子）。
 2. ~~加密在调用方对象上就地进行~~（bkrepo 于阶段 3、build/image 于阶段 4 修复）。
 3. NotFound 语义不一致：appcfg def、构建配置、networking 已在阶段 4 统一为哨兵错误；
-   拓扑 `ResourceSnapshotStoreMongo.Get` 未找到时返回 `nil, nil`（B 类，迁移时须保持调用方依赖的语义）。
+   拓扑快照未找到时返回 `nil, nil` 是调用方依赖的语义，阶段 5a 由具名函数 `topology.FindSnapshot` 显式保留。
 4. 不少 Store 直接 `return err` 不加 Wrap；`appdefaults` 中 Store 及其调用方的 `fmt.Errorf("%w")` 已在阶段 4 随迁移改为 `errors.Wrap`，
    其余未迁移的 Store 仍需处理。

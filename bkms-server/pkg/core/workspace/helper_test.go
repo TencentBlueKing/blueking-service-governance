@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
@@ -37,15 +38,14 @@ import (
 
 var _ = Describe("ListSortByOpTime", func() {
 	var ctx context.Context
-	var wsStore bkmsworkspace.WorkspaceStore
+	var wsStore *bkmsworkspace.WorkspaceStore
 	var opStore audit.OperationRecordStore
 
 	BeforeEach(func() {
 		var err error
 		ctx = context.Background()
 
-		wsStore, err = bkmsworkspace.NewWorkspaceStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
+		wsStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 
 		opStore, err = audit.NewOperationRecordStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
@@ -58,9 +58,9 @@ var _ = Describe("ListSortByOpTime", func() {
 		ws2 := dbfactory.Workspace(ctx, wsStore)
 		ws3 := dbfactory.Workspace(ctx, wsStore)
 		defer func() {
-			_ = wsStore.Delete(ctx, ws1.ID)
-			_ = wsStore.Delete(ctx, ws2.ID)
-			_ = wsStore.Delete(ctx, ws3.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, ws1.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, ws2.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, ws3.ID)
 		}()
 
 		now := time.Now()
@@ -103,8 +103,8 @@ var _ = Describe("ListSortByOpTime", func() {
 		wsWithOp := dbfactory.Workspace(ctx, wsStore)
 		wsNoOp := dbfactory.Workspace(ctx, wsStore)
 		defer func() {
-			_ = wsStore.Delete(ctx, wsWithOp.ID)
-			_ = wsStore.Delete(ctx, wsNoOp.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, wsWithOp.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, wsNoOp.ID)
 		}()
 
 		record := &audit.OperationRecord{
@@ -139,8 +139,8 @@ var _ = Describe("ListSortByOpTime", func() {
 		wsA := dbfactory.Workspace(ctx, wsStore)
 		wsB := dbfactory.Workspace(ctx, wsStore)
 		defer func() {
-			_ = wsStore.Delete(ctx, wsA.ID)
-			_ = wsStore.Delete(ctx, wsB.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, wsA.ID)
+			_ = bkmsworkspace.Delete(ctx, wsStore, wsB.ID)
 		}()
 
 		now := time.Now()

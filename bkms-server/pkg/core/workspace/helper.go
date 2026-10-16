@@ -41,14 +41,13 @@ type WorkspaceWithOpTime struct {
 // 不包含权限过滤
 func ListSortByOpTime(
 	ctx context.Context,
-	wsStore WorkspaceStore,
+	wsStore *WorkspaceStore,
 	opStore audit.OperationRecordStore,
 	username string,
 ) ([]WorkspaceWithOpTime, error) {
-	readyState := StateReady
-	workspaces, err := wsStore.List(ctx, &ListOptions{State: &readyState})
+	workspaces, err := wsStore.List(ctx, InState(StateReady))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "list ready workspaces")
 	}
 	if len(workspaces) == 0 {
 		return nil, nil

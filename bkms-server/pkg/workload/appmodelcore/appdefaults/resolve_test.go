@@ -27,7 +27,7 @@ var _ = Describe("Application default resolution", func() {
 	var db *mongo.Database
 	var envService *bkmsenv.EnvService
 	var envStore envmodel.EnvironmentStore
-	var workspaceStore bkmsworkspace.WorkspaceStore
+	var workspaceStore *bkmsworkspace.WorkspaceStore
 	var workspace *bkmsworkspace.Workspace
 
 	BeforeEach(func() {
@@ -39,9 +39,10 @@ var _ = Describe("Application default resolution", func() {
 			GinkgoT(),
 			bkmsenv.FxModule,
 			bkmsworkspace.FxModule,
-			fx.Populate(&envService, &envStore, &workspaceStore),
+			fx.Populate(&envService, &envStore),
 		)
 		diApp.RequireStart()
+		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 		db = testutil.NewDB(GinkgoT())
 		ruleStore = store.Of(db, appdefaults.RuleMeta)
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
@@ -51,7 +52,7 @@ var _ = Describe("Application default resolution", func() {
 		// Clear documents without Drop so migration-managed unique indexes survive.
 		Expect(testutil.CleanupCollection(appdefaults.CollectionName)).To(Succeed())
 		Expect(envStore.DeleteAll(ctx)).To(Succeed())
-		Expect(workspaceStore.Delete(ctx, workspace.ID)).To(Succeed())
+		Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		bkmsworkspace.ResetLifecycleHooksForTest()
 		bkmsenv.ResetHooksForTest()
 		diApp.RequireStop()

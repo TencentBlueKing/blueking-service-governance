@@ -36,11 +36,15 @@ import (
 // 选项按用途分为不同的类型，每个操作只接受其中一部分。传入不支持的选项会返回错误而不是被静默忽略，
 // 否则可能违背调用方预期，例如 DeleteMany(..., Limit(10)) 实际会删除全部匹配文档：
 //
-//	类型        创建方式                                          支持的操作
-//	CondOpt    Where / Filter / ByID / ContainsIgnoreCase / All  全部操作
-//	SortOpt    Asc / Desc                                       Get、List、GetAndDelete
-//	LimitOpt   Limit                                            List
-//	UpdateOpt  UpdateSelected / UpdateOmit / UpdateNonZero      Update、Upsert
+//	类型         创建方式                                          支持的操作
+//	CondOpt     Where / Filter / ByID / ContainsIgnoreCase / All  全部操作
+//	SortOpt     Asc / Desc                                       Get、List、ListPage、GetAndDelete
+//	LimitOpt    Limit                                            List
+//	ProjectOpt  OmitFields                                       Get、List、ListPage
+//	PageOpt     WithoutTotal                                     ListPage
+//	UpdateOpt   UpdateSelected / UpdateOmit / UpdateNonZero      Update、Upsert
+//
+// 只有 CondOpt 影响匹配哪些文档，其余选项只决定结果的顺序、数量、读出哪些字段或写入哪些字段。
 //
 // 过滤条件、排序中的字段名既可以写 bson 路径，也可以写 Go 字段名（见 resolvePath），
 // 模型中不存在的字段原样保留；Update / Upsert 的字段则必须存在于模型中。
@@ -67,18 +71,22 @@ const (
 	kindSort
 	kindLimit
 	kindUpdate
+	kindProject
+	kindPage
 )
 
 // 各操作支持的选项类别
 const (
-	getOpts    = kindCond | kindSort
-	listOpts   = kindCond | kindSort | kindLimit
-	condOpts   = kindCond
-	updateOpts = kindCond | kindUpdate
+	getOpts          = kindCond | kindSort | kindProject
+	listOpts         = kindCond | kindSort | kindLimit | kindProject
+	pageOpts         = kindCond | kindSort | kindProject | kindPage
+	getAndDeleteOpts = kindCond | kindSort
+	condOpts         = kindCond
+	updateOpts       = kindCond | kindUpdate
 )
 
 // kindNames 按位序排列，与上面的 kindXxx 一一对应
-var kindNames = []string{"condition", "sort", "limit", "update fields"}
+var kindNames = []string{"condition", "sort", "limit", "update fields", "omitted fields", "page"}
 
 func (k optKind) String() string {
 	var names []string
@@ -190,6 +198,48 @@ func Limit(n int64) LimitOpt {
 }
 
 // -----------------------------------------------------------------------------
+// ProjectOpt：读出的字段
+// -----------------------------------------------------------------------------
+
+// ProjectOpt 指定读操作不读出哪些字段，由 OmitFields 创建，仅 Get / List / ListPage 支持；多个 ProjectOpt 会合并
+type ProjectOpt struct {
+	omitted []string
+}
+
+func (ProjectOpt) kind() optKind { return kindProject }
+
+func (o ProjectOpt) apply(q *query) { q.omitted = append(q.omitted, o.omitted...) }
+
+// OmitFields 读取时不从数据库取回指定的字段，用于跳过体积大、列表页用不到的字段（如完整的资源清单）。
+// 它不影响匹配哪些文档：被跳过的字段在返回的对象中为零值，Decode 钩子照常执行，须能处理这些零值。
+// 字段可以写 bson 路径或 Go 字段名，必须存在于模型中，避免拼错时静默读出全部字段。例如：
+//
+//	// 列出部署记录的资源快照，但不读取 manifest
+//	snapshots.List(ctx, ByDeployRecord(recordID), store.OmitFields("manifest"))
+func OmitFields(fields ...string) ProjectOpt {
+	return ProjectOpt{omitted: fields}
+}
+
+// -----------------------------------------------------------------------------
+// PageOpt：分页行为
+// -----------------------------------------------------------------------------
+
+// PageOpt 调整 ListPage 的行为，由 WithoutTotal 创建，仅 ListPage 支持
+type PageOpt struct {
+	withoutTotal bool
+}
+
+func (PageOpt) kind() optKind { return kindPage }
+
+func (o PageOpt) apply(q *query) { q.withoutTotal = q.withoutTotal || o.withoutTotal }
+
+// WithoutTotal 让 ListPage 不统计匹配的总数，只判断是否还有下一页，适合「加载更多」式的分页，
+// 省去一次 Count。此时 Page.Total 恒为 0，不代表没有数据
+func WithoutTotal() PageOpt {
+	return PageOpt{withoutTotal: true}
+}
+
+// -----------------------------------------------------------------------------
 // UpdateOpt：Update / Upsert 写入的字段
 // -----------------------------------------------------------------------------
 
@@ -283,6 +333,10 @@ type query struct {
 	limit    int64
 	// fields 仅 Update / Upsert 使用，nil 表示没有传入任何 UpdateOpt
 	fields *fieldSelection
+	// omitted 读操作不读出的字段，parseOpts 之后为 bson 路径
+	omitted []string
+	// withoutTotal 仅 ListPage 使用
+	withoutTotal bool
 }
 
 var (
@@ -308,6 +362,14 @@ func (q *query) hasKey(key string) bool {
 	return documentHasKey(q.conds, key)
 }
 
+// projection 生成排除 omitted 字段的投影，没有要排除的字段时返回 nil（读出全部字段）
+func (q *query) projection() bson.D {
+	if len(q.omitted) == 0 {
+		return nil
+	}
+	return lo.Map(q.omitted, func(f string, _ int) bson.E { return bson.E{Key: f, Value: 0} })
+}
+
 // parseOpts 依次应用 opts，遇到 accepted 之外类别的选项时返回错误；
 // 过滤条件与排序中的字段名会被转换为 bson 路径
 func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*query, error) {
@@ -331,7 +393,34 @@ func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*q
 			return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 		}
 	}
+	if q.omitted, err = s.resolveOmitted(q.omitted); err != nil {
+		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
+	}
 	return q, nil
+}
+
+// resolveOmitted 将 OmitFields 的字段转换为 bson 路径：字段必须存在于模型中，重复的字段只保留一个，
+// 互为父子的字段会被 MongoDB 判定为路径冲突，提前拒绝
+func (s *GenericStore[T]) resolveOmitted(fields []string) ([]string, error) {
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	paths := make([]fieldPath, 0, len(fields))
+	for _, f := range fields {
+		p, err := resolvePath(s.schema.typ, f)
+		if err != nil {
+			return nil, err
+		}
+		if !p.known {
+			return nil, errors.Wrapf(errUnknownField, "omitted field %q", f)
+		}
+		paths = append(paths, p)
+	}
+	paths, err := dedupePaths(paths)
+	if err != nil {
+		return nil, err
+	}
+	return lo.Map(paths, func(p fieldPath, _ int) string { return p.String() }), nil
 }
 
 // requireFilter 要求写操作必须带过滤条件（或显式 All）

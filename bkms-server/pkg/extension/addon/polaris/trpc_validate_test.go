@@ -41,7 +41,6 @@ var _ = Describe("CollectConfigWarnings", func() {
 		appModelStore         appmodel.AppModelStore
 		appConfigFileStore    appcfg.AppConfigFileStore
 		appConfigFileDefStore *appcfg.AppConfigFileDefStore
-		versionStore          appcfg.AppConfigFileVersionStore
 		polarisConfigStore    polaris.PolarisConfigStore
 		cfgProvider           appcfg.MountableFileProvider
 		testAppID             string
@@ -59,13 +58,12 @@ var _ = Describe("CollectConfigWarnings", func() {
 			fx.Populate(
 				&appModelStore,
 				&appConfigFileStore,
-				&versionStore,
 				&polarisConfigStore,
 			),
 		)
 		diApp.RequireStart()
 		appConfigFileDefStore = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
-		cfgProvider = appcfg.NewMountableFileProvider(appConfigFileStore, testutil.NewDB(GinkgoT()), versionStore)
+		cfgProvider = appcfg.NewMountableFileProvider(appConfigFileStore, testutil.NewDB(GinkgoT()))
 	})
 
 	AfterEach(func() {

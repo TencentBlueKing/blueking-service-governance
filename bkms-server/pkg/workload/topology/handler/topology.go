@@ -72,7 +72,7 @@ func (h *Handler) GetResourceTopology(c *gin.Context) {
 	}
 
 	graph, err := topology.NewService(
-		h.registry.ResourceSnapshotStore,
+		h.registry.DB,
 		topology.NewBuilder(),
 		h.registry.AppModelStore,
 		h.registry.AppSpecStore,
@@ -121,7 +121,7 @@ func (h *Handler) GetTopologyNodeDetail(c *gin.Context) {
 	}
 
 	detail, err := topology.NewService(
-		h.registry.ResourceSnapshotStore,
+		h.registry.DB,
 		topology.NewBuilder(),
 		h.registry.AppModelStore,
 		h.registry.AppSpecStore,
@@ -175,7 +175,7 @@ func (h *Handler) ListTopologyNodeEvents(c *gin.Context) {
 	}
 
 	paginatedEvents, err := topology.NewService(
-		h.registry.ResourceSnapshotStore,
+		h.registry.DB,
 		topology.NewBuilder(),
 		h.registry.AppModelStore,
 		h.registry.AppSpecStore,
@@ -236,7 +236,7 @@ func (h *Handler) GetTopologyNodeManifest(c *gin.Context) {
 	}
 
 	manifest, err := topology.NewService(
-		h.registry.ResourceSnapshotStore,
+		h.registry.DB,
 		topology.NewBuilder(),
 		h.registry.AppModelStore,
 		h.registry.AppSpecStore,

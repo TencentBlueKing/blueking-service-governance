@@ -20,24 +20,14 @@ package build
 
 import (
 	"context"
-	"regexp"
-	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
-
-// buildRecordCollName 构建记录表名
-const buildRecordCollName = "build_records"
-
-// buildCounterCollName 构建计数器表名
-const buildCounterCollName = "build_counters"
 
 var (
 	// ErrConfigNotFound 构建配置未找到
@@ -74,7 +64,7 @@ func decryptImagePassword(cfg *Config) (err error) {
 	return errors.Wrap(err, "decrypt image password")
 }
 
-// ByApp 按应用 ID 匹配构建配置
+// ByApp 按应用 ID 匹配构建配置或构建记录
 func ByApp(appID string) store.Opt {
 	return store.Where("appID", appID)
 }
@@ -88,156 +78,50 @@ func UpdateConfig(ctx context.Context, configs *ConfigStore, cfg *Config) error 
 	return nil
 }
 
-// RecordStore 构建记录存储接口
-type RecordStore interface {
-	// Create 创建新的构建记录
-	Create(ctx context.Context, record *Record) error
+// RecordStore 构建记录存储
+type RecordStore = store.GenericStore[Record]
 
-	// Update 更新已存在的应用构建记录
-	Update(ctx context.Context, record *Record) error
-
-	// List 获取应用构建记录列表（支持分页）
-	List(ctx context.Context, appID, keyword string, page, pageSize int64) ([]Record, int64, error)
-
-	// Get 使用 AppID 和 BuildID 获取构建记录
-	Get(ctx context.Context, appID, buildID string) (*Record, error)
+// RecordMeta 构建记录的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - 唯一：appID + buildID
+var RecordMeta = store.Meta[Record]{
+	Collection: "build_records",
+	NotFound:   ErrRecordNotFound,
 }
 
-var _ RecordStore = &RecordStoreMongo{}
+// RecordCounterCollection 构建序号计数器的集合名，文档的 _id 为应用 ID
+const RecordCounterCollection = "build_counters"
 
-// RecordStoreMongo RecordStore 实现（基于 MongoDB）
-type RecordStoreMongo struct {
-	collection  *mongo.Collection
-	counterColl *mongo.Collection
+// ByBuild 按应用 ID 与构建 ID 匹配构建记录
+func ByBuild(appID, buildID string) store.Opt {
+	return store.Combine(ByApp(appID), store.Where("buildID", buildID))
 }
 
-// NewRecordStoreMongo 创建 RecordStoreMongo 实例
-func NewRecordStoreMongo(client *mongo.Client, dbName string) (*RecordStoreMongo, error) {
-	db := client.Database(dbName)
-	coll := db.Collection(buildRecordCollName)
-	// 索引（由 golang-migrate 维护）：
-	// - 唯一：appID + buildID
-	counterColl := db.Collection(buildCounterCollName)
-	return &RecordStoreMongo{collection: coll, counterColl: counterColl}, nil
+// RecordKeywordMatches 按制品信息、操作人模糊匹配构建记录，keyword 为空时不过滤
+func RecordKeywordMatches(keyword string) store.Opt {
+	return store.ContainsIgnoreCase(keyword, "artifact", "operator")
 }
 
-// buildCounter 构建计数器文档
-type buildCounter struct {
-	AppID string `bson:"_id"`
-	Seq   int64  `bson:"seq"`
-}
-
-// nextNum 获取指定 AppID 的下一个构建序号（原子操作，并发安全）
-func (s *RecordStoreMongo) nextNum(ctx context.Context, appID string) (int64, error) {
-	filter := bson.M{"_id": appID}
-	update := bson.M{"$inc": bson.M{"seq": 1}}
-	opts := options.FindOneAndUpdate().
-		SetUpsert(true).
-		SetReturnDocument(options.After)
-
-	var counter buildCounter
-	if err := s.counterColl.FindOneAndUpdate(ctx, filter, update, opts).Decode(&counter); err != nil {
-		return 0, errors.Wrapf(err, "get next build num for app %s", appID)
-	}
-	return counter.Seq, nil
-}
-
-// Create 创建新的构建记录
-func (s *RecordStoreMongo) Create(ctx context.Context, record *Record) error {
-	// 获取该 AppID 的下一个构建序号
-	num, err := s.nextNum(ctx, record.AppID)
+// CreateRecord 为记录分配该应用的下一个构建序号（原子操作，并发安全）后创建构建记录
+func CreateRecord(ctx context.Context, db *mongo.Database, record *Record) error {
+	num, err := store.NewCounter(db, RecordCounterCollection).Next(ctx, record.AppID)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "get next build num for app %s", record.AppID)
 	}
 	record.Num = num
-
-	timeNow := time.Now()
-	record.CreatedAt, record.UpdatedAt = timeNow, timeNow
-	if _, err = s.collection.InsertOne(ctx, record); err != nil {
-		// Check if it's a duplicate key error
-		if mongo.IsDuplicateKeyError(err) {
-			return errors.New("build record with the same appID & buildID already exists")
-		}
-		return err
+	if err = store.Of(db, RecordMeta).Create(ctx, record); err != nil {
+		return errors.Wrapf(err, "create app %s build record %s", record.AppID, record.BuildID)
 	}
 	return nil
 }
 
-// Update 更新已存在的应用构建记录
-func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
-	filter := bson.M{
-		"appID":   record.AppID,
-		"buildID": record.BuildID,
-	}
-	updateDoc := bson.M{"$set": bson.M{
-		"num":       record.Num,
-		"status":    record.Status,
-		"extras":    record.Extras,
-		"endedAt":   record.EndedAt,
-		"updatedAt": time.Now(),
-	}}
-	ret, err := s.collection.UpdateOne(ctx, filter, updateDoc)
-	if err != nil {
-		return errors.Wrapf(err, "update app %s build record %s failed", record.AppID, record.BuildID)
-	}
-	if ret.MatchedCount == 0 {
-		return errors.Wrapf(ErrRecordNotFound, "app %s build record %s", record.AppID, record.BuildID)
+// UpdateRecord 更新已存在的应用构建记录的序号、状态、额外信息与结束时间，记录不存在时返回 ErrRecordNotFound
+func UpdateRecord(ctx context.Context, records *RecordStore, record *Record) error {
+	if err := records.Update(
+		ctx, record, store.UpdateSelected("num", "status", "extras", "endedAt"), ByBuild(record.AppID, record.BuildID),
+	); err != nil {
+		return errors.Wrapf(err, "update app %s build record %s", record.AppID, record.BuildID)
 	}
 	return nil
-}
-
-// List 获取应用构建记录列表（支持分页）
-func (s *RecordStoreMongo) List(
-	ctx context.Context, appID, keyword string, page, pageSize int64,
-) ([]Record, int64, error) {
-	filter := bson.M{"appID": appID}
-	// 支持 keyword 参数
-	if keyword != "" {
-		// 转义正则表达式特殊字符，防止注入攻击和语法错误
-		keyword = regexp.QuoteMeta(keyword)
-		// 模糊匹配：制品信息、操作人
-		filter["$or"] = []bson.M{
-			{"artifact": bson.M{"$regex": keyword, "$options": "i"}},
-			{"operator": bson.M{"$regex": keyword, "$options": "i"}},
-		}
-	}
-
-	// 先统计总数
-	total, err := s.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "count app %s build records", appID)
-	}
-
-	// 分页参数
-	opts := options.Find().
-		SetLimit(pageSize).
-		SetSkip((page - 1) * pageSize).
-		SetSort(bson.D{{"createdAt", -1}})
-
-	cursor, err := s.collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "find app %s build records", appID)
-	}
-	defer cursor.Close(ctx)
-
-	var records []Record
-	if err = cursor.All(ctx, &records); err != nil {
-		return nil, 0, errors.Wrapf(err, "decode app %s build records", appID)
-	}
-	return records, total, nil
-}
-
-// Get 使用 AppID 和 BuildID 获取构建记录
-func (s *RecordStoreMongo) Get(ctx context.Context, appID, buildID string) (*Record, error) {
-	var record Record
-	filter := bson.M{"appID": appID, "buildID": buildID}
-	err := s.collection.FindOne(ctx, filter).Decode(&record)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			// 应用构建记录不存在则返回错误
-			return nil, errors.Wrapf(ErrRecordNotFound, "app %s build record %s", appID, buildID)
-		}
-		return nil, err
-	}
-	return &record, nil
 }

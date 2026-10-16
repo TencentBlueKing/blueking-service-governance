@@ -26,12 +26,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	k8smanifest "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/manifest"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
@@ -46,7 +48,7 @@ const (
 // saveResourceSnapshots 持久化本次部署下发的资源清单快照
 func saveResourceSnapshots(
 	ctx context.Context,
-	store ResourceSnapshotStore,
+	db *mongo.Database,
 	appID string,
 	deployID string,
 	mainWorkload any,
@@ -82,7 +84,7 @@ func saveResourceSnapshots(
 		return *snap, true
 	})
 
-	if err = store.CreateResources(ctx, snapshots); err != nil {
+	if err = store.Of(db, ResourceSnapshotMeta).CreateMany(ctx, lo.ToSlicePtr(snapshots)); err != nil {
 		log.Errorf(ctx, "create resource snapshots for app %s deploy %s: %v", appID, deployID, err)
 	}
 }

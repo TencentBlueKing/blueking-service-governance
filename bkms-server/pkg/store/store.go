@@ -78,13 +78,13 @@ func schemaOf(typ reflect.Type) (*schema, error) {
 	return actual.(*schema), nil
 }
 
-// Collection 返回底层集合，用于 GenericStore 未覆盖的查询（如聚合、分页）
+// Collection 返回底层集合，用于 GenericStore 未覆盖的操作（如聚合、$inc）
 func (s *GenericStore[T]) Collection() *mongo.Collection {
 	return s.coll
 }
 
 // Get 获取一个匹配的文档，可通过 Asc / Desc 指定取哪一个；不存在时返回 NotFound 错误。
-// 支持的选项：CondOpt、SortOpt
+// 支持的选项：CondOpt、SortOpt、ProjectOpt
 func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
 	q, err := s.parseOpts("find one in", opts, getOpts)
 	if err != nil {
@@ -93,6 +93,9 @@ func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
 	findOpts := options.FindOne()
 	if len(q.sort) > 0 {
 		findOpts.SetSort(q.sort)
+	}
+	if proj := q.projection(); proj != nil {
+		findOpts.SetProjection(proj)
 	}
 
 	var obj T
@@ -116,20 +119,27 @@ func (s *GenericStore[T]) GetByID(ctx context.Context, id any) (*T, error) {
 }
 
 // List 获取所有匹配的文档，可通过 Asc / Desc / Limit 指定排序与数量；无结果时返回空切片而非 nil。
-// 支持的选项：CondOpt、SortOpt、LimitOpt
+// 支持的选项：CondOpt、SortOpt、LimitOpt、ProjectOpt
 func (s *GenericStore[T]) List(ctx context.Context, opts ...Opt) ([]T, error) {
 	q, err := s.parseOpts("find in", opts, listOpts)
 	if err != nil {
 		return nil, err
 	}
 	findOpts := options.Find()
-	if len(q.sort) > 0 {
-		findOpts.SetSort(q.sort)
-	}
 	if q.limit > 0 {
 		findOpts.SetLimit(q.limit)
 	}
+	return s.find(ctx, q, findOpts)
+}
 
+// find 按 q 的过滤条件、排序与投影查询并解码文档，findOpts 中的其余设置（如 skip、limit）由调用方指定
+func (s *GenericStore[T]) find(ctx context.Context, q *query, findOpts *options.FindOptionsBuilder) ([]T, error) {
+	if len(q.sort) > 0 {
+		findOpts.SetSort(q.sort)
+	}
+	if proj := q.projection(); proj != nil {
+		findOpts.SetProjection(proj)
+	}
 	cur, err := s.coll.Find(ctx, q.filter(), findOpts)
 	if err != nil {
 		return nil, errors.Wrapf(err, "find in %s, filter %v", s.coll.Name(), q.filter())

@@ -37,6 +37,7 @@ import (
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
@@ -50,7 +51,7 @@ import (
 type BuilderService struct {
 	envVarsReader          *envvars.UnifiedEnvVarsReader
 	workspaceCompsStore    workspace.WorkspaceCompsStore
-	workspaceStore         workspace.WorkspaceStore
+	workspaceStore         *workspace.WorkspaceStore
 	polarisWorkloadBuilder *polaris.WorkloadBuilder
 	hostPortStore          hostport.HostPortStore
 	appModelStore          appmodel.AppModelStore
@@ -167,7 +168,6 @@ func NewBuilderService(
 	appDepsVarReader *depenvvars.Reader,
 	polarisVarReader *polarisenvvars.Reader,
 	workspaceCompsStore workspace.WorkspaceCompsStore,
-	workspaceStore workspace.WorkspaceStore,
 	polarisConfigStore polaris.PolarisConfigStore,
 	hostPortStore hostport.HostPortStore,
 	appModelStore appmodel.AppModelStore,
@@ -178,7 +178,7 @@ func NewBuilderService(
 	return &BuilderService{
 		envVarsReader:          envvars.NewUnifiedEnvVarsReader(scopedEnvVarStore, appDepsVarReader, polarisVarReader),
 		workspaceCompsStore:    workspaceCompsStore,
-		workspaceStore:         workspaceStore,
+		workspaceStore:         store.Of(db, workspace.Meta),
 		polarisWorkloadBuilder: polaris.NewWorkloadBuilder(polarisConfigStore),
 		hostPortStore:          hostPortStore,
 		appModelStore:          appModelStore,

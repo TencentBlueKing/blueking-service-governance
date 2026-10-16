@@ -110,7 +110,8 @@ func (h *Handler) prepareBuildLogDeps(
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init bkci client")
 	}
 
-	record, err := h.registry.HelmChartBuildRecordStore.Get(ctx, app.ID, uriInput.BuildID)
+	record, err := store.Of(h.registry.DB, helmchartbuild.RecordMeta).
+		Get(ctx, helmchartbuild.ByBuild(app.ID, uriInput.BuildID))
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get chart build record")
 	}

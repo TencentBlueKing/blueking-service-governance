@@ -31,10 +31,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
@@ -52,12 +52,7 @@ func triggerTopologyRefresh(ctx context.Context, args Args, record *appmodeldepl
 		return
 	}
 
-	store, err := topology.NewResourceSnapshotStoreMongo(database.Client(), database.Name())
-	if err != nil {
-		log.Errorf(ctx, "topology refresh (app model): create store: %v", err)
-		return
-	}
-	topology.NewRefresher(store).TriggerRefresh(ctx, topology.RefreshArgs{
+	topology.NewRefresher(storereg.G().DB).TriggerRefresh(ctx, topology.RefreshArgs{
 		AppID:           args.AppID,
 		EnvName:         args.EnvName,
 		TrafficLaneName: args.TrafficLaneName,
@@ -158,7 +153,7 @@ func loadApmServiceConfigContext(
 		log.Errorf(ctx, "sync apm service config: get env %s: %v", args.EnvName, err)
 		return nil, nil, nil, false
 	}
-	ws, err := reg.WorkspaceStore.Get(ctx, args.WorkspaceID)
+	ws, err := store.Of(reg.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(args.WorkspaceID))
 	if err != nil {
 		log.Errorf(ctx, "sync apm service config: get workspace %s: %v", args.WorkspaceID, err)
 		return nil, nil, nil, false
@@ -242,7 +237,6 @@ func resolveApmServiceName(
 	cfgProvider := appcfg.NewMountableFileProvider(
 		reg.AppConfigFileStore,
 		reg.DB,
-		reg.AppConfigFileVersionStore,
 	)
 	frameworkFile, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
 	if err != nil {

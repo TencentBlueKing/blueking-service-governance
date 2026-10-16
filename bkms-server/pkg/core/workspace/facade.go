@@ -35,11 +35,7 @@ func GetWorkspaceImageRegistry(
 	workspaceID string,
 ) (*bkmsreg.ImageRegistry, error) {
 	// 先获取工作空间，以知晓当前使用的镜像仓库类型
-	wsStore, err := NewWorkspaceStoreMongo(db.Client(), db.Name())
-	if err != nil {
-		return nil, errors.Wrap(err, "create workspace store")
-	}
-	workspace, err := wsStore.Get(ctx, workspaceID)
+	workspace, err := store.Of(db, Meta).Get(ctx, ByWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get workspace %s", workspaceID)
 	}

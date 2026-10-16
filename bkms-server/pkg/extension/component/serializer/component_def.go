@@ -26,6 +26,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // EmptyOutput 是无数据接口的 JSON 响应。
@@ -47,19 +48,14 @@ type ListComponentDefsQueryInput struct {
 	Keyword *string `form:"keyword" binding:"omitempty,max=64"`
 }
 
-// ToModel 将 query 参数转换为列表查询选项。
-func (i ListComponentDefsQueryInput) ToModel() *component.ListOptions {
-	opts := &component.ListOptions{ExcludeInvisible: true}
-	if i.ScopeWorkspaceID != nil {
-		opts.ScopeWorkspaceID = *i.ScopeWorkspaceID
-	}
-	if i.ManagedByWorkspaceID != nil {
-		opts.ManagedByWorkspaceID = *i.ManagedByWorkspaceID
-	}
-	if i.Keyword != nil {
-		opts.Keyword = *i.Keyword
-	}
-	return opts
+// ToListOpt 将 query 参数转换为列表查询条件，不可见的组件定义总是被过滤。
+func (i ListComponentDefsQueryInput) ToListOpt() store.Opt {
+	return store.Combine(
+		component.ExcludeInvisible(),
+		component.UsableInWorkspace(lo.FromPtr(i.ScopeWorkspaceID)),
+		component.ManagedByWorkspace(lo.FromPtr(i.ManagedByWorkspaceID)),
+		component.KeywordMatches(lo.FromPtr(i.Keyword)),
+	)
 }
 
 // CreateComponentDefInput 是创建组件定义的请求体。

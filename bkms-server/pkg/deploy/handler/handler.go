@@ -38,6 +38,5 @@ func (h *Handler) newMountableFileProvider() appcfg.MountableFileProvider {
 	return appcfg.NewMountableFileProvider(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 }

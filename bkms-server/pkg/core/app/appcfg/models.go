@@ -245,16 +245,6 @@ func (acf *AppConfigFile) initializeContentFields(
 	}
 }
 
-// AppValuesConfig 应用的 values 文件配置，当前包含默认 values 文件 ID，后续可扩展更多字段。
-type AppValuesConfig struct {
-	// ID 唯一标识。
-	ID bson.ObjectID `bson:"_id,omitempty"`
-	// AppID 所属应用 ID。
-	AppID string `bson:"appID"`
-	// DefaultAppConfigFileID 默认配置文件 ID。
-	DefaultAppConfigFileID *bson.ObjectID `bson:"defaultAppConfigFileID,omitempty"`
-}
-
 // AppConfigFileWithDef 配置文件记录 + def 信息的组合视图，供 service/handler 层使用。
 type AppConfigFileWithDef struct {
 	AppConfigFile

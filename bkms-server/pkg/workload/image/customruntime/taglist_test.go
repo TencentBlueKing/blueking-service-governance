@@ -30,8 +30,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -51,10 +49,9 @@ var _ = Describe("TagQueryManager", func() {
 
 	var (
 		ctx           context.Context
-		store         Store
+		images        *Store
 		snapshotStore snapshot.SnapshotStore
 		manager       *TagQueryManager
-		diApp         *fxtest.App
 		repoKey       string
 		listAllCalls  int
 		// 以下三者由各用例改写，用于控制镜像源绑定与远程拉取结果
@@ -64,8 +61,7 @@ var _ = Describe("TagQueryManager", func() {
 	)
 
 	BeforeEach(func() {
-		diApp = fxtest.New(GinkgoT(), FxModule, fx.Populate(&store))
-		diApp.RequireStart()
+		images = testutil.NewStore(GinkgoT(), Meta)
 		ctx = context.Background()
 
 		var err error
@@ -73,7 +69,7 @@ var _ = Describe("TagQueryManager", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		db := testutil.NewDB(GinkgoT())
-		manager = NewTagQueryManager(store, db, snapshot.NewService(snapshotStore, db, nil))
+		manager = NewTagQueryManager(db, snapshot.NewService(snapshotStore, db, nil))
 		repoKey = snapshot.GenerateRepoKey(imageName, "ws-user", "ws-pass")
 		listAllCalls = 0
 		remoteTags, remoteErr = nil, nil
@@ -101,14 +97,13 @@ var _ = Describe("TagQueryManager", func() {
 
 	AfterEach(func() {
 		mockey.UnPatchAll()
-		Expect(store.DeleteAll(ctx)).To(Succeed())
+		Expect(testutil.CleanupCollection(Meta.Collection)).To(Succeed())
 		Expect(snapshotStore.DeleteAll(ctx)).To(Succeed())
-		diApp.RequireStop()
 	})
 
 	// seedPersisted 造落库记录与新鲜快照，使该镜像走快照来源且不触发 TTL 懒刷新
 	seedPersisted := func(tags ...string) {
-		Expect(store.Upsert(ctx, &Image{
+		Expect(Register(ctx, images, &Image{
 			WorkspaceID: workspaceID, Type: ImageTypeBuilder, Name: imageName,
 		})).To(Succeed())
 		Expect(snapshotStore.UpsertSnapshots(ctx, repoKey, lo.Map(tags,
@@ -131,7 +126,7 @@ var _ = Describe("TagQueryManager", func() {
 		Expect(queried.Status).To(BeNil())
 		Expect(listAllCalls).To(Equal(1))
 
-		records, err := store.List(ctx, workspaceID, ListOptions{})
+		records, err := images.List(ctx, ByWorkspace(workspaceID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(records).To(BeEmpty())
 		_, total, err := snapshotStore.ListByRepoKey(ctx, repoKey, "", 1, 10)

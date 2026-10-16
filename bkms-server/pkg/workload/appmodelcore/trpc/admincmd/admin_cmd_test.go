@@ -51,7 +51,6 @@ var _ = Describe("TrpcAdminService", func() {
 	var appStore bkmsapp.ApplicationStore
 	var appConfigFileStore appcfg.AppConfigFileStore
 	var appConfigFileDefStore *appcfg.AppConfigFileDefStore
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var scopedEnvVarStore envvars.ScopedEnvVarStore
 	var appDepsVarReader *depenvvars.Reader
 	var polarisVarReader *polarisenvvars.Reader
@@ -79,7 +78,6 @@ var _ = Describe("TrpcAdminService", func() {
 			fx.Populate(
 				&appStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
 				&scopedEnvVarStore,
 				&appDepsVarReader,
 				&polarisVarReader,
@@ -92,10 +90,9 @@ var _ = Describe("TrpcAdminService", func() {
 
 		// 使用 dbfactory 创建测试用 tRPC 应用（包含 App、AppModel 和 AppConfigFile）
 		testApp, testAppModel = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			EnvVars: []appmodel.Variable{
 				{Key: "MODEL_ADMIN_PORT", Value: "7070"},
@@ -112,7 +109,6 @@ var _ = Describe("TrpcAdminService", func() {
 			MountableFileProvider: appcfg.NewMountableFileProvider(
 				appConfigFileStore,
 				testutil.NewDB(GinkgoT()),
-				appConfigFileVersionStore,
 			),
 			AppModelStore: appModelStore,
 			EnvVarsReader: envvars.NewUnifiedEnvVarsReader(
@@ -145,7 +141,6 @@ var _ = Describe("TrpcAdminService", func() {
 				svc := appcfg.NewAppConfigFileService(
 					appConfigFileStore,
 					testutil.NewDB(GinkgoT()),
-					appConfigFileVersionStore,
 				)
 				defs, err := appcfg.ListDefsByApp(
 					ctx,
@@ -294,7 +289,6 @@ var _ = Describe("TrpcAdminService", func() {
 			svc := appcfg.NewAppConfigFileService(
 				appConfigFileStore,
 				testutil.NewDB(GinkgoT()),
-				appConfigFileVersionStore,
 			)
 			defs, err := appcfg.ListDefsByApp(
 				ctx,

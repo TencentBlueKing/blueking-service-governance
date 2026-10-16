@@ -41,17 +41,16 @@ import (
 
 var _ = Describe("ExportService", func() {
 	var (
-		diApp                 *fxtest.App
-		ctx                   context.Context
-		workspaceID           string
-		environment           envmodel.Environment
-		scopedEnvVarStore     envvarsstore.ScopedEnvVarStore
-		appStore              coreapp.ApplicationStore
-		appModelStore         appmodel.AppModelStore
-		appSpecStore          appspec.AppSpecStore
-		appConfigFileStore    appcfg.AppConfigFileStore
-		appConfigVersionStore appcfg.AppConfigFileVersionStore
-		service               *Service
+		diApp              *fxtest.App
+		ctx                context.Context
+		workspaceID        string
+		environment        envmodel.Environment
+		scopedEnvVarStore  envvarsstore.ScopedEnvVarStore
+		appStore           coreapp.ApplicationStore
+		appModelStore      appmodel.AppModelStore
+		appSpecStore       appspec.AppSpecStore
+		appConfigFileStore appcfg.AppConfigFileStore
+		service            *Service
 	)
 
 	BeforeEach(func() {
@@ -70,7 +69,6 @@ var _ = Describe("ExportService", func() {
 				&appModelStore,
 				&appSpecStore,
 				&appConfigFileStore,
-				&appConfigVersionStore,
 			),
 		)
 		diApp.RequireStart()
@@ -153,10 +151,9 @@ var _ = Describe("ExportService", func() {
 
 	It("exports app-defined vars without scope metadata", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -182,10 +179,9 @@ var _ = Describe("ExportService", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -204,10 +200,9 @@ var _ = Describe("ExportService", func() {
 
 	It("exports the env-overridden resource limit instead of the stored default", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{WorkspaceID: workspaceID})
 
 		am, err := appModelStore.GetAppModel(ctx, app.ID)

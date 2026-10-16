@@ -48,7 +48,6 @@ func (h *Handler) newAppCfgFileDefService() *appcfg.AppCfgFileDefService {
 	base := appcfg.NewBaseAppCfgFileService(
 		h.registry.DB,
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileVersionStore,
 	)
 	return appcfg.NewAppCfgFileDefService(base)
 }

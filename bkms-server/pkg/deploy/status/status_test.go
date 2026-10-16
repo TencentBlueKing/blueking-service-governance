@@ -84,7 +84,6 @@ var _ = Describe("DeployStatusService", func() {
 		appStore                   bkmsapp.ApplicationStore
 		appModelStore              appmodel.AppModelStore
 		appConfigFileStore         appcfg.AppConfigFileStore
-		appConfigFileVersionStore  appcfg.AppConfigFileVersionStore
 		buildAutoDeployRecordStore autodeploy.RecordStore
 		envStore                   envmodel.EnvironmentStore
 		envSvc                     *bkmsenv.EnvService
@@ -108,7 +107,6 @@ var _ = Describe("DeployStatusService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
 				&envStore,
 				&envSvc,
 				&buildAutoDeployRecordStore,
@@ -142,10 +140,9 @@ var _ = Describe("DeployStatusService", func() {
 
 			BeforeEach(func() {
 				trpcApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-					AppStore:                  appStore,
-					AppModelStore:             appModelStore,
-					AppConfigFileStore:        appConfigFileStore,
-					AppConfigFileVersionStore: appConfigFileVersionStore,
+					AppStore:           appStore,
+					AppModelStore:      appModelStore,
+					AppConfigFileStore: appConfigFileStore,
 				}, nil)
 				testEnv = dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
 				Expect(envStore.AddApp(ctx, testEnv.ID, trpcApp.ID)).To(Succeed())
@@ -430,10 +427,9 @@ var _ = Describe("DeployStatusService", func() {
 
 		BeforeEach(func() {
 			trpcApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, nil)
 			workspaceID = trpcApp.WorkspaceID
 			envStaging = dbfactory.Env(ctx, envSvc, workspaceID)
@@ -507,10 +503,9 @@ var _ = Describe("DeployStatusService", func() {
 
 			BeforeEach(func() {
 				trpcApp2, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-					AppStore:                  appStore,
-					AppModelStore:             appModelStore,
-					AppConfigFileStore:        appConfigFileStore,
-					AppConfigFileVersionStore: appConfigFileVersionStore,
+					AppStore:           appStore,
+					AppModelStore:      appModelStore,
+					AppConfigFileStore: appConfigFileStore,
 				}, &dbfactory.TrpcApplicationOpts{WorkspaceID: workspaceID})
 				helmApp = dbfactory.HelmApplication(ctx, &dbfactory.HelmApplicationStores{
 					AppStore: appStore,
@@ -719,16 +714,14 @@ var _ = Describe("DeployStatusService", func() {
 
 		BeforeEach(func() {
 			trpcApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, nil)
 			otherApp, _ = dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-				AppStore:                  appStore,
-				AppModelStore:             appModelStore,
-				AppConfigFileStore:        appConfigFileStore,
-				AppConfigFileVersionStore: appConfigFileVersionStore,
+				AppStore:           appStore,
+				AppModelStore:      appModelStore,
+				AppConfigFileStore: appConfigFileStore,
 			}, &dbfactory.TrpcApplicationOpts{WorkspaceID: trpcApp.WorkspaceID})
 			sourceEnv = dbfactory.Env(ctx, envSvc, trpcApp.WorkspaceID)
 			featureEnv = dbfactory.FeatEnv(ctx, envSvc, trpcApp, sourceEnv)

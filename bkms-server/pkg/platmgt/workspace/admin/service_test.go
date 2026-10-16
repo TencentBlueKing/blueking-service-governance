@@ -41,7 +41,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 		ctx            context.Context
 		diApp          *fxtest.App
 		recordStore    *Store
-		workspaceStore bkmsworkspace.WorkspaceStore
+		workspaceStore *bkmsworkspace.WorkspaceStore
 		roleMgr        *stubRoleManager
 		service        *Service
 		ws             *bkmsworkspace.Workspace
@@ -58,9 +58,10 @@ var _ = Describe("WorkspaceAdminService", func() {
 			fx.Provide(
 				func() perm.Manager { return roleMgr },
 			),
-			fx.Populate(&service, &workspaceStore),
+			fx.Populate(&service),
 		)
 		diApp.RequireStart()
+		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 		recordStore = testutil.NewStore(GinkgoT(), Meta)
 
 		Expect(cleanupWorkspaceAdminCollections()).To(Succeed())

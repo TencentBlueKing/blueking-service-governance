@@ -53,10 +53,3 @@ type WorkspaceGradeManager struct {
 	WorkspaceID    string `bson:"workspaceID"`
 	GradeManagerID int    `bson:"gradeManagerID"`
 }
-
-// RoleQueryParams is the query params of role
-type RoleQueryParams struct {
-	WorkspaceID    *string
-	IsGradeManager *bool
-	Scope          *PermissionScope
-}

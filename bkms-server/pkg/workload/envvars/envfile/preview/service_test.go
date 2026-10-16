@@ -43,16 +43,15 @@ import (
 
 var _ = Describe("ImportPreviewService", func() {
 	var (
-		diApp                 *fxtest.App
-		ctx                   context.Context
-		workspaceID           string
-		environment           envmodel.Environment
-		scopedEnvVarStore     envvarsstore.ScopedEnvVarStore
-		appStore              coreapp.ApplicationStore
-		appModelStore         appmodel.AppModelStore
-		appConfigFileStore    appcfg.AppConfigFileStore
-		appConfigVersionStore appcfg.AppConfigFileVersionStore
-		service               *previewpkg.ImportPreviewService
+		diApp              *fxtest.App
+		ctx                context.Context
+		workspaceID        string
+		environment        envmodel.Environment
+		scopedEnvVarStore  envvarsstore.ScopedEnvVarStore
+		appStore           coreapp.ApplicationStore
+		appModelStore      appmodel.AppModelStore
+		appConfigFileStore appcfg.AppConfigFileStore
+		service            *previewpkg.ImportPreviewService
 	)
 
 	BeforeEach(func() {
@@ -69,7 +68,6 @@ var _ = Describe("ImportPreviewService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigVersionStore,
 			),
 		)
 		diApp.RequireStart()
@@ -238,10 +236,9 @@ SENSITIVE_PUBLIC_KEY=updated-secret
 
 	It("should detect existing keys in app import preview without scope metadata", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -277,10 +274,9 @@ BKMS_APP_NAME=custom-app-name
 
 	It("should mask original value for sensitive app env var overwrite", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 			EnvVars: []appmodel.Variable{
@@ -405,10 +401,9 @@ ENV_ONLY_KEY=env-override-value
 
 	It("should reject scope metadata in app import", func() {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			WorkspaceID: workspaceID,
 		})

@@ -36,6 +36,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // NewRefreshWorkspaceBkmonitorPermsCmd 批量刷新所有 Ready 状态 workspace 的 bkmonitor
@@ -62,7 +63,7 @@ func NewRefreshWorkspaceBkmonitorPermsCmd() *cobra.Command {
 			database.InitClient(ctx, cfg.Mongo)
 			storereg.Init(ctx)
 
-			wsStore := storereg.G().WorkspaceStore
+			wsStore := store.Of(storereg.G().DB, workspace.Meta)
 
 			if dryRun {
 				dryRunRefreshWorkspaceBkmonitorPerms(ctx, wsStore, workspaceIDs)
@@ -90,11 +91,10 @@ func NewRefreshWorkspaceBkmonitorPermsCmd() *cobra.Command {
 // dryRunRefreshWorkspaceBkmonitorPerms 以 dry-run 模式列出所有待变更的 workspace 及其详细信息。
 func dryRunRefreshWorkspaceBkmonitorPerms(
 	ctx context.Context,
-	wsStore workspace.WorkspaceStore,
+	wsStore *workspace.WorkspaceStore,
 	filterIDs []string,
 ) {
-	readyState := workspace.StateReady
-	workspaces, err := wsStore.List(ctx, &workspace.ListOptions{State: &readyState})
+	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady))
 	if err != nil {
 		log.Fatalf("list workspaces: %v", err)
 	}
@@ -203,12 +203,11 @@ func dryRunRefreshWorkspaceBkmonitorPerms(
 // refreshWorkspaceBkmonitorPerms 遍历所有 Ready 状态的 workspace，逐个刷新 bkmonitor 权限。
 func refreshWorkspaceBkmonitorPerms(
 	ctx context.Context,
-	wsStore workspace.WorkspaceStore,
+	wsStore *workspace.WorkspaceStore,
 	permMgr perm.Manager,
 	filterIDs []string,
 ) error {
-	readyState := workspace.StateReady
-	workspaces, err := wsStore.List(ctx, &workspace.ListOptions{State: &readyState})
+	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady))
 	if err != nil {
 		return errors.Wrap(err, "list workspaces")
 	}

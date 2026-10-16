@@ -40,7 +40,6 @@ type Migrator struct {
 	appSpecStore  appspec.AppSpecStore
 	appModelStore appmodel.AppModelStore
 	wsCompStore   workspace.WorkspaceCompsStore
-	compDefStore  component.ComponentDefStore
 }
 
 // New creates a tkeRouteEni component migrator with reference-count hooks wired.
@@ -50,17 +49,15 @@ func New(
 	appSpecStore appspec.AppSpecStore,
 	appModelStore appmodel.AppModelStore,
 	wsCompStore workspace.WorkspaceCompsStore,
-	compDefStore component.ComponentDefStore,
 ) *Migrator {
-	appModelStore.SetComponentHooks(appmodel.NewComponentRefCountHooks(compDefStore))
-	wsCompStore.SetComponentHooks(workspace.NewComponentRefCountHooks(compDefStore))
+	appModelStore.SetComponentHooks(appmodel.NewComponentRefCountHooks(db))
+	wsCompStore.SetComponentHooks(workspace.NewComponentRefCountHooks(db))
 	return &Migrator{
 		db:            db,
 		appStore:      appStore,
 		appSpecStore:  appSpecStore,
 		appModelStore: appModelStore,
 		wsCompStore:   wsCompStore,
-		compDefStore:  compDefStore,
 	}
 }
 

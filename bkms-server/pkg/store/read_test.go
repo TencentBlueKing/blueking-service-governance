@@ -214,6 +214,63 @@ var _ = Describe("GenericStore read operations", func() {
 		})
 	})
 
+	Describe("OmitFields", func() {
+		BeforeEach(func() {
+			w := f.newSecretWidget("w1")
+			w.Spec = WidgetSpec{Color: "red", Size: 3}
+			Expect(f.widgets.Create(f.ctx, w)).To(Succeed())
+		})
+
+		It("should leave the omitted fields zero in Get and List", func() {
+			got, err := f.widgets.Get(f.ctx, f.byName("w1"), store.OmitFields("tags", "Spec.Color"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Name).To(Equal("w1"))
+			Expect(got.Tags).To(BeNil())
+			Expect(got.Spec).To(Equal(WidgetSpec{Size: 3}))
+
+			list, err := f.widgets.List(f.ctx, f.byOwner(), store.OmitFields("spec"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list).To(HaveLen(1))
+			Expect(list[0].Spec).To(BeZero())
+			Expect(list[0].Tags).To(Equal([]string{"a"}))
+		})
+
+		It("should not affect which documents match", func() {
+			// 被跳过的字段即使出现在过滤条件中，也照常参与匹配
+			got, err := f.widgets.Get(f.ctx, f.byOwner(), store.Where("spec.color", "red"), store.OmitFields("spec"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Name).To(Equal("w1"))
+		})
+
+		It("should still run Decode hooks", func() {
+			got, err := f.widgets.Get(f.ctx, f.byName("w1"), store.OmitFields("tags"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Secret.Password).To(Equal(plainPassword))
+
+			// 跳过需要解码的字段时，钩子收到的是零值
+			got, err = f.widgets.Get(f.ctx, f.byName("w1"), store.OmitFields("secret"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Secret).To(BeNil())
+		})
+
+		It("should reject fields not defined in the model", func() {
+			_, err := f.widgets.List(f.ctx, f.byOwner(), store.OmitFields("manifest"))
+			Expect(err).To(MatchError(ContainSubstring("unknown field")))
+		})
+
+		It("should reject conflicting parent and child fields", func() {
+			_, err := f.widgets.List(f.ctx, f.byOwner(), store.OmitFields("spec", "spec.color"))
+			Expect(err).To(MatchError(ContainSubstring("conflicting fields")))
+		})
+
+		It("should not be accepted by Count or write operations", func() {
+			_, err := f.widgets.Count(f.ctx, f.byOwner(), store.OmitFields("tags"))
+			Expect(err).To(MatchError(ContainSubstring("omitted fields")))
+			_, err = f.widgets.GetAndDelete(f.ctx, f.byName("w1"), store.OmitFields("tags"))
+			Expect(err).To(MatchError(ContainSubstring("omitted fields")))
+		})
+	})
+
 	Describe("Exists", func() {
 		It("should report whether any document matches", func() {
 			f.mustCreateWidget("w1")

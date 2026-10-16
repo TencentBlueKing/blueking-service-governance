@@ -36,7 +36,6 @@ var FxModule = fx.Module("workload",
 	fx.Provide(
 		envvars.NewScopedEnvVarStoreMongo,
 		workspace.NewWorkspaceCompsStoreMongo,
-		fx.Annotate(workspace.NewWorkspaceStoreMongo, fx.As(new(workspace.WorkspaceStore))),
 		polaris.NewPolarisConfigStoreMongo,
 		hostport.NewHostPortStoreMongo,
 		fx.Annotate(appspec.NewAppSpecStoreMongo, fx.As(new(appspec.AppSpecStore))),

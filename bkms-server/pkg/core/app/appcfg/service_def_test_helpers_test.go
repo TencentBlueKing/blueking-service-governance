@@ -34,14 +34,13 @@ import (
 
 // defServiceFixture 封装 AppCfgFileDefService 集成测试所需的共享上下文。
 type defServiceFixture struct {
-	DiApp        *fxtest.App
-	AppStore     bkmsapp.ApplicationStore
-	FileStore    appcfg.AppConfigFileStore
-	DefStore     *appcfg.AppConfigFileDefStore
-	VersionStore appcfg.AppConfigFileVersionStore
-	Svc          *appcfg.AppCfgFileDefService
-	Ctx          context.Context
-	AppID        string
+	DiApp     *fxtest.App
+	AppStore  bkmsapp.ApplicationStore
+	FileStore appcfg.AppConfigFileStore
+	DefStore  *appcfg.AppConfigFileDefStore
+	Svc       *appcfg.AppCfgFileDefService
+	Ctx       context.Context
+	AppID     string
 }
 
 // setupDefServiceFixture 初始化测试 fixture，应在 BeforeEach 中调用。
@@ -57,14 +56,14 @@ func setupDefServiceFixture() *defServiceFixture {
 		GinkgoT(),
 		bkmsapp.FxModule,
 		appcfg.FxModule,
-		fx.Populate(&f.AppStore, &f.FileStore, &f.VersionStore),
+		fx.Populate(&f.AppStore, &f.FileStore),
 	)
 	f.DiApp.RequireStart()
 
 	app := dbfactory.Application(f.Ctx, f.AppStore)
 	f.AppID = app.ID
 
-	base := appcfg.NewBaseAppCfgFileService(testutil.NewDB(GinkgoT()), f.FileStore, f.VersionStore)
+	base := appcfg.NewBaseAppCfgFileService(testutil.NewDB(GinkgoT()), f.FileStore)
 	f.DefStore = base.DefStore
 	f.Svc = appcfg.NewAppCfgFileDefService(base)
 	return f

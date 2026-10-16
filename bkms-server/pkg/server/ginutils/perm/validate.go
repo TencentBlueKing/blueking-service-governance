@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // Type defines the permission type required by a route.
@@ -119,7 +120,7 @@ func getWorkspaceByID(
 		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "workspaceID is required")
 	}
 
-	ws, err := registry.WorkspaceStore.Get(ctx, workspaceID)
+	ws, err := store.Of(registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		if errors.Is(err, workspace.ErrWorkspaceNotFound) {
 			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "workspace %s not found", workspaceID)

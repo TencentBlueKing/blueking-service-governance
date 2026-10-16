@@ -52,12 +52,8 @@ type MountableFileProvider interface {
 }
 
 // NewMountableFileProvider 构造一个 MountableFileProvider 实例。
-func NewMountableFileProvider(
-	fileStore AppConfigFileStore,
-	db *mongo.Database,
-	versionStore AppConfigFileVersionStore,
-) MountableFileProvider {
-	return NewAppConfigFileService(fileStore, db, versionStore)
+func NewMountableFileProvider(fileStore AppConfigFileStore, db *mongo.Database) MountableFileProvider {
+	return NewAppConfigFileService(fileStore, db)
 }
 
 // GetFrameworkMountableFile 获取应用在指定环境下生效的框架可挂载文件。

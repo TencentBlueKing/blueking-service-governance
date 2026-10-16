@@ -39,7 +39,7 @@ import (
 var validate = validator.New()
 
 // Workspace 创建一个已持久化的测试用 Workspace，其名称和 ID 使用随机后缀避免冲突
-func Workspace(ctx context.Context, store bkmsworkspace.WorkspaceStore) *bkmsworkspace.Workspace {
+func Workspace(ctx context.Context, store *bkmsworkspace.WorkspaceStore) *bkmsworkspace.Workspace {
 	workspaceName := "test-workspace-" + stringx.Random(6)
 	ws := &bkmsworkspace.Workspace{
 		ID:          workspaceName + stringx.Random(6),
@@ -213,7 +213,7 @@ type ComponentDefOpts struct {
 //   - opts: 可选参数, 用于定制 ComponentDef 的字段
 func CompDef(
 	ctx context.Context,
-	store component.ComponentDefStore,
+	defs *component.ComponentDefStore,
 	opts *ComponentDefOpts,
 ) *component.ComponentDef {
 	validateOpts(opts)
@@ -234,7 +234,7 @@ func CompDef(
 		Creator:     "admin",
 		Updater:     "admin",
 	}
-	err := store.Create(ctx, compDef)
+	err := defs.Create(ctx, compDef)
 	gomega.Expect(err).To(gomega.Not(gomega.HaveOccurred()))
 	return compDef
 }
@@ -246,8 +246,7 @@ func validateOpts(opts any) {
 
 // TrpcApplicationStores 创建 tRPC 应用所需的 store 集合
 type TrpcApplicationStores struct {
-	AppStore                  bkmsapp.ApplicationStore
-	AppModelStore             appmodel.AppModelStore
-	AppConfigFileStore        appcfg.AppConfigFileStore
-	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
+	AppStore           bkmsapp.ApplicationStore
+	AppModelStore      appmodel.AppModelStore
+	AppConfigFileStore appcfg.AppConfigFileStore
 }

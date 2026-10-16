@@ -79,7 +79,7 @@ func (h *Handler) GetUserStatistics(c *gin.Context) {
 	var totalAppCount, totalEnvCount int64
 
 	// 获取所有工作空间列表
-	workspaces, err := h.registry.WorkspaceStore.List(ctx, &workspace.ListOptions{})
+	workspaces, err := store.Of(h.registry.DB, workspace.Meta).List(ctx)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspaces"))
 		return
@@ -267,12 +267,10 @@ func (h *Handler) ListWorkspaces(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	listOpts := &workspace.ListOptions{}
-	if queryInput.Keyword != nil {
-		listOpts.Keyword = *queryInput.Keyword
-	}
 	// 从数据库获取工作空间列表（支持关键字搜索）
-	workspaces, err := h.registry.WorkspaceStore.List(ctx, listOpts)
+	workspaces, err := store.Of(h.registry.DB, workspace.Meta).List(
+		ctx, workspace.KeywordMatches(lo.FromPtr(queryInput.Keyword)),
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspaces"))
 		return
@@ -332,7 +330,7 @@ func (h *Handler) ListWorkspacesOverview(c *gin.Context) {
 
 	// 查询所有 workspace 并按当前用户操作时间排序
 	workspaces, err := workspace.ListSortByOpTime(
-		ctx, h.registry.WorkspaceStore, h.registry.OperationRecordStore, username,
+		ctx, store.Of(h.registry.DB, workspace.Meta), h.registry.OperationRecordStore, username,
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(
@@ -581,7 +579,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		BkSystems: *bkSystem,
 		Creator:   auth.MustGetUser(ctx).ID,
 	}
-	if err = h.registry.WorkspaceStore.Create(ctx, ws); err != nil {
+	if err = store.Of(h.registry.DB, workspace.Meta).Create(ctx, ws); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create workspace in DB"))
 		return
 	}
@@ -669,7 +667,7 @@ func (h *Handler) UpdateWorkspaceInfo(c *gin.Context) {
 	ws.Updater = auth.MustGetUser(ctx).ID
 
 	// 保存更新
-	if err = h.registry.WorkspaceStore.Update(ctx, ws); err != nil {
+	if err = workspace.Update(ctx, store.Of(h.registry.DB, workspace.Meta), ws); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace in DB"))
 		return
 	}
@@ -887,7 +885,7 @@ func (h *Handler) SetWorkspaceState(c *gin.Context) {
 	}
 
 	// 保存更新
-	if err = h.registry.WorkspaceStore.Update(ctx, ws); err != nil {
+	if err = workspace.Update(ctx, store.Of(h.registry.DB, workspace.Meta), ws); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace in DB"))
 		return
 	}
@@ -948,7 +946,7 @@ func (h *Handler) DeleteWorkspace(c *gin.Context) {
 	}
 
 	// 删除工作空间
-	if err = h.registry.WorkspaceStore.Delete(ctx, ws.ID); err != nil {
+	if err = workspace.Delete(ctx, store.Of(h.registry.DB, workspace.Meta), ws.ID); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete workspace in DB"))
 		return
 	}

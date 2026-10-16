@@ -107,7 +107,6 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 	cfgProvider := appcfg.NewMountableFileProvider(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	outputList := lo.Map(configs, func(config *polaris.PolarisConfig, _ int) *serializer.PolarisConfigOutputObj {
 		warnings := polaris.CollectConfigWarnings(
@@ -466,7 +465,6 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 		appcfg.NewMountableFileProvider(
 			h.registry.AppConfigFileStore,
 			h.registry.DB,
-			h.registry.AppConfigFileVersionStore,
 		),
 		config,
 	)

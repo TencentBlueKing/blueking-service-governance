@@ -28,6 +28,5 @@ var FxModule = fx.Module("appmodeldeploy",
 	database.PrivateFxModule,
 	fx.Provide(
 		fx.Annotate(NewRecordStoreMongo, fx.As(new(RecordStore))),
-		fx.Annotate(NewResourceSnapshotStoreMongo, fx.As(new(ResourceSnapshotStore))),
 	),
 )

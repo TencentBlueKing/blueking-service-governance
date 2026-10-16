@@ -128,7 +128,6 @@ func (h *Handler) createHelmApp(ctx context.Context, app *bkmsapp.Application) e
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	if _, err := acfService.Create(
 		ctx,
@@ -163,7 +162,7 @@ func (h *Handler) deleteHelmApp(ctx context.Context, app *bkmsapp.Application) e
 	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(ctx, appcfg.DefsByApp(app.ID)); err != nil {
 		return errors.Wrap(err, "delete values file metas")
 	}
-	if _, err := h.registry.AppConfigFileVersionStore.DeleteByApp(ctx, app.ID); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileVersionMeta).DeleteMany(ctx, appcfg.VersionsByApp(app.ID)); err != nil {
 		return errors.Wrap(err, "delete values file versions")
 	}
 	return nil

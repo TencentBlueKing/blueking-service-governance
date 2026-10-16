@@ -69,7 +69,6 @@ func (h *Handler) newBuildService() (*build.Service, error) {
 	)
 	return build.NewService(
 		h.registry.DB,
-		h.registry.BuildRecordStore,
 		imageReferenceValidator,
 		h.customImageChecker,
 	)

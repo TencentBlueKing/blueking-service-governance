@@ -38,13 +38,12 @@ import (
 
 var _ = Describe("AppEnvVarService", func() {
 	var (
-		diApp                     *fxtest.App
-		ctx                       context.Context
-		appStore                  bkmsapp.ApplicationStore
-		appModelStore             appmodel.AppModelStore
-		appConfigFileStore        appcfg.AppConfigFileStore
-		appConfigFileVersionStore appcfg.AppConfigFileVersionStore
-		service                   *appmodel.AppEnvVarService
+		diApp              *fxtest.App
+		ctx                context.Context
+		appStore           bkmsapp.ApplicationStore
+		appModelStore      appmodel.AppModelStore
+		appConfigFileStore appcfg.AppConfigFileStore
+		service            *appmodel.AppEnvVarService
 	)
 
 	BeforeEach(func() {
@@ -62,7 +61,6 @@ var _ = Describe("AppEnvVarService", func() {
 				&appStore,
 				&appModelStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
 				&service,
 			),
 		)
@@ -75,10 +73,9 @@ var _ = Describe("AppEnvVarService", func() {
 
 	newTrpcApp := func(envVars []appmodel.Variable) *bkmsapp.Application {
 		app, _ := dbfactory.TrpcApplication(ctx, &dbfactory.TrpcApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, &dbfactory.TrpcApplicationOpts{
 			EnvVars: envVars,
 		})

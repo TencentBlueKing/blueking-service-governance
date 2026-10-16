@@ -39,7 +39,6 @@ func (h *Handler) newTrpcService() *trpcapp.Service {
 		h.registry.DB,
 		h.registry.EnvStore,
 		h.registry.AppConfigFileStore,
-		h.registry.AppConfigFileVersionStore,
 		h.registry.AppStore,
 	)
 }

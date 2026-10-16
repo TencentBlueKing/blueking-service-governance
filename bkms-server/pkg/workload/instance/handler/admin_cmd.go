@@ -212,7 +212,6 @@ func (h *Handler) ExecuteTafAdminCmd(c *gin.Context) {
 			MountableFileProvider: appcfg.NewMountableFileProvider(
 				h.registry.AppConfigFileStore,
 				h.registry.DB,
-				h.registry.AppConfigFileVersionStore,
 			),
 			EnvStore:      h.registry.EnvStore,
 			AppStore:      h.registry.AppStore,
@@ -285,7 +284,6 @@ func (h *Handler) newTrpcAdminService(
 		appcfg.NewMountableFileProvider(
 			h.registry.AppConfigFileStore,
 			h.registry.DB,
-			h.registry.AppConfigFileVersionStore,
 		),
 		h.registry.EnvStore,
 		h.registry.AppStore,

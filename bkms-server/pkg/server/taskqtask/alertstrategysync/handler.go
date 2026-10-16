@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // handleSync 同步应用在指定环境/泳道下的告警策略到蓝鲸监控远端。
@@ -49,9 +50,9 @@ func handleSync(ctx context.Context, args Args) error {
 	}
 
 	log.Infof(ctx, "alert strategy sync start: %s envID=%s", args, env.ID.Hex())
-	alertstrategy.NewService(
-		reg.AlertStrategyStore, reg.EnvStore, reg.AppStore, reg.ResourceSnapshotStore,
-	).SyncStrategiesForAppInEnv(ctx, ws, args.AppID, env.ID, args.TrafficLaneName, operatorFromCtx(ctx))
+	alertstrategy.NewService(reg.DB, reg.EnvStore, reg.AppStore).SyncStrategiesForAppInEnv(
+		ctx, ws, args.AppID, env.ID, args.TrafficLaneName, operatorFromCtx(ctx),
+	)
 	return nil
 }
 
@@ -73,9 +74,9 @@ func handleCleanup(ctx context.Context, args Args) error {
 	}
 
 	log.Infof(ctx, "alert strategy cleanup start: %s envID=%s", args, env.ID.Hex())
-	alertstrategy.NewService(
-		reg.AlertStrategyStore, reg.EnvStore, reg.AppStore, reg.ResourceSnapshotStore,
-	).CleanupStrategiesForAppInEnv(ctx, ws, args.AppID, env.ID, args.TrafficLaneName, operatorFromCtx(ctx))
+	alertstrategy.NewService(reg.DB, reg.EnvStore, reg.AppStore).CleanupStrategiesForAppInEnv(
+		ctx, ws, args.AppID, env.ID, args.TrafficLaneName, operatorFromCtx(ctx),
+	)
 	return nil
 }
 
@@ -92,12 +93,11 @@ func onCleanupExhausted(ctx context.Context, args Args, lastErr error) {
 // resolveContext 获取 store registry 和 workspace，返回 ErrStopRetry 代表不可恢复
 func resolveContext(ctx context.Context, args Args) (*storereg.Registry, *workspace.Workspace, error) {
 	reg := storereg.G()
-	if reg == nil || reg.AlertStrategyStore == nil || reg.EnvStore == nil ||
-		reg.AppStore == nil || reg.ResourceSnapshotStore == nil || reg.WorkspaceStore == nil {
+	if reg == nil || reg.DB == nil || reg.EnvStore == nil || reg.AppStore == nil {
 		return nil, nil, errors.Wrap(taskq.ErrStopRetry, "required store not initialized")
 	}
 
-	ws, err := reg.WorkspaceStore.Get(ctx, args.WorkspaceID)
+	ws, err := store.Of(reg.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(args.WorkspaceID))
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "get workspace %s", args.WorkspaceID)
 	}

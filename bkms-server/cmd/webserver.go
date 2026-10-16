@@ -106,7 +106,6 @@ func NewWebServerCmd() *cobra.Command {
 				appcfg.NewMountableFileProvider(
 					reg.AppConfigFileStore,
 					reg.DB,
-					reg.AppConfigFileVersionStore,
 				),
 				reg.PolarisConfigStore,
 			)

@@ -60,47 +60,41 @@ type DeployParams struct {
 
 // Service 负责 appmodel 部署相关编排，不负责权限校验与任务投递
 type Service struct {
-	db                                  *mongo.Database
-	appStore                            bkmsapp.ApplicationStore
-	envStore                            envmodel.EnvironmentStore
-	snapshotService                     *snapshot.Service
-	appModelStore                       appmodel.AppModelStore
-	workspaceStore                      workspace.WorkspaceStore
-	scopedEnvVarStore                   scopedenvvars.ScopedEnvVarStore
-	appDepsVarReader                    *depenvvars.Reader
-	polarisVarReader                    *polarisenvvars.Reader
-	workspaceCompsStore                 workspace.WorkspaceCompsStore
-	polarisConfigStore                  polaris.PolarisConfigStore
-	hostPortStore                       hostport.HostPortStore
-	appSpecStore                        appspec.AppSpecStore
-	buildAutoDeployRecordStore          autodeploy.RecordStore
-	appModelDeployRecordStore           deployappmodel.RecordStore
-	appModelDeployResourceSnapshotStore deployappmodel.ResourceSnapshotStore
-	appConfigFileStore                  appcfg.AppConfigFileStore
-	appConfigFileVersionStore           appcfg.AppConfigFileVersionStore
+	db                         *mongo.Database
+	appStore                   bkmsapp.ApplicationStore
+	envStore                   envmodel.EnvironmentStore
+	snapshotService            *snapshot.Service
+	appModelStore              appmodel.AppModelStore
+	scopedEnvVarStore          scopedenvvars.ScopedEnvVarStore
+	appDepsVarReader           *depenvvars.Reader
+	polarisVarReader           *polarisenvvars.Reader
+	workspaceCompsStore        workspace.WorkspaceCompsStore
+	polarisConfigStore         polaris.PolarisConfigStore
+	hostPortStore              hostport.HostPortStore
+	appSpecStore               appspec.AppSpecStore
+	buildAutoDeployRecordStore autodeploy.RecordStore
+	appModelDeployRecordStore  deployappmodel.RecordStore
+	appConfigFileStore         appcfg.AppConfigFileStore
 }
 
 // ServiceDeps 部署服务所需依赖
 type ServiceDeps struct {
 	// DB 供基于 GenericStore 的模型使用
-	DB                                  *mongo.Database                      `validate:"required"`
-	AppStore                            bkmsapp.ApplicationStore             `validate:"required"`
-	EnvStore                            envmodel.EnvironmentStore            `validate:"required"`
-	SnapshotService                     *snapshot.Service                    `validate:"required"`
-	AppModelStore                       appmodel.AppModelStore               `validate:"required"`
-	WorkspaceStore                      workspace.WorkspaceStore             `validate:"required"`
-	ScopedEnvVarStore                   scopedenvvars.ScopedEnvVarStore      `validate:"required"`
-	AppDepsVarReader                    *depenvvars.Reader                   `validate:"required"`
-	PolarisVarReader                    *polarisenvvars.Reader               `validate:"required"`
-	WorkspaceCompsStore                 workspace.WorkspaceCompsStore        `validate:"required"`
-	PolarisConfigStore                  polaris.PolarisConfigStore           `validate:"required"`
-	HostPortStore                       hostport.HostPortStore               `validate:"required"`
-	AppSpecStore                        appspec.AppSpecStore                 `validate:"required"`
-	BuildAutoDeployRecordStore          autodeploy.RecordStore               `validate:"required"`
-	AppModelDeployRecordStore           deployappmodel.RecordStore           `validate:"required"`
-	AppModelDeployResourceSnapshotStore deployappmodel.ResourceSnapshotStore `validate:"required"`
-	AppConfigFileStore                  appcfg.AppConfigFileStore            `validate:"required"`
-	AppConfigFileVersionStore           appcfg.AppConfigFileVersionStore     `validate:"required"`
+	DB                         *mongo.Database                 `validate:"required"`
+	AppStore                   bkmsapp.ApplicationStore        `validate:"required"`
+	EnvStore                   envmodel.EnvironmentStore       `validate:"required"`
+	SnapshotService            *snapshot.Service               `validate:"required"`
+	AppModelStore              appmodel.AppModelStore          `validate:"required"`
+	ScopedEnvVarStore          scopedenvvars.ScopedEnvVarStore `validate:"required"`
+	AppDepsVarReader           *depenvvars.Reader              `validate:"required"`
+	PolarisVarReader           *polarisenvvars.Reader          `validate:"required"`
+	WorkspaceCompsStore        workspace.WorkspaceCompsStore   `validate:"required"`
+	PolarisConfigStore         polaris.PolarisConfigStore      `validate:"required"`
+	HostPortStore              hostport.HostPortStore          `validate:"required"`
+	AppSpecStore               appspec.AppSpecStore            `validate:"required"`
+	BuildAutoDeployRecordStore autodeploy.RecordStore          `validate:"required"`
+	AppModelDeployRecordStore  deployappmodel.RecordStore      `validate:"required"`
+	AppConfigFileStore         appcfg.AppConfigFileStore       `validate:"required"`
 }
 
 var validate = validator.New(validator.WithRequiredStructEnabled())
@@ -111,24 +105,21 @@ func NewService(deps ServiceDeps) (*Service, error) {
 		return nil, errors.Wrap(err, "validate dependencies")
 	}
 	return &Service{
-		db:                                  deps.DB,
-		appStore:                            deps.AppStore,
-		envStore:                            deps.EnvStore,
-		snapshotService:                     deps.SnapshotService,
-		appModelStore:                       deps.AppModelStore,
-		workspaceStore:                      deps.WorkspaceStore,
-		scopedEnvVarStore:                   deps.ScopedEnvVarStore,
-		appDepsVarReader:                    deps.AppDepsVarReader,
-		polarisVarReader:                    deps.PolarisVarReader,
-		workspaceCompsStore:                 deps.WorkspaceCompsStore,
-		polarisConfigStore:                  deps.PolarisConfigStore,
-		hostPortStore:                       deps.HostPortStore,
-		appSpecStore:                        deps.AppSpecStore,
-		buildAutoDeployRecordStore:          deps.BuildAutoDeployRecordStore,
-		appModelDeployRecordStore:           deps.AppModelDeployRecordStore,
-		appModelDeployResourceSnapshotStore: deps.AppModelDeployResourceSnapshotStore,
-		appConfigFileStore:                  deps.AppConfigFileStore,
-		appConfigFileVersionStore:           deps.AppConfigFileVersionStore,
+		db:                         deps.DB,
+		appStore:                   deps.AppStore,
+		envStore:                   deps.EnvStore,
+		snapshotService:            deps.SnapshotService,
+		appModelStore:              deps.AppModelStore,
+		scopedEnvVarStore:          deps.ScopedEnvVarStore,
+		appDepsVarReader:           deps.AppDepsVarReader,
+		polarisVarReader:           deps.PolarisVarReader,
+		workspaceCompsStore:        deps.WorkspaceCompsStore,
+		polarisConfigStore:         deps.PolarisConfigStore,
+		hostPortStore:              deps.HostPortStore,
+		appSpecStore:               deps.AppSpecStore,
+		buildAutoDeployRecordStore: deps.BuildAutoDeployRecordStore,
+		appModelDeployRecordStore:  deps.AppModelDeployRecordStore,
+		appConfigFileStore:         deps.AppConfigFileStore,
 	}, nil
 }
 
@@ -143,24 +134,21 @@ func NewServiceFromRegistry(reg *storereg.Registry) (*Service, error) {
 		reg.AppStore,
 	)
 	return NewService(ServiceDeps{
-		DB:                                  reg.DB,
-		AppStore:                            reg.AppStore,
-		EnvStore:                            reg.EnvStore,
-		SnapshotService:                     snapshotSvc,
-		AppModelStore:                       reg.AppModelStore,
-		WorkspaceStore:                      reg.WorkspaceStore,
-		ScopedEnvVarStore:                   reg.ScopedEnvVarStore,
-		AppDepsVarReader:                    reg.AppDepsVarReader,
-		PolarisVarReader:                    reg.PolarisVarReader,
-		WorkspaceCompsStore:                 reg.WorkspaceCompsStore,
-		PolarisConfigStore:                  reg.PolarisConfigStore,
-		HostPortStore:                       reg.HostPortStore,
-		AppSpecStore:                        reg.AppSpecStore,
-		BuildAutoDeployRecordStore:          reg.BuildAutoDeployRecordStore,
-		AppModelDeployRecordStore:           reg.AppModelDeployRecordStore,
-		AppModelDeployResourceSnapshotStore: reg.AppModelDeployResourceSnapshotStore,
-		AppConfigFileStore:                  reg.AppConfigFileStore,
-		AppConfigFileVersionStore:           reg.AppConfigFileVersionStore,
+		DB:                         reg.DB,
+		AppStore:                   reg.AppStore,
+		EnvStore:                   reg.EnvStore,
+		SnapshotService:            snapshotSvc,
+		AppModelStore:              reg.AppModelStore,
+		ScopedEnvVarStore:          reg.ScopedEnvVarStore,
+		AppDepsVarReader:           reg.AppDepsVarReader,
+		PolarisVarReader:           reg.PolarisVarReader,
+		WorkspaceCompsStore:        reg.WorkspaceCompsStore,
+		PolarisConfigStore:         reg.PolarisConfigStore,
+		HostPortStore:              reg.HostPortStore,
+		AppSpecStore:               reg.AppSpecStore,
+		BuildAutoDeployRecordStore: reg.BuildAutoDeployRecordStore,
+		AppModelDeployRecordStore:  reg.AppModelDeployRecordStore,
+		AppConfigFileStore:         reg.AppConfigFileStore,
 	})
 }
 
@@ -184,7 +172,7 @@ func (s *Service) Deploy(ctx context.Context, app *bkmsapp.Application, params D
 	if err != nil {
 		return "", errors.Wrapf(err, "get app %s model", app.ID)
 	}
-	ws, err := s.workspaceStore.Get(ctx, app.WorkspaceID)
+	ws, err := store.Of(s.db, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return "", errors.Wrap(err, "get workspace")
 	}
@@ -204,17 +192,15 @@ func (s *Service) Deploy(ctx context.Context, app *bkmsapp.Application, params D
 		s.appDepsVarReader,
 		s.polarisVarReader,
 		s.workspaceCompsStore,
-		s.workspaceStore,
 		s.polarisConfigStore,
 		s.hostPortStore,
 		s.appModelStore,
 		s.appSpecStore,
 		s.db,
-		appcfg.NewMountableFileProvider(s.appConfigFileStore, s.db, s.appConfigFileVersionStore),
+		appcfg.NewMountableFileProvider(s.appConfigFileStore, s.db),
 	)
 	deployer := deployappmodel.NewDeployer(
 		s.appModelDeployRecordStore,
-		s.appModelDeployResourceSnapshotStore,
 		s.buildAutoDeployRecordStore,
 		s.appModelStore,
 		builderService,

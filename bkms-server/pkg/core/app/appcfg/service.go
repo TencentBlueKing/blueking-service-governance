@@ -36,12 +36,8 @@ type AppConfigFileService struct {
 var _ MountableFileProvider = (*AppCfgFileDefService)(nil)
 
 // NewAppConfigFileService 内部构造分层服务。
-func NewAppConfigFileService(
-	fileStore AppConfigFileStore,
-	db *mongo.Database,
-	versionStore AppConfigFileVersionStore,
-) *AppConfigFileService {
-	base := NewBaseAppCfgFileService(db, fileStore, versionStore)
+func NewAppConfigFileService(fileStore AppConfigFileStore, db *mongo.Database) *AppConfigFileService {
+	base := NewBaseAppCfgFileService(db, fileStore)
 	inner := NewAppCfgFileDefService(base)
 	return &AppConfigFileService{AppCfgFileDefService: inner}
 }

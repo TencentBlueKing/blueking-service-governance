@@ -122,7 +122,8 @@ func TrpcApplication(
 	// 创建 app-level 默认 AppConfigFile（tRPC plugin 需要）
 	// def.Name 使用 tRPC 配置中的实际文件名，与 app model 保持一致
 	acfService := appcfg.NewAppConfigFileService(
-		stores.AppConfigFileStore, database.DB(), stores.AppConfigFileVersionStore,
+		stores.AppConfigFileStore,
+		database.DB(),
 	)
 	_, err = acfService.Create(
 		ctx,
@@ -166,10 +167,9 @@ func TrpcApplication(
 
 // TafApplicationStores 创建 TAF 应用所需的 store 集合
 type TafApplicationStores struct {
-	AppStore                  bkmsapp.ApplicationStore
-	AppModelStore             appmodel.AppModelStore
-	AppConfigFileStore        appcfg.AppConfigFileStore
-	AppConfigFileVersionStore appcfg.AppConfigFileVersionStore
+	AppStore           bkmsapp.ApplicationStore
+	AppModelStore      appmodel.AppModelStore
+	AppConfigFileStore appcfg.AppConfigFileStore
 }
 
 // TafApplicationOpts 定义创建 TAF 应用时的可选参数
@@ -268,7 +268,8 @@ func TafApplication(
 	// 创建 app-level 默认 AppConfigFile（TAF plugin 需要）
 	// def.Name 使用 TAF 配置中的实际文件名，与 app model 保持一致
 	acfService := appcfg.NewAppConfigFileService(
-		stores.AppConfigFileStore, database.DB(), stores.AppConfigFileVersionStore,
+		stores.AppConfigFileStore,
+		database.DB(),
 	)
 	_, err = acfService.Create(
 		ctx,

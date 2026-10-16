@@ -108,7 +108,6 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	params := appcfg.CreateCfgFileParams{
 		AppID:               app.ID,
@@ -215,7 +214,6 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	if err = acfService.UpdateFile(
 		ctx, acf, input.Name, operator,
@@ -395,7 +393,6 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	oldAcf, err := acfService.DeleteFile(ctx, app.ID, id)
 	if err != nil {
@@ -731,7 +728,6 @@ func (h *Handler) persistContentUpdate(
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.AppConfigFileStore,
 		h.registry.DB,
-		h.registry.AppConfigFileVersionStore,
 	)
 	if err := acfService.UpdateFile(
 		ctx, acf, defName, operator,

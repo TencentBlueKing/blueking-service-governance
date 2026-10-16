@@ -57,7 +57,6 @@ type BuildResult struct {
 // Service 负责构建相关业务编排
 type Service struct {
 	db                      *mongo.Database
-	buildRecordStore        imgbuild.RecordStore
 	imageReferenceValidator ImageReferenceValidator
 	customImageChecker      CustomImageChecker
 }
@@ -67,11 +66,10 @@ type Service struct {
 // 避免运行时才发现依赖缺失。
 func NewService(
 	db *mongo.Database,
-	buildRecordStore imgbuild.RecordStore,
 	imageReferenceValidator ImageReferenceValidator,
 	customImageChecker CustomImageChecker,
 ) (*Service, error) {
-	if db == nil || buildRecordStore == nil {
+	if db == nil {
 		return nil, errors.New("build service dependencies not initialized")
 	}
 	if imageReferenceValidator == nil {
@@ -82,7 +80,6 @@ func NewService(
 	}
 	return &Service{
 		db:                      db,
-		buildRecordStore:        buildRecordStore,
 		imageReferenceValidator: imageReferenceValidator,
 		customImageChecker:      customImageChecker,
 	}, nil
@@ -221,8 +218,8 @@ func (s *Service) Build(
 		CreatedAt:   timeNow,
 		UpdatedAt:   timeNow,
 	}
-	if err = s.buildRecordStore.Create(ctx, buildRecord); err != nil {
-		return nil, errors.Wrapf(err, "create build record for %s", app.ID)
+	if err = imgbuild.CreateRecord(ctx, s.db, buildRecord); err != nil {
+		return nil, err
 	}
 
 	return &BuildResult{

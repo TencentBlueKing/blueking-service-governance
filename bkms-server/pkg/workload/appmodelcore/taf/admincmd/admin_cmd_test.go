@@ -50,7 +50,6 @@ var _ = Describe("TafAdminService", func() {
 	var appStore bkmsapp.ApplicationStore
 	var appConfigFileStore appcfg.AppConfigFileStore
 	var appConfigFileDefStore *appcfg.AppConfigFileDefStore
-	var appConfigFileVersionStore appcfg.AppConfigFileVersionStore
 	var appModelStore appmodel.AppModelStore
 	var envStore envmodel.EnvironmentStore
 	var envService *bkmsenv.EnvService
@@ -74,7 +73,6 @@ var _ = Describe("TafAdminService", func() {
 			MountableFileProvider: appcfg.NewMountableFileProvider(
 				appConfigFileStore,
 				testutil.NewDB(GinkgoT()),
-				appConfigFileVersionStore,
 			),
 			AppModelStore: appModelStore,
 			EnvStore:      envStore,
@@ -90,7 +88,7 @@ var _ = Describe("TafAdminService", func() {
 
 	// 辅助函数：创建指定内容的 TAF 配置文件
 	createConfigFile := func(content string) {
-		svc := appcfg.NewAppConfigFileService(appConfigFileStore, testutil.NewDB(GinkgoT()), appConfigFileVersionStore)
+		svc := appcfg.NewAppConfigFileService(appConfigFileStore, testutil.NewDB(GinkgoT()))
 		defs, err := appcfg.ListDefsByApp(
 			ctx,
 			appConfigFileDefStore,
@@ -134,7 +132,6 @@ var _ = Describe("TafAdminService", func() {
 			fx.Populate(
 				&appStore,
 				&appConfigFileStore,
-				&appConfigFileVersionStore,
 				&appModelStore,
 				&envStore,
 				&envService,
@@ -148,10 +145,9 @@ var _ = Describe("TafAdminService", func() {
 
 		// 使用 dbfactory 创建测试用 TAF 应用
 		testApp, testAppModel = dbfactory.TafApplication(ctx, &dbfactory.TafApplicationStores{
-			AppStore:                  appStore,
-			AppModelStore:             appModelStore,
-			AppConfigFileStore:        appConfigFileStore,
-			AppConfigFileVersionStore: appConfigFileVersionStore,
+			AppStore:           appStore,
+			AppModelStore:      appModelStore,
+			AppConfigFileStore: appConfigFileStore,
 		}, nil)
 
 		// 使用 dbfactory 创建测试用 Environment

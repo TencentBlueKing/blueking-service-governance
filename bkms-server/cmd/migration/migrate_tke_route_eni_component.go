@@ -12,7 +12,6 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -77,11 +76,7 @@ func initializeTkeRouteEniMigration(ctx context.Context, srvCfg string) (*appspe
 	if err != nil {
 		return nil, err
 	}
-	compDefStore, err := component.NewComponentDefStoreMongo(client, dbName)
-	if err != nil {
-		return nil, err
-	}
 	return appspecmigrate.New(
-		client.Database(dbName), appStore, appSpecStore, appModelStore, wsCompStore, compDefStore,
+		client.Database(dbName), appStore, appSpecStore, appModelStore, wsCompStore,
 	), nil
 }

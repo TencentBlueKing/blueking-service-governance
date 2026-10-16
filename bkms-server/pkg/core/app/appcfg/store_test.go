@@ -35,7 +35,6 @@ import (
 
 var _ = Describe("AppConfigFileStoreMongo", func() {
 	var store *appcfg.AppConfigFileStoreMongo
-	var versionStore *appcfg.AppConfigFileVersionStoreMongo
 	var ctx context.Context
 
 	var appID string
@@ -47,8 +46,6 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 		var err error
 
 		store, err = appcfg.NewAppConfigFileStoreMongo(database.Client(), database.Name())
-		Expect(err).NotTo(HaveOccurred())
-		versionStore, err = appcfg.NewAppConfigFileVersionStoreMongo(database.Client(), database.Name())
 		Expect(err).NotTo(HaveOccurred())
 
 		ctx = context.Background()
@@ -251,7 +248,7 @@ var _ = Describe("AppConfigFileStoreMongo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Add an overlay app config file that references the normal file
-			_, err = appcfg.NewAppConfigFileService(store, testutil.NewDB(GinkgoT()), versionStore).Create(
+			_, err = appcfg.NewAppConfigFileService(store, testutil.NewDB(GinkgoT())).Create(
 				ctx,
 				appcfg.CreateCfgFileParams{
 					AppID:               appID,

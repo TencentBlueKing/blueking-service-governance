@@ -62,12 +62,8 @@ func New(registry *storereg.Registry) *Handler {
 		registry.AppStore,
 	)
 	return &Handler{
-		registry: registry,
-		persistMgr: customruntime.NewPersistManager(
-			registry.CustomRuntimeImageStore,
-			registry.DB,
-			snapshotService,
-		),
+		registry:   registry,
+		persistMgr: customruntime.NewPersistManager(registry.DB, snapshotService),
 	}
 }
 
@@ -79,7 +75,6 @@ func (h *Handler) newBuildService() (*build.Service, error) {
 	)
 	return build.NewService(
 		h.registry.DB,
-		h.registry.BuildRecordStore,
 		imageReferenceValidator,
 		h.persistMgr,
 	)
@@ -260,12 +255,9 @@ func (h *Handler) ListBuildRecords(c *gin.Context) {
 		return
 	}
 
-	records, total, err := h.registry.BuildRecordStore.List(
-		ctx,
-		app.ID,
-		queryInput.Keyword,
-		queryInput.Page,
-		queryInput.PageSize,
+	page, err := store.Of(h.registry.DB, imagebuild.RecordMeta).ListPage(
+		ctx, queryInput.Page, queryInput.PageSize,
+		imagebuild.ByApp(app.ID), imagebuild.RecordKeywordMatches(queryInput.Keyword), store.Desc("createdAt"),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(
@@ -275,14 +267,14 @@ func (h *Handler) ListBuildRecords(c *gin.Context) {
 		return
 	}
 
-	results := make([]*buildserializer.BuildRecordOutputObj, 0, len(records))
-	for _, record := range records {
+	results := make([]*buildserializer.BuildRecordOutputObj, 0, len(page.Items))
+	for _, record := range page.Items {
 		results = append(results, new(buildserializer.BuildRecordOutputObj).FromModel(record))
 	}
 
 	ginutils.OK(c, buildserializer.ListBuildRecordsOutput{
 		Data: &buildserializer.PaginatedBuildRecordOutputObjs{
-			Count:   total,
+			Count:   page.Total,
 			Results: results,
 		},
 	})

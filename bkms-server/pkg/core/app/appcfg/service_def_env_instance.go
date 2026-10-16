@@ -251,7 +251,7 @@ func (s *AppCfgFileDefService) deleteEnvInstanceByName(
 	if _, err = s.FileStore.DeleteByID(ctx, appID, acf.ID); err != nil {
 		return nil, errors.Wrap(err, "delete env instance")
 	}
-	if _, err = s.VersionStore.DeleteByFileID(ctx, acf.ID); err != nil {
+	if _, err = s.VersionStore.DeleteMany(ctx, VersionsByFile(acf.ID)); err != nil {
 		return nil, errors.Wrap(err, "delete versions for env instance")
 	}
 	return acf, nil

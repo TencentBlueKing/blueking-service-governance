@@ -28,6 +28,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
@@ -39,7 +40,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/alertstrategysync"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/helmdeploypoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
 
 // ListHelmDeployRecords 获取 Helm 应用部署记录列表。
@@ -455,7 +458,7 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 	)
 	// 应用已从环境卸载，需同步清理该应用在该环境下关联的告警策略，避免残留无效告警。
 	// 先查询 workspace 与 env 信息（清理时需要其标识）；任一查询失败仅记录日志，不中断卸载主流程。
-	ws, wsErr := h.registry.WorkspaceStore.Get(ctx, app.WorkspaceID)
+	ws, wsErr := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if wsErr != nil {
 		log.Errorf(ctx, "get workspace %s for alert cleanup failed: %v", app.WorkspaceID, wsErr)
 	} else {
@@ -486,8 +489,8 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 	}
 
 	// 清理资源拓扑快照（失败不阻塞主流程）
-	if err = h.registry.ResourceSnapshotStore.Delete(
-		ctx, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
+	if err = store.Of(h.registry.DB, topology.ResourceSnapshotMeta).DeleteIfExists(
+		ctx, topology.ByScope(app.ID, uriInput.EnvName, queryInput.TrafficLaneName),
 	); err != nil {
 		log.Errorf(
 			ctx, "delete resource snapshot for app %s env %s lane %s failed: %v",

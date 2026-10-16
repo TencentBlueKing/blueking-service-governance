@@ -25,8 +25,6 @@ import (
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 	appsv1 "k8s.io/api/apps/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -56,13 +54,9 @@ var _ = AfterSuite(func() {
 	}
 })
 
-// newWorkspaceStore 通过 fx 构造 WorkspaceStore，供测试补齐 app 所属 workspace 使用。
-func newWorkspaceStore() workspace.WorkspaceStore {
-	var workspaceStore workspace.WorkspaceStore
-	diApp := fxtest.New(GinkgoT(), workspace.FxModule, fx.Populate(&workspaceStore))
-	diApp.RequireStart()
-	diApp.RequireStop()
-	return workspaceStore
+// newWorkspaceStore 构造 WorkspaceStore，供测试补齐 app 所属 workspace 使用。
+func newWorkspaceStore() *workspace.WorkspaceStore {
+	return testutil.NewStore(GinkgoT(), workspace.Meta)
 }
 
 // trackedWorkspaces 记录测试创建的 workspace，由 cleanupWorkspaces 统一清理。
@@ -82,15 +76,15 @@ func newWorkspaceID(ctx context.Context) string {
 func cleanupWorkspaces(ctx context.Context) {
 	store := newWorkspaceStore()
 	for _, id := range trackedWorkspaces {
-		_ = store.Delete(ctx, id)
+		_ = workspace.Delete(ctx, store, id)
 	}
 	trackedWorkspaces = nil
 }
 
 func initWorkloadPlugin() {
-	appConfigFileStore, db, appConfigFileVersionStore, polarisConfigStore := newWorkloadPluginDependencies()
+	appConfigFileStore, db, polarisConfigStore := newWorkloadPluginDependencies()
 	workload.InitPlugin(
-		appcfg.NewMountableFileProvider(appConfigFileStore, db, appConfigFileVersionStore),
+		appcfg.NewMountableFileProvider(appConfigFileStore, db),
 		polarisConfigStore,
 	)
 }
