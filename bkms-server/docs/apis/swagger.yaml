@@ -87,7 +87,9 @@ definitions:
         description: 容器内挂载目录（plain 必填）
         type: string
       mountedEnvNames:
-        description: 创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。环境名格式与路径参数 envName 相同。
+        description: |-
+          创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。
+          环境名格式与路径参数 envName 相同。
         items:
           type: string
         type: array
@@ -1183,6 +1185,8 @@ definitions:
         type: string
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput:
+    type: object
+  github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_releasestrategy_serializer.EmptyOutput:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput:
     type: object
@@ -2351,6 +2355,39 @@ definitions:
         type: string
     required:
     - instanceIDs
+    type: object
+  serializer.BatchInput:
+    properties:
+      pauseMode:
+        description: 本批完成后的暂停方式：none 不暂停 / duration 定时暂停 / permanent 永久暂停（需人工继续）
+        enum:
+        - none
+        - duration
+        - permanent
+        type: string
+      pauseSeconds:
+        description: 定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，范围 60 ~ 86400
+        maximum: 86400
+        minimum: 60
+        type: integer
+      target:
+        description: 本批"累计更新到"的实例数：正整数（如 "1"）或百分比（如 "25%"），百分比范围 1% ~ 100%
+        type: string
+    required:
+    - pauseMode
+    - target
+    type: object
+  serializer.BatchOutputObj:
+    properties:
+      pauseMode:
+        description: 本批完成后的暂停方式：none / duration / permanent
+        type: string
+      pauseSeconds:
+        description: 定时暂停时长（秒），pauseMode 不为 duration 时为 0
+        type: integer
+      target:
+        description: 本批"累计更新到"的实例数：正整数或百分比
+        type: string
     type: object
   serializer.BgEnvVarOutputObj:
     properties:
@@ -6244,6 +6281,14 @@ definitions:
           $ref: '#/definitions/serializer.RedisInstanceOutputObj'
         type: array
     type: object
+  serializer.ListReleaseStrategiesOutput:
+    properties:
+      data:
+        description: 空间内全部发布策略，按创建时间升序，不分页
+        items:
+          $ref: '#/definitions/serializer.ReleaseStrategyOutputObj'
+        type: array
+    type: object
   serializer.ListResourcesRulesOutput:
     properties:
       data:
@@ -7844,6 +7889,66 @@ definitions:
       status:
         type: string
       vendor:
+        type: string
+    type: object
+  serializer.ReleaseStrategyInput:
+    properties:
+      batches:
+        description: 批次列表，1 ~ 10 个；不校验跨批次递增
+        items:
+          $ref: '#/definitions/serializer.BatchInput'
+        maxItems: 10
+        minItems: 1
+        type: array
+      description:
+        description: 策略描述，不超过 200 个字符
+        maxLength: 200
+        type: string
+      name:
+        description: 策略名称，1 ~ 32 个字符，同一空间内唯一
+        maxLength: 32
+        type: string
+    required:
+    - batches
+    - name
+    type: object
+  serializer.ReleaseStrategyOutput:
+    properties:
+      data:
+        allOf:
+        - $ref: '#/definitions/serializer.ReleaseStrategyOutputObj'
+        description: 发布策略
+    type: object
+  serializer.ReleaseStrategyOutputObj:
+    properties:
+      batches:
+        description: 批次列表
+        items:
+          $ref: '#/definitions/serializer.BatchOutputObj'
+        type: array
+      createdAt:
+        description: 创建时间
+        type: string
+      creator:
+        description: 创建人
+        type: string
+      description:
+        description: 策略描述
+        type: string
+      id:
+        description: 策略 ID
+        type: string
+      name:
+        description: 策略名称
+        type: string
+      updatedAt:
+        description: 最近更新时间
+        type: string
+      updater:
+        description: 最近更新人
+        type: string
+      workspaceID:
+        description: 所属工作空间 ID
         type: string
     type: object
   serializer.RemoteRefOutput:
@@ -21414,6 +21519,184 @@ paths:
       summary: 获取操作审计记录列表
       tags:
       - operation-audit
+  /workspaces/{workspaceID}/release-strategies:
+    get:
+      operationId: ListReleaseStrategies
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListReleaseStrategiesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询空间内全部发布策略
+      tags:
+      - release-strategies
+    post:
+      consumes:
+      - application/json
+      operationId: CreateReleaseStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 发布策略
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.ReleaseStrategyInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ReleaseStrategyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 新建发布策略
+      tags:
+      - release-strategies
+  /workspaces/{workspaceID}/release-strategies/{strategyID}:
+    delete:
+      operationId: DeleteReleaseStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 发布策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_releasestrategy_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除发布策略
+      tags:
+      - release-strategies
+    get:
+      operationId: GetReleaseStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 发布策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ReleaseStrategyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询发布策略详情
+      tags:
+      - release-strategies
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateReleaseStrategy
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 发布策略 ID
+        in: path
+        name: strategyID
+        required: true
+        type: string
+      - description: 发布策略
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.ReleaseStrategyInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ReleaseStrategyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 修改发布策略
+      tags:
+      - release-strategies
   /workspaces/{workspaceID}/role-member-groups:
     get:
       operationId: ListWorkspaceRoleMemberGroups

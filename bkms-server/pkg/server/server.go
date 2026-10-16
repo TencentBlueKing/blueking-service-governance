@@ -54,6 +54,8 @@ import (
 	workspacehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	deployhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
+	releasestrategyhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa"
 	gpahandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
@@ -209,6 +211,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	helmchart.Register(v1, helmcharthandler.New(storereg.G()))
 	instancelog.Register(v1, instanceloghandler.New(storereg.G()))
 	appdefaults.Register(v1, appdefaultshandler.New(storereg.G()))
+	releasestrategy.Register(v1, releasestrategyhandler.New(storereg.G()))
 	appspec.Register(v1, appspechandler.New(storereg.G()))
 	arrangement.Register(v1, arrangementhandler.New(storereg.G()))
 	instance.Register(v1, instancehandler.New(storereg.G()))
