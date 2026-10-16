@@ -90,44 +90,19 @@ func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*q
 		}
 		opt.apply(q)
 	}
-	resolve := func(path string) (string, error) { return resolveKey(s.schema.typ, path) }
 	var err error
-	if q.conds, err = mapFilterKeys(q.conds, resolve); err != nil {
+	if q.conds, err = mapFilterKeys(q.conds, s.schema.resolveKey); err != nil {
 		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 	}
 	for i := range q.sort {
-		if q.sort[i].Key, err = resolve(q.sort[i].Key); err != nil {
+		if q.sort[i].Key, err = s.schema.resolveKey(q.sort[i].Key); err != nil {
 			return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 		}
 	}
-	if q.omitted, err = s.resolveOmitted(q.omitted); err != nil {
+	if q.omitted, err = s.schema.resolveOmitted(q.omitted); err != nil {
 		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 	}
 	return q, nil
-}
-
-// resolveOmitted 将 OmitFields 的字段转换为 bson 路径：字段必须存在于模型中，重复的字段只保留一个，
-// 互为父子的字段会被 MongoDB 判定为路径冲突，提前拒绝
-func (s *GenericStore[T]) resolveOmitted(fields []string) ([]string, error) {
-	if len(fields) == 0 {
-		return nil, nil
-	}
-	paths := make([]fieldPath, 0, len(fields))
-	for _, f := range fields {
-		p, err := resolvePath(s.schema.typ, f)
-		if err != nil {
-			return nil, err
-		}
-		if !p.known {
-			return nil, errors.Wrapf(errUnknownField, "omitted field %q", f)
-		}
-		paths = append(paths, p)
-	}
-	paths, err := dedupePaths(paths)
-	if err != nil {
-		return nil, err
-	}
-	return lo.Map(paths, func(p fieldPath, _ int) string { return p.String() }), nil
 }
 
 // requireFilter 要求写操作必须带过滤条件（或显式 All）

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
@@ -131,11 +130,11 @@ func (s *GenericStore[T]) modifyDoc(update bson.M, keepUpdatedAt bool) (bson.D, 
 		}
 		mapped := make(bson.D, 0, len(fields))
 		for _, f := range fields {
-			p, err := resolveUpdatePath(s.schema.typ, f.Key)
+			p, err := s.schema.resolveUpdatePath(f.Key)
 			if err != nil {
 				return nil, err
 			}
-			if (e.Key == "$set" || e.Key == "$unset") && !p.positional() {
+			if (e.Key == "$set" || e.Key == "$unset") && !p.Positional() {
 				return nil, errors.Errorf(
 					"%s of %q is only supported for positional array paths in Modify, use Update so that Encode is applied",
 					e.Key,
@@ -156,9 +155,4 @@ func (s *GenericStore[T]) modifyDoc(update bson.M, keepUpdatedAt bool) (bson.D, 
 		return doc, nil
 	}
 	return append(doc, bson.E{Key: "$set", Value: bson.D{touch}}), nil
-}
-
-// positional 判断路径中是否包含位置操作符（$、$[]、$[id]）
-func (p fieldPath) positional() bool {
-	return lo.ContainsBy(p.steps, func(st pathStep) bool { return isPositional(st.key) })
 }

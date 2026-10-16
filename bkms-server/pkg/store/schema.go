@@ -20,12 +20,13 @@ package store
 
 import (
 	"reflect"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store/path"
 )
 
 const (
@@ -39,9 +40,10 @@ var (
 	objectIDType = reflect.TypeFor[bson.ObjectID]()
 )
 
-// schema 是对模型结构体的反射分析结果，用于定位 _id 与时间戳字段
+// schema 是对模型结构体的反射分析结果，用于定位 _id 与时间戳字段，以及解析字段路径
 type schema struct {
-	typ reflect.Type
+	typ    reflect.Type
+	fields *path.SchemaFields
 	// 以下为字段在结构体中的 index 路径，nil 表示模型没有该字段
 	id        []int
 	createdAt []int
@@ -52,29 +54,60 @@ type schema struct {
 
 // newSchema 扫描顶层与 inline 的值类型结构体字段，因为这些是 _id、时间戳等顶层字段可能出现的位置
 func newSchema(typ reflect.Type) (*schema, error) {
-	if typ.Kind() != reflect.Struct {
-		return nil, errors.Errorf("model must be a struct, got %s", typ)
+	fields, err := path.New(typ)
+	if err != nil {
+		return nil, err
 	}
-	s := &schema{typ: typ}
-	for _, f := range structFields(typ) {
-		s.keys = append(s.keys, f.key)
-		switch f.key {
+	s := &schema{typ: typ, fields: fields}
+	for _, f := range fields.Fields() {
+		s.keys = append(s.keys, f.Key)
+		switch f.Key {
 		case keyID:
-			s.id = f.index
+			s.id = f.Index
 		case keyCreatedAt, keyUpdatedAt:
-			if f.typ != timeType {
+			if f.Type != timeType {
 				return nil, errors.Errorf(
-					"scan model %s: field %s (%s) must be time.Time, got %s", typ, f.name, f.key, f.typ,
+					"scan model %s: field %s (%s) must be time.Time, got %s", typ, f.Name, f.Key, f.Type,
 				)
 			}
-			if f.key == keyCreatedAt {
-				s.createdAt = f.index
+			if f.Key == keyCreatedAt {
+				s.createdAt = f.Index
 			} else {
-				s.updatedAt = f.index
+				s.updatedAt = f.Index
 			}
 		}
 	}
 	return s, nil
+}
+
+// resolveKey 将过滤条件、排序中的字段名转换为 bson 路径，模型中不存在的字段原样保留
+func (s *schema) resolveKey(field string) (string, error) {
+	p, err := s.fields.Resolve(field)
+	if err != nil {
+		return "", err
+	}
+	return p.String(), nil
+}
+
+// resolveOmitted 将 OmitFields 的字段转换为 bson 路径：字段必须存在于模型中，重复的字段只保留一个，
+// 互为父子的字段会被 MongoDB 判定为路径冲突，提前拒绝
+func (s *schema) resolveOmitted(fields []string) ([]string, error) {
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	paths := make([]path.Path, 0, len(fields))
+	for _, f := range fields {
+		p, err := s.fields.ResolveKnown(f)
+		if err != nil {
+			return nil, errors.Wrap(err, "omitted field")
+		}
+		paths = append(paths, p)
+	}
+	paths, err := path.Dedupe(paths)
+	if err != nil {
+		return nil, err
+	}
+	return lo.Map(paths, func(p path.Path, _ int) string { return p.String() }), nil
 }
 
 // fillID 当 _id 为零值时生成新的 ID：ObjectID 类型生成 ObjectID，string 类型生成其 hex 形式。
@@ -151,26 +184,4 @@ func (s *schema) idOf(v reflect.Value) (any, bool) {
 	}
 	f := v.FieldByIndex(s.id)
 	return f.Interface(), !f.IsZero()
-}
-
-// bsonKey 解析结构体字段的 bson key，规则与 mongo-driver 默认的 struct tag 解析（parseStructTags）
-// 保持一致：未设置 key 时使用小写的字段名；"-" 与未导出字段不参与编码，此时 ok 为 false
-func bsonKey(sf reflect.StructField) (key string, inline, ok bool) {
-	if !sf.IsExported() {
-		return "", false, false
-	}
-	tag, found := sf.Tag.Lookup("bson")
-	// 兼容驱动支持的旧式写法：整个 struct tag 即 bson tag，如 `myb,omitempty`
-	if !found && !strings.Contains(string(sf.Tag), ":") {
-		tag = string(sf.Tag)
-	}
-	if tag == "-" {
-		return "", false, false
-	}
-	key, opts, _ := strings.Cut(tag, ",")
-	inline = slices.Contains(strings.Split(opts, ","), "inline")
-	if key == "" {
-		key = strings.ToLower(sf.Name)
-	}
-	return key, inline, true
 }

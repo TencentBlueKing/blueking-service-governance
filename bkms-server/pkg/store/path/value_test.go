@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package store
+package path_test
 
 import (
 	"reflect"
@@ -29,16 +29,17 @@ import (
 
 var _ = Describe("Field path values", func() {
 	var doc *pathDoc
+	docFields := newFields[pathDoc]()
 
 	BeforeEach(func() {
 		doc = &pathDoc{}
 	})
 
-	set := func(path string, val any) error {
-		return setPath(reflect.ValueOf(doc).Elem(), mustResolvePath(pathDocType, path).steps, val)
+	set := func(field string, val any) error {
+		return mustResolve(docFields, field).Set(reflect.ValueOf(doc).Elem(), val)
 	}
 
-	Describe("setPath", func() {
+	Describe("Set", func() {
 		It("sets a top-level field", func() {
 			Expect(set("Title", "demo")).To(Succeed())
 			Expect(doc.Title).To(Equal("demo"))
@@ -92,9 +93,15 @@ var _ = Describe("Field path values", func() {
 			err := set("title", []int{1})
 			Expect(err).To(MatchError(ContainSubstring("convert []int to string")))
 		})
+
+		It("rejects a path that is not assignable", func() {
+			err := set("items.0.name", "x")
+			Expect(err).To(MatchError(ContainSubstring("is not assignable")))
+			Expect(doc.Items).To(BeNil())
+		})
 	})
 
-	Describe("assignValue", func() {
+	Describe("value conversion", func() {
 		It("sets a value of the same type directly", func() {
 			Expect(set("tags", []string{"a"})).To(Succeed())
 			Expect(doc.Tags).To(Equal([]string{"a"}))

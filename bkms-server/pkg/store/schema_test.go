@@ -30,7 +30,22 @@ import (
 
 type schemaNamedID string
 
+type SchemaBase struct {
+	Owner string `bson:"owner"`
+}
+
+type schemaSpec struct {
+	Color string `bson:"color"`
+}
+
 type (
+	schemaDoc struct {
+		ID         string `bson:"_id"`
+		SchemaBase `bson:",inline"`
+		Title      string     `bson:"title"`
+		Spec       schemaSpec `bson:"spec"`
+		CreatedAt  time.Time  `bson:"createdAt"`
+	}
 	schemaNoID struct {
 		Name string `bson:"name"`
 	}
@@ -55,7 +70,7 @@ func mustSchema[T any]() *schema {
 var _ = Describe("Schema", func() {
 	Describe("newSchema", func() {
 		It("should record keys of top-level and inline fields", func() {
-			Expect(mustSchema[pathDoc]().keys).To(ContainElements("_id", "owner", "title", "createdAt"))
+			Expect(mustSchema[schemaDoc]().keys).To(Equal([]string{"_id", "owner", "title", "spec", "createdAt"}))
 		})
 
 		It("should reject a non-struct model", func() {
@@ -68,6 +83,16 @@ var _ = Describe("Schema", func() {
 			Expect(err).To(MatchError(ContainSubstring("must be time.Time, got string")))
 		})
 	})
+
+	DescribeTable("resolveKey",
+		func(field, expected string) {
+			key, err := mustSchema[schemaDoc]().resolveKey(field)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(key).To(Equal(expected))
+		},
+		Entry("converts Go names to bson keys", "Spec.Color", "spec.color"),
+		Entry("keeps unknown fields as is", "legacy.Field", "legacy.Field"),
+	)
 
 	Describe("_id", func() {
 		It("should generate an ObjectID hex for a named string type", func() {

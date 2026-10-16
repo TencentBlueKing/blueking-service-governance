@@ -52,7 +52,7 @@ func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, op
 	groupID := make(bson.D, 0, len(groupBy))
 	for i, field := range groupBy {
 		var key string
-		if key, err = resolveKey(s.schema.typ, field); err != nil {
+		if key, err = s.schema.resolveKey(field); err != nil {
 			return nil, errors.Wrapf(err, "list latest in %s", s.coll.Name())
 		}
 		groupID = append(groupID, bson.E{Key: "k" + strconv.Itoa(i), Value: "$" + key})

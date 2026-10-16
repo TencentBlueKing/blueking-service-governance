@@ -25,13 +25,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store/path"
 )
 
 type selDoc struct {
 	ID        string            `bson:"_id"`
 	Name      string            `bson:"name"`
 	Enabled   bool              `bson:"enabled"`
-	Spec      pathSpec          `bson:"spec"`
+	Spec      schemaSpec        `bson:"spec"`
 	Labels    map[string]string `bson:"labels"`
 	CreatedAt time.Time         `bson:"createdAt"`
 	UpdatedAt time.Time         `bson:"updatedAt"`
@@ -53,7 +55,7 @@ var _ = Describe("Field selection", func() {
 	}
 	pathsOf := func(opts ...UpdateOpt) ([]string, error) {
 		paths, err := selection(opts...).paths(sc)
-		return lo.Map(paths, func(p fieldPath, _ int) string { return p.String() }), err
+		return lo.Map(paths, func(p path.Path, _ int) string { return p.String() }), err
 	}
 
 	DescribeTable("selects fields",
@@ -101,8 +103,8 @@ var _ = Describe("Field selection", func() {
 		Entry("\"*\" with other fields across merged opts",
 			[]UpdateOpt{UpdateSelected("*"), UpdateSelected("*", "name")}, ContainSubstring("cannot be combined"),
 		),
-		Entry("unknown selected field", []UpdateOpt{UpdateSelected("missing")}, errUnknownField),
-		Entry("unknown omitted field", []UpdateOpt{UpdateOmit("missing")}, errUnknownField),
+		Entry("unknown selected field", []UpdateOpt{UpdateSelected("missing")}, path.ErrUnknownField),
+		Entry("unknown omitted field", []UpdateOpt{UpdateOmit("missing")}, path.ErrUnknownField),
 		Entry("_id", []UpdateOpt{UpdateSelected("ID")}, ContainSubstring("cannot be updated")),
 		Entry("createdAt", []UpdateOpt{UpdateSelected("createdAt")}, ContainSubstring("cannot be updated")),
 		Entry("update operator", []UpdateOpt{UpdateSelected("$inc")}, ContainSubstring("not supported")),

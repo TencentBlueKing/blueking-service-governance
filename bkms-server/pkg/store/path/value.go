@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package store
+package path
 
 import (
 	"reflect"
@@ -25,10 +25,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-// setPath 将 val 赋给结构体 v 中 steps 所指的位置，途经的 nil 指针与 nil map 会被初始化。
-// steps 指向 map 条目且 val 为 nil 时删除该条目，使它在编码结果中不存在，从而被 Update 视为 $unset。
-// steps 必须来自 assignable 的 fieldPath
-func setPath(v reflect.Value, steps []pathStep, val any) error {
+// Set 将 val 赋给结构体 v（必须可寻址，且是解析 p 的模型类型）中 p 所指的位置，途经的 nil 指针与 nil map
+// 会被初始化。p 指向 map 条目且 val 为 nil 时删除该条目，使它在编码结果中不存在，从而被 Update 视为 $unset。
+// 值的转换规则见 assignValue；p 必须是 Assignable 的
+func (p Path) Set(v reflect.Value, val any) error {
+	if !p.Assignable {
+		return errors.Errorf("field path %q is not assignable", p)
+	}
+	return setSteps(v, p.Steps, val)
+}
+
+func setSteps(v reflect.Value, steps []Step, val any) error {
 	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			v.Set(reflect.New(v.Type().Elem()))
@@ -36,19 +43,19 @@ func setPath(v reflect.Value, steps []pathStep, val any) error {
 		v = v.Elem()
 	}
 	st, rest := steps[0], steps[1:]
-	if st.kind == stepField {
-		f := v.FieldByIndex(st.index)
+	if st.Kind == StepField {
+		f := v.FieldByIndex(st.Index)
 		if len(rest) == 0 {
 			return assignValue(f, val)
 		}
-		return setPath(f, rest, val)
+		return setSteps(f, rest, val)
 	}
 
 	// map 中的条目不可寻址，在副本上修改后再写回
 	if v.IsNil() {
 		v.Set(reflect.MakeMap(v.Type()))
 	}
-	key := reflect.ValueOf(st.key).Convert(v.Type().Key())
+	key := reflect.ValueOf(st.Key).Convert(v.Type().Key())
 	if len(rest) == 0 && val == nil {
 		v.SetMapIndex(key, reflect.Value{})
 		return nil
@@ -61,7 +68,7 @@ func setPath(v reflect.Value, steps []pathStep, val any) error {
 		if old := v.MapIndex(key); old.IsValid() {
 			elem.Set(old)
 		}
-		err = setPath(elem, rest, val)
+		err = setSteps(elem, rest, val)
 	}
 	if err != nil {
 		return err
@@ -71,7 +78,7 @@ func setPath(v reflect.Value, steps []pathStep, val any) error {
 }
 
 // assignValue 将 val 赋给 dst（必须可寻址）：
-//   - 类型可以直接赋值时直接赋值，nil 表示零值（map 条目除外，见 setPath）
+//   - 类型可以直接赋值时直接赋值，nil 表示零值（map 条目除外，见 Path.Set）
 //   - 指针字段可以直接传入元素值，如 *bool 字段传入 true
 //   - 底层类型相同的标量直接转换，如 string 写入 type SourceType string
 //   - 其余情况借助 bson 编解码转换为字段类型，如 int 写入 int64、[]any 写入 []string；

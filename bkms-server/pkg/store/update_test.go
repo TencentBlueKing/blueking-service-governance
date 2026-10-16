@@ -121,7 +121,9 @@ var _ = Describe("GenericStore Update", func() {
 				Expect(f.widgets.Update(f.ctx, m, f.byName("w1"))).To(MatchError(ContainSubstring(msg)))
 				Expect(f.mustGetWidget("w1").UpdatedAt).To(beStoredTime(w.UpdatedAt))
 			},
-			Entry("unknown field", map[string]any{"nonexistent": 1}, `field "nonexistent": unknown field`),
+			Entry("unknown field", map[string]any{"nonexistent": 1}, `has no field "nonexistent": unknown field`),
+			Entry("unknown nested field", map[string]any{"spec.missing": 1},
+				`resolve field path "spec.missing": store_test.WidgetSpec has no field "missing": unknown field`),
 			Entry("update operator", map[string]any{"$inc": bson.M{"priority": 1}}, "update operator"),
 			Entry("createdAt by Go name", map[string]any{"CreatedAt": time.Now()}, "cannot be updated"),
 			Entry("path into an array", map[string]any{"tags.0": "x"}, "cannot be set from a map"),
@@ -224,7 +226,8 @@ var _ = Describe("GenericStore Update", func() {
 			err := f.widgets.Update(f.ctx, f.newWidget("w1"), store.UpdateSelected("nonexistent"), f.byName("w1"))
 			Expect(
 				err,
-			).To(MatchError(ContainSubstring(`update ` + widgetCollection + `: field "nonexistent": unknown field`)))
+			).To(MatchError(ContainSubstring(`update ` + widgetCollection + `: resolve field path "nonexistent"`)))
+			Expect(err).To(MatchError(ContainSubstring("unknown field")))
 		})
 
 		It("should return NotFound when nothing matches", func() {

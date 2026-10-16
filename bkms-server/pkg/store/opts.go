@@ -47,7 +47,7 @@ import (
 //
 // 只有 CondOpt 影响匹配哪些文档，其余选项只决定结果的顺序、数量、读出哪些字段或写入哪些字段。
 //
-// 过滤条件、排序中的字段名既可以写 bson 路径，也可以写 Go 字段名（见 resolvePath），
+// 过滤条件、排序中的字段名既可以写 bson 路径，也可以写 Go 字段名（见 path.SchemaFields.Resolve），
 // 模型中不存在的字段原样保留；Update / Upsert 的字段则必须存在于模型中。
 //
 // 领域包可基于 Where / Filter 定义具名的 Opt，让字段名只出现在一处，例如：
