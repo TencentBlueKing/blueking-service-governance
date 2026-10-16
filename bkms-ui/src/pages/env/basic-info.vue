@@ -406,7 +406,7 @@
                 :project-code="formData.cluster?.projectCode"
                 :value="formData.cluster?.clusterID || ''"
                 @update:cluster-type="val => (selectedClusterType = val)"
-                @update:value="val => (formData.cluster!.clusterID = val)"
+                @update:value="handleClusterIDChange"
               />
             </Form.FormItem>
             <Form.FormItem
@@ -486,7 +486,7 @@
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
   import { Button, DatePicker, Form, Input, Message, Select, Tag } from 'bkui-vue';
-  import { EditLine, ExclamationCircleShape } from 'bkui-vue/lib/icon';
+  import { ExclamationCircleShape } from 'bkui-vue/lib/icon';
   import { cloneDeep, countBy } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -607,6 +607,13 @@
     const targetApp = appID ? deployedApps.value.find(app => app.appID === appID) : null;
     return targetApp?.appType || appType;
   });
+
+  function handleClusterIDChange(clusterID: string) {
+    const cluster = formData.value.cluster!;
+    if (cluster.clusterID === clusterID) return;
+    cluster.clusterID = clusterID;
+    cluster.namespace = '';
+  }
 
   // 集群资源编辑
   function handleClusterResourcesEdit() {

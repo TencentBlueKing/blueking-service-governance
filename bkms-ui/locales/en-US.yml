@@ -657,6 +657,9 @@ yaml 文件路径已更改: yaml FilePath has been changed
   permissions for the Blue Shield project must also be obtained
 绑定已有项目: Bind existing projects
 绑定已有镜像仓库: Bind an existing image repository
+使用平台镜像仓库: Use the platform image repository
+平台提供的镜像仓库资源有限，不适合大规模镜像拉取，请谨慎选择。:
+  The image repository provided by the platform has limited resources and is unsuitable for large-scale image pulls. Please choose carefully.
 "在容器项目{0}的制品库中新建名为 repo 的 docker 仓库":
   "Create a new Docker repository named repo
   in the artifact library of container project {0}"
