@@ -191,11 +191,7 @@
                           clearable
                         />
                         <div class="mt-[4px] text-[12px] text-[#979BA5]">
-                          {{
-                            $t('文件最终挂载到 {0}', [
-                              `${(fileInfoFormData.mountDir || '/[路径]').replace(/\/$/, '')}/${fileInfoFormData.name || '[文件名]'}`,
-                            ])
-                          }}
+                          {{ $t('文件最终挂载到 {0}', [mountPathPreview]) }}
                         </div>
                       </Form.FormItem>
                       <Form.FormItem
@@ -762,6 +758,11 @@
     name: '',
     scope: 'all' as MountScope,
   });
+  // 预览挂载路径
+  const mountPathPreview = computed(() => {
+    const mountDir = (fileInfoFormData.mountDir || '/[路径]').replace(/\/+$/, '');
+    return `${mountDir}/${fileInfoFormData.name || '[文件名]'}`.replace(/\/{2,}/g, '/');
+  });
   const fileInfoFormRef = ref<InstanceType<typeof Form> | null>(null);
   const fileInfoFormRules = {
     name: [
@@ -780,7 +781,7 @@
         message: t('挂载路径需以 / 开头，例如 /data/config'),
         trigger: 'blur',
         validator: (value: string) =>
-          isFrameworkFile.value || value === '/' || BKMS_REGEX.appConfigMountDirRegex.test(value),
+          value === '/' || BKMS_REGEX.appConfigMountDirRegex.test(value.replace(/\/{2,}/g, '/')),
       },
     ],
     mountedEnvNames: [
