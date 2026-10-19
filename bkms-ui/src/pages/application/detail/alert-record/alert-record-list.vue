@@ -44,8 +44,8 @@
         :sort-config="sortConfig"
         @filter-change="handleFilterChange"
         @page-limit-change="pageSizeChange"
-        @sort-change="handleSortChange"
         @page-value-change="pageChange"
+        @sort-change="handleSortChange"
         @toggle-row-expand="handleExpandChange"
       >
         <template #empty>
@@ -165,7 +165,7 @@
   import dayjs from 'dayjs';
   import { useI18n } from 'vue-i18n';
   import { BkintegrationsBkmonitorService } from '~/api/modules/v1/bkintegrations-bkmonitor';
-  import EnvSelectPanel from '~/components/env-select-panel.vue';
+  import EnvSelectPanel from '~/components/env-select-panel/env-select-panel.vue';
   import StatusIcon from '~/components/status-icon.vue';
   import TableException from '~/components/table-exception.vue';
   import { useElementHeight } from '~/composables/use-element-height';
@@ -330,24 +330,6 @@
   /** 当前空间绑定的蓝鲸监控业务 ID（可能为空：未配置蓝鲸监控的空间） */
   const bkMonitorProjectID = computed(() => spaceStore.workspaceDetail?.bkSystems?.bkMonitorProjectID ?? '');
 
-  /** 跳转到蓝鲸监控告警详情页：`${BK_MONITOR}/?bizId=${bkMonitorProjectID}/#/trace/alarm-center/detail/${alertID}`
-   *  字段来源：
-   *   - bkMonitorProjectID 来自 workspace.bkSystems（不在 alert 事件行上）
-   *   - alertID 是告警事件主键
-   */
-  function handleToAlertDetail(row: AlertEventOutput) {
-    if (!bkMonitorProjectID.value) {
-      Message({ theme: 'warning', message: t('当前空间未配置蓝鲸监控业务，无法跳转') });
-      return;
-    }
-    const alertID = (row as unknown as Record<string, string>).alertID;
-    if (!alertID) {
-      Message({ theme: 'warning', message: t('告警详情链接信息不完整，无法跳转') });
-      return;
-    }
-    handleToLink('monitor-alert', bkMonitorProjectID.value, alertID);
-  }
-
   /** 拉取告警事件列表 */
   async function fetchList() {
     if (!appDetailStore.appID || !spaceStore.currentSpace || !selectedEnv.value) return;
@@ -411,14 +393,6 @@
     fetchList();
   }
 
-  /** 处理表头排序：更新排序状态并重新拉取列表（服务端排序，携带 ordering） */
-  function handleSortChange({ field, order }: { field: string; order: null | SortOrder }) {
-    sortBy.value = order ? field : '';
-    sortOrder.value = order || '';
-    handleResetPage();
-    fetchList();
-  }
-
   /** 处理行展开/折叠，维护展开行 key 集合 */
   function handleExpandChange({ row, expanded }: VxeTableDefines.ToggleRowExpandEventParams<AlertEventOutput>) {
     const key = row.eventID || '';
@@ -430,6 +404,32 @@
       next.delete(key);
     }
     expandedRowKeys.value = next;
+  }
+
+  /** 处理表头排序：更新排序状态并重新拉取列表（服务端排序，携带 ordering） */
+  function handleSortChange({ field, order }: { field: string; order: null | SortOrder }) {
+    sortBy.value = order ? field : '';
+    sortOrder.value = order || '';
+    handleResetPage();
+    fetchList();
+  }
+
+  /** 跳转到蓝鲸监控告警详情页：`${BK_MONITOR}/?bizId=${bkMonitorProjectID}/#/trace/alarm-center/detail/${alertID}`
+   *  字段来源：
+   *   - bkMonitorProjectID 来自 workspace.bkSystems（不在 alert 事件行上）
+   *   - alertID 是告警事件主键
+   */
+  function handleToAlertDetail(row: AlertEventOutput) {
+    if (!bkMonitorProjectID.value) {
+      Message({ theme: 'warning', message: t('当前空间未配置蓝鲸监控业务，无法跳转') });
+      return;
+    }
+    const alertID = (row as unknown as Record<string, string>).alertID;
+    if (!alertID) {
+      Message({ theme: 'warning', message: t('告警详情链接信息不完整，无法跳转') });
+      return;
+    }
+    handleToLink('monitor-alert', bkMonitorProjectID.value, alertID);
   }
 
   /** 标准化 status 为 status-icon 颜色 key（兼容后端 RECOVERED / ABNORMAL / CLOSED 三态） */

@@ -156,14 +156,20 @@
       >
         <div class="text-[14px] leading-[22px] font-medium text-[#313238]">{{ $t('设置可见环境') }}</div>
         <p class="mt-[4px] mb-[8px] text-[12px] leading-[20px] text-[#979BA5]">
-          {{ $t('勾选要在下拉中显示的环境，特性环境始终可见。') }}
+          {{
+            $t(
+              '特性环境始终可见，无需设置。可仅勾选需要在「部署管理」页面环境下拉列表中显示的环境；其他页面不受此设置影响，仍会显示全部环境。',
+            )
+          }}
         </p>
         <div class="env-list-scroll max-h-[320px] overflow-y-auto">
           <EnvGroupSelector
             v-model="visibleEnvDraft"
             :class="columns === 2 ? '!grid-cols-2' : ''"
+            :deploy-statuses="appDeployStatuses"
             :disabled="appDetailStore.savingVisibleEnvs"
             :env-list="standardEnvList"
+            :get-env-disabled-reason="getVisibleEnvDisabledReason"
             show-deploy-icon
           />
         </div>
@@ -352,6 +358,7 @@
   import { AppService } from '~/api/modules/v1/app';
   import { EnvService } from '~/api/modules/v1/env';
   import EnvGroupSelector from '~/components/env-group-selector.vue';
+  import { getRequiredVisibleEnvReasons } from '~/components/env-select-panel/visible-env-rules';
   import OverflowTags from '~/components/overflow-tags.vue';
   import StatusDotIcon from '~/components/status-dot-icon.vue';
   import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
@@ -457,9 +464,18 @@
   const envList = ref<EnvOutput[]>([]);
   let envListRequest = 0;
   let reconciledVisibleEnvsVersion = appDetailStore.visibleEnvsVersion;
-  /** 部署状态分别按环境 ID 和名称索引，ID 未命中时按名称兜底。 */
-  const appDeployStatusByID = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
-  const appDeployStatusByName = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
+  /** 保留所有泳道的原始记录，供可见环境规则判断。 */
+  const appDeployStatuses = ref<AppDeployedEnvOutputObj[]>([]);
+  /** 从同一份列表派生展示索引，ID 未命中时按名称兜底。 */
+  const appDeployStatusMap = computed(() => {
+    const byID = new Map<string, AppDeployedEnvOutputObj>();
+    const byName = new Map<string, AppDeployedEnvOutputObj>();
+    appDeployStatuses.value.forEach(status => {
+      if (status.id) byID.set(status.id, status);
+      if (status.name) byName.set(status.name, status);
+    });
+    return { byID, byName };
+  });
   let deployStatusesRequest = 0;
   /** 搜索关键词 */
   const searchKeyword = ref('');
@@ -480,8 +496,14 @@
     props.filterVisibleEnvs ? kindEnvList.value.filter(isEnvVisible) : kindEnvList.value,
   );
   const standardEnvList = computed(() => envList.value.filter(env => (env.kind || 'standard') === 'standard'));
+  const requiredVisibleEnvReasons = computed(() =>
+    getRequiredVisibleEnvReasons(envList.value, appDeployStatuses.value),
+  );
   const allStandardEnvNames = computed(() =>
     standardEnvList.value.map(env => env.name).filter((name): name is string => !!name),
+  );
+  const requiredVisibleEnvNames = computed(() =>
+    allStandardEnvNames.value.filter(name => requiredVisibleEnvReasons.value.has(name)),
   );
   const allStandardEnvsSelected = computed(
     () =>
@@ -545,10 +567,8 @@
   }
 
   function getEnvDeployStatus(env: EnvOutput) {
-    return (
-      (env.id ? appDeployStatusByID.value.get(env.id) : undefined) ||
-      (env.name ? appDeployStatusByName.value.get(env.name) : undefined)
-    );
+    const { byID, byName } = appDeployStatusMap.value;
+    return (env.id ? byID.get(env.id) : undefined) || (env.name ? byName.get(env.name) : undefined);
   }
 
   /** 获取环境类型对应的展示配置 */
@@ -672,23 +692,16 @@
     const requestToken = ++deployStatusesRequest;
     const appID = appDetailStore.appID;
     if (!appID) {
-      appDeployStatusByID.value = new Map();
-      appDeployStatusByName.value = new Map();
+      appDeployStatuses.value = [];
       emits('update:deployStatusList', []);
-      return;
+      return false;
     }
-    const res = await AppService.getAppDeployStatuses({ appID }).catch(() => []);
-    if (requestToken !== deployStatusesRequest || appID !== appDetailStore.appID) return;
+    const res = await AppService.getAppDeployStatuses({ appID }).catch(() => null);
+    if (requestToken !== deployStatusesRequest || appID !== appDetailStore.appID || res === null) return false;
     const list = (res || []) as AppDeployedEnvOutputObj[];
-    const byID = new Map<string, AppDeployedEnvOutputObj>();
-    const byName = new Map<string, AppDeployedEnvOutputObj>();
-    list.forEach(status => {
-      if (status.id) byID.set(status.id, status);
-      if (status.name) byName.set(status.name, status);
-    });
-    appDeployStatusByID.value = byID;
-    appDeployStatusByName.value = byName;
+    appDeployStatuses.value = list;
     emits('update:deployStatusList', list);
+    return true;
   }
 
   /** 根据环境获取部署状态对应的状态图标名 */
@@ -803,8 +816,7 @@
         await Promise.all([getDeployStatuses(), handleGetEnvList()]);
       } else {
         deployStatusesRequest += 1;
-        appDeployStatusByID.value = new Map();
-        appDeployStatusByName.value = new Map();
+        appDeployStatuses.value = [];
         envList.value = [];
         isLoading.value = false;
         emits('update:deployStatusList', []);
@@ -814,6 +826,10 @@
     },
     { immediate: true },
   );
+
+  function ensureRequiredVisibleEnvs() {
+    visibleEnvDraft.value = [...new Set([...visibleEnvDraft.value, ...requiredVisibleEnvNames.value])];
+  }
 
   /** 获取环境不可选原因，业务限制优先于未配置集群状态。 */
   function getEnvUnavailableReason(env: EnvOutput) {
@@ -830,11 +846,28 @@
       .filter((name): name is string => !!name);
   }
 
-  function handleEditVisibleEnvs() {
+  function getVisibleEnvDisabledReason(env: EnvOutput) {
+    const reason = env.name && requiredVisibleEnvReasons.value.get(env.name);
+    if (reason === 'deployment') {
+      return t('该环境已有部署，必须保持可见，不能取消');
+    }
+    if (reason === 'feature-parent') {
+      return t('该环境是特性环境的父环境，必须保持可见，不能取消');
+    }
+    return '';
+  }
+
+  async function handleEditVisibleEnvs() {
+    if (!(await getDeployStatuses())) return;
     visibleEnvDraft.value = isRestricted.value ? [...visibleEnvNames.value] : [...allStandardEnvNames.value];
+    ensureRequiredVisibleEnvs();
     searchKeyword.value = '';
     isEditingVisibleEnvs.value = true;
   }
+
+  watch(requiredVisibleEnvNames, () => {
+    if (isEditingVisibleEnvs.value) ensureRequiredVisibleEnvs();
+  });
 
   /** 分组全选/取消全选：选中时追加，取消时移除该分组内所有可选环境 */
   function handleGroupSelectAll(envs: EnvOutput[], checked: boolean) {
@@ -891,6 +924,8 @@
 
   async function handleSaveVisibleEnvs() {
     if (appDetailStore.savingVisibleEnvs) return;
+    if (!(await getDeployStatuses())) return;
+    ensureRequiredVisibleEnvs();
     try {
       // 接口以空名单表示全部可见，编辑态则用全选展示同一状态。
       const result = await appDetailStore.updateVisibleEnvs(allStandardEnvsSelected.value ? [] : visibleEnvDraft.value);

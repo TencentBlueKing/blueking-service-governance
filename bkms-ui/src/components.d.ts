@@ -37,7 +37,7 @@ declare module 'vue' {
     EditBlock: typeof import('./components/edit-block.vue')['default']
     EditorStatus: typeof import('./components/monaco-editor/editor-status.vue')['default']
     EnvGroupSelector: typeof import('./components/env-group-selector.vue')['default']
-    EnvSelectPanel: typeof import('./components/env-select-panel.vue')['default']
+    EnvSelectPanel: typeof import('./components/env-select-panel/env-select-panel.vue')['default']
     EnvVarCopyDropdown: typeof import('./components/view-default-env-vars/env-var-copy-dropdown.vue')['default']
     EnvVarsImportSideslider: typeof import('./components/env-vars-import-sideslider.vue')['default']
     FieldItem: typeof import('./components/field-item.vue')['default']

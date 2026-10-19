@@ -159,7 +159,7 @@ vi.mock('~/pages/application/detail/helm-deploy/preview-rollback.vue', async () 
 // —— index.vue 的重型容器子件契约 stub ——
 
 // 环境选择：mounted 自动 emit 指定环境（真实组件行为是拉环境列表 + 自动选首环境）
-vi.mock('~/components/env-select-panel.vue', async () => {
+vi.mock('~/components/env-select-panel/env-select-panel.vue', async () => {
   const { defineComponent } = await import('vue');
   return {
     default: defineComponent({

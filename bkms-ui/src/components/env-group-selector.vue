@@ -119,6 +119,8 @@
 
   const props = withDefaults(
     defineProps<{
+      /** 外部提供的部署状态（包括空数组）；未提供时按需自行请求 */
+      deployStatuses?: AppDeployedEnvOutputObj[];
       /** 整体禁用（只读态） */
       disabled?: boolean;
       /** 这些状态的环境不可勾选且不计入全选，如 ['NotReady'] */
@@ -126,7 +128,7 @@
       envList: EnvOutput[];
       /** 返回环境的业务禁用原因；有返回值时环境不可选择并展示提示 */
       getEnvDisabledReason?: (env: EnvOutput) => string | undefined;
-      /** 是否显示环境部署状态图标（为 true 时才会发起部署状态请求） */
+      /** 是否显示环境部署状态图标；开启且未提供部署状态时才自行请求 */
       showDeployIcon?: boolean;
       /** v-model 值的来源字段：name（默认，兼容现有调用方）或 id */
       valueKey?: 'id' | 'name';
@@ -145,43 +147,47 @@
   const appDetailStore = useAppDetail();
   const FEATURE_ENV_KIND = 'feature';
 
-  /** 部署状态分别按环境 ID 和名称索引，ID 未命中时按名称兜底。 */
-  const appDeployStatusByID = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
-  const appDeployStatusByName = ref<Map<string, AppDeployedEnvOutputObj>>(new Map());
+  const fetchedDeployStatuses = ref<AppDeployedEnvOutputObj[]>([]);
+  /** 优先使用外部状态，按环境 ID 和名称派生索引。 */
+  const appDeployStatusMap = computed(() => {
+    const byID = new Map<string, AppDeployedEnvOutputObj>();
+    const byName = new Map<string, AppDeployedEnvOutputObj>();
+    (props.deployStatuses ?? fetchedDeployStatuses.value).forEach(status => {
+      if (status.id) byID.set(status.id, status);
+      if (status.name) byName.set(status.name, status);
+    });
+    return { byID, byName };
+  });
   let deployStatusesRequest = 0;
 
   /** 获取当前应用在各环境的部署状态 */
   async function fetchDeployStatuses(appID: string) {
     const requestToken = ++deployStatusesRequest;
     const res = await AppService.getAppDeployStatuses({ appID }).catch(() => []);
-    if (requestToken !== deployStatusesRequest || appID !== appDetailStore.appID || !props.showDeployIcon) return;
-    const byID = new Map<string, AppDeployedEnvOutputObj>();
-    const byName = new Map<string, AppDeployedEnvOutputObj>();
-    ((res || []) as AppDeployedEnvOutputObj[]).forEach(status => {
-      if (status.id) byID.set(status.id, status);
-      if (status.name) byName.set(status.name, status);
-    });
-    appDeployStatusByID.value = byID;
-    appDeployStatusByName.value = byName;
+    if (
+      requestToken !== deployStatusesRequest ||
+      appID !== appDetailStore.appID ||
+      !props.showDeployIcon ||
+      props.deployStatuses !== undefined
+    )
+      return;
+    fetchedDeployStatuses.value = (res || []) as AppDeployedEnvOutputObj[];
   }
 
   function getEnvDeployStatus(env: EnvOutput) {
-    return (
-      (env.id ? appDeployStatusByID.value.get(env.id) : undefined) ||
-      (env.name ? appDeployStatusByName.value.get(env.name) : undefined)
-    );
+    const { byID, byName } = appDeployStatusMap.value;
+    return (env.id ? byID.get(env.id) : undefined) || (env.name ? byName.get(env.name) : undefined);
   }
 
-  /** 仅当开启图标且存在 appID 时才发起部署状态请求 */
+  /** 未提供外部状态时，保持开启图标且存在 appID 才请求的行为。 */
   watch(
-    () => [props.showDeployIcon, appDetailStore.appID] as const,
-    ([showDeployIcon, appID]) => {
-      if (showDeployIcon && appID) {
+    () => [props.showDeployIcon, appDetailStore.appID, props.deployStatuses !== undefined] as const,
+    ([showDeployIcon, appID, hasDeployStatuses]) => {
+      if (showDeployIcon && appID && !hasDeployStatuses) {
         fetchDeployStatuses(appID);
       } else {
         deployStatusesRequest += 1;
-        appDeployStatusByID.value = new Map();
-        appDeployStatusByName.value = new Map();
+        fetchedDeployStatuses.value = [];
       }
     },
     { immediate: true },

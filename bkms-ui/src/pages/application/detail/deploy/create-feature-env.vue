@@ -178,7 +178,7 @@
   import { EnvService } from '~/api/modules/v1';
   import { BKMS_REGEX } from '~/common/const';
   import DividerHeader from '~/components/divider-header.vue';
-  import EnvSelectPanel from '~/components/env-select-panel.vue';
+  import EnvSelectPanel from '~/components/env-select-panel/env-select-panel.vue';
   import { isFederationEnv } from '~/composables/use-is-federation-env';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useAppDetail } from '~/stores/app-detail';

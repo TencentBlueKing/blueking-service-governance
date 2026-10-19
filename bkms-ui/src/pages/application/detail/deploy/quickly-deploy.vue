@@ -102,7 +102,7 @@
 
   import { Button, Form, Message, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
-  import EnvSelectPanel from '~/components/env-select-panel.vue';
+  import EnvSelectPanel from '~/components/env-select-panel/env-select-panel.vue';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 

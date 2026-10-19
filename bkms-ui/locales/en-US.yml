@@ -2197,9 +2197,11 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 就绪状态: Readiness
 实例是否可以接收流量: Can the instance receive traffic?
 设置可见环境: "Set visible environments"
-勾选要在下拉中显示的环境，特性环境始终可见。: "Select the environments to display. Feature environments are always visible."
+特性环境始终可见，无需设置。可仅勾选需要在「部署管理」页面环境下拉列表中显示的环境；其他页面不受此设置影响，仍会显示全部环境。: "Feature environments are always visible and need no configuration. You only need to select the environments to show in the environment dropdown on the Deployment Management page; other pages are not affected and still show all environments."
 恢复全部: "Restore all"
 已按可见环境筛选，共 {0} 个: "Filtered by visible environments, {0} in total"
 显示全部环境: "Showing all environments"
 该应用未配置部署到此环境: "This application is not configured to deploy to this environment"
+该环境已有部署，必须保持可见，不能取消: "This environment has a deployment and must remain visible. It cannot be deselected."
+该环境是特性环境的父环境，必须保持可见，不能取消: "This environment is the parent of a feature environment and must remain visible. It cannot be deselected."
 配置已保存，获取最新配置失败，请刷新页面重试: "Configuration saved, but failed to load the latest configuration. Refresh the page to retry"

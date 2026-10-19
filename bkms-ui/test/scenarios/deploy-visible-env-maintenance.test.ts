@@ -82,7 +82,7 @@ vi.mock('~/pages/application/components/image-select.vue', () => ({
     template: '<input aria-label="镜像 Tag" :value="value" @input="$emit(\'update:value\', $event.target.value)" />',
   },
 }));
-vi.mock('~/components/env-select-panel.vue', async () => {
+vi.mock('~/components/env-select-panel/env-select-panel.vue', async () => {
   const { defineComponent } = await import('vue');
   return {
     default: defineComponent({

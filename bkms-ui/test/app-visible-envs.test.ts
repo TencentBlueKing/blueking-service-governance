@@ -20,14 +20,17 @@ import { defineComponent, effectScope, nextTick } from 'vue';
 
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor, within } from '@testing-library/vue';
+import { flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import EnvSelectPanel from '~/components/env-select-panel.vue';
+import EnvGroupSelector from '~/components/env-group-selector.vue';
+import EnvSelectPanel from '~/components/env-select-panel/env-select-panel.vue';
 import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
 import { useDeployPrecheck } from '~/pages/application/detail/deploy/use-deploy-precheck';
 import { useAppDetail } from '~/stores/app-detail';
 import { useDeployEnvStore } from '~/stores/deploy-env';
 
+import type { AppDeployedEnvOutputObj } from '~/@types/v1/app';
 import type { EnvOutput } from '~/@types/v1/env';
 
 const mocks = vi.hoisted(() => ({
@@ -73,7 +76,7 @@ const env = (name: string, extra: Partial<EnvOutput> = {}): EnvOutput => ({
 const environments = [
   env('test'),
   env('prod', { type: 'production' }),
-  env('feature-a', { kind: 'feature', ownerAppID: 'app-a', sourceEnvID: 'prod' }),
+  env('feature-a', { kind: 'feature', ownerAppID: 'app-a', sourceEnvID: 'test' }),
   env('not-ready', { status: 'NotReady' }),
 ];
 const detail = (visibleEnvNames: string[] = []) => ({ id: 'app-a', name: 'app-a', visibleEnvNames });
@@ -140,7 +143,16 @@ async function openPanel(props: Record<string, unknown> = {}) {
         $t: (text: string, params: unknown[] = []) => text.replace(/\{(\d+)\}/g, (_, i) => String(params[Number(i)])),
       },
       stubs: { Popover: PopoverStub, Select: true, StatusDotIcon: true, ColorIcon: true, OverflowTags: true },
-      directives: { 'bk-tooltips': {} },
+      directives: {
+        'bk-tooltips': {
+          mounted(el, binding) {
+            el.setAttribute('data-tip', binding.value?.content || '');
+          },
+          updated(el, binding) {
+            el.setAttribute('data-tip', binding.value?.content || '');
+          },
+        },
+      },
     },
   });
   await userEvent.click(screen.getByTestId('env-trigger'));
@@ -225,6 +237,89 @@ describe('应用可见环境：名单语义与保存', () => {
 });
 
 describe('可见环境下拉交互', () => {
+  it('设置面板复用父组件状态，进入设置和保存前仍刷新部署状态', async () => {
+    useAppDetail().appDetail = detail(['test']);
+    await openPanel();
+    const requestsBeforeEdit = mocks.statuses.mock.calls.length;
+    await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    await screen.findByRole('button', { name: '保存' });
+    expect(mocks.statuses).toHaveBeenCalledTimes(requestsBeforeEdit + 1);
+
+    mocks.statuses.mockResolvedValue([{ id: 'prod', deployStatus: 'deployed' }]);
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith({ appID: 'app-a', visibleEnvNames: ['test', 'prod'] }),
+    );
+    expect(mocks.statuses).toHaveBeenCalledTimes(requestsBeforeEdit + 2);
+  });
+
+  it('进入编辑态前等待部署状态，避免慢请求期间把已部署环境作为可取消项', async () => {
+    useAppDetail().appDetail = detail(['test']);
+    const pending = deferred<{ deployStatus: string; id: string }[]>();
+    mocks.statuses.mockReturnValue(pending.promise);
+    await openPanel();
+    await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    pending.resolve([{ id: 'prod', deployStatus: 'deployed' }]);
+    const row = await screen.findByText('PROD');
+    expect(within(row.closest('[data-tip]') as HTMLElement).getByRole('checkbox')).toBeDisabled();
+  });
+
+  it('部署中、失败、成功及 Helm 进行中的环境必须可见，分组取消只移除可选环境', async () => {
+    const names = ['deploying', 'failed', 'deployed', 'helm-pending', 'free'];
+    mocks.list.mockResolvedValue(names.map(name => env(name)));
+    mocks.statuses.mockResolvedValue([
+      { id: 'deploying', deployStatus: 'deploying' },
+      { id: 'failed', deployStatus: 'failed' },
+      { id: 'deployed', deployStatus: 'deployed' },
+      { id: 'deployed', deployStatus: 'uninstalled', trafficLaneName: 'other-lane' },
+      { id: 'helm-pending', deployStatus: 'pending-install' },
+    ]);
+    await openPanel();
+    await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    const group = within(screen.getByRole('group', { name: '测试' }));
+    for (const name of names.slice(0, -1)) {
+      const row = group.getByText(name.toUpperCase()).closest('[data-tip]')!;
+      expect(row).toHaveAttribute('data-tip', '该环境已有部署，必须保持可见，不能取消');
+      const checkbox = within(row as HTMLElement).getByRole('checkbox');
+      expect(checkbox).toBeChecked();
+      expect(checkbox).toBeDisabled();
+      await userEvent.click(row);
+      expect(checkbox).toBeChecked();
+    }
+    await userEvent.click(group.getAllByRole('checkbox')[0]);
+    expect(group.getByText('FREE').closest('[data-tip]')?.querySelector('input[type="checkbox"]')).not.toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith({ appID: 'app-a', visibleEnvNames: names.slice(0, -1) }),
+    );
+  });
+
+  it('特性环境的父环境自动选中并禁用，不能通过单项或整组取消', async () => {
+    useAppDetail().appDetail = detail(['test']);
+    mocks.list.mockResolvedValue([
+      env('test'),
+      env('prod', { type: 'production' }),
+      env('free', { type: 'production' }),
+      env('feature-a', { kind: 'feature', ownerAppID: 'app-a', sourceEnvID: 'prod' }),
+    ]);
+    await openPanel();
+    await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    const row = screen.getByText('PROD').closest('[data-tip]')!;
+    expect(row).toHaveAttribute('data-tip', '该环境是特性环境的父环境，必须保持可见，不能取消');
+    const checkbox = within(row as HTMLElement).getByRole('checkbox');
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBeDisabled();
+    await userEvent.click(row);
+    await userEvent.click(screen.getByText('FREE'));
+    await userEvent.click(within(screen.getByRole('group', { name: '生产' })).getAllByRole('checkbox')[0]);
+    expect(checkbox).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith({ appID: 'app-a', visibleEnvNames: ['test', 'prod'] }),
+    );
+  });
+
   it('未限制可见环境时，设置面板默认全选；取消部分勾选后保存具体名单', async () => {
     await openPanel();
     await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
@@ -400,5 +495,57 @@ describe('可见环境下拉交互', () => {
     useAppDetail().appDetail = detail(['test']);
     useAppDetail().visibleEnvsVersion += 1;
     await waitFor(() => expect(view.emitted()['update:modelValues']).toContainEqual([[]]));
+  });
+});
+
+describe('环境分组选择器部署状态来源', () => {
+  function renderSelector(props: { deployStatuses?: AppDeployedEnvOutputObj[]; showDeployIcon?: boolean } = {}) {
+    return render(EnvGroupSelector, {
+      props: { envList: [env('test')], showDeployIcon: true, ...props },
+      global: {
+        mocks: { $t: (text: string) => text },
+        stubs: {
+          ColorIcon: {
+            props: ['icon'],
+            template: '<span data-testid="deploy-icon" :data-icon="icon" />',
+          },
+        },
+        directives: { 'bk-tooltips': {} },
+      },
+    });
+  }
+
+  it('外部空列表也不自行请求，图标随外部 ID 或名称状态更新', async () => {
+    const view = renderSelector({ deployStatuses: [] });
+    expect(screen.getByTestId('deploy-icon')).toHaveAttribute('data-icon', 'status-unknown');
+    await view.rerender({ deployStatuses: [{ id: 'test', deployStatus: 'deployed' }] });
+    expect(screen.getByTestId('deploy-icon')).toHaveAttribute('data-icon', 'normal');
+    await view.rerender({ deployStatuses: [{ name: 'test', deployStatus: 'failed' }] });
+    expect(screen.getByTestId('deploy-icon')).toHaveAttribute('data-icon', 'abnormal');
+    expect(mocks.statuses).not.toHaveBeenCalled();
+  });
+
+  it('未传部署状态时保持自行请求的行为', async () => {
+    mocks.statuses.mockResolvedValue([{ id: 'test', deployStatus: 'deployed' }]);
+    renderSelector();
+    await waitFor(() => expect(screen.getByTestId('deploy-icon')).toHaveAttribute('data-icon', 'normal'));
+    expect(mocks.statuses).toHaveBeenCalledExactlyOnceWith({ appID: 'app-a' });
+  });
+
+  it('切换为外部状态后忽略迟到响应，移除外部状态时重新请求', async () => {
+    const pending = deferred<AppDeployedEnvOutputObj[]>();
+    const nextPending = deferred<AppDeployedEnvOutputObj[]>();
+    mocks.statuses.mockReturnValueOnce(pending.promise).mockReturnValueOnce(nextPending.promise);
+    const view = renderSelector();
+    await view.rerender({ deployStatuses: [{ id: 'test', deployStatus: 'failed' }] });
+    pending.resolve([{ id: 'test', deployStatus: 'deployed' }]);
+    await flushPromises();
+    expect(screen.getByTestId('deploy-icon')).toHaveAttribute('data-icon', 'abnormal');
+
+    await view.rerender({ deployStatuses: undefined });
+    expect(screen.getByTestId('deploy-icon')).toHaveAttribute('data-icon', 'status-unknown');
+    expect(mocks.statuses).toHaveBeenCalledTimes(2);
+    nextPending.resolve([{ name: 'test', deployStatus: 'deploying' }]);
+    await waitFor(() => expect(screen.getByTestId('deploy-icon')).toHaveAttribute('data-icon', 'loading'));
   });
 });
