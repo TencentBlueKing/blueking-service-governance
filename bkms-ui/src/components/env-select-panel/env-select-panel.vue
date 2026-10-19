@@ -326,7 +326,7 @@
         <template v-else>
           <span class="text-[12px] text-[#979BA5]">{{
             isRestricted && filterVisibleEnvs
-              ? $t('已按可见环境筛选，共 {0} 个', [visibleStandardEnvCount])
+              ? $t('已按可见环境筛选，共 {0} 个', [selectableEnvList.length])
               : $t('显示全部环境')
           }}</span>
           <Button
@@ -510,7 +510,6 @@
       visibleEnvDraft.value.length === allStandardEnvNames.value.length &&
       allStandardEnvNames.value.every(name => visibleEnvDraft.value.includes(name)),
   );
-  const visibleStandardEnvCount = computed(() => standardEnvList.value.filter(isEnvVisible).length);
 
   /** 单选模式下当前选中的环境对象 */
   // 总览下钻可继续查看隐藏环境，触发器仍需显示当前查看对象。

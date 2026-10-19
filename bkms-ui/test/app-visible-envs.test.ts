@@ -360,12 +360,23 @@ describe('可见环境下拉交互', () => {
     );
   });
 
-  it('当用户搜索或仅显示已部署环境时，可见标准环境计数应保持不变', async () => {
-    useAppDetail().appDetail = detail(['test', 'not-ready']);
+  it('当用户搜索或仅显示已部署环境时，可见环境计数应包含特性环境且保持不变', async () => {
+    useAppDetail().appDetail = detail(['test', 'test-2', 'staging']);
+    mocks.list.mockResolvedValue([
+      env('test'),
+      env('test-2'),
+      env('staging', { type: 'staging' }),
+      env('prod', { type: 'production' }),
+      env('feature-a', { kind: 'feature', ownerAppID: 'app-a', sourceEnvID: 'test' }),
+      env('feature-b', { kind: 'feature', ownerAppID: 'app-a', sourceEnvID: 'test-2' }),
+    ]);
     await openPanel();
+    expect(screen.getByText('FEATURE-A')).toBeInTheDocument();
+    expect(screen.getByText('FEATURE-B')).toBeInTheDocument();
+    expect(screen.getByText('已按可见环境筛选，共 5 个')).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText('请输入关键词'), 'no-match');
     await userEvent.click(screen.getByRole('checkbox', { name: '仅显示已部署环境' }));
-    expect(screen.getByText('已按可见环境筛选，共 2 个')).toBeInTheDocument();
+    expect(screen.getByText('已按可见环境筛选，共 5 个')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
     expect(screen.getByText('PROD')).toBeInTheDocument();
   });
@@ -418,7 +429,7 @@ describe('可见环境下拉交互', () => {
     const panel = within(screen.getByTestId('env-panel'));
     expect(panel.queryByText('PROD')).not.toBeInTheDocument();
     expect(panel.getByText('FEATURE-A')).toBeInTheDocument();
-    expect(panel.getByText('已按可见环境筛选，共 1 个')).toBeInTheDocument();
+    expect(panel.getByText('已按可见环境筛选，共 2 个')).toBeInTheDocument();
     await view.rerender({ filterVisibleEnvs: false });
     expect(panel.getByText('PROD')).toBeInTheDocument();
   });
