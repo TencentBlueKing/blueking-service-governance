@@ -215,9 +215,22 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 		acf.BSCPConfig = bscpCfg
 	}
 
-	oldName := h.resolveDefName(ctx, acf.DefID)
+	def, err := h.configFileDefs().GetByID(ctx, acf.DefID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get config file def"))
+		return
+	}
+	oldName := def.Name
 
 	operator := auth.MustGetUser(ctx).ID
+	// todo 兼容：Helm 编辑仍通过本接口修改 def 名称。前端改走 def 更新接口后，名字不一致直接拒绝并删除。
+	if input.Name != oldName {
+		if err = rejectDisallowedDefRename(def, app.Type); err != nil {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "update config file name"))
+			return
+		}
+	}
+
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.DB,
 	)
@@ -237,8 +250,16 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 		return
 	}
 
-	// TODO: 老接口兼容——同步更新 def name，迁移新接口后可删除
-	h.syncDefName(ctx, acf.DefID, input.Name, oldName)
+	if input.Name != oldName {
+		if err = h.syncDefName(ctx, app, def, input.Name, operator); err != nil {
+			code := bkerrs.ErrCodeInternalServerError
+			if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+				code = bkerrs.ErrCodeInvalidArgument
+			}
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "update config file name"))
+			return
+		}
+	}
 
 	h.addAppConfigFileAudit(ctx, app, acf.EnvName, audit.OperationTypeUpdate,
 		buildAppConfigFileAuditData(&oldAcf, oldName),
@@ -752,26 +773,33 @@ func (h *Handler) persistContentUpdate(
 	return nil
 }
 
-// resolveDefName 从 def 获取文件名称，def 不存在时返回空字符串。
-// TODO: 老接口兼容辅助，迁移新接口后可删除。
-func (h *Handler) resolveDefName(ctx context.Context, defID bson.ObjectID) string {
-	def, err := h.configFileDefs().GetByID(ctx, defID)
-	if err != nil {
-		return ""
+// rejectDisallowedDefRename 用和 def 更新接口相同的策略判断这次改名是否允许。
+func rejectDisallowedDefRename(def *appcfg.AppConfigFileDef, appType string) error {
+	policy, ok := appcfg.DefaultPolicies[def.ConfigKind]
+	if !ok {
+		return pkgerrors.Wrapf(appcfg.ErrInvalidConfigSpec, "unsupported config kind: %s", def.ConfigKind)
 	}
-	return def.Name
+	if !policy.AllowNameUpdate(appType) {
+		return pkgerrors.Wrap(appcfg.ErrInvalidConfigSpec, "this config kind does not allow modifying name")
+	}
+	return nil
 }
 
-// syncDefName 老接口兼容：同步更新 def name。
-// TODO: 迁移新接口后可删除。
-func (h *Handler) syncDefName(ctx context.Context, defID bson.ObjectID, newName, oldName string) {
-	if newName == oldName {
-		return
+// syncDefName 按 def 更新策略修改文件名。tRPC framework 改名会被拒绝，Helm、TAF 和 plain 仍允许。
+// todo 兼容：Helm 编辑仍通过 PUT /app-config-files/:id 修改 def 名称。前端改走 def 更新接口后删除。
+func (h *Handler) syncDefName(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	def *appcfg.AppConfigFileDef,
+	newName, operator string,
+) error {
+	svc := appcfg.NewAppCfgFileDefService(appcfg.NewBaseAppCfgFileService(h.registry.DB))
+	if err := svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+		Name:     &newName,
+		AppType:  app.Type,
+		Operator: operator,
+	}); err != nil {
+		return pkgerrors.Wrapf(err, "sync config file def %s name", def.ID.Hex())
 	}
-	def, err := h.configFileDefs().GetByID(ctx, defID)
-	if err != nil {
-		return
-	}
-	def.Name = newName
-	_ = appcfg.UpdateDef(ctx, h.configFileDefs(), def)
+	return nil
 }

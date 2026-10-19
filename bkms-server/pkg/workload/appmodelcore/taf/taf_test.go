@@ -216,4 +216,51 @@ var _ = Describe("TAF application service", func() {
 		_, err = store.Of(db, appspec.AppSpecMeta).Get(ctx, appspec.ByAppEnv(application.ID, environment.Name))
 		Expect(errors.Is(err, appspec.ErrAppSpecNotFound)).To(BeTrue())
 	})
+
+	It("updates the framework def and leaves the model file location empty", func() {
+		name := "taf-update-" + stringx.Random(6)
+		application = &bkmsapp.Application{
+			ID:          name + stringx.Random(6),
+			Name:        name,
+			DisplayName: name,
+			WorkspaceID: workspace.ID,
+			Type:        bkmsapp.AppTypeTAF,
+		}
+		svc := taf.NewService(db)
+		err := svc.Create(ctx, application, &taf.CreateParams{
+			TafConfig: &taf.TafConfigParams{
+				FileName: "taf.conf",
+				FilePath: "/etc/taf",
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		_, updated, err := svc.Update(ctx, application, &taf.UpdateParams{
+			Command: []string{"/bin/app"},
+			TafConfig: &taf.TafConfigParams{
+				FileName: "app.conf",
+				FilePath: "/usr/local/app/",
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated.Workload.Command).To(Equal([]string{"/bin/app"}))
+		Expect(updated.Workload.TafConfig.FileName).To(BeEmpty())
+		Expect(updated.Workload.TafConfig.FilePath).To(BeEmpty())
+
+		persisted, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(application.ID))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(persisted.Workload.TafConfig.FileName).To(BeEmpty())
+		Expect(persisted.Workload.TafConfig.FilePath).To(BeEmpty())
+
+		defs, err := appcfg.ListDefsByApp(
+			ctx,
+			store.Of(db, appcfg.AppConfigFileDefMeta),
+			application.ID,
+			appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defs).To(HaveLen(1))
+		Expect(defs[0].Name).To(Equal("app.conf"))
+		Expect(defs[0].MountDir).To(Equal("/usr/local/app"))
+	})
 })

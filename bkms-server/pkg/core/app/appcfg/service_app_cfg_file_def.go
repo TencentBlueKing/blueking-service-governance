@@ -186,7 +186,7 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 			return errors.Wrap(err, "loading config kind policy for def update")
 		}
 		if update.Name != nil && *update.Name != def.Name && !policy.AllowNameUpdate(update.AppType) {
-			return errors.Wrap(ErrInvalidConfigSpec, "trpc framework config file name cannot be changed")
+			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not allow modifying name")
 		}
 		if update.MountDir != nil && !policy.AllowMountDirUpdate(update.AppType) {
 			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not support modifying mountDir via def")

@@ -485,6 +485,7 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("does not allow modifying name"))
 
 			unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -981,6 +982,71 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 			_, err = f.DefStore.GetByID(f.Ctx, defID)
 			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("SyncFrameworkFileLocation", func() {
+		It("should reject an app that does not have exactly one framework def", func() {
+			f.createFrameworkFile("one.yaml")
+			f.createFrameworkFile("two.yaml")
+
+			err := f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "taf", "renamed.yaml", "/etc/app")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("2 framework config files"))
+
+			defs, listErr := appcfg.ListDefsByApp(
+				f.Ctx, f.DefStore, f.AppID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(defs).To(ConsistOf(
+				HaveField("Name", "one.yaml"),
+				HaveField("Name", "two.yaml"),
+			))
+		})
+
+		It("should keep the current name and mount dir when both inputs are empty", func() {
+			result := f.createFrameworkFile("keep.yaml")
+			mountDir := "/etc/keep"
+			err := f.Svc.UpdateAppCfgFileDef(f.Ctx, result.Def, appcfg.FileDefUpdate{
+				MountDir: &mountDir,
+				AppType:  "taf",
+				Operator: "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "taf", "", "")
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.Name).To(Equal("keep.yaml"))
+			Expect(updated.MountDir).To(Equal("/etc/keep"))
+		})
+
+		It("should reject renaming a trpc framework file", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+
+			err := f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "trpc", "other.yaml", "")
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("does not allow modifying name"))
+
+			unchanged, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unchanged.Name).To(Equal("trpc_go.yaml"))
+			Expect(unchanged.MountDir).To(BeEmpty())
+		})
+
+		It("should update only the mount dir", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+
+			err := f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "trpc", "", "/usr/local/trpc/bin/")
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.Name).To(Equal("trpc_go.yaml"))
+			Expect(updated.MountDir).To(Equal("/usr/local/trpc/bin"))
 		})
 	})
 })
