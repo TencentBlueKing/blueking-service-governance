@@ -17,8 +17,8 @@ assert {
 
 tests {
   test("should verify appmodel spec was updated", () => {
-    expect(res.body.data.appModelSpec.trpcSpec.fileName).to.equal('updated_trpc_go.yaml');
-    expect(res.body.data.appModelSpec.trpcSpec.filePath).to.equal('/usr/local/trpc/updated/');
+    expect(res.body.data.appModelSpec.trpcSpec.fileName).to.equal('trpc_go.yaml');
+    expect(res.body.data.appModelSpec.trpcSpec.filePath).to.equal('/usr/local/trpc/updated');
     const envVar = res.body.data.appModelSpec.envVars.find(({ key }) => key === "PRESERVED_TRPC_VAR");
     expect(envVar).to.not.be.undefined;
     expect(envVar).to.include({

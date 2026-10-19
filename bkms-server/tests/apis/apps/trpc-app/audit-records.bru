@@ -34,8 +34,9 @@ tests {
       return after &&
         after.Workload &&
         after.Workload.TrpcConfig &&
-        after.Workload.TrpcConfig.FileName === "updated_trpc_go.yaml" &&
-        after.Workload.TrpcConfig.FilePath === "/usr/local/trpc/updated/";
+        after.Workload.TrpcConfig.Language === "go" &&
+        !after.Workload.TrpcConfig.FileName &&
+        !after.Workload.TrpcConfig.FilePath;
     });
 
     expect(record, `matched records: ${JSON.stringify(candidates, null, 2)}`).to.exist;

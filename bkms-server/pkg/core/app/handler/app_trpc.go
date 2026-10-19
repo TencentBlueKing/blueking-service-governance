@@ -20,11 +20,13 @@ package handler
 
 import (
 	"context"
+	"errors"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -78,7 +80,11 @@ func (h *Handler) UpdateAppTrpcSpec(c *gin.Context) {
 
 	// 更新 AppModel 应用配置（复用现有逻辑）
 	if err = h.updateTrpcApp(ctx, app, input.AppModelSpec); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update trpc app"))
+		code := bkerrs.ErrCodeInternalServerError
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+			code = bkerrs.ErrCodeInvalidRequest
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "update trpc app"))
 		return
 	}
 

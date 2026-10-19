@@ -18,7 +18,7 @@ assert {
 tests {
   test("should verify appmodel spec was updated", () => {
     expect(res.body.data.appModelSpec.trpcSpec.fileName).to.equal('trpc_go.yaml');
-    expect(res.body.data.appModelSpec.trpcSpec.filePath).to.equal('/usr/local/trpc/bin/');
+    expect(res.body.data.appModelSpec.trpcSpec.filePath).to.equal('/usr/local/trpc/bin');
     expect(res.body.data.buildConfig.pipelineBuildConfig.pipelineID).to.equal("p-test-pipeline-123")
     expect(res.body.data.buildConfig.pipelineBuildConfig.params.BRANCH).to.equal("dev")
     expect(res.body.data.buildConfig.pipelineBuildConfig.params.REPO_URL).to.equal("https://git.com/bkms-govern-pipeline-dev.git")
