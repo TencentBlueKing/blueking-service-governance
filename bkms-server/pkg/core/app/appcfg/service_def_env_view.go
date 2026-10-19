@@ -62,7 +62,10 @@ func (s *AppCfgFileDefService) GetEnvFileDetail(
 		return result, nil
 	}
 
-	strategy := policy.GetEnvInstanceStrategy()
+	strategy, err := policy.ResolveEnvInstanceStrategy(def)
+	if err != nil {
+		return nil, err
+	}
 	if envFile != nil {
 		result.HasEnvInstance = true
 		result.DisplayFile = envFile
@@ -182,7 +185,11 @@ func (s *AppCfgFileDefService) GetMountPreview(
 			item.HasEnvFile = true
 			item.ContentSource = envFile.Type
 			// overwrite 策略下 normal 实例语义为 overwrite
-			if policy.GetEnvInstanceStrategy() == EnvInstanceStrategyOverwrite &&
+			strategy, sErr := policy.ResolveEnvInstanceStrategy(&def)
+			if sErr != nil {
+				return nil, sErr
+			}
+			if strategy == EnvInstanceStrategyOverwrite &&
 				envFile.Type == AppConfigFileTypeNormal {
 				item.ContentSource = "overwrite"
 			}

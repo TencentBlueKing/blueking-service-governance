@@ -19242,7 +19242,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "mountedEnvNames": {
-                    "description": "创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。环境名格式与路径参数 envName 相同。",
+                    "description": "创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。\n环境名格式与路径参数 envName 相同。",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -19301,6 +19301,9 @@ const docTemplate = `{
                 "enableEnvVarRender": {
                     "type": "boolean"
                 },
+                "envInstanceStrategy": {
+                    "type": "string"
+                },
                 "fileFormat": {
                     "type": "string"
                 },
@@ -19357,6 +19360,9 @@ const docTemplate = `{
                 },
                 "enableEnvVarRender": {
                     "type": "boolean"
+                },
+                "envInstanceStrategy": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
@@ -19510,6 +19516,13 @@ const docTemplate = `{
             "properties": {
                 "enableEnvVarRender": {
                     "type": "boolean"
+                },
+                "envInstanceStrategy": {
+                    "type": "string",
+                    "enum": [
+                        "overlay",
+                        "overwrite"
+                    ]
                 },
                 "isUnifiedConfig": {
                     "type": "boolean"

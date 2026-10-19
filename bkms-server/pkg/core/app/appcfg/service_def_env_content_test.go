@@ -141,6 +141,48 @@ var _ = Describe("AppCfgFileDefService — Env Content", func() {
 			Expect(updatedResult.CompiledContent).To(ContainSubstring("newKey: enabled"))
 		})
 
+		It("should create a normal env file for framework overwrite strategy", func() {
+			content := "keep: true\nbase: default\n"
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "trpc",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			envContent := "keep: true\nbase: prod\n"
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     envContent,
+				Operator:    "editor",
+				Description: "prod full content",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(upserted.IsNewFile).To(BeTrue())
+			Expect(upserted.File.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
+			Expect(lo.FromPtr(upserted.File.Content)).To(Equal(envContent))
+			Expect(upserted.File.OverlayContent).To(BeNil())
+			Expect(upserted.File.BaseAppConfigFileID).To(BeNil())
+			Expect(upserted.CompiledContent).To(Equal(envContent))
+			Expect(upserted.CompiledContent).NotTo(ContainSubstring("base: default"))
+		})
+
 		It("should create plain env file with overwrite strategy", func() {
 			result := f.createPlainFile("plain.yaml", "/data", "key: default\n")
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)

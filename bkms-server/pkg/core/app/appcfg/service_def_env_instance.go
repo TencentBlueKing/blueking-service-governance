@@ -66,10 +66,21 @@ func (s *AppCfgFileDefService) buildEnvInstance(
 	params CreateEnvInstanceParams,
 ) (*AppConfigFile, error) {
 	kind := defaultFile.GetConfigKind()
+	policy, err := s.policyFor(kind)
+	if err != nil {
+		return nil, err
+	}
 	switch kind {
 	case ConfigKindPlain:
 		return s.buildPlainEnvInstance(defaultFile, params)
 	case ConfigKindFramework:
+		strategy, err := policy.ResolveEnvInstanceStrategy(defaultFile.Def)
+		if err != nil {
+			return nil, err
+		}
+		if strategy == EnvInstanceStrategyOverwrite {
+			return s.buildFrameworkEnvOverwrite(defaultFile, params)
+		}
 		return s.buildFrameworkEnvOverlay(defaultFile, params)
 	default:
 		return nil, errors.Errorf("unsupported config kind for env instance: %s", kind)
@@ -106,6 +117,19 @@ func (s *AppCfgFileDefService) buildPlainEnvInstance(
 	return &acf, nil
 }
 
+// buildFrameworkEnvOverwrite 构造完整内容的 framework 环境实例。
+func (s *AppCfgFileDefService) buildFrameworkEnvOverwrite(
+	defaultFile AppConfigFileWithDef,
+	params CreateEnvInstanceParams,
+) (*AppConfigFile, error) {
+	if params.Content == nil {
+		return nil, errors.Wrap(ErrInvalidConfigSpec, "framework env overwrite requires content")
+	}
+	acf := newFrameworkEnvInstance(defaultFile, params, AppConfigFileTypeNormal)
+	acf.Content = params.Content
+	return &acf, nil
+}
+
 // buildFrameworkEnvOverlay 构造 framework overlay 类型的环境实例。
 func (s *AppCfgFileDefService) buildFrameworkEnvOverlay(
 	defaultFile AppConfigFileWithDef,
@@ -115,23 +139,31 @@ func (s *AppCfgFileDefService) buildFrameworkEnvOverlay(
 		return nil, errors.Wrap(ErrInvalidConfigSpec, "framework env overlay requires overlayContent")
 	}
 	baseID := defaultFile.ID
-	acf := AppConfigFile{
+	acf := newFrameworkEnvInstance(defaultFile, params, AppConfigFileTypeOverlay)
+	acf.OverlayContent = params.OverlayContent
+	acf.BaseAppConfigFileID = &baseID
+	return &acf, nil
+}
+
+func newFrameworkEnvInstance(
+	defaultFile AppConfigFileWithDef,
+	params CreateEnvInstanceParams,
+	fileType AppConfigFileType,
+) AppConfigFile {
+	return AppConfigFile{
 		DefID:   defaultFile.DefID,
 		AppID:   defaultFile.AppID,
 		EnvName: params.EnvName,
-		Type:    AppConfigFileTypeOverlay,
+		Type:    fileType,
 		VersionedContent: VersionedContent{
-			// 环境 overlay 来自用户输入的补丁内容，而不是继承默认文件的数据源。
-			ContentSourceType:   ContentSourceTypeLocal,
-			Format:              defaultFile.GetConfigFormat(),
-			OverlayContent:      params.OverlayContent,
-			BaseAppConfigFileID: &baseID,
+			// framework 环境实例始终来自本地编辑内容；差异只在 Content / OverlayContent 的存储形态。
+			ContentSourceType: ContentSourceTypeLocal,
+			Format:            defaultFile.GetConfigFormat(),
 		},
 		Creator:        params.Operator,
 		Updater:        params.Operator,
 		CurrentVersion: 1,
 	}
-	return &acf, nil
 }
 
 // --- 环境实例变更 ---

@@ -110,6 +110,7 @@ func (s *AppCfgFileDefService) createDef(
 	if params.MountedEnvNames != nil {
 		envConfigMode.MountedEnvNames = *params.MountedEnvNames
 	}
+	policy.InitializeEnvConfigMode(&envConfigMode, params)
 
 	def := AppConfigFileDef{
 		AppID:              params.AppID,
@@ -172,8 +173,11 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 	}
 
 	// 按策略区分
-	if update.MountDir != nil || update.EnableEnvVarRender != nil || update.MountedEnvNames != nil {
-		policy, err := s.policyFor(def.ConfigKind)
+	var policy ConfigKindPolicy
+	if update.MountDir != nil || update.EnableEnvVarRender != nil ||
+		update.MountedEnvNames != nil || update.EnvInstanceStrategy != nil {
+		var err error
+		policy, err = s.policyFor(def.ConfigKind)
 		if err != nil {
 			return errors.Wrap(err, "loading config kind policy for def update")
 		}
@@ -187,9 +191,21 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 			return errors.Wrap(ErrInvalidConfigSpec,
 				"this config kind does not allow modifying enableEnvVarRender")
 		}
+		if update.EnvInstanceStrategy != nil && !policy.AllowEnvInstanceStrategyUpdate() {
+			return errors.Wrap(ErrInvalidConfigSpec,
+				"this config kind does not support modifying envInstanceStrategy")
+		}
 	}
 
 	applyStaticDefFields(def, update)
+
+	if update.EnvInstanceStrategy != nil {
+		if err := s.applyFrameworkEnvInstanceStrategyChange(
+			ctx, def, *update.EnvInstanceStrategy, update.Operator,
+		); err != nil {
+			return err
+		}
+	}
 
 	if update.IsUnifiedConfig != nil && def.EnvConfigMode.IsUnifiedConfig != *update.IsUnifiedConfig {
 		def.EnvConfigMode.IsUnifiedConfig = *update.IsUnifiedConfig
@@ -209,6 +225,108 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 		return errors.Wrap(err, "updating def record")
 	}
 	return nil
+}
+
+// applyFrameworkEnvInstanceStrategyChange 更新框架定义的环境实例策略。
+// 没有环境实例时只改字段。已有环境实例时，把每条实例改写成目标策略对应的文件形态并记一个版本。
+//
+// 调用方已通过 policy 保证当前 kind 支持修改 envInstanceStrategy。
+// TODO(non-atomic): 先改写环境实例，再由上层 UpdateAppCfgFileDef 持久化 def。
+func (s *AppCfgFileDefService) applyFrameworkEnvInstanceStrategyChange(
+	ctx context.Context,
+	def *AppConfigFileDef,
+	strategy EnvInstanceStrategy,
+	operator string,
+) error {
+	if err := validateFrameworkEnvInstanceStrategy(strategy); err != nil {
+		return err
+	}
+	if def.EnvConfigMode.EnvInstanceStrategy == strategy {
+		return nil
+	}
+	if def.EnvConfigMode.IsIndependent() {
+		if err := s.convertEnvInstancesForStrategy(ctx, def, strategy, operator); err != nil {
+			return err
+		}
+	}
+	def.EnvConfigMode.EnvInstanceStrategy = strategy
+	return nil
+}
+
+// convertEnvInstancesForStrategy 把已有环境实例转换成目标策略的存储形态。
+func (s *AppCfgFileDefService) convertEnvInstancesForStrategy(
+	ctx context.Context,
+	def *AppConfigFileDef,
+	strategy EnvInstanceStrategy,
+	operator string,
+) error {
+	defaultFile, err := s.FileStore.Get(ctx, FileByDefEnv(def.ID, EnvNameDefault))
+	if err != nil {
+		return errors.Wrap(err, "loading default file for strategy switch")
+	}
+	files, err := s.FileStore.List(ctx, FilesByDef(def.ID))
+	if err != nil {
+		return errors.Wrap(err, "listing env instances for strategy switch")
+	}
+	for i := range files {
+		file := files[i]
+		if file.EnvName == EnvNameDefault {
+			continue
+		}
+		if err = s.convertEnvInstanceForStrategy(ctx, def, defaultFile, &file, strategy, operator); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *AppCfgFileDefService) convertEnvInstanceForStrategy(
+	ctx context.Context,
+	def *AppConfigFileDef,
+	defaultFile *AppConfigFile,
+	file *AppConfigFile,
+	strategy EnvInstanceStrategy,
+	operator string,
+) error {
+	editor, err := NewAppConfigFileEditor(s.db, file)
+	if err != nil {
+		return errors.Wrapf(err, "creating editor for env instance %s", file.ID.Hex())
+	}
+	compiled, err := editor.GetCompiledContent(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "compiling env instance %s", file.ID.Hex())
+	}
+
+	switch strategy {
+	case EnvInstanceStrategyOverwrite:
+		file.Type = AppConfigFileTypeNormal
+		file.Content = &compiled
+		file.OverlayContent = nil
+		file.BaseAppConfigFileID = nil
+	case EnvInstanceStrategyOverlay:
+		baseID := defaultFile.ID
+		file.Type = AppConfigFileTypeOverlay
+		file.Content = nil
+		file.OverlayContent = &compiled
+		file.BaseAppConfigFileID = &baseID
+	default:
+		return errors.Wrapf(ErrInvalidConfigSpec, "unsupported envInstanceStrategy %q", strategy)
+	}
+
+	if err = s.UpdateFile(ctx, file, def.Name, operator, UpdateCfgFileOptions{
+		OperationType: AppConfigFileVersionOperationTypeUpdate,
+		Description:   strategySwitchDescription(strategy),
+	}); err != nil {
+		return errors.Wrapf(err, "converting env instance %s", file.ID.Hex())
+	}
+	return nil
+}
+
+func strategySwitchDescription(strategy EnvInstanceStrategy) string {
+	if strategy == EnvInstanceStrategyOverwrite {
+		return "切换为独立完整配置"
+	}
+	return "切换为与默认配置合并"
 }
 
 // deleteEnvInstances 删除指定 def 下所有非默认的环境实例及其版本记录。

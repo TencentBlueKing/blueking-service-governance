@@ -249,7 +249,7 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 	})
 }
 
-// UpdateAppCfgFileDef 更新配置文件定义信息（name / mountDir / isUnifiedConfig / mountedEnvNames）。
+// UpdateAppCfgFileDef 更新配置文件定义信息（name / mountDir / isUnifiedConfig / mountedEnvNames / envInstanceStrategy）。
 //
 //	@ID				UpdateAppConfigFileDef
 //	@Summary		更新配置文件定义信息

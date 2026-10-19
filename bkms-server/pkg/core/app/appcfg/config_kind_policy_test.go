@@ -73,9 +73,41 @@ var _ = Describe("FrameworkPolicy", func() {
 		})
 	})
 
-	Describe("GetEnvInstanceStrategy", func() {
-		It("should return overlay strategy", func() {
-			Expect(policy.GetEnvInstanceStrategy()).To(Equal(appcfg.EnvInstanceStrategyOverlay))
+	Describe("InitializeEnvConfigMode", func() {
+		It("should initialize overwrite strategy for trpc framework", func() {
+			mode := &appcfg.EnvConfigMode{}
+			policy.InitializeEnvConfigMode(mode, appcfg.CreateCfgFileParams{AppType: "trpc"})
+			Expect(mode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+		})
+
+		It("should initialize overlay strategy for helm framework", func() {
+			mode := &appcfg.EnvConfigMode{}
+			policy.InitializeEnvConfigMode(mode, appcfg.CreateCfgFileParams{AppType: "helm"})
+			Expect(mode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverlay))
+		})
+	})
+
+	Describe("ResolveEnvInstanceStrategy", func() {
+		It("should resolve persisted strategy from framework def", func() {
+			strategy, err := policy.ResolveEnvInstanceStrategy(&appcfg.AppConfigFileDef{
+				ConfigKind: appcfg.ConfigKindFramework,
+				EnvConfigMode: appcfg.EnvConfigMode{
+					EnvInstanceStrategy: appcfg.EnvInstanceStrategyOverwrite,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(strategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+		})
+
+		It("should reject invalid persisted framework strategy", func() {
+			_, err := policy.ResolveEnvInstanceStrategy(&appcfg.AppConfigFileDef{
+				ConfigKind: appcfg.ConfigKindFramework,
+				EnvConfigMode: appcfg.EnvConfigMode{
+					EnvInstanceStrategy: "invalid",
+				},
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("envInstanceStrategy"))
 		})
 	})
 
@@ -103,6 +135,12 @@ var _ = Describe("FrameworkPolicy", func() {
 	Describe("AllowEnableEnvVarRenderUpdate", func() {
 		It("should not allow enableEnvVarRender update", func() {
 			Expect(policy.AllowEnableEnvVarRenderUpdate()).To(BeFalse())
+		})
+	})
+
+	Describe("AllowEnvInstanceStrategyUpdate", func() {
+		It("should allow envInstanceStrategy update", func() {
+			Expect(policy.AllowEnvInstanceStrategyUpdate()).To(BeTrue())
 		})
 	})
 
@@ -224,6 +262,28 @@ var _ = Describe("PlainPolicy", func() {
 	Describe("AllowEnableEnvVarRenderUpdate", func() {
 		It("should allow enableEnvVarRender update", func() {
 			Expect(policy.AllowEnableEnvVarRenderUpdate()).To(BeTrue())
+		})
+	})
+
+	Describe("AllowEnvInstanceStrategyUpdate", func() {
+		It("should reject envInstanceStrategy update", func() {
+			Expect(policy.AllowEnvInstanceStrategyUpdate()).To(BeFalse())
+		})
+	})
+
+	Describe("InitializeEnvConfigMode", func() {
+		It("should not write persisted strategy for plain config", func() {
+			mode := &appcfg.EnvConfigMode{}
+			policy.InitializeEnvConfigMode(mode, appcfg.CreateCfgFileParams{AppType: "trpc"})
+			Expect(mode.EnvInstanceStrategy).To(BeEmpty())
+		})
+	})
+
+	Describe("ResolveEnvInstanceStrategy", func() {
+		It("should always resolve overwrite strategy", func() {
+			strategy, err := policy.ResolveEnvInstanceStrategy(nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(strategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
 		})
 	})
 

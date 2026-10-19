@@ -50,6 +50,39 @@ var _ = Describe("AppCfgFileDefService — Env View", func() {
 			Expect(detail.EditableContentField).To(Equal("content"))
 		})
 
+		It("should return default file for framework overwrite strategy without env instance", func() {
+			content := "key: value"
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "trpc",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			detail, err := f.Svc.GetEnvFileDetail(f.Ctx, def, "prod")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(detail.DisplayFile).NotTo(BeNil())
+			Expect(detail.DisplayFile.ID).To(Equal(result.ID))
+			Expect(detail.HasEnvInstance).To(BeFalse())
+			Expect(detail.EditableContentField).To(Equal("content"))
+		})
+
 		It("should return nil display file for framework overlay strategy without env instance", func() {
 			result := f.createFrameworkFile("values.yaml")
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)

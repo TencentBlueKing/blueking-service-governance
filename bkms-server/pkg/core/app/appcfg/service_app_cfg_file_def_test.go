@@ -296,6 +296,65 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err.Error()).To(ContainSubstring("enableEnvVarRender"))
 		})
 
+		It("should store overwrite as the env instance strategy for a new trpc framework def", func() {
+			content := "key: value"
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "trpc",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+		})
+
+		It("should store overwrite as the env instance strategy for a new taf framework def", func() {
+			content := "key: value"
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "taf.conf",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatTAF,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "taf",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+		})
+
+		It("should store overlay as the env instance strategy for a new helm framework def", func() {
+			content := "key: value"
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "default",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "helm",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverlay))
+		})
+
+		It("should store overlay when a framework def is created without an app type", func() {
+			result := f.createFrameworkFile("values.yaml")
+			Expect(result.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverlay))
+		})
+
 		It("should reject framework kind create with mountedEnvNames", func() {
 			content := "key: value"
 			mountedEnvNames := []string{"prod"}
@@ -484,6 +543,147 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("def is required"))
+		})
+
+		It("should reject env instance strategy updates on plain defs", func() {
+			result := f.createPlainFile("plain.conf", "/data", "k=v")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			strategy := appcfg.EnvInstanceStrategyOverwrite
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				EnvInstanceStrategy: &strategy,
+				Operator:            "editor",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+		})
+
+		It("should change env instance strategy without rewriting files when no env instance exists", func() {
+			result := f.createFrameworkFile("values.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			strategy := appcfg.EnvInstanceStrategyOverwrite
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				EnvInstanceStrategy: &strategy,
+				Operator:            "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			gotDef, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(gotDef.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+
+			gotFile, err := f.FileStore.GetByID(f.Ctx, result.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(gotFile.CurrentVersion).To(Equal(int64(1)))
+			Expect(gotFile.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
+		})
+
+		It("should materialize merged content when switching framework strategy to overwrite", func() {
+			content := "keep: true\nbase: default\n"
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "framework.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     "base: prod\n",
+				Operator:    "editor",
+				Description: "prod overlay",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			strategy := appcfg.EnvInstanceStrategyOverwrite
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				EnvInstanceStrategy: &strategy,
+				Operator:            "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := f.FileStore.GetByID(f.Ctx, upserted.File.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
+			Expect(got.OverlayContent).To(BeNil())
+			Expect(got.BaseAppConfigFileID).To(BeNil())
+			Expect(lo.FromPtr(got.Content)).To(ContainSubstring("base: prod"))
+			Expect(lo.FromPtr(got.Content)).To(ContainSubstring("keep: true"))
+			Expect(got.CurrentVersion).To(Equal(int64(2)))
+
+			gotDef, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(gotDef.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+		})
+
+		It("should keep current content as overlay when switching framework strategy to overlay", func() {
+			content := "keep: true\n"
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "trpc",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			full := "keep: true\nbase: prod\n"
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     full,
+				Operator:    "editor",
+				Description: "prod full content",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(upserted.File.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
+
+			strategy := appcfg.EnvInstanceStrategyOverlay
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				EnvInstanceStrategy: &strategy,
+				Operator:            "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := f.FileStore.GetByID(f.Ctx, upserted.File.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Type).To(Equal(appcfg.AppConfigFileTypeOverlay))
+			Expect(got.Content).To(BeNil())
+			Expect(lo.FromPtr(got.OverlayContent)).To(Equal(full))
+			Expect(got.BaseAppConfigFileID).NotTo(BeNil())
+			Expect(*got.BaseAppConfigFileID).To(Equal(result.ID))
+			Expect(got.CurrentVersion).To(Equal(int64(2)))
 		})
 
 		It("should clean up removed env instances when shrinking mountedEnvNames", func() {

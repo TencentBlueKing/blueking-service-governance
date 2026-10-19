@@ -1,0 +1,19 @@
+[
+  {
+    "update": "app_config_file_defs",
+    "updates": [
+      {
+        "q": {
+          "configKind": "framework",
+          "envInstanceStrategy": { "$exists": true }
+        },
+        "u": {
+          "$unset": {
+            "envInstanceStrategy": ""
+          }
+        },
+        "multi": true
+      }
+    ]
+  }
+]
