@@ -225,6 +225,19 @@ describe('应用可见环境：名单语义与保存', () => {
 });
 
 describe('可见环境下拉交互', () => {
+  it('未限制可见环境时，设置面板默认全选；取消部分勾选后保存具体名单', async () => {
+    await openPanel();
+    await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    const panel = within(screen.getByTestId('env-panel'));
+    const checkboxes = panel.getAllByRole('checkbox').filter(input => !(input as HTMLInputElement).disabled);
+    expect(checkboxes.every(input => (input as HTMLInputElement).checked)).toBe(true);
+    await userEvent.click(panel.getByText('PROD'));
+    await userEvent.click(panel.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith({ appID: 'app-a', visibleEnvNames: ['test', 'not-ready'] }),
+    );
+  });
+
   it('当点击设置或取消切换编辑态时，应保持下拉打开，点击外部时才关闭', async () => {
     await openPanel();
     await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
@@ -263,6 +276,7 @@ describe('可见环境下拉交互', () => {
   });
 
   it('当保存已成功但刷新详情失败时，应提示刷新并保留已保存名单', async () => {
+    useAppDetail().appDetail = detail(['test']);
     mocks.get.mockRejectedValueOnce(new Error('offline'));
     await openPanel();
     await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
@@ -276,7 +290,7 @@ describe('可见环境下拉交互', () => {
         }),
       ),
     );
-    expect(useAppDetail().appDetail?.visibleEnvNames).toEqual(['prod']);
+    expect(useAppDetail().appDetail?.visibleEnvNames).toEqual(['test', 'prod']);
   });
 
   it('当名单内没有可部署环境时，应清空目标且保留配置入口', async () => {
@@ -339,6 +353,10 @@ describe('可见环境下拉交互', () => {
     await openPanel();
     await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
     await userEvent.click(screen.getByRole('button', { name: '恢复全部' }));
+    const checkboxes = within(screen.getByTestId('env-panel'))
+      .getAllByRole('checkbox')
+      .filter(input => !(input as HTMLInputElement).disabled);
+    expect(checkboxes.every(input => (input as HTMLInputElement).checked)).toBe(true);
     await userEvent.click(screen.getByRole('button', { name: '保存' }));
     await userEvent.click(screen.getByRole('button', { name: '保存' }));
     expect(mocks.update).toHaveBeenCalledTimes(1);
@@ -348,6 +366,7 @@ describe('可见环境下拉交互', () => {
   });
 
   it('无编辑权限时保留草稿以便重试', async () => {
+    useAppDetail().appDetail = detail(['test']);
     mocks.update.mockRejectedValueOnce(new Error('forbidden'));
     await openPanel();
     await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
@@ -356,7 +375,9 @@ describe('可见环境下拉交互', () => {
     await waitFor(() => expect(useAppDetail().savingVisibleEnvs).toBe(false));
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '保存' }));
-    await waitFor(() => expect(mocks.update).toHaveBeenLastCalledWith({ appID: 'app-a', visibleEnvNames: ['prod'] }));
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenLastCalledWith({ appID: 'app-a', visibleEnvNames: ['test', 'prod'] }),
+    );
   });
 
   it('保存后单选回退可用环境；部署表单清空目标', async () => {

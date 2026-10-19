@@ -156,7 +156,7 @@
       >
         <div class="text-[14px] leading-[22px] font-medium text-[#313238]">{{ $t('设置可见环境') }}</div>
         <p class="mt-[4px] mb-[8px] text-[12px] leading-[20px] text-[#979BA5]">
-          {{ $t('勾选要在下拉中显示的环境，全部不选则显示全部。特性环境始终可见。') }}
+          {{ $t('勾选要在下拉中显示的环境，特性环境始终可见。') }}
         </p>
         <div class="env-list-scroll max-h-[320px] overflow-y-auto">
           <EnvGroupSelector
@@ -294,14 +294,15 @@
       >
         <template v-if="isEditingVisibleEnvs">
           <Button
-            :disabled="appDetailStore.savingVisibleEnvs || !visibleEnvDraft.length"
+            :disabled="appDetailStore.savingVisibleEnvs || allStandardEnvsSelected"
             text
             theme="primary"
-            @click="visibleEnvDraft = []"
+            @click="visibleEnvDraft = [...allStandardEnvNames]"
             >{{ $t('恢复全部') }}</Button
           >
           <div class="flex gap-[8px]">
             <Button
+              :disabled="standardEnvList.length > 0 && !visibleEnvDraft.length"
               :loading="appDetailStore.savingVisibleEnvs"
               size="small"
               theme="primary"
@@ -479,6 +480,14 @@
     props.filterVisibleEnvs ? kindEnvList.value.filter(isEnvVisible) : kindEnvList.value,
   );
   const standardEnvList = computed(() => envList.value.filter(env => (env.kind || 'standard') === 'standard'));
+  const allStandardEnvNames = computed(() =>
+    standardEnvList.value.map(env => env.name).filter((name): name is string => !!name),
+  );
+  const allStandardEnvsSelected = computed(
+    () =>
+      visibleEnvDraft.value.length === allStandardEnvNames.value.length &&
+      allStandardEnvNames.value.every(name => visibleEnvDraft.value.includes(name)),
+  );
   const visibleStandardEnvCount = computed(() => standardEnvList.value.filter(isEnvVisible).length);
 
   /** 单选模式下当前选中的环境对象 */
@@ -822,7 +831,7 @@
   }
 
   function handleEditVisibleEnvs() {
-    visibleEnvDraft.value = [...visibleEnvNames.value];
+    visibleEnvDraft.value = isRestricted.value ? [...visibleEnvNames.value] : [...allStandardEnvNames.value];
     searchKeyword.value = '';
     isEditingVisibleEnvs.value = true;
   }
@@ -883,7 +892,8 @@
   async function handleSaveVisibleEnvs() {
     if (appDetailStore.savingVisibleEnvs) return;
     try {
-      const result = await appDetailStore.updateVisibleEnvs(visibleEnvDraft.value);
+      // 接口以空名单表示全部可见，编辑态则用全选展示同一状态。
+      const result = await appDetailStore.updateVisibleEnvs(allStandardEnvsSelected.value ? [] : visibleEnvDraft.value);
       if (result === 'stale') return;
       if (result === 'refresh-failed') {
         Message({ theme: 'warning', message: t('配置已保存，获取最新配置失败，请刷新页面重试') });
