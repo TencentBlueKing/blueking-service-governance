@@ -60,6 +60,7 @@ func (s *AppCfgFileDefService) Create(
 	if kind == "" {
 		return nil, errors.Wrap(ErrInvalidConfigSpec, "config kind is required")
 	}
+	params.MountDir = NormalizeMountDir(params.MountDir)
 
 	policy, err := s.policyFor(kind)
 	if err != nil {
@@ -172,17 +173,22 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 	if def == nil {
 		return errors.New("def is required")
 	}
+	if update.MountDir != nil {
+		cleaned := NormalizeMountDir(*update.MountDir)
+		update.MountDir = &cleaned
+	}
 
-	// 按策略区分
-	var policy ConfigKindPolicy
-	if update.MountDir != nil || update.EnableEnvVarRender != nil ||
+	// 按策略区分。policyFor 只是按 kind 查表。
+	if update.Name != nil || update.MountDir != nil || update.EnableEnvVarRender != nil ||
 		update.MountedEnvNames != nil || update.EnvContentStrategy != nil {
-		var err error
-		policy, err = s.policyFor(def.ConfigKind)
+		policy, err := s.policyFor(def.ConfigKind)
 		if err != nil {
 			return errors.Wrap(err, "loading config kind policy for def update")
 		}
-		if update.MountDir != nil && !policy.AllowMountDirUpdate() {
+		if update.Name != nil && *update.Name != def.Name && !policy.AllowNameUpdate(update.AppType) {
+			return errors.Wrap(ErrInvalidConfigSpec, "trpc framework config file name cannot be changed")
+		}
+		if update.MountDir != nil && !policy.AllowMountDirUpdate(update.AppType) {
 			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not support modifying mountDir via def")
 		}
 		if update.MountedEnvNames != nil && !policy.AllowMountedEnvNamesUpdate() {
@@ -318,6 +324,44 @@ func (s *AppCfgFileDefService) convertEnvInstancesForStrategy(
 		}
 	}
 	return nil
+}
+
+// SyncFrameworkFileLocation 把 spec 更新里的文件名和挂载目录写到该应用唯一的 framework def。
+// 空的 fileName / mountDir 表示保持 def 上的原值。trpc 改名由策略拒绝。
+//
+// todo 兼容 PUT /trpc-spec、PUT /taf-spec 仍携带 fileName、filePath。
+// 创建时这两个值已经写在 def 上。后续 spec 只更新语言、启动命令和参数，名字和目录只通过 def 更新接口修改，查询继续从 def 填回。届时删除本函数。
+func (s *AppCfgFileDefService) SyncFrameworkFileLocation(
+	ctx context.Context,
+	appID, appType, fileName, mountDir string,
+) error {
+	defs, err := ListDefsByApp(ctx, s.DefStore, appID, DefFilterConfigKind(ConfigKindFramework))
+	if err != nil {
+		return errors.Wrapf(err, "listing framework defs for app %s", appID)
+	}
+	if len(defs) != 1 {
+		return errors.Errorf("app %s has %d framework config files", appID, len(defs))
+	}
+	def := &defs[0]
+	nextName := def.Name
+	if fileName != "" {
+		nextName = fileName
+	}
+	nextDir := def.MountDir
+	if mountDir != "" {
+		nextDir = NormalizeMountDir(mountDir)
+	}
+	if nextName == def.Name && nextDir == def.MountDir {
+		return nil
+	}
+	update := FileDefUpdate{AppType: appType}
+	if nextName != def.Name {
+		update.Name = &nextName
+	}
+	if nextDir != def.MountDir {
+		update.MountDir = &nextDir
+	}
+	return s.UpdateAppCfgFileDef(ctx, def, update)
 }
 
 // deleteEnvInstances 删除指定 def 下所有非默认的环境实例及其版本记录。

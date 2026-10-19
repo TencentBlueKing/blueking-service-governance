@@ -130,9 +130,27 @@ var _ = Describe("FrameworkPolicy", func() {
 		})
 	})
 
+	Describe("AllowNameUpdate", func() {
+		It("should not allow renaming a trpc framework file", func() {
+			Expect(policy.AllowNameUpdate("trpc")).To(BeFalse())
+		})
+
+		It("should allow renaming taf and helm framework files", func() {
+			Expect(policy.AllowNameUpdate("taf")).To(BeTrue())
+			Expect(policy.AllowNameUpdate("helm")).To(BeTrue())
+			Expect(policy.AllowNameUpdate("")).To(BeTrue())
+		})
+	})
+
 	Describe("AllowMountDirUpdate", func() {
-		It("should not allow mount dir update", func() {
-			Expect(policy.AllowMountDirUpdate()).To(BeFalse())
+		It("should not allow mount dir update for helm", func() {
+			Expect(policy.AllowMountDirUpdate("helm")).To(BeFalse())
+			Expect(policy.AllowMountDirUpdate("")).To(BeFalse())
+		})
+
+		It("should allow mount dir update for trpc and taf", func() {
+			Expect(policy.AllowMountDirUpdate("trpc")).To(BeTrue())
+			Expect(policy.AllowMountDirUpdate("taf")).To(BeTrue())
 		})
 	})
 

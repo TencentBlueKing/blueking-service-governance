@@ -103,15 +103,18 @@ func TrpcApplication(
 		}
 	}
 
-	// 创建 AppModel
+	// 创建 AppModel。文件名和挂载目录不写入 app model，只写到下面的 framework def。
 	model := &appmodel.AppModel{
 		AppID: app.ID,
 		Workload: appmodel.Workload{
-			Type:       appmodel.WorkloadTypeTrpc,
-			Name:       app.Name,
-			Image:      image,
-			EnvVars:    opts.EnvVars,
-			TrpcConfig: *trpcConfig,
+			Type:    appmodel.WorkloadTypeTrpc,
+			Name:    app.Name,
+			Image:   image,
+			EnvVars: opts.EnvVars,
+			TrpcConfig: appmodel.TrpcConfig{
+				Language:    trpcConfig.Language,
+				FileContent: trpcConfig.FileContent,
+			},
 		},
 		Components: opts.Components,
 		Replicas:   opts.Replicas,
@@ -119,8 +122,8 @@ func TrpcApplication(
 	err = appmodel.CreateAppModel(ctx, database.DB(), model)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-	// 创建 app-level 默认 AppConfigFile（tRPC plugin 需要）
-	// def.Name 使用 tRPC 配置中的实际文件名，与 app model 保持一致
+	// 创建 app-level 默认 AppConfigFile（tRPC plugin 需要）。
+	// 文件名和挂载目录取自入参，写入 framework def。
 	acfService := appcfg.NewAppConfigFileService(
 		database.DB(),
 	)
@@ -130,6 +133,7 @@ func TrpcApplication(
 			AppID:             app.ID,
 			EnvName:           appcfg.EnvNameDefault,
 			Name:              trpcConfig.FileName,
+			MountDir:          trpcConfig.FilePath,
 			Type:              appcfg.AppConfigFileTypeNormal,
 			ContentSourceType: appcfg.ContentSourceTypeLocal,
 			Format:            appcfg.FileFormatYAML,
@@ -246,15 +250,17 @@ func TafApplication(
 		}
 	}
 
-	// 创建 AppModel
+	// 创建 AppModel。文件名和挂载目录不写入 app model，只写到下面的 framework def。
 	model := &appmodel.AppModel{
 		AppID: app.ID,
 		Workload: appmodel.Workload{
-			Type:      appmodel.WorkloadTypeTaf,
-			Name:      app.Name,
-			Image:     image,
-			EnvVars:   opts.EnvVars,
-			TafConfig: *tafConfig,
+			Type:    appmodel.WorkloadTypeTaf,
+			Name:    app.Name,
+			Image:   image,
+			EnvVars: opts.EnvVars,
+			TafConfig: appmodel.TafConfig{
+				FileContent: tafConfig.FileContent,
+			},
 		},
 		Components: opts.Components,
 		Replicas:   opts.Replicas,
@@ -262,8 +268,8 @@ func TafApplication(
 	err = appmodel.CreateAppModel(ctx, database.DB(), model)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-	// 创建 app-level 默认 AppConfigFile（TAF plugin 需要）
-	// def.Name 使用 TAF 配置中的实际文件名，与 app model 保持一致
+	// 创建 app-level 默认 AppConfigFile（TAF plugin 需要）。
+	// 文件名和挂载目录取自入参，写入 framework def。
 	acfService := appcfg.NewAppConfigFileService(
 		database.DB(),
 	)
@@ -273,6 +279,7 @@ func TafApplication(
 			AppID:             app.ID,
 			EnvName:           appcfg.EnvNameDefault,
 			Name:              tafConfig.FileName,
+			MountDir:          tafConfig.FilePath,
 			Type:              appcfg.AppConfigFileTypeNormal,
 			ContentSourceType: appcfg.ContentSourceTypeLocal,
 			Format:            appcfg.FileFormatTAF,

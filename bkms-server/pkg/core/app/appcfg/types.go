@@ -159,6 +159,8 @@ type FileDefUpdate struct {
 	EnableEnvVarRender *bool
 	EnvContentStrategy *EnvContentStrategy
 	Operator           string
+	// AppType 应用类型。trpc 的框架文件不允许改名；trpc/taf 允许通过 def 改挂载目录。
+	AppType string
 }
 
 // CreateEnvInstanceParams 创建环境级配置实例的参数。

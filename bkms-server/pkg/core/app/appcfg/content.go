@@ -20,6 +20,7 @@ package appcfg
 
 import (
 	"context"
+	"path"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -33,9 +34,8 @@ var ErrNoConfigFileFound = errors.New("no config file found")
 type MountableFile struct {
 	// Name 配置文件名，对应 AppConfigFileDef.Name。
 	Name string
-	// MountDir 容器内挂载目录。plain 文件取自 def 上的用户配置；
-	// framework 文件当前为空——其挂载路径仍由 app 级 ConfigFilePath 管理，
-	// 待迁移至 def 后此字段将对所有 kind 统一填充。
+	// MountDir 容器内挂载目录。plain 与 trpc/taf 框架文件都取自 def。
+	// Helm values 没有挂载目录，此字段为空。
 	MountDir string
 	// Content 经 overlay/overwrite 策略编译后的最终文件内容。
 	Content string
@@ -56,8 +56,16 @@ func NewMountableFileProvider(db *mongo.Database) MountableFileProvider {
 	return NewAppConfigFileService(db)
 }
 
+// NormalizeMountDir 把挂载目录收成唯一索引可比较的形式。
+// 空字符串保持为空。非空时用 path.Clean，去掉末尾斜杠并解析 . 和 ..。
+func NormalizeMountDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	return path.Clean(dir)
+}
+
 // GetFrameworkMountableFile 获取应用在指定环境下生效的框架可挂载文件。
-// TODO: 待挂载路径迁移至 def 后，plugin 应改为使用此处返回的 MountDir。
 func (s *AppCfgFileDefService) GetFrameworkMountableFile(
 	ctx context.Context,
 	appID, envName string,

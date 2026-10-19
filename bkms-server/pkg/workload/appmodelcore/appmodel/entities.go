@@ -324,9 +324,11 @@ type Variable struct {
 //	当 AppConfigFile.EnvName = "" 时, 表示应用级别的默认配置;
 //	当 AppConfigFile.EnvName != "" 时, 表示环境级别的配置, 默认为覆盖层配置，通过与默认配置合并得到最终的配置文件;
 type TrpcConfig struct {
-	// FileName tRPC 配置文件名
+	// FileName tRPC 配置文件名。
+	// todo 兼容：已迁到 framework def。字段留给未迁移文档，迁移完成后删除。
 	FileName string `bson:"fileName"`
-	// FilePath tRPC 配置文件在 workload 容器内的路径
+	// FilePath tRPC 配置文件在 workload 容器内的路径。
+	// todo 兼容：已迁到 framework def。字段留给未迁移文档，迁移完成后删除。
 	FilePath string `bson:"filePath"`
 	// FileContent tRPC 配置文件内容
 	// 配置内容已迁移到 AppConfigFile 存储，该字段仅用于计算过程中临时存储结果
@@ -338,9 +340,11 @@ type TrpcConfig struct {
 // TafConfig is the compatibility DTO for persisted TAF framework fields.
 // NOTE: 配置文件实际内容存储于 AppConfigFile 表, 通过 appID 字段关联
 type TafConfig struct {
-	// FileName TAF 配置文件名
+	// FileName TAF 配置文件名。
+	// todo 兼容：已迁到 framework def。字段留给未迁移文档，迁移完成后删除。
 	FileName string `bson:"fileName"`
-	// FilePath TAF 配置文件在 workload 容器内的路径
+	// FilePath TAF 配置文件在 workload 容器内的路径。
+	// todo 兼容：已迁到 framework def。字段留给未迁移文档，迁移完成后删除。
 	FilePath string `bson:"filePath"`
 	// FileContent TAF 配置文件内容
 	FileContent string `bson:"fileContent"`

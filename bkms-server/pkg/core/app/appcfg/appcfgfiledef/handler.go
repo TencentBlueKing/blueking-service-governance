@@ -288,6 +288,7 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 
 	operator := auth.MustGetUser(ctx).ID
 	update := input.ToFileDefUpdate(operator)
+	update.AppType = app.Type
 	oldDef := *def
 
 	svc := h.newAppCfgFileDefService()

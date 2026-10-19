@@ -408,3 +408,15 @@ var _ = Describe("ListPlainMountableFiles", func() {
 		Expect(result).To(BeEmpty())
 	})
 })
+
+var _ = Describe("mount path identity", func() {
+	DescribeTable("NormalizeMountDir",
+		func(input, expected string) {
+			Expect(appcfg.NormalizeMountDir(input)).To(Equal(expected))
+		},
+		Entry("empty stays empty", "", ""),
+		Entry("strips a trailing slash", "/etc/app/", "/etc/app"),
+		Entry("keeps root", "/", "/"),
+		Entry("cleans parent segments", "/etc/foo/../app", "/etc/app"),
+	)
+})

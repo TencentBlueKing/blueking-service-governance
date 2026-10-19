@@ -73,7 +73,7 @@ func (p *Plugin) Start(
 	appModel *appmodel.AppModel,
 	renderCtx plugin.RenderContext,
 ) (plugin.WorkloadPluginSession, error) {
-	frameworkItem, err := p.computeTrpcConfig(ctx, app, env, *appModel)
+	frameworkItem, err := p.computeTrpcConfig(ctx, app, env)
 	if err != nil {
 		return nil, errors.Wrap(err, "computing tRPC config")
 	}
@@ -113,23 +113,13 @@ func (p *Plugin) computeTrpcConfig(
 	ctx context.Context,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
-	appModel appmodel.AppModel,
 ) (appcfg.MountableFile, error) {
-	trpcCfg := appModel.Workload.TrpcConfig
-	item := appcfg.MountableFile{
-		Name:     trpcCfg.FileName,
-		Content:  trpcCfg.FileContent,
-		MountDir: trpcCfg.FilePath,
-	}
-
 	frameworkContent, err := p.mountableFileProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
 	if err != nil {
 		return appcfg.MountableFile{}, err
 	}
-	// framework 文件名当前仍以 app model 为准，避免把运行时挂载名意外改成 def 名（如 default）。
-	item.Content = frameworkContent.Content
-	// TODO: MountDir 当前仍由 app model（trpcCfg.FilePath）决定，未使用 def.MountDir。
-	// 待挂载路径迁移至 def 后，应改为 item.MountDir = frameworkContent.MountDir。
+	// 文件名和挂载目录以 def 为准。
+	item := *frameworkContent
 
 	// 依次调用注册的 ConfigPatcher 对配置进行补丁（如 polaris 注册信息注入）
 	for _, cfgPatcher := range p.configPatchers {

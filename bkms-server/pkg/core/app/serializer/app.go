@@ -156,11 +156,14 @@ type AppDetailOutputObj struct {
 }
 
 // FromModel fills output fields from app detail models.
+// fileName 和 filePath 来自 framework def。没有唯一的 framework def 时传空字符串。
+// todo 兼容：详情仍在 spec 返回这两个字段。调用方改读 def 后删除这两个参数。
 func (o *AppDetailOutputObj) FromModel(
 	app *bkmsapp.Application,
 	buildConfig *build.Config,
 	appModel *appmodel.AppModel,
 	components []ComponentOutputObj,
+	fileName, filePath string,
 ) *AppDetailOutputObj {
 	*o = AppDetailOutputObj{
 		ID:              app.ID,
@@ -176,7 +179,7 @@ func (o *AppDetailOutputObj) FromModel(
 		HelmSpec:        new(HelmSpecOutputObj).FromModel(app.HelmSpec),
 	}
 	if appModel != nil {
-		o.AppModelSpec = new(AppModelSpecOutputObj).FromModel(appModel, components)
+		o.AppModelSpec = new(AppModelSpecOutputObj).FromModel(appModel, components, fileName, filePath)
 	}
 	return o
 }
@@ -258,9 +261,12 @@ type ComponentOutputObj struct {
 }
 
 // FromModel fills output fields from appmodel data.
+// fileName 和 filePath 来自 framework def，写入 trpcSpec 或 tafSpec。
+// todo 兼容：详情仍在 spec 返回这两个字段。调用方改读 def 后删除这两个参数。
 func (o *AppModelSpecOutputObj) FromModel(
 	am *appmodel.AppModel,
 	components []ComponentOutputObj,
+	fileName, filePath string,
 ) *AppModelSpecOutputObj {
 	if am == nil {
 		return nil
@@ -283,18 +289,18 @@ func (o *AppModelSpecOutputObj) FromModel(
 			IsSensitive: v.IsSensitive,
 		})
 	}
-	if am.Workload.TrpcConfig.FileName != "" {
+	if am.Workload.Type == appmodel.WorkloadTypeTrpc || am.Workload.TrpcConfig.Language != "" {
 		o.TrpcSpec = &TrpcSpecOutputObj{
 			Language:    am.Workload.TrpcConfig.Language,
-			FileName:    am.Workload.TrpcConfig.FileName,
-			FilePath:    am.Workload.TrpcConfig.FilePath,
+			FileName:    fileName,
+			FilePath:    filePath,
 			FileContent: am.Workload.TrpcConfig.FileContent,
 		}
 	}
-	if am.Workload.TafConfig.FileName != "" {
+	if am.Workload.Type == appmodel.WorkloadTypeTaf {
 		o.TafSpec = &TafSpecOutputObj{
-			FileName:    am.Workload.TafConfig.FileName,
-			FilePath:    am.Workload.TafConfig.FilePath,
+			FileName:    fileName,
+			FilePath:    filePath,
 			FileContent: am.Workload.TafConfig.FileContent,
 		}
 	}

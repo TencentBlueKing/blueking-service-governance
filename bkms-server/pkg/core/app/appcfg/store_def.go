@@ -39,8 +39,7 @@ type AppConfigFileDefStore = store.GenericStore[AppConfigFileDef]
 // AppConfigFileDefMeta 配置文件 def 的存储元数据。
 //
 // 索引（由 golang-migrate 维护）：
-// - 唯一：appID + name
-// - 唯一（partial，mountDir 非空）：appID + mountDir + name，保证最终挂载路径 Join(mountDir, name) 不重复
+// - 唯一：appID + mountDir + name。mountDir 为空时字段不落库，按空值参与唯一约束，同一应用下文件名仍然唯一。
 // - 查询：appID + configKind
 var AppConfigFileDefMeta = store.Meta[AppConfigFileDef]{
 	Collection: "app_config_file_defs",
@@ -78,6 +77,7 @@ func UpdateDef(ctx context.Context, defs *AppConfigFileDefStore, def *AppConfigF
 	if def.ID.IsZero() {
 		return errors.New("def ID is required for update")
 	}
+	// mountDir 带 omitempty，空目录在 Update 时被 $unset，不把 "" 写进唯一索引。
 	mutable := store.UpdateSelected(
 		"name", "mountDir", "isUnifiedConfig", "mountedEnvNames", "enableEnvVarRender", "envContentStrategy",
 	)

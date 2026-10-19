@@ -1,0 +1,186 @@
+[
+  {
+    "aggregate": "app_models",
+    "pipeline": [
+      {
+        "$match": {
+          "workload.type": { "$in": ["trpc", "taf"] }
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_config_file_defs",
+          "let": { "appID": "$appID" },
+          "pipeline": [
+            {
+              "$match": {
+                "$expr": {
+                  "$and": [
+                    { "$eq": ["$appID", "$$appID"] },
+                    { "$eq": ["$configKind", "framework"] }
+                  ]
+                }
+              }
+            }
+          ],
+          "as": "defs"
+        }
+      },
+      {
+        "$match": {
+          "$expr": { "$eq": [{ "$size": "$defs" }, 1] }
+        }
+      },
+      {
+        "$project": {
+          "_id": { "$arrayElemAt": ["$defs._id", 0] },
+          "name": {
+            "$cond": [
+              { "$eq": ["$workload.type", "trpc"] },
+              "$workload.trpcConfig.fileName",
+              "$workload.tafConfig.fileName"
+            ]
+          },
+          "mountDir": {
+            "$cond": [
+              { "$eq": ["$workload.type", "trpc"] },
+              "$workload.trpcConfig.filePath",
+              "$workload.tafConfig.filePath"
+            ]
+          }
+        }
+      },
+      {
+        "$match": {
+          "name": { "$nin": [null, ""] },
+          "mountDir": { "$nin": [null, ""] }
+        }
+      },
+      {
+        "$merge": {
+          "into": "app_config_file_defs",
+          "on": "_id",
+          "whenMatched": "merge",
+          "whenNotMatched": "discard"
+        }
+      }
+    ],
+    "cursor": {}
+  },
+  {
+    "update": "app_config_file_defs",
+    "updates": [
+      {
+        "q": { "mountDir": { "$regex": ".+/$" } },
+        "u": [
+          {
+            "$set": {
+              "mountDir": { "$rtrim": { "input": "$mountDir", "chars": "/" } }
+            }
+          }
+        ],
+        "multi": true
+      }
+    ]
+  },
+  {
+    "update": "app_config_file_defs",
+    "updates": [
+      {
+        "q": {
+          "$or": [
+            { "mountDir": "" },
+            { "mountDir": null }
+          ]
+        },
+        "u": { "$unset": { "mountDir": "" } },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "dropIndexes": "app_config_file_defs",
+    "index": "appID_1_name_1"
+  },
+  {
+    "dropIndexes": "app_config_file_defs",
+    "index": "appID_1_mountDir_1_name_1"
+  },
+  {
+    "createIndexes": "app_config_file_defs",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "mountDir": 1,
+          "name": 1
+        },
+        "name": "appID_1_mountDir_1_name_1",
+        "unique": true
+      }
+    ]
+  },
+  {
+    "aggregate": "app_config_file_defs",
+    "pipeline": [
+      {
+        "$match": {
+          "configKind": "framework",
+          "mountDir": { "$gt": "" }
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_config_file_defs",
+          "let": { "appID": "$appID" },
+          "pipeline": [
+            {
+              "$match": {
+                "$expr": {
+                  "$and": [
+                    { "$eq": ["$appID", "$$appID"] },
+                    { "$eq": ["$configKind", "framework"] }
+                  ]
+                }
+              }
+            }
+          ],
+          "as": "frameworkDefs"
+        }
+      },
+      {
+        "$match": {
+          "$expr": { "$eq": [{ "$size": "$frameworkDefs" }, 1] }
+        }
+      },
+      {
+        "$lookup": {
+          "from": "app_models",
+          "localField": "appID",
+          "foreignField": "appID",
+          "as": "models"
+        }
+      },
+      { "$unwind": "$models" },
+      { "$project": { "_id": "$models._id" } },
+      {
+        "$merge": {
+          "into": "app_models",
+          "on": "_id",
+          "whenMatched": [
+            {
+              "$unset": [
+                "workload.trpcConfig.fileName",
+                "workload.trpcConfig.filePath",
+                "workload.tafConfig.fileName",
+                "workload.tafConfig.filePath"
+              ]
+            }
+          ],
+          "whenNotMatched": "discard"
+        }
+      }
+    ],
+    "cursor": {}
+  }
+]

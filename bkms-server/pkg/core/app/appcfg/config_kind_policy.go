@@ -47,8 +47,12 @@ type ConfigKindPolicy interface {
 	GetEnvContentStrategy(def *AppConfigFileDef) (EnvContentStrategy, error)
 	// IsEffectiveForEnv 判断该 def 是否在指定环境下生效。
 	IsEffectiveForEnv(def *AppConfigFileDef, envName string) bool
+	// AllowNameUpdate 是否允许通过 def 接口修改文件名。
+	// appType 用来区分同一 ConfigKind 下的应用类型，例如 framework 里的 helm 与 trpc。
+	AllowNameUpdate(appType string) bool
 	// AllowMountDirUpdate 是否允许通过 def 接口修改挂载目录。
-	AllowMountDirUpdate() bool
+	// appType 用来区分同一 ConfigKind 下的应用类型，例如 framework 里的 helm 与 trpc。
+	AllowMountDirUpdate(appType string) bool
 	// AllowMountedEnvNamesUpdate 是否允许通过 def 接口修改挂载环境范围。
 	AllowMountedEnvNamesUpdate() bool
 	// AllowEnableEnvVarRenderUpdate 是否允许通过 def 接口修改环境变量渲染开关。
@@ -125,10 +129,15 @@ func (FrameworkPolicy) IsEffectiveForEnv(_ *AppConfigFileDef, _ string) bool {
 	return true
 }
 
-// AllowMountDirUpdate framework 挂载路径由 app_models 管理，不允许通过 def 修改。
-// TODO: 待挂载路径迁移至 def 后放开此限制。
-func (FrameworkPolicy) AllowMountDirUpdate() bool {
-	return false
+// AllowNameUpdate trpc 的框架文件名创建后不能改。taf 和 Helm 可以改。
+func (FrameworkPolicy) AllowNameUpdate(appType string) bool {
+	return appType != "trpc"
+}
+
+// AllowMountDirUpdate framework 默认不允许改挂载目录，避免 Helm values 被写上目录。
+// trpc/taf 的框架文件目录存在 def 上，允许修改。
+func (FrameworkPolicy) AllowMountDirUpdate(appType string) bool {
+	return appType == "trpc" || appType == "taf"
 }
 
 // AllowMountedEnvNamesUpdate framework 始终对全部环境生效，不允许设置挂载范围。
@@ -203,8 +212,13 @@ func (PlainPolicy) IsEffectiveForEnv(def *AppConfigFileDef, envName string) bool
 	return def.EnvConfigMode.ContainsEnv(envName)
 }
 
+// AllowNameUpdate plain 文件名由用户指定，允许通过 def 修改。
+func (PlainPolicy) AllowNameUpdate(string) bool {
+	return true
+}
+
 // AllowMountDirUpdate plain 挂载路径由用户指定，允许通过 def 修改。
-func (PlainPolicy) AllowMountDirUpdate() bool {
+func (PlainPolicy) AllowMountDirUpdate(string) bool {
 	return true
 }
 

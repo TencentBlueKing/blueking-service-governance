@@ -25,9 +25,11 @@ import (
 
 // TafSpecInput is the TAF spec input.
 type TafSpecInput struct {
-	// 配置文件名
+	// 配置文件名。
+	// todo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。
 	FileName string `json:"fileName" binding:"required"`
-	// 配置文件路径
+	// 配置文件路径。
+	// todo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。
 	FilePath string `json:"filePath" binding:"required,mount_dir"`
 	// 配置文件内容
 	FileContent string `json:"fileContent"`
@@ -35,9 +37,11 @@ type TafSpecInput struct {
 
 // TafSpecOutputObj is the TAF spec output.
 type TafSpecOutputObj struct {
-	// 配置文件名
+	// 配置文件名。
+	// todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
 	FileName string `json:"fileName"`
-	// 配置文件路径
+	// 配置文件路径。
+	// todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
 	FilePath string `json:"filePath"`
 	// 配置文件内容
 	FileContent string `json:"fileContent"`

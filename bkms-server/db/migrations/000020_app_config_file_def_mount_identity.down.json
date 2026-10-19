@@ -1,0 +1,31 @@
+[
+  {
+    "dropIndexes": "app_config_file_defs",
+    "index": "appID_1_mountDir_1_name_1"
+  },
+  {
+    "createIndexes": "app_config_file_defs",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1,
+          "name": 1
+        },
+        "name": "appID_1_name_1",
+        "unique": true
+      },
+      {
+        "key": {
+          "appID": 1,
+          "mountDir": 1,
+          "name": 1
+        },
+        "name": "appID_1_mountDir_1_name_1",
+        "unique": true,
+        "partialFilterExpression": {
+          "mountDir": { "$exists": true, "$gt": "" }
+        }
+      }
+    ]
+  }
+]

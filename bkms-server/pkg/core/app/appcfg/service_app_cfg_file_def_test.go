@@ -441,6 +441,56 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(unchanged.EnvConfigMode.MountedEnvNames).To(BeNil())
 		})
 
+		It("should clean a trailing slash from a plain mountDir", func() {
+			result := f.createPlainFile("slash.conf", "/etc/app/", "content")
+			Expect(result.Def.MountDir).To(Equal("/etc/app"))
+		})
+
+		It("should allow the same file name under different mount dirs", func() {
+			first := f.createPlainFile("app.conf", "/etc/a", "a")
+			second := f.createPlainFile("app.conf", "/etc/b", "b")
+			Expect(first.Def.Name).To(Equal("app.conf"))
+			Expect(second.Def.Name).To(Equal("app.conf"))
+			Expect(first.Def.ID).NotTo(Equal(second.Def.ID))
+		})
+
+		It("should allow mountDir update for a trpc framework file", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			newDir := "/usr/local/trpc/bin/"
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				MountDir: &newDir,
+				AppType:  "trpc",
+				Operator: "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.MountDir).To(Equal("/usr/local/trpc/bin"))
+		})
+
+		It("should reject renaming a trpc framework file", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			newName := "other.yaml"
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				Name:     &newName,
+				AppType:  "trpc",
+				Operator: "editor",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+
+			unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unchanged.Name).To(Equal("trpc_go.yaml"))
+		})
+
 		It("should reject mountDir update for framework kind", func() {
 			result := f.createFrameworkFile("fw.yaml")
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)

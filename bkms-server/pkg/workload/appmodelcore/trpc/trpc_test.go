@@ -121,6 +121,19 @@ var _ = Describe("tRPC application service", func() {
 		persistedModel, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(application.ID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(persistedModel.Workload.Type).To(Equal(appmodel.WorkloadTypeTrpc))
+		Expect(persistedModel.Workload.TrpcConfig.Language).To(Equal("go"))
+		Expect(persistedModel.Workload.TrpcConfig.FileName).To(BeEmpty())
+		Expect(persistedModel.Workload.TrpcConfig.FilePath).To(BeEmpty())
+		defs, listErr := appcfg.ListDefsByApp(
+			ctx,
+			store.Of(db, appcfg.AppConfigFileDefMeta),
+			application.ID,
+			appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+		)
+		Expect(listErr).NotTo(HaveOccurred())
+		Expect(defs).To(HaveLen(1))
+		Expect(defs[0].Name).To(Equal("trpc.yaml"))
+		Expect(defs[0].MountDir).To(Equal("/etc/trpc"))
 		Expect(*persistedModel.Replicas).To(Equal(int32(1)))
 		Expect(persistedModel.Workload.Resources).To(Equal(map[string]string{
 			"cpu":    "1-2",
