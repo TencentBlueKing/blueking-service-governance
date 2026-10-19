@@ -19,6 +19,7 @@
 <template>
   <Dialog
     v-model:is-show="isShow"
+    :before-close="handleBeforeClose"
     :width="500"
     @closed="handleClose"
   >
@@ -58,13 +59,13 @@
         <span
           v-bk-tooltips="{
             content: $t('请输入环境名称'),
-            disabled: formData.confirmName === envName,
+            disabled: formData.confirmName === envName || loading,
           }"
         >
           <Button
             class="mr-[8px]"
-            :disabled="formData.confirmName !== envName"
-            :loading="confirmLoading"
+            :disabled="formData.confirmName !== envName || loading"
+            :loading="loading"
             theme="danger"
             @click="handleConfirm"
           >
@@ -72,7 +73,7 @@
           </Button>
         </span>
         <Button
-          :loading="confirmLoading"
+          :disabled="loading"
           @click="handleClose"
         >
           {{ $t('取消') }}
@@ -92,25 +93,36 @@
   const { t } = useI18n();
 
   const isShow = defineModel<boolean>('isShow');
-  const props = defineProps<{
-    envDisplayName: string;
-    envName: string;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      envDisplayName: string;
+      envName: string;
+      loading?: boolean;
+    }>(),
+    {
+      loading: false,
+    },
+  );
   const emit = defineEmits<{
     confirm: [];
   }>();
 
-  const confirmLoading = ref(false);
   const formData = ref({
     confirmName: '',
   });
+
+  // 删除进行中禁止关闭弹窗，避免请求结果无法反馈
+  function handleBeforeClose() {
+    return !props.loading;
+  }
 
   function handleClose() {
     isShow.value = false;
     formData.value.confirmName = '';
   }
 
-  async function handleConfirm() {
+  function handleConfirm() {
+    if (props.loading) return;
     if (formData.value.confirmName !== props.envName) {
       Message({
         message: t('环境名称不一致，请重新输入'),
@@ -118,12 +130,7 @@
       });
       return;
     }
-    confirmLoading.value = true;
-    try {
-      emit('confirm');
-    } finally {
-      confirmLoading.value = false;
-    }
+    emit('confirm');
   }
 </script>
 

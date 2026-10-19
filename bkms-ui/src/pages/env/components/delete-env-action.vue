@@ -27,6 +27,7 @@
     v-model:is-show="showConfirm"
     :env-display-name="selectedEnv?.displayName || ''"
     :env-name="selectedEnv?.name || ''"
+    :loading="deleting"
     @confirm="confirmDelete"
   />
 </template>
@@ -50,12 +51,12 @@
   const showDeployedWarning = ref(false);
   const showConfirm = ref(false);
   let sequence = 0;
-  let deleting = false;
+  const deleting = ref(false);
 
   async function confirmDelete() {
-    if (!selectedEnv.value?.id || deleting) return;
+    if (!selectedEnv.value?.id || deleting.value) return;
     const current = sequence;
-    deleting = true;
+    deleting.value = true;
     try {
       await EnvService.deleteEnv({ envID: selectedEnv.value.id });
       if (current !== sequence) return;
@@ -65,12 +66,12 @@
     } catch {
       // 默认请求拦截器展示错误，保留确认框供重试。
     } finally {
-      deleting = false;
+      deleting.value = false;
     }
   }
 
   async function show(env: EnvOutput) {
-    if (!env.id || deleting) return;
+    if (!env.id || deleting.value) return;
     const current = ++sequence;
     selectedEnv.value = env;
     showConfirm.value = false;
