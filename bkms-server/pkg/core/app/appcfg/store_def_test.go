@@ -138,7 +138,7 @@ var _ = Describe("AppConfigFileDef store", func() {
 
 			got.Name = "new-values.yaml"
 			got.EnvConfigMode.IsUnifiedConfig = false
-			got.EnvConfigMode.EnvInstanceStrategy = appcfg.EnvInstanceStrategyOverwrite
+			got.EnvConfigMode.EnvContentStrategy = appcfg.EnvContentStrategyOverwrite
 			got.EnableEnvVarRender = true
 			Expect(appcfg.UpdateDef(ctx, defs, got)).To(Succeed())
 
@@ -146,7 +146,7 @@ var _ = Describe("AppConfigFileDef store", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.Name).To(Equal("new-values.yaml"))
 			Expect(updated.EnvConfigMode.IsUnifiedConfig).To(BeFalse())
-			Expect(updated.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+			Expect(updated.EnvConfigMode.EnvContentStrategy).To(Equal(appcfg.EnvContentStrategyOverwrite))
 			Expect(updated.EnableEnvVarRender).To(BeTrue())
 
 			var raw bson.M

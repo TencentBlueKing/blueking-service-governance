@@ -152,13 +152,13 @@ type CreateCfgFileParams struct {
 // FileDefUpdate 描述应用配置文件 def 级字段的更新请求。
 // 指针字段为可选更新项，nil 表示不修改。
 type FileDefUpdate struct {
-	Name                *string
-	MountDir            *string
-	IsUnifiedConfig     *bool
-	MountedEnvNames     *[]string
-	EnableEnvVarRender  *bool
-	EnvInstanceStrategy *EnvInstanceStrategy
-	Operator            string
+	Name               *string
+	MountDir           *string
+	IsUnifiedConfig    *bool
+	MountedEnvNames    *[]string
+	EnableEnvVarRender *bool
+	EnvContentStrategy *EnvContentStrategy
+	Operator           string
 }
 
 // CreateEnvInstanceParams 创建环境级配置实例的参数。

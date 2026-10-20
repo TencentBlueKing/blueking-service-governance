@@ -105,7 +105,7 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 				AppType:           "trpc",
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(base.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+			Expect(base.Def.EnvConfigMode.EnvContentStrategy).To(Equal(appcfg.EnvContentStrategyOverwrite))
 
 			created, err := f.Svc.AttachFrameworkEnvOverlay(f.Ctx, appcfg.CreateCfgFileParams{
 				AppID:               f.AppID,
@@ -168,44 +168,28 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(defs).To(HaveLen(1))
 		})
 
-		It("should reject a second framework def for trpc apps", func() {
-			f.createFrameworkFile("default")
-			content := "key: other"
-			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
-				AppID:             f.AppID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              "another.yaml",
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Format:            appcfg.FileFormatYAML,
-				Content:           &content,
-				Creator:           "tester",
-				ConfigKind:        appcfg.ConfigKindFramework,
-				AppType:           "trpc",
-			})
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
-			Expect(err.Error()).To(ContainSubstring("only one framework config file"))
-		})
-
-		It("should reject a second framework def for bkmsApp apps", func() {
+		DescribeTable("framework def uniqueness by app type", func(
+			appType string,
+			firstName string,
+			expectSecondCreateErr bool,
+		) {
 			content := "key: value"
 			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
 				AppID:             f.AppID,
 				EnvName:           appcfg.EnvNameDefault,
-				Name:              "app-model.yaml",
+				Name:              firstName,
 				Type:              appcfg.AppConfigFileTypeNormal,
 				ContentSourceType: appcfg.ContentSourceTypeLocal,
 				Format:            appcfg.FileFormatYAML,
 				Content:           &content,
 				Creator:           "tester",
 				ConfigKind:        appcfg.ConfigKindFramework,
-				AppType:           "bkmsApp",
+				AppType:           appType,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			content2 := "key: other"
-			_, err = f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+			second, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
 				AppID:             f.AppID,
 				EnvName:           appcfg.EnvNameDefault,
 				Name:              "another.yaml",
@@ -215,30 +199,17 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 				Content:           &content2,
 				Creator:           "tester",
 				ConfigKind:        appcfg.ConfigKindFramework,
-				AppType:           "bkmsApp",
+				AppType:           appType,
 			})
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
-			Expect(err.Error()).To(ContainSubstring("only one framework config file"))
-		})
+			if expectSecondCreateErr {
+				Expect(err).To(HaveOccurred())
+				Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("only one framework config file"))
+				return
+			}
 
-		It("should allow multiple framework defs for helm apps", func() {
-			f.createFrameworkFile("values.yaml")
-			content := "replicaCount: 2"
-			second, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
-				AppID:             f.AppID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              "prod-values.yaml",
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Format:            appcfg.FileFormatYAML,
-				Content:           &content,
-				Creator:           "tester",
-				ConfigKind:        appcfg.ConfigKindFramework,
-				AppType:           "helm",
-			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(second.Def.Name).To(Equal("prod-values.yaml"))
+			Expect(second.Def.Name).To(Equal("another.yaml"))
 
 			defs, err := appcfg.ListDefsByApp(
 				f.Ctx,
@@ -248,7 +219,11 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(defs).To(HaveLen(2))
-		})
+		},
+			Entry("trpc apps allow only one framework def", "trpc", "default", true),
+			Entry("bkmsApp apps allow only one framework def", "bkmsApp", "app-model.yaml", true),
+			Entry("helm apps allow multiple framework defs", "helm", "values.yaml", false),
+		)
 
 		It("should reject empty config kind", func() {
 			content := "key: value"
@@ -366,64 +341,47 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err.Error()).To(ContainSubstring("enableEnvVarRender"))
 		})
 
-		It("should store overwrite as the env instance strategy for a new trpc framework def", func() {
-			content := "key: value"
-			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
-				AppID:             f.AppID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              "trpc_go.yaml",
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Format:            appcfg.FileFormatYAML,
-				Content:           &content,
-				Creator:           "tester",
-				ConfigKind:        appcfg.ConfigKindFramework,
-				AppType:           "trpc",
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
-		})
-
-		It("should store overwrite as the env instance strategy for a new taf framework def", func() {
-			content := "key: value"
-			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
-				AppID:             f.AppID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              "taf.conf",
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Format:            appcfg.FileFormatTAF,
-				Content:           &content,
-				Creator:           "tester",
-				ConfigKind:        appcfg.ConfigKindFramework,
-				AppType:           "taf",
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
-		})
-
-		It("should store overlay as the env instance strategy for a new helm framework def", func() {
-			content := "key: value"
-			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
-				AppID:             f.AppID,
-				EnvName:           appcfg.EnvNameDefault,
-				Name:              "default",
-				Type:              appcfg.AppConfigFileTypeNormal,
-				ContentSourceType: appcfg.ContentSourceTypeLocal,
-				Format:            appcfg.FileFormatYAML,
-				Content:           &content,
-				Creator:           "tester",
-				ConfigKind:        appcfg.ConfigKindFramework,
-				AppType:           "helm",
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverlay))
-		})
-
-		It("should store overlay when a framework def is created without an app type", func() {
-			result := f.createFrameworkFile("values.yaml")
-			Expect(result.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverlay))
-		})
+		DescribeTable(
+			"initial framework env content strategy by app type",
+			func(
+				appType string,
+				name string,
+				format appcfg.FileFormat,
+				want appcfg.EnvContentStrategy,
+			) {
+				content := "key: value"
+				result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+					AppID:             f.AppID,
+					EnvName:           appcfg.EnvNameDefault,
+					Name:              name,
+					Type:              appcfg.AppConfigFileTypeNormal,
+					ContentSourceType: appcfg.ContentSourceTypeLocal,
+					Format:            format,
+					Content:           &content,
+					Creator:           "tester",
+					ConfigKind:        appcfg.ConfigKindFramework,
+					AppType:           appType,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Def.EnvConfigMode.EnvContentStrategy).To(Equal(want))
+			},
+			Entry(
+				"trpc uses overwrite",
+				"trpc",
+				"trpc_go.yaml",
+				appcfg.FileFormatYAML,
+				appcfg.EnvContentStrategyOverwrite,
+			),
+			Entry("taf uses overwrite", "taf", "taf.conf", appcfg.FileFormatTAF, appcfg.EnvContentStrategyOverwrite),
+			Entry("helm uses overlay", "helm", "default", appcfg.FileFormatYAML, appcfg.EnvContentStrategyOverlay),
+			Entry(
+				"empty app type defaults to overlay",
+				"",
+				"values.yaml",
+				appcfg.FileFormatYAML,
+				appcfg.EnvContentStrategyOverlay,
+			),
+		)
 
 		It("should reject framework kind create with mountedEnvNames", func() {
 			content := "key: value"
@@ -620,10 +578,10 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
 			Expect(err).NotTo(HaveOccurred())
 
-			strategy := appcfg.EnvInstanceStrategyOverwrite
+			strategy := appcfg.EnvContentStrategyOverwrite
 			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
-				EnvInstanceStrategy: &strategy,
-				Operator:            "editor",
+				EnvContentStrategy: &strategy,
+				Operator:           "editor",
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
@@ -634,16 +592,16 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
 			Expect(err).NotTo(HaveOccurred())
 
-			strategy := appcfg.EnvInstanceStrategyOverwrite
+			strategy := appcfg.EnvContentStrategyOverwrite
 			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
-				EnvInstanceStrategy: &strategy,
-				Operator:            "editor",
+				EnvContentStrategy: &strategy,
+				Operator:           "editor",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			gotDef, err := f.DefStore.GetByID(f.Ctx, def.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(gotDef.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+			Expect(gotDef.EnvConfigMode.EnvContentStrategy).To(Equal(appcfg.EnvContentStrategyOverwrite))
 
 			gotFile, err := f.FileStore.GetByID(f.Ctx, result.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -683,10 +641,10 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			strategy := appcfg.EnvInstanceStrategyOverwrite
+			strategy := appcfg.EnvContentStrategyOverwrite
 			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
-				EnvInstanceStrategy: &strategy,
-				Operator:            "editor",
+				EnvContentStrategy: &strategy,
+				Operator:           "editor",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -705,7 +663,7 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 
 			gotDef, err := f.DefStore.GetByID(f.Ctx, def.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(gotDef.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+			Expect(gotDef.EnvConfigMode.EnvContentStrategy).To(Equal(appcfg.EnvContentStrategyOverwrite))
 		})
 
 		It("should keep current content as overlay when switching framework strategy to overlay", func() {
@@ -743,10 +701,10 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(upserted.File.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
 
-			strategy := appcfg.EnvInstanceStrategyOverlay
+			strategy := appcfg.EnvContentStrategyOverlay
 			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
-				EnvInstanceStrategy: &strategy,
-				Operator:            "editor",
+				EnvContentStrategy: &strategy,
+				Operator:           "editor",
 			})
 			Expect(err).NotTo(HaveOccurred())
 

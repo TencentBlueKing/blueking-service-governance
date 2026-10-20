@@ -34,7 +34,7 @@ type appConfigFileDefAuditData struct {
 	IsUnifiedConfig     bool           `json:"isUnifiedConfig"`
 	MountedEnvNames     []string       `json:"mountedEnvNames,omitempty"`
 	EnableEnvVarRender  bool           `json:"enableEnvVarRender"`
-	EnvInstanceStrategy string         `json:"envInstanceStrategy,omitempty"`
+	EnvContentStrategy  string         `json:"envInstanceStrategy,omitempty"`
 	FileID              string         `json:"fileId,omitempty"`
 	Type                string         `json:"type,omitempty"`
 	EnvName             string         `json:"envName,omitempty"`
@@ -50,14 +50,14 @@ func buildAppConfigFileDefAuditData(
 	file *appcfg.AppConfigFile,
 ) *appConfigFileDefAuditData {
 	data := &appConfigFileDefAuditData{
-		ID:                  def.ID.Hex(),
-		Name:                def.Name,
-		ConfigKind:          string(def.ConfigKind),
-		MountDir:            def.MountDir,
-		IsUnifiedConfig:     def.EnvConfigMode.IsUnifiedConfig,
-		MountedEnvNames:     def.EnvConfigMode.MountedEnvNames,
-		EnableEnvVarRender:  def.EnableEnvVarRender,
-		EnvInstanceStrategy: string(def.EnvConfigMode.EnvInstanceStrategy),
+		ID:                 def.ID.Hex(),
+		Name:               def.Name,
+		ConfigKind:         string(def.ConfigKind),
+		MountDir:           def.MountDir,
+		IsUnifiedConfig:    def.EnvConfigMode.IsUnifiedConfig,
+		MountedEnvNames:    def.EnvConfigMode.MountedEnvNames,
+		EnableEnvVarRender: def.EnableEnvVarRender,
+		EnvContentStrategy: string(def.EnvConfigMode.EnvContentStrategy),
 	}
 
 	if file == nil {

@@ -176,7 +176,7 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 	// 按策略区分
 	var policy ConfigKindPolicy
 	if update.MountDir != nil || update.EnableEnvVarRender != nil ||
-		update.MountedEnvNames != nil || update.EnvInstanceStrategy != nil {
+		update.MountedEnvNames != nil || update.EnvContentStrategy != nil {
 		var err error
 		policy, err = s.policyFor(def.ConfigKind)
 		if err != nil {
@@ -192,7 +192,7 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 			return errors.Wrap(ErrInvalidConfigSpec,
 				"this config kind does not allow modifying enableEnvVarRender")
 		}
-		if update.EnvInstanceStrategy != nil && !policy.AllowEnvInstanceStrategyUpdate() {
+		if update.EnvContentStrategy != nil && !policy.AllowEnvContentStrategyUpdate() {
 			return errors.Wrap(ErrInvalidConfigSpec,
 				"this config kind does not support modifying envInstanceStrategy")
 		}
@@ -200,9 +200,9 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 
 	applyStaticDefFields(def, update)
 
-	if update.EnvInstanceStrategy != nil {
-		if err := s.applyFrameworkEnvInstanceStrategyChange(
-			ctx, def, *update.EnvInstanceStrategy, update.Operator,
+	if update.EnvContentStrategy != nil {
+		if err := s.applyFrameworkEnvContentStrategyChange(
+			ctx, def, *update.EnvContentStrategy, update.Operator,
 		); err != nil {
 			return err
 		}
@@ -228,22 +228,22 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 	return nil
 }
 
-// applyFrameworkEnvInstanceStrategyChange 更新框架定义的环境实例策略。
+// applyFrameworkEnvContentStrategyChange 更新框架定义的环境内容策略。
 // 没有环境实例时只改字段。已有环境实例时，把每条实例改写成目标策略对应的文件形态，
 // 但不新增版本记录，currentVersion 保持不变。
 //
 // 调用方已通过 policy 保证当前 kind 支持修改 envInstanceStrategy。
 // TODO(non-atomic): 先改写环境实例，再由上层 UpdateAppCfgFileDef 持久化 def。
-func (s *AppCfgFileDefService) applyFrameworkEnvInstanceStrategyChange(
+func (s *AppCfgFileDefService) applyFrameworkEnvContentStrategyChange(
 	ctx context.Context,
 	def *AppConfigFileDef,
-	strategy EnvInstanceStrategy,
+	strategy EnvContentStrategy,
 	operator string,
 ) error {
-	if err := validateFrameworkEnvInstanceStrategy(strategy); err != nil {
+	if err := validateFrameworkEnvContentStrategy(strategy); err != nil {
 		return err
 	}
-	if def.EnvConfigMode.EnvInstanceStrategy == strategy {
+	if def.EnvConfigMode.EnvContentStrategy == strategy {
 		return nil
 	}
 	if def.EnvConfigMode.IsIndependent() {
@@ -251,7 +251,7 @@ func (s *AppCfgFileDefService) applyFrameworkEnvInstanceStrategyChange(
 			return err
 		}
 	}
-	def.EnvConfigMode.EnvInstanceStrategy = strategy
+	def.EnvConfigMode.EnvContentStrategy = strategy
 	return nil
 }
 
@@ -259,7 +259,7 @@ func (s *AppCfgFileDefService) applyFrameworkEnvInstanceStrategyChange(
 func (s *AppCfgFileDefService) convertEnvInstancesForStrategy(
 	ctx context.Context,
 	defID bson.ObjectID,
-	strategy EnvInstanceStrategy,
+	strategy EnvContentStrategy,
 	operator string,
 ) error {
 	defaultFile, err := s.FileStore.Get(ctx, FileByDefEnv(defID, EnvNameDefault))
@@ -275,9 +275,9 @@ func (s *AppCfgFileDefService) convertEnvInstancesForStrategy(
 		if file.EnvName == EnvNameDefault {
 			continue
 		}
-		rawContent := cloneStringPtr(file.Content)
+		rawContent := file.Content
 		if file.Type == AppConfigFileTypeOverlay {
-			rawContent = cloneStringPtr(file.OverlayContent)
+			rawContent = file.OverlayContent
 		}
 
 		var (
@@ -288,11 +288,11 @@ func (s *AppCfgFileDefService) convertEnvInstancesForStrategy(
 		targetBaseID := file.BaseAppConfigFileID
 
 		switch strategy {
-		case EnvInstanceStrategyOverwrite:
+		case EnvContentStrategyOverwrite:
 			targetType = AppConfigFileTypeNormal
 			targetContent = rawContent
 			targetOverlayContent = nil
-		case EnvInstanceStrategyOverlay:
+		case EnvContentStrategyOverlay:
 			targetType = AppConfigFileTypeOverlay
 			targetContent = nil
 			targetOverlayContent = rawContent
@@ -414,7 +414,7 @@ func (s *AppCfgFileDefService) AttachFrameworkEnvOverlay(
 	if err != nil {
 		return nil, errors.Wrap(err, "loading config kind policy for compatibility create")
 	}
-	strategy, err := policy.ResolveEnvInstanceStrategy(def)
+	strategy, err := policy.GetEnvContentStrategy(def)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolving env instance strategy for compatibility create")
 	}
@@ -425,7 +425,7 @@ func (s *AppCfgFileDefService) AttachFrameworkEnvOverlay(
 		Description: params.Description,
 	}
 	raw := lo.FromPtr(params.OverlayContent)
-	if strategy == EnvInstanceStrategyOverwrite {
+	if strategy == EnvContentStrategyOverwrite {
 		envParams.Content = &raw
 	} else {
 		envParams.OverlayContent = &raw
@@ -436,11 +436,4 @@ func (s *AppCfgFileDefService) AttachFrameworkEnvOverlay(
 		return nil, errors.Wrap(err, "creating framework env overlay on existing def")
 	}
 	return &AppConfigFileWithDef{AppConfigFile: *created, Def: def}, nil
-}
-
-func cloneStringPtr(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	return lo.ToPtr(*value)
 }

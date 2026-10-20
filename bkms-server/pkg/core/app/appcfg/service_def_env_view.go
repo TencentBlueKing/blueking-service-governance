@@ -62,17 +62,17 @@ func (s *AppCfgFileDefService) GetEnvFileDetail(
 		return result, nil
 	}
 
-	strategy, err := policy.ResolveEnvInstanceStrategy(def)
+	strategy, err := policy.GetEnvContentStrategy(def)
 	if err != nil {
 		return nil, err
 	}
 	if envFile != nil {
 		result.HasEnvInstance = true
 		result.DisplayFile = envFile
-	} else if strategy == EnvInstanceStrategyOverwrite {
+	} else if strategy == EnvContentStrategyOverwrite {
 		// overwrite 策略（如 plain）：无实例时默认文件即为生效内容
 		result.DisplayFile = defaultFile
-	} else if strategy == EnvInstanceStrategyOverlay {
+	} else if strategy == EnvContentStrategyOverlay {
 		// overlay 策略（如 framework）：无实例表示无定制，内容为空
 		result.DisplayFile = nil
 	} else {
@@ -185,11 +185,11 @@ func (s *AppCfgFileDefService) GetMountPreview(
 			item.HasEnvFile = true
 			item.ContentSource = envFile.Type
 			// overwrite 策略下 normal 实例语义为 overwrite
-			strategy, sErr := policy.ResolveEnvInstanceStrategy(&def)
+			strategy, sErr := policy.GetEnvContentStrategy(&def)
 			if sErr != nil {
 				return nil, sErr
 			}
-			if strategy == EnvInstanceStrategyOverwrite &&
+			if strategy == EnvContentStrategyOverwrite &&
 				envFile.Type == AppConfigFileTypeNormal {
 				item.ContentSource = "overwrite"
 			}

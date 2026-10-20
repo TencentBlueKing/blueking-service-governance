@@ -77,30 +77,30 @@ var _ = Describe("FrameworkPolicy", func() {
 		It("should initialize overwrite strategy for trpc framework", func() {
 			mode := &appcfg.EnvConfigMode{}
 			policy.InitializeEnvConfigMode(mode, appcfg.CreateCfgFileParams{AppType: "trpc"})
-			Expect(mode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+			Expect(mode.EnvContentStrategy).To(Equal(appcfg.EnvContentStrategyOverwrite))
 		})
 
 		It("should initialize overlay strategy for helm framework", func() {
 			mode := &appcfg.EnvConfigMode{}
 			policy.InitializeEnvConfigMode(mode, appcfg.CreateCfgFileParams{AppType: "helm"})
-			Expect(mode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverlay))
+			Expect(mode.EnvContentStrategy).To(Equal(appcfg.EnvContentStrategyOverlay))
 		})
 	})
 
-	Describe("ResolveEnvInstanceStrategy", func() {
-		It("should resolve persisted strategy from framework def", func() {
-			strategy, err := policy.ResolveEnvInstanceStrategy(&appcfg.AppConfigFileDef{
+	Describe("GetEnvContentStrategy", func() {
+		It("should return persisted strategy from framework def", func() {
+			strategy, err := policy.GetEnvContentStrategy(&appcfg.AppConfigFileDef{
 				ConfigKind: appcfg.ConfigKindFramework,
 				EnvConfigMode: appcfg.EnvConfigMode{
-					EnvInstanceStrategy: appcfg.EnvInstanceStrategyOverwrite,
+					EnvContentStrategy: appcfg.EnvContentStrategyOverwrite,
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(strategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+			Expect(strategy).To(Equal(appcfg.EnvContentStrategyOverwrite))
 		})
 
 		It("should reject empty persisted framework strategy", func() {
-			_, err := policy.ResolveEnvInstanceStrategy(&appcfg.AppConfigFileDef{
+			_, err := policy.GetEnvContentStrategy(&appcfg.AppConfigFileDef{
 				ConfigKind:         appcfg.ConfigKindFramework,
 				EnvConfigMode:      appcfg.EnvConfigMode{},
 				EnableEnvVarRender: true,
@@ -110,10 +110,10 @@ var _ = Describe("FrameworkPolicy", func() {
 		})
 
 		It("should reject invalid persisted framework strategy", func() {
-			_, err := policy.ResolveEnvInstanceStrategy(&appcfg.AppConfigFileDef{
+			_, err := policy.GetEnvContentStrategy(&appcfg.AppConfigFileDef{
 				ConfigKind: appcfg.ConfigKindFramework,
 				EnvConfigMode: appcfg.EnvConfigMode{
-					EnvInstanceStrategy: "invalid",
+					EnvContentStrategy: "invalid",
 				},
 			})
 			Expect(err).To(HaveOccurred())
@@ -148,9 +148,9 @@ var _ = Describe("FrameworkPolicy", func() {
 		})
 	})
 
-	Describe("AllowEnvInstanceStrategyUpdate", func() {
+	Describe("AllowEnvContentStrategyUpdate", func() {
 		It("should allow envInstanceStrategy update", func() {
-			Expect(policy.AllowEnvInstanceStrategyUpdate()).To(BeTrue())
+			Expect(policy.AllowEnvContentStrategyUpdate()).To(BeTrue())
 		})
 	})
 
@@ -275,9 +275,9 @@ var _ = Describe("PlainPolicy", func() {
 		})
 	})
 
-	Describe("AllowEnvInstanceStrategyUpdate", func() {
+	Describe("AllowEnvContentStrategyUpdate", func() {
 		It("should reject envInstanceStrategy update", func() {
-			Expect(policy.AllowEnvInstanceStrategyUpdate()).To(BeFalse())
+			Expect(policy.AllowEnvContentStrategyUpdate()).To(BeFalse())
 		})
 	})
 
@@ -285,15 +285,15 @@ var _ = Describe("PlainPolicy", func() {
 		It("should not write persisted strategy for plain config", func() {
 			mode := &appcfg.EnvConfigMode{}
 			policy.InitializeEnvConfigMode(mode, appcfg.CreateCfgFileParams{AppType: "trpc"})
-			Expect(mode.EnvInstanceStrategy).To(BeEmpty())
+			Expect(mode.EnvContentStrategy).To(BeEmpty())
 		})
 	})
 
-	Describe("ResolveEnvInstanceStrategy", func() {
-		It("should always resolve overwrite strategy", func() {
-			strategy, err := policy.ResolveEnvInstanceStrategy(nil)
+	Describe("GetEnvContentStrategy", func() {
+		It("should always return overwrite strategy", func() {
+			strategy, err := policy.GetEnvContentStrategy(nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(strategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+			Expect(strategy).To(Equal(appcfg.EnvContentStrategyOverwrite))
 		})
 	})
 

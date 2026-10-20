@@ -74,14 +74,11 @@ func (s *AppCfgFileDefService) buildEnvInstance(
 	case ConfigKindPlain:
 		return s.buildPlainEnvInstance(defaultFile, params)
 	case ConfigKindFramework:
-		strategy, err := policy.ResolveEnvInstanceStrategy(defaultFile.Def)
+		strategy, err := policy.GetEnvContentStrategy(defaultFile.Def)
 		if err != nil {
 			return nil, err
 		}
-		if strategy == EnvInstanceStrategyOverwrite {
-			return s.buildFrameworkEnvOverwrite(defaultFile, params)
-		}
-		return s.buildFrameworkEnvOverlay(defaultFile, params)
+		return newFrameworkEnvInstance(defaultFile, params, strategy)
 	default:
 		return nil, errors.Errorf("unsupported config kind for env instance: %s", kind)
 	}
@@ -117,44 +114,15 @@ func (s *AppCfgFileDefService) buildPlainEnvInstance(
 	return &acf, nil
 }
 
-// buildFrameworkEnvOverwrite 构造完整内容的 framework 环境实例。
-func (s *AppCfgFileDefService) buildFrameworkEnvOverwrite(
-	defaultFile AppConfigFileWithDef,
-	params CreateEnvInstanceParams,
-) (*AppConfigFile, error) {
-	if params.Content == nil {
-		return nil, errors.Wrap(ErrInvalidConfigSpec, "framework env overwrite requires content")
-	}
-	acf := newFrameworkEnvInstance(defaultFile, params, AppConfigFileTypeNormal)
-	acf.Content = params.Content
-	return &acf, nil
-}
-
-// buildFrameworkEnvOverlay 构造 framework overlay 类型的环境实例。
-func (s *AppCfgFileDefService) buildFrameworkEnvOverlay(
-	defaultFile AppConfigFileWithDef,
-	params CreateEnvInstanceParams,
-) (*AppConfigFile, error) {
-	if params.OverlayContent == nil {
-		return nil, errors.Wrap(ErrInvalidConfigSpec, "framework env overlay requires overlayContent")
-	}
-	baseID := defaultFile.ID
-	acf := newFrameworkEnvInstance(defaultFile, params, AppConfigFileTypeOverlay)
-	acf.OverlayContent = params.OverlayContent
-	acf.BaseAppConfigFileID = &baseID
-	return &acf, nil
-}
-
 func newFrameworkEnvInstance(
 	defaultFile AppConfigFileWithDef,
 	params CreateEnvInstanceParams,
-	fileType AppConfigFileType,
-) AppConfigFile {
-	return AppConfigFile{
+	strategy EnvContentStrategy,
+) (*AppConfigFile, error) {
+	acf := AppConfigFile{
 		DefID:   defaultFile.DefID,
 		AppID:   defaultFile.AppID,
 		EnvName: params.EnvName,
-		Type:    fileType,
 		VersionedContent: VersionedContent{
 			// framework 环境实例始终来自本地编辑内容；差异只在 Content / OverlayContent 的存储形态。
 			ContentSourceType: ContentSourceTypeLocal,
@@ -164,6 +132,26 @@ func newFrameworkEnvInstance(
 		Updater:        params.Operator,
 		CurrentVersion: 1,
 	}
+
+	switch strategy {
+	case EnvContentStrategyOverwrite:
+		if params.Content == nil {
+			return nil, errors.Wrap(ErrInvalidConfigSpec, "framework env overwrite requires content")
+		}
+		acf.Type = AppConfigFileTypeNormal
+		acf.Content = params.Content
+	case EnvContentStrategyOverlay:
+		if params.OverlayContent == nil {
+			return nil, errors.Wrap(ErrInvalidConfigSpec, "framework env overlay requires overlayContent")
+		}
+		baseID := defaultFile.ID
+		acf.Type = AppConfigFileTypeOverlay
+		acf.OverlayContent = params.OverlayContent
+		acf.BaseAppConfigFileID = &baseID
+	default:
+		return nil, errors.Wrapf(ErrInvalidConfigSpec, "unsupported env content strategy %q", strategy)
+	}
+	return &acf, nil
 }
 
 // --- 环境实例变更 ---

@@ -275,10 +275,10 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(versions).To(HaveLen(1))
 			targetVersionID := versions[0].ID
 
-			strategy := appcfg.EnvInstanceStrategyOverwrite
+			strategy := appcfg.EnvContentStrategyOverwrite
 			err = service.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
-				EnvInstanceStrategy: &strategy,
-				Operator:            "editor",
+				EnvContentStrategy: &strategy,
+				Operator:           "editor",
 			})
 			Expect(err).NotTo(HaveOccurred())
 

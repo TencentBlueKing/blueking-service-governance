@@ -164,11 +164,11 @@ func (s *AppCfgFileDefService) buildContentUpdateNewFile(
 		EnvName:  envName,
 		Operator: operator,
 	}
-	strategy, err := policy.ResolveEnvInstanceStrategy(defaultFile.Def)
+	strategy, err := policy.GetEnvContentStrategy(defaultFile.Def)
 	if err != nil {
 		return nil, err
 	}
-	if strategy == EnvInstanceStrategyOverwrite {
+	if strategy == EnvContentStrategyOverwrite {
 		params.Content = &content
 	} else {
 		params.OverlayContent = &content
