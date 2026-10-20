@@ -660,9 +660,9 @@
                 v-if="!isEnglish"
                 v-bk-tooltips="{
                   content: $t('未获取到北极星信息，无法调整权重'),
-                  disabled: canAdjustWeight(row),
+                  disabled: canAdjustInstanceWeight(row),
                 }"
-                :disabled="!canAdjustWeight(row)"
+                :disabled="!canAdjustInstanceWeight(row)"
                 text
                 theme="primary"
                 @click.stop="emitRowAction('weight', row)"
@@ -698,11 +698,11 @@
                       v-if="isEnglish"
                       v-bk-tooltips="{
                         content: $t('未获取到北极星信息，无法调整权重'),
-                        disabled: canAdjustWeight(row),
+                        disabled: canAdjustInstanceWeight(row),
                         placement: 'left',
                       }"
-                      :class="{ 'is-disabled': !canAdjustWeight(row) }"
-                      @click="canAdjustWeight(row) && emitRowAction('weight', row)"
+                      :class="{ 'is-disabled': !canAdjustInstanceWeight(row) }"
+                      @click="canAdjustInstanceWeight(row) && emitRowAction('weight', row)"
                     >
                       {{ $t('调整权重') }}
                     </Dropdown.DropdownItem>
@@ -747,7 +747,13 @@
     sortInstancesByRestart,
   } from '../composables/instance-watch-utils';
   import { useInstanceListWatch } from '../composables/use-instance-list-watch';
-  import { canInstanceGrayDeploy, canLogin, canViewLog, isPolarisHealthy } from '../instance-utils';
+  import {
+    canAdjustInstanceWeight,
+    canInstanceGrayDeploy,
+    canLogin,
+    canViewLog,
+    isPolarisHealthy,
+  } from '../instance-utils';
   import InstanceGroupFilter, { type FilterGroup } from './instance-group-filter.vue';
 
   import type {
@@ -823,10 +829,6 @@
   const readinessFilterGroups = computed<FilterGroup[]>(() => [
     { field: 'isHealthy', label: window.i18n.t('就绪'), options: props.filterOptions.isHealthy ?? [] },
   ]);
-  function canAdjustWeight(row: AppInstanceOutputObj) {
-    return (row.polarisInfos?.length ?? 0) > 0;
-  }
-
   function canRowGray(row: AppInstanceOutputObj) {
     return !props.isFederation && canInstanceGrayDeploy(row);
   }

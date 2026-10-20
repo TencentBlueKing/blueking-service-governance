@@ -18,7 +18,7 @@
 
 import { type ComputedRef, type Ref, computed } from 'vue';
 
-import { canInstanceGrayDeploy } from '../instance-utils';
+import { canAdjustInstanceWeight, canInstanceGrayDeploy } from '../instance-utils';
 import { type UseInstanceActionsOptions, useInstanceActions } from './use-instance-actions';
 
 import type InstanceActionsHost from '../components/instance-actions-host.vue';
@@ -43,6 +43,11 @@ export function useInstanceListController(options: UseInstanceListControllerOpti
     return selections.length > 0 && selections.every(instance => canInstanceGrayDeploy(instance));
   });
 
+  const canAdjustWeight = computed(() => {
+    const selections = actionOptions.getSelectedInstances();
+    return selections.length > 0 && selections.every(instance => instance.id && canAdjustInstanceWeight(instance));
+  });
+
   const instanceActions = useInstanceActions(
     {
       ...actionOptions,
@@ -59,6 +64,7 @@ export function useInstanceListController(options: UseInstanceListControllerOpti
   }
 
   return {
+    canAdjustWeight,
     canGrayDeploy,
     handleRowAction,
     instanceActions,

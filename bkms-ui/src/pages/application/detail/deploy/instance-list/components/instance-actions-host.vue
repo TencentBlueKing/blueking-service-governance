@@ -19,8 +19,11 @@
 <template>
   <WeightDialog
     v-model:visible="weightVisible"
+    :clear-selection-on-success="weightClearSelectionOnSuccess"
     :env-name="weightEnvName"
-    :instance="weightInstance"
+    :initial-weight="weightInitialValue"
+    :instance-ids="weightInstanceIds"
+    :instance-name="weightInstanceName"
   />
   <GrayDialog
     v-model:visible="grayVisible"
@@ -60,7 +63,10 @@
 
   const weightVisible = ref(false);
   const weightEnvName = ref('');
-  const weightInstance = ref<AppInstanceOutputObj | null>(null);
+  const weightInstanceIds = ref<string[]>([]);
+  const weightInstanceName = ref('');
+  const weightInitialValue = ref(10);
+  const weightClearSelectionOnSuccess = ref(false);
 
   const grayVisible = ref(false);
   const grayEnvName = ref('');
@@ -113,9 +119,20 @@
     monitorVisible.value = true;
   }
 
-  function openWeight(instance: AppInstanceOutputObj, envName: string) {
-    weightEnvName.value = envName;
-    weightInstance.value = instance;
+  function openWeight(options: {
+    clearSelectionOnSuccess?: boolean;
+    envName: string;
+    instances: AppInstanceOutputObj[];
+  }) {
+    const ids = options.instances.map(instance => instance.id).filter((id): id is string => !!id);
+    if (!options.envName || ids.length !== options.instances.length || !ids.length) return;
+
+    weightEnvName.value = options.envName;
+    weightInstanceIds.value = ids;
+    weightInstanceName.value = options.instances.length === 1 ? ids[0] : '';
+    weightInitialValue.value =
+      options.instances.length === 1 ? Number(options.instances[0].polarisInfos?.[0]?.weight ?? 10) : 10;
+    weightClearSelectionOnSuccess.value = Boolean(options.clearSelectionOnSuccess);
     weightVisible.value = true;
   }
 

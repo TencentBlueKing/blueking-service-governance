@@ -34,6 +34,7 @@
     </template>
     <div class="flex items-center justify-between mb-[12px]">
       <InstanceBatchToolbar
+        :can-adjust-weight="canAdjustWeight"
         :can-gray-deploy="canGrayDeploy"
         :disable-admin-command="isCrossPageSelection"
         :disable-delete="isCrossPageSelection"
@@ -47,6 +48,7 @@
         @gray="handleShowGrayUpgrade()"
         @monitor="instanceActions.openMonitor()"
         @remove-deploy="emit('remove-deploy')"
+        @weight="instanceActions.openSelectedWeight"
       />
       <SearchSelect
         v-model="searchValue"
@@ -172,7 +174,7 @@
   /** 是否存在生效的筛选条件（SearchSelect 与列筛选均同步到 searchValue） */
   const isFiltered = computed(() => searchValue.value.some(filter => filter.values?.length));
 
-  const { canGrayDeploy, handleRowAction, instanceActions } = useInstanceListController({
+  const { canAdjustWeight, canGrayDeploy, handleRowAction, instanceActions } = useInstanceListController({
     actionsHostRef,
     beforeRowAction: payload => {
       if (payload.action === 'gray') {

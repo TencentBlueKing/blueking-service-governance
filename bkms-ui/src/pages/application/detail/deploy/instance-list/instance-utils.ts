@@ -23,6 +23,11 @@ import { i18n } from '~/modules/i18n';
 
 const { t } = i18n.global;
 
+/** 只有获取到北极星信息的实例可以调整权重。 */
+export function canAdjustInstanceWeight(instance: AppInstanceOutputObj): boolean {
+  return (instance.polarisInfos?.length ?? 0) > 0;
+}
+
 /** 判断实例是否可以灰度（只有 Running 和 Pending 状态可以灰度） */
 export function canInstanceGrayDeploy(instance: AppInstanceOutputObj): boolean {
   return instance.status === 'Running' || instance.status === 'Pending';

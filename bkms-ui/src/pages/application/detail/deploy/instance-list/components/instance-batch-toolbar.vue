@@ -24,17 +24,6 @@
     >
       {{ $t('监控') }}
     </Button>
-    <Button
-      v-bk-tooltips="{
-        content: grayTooltipContent,
-        disabled: isGrayTooltipDisabled,
-      }"
-      class="bg-[#fff]"
-      :disabled="isGrayDisabled"
-      @click="emit('gray')"
-    >
-      {{ $t('灰度') }}
-    </Button>
     <Popover
       ref="removeDeployPopoverRef"
       :disabled="isDeletePopoverDisabled"
@@ -86,17 +75,56 @@
     >
       {{ $t('管理命令') }}
     </Button>
+    <Button
+      v-bk-tooltips="{
+        content: $t('未获取到北极星信息，无法调整权重'),
+        disabled: !hasSelection || canAdjustWeight,
+      }"
+      class="bg-[#fff]"
+      :disabled="!hasSelection || !canAdjustWeight"
+      @click="emit('weight')"
+    >
+      {{ $t('调整权重') }}
+    </Button>
+    <Dropdown
+      placement="bottom-start"
+      :popover-options="{ clickContentAutoHide: true }"
+      trigger="click"
+    >
+      <Button
+        :aria-label="$t('更多操作')"
+        class="!min-w-[32px] !px-0 bg-[#fff]"
+      >
+        <i class="bkms-icon bkms-icon-more-fill"></i>
+      </Button>
+      <template #content>
+        <Dropdown.DropdownMenu>
+          <Dropdown.DropdownItem
+            v-bk-tooltips="{
+              content: grayTooltipContent,
+              disabled: isGrayTooltipDisabled,
+              placement: 'right',
+            }"
+            :class="{ 'text-[#c4c6cc] cursor-not-allowed': isGrayDisabled }"
+            @click="!isGrayDisabled && emit('gray')"
+          >
+            {{ $t('灰度') }}
+          </Dropdown.DropdownItem>
+        </Dropdown.DropdownMenu>
+      </template>
+    </Dropdown>
   </div>
 </template>
 
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
 
-  import { Button, Popover } from 'bkui-vue';
+  import { Button, Dropdown, Popover } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
 
   const props = withDefaults(
     defineProps<{
+      canAdjustWeight: boolean; // 已选实例是否都能调整权重
       canGrayDeploy: boolean; // 是否允许灰度部署
       disableAdminCommand?: boolean; // 是否禁用管理命令（跨页全选时）
       disableDelete?: boolean; // 是否禁用删除（跨页全选时）
@@ -118,6 +146,7 @@
     gray: [];
     monitor: [];
     'remove-deploy': [];
+    weight: [];
   }>();
 
   const { t } = useI18n();
@@ -126,17 +155,17 @@
   // 是否有任意实例被选中
   const hasSelection = computed(() => props.selectedCount > 0);
 
-  // 灰度按钮是否禁用：未选中 / 跨页全选禁用 / 不允许灰度部署
+  // 灰度菜单项是否禁用：未选中 / 跨页全选禁用 / 不允许灰度部署
   const isGrayDisabled = computed(() => !props.selectedCount || props.disableGray || !props.canGrayDeploy);
 
-  // 灰度按钮 tooltip 文案：优先使用能力受限提示，其次按禁用原因给出对应文案
+  // 灰度菜单项 tooltip 文案：优先使用能力受限提示，其次按禁用原因给出对应文案
   const grayTooltipContent = computed(
     () =>
       props.grayDisabledTip ||
       (props.disableGray ? t('多环境跨页全选后暂不支持批量灰度') : t('仅支持实例状态为 Running、Pending 的实例')),
   );
 
-  // 灰度 tooltip 是否禁用：存在自定义提示时始终展示；否则仅在按钮非可用（未选中或被灰度限制禁用）时不展示
+  // 灰度 tooltip 是否禁用：存在自定义提示时始终展示；否则仅在菜单项非可用（未选中或被灰度限制禁用）时不展示
   const isGrayTooltipDisabled = computed(
     () => !props.grayDisabledTip && (!props.selectedCount || (!props.disableGray && props.canGrayDeploy)),
   );

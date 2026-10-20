@@ -25,7 +25,7 @@ import { InstanceService } from '~/api/modules/v1';
 import { useTabManager } from '~/composables/use-tab-manager';
 import { useAppDetail } from '~/stores/app-detail';
 
-import { renderDeleteInfoBoxContent } from '../instance-utils';
+import { canAdjustInstanceWeight, renderDeleteInfoBoxContent } from '../instance-utils';
 import { provideInstanceActionContext } from './use-instance-action-context';
 
 import type { default as InstanceActionsHost } from '../components/instance-actions-host.vue';
@@ -74,8 +74,23 @@ export function useInstanceActions(
   }
 
   function openWeight(instance: AppInstanceOutputObj, envName?: string) {
+    if (!instance.id || !canAdjustInstanceWeight(instance)) return;
     const resolvedEnvName = envName || options.getEnvName({ instance });
-    actionsHostRef.value?.openWeight(instance, resolvedEnvName);
+    if (!resolvedEnvName) return;
+    actionsHostRef.value?.openWeight({ envName: resolvedEnvName, instances: [instance] });
+  }
+
+  function openSelectedWeight() {
+    const instances = options.getSelectedInstances();
+    const envName = options.getEnvName();
+    if (
+      !envName ||
+      !instances.length ||
+      !instances.every(instance => instance.id && canAdjustInstanceWeight(instance))
+    ) {
+      return;
+    }
+    actionsHostRef.value?.openWeight({ envName, instances, clearSelectionOnSuccess: true });
   }
 
   function openLog(instance: AppInstanceOutputObj, envName?: string) {
@@ -148,6 +163,7 @@ export function useInstanceActions(
     openLog,
     openMonitor,
     openWeight,
+    openSelectedWeight,
   };
 }
 

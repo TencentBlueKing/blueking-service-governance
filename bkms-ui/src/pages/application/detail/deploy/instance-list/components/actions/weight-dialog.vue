@@ -19,13 +19,16 @@
 <template>
   <Dialog
     v-model:is-show="visible"
+    :before-close="handleBeforeClose"
     :quick-close="false"
     width="480"
     @confirm="handleConfirm"
   >
     <template #header>
       <DividerHeader :title="$t('调整权重')">
-        <span class="truncate">{{ instance?.id }}</span>
+        <span class="truncate">
+          {{ instanceIds.length === 1 ? instanceName : $t('已选 {0} 个实例', [instanceIds.length]) }}
+        </span>
       </DividerHeader>
     </template>
     <Alert
@@ -56,7 +59,6 @@
   import { ref, watch } from 'vue';
 
   import { Alert, Dialog, Form, Input } from 'bkui-vue';
-  import { type AppInstanceOutputObj } from '~/@types/v1/instance';
   import { InstanceService } from '~/api/modules/v1';
   import DividerHeader from '~/components/divider-header.vue';
   import { useAppDetail } from '~/stores/app-detail';
@@ -64,36 +66,46 @@
   import { runActionSuccess, useInstanceActionContext } from '../../composables/use-instance-action-context';
 
   const props = defineProps<{
+    clearSelectionOnSuccess?: boolean;
     envName: string;
-    instance: AppInstanceOutputObj | null;
+    initialWeight: number;
+    instanceIds: string[];
+    instanceName: string;
   }>();
 
   const visible = defineModel<boolean>('visible', { default: false });
 
   const context = useInstanceActionContext();
   const appDetailStore = useAppDetail();
-  const weightValue = ref(0);
+  const weightValue = ref('10');
   const submitting = ref(false);
 
   watch(
-    () => [visible.value, props.instance] as const,
-    ([show, inst]) => {
-      if (show && inst) {
-        weightValue.value = Number(inst.polarisInfos?.[0]?.weight ?? 10);
+    () => visible.value,
+    show => {
+      if (show) {
+        weightValue.value = String(props.initialWeight);
       }
     },
   );
 
+  function handleBeforeClose() {
+    return !submitting.value;
+  }
+
   async function handleConfirm() {
-    if (!appDetailStore.appID || !props.envName || !props.instance || submitting.value) return;
+    if (!appDetailStore.appID || !props.envName || !props.instanceIds.length || submitting.value) return;
+
+    const weight = Number(weightValue.value);
+    if (weightValue.value === '' || !Number.isInteger(weight) || weight < 0) return;
 
     submitting.value = true;
     const result = await InstanceService.updateAppInstancePolaris({
       appID: appDetailStore.appID,
       envName: props.envName,
       trafficLaneName: '',
-      instanceIDs: [props.instance.id!],
-      weight: Number(weightValue.value),
+      instanceIDs: [...props.instanceIds],
+      weight,
     })
       .then(() => true)
       .catch(() => false);
@@ -102,6 +114,6 @@
     if (!result) return;
 
     visible.value = false;
-    await runActionSuccess(context);
+    await runActionSuccess(context, { clearSelection: props.clearSelectionOnSuccess });
   }
 </script>

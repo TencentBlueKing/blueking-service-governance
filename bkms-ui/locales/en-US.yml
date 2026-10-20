@@ -1407,6 +1407,7 @@ APM 实例: APM Instance
 流量权重: Traffic Weight
 数据有 15s 左右延迟: Data has approximately 15s delay
 调整权重: Adjust Weight
+更多操作: More Actions
 权重为 0 时 该实例将不再接收流量，权重值修改后将同步到实例下的所有 ServiceName:
   When the weight is 0, the
   instance will no longer receive traffic. The weight value will be synchronized

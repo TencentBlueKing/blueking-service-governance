@@ -36,6 +36,7 @@
     <!-- 批量操作区域 -->
     <div class="flex items-center justify-between mb-[12px]">
       <InstanceBatchToolbar
+        :can-adjust-weight="canAdjustWeight"
         :can-gray-deploy="canGrayDeploy"
         :disable-admin-command="hasCrossPageSelection"
         :disable-delete="hasCrossPageSelection"
@@ -49,6 +50,7 @@
         @gray="handleOpenGray"
         @monitor="instanceActions.openMonitor(undefined, undefined, selectedEnvs)"
         @remove-deploy="handleRemoveDeploy"
+        @weight="instanceActions.openSelectedWeight"
       />
     </div>
 
@@ -296,7 +298,7 @@
   }
 
   /** 实例列表控制器：统一管理批量操作、刷新和灰度部署等逻辑。 */
-  const { canGrayDeploy, handleRowAction, instanceActions } = useInstanceListController({
+  const { canAdjustWeight, canGrayDeploy, handleRowAction, instanceActions } = useInstanceListController({
     actionsHostRef,
     getEnvName: () => selectedEnvName.value || selectedEnvs.value[0] || '',
     getSelectedInstances: getAllSelections,
