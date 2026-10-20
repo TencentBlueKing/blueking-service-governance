@@ -116,7 +116,7 @@ type DefSummaryObj struct {
 	IsUnifiedConfig    bool     `json:"isUnifiedConfig"`
 	MountedEnvNames    []string `json:"mountedEnvNames,omitempty"`
 	EnableEnvVarRender bool     `json:"enableEnvVarRender"`
-	EnvContentStrategy string   `json:"envInstanceStrategy,omitempty"`
+	EnvContentStrategy string   `json:"envContentStrategy,omitempty"`
 	Creator            string   `json:"creator"`
 	CreatedAt          string   `json:"createdAt"`
 }
@@ -155,7 +155,7 @@ type DefDetailObj struct {
 	IsUnifiedConfig     bool           `json:"isUnifiedConfig"`
 	MountedEnvNames     []string       `json:"mountedEnvNames,omitempty"`
 	EnableEnvVarRender  bool           `json:"enableEnvVarRender"`
-	EnvContentStrategy  string         `json:"envInstanceStrategy,omitempty"`
+	EnvContentStrategy  string         `json:"envContentStrategy,omitempty"`
 	FileType            string         `json:"fileType,omitempty"`
 	ContentSourceType   string         `json:"contentSourceType"`
 	BaseAppConfigFileID string         `json:"baseAppConfigFileId,omitempty"`
@@ -275,7 +275,7 @@ type UpdateDefInput struct {
 	MountedEnvNames    *[]string `json:"mountedEnvNames,omitempty" binding:"omitempty,dive,uri_slug"`
 	EnableEnvVarRender *bool     `json:"enableEnvVarRender,omitempty"`
 	// EnvContentStrategy: overlay 表示环境内容按补丁与默认配置合并；overwrite 表示环境内容独立生效，不再继承默认配置变更。
-	EnvContentStrategy *string `json:"envInstanceStrategy,omitempty" binding:"omitempty,oneof=overlay overwrite"`
+	EnvContentStrategy *string `json:"envContentStrategy,omitempty" binding:"omitempty,oneof=overlay overwrite"`
 }
 
 // ToFileDefUpdate 转换为 service 层参数。

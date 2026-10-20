@@ -19301,7 +19301,7 @@ const docTemplate = `{
                 "enableEnvVarRender": {
                     "type": "boolean"
                 },
-                "envInstanceStrategy": {
+                "envContentStrategy": {
                     "type": "string"
                 },
                 "fileFormat": {
@@ -19361,7 +19361,7 @@ const docTemplate = `{
                 "enableEnvVarRender": {
                     "type": "boolean"
                 },
-                "envInstanceStrategy": {
+                "envContentStrategy": {
                     "type": "string"
                 },
                 "id": {
@@ -19517,7 +19517,7 @@ const docTemplate = `{
                 "enableEnvVarRender": {
                     "type": "boolean"
                 },
-                "envInstanceStrategy": {
+                "envContentStrategy": {
                     "type": "string",
                     "enum": [
                         "overlay",

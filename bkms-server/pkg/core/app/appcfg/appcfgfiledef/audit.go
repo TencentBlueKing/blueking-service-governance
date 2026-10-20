@@ -34,7 +34,7 @@ type appConfigFileDefAuditData struct {
 	IsUnifiedConfig     bool           `json:"isUnifiedConfig"`
 	MountedEnvNames     []string       `json:"mountedEnvNames,omitempty"`
 	EnableEnvVarRender  bool           `json:"enableEnvVarRender"`
-	EnvContentStrategy  string         `json:"envInstanceStrategy,omitempty"`
+	EnvContentStrategy  string         `json:"envContentStrategy,omitempty"`
 	FileID              string         `json:"fileId,omitempty"`
 	Type                string         `json:"type,omitempty"`
 	EnvName             string         `json:"envName,omitempty"`

@@ -19298,7 +19298,7 @@
                 "enableEnvVarRender": {
                     "type": "boolean"
                 },
-                "envInstanceStrategy": {
+                "envContentStrategy": {
                     "type": "string"
                 },
                 "fileFormat": {
@@ -19358,7 +19358,7 @@
                 "enableEnvVarRender": {
                     "type": "boolean"
                 },
-                "envInstanceStrategy": {
+                "envContentStrategy": {
                     "type": "string"
                 },
                 "id": {
@@ -19514,7 +19514,7 @@
                 "enableEnvVarRender": {
                     "type": "boolean"
                 },
-                "envInstanceStrategy": {
+                "envContentStrategy": {
                     "type": "string",
                     "enum": [
                         "overlay",

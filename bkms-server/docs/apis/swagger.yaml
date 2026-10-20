@@ -136,7 +136,7 @@ definitions:
         type: string
       enableEnvVarRender:
         type: boolean
-      envInstanceStrategy:
+      envContentStrategy:
         type: string
       fileFormat:
         type: string
@@ -176,7 +176,7 @@ definitions:
         type: string
       enableEnvVarRender:
         type: boolean
-      envInstanceStrategy:
+      envContentStrategy:
         type: string
       id:
         type: string
@@ -277,7 +277,7 @@ definitions:
     properties:
       enableEnvVarRender:
         type: boolean
-      envInstanceStrategy:
+      envContentStrategy:
         enum:
         - overlay
         - overwrite
