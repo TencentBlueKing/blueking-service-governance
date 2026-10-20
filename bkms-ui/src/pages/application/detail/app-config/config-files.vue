@@ -541,6 +541,11 @@
   import MountScopeField from '~/pages/application/detail/app-config/components/mount-scope-field.vue';
   import SaveVersionConfirmDialog from '~/pages/application/detail/app-config/components/save-version-confirm-dialog.vue';
   import TrpcEnvVarTip from '~/pages/application/detail/app-config/components/trpc-env-var-tip.vue';
+  import {
+    createMountDirRules,
+    formatMountPathPreview,
+    normalizeMountDir,
+  } from '~/pages/application/detail/app-config/config-file-utils';
   import EnvPerspectiveSelect from '~/pages/application/detail/app-config/env-perspective-select.vue';
   import {
     MOUNT_PREVIEW_VISIBLE_KEY,
@@ -759,10 +764,7 @@
     scope: 'all' as MountScope,
   });
   // 预览挂载路径
-  const mountPathPreview = computed(() => {
-    const mountDir = (fileInfoFormData.mountDir || '/[路径]').replace(/\/+$/, '');
-    return `${mountDir}/${fileInfoFormData.name || '[文件名]'}`.replace(/\/{2,}/g, '/');
-  });
+  const mountPathPreview = computed(() => formatMountPathPreview(fileInfoFormData.mountDir, fileInfoFormData.name));
   const fileInfoFormRef = ref<InstanceType<typeof Form> | null>(null);
   const fileInfoFormRules = {
     name: [
@@ -776,14 +778,7 @@
           BKMS_REGEX.appConfigFileNameRegex.test(value),
       },
     ],
-    mountDir: [
-      {
-        message: t('挂载路径需以 / 开头，例如 /data/config'),
-        trigger: 'blur',
-        validator: (value: string) =>
-          value === '/' || BKMS_REGEX.appConfigMountDirRegex.test(value.replace(/\/{2,}/g, '/')),
-      },
-    ],
+    mountDir: createMountDirRules(t),
     mountedEnvNames: [
       {
         required: true,
@@ -1145,6 +1140,8 @@
       .then(() => true)
       .catch(() => false);
     if (!isValid) return;
+    // 落库前归一化（合并重复斜杠、去掉末尾斜杠），保证表单展示与最终挂载路径一致
+    fileInfoFormData.mountDir = normalizeMountDir(fileInfoFormData.mountDir);
     isFileInfoSaving.value = true;
     try {
       if (isFrameworkFile.value) {

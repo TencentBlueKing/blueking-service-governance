@@ -2156,8 +2156,7 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 该环境已单独配置，不随默认配置更新: This environment has its own configuration and will not follow updates to the default configuration
 内容来源: Content source
 配置文件: Configuration files
-"挂载路径需以 / 开头，例如 /data/config": "The mount path must start with /, for example /data/config"
-"挂载路径不能为根目录 /": "The mount path cannot be the root directory /"
+"挂载路径需以 / 开头，且不能包含 .、.. 路径段或反斜杠": "The mount path must start with / and cannot contain . or .. path segments or backslashes"
 其他配置文件: Other configuration files
 跟随默认: Follows default
 已单独配置: Configured separately

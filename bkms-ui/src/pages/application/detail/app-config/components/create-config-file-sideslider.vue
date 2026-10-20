@@ -68,11 +68,7 @@
             :placeholder="$t('请输入容器内目录，例如 /data/conf')"
           />
           <div class="mt-[4px] text-[12px] text-[#979BA5]">
-            {{
-              $t('文件最终挂载到 {0}', [
-                `${(formData.mountDir || '/[路径]').replace(/\/$/, '')}/${formData.name || '[文件名]'}`,
-              ])
-            }}
+            {{ $t('文件最终挂载到 {0}', [mountPathPreview]) }}
           </div>
         </Form.FormItem>
         <Form.FormItem
@@ -126,6 +122,11 @@
   import { BKMS_REGEX } from '~/common/const';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import MountScopeField from '~/pages/application/detail/app-config/components/mount-scope-field.vue';
+  import {
+    createMountDirRules,
+    formatMountPathPreview,
+    normalizeMountDir,
+  } from '~/pages/application/detail/app-config/config-file-utils';
 
   import type { EnvOutput } from '~/@types/v1/env';
   import type { MountScope } from '~/pages/application/detail/app-config/components/mount-scope-field.vue';
@@ -167,6 +168,7 @@
     /** 挂载范围 */
     scope: 'all' as MountScope,
   });
+  const mountPathPreview = computed(() => formatMountPathPreview(formData.mountDir, formData.name));
   const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formData);
 
   function handleBeforeClose() {
@@ -191,13 +193,7 @@
         validator: (val: string) => BKMS_REGEX.appConfigFileNameRegex.test(val),
       },
     ],
-    mountDir: [
-      {
-        message: t('挂载路径需以 / 开头，例如 /data/config'),
-        trigger: 'blur',
-        validator: (val: string) => val === '/' || BKMS_REGEX.appConfigMountDirRegex.test(val),
-      },
-    ],
+    mountDir: createMountDirRules(t),
     mountedEnvNames: [
       {
         required: true,
@@ -230,7 +226,8 @@
 
     emit('submit', {
       enableEnvVarRender: formData.enableEnvVarRender,
-      mountDir: formData.mountDir,
+      // 落库前归一化（合并重复斜杠、去掉末尾斜杠），与预览展示保持一致
+      mountDir: normalizeMountDir(formData.mountDir),
       // 全部环境不传该字段；指定环境时传所选环境名集合。
       mountedEnvNames: formData.scope === 'all' ? undefined : [...formData.mountedEnvNames],
       name: formData.name,
