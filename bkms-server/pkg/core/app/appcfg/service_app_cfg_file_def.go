@@ -194,7 +194,7 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 		}
 		if update.EnvContentStrategy != nil && !policy.AllowEnvContentStrategyUpdate() {
 			return errors.Wrap(ErrInvalidConfigSpec,
-				"this config kind does not support modifying envInstanceStrategy")
+				"this config kind does not support modifying envContentStrategy")
 		}
 	}
 
@@ -232,7 +232,7 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 // 没有环境实例时只改字段。已有环境实例时，把每条实例改写成目标策略对应的文件形态，
 // 但不新增版本记录，currentVersion 保持不变。
 //
-// 调用方已通过 policy 保证当前 kind 支持修改 envInstanceStrategy。
+// 调用方已通过 policy 保证当前 kind 支持修改 envContentStrategy。
 // TODO(non-atomic): 先改写环境实例，再由上层 UpdateAppCfgFileDef 持久化 def。
 func (s *AppCfgFileDefService) applyFrameworkEnvContentStrategyChange(
 	ctx context.Context,
@@ -301,7 +301,7 @@ func (s *AppCfgFileDefService) convertEnvInstancesForStrategy(
 				targetBaseID = &baseID
 			}
 		default:
-			return errors.Wrapf(ErrInvalidConfigSpec, "unsupported envInstanceStrategy %q", strategy)
+			return errors.Wrapf(ErrInvalidConfigSpec, "unsupported envContentStrategy %q", strategy)
 		}
 
 		if err := UpdateEnvInstanceForStrategySwitch(

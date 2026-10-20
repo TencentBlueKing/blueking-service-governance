@@ -5,11 +5,11 @@
       {
         "q": {
           "configKind": "framework",
-          "envInstanceStrategy": { "$exists": true }
+          "envContentStrategy": { "$exists": false }
         },
         "u": {
-          "$unset": {
-            "envInstanceStrategy": ""
+          "$set": {
+            "envContentStrategy": "overlay"
           }
         },
         "multi": true

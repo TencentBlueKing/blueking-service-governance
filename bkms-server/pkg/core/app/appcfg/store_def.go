@@ -73,13 +73,13 @@ func ListDefsByApp(
 }
 
 // UpdateDef 按 ID 更新 def 记录的可变字段，def 不存在时返回 ErrAppConfigFileDefNotFound。
-// EnvConfigMode 以 inline 方式展开为 isUnifiedConfig / mountedEnvNames / envInstanceStrategy。
+// EnvConfigMode 以 inline 方式展开为 isUnifiedConfig / mountedEnvNames / envContentStrategy。
 func UpdateDef(ctx context.Context, defs *AppConfigFileDefStore, def *AppConfigFileDef) error {
 	if def.ID.IsZero() {
 		return errors.New("def ID is required for update")
 	}
 	mutable := store.UpdateSelected(
-		"name", "mountDir", "isUnifiedConfig", "mountedEnvNames", "enableEnvVarRender", "envInstanceStrategy",
+		"name", "mountDir", "isUnifiedConfig", "mountedEnvNames", "enableEnvVarRender", "envContentStrategy",
 	)
 	if err := defs.Update(ctx, def, mutable, store.ByID(def.ID)); err != nil {
 		return errors.Wrapf(err, "update app config file def %s", def.ID.Hex())

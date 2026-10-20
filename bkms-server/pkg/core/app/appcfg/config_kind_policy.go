@@ -235,7 +235,7 @@ func validateFrameworkEnvContentStrategy(strategy EnvContentStrategy) error {
 		return nil
 	default:
 		return errors.Wrapf(
-			ErrInvalidConfigSpec, "framework envInstanceStrategy %q is invalid", strategy,
+			ErrInvalidConfigSpec, "framework envContentStrategy %q is invalid", strategy,
 		)
 	}
 }

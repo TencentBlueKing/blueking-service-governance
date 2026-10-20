@@ -106,7 +106,7 @@ var _ = Describe("FrameworkPolicy", func() {
 				EnableEnvVarRender: true,
 			})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("envInstanceStrategy"))
+			Expect(err.Error()).To(ContainSubstring("envContentStrategy"))
 		})
 
 		It("should reject invalid persisted framework strategy", func() {
@@ -117,7 +117,7 @@ var _ = Describe("FrameworkPolicy", func() {
 				},
 			})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("envInstanceStrategy"))
+			Expect(err.Error()).To(ContainSubstring("envContentStrategy"))
 		})
 	})
 
@@ -149,7 +149,7 @@ var _ = Describe("FrameworkPolicy", func() {
 	})
 
 	Describe("AllowEnvContentStrategyUpdate", func() {
-		It("should allow envInstanceStrategy update", func() {
+		It("should allow envContentStrategy update", func() {
 			Expect(policy.AllowEnvContentStrategyUpdate()).To(BeTrue())
 		})
 	})
@@ -276,7 +276,7 @@ var _ = Describe("PlainPolicy", func() {
 	})
 
 	Describe("AllowEnvContentStrategyUpdate", func() {
-		It("should reject envInstanceStrategy update", func() {
+		It("should reject envContentStrategy update", func() {
 			Expect(policy.AllowEnvContentStrategyUpdate()).To(BeFalse())
 		})
 	})
