@@ -2205,3 +2205,4 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 该环境已有部署，必须保持可见，不能取消: "This environment has a deployment and must remain visible. It cannot be deselected."
 该环境是特性环境的父环境，必须保持可见，不能取消: "This environment is the parent of a feature environment and must remain visible. It cannot be deselected."
 配置已保存，获取最新配置失败，请刷新页面重试: "Configuration saved, but failed to load the latest configuration. Refresh the page to retry"
+仅对选中实例原地更新镜像 Tag，不重建 Pod、不变更配置。同一环境内允许部分实例使用不同镜像。: Only update the image tag of the selected instances in place, without rebuilding Pods or changing the configuration. Instances in the same environment are allowed to use different images.

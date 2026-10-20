@@ -105,8 +105,9 @@
               disabled: isGrayTooltipDisabled,
               placement: 'right',
             }"
-            :class="{ 'text-[#c4c6cc] cursor-not-allowed': isGrayDisabled }"
-            @click="!isGrayDisabled && emit('gray')"
+            :aria-disabled="isGrayDisabled"
+            :class="{ '!text-[#c4c6cc] !cursor-not-allowed hover:!bg-transparent': isGrayDisabled }"
+            @click="handleGrayClick"
           >
             {{ $t('灰度') }}
           </Dropdown.DropdownItem>
@@ -157,6 +158,14 @@
 
   // 灰度菜单项是否禁用：未选中 / 跨页全选禁用 / 不允许灰度部署
   const isGrayDisabled = computed(() => !props.selectedCount || props.disableGray || !props.canGrayDeploy);
+
+  function handleGrayClick(event: MouseEvent) {
+    if (isGrayDisabled.value) {
+      event.stopPropagation();
+      return;
+    }
+    emit('gray');
+  }
 
   // 灰度菜单项 tooltip 文案：优先使用能力受限提示，其次按禁用原因给出对应文案
   const grayTooltipContent = computed(

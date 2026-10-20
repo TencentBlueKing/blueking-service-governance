@@ -195,14 +195,22 @@ describe('实例批量调整权重', () => {
       global,
     });
     const weightButton = wrapper.findAll('button').find(button => button.text() === '调整权重');
+    const grayItem = wrapper.find('[role="menuitem"]');
     expect(weightButton?.attributes('disabled')).toBeDefined();
+    expect(grayItem.attributes('aria-disabled')).toBe('true');
 
     await wrapper.setProps({ selectedCount: 2 });
     expect(weightButton?.attributes('disabled')).toBeDefined();
     expect(wrapper.findAll('button').some(button => button.text() === '灰度')).toBe(false);
-    expect(wrapper.find('[role="menuitem"]').text()).toBe('灰度');
-    await wrapper.find('[role="menuitem"]').trigger('click');
+    expect(grayItem.text()).toBe('灰度');
+    expect(grayItem.attributes('aria-disabled')).toBe('true');
+    await grayItem.trigger('click');
     expect(wrapper.emitted('gray')).toBeUndefined();
+
+    await wrapper.setProps({ canGrayDeploy: true });
+    expect(grayItem.attributes('aria-disabled')).toBe('false');
+    await grayItem.trigger('click');
+    expect(wrapper.emitted('gray')).toHaveLength(1);
 
     await wrapper.setProps({ canAdjustWeight: true });
     expect(weightButton?.attributes('disabled')).toBeUndefined();

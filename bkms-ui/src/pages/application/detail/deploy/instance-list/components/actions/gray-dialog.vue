@@ -45,8 +45,12 @@
         </span>
       </DividerHeader>
     </template>
+    <Alert
+      theme="info"
+      :title="$t('仅对选中实例原地更新镜像 Tag，不重建 Pod、不变更配置。同一环境内允许部分实例使用不同镜像。')"
+    />
     <Form
-      class="mt-[4px] mb-[12px]"
+      class="mt-[16px] mb-[12px]"
       form-type="vertical"
     >
       <Form.FormItem
@@ -62,7 +66,7 @@
 <script lang="ts" setup>
   import { ref, watch } from 'vue';
 
-  import { Dialog, Form } from 'bkui-vue';
+  import { Alert, Dialog, Form } from 'bkui-vue';
   import { type AppInstanceOutputObj } from '~/@types/v1/instance';
   import { ApiServerService } from '~/api/modules/bkmsserver';
   import DividerHeader from '~/components/divider-header.vue';
