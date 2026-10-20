@@ -130,7 +130,6 @@ type EnvConfigMode struct {
 	// overlay：环境内容是补丁，部署时与默认配置合并。
 	// overwrite：环境内容是完整配置，之后修改默认配置不影响已单独配置的环境。
 	// 仅 framework 定义写入该字段。新建时会写入初始值，后续创建环境实例/展示内容均读取该持久化字段。
-	// 存量由 migration 回填为 overlay，运行时不再对缺失值做兜底。
 	EnvInstanceStrategy EnvInstanceStrategy `bson:"envInstanceStrategy,omitempty"`
 }
 

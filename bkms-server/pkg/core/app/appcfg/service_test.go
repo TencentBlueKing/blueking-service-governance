@@ -235,6 +235,63 @@ var _ = Describe("AppConfigFileService", func() {
 			Expect(*rollbackVersion.RollbackFromVersion).To(Equal(int64(2)))
 			Expect(rollbackVersion.Version).To(Equal(int64(4)))
 		})
+
+		It("should reject rollback when target version type differs from current file type", func() {
+			defaultContent := "keep: true\nbase: default\n"
+			created, err := service.Create(ctx, appcfg.CreateCfgFileParams{
+				AppID:             appID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "values.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &defaultContent,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			def, err := service.DefStore.GetByID(ctx, created.DefID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = service.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			upserted, err := service.UpsertEnvContent(ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "prod",
+				Content:     "base: prod\n",
+				Operator:    "editor",
+				Description: "prod overlay",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(upserted.File.Type).To(Equal(appcfg.AppConfigFileTypeOverlay))
+
+			versions, err := versionStore.List(ctx, appcfg.VersionsByFile(upserted.File.ID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(versions).To(HaveLen(1))
+			targetVersionID := versions[0].ID
+
+			strategy := appcfg.EnvInstanceStrategyOverwrite
+			err = service.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
+				EnvInstanceStrategy: &strategy,
+				Operator:            "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			current, err := fileStore.GetByID(ctx, upserted.File.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(current.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
+			Expect(current.CurrentVersion).To(Equal(int64(1)))
+
+			_, _, err = service.Rollback(ctx, appID, targetVersionID, "operator", "", nil)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("current file type"))
+		})
 	})
 
 	Context("DeleteFile", func() {

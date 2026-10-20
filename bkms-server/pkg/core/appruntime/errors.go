@@ -71,8 +71,8 @@ var (
 // 新模型成为唯一事实来源后直接调用 ValidateStack 即可，该 sentinel 随之删除。
 var ErrNormalizeFailed = errors.New("runtime snapshot normalize failed")
 
-// BRIDGE-ONLY: Issue / Report 是桥接期的冲突上报载体，服务于扫描报告与迁移决策。
 // Issue is a locatable normalize/scan finding. It never carries config body or secrets.
+// BRIDGE-ONLY: Issue / Report 是桥接期的冲突上报载体，服务于扫描报告与迁移决策。
 type Issue struct {
 	Code     string
 	Blocking bool

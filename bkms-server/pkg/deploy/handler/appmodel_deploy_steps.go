@@ -272,7 +272,8 @@ func (h *Handler) handleAppModelDeployUninstalled(
 
 	// 应用已从环境卸载，需同步清理该应用在该环境下关联的告警策略，避免残留的无效告警。
 	// 先查询 workspace 信息（清理时需要其标识），查询失败仅记录日志，不影响卸载主流程。
-	if ws, wsErr := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID)); wsErr != nil {
+	ws, wsErr := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
+	if wsErr != nil {
 		log.Errorf(ctx, "get workspace %s for alert cleanup failed: %v", app.WorkspaceID, wsErr)
 	} else {
 		// 异步执行清理，避免阻塞卸载接口的响应

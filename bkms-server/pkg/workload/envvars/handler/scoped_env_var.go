@@ -804,7 +804,8 @@ func (h *Handler) validateScopedEnvVarScopeValue(
 
 	// The caller has already checked workspace edit permission, so both standard
 	// and feature environments in this workspace are valid targets.
-	if _, err := store.Of(h.registry.DB, envmodel.EnvMeta).Get(ctx, envmodel.ByName(workspaceID, scope.ScopeValue)); err != nil {
+	_, err := store.Of(h.registry.DB, envmodel.EnvMeta).Get(ctx, envmodel.ByName(workspaceID, scope.ScopeValue))
+	if err != nil {
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", scope.ScopeValue)
 		}

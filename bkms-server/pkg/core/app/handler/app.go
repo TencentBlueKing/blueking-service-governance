@@ -847,10 +847,14 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileMeta).DeleteMany(ctx, appcfg.FilesByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config files", app.Name)
 	}
-	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(ctx, appcfg.DefsByApp(app.ID)); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(
+		ctx, appcfg.DefsByApp(app.ID),
+	); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config file defs", app.Name)
 	}
-	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileVersionMeta).DeleteMany(ctx, appcfg.VersionsByApp(app.ID)); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileVersionMeta).DeleteMany(
+		ctx, appcfg.VersionsByApp(app.ID),
+	); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config file versions", app.Name)
 	}
 
@@ -860,7 +864,9 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 	}
 
 	// 4. 删除 HostPort 配置
-	if err := store.Of(h.registry.DB, hostport.HostPortConfigMeta).DeleteIfExists(ctx, hostport.ByApp(app.ID)); err != nil {
+	if err := store.Of(h.registry.DB, hostport.HostPortConfigMeta).DeleteIfExists(
+		ctx, hostport.ByApp(app.ID),
+	); err != nil {
 		return errors.Wrapf(err, "delete app(%s) hostport config", app.Name)
 	}
 

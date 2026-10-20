@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bscpapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
@@ -133,15 +134,10 @@ func (m *Manager) CreateEnvBinding(
 		return nil, errors.New("bscpcfg is disabled")
 	}
 
-	bizID := params.Workspace.BkSystems.BkCCBizID
-	projectIDStr := params.Workspace.BkSystems.BkBSCPProjectID
-	if projectIDStr == "" {
-		return nil, errors.New("workspace is not bound to a BSCP project")
+	bizID, projectID, err := bscpProject(params.Workspace)
+	if err != nil {
+		return nil, err
 	}
-	if params.Workspace.BkSystems.BscpCredentialID == "" {
-		return nil, errors.New("workspace bscp credential is not ready")
-	}
-	projectID := cast.ToInt64(projectIDStr)
 
 	// 2. 按 envName 匹配或创建 BSCP 环境（类型由 bkms 环境类型映射而来）
 	bscpEnv, err := m.getOrCreateBscpEnv(ctx, bizID, projectID, params.EnvName, params.EnvType)
@@ -172,20 +168,8 @@ func (m *Manager) CreateEnvBinding(
 	}
 
 	// 4. 绑定后置脚本
-	if postHookID := cast.ToInt64(meta.PostHookID); meta.PostHookID != "" && postHookID != 0 {
-		bscpAppID := cast.ToInt64(bscpApp.ID)
-		if err = m.client.UpdateConfigHook(ctx, &bscpapi.UpdateConfigHookReq{
-			BizID:      bizID,
-			ProjectID:  projectID,
-			EnvID:      bscpEnv.ID,
-			AppID:      bscpAppID,
-			PostHookID: postHookID,
-		}); err != nil {
-			metrics.BscpcfgStepFailed("bind_post_hook")
-			return nil, errors.Wrap(err, "bind post hook to bscp app")
-		}
-		log.Infof(ctx, "bound post hook %d to bscp app %d (biz %s, project %d, env %s)",
-			postHookID, bscpAppID, bizID, projectID, envID)
+	if err = m.bindPostHook(ctx, meta, bizID, projectID, bscpEnv.ID, bscpApp.ID, envID); err != nil {
+		return nil, err
 	}
 
 	// 5. 刷新 Credential Scope
@@ -212,6 +196,45 @@ func (m *Manager) CreateEnvBinding(
 		Metadata:   meta,
 		EnvBinding: binding,
 	}, nil
+}
+
+func bscpProject(ws *workspace.Workspace) (string, int64, error) {
+	bizID := ws.BkSystems.BkCCBizID
+	projectID := ws.BkSystems.BkBSCPProjectID
+	if projectID == "" {
+		return "", 0, errors.New("workspace is not bound to a BSCP project")
+	}
+	if ws.BkSystems.BscpCredentialID == "" {
+		return "", 0, errors.New("workspace bscp credential is not ready")
+	}
+	return bizID, cast.ToInt64(projectID), nil
+}
+
+func (m *Manager) bindPostHook(
+	ctx context.Context,
+	meta *model.Metadata,
+	bizID string,
+	projectID, bscpEnvID int64,
+	bscpAppID, envID string,
+) error {
+	postHookID := cast.ToInt64(meta.PostHookID)
+	if meta.PostHookID == "" || postHookID == 0 {
+		return nil
+	}
+	appID := cast.ToInt64(bscpAppID)
+	if err := m.client.UpdateConfigHook(ctx, &bscpapi.UpdateConfigHookReq{
+		BizID:      bizID,
+		ProjectID:  projectID,
+		EnvID:      bscpEnvID,
+		AppID:      appID,
+		PostHookID: postHookID,
+	}); err != nil {
+		metrics.BscpcfgStepFailed("bind_post_hook")
+		return errors.Wrap(err, "bind post hook to bscp app")
+	}
+	log.Infof(ctx, "bound post hook %d to bscp app %d (biz %s, project %d, env %s)",
+		postHookID, appID, bizID, projectID, envID)
+	return nil
 }
 
 // GetSnapshot 获取指定 app+env 的聚合快照。

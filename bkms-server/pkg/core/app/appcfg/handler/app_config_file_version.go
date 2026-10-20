@@ -259,6 +259,10 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 		rollbackDescription,
 		input.CurrentVersion,
 	); err != nil {
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "create rollback version"))
+			return
+		}
 		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, id.Hex()))
 			return

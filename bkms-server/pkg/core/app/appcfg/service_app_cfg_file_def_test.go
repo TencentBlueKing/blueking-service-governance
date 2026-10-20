@@ -90,6 +90,42 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(defs[0].EnvConfigMode.IsUnifiedConfig).To(BeFalse())
 		})
 
+		It("should create overwrite env instance through compatibility entry for app model defs", func() {
+			content := "default: true\n"
+			base, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "trpc_go.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "trpc",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(base.Def.EnvConfigMode.EnvInstanceStrategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
+
+			created, err := f.Svc.AttachFrameworkEnvOverlay(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:               f.AppID,
+				EnvName:             "test",
+				Name:                "test",
+				Type:                appcfg.AppConfigFileTypeOverlay,
+				ContentSourceType:   appcfg.ContentSourceTypeLocal,
+				Format:              appcfg.FileFormatYAML,
+				BaseAppConfigFileID: &base.ID,
+				Creator:             "tester",
+				Description:         "env create",
+				ConfigKind:          appcfg.ConfigKindFramework,
+				AppType:             "trpc",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
+			Expect(lo.FromPtr(created.Content)).To(BeEmpty())
+			Expect(created.OverlayContent).To(BeNil())
+		})
+
 		It("should reuse existing framework env overlay instead of creating another def", func() {
 			base := f.createFrameworkFile("default")
 			overlay := "a: 1\n"
@@ -146,6 +182,40 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 				Creator:           "tester",
 				ConfigKind:        appcfg.ConfigKindFramework,
 				AppType:           "trpc",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("only one framework config file"))
+		})
+
+		It("should reject a second framework def for bkmsApp apps", func() {
+			content := "key: value"
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "app-model.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "bkmsApp",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			content2 := "key: other"
+			_, err = f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "another.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content2,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "bkmsApp",
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
@@ -581,7 +651,7 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(gotFile.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
 		})
 
-		It("should materialize merged content when switching framework strategy to overwrite", func() {
+		It("should keep raw env content and currentVersion when switching framework strategy to overwrite", func() {
 			content := "keep: true\nbase: default\n"
 			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
 				AppID:             f.AppID,
@@ -624,10 +694,14 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.Type).To(Equal(appcfg.AppConfigFileTypeNormal))
 			Expect(got.OverlayContent).To(BeNil())
-			Expect(got.BaseAppConfigFileID).To(BeNil())
-			Expect(lo.FromPtr(got.Content)).To(ContainSubstring("base: prod"))
-			Expect(lo.FromPtr(got.Content)).To(ContainSubstring("keep: true"))
-			Expect(got.CurrentVersion).To(Equal(int64(2)))
+			Expect(got.BaseAppConfigFileID).NotTo(BeNil())
+			Expect(*got.BaseAppConfigFileID).To(Equal(result.ID))
+			Expect(lo.FromPtr(got.Content)).To(Equal("base: prod\n"))
+			Expect(got.CurrentVersion).To(Equal(int64(1)))
+
+			versions, err := f.Svc.VersionStore.List(f.Ctx, appcfg.VersionsByFile(got.ID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(versions).To(HaveLen(1))
 
 			gotDef, err := f.DefStore.GetByID(f.Ctx, def.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -683,7 +757,11 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(lo.FromPtr(got.OverlayContent)).To(Equal(full))
 			Expect(got.BaseAppConfigFileID).NotTo(BeNil())
 			Expect(*got.BaseAppConfigFileID).To(Equal(result.ID))
-			Expect(got.CurrentVersion).To(Equal(int64(2)))
+			Expect(got.CurrentVersion).To(Equal(int64(1)))
+
+			versions, err := f.Svc.VersionStore.List(f.Ctx, appcfg.VersionsByFile(got.ID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(versions).To(HaveLen(1))
 		})
 
 		It("should clean up removed env instances when shrinking mountedEnvNames", func() {

@@ -21,6 +21,8 @@ package appcfg
 import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
 // EnvInstanceStrategy 环境实例的产生方式。
@@ -93,23 +95,17 @@ func (FrameworkPolicy) ValidateContent(content string, _ FileFormat) error {
 	return nil
 }
 
-// initialFrameworkEnvInstanceStrategy 决定新建框架定义写入的初始环境实例策略。
-// tRPC / TAF（含 bkmsApp）默认完整配置；Helm / Agones 保持与默认配置合并。
-func initialFrameworkEnvInstanceStrategy(appType string) EnvInstanceStrategy {
-	switch appType {
-	case "trpc", "taf", "bkmsApp":
-		return EnvInstanceStrategyOverwrite
-	default:
-		return EnvInstanceStrategyOverlay
-	}
-}
-
 // InitializeEnvConfigMode 在创建 framework def 时写入初始环境实例策略。
+// AppModel 应用写入完整配置，其余类型写入与默认配置合并。
 func (FrameworkPolicy) InitializeEnvConfigMode(mode *EnvConfigMode, params CreateCfgFileParams) {
 	if mode == nil {
 		return
 	}
-	mode.EnvInstanceStrategy = initialFrameworkEnvInstanceStrategy(params.AppType)
+	if appruntime.IsAppModelType(params.AppType) {
+		mode.EnvInstanceStrategy = EnvInstanceStrategyOverwrite
+		return
+	}
+	mode.EnvInstanceStrategy = EnvInstanceStrategyOverlay
 }
 
 // validateFrameworkEnvInstanceStrategy 校验框架定义上持久化的环境实例策略字段。
@@ -130,6 +126,9 @@ func (FrameworkPolicy) ResolveEnvInstanceStrategy(def *AppConfigFileDef) (EnvIns
 		return "", errors.Wrap(ErrInvalidConfigSpec, "framework def is required")
 	}
 	strategy := def.EnvConfigMode.EnvInstanceStrategy
+	if strategy == "" {
+		return EnvInstanceStrategyOverlay, nil
+	}
 	if err := validateFrameworkEnvInstanceStrategy(strategy); err != nil {
 		return "", err
 	}

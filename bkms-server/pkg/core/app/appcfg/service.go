@@ -21,6 +21,8 @@ package appcfg
 import (
 	"context"
 
+	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -53,4 +55,34 @@ func (s *AppConfigFileService) Create(
 		return nil, err
 	}
 	return &wm.AppConfigFile, nil
+}
+
+// Rollback 回滚配置文件版本；当前文件类型与目标版本类型不一致时拒绝回滚。
+func (s *AppConfigFileService) Rollback(
+	ctx context.Context,
+	appID string,
+	versionID bson.ObjectID,
+	operator string,
+	description string,
+	expectedCurrentVersion *int64,
+) (*AppConfigFile, *AppConfigFileVersion, error) {
+	targetVersion, err := s.GetVersionByAppAndID(ctx, appID, versionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	currentFile, err := s.FileStore.GetByID(ctx, targetVersion.AppConfigFileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if currentFile.Type != targetVersion.Type {
+		return nil, nil, errors.Wrapf(
+			ErrInvalidConfigSpec,
+			"current file type %s does not match target version type %s",
+			currentFile.Type,
+			targetVersion.Type,
+		)
+	}
+	return s.BaseAppCfgFileService.Rollback(
+		ctx, appID, versionID, operator, description, expectedCurrentVersion,
+	)
 }

@@ -16,6 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+// Package path 处理模型结构体中参与 bson 编码的字段：扫描字段，并在 bson key 与 Go 字段名之间转换字段路径
 package path
 
 import (

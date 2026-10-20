@@ -49,7 +49,9 @@ func (s *Service) SyncToRemote(
 			return err
 		}
 		// 2. 把远端引用回写到本地，保持本地与远端映射一致。
-		if err = s.strategies.Update(ctx, bson.M{"remoteRefs": remoteRefs, "updater": operator}, store.ByID(strategyID)); err != nil {
+		if err = s.strategies.Update(
+			ctx, bson.M{"remoteRefs": remoteRefs, "updater": operator}, store.ByID(strategyID),
+		); err != nil {
 			return errors.Wrap(err, "update remoteRefs")
 		}
 		return nil
@@ -207,7 +209,9 @@ func (s *Service) SwitchEnabled(
 			}
 		}
 		// 3. 最后回写本地启停状态。
-		if err := s.strategies.Update(ctx, bson.M{"enabled": enabled, "updater": operator}, store.ByID(strategyID)); err != nil {
+		if err := s.strategies.Update(
+			ctx, bson.M{"enabled": enabled, "updater": operator}, store.ByID(strategyID),
+		); err != nil {
 			return errors.Wrap(err, "update enabled state")
 		}
 		return nil
@@ -428,7 +432,9 @@ func (s *Service) cleanupSingleStrategy(
 			if err := s.deleteRemoteStrategies(ctx, ws, strategy, operator); err != nil {
 				return errors.Wrap(err, "delete remote strategies")
 			}
-			if err := s.strategies.Update(ctx, bson.M{"remoteRefs": keepRefs, "updater": operator}, store.ByID(strategy.ID)); err != nil {
+			if err := s.strategies.Update(
+				ctx, bson.M{"remoteRefs": keepRefs, "updater": operator}, store.ByID(strategy.ID),
+			); err != nil {
 				return errors.Wrap(err, "update remote refs after delete")
 			}
 			return nil
@@ -469,7 +475,9 @@ func (s *Service) cleanupSingleStrategy(
 			if err := s.deleteRemoteStrategies(ctx, ws, strategy, operator); err != nil {
 				return errors.Wrap(err, "delete remote strategies (all stale)")
 			}
-			if err := s.strategies.Update(ctx, bson.M{"remoteRefs": keepRefs, "updater": operator}, store.ByID(strategy.ID)); err != nil {
+			if err := s.strategies.Update(
+				ctx, bson.M{"remoteRefs": keepRefs, "updater": operator}, store.ByID(strategy.ID),
+			); err != nil {
 				return errors.Wrap(err, "update remote refs after delete (all stale)")
 			}
 			return nil
@@ -480,7 +488,9 @@ func (s *Service) cleanupSingleStrategy(
 		if reconcileErr != nil {
 			return errors.Wrap(reconcileErr, "reconcile shared remote strategy for cleanup")
 		}
-		if err := s.strategies.Update(ctx, bson.M{"remoteRefs": newRefs, "updater": operator}, store.ByID(strategy.ID)); err != nil {
+		if err := s.strategies.Update(
+			ctx, bson.M{"remoteRefs": newRefs, "updater": operator}, store.ByID(strategy.ID),
+		); err != nil {
 			return errors.Wrap(err, "update remote refs after reconcile")
 		}
 		return nil
@@ -547,7 +557,9 @@ func (s *Service) syncStrategyToEnv(
 			return err
 		}
 
-		if err = s.strategies.Update(ctx, bson.M{"remoteRefs": newRefs, "updater": operator}, store.ByID(fresh.ID)); err != nil {
+		if err = s.strategies.Update(
+			ctx, bson.M{"remoteRefs": newRefs, "updater": operator}, store.ByID(fresh.ID),
+		); err != nil {
 			return err
 		}
 		return nil

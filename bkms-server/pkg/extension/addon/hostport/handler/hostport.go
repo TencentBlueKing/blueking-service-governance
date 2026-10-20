@@ -112,7 +112,8 @@ func (h *Handler) PutHostPorts(c *gin.Context) {
 	}
 
 	var before *hostport.HostPortConfig
-	if existing, gErr := store.Of(h.registry.DB, hostport.HostPortConfigMeta).Get(ctx, hostport.ByApp(app.ID)); gErr == nil {
+	existing, gErr := store.Of(h.registry.DB, hostport.HostPortConfigMeta).Get(ctx, hostport.ByApp(app.ID))
+	if gErr == nil {
 		before = existing
 	} else if !errors.Is(gErr, hostport.ErrConfigNotFound) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(gErr, bkerrs.ErrCodeInternalServerError, "get hostports"))

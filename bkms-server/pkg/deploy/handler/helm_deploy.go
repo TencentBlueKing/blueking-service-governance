@@ -466,7 +466,9 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 	if wsErr != nil {
 		log.Errorf(ctx, "get workspace %s for alert cleanup failed: %v", app.WorkspaceID, wsErr)
 	} else {
-		env, envErr := store.Of(h.registry.DB, envmodel.EnvMeta).Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
+		env, envErr := store.Of(h.registry.DB, envmodel.EnvMeta).Get(
+			ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName),
+		)
 		if envErr != nil {
 			log.Errorf(ctx, "get env %s for alert cleanup failed: %v", uriInput.EnvName, envErr)
 		} else {

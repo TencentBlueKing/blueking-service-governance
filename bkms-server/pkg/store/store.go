@@ -16,6 +16,12 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+// Package store 提供基于泛型的通用 MongoDB Store。
+//
+// 只需要通用 CRUD 的数据模型无需再定义自己的 Store，只要通过 Meta 描述集合名、
+// 业务错误与读写钩子，再通过 Of(db, meta) 即可获得 GenericStore[T]。
+// 过滤、排序、更新中的字段名既可以写 bson 字段名，也可以写 Go 字段名，嵌套字段使用 "a.b" 形式；
+// 两种写法等价，代码中优先使用 bson 字段名。
 package store
 
 import (
