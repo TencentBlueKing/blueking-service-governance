@@ -16,7 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { defineComponent, effectScope, nextTick } from 'vue';
+import type { Component } from 'vue';
+import { defineComponent, effectScope, nextTick, ref } from 'vue';
 
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor, within } from '@testing-library/vue';
@@ -135,8 +136,8 @@ beforeEach(() => {
   mocks.envVars.mockResolvedValue({});
 });
 
-async function openPanel(props: Record<string, unknown> = {}) {
-  const result = render(EnvSelectPanel, {
+async function openPanel(props: Record<string, unknown> = {}, component: Component = EnvSelectPanel) {
+  const result = render(component, {
     props: { enableVisibleEnvSettings: true, filterVisibleEnvs: true, ...props },
     global: {
       mocks: {
@@ -158,6 +159,19 @@ async function openPanel(props: Record<string, unknown> = {}) {
   await userEvent.click(screen.getByTestId('env-trigger'));
   await waitFor(() => expect(screen.getByRole('button', { name: '设置可见环境' })).toBeEnabled());
   return result;
+}
+
+async function openPollingPanel() {
+  const panel = ref<InstanceType<typeof EnvSelectPanel>>();
+  await openPanel(
+    {},
+    {
+      components: { EnvSelectPanel },
+      setup: () => ({ panel }),
+      template: '<EnvSelectPanel ref="panel" />',
+    },
+  );
+  return panel.value!;
 }
 
 /** 组件契约与 store 单测：名单语义、异步隔离、草稿与选择联动；仅替换 Popover 定位动画和图标。 */
@@ -237,6 +251,101 @@ describe('应用可见环境：名单语义与保存', () => {
 });
 
 describe('可见环境下拉交互', () => {
+  it('已有当前应用详情时，面板初始化应复用详情和可见名单', async () => {
+    const store = useAppDetail();
+    store.appDetail = detail(['test']);
+    const previousDetail = store.appDetail;
+    mocks.initialGet.mockResolvedValue(detail(['test']));
+    await openPanel();
+    expect(mocks.initialGet).not.toHaveBeenCalled();
+    expect(store.appDetail).toBe(previousDetail);
+    expect(screen.queryByText('PROD')).not.toBeInTheDocument();
+  });
+
+  it('已有当前应用详情时，面板刷新不应因详情接口异常丢失名单限制', async () => {
+    const store = useAppDetail();
+    store.appDetail = detail(['test']);
+    const { isRestricted, checkDeployEnv } = useAppVisibleEnvs();
+    const panel = await openPollingPanel();
+    const previousDetail = store.appDetail;
+    mocks.initialGet.mockClear();
+    mocks.initialGet.mockRejectedValue(new TypeError('offline'));
+    await panel.refresh();
+    expect(isRestricted.value).toBe(true);
+    expect(store.appDetail).toBe(previousDetail);
+    expect(checkDeployEnv(environments[1])).toBe(false);
+    expect(screen.queryByText('PROD')).not.toBeInTheDocument();
+    expect(mocks.initialGet).not.toHaveBeenCalled();
+  });
+
+  it.each(['未加载', '属于其他应用'])('应用详情%s时，面板应获取当前应用详情后再使用可见名单', async state => {
+    const store = useAppDetail();
+    store.appDetail = state === '未加载' ? null : { ...detail(['prod']), id: 'app-b' };
+    mocks.initialGet.mockResolvedValue(detail(['test']));
+    await openPanel();
+    expect(mocks.initialGet).toHaveBeenCalledExactlyOnceWith({ appID: 'app-a' });
+    expect(store.appDetail?.visibleEnvNames).toEqual(['test']);
+    expect(screen.queryByText('PROD')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['设置可见环境', false],
+    ['设置可见环境', true],
+    ['保存', false],
+    ['保存', true],
+  ] as const)('%s 期间并发刷新部署状态（刷新先返回：%s），操作仍应完成并采用最新状态', async (action, refreshFirst) => {
+    useAppDetail().appDetail = detail(['test']);
+    const panel = await openPollingPanel();
+    if (action === '保存') {
+      await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    }
+    const pending = deferred<AppDeployedEnvOutputObj[]>();
+    const refresh = deferred<AppDeployedEnvOutputObj[]>();
+    mocks.statuses.mockReturnValueOnce(pending.promise).mockReturnValueOnce(refresh.promise);
+    await userEvent.click(screen.getByRole('button', { name: action }));
+    const refreshing = panel.refreshDeployStatuses();
+    if (refreshFirst) {
+      refresh.resolve([{ id: 'prod', deployStatus: 'deployed' }]);
+      await refreshing;
+      pending.resolve([]);
+    } else {
+      pending.resolve([]);
+      await flushPromises();
+      expect(mocks.update).not.toHaveBeenCalled();
+      refresh.resolve([{ id: 'prod', deployStatus: 'deployed' }]);
+      await refreshing;
+    }
+    await flushPromises();
+    if (action === '保存') {
+      expect(mocks.update).toHaveBeenCalledExactlyOnceWith({ appID: 'app-a', visibleEnvNames: ['test', 'prod'] });
+    } else {
+      expect(screen.getByRole('button', { name: '保存' })).toBeVisible();
+      const row = screen.getByText('PROD').closest('[data-tip]')!;
+      expect(within(row as HTMLElement).getByRole('checkbox')).toBeChecked();
+      expect(within(row as HTMLElement).getByRole('checkbox')).toBeDisabled();
+    }
+  });
+
+  it('保存被并发刷新顶替后，最新状态请求失败应保留草稿并允许重试', async () => {
+    useAppDetail().appDetail = detail(['test']);
+    const panel = await openPollingPanel();
+    await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    await userEvent.click(screen.getByText('PROD'));
+    const pending = deferred<AppDeployedEnvOutputObj[]>();
+    mocks.statuses.mockReturnValueOnce(pending.promise).mockRejectedValueOnce(new TypeError('offline'));
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(await panel.refreshDeployStatuses()).toBe(false);
+    pending.resolve([]);
+    await flushPromises();
+    expect(mocks.update).not.toHaveBeenCalled();
+    const row = screen.getByText('PROD').closest('[data-tip]')!;
+    expect(within(row as HTMLElement).getByRole('checkbox')).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledExactlyOnceWith({ appID: 'app-a', visibleEnvNames: ['test', 'prod'] }),
+    );
+  });
+
   it('设置面板复用父组件状态，进入设置和保存前仍刷新部署状态', async () => {
     useAppDetail().appDetail = detail(['test']);
     await openPanel();
@@ -469,6 +578,43 @@ describe('可见环境下拉交互', () => {
     expect(mocks.update).toHaveBeenCalledWith({ appID: 'app-a', visibleEnvNames: [] });
     pending.resolve({});
     await waitFor(() => expect(screen.queryByTestId('env-panel')).not.toBeInTheDocument());
+  });
+
+  it.each(['点击外部', '取消'])('保存前刷新部署状态期间%s，不提交已失效的草稿', async action => {
+    useAppDetail().appDetail = detail(['test']);
+    mocks.list.mockResolvedValue(environments.filter(item => item.kind !== 'feature'));
+    await openPanel();
+    await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    const pending = deferred<AppDeployedEnvOutputObj[]>();
+    mocks.statuses.mockReturnValueOnce(pending.promise);
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(mocks.update).not.toHaveBeenCalled();
+    if (action === '点击外部') {
+      await userEvent.click(document.body);
+      await waitFor(() => expect(screen.queryByTestId('env-panel')).not.toBeInTheDocument());
+    } else {
+      await userEvent.click(screen.getByRole('button', { name: action }));
+    }
+    pending.resolve([]);
+    await flushPromises();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(useAppDetail().appDetail?.visibleEnvNames).toEqual(['test']);
+  });
+
+  it('提交后刷新详情期间关闭再打开下拉，旧保存会话不关闭新面板', async () => {
+    useAppDetail().appDetail = detail(['test']);
+    const pending = deferred<ReturnType<typeof detail>>();
+    mocks.get.mockReturnValueOnce(pending.promise);
+    await openPanel();
+    await userEvent.click(screen.getByRole('button', { name: '设置可见环境' }));
+    await userEvent.click(screen.getByText('PROD'));
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole('button', { name: '关闭下拉' }));
+    await userEvent.click(screen.getByTestId('env-trigger'));
+    pending.resolve(detail(['test', 'prod']));
+    await flushPromises();
+    expect(screen.getByTestId('env-panel')).toBeInTheDocument();
   });
 
   it('无编辑权限时保留草稿以便重试', async () => {

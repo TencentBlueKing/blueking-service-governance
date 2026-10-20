@@ -167,7 +167,7 @@
             v-model="visibleEnvDraft"
             :class="columns === 2 ? '!grid-cols-2' : ''"
             :deploy-statuses="appDeployStatuses"
-            :disabled="appDetailStore.savingVisibleEnvs"
+            :disabled="visibleEnvsSaving"
             :env-list="standardEnvList"
             :get-env-disabled-reason="getVisibleEnvDisabledReason"
             show-deploy-icon
@@ -300,7 +300,7 @@
       >
         <template v-if="isEditingVisibleEnvs">
           <Button
-            :disabled="appDetailStore.savingVisibleEnvs || allStandardEnvsSelected"
+            :disabled="visibleEnvsSaving || allStandardEnvsSelected"
             text
             theme="primary"
             @click="visibleEnvDraft = [...allStandardEnvNames]"
@@ -309,7 +309,7 @@
           <div class="flex gap-[8px]">
             <Button
               :disabled="standardEnvList.length > 0 && !visibleEnvDraft.length"
-              :loading="appDetailStore.savingVisibleEnvs"
+              :loading="visibleEnvsSaving"
               size="small"
               theme="primary"
               @click="handleSaveVisibleEnvs"
@@ -318,7 +318,7 @@
             <Button
               :disabled="appDetailStore.savingVisibleEnvs"
               size="small"
-              @click="isEditingVisibleEnvs = false"
+              @click="endVisibleEnvEdit"
               >{{ $t('取消') }}</Button
             >
           </div>
@@ -333,7 +333,7 @@
             :disabled="
               isLoading ||
               appDetailStore.loading ||
-              appDetailStore.savingVisibleEnvs ||
+              visibleEnvsSaving ||
               appDetailStore.appDetail?.id !== appDetailStore.appID
             "
             text
@@ -454,6 +454,17 @@
   const { isEnvVisible, isRestricted, visibleEnvNames } = useAppVisibleEnvs();
   const isEditingVisibleEnvs = ref(false);
   const visibleEnvDraft = ref<string[]>([]);
+  const submittingVisibleEnvs = ref(false);
+  const visibleEnvsSaving = computed(() => submittingVisibleEnvs.value || appDetailStore.savingVisibleEnvs);
+  /** 关闭、取消或切换应用后，使在途保存的异步结果失效。 */
+  let visibleEnvEditSession = 0;
+
+  function endVisibleEnvEdit() {
+    visibleEnvEditSession += 1;
+    submittingVisibleEnvs.value = false;
+    isEditingVisibleEnvs.value = false;
+    visibleEnvDraft.value = [];
+  }
 
   const popoverRef = ref<InstanceType<typeof Popover> | null>(null);
   /** 数据加载状态 */
@@ -477,6 +488,7 @@
     return { byID, byName };
   });
   let deployStatusesRequest = 0;
+  let latestDeployStatusesPromise: Promise<boolean>;
   /** 搜索关键词 */
   const searchKeyword = ref('');
   /** 是否仅显示已部署环境 */
@@ -505,11 +517,10 @@
   const requiredVisibleEnvNames = computed(() =>
     allStandardEnvNames.value.filter(name => requiredVisibleEnvReasons.value.has(name)),
   );
-  const allStandardEnvsSelected = computed(
-    () =>
-      visibleEnvDraft.value.length === allStandardEnvNames.value.length &&
-      allStandardEnvNames.value.every(name => visibleEnvDraft.value.includes(name)),
-  );
+  const hasSelectedAllStandardEnvs = (selected: string[]) =>
+    selected.length === allStandardEnvNames.value.length &&
+    allStandardEnvNames.value.every(name => selected.includes(name));
+  const allStandardEnvsSelected = computed(() => hasSelectedAllStandardEnvs(visibleEnvDraft.value));
 
   /** 单选模式下当前选中的环境对象 */
   // 总览下钻可继续查看隐藏环境，触发器仍需显示当前查看对象。
@@ -687,7 +698,7 @@
   }
 
   /** 获取当前应用在各环境的部署状态 */
-  async function getDeployStatuses() {
+  async function getDeployStatuses(): Promise<boolean> {
     const requestToken = ++deployStatusesRequest;
     const appID = appDetailStore.appID;
     if (!appID) {
@@ -695,12 +706,20 @@
       emits('update:deployStatusList', []);
       return false;
     }
-    const res = await AppService.getAppDeployStatuses({ appID }).catch(() => null);
-    if (requestToken !== deployStatusesRequest || appID !== appDetailStore.appID || res === null) return false;
-    const list = (res || []) as AppDeployedEnvOutputObj[];
-    appDeployStatuses.value = list;
-    emits('update:deployStatusList', list);
-    return true;
+    const request = AppService.getAppDeployStatuses({ appID })
+      .catch(() => null) // 接口错误由全局拦截器提示。
+      .then(res => {
+        if (appID !== appDetailStore.appID) return false;
+        // 展示刷新可能顶替设置/保存前的校验；等待最新结果，避免操作静默中断。
+        if (requestToken !== deployStatusesRequest) return latestDeployStatusesPromise;
+        if (res === null) return false;
+        const list = (res || []) as AppDeployedEnvOutputObj[];
+        appDeployStatuses.value = list;
+        emits('update:deployStatusList', list);
+        return true;
+      });
+    latestDeployStatusesPromise = request;
+    return request;
   }
 
   /** 根据环境获取部署状态对应的状态图标名 */
@@ -755,7 +774,10 @@
     try {
       const [loaded] = await Promise.all([
         getEnvList(),
-        props.enableVisibleEnvSettings ? appDetailStore.fetchAppDetail() : Promise.resolve(),
+        // 复用当前应用详情，避免辅助刷新失败时清空全局详情及已有的可见名单。
+        props.enableVisibleEnvSettings && appDetailStore.appDetail?.id !== appID
+          ? appDetailStore.fetchAppDetail()
+          : Promise.resolve(),
       ]);
       if (!loaded || appID !== appDetailStore.appID) return;
       if (mode.value === 'multi') {
@@ -806,11 +828,10 @@
   watch(
     () => appDetailStore.appID,
     async appID => {
+      endVisibleEnvEdit();
       envListRequest += 1;
       envList.value = [];
       emits('update:envList', []);
-      isEditingVisibleEnvs.value = false;
-      visibleEnvDraft.value = [];
       if (appID) {
         await Promise.all([getDeployStatuses(), handleGetEnvList()]);
       } else {
@@ -857,7 +878,8 @@
   }
 
   async function handleEditVisibleEnvs() {
-    if (!(await getDeployStatuses())) return;
+    const session = ++visibleEnvEditSession;
+    if (!(await getDeployStatuses()) || session !== visibleEnvEditSession || !isPopoverVisible.value) return;
     visibleEnvDraft.value = isRestricted.value ? [...visibleEnvNames.value] : [...allStandardEnvNames.value];
     ensureRequiredVisibleEnvs();
     searchKeyword.value = '';
@@ -898,10 +920,9 @@
 
   /** 下拉面板关闭时重置搜索关键词 */
   function handlePopoverHidden() {
+    endVisibleEnvEdit();
     isPopoverVisible.value = false;
     searchKeyword.value = '';
-    isEditingVisibleEnvs.value = false;
-    visibleEnvDraft.value = [];
   }
 
   /** 下拉面板打开时刷新部署状态，避免状态图标和仅已部署过滤使用旧缓存。 */
@@ -922,13 +943,20 @@
   }
 
   async function handleSaveVisibleEnvs() {
-    if (appDetailStore.savingVisibleEnvs) return;
-    if (!(await getDeployStatuses())) return;
-    ensureRequiredVisibleEnvs();
+    if (visibleEnvsSaving.value || !isEditingVisibleEnvs.value) return;
+    const session = visibleEnvEditSession;
+    const appID = appDetailStore.appID;
+    // 第一次 await 前固定用户选择；关闭编辑态会清空界面草稿。
+    const draft = [...visibleEnvDraft.value];
+    submittingVisibleEnvs.value = true;
     try {
+      if (!(await getDeployStatuses()) || session !== visibleEnvEditSession || appID !== appDetailStore.appID) return;
+      // 刷新后的必选环境合并进快照，不从可能已变化的界面草稿取值。
+      const selected = [...new Set([...draft, ...requiredVisibleEnvNames.value])];
       // 接口以空名单表示全部可见，编辑态则用全选展示同一状态。
-      const result = await appDetailStore.updateVisibleEnvs(allStandardEnvsSelected.value ? [] : visibleEnvDraft.value);
-      if (result === 'stale') return;
+      const result = await appDetailStore.updateVisibleEnvs(hasSelectedAllStandardEnvs(selected) ? [] : selected);
+      // PUT 可能已发出；旧会话不能关闭后来打开的面板。
+      if (session !== visibleEnvEditSession || result === 'stale') return;
       if (result === 'refresh-failed') {
         Message({ theme: 'warning', message: t('配置已保存，获取最新配置失败，请刷新页面重试') });
       }
@@ -936,6 +964,9 @@
       popoverRef.value?.hide();
     } catch {
       // 请求拦截器展示权限或校验错误；保留草稿便于修改后重试。
+    } finally {
+      // 关闭/取消会释放本地锁，旧请求不能覆盖新会话的状态。
+      if (session === visibleEnvEditSession) submittingVisibleEnvs.value = false;
     }
   }
 
