@@ -48,9 +48,9 @@ tests {
       const before = item.data?.before ? JSON.parse(item.data.before) : null;
       const after = item.data?.after ? JSON.parse(item.data.after) : null;
       return before && after &&
-        before.id === bru.getVar("appCfgAuditNormalFileID") &&
+        before.fileId === bru.getVar("appCfgAuditNormalFileID") &&
         before.name === bru.getVar("appCfgAuditNormalFileName") &&
-        after.id === bru.getVar("appCfgAuditNormalFileID") &&
+        after.fileId === bru.getVar("appCfgAuditNormalFileID") &&
         after.name === bru.getVar("appCfgAuditUpdatedNormalFileName");
     });
 

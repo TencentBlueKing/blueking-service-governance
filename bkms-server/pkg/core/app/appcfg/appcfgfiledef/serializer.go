@@ -300,6 +300,25 @@ type UpdateDefOutput struct {
 	Item *DefSummaryObj `json:"item"`
 }
 
+// UpdateHelmFileInput 是 Helm 编辑表单的一次保存请求。
+type UpdateHelmFileInput struct {
+	// 文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。
+	Name string `json:"name" binding:"required,min=1,max=64,app_config_file_name"`
+	// overlay 文件必须传当前基础文件 ID，未修改时也传原值。普通文件留空。
+	BaseAppConfigFileID string `json:"baseAppConfigFileId,omitempty" binding:"omitempty,mongodb"`
+	// BSCP 来源必须传当前绑定，未修改时也传原值。本地来源留空。
+	BSCPConfig *BSCPConfigInput `json:"bscpConfig,omitempty"`
+	// 版本描述。基础文件或 BSCP 发生变化时写入版本，只改名称不写版本。
+	Description string `json:"description"`
+	// 编辑开始时的当前版本号，用于乐观锁冲突检测。
+	CurrentVersion *int64 `json:"currentVersion,omitempty"`
+}
+
+// UpdateHelmFileOutput 是 Helm 编辑保存的响应。
+type UpdateHelmFileOutput struct {
+	Item *DefDetailObj `json:"item"`
+}
+
 // --- 环境实例 ---
 
 // EnvInstanceObj 环境实例信息。

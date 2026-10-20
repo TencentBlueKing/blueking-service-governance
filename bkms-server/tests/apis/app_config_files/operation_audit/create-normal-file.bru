@@ -27,12 +27,14 @@ assert {
 
 script:post-response {
   bru.setVar("appCfgAuditNormalFileID", res.body.item.id);
+  bru.setVar("appCfgAuditNormalDefID", res.body.item.defID);
   bru.setVar("appCfgAuditNormalFileName", res.body.item.name);
 }
 
 tests {
   test("should create normal app config file", () => {
     expect(res.body.item.type).to.equal("normal");
+    expect(res.body.item.defID).to.be.a("string").and.not.empty;
   });
 }
 

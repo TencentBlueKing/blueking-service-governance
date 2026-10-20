@@ -19,6 +19,8 @@
 package appcfg_test
 
 import (
+	"errors"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -71,6 +73,32 @@ var _ = Describe("FrameworkPolicy", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("mountedEnvNames"))
 		})
+
+		DescribeTable("should reject a mount dir unless the app type allows it",
+			func(appType string) {
+				err := policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+					AppType:  appType,
+					MountDir: "/etc/a",
+				})
+				Expect(err).To(HaveOccurred())
+				Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("mountDir"))
+			},
+			Entry("helm", "helm"),
+			Entry("agones", "agones"),
+			Entry("empty app type", ""),
+		)
+
+		DescribeTable("should allow a framework file to set a mount dir",
+			func(appType string) {
+				Expect(policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+					AppType:  appType,
+					MountDir: "/usr/local/trpc/bin",
+				})).To(Succeed())
+			},
+			Entry("trpc", "trpc"),
+			Entry("taf", "taf"),
+		)
 	})
 
 	Describe("InitializeEnvConfigMode", func() {

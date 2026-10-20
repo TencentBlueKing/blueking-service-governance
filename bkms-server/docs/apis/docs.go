@@ -564,6 +564,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/app-config-file-defs/{id}/helm-file": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-config-file-defs"
+                ],
+                "summary": "保存 Helm 配置文件的名称、基础文件和 BSCP 绑定",
+                "operationId": "UpdateHelmFile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "配置文件定义 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Helm 编辑保存请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.UpdateHelmFileInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/appcfgfiledef.UpdateHelmFileOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/app-config-file/versions": {
             "get": {
                 "security": [
@@ -19937,6 +19999,48 @@ const docTemplate = `{
                 }
             }
         },
+        "appcfgfiledef.UpdateHelmFileInput": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "baseAppConfigFileId": {
+                    "description": "overlay 文件必须传当前基础文件 ID，未修改时也传原值。普通文件留空。",
+                    "type": "string"
+                },
+                "bscpConfig": {
+                    "description": "BSCP 来源必须传当前绑定，未修改时也传原值。本地来源留空。",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/appcfgfiledef.BSCPConfigInput"
+                        }
+                    ]
+                },
+                "currentVersion": {
+                    "description": "编辑开始时的当前版本号，用于乐观锁冲突检测。",
+                    "type": "integer"
+                },
+                "description": {
+                    "description": "版本描述。基础文件或 BSCP 发生变化时写入版本，只改名称不写版本。",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                }
+            }
+        },
+        "appcfgfiledef.UpdateHelmFileOutput": {
+            "type": "object",
+            "properties": {
+                "item": {
+                    "$ref": "#/definitions/appcfgfiledef.DefDetailObj"
+                }
+            }
+        },
         "bkerrs.ErrCode": {
             "type": "string",
             "enum": [
@@ -21526,6 +21630,10 @@ const docTemplate = `{
                 "currentVersion": {
                     "description": "当前生效版本号",
                     "type": "integer"
+                },
+                "defID": {
+                    "description": "配置文件定义 ID",
+                    "type": "string"
                 },
                 "envName": {
                     "description": "环境名称，为空表示应用级别配置，非空表示特定环境的配置",
@@ -32368,11 +32476,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名",
+                    "description": "配置文件名。\ntodo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径",
+                    "description": "配置文件路径。\ntodo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。",
                     "type": "string"
                 }
             }
@@ -32385,11 +32493,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名",
+                    "description": "配置文件名。\ntodo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径",
+                    "description": "配置文件路径。\ntodo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。",
                     "type": "string"
                 }
             }
@@ -32919,11 +33027,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名",
+                    "description": "配置文件名。\ntodo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径",
+                    "description": "配置文件路径。\ntodo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。",
                     "type": "string"
                 },
                 "language": {
@@ -32944,11 +33052,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名",
+                    "description": "配置文件名。\ntodo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径",
+                    "description": "配置文件路径。\ntodo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。",
                     "type": "string"
                 },
                 "language": {
@@ -33047,9 +33155,6 @@ const docTemplate = `{
         },
         "serializer.UpdateAppConfigFileInput": {
             "type": "object",
-            "required": [
-                "name"
-            ],
             "properties": {
                 "baseAppConfigFileID": {
                     "description": "基础应用配置文件 ID，仅当 type 是 overlay 时生效",
@@ -33070,12 +33175,6 @@ const docTemplate = `{
                 "description": {
                     "description": "版本描述",
                     "type": "string"
-                },
-                "name": {
-                    "description": "应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间",
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 1
                 }
             }
         },

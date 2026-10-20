@@ -84,6 +84,9 @@ func (h *Handler) UpdateAppTafSpec(c *gin.Context) {
 		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
 			code = bkerrs.ErrCodeInvalidRequest
 		}
+		if errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists) {
+			code = bkerrs.ErrCodeAlreadyExists
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "update taf app"))
 		return
 	}

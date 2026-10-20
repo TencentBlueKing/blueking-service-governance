@@ -203,7 +203,7 @@ func (s *Service) Update(
 		if err = s.appConfigFileService.SyncFrameworkFileLocation(
 			ctx, app.ID, app.Type, params.TrpcConfig.FileName, params.TrpcConfig.FilePath,
 		); err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrapf(err, "sync framework file location for app %s", app.ID)
 		}
 		appModel.Workload.TrpcConfig = appmodel.TrpcConfig{
 			Language: params.TrpcConfig.Language,

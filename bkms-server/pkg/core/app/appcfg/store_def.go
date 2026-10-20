@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -55,6 +56,21 @@ func DefsByApp(appID string) store.Opt {
 // DefFilterConfigKind 按 ConfigKind 过滤 def 记录
 func DefFilterConfigKind(kind ConfigKind) store.Opt {
 	return store.Where("configKind", kind)
+}
+
+// DefByMountIdentity 匹配占用 appID + mountDir + name 这组唯一键的 def 记录，
+// excludeID 非零时排除该记录自身（更新场景下排除待更新的那条）。
+// mountDir 带 omitempty，空目录不落库，因此按字段缺失或空值匹配。
+func DefByMountIdentity(appID, name, mountDir string, excludeID bson.ObjectID) store.Opt {
+	var mountDirCond any = mountDir
+	if mountDir == "" {
+		mountDirCond = bson.M{"$in": []any{nil, ""}}
+	}
+	opts := []store.Opt{DefsByApp(appID), store.Where("name", name), store.Where("mountDir", mountDirCond)}
+	if !excludeID.IsZero() {
+		opts = append(opts, store.Where("_id", bson.M{"$ne": excludeID}))
+	}
+	return store.Combine(opts...)
 }
 
 // ListDefsByApp 返回指定应用下的全部 def 记录（按名称排序），可通过 DefFilterConfigKind 等条件进一步过滤

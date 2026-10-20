@@ -36,6 +36,12 @@ var _ = Describe("errCodeForDefError", func() {
 		Expect(errCodeForDefError(err)).To(Equal(bkerrs.ErrCodeInvalidArgument))
 	})
 
+	It("maps an existing def to already exists", func() {
+		err := errors.Wrap(appcfg.ErrAppConfigFileDefAlreadyExists, "name taken")
+
+		Expect(errCodeForDefError(err)).To(Equal(bkerrs.ErrCodeAlreadyExists))
+	})
+
 	It("keeps unknown errors as internal server error", func() {
 		err := stdErrors.New("db down")
 

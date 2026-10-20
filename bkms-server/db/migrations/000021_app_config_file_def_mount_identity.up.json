@@ -1,5 +1,13 @@
 [
   {
+    "dropIndexes": "app_config_file_defs",
+    "index": "appID_1_name_1"
+  },
+  {
+    "dropIndexes": "app_config_file_defs",
+    "index": "appID_1_mountDir_1_name_1"
+  },
+  {
     "aggregate": "app_models",
     "pipeline": [
       {
@@ -97,14 +105,6 @@
         "multi": true
       }
     ]
-  },
-  {
-    "dropIndexes": "app_config_file_defs",
-    "index": "appID_1_name_1"
-  },
-  {
-    "dropIndexes": "app_config_file_defs",
-    "index": "appID_1_mountDir_1_name_1"
   },
   {
     "createIndexes": "app_config_file_defs",

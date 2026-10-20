@@ -5,15 +5,14 @@ meta {
 }
 
 put {
-  url: {{serviceURL}}/apps/{{appCfgAuditAppID}}/app-config-files/{{appCfgAuditNormalFileID}}
+  url: {{serviceURL}}/apps/{{appCfgAuditAppID}}/app-config-file-defs/{{appCfgAuditNormalDefID}}/helm-file
   body: json
   auth: inherit
 }
 
 body:json {
   {
-    "name": "audit-nor-r-{{randomSuffix}}",
-    "versionDescription": "更新配置文件名称"
+    "name": "audit-nor-r-{{randomSuffix}}"
   }
 }
 

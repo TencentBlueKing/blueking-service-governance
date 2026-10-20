@@ -302,6 +302,34 @@ definitions:
       item:
         $ref: '#/definitions/appcfgfiledef.DefSummaryObj'
     type: object
+  appcfgfiledef.UpdateHelmFileInput:
+    properties:
+      baseAppConfigFileId:
+        description: overlay 文件必须传当前基础文件 ID，未修改时也传原值。普通文件留空。
+        type: string
+      bscpConfig:
+        allOf:
+        - $ref: '#/definitions/appcfgfiledef.BSCPConfigInput'
+        description: BSCP 来源必须传当前绑定，未修改时也传原值。本地来源留空。
+      currentVersion:
+        description: 编辑开始时的当前版本号，用于乐观锁冲突检测。
+        type: integer
+      description:
+        description: 版本描述。基础文件或 BSCP 发生变化时写入版本，只改名称不写版本。
+        type: string
+      name:
+        description: 文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。
+        maxLength: 64
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  appcfgfiledef.UpdateHelmFileOutput:
+    properties:
+      item:
+        $ref: '#/definitions/appcfgfiledef.DefDetailObj'
+    type: object
   bkerrs.ErrCode:
     enum:
     - INVALID_ARGUMENT
@@ -1417,6 +1445,9 @@ definitions:
       currentVersion:
         description: 当前生效版本号
         type: integer
+      defID:
+        description: 配置文件定义 ID
+        type: string
       envName:
         description: 环境名称，为空表示应用级别配置，非空表示特定环境的配置
         type: string
@@ -8802,10 +8833,14 @@ definitions:
         description: 配置文件内容
         type: string
       fileName:
-        description: 配置文件名
+        description: |-
+          配置文件名。
+          todo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。
         type: string
       filePath:
-        description: 配置文件路径
+        description: |-
+          配置文件路径。
+          todo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。
         type: string
     required:
     - fileName
@@ -8817,10 +8852,14 @@ definitions:
         description: 配置文件内容
         type: string
       fileName:
-        description: 配置文件名
+        description: |-
+          配置文件名。
+          todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
         type: string
       filePath:
-        description: 配置文件路径
+        description: |-
+          配置文件路径。
+          todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
         type: string
     type: object
   serializer.TagConfigInput:
@@ -9185,10 +9224,14 @@ definitions:
         description: 配置文件内容
         type: string
       fileName:
-        description: 配置文件名
+        description: |-
+          配置文件名。
+          todo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。
         type: string
       filePath:
-        description: 配置文件路径
+        description: |-
+          配置文件路径。
+          todo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。
         type: string
       language:
         description: 编程语言
@@ -9207,10 +9250,14 @@ definitions:
         description: 配置文件内容
         type: string
       fileName:
-        description: 配置文件名
+        description: |-
+          配置文件名。
+          todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
         type: string
       filePath:
-        description: 配置文件路径
+        description: |-
+          配置文件路径。
+          todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
         type: string
       language:
         description: 编程语言
@@ -9289,13 +9336,6 @@ definitions:
       description:
         description: 版本描述
         type: string
-      name:
-        description: 应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间
-        maxLength: 64
-        minLength: 1
-        type: string
-    required:
-    - name
     type: object
   serializer.UpdateAppConfigFileOutput:
     properties:
@@ -10346,6 +10386,45 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 恢复环境配置为默认值
+      tags:
+      - app-config-file-defs
+  /apps/{appID}/app-config-file-defs/{id}/helm-file:
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateHelmFile
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 配置文件定义 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Helm 编辑保存请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/appcfgfiledef.UpdateHelmFileInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/appcfgfiledef.UpdateHelmFileOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 保存 Helm 配置文件的名称、基础文件和 BSCP 绑定
       tags:
       - app-config-file-defs
   /apps/{appID}/app-config-file-defs/defaults:

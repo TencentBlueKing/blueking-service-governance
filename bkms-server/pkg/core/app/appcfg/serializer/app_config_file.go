@@ -120,9 +120,8 @@ type CreateAppConfigFileInput struct {
 }
 
 // UpdateAppConfigFileInput is the JSON body for updating app config file metadata.
+// 文件名不属于本接口。Helm 编辑表单走 PUT /app-config-file-defs/:id/helm-file。
 type UpdateAppConfigFileInput struct {
-	// 应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间
-	Name string `json:"name" binding:"required,min=1,max=64,app_config_file_name"`
 	// 基础应用配置文件 ID，仅当 type 是 overlay 时生效
 	BaseAppConfigFileID string `json:"baseAppConfigFileID"`
 	// 当 contentSourceType 为 bscp 时，bscpConfig 为必填
@@ -174,6 +173,8 @@ type AppConfigFileEmptyOutput struct{}
 type AppConfigFileOutputObj struct {
 	// 应用配置文件 ID
 	ID string `json:"id"`
+	// 配置文件定义 ID
+	DefID string `json:"defID,omitempty"`
 	// 文件名称
 	Name string `json:"name"`
 	// 文件类型
@@ -208,6 +209,9 @@ func (o *AppConfigFileOutputObj) FromModel(obj appcfg.AppConfigFile, name string
 		CurrentVersion:    obj.CurrentVersion,
 		Updater:           obj.Updater,
 		UpdatedAt:         obj.UpdatedAt.Format(time.RFC3339),
+	}
+	if !obj.DefID.IsZero() {
+		o.DefID = obj.DefID.Hex()
 	}
 	if obj.BaseAppConfigFileID != nil {
 		o.BaseAppConfigFileID = obj.BaseAppConfigFileID.Hex()

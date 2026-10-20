@@ -59,6 +59,9 @@ func errCodeForDefError(err error) bkerrs.ErrCode {
 	if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
 		return bkerrs.ErrCodeInvalidArgument
 	}
+	if errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists) {
+		return bkerrs.ErrCodeAlreadyExists
+	}
 	return bkerrs.ErrCodeInternalServerError
 }
 
@@ -311,6 +314,100 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 	)
 	ginutils.OK(c, UpdateDefOutput{
 		Item: new(DefSummaryObj).FromDef(*def),
+	})
+}
+
+// UpdateHelmFile 一次保存 Helm 编辑表单上的名称、基础 values 和 BSCP 绑定。
+//
+//	@ID				UpdateHelmFile
+//	@Summary		保存 Helm 配置文件的名称、基础文件和 BSCP 绑定
+//	@Tags			app-config-file-defs
+//	@Accept			json
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			appID	path		string				true	"应用 ID"
+//	@Param			id		path		string				true	"配置文件定义 ID"
+//	@Param			body	body		UpdateHelmFileInput	true	"Helm 编辑保存请求"
+//	@Success		200		{object}	UpdateHelmFileOutput
+//	@Failure		400		{object}	bkerrs.GinErrorOutput
+//	@Router			/apps/{appID}/app-config-file-defs/{id}/helm-file [put]
+func (h *Handler) UpdateHelmFile(c *gin.Context) {
+	var uriInput DefURIInput
+	var input UpdateHelmFileInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	def, err := h.getAppCfgFileDef(c, uriInput)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	svc := h.newAppCfgFileDefService()
+	defaultFile, err := svc.GetDefaultFileWithDef(ctx, def.ID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "loading default file"))
+		return
+	}
+
+	baseID, err := h.validateBaseAppConfigFileID(
+		ctx, app.ID, defaultFile.Type, input.BaseAppConfigFileID,
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating base file"))
+		return
+	}
+	bscpConfig, err := h.validateBSCPConfig(
+		ctx, defaultFile.ContentSourceType, input.BSCPConfig, defaultFile.GetConfigFormat(),
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating bscp config"))
+		return
+	}
+
+	oldDef := *def
+	oldFile := defaultFile.AppConfigFile
+	operator := auth.MustGetUser(ctx).ID
+	result, err := svc.UpdateHelmFile(ctx, def, &defaultFile.AppConfigFile, appcfg.HelmFileUpdate{
+		Name:                   input.Name,
+		BaseAppConfigFileID:    baseID,
+		BSCPConfig:             bscpConfig,
+		Operator:               operator,
+		AppType:                app.Type,
+		Description:            input.Description,
+		ExpectedCurrentVersion: input.CurrentVersion,
+	})
+	if err != nil {
+		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
+			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, def.AppID, defaultFile.ID.Hex()))
+			return
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "updating helm file"))
+		return
+	}
+
+	if result.NameChanged || result.FileChanged {
+		h.addAppConfigFileDefAudit(
+			ctx,
+			app,
+			defaultFile.EnvName,
+			audit.OperationTypeUpdate,
+			buildAppConfigFileDefAuditData(&oldDef, &oldFile),
+			buildAppConfigFileDefAuditData(result.Def, result.File),
+		)
+	}
+	ginutils.OK(c, UpdateHelmFileOutput{
+		Item: new(DefDetailObj).FromDefAndFile(*result.Def, result.File),
 	})
 }
 

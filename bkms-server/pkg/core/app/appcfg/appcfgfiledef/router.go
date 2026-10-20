@@ -37,6 +37,8 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler) {
 	defs.GET("/:id", h.GetAppCfgFileDetail)
 	// 更新配置文件定义信息
 	defs.PUT("/:id", h.UpdateAppCfgFileDef)
+	// Helm 编辑表单：一次提交名称、基础 values 和 BSCP 绑定
+	defs.PUT("/:id/helm-file", h.UpdateHelmFile)
 	// 删除配置文件定义及其所有关联文件和版本
 	defs.DELETE("/:id", h.DeleteAppCfgFileDef)
 	// 列出配置文件定义下的所有环境实例

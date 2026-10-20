@@ -159,8 +159,8 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 
 // UpdateAppConfigFile 更新应用配置文件的 BSCP 绑定关系和 overlay base 引用。
 //
-// 职责说明：本接口负责 file 级字段的更新（baseAppConfigFileID、bscpConfig），
-// 与新接口各司其职：
+// 职责说明：本接口只更新 file 级字段（baseAppConfigFileID、bscpConfig），不修改文件名。
+// Helm 编辑表单改名称、基础 values 和 BSCP 时走 PUT /app-config-file-defs/:id/helm-file。
 //
 //   - def 级字段（名称 / mountDir / 环境策略等） → PUT /app-config-file-defs/:id
 //
@@ -220,22 +220,13 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get config file def"))
 		return
 	}
-	oldName := def.Name
 
 	operator := auth.MustGetUser(ctx).ID
-	// todo 兼容：Helm 编辑仍通过本接口修改 def 名称。前端改走 def 更新接口后，名字不一致直接拒绝并删除。
-	if input.Name != oldName {
-		if err = rejectDisallowedDefRename(def, app.Type); err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "update config file name"))
-			return
-		}
-	}
-
 	acfService := appcfg.NewAppConfigFileService(
 		h.registry.DB,
 	)
 	if err = acfService.UpdateFile(
-		ctx, acf, input.Name, operator,
+		ctx, acf, def.Name, operator,
 		appcfg.UpdateCfgFileOptions{
 			OperationType:          appcfg.AppConfigFileVersionOperationTypeUpdate,
 			Description:            input.Description,
@@ -250,23 +241,12 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 		return
 	}
 
-	if input.Name != oldName {
-		if err = h.syncDefName(ctx, app, def, input.Name, operator); err != nil {
-			code := bkerrs.ErrCodeInternalServerError
-			if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
-				code = bkerrs.ErrCodeInvalidArgument
-			}
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "update config file name"))
-			return
-		}
-	}
-
 	h.addAppConfigFileAudit(ctx, app, acf.EnvName, audit.OperationTypeUpdate,
-		buildAppConfigFileAuditData(&oldAcf, oldName),
-		buildAppConfigFileAuditData(acf, input.Name),
+		buildAppConfigFileAuditData(&oldAcf, def.Name),
+		buildAppConfigFileAuditData(acf, def.Name),
 	)
 	ginutils.OK(c, slz.UpdateAppConfigFileOutput{
-		Item: new(slz.AppConfigFileOutputObj).FromModel(*acf, input.Name),
+		Item: new(slz.AppConfigFileOutputObj).FromModel(*acf, def.Name),
 	})
 }
 
@@ -770,36 +750,5 @@ func (h *Handler) persistContentUpdate(
 		buildAppConfigFileAuditData(oldAcf, defName),
 		buildAppConfigFileAuditData(acf, defName),
 	)
-	return nil
-}
-
-// rejectDisallowedDefRename 用和 def 更新接口相同的策略判断这次改名是否允许。
-func rejectDisallowedDefRename(def *appcfg.AppConfigFileDef, appType string) error {
-	policy, ok := appcfg.DefaultPolicies[def.ConfigKind]
-	if !ok {
-		return pkgerrors.Wrapf(appcfg.ErrInvalidConfigSpec, "unsupported config kind: %s", def.ConfigKind)
-	}
-	if !policy.AllowNameUpdate(appType) {
-		return pkgerrors.Wrap(appcfg.ErrInvalidConfigSpec, "this config kind does not allow modifying name")
-	}
-	return nil
-}
-
-// syncDefName 按 def 更新策略修改文件名。tRPC framework 改名会被拒绝，Helm、TAF 和 plain 仍允许。
-// todo 兼容：Helm 编辑仍通过 PUT /app-config-files/:id 修改 def 名称。前端改走 def 更新接口后删除。
-func (h *Handler) syncDefName(
-	ctx context.Context,
-	app *bkmsapp.Application,
-	def *appcfg.AppConfigFileDef,
-	newName, operator string,
-) error {
-	svc := appcfg.NewAppCfgFileDefService(appcfg.NewBaseAppCfgFileService(h.registry.DB))
-	if err := svc.UpdateAppCfgFileDef(ctx, def, appcfg.FileDefUpdate{
-		Name:     &newName,
-		AppType:  app.Type,
-		Operator: operator,
-	}); err != nil {
-		return pkgerrors.Wrapf(err, "sync config file def %s name", def.ID.Hex())
-	}
 	return nil
 }

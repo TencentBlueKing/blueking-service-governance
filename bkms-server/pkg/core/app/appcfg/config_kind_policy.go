@@ -77,12 +77,16 @@ type FrameworkPolicy struct{}
 var _ ConfigKindPolicy = FrameworkPolicy{}
 
 // ValidateCreateParams framework 创建时不允许关闭环境变量渲染。
-func (FrameworkPolicy) ValidateCreateParams(params CreateCfgFileParams) error {
+func (p FrameworkPolicy) ValidateCreateParams(params CreateCfgFileParams) error {
 	if params.EnableEnvVarRender != nil && !*params.EnableEnvVarRender {
 		return errors.Wrap(ErrInvalidConfigSpec, "framework config file does not allow disable enableEnvVarRender")
 	}
 	if params.MountedEnvNames != nil {
 		return errors.Wrap(ErrInvalidConfigSpec, "framework config file does not support mountedEnvNames")
+	}
+	// 挂载目录是否允许与更新使用同一规则：只有 trpc/taf 可以带 mountDir。
+	if params.MountDir != "" && !p.AllowMountDirUpdate(params.AppType) {
+		return errors.Wrap(ErrInvalidConfigSpec, "framework config file does not allow mountDir")
 	}
 	return nil
 }
