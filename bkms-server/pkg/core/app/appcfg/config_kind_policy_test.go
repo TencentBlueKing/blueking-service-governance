@@ -99,14 +99,14 @@ var _ = Describe("FrameworkPolicy", func() {
 			Expect(strategy).To(Equal(appcfg.EnvInstanceStrategyOverwrite))
 		})
 
-		It("should fallback empty persisted framework strategy to overlay", func() {
-			strategy, err := policy.ResolveEnvInstanceStrategy(&appcfg.AppConfigFileDef{
+		It("should reject empty persisted framework strategy", func() {
+			_, err := policy.ResolveEnvInstanceStrategy(&appcfg.AppConfigFileDef{
 				ConfigKind:         appcfg.ConfigKindFramework,
 				EnvConfigMode:      appcfg.EnvConfigMode{},
 				EnableEnvVarRender: true,
 			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(strategy).To(Equal(appcfg.EnvInstanceStrategyOverlay))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("envInstanceStrategy"))
 		})
 
 		It("should reject invalid persisted framework strategy", func() {

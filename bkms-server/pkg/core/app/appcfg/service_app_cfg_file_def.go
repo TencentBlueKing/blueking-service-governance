@@ -247,7 +247,7 @@ func (s *AppCfgFileDefService) applyFrameworkEnvInstanceStrategyChange(
 		return nil
 	}
 	if def.EnvConfigMode.IsIndependent() {
-		if err := s.convertEnvInstancesForStrategy(ctx, def, strategy, operator); err != nil {
+		if err := s.convertEnvInstancesForStrategy(ctx, def.ID, strategy, operator); err != nil {
 			return err
 		}
 	}
@@ -258,79 +258,66 @@ func (s *AppCfgFileDefService) applyFrameworkEnvInstanceStrategyChange(
 // convertEnvInstancesForStrategy 把已有环境实例转换成目标策略的存储形态。
 func (s *AppCfgFileDefService) convertEnvInstancesForStrategy(
 	ctx context.Context,
-	def *AppConfigFileDef,
+	defID bson.ObjectID,
 	strategy EnvInstanceStrategy,
 	operator string,
 ) error {
-	defaultFile, err := s.FileStore.Get(ctx, FileByDefEnv(def.ID, EnvNameDefault))
+	defaultFile, err := s.FileStore.Get(ctx, FileByDefEnv(defID, EnvNameDefault))
 	if err != nil {
 		return errors.Wrap(err, "loading default file for strategy switch")
 	}
-	files, err := s.FileStore.List(ctx, FilesByDef(def.ID))
+	files, err := s.FileStore.List(ctx, FilesByDef(defID))
 	if err != nil {
 		return errors.Wrap(err, "listing env instances for strategy switch")
 	}
 	for i := range files {
-		file := files[i]
+		file := &files[i]
 		if file.EnvName == EnvNameDefault {
 			continue
 		}
-		if err = s.convertEnvInstanceForStrategy(ctx, def, defaultFile, &file, strategy, operator); err != nil {
-			return err
+		rawContent := cloneStringPtr(file.Content)
+		if file.Type == AppConfigFileTypeOverlay {
+			rawContent = cloneStringPtr(file.OverlayContent)
+		}
+
+		var (
+			targetType           AppConfigFileType
+			targetContent        *string
+			targetOverlayContent *string
+		)
+		targetBaseID := file.BaseAppConfigFileID
+
+		switch strategy {
+		case EnvInstanceStrategyOverwrite:
+			targetType = AppConfigFileTypeNormal
+			targetContent = rawContent
+			targetOverlayContent = nil
+		case EnvInstanceStrategyOverlay:
+			targetType = AppConfigFileTypeOverlay
+			targetContent = nil
+			targetOverlayContent = rawContent
+			if targetBaseID == nil {
+				baseID := defaultFile.ID
+				targetBaseID = &baseID
+			}
+		default:
+			return errors.Wrapf(ErrInvalidConfigSpec, "unsupported envInstanceStrategy %q", strategy)
+		}
+
+		if err := UpdateEnvInstanceForStrategySwitch(
+			ctx,
+			s.FileStore,
+			file.ID,
+			targetType,
+			targetContent,
+			targetOverlayContent,
+			targetBaseID,
+			operator,
+		); err != nil {
+			return errors.Wrapf(err, "converting env instance %s", file.ID.Hex())
 		}
 	}
 	return nil
-}
-
-func (s *AppCfgFileDefService) convertEnvInstanceForStrategy(
-	ctx context.Context,
-	def *AppConfigFileDef,
-	defaultFile *AppConfigFile,
-	file *AppConfigFile,
-	strategy EnvInstanceStrategy,
-	operator string,
-) error {
-	rawContent := getRawEnvInstanceContent(file)
-
-	switch strategy {
-	case EnvInstanceStrategyOverwrite:
-		file.Type = AppConfigFileTypeNormal
-		file.Content = rawContent
-		file.OverlayContent = nil
-	case EnvInstanceStrategyOverlay:
-		baseID := defaultFile.ID
-		file.Type = AppConfigFileTypeOverlay
-		file.Content = nil
-		file.OverlayContent = rawContent
-		if file.BaseAppConfigFileID == nil {
-			file.BaseAppConfigFileID = &baseID
-		}
-	default:
-		return errors.Wrapf(ErrInvalidConfigSpec, "unsupported envInstanceStrategy %q", strategy)
-	}
-
-	file.Updater = operator
-	if err := s.FileStore.Update(ctx, file, store.UpdateSelected("*"), store.ByID(file.ID)); err != nil {
-		return errors.Wrapf(err, "converting env instance %s", file.ID.Hex())
-	}
-	return nil
-}
-
-func getRawEnvInstanceContent(file *AppConfigFile) *string {
-	if file == nil {
-		return nil
-	}
-	if file.Type == AppConfigFileTypeOverlay {
-		return cloneStringPtr(file.OverlayContent)
-	}
-	return cloneStringPtr(file.Content)
-}
-
-func cloneStringPtr(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	return lo.ToPtr(*value)
 }
 
 // deleteEnvInstances 删除指定 def 下所有非默认的环境实例及其版本记录。
@@ -449,4 +436,11 @@ func (s *AppCfgFileDefService) AttachFrameworkEnvOverlay(
 		return nil, errors.Wrap(err, "creating framework env overlay on existing def")
 	}
 	return &AppConfigFileWithDef{AppConfigFile: *created, Def: def}, nil
+}
+
+func cloneStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	return lo.ToPtr(*value)
 }

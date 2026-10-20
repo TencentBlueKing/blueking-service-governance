@@ -57,7 +57,9 @@ func (s *AppConfigFileService) Create(
 	return &wm.AppConfigFile, nil
 }
 
-// Rollback 回滚配置文件版本；当前文件类型与目标版本类型不一致时拒绝回滚。
+// Rollback 回滚到指定历史版本。
+// 这里回滚的是文件记录的完整存储形态（包括 type 以及对应的内容字段），
+// 因此当前文件类型与目标版本类型不一致时直接拒绝，避免跨类型回滚把当前策略下的实例形态改回去。
 func (s *AppConfigFileService) Rollback(
 	ctx context.Context,
 	appID string,

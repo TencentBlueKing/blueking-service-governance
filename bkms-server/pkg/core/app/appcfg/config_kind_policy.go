@@ -121,14 +121,12 @@ func validateFrameworkEnvInstanceStrategy(strategy EnvInstanceStrategy) error {
 }
 
 // ResolveEnvInstanceStrategy 返回框架定义上已持久化的环境实例策略。
+// 该字段必须先由 migration 或新写入路径补齐，缺失时直接视为非法数据。
 func (FrameworkPolicy) ResolveEnvInstanceStrategy(def *AppConfigFileDef) (EnvInstanceStrategy, error) {
 	if def == nil {
 		return "", errors.Wrap(ErrInvalidConfigSpec, "framework def is required")
 	}
 	strategy := def.EnvConfigMode.EnvInstanceStrategy
-	if strategy == "" {
-		return EnvInstanceStrategyOverlay, nil
-	}
 	if err := validateFrameworkEnvInstanceStrategy(strategy); err != nil {
 		return "", err
 	}

@@ -188,6 +188,42 @@ func UpdateFileIfVersionMatches(
 	return nil
 }
 
+// UpdateEnvInstanceForStrategySwitch 仅更新策略切换涉及的字段，不产生版本记录，也不修改 currentVersion。
+func UpdateEnvInstanceForStrategySwitch(
+	ctx context.Context,
+	files *AppConfigFileStore,
+	fileID bson.ObjectID,
+	fileType AppConfigFileType,
+	content *string,
+	overlayContent *string,
+	baseAppConfigFileID *bson.ObjectID,
+	updater string,
+) error {
+	if fileID.IsZero() {
+		return errors.New("object's ID is required for update")
+	}
+	patch := &AppConfigFile{
+		ID:   fileID,
+		Type: fileType,
+		VersionedContent: VersionedContent{
+			Content:             content,
+			OverlayContent:      overlayContent,
+			BaseAppConfigFileID: baseAppConfigFileID,
+		},
+		Updater: updater,
+	}
+	err := files.Update(
+		ctx,
+		patch,
+		store.UpdateSelected("type", "content", "overlayContent", "baseAppConfigFileID", "updater"),
+		store.ByID(fileID),
+	)
+	if err != nil {
+		return errors.Wrapf(err, "update app config file %s for strategy switch", fileID.Hex())
+	}
+	return nil
+}
+
 // DeleteFile 删除应用下的一个文件记录，文件被其它 overlay 文件引用时返回 ErrAppConfigFileReferenced；
 // 文件不存在或不属于该应用时不做任何操作。
 func DeleteFile(ctx context.Context, files *AppConfigFileStore, appID string, id bson.ObjectID) error {
