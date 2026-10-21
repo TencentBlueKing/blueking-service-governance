@@ -194,7 +194,7 @@ func runToEnd(m *Manager) *httptest.ResponseRecorder {
 
 // runUntilFetched 用极短 tick 跑一条 Watch，等插件被调用到第 untilCall 次后中断集群通道并收流
 // 插件层在 select 分支里串行执行，因此收到第 N 次调用信号时，第 N-1 轮的推送必然已写完
-// 有预置实例时第 1 次调用是建流时的 Prime，之后才是各 tick；configure 用来调小其它时限
+// 每次调用都对应一个 tick，建流时不拉插件；configure 用来调小其它时限
 func runUntilFetched(
 	w *stubPodWatch,
 	p *stubPlugin,
@@ -399,20 +399,17 @@ var _ = Describe("Manager", func() {
 	})
 
 	// 建流后 Pod 一直不动（如只改了北极星权重），附属数据变化也必须能推出去
-	// 预置实例只记账不推 Pod 事件，建流时的 Prime 记下基线：没变的不重推，从有到空的变化也要推
-	It("seeds live instances and primes baselines so only real changes are pushed", func() {
+	// 预置实例只记账不推 Pod 事件；首个 tick 对它们全量同步一次：首包降级为空、随后恢复的要推，
+	// 首包有数据、随后变空的也要推；同步之后只推变化
+	It("seeds live instances and syncs them once before pushing only changes", func() {
 		w := newStubPodWatch()
 		w.livePods = []*unstructured.Unstructured{validPod("pod-2"), badPod("bad-pod"), validPod("pod-1")}
 		p := newStubPlugin("stub", func(call int) (map[string]any, error) {
-			switch call {
-			// 第 1 次是建流时的 Prime，只记基线
-			case 1:
-				return map[string]any{"pod-1": []string{"v1"}, "pod-2": []string{"v1"}}, nil
-			case 2:
-				return map[string]any{"pod-1": []string{"v2"}, "pod-2": []string{"v1"}}, nil
-			default:
-				return map[string]any{"pod-1": []string{"v2"}, "pod-2": []string{}}, nil
+			if call <= 2 {
+				return map[string]any{"pod-1": []string{"v1"}, "pod-2": []string{}}, nil
 			}
+
+			return map[string]any{"pod-1": []string{"v2"}, "pod-2": []string{}}, nil
 		})
 
 		events := parseSSE(runUntilFetched(w, p, 4))
@@ -423,52 +420,55 @@ var _ = Describe("Manager", func() {
 
 		// 没有任何 Pod 事件，插件照样拿到按 ID 定序的存活快照；坏 Pod 不进快照
 		Expect(p.snapshots).To(Receive(Equal([]string{"pod-1", "pod-2"})))
-		Expect(eventTypes(events)).To(Equal([]string{"PLUGIN", "PLUGIN", "ENDED"}))
+		Expect(eventTypes(events)).To(Equal([]string{"PLUGIN", "PLUGIN", "PLUGIN", "ENDED"}))
 
-		// 基线与首包一致的部分不重推：第 1 个 tick 只有 pod-1 变了
+		// 首个 tick 两个实例都推，pod-2 的空数组也推出去
 		id, data := events[0].pluginPayload()
 		Expect(id).To(Equal("pod-1"))
-		Expect(data).To(Equal([]string{"v2"}))
-
-		// pod-2 首包有数据、随后变空，必须推出去，否则页面会一直显示旧状态
+		Expect(data).To(Equal([]string{"v1"}))
 		id, data = events[1].pluginPayload()
 		Expect(id).To(Equal("pod-2"))
 		Expect(data).To(Equal([]string{}))
+
+		// 第 2 个 tick 没变化不推，第 3 个 tick 只有 pod-1 变了
+		id, data = events[2].pluginPayload()
+		Expect(id).To(Equal("pod-1"))
+		Expect(data).To(Equal([]string{"v2"}))
 	})
 
-	// 预置实例随后被删：DELETED 照常推，下一轮快照里不能再有它
+	// 预置实例随后被删：DELETED 照常推，之后的快照里不能再有它，也不会为它补出 PLUGIN
 	It("drops seeded instances from the plugin snapshot once they are deleted", func() {
 		w := newStubPodWatch()
 		w.livePods = []*unstructured.Unstructured{validPod("pod-1"), validPod("pod-2")}
 		p := newStubPlugin("stub", func(int) (map[string]any, error) {
-			return map[string]any{"pod-1": []string{"v1"}}, nil
+			return map[string]any{"pod-1": []string{"v1"}, "pod-2": []string{"v1"}}, nil
 		})
 		w.send(k8swatch.Deleted, validPod("pod-2"))
 
 		events := parseSSE(runUntilFetched(w, p, 2))
 
-		// Prime 时两个都在，DELETED 之后的 tick 只剩 pod-1；pod-1 没变化不推
-		Expect(p.snapshots).To(Receive(Equal([]string{"pod-1", "pod-2"})))
+		// 首个 tick 前 DELETED 已消费，快照只剩 pod-1；pod-2 的待同步标记随之作废
 		Expect(p.snapshots).To(Receive(Equal([]string{"pod-1"})))
-		Expect(eventTypes(events)).To(Equal([]string{"DELETED", "ENDED"}))
+		Expect(eventTypes(events)).To(Equal([]string{"DELETED", "PLUGIN", "ENDED"}))
+		id, _ := events[1].pluginPayload()
+		Expect(id).To(Equal("pod-1"))
 	})
 
-	// 预置时已存在、位点之后才 ADDED 的实例，前端新建的行附属数据为空；必须忘掉基线重新推
-	It("forgets primed baselines on ADDED so the new row gets its plugin data", func() {
+	// ADDED 之后服务端不知道页面这一行显示的附属数据（新行为空，重复 ADDED 保留旧数据），空载荷也要推一次覆盖过去
+	It("syncs plugin data for ADDED instances even when the payload is empty", func() {
 		w := newStubPodWatch()
-		w.livePods = []*unstructured.Unstructured{validPod("pod-1")}
 		p := newStubPlugin("stub", func(int) (map[string]any, error) {
-			return map[string]any{"pod-1": []string{"v1"}}, nil
+			return map[string]any{"pod-1": []string{}}, nil
 		})
 		w.send(k8swatch.Added, validPod("pod-1"))
 
 		events := parseSSE(runUntilFetched(w, p, 3))
 
-		// 载荷与 Prime 基线相同，但 ADDED 之后要按首次见到重新推一次
+		// 只推一次，之后载荷没变不重推
 		Expect(eventTypes(events)).To(Equal([]string{"ADDED", "PLUGIN", "ENDED"}))
 		id, data := events[1].pluginPayload()
 		Expect(id).To(Equal("pod-1"))
-		Expect(data).To(Equal([]string{"v1"}))
+		Expect(data).To(Equal([]string{}))
 	})
 
 	// 预置拉取失败或超时都不拆流：退回只认推送过事件的实例，Pod 事件照常推
@@ -485,7 +485,7 @@ var _ = Describe("Manager", func() {
 				m.seedListTimeout = 20 * time.Millisecond
 			}))
 
-			// 没有预置实例就没有 Prime，第 1 次调用即第 1 个 tick
+			// 没有预置实例，插件快照里只有推送过 ADDED 的实例
 			Expect(p.snapshots).To(Receive(Equal([]string{"pod-1"})))
 			Expect(eventTypes(events)).To(Equal([]string{"ADDED", "PLUGIN", "ENDED"}))
 		},

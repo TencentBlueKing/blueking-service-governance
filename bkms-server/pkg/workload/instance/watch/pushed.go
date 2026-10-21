@@ -20,6 +20,7 @@ package watch
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
@@ -67,6 +68,11 @@ func (p *pushedInstances) track(event serializer.AppInstanceWatchEvent) {
 // empty 是否尚无任何已知实例（既没预置到，也没推送过）
 func (p *pushedInstances) empty() bool {
 	return len(p.items) == 0
+}
+
+// ids 返回全部记录的实例 ID，不保证顺序
+func (p *pushedInstances) ids() []string {
+	return slices.Collect(maps.Keys(p.items))
 }
 
 // sorted 按实例 ID 定序返回全部记录，使一轮补拉的推送顺序稳定

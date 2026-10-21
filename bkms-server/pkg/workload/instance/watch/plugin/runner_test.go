@@ -205,45 +205,57 @@ var _ = Describe("Runner", func() {
 		Expect(events).To(BeEmpty())
 	})
 
-	// Prime 只记基线不推：与基线相同的不重推，从有到空的变化照样推；拉取失败的插件退回首次见到的口径
-	It("primes baselines without emitting and falls back to first-seen on failure", func() {
-		primed := &fakePlugin{name: "primed", rounds: []map[string]any{
-			{"a": []string{"v1"}, "b": []string{"v1"}},
+	// 待同步实例拿到值就推一次，空值也推（前端首包可能有旧数据）；推过之后回到深比较
+	// 插件没给值的实例标记保留，等它给出值的那一轮再推
+	It("pushes unsynced instances once even when the payload is empty", func() {
+		p := &fakePlugin{name: "stub", rounds: []map[string]any{
 			{"a": []string{"v1"}, "b": []string{}},
+			{"a": []string{"v1"}, "b": []string{}},
+			{"a": []string{"v1"}, "b": []string{}, "c": []string{}},
+			{"a": []string{"v1"}, "b": []string{}, "c": []string{}},
 		}}
-		broken := &fakePlugin{name: "broken", failAll: true}
-		runner := NewRunner(primed, broken)
+		runner := NewRunner(p)
+		runner.MarkUnsynced("a", "b", "c")
 
-		runner.Prime(ctx, snapshotOf("a", "b"))
+		rounds := make([][]serializer.AppInstancePluginWatchEvent, 4)
+		for i := range rounds {
+			Expect(runner.Run(ctx, snapshotOf("a", "b", "c"), collect(&rounds[i]))).To(Succeed())
+		}
 
-		broken.failAll = false
-		broken.rounds = []map[string]any{{"a": []string{}, "b": []string{"v1"}}}
-
-		var events []serializer.AppInstancePluginWatchEvent
-		Expect(runner.Run(ctx, snapshotOf("a", "b"), collect(&events))).To(Succeed())
-
-		// primed：a 与基线一致不推，b 变空必须推；broken 没建成基线，首次见到的空载荷不推、非空才推
-		Expect(events).To(HaveLen(2))
-		Expect(events[0].Plugin).To(Equal("primed"))
-		Expect(events[0].Object.ID).To(Equal("b"))
-		Expect(events[0].Object.Data).To(Equal([]string{}))
-		Expect(events[1].Plugin).To(Equal("broken"))
-		Expect(events[1].Object.ID).To(Equal("b"))
+		// 首轮 a、b 都推，b 的空数组也推；c 没给值不推
+		Expect(rounds[0]).To(HaveLen(2))
+		Expect(rounds[0][0].Object.ID).To(Equal("a"))
+		Expect(rounds[0][1].Object.ID).To(Equal("b"))
+		Expect(rounds[0][1].Object.Data).To(Equal([]string{}))
+		// 同步过的不再重推
+		Expect(rounds[1]).To(BeEmpty())
+		// c 首次给值即推，哪怕是空值
+		Expect(rounds[2]).To(HaveLen(1))
+		Expect(rounds[2][0].Object.ID).To(Equal("c"))
+		Expect(rounds[3]).To(BeEmpty())
 	})
 
-	// Forget 之后同样的载荷也要按首次见到重推一次，其它实例不受影响
-	It("re-pushes an unchanged payload after the instance is forgotten", func() {
-		p := &fakePlugin{name: "stub", rounds: []map[string]any{{"a": []string{"v1"}, "b": []string{"v1"}}}}
+	// 拉取失败的轮次不消耗待同步标记；已推送过的实例重新标记后，相同载荷也要再推一次
+	It("keeps unsynced marks across failed fetches and re-pushes after re-marking", func() {
+		p := &fakePlugin{name: "stub", failAll: true, rounds: []map[string]any{{"a": []string{"v1"}}}}
 		runner := NewRunner(p)
-		runner.Prime(ctx, snapshotOf("a", "b"))
+		runner.MarkUnsynced("a")
 
-		runner.Forget("a")
+		var failed []serializer.AppInstancePluginWatchEvent
+		Expect(runner.Run(ctx, snapshotOf("a"), collect(&failed))).To(Succeed())
 
-		var events []serializer.AppInstancePluginWatchEvent
-		Expect(runner.Run(ctx, snapshotOf("a", "b"), collect(&events))).To(Succeed())
+		p.failAll = false
+		var recovered []serializer.AppInstancePluginWatchEvent
+		Expect(runner.Run(ctx, snapshotOf("a"), collect(&recovered))).To(Succeed())
 
-		Expect(events).To(HaveLen(1))
-		Expect(events[0].Object.ID).To(Equal("a"))
+		runner.MarkUnsynced("a")
+		var remarked []serializer.AppInstancePluginWatchEvent
+		Expect(runner.Run(ctx, snapshotOf("a"), collect(&remarked))).To(Succeed())
+
+		Expect(failed).To(BeEmpty())
+		Expect(recovered).To(HaveLen(1))
+		Expect(remarked).To(HaveLen(1))
+		Expect(remarked[0].Object.Data).To(Equal([]string{"v1"}))
 	})
 
 	// 插件快照是抽出的值拷贝，改 IP 碰不到调用方的投影对象

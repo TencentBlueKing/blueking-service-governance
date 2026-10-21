@@ -35,13 +35,6 @@ import (
 // 插件与 Pod 事件 / 心跳共用 consume goroutine，超时后按本轮失败跳过，避免一次卡住拖死整条流
 const pluginFetchTimeout = 5 * time.Second
 
-const (
-	// fetchStagePrime 建流时为预置实例建基线的那次拉取
-	fetchStagePrime = "prime"
-	// fetchStageRound 每个 tick 的周期拉取
-	fetchStageRound = "round"
-)
-
 // Emit 把一条插件事件写给客户端；返回 error 表示流已不可写，Runner 立即中止本轮
 type Emit func(event serializer.AppInstancePluginWatchEvent) error
 
@@ -51,9 +44,12 @@ type Emit func(event serializer.AppInstancePluginWatchEvent) error
 // consume 的单 goroutine 内读写，故不加锁；若以后把插件调用挪进独立 goroutine，这里必须先补锁
 type Runner struct {
 	plugins []Plugin
-	// pushed 每个插件上次成功推给前端的载荷（含 Prime 记下的建流基线），索引为 pushed[插件名][实例 ID]
+	// pushed 每个插件上次成功推给前端的载荷，索引为 pushed[插件名][实例 ID]
 	// 它是判断「有没有变化」的唯一基准：本轮拉取失败不动它，页面因此保留上次已知值
 	pushed map[string]map[string]any
+	// unsynced 每个插件下一次拿到值时必须无条件推的实例，索引为 unsynced[插件名][实例 ID]
+	// 推出去才清除；插件没给值的实例继续保留，已离开快照的随之出栈
+	unsynced map[string]map[string]struct{}
 	// fetchTimeout 单次 Fetch 上限；单测调小以免真实等待
 	fetchTimeout time.Duration
 }
@@ -63,46 +59,26 @@ func NewRunner(plugins ...Plugin) *Runner {
 	return &Runner{
 		plugins:      plugins,
 		pushed:       make(map[string]map[string]any, len(plugins)),
+		unsynced:     make(map[string]map[string]struct{}, len(plugins)),
 		fetchTimeout: pluginFetchTimeout,
 	}
 }
 
-// Prime 建流时拉一轮，把结果记为各实例的对比基线，不推事件
-// 预置实例前端首包已带附属数据，按「首次见到且为空不推」判断会吞掉变空、重推未变的
-// 代价：List 到建流之间恰好发生的变化，要等下次变化或重连才补上
-func (r *Runner) Prime(ctx context.Context, snapshot []*serializer.AppInstanceOutputObj) {
-	// 没有预置实例时无从建基线，省掉一轮拉取
-	if len(snapshot) == 0 {
-		return
-	}
-
-	views := toInstanceSnapshots(snapshot)
-
+// MarkUnsynced 标记这些实例需要重新同步附属数据：每个插件下一次给出该实例的值时，不做比较直接推一次（空值也推）
+// 用于建流时预置的实例与 ADDED 的实例：服务端不知道页面上这些行当前显示的附属数据是什么
+// 首包可能是降级后的空值，也可能是建流前取的旧值，只能推一份当前值覆盖过去，之后再按深比较只推变化
+// 前端按 id 覆盖附属数据，重复推相同的值没有副作用
+func (r *Runner) MarkUnsynced(instanceIDs ...string) {
 	for _, p := range r.plugins {
-		// 拉取失败的插件不建基线，它的实例保持未记录，之后按首次见到处理
-		payloads, ok := r.fetchOrSkip(ctx, p, fetchStagePrime, views)
+		unsynced, ok := r.unsynced[p.Name()]
 		if !ok {
-			continue
+			unsynced = make(map[string]struct{}, len(instanceIDs))
+			r.unsynced[p.Name()] = unsynced
 		}
 
-		// 只记插件给了值的实例；没给的保持未记录，之后按首次见到处理
-		baseline := make(map[string]any, len(views))
-		for _, instance := range views {
-			if payload, found := payloads[instance.ID]; found {
-				baseline[instance.ID] = payload
-			}
+		for _, id := range instanceIDs {
+			unsynced[id] = struct{}{}
 		}
-
-		r.pushed[p.Name()] = baseline
-	}
-}
-
-// Forget 清掉某实例在全部插件里的已推送记录，下一轮按首次见到重新判断
-// 前端收到新行的 ADDED 时附属数据为空，此前记下的基线已不代表前端所见，不清掉的话
-// 载荷没变就永远不推，这一行的附属数据会一直空着
-func (r *Runner) Forget(instanceID string) {
-	for _, pushed := range r.pushed {
-		delete(pushed, instanceID)
 	}
 }
 
@@ -117,8 +93,8 @@ func (r *Runner) Run(ctx context.Context, snapshot []*serializer.AppInstanceOutp
 	views := toInstanceSnapshots(snapshot)
 
 	for _, p := range r.plugins {
-		// 拉取失败（含超时）按「本轮不可用」处理：不推事件、不拆流、不动已推送记录
-		payloads, ok := r.fetchOrSkip(ctx, p, fetchStageRound, views)
+		// 拉取失败（含超时）按「本轮不可用」处理：不推事件、不拆流、不动已推送记录与待同步标记
+		payloads, ok := r.fetchOrSkip(ctx, p, views)
 		if !ok {
 			continue
 		}
@@ -141,24 +117,25 @@ func toInstanceSnapshots(snapshot []*serializer.AppInstanceOutputObj) []Instance
 	return views
 }
 
-// fetchOrSkip 拉一轮并吞掉失败，Prime 与 Run 共用：失败只告警、记 metrics，返回 false 让调用方跳过该插件
-// 失败被这里吞掉，不会体现在响应里，只能靠日志与 metrics 排查；stage 写进日志区分建基线还是周期轮次
-// 客户端已断开导致的失败是正常收流，不是插件故障，不告警
+// fetchOrSkip 拉一轮并吞掉失败：失败只告警、记 metrics，返回 false 让调用方跳过该插件
+// 失败被这里吞掉，不会体现在响应里，只能靠日志与 metrics 排查
 func (r *Runner) fetchOrSkip(
 	ctx context.Context,
 	p Plugin,
-	stage string,
 	views []InstanceSnapshot,
 ) (map[string]any, bool) {
 	payloads, err := r.fetch(ctx, p, views)
+
+	// 客户端已断开导致的失败是正常收流，不是插件故障：不告警，也不计入失败率
+	if err != nil && ctx.Err() != nil {
+		return nil, false
+	}
+
 	if err != nil {
-		if ctx.Err() == nil {
-			log.WarnAttrs(ctx, "watch plugin fetch failed, skip this plugin",
-				slog.String("plugin", p.Name()),
-				slog.String("stage", stage),
-				slog.String("err", err.Error()),
-			)
-		}
+		log.WarnAttrs(ctx, "watch plugin fetch failed, skip this plugin",
+			slog.String("plugin", p.Name()),
+			slog.String("err", err.Error()),
+		)
 
 		metrics.InstanceWatchPluginFetch(p.Name(), false)
 
@@ -195,24 +172,34 @@ func (r *Runner) emitChanged(
 	emit Emit,
 ) error {
 	prev := r.pushed[name]
+	unsynced := r.unsynced[name]
 	// 按本轮快照重建，DELETED 的实例不在快照里，随之出栈
 	next := make(map[string]any, len(snapshot))
+	nextUnsynced := make(map[string]struct{})
 
 	for _, instance := range snapshot {
+		_, force := unsynced[instance.ID]
+
+		// 本轮没有可推的值：待同步标记留到插件给出值的那一轮
 		payload, known := payloadThisRound(payloads, prev, instance.ID)
 		if !known {
+			if force {
+				nextUnsynced[instance.ID] = struct{}{}
+			}
+
 			continue
 		}
 
 		next[instance.ID] = payload
 
-		if err := emitIfChanged(name, instance.ID, prev, payload, emit); err != nil {
+		if err := emitIfChanged(name, instance.ID, prev, payload, force, emit); err != nil {
 			return err
 		}
 	}
 
-	// 全部写成功才提交；中途失败丢弃 next，缓存停在上一轮
+	// 全部写成功才提交；中途失败丢弃 next 与 nextUnsynced，缓存和待同步标记都停在上一轮
 	r.pushed[name] = next
+	r.unsynced[name] = nextUnsynced
 
 	return nil
 }
@@ -227,10 +214,10 @@ func payloadThisRound(payloads, prev map[string]any, id string) (any, bool) {
 	return last, tracked
 }
 
-// emitIfChanged 相对上次有差异才写事件；写失败说明流已不可写，本轮剩余实例不再尝试
-func emitIfChanged(name, instanceID string, prev map[string]any, payload any, emit Emit) error {
+// emitIfChanged 相对上次有差异才写事件，force 时无条件写；写失败说明流已不可写，本轮剩余实例不再尝试
+func emitIfChanged(name, instanceID string, prev map[string]any, payload any, force bool, emit Emit) error {
 	last, tracked := prev[instanceID]
-	if !needEmit(tracked, last, payload) {
+	if !force && !needEmit(tracked, last, payload) {
 		return nil
 	}
 

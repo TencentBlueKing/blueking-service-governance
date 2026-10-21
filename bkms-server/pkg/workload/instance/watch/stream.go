@@ -45,7 +45,8 @@ const (
 	streamTickInterval = 15 * time.Second
 	// streamMaxAge 单条 SSE 连接的硬性上限；到期推 ENDED，不向客户端承诺更长连接
 	streamMaxAge = 2 * time.Minute
-	// seedListTimeout 建流时预置 List 的上限，与插件单次拉取上限对齐；超时按预置失败降级，不拖慢建流
+	// seedListTimeout 建流时预置 List 的上限；它在写 SSE 响应头之前，取一个前端可接受的建流等待
+	// 超时按预置失败降级，不拖慢建流
 	seedListTimeout = 5 * time.Second
 	// seedListResourceVersion 预置 List 从 apiserver watch cache 读，不穿透 etcd
 	// 也是唯一允许与 continue 翻页同时出现的非空位点，实例超过一页时不会被 apiserver 拒绝
@@ -100,11 +101,15 @@ func (m *Manager) Run(ctx context.Context, w http.ResponseWriter, p RunParams) e
 		return err
 	}
 
-	// 预置插件层快照并建立对比基线：前端首包已有这些实例，Watch 只推位点之后的增量
+	// 预置插件层快照：前端首包已有这些实例，Watch 只推位点之后的增量
 	// 不预置的话 Pod 一直不动时快照恒为空，北极星等附属数据的变化永远推不出去
 	// 放在建 Watch 之前：集群 Watch 的结果通道无缓冲，建好后迟迟不消费会把事件堵在读端
+	// 这里只有一次 List、不拉插件，建流前最多多等 seedListTimeout
 	pushed := m.seedLiveInstances(ctx, p)
-	m.pluginRunner.Prime(ctx, pushed.sorted())
+
+	// 前端首包里的附属数据可能已降级为空，也可能早于本连接的拉取，不能拿来当对比基线
+	// 标为待同步：首个 tick 拿到值后对它们无条件推一次，之后再按深比较只推变化
+	m.pluginRunner.MarkUnsynced(pushed.ids()...)
 
 	// 再建立集群 Watch；此时尚未写响应头，失败仍可返回普通 HTTP 错误
 	// TimeoutSeconds 与 SSE 硬上限对齐，避免集群侧 Watch 比本条连接活得更久
@@ -178,7 +183,7 @@ func endedReason(err error) (string, bool) {
 }
 
 // seedLiveInstances 取当前存活实例作为插件层的初始快照，只记录不推事件
-// 结果与续传位点可能有出入，由后续事件纠正：ADDED 经 Runner.Forget 重置基线，DELETED 出栈；
+// 结果与续传位点可能有出入，由后续事件纠正：ADDED 经 Runner.MarkUnsynced 重新同步，DELETED 出栈；
 // 偶尔收不到 DELETED 的残留实例只会产生前端忽略的 PLUGIN
 // 拉取失败或超时只告警并返回空记录，不拆流
 func (m *Manager) seedLiveInstances(ctx context.Context, p RunParams) *pushedInstances {
@@ -296,9 +301,10 @@ func (m *Manager) handleEvent(
 	// 推送成功后才记录：没推出去的实例不进插件层快照，也就不会被补出附属数据事件
 	pushed.track(event)
 
-	// 前端按 ADDED 建的新行附属数据为空；建流时为它记下的基线不再代表前端所见，必须清掉重来
+	// 前端按 ADDED 新建的行附属数据为空，重复 ADDED 则保留旧行的附属数据；两种情况服务端都分不清，
+	// 已推送记录不再等于页面上显示的值，标为待同步，下一轮拿到值后直接推一次
 	if event.Type == string(EventAdded) {
-		m.pluginRunner.Forget(event.Object.ID)
+		m.pluginRunner.MarkUnsynced(event.Object.ID)
 	}
 
 	return nil
