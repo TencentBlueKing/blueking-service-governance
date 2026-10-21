@@ -1245,8 +1245,13 @@
         isFrameworkFile.value && fileInfoFormData.envContentStrategy !== activeEnvContentStrategy.value;
       if (strategyChanged) {
         // 必须读取成功后才能判断是否有环境单独配置，不能以旧列表或失败时的空值跳过确认。
-        const instances = await fetchEnvInstances();
-        if (!instances) return;
+        // 被并发请求作废（stale）时重试一次；仍不可用则提示后中止，避免"点了保存没反应"。
+        let instances = await fetchEnvInstances();
+        if (!instances) instances = await fetchEnvInstances();
+        if (!instances) {
+          Message({ theme: 'warning', message: t('获取环境配置信息失败，请稍后重试') });
+          return;
+        }
         const envNames = instances.map(item => item.envName || '').filter(Boolean);
         if (
           envNames.length &&
@@ -1266,7 +1271,18 @@
           await updateSpecApi.value({ appID: appDetailStore.appID, appModelSpec: updatedSpec });
           await getAppData();
         }
-        if (strategyChanged) await updateDef({ envContentStrategy: fileInfoFormData.envContentStrategy });
+        if (strategyChanged) {
+          try {
+            await updateDef({ envContentStrategy: fileInfoFormData.envContentStrategy });
+          } catch (error) {
+            // 元信息已落库、仅策略未生效：保留编辑态让用户重试（重试只提交策略），并明确告知部分成功
+            if (metadataChanged) {
+              Message({ theme: 'warning', message: t('文件信息已保存，生效方式保存失败，请重试') });
+              return;
+            }
+            throw error;
+          }
+        }
       } else {
         const changes: UpdateDefInput = {};
         if (fileInfoFormData.name !== activeDef.value.name) changes.name = fileInfoFormData.name;
