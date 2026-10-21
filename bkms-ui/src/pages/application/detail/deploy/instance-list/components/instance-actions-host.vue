@@ -65,7 +65,7 @@
   const weightEnvName = ref('');
   const weightInstanceIds = ref<string[]>([]);
   const weightInstanceName = ref('');
-  const weightInitialValue = ref(10);
+  const weightInitialValue = ref<null | number>(null);
   const weightClearSelectionOnSuccess = ref(false);
 
   const grayVisible = ref(false);
@@ -130,8 +130,9 @@
     weightEnvName.value = options.envName;
     weightInstanceIds.value = ids;
     weightInstanceName.value = options.instances.length === 1 ? ids[0] : '';
+    // 单实例时回填当前权重，多实例时不给默认值
     weightInitialValue.value =
-      options.instances.length === 1 ? Number(options.instances[0].polarisInfos?.[0]?.weight ?? 10) : 10;
+      options.instances.length === 1 ? Number(options.instances[0].polarisInfos?.[0]?.weight ?? 10) : null;
     weightClearSelectionOnSuccess.value = Boolean(options.clearSelectionOnSuccess);
     weightVisible.value = true;
   }
