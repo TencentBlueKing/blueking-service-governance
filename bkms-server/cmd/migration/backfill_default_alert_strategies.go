@@ -159,7 +159,7 @@ func runBackfillDefaultAlertStrategies(
 		return nil, errors.Errorf("app %s does not belong to workspace %s", app.ID, opts.WorkspaceID)
 	}
 
-	ws, err := deps.workspaceStore.Get(ctx, workspace.ByWorkspaceID(opts.WorkspaceID))
+	ws, err := deps.workspaceStore.Get(ctx, workspace.ByWorkspaceID(opts.WorkspaceID), store.AllTenants())
 	if err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}

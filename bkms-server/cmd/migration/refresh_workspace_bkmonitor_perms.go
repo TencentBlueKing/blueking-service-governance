@@ -94,7 +94,7 @@ func dryRunRefreshWorkspaceBkmonitorPerms(
 	wsStore *workspace.WorkspaceStore,
 	filterIDs []string,
 ) {
-	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady))
+	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady), store.AllTenants())
 	if err != nil {
 		log.Fatalf("list workspaces: %v", err)
 	}
@@ -207,7 +207,7 @@ func refreshWorkspaceBkmonitorPerms(
 	permMgr perm.Manager,
 	filterIDs []string,
 ) error {
-	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady))
+	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady), store.AllTenants())
 	if err != nil {
 		return errors.Wrap(err, "list workspaces")
 	}

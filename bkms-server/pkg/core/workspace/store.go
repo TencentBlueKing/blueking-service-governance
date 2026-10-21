@@ -36,11 +36,16 @@ type WorkspaceStore = store.GenericStore[Workspace]
 
 // Meta 工作空间的存储元数据。模型没有 _id 字段，工作空间 ID 存在 id 字段中，按 ID 查询须用 ByWorkspaceID。
 //
+// 集合按租户隔离：租户默认取自 ctx，平台管理与运维命令用 AllTenants / ForTenant 改变范围。
+// id 目前仍是全局唯一，即不同租户不能使用同一个工作空间 ID。
+//
 // 索引（由 golang-migrate 维护）：
 // - 唯一：id
+// - 普通：tenantID
 var Meta = store.Meta[Workspace]{
-	Collection: "workspaces",
-	NotFound:   ErrWorkspaceNotFound,
+	Collection:     "workspaces",
+	TenantIsolated: true,
+	NotFound:       ErrWorkspaceNotFound,
 }
 
 // ByWorkspaceID 按工作空间 ID 匹配
@@ -64,9 +69,10 @@ func DefaultOrder() store.Opt {
 }
 
 // Update 更新已经存在的工作空间的可变字段，不存在时返回 ErrWorkspaceNotFound
-func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace) error {
+func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace, opts ...store.Opt) error {
 	mutable := store.UpdateSelected("displayName", "description", "bkSystems", "imageRegistryType", "state", "updater")
-	if err := workspaces.Update(ctx, ws, mutable, ByWorkspaceID(ws.ID)); err != nil {
+	opts = append(opts, mutable, ByWorkspaceID(ws.ID))
+	if err := workspaces.Update(ctx, ws, opts...); err != nil {
 		return errors.Wrapf(err, "update workspace %s", ws.ID)
 	}
 	return nil
