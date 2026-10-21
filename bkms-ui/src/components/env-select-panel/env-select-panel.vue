@@ -456,7 +456,7 @@
   const visibleEnvDraft = ref<string[]>([]);
   const submittingVisibleEnvs = ref(false);
   const visibleEnvsSaving = computed(() => submittingVisibleEnvs.value || appDetailStore.savingVisibleEnvs);
-  /** 关闭、取消或切换应用后，使在途保存的异步结果失效。 */
+  /** 关闭、取消或切换应用时递增，阻止旧的进入编辑/保存流程继续操作面板。 */
   let visibleEnvEditSession = 0;
 
   function endVisibleEnvEdit() {
@@ -473,7 +473,9 @@
   const isPopoverVisible = ref(false);
   /** 全部环境列表 */
   const envList = ref<EnvOutput[]>([]);
+  /** 由加载入口递增，切换应用时失效；列表写入、选择初始化和 loading 共用此序号。 */
   let envListRequest = 0;
+  /** 已完成选择清理的名单版本；加载期间跳过清理时，在加载结束后补做。 */
   let reconciledVisibleEnvsVersion = appDetailStore.visibleEnvsVersion;
   /** 保留所有泳道的原始记录，供可见环境规则判断。 */
   const appDeployStatuses = ref<AppDeployedEnvOutputObj[]>([]);
@@ -487,7 +489,9 @@
     });
     return { byID, byName };
   });
+  /** 仅最新部署状态请求可写入；与编辑会话独立，普通刷新也会递增。 */
   let deployStatusesRequest = 0;
+  /** 被刷新顶替的编辑/保存校验等待此结果，避免使用旧状态或静默中断。 */
   let latestDeployStatusesPromise: Promise<boolean>;
   /** 搜索关键词 */
   const searchKeyword = ref('');
@@ -730,10 +734,8 @@
   }
 
   /** 获取环境列表，NotReady 环境排到末尾 */
-  async function getEnvList() {
-    const request = ++envListRequest;
-    const appID = appDetailStore.appID;
-    if (!appDetailStore.appID) {
+  async function getEnvList(appID: string, request: number) {
+    if (!appID) {
       envList.value = [];
       emits('update:envList', []);
       return false;
@@ -768,18 +770,19 @@
   /** 组件初始化：拉取环境列表并根据选择模式初始化选中值 */
   async function handleGetEnvList() {
     const appID = appDetailStore.appID;
-    const request = envListRequest + 1;
+    const request = ++envListRequest;
     isLoading.value = true;
     emits('update:loading', true);
     try {
       const [loaded] = await Promise.all([
-        getEnvList(),
+        getEnvList(appID, request),
         // 复用当前应用详情，避免辅助刷新失败时清空全局详情及已有的可见名单。
         props.enableVisibleEnvSettings && appDetailStore.appDetail?.id !== appID
           ? appDetailStore.fetchAppDetail()
           : Promise.resolve(),
       ]);
-      if (!loaded || appID !== appDetailStore.appID) return;
+      // 等待应用详情期间也可能发起新一轮加载，初始化选择前再次检查归属。
+      if (!loaded || request !== envListRequest || appID !== appDetailStore.appID) return;
       if (mode.value === 'multi') {
         // 多选模式初始化
         if (props.modelValues?.length) {

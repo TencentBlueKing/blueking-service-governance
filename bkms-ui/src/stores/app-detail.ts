@@ -36,12 +36,16 @@ export const useAppDetail = defineStore('appDetail', () => {
   const appDetail = ref<AppDetailOutputObj | null>(null);
   const loading = ref(false);
   const savingVisibleEnvs = ref(false);
+  /** 保存成功后递增，防止旧详情覆盖新名单，并通知选择器清理失效选择。 */
   const visibleEnvsVersion = ref(0);
+  /** 每次切换应用即递增，即使 A→B→A 也不能接受最初 A 的迟到响应。 */
   let appRevision = 0;
   watch(
     appID,
     () => {
       appRevision += 1;
+      // 旧请求已失效，即使不再发起详情请求，也要释放其加载状态。
+      loading.value = false;
       fetchPromiseCache.clear();
     },
     { flush: 'sync' },

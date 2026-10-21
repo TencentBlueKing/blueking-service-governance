@@ -238,6 +238,42 @@ describe('应用可见环境：名单语义与保存', () => {
     expect(mocks.get).not.toHaveBeenCalled();
   });
 
+  it.each(['切换应用', '清空应用', '重置 store'])('%s 后无新请求时，立即释放详情 loading', async action => {
+    const store = useAppDetail();
+    const pending = deferred<ReturnType<typeof detail>>();
+    mocks.initialGet.mockReturnValueOnce(pending.promise);
+    const fetching = store.fetchAppDetail();
+    expect(store.loading).toBe(true);
+
+    if (action === '重置 store') store.reset();
+    else store.updateAppID(action === '切换应用' ? 'app-b' : '');
+    expect.soft(store.loading).toBe(false);
+
+    pending.resolve(detail());
+    expect(await fetching).toBeNull();
+    expect(store.loading).toBe(false);
+  });
+
+  it('旧应用详情请求结束时，不释放新应用请求的 loading', async () => {
+    const store = useAppDetail();
+    const previous = deferred<ReturnType<typeof detail>>();
+    const latest = deferred<ReturnType<typeof detail>>();
+    mocks.initialGet.mockReturnValueOnce(previous.promise).mockReturnValueOnce(latest.promise);
+    const previousFetching = store.fetchAppDetail();
+    store.updateAppID('app-b');
+    const latestFetching = store.fetchAppDetail();
+    expect(store.loading).toBe(true);
+
+    previous.resolve(detail());
+    expect(await previousFetching).toBeNull();
+    expect(store.loading).toBe(true);
+
+    latest.resolve({ ...detail(), id: 'app-b' });
+    await latestFetching;
+    expect(store.loading).toBe(false);
+    expect(store.appDetail?.id).toBe('app-b');
+  });
+
   it('保存之前的详情请求晚返回也不会恢复旧名单', async () => {
     const store = useAppDetail();
     const pending = deferred<ReturnType<typeof detail>>();
@@ -276,6 +312,38 @@ describe('可见环境下拉交互', () => {
     expect(checkDeployEnv(environments[1])).toBe(false);
     expect(screen.queryByText('PROD')).not.toBeInTheDocument();
     expect(mocks.initialGet).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('并发加载环境时，仅最新请求更新列表和结束 loading（最新先返回：%s）', async latestFirst => {
+    const panel = await openPollingPanel();
+    const previous = deferred<EnvOutput[]>();
+    const latest = deferred<EnvOutput[]>();
+    mocks.list.mockReturnValueOnce(previous.promise).mockReturnValueOnce(latest.promise);
+    const previousRefresh = panel.refreshEnvList();
+    const latestRefresh = panel.refreshEnvList();
+    await nextTick();
+    const settingsButton = screen.getByRole('button', { name: '设置可见环境' });
+    expect(settingsButton).toBeDisabled();
+
+    if (latestFirst) {
+      latest.resolve([env('latest')]);
+      await latestRefresh;
+      await nextTick();
+      expect(settingsButton).toBeEnabled();
+      previous.resolve([env('previous')]);
+    } else {
+      previous.resolve([env('previous')]);
+      await previousRefresh;
+      await nextTick();
+      expect(settingsButton).toBeDisabled();
+      latest.resolve([env('latest')]);
+    }
+
+    await Promise.all([previousRefresh, latestRefresh]);
+    await nextTick();
+    expect(settingsButton).toBeEnabled();
+    expect(screen.getByText('LATEST')).toBeVisible();
+    expect(screen.queryByText('PREVIOUS')).not.toBeInTheDocument();
   });
 
   it.each(['未加载', '属于其他应用'])('应用详情%s时，面板应获取当前应用详情后再使用可见名单', async state => {
