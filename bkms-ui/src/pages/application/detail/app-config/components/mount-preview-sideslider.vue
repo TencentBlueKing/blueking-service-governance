@@ -208,9 +208,9 @@
     return '--';
   }
 
-  // 打开抽屉或环境列表变化时，若当前环境已不在列表中则回退到第一个环境，并重新拉取数据。
+  // 打开抽屉或环境/文件定义刷新时重新拉取，确保策略切换后内容来源同步更新。
   watch(
-    [() => props.isShow, () => props.envList],
+    [() => props.isShow, () => props.envList, () => props.files],
     ([isShow]) => {
       if (!isShow) {
         previewRequestID += 1;

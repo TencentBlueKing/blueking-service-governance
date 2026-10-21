@@ -38,6 +38,8 @@ export interface ConfigFileDefView {
   editableContentField: EditableContentField;
   /** 是否开启环境变量渲染 */
   enableEnvVarRender: boolean;
+  /** 环境内容相对默认配置的生效方式 */
+  envContentStrategy: ConfigFileEnvContentStrategy;
   fileFormat: ConfigFileFormat;
   fileId: string;
   /** 文件类型：normal 普通文件 / overlay 覆盖文件 */
@@ -55,6 +57,7 @@ export interface ConfigFileDefView {
   /** overlay 文件的覆盖内容 */
   overlayContent: string;
 }
+export type ConfigFileEnvContentStrategy = 'overlay' | 'overwrite';
 export type ConfigFileFormat = 'taf' | 'yaml';
 export type ConfigFileKind = 'framework' | 'plain';
 /** 列表展示项：在视图模型上补充展示用名称与路径 */
@@ -173,6 +176,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
       return;
     }
     envInstances.value = result.items || [];
+    return envInstances.value;
   }
 
   /** 并行刷新详情与环境实例 */
@@ -271,6 +275,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
     detailLoading,
     envInstances,
     fetchDefs,
+    fetchEnvInstances,
     listLoading,
     modifiedEnvNames,
     refreshActive,
@@ -309,6 +314,8 @@ function normalizeDef(source?: DefDetailObj): ConfigFileDefView {
     editableContentField: field === 'content' || field === 'overlayContent' ? field : 'none',
     // framework 文件默认开启环境变量渲染
     enableEnvVarRender: source?.enableEnvVarRender ?? source?.configKind === 'framework',
+    envContentStrategy:
+      source?.configKind === 'plain' || source?.envContentStrategy === 'overwrite' ? 'overwrite' : 'overlay',
     fileFormat: source?.fileFormat === 'taf' ? 'taf' : 'yaml',
     fileId: source?.fileId || '',
     fileType: source?.fileType === 'overlay' ? 'overlay' : 'normal',

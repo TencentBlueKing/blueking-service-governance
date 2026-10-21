@@ -2139,6 +2139,18 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 北极星权重因子已修改，但平台配置保存失败，请重试保存: The Polaris weight factor was updated, but the platform configuration could not be saved. Please retry saving
 按环境查看容器内最终挂载的配置文件: Preview the final mounted configuration files by environment
 按环境配置: Configure by environment
+环境配置方式: Environment configuration mode
+独立完整配置（推荐）: Independent full configuration (recommended)
+与默认配置合并: Merge with the default configuration
+每个环境维护完整文件；修改默认配置不会影响已单独配置的环境。: Each environment maintains a complete file. Changes to the default configuration do not affect separately configured environments.
+每个环境只维护差异项；修改默认配置会同步影响各环境的最终配置。: Each environment maintains only its differences. Changes to the default configuration affect the final configuration of every environment.
+切换为“与默认配置合并”？: Switch to "Merge with default configuration"?
+切换为“独立完整配置”？: Switch to "Independent full configuration"?
+切换后，这些环境的文件内容{0}。请在切换后{1}。: After switching, the file content for these environments will {0}. Please {1} after switching.
+保持原样，不会自动按环境拆分差异: remain unchanged and will not be automatically split into per-environment differences
+保持原样，不会自动合并: remain unchanged and will not be automatically merged
+手动修改下列环境的文件内容: manually update the file content for the following environments
+确认切换: Confirm switch
 版本列表: Version history
 保存为空文件: Save as empty file
 本环境单独配置: Configured separately for this environment
