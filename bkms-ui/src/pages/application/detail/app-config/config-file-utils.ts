@@ -19,7 +19,7 @@
 import { BKMS_REGEX } from '~/common/const';
 
 /** 「挂载路径」校验提示，新建与编辑表单共用，避免多处文案漂移。 */
-export const MOUNT_DIR_INVALID_MESSAGE = '挂载路径需以 / 开头，且不能包含 .、.. 路径段或反斜杠';
+export const MOUNT_DIR_INVALID_MESSAGE = '挂载路径必须以“/”开头，且不能包含“.”或“..”路径段及反斜杠“\\”';
 
 /** 「挂载路径」表单校验规则。 */
 export function createMountDirRules(t: (key: string) => string) {
