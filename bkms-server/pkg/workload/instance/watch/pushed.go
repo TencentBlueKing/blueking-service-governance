@@ -25,8 +25,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
-// pushedInstances 记录本连接内每个实例最后一次推给前端的投影，供北极星补拉比对与重推
-// 只收成功推送过的实例，DELETED 后移除；请求级内存，不跨连接、不跨副本共享
+// pushedInstances 记录本连接内前端已知的每个实例的最新投影，供插件层取存活快照
+// 来源有两个：建流时预置的存活实例（前端首包已有），以及之后成功推送过的实例；DELETED 后移除
+// 请求级内存，不跨连接、不跨副本共享
 //
 // 驻留量的上界是该应用环境当前存活的实例数，与一次 List 全量同量级，连接一关整体释放
 // 不是持久化存储，与 appmodel / image 下那几个写 MongoDB 的 SnapshotStore 无关
@@ -40,6 +41,12 @@ type pushedInstances struct {
 // newPushedInstances 创建一条 Watch 连接的已推送投影记录
 func newPushedInstances() *pushedInstances {
 	return &pushedInstances{items: make(map[string]*serializer.AppInstanceOutputObj)}
+}
+
+// seed 预置一个前端首包已有的实例；不经过事件，只为让插件层在 Pod 不动时也能拿到快照
+// 之后同一实例的 Pod 事件由 track 覆盖，与直接推送过的实例无区别
+func (p *pushedInstances) seed(instance *serializer.AppInstanceOutputObj) {
+	p.items[instance.ID] = instance
 }
 
 // track 按已推送出去的事件更新记录；DELETED 移除该实例，其余覆盖为最新一次投影
@@ -57,7 +64,7 @@ func (p *pushedInstances) track(event serializer.AppInstanceWatchEvent) {
 	p.items[event.Object.ID] = event.Object
 }
 
-// empty 是否尚无任何已推送实例
+// empty 是否尚无任何已知实例（既没预置到，也没推送过）
 func (p *pushedInstances) empty() bool {
 	return len(p.items) == 0
 }

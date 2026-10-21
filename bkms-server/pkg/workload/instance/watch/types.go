@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8swatch "k8s.io/apimachinery/pkg/watch"
 )
 
@@ -46,9 +47,12 @@ const (
 	EventEnded EventType = "ENDED"
 )
 
-// PodWatcher 按命名空间订阅 Pod 变更；实现方负责把 ResourceVersion 交给 apiserver
-type PodWatcher interface {
+// PodSource 基础层读取集群 Pod 的入口
+// Watch 从续传位点起订阅增量，实现方负责把 ResourceVersion 交给 apiserver
+// List 只在建流时调用一次，取当前存活实例作为插件层的初始快照
+type PodSource interface {
 	Watch(ctx context.Context, namespace string, opts metav1.ListOptions) (k8swatch.Interface, error)
+	List(ctx context.Context, namespace string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 // RunParams 一条 Watch 连接的订阅范围与续传位点，均取自部署记录与 List 响应

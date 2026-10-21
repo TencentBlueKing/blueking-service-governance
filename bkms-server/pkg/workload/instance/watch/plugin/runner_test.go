@@ -205,6 +205,47 @@ var _ = Describe("Runner", func() {
 		Expect(events).To(BeEmpty())
 	})
 
+	// Prime 只记基线不推：与基线相同的不重推，从有到空的变化照样推；拉取失败的插件退回首次见到的口径
+	It("primes baselines without emitting and falls back to first-seen on failure", func() {
+		primed := &fakePlugin{name: "primed", rounds: []map[string]any{
+			{"a": []string{"v1"}, "b": []string{"v1"}},
+			{"a": []string{"v1"}, "b": []string{}},
+		}}
+		broken := &fakePlugin{name: "broken", failAll: true}
+		runner := NewRunner(primed, broken)
+
+		runner.Prime(ctx, snapshotOf("a", "b"))
+
+		broken.failAll = false
+		broken.rounds = []map[string]any{{"a": []string{}, "b": []string{"v1"}}}
+
+		var events []serializer.AppInstancePluginWatchEvent
+		Expect(runner.Run(ctx, snapshotOf("a", "b"), collect(&events))).To(Succeed())
+
+		// primed：a 与基线一致不推，b 变空必须推；broken 没建成基线，首次见到的空载荷不推、非空才推
+		Expect(events).To(HaveLen(2))
+		Expect(events[0].Plugin).To(Equal("primed"))
+		Expect(events[0].Object.ID).To(Equal("b"))
+		Expect(events[0].Object.Data).To(Equal([]string{}))
+		Expect(events[1].Plugin).To(Equal("broken"))
+		Expect(events[1].Object.ID).To(Equal("b"))
+	})
+
+	// Forget 之后同样的载荷也要按首次见到重推一次，其它实例不受影响
+	It("re-pushes an unchanged payload after the instance is forgotten", func() {
+		p := &fakePlugin{name: "stub", rounds: []map[string]any{{"a": []string{"v1"}, "b": []string{"v1"}}}}
+		runner := NewRunner(p)
+		runner.Prime(ctx, snapshotOf("a", "b"))
+
+		runner.Forget("a")
+
+		var events []serializer.AppInstancePluginWatchEvent
+		Expect(runner.Run(ctx, snapshotOf("a", "b"), collect(&events))).To(Succeed())
+
+		Expect(events).To(HaveLen(1))
+		Expect(events[0].Object.ID).To(Equal("a"))
+	})
+
 	// 插件快照是抽出的值拷贝，改 IP 碰不到调用方的投影对象
 	It("does not let plugin mutations reach the caller snapshot", func() {
 		mut := &fakePlugin{

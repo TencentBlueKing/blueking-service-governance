@@ -37,6 +37,9 @@ import (
 	publishplugin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/watch/plugin/publish"
 )
 
+// Watch 基础层通过 PodSource 读集群 Pod；断言放在组装处，避免 infras 反向依赖 workload
+var _ watch.PodSource = (*k8sclient.PodClient)(nil)
+
 // WatchAppInstances 订阅应用实例投影变更（SSE）
 // 本函数只做编排：绑定参数、鉴权取部署记录、从续传位点起推增量
 //

@@ -45,6 +45,11 @@ const (
 	streamTickInterval = 15 * time.Second
 	// streamMaxAge 单条 SSE 连接的硬性上限；到期推 ENDED，不向客户端承诺更长连接
 	streamMaxAge = 2 * time.Minute
+	// seedListTimeout 建流时预置 List 的上限，与插件单次拉取上限对齐；超时按预置失败降级，不拖慢建流
+	seedListTimeout = 5 * time.Second
+	// seedListResourceVersion 预置 List 从 apiserver watch cache 读，不穿透 etcd
+	// 也是唯一允许与 continue 翻页同时出现的非空位点，实例超过一页时不会被 apiserver 拒绝
+	seedListResourceVersion = "0"
 	// ENDED 事件的 reason，前端据此识别集群中断并重连
 	clusterWatchEndedReason = "cluster watch interrupted"
 	// watchTimeoutEndedReason 连接达到 maxAge 时的 ENDED reason；前端同样重新 List 再建 Watch
@@ -64,23 +69,26 @@ var errSkipEvent = errors.New("skip watch event")
 // 只管 Pod 的 list/watch 与投影推送，不感知任何附属数据源；附属数据由插件层补充
 // 连接级对象：每条 Watch 请求新建一个，字段只在 consume 的单 goroutine 内读写，故不加锁
 type Manager struct {
-	podWatcher PodWatcher
+	podSource PodSource
 	// pluginRunner 附属数据插件执行时；每个 tick 驱动一轮，产出独立的 PLUGIN 事件
 	pluginRunner *plugin.Runner
 	// tickInterval 心跳与插件层共用的周期；单测调小以免真实等待
 	tickInterval time.Duration
 	// maxAge 本条 SSE 的最长存活时间；单测调小以免真实等待
 	maxAge time.Duration
+	// seedListTimeout 建流时预置 List 的上限
+	seedListTimeout time.Duration
 }
 
 // NewManager 创建 Watch 投影流 Manager；plugins 为附属数据插件，按注册顺序驱动
 // 基础层不认识具体插件，注册在 handler 组装时完成
-func NewManager(podWatcher PodWatcher, plugins ...plugin.Plugin) *Manager {
+func NewManager(podSource PodSource, plugins ...plugin.Plugin) *Manager {
 	return &Manager{
-		podWatcher:   podWatcher,
-		pluginRunner: plugin.NewRunner(plugins...),
-		tickInterval: streamTickInterval,
-		maxAge:       streamMaxAge,
+		podSource:       podSource,
+		pluginRunner:    plugin.NewRunner(plugins...),
+		tickInterval:    streamTickInterval,
+		maxAge:          streamMaxAge,
+		seedListTimeout: seedListTimeout,
 	}
 }
 
@@ -92,10 +100,16 @@ func (m *Manager) Run(ctx context.Context, w http.ResponseWriter, p RunParams) e
 		return err
 	}
 
-	// 先建立集群 Watch；此时尚未写响应头，失败仍可返回普通 HTTP 错误
+	// 预置插件层快照并建立对比基线：前端首包已有这些实例，Watch 只推位点之后的增量
+	// 不预置的话 Pod 一直不动时快照恒为空，北极星等附属数据的变化永远推不出去
+	// 放在建 Watch 之前：集群 Watch 的结果通道无缓冲，建好后迟迟不消费会把事件堵在读端
+	pushed := m.seedLiveInstances(ctx, p)
+	m.pluginRunner.Prime(ctx, pushed.sorted())
+
+	// 再建立集群 Watch；此时尚未写响应头，失败仍可返回普通 HTTP 错误
 	// TimeoutSeconds 与 SSE 硬上限对齐，避免集群侧 Watch 比本条连接活得更久
 	timeoutSeconds := m.watchTimeoutSeconds()
-	watcher, err := m.podWatcher.Watch(ctx, p.Namespace, metav1.ListOptions{
+	watcher, err := m.podSource.Watch(ctx, p.Namespace, metav1.ListOptions{
 		LabelSelector:   p.LabelSelector,
 		ResourceVersion: p.ResourceVersion,
 		TimeoutSeconds:  &timeoutSeconds,
@@ -112,7 +126,7 @@ func (m *Manager) Run(ctx context.Context, w http.ResponseWriter, p RunParams) e
 	metrics.InstanceWatchStarted()
 	defer metrics.InstanceWatchFinished()
 
-	err = m.consume(ctx, stream, watcher, p.DeployID)
+	err = m.consume(ctx, stream, watcher, pushed, p.DeployID)
 
 	// 已成流后的集群中断或到达硬上限：补一条 ENDED 供前端识别并重连
 	if reason, ok := endedReason(err); ok {
@@ -163,11 +177,53 @@ func endedReason(err error) (string, bool) {
 	}
 }
 
+// seedLiveInstances 取当前存活实例作为插件层的初始快照，只记录不推事件
+// 结果与续传位点可能有出入，由后续事件纠正：ADDED 经 Runner.Forget 重置基线，DELETED 出栈；
+// 偶尔收不到 DELETED 的残留实例只会产生前端忽略的 PLUGIN
+// 拉取失败或超时只告警并返回空记录，不拆流
+func (m *Manager) seedLiveInstances(ctx context.Context, p RunParams) *pushedInstances {
+	pushed := newPushedInstances()
+
+	listCtx, cancel := context.WithTimeout(ctx, m.seedListTimeout)
+	defer cancel()
+
+	pods, err := m.podSource.List(listCtx, p.Namespace, metav1.ListOptions{
+		LabelSelector:   p.LabelSelector,
+		ResourceVersion: seedListResourceVersion,
+	})
+	if err != nil {
+		// 客户端已断开导致的失败是正常收流，不告警
+		if ctx.Err() == nil {
+			log.WarnAttrs(ctx, "list live pods for watch plugin seed failed, plugins only see pushed instances",
+				slog.String("namespace", p.Namespace),
+				slog.String("label_selector", p.LabelSelector),
+				slog.String("err", err.Error()),
+			)
+		}
+
+		return pushed
+	}
+
+	// 与 Pod 事件同一套投影口径：投影失败的坏 Pod 不进快照，插件也就不会为它补数据
+	for _, pod := range pods.Items {
+		instance, pErr := new(serializer.AppInstanceOutputObj).FromPodManifest(pod.Object, p.DeployID)
+		if pErr != nil {
+			continue
+		}
+
+		pushed.seed(instance)
+	}
+
+	return pushed
+}
+
 // consume 消费集群事件并写 SSE；ctx 取消安静退出，通道关闭视为集群中断，到期视为超时
+// pushed 是连接级记录，存已推送出去（含建流时预置）的投影；随本次 consume 结束一起释放
 func (m *Manager) consume(
 	ctx context.Context,
 	stream *sseStream,
 	watcher k8swatch.Interface,
+	pushed *pushedInstances,
 	deployID string,
 ) error {
 	ticker := time.NewTicker(m.tickInterval)
@@ -175,9 +231,6 @@ func (m *Manager) consume(
 
 	maxAge := time.NewTimer(m.maxAge)
 	defer maxAge.Stop()
-
-	// 连接级记录，存已推送出去的投影；随本次 consume 结束一起释放
-	pushed := newPushedInstances()
 
 	for {
 		select {
@@ -243,15 +296,20 @@ func (m *Manager) handleEvent(
 	// 推送成功后才记录：没推出去的实例不进插件层快照，也就不会被补出附属数据事件
 	pushed.track(event)
 
+	// 前端按 ADDED 建的新行附属数据为空；建流时为它记下的基线不再代表前端所见，必须清掉重来
+	if event.Type == string(EventAdded) {
+		m.pluginRunner.Forget(event.Object.ID)
+	}
+
 	return nil
 }
 
 // runPlugins 把本连接存活实例的快照交给插件层跑一轮，有变化的实例推独立 PLUGIN 事件
-// 快照只含已成功推送且未 DELETED 的实例，因此不会补出从未推过的实例，也不会推已删除的
+// 快照只含建流时预置或已成功推送、且未 DELETED 的实例，因此不会补出投影失败的实例，也不会推已删除的
 // 插件调用留在 consume 的同一 goroutine 内顺序执行：pushedInstances 与 Runner 的免锁前提
 // 正是「Pod 事件与周期任务是同一 goroutine 的两个 case」
 func (m *Manager) runPlugins(ctx context.Context, stream *sseStream, pushed *pushedInstances) error {
-	// 还没成功推送过任何实例时快照必为空，省掉一次排序与遍历
+	// 应用环境下没有存活实例、也没推送过任何实例时快照必为空，省掉一次排序与遍历
 	if pushed.empty() {
 		return nil
 	}
