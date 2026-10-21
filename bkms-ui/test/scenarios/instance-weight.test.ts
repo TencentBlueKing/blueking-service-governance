@@ -264,6 +264,22 @@ describe('实例批量调整权重', () => {
     expect(mocks.runActionSuccess).not.toHaveBeenCalled();
   });
 
+  it('校验未完成前连点两次只提交一次', async () => {
+    const wrapper = mountWeightDialog({ initialWeight: 10, instanceIds: ['pod-1', 'pod-2'] });
+    await wrapper.setProps({ visible: true });
+    const button = wrapper.get('[role="dialog"] button');
+
+    // 不等待第一次点击的校验结果，模拟校验期间再次点击
+    void button.trigger('click');
+    void button.trigger('click');
+    await flushPromises();
+    await flushPromises();
+
+    expect(mocks.updateWeight).toHaveBeenCalledOnce();
+    expect(mocks.runActionSuccess).toHaveBeenCalledOnce();
+    expect(wrapper.emitted('update:visible')).toHaveLength(1);
+  });
+
   it('接口失败时保留弹窗和输入值', async () => {
     const wrapper = mountWeightDialog({ initialWeight: 10, instanceIds: ['pod-1', 'pod-2'] });
     await wrapper.setProps({ visible: true });

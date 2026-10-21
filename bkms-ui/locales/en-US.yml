@@ -1906,6 +1906,8 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 权重在该环境首次部署时生效: The weight takes effect when the environment is deployed for the first time
 权重为 0 时，该环境将不再接收流量: When the weight is 0, this environment will no longer receive traffic
 请输入0-10000之间的整数: Enter an integer from 0 to 10000
+"请输入 0-10000 的整数": "Enter an integer from 0 to 10000"
+权重不能为空: Weight cannot be empty
 设置初始权重: Set Initial Weight
 调整说明: Adjustment Notes
 "数值越大权重越高；保存后按新的单实例权重重算总权重。权重为 {0} 时该环境将不再接收流量。": "A larger value gives a higher weight. After saving, the total weight is recalculated using the new per-instance weight. When the weight is {0}, this environment will no longer receive traffic."

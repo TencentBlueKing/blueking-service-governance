@@ -140,20 +140,25 @@
   async function handleConfirm() {
     if (!appDetailStore.appID || !props.envName || !props.instanceIds.length || submitting.value) return;
 
-    const valid = await formRef.value?.validate().catch(() => false);
-    if (!valid) return;
-
+    // 先加锁再 await 校验：校验期间同样禁止重复提交与关闭弹窗
     submitting.value = true;
-    const result = await InstanceService.updateAppInstancePolaris({
-      appID: appDetailStore.appID,
-      envName: props.envName,
-      trafficLaneName: '',
-      instanceIDs: [...props.instanceIds],
-      weight: Number(formModel.weight),
-    })
-      .then(() => true)
-      .catch(() => false);
-    submitting.value = false;
+    let result = false;
+    try {
+      const valid = await formRef.value?.validate().catch(() => false);
+      if (!valid) return;
+
+      result = await InstanceService.updateAppInstancePolaris({
+        appID: appDetailStore.appID,
+        envName: props.envName,
+        trafficLaneName: '',
+        instanceIDs: [...props.instanceIds],
+        weight: Number(formModel.weight),
+      })
+        .then(() => true)
+        .catch(() => false);
+    } finally {
+      submitting.value = false;
+    }
 
     if (!result) return;
 
