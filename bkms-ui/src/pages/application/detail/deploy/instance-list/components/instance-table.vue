@@ -1092,6 +1092,15 @@
     handleClearSelection,
   } = useTableCheckbox(instanceList, 'id', totalRef);
 
+  // 选择提示条改变 prepend 高度后，同步重算左右固定列的位置。
+  watch(
+    () => props.mode === 'single' && hasSelection.value,
+    () => {
+      tableRef.value?.getVxeTableInstance?.()?.recalculate();
+    },
+    { flush: 'post' },
+  );
+
   // Watch 删除实例时清理失效选择，MODIFIED 时把已选对象同步为最新投影。
   watch(
     allInstances,

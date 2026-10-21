@@ -105,6 +105,11 @@
 
   const weightRules = [
     {
+      required: true,
+      message: t('权重不能为空'),
+      trigger: 'blur',
+    },
+    {
       validator: (value: string) => isValidWeight(value),
       message: t('请输入 0-10000 的整数'),
       trigger: 'blur',
