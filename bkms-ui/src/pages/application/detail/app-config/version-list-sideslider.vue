@@ -407,7 +407,7 @@
       .map(v => ({
         ...v,
         isCurrent: v.version === currentVersionNum.value,
-        isTypeMismatch: !!props.configFileDefId && v.type !== currentFileType.value,
+        isTypeMismatch: !!props.configFileDefId && !!currentFileType.value && v.type !== currentFileType.value,
       }))
       .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent));
   });
