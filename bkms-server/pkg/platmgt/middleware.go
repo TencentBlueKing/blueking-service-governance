@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	platmgtadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/admin"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // RequirePlatformRole returns a middleware that ensures current user has one of the allowed platform roles.
@@ -50,6 +51,8 @@ func RequirePlatformRole(db *mongo.Database, allowedRoles ...platmgtadmin.RoleCo
 			)
 			return
 		}
+		// 平台管理需要跨租户，但 ctx 里是操作者的租户
+		c.Request = c.Request.WithContext(store.RequireExplicitTenantScope(c.Request.Context()))
 		c.Next()
 	}
 }

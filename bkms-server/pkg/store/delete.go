@@ -29,7 +29,7 @@ import (
 // Delete 删除匹配的一个文档，不存在时返回 NotFound 错误；需要忽略不存在的场景请使用 DeleteIfExists。
 // 支持的选项：CondOpt
 func (s *GenericStore[T]) Delete(ctx context.Context, opts ...Opt) error {
-	q, err := s.writeQuery("delete from", opts, condOpts)
+	q, err := s.writeQuery(ctx, "delete from", opts, condOpts)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func (s *GenericStore[T]) Delete(ctx context.Context, opts ...Opt) error {
 
 // DeleteIfExists 删除匹配的一个文档，不存在时直接返回 nil。支持的选项：CondOpt
 func (s *GenericStore[T]) DeleteIfExists(ctx context.Context, opts ...Opt) error {
-	q, err := s.writeQuery("delete from", opts, condOpts)
+	q, err := s.writeQuery(ctx, "delete from", opts, condOpts)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (s *GenericStore[T]) DeleteIfExists(ctx context.Context, opts ...Opt) error
 // GetAndDelete 原子地删除匹配的一个文档并返回被删除的文档（已经过 Decode），可通过 Asc / Desc 指定删除哪一个；
 // 不存在时返回 NotFound 错误。适用于删除后仍需使用原文档的场景（如记录审计）。支持的选项：CondOpt、SortOpt
 func (s *GenericStore[T]) GetAndDelete(ctx context.Context, opts ...Opt) (*T, error) {
-	q, err := s.writeQuery("find and delete from", opts, getAndDeleteOpts)
+	q, err := s.writeQuery(ctx, "find and delete from", opts, getAndDeleteOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (s *GenericStore[T]) GetAndDelete(ctx context.Context, opts ...Opt) (*T, er
 
 // DeleteMany 删除所有匹配的文档，返回删除的数量。支持的选项：CondOpt
 func (s *GenericStore[T]) DeleteMany(ctx context.Context, opts ...Opt) (int64, error) {
-	q, err := s.writeQuery("delete many from", opts, condOpts)
+	q, err := s.writeQuery(ctx, "delete many from", opts, condOpts)
 	if err != nil {
 		return 0, err
 	}

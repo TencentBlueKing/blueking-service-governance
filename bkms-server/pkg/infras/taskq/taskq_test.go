@@ -31,6 +31,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 type sampleArgs struct {
@@ -159,7 +160,8 @@ var _ = Describe("Test taskq exhausted handler", func() {
 		fn, ok := getExhaustedHandler(tt.Name())
 		Expect(ok).To(BeTrue())
 		payload := lo.Must(wrapEnvelope(
-			auth.User{ID: "tester"}, lo.Must(json.Marshal(sampleArgs{ID: "abc", Step: 7})),
+			auth.User{ID: "tester"}, tenant.DefaultTenantID,
+			lo.Must(json.Marshal(sampleArgs{ID: "abc", Step: 7})),
 		))
 		safeCallExhaustedHandler(context.Background(), fn, tt.Name(), payload, stderrors.New("boom"))
 
@@ -224,10 +226,23 @@ var _ = Describe("Test taskq NewTask and Enqueue", func() {
 		task := tt.NewTask(sampleArgs{ID: "x"})
 		Expect(task).NotTo(BeNil())
 
-		ctx := auth.WithUser(context.Background(), auth.User{ID: "tester"})
+		ctx := tenant.WithTenantID(auth.WithUser(context.Background(), auth.User{ID: "tester"}), "tenant-a")
 		err := Enqueue(ctx, task)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("client not initialized"))
+	})
+
+	It("Enqueue returns error when tenant id is missing", func() {
+		tt := NewTaskType[sampleArgs]("test.notenant", func(_ context.Context, _ sampleArgs) error {
+			return nil
+		})
+		task := tt.NewTask(sampleArgs{ID: "x"})
+		Expect(task).NotTo(BeNil())
+
+		ctx := auth.WithUser(context.Background(), auth.User{ID: "tester"})
+		err := Enqueue(ctx, task)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("tenant id not found"))
 	})
 
 	It("Enqueue returns error when auth user is missing", func() {
@@ -247,8 +262,9 @@ var _ = Describe("Test taskq auth envelope", func() {
 	It("wraps and restores auth user without mixing into business args", func() {
 		argsPayload := lo.Must(json.Marshal(sampleArgs{ID: "build-1", Step: 2}))
 		user := auth.User{ID: "alice", Cred: auth.UserCredential{AccessToken: "tok"}}
-		wrapped := lo.Must(wrapEnvelope(user, argsPayload))
+		wrapped := lo.Must(wrapEnvelope(user, "tenant-a", argsPayload))
 		Expect(string(wrapped)).To(ContainSubstring(`"_authUser"`))
+		Expect(string(wrapped)).To(ContainSubstring(`"_tenantID"`))
 		Expect(string(wrapped)).To(ContainSubstring(`"_args"`))
 
 		ctx, rawArgs := restoreEnvelope(context.Background(), wrapped)
@@ -257,10 +273,31 @@ var _ = Describe("Test taskq auth envelope", func() {
 		Expect(gotUser.ID).To(Equal("alice"))
 		Expect(gotUser.Cred.AccessToken).To(Equal("tok"))
 
+		gotTenant, ok := tenant.GetTenantID(ctx)
+		Expect(ok).To(BeTrue())
+		Expect(gotTenant).To(Equal("tenant-a"))
+
 		var args sampleArgs
 		Expect(json.Unmarshal(rawArgs, &args)).To(Succeed())
 		Expect(args.ID).To(Equal("build-1"))
 		Expect(args.Step).To(Equal(2))
+	})
+
+	It("falls back to the default tenant for tasks enqueued before multi-tenancy", func() {
+		// 存量任务的 envelope 里没有 _tenantID，消费时回落到默认租户，避免 worker 直接失败
+		legacy := lo.Must(json.Marshal(map[string]any{
+			"_authUser": auth.User{ID: "alice"},
+			"_args":     json.RawMessage(lo.Must(json.Marshal(sampleArgs{ID: "legacy"}))),
+		}))
+
+		ctx, rawArgs := restoreEnvelope(context.Background(), legacy)
+		gotTenant, ok := tenant.GetTenantID(ctx)
+		Expect(ok).To(BeTrue())
+		Expect(gotTenant).To(Equal(tenant.DefaultTenantID))
+
+		var args sampleArgs
+		Expect(json.Unmarshal(rawArgs, &args)).To(Succeed())
+		Expect(args.ID).To(Equal("legacy"))
 	})
 
 	It("Handler restores envelope user into context", func() {
@@ -274,7 +311,7 @@ var _ = Describe("Test taskq auth envelope", func() {
 			return nil
 		})
 		argsPayload := lo.Must(json.Marshal(sampleArgs{ID: "x", Step: 3}))
-		wrapped := lo.Must(wrapEnvelope(auth.User{ID: "bob"}, argsPayload))
+		wrapped := lo.Must(wrapEnvelope(auth.User{ID: "bob"}, "tenant-a", argsPayload))
 		err := task.Handler()(context.Background(), asynq.NewTask("with-auth", wrapped))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(gotUser.ID).To(Equal("bob"))

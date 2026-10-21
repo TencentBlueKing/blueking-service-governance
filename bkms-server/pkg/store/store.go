@@ -27,6 +27,7 @@ package store
 import (
 	"context"
 	"reflect"
+	"slices"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -40,10 +41,11 @@ import (
 // 约定：
 //   - 过滤条件、排序、数量限制等均通过 Opt 传入，各操作只接受部分类型的 Opt（见 Opt）；
 //     读操作不带过滤条件时匹配全部文档
-//   - bson tag 为 "_id"、"createdAt"、"updatedAt" 的字段（含 inline 嵌入）会被自动维护
+//   - bson tag 为 "_id"、"createdAt"、"updatedAt"、"tenantID" 的字段（含 inline 嵌入）会被自动维护
 //   - 写操作传入 *T 时，BeforeSave 的修改与时间戳（Create 还包括 _id）在写库之前就会作用到该对象上，
 //     写入失败（如 NotFound、Duplicate）时对象同样已被修改，不能据此判断是否写入成功
 //   - 返回的错误均已附带集合名等上下文，NotFound / Duplicate 可用 errors.Is 判断
+//   - TenantIsolated 集合的读写会按租户隔离，租户默认取自 ctx，由 AllTenants / ForTenant 选项改变范围
 type GenericStore[T any] struct {
 	coll   *mongo.Collection
 	meta   Meta[T]
@@ -66,6 +68,14 @@ func New[T any](db *mongo.Database, meta Meta[T]) (*GenericStore[T], error) {
 	sc, err := schemaOf(typ)
 	if err != nil {
 		return nil, errors.Wrapf(err, "meta of %s", typ)
+	}
+	// TenantIsolated 与模型字段互相校验：声明了隔离却没有字段会让隔离静默失效，
+	// 有字段却没声明则是忘了接入，两种都只能在构造时拦住
+	if meta.TenantIsolated && sc.tenantID == nil {
+		return nil, errors.Errorf("meta of %s: tenant isolated collection requires a %q field", typ, keyTenantID)
+	}
+	if !meta.TenantIsolated && sc.tenantID != nil {
+		return nil, errors.Errorf("meta of %s: model has a %q field, set TenantIsolated to true", typ, keyTenantID)
 	}
 	return &GenericStore[T]{coll: db.Collection(meta.Collection), meta: meta, schema: sc}, nil
 }
@@ -95,7 +105,7 @@ func (s *GenericStore[T]) Collection() *mongo.Collection {
 // Get 获取一个匹配的文档，可通过 Asc / Desc 指定取哪一个；不存在时返回 NotFound 错误。
 // 支持的选项：CondOpt、SortOpt、ProjectOpt
 func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
-	q, err := s.parseOpts("find one in", opts, getOpts)
+	q, err := s.parseOpts(ctx, "find one in", opts, getOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -122,15 +132,15 @@ func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
 }
 
 // GetByID 按 _id 获取文档，等价于 Get(ctx, ByID(id))；不存在时返回 NotFound 错误。
-// 需要附加范围条件时（如 _id 须属于某个工作空间）改用 Get 并组合 ByID 与其它条件
-func (s *GenericStore[T]) GetByID(ctx context.Context, id any) (*T, error) {
-	return s.Get(ctx, ByID(id))
+// opts 用于指定租户范围，需要附加过滤条件时（如 _id 须属于某个工作空间）改用 Get 并组合 ByID 与其它条件
+func (s *GenericStore[T]) GetByID(ctx context.Context, id any, opts ...Opt) (*T, error) {
+	return s.Get(ctx, append(slices.Clone(opts), ByID(id))...)
 }
 
 // List 获取所有匹配的文档，可通过 Asc / Desc / Limit 指定排序与数量；无结果时返回空切片而非 nil。
 // 支持的选项：CondOpt、SortOpt、LimitOpt、ProjectOpt
 func (s *GenericStore[T]) List(ctx context.Context, opts ...Opt) ([]T, error) {
-	q, err := s.parseOpts("find in", opts, listOpts)
+	q, err := s.parseOpts(ctx, "find in", opts, listOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +182,7 @@ func (s *GenericStore[T]) decodeAll(ctx context.Context, cur *mongo.Cursor) ([]T
 
 // Exists 判断是否存在匹配的文档。支持的选项：CondOpt
 func (s *GenericStore[T]) Exists(ctx context.Context, opts ...Opt) (bool, error) {
-	q, err := s.parseOpts("exists in", opts, condOpts)
+	q, err := s.parseOpts(ctx, "exists in", opts, condOpts)
 	if err != nil {
 		return false, err
 	}
@@ -185,7 +195,7 @@ func (s *GenericStore[T]) Exists(ctx context.Context, opts ...Opt) (bool, error)
 
 // Count 统计匹配的文档数量。支持的选项：CondOpt
 func (s *GenericStore[T]) Count(ctx context.Context, opts ...Opt) (int64, error) {
-	q, err := s.parseOpts("count in", opts, condOpts)
+	q, err := s.parseOpts(ctx, "count in", opts, condOpts)
 	if err != nil {
 		return 0, err
 	}
