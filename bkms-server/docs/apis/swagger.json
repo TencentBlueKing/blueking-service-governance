@@ -14821,6 +14821,120 @@
                 }
             }
         },
+        "/plat-mgt/workspaces/{workspaceID}/image-registry": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "platmgt"
+                ],
+                "summary": "查询空间当前生效的镜像仓库",
+                "operationId": "GetPlatWorkspaceImageRegistry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ImageRegistryResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "platmgt"
+                ],
+                "summary": "切换空间的镜像仓库，或修改外部镜像仓库",
+                "operationId": "UpdatePlatWorkspaceImageRegistry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "镜像仓库信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateImageRegistryInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ImageRegistryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/platform-build-images": {
             "get": {
                 "security": [
@@ -27649,6 +27763,27 @@
                 }
             }
         },
+        "serializer.ImageRegistryOutput": {
+            "type": "object",
+            "properties": {
+                "password": {
+                    "description": "镜像密码，配置缺失时为空",
+                    "type": "string"
+                },
+                "registry": {
+                    "description": "镜像仓库地址（含命名空间），配置缺失时为空",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "镜像仓库类型：builtin（平台镜像仓库）/ external（外部镜像仓库）",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "镜像账号，配置缺失时为空",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.ImageRegistryOutputObj": {
             "type": "object",
             "properties": {
@@ -27663,6 +27798,14 @@
                 "username": {
                     "description": "镜像仓库用户名",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.ImageRegistryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ImageRegistryOutput"
                 }
             }
         },
@@ -33405,6 +33548,37 @@
                             "$ref": "#/definitions/serializer.HelmSpecInput"
                         }
                     ]
+                }
+            }
+        },
+        "serializer.UpdateImageRegistryInput": {
+            "type": "object",
+            "required": [
+                "type"
+            ],
+            "properties": {
+                "password": {
+                    "description": "外部镜像仓库密码；留空表示沿用该空间已有外部仓库的密码",
+                    "type": "string",
+                    "maxLength": 512
+                },
+                "registry": {
+                    "description": "外部镜像仓库地址，形如 mirrors.tencent.com/my-namespace，不带协议前缀",
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "type": {
+                    "description": "目标镜像仓库类型：builtin（切回平台镜像仓库，其余字段不生效）/ external（外部镜像仓库）",
+                    "type": "string",
+                    "enum": [
+                        "builtin",
+                        "external"
+                    ]
+                },
+                "username": {
+                    "description": "外部镜像仓库账号",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },

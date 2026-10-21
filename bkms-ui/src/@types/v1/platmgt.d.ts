@@ -88,6 +88,20 @@ export interface RevokeWorkspaceAdminRequest {
   workspaceID: string;
 }
 
+export interface GetPlatWorkspaceImageRegistryRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
+export type UpdatePlatWorkspaceImageRegistryRequest = UpdateImageRegistryInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+};
+
 export interface ListRoleBindingsResponse {
   data?: RoleBindingOutput[];
 }
@@ -130,6 +144,48 @@ export interface GrantAdminInput {
    * 由于 false 具有明确语义，当前 IsTemporary 字段强制必传， 避免默认值误解
    */
   isTemporary: boolean;
+}
+
+export interface ImageRegistryResponse {
+  data?: ImageRegistryOutput;
+}
+
+export interface UpdateImageRegistryInput {
+  /**
+   * 外部镜像仓库密码；留空表示沿用该空间已有外部仓库的密码
+   */
+  password?: string;
+  /**
+   * 外部镜像仓库地址，形如 mirrors.tencent.com/my-namespace，不带协议前缀
+   */
+  registry?: string;
+  /**
+   * 目标镜像仓库类型：builtin（切回平台镜像仓库，其余字段不生效）/ external（外部镜像仓库）
+   */
+  type: "builtin" | "external";
+  /**
+   * 外部镜像仓库账号
+   */
+  username?: string;
+}
+
+export interface ImageRegistryOutput {
+  /**
+   * 镜像密码，配置缺失时为空
+   */
+  password?: string;
+  /**
+   * 镜像仓库地址（含命名空间），配置缺失时为空
+   */
+  registry?: string;
+  /**
+   * 镜像仓库类型：builtin（平台镜像仓库）/ external（外部镜像仓库）
+   */
+  type?: string;
+  /**
+   * 镜像账号，配置缺失时为空
+   */
+  username?: string;
 }
 
 export interface RoleStatusOutput {

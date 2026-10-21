@@ -155,6 +155,50 @@
           </div>
         </div>
 
+        <!-- 镜像仓库 -->
+        <BkmsContent
+          class="mt-[24px] shadow-[0_2px_4px_0_#1919290d]"
+          :collapsible="true"
+          :show-edit-icon="true"
+          :title="t('镜像仓库')"
+          @edit="isImageRegistryDialogShow = true"
+        >
+          <div class="flex items-center min-h-[80px] px-[120px] bg-[#fff]">
+            <div
+              v-if="!imageRegistry?.registry"
+              class="text-[14px] text-[#979ba5]"
+            >
+              {{ t('暂未配置镜像仓库') }}
+            </div>
+            <div
+              v-else
+              class="flex flex-wrap gap-x-[80px]"
+            >
+              <ProbeDetailItem
+                :label="t('仓库类型')"
+                :line-height="22"
+                :value="imageRegistryTypeText"
+              />
+              <ProbeDetailItem
+                :label="t('镜像仓库地址')"
+                :line-height="22"
+                :value="imageRegistry.registry"
+              />
+              <ProbeDetailItem
+                :label="t('镜像账号')"
+                :line-height="22"
+                :value="imageRegistry.username || '--'"
+              />
+              <ProbeDetailItem
+                :label="t('镜像密码')"
+                :line-height="22"
+              >
+                <SecretToggle :value="imageRegistry.password || ''" />
+              </ProbeDetailItem>
+            </div>
+          </div>
+        </BkmsContent>
+
         <!-- 快捷操作 -->
         <BkmsContent
           class="mt-[24px] shadow-[0_2px_4px_0_#1919290d]"
@@ -216,6 +260,13 @@
         </BkmsContent>
       </Skeleton>
     </div>
+
+    <ImageRegistryDialog
+      v-model:is-show="isImageRegistryDialogShow"
+      :registry="imageRegistry"
+      :workspace-id="workspaceID"
+      @saved="imageRegistry = $event"
+    />
   </section>
 </template>
 
@@ -229,6 +280,7 @@
   import { PlatmgtService } from '~/api/modules/v1';
   import BkmsContent from '~/components/bkms-content.vue';
   import MsHeader from '~/components/ms-header.vue';
+  import SecretToggle from '~/components/secret-toggle.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
   import StatusIcon from '~/components/status-icon.vue';
@@ -236,8 +288,9 @@
   import { useUserStore } from '~/stores/user';
 
   import ProbeDetailItem from '../../application/detail/app-config/components/probe-detail-item.vue';
+  import ImageRegistryDialog from './components/image-registry-dialog.vue';
 
-  import type { WorkspaceInfoOutput } from '~/@types/v1/platmgt';
+  import type { ImageRegistryOutput, WorkspaceInfoOutput } from '~/@types/v1/platmgt';
 
   const { t } = useI18n();
   const route = useRoute();
@@ -252,6 +305,9 @@
   const isLoading = ref(false);
   const isError = ref(false);
   const isPermissionSubmitting = ref(false);
+  /** 空间当前生效的镜像仓库（不含密码） */
+  const imageRegistry = ref<ImageRegistryOutput | null>(null);
+  const isImageRegistryDialogShow = ref(false);
   /** 竞态控制：workspaceID 快速切换时，仅最后一次请求的结果生效 */
   const requestSequence = ref(0);
 
@@ -278,6 +334,9 @@
     Processing: t('处理中'),
     Disabled: t('已停用'),
   }));
+  const imageRegistryTypeText = computed(() =>
+    imageRegistry.value?.type === 'external' ? t('外部镜像仓库') : t('平台镜像仓库'),
+  );
   /** 空间名称首字母，用于头像展示 */
   const workspaceInitial = computed(() => {
     const name = (workspaceDetail.value?.displayName || workspaceDetail.value?.id || workspaceID.value).trim();
@@ -310,15 +369,22 @@
     isError.value = false;
 
     try {
-      const [detail] = await Promise.all([
+      const [detail, registry] = await Promise.all([
         PlatmgtService.getPlatWorkspace({ workspaceID: workspaceID.value }),
+        // 镜像仓库加载失败只让卡片展示空态，不让整个详情页进入失败态
+        PlatmgtService.getPlatWorkspaceImageRegistry(
+          { workspaceID: workspaceID.value },
+          { interceptorErr: false, validateCode: false },
+        ).catch(() => null),
         fetchWorkspaceAdminStatus(workspaceID.value),
       ]);
       if (currentSequence !== requestSequence.value) return; // 丢弃过期请求
       workspaceDetail.value = detail;
+      imageRegistry.value = registry;
     } catch {
       if (currentSequence !== requestSequence.value) return;
       workspaceDetail.value = null;
+      imageRegistry.value = null;
       isCurrentUserWorkspaceAdmin.value = false;
       isError.value = true;
     } finally {
