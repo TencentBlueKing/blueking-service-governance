@@ -19,6 +19,8 @@
 package store
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -30,10 +32,13 @@ import (
 
 // query 汇总从 Opt 中解析出的操作参数
 type query struct {
-	conds    bson.D
-	matchAll bool
-	sort     bson.D
-	limit    int64
+	conds bson.D
+	// callerConds 调用方传入的条件数量，不含注入的租户条件。
+	// 写操作据此判断是否真的带了条件：租户条件注入后 conds 恒非空，不能再用它来判断
+	callerConds int
+	matchAll    bool
+	sort        bson.D
+	limit       int64
 	// fields 仅 Update / Upsert 使用，nil 表示没有传入任何 UpdateOpt
 	fields *fieldSelection
 	// selected / omitted 读操作只读出 / 不读出的字段，两者不能同时非空，parseOpts 之后为 bson 路径
@@ -45,6 +50,12 @@ type query struct {
 	keepUpdatedAt bool
 	// arrayFilters 仅 Modify / ModifyMany 使用
 	arrayFilters []any
+	// tenantOpts 传入的租户选项个数，超过 1 个为重复指定；为 0 时租户取自 ctx
+	tenantOpts int
+	// tenantAll 本次操作跨租户，不按租户过滤
+	tenantAll bool
+	// tenantID 本次操作指定的租户
+	tenantID string
 }
 
 var (
@@ -83,8 +94,10 @@ func (q *query) projection() bson.D {
 }
 
 // parseOpts 依次应用 opts，遇到 accepted 之外类别的选项时返回错误；
-// 过滤条件与排序中的字段名会被转换为 bson 路径
-func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*query, error) {
+// 过滤条件与排序中的字段名会被转换为 bson 路径，Tenanted 集合最后再注入租户条件。
+//
+// 所有读写操作都经由它（或 writeQuery）构造过滤条件，因此这里是租户隔离唯一需要收口的地方
+func (s *GenericStore[T]) parseOpts(ctx context.Context, op string, opts []Opt, accepted optKind) (*query, error) {
 	q := &query{}
 	for _, opt := range opts {
 		if opt == nil {
@@ -92,6 +105,10 @@ func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*q
 		}
 		if k := opt.kind() &^ accepted; k != 0 {
 			return nil, errors.Wrapf(errUnsupportedOpt, "%s %s: %s", op, s.coll.Name(), k)
+		}
+		// 租户范围是安全边界，必须留在调用点上，不能被 Combine 收进领域包的具名 Opt
+		if _, combined := opt.(combinedOpt); combined && opt.kind()&kindTenantAny != 0 {
+			return nil, errors.Wrapf(ErrTenantScopeCombined, "%s %s", op, s.coll.Name())
 		}
 		opt.apply(q)
 	}
@@ -113,20 +130,26 @@ func (s *GenericStore[T]) parseOpts(op string, opts []Opt, accepted optKind) (*q
 	if q.omitted, err = s.schema.resolveProjected(q.omitted, "omitted field"); err != nil {
 		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 	}
+	// 注入必须在字段名解析之后：注入的已经是 bson 路径，不应再被解析一次
+	q.callerConds = len(q.conds)
+	if err = s.injectTenant(ctx, op, q); err != nil {
+		return nil, err
+	}
 	return q, nil
 }
 
-// requireFilter 要求写操作必须带过滤条件（或显式 All）
+// requireFilter 要求写操作必须带过滤条件（或显式 All）。
+// 只看调用方传入的条件：租户条件是自动注入的，不能让它把漏传条件的写操作放过去
 func (s *GenericStore[T]) requireFilter(op string, q *query) error {
-	if len(q.conds) == 0 && !q.matchAll {
+	if q.callerConds == 0 && !q.matchAll {
 		return errors.Wrapf(errNoFilter, "%s %s", op, s.coll.Name())
 	}
 	return nil
 }
 
 // writeQuery 用于写操作：在 parseOpts 的基础上要求必须带过滤条件（或显式 All）
-func (s *GenericStore[T]) writeQuery(op string, opts []Opt, accepted optKind) (*query, error) {
-	q, err := s.parseOpts(op, opts, accepted)
+func (s *GenericStore[T]) writeQuery(ctx context.Context, op string, opts []Opt, accepted optKind) (*query, error) {
+	q, err := s.parseOpts(ctx, op, opts, accepted)
 	if err != nil {
 		return nil, err
 	}

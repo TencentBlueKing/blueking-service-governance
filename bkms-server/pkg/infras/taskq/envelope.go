@@ -23,13 +23,17 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/samber/lo"
+
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
-// payloadEnvelope 把身份与业务 Args 分开放进 asynq payload
-// 字段名前缀 `_` 避免与业务 Args 字段冲突；身份禁止放进业务 Args
+// payloadEnvelope 把身份、租户与业务 Args 分开放进 asynq payload
+// 字段名前缀 `_` 避免与业务 Args 字段冲突；身份与租户禁止放进业务 Args
 type payloadEnvelope struct {
 	AuthUser auth.User       `json:"_authUser"`
+	TenantID string          `json:"_tenantID"`
 	Args     json.RawMessage `json:"_args"`
 }
 
@@ -42,13 +46,23 @@ func userFromContext(ctx context.Context) (auth.User, error) {
 	return user, nil
 }
 
-// wrapEnvelope 把用户身份与业务 Args JSON 打成 envelope，身份不进入业务 Args
-func wrapEnvelope(user auth.User, argsPayload []byte) ([]byte, error) {
-	return json.Marshal(payloadEnvelope{AuthUser: user, Args: argsPayload})
+// tenantFromContext 从 ctx 取租户；缺租户直接失败，否则任务消费时会读不到按租户隔离的数据
+func tenantFromContext(ctx context.Context) (string, error) {
+	tenantID, ok := tenant.GetTenantID(ctx)
+	if !ok {
+		return "", errors.New("taskq: tenant id not found in context")
+	}
+	return tenantID, nil
 }
 
-// restoreEnvelope 从 envelope 恢复用户到 ctx，并抽出业务 Args JSON
-// 没有 `_args` 的旧 payload 原样返回，兼容单测与存量任务
+// wrapEnvelope 把用户身份、租户与业务 Args JSON 打成 envelope，两者都不进入业务 Args
+func wrapEnvelope(user auth.User, tenantID string, argsPayload []byte) ([]byte, error) {
+	return json.Marshal(payloadEnvelope{AuthUser: user, TenantID: tenantID, Args: argsPayload})
+}
+
+// restoreEnvelope 从 envelope 恢复用户与租户到 ctx，并抽出业务 Args JSON
+// 没有 `_args` 的旧 payload 原样返回，兼容单测与存量任务；
+// 没有 `_tenantID` 的存量任务（多租户上线前已入队）回落到默认租户，队列排空后可以去掉这个回落
 func restoreEnvelope(ctx context.Context, payload []byte) (context.Context, []byte) {
 	var env payloadEnvelope
 	if err := json.Unmarshal(payload, &env); err != nil || len(env.Args) == 0 {
@@ -57,5 +71,6 @@ func restoreEnvelope(ctx context.Context, payload []byte) (context.Context, []by
 	if env.AuthUser.ID != "" {
 		ctx = auth.WithUser(ctx, env.AuthUser)
 	}
+	ctx = tenant.WithTenantID(ctx, lo.CoalesceOrEmpty(env.TenantID, tenant.DefaultTenantID))
 	return ctx, env.Args
 }

@@ -33,6 +33,7 @@ const (
 	keyID        = "_id"
 	keyCreatedAt = "createdAt"
 	keyUpdatedAt = "updatedAt"
+	keyTenantID  = "tenantID"
 )
 
 var (
@@ -48,6 +49,7 @@ type schema struct {
 	id        []int
 	createdAt []int
 	updatedAt []int
+	tenantID  []int
 	// keys 模型编码后的全部顶层字段名，含 inline 结构体展开的字段；inline map 中的字段是动态的，不在其列
 	keys []string
 }
@@ -64,6 +66,13 @@ func newSchema(typ reflect.Type) (*schema, error) {
 		switch f.Key {
 		case keyID:
 			s.id = f.Index
+		case keyTenantID:
+			if f.Type.Kind() != reflect.String {
+				return nil, errors.Errorf(
+					"scan model %s: field %s (%s) must be a string, got %s", typ, f.Name, f.Key, f.Type,
+				)
+			}
+			s.tenantID = f.Index
 		case keyCreatedAt, keyUpdatedAt:
 			if f.Type != timeType {
 				return nil, errors.Errorf(
@@ -136,6 +145,14 @@ func (s *schema) newID() (any, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// fillTenant 将解析出的租户写入对象，覆盖调用方传入的值。tenantID 为空时（全局集合）不做任何事
+func (s *schema) fillTenant(v reflect.Value, tenantID string) {
+	if s.tenantID == nil || tenantID == "" {
+		return
+	}
+	v.FieldByIndex(s.tenantID).SetString(tenantID)
 }
 
 // fillCreated 为新文档补全时间戳：未设置的 createdAt 取当前时间，updatedAt 与 createdAt 保持一致
