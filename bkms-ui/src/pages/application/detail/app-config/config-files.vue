@@ -248,7 +248,7 @@
                           class="mt-[8px] rounded-[2px] bg-[#F5F7FA] px-[16px] py-[12px]"
                         >
                           <div class="mb-[10px] text-[12px] font-bold text-[#313238]">
-                            {{ $t('环境配置方式') }}
+                            {{ $t('环境文件生效方式') }}
                           </div>
                           <Radio.Group
                             v-model="fileInfoFormData.envContentStrategy"
@@ -431,15 +431,19 @@
                                         @change="handleEnvSelectChange"
                                       />
                                     </template>
-                                    <OverflowTitle
+                                    <div
                                       v-if="editorContentHint"
                                       :key="editorContentHint"
-                                      class="ml-[8px] min-w-0 text-[12px] text-[#979ba5]"
-                                      resizeable
-                                      type="tips"
+                                      class="ml-[8px] flex min-w-0 flex-1 items-center overflow-hidden"
                                     >
-                                      {{ editorContentHint }}
-                                    </OverflowTitle>
+                                      <OverflowTitle
+                                        class="min-w-0 text-[12px] leading-[20px] text-[#979ba5]"
+                                        resizeable
+                                        type="tips"
+                                      >
+                                        {{ editorContentHint }}
+                                      </OverflowTitle>
+                                    </div>
                                     <Button
                                       v-if="isEditing && canResetCurrentEnv"
                                       class="ml-[12px] shrink-0 !text-[12px]"
@@ -462,7 +466,7 @@
                                       v-for="item in contentViewOptions"
                                       :key="item.value"
                                       :aria-pressed="contentView === item.value"
-                                      class="inline-flex h-full appearance-none items-center justify-center gap-[4px] rounded-none border-0 border-solid bg-transparent px-[8px] text-[12px] leading-[22px] text-[#979ba5] outline-offset-[-1px] cursor-pointer focus-visible:outline focus-visible:outline-[1px] focus-visible:outline-[#3a84ff]"
+                                      class="inline-flex h-full appearance-none items-center justify-center gap-[4px] whitespace-nowrap rounded-none border-0 border-solid bg-transparent px-[8px] text-[12px] leading-[22px] text-[#979ba5] outline-offset-[-1px] cursor-pointer focus-visible:outline focus-visible:outline-[1px] focus-visible:outline-[#3a84ff]"
                                       :class="[
                                         item.divider ? 'border-r border-r-[#63656e]' : '',
                                         contentView === item.value

@@ -26,7 +26,10 @@
     <div :class="['h-[40px] px-[16px] rounded-t-sm ms-editor', lightTheme ? 'bg-[#DCDEE5]' : 'bg-[#2E2E2E]']">
       <div class="flex items-center justify-between h-full">
         <div
-          :class="['flex-1 ms-editor-title text-[14px] leading-none', lightTheme ? 'text-[#313238]' : 'text-[#C4C6CC]']"
+          :class="[
+            'flex-1 min-w-0 ms-editor-title text-[14px] leading-none',
+            lightTheme ? 'text-[#313238]' : 'text-[#C4C6CC]',
+          ]"
         >
           <slot name="title">
             <div v-if="!isDiff">
@@ -42,7 +45,7 @@
             </div>
           </slot>
         </div>
-        <div class="flex items-center ms-editor-tools">
+        <div class="flex shrink-0 items-center whitespace-nowrap ms-editor-tools">
           <slot
             :editor="editor"
             name="tools"
