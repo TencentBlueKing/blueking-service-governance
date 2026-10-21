@@ -118,7 +118,7 @@ export interface CreateDefInput {
   /**
    * 配置种类：framework / plain
    */
-  configKind: "framework" | "plain";
+  configKind: 'framework' | 'plain';
   /**
    * 初始内容（可选，仅 local 来源）
    */
@@ -126,7 +126,7 @@ export interface CreateDefInput {
   /**
    * 内容来源：local / bscp
    */
-  contentSourceType: "local" | "bscp";
+  contentSourceType: 'local' | 'bscp';
   /**
    * 版本描述
    */
@@ -138,11 +138,11 @@ export interface CreateDefInput {
   /**
    * 文件格式
    */
-  fileFormat: "yaml" | "taf";
+  fileFormat: 'yaml' | 'taf';
   /**
    * 文件类型：normal / overlay
    */
-  fileType: "normal" | "overlay";
+  fileType: 'normal' | 'overlay';
   /**
    * 容器内挂载目录（plain 必填）
    */
@@ -172,7 +172,7 @@ export interface GetDefDetailOutput {
 
 export interface UpdateDefInput {
   enableEnvVarRender?: boolean;
-  envContentStrategy?: "overlay" | "overwrite";
+  envContentStrategy?: 'overlay' | 'overwrite';
   isUnifiedConfig?: boolean;
   mountDir?: string;
   mountedEnvNames?: string[];
@@ -186,8 +186,7 @@ export interface UpdateDefOutput {
   item?: DefSummaryObj;
 }
 
-export interface DeleteDefOutput {
-}
+export interface DeleteDefOutput {}
 
 export interface UpdateContentInput {
   content?: string;
@@ -205,8 +204,7 @@ export interface ListEnvInstancesOutput {
   items?: EnvInstanceObj[];
 }
 
-export interface ResetEnvOutput {
-}
+export interface ResetEnvOutput {}
 
 export interface MountPreviewOutput {
   items?: MountPreviewItemObj[];

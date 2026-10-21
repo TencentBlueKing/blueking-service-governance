@@ -44,6 +44,8 @@ export const InstanceService = {
    * @param all query boolean 为 true 时一次返回全量实例；禁止同时带 page 或 pageSize
    * @param page query number 页码，取值 1-10000；分页模式必填，all=true 时禁止出现
    * @param pageSize query number 每页数量；分页模式必填，all=true 时禁止出现
+   * @param podIP query string[] Pod IP 精确过滤，多值取 OR
+   * @param nodeIP query string[] Node IP 精确过滤，多值取 OR
    * @response 200 ListAppInstancesOutput OK
    * @response 400 GinErrorOutput Bad Request
    */

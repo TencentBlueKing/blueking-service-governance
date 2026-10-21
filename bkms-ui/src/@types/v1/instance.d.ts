@@ -63,6 +63,14 @@ export interface ListAppInstancesRequest {
    * 每页数量；分页模式必填，all=true 时禁止出现
    */
   pageSize?: number;
+  /**
+   * Pod IP 精确过滤，多值取 OR
+   */
+  podIP?: string[];
+  /**
+   * Node IP 精确过滤，多值取 OR
+   */
+  nodeIP?: string[];
 }
 
 export type UpdateAppInstancesRequest = UpdateAppInstancesInput & {

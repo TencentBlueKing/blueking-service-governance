@@ -57,7 +57,7 @@
         :placeholder="
           createPlaceholder({
             type: 'searchSelect',
-            labels: ['实例', '镜像 Tag', '实例状态', '就绪状态', '北极星状态'],
+            labels: ['实例', 'Pod IP', 'Node IP', '镜像 Tag', '实例状态', '就绪状态', '北极星状态'],
           })
         "
         unique-select
@@ -109,7 +109,7 @@
   import { resolveInstanceSourceMode } from './composables/instance-watch-utils';
   import { useInstanceListController } from './composables/use-instance-list-controller';
   import { useInstanceListWatch } from './composables/use-instance-list-watch';
-  import { isPolarisHealthy } from './instance-utils';
+  import { isPolarisHealthy, matchesInstanceIPFilter } from './instance-utils';
 
   import type { InstanceListSourceMode } from './types';
   import type { ISearchValue } from 'bkui-vue/lib/search-select/utils';
@@ -285,6 +285,16 @@
       multiple: false,
     },
     {
+      name: 'Pod IP',
+      id: 'podIP',
+      multiple: false,
+    },
+    {
+      name: 'Node IP',
+      id: 'nodeIP',
+      multiple: false,
+    },
+    {
       name: t('镜像 Tag'),
       id: 'image',
       multiple: true,
@@ -324,9 +334,16 @@
     if (!searchValue.value.length) return instanceList.value;
 
     let filteredList = [...instanceList.value];
+    const podIPs = searchValue.value.find(filter => filter.id === 'podIP')?.values?.map(value => value.id) ?? [];
+    const nodeIPs = searchValue.value.find(filter => filter.id === 'nodeIP')?.values?.map(value => value.id) ?? [];
+
+    // IP 筛选是独立的 OR 组：Pod IP 与 Node IP 不能按普通字段逐项做 AND。
+    if (podIPs.length || nodeIPs.length) {
+      filteredList = filteredList.filter(instance => matchesInstanceIPFilter(instance, podIPs, nodeIPs));
+    }
 
     for (const filter of searchValue.value) {
-      if (!filter.values?.length) continue;
+      if (!filter.values?.length || filter.id === 'podIP' || filter.id === 'nodeIP') continue;
       const selectedValues = filter.values.map(v => v.id);
 
       switch (filter.id) {

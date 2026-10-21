@@ -40,3 +40,4 @@ export * from './workspace';
 export * from './bkintegrations-bkci';
 export * from './workspace-components';
 export * from './depservice-redis';
+export * from './release-strategies';
