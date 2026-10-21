@@ -186,14 +186,21 @@
               v-else
               class="flex items-center gap-[12px]"
             >
-              <Button
-                :disabled="row.isCurrent"
-                text
-                theme="primary"
-                @click="handleRollback(row)"
+              <span
+                v-bk-tooltips="{
+                  content: $t('该版本的环境文件生效方式与当前不同，文件类型不一致，不能回滚。'),
+                  disabled: !row.isTypeMismatch,
+                }"
               >
-                {{ $t('回滚到此版本') }}
-              </Button>
+                <Button
+                  :disabled="row.isTypeMismatch"
+                  text
+                  theme="primary"
+                  @click="handleRollback(row)"
+                >
+                  {{ $t('回滚到此版本') }}
+                </Button>
+              </span>
               <Button
                 text
                 theme="primary"
@@ -266,8 +273,8 @@
   /** 默认配置环境 ID */
   const DEFAULT_ENV_ID = '__default__';
 
-  /** 版本项类型（接口数据 + isCurrent 计算字段） */
-  type VersionItem = AppConfigFileVersionOutputObj & { isCurrent: boolean };
+  /** 版本项类型（接口数据 + 当前版本和类型差异标记） */
+  type VersionItem = AppConfigFileVersionOutputObj & { isCurrent: boolean; isTypeMismatch: boolean };
 
   const props = defineProps<{
     /** 配置文件定义 ID（Def 页面按环境切换版本时使用） */
@@ -351,6 +358,9 @@
   /** 版本列表数据 */
   const versionList = ref<AppConfigFileVersionOutputObj[]>([]);
 
+  /** 当前生效版本记录的文件类型 */
+  const currentFileType = ref<string>();
+
   /** 分页总数 */
   const total = ref(0);
 
@@ -391,10 +401,14 @@
     return props.currentVersion ?? props.currentFile?.currentVersion ?? 0;
   });
 
-  /** 版本列表（附加 isCurrent 标记，当前生效版本置顶） */
+  /** 版本列表（附加当前版本和类型差异标记，当前生效版本置顶） */
   const versionListWithCurrent = computed<VersionItem[]>(() => {
     return versionList.value
-      .map(v => ({ ...v, isCurrent: v.version === currentVersionNum.value }))
+      .map(v => ({
+        ...v,
+        isCurrent: v.version === currentVersionNum.value,
+        isTypeMismatch: !!props.configFileDefId && v.type !== currentFileType.value,
+      }))
       .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent));
   });
 
@@ -403,6 +417,7 @@
     const requestID = ++versionListRequestID;
     if (!appDetailStore.appID || (props.configFileDefId && !activeFileID.value)) {
       versionList.value = [];
+      currentFileType.value = undefined;
       total.value = 0;
       versionListLoading.value = false;
       return;
@@ -410,7 +425,8 @@
 
     versionListLoading.value = true;
     try {
-      const res = await AppConfigFilesService.listAppConfigFileVersions({
+      const version = currentVersionNum.value;
+      const fileParams = {
         appID: appDetailStore.appID,
         // 定义模式同时按文件与环境过滤，避免同一环境下其他文件的版本混入
         ...(props.configFileDefId
@@ -418,11 +434,28 @@
           : isFileMode.value
             ? { appConfigFileID: activeFileID.value }
             : { envName: curEnvName.value }),
+      };
+      const res = await AppConfigFilesService.listAppConfigFileVersions({
+        ...fileParams,
         page: pageConf.current,
         pageSize: pageConf.limit,
         ...getSearchParams(),
       });
       if (requestID !== versionListRequestID) return;
+
+      let currentType = res.results?.find(item => item.version === version)?.type;
+      // 搜索或翻页可能不包含当前版本，单独查询以免误用实例上的旧类型。
+      if (props.configFileDefId && version && !currentType) {
+        const currentVersionRes = await AppConfigFilesService.listAppConfigFileVersions({
+          ...fileParams,
+          version,
+          page: 1,
+          pageSize: 5,
+        });
+        if (requestID !== versionListRequestID) return;
+        currentType = currentVersionRes.results?.find(item => item.version === version)?.type;
+      }
+      currentFileType.value = currentType;
       versionList.value = res.results ?? [];
       total.value = res.count ?? 0;
       clearErrorType();
@@ -485,12 +518,14 @@
     curEnvID.value = DEFAULT_ENV_ID;
     searchValue.value = [];
     versionList.value = [];
+    currentFileType.value = undefined;
     total.value = 0;
     handleResetPage();
   }
 
   /** 打开回滚确认弹窗 */
   function handleRollback(row: VersionItem) {
+    if (row.isCurrent || row.isTypeMismatch) return;
     currentRollbackRow.value = row;
     rollbackDialogVisible.value = true;
   }
