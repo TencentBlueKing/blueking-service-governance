@@ -39,6 +39,7 @@ import (
 var _ = Describe("WorkspaceAdminService", func() {
 	var (
 		ctx            context.Context
+		platCtx        context.Context
 		diApp          *fxtest.App
 		recordStore    *Store
 		workspaceStore *bkmsworkspace.WorkspaceStore
@@ -48,7 +49,8 @@ var _ = Describe("WorkspaceAdminService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithDefaultTenant(context.Background())
+		platCtx = store.RequireExplicitTenantScope(ctx)
 		roleMgr = &stubRoleManager{roleID: "fake-admin-role"}
 
 		diApp = fxtest.New(
@@ -77,14 +79,14 @@ var _ = Describe("WorkspaceAdminService", func() {
 	It("should report target user role membership by role code and username", func() {
 		roleMgr.members = []string{"developer-user"}
 
-		status, err := service.GetRoleStatus(ctx, ws.ID, "developer", "developer-user")
+		status, err := service.GetRoleStatus(platCtx, ws.ID, "developer", "developer-user")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeTrue())
 	})
 
 	It("should grant admin as temporary when isTemporary is true", func() {
 		before := time.Now()
-		status, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		status, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeTrue())
 
@@ -95,7 +97,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 	})
 
 	It("should grant admin as permanent when isTemporary is false", func() {
-		status, err := service.GrantAdmin(ctx, ws.ID, "perm-user", false)
+		status, err := service.GrantAdmin(platCtx, ws.ID, "perm-user", false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeTrue())
 		Expect(roleMgr.members).To(ContainElement("perm-user"))
@@ -107,15 +109,15 @@ var _ = Describe("WorkspaceAdminService", func() {
 	It("should reject grant when current user is already a workspace admin", func() {
 		roleMgr.members = []string{"admin"}
 
-		_, err := service.GrantAdmin(ctx, ws.ID, "admin", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "admin", true)
 		Expect(err).To(MatchError(ErrWorkspaceAdminAlreadyExists))
 	})
 
 	It("should reject duplicate temporary grant once user already has admin role", func() {
-		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err = service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).To(MatchError(ErrWorkspaceAdminAlreadyExists))
 	})
 
@@ -133,17 +135,17 @@ var _ = Describe("WorkspaceAdminService", func() {
 		}
 		Expect(recordStore.Create(ctx, record)).To(Succeed())
 
-		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).To(MatchError(ErrTempAdminAlreadyExists))
 		Expect(roleMgr.addCalls).To(Equal(0))
 		Expect(roleMgr.members).NotTo(ContainElement("temp-user"))
 	})
 
 	It("should revoke admin and recycle temp grant history when needed", func() {
-		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 
-		status, err := service.RevokeAdmin(ctx, ws.ID, "temp-user")
+		status, err := service.RevokeAdmin(platCtx, ws.ID, "temp-user")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeFalse())
 
@@ -158,7 +160,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 	It("should revoke workspace admin even without a temporary admin record", func() {
 		roleMgr.members = []string{"admin"}
 
-		status, err := service.RevokeAdmin(ctx, ws.ID, "admin")
+		status, err := service.RevokeAdmin(platCtx, ws.ID, "admin")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeFalse())
 
@@ -167,7 +169,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 	})
 
 	It("should reconcile expired records into recycled state", func() {
-		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 
 		record, err := recordStore.Get(ctx, ByActiveGrant(ws.ID, "temp-user"))

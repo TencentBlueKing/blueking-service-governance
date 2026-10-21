@@ -20,6 +20,7 @@ package store
 
 import (
 	"context"
+	"slices"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -37,7 +38,7 @@ import (
 // 取决于服务端配置（MongoDB 6.0 起默认落盘，更早的版本报错），匹配的文档较多时应建立上述索引或用 CondOpt 缩小范围。
 // 支持的选项：CondOpt、SortOpt、ProjectOpt
 func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, opts ...Opt) ([]T, error) {
-	q, err := s.parseOpts("list latest in", opts, latestOpts)
+	q, err := s.parseOpts(ctx, "list latest in", opts, latestOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +105,11 @@ func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, op
 //
 // 支持的选项：CondOpt
 func Aggregate[R, T any](ctx context.Context, s *GenericStore[T], pipeline mongo.Pipeline, opts ...Opt) ([]R, error) {
-	q, err := s.parseOpts("aggregate", opts, condOpts)
+	q, err := s.parseOpts(ctx, "aggregate", opts, condOpts)
 	if err != nil {
+		return nil, err
+	}
+	if err = s.checkAggStages(pipeline); err != nil {
 		return nil, err
 	}
 	if filter := q.filter(); len(filter) > 0 {
@@ -120,4 +124,27 @@ func Aggregate[R, T any](ctx context.Context, s *GenericStore[T], pipeline mongo
 		return nil, errors.Wrapf(err, "decode aggregation results from %s", s.coll.Name())
 	}
 	return rows, nil
+}
+
+// crossCollStages 会读写本集合之外的数据，租户条件只加在管道首部，约束不到它们
+var crossCollStages = []string{"$lookup", "$graphLookup", "$unionWith", "$merge", "$out"}
+
+// checkAggStages 拒绝租户隔离集合上跨集合的聚合阶段。
+// 这里用黑名单而不是白名单：现有管道用到的阶段不应被新规则打断，只拦住确实绕过隔离的那几个
+func (s *GenericStore[T]) checkAggStages(pipeline mongo.Pipeline) error {
+	if !s.meta.TenantIsolated {
+		return nil
+	}
+	for _, stage := range pipeline {
+		for _, e := range stage {
+			if slices.Contains(crossCollStages, e.Key) {
+				return errors.Errorf(
+					"aggregate %s: stage %s reads or writes other collections and bypasses tenant isolation, "+
+						"run it on the raw collection and handle the tenant yourself",
+					s.coll.Name(), e.Key,
+				)
+			}
+		}
+	}
+	return nil
 }

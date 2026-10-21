@@ -50,7 +50,7 @@ var _ = Describe("WorkspaceStore", func() {
 
 	BeforeEach(func() {
 		store = testutil.NewStore(GinkgoT(), Meta)
-		ctx = context.Background()
+		ctx = testutil.WithDefaultTenant(context.Background())
 		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
 		ResetLifecycleHooksForTest()
 
@@ -283,7 +283,7 @@ var _ = Describe("ImageRegistryStore", func() {
 
 		store = testutil.NewStore(GinkgoT(), registry.ImageRegistryMeta)
 
-		ctx = context.Background()
+		ctx = testutil.WithDefaultTenant(context.Background())
 		workspaceID = "workspace-" + stringx.Random(6)
 
 		registryA = registry.ImageRegistry{

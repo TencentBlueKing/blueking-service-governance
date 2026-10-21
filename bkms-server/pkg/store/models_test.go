@@ -35,6 +35,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -206,6 +207,30 @@ var ErrProfileNotFound = errors.New("profile not found")
 
 var profileMeta = store.Meta[Profile]{Collection: profileCollection, NotFound: ErrProfileNotFound}
 
+// Ticket 模拟按租户隔离的模型：tenantID 由 store 维护，业务侧只关心 ownerID + name。
+// 字段齐全（含 map / 计数器）以便覆盖 Upsert 与 Modify 两条写入路径
+type Ticket struct {
+	ID        bson.ObjectID         `bson:"_id,omitempty"`
+	TenantID  string                `bson:"tenantID"`
+	OwnerID   string                `bson:"ownerID"`
+	Name      string                `bson:"name"`
+	Priority  int                   `bson:"priority"`
+	Hits      int64                 `bson:"hits"`
+	States    map[string]BoardState `bson:"states,omitempty"`
+	CreatedAt time.Time             `bson:"createdAt"`
+	UpdatedAt time.Time             `bson:"updatedAt"`
+}
+
+const ticketCollection = "store_test_tickets"
+
+var ErrTicketNotFound = errors.New("ticket not found")
+
+var ticketMeta = store.Meta[Ticket]{
+	Collection:     ticketCollection,
+	TenantIsolated: true,
+	NotFound:       ErrTicketNotFound,
+}
+
 // storeFixture 汇总测试用例需要的依赖
 type storeFixture struct {
 	ctx      context.Context
@@ -216,14 +241,24 @@ type storeFixture struct {
 	notes    *store.GenericStore[Note]
 	boards   *store.GenericStore[Board]
 	profiles *store.GenericStore[Profile]
+	tickets  *store.GenericStore[Ticket]
 	// owner 当前用例的 ownerID，让过滤条件贴近领域包中 byXxx 的真实用法；
 	// 用例之间的隔离依靠每个用例开始前清空测试集合
 	owner string
+	// ctxA / ctxB 分属两个租户的上下文，用于验证 Tenanted 集合的隔离
+	ctxA context.Context
+	ctxB context.Context
 }
+
+const (
+	tenantA = "tenant-a"
+	tenantB = "tenant-b"
+)
 
 // setUpStores 通过 fx 提供测试模型的 Store，同时清空测试集合、确保唯一索引存在
 func setUpStores() *storeFixture {
 	f := &storeFixture{ctx: context.Background(), owner: "owner-" + stringx.Random(8)}
+	f.ctxA, f.ctxB = tenant.WithTenantID(f.ctx, tenantA), tenant.WithTenantID(f.ctx, tenantB)
 	f.app = fxtest.New(
 		GinkgoT(),
 		store.FxModule,
@@ -232,13 +267,14 @@ func setUpStores() *storeFixture {
 		store.Provide(noteMeta),
 		store.Provide(boardMeta),
 		store.Provide(profileMeta),
-		fx.Populate(&f.db, &f.widgets, &f.items, &f.notes, &f.boards, &f.profiles),
+		store.Provide(ticketMeta),
+		fx.Populate(&f.db, &f.widgets, &f.items, &f.notes, &f.boards, &f.profiles, &f.tickets),
 	)
 	f.app.RequireStart()
 
 	for _, coll := range []*mongo.Collection{
 		f.widgets.Collection(), f.items.Collection(), f.notes.Collection(), f.boards.Collection(),
-		f.profiles.Collection(),
+		f.profiles.Collection(), f.tickets.Collection(),
 	} {
 		_, err := coll.DeleteMany(f.ctx, bson.M{})
 		Expect(err).NotTo(HaveOccurred())
@@ -376,4 +412,23 @@ func (f *storeFixture) mustGetBoard(name string) *Board {
 	b, err := f.boards.Get(f.ctx, f.byName(name))
 	Expect(err).NotTo(HaveOccurred())
 	return b
+}
+
+// mustCreateTicket 在 ctx 所属的租户下创建一个 Ticket
+func (f *storeFixture) mustCreateTicket(ctx context.Context, name string) *Ticket {
+	t := &Ticket{OwnerID: f.owner, Name: name, Priority: 1}
+	Expect(f.tickets.Create(ctx, t)).To(Succeed())
+	return t
+}
+
+// rawTicketTenant 绕过 GenericStore 读出库中实际存储的 tenantID
+func (f *storeFixture) rawTicketTenant(name string) string {
+	raw, err := f.tickets.Collection().FindOne(f.ctx, bson.M{"ownerID": f.owner, "name": name}).Raw()
+	Expect(err).NotTo(HaveOccurred())
+	return rawString(raw, "tenantID")
+}
+
+// ticketNames 按顺序返回 Ticket 的名称
+func ticketNames(list []Ticket) []string {
+	return lo.Map(list, func(t Ticket, _ int) string { return t.Name })
 }

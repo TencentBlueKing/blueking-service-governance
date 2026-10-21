@@ -38,6 +38,7 @@ type Service struct {
 }
 
 // NewService creates a platform workspace service.
+// 平台管理视角要看到全部租户的工作空间，因此 store 使用跨租户范围
 func NewService(db *mongo.Database) *Service {
 	return &Service{
 		workspaceStore: store.Of(db, bkmsworkspace.Meta),
@@ -47,7 +48,13 @@ func NewService(db *mongo.Database) *Service {
 
 // List returns workspaces without per-workspace permission filtering.
 func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*WorkspaceListResult, error) {
-	page, err := s.workspaceStore.ListPage(ctx, opts.Page, opts.PageSize, opts.ToWorkspaceStoreListOpt())
+	page, err := s.workspaceStore.ListPage(
+		ctx,
+		opts.Page,
+		opts.PageSize,
+		opts.ToWorkspaceStoreListOpt(),
+		store.AllTenants(),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "list workspaces")
 	}
@@ -96,7 +103,7 @@ func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*Workspa
 
 // Get returns the basic info of a target workspace for platform administrators.
 func (s *Service) Get(ctx context.Context, workspaceID string) (*WorkspaceInfo, error) {
-	ws, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID))
+	ws, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.AllTenants())
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +126,8 @@ func (s *Service) GetStateStatistics(ctx context.Context) (*WorkspaceStateStatis
 }
 
 func (s *Service) getStateStatistics(ctx context.Context, opts ...store.Opt) (*WorkspaceStateStatistics, error) {
-	counts, err := bkmsworkspace.CountByState(ctx, s.workspaceStore, opts...)
+	// 平台管理统计全部租户的工作空间
+	counts, err := bkmsworkspace.CountByState(ctx, s.workspaceStore, append(opts, store.AllTenants())...)
 	if err != nil {
 		return nil, err
 	}

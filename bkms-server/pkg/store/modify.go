@@ -59,7 +59,7 @@ type ModifyResult struct {
 //
 // 支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt
 func (s *GenericStore[T]) Modify(ctx context.Context, update bson.M, opts ...Opt) (ModifyResult, error) {
-	q, doc, err := s.prepareModify("modify", update, opts)
+	q, doc, err := s.prepareModify(ctx, "modify", update, opts)
 	if err != nil {
 		return ModifyResult{}, err
 	}
@@ -80,7 +80,7 @@ func (s *GenericStore[T]) Modify(ctx context.Context, update bson.M, opts ...Opt
 // ModifyMany 用 update 中的操作符修改全部匹配的文档，没有匹配时不返回错误。
 // update 的规则同 Modify。支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt
 func (s *GenericStore[T]) ModifyMany(ctx context.Context, update bson.M, opts ...Opt) (ModifyResult, error) {
-	q, doc, err := s.prepareModify("modify many in", update, opts)
+	q, doc, err := s.prepareModify(ctx, "modify many in", update, opts)
 	if err != nil {
 		return ModifyResult{}, err
 	}
@@ -95,8 +95,10 @@ func (s *GenericStore[T]) ModifyMany(ctx context.Context, update bson.M, opts ..
 	return ModifyResult{Matched: res.MatchedCount, Modified: res.ModifiedCount}, nil
 }
 
-func (s *GenericStore[T]) prepareModify(op string, update bson.M, opts []Opt) (*query, bson.D, error) {
-	q, err := s.writeQuery(op, opts, modifyOpts)
+func (s *GenericStore[T]) prepareModify(
+	ctx context.Context, op string, update bson.M, opts []Opt,
+) (*query, bson.D, error) {
+	q, err := s.writeQuery(ctx, op, opts, modifyOpts)
 	if err != nil {
 		return nil, nil, err
 	}

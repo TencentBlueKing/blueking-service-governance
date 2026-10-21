@@ -55,6 +55,7 @@ type Service struct {
 }
 
 // NewService 创建 workspace admin 服务。
+// 平台管理要对全部租户的工作空间授予临时管理员，因此 workspace store 使用跨租户范围
 func NewService(db *mongo.Database, permMgr perm.Manager) *Service {
 	return &Service{
 		workspaceStore: store.Of(db, bkmsworkspace.Meta),
@@ -69,7 +70,7 @@ func (s *Service) GetRoleStatus(
 	ctx context.Context,
 	workspaceID, roleCode, username string,
 ) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID)); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.AllTenants()); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 	_, hasRole, err := s.loadRoleState(ctx, workspaceID, roleCode, username)
@@ -85,7 +86,7 @@ func (s *Service) GrantAdmin(
 	workspaceID, username string,
 	isTemporary bool,
 ) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID)); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.AllTenants()); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 
@@ -138,7 +139,7 @@ func (s *Service) GrantAdmin(
 
 // RevokeAdmin 统一回收目标空间管理员权限。
 func (s *Service) RevokeAdmin(ctx context.Context, workspaceID, username string) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID)); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.AllTenants()); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 
