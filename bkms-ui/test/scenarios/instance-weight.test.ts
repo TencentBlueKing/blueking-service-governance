@@ -22,7 +22,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type AppInstanceOutputObj } from '~/@types/v1/instance';
 
-/* 测试中的组件均为 bkui-vue 的轻量桩。 */
+/* 保留真实表单校验，其他 bkui-vue 组件使用轻量桩。 */
 /* eslint-disable vue/one-component-per-file */
 
 const mocks = vi.hoisted(() => ({
@@ -55,6 +55,7 @@ vi.mock('~/components/divider-header.vue', async () => {
 });
 vi.mock('bkui-vue', async () => {
   const { defineComponent, h } = await import('vue');
+  const { default: bkForm } = await import('bkui-vue/lib/form');
   const stubSlot = defineComponent({
     setup(_, { slots }) {
       return () => h('div', slots.default?.());
@@ -68,16 +69,9 @@ vi.mock('bkui-vue', async () => {
   });
   const stubDialog = defineComponent({
     props: { isShow: Boolean },
-    emits: ['confirm'],
-    setup(props, { emit, slots }) {
+    setup(props, { slots }) {
       return () =>
-        props.isShow
-          ? h('div', { role: 'dialog' }, [
-              slots.header?.(),
-              slots.default?.(),
-              h('button', { 'data-testid': 'confirm-weight', onClick: () => emit('confirm') }, '确定'),
-            ])
-          : null;
+        props.isShow ? h('div', { role: 'dialog' }, [slots.header?.(), slots.default?.(), slots.footer?.()]) : null;
     },
   });
   const stubInput = defineComponent({
@@ -106,7 +100,7 @@ vi.mock('bkui-vue', async () => {
     Button: stubButton,
     Dialog: stubDialog,
     Dropdown: Object.assign(stubDropdown, { DropdownItem: stubDropdownItem, DropdownMenu: stubSlot }),
-    Form: Object.assign(stubSlot, { FormItem: stubSlot }),
+    Form: bkForm,
     Input: stubInput,
     Popover: stubSlot,
   };
@@ -122,7 +116,7 @@ const global = { directives: { 'bk-tooltips': {} }, mocks: { $t: translate } };
 
 function mountWeightDialog(options: {
   clearSelectionOnSuccess?: boolean;
-  initialWeight: number;
+  initialWeight?: null | number;
   instanceIds: string[];
 }) {
   return mount(WeightDialog, {
@@ -224,7 +218,7 @@ describe('实例批量调整权重', () => {
     expect(wrapper.text()).toContain('pod-1');
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('42');
 
-    await wrapper.find('[data-testid="confirm-weight"]').trigger('click');
+    await wrapper.get('[role="dialog"] button').trigger('click');
     await flushPromises();
     expect(mocks.updateWeight).toHaveBeenCalledWith({
       appID: 'demo-app',
@@ -236,17 +230,22 @@ describe('实例批量调整权重', () => {
     expect(mocks.runActionSuccess).toHaveBeenCalledWith({}, { clearSelection: false });
   });
 
-  it('多个实例显示数量，默认权重 10，并一次提交全部 ID', async () => {
+  it('多个实例显示数量，权重初始为空，输入后一次提交全部 ID', async () => {
     const wrapper = mountWeightDialog({
       clearSelectionOnSuccess: true,
-      initialWeight: 10,
+      initialWeight: null,
       instanceIds: ['pod-1', 'pod-2', 'pod-3'],
     });
     await wrapper.setProps({ visible: true });
     expect(wrapper.text()).toContain('已选 3 个实例');
-    expect((wrapper.find('input').element as HTMLInputElement).value).toBe('10');
+    expect((wrapper.find('input').element as HTMLInputElement).value).toBe('');
 
-    await wrapper.find('[data-testid="confirm-weight"]').trigger('click');
+    await wrapper.get('[role="dialog"] button').trigger('click');
+    await flushPromises();
+    expect(mocks.updateWeight).not.toHaveBeenCalled();
+
+    await wrapper.find('input').setValue('10');
+    await wrapper.get('[role="dialog"] button').trigger('click');
     await flushPromises();
     expect(mocks.updateWeight).toHaveBeenCalledWith(
       expect.objectContaining({ instanceIDs: ['pod-1', 'pod-2', 'pod-3'], weight: 10 }),
@@ -254,17 +253,28 @@ describe('实例批量调整权重', () => {
     expect(mocks.runActionSuccess).toHaveBeenCalledWith({}, { clearSelection: true });
   });
 
-  it('非法权重不提交；接口失败时保留弹窗和输入值', async () => {
+  it.each(['', '-1', '10001', '1.5'])('非法权重 "%s" 不提交', async weight => {
     const wrapper = mountWeightDialog({ initialWeight: 10, instanceIds: ['pod-1', 'pod-2'] });
     await wrapper.setProps({ visible: true });
-    await wrapper.find('input').setValue('-1');
-    await wrapper.find('[data-testid="confirm-weight"]').trigger('click');
+    await wrapper.find('input').setValue(weight);
+    await wrapper.get('[role="dialog"] button').trigger('click');
+    await flushPromises();
     expect(mocks.updateWeight).not.toHaveBeenCalled();
+    expect(wrapper.emitted('update:visible')).toBeUndefined();
+    expect(mocks.runActionSuccess).not.toHaveBeenCalled();
+  });
 
+  it('接口失败时保留弹窗和输入值', async () => {
+    const wrapper = mountWeightDialog({ initialWeight: 10, instanceIds: ['pod-1', 'pod-2'] });
+    await wrapper.setProps({ visible: true });
     mocks.updateWeight.mockRejectedValueOnce(new Error('request failed'));
     await wrapper.find('input').setValue('25');
-    await wrapper.find('[data-testid="confirm-weight"]').trigger('click');
+    await wrapper.get('[role="dialog"] button').trigger('click');
     await flushPromises();
+    expect(mocks.updateWeight).toHaveBeenCalledOnce();
+    expect(mocks.updateWeight).toHaveBeenCalledWith(
+      expect.objectContaining({ instanceIDs: ['pod-1', 'pod-2'], weight: 25 }),
+    );
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('25');
     expect(wrapper.emitted('update:visible')).toBeUndefined();
