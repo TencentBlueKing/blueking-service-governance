@@ -371,11 +371,15 @@ export interface AppInfoOutputObj {
    */
   displayName?: string;
   /**
+   * 应用框架（trpc/taf/blank）；Helm/Agones 为空
+   */
+  framework?: string;
+  /**
    * 应用 ID
    */
   id?: string;
   /**
-   * 应用使用的编程语言（如 go、cpp），仅 trpc 类型应用有值
+   * 应用使用的编程语言（如 go、cpp）
    */
   language?: string;
   /**

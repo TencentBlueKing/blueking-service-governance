@@ -14,7 +14,7 @@ export type DevModePublishPreflightRequest = PreflightBodyInput & {
   envName: string;
 };
 
-export interface ListDevModePublishRecordsRequest {
+export type CreateDevModePublishRecordsRequest = CreatePublishRecordsInput & {
   /**
    * 应用 ID
    */
@@ -23,6 +23,21 @@ export interface ListDevModePublishRecordsRequest {
    * 环境名称
    */
   envName: string;
+};
+
+export interface ListDevModePublishRecordsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 环境名称，与 envTypes 二选一
+   */
+  envNames?: string[];
+  /**
+   * 环境类型，与 envNames 二选一
+   */
+  envTypes?: string[];
   /**
    * 搜索关键字
    */
@@ -35,17 +50,21 @@ export interface ListDevModePublishRecordsRequest {
    * 分页大小
    */
   pageSize: number;
+  /**
+   * 只返回创建时间不早于该时间的记录（RFC3339）
+   */
+  since?: string;
+  /**
+   * 状态过滤
+   */
+  statuses?: string[];
 }
 
-export type CreateDevModePublishRecordsRequest = CreatePublishRecordsInput & {
+export type RestartDevModeProcessesRequest = RestartInput & {
   /**
    * 应用 ID
    */
   appID: string;
-  /**
-   * 环境名称
-   */
-  envName: string;
 };
 
 export interface PreflightBodyInput {
@@ -61,10 +80,6 @@ export interface PreflightBodyInput {
 
 export interface PreflightOutput {
   data?: PreflightData;
-}
-
-export interface ListPublishRecordsOutput {
-  data?: PaginatedPublishRecords;
 }
 
 export interface CreatePublishRecordsInput {
@@ -90,6 +105,70 @@ export interface CreatePublishRecordsOutput {
   data?: CreatePublishRecordsData;
 }
 
+export interface ListPublishRecordsOutput {
+  data?: PaginatedPublishRecords;
+}
+
+export interface RestartInput {
+  /**
+   * EnvTypes 按环境类型重启（匹配环境下所有 Running 实例）
+   */
+  envTypes?: RestartEnvTypesTarget;
+  /**
+   * Envs 按环境名称重启（各环境下所有 Running 实例）
+   */
+  envs?: RestartEnvsTarget;
+  /**
+   * Instances 重启指定环境下的指定实例
+   */
+  instances?: RestartInstancesTarget;
+}
+
+export interface RestartEnvTypesTarget {
+  /**
+   * Types 环境类型列表，不允许 production
+   */
+  types: string[];
+}
+
+export interface RestartEnvsTarget {
+  /**
+   * Names 环境名称列表
+   */
+  names: string[];
+}
+
+export interface RestartInstancesTarget {
+  /**
+   * EnvName 环境名称
+   */
+  envName: string;
+  /**
+   * InstanceIDs 实例 ID 列表，须属于 EnvName 环境
+   */
+  instanceIDs: string[];
+}
+
+export interface PaginatedPublishRecords {
+  count?: string;
+  results?: PublishRecordOutputObj[];
+}
+
+export interface PublishRecordOutputObj {
+  action?: string;
+  binaryName?: string;
+  createdAt?: string;
+  envName?: string;
+  fileSize?: number;
+  id?: string;
+  instance?: string;
+  md5?: string;
+  message?: string;
+  operator?: string;
+  status?: string;
+  updatedAt?: string;
+}
+
 export interface CreatePublishRecordsData {
   /**
    * RecordIDs 新建的发布记录 ID 列表
@@ -110,24 +189,6 @@ export interface PublishInstanceResult {
    * Status 发布状态：success / failed
    */
   status: "success" | "failed";
-}
-
-export interface PaginatedPublishRecords {
-  count?: string;
-  results?: PublishRecordOutputObj[];
-}
-
-export interface PublishRecordOutputObj {
-  binaryName?: string;
-  createdAt?: string;
-  fileSize?: number;
-  id?: string;
-  instance?: string;
-  md5?: string;
-  message?: string;
-  operator?: string;
-  status?: string;
-  updatedAt?: string;
 }
 
 export interface PreflightData {

@@ -148,7 +148,8 @@ export interface CreateDefInput {
    */
   mountDir?: string;
   /**
-   * 创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。环境名格式与路径参数 envName 相同。
+   * 创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。
+   * 环境名格式与路径参数 envName 相同。
    */
   mountedEnvNames?: string[];
   /**
@@ -171,6 +172,7 @@ export interface GetDefDetailOutput {
 
 export interface UpdateDefInput {
   enableEnvVarRender?: boolean;
+  envContentStrategy?: "overlay" | "overwrite";
   isUnifiedConfig?: boolean;
   mountDir?: string;
   mountedEnvNames?: string[];
@@ -235,6 +237,7 @@ export interface DefSummaryObj {
   createdAt?: string;
   creator?: string;
   enableEnvVarRender?: boolean;
+  envContentStrategy?: string;
   id?: string;
   isUnifiedConfig?: boolean;
   mountDir?: string;
@@ -257,6 +260,7 @@ export interface DefDetailObj {
    */
   editableContentField?: string;
   enableEnvVarRender?: boolean;
+  envContentStrategy?: string;
   fileFormat?: string;
   fileId?: string;
   fileType?: string;

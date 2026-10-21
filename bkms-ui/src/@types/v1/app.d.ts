@@ -525,6 +525,10 @@ export interface AppInfoOutputObj {
    */
   displayName?: string;
   /**
+   * 应用框架（trpc/taf/blank）；Helm/Agones 为空
+   */
+  framework?: string;
+  /**
    * 应用 ID
    */
   id?: string;
@@ -772,6 +776,10 @@ export interface AppDetailOutputObj {
    */
   displayName?: string;
   /**
+   * 框架（兼容投影：优先 Application.Framework，否则由旧 type 推导）
+   */
+  framework?: string;
+  /**
    * Helm 应用描述规范
    */
   helmSpec?: HelmSpecOutputObj;
@@ -779,6 +787,10 @@ export interface AppDetailOutputObj {
    * 应用 ID
    */
   id?: string;
+  /**
+   * 编程语言（兼容投影：优先 Application.Language，否则 TrpcSpec）
+   */
+  language?: string;
   /**
    * 应用名称
    */
