@@ -29,7 +29,6 @@ import (
 
 var (
 	// ErrTenantIDRequired 需要租户但没有拿到：ctx 中没有租户，或 ForTenant 传入了空字符串。
-	// 数据层不回落到默认租户，避免漏挂中间件时静默写出跨租户的数据
 	ErrTenantIDRequired = errors.New("tenant id is required")
 	// ErrTenantScopeDuplicated 一次操作里传入了多个租户选项
 	ErrTenantScopeDuplicated = errors.New("tenant scope is specified more than once")
@@ -77,7 +76,7 @@ func (o TenantOpt) kind() optKind {
 }
 
 func (o TenantOpt) apply(q *query) {
-	q.tenantOpts++
+	q.tenantOptCount++
 	q.tenantAll = o.all
 	q.tenantID = o.id
 }
@@ -104,12 +103,12 @@ func (s *GenericStore[T]) resolveTenant(ctx context.Context, op string, q *query
 	fail := func(err error) (string, bool, error) {
 		return "", false, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 	}
-	if q.tenantOpts > 1 {
+	if q.tenantOptCount > 1 {
 		return fail(ErrTenantScopeDuplicated)
 	}
 	if !s.meta.TenantIsolated {
 		// 非租户集合上指定租户不静默忽略：调用方写出来就是理解错了集合的属性
-		if q.tenantOpts > 0 {
+		if q.tenantOptCount > 0 {
 			return fail(ErrTenantScopeNotSupported)
 		}
 		return "", false, nil
@@ -117,12 +116,14 @@ func (s *GenericStore[T]) resolveTenant(ctx context.Context, op string, q *query
 	if q.tenantAll {
 		return "", false, nil
 	}
-	if q.tenantOpts > 0 {
+	if q.tenantOptCount > 0 {
 		if q.tenantID == "" {
 			return fail(ErrTenantIDRequired)
 		}
 		return q.tenantID, true, nil
 	}
+	// 走到这里说明调用方没有传 AllTenants / ForTenant。被标记的 ctx（如平台管理请求）里虽然有租户，
+	// 但那是操作者自己的租户，不代表本次操作的范围，用它会静默只返回操作者租户的数据，所以直接报错
 	if explicitTenantScopeRequired(ctx) {
 		return fail(ErrTenantScopeRequired)
 	}
