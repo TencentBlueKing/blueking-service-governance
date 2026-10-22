@@ -117,11 +117,13 @@ func (s *GenericStore[T]) UpsertMany(ctx context.Context, objs []*T, key func(*T
 		if k == nil || k.kind()&^kindCond != 0 {
 			return 0, errors.Errorf("upsert many into %s: key of object %d must be a condition", s.coll.Name(), i)
 		}
-		q, err := s.parseOpts(ctx, "upsert many into", append(slices.Clone(opts), k), upsertOpts)
+		var q *query
+		q, err = s.parseOpts(ctx, "upsert many into", append(slices.Clone(opts), k), upsertOpts)
 		if err != nil {
 			return 0, err
 		}
-		op, err := s.prepareUpsert(obj, q, tenantID, now)
+		var op *upsertOp
+		op, err = s.prepareUpsert(obj, q, tenantID, now)
 		if err != nil {
 			return 0, errors.Wrapf(err, "object %d", i)
 		}
@@ -164,9 +166,9 @@ func (s *GenericStore[T]) prepareUpsert(target any, q *query, tenantID string, n
 				keyID,
 			)
 		}
-		// 对象自带的 _id 等同于调用方给出的条件，计入 callerConds 以满足 requireFilter
+		// 对象自带的 _id 等同于调用方给出的条件，计入 callerCondCount 以满足 requireFilter
 		q.conds = append(q.conds, bson.E{Key: keyID, Value: objectID})
-		q.callerConds++
+		q.callerCondCount++
 	}
 	if err = s.requireFilter("upsert into", q); err != nil {
 		return nil, err
