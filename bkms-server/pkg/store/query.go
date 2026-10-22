@@ -33,12 +33,12 @@ import (
 // query 汇总从 Opt 中解析出的操作参数
 type query struct {
 	conds bson.D
-	// callerConds 调用方传入的条件数量，不含注入的租户条件。
+	// callerCondCount 调用方传入的条件数量，不含注入的租户条件。
 	// 写操作据此判断是否真的带了条件：租户条件注入后 conds 恒非空，不能再用它来判断
-	callerConds int
-	matchAll    bool
-	sort        bson.D
-	limit       int64
+	callerCondCount int
+	matchAll        bool
+	sort            bson.D
+	limit           int64
 	// fields 仅 Update / Upsert 使用，nil 表示没有传入任何 UpdateOpt
 	fields *fieldSelection
 	// selected / omitted 读操作只读出 / 不读出的字段，两者不能同时非空，parseOpts 之后为 bson 路径
@@ -50,8 +50,8 @@ type query struct {
 	keepUpdatedAt bool
 	// arrayFilters 仅 Modify / ModifyMany 使用
 	arrayFilters []any
-	// tenantOpts 传入的租户选项个数，超过 1 个为重复指定；为 0 时租户取自 ctx
-	tenantOpts int
+	// tenantOptCount 传入的租户选项个数，超过 1 个为重复指定；为 0 时租户取自 ctx
+	tenantOptCount int
 	// tenantAll 本次操作跨租户，不按租户过滤
 	tenantAll bool
 	// tenantID 本次操作指定的租户
@@ -106,7 +106,9 @@ func (s *GenericStore[T]) parseOpts(ctx context.Context, op string, opts []Opt, 
 		if k := opt.kind() &^ accepted; k != 0 {
 			return nil, errors.Wrapf(errUnsupportedOpt, "%s %s: %s", op, s.coll.Name(), k)
 		}
-		// 租户范围是安全边界，必须留在调用点上，不能被 Combine 收进领域包的具名 Opt
+		// 拒绝被 Combine 包住的租户范围（AllTenants / ForTenant）：combinedOpt 的 kind 是内部各选项的并集，
+		// 带上 kindTenantAny 位就说明里面藏了租户范围。否则领域包可以把 AllTenants 收进具名 Opt，
+		// 调用点上看不出这次操作跨了租户
 		if _, combined := opt.(combinedOpt); combined && opt.kind()&kindTenantAny != 0 {
 			return nil, errors.Wrapf(ErrTenantScopeCombined, "%s %s", op, s.coll.Name())
 		}
@@ -131,7 +133,7 @@ func (s *GenericStore[T]) parseOpts(ctx context.Context, op string, opts []Opt, 
 		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
 	}
 	// 注入必须在字段名解析之后：注入的已经是 bson 路径，不应再被解析一次
-	q.callerConds = len(q.conds)
+	q.callerCondCount = len(q.conds)
 	if err = s.injectTenant(ctx, op, q); err != nil {
 		return nil, err
 	}
@@ -141,7 +143,7 @@ func (s *GenericStore[T]) parseOpts(ctx context.Context, op string, opts []Opt, 
 // requireFilter 要求写操作必须带过滤条件（或显式 All）。
 // 只看调用方传入的条件：租户条件是自动注入的，不能让它把漏传条件的写操作放过去
 func (s *GenericStore[T]) requireFilter(op string, q *query) error {
-	if q.callerConds == 0 && !q.matchAll {
+	if q.callerCondCount == 0 && !q.matchAll {
 		return errors.Wrapf(errNoFilter, "%s %s", op, s.coll.Name())
 	}
 	return nil
