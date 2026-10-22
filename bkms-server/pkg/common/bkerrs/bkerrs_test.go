@@ -110,6 +110,31 @@ var _ = Describe("Error", func() {
 		)
 	})
 
+	Describe("WrapAppConfigFileMountIdentityConflict", func() {
+		It("should expose the mount identity detail code and extras", func() {
+			err := bkerrs.WrapAppConfigFileMountIdentityConflict(
+				errors.New("duplicate key"),
+				"app-1",
+				"app.conf",
+				"/etc/app",
+			)
+
+			var bkErr *bkerrs.Error
+			Expect(errors.As(err, &bkErr)).To(BeTrue())
+			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeAlreadyExists))
+			details := bkErr.Details()
+			Expect(details).To(HaveLen(1))
+			detail := (&details).AsMaps()[0]
+			Expect(detail["code"]).To(Equal(bkerrs.ErrDetailCodeAppConfigFileMountIdentityConflict))
+			Expect(detail["module"]).To(Equal("app-config-file"))
+			Expect(detail["extras"]).To(Equal(map[string]string{
+				"appID":    "app-1",
+				"name":     "app.conf",
+				"mountDir": "/etc/app",
+			}))
+		})
+	})
+
 	Describe("WrapBSCPNotFullyReleased", func() {
 		It("should wrap not fully released error with detail code", func() {
 			err := bkerrs.WrapBSCPNotFullyReleased(

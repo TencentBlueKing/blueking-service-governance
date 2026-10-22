@@ -55,6 +55,16 @@ func (h *Handler) newAppCfgFileDefService() *appcfg.AppCfgFileDefService {
 	return appcfg.NewAppCfgFileDefService(base)
 }
 
+// abortDefWriteErr 把写入 def 的错误返回给调用方。
+// 文件名 + 挂载目录冲突带 APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT，供前端单独提示。
+func abortDefWriteErr(c *gin.Context, err error, action, appID, name, mountDir string) {
+	if errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists) {
+		bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileMountIdentityConflict(err, appID, name, mountDir))
+		return
+	}
+	bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), action))
+}
+
 func errCodeForDefError(err error) bkerrs.ErrCode {
 	if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
 		return bkerrs.ErrCodeInvalidArgument
@@ -136,6 +146,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 //	@Param			body	body		CreateDefInput	true	"创建配置文件定义请求"
 //	@Success		200		{object}	CreateDefOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
+//	@Failure		409		{object}	bkerrs.GinErrorOutput	"文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT"
 //	@Router			/apps/{appID}/app-config-file-defs [post]
 func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 	var uriInput AppURIInput
@@ -189,7 +200,7 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 		AppType:             app.Type,
 	})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "creating def"))
+		abortDefWriteErr(c, err, "creating def", app.ID, input.Name, input.MountDir)
 		return
 	}
 
@@ -266,6 +277,7 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 //	@Param			body	body		UpdateDefInput	true	"更新配置文件定义请求"
 //	@Success		200		{object}	UpdateDefOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
+//	@Failure		409		{object}	bkerrs.GinErrorOutput	"文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT"
 //	@Router			/apps/{appID}/app-config-file-defs/{id} [put]
 func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 	var uriInput DefURIInput
@@ -300,7 +312,14 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, def.AppID, def.ID.Hex()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "updating def"))
+		name, mountDir := def.Name, def.MountDir
+		if update.Name != nil {
+			name = *update.Name
+		}
+		if update.MountDir != nil {
+			mountDir = *update.MountDir
+		}
+		abortDefWriteErr(c, err, "updating def", def.AppID, name, mountDir)
 		return
 	}
 
@@ -331,6 +350,7 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 //	@Param			body	body		UpdateHelmFileInput	true	"Helm 编辑保存请求"
 //	@Success		200		{object}	UpdateHelmFileOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
+//	@Failure		409		{object}	bkerrs.GinErrorOutput	"文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT"
 //	@Router			/apps/{appID}/app-config-file-defs/{id}/helm-file [put]
 func (h *Handler) UpdateHelmFile(c *gin.Context) {
 	var uriInput DefURIInput
@@ -392,7 +412,7 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, def.AppID, defaultFile.ID.Hex()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "updating helm file"))
+		abortDefWriteErr(c, err, "updating helm file", def.AppID, input.Name, def.MountDir)
 		return
 	}
 

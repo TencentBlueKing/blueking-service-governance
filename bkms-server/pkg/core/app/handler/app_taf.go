@@ -51,6 +51,7 @@ func (h *Handler) newTafService() *tafapp.Service {
 //	@Param		body	body		serializer.UpdateAppModelSpecInput	true	"更新 Taf 配置请求"
 //	@Success	200		{object}	serializer.EmptyOutput
 //	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Failure	409		{object}	bkerrs.GinErrorOutput	"文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT"
 //	@Router		/apps/{appID}/taf-spec [put]
 func (h *Handler) UpdateAppTafSpec(c *gin.Context) {
 	var uriInput serializer.AppURIInput
@@ -85,7 +86,11 @@ func (h *Handler) UpdateAppTafSpec(c *gin.Context) {
 			code = bkerrs.ErrCodeInvalidRequest
 		}
 		if errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists) {
-			code = bkerrs.ErrCodeAlreadyExists
+			spec := input.AppModelSpec.TafSpec
+			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileMountIdentityConflict(
+				err, app.ID, spec.FileName, spec.FilePath,
+			))
+			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "update taf app"))
 		return

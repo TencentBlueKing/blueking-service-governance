@@ -35,6 +35,9 @@ const (
 	// ErrDetailCodeAppConfigFileVersionConflict 应用配置文件版本冲突
 	ErrDetailCodeAppConfigFileVersionConflict ErrDetailCode = "APP_CONFIG_FILE_VERSION_CONFLICT"
 
+	// ErrDetailCodeAppConfigFileMountIdentityConflict 同应用下已存在相同文件名和挂载目录的配置文件
+	ErrDetailCodeAppConfigFileMountIdentityConflict ErrDetailCode = "APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT"
+
 	// ErrDetailCodeNotFullyReleased BSCP 服务未全量发布
 	ErrDetailCodeNotFullyReleased ErrDetailCode = "BSCP_NOT_FULLY_RELEASED"
 
