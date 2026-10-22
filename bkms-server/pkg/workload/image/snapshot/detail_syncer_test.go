@@ -90,7 +90,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
@@ -120,7 +120,6 @@ var _ = Describe("DetailSyncer", func() {
 
 		It("should restore suppressed tags whose manifest exists again", func() {
 			Expect(UpsertTagSuppression(ctx, db, info.RepoKey, info.RepoName, "v1.0.0")).To(Succeed())
-			info.SuppressedTags = []string{"v1.0.0"}
 
 			mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
 			mockey.Mock((*registry.Client).GetTagDetail).
@@ -135,7 +134,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err := syncer.SyncDetails(ctx, info)
+			err := syncer.SyncDetails(ctx, info, []string{"v1.0.0"})
 			Expect(err).NotTo(HaveOccurred())
 
 			suppressions, err := ListSuppressedTags(ctx, db, info.RepoKey)
@@ -148,6 +147,34 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(snapshots).To(HaveLen(1))
 			Expect(snapshots[0].Tag).To(Equal("v1.0.0"))
 			Expect(snapshots[0].Digest).To(Equal("sha256:v1.0.0"))
+		})
+
+		It("should request retry when rechecking a suppressed tag fails transiently", func() {
+			Expect(UpsertTagSuppression(ctx, db, info.RepoKey, info.RepoName, "v1.0.0")).To(Succeed())
+
+			headErr := error(&transport.Error{StatusCode: http.StatusBadGateway})
+			mockey.Mock((*registry.Client).HeadManifest).To(
+				func(*registry.Client, context.Context, string, string) error { return headErr },
+			).Build()
+			mockey.Mock((*registry.Client).GetTagDetail).Return(registry.ImageDetail{
+				Tag: "v1.0.0", Digest: "sha256:v1.0.0", BuiltAt: time.Now(),
+			}, nil).Build()
+
+			err := syncer.SyncDetails(ctx, info, []string{"v1.0.0"})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("restore suppressed tags"))
+
+			Expect(ListSuppressedTags(ctx, db, info.RepoKey)).To(Equal([]string{"v1.0.0"}))
+			Expect(ListAllTags(ctx, db, info.RepoKey)).To(BeEmpty())
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+
+			// asynq 重试时 registry 已恢复，tag 应被恢复
+			headErr = nil
+			Expect(syncer.SyncDetails(ctx, info, []string{"v1.0.0"})).To(Succeed())
+			Expect(ListSuppressedTags(ctx, db, info.RepoKey)).To(BeEmpty())
+			Expect(ListAllTags(ctx, db, info.RepoKey)).To(Equal([]string{"v1.0.0"}))
 		})
 
 		It("should keep syncing remaining tags when one detail request fails", func() {
@@ -172,7 +199,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
@@ -224,7 +251,7 @@ var _ = Describe("DetailSyncer", func() {
 				},
 			).Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
@@ -258,7 +285,7 @@ var _ = Describe("DetailSyncer", func() {
 				Build()
 			mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
@@ -299,7 +326,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
@@ -350,7 +377,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			snapshots, _, listErr := listSnapshots(ctx, db, info.RepoKey)
@@ -391,7 +418,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 状态不应被修改，仍为 refreshing
@@ -416,7 +443,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 状态不应被修改，仍为 detail_syncing
@@ -433,11 +460,9 @@ var _ = Describe("DetailSyncer", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			info.SuppressedTags = []string{"v1.0.0"}
-
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, []string{"v1.0.0"})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("status is not idle"))
+			Expect(err.Error()).To(ContainSubstring("retry later to recheck suppressed tags"))
 		})
 	})
 })

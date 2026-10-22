@@ -473,7 +473,7 @@ func (f *tagDeletionFixture) cleanup(
 		"repoKey": f.repoKey,
 	})
 	Expect(err).NotTo(HaveOccurred())
-	_, err = db.Collection("image_tag_suppressions").DeleteMany(ctx, bson.M{
+	_, err = db.Collection(snapshot.TagSuppressionMeta.Collection).DeleteMany(ctx, bson.M{
 		"repoKey": f.repoKey,
 	})
 	Expect(err).NotTo(HaveOccurred())

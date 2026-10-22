@@ -41,6 +41,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -334,6 +335,31 @@ var _ = Describe("Service", func() {
 				suppressions, err := ListSuppressedTags(ctx, db, repoKey)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(suppressions).To(Equal([]string{"still-suppressed"}))
+			})
+		})
+
+		It("should keep the suppression of a tag that is being deleted concurrently", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				// DeleteImageTag 已写 suppression、尚未删快照时刷新恰好执行：本地快照与 suppression 同时存在
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				Expect(UpsertTags(ctx, db, repoKey, []string{"deleting"})).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "deleting")).To(Succeed())
+
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"deleting"}, nil).Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				_, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ListSuppressedTags(ctx, db, repoKey)).To(Equal([]string{"deleting"}))
+
+				// 删除流程随后删掉快照，下一次刷新不应把残留名字写回
+				_, err = store.Of(db, ImageMeta).DeleteMany(ctx, ByRepoTag(repoKey, "deleting"))
+				Expect(err).NotTo(HaveOccurred())
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.AddedTagCnt).To(BeZero())
+				Expect(ListAllTags(ctx, db, repoKey)).To(BeEmpty())
 			})
 		})
 

@@ -41,8 +41,11 @@ func NewDetailSyncer(db *mongo.Database) *DetailSyncer {
 	return &DetailSyncer{db: db}
 }
 
-// SyncDetails 执行详情同步
-func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo) error {
+// SyncDetails 执行详情同步。suppressedTags 是本次刷新命中的 suppression tag，先逐个复核 manifest 是否重新存在。
+//
+// 复核遇到 404 以外的错误时，状态照常回到 idle，但返回错误交给 asynq 重试，否则这批 tag 要等到下一次刷新才有机会恢复；
+// 普通 tag 的详情拉取失败只记入 LastError，不触发重试
+func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo, suppressedTags []string) error {
 	repoKey := info.RepoKey
 	repoName := info.RepoName
 
@@ -52,8 +55,13 @@ func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo) error
 		return err
 	}
 	if !acquired {
-		if len(info.SuppressedTags) > 0 {
-			return errors.Errorf("detail sync for %s skipped: status is not idle", repoKey)
+		// suppressedTags 只随本条任务消息传递，正在执行的任务不会复核它们；
+		// 返回错误交给 asynq 重试，避免这批 tag 要等到下一次刷新才能恢复
+		if len(suppressedTags) > 0 {
+			return errors.Errorf(
+				"detail sync for %s is busy, retry later to recheck suppressed tags %v",
+				repoKey, suppressedTags,
+			)
 		}
 		log.Infof(ctx, "detail sync for %s skipped: status is not idle", repoKey)
 		return nil
@@ -61,12 +69,11 @@ func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo) error
 
 	client := registry.New(info.Username, info.Password, true)
 
-	lastError := ""
-	if len(info.SuppressedTags) > 0 {
-		if err = s.restoreSuppressedTags(ctx, repoKey, repoName, client, info.SuppressedTags); err != nil {
-			lastError = err.Error()
-			log.Errorf(ctx, "restore suppressed tags for %s failed: %v", repoKey, err)
-		}
+	var lastError string
+	restoreErr := s.restoreSuppressedTags(ctx, repoKey, repoName, client, suppressedTags)
+	if restoreErr != nil {
+		lastError = restoreErr.Error()
+		log.Errorf(ctx, "restore suppressed tags for %s failed: %v", repoKey, restoreErr)
 	}
 
 	// 获取需要补全详情的标签
@@ -74,18 +81,13 @@ func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo) error
 	if err != nil {
 		return err
 	}
-
 	if len(tags) == 0 {
 		log.Infof(ctx, "no tags need detail sync for %s", repoKey)
-		return s.completeDetailSync(ctx, repoKey, lastError)
 	}
 
 	// 按批次处理
 	for i := 0; i < len(tags); i += DetailSyncBatchSize {
-		end := i + DetailSyncBatchSize
-		if end > len(tags) {
-			end = len(tags)
-		}
+		end := min(i+DetailSyncBatchSize, len(tags))
 		batch := tags[i:end]
 
 		batchErr := s.syncDetailBatch(ctx, repoKey, repoName, client, batch)
@@ -96,39 +98,45 @@ func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo) error
 		}
 	}
 
-	return s.completeDetailSync(ctx, repoKey, lastError)
+	if err = s.completeDetailSync(ctx, repoKey, lastError); err != nil {
+		return err
+	}
+	return errors.Wrapf(restoreErr, "restore suppressed tags for %s", repoKey)
 }
 
+// restoreSuppressedTags 逐个 HEAD 复核 suppressed tag：manifest 重新存在时删除 suppression 并补回空快照，
+// 404 时保留 suppression。返回遇到的第一个其他错误，所有 tag 都会处理完。
+//
+// 可以安全重入：已恢复的 tag 重试时只是重复删除与 upsert；删除 suppression 后写快照失败时，
+// 重试或下一次刷新都会把它当作普通新增 tag 写回
 func (s *DetailSyncer) restoreSuppressedTags(
 	ctx context.Context,
 	repoKey, repoName string,
 	client *registry.Client,
 	tags []string,
 ) error {
+	ctx = context.WithoutCancel(ctx)
 	var firstErr error
+	keepFirst := func(err error) {
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
 	for _, tag := range tags {
-		gCtx := context.WithoutCancel(ctx)
-		err := client.HeadManifest(gCtx, repoName, tag)
+		err := client.HeadManifest(ctx, repoName, tag)
 		switch {
 		case err == nil:
-			if delErr := DeleteTagSuppressions(gCtx, s.db, repoKey, []string{tag}); delErr != nil {
-				if firstErr == nil {
-					firstErr = delErr
-				}
+			if delErr := DeleteTagSuppressions(ctx, s.db, repoKey, []string{tag}); delErr != nil {
+				keepFirst(delErr)
 				continue
 			}
-			if upsertErr := UpsertTags(gCtx, s.db, repoKey, []string{tag}); upsertErr != nil {
-				if firstErr == nil {
-					firstErr = errors.Wrapf(upsertErr, "restore suppressed tag %s", tag)
-				}
-				continue
+			if upsertErr := UpsertTags(ctx, s.db, repoKey, []string{tag}); upsertErr != nil {
+				keepFirst(errors.Wrapf(upsertErr, "restore suppressed tag %s", tag))
 			}
 		case registry.IsTagNotFound(err):
-			continue
+			// manifest 仍不存在，保留 suppression
 		default:
-			if firstErr == nil {
-				firstErr = errors.Wrapf(err, "head manifest for suppressed tag %s", tag)
-			}
+			keepFirst(errors.Wrapf(err, "head manifest for suppressed tag %s", tag))
 		}
 	}
 	return firstErr

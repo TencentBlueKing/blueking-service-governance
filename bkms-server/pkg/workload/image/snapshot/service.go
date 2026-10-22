@@ -57,11 +57,10 @@ func NewService(db *mongo.Database) *Service {
 
 // RepoKeyInfo 仓库 key 解析结果
 type RepoKeyInfo struct {
-	RepoKey        string
-	RepoName       string
-	Username       string
-	Password       string
-	SuppressedTags []string
+	RepoKey  string
+	RepoName string
+	Username string
+	Password string
 }
 
 // ResolveRepoKeyForRepository 根据镜像仓库名称生成无凭据的仓库实例信息。
@@ -390,9 +389,11 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		return !suppressedTagSet.Has(tag)
 	})
 
-	// suppression 若已不在远端名单，或本地快照已重新存在，说明已可清理。
+	// 只有远端名单已不再返回的 suppression 才能清理。「本地快照仍在」不能作为依据：
+	// 删除流程先写 suppression 再删快照，与刷新并发时这正是删除中的正常中间状态；
+	// manifest 重新存在时由详情同步的复核负责删除 suppression。
 	staleSuppressions := lo.Filter(suppressedTags, func(tag string, _ int) bool {
-		return !remoteTagSet.Has(tag) || localTagSet.Has(tag)
+		return !remoteTagSet.Has(tag)
 	})
 	if err = DeleteTagSuppressions(persistCtx, s.db, info.RepoKey, staleSuppressions); err != nil {
 		return nil, err

@@ -252,6 +252,9 @@ func (c *Client) HeadManifest(ctx context.Context, repoName, tagName string) err
 // DeleteTag 删除远端仓库中的指定镜像标签
 // 利用开源库 go-containerregistry 删除镜像，只能删除底层镜像，无法删除对应仓库如 bkrepo、mirrors 仓库自己额外的元数据
 // 删除后在仓库相应页面还有可能看到镜像，但使用命令拉取/同步仓库无法拉到对应镜像，在 bkms 侧不受影响
+//
+// 返回的错误满足 IsTagNotFound 时，表示远端已确认该 tag 不存在：按 tag 查 digest 时 404，
+// 或按 digest 删除返回 404 后再次按 tag 查询仍是 404
 func (c *Client) DeleteTag(ctx context.Context, repoName, tagName string) error {
 	// 获取镜像 desc 信息
 	desc, err := c.headDescriptor(ctx, repoName, tagName)

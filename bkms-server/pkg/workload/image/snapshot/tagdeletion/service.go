@@ -79,7 +79,9 @@ func NewService(db *mongo.Database) *Service {
 }
 
 // DeleteImageTag 删除指定应用下的镜像标签，并同步清理本地记录
-// 该接口不再额外校验镜像标签是否仍被当前工作负载引用，直接删除，如遇到问题直接抛出错误
+// 该接口不再额外校验镜像标签是否仍被当前工作负载引用，直接删除，如遇到问题直接抛出错误。
+// 删除是幂等的：远端确认 tag 已不存在时同样视为删除成功，仍会写 suppression 并清理本地记录，
+// 因为制品库的 tags/list 可能仍残留该名字
 func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
 	repoResolver := snapshot.NewService(s.db)
 	info, err := repoResolver.ResolveRepoKeyForApp(ctx, appID)
