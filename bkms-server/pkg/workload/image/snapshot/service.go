@@ -20,7 +20,6 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -381,20 +380,17 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		return nil, err
 	}
 
-	// 计算 diff：找出新增标签。
 	localTagSet := set.NewStringSetWithValues(localTags)
 	remoteTagSet := set.NewStringSetWithValues(remoteTags)
 	suppressedTagSet := set.NewStringSetWithValues(suppressedTags)
-	newTags := lo.Filter(remoteTags, func(tag string, _ int) bool {
-		return !localTagSet.Has(tag)
-	})
 
-	// 删除后本地快照已清掉，tags/list 残留的名字会被当成新增；命中 suppression 的先别写回。
-	suppressedNewTags := lo.Filter(newTags, func(tag string, _ int) bool {
+	// tags/list 残留的已删除 tag 命中 suppression，不写回，交给详情同步复核。
+	// 复核不看本地快照是否存在：删除流程写入 suppression 后删快照失败，会留下两者并存，只有复核能清掉
+	recheckTags, unsuppressedTags := lo.FilterReject(remoteTags, func(tag string, _ int) bool {
 		return suppressedTagSet.Has(tag)
 	})
-	newTags = lo.Filter(newTags, func(tag string, _ int) bool {
-		return !suppressedTagSet.Has(tag)
+	newTags := lo.Filter(unsuppressedTags, func(tag string, _ int) bool {
+		return !localTagSet.Has(tag)
 	})
 
 	// 只有远端名单已不再返回的 suppression 才能清理。「本地快照仍在」不能作为依据：
@@ -443,7 +439,7 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		return nil, err
 	}
 
-	if len(unsyncedDetailTags) > 0 || len(suppressedNewTags) > 0 {
+	if len(unsyncedDetailTags) > 0 || len(recheckTags) > 0 {
 		// 通过任务队列异步触发详情同步（构造时即完成凭据加密）
 		detailSyncArgs, encryptErr := NewImageDetailSyncArgs(
 			info.RepoKey, info.RepoName, info.Username, info.Password,
@@ -452,7 +448,7 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 			log.Errorf(persistCtx, "encrypt credentials for detail sync task %s failed: %v", info.RepoKey, encryptErr)
 			resultMsg = "Snapshot refresh completed, but the detail sync task was not submitted"
 		} else {
-			detailSyncArgs.SuppressedTags = suppressedNewTags
+			detailSyncArgs.SuppressedTags = recheckTags
 			if enqueueErr := taskq.Enqueue(persistCtx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
 				log.Errorf(persistCtx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
 				return nil, errors.Wrap(enqueueErr, "enqueue image detail sync task")
@@ -469,22 +465,16 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	}, nil
 }
 
-// clearMissingRepo 远端仓库为空或不存在时清空本地快照与 suppression，再返回 ErrRepoNotFound。
+// clearMissingRepo 远端仓库为空或不存在时清空本地快照，再返回 ErrRepoNotFound。
 //
-// 返回的错误同时保留原始 registry 错误，自定义镜像链路仍按仓库侧失败识别
+// suppression 必须保留：NAME_UNKNOWN 也可能来自仓库改名、无权限或制品库短暂异常，
+// 仓库恢复后 tags/list 残留的已删除 tag 仍要靠它拦住；快照是可重建的缓存，清掉无妨
 func (s *Service) clearMissingRepo(ctx context.Context, info *RepoKeyInfo, listErr error) error {
 	ctx = context.WithoutCancel(ctx)
 	removedCount, err := DeleteTagsNotIn(ctx, s.db, info.RepoKey, nil)
 	if err != nil {
 		return err
 	}
-	suppressedTags, err := ListSuppressedTags(ctx, s.db, info.RepoKey)
-	if err != nil {
-		return err
-	}
-	if err = DeleteTagSuppressions(ctx, s.db, info.RepoKey, suppressedTags); err != nil {
-		return err
-	}
 	log.Infof(ctx, "repository %s is empty or not found, removed %d local snapshots", info.RepoName, removedCount)
-	return fmt.Errorf("list all tags for %s: %w: %w", info.RepoName, ErrRepoNotFound, listErr)
+	return errors.Wrapf(ErrRepoNotFound, "list all tags for %s: %v", info.RepoName, listErr)
 }

@@ -149,6 +149,34 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(snapshots[0].Digest).To(Equal("sha256:v1.0.0"))
 		})
 
+		It("should drop the leftover snapshot of a suppressed tag whose manifest is still gone", func() {
+			// 删除流程写入 suppression 后删快照失败：完整快照与 suppression 并存
+			Expect(UpsertTags(ctx, db, info.RepoKey, []string{"v1.0.0"})).To(Succeed())
+			Expect(UpdateDetail(ctx, db, info.RepoKey, "v1.0.0", &registry.ImageDetail{
+				Tag: "v1.0.0", Digest: "sha256:v1.0.0", BuiltAt: time.Now(),
+			})).To(Succeed())
+			Expect(UpsertTagSuppression(ctx, db, info.RepoKey, info.RepoName, "v1.0.0")).To(Succeed())
+
+			mockey.Mock((*registry.Client).HeadManifest).Return(
+				errors.Wrap(&transport.Error{StatusCode: http.StatusNotFound}, "head manifest"),
+			).Build()
+			mockey.Mock((*registry.Client).GetTagDetail).To(
+				func(*registry.Client, context.Context, string, string) (registry.ImageDetail, error) {
+					Fail("detail of a suppressed tag should not be fetched")
+					return registry.ImageDetail{}, nil
+				},
+			).Build()
+
+			Expect(syncer.SyncDetails(ctx, info, []string{"v1.0.0"})).To(Succeed())
+
+			Expect(ListAllTags(ctx, db, info.RepoKey)).To(BeEmpty())
+			Expect(ListSuppressedTags(ctx, db, info.RepoKey)).To(Equal([]string{"v1.0.0"}))
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+			Expect(status.LastError).To(BeEmpty())
+		})
+
 		It("should request retry when rechecking a suppressed tag fails transiently", func() {
 			Expect(UpsertTagSuppression(ctx, db, info.RepoKey, info.RepoName, "v1.0.0")).To(Succeed())
 

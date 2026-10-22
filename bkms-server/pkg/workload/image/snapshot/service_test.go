@@ -308,6 +308,34 @@ var _ = Describe("Service", func() {
 			})
 		})
 
+		It("should recheck a suppressed tag even when its full local snapshot still exists", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				// 删除流程写入 suppression 后删快照失败：完整快照与 suppression 并存，tags/list 仍残留该名字
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0"})).To(Succeed())
+				Expect(UpdateDetail(ctx, db, repoKey, "v1.0.0", &registry.ImageDetail{
+					Tag: "v1.0.0", Digest: "sha256:v1.0.0", BuiltAt: time.Now(),
+				})).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v1.0.0")).To(Succeed())
+
+				var preparedArgs *ImageDetailSyncArgs
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"v1.0.0"}, nil).Build()
+				mockey.Mock(NewImageDetailSyncArgs).
+					To(func(repoKey, repoName, username, password string) (*ImageDetailSyncArgs, error) {
+						preparedArgs = &ImageDetailSyncArgs{RepoKey: repoKey, RepoName: repoName}
+						return preparedArgs, nil
+					}).
+					Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				_, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(preparedArgs).NotTo(BeNil())
+				Expect(preparedArgs.SuppressedTags).To(Equal([]string{"v1.0.0"}))
+			})
+		})
+
 		It("should clear stale suppressions and keep only active suppressed ones", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
@@ -400,7 +428,7 @@ var _ = Describe("Service", func() {
 			})
 		})
 
-		It("should clear local data and return ErrRepoNotFound for an unknown repository", func() {
+		It("should keep suppressions and return ErrRepoNotFound for an unknown repository", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				// mirrors 在仓库内镜像全部删除后，tags/list 返回 404 NAME_UNKNOWN
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
@@ -416,9 +444,9 @@ var _ = Describe("Service", func() {
 				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
 				Expect(result).To(BeNil())
 				Expect(errors.Is(err, ErrRepoNotFound)).To(BeTrue())
-				Expect(registry.IsTagNotFound(err)).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring(string(transport.NameUnknownErrorCode)))
 				Expect(ListAllTags(ctx, db, repoKey)).To(BeEmpty())
-				Expect(ListSuppressedTags(ctx, db, repoKey)).To(BeEmpty())
+				Expect(ListSuppressedTags(ctx, db, repoKey)).To(Equal([]string{"v2.0.0"}))
 
 				status, getErr := GetRepoStatus(ctx, db, repoKey)
 				Expect(getErr).NotTo(HaveOccurred())

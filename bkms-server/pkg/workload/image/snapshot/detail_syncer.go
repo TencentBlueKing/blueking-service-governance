@@ -44,7 +44,8 @@ func NewDetailSyncer(db *mongo.Database) *DetailSyncer {
 // SyncDetails 执行详情同步。suppressedTags 是本次刷新命中的 suppression tag，先逐个复核 manifest 是否重新存在。
 //
 // 复核遇到 404 以外的错误时，状态照常回到 idle，但返回错误交给 asynq 重试，否则这批 tag 要等到下一次刷新才有机会恢复；
-// 普通 tag 的详情拉取失败只记入 LastError，不触发重试
+// 普通 tag 的详情拉取失败只记入 LastError，本身不触发重试。复核失败引发的重试会整条任务重跑，
+// 上次详情拉取失败、仍未补全的普通 tag 会顺带再拉一次，已补全的不受影响
 func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo, suppressedTags []string) error {
 	repoKey := info.RepoKey
 	repoName := info.RepoName
@@ -73,7 +74,6 @@ func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo, suppr
 	restoreErr := s.restoreSuppressedTags(ctx, repoKey, repoName, client, suppressedTags)
 	if restoreErr != nil {
 		lastError = restoreErr.Error()
-		log.Errorf(ctx, "restore suppressed tags for %s failed: %v", repoKey, restoreErr)
 	}
 
 	// 获取需要补全详情的标签
@@ -104,11 +104,7 @@ func (s *DetailSyncer) SyncDetails(ctx context.Context, info *RepoKeyInfo, suppr
 	return errors.Wrapf(restoreErr, "restore suppressed tags for %s", repoKey)
 }
 
-// restoreSuppressedTags 逐个 HEAD 复核 suppressed tag：manifest 重新存在时删除 suppression 并补回空快照，
-// 404 时保留 suppression。返回遇到的第一个其他错误，所有 tag 都会处理完。
-//
-// 可以安全重入：已恢复的 tag 重试时只是重复删除与 upsert；删除 suppression 后写快照失败时，
-// 重试或下一次刷新都会把它当作普通新增 tag 写回
+// restoreSuppressedTags 逐个 HEAD 复核 suppressed tag：manifest 重新存在时删除 suppression 并补回空快照
 func (s *DetailSyncer) restoreSuppressedTags(
 	ctx context.Context,
 	repoKey, repoName string,
@@ -134,7 +130,9 @@ func (s *DetailSyncer) restoreSuppressedTags(
 				keepFirst(errors.Wrapf(upsertErr, "restore suppressed tag %s", tag))
 			}
 		case registry.IsTagNotFound(err):
-			// manifest 仍不存在，保留 suppression
+			if _, delErr := store.Of(s.db, ImageMeta).DeleteMany(ctx, ByRepoTag(repoKey, tag)); delErr != nil {
+				keepFirst(errors.Wrapf(delErr, "delete leftover snapshot of suppressed tag %s", tag))
+			}
 		default:
 			keepFirst(errors.Wrapf(err, "head manifest for suppressed tag %s", tag))
 		}
@@ -205,7 +203,7 @@ func (s *DetailSyncer) syncDetailBatch(
 }
 
 // dropMissingManifestTag 为 manifest 已不存在的 tag 写入 suppression 并删除快照。
-// tags/list 仍残留该名字时，suppression 阻止刷新把它当成新增写回，所以必须先于快照删除写入。
+// tags/list 仍残留该名字时，suppression 阻止刷新把它当成新增写回，所以必须先于快照删除写入
 func (s *DetailSyncer) dropMissingManifestTag(ctx context.Context, repoKey, repoName, tag string) error {
 	if err := UpsertTagSuppression(ctx, s.db, repoKey, repoName, tag); err != nil {
 		return err
