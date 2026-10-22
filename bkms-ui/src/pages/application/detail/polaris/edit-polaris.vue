@@ -370,7 +370,6 @@
               <Form.FormItem
                 :label="$t('健康检查')"
                 property="enableHealthCheck"
-                required
               >
                 <div class="flex items-center gap-[10px]">
                   <Switcher
