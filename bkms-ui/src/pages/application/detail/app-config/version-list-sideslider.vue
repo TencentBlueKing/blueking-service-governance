@@ -358,8 +358,8 @@
   /** 版本列表数据 */
   const versionList = ref<AppConfigFileVersionOutputObj[]>([]);
 
-  /** 当前生效版本记录的文件类型 */
-  const currentFileType = ref<string>();
+  /** 当前实例的实时文件类型，生效方式变更不会生成版本历史 */
+  const currentFileType = computed(() => props.envInstances?.find(item => item.fileId === activeFileID.value)?.type);
 
   /** 分页总数 */
   const total = ref(0);
@@ -417,7 +417,6 @@
     const requestID = ++versionListRequestID;
     if (!appDetailStore.appID || (props.configFileDefId && !activeFileID.value)) {
       versionList.value = [];
-      currentFileType.value = undefined;
       total.value = 0;
       versionListLoading.value = false;
       return;
@@ -425,7 +424,6 @@
 
     versionListLoading.value = true;
     try {
-      const version = currentVersionNum.value;
       const fileParams = {
         appID: appDetailStore.appID,
         // 定义模式同时按文件与环境过滤，避免同一环境下其他文件的版本混入
@@ -443,19 +441,6 @@
       });
       if (requestID !== versionListRequestID) return;
 
-      let currentType = res.results?.find(item => item.version === version)?.type;
-      // 搜索或翻页可能不包含当前版本，单独查询以免误用实例上的旧类型。
-      if (props.configFileDefId && version && !currentType) {
-        const currentVersionRes = await AppConfigFilesService.listAppConfigFileVersions({
-          ...fileParams,
-          version,
-          page: 1,
-          pageSize: 5,
-        });
-        if (requestID !== versionListRequestID) return;
-        currentType = currentVersionRes.results?.find(item => item.version === version)?.type;
-      }
-      currentFileType.value = currentType;
       versionList.value = res.results ?? [];
       total.value = res.count ?? 0;
       clearErrorType();
@@ -518,7 +503,6 @@
     curEnvID.value = DEFAULT_ENV_ID;
     searchValue.value = [];
     versionList.value = [];
-    currentFileType.value = undefined;
     total.value = 0;
     handleResetPage();
   }
