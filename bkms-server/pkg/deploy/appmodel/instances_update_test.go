@@ -229,9 +229,9 @@ func containerImagesForTest(spec map[string]any) []any {
 	return images
 }
 
-var _ = Describe("updateWorkloadManifest", func() {
+var _ = Describe("instancesUpdateManifest", func() {
 	It("should update main container image and set inplace update strategy", func() {
-		manifest, truncated, err := updateWorkloadManifest(
+		manifest, truncated, err := instancesUpdateManifest(
 			gameDeployManifestForTest, "mirrors.example.com/app:v2", "InplaceUpdate",
 		)
 
@@ -248,7 +248,7 @@ var _ = Describe("updateWorkloadManifest", func() {
 	})
 
 	It("should set rolling update strategy and reset the partition", func() {
-		manifest, _, err := updateWorkloadManifest(
+		manifest, _, err := instancesUpdateManifest(
 			gameDeployManifestForTest, "mirrors.example.com/app:v2", "RollingUpdate",
 		)
 
@@ -259,7 +259,7 @@ var _ = Describe("updateWorkloadManifest", func() {
 	})
 
 	It("should create update strategy when it is missing and keep image when image is empty", func() {
-		manifest, _, err := updateWorkloadManifest(`kind: GameDeployment
+		manifest, _, err := instancesUpdateManifest(`kind: GameDeployment
 spec:
   template:
     spec:
@@ -274,8 +274,29 @@ spec:
 		Expect(spec["updateStrategy"]).To(Equal(map[string]any{"type": "InplaceUpdate", "partition": float64(0)}))
 	})
 
+	It("should remove the rollout label and keep other labels", func() {
+		manifest, _, err := instancesUpdateManifest(`kind: GameDeployment
+metadata:
+  labels:
+    app: gd1
+    rollout: "true"
+  name: gd1
+spec:
+  template:
+    spec:
+      containers:
+      - image: app:v1
+        name: main
+`, "app:v2", "InplaceUpdate")
+
+		Expect(err).NotTo(HaveOccurred())
+		var obj map[string]any
+		Expect(yaml.Unmarshal([]byte(manifest), &obj)).To(Succeed())
+		Expect(obj["metadata"].(map[string]any)["labels"]).To(Equal(map[string]any{"app": "gd1"}))
+	})
+
 	It("should return error when the manifest is invalid", func() {
-		_, _, err := updateWorkloadManifest("spec: [", "app:v2", "InplaceUpdate")
+		_, _, err := instancesUpdateManifest("spec: [", "app:v2", "InplaceUpdate")
 
 		Expect(err).To(HaveOccurred())
 	})

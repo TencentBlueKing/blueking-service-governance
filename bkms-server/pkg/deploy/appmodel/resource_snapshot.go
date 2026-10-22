@@ -128,7 +128,7 @@ func copyInstancesUpdateResourceSnapshots(
 	snapshots := lo.Map(srcSnapshots, func(snap ResourceSnapshot, _ int) ResourceSnapshot {
 		// 截断的清单已不是合法 YAML，原样复制
 		if snap.Kind == mainWorkload.Kind && snap.Name == mainWorkload.Name && !snap.IsTruncated {
-			manifest, truncated, uErr := updateWorkloadManifest(snap.Manifest, image, updateStrategy)
+			manifest, truncated, uErr := instancesUpdateManifest(snap.Manifest, image, updateStrategy)
 			if uErr != nil {
 				log.Errorf(ctx, "update %s snapshot for app %s deploy %s: %v", mainWorkload, appID, dstDeployID, uErr)
 			} else {
@@ -146,13 +146,15 @@ func copyInstancesUpdateResourceSnapshots(
 	}
 }
 
-// updateWorkloadManifest 修改 GameDeployment 清单中主容器的镜像与更新策略，返回新的清单及是否被截断
-// 与 GameDeploymentJSONPatchBuilder 的全量更新保持一致：partition 置为 0；image 为空时不修改镜像
-func updateWorkloadManifest(manifest, image, updateStrategy string) (string, bool, error) {
+// instancesUpdateManifest 由 GameDeployment 清单生成全量实例更新后的清单，返回新的清单及是否被截断。
+// 与 UpdateInstances 对工作负载的修改保持一致：修改主容器镜像（image 为空时不修改）与更新策略类型，
+// partition 置为 0，并移除实例更新前已从工作负载上清理的 Rollout 标签
+func instancesUpdateManifest(manifest, image, updateStrategy string) (string, bool, error) {
 	var obj map[string]any
 	if err := yaml.Unmarshal([]byte(manifest), &obj); err != nil {
 		return "", false, errors.Wrap(err, "unmarshal manifest")
 	}
+	unstructured.RemoveNestedField(obj, "metadata", "labels", batchrelease.WorkloadLabelKey)
 
 	if image != "" {
 		containers, _, err := unstructured.NestedSlice(obj, "spec", "template", "spec", "containers")

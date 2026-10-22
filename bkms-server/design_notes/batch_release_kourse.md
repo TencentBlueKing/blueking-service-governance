@@ -65,12 +65,12 @@
 
 | 字段 | 说明 |
 |------|------|
-| `releaseMode` | `all` 一次更新全部 / `batch` 按策略分批。存量记录没有该字段，读取时通过 `GetReleaseMode()` 视为 `all`，无需迁移 |
+| `releaseMode` | `all` 一次更新全部 / `canary` 按策略分批。存量记录没有该字段，读取时通过 `GetReleaseMode()` 视为 `all`，无需迁移 |
 | `releaseStrategy` | 发起时的策略快照（ID、名称、批次）。策略之后被修改或删除，进度查询仍以快照为准 |
 | `batchProgress` | 轮询任务写入的进度：当前批次序号（缺失为 `nil`，与第一批的 `0` 区分）、批次状态、Rollout 原始 phase 与提示、暂停开始时间、已更新 / 总实例数、新旧镜像 |
 | `status` | 新增 `rolled-back`，属于终态（`IsStable()` 为真） |
 
-`Record.IsBatchReleasing()`：发布方式为 `batch` 且状态为 `deploying` 时视为"分批发布中"。冲突拦截和手动操作都以环境 / 泳道的**最新部署记录**为准，不实时请求集群。
+`Record.IsBatchReleasing()`：发布方式为 `canary` 且状态为 `deploying` 时视为"分批发布中"。冲突拦截和手动操作都以环境 / 泳道的**最新部署记录**为准，不实时请求集群。
 
 `rolled-back` 的语义：Pod 已全部恢复旧版本，但工作负载 spec 和部署记录中的镜像**仍是本次部署的新版本**（见 4.6）。工作负载仍在运行，所以 `HasActiveDeployments` 把它算作活跃部署。
 
