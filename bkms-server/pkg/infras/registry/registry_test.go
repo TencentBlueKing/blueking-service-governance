@@ -207,6 +207,25 @@ var _ = Describe("Registry Client", func() {
 		})
 	})
 
+	Describe("IsRepoNotFound", func() {
+		It("should match only 404 with NAME_UNKNOWN", func() {
+			nameUnknown := &transport.Error{
+				StatusCode: http.StatusNotFound,
+				Errors:     []transport.Diagnostic{{Code: transport.NameUnknownErrorCode}},
+			}
+			Expect(IsRepoNotFound(fmt.Errorf("list tags: %w", nameUnknown))).To(BeTrue())
+
+			manifestUnknown := &transport.Error{
+				StatusCode: http.StatusNotFound,
+				Errors:     []transport.Diagnostic{{Code: transport.ManifestUnknownErrorCode}},
+			}
+			Expect(IsRepoNotFound(manifestUnknown)).To(BeFalse())
+			Expect(IsRepoNotFound(&transport.Error{StatusCode: http.StatusNotFound})).To(BeFalse())
+			Expect(IsRepoNotFound(&transport.Error{StatusCode: http.StatusUnauthorized})).To(BeFalse())
+			Expect(IsRepoNotFound(fmt.Errorf("boom"))).To(BeFalse())
+		})
+	})
+
 	Describe("DeleteTag", func() {
 		It("should delete manifest by digest resolved from tag", func() {
 			const (

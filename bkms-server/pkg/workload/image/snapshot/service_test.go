@@ -22,11 +22,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync/atomic"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
@@ -395,6 +397,33 @@ var _ = Describe("Service", func() {
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 				Expect(status.LastError).To(ContainSubstring("list all tags"))
+			})
+		})
+
+		It("should clear local data and return ErrRepoNotFound for an unknown repository", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				// mirrors 在仓库内镜像全部删除后，tags/list 返回 404 NAME_UNKNOWN
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0"})).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v2.0.0")).To(Succeed())
+
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return(nil, fmt.Errorf("list tags: %w", &transport.Error{
+					StatusCode: http.StatusNotFound,
+					Errors:     []transport.Diagnostic{{Code: transport.NameUnknownErrorCode}},
+				})).Build()
+
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(result).To(BeNil())
+				Expect(errors.Is(err, ErrRepoNotFound)).To(BeTrue())
+				Expect(registry.IsTagNotFound(err)).To(BeTrue())
+				Expect(ListAllTags(ctx, db, repoKey)).To(BeEmpty())
+				Expect(ListSuppressedTags(ctx, db, repoKey)).To(BeEmpty())
+
+				status, getErr := GetRepoStatus(ctx, db, repoKey)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+				Expect(status.LastError).To(ContainSubstring(ErrRepoNotFound.Error()))
 			})
 		})
 

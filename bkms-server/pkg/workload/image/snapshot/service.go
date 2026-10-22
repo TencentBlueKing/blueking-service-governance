@@ -20,6 +20,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -44,6 +45,10 @@ const (
 	// customImageStaleTTL 工作空间自定义镜像超过此时长未刷新则视为过期，查询时顺带异步补刷
 	customImageStaleTTL = 5 * time.Minute
 )
+
+// ErrRepoNotFound 远端镜像仓库为空或不存在。
+// mirrors 等制品库在仓库内镜像全部删除（或从未推送）时，tags/list 返回 NAME_UNKNOWN 而不是空列表，两种情况无法区分
+var ErrRepoNotFound = errors.New("image repository is empty or not found")
 
 // Service 镜像快照服务
 type Service struct {
@@ -357,7 +362,10 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	client := registry.New(info.Username, info.Password, true)
 	remoteTags, err := client.ListAllTags(ctx, info.RepoName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "list all tags for %s", info.RepoName)
+		if !registry.IsRepoNotFound(err) {
+			return nil, errors.Wrapf(err, "list all tags for %s", info.RepoName)
+		}
+		return nil, s.clearMissingRepo(ctx, info, err)
 	}
 
 	// 远端已返回，后续落库不得再受请求取消影响，否则 tag 已拉到却写不进状态
@@ -459,4 +467,24 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		AddedTagCnt:   addedCount,
 		RemovedTagCnt: removedCount,
 	}, nil
+}
+
+// clearMissingRepo 远端仓库为空或不存在时清空本地快照与 suppression，再返回 ErrRepoNotFound。
+//
+// 返回的错误同时保留原始 registry 错误，自定义镜像链路仍按仓库侧失败识别
+func (s *Service) clearMissingRepo(ctx context.Context, info *RepoKeyInfo, listErr error) error {
+	ctx = context.WithoutCancel(ctx)
+	removedCount, err := DeleteTagsNotIn(ctx, s.db, info.RepoKey, nil)
+	if err != nil {
+		return err
+	}
+	suppressedTags, err := ListSuppressedTags(ctx, s.db, info.RepoKey)
+	if err != nil {
+		return err
+	}
+	if err = DeleteTagSuppressions(ctx, s.db, info.RepoKey, suppressedTags); err != nil {
+		return err
+	}
+	log.Infof(ctx, "repository %s is empty or not found, removed %d local snapshots", info.RepoName, removedCount)
+	return fmt.Errorf("list all tags for %s: %w: %w", info.RepoName, ErrRepoNotFound, listErr)
 }

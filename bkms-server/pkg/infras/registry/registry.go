@@ -79,6 +79,18 @@ func IsTagNotFound(err error) bool {
 	return errors.As(err, &transportErr) && transportErr.StatusCode == http.StatusNotFound
 }
 
+// IsRepoNotFound 判断错误链中是否包含“仓库名不存在”（NAME_UNKNOWN）错误。
+// mirrors 等制品库在仓库内的 manifest 全部删除后，tags/list 返回的是该错误而不是空列表
+func IsRepoNotFound(err error) bool {
+	var transportErr *transport.Error
+	if !errors.As(err, &transportErr) || transportErr.StatusCode != http.StatusNotFound {
+		return false
+	}
+	return slices.ContainsFunc(transportErr.Errors, func(d transport.Diagnostic) bool {
+		return d.Code == transport.NameUnknownErrorCode
+	})
+}
+
 // IsAuthRequired 判断错误链中是否包含“镜像仓库鉴权失败”错误。
 func IsAuthRequired(err error) bool {
 	var transportErr *transport.Error
