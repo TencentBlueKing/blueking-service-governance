@@ -114,11 +114,19 @@ func (b *GameDeploymentJSONPatchBuilder) BuildInplaceUpdatePatch(partition int) 
 	}
 }
 
-// BuildRollingUpdatePatch 构建滚动更新 Patch，用于支持全量更新（镜像+配置 / 仅配置）场景
-func (b *GameDeploymentJSONPatchBuilder) BuildRollingUpdatePatch() map[string]any {
-	return map[string]any{
-		"op":    "replace",
-		"path":  "/spec/updateStrategy/type",
-		"value": "RollingUpdate",
+// BuildRollingUpdatePatch 构建滚动更新 Patch，用于支持全量更新（镜像+配置 / 仅配置）场景。
+// 全量更新需更新所有 Pod，partition 置为 0，否则此前灰度留下的 partition 会让部分 Pod 停留在旧版本
+func (b *GameDeploymentJSONPatchBuilder) BuildRollingUpdatePatch() []map[string]any {
+	return []map[string]any{
+		{
+			"op":    "replace",
+			"path":  "/spec/updateStrategy/type",
+			"value": "RollingUpdate",
+		},
+		{
+			"op":    "replace",
+			"path":  "/spec/updateStrategy/partition",
+			"value": 0,
+		},
 	}
 }

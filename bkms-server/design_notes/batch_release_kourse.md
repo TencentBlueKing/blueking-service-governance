@@ -32,13 +32,13 @@
 |------|------|------|
 | 公共模型与 Rollout 封装 | 发布策略存储、部署记录扩展字段、Rollout CR 生成 / 读写 / status 修改与解析、状态判定 | 已完成 |
 | 发布策略增删改查 | 空间级自定义策略，空间下所有应用可选用；权限同空间设置 | 已完成 |
-| 按策略分批部署 | 部署接口新增可选的 `releaseStrategyID`，传入时下发 Rollout 并分批更新 | 待实现 |
-| 全量部署清理 | 不传策略时，先删除遗留的 Rollout CR 和 `rollout` 标签，再一次更新全部实例 | 待实现 |
+| 按策略分批部署 | 部署接口新增可选的 `releaseStrategyID`，传入时下发 Rollout 并分批更新 | 已完成 |
+| 全量部署清理 | 不传策略时，先删除遗留的 Rollout CR 和 `rollout` 标签，再一次更新全部实例；实例更新（全量 / 灰度）修改镜像前同样清理 | 已完成 |
 | 进度同步与查询 | 部署轮询任务同步 Rollout 状态到部署记录；进度查询接口只读库 | 待实现 |
 | 终态判定 | 已部署 / 已回滚；分批发布记录不受轮询超时限制 | 待实现 |
 | 手动操作 | 继续、暂停、回退上一批、跳过剩余批次、回滚 | 待实现（前置条件校验已完成） |
 | 冲突拦截 | 分批发布中拒绝新部署、下架、实例灰度更新、删除实例、手动扩缩容 | 待实现（判定方法已完成） |
-| 审计 | 策略增删改、分批部署、手动操作写入空间操作记录 | 部分完成（策略增删改） |
+| 审计 | 策略增删改、分批部署、手动操作写入空间操作记录 | 部分完成（策略增删改、分批部署） |
 
 一期**不包含**：
 
@@ -122,11 +122,19 @@ spec:
 整批更新后 Rollout 照样会走到 `Healthy`，从 Rollout status 上看不出没有分批。因此分批部署按以下顺序执行：
 
 1. Apply Rollout CR（`RolloutClient.Apply`，Server-Side Apply）。
-2. 等待 Rollout `status.workloadRevision` 被写入，说明控制器已调谐过、缓存中已有该 Rollout。
+2. 等待控制器调谐过该 Rollout 的当前 spec：
+   - Rollout `status.workloadRevision` 已写入，说明缓存中已有该 Rollout；
+   - 如果本次修改了已有 Rollout 的 spec（Apply 前后 `metadata.generation` 不同），还要等 `status.rolloutRevision` 离开 Apply 前的值。上一轮遗留的 Rollout 早已写入 `workloadRevision`，单看它会立即返回。控制器若先看到工作负载版本变化，会按**旧批次**开始一轮，随后发现 spec 变化再从第 0 批重来，旧批次已更新的实例会被白白更新一次再退回（已在集群中复现）。
 3. 更新 GameDeployment，并为其加上标签 `rollout: "true"`。控制器检查该标签，缺失时会直接放开 partition 整批更新（见 4.4）。
 4. 校验 GameDeployment `spec.updateStrategy.partition == replicas`，确认 webhook 已注入；不满足时部署记录置为失败，不能当作分批发布继续轮询。
 
-**全量部署清理**：不传策略时，如果主工作负载存在同名 Rollout CR 或 `rollout` 标签，先删除 CR（`RolloutClient.Delete`，CR 不存在或集群未安装 CRD 都视为成功）、移除标签，再走现有部署流程。否则遗留的 Rollout 会继续按旧策略分批。删除失败时整个部署失败，不更新工作负载。
+GameDeployment 首次创建时没有旧版本实例，无需分批：仍先下发 Rollout、带上标签，但跳过第 2、4 步（Rollout 指向不存在的工作负载时控制器不会写入 `workloadRevision`）。
+
+**全量部署清理**：不传策略时，如果主工作负载存在同名 Rollout CR 或 `rollout` 标签，先删除 CR（CR 不存在或集群未安装 CRD 都视为没有遗留）并等待删除完成、移除标签，再走现有部署流程。否则遗留的 Rollout 会继续按旧策略分批。删除失败时整个部署失败，不更新工作负载。
+
+**资源追踪**：Rollout 不写入部署记录的 `ResourceKeys`（其删除必须先于工作负载更新，通用的过期资源删除在更新之后执行），因此单独处理：分批部署时 Rollout CR 写入资源清单快照；下架时先删除与主工作负载同名的 Rollout，不以最新记录的发布方式判断（全量实例更新生成的新记录不带发布方式）。
+
+**审计**：按策略分批部署在下发成功时写入空间操作记录（`deploy` / `app`，extras 含策略 ID 与名称），不等待轮询任务进入终态。
 
 **不要在发布进行中重新 Apply 批次不同的 Rollout**：控制器发现 Rollout spec 变化后，会清理灰度资源并从第 0 批重新开始。
 
@@ -140,12 +148,12 @@ spec:
 | `status.message` | 整体提示 |
 | `status.paused` | 字符串：`true` 暂停在当前批次 / `false` / `temporary` 定时暂停中 / `manually` 立即冻结所有动作 |
 | `status.workloadRevision` | Rollout 正在跟踪的工作负载版本，格式与 GameDeployment `status.updateRevision` 相同（`<name>-<hash>`），可直接逐字比较 |
+| `status.rolloutRevision` | 控制器已观察到的 Rollout spec 的哈希，spec 相同则取值相同。修改 spec 后，该值变化说明控制器已看到新 spec |
 | `status.stepStatus.currentStepIndex` | 当前批次序号，从 0 开始；`-1` 表示回滚。批次全部走完后整个 `stepStatus` 被清成 `{}`，该字段不存在，解析为 `nil`，**必须和 0 区分** |
 | `status.stepStatus.currentStepPhase` | 当前批次阶段：`ScalingReplicas` 更新本批实例 / `PausedTemporarily` / `PausedPermanently` / `PausedManually` / `Error`。两批之间为空；回滚后不清理，残留回滚前的值 |
 | `status.stepStatus.message` | 当前批次提示，批次出错时的原因写在这里 |
 | `status.stepStatus.pauseStartTime` | 当前批次暂停开始时间 |
 
-Rollout 没有 `observedGeneration`，无法从 Rollout 自身判断它是否已经看到工作负载的最新 spec，所以判断进度时**必须同时读取 GameDeployment**（`ParseWorkloadSnapshot`，读取 generation、`updateRevision` / `currentRevision` 和各类副本数）。
 
 ### 4.4 Rollout 控制器的行为
 
@@ -153,7 +161,7 @@ Rollout 没有 `observedGeneration`，无法从 Rollout 自身判断它是否已
 
 1. `paused=manually`：什么都不做，`currentStepPhase` 置为 `PausedManually`。
 2. 工作负载版本变化（`workloadRevision` 不等于 GameDeployment 的 `updateRevision`）：开始新一轮发布，见下方流转。
-3. Rollout spec 变化：清理灰度资源，从第 0 批重新开始。
+3. Rollout spec 变化（`rolloutRevision` 与当前 spec 的哈希不同）：清理灰度资源，从第 0 批重新开始，并更新 `rolloutRevision`。没有进行中的发布（`Healthy`）时只更新 `rolloutRevision`。
 4. 检查 GameDeployment 状态：
 
 | 条件（按顺序） | Rollout 行为 |
@@ -253,4 +261,5 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
   - 前端状态枚举。
 - **进度写入与其他写操作的竞争**：通用的 `UpdateRecord` 不写 `batchProgress`，进度由 `UpdateBatchProgress` 定向更新。轮询接入时必须走这个函数，不能把进度放进 `UpdateRecord` 的整记录写回。
 - **webhook 缓存竞争**：4.2 的第 2、4 步是对 webhook 缓存未同步的兜底，需要在真实集群验证。
+- **回滚后换策略会重新发布被回滚的版本**：回滚后 GameDeployment 的 `updateRevision` 仍是被回滚的版本。Rollout 处于 `RollbackCompleted` 时，修改其 spec 或删除后重建，控制器都会立即从第 0 批开始发布被回滚的版本，早于平台更新工作负载（已在集群中复现）。策略不变时 spec 不变，不受影响。处理方式待定。
 - **轮询中断**：记录置为 `polling-broken` 后不再是"分批发布中"，但集群中的 Rollout 可能仍在进行，兜底方式另行设计。

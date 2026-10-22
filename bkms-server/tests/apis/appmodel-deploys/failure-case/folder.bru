@@ -54,9 +54,15 @@ script:pre-request {
       }
     });
 
+    // tRPC app passes the app type check, used for cases rejected before
+    // touching the cluster (e.g. unknown release strategy); we do NOT deploy it.
+    const trpcAppID = `apdf-trpc-${suffix}`;
+    await common.createTrpcApp({id: trpcAppID, workspaceID: ws.id});
+
     bru.setVar("appmodelDeployFailWorkspaceID", ws.id);
     bru.setVar("appmodelDeployFailEnvName", envName);
     bru.setVar("appmodelDeployFailHelmAppID", helmAppID);
+    bru.setVar("appmodelDeployFailTrpcAppID", trpcAppID);
     bru.setVar("appmodelDeployFailReady", true);
   }
 }

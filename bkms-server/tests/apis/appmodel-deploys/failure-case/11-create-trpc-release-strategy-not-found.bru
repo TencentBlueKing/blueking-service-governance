@@ -1,0 +1,37 @@
+meta {
+  name: 11-create-trpc-release-strategy-not-found
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{serviceURL}}/apps/{{appmodelDeployFailTrpcAppID}}/envs/{{appmodelDeployFailEnvName}}/trpc-deploys
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "imageTag": "1.0",
+    "replicas": 1,
+    "releaseStrategyID": "000000000000000000000000"
+  }
+}
+
+assert {
+  res.status: eq 404
+  res.body: isJson
+}
+
+tests {
+  test("should reject unknown release strategy before deploying", () => {
+    expect(res.body.error).to.be.an("object");
+    expect(res.body.error.code).to.equal("NOT_FOUND");
+    expect(res.body.error.message).to.include("release strategy not found");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 5000
+}

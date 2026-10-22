@@ -31,6 +31,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -246,14 +247,14 @@ var _ = Describe("updateWorkloadManifest", func() {
 		Expect(spec["replicas"]).To(Equal(float64(3)))
 	})
 
-	It("should only set strategy type for rolling update", func() {
+	It("should set rolling update strategy and reset the partition", func() {
 		manifest, _, err := updateWorkloadManifest(
 			gameDeployManifestForTest, "mirrors.example.com/app:v2", "RollingUpdate",
 		)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(gameDeploySpecForTest(manifest)["updateStrategy"]).To(Equal(map[string]any{
-			"type": "RollingUpdate", "maxUnavailable": "25%",
+			"type": "RollingUpdate", "partition": float64(0), "maxUnavailable": "25%",
 		}))
 	})
 
@@ -335,6 +336,30 @@ var _ = Describe("copyInstancesUpdateResourceSnapshots", func() {
 		// 源快照保持不变
 		src := listByDeployRecord(srcOID)
 		Expect(src[1].Manifest).To(Equal(gameDeployManifestForTest))
+	})
+
+	It("should not copy the rollout deleted before the instances update", func() {
+		srcOID, dstOID := bson.NewObjectID(), bson.NewObjectID()
+		Expect(snapStore.CreateMany(ctx, []*ResourceSnapshot{
+			{
+				AppID: appID, DeployRecordID: srcOID, APIVersion: "tkex.tencent.com/v1alpha1",
+				Kind: k8skind.GameDeploy, Name: "gd1", Manifest: gameDeployManifestForTest,
+			},
+			{
+				AppID: appID, DeployRecordID: srcOID, APIVersion: batchrelease.APIVersion,
+				Kind: batchrelease.Kind, Name: "gd1", Manifest: "rollout-yaml",
+			},
+		})).To(Succeed())
+
+		copyInstancesUpdateResourceSnapshots(
+			ctx, db, appID, srcOID.Hex(), dstOID.Hex(), mainWorkload, "app:v2", "InplaceUpdate",
+		)
+
+		dst := listByDeployRecord(dstOID)
+		Expect(dst).To(HaveLen(1))
+		Expect(dst[0].Kind).To(Equal(k8skind.GameDeploy))
+		// 源快照保持不变
+		Expect(listByDeployRecord(srcOID)).To(HaveLen(2))
 	})
 
 	It("should copy the main workload as is when the manifest is truncated", func() {

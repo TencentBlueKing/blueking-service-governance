@@ -40,6 +40,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -91,7 +92,8 @@ func NewDeployer(
 	}
 }
 
-// Deploy 执行部署操作，返回部署 ID，执行错误
+// Deploy 执行部署操作，返回部署 ID，执行错误。
+// strategy 不为 nil 时按发布策略分批更新（下发 Rollout CR），为 nil 时一次更新全部实例（先清理遗留的 Rollout）。
 func (d *Deployer) Deploy(
 	ctx context.Context,
 	appModel *appmodel.AppModel,
@@ -100,6 +102,7 @@ func (d *Deployer) Deploy(
 	trafficLaneName, imageTag, updateStrategy string,
 	replicas int32,
 	buildAutoDeployInfo *BuildAutoDeployInfo,
+	strategy *releasestrategy.ReleaseStrategy,
 ) (deployID string, retErr error) {
 	// 前置准备 & 预设配置
 	// 设置环境下的部署规格，调整 replicas 副本数
@@ -120,6 +123,15 @@ func (d *Deployer) Deploy(
 	}
 	extraObjs := buildResult.ExtraObjects
 
+	clusterID, namespace := env.Cluster.ClusterID, env.Cluster.Namespace
+	// 主工作负载不支持分批发布时，在创建部署记录、下发任何资源之前拒绝
+	rollout, err := newWorkloadRollout(
+		cluster.NewConfig(clusterID), namespace, buildResult.WorkloadKind, buildResult.Name(), strategy,
+	)
+	if err != nil {
+		return "", err
+	}
+
 	// 构建当前部署的 资源引用信息 并创建部署记录
 	resourceKeys := d.buildResourceKeys(buildResult.WorkloadKind, buildResult.Name(), extraObjs)
 	// 删除之前部署中下发的，现在已经不再需要的资源
@@ -129,7 +141,7 @@ func (d *Deployer) Deploy(
 	}
 	deployID, err = d.createDeployRecord(
 		ctx, env, trafficLaneName, imageTag, updateStrategy,
-		replicas, buildAutoDeployInfo, buildResult.Selector(), buildResult.WorkloadKind, resourceKeys,
+		replicas, buildAutoDeployInfo, buildResult.Selector(), buildResult.WorkloadKind, resourceKeys, strategy,
 	)
 	if err != nil {
 		return "", errors.Wrap(err, "create deploy record")
@@ -153,6 +165,11 @@ func (d *Deployer) Deploy(
 		}
 	}()
 
+	// 根据发布方式决定是否下发 Rollout or 清理集群内可能遗留的 Rollout
+	if err = rollout.EnsureRollout(ctx, buildResult.ObjectMeta()); err != nil {
+		return "", err
+	}
+
 	buildCfg, err := store.Of(d.db, build.ConfigMeta).Get(ctx, build.ByApp(d.app.ID))
 	if err != nil {
 		return "", errors.Wrap(err, "get build config")
@@ -163,7 +180,6 @@ func (d *Deployer) Deploy(
 		return "", errors.Wrap(err, "sync image pull secret")
 	}
 
-	clusterID, namespace := env.Cluster.ClusterID, env.Cluster.Namespace
 	// 先下发额外资源（如 ConfigMap 等）到集群中
 	if err = d.upsertExtraObjects(ctx, clusterID, namespace, extraObjs); err != nil {
 		return "", errors.Wrap(err, "upsert extra objects")
@@ -171,8 +187,12 @@ func (d *Deployer) Deploy(
 	// 在主工作负载中注入 deployID，确保每次部署都能触发 Pod 滚动更新
 	d.injectDeployID(buildResult, deployID)
 	// 下发主工作负载资源到集群中
-	if err = d.upsertWorkload(ctx, clusterID, namespace, buildResult.GVR(), buildResult.MainWorkload); err != nil {
+	liveWorkload, err := d.upsertWorkload(ctx, clusterID, namespace, buildResult.GVR(), buildResult.MainWorkload)
+	if err != nil {
 		return "", errors.Wrap(err, "upsert main workload")
+	}
+	if err = rollout.EnsurePartition(ctx, liveWorkload); err != nil {
+		return "", err
 	}
 
 	// 持久化已下发资源清单
@@ -182,7 +202,7 @@ func (d *Deployer) Deploy(
 		appModel.AppID,
 		deployID,
 		buildResult.MainWorkload,
-		extraObjs,
+		rollout.SnapshotObjects(extraObjs),
 		buildResult.SensitiveEnvVarValues,
 	)
 
@@ -233,6 +253,11 @@ func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, traf
 	}
 	if err = d.syncBuildAutoDeployStatus(ctx, record); err != nil {
 		return errors.Wrap(err, "sync build auto deploy status as uninstalling")
+	}
+
+	// 分批发布下发的 Rollout 不在 ResourceKeys 中；最新记录可能是之后的实例更新记录，不能以发布方式判断是否存在
+	if err = deleteRollout(ctx, cluster.NewConfig(record.ClusterID), record); err != nil {
+		return errors.Wrap(err, "delete rollout")
 	}
 
 	// 删除本次部署所管理的资源
@@ -332,6 +357,11 @@ func (d *Deployer) UpdateInstances(
 		return "", errors.Wrap(err, "get latest game deployment")
 	}
 	clusterID, namespace := record.ClusterID, record.Namespace
+	// 分批发布结束后 Rollout 与标签仍保留在集群中，修改 Pod 模板前不清理会按旧策略再分批一次
+	rollouts := newRolloutManager(cluster.NewConfig(clusterID))
+	if err = rollouts.Cleanup(ctx, namespace, gameDeploy.Name); err != nil {
+		return "", errors.Wrap(err, "clean up rollout")
+	}
 	// workloadPods 为工作负载下的全部 Pod，podNames 为请求指定的 Pod
 	var workloadPods []unstructured.Unstructured
 	if len(podNames) > 0 {
@@ -346,6 +376,8 @@ func (d *Deployer) UpdateInstances(
 	patchBuilder := NewGameDeploymentJSONPatchBuilder(gameDeploy)
 	imagePatch := patchBuilder.BuildMainContainerImagePatch(imageTag)
 	patches := []map[string]any{imagePatch}
+	// wantPartition 本次更新后 partition 应有的值，全量更新为 0
+	var wantPartition int64
 	if len(podNames) > 0 {
 		// 灰度更新：调低待灰度 Pod 的 DeletionCost 使其优先更新，并通过分区保留其余 Pod 为旧版本
 		shouldGrayscalePodNames := d.podManager.FilterShouldGrayscalePodNames(workloadPods, podNames, imageTag)
@@ -364,20 +396,27 @@ func (d *Deployer) UpdateInstances(
 			partition = int(*gameDeploy.Spec.Replicas) - len(shouldGrayscalePodNames)
 		}
 		partition = max(0, partition)
+		wantPartition = int64(partition)
 		patches = append(patches, patchBuilder.BuildInplaceUpdatePatch(partition)...)
 	} else if updateStrategy == string(tkex.InPlaceGameDeploymentUpdateStrategyType) {
 		patches = append(patches, patchBuilder.BuildInplaceUpdatePatch(0)...)
 	} else {
 		updateStrategy = string(tkex.RollingGameDeploymentUpdateStrategyType)
-		patches = append(patches, patchBuilder.BuildRollingUpdatePatch())
+		patches = append(patches, patchBuilder.BuildRollingUpdatePatch()...)
 	}
 
-	if err = d.patchWorkload(ctx, clusterID, namespace, gameDeploy.Name, gvr.GameDeploy, patches); err != nil {
+	live, err := d.patchWorkload(ctx, clusterID, namespace, gameDeploy.Name, gvr.GameDeploy, patches)
+	if err != nil {
 		log.Errorf(
 			ctx, "patch record %s game deployment %s with patches %+v failed, err: %v",
 			record.ID.Hex(), gameDeploy.Name, patches, err,
 		)
 		return "", errors.Wrap(err, "patch game deployment")
+	}
+	// patches 中的 partition 可能被尚未同步 Rollout 删除的 webhook 覆盖，需按返回的工作负载纠正。
+	// 不以本次是否删除了 Rollout 为条件：删除后的步骤失败时，重试已看不到遗留的 Rollout
+	if err = rollouts.RestorePartition(ctx, live, wantPartition); err != nil {
+		return "", errors.Wrapf(err, "game deployment %s/%s already patched", namespace, gameDeploy.Name)
 	}
 
 	if len(podNames) > 0 {
@@ -432,7 +471,7 @@ func (d *Deployer) Scale(ctx context.Context, envName, trafficLaneName string, r
 	}
 
 	patches := []map[string]any{replicasJSONPatch(replicas)}
-	if err = d.patchWorkload(ctx, record.ClusterID, record.Namespace, name, driver.GVR(), patches); err != nil {
+	if _, err = d.patchWorkload(ctx, record.ClusterID, record.Namespace, name, driver.GVR(), patches); err != nil {
 		log.Errorf(
 			ctx, "patch record %s %s %s with patches %+v failed, err: %v",
 			record.ID.Hex(), kind, name, patches, err,
@@ -527,7 +566,7 @@ func (d *Deployer) deleteRunningPodsByGameDeployment(
 		patchBuilder.BuildReplicasPatch(newReplicas),
 		patchBuilder.BuildPodsToDeletePatch(podNames),
 	}
-	if err = d.patchWorkload(
+	if _, err = d.patchWorkload(
 		ctx,
 		record.ClusterID,
 		record.Namespace,
@@ -654,46 +693,46 @@ func (d *Deployer) getLatestGameDeployment(ctx context.Context, record *Record) 
 	return &gameDeploy, nil
 }
 
-// upsertWorkload 更新或创建主工作负载
+// upsertWorkload 更新或创建主工作负载，返回集群中更新后的工作负载（含 admission webhook 的修改）
 func (d *Deployer) upsertWorkload(
 	ctx context.Context,
 	clusterID, namespace string,
 	resGVR schema.GroupVersionResource,
 	obj any,
-) error {
+) (*unstructured.Unstructured, error) {
 	manifest, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
-		return errors.Wrap(err, "convert workload to unstructured")
+		return nil, errors.Wrap(err, "convert workload to unstructured")
 	}
 
 	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), resGVR)
-	if _, err = client.Upsert(ctx, namespace, manifest, metav1.PatchOptions{}); err != nil {
-		return errors.Wrap(err, "upsert workload")
+	live, err := client.Upsert(ctx, namespace, manifest, metav1.PatchOptions{})
+	if err != nil {
+		return nil, errors.Wrap(err, "upsert workload")
 	}
-	return nil
+	return live, nil
 }
 
-// patchWorkload 通过 patch 的方式更新主工作负载
+// patchWorkload 通过 patch 的方式更新主工作负载，返回集群中更新后的工作负载（含 admission webhook 的修改）
 func (d *Deployer) patchWorkload(
 	ctx context.Context,
 	clusterID, namespace, name string,
 	resGVR schema.GroupVersionResource,
 	patches []map[string]any,
-) error {
+) (*unstructured.Unstructured, error) {
 	patches = lo.Filter(patches, func(p map[string]any, _ int) bool {
 		return len(p) > 0
 	})
 	patchesByte, err := json.Marshal(patches)
 	if err != nil {
-		return errors.Wrap(err, "marshal workload patches")
+		return nil, errors.Wrap(err, "marshal workload patches")
 	}
 	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), resGVR)
-	if _, err = client.Patch(
-		ctx, namespace, name, types.JSONPatchType, patchesByte, metav1.PatchOptions{},
-	); err != nil {
-		return errors.Wrap(err, "patch workload")
+	live, err := client.Patch(ctx, namespace, name, types.JSONPatchType, patchesByte, metav1.PatchOptions{})
+	if err != nil {
+		return nil, errors.Wrap(err, "patch workload")
 	}
-	return nil
+	return live, nil
 }
 
 // buildResourceKeys 构建资源引用信息（用于后续资源管理和追踪）。
@@ -746,9 +785,20 @@ func (d *Deployer) createDeployRecord(
 	labelSelector map[string]string,
 	workloadKind string,
 	resourceKeys ResourceKeys,
+	strategy *releasestrategy.ReleaseStrategy,
 ) (string, error) {
 	timeNow := time.Now()
 	operator := auth.MustGetUser(ctx).ID
+	releaseMode := ReleaseModeAll
+	var strategySnapshot *ReleaseStrategySnapshot
+	if strategy != nil {
+		releaseMode = ReleaseModeBatch
+		strategySnapshot = &ReleaseStrategySnapshot{
+			ID:      strategy.ID.Hex(),
+			Name:    strategy.Name,
+			Batches: strategy.Batches,
+		}
+	}
 	record := Record{
 		WorkspaceID:     d.app.WorkspaceID,
 		AppID:           d.app.ID,
@@ -763,6 +813,8 @@ func (d *Deployer) createDeployRecord(
 		LabelSelector:   labelSelector,
 		WorkloadKind:    workloadKind,
 		ResourceKeys:    resourceKeys,
+		ReleaseMode:     releaseMode,
+		ReleaseStrategy: strategySnapshot,
 		Message:         "",
 		Status:          StatusDeploying,
 		Extras:          NewBuildAutoDeployExtras(buildAutoDeployInfo),

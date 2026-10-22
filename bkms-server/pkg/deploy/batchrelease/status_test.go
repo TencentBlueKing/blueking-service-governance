@@ -65,6 +65,7 @@ var _ = Describe("ParseStatus", func() {
 				"message":          "Running canary step 1",
 				"paused":           "true",
 				"workloadRevision": newRevision,
+				"rolloutRevision":  "565bf4d5c7",
 				"stepStatus": map[string]any{
 					"currentStepIndex": int64(1),
 					"currentStepPhase": "PausedPermanently",
@@ -81,20 +82,13 @@ var _ = Describe("ParseStatus", func() {
 			Message:          "Running canary step 1",
 			Paused:           "true",
 			WorkloadRevision: newRevision,
+			RolloutRevision:  "565bf4d5c7",
 			CurrentStepIndex: lo.ToPtr(int64(1)),
 			CurrentStepPhase: "PausedPermanently",
 			StepMessage:      "Paused permanently",
 			PauseStartTime:   &pauseStartTime,
 		}))
 		Expect(status.BatchPhase(firstBatchWorkload)).To(Equal(batchrelease.BatchPhaseManualPaused))
-	})
-
-	It("accepts float encoded step index", func() {
-		status, err := batchrelease.ParseStatus(map[string]any{
-			"status": map[string]any{"stepStatus": map[string]any{"currentStepIndex": float64(-1)}},
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(status.CurrentStepIndex).To(Equal(lo.ToPtr(int64(-1))))
 	})
 
 	It("distinguishes step index 0 from a missing step index", func() {
@@ -122,9 +116,6 @@ var _ = Describe("ParseStatus", func() {
 		Entry("no status", map[string]any{"spec": map[string]any{}}),
 		Entry("empty status", map[string]any{"status": map[string]any{}}),
 		Entry("empty step status", map[string]any{"status": map[string]any{"stepStatus": map[string]any{}}}),
-		Entry("null step index", map[string]any{
-			"status": map[string]any{"stepStatus": map[string]any{"currentStepIndex": nil}},
-		}),
 	)
 
 	DescribeTable("returns an error when field types mismatch",
@@ -134,7 +125,10 @@ var _ = Describe("ParseStatus", func() {
 		},
 		Entry("non string phase", map[string]any{"phase": int64(1)}),
 		Entry("non string workload revision", map[string]any{"workloadRevision": int64(1)}),
+		Entry("non string rollout revision", map[string]any{"rolloutRevision": int64(1)}),
 		Entry("invalid pause start time", map[string]any{"stepStatus": map[string]any{"pauseStartTime": "yesterday"}}),
+		Entry("float step index", map[string]any{"stepStatus": map[string]any{"currentStepIndex": float64(-1)}}),
+		Entry("null step index", map[string]any{"stepStatus": map[string]any{"currentStepIndex": nil}}),
 	)
 })
 
@@ -288,7 +282,7 @@ var _ = Describe("ParseWorkloadSnapshot", func() {
 				"currentRevision":      oldRevision,
 				"updateRevision":       newRevision,
 				"replicas":             int64(4),
-				"readyReplicas":        float64(3),
+				"readyReplicas":        int64(3),
 				"updatedReplicas":      int64(0),
 				"updatedReadyReplicas": int64(0),
 			},
@@ -314,5 +308,6 @@ var _ = Describe("ParseWorkloadSnapshot", func() {
 			Expect(err).To(HaveOccurred())
 		},
 		Entry("non string revision", map[string]any{"status": map[string]any{"updateRevision": int64(1)}}),
+		Entry("float replicas", map[string]any{"spec": map[string]any{"replicas": float64(4)}}),
 	)
 })

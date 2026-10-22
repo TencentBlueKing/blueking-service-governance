@@ -87,19 +87,22 @@ func (c *RolloutClient) GetStatus(ctx context.Context, namespace, name string) (
 	return status, nil
 }
 
-// Apply 创建或更新 Rollout CR（Server-Side Apply），manifest 通常由 BuildManifest 生成
-func (c *RolloutClient) Apply(ctx context.Context, namespace string, manifest map[string]any) error {
+// Apply 创建或更新 Rollout CR（Server-Side Apply），返回更新后的 Rollout；manifest 通常由 BuildManifest 生成
+func (c *RolloutClient) Apply(
+	ctx context.Context, namespace string, manifest map[string]any,
+) (*unstructured.Unstructured, error) {
 	name, _, _ := unstructured.NestedString(manifest, "metadata", "name")
-	if _, err := c.cli.Upsert(ctx, namespace, manifest, metav1.PatchOptions{}); err != nil {
+	obj, err := c.cli.Upsert(ctx, namespace, manifest, metav1.PatchOptions{})
+	if err != nil {
 		// SSA 在对象不存在时会直接创建，NotFound 只可能来自资源类型或命名空间不存在
 		if k8serrors.IsNotFound(err) {
 			if installErr := c.checkInstalled(ctx, namespace); installErr != nil {
-				return installErr
+				return nil, installErr
 			}
 		}
-		return errors.Wrapf(err, "apply rollout %s/%s in cluster %s", namespace, name, c.clusterID)
+		return nil, errors.Wrapf(err, "apply rollout %s/%s in cluster %s", namespace, name, c.clusterID)
 	}
-	return nil
+	return obj, nil
 }
 
 // Delete 删除 Rollout CR；CR 不存在或集群未安装 CRD 时视为删除成功（本就没有遗留的 Rollout）

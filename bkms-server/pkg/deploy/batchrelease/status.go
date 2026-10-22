@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/cast"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -100,6 +99,9 @@ type Status struct {
 	// WorkloadRevision Rollout 正在跟踪的工作负载版本（status.workloadRevision），
 	// 与 GameDeployment 的 status.updateRevision 格式相同；发布开始时即切换为新版本
 	WorkloadRevision string
+	// RolloutRevision 控制器已观察到的 Rollout spec 的哈希（status.rolloutRevision），spec 相同则取值相同。
+	// Rollout 没有 observedGeneration，修改 spec 后以该值变化判断控制器已看到新 spec
+	RolloutRevision string
 	// CurrentStepIndex 当前步骤序号，从 0 开始，-1 表示回滚（status.stepStatus.currentStepIndex）。
 	// 所有步骤完成后 stepStatus 被清空，此时为 nil
 	CurrentStepIndex *int64
@@ -123,6 +125,7 @@ func ParseStatus(rollout map[string]any) (Status, error) {
 		{&status.Message, []string{"status", "message"}},
 		{&status.Paused, []string{"status", "paused"}},
 		{&status.WorkloadRevision, []string{"status", "workloadRevision"}},
+		{&status.RolloutRevision, []string{"status", "rolloutRevision"}},
 		{&status.CurrentStepPhase, []string{"status", "stepStatus", "currentStepPhase"}},
 		{&status.StepMessage, []string{"status", "stepStatus", "message"}},
 	}
@@ -132,7 +135,7 @@ func ParseStatus(rollout map[string]any) (Status, error) {
 		}
 	}
 
-	stepIndex, found, err := nestedInt64(rollout, "status", "stepStatus", "currentStepIndex")
+	stepIndex, found, err := unstructured.NestedInt64(rollout, "status", "stepStatus", "currentStepIndex")
 	if err != nil {
 		return Status{}, errors.Wrap(err, "parse rollout status")
 	}
@@ -152,16 +155,6 @@ func ParseStatus(rollout map[string]any) (Status, error) {
 		status.PauseStartTime = &t
 	}
 	return status, nil
-}
-
-// nestedInt64 读取整数字段。对端保证为数字，用 cast.ToInt64 兼容 int64、float64 等解码类型。
-// 字段缺失或为 null 时第二个返回值为 false。
-func nestedInt64(obj map[string]any, fields ...string) (int64, bool, error) {
-	val, found, err := unstructured.NestedFieldNoCopy(obj, fields...)
-	if err != nil || !found || val == nil {
-		return 0, false, err
-	}
-	return cast.ToInt64(val), true, nil
 }
 
 // BatchPhase 将 Rollout 状态映射为当前批次状态，workload 为 Rollout 所控制的主工作负载的当前状态。

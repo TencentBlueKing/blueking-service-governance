@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	deployappmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
@@ -53,6 +54,8 @@ type DeployParams struct {
 	UpdateStrategy      string
 	Replicas            int32
 	BuildAutoDeployInfo *deployappmodel.BuildAutoDeployInfo
+	// ReleaseStrategy 按该发布策略分批更新；为 nil 时一次更新全部实例
+	ReleaseStrategy *releasestrategy.ReleaseStrategy
 }
 
 // Service 负责 appmodel 部署相关编排，不负责权限校验与任务投递
@@ -163,6 +166,7 @@ func (s *Service) Deploy(ctx context.Context, app *bkmsapp.Application, params D
 		updateStrategy,
 		params.Replicas,
 		params.BuildAutoDeployInfo,
+		params.ReleaseStrategy,
 	)
 	if err != nil {
 		return "", errors.Wrap(err, "deploy appmodel")

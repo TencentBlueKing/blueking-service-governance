@@ -23,7 +23,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -33,6 +32,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	k8smanifest "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/manifest"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
@@ -93,7 +93,8 @@ func saveResourceSnapshots(
 
 // copyInstancesUpdateResourceSnapshots 为全量实例更新的部署记录生成资源清单快照
 // 全量实例更新仅 Patch 主工作负载的主容器镜像与更新策略，因此复制源部署记录的快照，
-// 并在主工作负载快照中同步修改这两处；源快照已脱敏，复制不会泄露敏感信息
+// 并在主工作负载快照中同步修改这两处；源快照已脱敏，复制不会泄露敏感信息。
+// 实例更新前已删除遗留的 Rollout，因此不复制其快照
 func copyInstancesUpdateResourceSnapshots(
 	ctx context.Context,
 	db *mongo.Database,
@@ -112,6 +113,10 @@ func copyInstancesUpdateResourceSnapshots(
 		log.Errorf(ctx, "list resource snapshots for app %s deploy %s: %v", appID, srcDeployID, err)
 		return
 	}
+	// 清理遗留的 Rollout 快照（实例更新时不使用 Rollout，会提前清理）
+	srcSnapshots = lo.Reject(srcSnapshots, func(snap ResourceSnapshot, _ int) bool {
+		return snap.APIVersion == batchrelease.APIVersion && snap.Kind == batchrelease.Kind
+	})
 	// 历史部署记录可能没有快照，此时无需复制
 	if len(srcSnapshots) == 0 {
 		log.Warnf(ctx, "no resource snapshots for app %s deploy %s, skip copy", appID, srcDeployID)
@@ -142,7 +147,7 @@ func copyInstancesUpdateResourceSnapshots(
 }
 
 // updateWorkloadManifest 修改 GameDeployment 清单中主容器的镜像与更新策略，返回新的清单及是否被截断
-// 与 GameDeploymentJSONPatchBuilder 保持一致：原地更新时 partition 置为 0；image 为空时不修改镜像
+// 与 GameDeploymentJSONPatchBuilder 的全量更新保持一致：partition 置为 0；image 为空时不修改镜像
 func updateWorkloadManifest(manifest, image, updateStrategy string) (string, bool, error) {
 	var obj map[string]any
 	if err := yaml.Unmarshal([]byte(manifest), &obj); err != nil {
@@ -167,10 +172,8 @@ func updateWorkloadManifest(manifest, image, updateStrategy string) (string, boo
 	if err := unstructured.SetNestedField(obj, updateStrategy, "spec", "updateStrategy", "type"); err != nil {
 		return "", false, errors.Wrap(err, "set update strategy type")
 	}
-	if updateStrategy == string(tkex.InPlaceGameDeploymentUpdateStrategyType) {
-		if err := unstructured.SetNestedField(obj, int64(0), "spec", "updateStrategy", "partition"); err != nil {
-			return "", false, errors.Wrap(err, "set update strategy partition")
-		}
+	if err := unstructured.SetNestedField(obj, int64(0), "spec", "updateStrategy", "partition"); err != nil {
+		return "", false, errors.Wrap(err, "set update strategy partition")
 	}
 	return UnstructuredToYaml(unstructured.Unstructured{Object: obj})
 }

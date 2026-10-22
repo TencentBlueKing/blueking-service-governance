@@ -76,7 +76,7 @@ func ParseWorkloadSnapshot(workload map[string]any) (WorkloadSnapshot, error) {
 		{&snapshot.UpdatedReadyReplicas, []string{"status", "updatedReadyReplicas"}},
 	}
 	for _, field := range intFields {
-		if *field.target, _, err = nestedInt64(workload, field.path...); err != nil {
+		if *field.target, _, err = unstructured.NestedInt64(workload, field.path...); err != nil {
 			return WorkloadSnapshot{}, errors.Wrap(err, "parse workload status")
 		}
 	}

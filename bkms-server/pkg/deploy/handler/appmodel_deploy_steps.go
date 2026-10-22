@@ -39,6 +39,8 @@ import (
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
@@ -170,6 +172,16 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+	var strategy *releasestrategy.ReleaseStrategy
+	if input.ReleaseStrategyID != "" {
+		strategy, err = releasestrategy.GetStrategy(
+			ctx, store.Of(h.registry.DB, releasestrategy.Meta), app.WorkspaceID, input.ReleaseStrategyID,
+		)
+		if err != nil {
+			bkerrs.AbortWithErr(c, batchrelease.APIError(err, "get release strategy"))
+			return
+		}
+	}
 
 	deployService, err := h.newAppModelDeployService()
 	if err != nil {
@@ -182,6 +194,7 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 		TrafficLaneName: input.TrafficLaneName,
 		ImageTag:        input.ImageTag,
 		Replicas:        input.Replicas,
+		ReleaseStrategy: strategy,
 	})
 	if err != nil {
 		var checkErr *clusteraddon.RequiredAddonsNotInstalledError
@@ -193,11 +206,19 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 			return
 		}
 		deployInfo := genDeployInfo(app.WorkspaceID, app.ID, uriInput.EnvName, input.TrafficLaneName)
+		if errors.Is(err, batchrelease.ErrWorkloadNotSupported) ||
+			errors.Is(err, batchrelease.ErrRolloutNotInstalled) {
+			bkerrs.AbortWithErr(c, batchrelease.APIError(err, "batch release app model app: "+deployInfo))
+			return
+		}
 		bkerrs.AbortWithErr(
 			c,
 			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deploy app model app: %s", deployInfo),
 		)
 		return
+	}
+	if strategy != nil {
+		recordBatchDeployAudit(ctx, app, uriInput.EnvName, input.TrafficLaneName, deployID, strategy)
 	}
 	// 轮询部署状态 & 更新部署记录
 	// 注：部署成功/失败的操作记录在异步任务中记录
@@ -220,6 +241,32 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 	}
 
 	ginutils.OK(c, serializer.EmptyOutput{})
+}
+
+// recordBatchDeployAudit 记录按策略分批部署的操作记录（含策略名称）。
+// 分批发布可能长期暂停等待人工确认，因此在下发时记录，不等待轮询任务进入终态。
+func recordBatchDeployAudit(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	envName, trafficLaneName, deployID string,
+	strategy *releasestrategy.ReleaseStrategy,
+) {
+	go audit.AddOperationRecordAsync(
+		context.WithoutCancel(ctx),
+		audit.OperationTypeDeploy,
+		audit.ResourceTypeApp,
+		app.ID,
+		audit.WithWorkspaceID(app.WorkspaceID),
+		audit.WithAppID(app.ID),
+		audit.WithEnvName(envName),
+		audit.WithExtras(map[string]string{
+			"trafficLaneName":     trafficLaneName,
+			"deployID":            deployID,
+			"releaseMode":         string(appmodeldeploy.ReleaseModeBatch),
+			"releaseStrategyID":   strategy.ID.Hex(),
+			"releaseStrategyName": strategy.Name,
+		}),
+	)
 }
 
 // deleteAppModelDeploy 删除 AppModel 应用部署

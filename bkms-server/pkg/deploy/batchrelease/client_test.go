@@ -153,7 +153,9 @@ var _ = Describe("RolloutClient", func() {
 
 	Context("when the rollout CRD is installed", func() {
 		It("applies, reads and deletes the rollout", func() {
-			Expect(client.Apply(ctx, "demo-ns", rollout)).To(Succeed())
+			applied, err := client.Apply(ctx, "demo-ns", rollout)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(applied.GetName()).To(Equal("demo"))
 			applyReq := fake.lastRequest()
 			Expect(applyReq.Method).To(Equal(http.MethodPatch))
 			Expect(applyReq.Path).To(Equal(rolloutsPath + "/demo"))
@@ -243,7 +245,7 @@ var _ = Describe("RolloutClient", func() {
 			Expect(err.Error()).To(ContainSubstring("BCS-K8S-00000"))
 			Expect(err.Error()).To(ContainSubstring("the server could not find the requested resource"))
 
-			err = client.Apply(ctx, "demo-ns", rollout)
+			_, err = client.Apply(ctx, "demo-ns", rollout)
 			Expect(errors.Is(err, batchrelease.ErrRolloutNotInstalled)).To(BeTrue())
 
 			err = client.UpdateStatus(ctx, "demo-ns", "demo", batchrelease.StatusPatch{

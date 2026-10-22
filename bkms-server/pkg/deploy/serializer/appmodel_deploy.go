@@ -137,6 +137,8 @@ type CreateAppModelDeployInput struct {
 	ImageTag string `json:"imageTag" binding:"required"`
 	// 副本数量
 	Replicas int32 `json:"replicas" binding:"required,gte=1"`
+	// 发布策略 ID：指定时按该策略分批更新实例（仅支持非联邦集群），不指定时一次更新全部实例
+	ReleaseStrategyID string `json:"releaseStrategyID"`
 }
 
 // DeleteAppModelDeployInput contains query parameters for deleting a deploy.
