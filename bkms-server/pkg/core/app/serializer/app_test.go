@@ -588,6 +588,10 @@ var _ = Describe("App serializers", func() {
 		Entry("taf rejects relative path", serializer.TafSpecInput{
 			FileName: "taf.conf", FilePath: "etc/taf",
 		}, true),
+		Entry("trpc allows omitting file location for spec updates", serializer.TrpcSpecInput{
+			Language: "go",
+		}, false),
+		Entry("taf allows omitting file location for spec updates", serializer.TafSpecInput{}, false),
 	)
 
 	DescribeTable(
@@ -697,6 +701,35 @@ var _ = Describe("App serializers", func() {
 		}, []string{
 			"Key: 'CreateAppInput.AppModelSpec.TrpcSpec'",
 			"Error:Field validation for 'AppModelSpec.TrpcSpec' failed on the 'required' tag",
+		}),
+		Entry("trpc app requires framework file location on create", serializer.CreateAppInput{
+			Name: "demo-app",
+			ID:   "demo-app",
+			Type: bkmsapp.AppTypeTRPC,
+			BuildConfig: &serializer.BuildConfigInput{
+				SourceType:          "pipeline",
+				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
+			},
+			AppModelSpec: &serializer.AppModelSpecInput{
+				TrpcSpec: &serializer.TrpcSpecInput{Language: "go"},
+			},
+		}, []string{
+			"Field validation for 'AppModelSpec.TrpcSpec.FileName' failed on the 'required' tag",
+			"Field validation for 'AppModelSpec.TrpcSpec.FilePath' failed on the 'required' tag",
+		}),
+		Entry("taf app requires framework file location on create", serializer.CreateAppInput{
+			Name: "demo-app",
+			ID:   "demo-app",
+			Type: bkmsapp.AppTypeTAF,
+			BuildConfig: &serializer.BuildConfigInput{
+				SourceType:          "pipeline",
+				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
+			},
+			AppModelSpec: &serializer.AppModelSpecInput{
+				TafSpec: &serializer.TafSpecInput{FileName: "taf.conf"},
+			},
+		}, []string{
+			"Field validation for 'AppModelSpec.TafSpec.FilePath' failed on the 'required' tag",
 		}),
 		Entry("helm app requires helm repo config for helm repo type", serializer.CreateAppInput{
 			Name: "helm-app",

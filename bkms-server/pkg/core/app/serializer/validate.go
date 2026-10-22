@@ -92,6 +92,9 @@ func validateCreateAppInputStruct(sl validator.StructLevel) {
 			sl.ReportError(nil, "AppModelSpec.TrpcSpec", "TrpcSpec", "required", "")
 			return
 		}
+		validateFrameworkFileLocationRequired(
+			sl, "AppModelSpec.TrpcSpec", input.AppModelSpec.TrpcSpec.FileName, input.AppModelSpec.TrpcSpec.FilePath,
+		)
 		validateAppModelSpecEnvVarsUnique(sl, input.AppModelSpec)
 	case bkmsapp.AppTypeTAF:
 		if input.AppModelSpec == nil {
@@ -102,6 +105,9 @@ func validateCreateAppInputStruct(sl validator.StructLevel) {
 			sl.ReportError(nil, "AppModelSpec.TafSpec", "TafSpec", "required", "")
 			return
 		}
+		validateFrameworkFileLocationRequired(
+			sl, "AppModelSpec.TafSpec", input.AppModelSpec.TafSpec.FileName, input.AppModelSpec.TafSpec.FilePath,
+		)
 		validateAppModelSpecEnvVarsUnique(sl, input.AppModelSpec)
 	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:
 		if input.HelmSpec == nil {
@@ -111,6 +117,17 @@ func validateCreateAppInputStruct(sl validator.StructLevel) {
 		// HelmSpec.HelmSource 的 required 校验由字段 binding tag 保证；
 		// HelmSource 内部 RepoType 与各 Config 的关联校验由
 		// HelmSourceInput 的 struct-level validator 统一处理。
+	}
+}
+
+// validateFrameworkFileLocationRequired 要求创建 trpc/taf 应用时提供框架配置文件名和路径。
+// 更新 spec 时这两个字段可省略，因此不放在字段 binding tag 上。
+func validateFrameworkFileLocationRequired(sl validator.StructLevel, specField, fileName, filePath string) {
+	if fileName == "" {
+		sl.ReportError(fileName, specField+".FileName", "FileName", "required", "")
+	}
+	if filePath == "" {
+		sl.ReportError(filePath, specField+".FilePath", "FilePath", "required", "")
 	}
 }
 

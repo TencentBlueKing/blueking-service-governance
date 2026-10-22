@@ -102,6 +102,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 		var prodEnv *envmodel.Environment
 		var testEnv *envmodel.Environment
 		var appModel *appmodel.AppModel
+		var prodContent string
 
 		BeforeEach(func() {
 			// 使用 dbfactory.TafApplication 创建应用和模型
@@ -121,7 +122,7 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			prodEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 			testEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			// 切换到独立配置后，为 prod 创建 env-specific overlay。
+			// 切换到独立配置后，为 prod 写入环境完整配置。TAF 框架文件使用 overwrite。
 			defs, err := appcfg.ListDefsByApp(
 				ctx,
 				appConfigFileDefStore,
@@ -143,16 +144,16 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// 获取已有框架 def 的默认文件，在其上创建 env overlay
+			// 获取已有框架 def 的默认文件，在其上创建环境完整配置
 			defaultFileWithDef, err := cfgSvc.GetDefaultFileWithDef(ctx, defs[0].ID)
 			Expect(err).NotTo(HaveOccurred())
 
-			prodOverlayContent := "<taf>\n  <application>\n    <server>\n      logpath=/data/prod/log\n    </server>\n  </application>\n</taf>\n"
+			prodContent = "<taf>\n  <application>\n    <server>\n      logpath=/data/prod/log\n    </server>\n  </application>\n</taf>\n"
 			_, err = cfgSvc.CreateEnvInstance(ctx, *defaultFileWithDef, appcfg.CreateEnvInstanceParams{
-				EnvName:        prodEnv.Name,
-				OverlayContent: &prodOverlayContent,
-				Operator:       appcfg.CfgSystemUser,
-				Description:    "prod env overlay for test",
+				EnvName:     prodEnv.Name,
+				Content:     &prodContent,
+				Operator:    appcfg.CfgSystemUser,
+				Description: "prod env content for test",
 			})
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -209,11 +210,9 @@ var _ = Describe("TafWorkloadBuilder", func() {
 			Expect(extraObjs).To(HaveLen(1))
 			Expect(extraObjs[0].GetKind()).To(Equal("ConfigMap"))
 
-			// Verify ConfigMap contains prod-specific content (merged with default)
+			// 环境内容整体替换默认内容，默认文件中的 timeout 不再保留。
 			configContent := singleConfigMapContent(extraObjs)
-			// TAF merge should have prod-specific logpath but keep default timeout
-			Expect(configContent).To(ContainSubstring("logpath=/data/prod/log"))
-			Expect(configContent).To(ContainSubstring("timeout=3000"))
+			Expect(configContent).To(Equal(prodContent))
 
 			// Verify volume mount exists
 			Expect(gd.Spec.Template.Spec.Containers).To(HaveLen(1))

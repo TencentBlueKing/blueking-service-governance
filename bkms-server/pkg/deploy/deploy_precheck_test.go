@@ -291,13 +291,8 @@ ignored: ${LEGACY}
 		result, err := checker.Check(ctx, app, appEnv)
 
 		Expect(err).NotTo(HaveOccurred())
+		// tRPC 框架文件使用 overwrite：环境内容整体替换默认内容，默认文件里的变量不再出现。
 		Expect(result.UndefinedVars).To(Equal([]envvarrefs.UndefinedEnvVar{
-			{
-				Key: "DEFAULT_ONLY",
-				Sources: []envvarrefs.Source{
-					{Type: envvarrefs.SourceAppConfigFile, Name: "trpc_go.yaml"},
-				},
-			},
 			{
 				Key: "ENV_ONLY",
 				Sources: []envvarrefs.Source{

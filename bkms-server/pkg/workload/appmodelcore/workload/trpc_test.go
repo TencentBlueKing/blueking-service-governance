@@ -134,7 +134,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			prodEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 			testEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
 
-			// 切换到独立配置后，为 prod 创建 env-specific overlay。
+			// 切换到独立配置后，为 prod 写入环境完整配置。tRPC 框架文件使用 overwrite。
 			defs, err := appcfg.ListDefsByApp(
 				ctx,
 				appConfigFileDefStore,
@@ -156,16 +156,16 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// 获取已有框架 def 的默认文件，在其上创建 env overlay
+			// 获取已有框架 def 的默认文件，在其上创建环境完整配置
 			defaultFileWithDef, err := cfgSvc.GetDefaultFileWithDef(ctx, defs[0].ID)
 			Expect(err).NotTo(HaveOccurred())
 
-			prodOverlayContent := "server:\n  address: 0.0.0.0:9090"
+			prodContent := "server:\n  address: 0.0.0.0:9090\n"
 			_, err = cfgSvc.CreateEnvInstance(ctx, *defaultFileWithDef, appcfg.CreateEnvInstanceParams{
-				EnvName:        prodEnv.Name,
-				OverlayContent: &prodOverlayContent,
-				Operator:       appcfg.CfgSystemUser,
-				Description:    "prod env overlay for test",
+				EnvName:     prodEnv.Name,
+				Content:     &prodContent,
+				Operator:    appcfg.CfgSystemUser,
+				Description: "prod env content for test",
 			})
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -220,9 +220,9 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 			Expect(extraObjs).To(HaveLen(1))
 			Expect(extraObjs[0].GetKind()).To(Equal("ConfigMap"))
 
-			// Verify ConfigMap contains prod-specific content (not default)
+			// 环境内容整体替换默认内容，默认文件中的 timeout 不再保留。
 			configContent := singleConfigMapContent(extraObjs)
-			Expect(configContent).To(Equal("server:\n  address: 0.0.0.0:9090\n  timeout: 3000\n"))
+			Expect(configContent).To(Equal("server:\n  address: 0.0.0.0:9090\n"))
 
 			// Verify volume mount exists
 			Expect(gd.Spec.Template.Spec.Containers).To(HaveLen(1))

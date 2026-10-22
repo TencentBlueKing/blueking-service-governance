@@ -141,6 +141,7 @@ func TrpcApplication(
 			Creator:           appcfg.CfgSystemUser,
 			Description:       appcfg.CfgSystemVersionDescription,
 			ConfigKind:        appcfg.ConfigKindFramework,
+			AppType:           app.Type,
 		},
 	)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -287,6 +288,7 @@ func TafApplication(
 			Creator:           appcfg.CfgSystemUser,
 			Description:       appcfg.CfgSystemVersionDescription,
 			ConfigKind:        appcfg.ConfigKindFramework,
+			AppType:           app.Type,
 		},
 	)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())

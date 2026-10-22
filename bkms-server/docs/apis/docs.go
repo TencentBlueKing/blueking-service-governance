@@ -32466,21 +32466,17 @@ const docTemplate = `{
         },
         "serializer.TafSpecInput": {
             "type": "object",
-            "required": [
-                "fileName",
-                "filePath"
-            ],
             "properties": {
                 "fileContent": {
                     "description": "配置文件内容",
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名。\ntodo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。",
+                    "description": "配置文件名，创建应用时必填，写入 framework def，应用模型不保存。\ntodo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径。\ntodo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。",
+                    "description": "配置文件路径，创建应用时必填，写入 framework def 的挂载目录，应用模型不保存。\ntodo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。",
                     "type": "string"
                 }
             }
@@ -33017,8 +33013,6 @@ const docTemplate = `{
         "serializer.TrpcSpecInput": {
             "type": "object",
             "required": [
-                "fileName",
-                "filePath",
                 "language"
             ],
             "properties": {
@@ -33027,11 +33021,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名。\ntodo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。",
+                    "description": "配置文件名，创建应用时必填，写入 framework def，应用模型不保存。\ntodo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径。\ntodo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。",
+                    "description": "配置文件路径，创建应用时必填，写入 framework def 的挂载目录，应用模型不保存。\ntodo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。",
                     "type": "string"
                 },
                 "language": {

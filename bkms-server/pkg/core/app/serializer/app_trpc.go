@@ -28,12 +28,12 @@ import (
 type TrpcSpecInput struct {
 	// 编程语言
 	Language string `json:"language" binding:"required,oneof=go cpp"`
-	// 配置文件名。
-	// todo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。
-	FileName string `json:"fileName" binding:"required"`
-	// 配置文件路径。
-	// todo 兼容：创建和更新仍从 spec 接收，实际写入 framework def。调用方改走 def 后删除。
-	FilePath string `json:"filePath" binding:"required,mount_dir"`
+	// 配置文件名，创建应用时必填，写入 framework def，应用模型不保存。
+	// todo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。
+	FileName string `json:"fileName"`
+	// 配置文件路径，创建应用时必填，写入 framework def 的挂载目录，应用模型不保存。
+	// todo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。
+	FilePath string `json:"filePath" binding:"omitempty,mount_dir"`
 	// 配置文件内容
 	FileContent string `json:"fileContent"`
 }
