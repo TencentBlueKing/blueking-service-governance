@@ -25,9 +25,10 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
 
-// CheckVisibleEnv 按应用可见环境名单拦截部署目标环境。
+// CheckVisibleEnv 按应用可见环境名单校验目标环境。
 // 名单为空表示未配置，不做限制；应用自己的特性环境无需写入名单，始终允许。
-// 仅用于创建部署（含构建后自动部署）和 precheck，卸载、回滚、查记录、实例更新不做此校验。
+// 用于创建部署（含构建后自动部署）、precheck 和创建特性环境时的来源环境校验。
+// 卸载、回滚、查记录、实例更新不做此校验。
 func (a *Application) CheckVisibleEnv(env *envmodel.Environment) error {
 	if len(a.VisibleEnvNames) == 0 {
 		return nil

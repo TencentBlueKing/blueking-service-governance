@@ -196,7 +196,7 @@ func ListAppFeatEnvs(
 // Create 根据应用、来源环境和展示名称创建特性环境记录。
 //
 // 关键约束：
-// - sourceEnv 必须是标准环境，且与应用属于同一个 workspace；
+// - sourceEnv 必须是应用可见的标准环境，且与应用属于同一个 workspace；
 // - name / namespace 由平台按 feat-<appID>-<index> 自动生成，调用方不能指定；
 // - 集群的 namespace 也是自动生成，将由后台自动完成初始化；
 // - 按需复制来源环境的自定义变量；之后双方独立修改，不持续同步；
@@ -207,6 +207,9 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 			"validate create feature environment input: %v",
 			formatError(err),
 		)
+	}
+	if err := input.App.CheckVisibleEnv(input.SourceEnv); err != nil {
+		return nil, errors.Wrapf(ErrInvalidFeatureEnvInput, "validate source environment visibility: %v", err)
 	}
 
 	index, err := s.indexCounter.Next(ctx, input.App.ID)

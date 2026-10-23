@@ -111,9 +111,10 @@ var _ = Describe("FeatureEnvService", func() {
 		Expect(sourceEnvByFeatEnvName).NotTo(HaveKey(secondFeatureEnv.Name))
 	})
 
-	It("creates feature environments from a standard source environment", func() {
+	It("creates feature environments from a visible standard source environment", func() {
 		app := dbfactory.Application(ctx, appStore)
 		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+		app.VisibleEnvNames = []string{sourceEnv.Name}
 		_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, *sourceEnv, "SOURCE_ONLY", "source-value", "")
 		Expect(err).NotTo(HaveOccurred())
 		sourceEnv.Cluster.IsFederation = true
@@ -412,6 +413,30 @@ var _ = Describe("FeatureEnvService", func() {
 		Expect(occupiedErr.Namespace).To(Equal(occupiedNamespace))
 		Expect(occupiedErr.OccupiedByEnvName).To(Equal(occupiedEnvName))
 		Expect(occupiedErr.OccupiedByWorkspaceID).To(Equal(occupiedWorkspaceID))
+	})
+
+	It("rejects creating a feature environment after its source is hidden", func() {
+		app := dbfactory.Application(ctx, appStore)
+		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+		visibleEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+		Expect(appStore.Update(ctx,
+			map[string]any{"visibleEnvNames": []string{visibleEnv.Name}}, bkmsapp.ByID(app.ID),
+		)).To(Succeed())
+		app, err := appStore.Get(ctx, bkmsapp.ByID(app.ID))
+		Expect(err).NotTo(HaveOccurred())
+
+		featureEnv, err := service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
+			App:         app,
+			SourceEnv:   sourceEnv,
+			DisplayName: "hidden source",
+		})
+		Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
+		Expect(err).To(MatchError(ContainSubstring(sourceEnv.Name)))
+		Expect(featureEnv).To(BeNil())
+
+		featureEnvs, err := envStore.List(ctx, model.FeatEnvsOf(app.ID))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(featureEnvs).To(BeEmpty())
 	})
 
 	It("rejects feature environments as source environments", func() {
