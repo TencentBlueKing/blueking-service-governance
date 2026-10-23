@@ -90,7 +90,7 @@ func ValidateStack(stack Stack) error {
 		}
 		return nil
 	case AppTypeBKMSApp:
-		return validateBKMSAppStack(stack)
+		return validateBKMSAppStack(stack, false)
 	case AppTypeTRPC, AppTypeTAF:
 		return errors.Errorf("legacy app type %q is not a normalized stack type", stack.Type)
 	case "":
@@ -100,7 +100,16 @@ func ValidateStack(stack Stack) error {
 	}
 }
 
-func validateBKMSAppStack(stack Stack) error {
+// ValidateCapabilityStack 校验用于能力查表的技术栈，与 ValidateStack 的唯一区别是允许缺语言。
+// BRIDGE-ONLY：存量应用可能没有记录语言，回填完成后删除。
+func ValidateCapabilityStack(stack Stack) error {
+	if stack.Type == AppTypeBKMSApp {
+		return validateBKMSAppStack(stack, true)
+	}
+	return ValidateStack(stack)
+}
+
+func validateBKMSAppStack(stack Stack, allowEmptyLanguage bool) error {
 	if stack.Framework == "" {
 		return errors.New("framework is required for bkmsApp")
 	}
@@ -111,6 +120,9 @@ func validateBKMSAppStack(stack Stack) error {
 		return errors.Wrapf(ErrUnknownFramework, "framework %q", stack.Framework)
 	}
 	if stack.Language == "" {
+		if allowEmptyLanguage {
+			return nil
+		}
 		return errors.New("language is required for bkmsApp")
 	}
 	if !KnownLanguages.Contains(stack.Language) {

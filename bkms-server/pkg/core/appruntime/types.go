@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package appruntime 定义应用技术栈值类型、框架目录以及旧数据规范化合同。
+// Package appruntime 定义应用技术栈值类型、框架目录以及旧数据规范化约定。
 //
 // 本包不 import appmodel、component、具体框架适配器或 handler。
 package appruntime
@@ -39,6 +39,12 @@ const (
 	LanguageGo = "go"
 	// LanguageCpp C++ 技术栈。
 	LanguageCpp = "cpp"
+	// LanguageJava Java 技术栈。
+	LanguageJava = "java"
+	// LanguageNodeJS Node.js 技术栈。
+	LanguageNodeJS = "nodejs"
+	// LanguagePython Python 技术栈。
+	LanguagePython = "python"
 )
 
 const (
