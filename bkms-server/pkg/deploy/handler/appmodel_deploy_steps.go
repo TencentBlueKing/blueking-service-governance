@@ -197,24 +197,7 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 		ReleaseStrategy: strategy,
 	})
 	if err != nil {
-		var checkErr *clusteraddon.RequiredAddonsNotInstalledError
-		if errors.As(err, &checkErr) {
-			components := lo.Map(checkErr.Missing, func(addon clusteraddon.AddonReference, _ int) string {
-				return addon.Name
-			})
-			bkerrs.AbortWithErr(c, bkerrs.WrapComponentsNotInstalled(err, components, environment.Cluster.ClusterID))
-			return
-		}
-		deployInfo := genDeployInfo(app.WorkspaceID, app.ID, uriInput.EnvName, input.TrafficLaneName)
-		if errors.Is(err, batchrelease.ErrWorkloadNotSupported) ||
-			errors.Is(err, batchrelease.ErrRolloutNotInstalled) {
-			bkerrs.AbortWithErr(c, batchrelease.APIError(err, "batch release app model app: "+deployInfo))
-			return
-		}
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deploy app model app: %s", deployInfo),
-		)
+		bkerrs.AbortWithErr(c, toAppModelDeployAPIError(err, app, environment, input.TrafficLaneName))
 		return
 	}
 	if strategy != nil {
@@ -223,15 +206,13 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 	// 轮询部署状态 & 更新部署记录
 	// 注：部署成功/失败的操作记录在异步任务中记录
 	err = taskq.Enqueue(
-		ctx,
-		appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
+		ctx, appmodeldeploypoll.Task.NewTask(appmodeldeploypoll.Args{
 			WorkspaceID:     app.WorkspaceID,
 			AppID:           app.ID,
 			EnvName:         uriInput.EnvName,
 			TrafficLaneName: input.TrafficLaneName,
 			DeployID:        deployID,
-		}),
-		asynq.ProcessIn(appmodeldeploypoll.PollingInterval()),
+		}), asynq.ProcessIn(appmodeldeploypoll.PollingInterval()),
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(
@@ -241,32 +222,6 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 	}
 
 	ginutils.OK(c, serializer.EmptyOutput{})
-}
-
-// recordBatchDeployAudit 记录按策略分批部署的操作记录（含策略名称）。
-// 分批发布可能长期暂停等待人工确认，因此在下发时记录，不等待轮询任务进入终态。
-func recordBatchDeployAudit(
-	ctx context.Context,
-	app *bkmsapp.Application,
-	envName, trafficLaneName, deployID string,
-	strategy *releasestrategy.ReleaseStrategy,
-) {
-	go audit.AddOperationRecordAsync(
-		context.WithoutCancel(ctx),
-		audit.OperationTypeDeploy,
-		audit.ResourceTypeApp,
-		app.ID,
-		audit.WithWorkspaceID(app.WorkspaceID),
-		audit.WithAppID(app.ID),
-		audit.WithEnvName(envName),
-		audit.WithExtras(map[string]string{
-			"trafficLaneName":     trafficLaneName,
-			"deployID":            deployID,
-			"releaseMode":         string(appmodeldeploy.ReleaseModeBatch),
-			"releaseStrategyID":   strategy.ID.Hex(),
-			"releaseStrategyName": strategy.Name,
-		}),
-	)
 }
 
 // deleteAppModelDeploy 删除 AppModel 应用部署
@@ -548,4 +503,52 @@ func shouldUseBuildAutoDeployRecord(
 		return true
 	}
 	return !buildAutoDeployRecord.CreatedAt.Before(deployRecord.CreatedAt)
+}
+
+// toAppModelDeployAPIError 将 AppModel 部署下发失败的错误转换为对应错误码的 API 错误
+func toAppModelDeployAPIError(
+	err error,
+	app *bkmsapp.Application,
+	env *bkmsenv.Environment,
+	trafficLaneName string,
+) error {
+	var checkErr *clusteraddon.RequiredAddonsNotInstalledError
+	if errors.As(err, &checkErr) {
+		components := lo.Map(checkErr.Missing, func(addon clusteraddon.AddonReference, _ int) string {
+			return addon.Name
+		})
+		return bkerrs.WrapComponentsNotInstalled(err, components, env.Cluster.ClusterID)
+	}
+	deployInfo := genDeployInfo(app.WorkspaceID, app.ID, env.Name, trafficLaneName)
+	if errors.Is(err, batchrelease.ErrWorkloadNotSupported) ||
+		errors.Is(err, batchrelease.ErrRolloutNotInstalled) {
+		return batchrelease.APIError(err, "batch release app model app: "+deployInfo)
+	}
+	return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deploy app model app: %s", deployInfo)
+}
+
+// recordBatchDeployAudit 记录按策略分批部署的操作记录（含策略名称）。
+// 分批发布可能长期暂停等待人工确认，因此在下发时记录，不等待轮询任务进入终态。
+func recordBatchDeployAudit(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	envName, trafficLaneName, deployID string,
+	strategy *releasestrategy.ReleaseStrategy,
+) {
+	go audit.AddOperationRecordAsync(
+		context.WithoutCancel(ctx),
+		audit.OperationTypeDeploy,
+		audit.ResourceTypeApp,
+		app.ID,
+		audit.WithWorkspaceID(app.WorkspaceID),
+		audit.WithAppID(app.ID),
+		audit.WithEnvName(envName),
+		audit.WithExtras(map[string]string{
+			"trafficLaneName":     trafficLaneName,
+			"deployID":            deployID,
+			"releaseMode":         string(appmodeldeploy.ReleaseModeBatch),
+			"releaseStrategyID":   strategy.ID.Hex(),
+			"releaseStrategyName": strategy.Name,
+		}),
+	)
 }

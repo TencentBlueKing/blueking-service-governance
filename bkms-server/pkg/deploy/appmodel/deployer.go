@@ -104,22 +104,12 @@ func (d *Deployer) Deploy(
 	buildAutoDeployInfo *BuildAutoDeployInfo,
 	strategy *releasestrategy.ReleaseStrategy,
 ) (deployID string, retErr error) {
-	// 前置准备 & 预设配置
-	// 设置环境下的部署规格，调整 replicas 副本数
-	if err := appspec.SetReplicas(ctx, d.db, d.app.ID, env.Name, replicas); err != nil {
-		return "", errors.Wrap(err, "setting replicas for the env")
-	}
-	d.setupAppModel(appModel, imageRegistry, trafficLaneName, imageTag, updateStrategy)
-	// 校验应用模型
-	if err := d.validateAppModel(appModel); err != nil {
-		return "", errors.Wrap(err, "validate app model")
-	}
-
 	// 获取待下发的主工作负载 & 额外 k8s 资源
-	builder := workload.NewBuilder(d.builderService, d.app, appModel)
-	buildResult, err := builder.Build(ctx, env)
+	buildResult, err := d.buildWorkload(
+		ctx, appModel, env, imageRegistry, trafficLaneName, imageTag, updateStrategy, replicas,
+	)
 	if err != nil {
-		return "", errors.Wrap(err, "build app model workload")
+		return "", err
 	}
 	extraObjs := buildResult.ExtraObjects
 
@@ -132,16 +122,15 @@ func (d *Deployer) Deploy(
 		return "", err
 	}
 
-	// 构建当前部署的 资源引用信息 并创建部署记录
+	// 找出之前部署中下发、本次不再需要的资源；以最新的部署记录为准，必须在创建本次部署记录之前计算
 	resourceKeys := d.buildResourceKeys(buildResult.WorkloadKind, buildResult.Name(), extraObjs)
-	// 删除之前部署中下发的，现在已经不再需要的资源
 	expiredResources, err := d.getExpiredResources(ctx, env.Name, trafficLaneName, resourceKeys)
 	if err != nil {
 		return "", errors.Wrap(err, "get expired resources")
 	}
 	deployID, err = d.createDeployRecord(
 		ctx, env, trafficLaneName, imageTag, updateStrategy,
-		replicas, buildAutoDeployInfo, buildResult.Selector(), buildResult.WorkloadKind, resourceKeys, strategy,
+		replicas, buildAutoDeployInfo, buildResult, resourceKeys, strategy,
 	)
 	if err != nil {
 		return "", errors.Wrap(err, "create deploy record")
@@ -151,53 +140,26 @@ func (d *Deployer) Deploy(
 	createdDeployID := deployID
 	defer func() {
 		if retErr != nil {
-			record, getErr := GetRecord(ctx, d.db, d.app.ID, createdDeployID)
-			if getErr != nil {
-				log.Errorf(ctx, "mark record failed: get deploy record %s: %v", createdDeployID, getErr)
-				return
-			}
-			record.Status = StatusFailed
-			record.Message = retErr.Error()
-			record.EndedAt = time.Now()
-			if updateErr := UpdateRecord(ctx, d.db, record); updateErr != nil {
-				log.Errorf(ctx, "mark record failed: update deploy record %s: %v", createdDeployID, updateErr)
-			}
+			d.markRecordFailed(ctx, createdDeployID, retErr)
 		}
 	}()
 
-	// 根据发布方式决定是否下发 Rollout or 清理集群内可能遗留的 Rollout
-	if err = rollout.EnsureRollout(ctx, buildResult.ObjectMeta()); err != nil {
+	// 确保待部署环境中已经存在对应的 ImagePullSecret
+	if err = d.syncImagePullSecret(ctx, env); err != nil {
 		return "", err
 	}
-
-	buildCfg, err := store.Of(d.db, build.ConfigMeta).Get(ctx, build.ByApp(d.app.ID))
-	if err != nil {
-		return "", errors.Wrap(err, "get build config")
-	}
-
-	// 确保待部署环境中已经存在对应的 ImagePullSecret
-	if err = secret.NewImagePullSecretSyncer(d.db, env, d.app.ID, buildCfg).Sync(ctx); err != nil {
-		return "", errors.Wrap(err, "sync image pull secret")
-	}
-
 	// 先下发额外资源（如 ConfigMap 等）到集群中
 	if err = d.upsertExtraObjects(ctx, clusterID, namespace, extraObjs); err != nil {
 		return "", errors.Wrap(err, "upsert extra objects")
 	}
-	// 在主工作负载中注入 deployID，确保每次部署都能触发 Pod 滚动更新
-	d.injectDeployID(buildResult, deployID)
-	// 下发主工作负载资源到集群中
-	liveWorkload, err := d.upsertWorkload(ctx, clusterID, namespace, buildResult.GVR(), buildResult.MainWorkload)
-	if err != nil {
-		return "", errors.Wrap(err, "upsert main workload")
-	}
-	if err = rollout.EnsurePartition(ctx, liveWorkload); err != nil {
+	// 按发布方式处理 Rollout 并下发主工作负载
+	if err = d.applyMainWorkload(ctx, clusterID, namespace, deployID, buildResult, rollout); err != nil {
 		return "", err
 	}
 
-	// 持久化已下发资源清单
+	// 持久化已下发资源清单；异步执行，不能随请求结束而取消
 	go saveResourceSnapshots(
-		ctx,
+		context.WithoutCancel(ctx),
 		d.db,
 		appModel.AppID,
 		deployID,
@@ -216,18 +178,7 @@ func (d *Deployer) Deploy(
 		return "", errors.Wrap(err, "update app model")
 	}
 
-	// 部署已带上最新 PolarisConfig，记录集群中的关键字段并清理已离开 scope 的环境信息。
-	if err = d.polarisEnvStateManager.ReconcileAfterDeploy(ctx, d.app, env); err != nil {
-		log.Errorf(ctx, "reconcile polaris config after deploy failed, app=%s env=%s: %v",
-			d.app.ID, env.Name, err)
-	}
-	if err = d.hostPortEnvStateManager.ReconcileAfterDeploy(
-		ctx, d.app, env, buildResult.HostPortAppliedPorts,
-	); err != nil {
-		log.Errorf(ctx, "reconcile hostport after deploy failed, app=%s env=%s: %v",
-			d.app.ID, env.Name, err)
-	}
-
+	d.reconcileEnvStates(ctx, env, buildResult)
 	return deployID, nil
 }
 
@@ -782,8 +733,7 @@ func (d *Deployer) createDeployRecord(
 	trafficLaneName, imageTag, updateStrategy string,
 	replicas int32,
 	buildAutoDeployInfo *BuildAutoDeployInfo,
-	labelSelector map[string]string,
-	workloadKind string,
+	buildResult *workload.BuildResult,
 	resourceKeys ResourceKeys,
 	strategy *releasestrategy.ReleaseStrategy,
 ) (string, error) {
@@ -810,8 +760,8 @@ func (d *Deployer) createDeployRecord(
 		UpdateStrategy:  updateStrategy,
 		Replicas:        replicas,
 		DeletionCost:    defaults.PodDeletionCost,
-		LabelSelector:   labelSelector,
-		WorkloadKind:    workloadKind,
+		LabelSelector:   buildResult.Selector(),
+		WorkloadKind:    buildResult.WorkloadKind,
 		ResourceKeys:    resourceKeys,
 		ReleaseMode:     releaseMode,
 		ReleaseStrategy: strategySnapshot,
@@ -924,6 +874,93 @@ func (d *Deployer) UpdateInstancePolaris(
 		return errors.Wrapf(err, "set polaris annotations for app %s instances", d.app.ID)
 	}
 	return nil
+}
+
+// buildWorkload 按本次部署的参数生成待下发的主工作负载与额外 k8s 资源。
+// 会先保存环境的副本数：构建时从环境的部署规格读取副本数
+func (d *Deployer) buildWorkload(
+	ctx context.Context,
+	appModel *appmodel.AppModel,
+	env *bkmsenv.Environment,
+	imageRegistry *registry.ImageRegistry,
+	trafficLaneName, imageTag, updateStrategy string,
+	replicas int32,
+) (*workload.BuildResult, error) {
+	if err := appspec.SetReplicas(ctx, d.db, d.app.ID, env.Name, replicas); err != nil {
+		return nil, errors.Wrap(err, "setting replicas for the env")
+	}
+	d.setupAppModel(appModel, imageRegistry, trafficLaneName, imageTag, updateStrategy)
+	if err := d.validateAppModel(appModel); err != nil {
+		return nil, errors.Wrap(err, "validate app model")
+	}
+	buildResult, err := workload.NewBuilder(d.builderService, d.app, appModel).Build(ctx, env)
+	if err != nil {
+		return nil, errors.Wrap(err, "build app model workload")
+	}
+	return buildResult, nil
+}
+
+// syncImagePullSecret 确保待部署环境中已经存在应用镜像仓库对应的 ImagePullSecret
+func (d *Deployer) syncImagePullSecret(ctx context.Context, env *bkmsenv.Environment) error {
+	buildCfg, err := store.Of(d.db, build.ConfigMeta).Get(ctx, build.ByApp(d.app.ID))
+	if err != nil {
+		return errors.Wrap(err, "get build config")
+	}
+	return errors.Wrap(
+		secret.NewImagePullSecretSyncer(d.db, env, d.app.ID, buildCfg).Sync(ctx), "sync image pull secret",
+	)
+}
+
+// applyMainWorkload 下发主工作负载。Rollout 的存在与否决定了本次更新是否分批，
+// 因此更新前按发布方式下发或清理 Rollout，更新后确认 partition 符合本次的发布方式
+func (d *Deployer) applyMainWorkload(
+	ctx context.Context,
+	clusterID, namespace, deployID string,
+	buildResult *workload.BuildResult,
+	rollout *workloadRollout,
+) error {
+	// 在主工作负载中注入 deployID，确保每次部署都能触发 Pod 滚动更新
+	d.injectDeployID(buildResult, deployID)
+	if err := rollout.EnsureRollout(ctx, buildResult.ObjectMeta()); err != nil {
+		return err
+	}
+	liveWorkload, err := d.upsertWorkload(ctx, clusterID, namespace, buildResult.GVR(), buildResult.MainWorkload)
+	if err != nil {
+		return errors.Wrap(err, "upsert main workload")
+	}
+	return rollout.EnsurePartition(ctx, liveWorkload)
+}
+
+// reconcileEnvStates 部署完成后调谐北极星、HostPort 的环境状态：部署已带上最新 PolarisConfig，
+// 记录集群中的关键字段并清理已离开 scope 的环境信息。失败只打日志，不影响部署结果
+func (d *Deployer) reconcileEnvStates(
+	ctx context.Context, env *bkmsenv.Environment, buildResult *workload.BuildResult,
+) {
+	if err := d.polarisEnvStateManager.ReconcileAfterDeploy(ctx, d.app, env); err != nil {
+		log.Errorf(ctx, "reconcile polaris config after deploy failed, app=%s env=%s: %v", d.app.ID, env.Name, err)
+	}
+	if err := d.hostPortEnvStateManager.ReconcileAfterDeploy(
+		ctx, d.app, env, buildResult.HostPortAppliedPorts,
+	); err != nil {
+		log.Errorf(ctx, "reconcile hostport after deploy failed, app=%s env=%s: %v", d.app.ID, env.Name, err)
+	}
+}
+
+// markRecordFailed 将部署记录标记为失败，cause 作为失败信息；标记失败只打日志。
+// 部署可能正是因 ctx 取消而失败，标记时不能随之取消，否则记录会一直停留在部署中
+func (d *Deployer) markRecordFailed(ctx context.Context, deployID string, cause error) {
+	ctx = context.WithoutCancel(ctx)
+	record, err := GetRecord(ctx, d.db, d.app.ID, deployID)
+	if err != nil {
+		log.Errorf(ctx, "mark record failed: get deploy record %s: %v", deployID, err)
+		return
+	}
+	record.Status = StatusFailed
+	record.Message = cause.Error()
+	record.EndedAt = time.Now()
+	if err = UpdateRecord(ctx, d.db, record); err != nil {
+		log.Errorf(ctx, "mark record failed: update deploy record %s: %v", deployID, err)
+	}
 }
 
 func replicasJSONPatch(replicas int32) map[string]any {

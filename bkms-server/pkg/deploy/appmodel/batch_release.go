@@ -65,7 +65,7 @@ type workloadRollout struct {
 }
 
 // newWorkloadRollout 创建主工作负载的 Rollout 处理，strategy 为 nil 时一次更新全部实例。
-// 主工作负载不支持分批发布时返回 batchrelease.ErrWorkloadNotSupported；该函数不访问集群。
+// 主工作负载不支持分批发布时返回 batchrelease.ErrWorkloadNotSupported。
 func newWorkloadRollout(
 	cfg *cluster.Config,
 	namespace, workloadKind, workloadName string,
