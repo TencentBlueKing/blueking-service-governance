@@ -627,12 +627,15 @@
   );
   const isEnvSelectInline = ref(false);
 
-  // 切 Tab 时投放点会随旧页面一起销毁，先把选择器收回顶部栏，等新页面挂载完再投放过去。
+  // 切 Tab 或离开特性环境页时投放点会随旧页面一起销毁，先把选择器收回顶部栏，等新页面挂载完再投放过去。
+  let envSelectTeleportGeneration = 0;
   watch(
-    [activeTab, hasAvailableEnv, isEnvListLoading],
+    [activeTab, hasAvailableEnv, isEnvListLoading, isFeatureEnvPage],
     async () => {
+      const generation = ++envSelectTeleportGeneration;
       isEnvSelectInline.value = false;
       await nextTick();
+      if (generation !== envSelectTeleportGeneration || isFeatureEnvPage.value) return;
       isEnvSelectInline.value =
         (hasAvailableEnv.value || isEnvListLoading.value) && INLINE_ENV_SELECT_TABS.includes(activeTab.value);
     },
