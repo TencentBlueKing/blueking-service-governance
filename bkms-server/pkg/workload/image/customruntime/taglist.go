@@ -239,7 +239,7 @@ func classifyRealtimeTagError(err error, imageName string) error {
 // 仓库侧失败对用户是可解释、可自行处理的，折成 failed 结果返回；
 // 平台自身故障（如数据库不可用）必须上抛为服务端错误，不能伪装成刷新失败
 func isRegistryFailure(err error) bool {
-	if infrasreg.IsAuthRequired(err) || infrasreg.IsTagNotFound(err) {
+	if infrasreg.IsAuthRequired(err) || infrasreg.IsTagNotFound(err) || errors.Is(err, snapshot.ErrRepoNotFound) {
 		return true
 	}
 	var netErr net.Error
@@ -251,7 +251,7 @@ func registryFailureMessage(err error) string {
 	switch {
 	case infrasreg.IsAuthRequired(err):
 		return registryAuthFailedMessage
-	case infrasreg.IsTagNotFound(err):
+	case infrasreg.IsTagNotFound(err), errors.Is(err, snapshot.ErrRepoNotFound):
 		return registryImageMissedMessage
 	default:
 		return registryUnreachableMessage

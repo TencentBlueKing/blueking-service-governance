@@ -63,7 +63,8 @@ func NewDetailSyncManager(db *mongo.Database) *DetailSyncManager {
 
 // Handle 解密仓库凭据后调用 DetailSyncer 补全 tag 详情。
 // 解密失败属不可恢复，wrap taskq.ErrStopRetry；SyncDetails 的 store 类错误原样返回，
-// 由 asynq MaxRetry 重试。部分 tag 拉取失败由 SyncDetails 写 LastError 后成功返回，不在此改判。
+// 由 asynq MaxRetry 重试。部分 tag 拉取失败由 SyncDetails 写 LastError 后成功返回，不在此改判；
+// suppressed tag 复核失败（非 404）会由 SyncDetails 返回错误，同样交给重试。
 func (m *DetailSyncManager) Handle(ctx context.Context, args ImageDetailSyncArgs) error {
 	if m.db == nil {
 		return errors.Wrap(taskq.ErrStopRetry, "snapshot database not initialized")
@@ -86,7 +87,7 @@ func (m *DetailSyncManager) Handle(ctx context.Context, args ImageDetailSyncArgs
 		Username: username,
 		Password: password,
 	}
-	if err = NewDetailSyncer(m.db).SyncDetails(ctx, info); err != nil {
+	if err = NewDetailSyncer(m.db).SyncDetails(ctx, info, args.SuppressedTags); err != nil {
 		return errors.Wrapf(err, "detail sync for %s failed", args.RepoKey)
 	}
 

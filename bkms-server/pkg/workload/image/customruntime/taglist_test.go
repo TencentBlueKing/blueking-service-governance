@@ -228,5 +228,16 @@ var _ = Describe("TagQueryManager", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.RefreshStatus).To(Equal(snapshot.RefreshStatusIdle))
 		Expect(status.LastError).NotTo(BeEmpty())
+
+		// 仓库为空或不存在（NAME_UNKNOWN）同样折成 failed，提示镜像不存在
+		remoteErr = &transport.Error{
+			StatusCode: http.StatusNotFound,
+			Errors:     []transport.Diagnostic{{Code: transport.NameUnknownErrorCode}},
+		}
+		seedPersisted("v1.0")
+		result, err = manager.RefreshTags(ctx, workspaceID, imageName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(snapshot.RefreshResultFailed))
+		Expect(result.Message).To(Equal(registryImageMissedMessage))
 	})
 })

@@ -1,0 +1,21 @@
+[
+  {
+    "createIndexes": "image_tag_suppressions",
+    "indexes": [
+      {
+        "key": {
+          "repoKey": 1,
+          "tag": 1
+        },
+        "name": "idx_repoKey_tag",
+        "unique": true
+      },
+      {
+        "key": {
+          "repoKey": 1
+        },
+        "name": "idx_repoKey"
+      }
+    ]
+  }
+]

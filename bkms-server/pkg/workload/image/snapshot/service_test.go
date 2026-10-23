@@ -22,11 +22,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync/atomic"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
@@ -41,6 +43,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -266,6 +269,130 @@ var _ = Describe("Service", func() {
 			})
 		})
 
+		It("should ignore suppressed new tags and enqueue them for suppression recheck", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				Expect(UpsertTags(ctx, db, repoKey, []string{"stale"})).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v1.0.0")).To(Succeed())
+
+				var preparedArgs *ImageDetailSyncArgs
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"v1.0.0", "v2.0.0"}, nil).Build()
+				mockey.Mock(NewImageDetailSyncArgs).
+					To(func(repoKey, repoName, username, password string) (*ImageDetailSyncArgs, error) {
+						preparedArgs = &ImageDetailSyncArgs{RepoKey: repoKey, RepoName: repoName}
+						return preparedArgs, nil
+					}).
+					Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal("success"))
+				Expect(result.AddedTagCnt).To(BeEquivalentTo(1))
+				Expect(result.RemovedTagCnt).To(BeEquivalentTo(1))
+
+				snapshots, total, err := listSnapshots(ctx, db, repoKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(total).To(BeEquivalentTo(1))
+				Expect(
+					lo.Map(snapshots, func(item Image, _ int) string { return item.Tag }),
+				).To(Equal([]string{"v2.0.0"}))
+
+				suppressions, err := ListSuppressedTags(ctx, db, repoKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(suppressions).To(Equal([]string{"v1.0.0"}))
+
+				Expect(preparedArgs).NotTo(BeNil())
+				Expect(preparedArgs.SuppressedTags).To(Equal([]string{"v1.0.0"}))
+			})
+		})
+
+		It("should recheck a suppressed tag even when its full local snapshot still exists", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				// 删除流程写入 suppression 后删快照失败：完整快照与 suppression 并存，tags/list 仍残留该名字
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0"})).To(Succeed())
+				Expect(UpdateDetail(ctx, db, repoKey, "v1.0.0", &registry.ImageDetail{
+					Tag: "v1.0.0", Digest: "sha256:v1.0.0", BuiltAt: time.Now(),
+				})).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v1.0.0")).To(Succeed())
+
+				var preparedArgs *ImageDetailSyncArgs
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"v1.0.0"}, nil).Build()
+				mockey.Mock(NewImageDetailSyncArgs).
+					To(func(repoKey, repoName, username, password string) (*ImageDetailSyncArgs, error) {
+						preparedArgs = &ImageDetailSyncArgs{RepoKey: repoKey, RepoName: repoName}
+						return preparedArgs, nil
+					}).
+					Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				_, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(preparedArgs).NotTo(BeNil())
+				Expect(preparedArgs.SuppressedTags).To(Equal([]string{"v1.0.0"}))
+			})
+		})
+
+		It("should clear stale suppressions and keep only active suppressed ones", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				err := UpsertTags(ctx, db, repoKey, []string{"stale-local"})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "removed-tag")).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "still-suppressed")).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "stale-local")).To(Succeed())
+
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).
+					Return([]string{"still-suppressed", "v1.0.3"}, nil).
+					Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.AddedTagCnt).To(BeEquivalentTo(1))
+				Expect(result.RemovedTagCnt).To(BeEquivalentTo(1))
+
+				snapshots, total, err := listSnapshots(ctx, db, repoKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(total).To(BeEquivalentTo(1))
+				tags := lo.Map(snapshots, func(item Image, _ int) string { return item.Tag })
+				Expect(tags).To(ConsistOf("v1.0.3"))
+
+				suppressions, err := ListSuppressedTags(ctx, db, repoKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(suppressions).To(Equal([]string{"still-suppressed"}))
+			})
+		})
+
+		It("should keep the suppression of a tag that is being deleted concurrently", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				// DeleteImageTag 已写 suppression、尚未删快照时刷新恰好执行：本地快照与 suppression 同时存在
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				Expect(UpsertTags(ctx, db, repoKey, []string{"deleting"})).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "deleting")).To(Succeed())
+
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"deleting"}, nil).Build()
+				mockey.Mock(taskq.Enqueue).Return(nil).Build()
+
+				_, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ListSuppressedTags(ctx, db, repoKey)).To(Equal([]string{"deleting"}))
+
+				// 删除流程随后删掉快照，下一次刷新不应把残留名字写回
+				_, err = store.Of(db, ImageMeta).DeleteMany(ctx, ByRepoTag(repoKey, "deleting"))
+				Expect(err).NotTo(HaveOccurred())
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.AddedTagCnt).To(BeZero())
+				Expect(ListAllTags(ctx, db, repoKey)).To(BeEmpty())
+			})
+		})
+
 		It("should short-circuit when another refresh is in progress", func() {
 			mockey.PatchConvey("test", GinkgoT(), func() {
 				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
@@ -298,6 +425,33 @@ var _ = Describe("Service", func() {
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
 				Expect(status.LastError).To(ContainSubstring("list all tags"))
+			})
+		})
+
+		It("should keep suppressions and return ErrRepoNotFound for an unknown repository", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				// mirrors 在仓库内镜像全部删除后，tags/list 返回 404 NAME_UNKNOWN
+				repoKey := GenerateRepoKey("library/busybox", "alice", "secret")
+				Expect(UpsertTags(ctx, db, repoKey, []string{"v1.0.0"})).To(Succeed())
+				Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v2.0.0")).To(Succeed())
+
+				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+				mockey.Mock((*registry.Client).ListAllTags).Return(nil, fmt.Errorf("list tags: %w", &transport.Error{
+					StatusCode: http.StatusNotFound,
+					Errors:     []transport.Diagnostic{{Code: transport.NameUnknownErrorCode}},
+				})).Build()
+
+				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				Expect(result).To(BeNil())
+				Expect(errors.Is(err, ErrRepoNotFound)).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring(string(transport.NameUnknownErrorCode)))
+				Expect(ListAllTags(ctx, db, repoKey)).To(BeEmpty())
+				Expect(ListSuppressedTags(ctx, db, repoKey)).To(Equal([]string{"v2.0.0"}))
+
+				status, getErr := GetRepoStatus(ctx, db, repoKey)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+				Expect(status.LastError).To(ContainSubstring(ErrRepoNotFound.Error()))
 			})
 		})
 

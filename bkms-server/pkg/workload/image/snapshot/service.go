@@ -45,6 +45,10 @@ const (
 	customImageStaleTTL = 5 * time.Minute
 )
 
+// ErrRepoNotFound 远端镜像仓库为空或不存在。
+// mirrors 等制品库在仓库内镜像全部删除（或从未推送）时，tags/list 返回 NAME_UNKNOWN 而不是空列表，两种情况无法区分
+var ErrRepoNotFound = errors.New("image repository is empty or not found")
+
 // Service 镜像快照服务
 type Service struct {
 	db *mongo.Database
@@ -357,7 +361,10 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	client := registry.New(info.Username, info.Password, true)
 	remoteTags, err := client.ListAllTags(ctx, info.RepoName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "list all tags for %s", info.RepoName)
+		if !registry.IsRepoNotFound(err) {
+			return nil, errors.Wrapf(err, "list all tags for %s", info.RepoName)
+		}
+		return nil, s.clearMissingRepo(ctx, info, err)
 	}
 
 	// 远端已返回，后续落库不得再受请求取消影响，否则 tag 已拉到却写不进状态
@@ -368,12 +375,33 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	if err != nil {
 		return nil, err
 	}
+	suppressedTags, err := ListSuppressedTags(persistCtx, s.db, info.RepoKey)
+	if err != nil {
+		return nil, err
+	}
 
-	// 计算 diff：找出新增标签
 	localTagSet := set.NewStringSetWithValues(localTags)
-	newTags := lo.Filter(remoteTags, func(tag string, _ int) bool {
+	remoteTagSet := set.NewStringSetWithValues(remoteTags)
+	suppressedTagSet := set.NewStringSetWithValues(suppressedTags)
+
+	// tags/list 残留的已删除 tag 命中 suppression，不写回，交给详情同步复核。
+	// 复核不看本地快照是否存在：删除流程写入 suppression 后删快照失败，会留下两者并存，只有复核能清掉
+	recheckTags, unsuppressedTags := lo.FilterReject(remoteTags, func(tag string, _ int) bool {
+		return suppressedTagSet.Has(tag)
+	})
+	newTags := lo.Filter(unsuppressedTags, func(tag string, _ int) bool {
 		return !localTagSet.Has(tag)
 	})
+
+	// 只有远端名单已不再返回的 suppression 才能清理。「本地快照仍在」不能作为依据：
+	// 删除流程先写 suppression 再删快照，与刷新并发时这正是删除中的正常中间状态；
+	// manifest 重新存在时由详情同步的复核负责删除 suppression。
+	staleSuppressions := lo.Filter(suppressedTags, func(tag string, _ int) bool {
+		return !remoteTagSet.Has(tag)
+	})
+	if err = DeleteTagSuppressions(persistCtx, s.db, info.RepoKey, staleSuppressions); err != nil {
+		return nil, err
+	}
 
 	// 只对新增标签进行插入
 	var addedCount int64
@@ -411,7 +439,7 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		return nil, err
 	}
 
-	if len(unsyncedDetailTags) > 0 {
+	if len(unsyncedDetailTags) > 0 || len(recheckTags) > 0 {
 		// 通过任务队列异步触发详情同步（构造时即完成凭据加密）
 		detailSyncArgs, encryptErr := NewImageDetailSyncArgs(
 			info.RepoKey, info.RepoName, info.Username, info.Password,
@@ -419,10 +447,12 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		if encryptErr != nil {
 			log.Errorf(persistCtx, "encrypt credentials for detail sync task %s failed: %v", info.RepoKey, encryptErr)
 			resultMsg = "Snapshot refresh completed, but the detail sync task was not submitted"
-		} else if enqueueErr := taskq.Enqueue(persistCtx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
-			log.Errorf(persistCtx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
-			return nil, errors.Wrap(enqueueErr, "enqueue image detail sync task")
 		} else {
+			detailSyncArgs.SuppressedTags = recheckTags
+			if enqueueErr := taskq.Enqueue(persistCtx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
+				log.Errorf(persistCtx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
+				return nil, errors.Wrap(enqueueErr, "enqueue image detail sync task")
+			}
 			resultMsg = "Snapshot refresh completed, and the detail sync task has started asynchronously"
 		}
 	}
@@ -433,4 +463,18 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		AddedTagCnt:   addedCount,
 		RemovedTagCnt: removedCount,
 	}, nil
+}
+
+// clearMissingRepo 远端仓库为空或不存在时清空本地快照，再返回 ErrRepoNotFound。
+//
+// suppression 必须保留：NAME_UNKNOWN 也可能来自仓库改名、无权限或制品库短暂异常，
+// 仓库恢复后 tags/list 残留的已删除 tag 仍要靠它拦住；快照是可重建的缓存，清掉无妨
+func (s *Service) clearMissingRepo(ctx context.Context, info *RepoKeyInfo, listErr error) error {
+	ctx = context.WithoutCancel(ctx)
+	removedCount, err := DeleteTagsNotIn(ctx, s.db, info.RepoKey, nil)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx, "repository %s is empty or not found, removed %d local snapshots", info.RepoName, removedCount)
+	return errors.Wrapf(ErrRepoNotFound, "list all tags for %s: %v", info.RepoName, listErr)
 }

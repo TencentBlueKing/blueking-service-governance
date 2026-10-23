@@ -32,9 +32,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// cleanupSnapshotCollections 清空镜像快照与仓库快照状态集合
+// cleanupSnapshotCollections 清空镜像快照、tag suppression 与仓库快照状态集合
 func cleanupSnapshotCollections() {
 	Expect(testutil.CleanupMetaColl(ImageMeta)).To(Succeed())
+	Expect(testutil.CleanupMetaColl(TagSuppressionMeta)).To(Succeed())
 	Expect(testutil.CleanupMetaColl(RepoStatusMeta)).To(Succeed())
 }
 
@@ -247,6 +248,24 @@ var _ = Describe("Snapshot store", func() {
 
 		It("returns empty for non-existent repoKey", func() {
 			Expect(ListAllTags(ctx, db, "nonexistent")).To(BeEmpty())
+		})
+	})
+
+	Describe("TagSuppressions", func() {
+		It("upserts, lists and deletes suppressions by repoKey and tag", func() {
+			Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v2.0.0")).To(Succeed())
+			Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v1.0.0")).To(Succeed())
+			// 再次写入同一 tag 应保持幂等
+			Expect(UpsertTagSuppression(ctx, db, repoKey, "library/busybox", "v1.0.0")).To(Succeed())
+			Expect(UpsertTagSuppression(ctx, db, "other-repo", "library/busybox", "v1.0.0")).To(Succeed())
+
+			Expect(ListSuppressedTags(ctx, db, repoKey)).To(Equal([]string{"v1.0.0", "v2.0.0"}))
+
+			Expect(DeleteTagSuppressions(ctx, db, repoKey, []string{"v1.0.0"})).To(Succeed())
+			Expect(DeleteTagSuppressions(ctx, db, repoKey, nil)).To(Succeed())
+
+			Expect(ListSuppressedTags(ctx, db, repoKey)).To(Equal([]string{"v2.0.0"}))
+			Expect(ListSuppressedTags(ctx, db, "other-repo")).To(Equal([]string{"v1.0.0"}))
 		})
 	})
 

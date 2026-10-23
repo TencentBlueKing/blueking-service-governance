@@ -44,6 +44,9 @@ const (
 	// ErrDetailCodeImageRepositoryAuthRequired 删除镜像时镜像仓库鉴权缺失或失败
 	ErrDetailCodeImageRepositoryAuthRequired ErrDetailCode = "IMAGE_REPOSITORY_AUTH_REQUIRED"
 
+	// ErrDetailCodeImageRepositoryNotFound 刷新镜像时镜像仓库为空或不存在
+	ErrDetailCodeImageRepositoryNotFound ErrDetailCode = "IMAGE_REPOSITORY_NOT_FOUND"
+
 	// ErrDetailCodeBSCPNoPermission BSCP 服务无权限
 	ErrDetailCodeBSCPNoPermission ErrDetailCode = "BSCP_NO_PERMISSION"
 

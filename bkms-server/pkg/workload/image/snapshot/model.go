@@ -46,6 +46,21 @@ type Image struct {
 	UpdatedAt time.Time `bson:"updatedAt"`
 }
 
+// TagSuppression 记录已确认 manifest 不存在（BKMS 删除或详情同步确认 404）、刷新时应抑制回流的 tag。
+// 当远端 manifest 确认重新存在，或远端 tags/list 已不再返回该名字时删除。
+type TagSuppression struct {
+	// RepoKey 仓库实例唯一标识
+	RepoKey string `bson:"repoKey"`
+	// Tag 镜像标签名
+	Tag string `bson:"tag"`
+	// RepoName 仓库名，仅用于日志和排查
+	RepoName string `bson:"repoName,omitempty"`
+	// CreatedAt 创建时间
+	CreatedAt time.Time `bson:"createdAt"`
+	// UpdatedAt 更新时间
+	UpdatedAt time.Time `bson:"updatedAt"`
+}
+
 // RepoSnapshotStatus 仓库快照状态
 type RepoSnapshotStatus struct {
 	// RepoKey 仓库实例唯一标识

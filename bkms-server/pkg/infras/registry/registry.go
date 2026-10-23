@@ -79,6 +79,18 @@ func IsTagNotFound(err error) bool {
 	return errors.As(err, &transportErr) && transportErr.StatusCode == http.StatusNotFound
 }
 
+// IsRepoNotFound 判断错误链中是否包含“仓库名不存在”（NAME_UNKNOWN）错误。
+// mirrors 等制品库在仓库内的 manifest 全部删除后，tags/list 返回的是该错误而不是空列表
+func IsRepoNotFound(err error) bool {
+	var transportErr *transport.Error
+	if !errors.As(err, &transportErr) || transportErr.StatusCode != http.StatusNotFound {
+		return false
+	}
+	return slices.ContainsFunc(transportErr.Errors, func(d transport.Diagnostic) bool {
+		return d.Code == transport.NameUnknownErrorCode
+	})
+}
+
 // IsAuthRequired 判断错误链中是否包含“镜像仓库鉴权失败”错误。
 func IsAuthRequired(err error) bool {
 	var transportErr *transport.Error
@@ -252,6 +264,9 @@ func (c *Client) HeadManifest(ctx context.Context, repoName, tagName string) err
 // DeleteTag 删除远端仓库中的指定镜像标签
 // 利用开源库 go-containerregistry 删除镜像，只能删除底层镜像，无法删除对应仓库如 bkrepo、mirrors 仓库自己额外的元数据
 // 删除后在仓库相应页面还有可能看到镜像，但使用命令拉取/同步仓库无法拉到对应镜像，在 bkms 侧不受影响
+//
+// 返回的错误满足 IsTagNotFound 时，表示远端已确认该 tag 不存在：按 tag 查 digest 时 404，
+// 或按 digest 删除返回 404 后再次按 tag 查询仍是 404
 func (c *Client) DeleteTag(ctx context.Context, repoName, tagName string) error {
 	// 获取镜像 desc 信息
 	desc, err := c.headDescriptor(ctx, repoName, tagName)
@@ -267,6 +282,20 @@ func (c *Client) DeleteTag(ctx context.Context, repoName, tagName string) error 
 
 	// 按 digest 删除
 	if err = remote.Delete(digestRef, c.withContext(ctx)...); err != nil {
+		if !IsTagNotFound(err) {
+			return errors.Wrap(err, "delete tag")
+		}
+		// digest 删除返回 404 时，tag 可能已被并发推送指向新 digest，必须再查一次 tag 才能当作已删除。
+		if _, headErr := c.headDescriptor(ctx, repoName, tagName); headErr == nil {
+			return errors.Errorf(
+				"delete tag %s: digest %s is gone but tag still exists: %v",
+				tagName,
+				desc.Digest,
+				err,
+			)
+		} else if !IsTagNotFound(headErr) {
+			return errors.Wrap(headErr, "confirm tag after digest delete returned 404")
+		}
 		return errors.Wrap(err, "delete tag")
 	}
 	return nil

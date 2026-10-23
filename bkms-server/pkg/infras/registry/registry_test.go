@@ -207,6 +207,25 @@ var _ = Describe("Registry Client", func() {
 		})
 	})
 
+	Describe("IsRepoNotFound", func() {
+		It("should match only 404 with NAME_UNKNOWN", func() {
+			nameUnknown := &transport.Error{
+				StatusCode: http.StatusNotFound,
+				Errors:     []transport.Diagnostic{{Code: transport.NameUnknownErrorCode}},
+			}
+			Expect(IsRepoNotFound(fmt.Errorf("list tags: %w", nameUnknown))).To(BeTrue())
+
+			manifestUnknown := &transport.Error{
+				StatusCode: http.StatusNotFound,
+				Errors:     []transport.Diagnostic{{Code: transport.ManifestUnknownErrorCode}},
+			}
+			Expect(IsRepoNotFound(manifestUnknown)).To(BeFalse())
+			Expect(IsRepoNotFound(&transport.Error{StatusCode: http.StatusNotFound})).To(BeFalse())
+			Expect(IsRepoNotFound(&transport.Error{StatusCode: http.StatusUnauthorized})).To(BeFalse())
+			Expect(IsRepoNotFound(fmt.Errorf("boom"))).To(BeFalse())
+		})
+	})
+
 	Describe("DeleteTag", func() {
 		It("should delete manifest by digest resolved from tag", func() {
 			const (
@@ -254,6 +273,63 @@ var _ = Describe("Registry Client", func() {
 			Expect(IsTagNotFound(err)).To(BeTrue())
 			Expect(err.Error()).To(ContainSubstring("head manifest"))
 			Expect(err.Error()).To(ContainSubstring(tagName))
+		})
+
+		Context("when digest delete returns 404", func() {
+			const (
+				repoName = "fixture/sample"
+				tagName  = "latest"
+				digest   = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+			)
+			var headCalls int
+
+			BeforeEach(func() {
+				headCalls = 0
+				mockey.Mock(remote.Delete).To(func(name.Reference, ...remote.Option) error {
+					return &transport.Error{StatusCode: http.StatusNotFound}
+				}).Build()
+			})
+
+			mockHead := func(confirmErr error) {
+				parsedDigest, err := v1.NewHash(digest)
+				Expect(err).NotTo(HaveOccurred())
+				mockey.Mock(remote.Head).To(func(name.Reference, ...remote.Option) (*v1.Descriptor, error) {
+					headCalls++
+					if headCalls == 1 {
+						return &v1.Descriptor{Digest: parsedDigest}, nil
+					}
+					if confirmErr != nil {
+						return nil, confirmErr
+					}
+					return &v1.Descriptor{Digest: parsedDigest}, nil
+				}).Build()
+			}
+
+			It("should keep not-found when the tag is also gone", func() {
+				mockHead(&transport.Error{StatusCode: http.StatusNotFound})
+
+				err := New("", "", true).DeleteTag(ctx, "registry.example.com/"+repoName, tagName)
+				Expect(err).To(HaveOccurred())
+				Expect(IsTagNotFound(err)).To(BeTrue())
+				Expect(headCalls).To(Equal(2))
+			})
+
+			It("should not report not-found when the tag still resolves", func() {
+				mockHead(nil)
+
+				err := New("", "", true).DeleteTag(ctx, "registry.example.com/"+repoName, tagName)
+				Expect(err).To(HaveOccurred())
+				Expect(IsTagNotFound(err)).To(BeFalse())
+				Expect(err.Error()).To(ContainSubstring("tag still exists"))
+			})
+
+			It("should not report not-found when the confirm request fails", func() {
+				mockHead(&transport.Error{StatusCode: http.StatusBadGateway})
+
+				err := New("", "", true).DeleteTag(ctx, "registry.example.com/"+repoName, tagName)
+				Expect(err).To(HaveOccurred())
+				Expect(IsTagNotFound(err)).To(BeFalse())
+			})
 		})
 	})
 

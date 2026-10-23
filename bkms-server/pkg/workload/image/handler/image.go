@@ -199,6 +199,16 @@ func (h *Handler) RefreshAppImages(c *gin.Context) {
 	result, err := snapshotService.RefreshAppSnapshots(ctx, uriInput.AppID)
 	if err != nil {
 		metricStatus = metrics.StatusErr
+		if errors.Is(err, snapshot.ErrRepoNotFound) {
+			err = bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "refresh images for app %s", uriInput.AppID).SetDetails(
+				bkerrs.NewDetail(
+					bkerrs.ErrDetailCodeImageRepositoryNotFound,
+					"image repository is empty or not found",
+					bkerrs.WithSystem(bkerrs.SystemName),
+					bkerrs.WithModule(bkerrs.ModuleName),
+				),
+			)
+		}
 		bkerrs.AbortWithErr(c, err)
 		return
 	}

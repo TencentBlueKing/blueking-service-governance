@@ -21,10 +21,12 @@ package tagdeletion
 import (
 	"context"
 	stderrors "errors"
+	"net/http"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	pkgerrors "github.com/pkg/errors"
@@ -213,6 +215,69 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(isPromoted).To(BeFalse())
+
+		suppressions, err := snapshot.ListSuppressedTags(ctx, db, fixture.repoKey)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(suppressions).To(Equal([]string{fixture.inUseTag}))
+	})
+
+	It("should clear local records when the remote manifest is already gone", func() {
+		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
+		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
+
+		Expect(promotion.Promote(ctx, promotionStore, fixture.app.ID, fixture.repoKey, fixture.inUseTag, "admin")).
+			To(Succeed())
+
+		mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+		mockey.Mock((*registry.Client).DeleteTag).To(
+			func(_ *registry.Client, _ context.Context, _, _ string) error {
+				return pkgerrors.Wrap(
+					&transport.Error{StatusCode: http.StatusNotFound},
+					"head manifest",
+				)
+			},
+		).Build()
+
+		err := service.DeleteImageTag(ctx, fixture.app.ID, fixture.inUseTag)
+		Expect(err).NotTo(HaveOccurred())
+
+		tags, err := snapshot.ListAllTags(ctx, db, fixture.repoKey)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(tags).To(Equal([]string{fixture.safeToDeleteTag}))
+
+		isPromoted, err := promotionStore.Exists(
+			ctx,
+			promotion.ByTag(fixture.app.ID, fixture.repoKey, fixture.inUseTag),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(isPromoted).To(BeFalse())
+
+		suppressions, err := snapshot.ListSuppressedTags(ctx, db, fixture.repoKey)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(suppressions).To(Equal([]string{fixture.inUseTag}))
+	})
+
+	It("should keep local records when the remote tag still exists after delete", func() {
+		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
+		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
+
+		mockey.Mock(registry.New).Return(&registry.Client{}).Build()
+		mockey.Mock((*registry.Client).DeleteTag).To(
+			func(_ *registry.Client, _ context.Context, _, _ string) error {
+				return pkgerrors.New("delete tag latest: digest sha256:x is gone but tag still exists")
+			},
+		).Build()
+
+		err := service.DeleteImageTag(ctx, fixture.app.ID, fixture.inUseTag)
+		Expect(err).To(HaveOccurred())
+
+		tags, err := snapshot.ListAllTags(ctx, db, fixture.repoKey)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(tags).To(ConsistOf(fixture.inUseTag, fixture.safeToDeleteTag))
+
+		suppressions, err := snapshot.ListSuppressedTags(ctx, db, fixture.repoKey)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(suppressions).To(BeEmpty())
 	})
 
 	It("should classify delete errors when image repository credential is missing", func() {
@@ -405,6 +470,10 @@ func (f *tagDeletionFixture) cleanup(
 	})
 	Expect(err).NotTo(HaveOccurred())
 	_, err = db.Collection("image_snapshots").DeleteMany(ctx, bson.M{
+		"repoKey": f.repoKey,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	_, err = db.Collection(snapshot.TagSuppressionMeta.Collection).DeleteMany(ctx, bson.M{
 		"repoKey": f.repoKey,
 	})
 	Expect(err).NotTo(HaveOccurred())

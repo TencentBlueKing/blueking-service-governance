@@ -21,10 +21,12 @@ package snapshot
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
@@ -88,7 +90,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
@@ -116,6 +118,93 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(status.LastError).To(BeEmpty())
 		})
 
+		It("should restore suppressed tags whose manifest exists again", func() {
+			Expect(UpsertTagSuppression(ctx, db, info.RepoKey, info.RepoName, "v1.0.0")).To(Succeed())
+
+			mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
+			mockey.Mock((*registry.Client).GetTagDetail).
+				To(func(_ *registry.Client, _ context.Context, _, tag string) (registry.ImageDetail, error) {
+					Expect(tag).To(Equal("v1.0.0"))
+					return registry.ImageDetail{
+						Tag:     tag,
+						Digest:  "sha256:v1.0.0",
+						Size:    64,
+						BuiltAt: time.Now(),
+					}, nil
+				}).
+				Build()
+
+			err := syncer.SyncDetails(ctx, info, []string{"v1.0.0"})
+			Expect(err).NotTo(HaveOccurred())
+
+			suppressions, err := ListSuppressedTags(ctx, db, info.RepoKey)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(suppressions).To(BeEmpty())
+
+			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(total).To(BeEquivalentTo(1))
+			Expect(snapshots).To(HaveLen(1))
+			Expect(snapshots[0].Tag).To(Equal("v1.0.0"))
+			Expect(snapshots[0].Digest).To(Equal("sha256:v1.0.0"))
+		})
+
+		It("should drop the leftover snapshot of a suppressed tag whose manifest is still gone", func() {
+			// 删除流程写入 suppression 后删快照失败：完整快照与 suppression 并存
+			Expect(UpsertTags(ctx, db, info.RepoKey, []string{"v1.0.0"})).To(Succeed())
+			Expect(UpdateDetail(ctx, db, info.RepoKey, "v1.0.0", &registry.ImageDetail{
+				Tag: "v1.0.0", Digest: "sha256:v1.0.0", BuiltAt: time.Now(),
+			})).To(Succeed())
+			Expect(UpsertTagSuppression(ctx, db, info.RepoKey, info.RepoName, "v1.0.0")).To(Succeed())
+
+			mockey.Mock((*registry.Client).HeadManifest).Return(
+				errors.Wrap(&transport.Error{StatusCode: http.StatusNotFound}, "head manifest"),
+			).Build()
+			mockey.Mock((*registry.Client).GetTagDetail).To(
+				func(*registry.Client, context.Context, string, string) (registry.ImageDetail, error) {
+					Fail("detail of a suppressed tag should not be fetched")
+					return registry.ImageDetail{}, nil
+				},
+			).Build()
+
+			Expect(syncer.SyncDetails(ctx, info, []string{"v1.0.0"})).To(Succeed())
+
+			Expect(ListAllTags(ctx, db, info.RepoKey)).To(BeEmpty())
+			Expect(ListSuppressedTags(ctx, db, info.RepoKey)).To(Equal([]string{"v1.0.0"}))
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+			Expect(status.LastError).To(BeEmpty())
+		})
+
+		It("should request retry when rechecking a suppressed tag fails transiently", func() {
+			Expect(UpsertTagSuppression(ctx, db, info.RepoKey, info.RepoName, "v1.0.0")).To(Succeed())
+
+			headErr := error(&transport.Error{StatusCode: http.StatusBadGateway})
+			mockey.Mock((*registry.Client).HeadManifest).To(
+				func(*registry.Client, context.Context, string, string) error { return headErr },
+			).Build()
+			mockey.Mock((*registry.Client).GetTagDetail).Return(registry.ImageDetail{
+				Tag: "v1.0.0", Digest: "sha256:v1.0.0", BuiltAt: time.Now(),
+			}, nil).Build()
+
+			err := syncer.SyncDetails(ctx, info, []string{"v1.0.0"})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("restore suppressed tags"))
+
+			Expect(ListSuppressedTags(ctx, db, info.RepoKey)).To(Equal([]string{"v1.0.0"}))
+			Expect(ListAllTags(ctx, db, info.RepoKey)).To(BeEmpty())
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+
+			// asynq 重试时 registry 已恢复，tag 应被恢复
+			headErr = nil
+			Expect(syncer.SyncDetails(ctx, info, []string{"v1.0.0"})).To(Succeed())
+			Expect(ListSuppressedTags(ctx, db, info.RepoKey)).To(BeEmpty())
+			Expect(ListAllTags(ctx, db, info.RepoKey)).To(Equal([]string{"v1.0.0"}))
+		})
+
 		It("should keep syncing remaining tags when one detail request fails", func() {
 			err := UpsertTags(ctx, db, info.RepoKey, []string{
 				"v1.0.0",
@@ -138,7 +227,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
@@ -163,6 +252,87 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(status.LastError).To(ContainSubstring("get detail for v1.1.0"))
 		})
 
+		It("should drop the snapshot when the remote manifest is gone", func() {
+			err := UpsertTags(ctx, db, info.RepoKey, []string{"v1.0.2", "v1.0.3"})
+			Expect(err).NotTo(HaveOccurred())
+
+			mockey.Mock((*registry.Client).GetTagDetail).
+				To(func(_ *registry.Client, _ context.Context, _, tag string) (registry.ImageDetail, error) {
+					if tag == "v1.0.2" {
+						return registry.ImageDetail{}, errors.Wrap(
+							&transport.Error{StatusCode: http.StatusNotFound},
+							"get manifest",
+						)
+					}
+					return registry.ImageDetail{
+						Tag:     tag,
+						Digest:  fmt.Sprintf("sha256:%s", tag),
+						Size:    64,
+						BuiltAt: time.Now(),
+					}, nil
+				}).
+				Build()
+			mockey.Mock((*registry.Client).HeadManifest).To(
+				func(_ *registry.Client, _ context.Context, _, tag string) error {
+					Expect(tag).To(Equal("v1.0.2"))
+					return errors.Wrap(&transport.Error{StatusCode: http.StatusNotFound}, "head manifest")
+				},
+			).Build()
+
+			err = syncer.SyncDetails(ctx, info, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(total).To(BeEquivalentTo(1))
+			Expect(snapshots).To(HaveLen(1))
+			Expect(snapshots[0].Tag).To(Equal("v1.0.3"))
+			Expect(snapshots[0].Digest).To(Equal("sha256:v1.0.3"))
+
+			suppressedTags, listSuppressionErr := ListSuppressedTags(ctx, db, info.RepoKey)
+			Expect(listSuppressionErr).NotTo(HaveOccurred())
+			Expect(suppressedTags).To(Equal([]string{"v1.0.2"}))
+
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.RefreshStatus).To(Equal(RefreshStatusIdle))
+			Expect(status.LastError).To(BeEmpty())
+		})
+
+		It("should keep the snapshot when a later detail request returns 404", func() {
+			err := UpsertTags(ctx, db, info.RepoKey, []string{"v1.0.2"})
+			Expect(err).NotTo(HaveOccurred())
+
+			mockey.Mock((*registry.Client).GetTagDetail).
+				To(func(*registry.Client, context.Context, string, string) (registry.ImageDetail, error) {
+					return registry.ImageDetail{}, errors.Wrap(
+						&transport.Error{StatusCode: http.StatusNotFound},
+						"get image config file",
+					)
+				}).
+				Build()
+			mockey.Mock((*registry.Client).HeadManifest).Return(nil).Build()
+
+			err = syncer.SyncDetails(ctx, info, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			snapshots, total, listErr := listSnapshots(ctx, db, info.RepoKey)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(total).To(BeEquivalentTo(1))
+			Expect(snapshots).To(HaveLen(1))
+			Expect(snapshots[0].Tag).To(Equal("v1.0.2"))
+			Expect(snapshots[0].Digest).To(BeEmpty())
+
+			suppressedTags, listSuppressionErr := ListSuppressedTags(ctx, db, info.RepoKey)
+			Expect(listSuppressionErr).NotTo(HaveOccurred())
+			Expect(suppressedTags).To(BeEmpty())
+
+			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(status.LastError).To(ContainSubstring("get detail for v1.0.2"))
+			Expect(status.LastError).To(ContainSubstring("get image config file"))
+		})
+
 		It("should finish cleanly when there is no tag to sync", func() {
 			// UpsertTags 不会写入 builtAt，需要额外调用 UpdateDetail 设置详情
 			err := UpsertTags(ctx, db, info.RepoKey, []string{
@@ -184,7 +354,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			status, getErr := GetRepoStatus(ctx, db, info.RepoKey)
@@ -235,7 +405,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			snapshots, _, listErr := listSnapshots(ctx, db, info.RepoKey)
@@ -276,7 +446,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 状态不应被修改，仍为 refreshing
@@ -301,7 +471,7 @@ var _ = Describe("DetailSyncer", func() {
 				}).
 				Build()
 
-			err = syncer.SyncDetails(ctx, info)
+			err = syncer.SyncDetails(ctx, info, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// 状态不应被修改，仍为 detail_syncing
@@ -309,6 +479,18 @@ var _ = Describe("DetailSyncer", func() {
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(status).NotTo(BeNil())
 			Expect(status.RefreshStatus).To(Equal(RefreshStatusDetailSyncing))
+		})
+
+		It("should request retry when suppressed tags arrive during another sync", func() {
+			err := UpsertRepoStatus(ctx, db, &RepoSnapshotStatus{
+				RepoKey:       info.RepoKey,
+				RefreshStatus: RefreshStatusDetailSyncing,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = syncer.SyncDetails(ctx, info, []string{"v1.0.0"})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("retry later to recheck suppressed tags"))
 		})
 	})
 })

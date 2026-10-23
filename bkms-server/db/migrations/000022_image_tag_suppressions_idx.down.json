@@ -1,0 +1,9 @@
+[
+  {
+    "dropIndexes": "image_tag_suppressions",
+    "index": [
+      "idx_repoKey_tag",
+      "idx_repoKey"
+    ]
+  }
+]
