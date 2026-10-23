@@ -65,7 +65,7 @@ type Opt interface {
 }
 
 // optKind 是选项类别的位集合，Combine 组合出的选项可能同时属于多个类别
-type optKind uint8
+type optKind uint16
 
 const (
 	kindCond optKind = 1 << iota
@@ -76,24 +76,36 @@ const (
 	kindPage
 	kindTimestamp
 	kindArrayFilter
+	// kindTenantFixed 指定租户，所有操作都支持
+	kindTenantFixed
+	// kindTenantAll 跨租户，写入整个文档的操作不支持：新文档的租户必须是确定值
+	kindTenantAll
 )
 
-// 各操作支持的选项类别
+// kindTenantAny 任一租户选项，用于判断某个 Opt 是否携带了租户范围
+const kindTenantAny = kindTenantFixed | kindTenantAll
+
+// 各操作支持的选项类别。
+// 读、局部更新与删除接受全部租户选项，写入整个文档的操作只接受 kindTenantFixed
 const (
-	getOpts          = kindCond | kindSort | kindProject
-	listOpts         = kindCond | kindSort | kindLimit | kindProject
-	latestOpts       = kindCond | kindSort | kindProject
-	pageOpts         = kindCond | kindSort | kindProject | kindPage
-	getAndDeleteOpts = kindCond | kindSort
-	condOpts         = kindCond
-	updateOpts       = kindCond | kindUpdate | kindTimestamp
-	upsertOpts       = kindCond | kindUpdate
-	modifyOpts       = kindCond | kindTimestamp | kindArrayFilter
+	getOpts          = kindCond | kindSort | kindProject | kindTenantAny
+	listOpts         = kindCond | kindSort | kindLimit | kindProject | kindTenantAny
+	latestOpts       = kindCond | kindSort | kindProject | kindTenantAny
+	pageOpts         = kindCond | kindSort | kindProject | kindPage | kindTenantAny
+	getAndDeleteOpts = kindCond | kindSort | kindTenantAny
+	condOpts         = kindCond | kindTenantAny
+	updateOpts       = kindCond | kindUpdate | kindTimestamp | kindTenantAny
+	upsertOpts       = kindCond | kindUpdate | kindTenantFixed
+	modifyOpts       = kindCond | kindTimestamp | kindArrayFilter | kindTenantAny
+	replaceOpts      = kindCond | kindTenantFixed
+	// insertOpts 插入只需要选租户，没有过滤条件可言
+	insertOpts = kindTenantFixed
 )
 
 // kindNames 按位序排列，与上面的 kindXxx 一一对应
 var kindNames = []string{
 	"condition", "sort", "limit", "update fields", "projection", "page", "keep updatedAt", "array filters",
+	"tenant", "all tenants",
 }
 
 func (k optKind) String() string {

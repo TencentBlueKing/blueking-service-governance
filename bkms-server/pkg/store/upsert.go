@@ -59,11 +59,15 @@ import (
 // createdAt 取 obj 的值，零值时取当前时间。obj 的 updatedAt 总会被更新；
 // 插入时 _id 与 createdAt 会回填到 obj，更新时库中已有的值未知，obj 中的这两个字段保持不变
 func (s *GenericStore[T]) Upsert(ctx context.Context, target any, opts ...Opt) (bool, error) {
-	q, err := s.parseOpts("upsert into", opts, upsertOpts)
+	q, err := s.parseOpts(ctx, "upsert into", opts, upsertOpts)
 	if err != nil {
 		return false, err
 	}
-	op, err := s.prepareUpsert(target, q, time.Now())
+	tenantID, err := s.tenantForWrite(ctx, "upsert into", q)
+	if err != nil {
+		return false, err
+	}
+	op, err := s.prepareUpsert(target, q, tenantID, time.Now())
 	if err != nil {
 		return false, err
 	}
@@ -93,6 +97,15 @@ func (s *GenericStore[T]) UpsertMany(ctx context.Context, objs []*T, key func(*T
 	if len(objs) == 0 {
 		return 0, nil
 	}
+	// 租户只取决于 opts，与逐个对象的 key 无关，先解析一次供全部对象复用
+	scopeQ, err := s.parseOpts(ctx, "upsert many into", opts, upsertOpts)
+	if err != nil {
+		return 0, err
+	}
+	tenantID, err := s.tenantForWrite(ctx, "upsert many into", scopeQ)
+	if err != nil {
+		return 0, err
+	}
 	now := time.Now()
 	ops := make([]*upsertOp, 0, len(objs))
 	models := make([]mongo.WriteModel, 0, len(objs))
@@ -104,11 +117,13 @@ func (s *GenericStore[T]) UpsertMany(ctx context.Context, objs []*T, key func(*T
 		if k == nil || k.kind()&^kindCond != 0 {
 			return 0, errors.Errorf("upsert many into %s: key of object %d must be a condition", s.coll.Name(), i)
 		}
-		q, err := s.parseOpts("upsert many into", append(slices.Clone(opts), k), upsertOpts)
+		var q *query
+		q, err = s.parseOpts(ctx, "upsert many into", append(slices.Clone(opts), k), upsertOpts)
 		if err != nil {
 			return 0, err
 		}
-		op, err := s.prepareUpsert(obj, q, now)
+		var op *upsertOp
+		op, err = s.prepareUpsert(obj, q, tenantID, now)
 		if err != nil {
 			return 0, errors.Wrapf(err, "object %d", i)
 		}
@@ -133,13 +148,15 @@ type upsertOp struct {
 	inserted func(id any)
 }
 
-// prepareUpsert 根据 target 与已解析的选项 q 生成 Upsert 请求，q 中的条件可能被追加对象的 _id
-func (s *GenericStore[T]) prepareUpsert(target any, q *query, now time.Time) (*upsertOp, error) {
+// prepareUpsert 根据 target 与已解析的选项 q 生成 Upsert 请求，q 中的条件可能被追加对象的 _id。
+// tenantID 为插入时写入的租户，过滤条件中的租户已由 parseOpts 注入
+func (s *GenericStore[T]) prepareUpsert(target any, q *query, tenantID string, now time.Time) (*upsertOp, error) {
 	obj, paths, err := s.updateTarget(target, q.fields, true)
 	if err != nil {
 		return nil, errors.Wrapf(err, "upsert into %s", s.coll.Name())
 	}
 	v := reflect.ValueOf(obj).Elem()
+	s.schema.fillTenant(v, tenantID)
 	objectID, hasObjectID := s.schema.idOf(v)
 	if hasObjectID {
 		if q.hasKey(keyID) {
@@ -149,7 +166,9 @@ func (s *GenericStore[T]) prepareUpsert(target any, q *query, now time.Time) (*u
 				keyID,
 			)
 		}
+		// 对象自带的 _id 等同于调用方给出的条件，计入 callerCondCount 以满足 requireFilter
 		q.conds = append(q.conds, bson.E{Key: keyID, Value: objectID})
+		q.callerCondCount++
 	}
 	if err = s.requireFilter("upsert into", q); err != nil {
 		return nil, err
