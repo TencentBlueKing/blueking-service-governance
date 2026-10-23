@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { CreateAppConfigFileDefRequest, CreateDefOutput, ListDefaultFilesWithDefRequest, ListDefsOutput, GetAppConfigFileDefDetailRequest, GetDefDetailOutput, UpdateAppConfigFileDefRequest, UpdateDefOutput, DeleteAppConfigFileDefRequest, DeleteDefOutput, UpdateAppConfigFileDefContentRequest, UpdateContentOutput, ListAppConfigFileDefEnvInstancesRequest, ListEnvInstancesOutput, ResetAppConfigFileDefEnvToDefaultRequest, ResetEnvOutput, GetMountPreviewRequest, MountPreviewOutput } from '~/@types/v1/app-config-file-defs';
+import type { CreateAppConfigFileDefRequest, CreateDefOutput, ListDefaultFilesWithDefRequest, ListDefsOutput, GetAppConfigFileDefDetailRequest, GetDefDetailOutput, UpdateAppConfigFileDefRequest, UpdateDefOutput, DeleteAppConfigFileDefRequest, DeleteDefOutput, UpdateAppConfigFileDefContentRequest, UpdateContentOutput, ListAppConfigFileDefEnvInstancesRequest, ListEnvInstancesOutput, ResetAppConfigFileDefEnvToDefaultRequest, ResetEnvOutput, UpdateHelmFileRequest, UpdateHelmFileOutput, GetMountPreviewRequest, MountPreviewOutput } from '~/@types/v1/app-config-file-defs';
 
 export const AppConfigFileDefsService = {
   /**
@@ -133,6 +133,22 @@ export const AppConfigFileDefsService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.delete<Request, ResponseData>('/apps/{appID}/app-config-file-defs/{id}/envs/{envName}')(params, config),
+  /**
+   * 保存 Helm 配置文件的名称、基础文件和 BSCP 绑定
+   *
+   * @method PUT
+   * @path /apps/{appID}/app-config-file-defs/{id}/helm-file
+   * @tag app-config-file-defs
+   * @param appID path string required 应用 ID
+   * @param id path string required 配置文件定义 ID
+   * @param body body UpdateHelmFileInput required Helm 编辑保存请求
+   * @response 200 UpdateHelmFileOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  updateHelmFile: async <Request extends UpdateHelmFileRequest = UpdateHelmFileRequest, ResponseData = UpdateHelmFileOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/app-config-file-defs/{id}/helm-file')(params, config),
   /**
    * 获取配置文件挂载预览
    *

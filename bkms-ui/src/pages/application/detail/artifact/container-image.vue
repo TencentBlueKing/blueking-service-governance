@@ -104,6 +104,7 @@
         }"
         :sort-config="sortConfig"
         sync-resize
+        :tooltip-config="tooltipConfig"
         @page-limit-change="pageSizeChange"
         @page-value-change="pageChange"
       >
@@ -409,6 +410,13 @@
     multiple: false,
     trigger: 'cell',
   });
+
+  const tooltipConfig = {
+    contentMethod: ({ column, row }: { column: { field?: string }; row: AppImageOutputObj }) => {
+      if (column.field === 'tag' && row.isPromoted) return '';
+      return undefined;
+    },
+  };
 
   /** table 折叠配置项 */
   const expandConfig = {
