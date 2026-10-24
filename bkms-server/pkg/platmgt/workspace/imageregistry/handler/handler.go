@@ -89,6 +89,7 @@ func (h *Handler) GetPlatWorkspaceImageRegistry(c *gin.Context) {
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Failure	403			{object}	bkerrs.GinErrorOutput
 //	@Failure	404			{object}	bkerrs.GinErrorOutput
+//	@Failure	409			{object}	bkerrs.GinErrorOutput
 //	@Router		/plat-mgt/workspaces/{workspaceID}/image-registry [put]
 func (h *Handler) UpdatePlatWorkspaceImageRegistry(c *gin.Context) {
 	var path serializer.WorkspacePath
@@ -135,6 +136,8 @@ func toAPIError(err error, internalMessage string) error {
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "目标仓库访问失败，请检查地址与网络")
 	case errors.Is(err, imageregistry.ErrBkCICredentialCreateFailed):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "创建蓝盾凭证失败，请先成为空间管理员后重试")
+	case errors.Is(err, imageregistry.ErrConcurrentUpdate):
+		return bkerrs.Wrap(err, bkerrs.ErrCodeAborted, "该空间的镜像仓库正在被修改，请稍后重试")
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
 	}

@@ -192,6 +192,7 @@ export const PlatmgtService = {
    * @response 400 GinErrorOutput Bad Request
    * @response 403 GinErrorOutput Forbidden
    * @response 404 GinErrorOutput Not Found
+   * @response 409 GinErrorOutput Conflict
    */
   updatePlatWorkspaceImageRegistry: async <Request extends UpdatePlatWorkspaceImageRegistryRequest = UpdatePlatWorkspaceImageRegistryRequest, ResponseData = ImageRegistryOutput>(
     params?: NoInfer<Request>,

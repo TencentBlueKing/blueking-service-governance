@@ -2233,3 +2233,4 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 我已确认目标仓库可用，并知晓存量镜像不会迁移: I have confirmed the target registry is available and understand existing images will not be migrated
 "请输入镜像仓库地址，如：{0}": "Please enter the registry address, e.g. {0}"
 填写到命名空间即可，不带协议前缀，不含镜像名与 tag: Fill in up to the namespace, without protocol prefix, image name or tag
+留空则沿用该空间已有外部仓库的密码: Leave blank to keep the password of this workspace's existing external registry

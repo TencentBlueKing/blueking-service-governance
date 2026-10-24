@@ -25,12 +25,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -45,6 +45,8 @@ const (
 	probeTimeout = 8 * time.Second
 	// probeImageName 探测推送权限时拼在命名空间后的镜像名；上传会立即取消，不会真的创建该镜像
 	probeImageName = "bkms-registry-probe"
+	// updateLockTimeoutSeconds 修改锁的过期时间，需覆盖探测、创建凭证与两次落库的耗时；进程异常退出时靠它自动释放
+	updateLockTimeoutSeconds = 60
 )
 
 var (
@@ -62,6 +64,8 @@ var (
 	ErrBkCICredentialCreateFailed = errors.New("create bkci image credential failed")
 	// ErrBuiltinRegistryNotFound 空间没有平台镜像仓库记录，无法切回平台仓库
 	ErrBuiltinRegistryNotFound = errors.New("builtin image registry not found")
+	// ErrConcurrentUpdate 同一空间的镜像仓库正在被另一个请求修改
+	ErrConcurrentUpdate = errors.New("workspace image registry is being updated")
 )
 
 // UpdateParams 设置空间镜像仓库的参数
@@ -107,12 +111,21 @@ func (m *Manager) Get(ctx context.Context, workspaceID string) (*bkmsreg.ImageRe
 	return reg, nil
 }
 
-// Update 把空间镜像仓库设置为平台仓库或指定的外部仓库，成功后写一条不含密码的审计
+// Update 把空间镜像仓库设置为平台仓库或指定的外部仓库，配置有变化时写一条不含密码的审计
 //
 // 平台仓库与外部仓库的记录切换后都保留，生效的是哪个由空间的 ImageRegistryType 决定
 func (m *Manager) Update(
 	ctx context.Context, workspaceID string, params UpdateParams,
 ) (*bkmsreg.ImageRegistry, error) {
+	// 外部仓库记录与生效类型是两次独立写入，失败补偿会按本请求读到的旧值删除或写回记录；
+	// 同一空间并发修改时，补偿可能抹掉另一个请求已提交的配置，所以按空间串行化，拿不到锁直接拒绝
+	updateLock := lock.NewRedisLock(m.buildUpdateLockKey(workspaceID), updateLockTimeoutSeconds)
+	if !updateLock.Acquire(ctx) {
+		return nil, errors.Wrapf(ErrConcurrentUpdate, "workspace %s", workspaceID)
+	}
+	// 请求被取消时仍要释放锁，否则同一空间要等锁过期才能再次修改
+	defer updateLock.Release(context.WithoutCancel(ctx))
+
 	ws, err := m.workspaces.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get workspace %s", workspaceID)
@@ -131,6 +144,12 @@ func (m *Manager) Update(
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// 生效类型与仓库记录都没变（如平台仓库再切平台仓库、提交相同的外部配置）时不写审计；
+	// 只改密码时凭证 ID 会变，记录不相等，仍会记一条
+	if ws.ImageRegistryType == after.Type && before != nil && *before == *after {
+		return after, nil
 	}
 
 	go audit.AddOperationRecordAsync(
@@ -254,19 +273,14 @@ func (m *Manager) probe(ctx context.Context, registry, username, password string
 	}
 }
 
-// createCredential 以当前操作人身份在空间蓝盾项目下创建镜像凭证，ID 规则与创建空间时一致
+// createCredential 以当前操作人身份在空间蓝盾项目下创建镜像凭证，与创建空间时共用同一套 ID 与描述规则
 func (m *Manager) createCredential(
 	ctx context.Context, bkciProjectID string, params UpdateParams, password string,
 ) (string, error) {
-	client, err := bkciapi.New(auth.MustGetUser(ctx))
+	credID, err := bkmsworkspace.CreateImageCredential(ctx, bkciProjectID, params.Registry, params.Username, password)
 	if err != nil {
-		return "", errors.Wrap(err, "create bkci client")
-	}
-
-	credID := strings.ReplaceAll(uuid.NewString(), "-", "")
-	desc := fmt.Sprintf("bkms image credential for registry %s", params.Registry)
-	if err = client.CreateCredential(ctx, bkciProjectID, credID, desc, params.Username, password); err != nil {
-		return "", errors.Wrapf(ErrBkCICredentialCreateFailed, "project %s: %s", bkciProjectID, err)
+		// 包装哨兵供接口层识别，底层错误只能以文本保留
+		return "", errors.Wrap(ErrBkCICredentialCreateFailed, err.Error())
 	}
 	return credID, nil
 }
@@ -329,6 +343,10 @@ func (m *Manager) getRegistry(
 		return nil, nil
 	}
 	return reg, errors.Wrapf(err, "get workspace %s %s image registry", workspaceID, t)
+}
+
+func (m *Manager) buildUpdateLockKey(workspaceID string) string {
+	return fmt.Sprintf("lock:workspace-image-registry:%s", workspaceID)
 }
 
 func (m *Manager) byExternal(workspaceID string) store.Opt {

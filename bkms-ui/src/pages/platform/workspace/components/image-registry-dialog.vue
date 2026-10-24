@@ -76,14 +76,11 @@
             :placeholder="$t('请输入账号')"
           />
         </Form.FormItem>
-        <Form.FormItem
-          :label="$t('镜像密码')"
-          property="password"
-          required
-        >
+        <Form.FormItem :label="$t('镜像密码')">
+          <!-- 密码首尾空格也是凭证内容，不能 trim -->
           <Input
-            v-model.trim="formData.password"
-            :placeholder="$t('请输入密码')"
+            v-model="formData.password"
+            :placeholder="$t('留空则沿用该空间已有外部仓库的密码')"
             type="password"
           />
         </Form.FormItem>
@@ -153,7 +150,7 @@
   const confirmed = ref(false);
   const isSubmitting = ref(false);
 
-  // 地址格式由后端校验，这里只做必填
+  // 地址格式由后端校验，这里只做必填；密码留空由后端沿用已有外部仓库的密码，没有可沿用的才报错
   const formRules = computed(() => ({
     registry: [
       {
@@ -163,10 +160,9 @@
       },
     ],
     username: [{ required: true, message: t('请输入账号'), trigger: 'blur' }],
-    password: [{ required: true, message: t('请输入密码'), trigger: 'blur' }],
   }));
 
-  // 每次打开都按当前生效配置重置表单：当前是外部仓库时预填地址、账号和密码
+  // 每次打开都按当前生效配置重置表单：当前是外部仓库时预填地址和账号，密码不回填，需要修改时再输入
   watch(isShow, visible => {
     if (!visible) return;
 
@@ -174,7 +170,7 @@
     formData.type = isExternal ? 'external' : 'builtin';
     formData.registry = isExternal ? props.registry?.registry || '' : '';
     formData.username = isExternal ? props.registry?.username || '' : '';
-    formData.password = isExternal ? props.registry?.password || '' : '';
+    formData.password = '';
     confirmed.value = false;
     formRef.value?.clearValidate();
   });

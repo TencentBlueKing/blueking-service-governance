@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 )
 
 func TestImageRegistry(t *testing.T) {
@@ -36,6 +37,8 @@ var _ = BeforeSuite(func() {
 	if err := testutil.SetUpGlobalDatabase(); err != nil {
 		panic("failed to set up global database: " + err.Error())
 	}
+	// Update 按空间加 Redis 锁，这里用 miniredis
+	redis.InitClientForTest()
 })
 
 var _ = AfterSuite(func() {

@@ -305,7 +305,7 @@
   const isLoading = ref(false);
   const isError = ref(false);
   const isPermissionSubmitting = ref(false);
-  /** 空间当前生效的镜像仓库（不含密码） */
+  /** 空间当前生效的镜像仓库，含明文密码，仅通过 SecretToggle 展示 */
   const imageRegistry = ref<ImageRegistryOutput | null>(null);
   const isImageRegistryDialogShow = ref(false);
   /** 竞态控制：workspaceID 快速切换时，仅最后一次请求的结果生效 */

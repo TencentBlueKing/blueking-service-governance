@@ -128,16 +128,10 @@ func CreateExternalImageRegistry(
 		return errors.Errorf("registry, username, password are required")
 	}
 
-	credID := strings.ReplaceAll(uuid.NewString(), "-", "")
-	description := fmt.Sprintf("bkms image credential for registry %s", registry)
-
-	client, err := bkciapi.New(auth.MustGetUser(ctx))
-	if err != nil {
-		return errors.Wrap(err, "create bkci client")
-	}
 	// 预先调用蓝盾 API 创建凭证（用于推送镜像）
-	if err = client.CreateCredential(ctx, bkciProjectID, credID, description, username, password); err != nil {
-		return errors.Wrap(err, "create bkci credential")
+	credID, err := CreateImageCredential(ctx, bkciProjectID, registry, username, password)
+	if err != nil {
+		return err
 	}
 
 	imageReg := &bkmsreg.ImageRegistry{
@@ -152,6 +146,25 @@ func CreateExternalImageRegistry(
 		return errors.Wrap(err, "create image registry")
 	}
 	return nil
+}
+
+// CreateImageCredential 以当前用户身份在蓝盾项目下创建镜像仓库账密凭证，返回新凭证 ID
+//
+// 凭证 ID 为去掉连字符的 uuid，每次调用都新建，不复用同名凭证
+func CreateImageCredential(
+	ctx context.Context, bkciProjectID, registry, username, password string,
+) (string, error) {
+	client, err := bkciapi.New(auth.MustGetUser(ctx))
+	if err != nil {
+		return "", errors.Wrap(err, "create bkci client")
+	}
+
+	credID := strings.ReplaceAll(uuid.NewString(), "-", "")
+	description := fmt.Sprintf("bkms image credential for registry %s", registry)
+	if err = client.CreateCredential(ctx, bkciProjectID, credID, description, username, password); err != nil {
+		return "", errors.Wrapf(err, "create bkci credential in project %s", bkciProjectID)
+	}
+	return credID, nil
 }
 
 // InitWorkspaceUser 初始化 workspace 默认设计的四类用户：管理员、开发者、SRE、运营

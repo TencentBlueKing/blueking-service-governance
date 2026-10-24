@@ -31,6 +31,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -143,6 +144,28 @@ var _ = Describe("Manager", func() {
 			Expect(createdCredIDs).To(BeEmpty())
 			_, err = getExternal()
 			Expect(err).To(MatchError(bkmsreg.ErrImageRegistryNotFound))
+		})
+
+		It("should reject without side effects when another update holds the lock", func() {
+			updateLock := lock.NewRedisLock(manager.buildUpdateLockKey(ws.ID), updateLockTimeoutSeconds)
+			Expect(updateLock.Acquire(ctx)).To(BeTrue())
+			defer updateLock.Release(ctx)
+
+			_, err := manager.Update(ctx, ws.ID, params)
+			Expect(err).To(MatchError(ErrConcurrentUpdate))
+			Expect(createdCredIDs).To(BeEmpty())
+			Expect(getRegistryType()).NotTo(Equal(external))
+		})
+
+		It("should release the lock after a failed update", func() {
+			probeErr = &transport.Error{StatusCode: http.StatusUnauthorized}
+			_, err := manager.Update(ctx, ws.ID, params)
+			Expect(err).To(MatchError(ErrRegistryAuthFailed))
+
+			probeErr = nil
+			_, err = manager.Update(ctx, ws.ID, params)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getRegistryType()).To(Equal(external))
 		})
 
 		It("should clean up the record and credential when switching the type fails", func() {
