@@ -96,6 +96,8 @@ import (
 	platworkspaceadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin"
 	platworkspaceadminhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin/handler"
 	platmgtworkspacehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/handler"
+	platworkspaceimagereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry"
+	platworkspaceimageregh "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic"
 	basichandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic/handler"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
@@ -251,6 +253,11 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	platworkspaceadmin.Register(
 		v1,
 		platworkspaceadminhandler.New(storereg.G()),
+		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
+	)
+	platworkspaceimagereg.Register(
+		v1,
+		platworkspaceimageregh.New(storereg.G()),
 		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
 	)
 

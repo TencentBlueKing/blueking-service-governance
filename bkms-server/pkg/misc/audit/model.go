@@ -229,6 +229,8 @@ const (
 	AttributeHostPort Attribute = "hostport"
 	// AttributeVisibleEnvNames 应用可见环境名单
 	AttributeVisibleEnvNames Attribute = "visibleEnvNames"
+	// AttributeImageRegistry 空间镜像仓库
+	AttributeImageRegistry Attribute = "imageRegistry"
 )
 
 // DisplayName 属性展示用名称 TODO 国际化
@@ -278,6 +280,8 @@ func (t Attribute) DisplayName() string {
 		return "HostPort 端口映射"
 	case AttributeVisibleEnvNames:
 		return "可见环境"
+	case AttributeImageRegistry:
+		return "镜像仓库"
 	default:
 		// 默认返回原始值
 		return string(t)

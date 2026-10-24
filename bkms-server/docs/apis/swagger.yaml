@@ -5645,6 +5645,21 @@ definitions:
     - registry
     - username
     type: object
+  serializer.ImageRegistryOutput:
+    properties:
+      password:
+        description: 镜像密码，配置缺失时为空
+        type: string
+      registry:
+        description: 镜像仓库地址（含命名空间），配置缺失时为空
+        type: string
+      type:
+        description: 镜像仓库类型：builtin（平台镜像仓库）/ external（外部镜像仓库）
+        type: string
+      username:
+        description: 镜像账号，配置缺失时为空
+        type: string
+    type: object
   serializer.ImageRegistryOutputObj:
     properties:
       password:
@@ -5656,6 +5671,11 @@ definitions:
       username:
         description: 镜像仓库用户名
         type: string
+    type: object
+  serializer.ImageRegistryResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.ImageRegistryOutput'
     type: object
   serializer.ImageTagDeployRecordOutputObj:
     properties:
@@ -9557,6 +9577,29 @@ definitions:
         description: 待更新的 Helm Chart 配置
     required:
     - helmSpec
+    type: object
+  serializer.UpdateImageRegistryInput:
+    properties:
+      password:
+        description: 外部镜像仓库密码；留空表示沿用该空间已有外部仓库的密码
+        maxLength: 512
+        type: string
+      registry:
+        description: 外部镜像仓库地址，形如 mirrors.tencent.com/my-namespace，不带协议前缀
+        maxLength: 256
+        type: string
+      type:
+        description: 目标镜像仓库类型：builtin（切回平台镜像仓库，其余字段不生效）/ external（外部镜像仓库）
+        enum:
+        - builtin
+        - external
+        type: string
+      username:
+        description: 外部镜像仓库账号
+        maxLength: 128
+        type: string
+    required:
+    - type
     type: object
   serializer.UpdateImportedPolarisInput:
     properties:
@@ -19393,6 +19436,81 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 为当前用户授予目标空间管理员身份
+      tags:
+      - platmgt
+  /plat-mgt/workspaces/{workspaceID}/image-registry:
+    get:
+      operationId: GetPlatWorkspaceImageRegistry
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ImageRegistryResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询空间当前生效的镜像仓库
+      tags:
+      - platmgt
+    put:
+      consumes:
+      - application/json
+      operationId: UpdatePlatWorkspaceImageRegistry
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 镜像仓库信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateImageRegistryInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ImageRegistryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 切换空间的镜像仓库，或修改外部镜像仓库
       tags:
       - platmgt
   /plat-mgt/workspaces/statistics:

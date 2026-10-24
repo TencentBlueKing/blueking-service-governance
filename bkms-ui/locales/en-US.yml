@@ -2221,3 +2221,16 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 该环境是特性环境的父环境，必须保持可见，不能取消: "This environment is the parent of a feature environment and must remain visible. It cannot be deselected."
 配置已保存，获取最新配置失败，请刷新页面重试: "Configuration saved, but failed to load the latest configuration. Refresh the page to retry"
 仅对选中实例原地更新镜像 Tag，不重建 Pod、不变更配置。同一环境内允许部分实例使用不同镜像。: Only update the image tag of the selected instances in place, without rebuilding Pods or changing the configuration. Instances in the same environment are allowed to use different images.
+修改镜像仓库: Edit Image Registry
+仓库类型: Registry Type
+平台镜像仓库: Platform Image Registry
+外部镜像仓库: External Image Registry
+镜像密码: Registry Password
+暂未配置镜像仓库: No image registry configured
+修改后，新构建的镜像将推送到新仓库: After the change, newly built images will be pushed to the new registry
+存量镜像不会迁移，使用旧镜像的应用仍需重新构建后再部署: Existing images will not be migrated; apps using old images must be rebuilt before deploying
+当前运行中的实例不受此影响: Running instances are not affected
+我已确认目标仓库可用，并知晓存量镜像不会迁移: I have confirmed the target registry is available and understand existing images will not be migrated
+"请输入镜像仓库地址，如：{0}": "Please enter the registry address, e.g. {0}"
+填写到命名空间即可，不带协议前缀，不含镜像名与 tag: Fill in up to the namespace, without protocol prefix, image name or tag
+留空则沿用该空间已有外部仓库的密码: Leave blank to keep the password of this workspace's existing external registry

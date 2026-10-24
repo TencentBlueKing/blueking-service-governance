@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 
 	"github.com/bytedance/mockey"
@@ -279,6 +280,91 @@ var _ = Describe("Registry Client", func() {
 				_, _, err := regCli.ListTagsWithDetail(ctx, localRepoName("nonexistent-repo-12345"), "", 1, 5)
 				Expect(err).To(HaveOccurred())
 			})
+		})
+	})
+
+	Describe("CheckPushPermission", func() {
+		const (
+			probeUser     = "probe-user"
+			probePassword = "probe-pass"
+			probeToken    = "probe-token"
+			probeRepoPath = "ns/bkms-probe"
+			uploadPath    = "/v2/" + probeRepoPath + "/blobs/uploads/"
+			sessionPath   = uploadPath + "session-1"
+		)
+
+		var (
+			server    *httptest.Server
+			gotScope  string
+			denyPush  bool
+			cancelled bool
+		)
+
+		// repoNameOf 拼出 httptest 仓库下的探测镜像名
+		repoNameOf := func(s *httptest.Server) string {
+			return strings.TrimPrefix(s.URL, "http://") + "/" + probeRepoPath
+		}
+
+		// 模拟 Bearer 鉴权的仓库：账密正确才签发 token；带 token 发起上传返回会话地址，denyPush 时返回 403
+		BeforeEach(func() {
+			gotScope, denyPush, cancelled = "", false, false
+			mux := http.NewServeMux()
+			server = httptest.NewServer(mux)
+			mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+				if user, pass, _ := r.BasicAuth(); user != probeUser || pass != probePassword {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				gotScope = r.URL.Query().Get("scope")
+				_, _ = fmt.Fprintf(w, `{"token":%q}`, probeToken)
+			})
+			mux.HandleFunc("/v2/", func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Header.Get("Authorization") != "Bearer "+probeToken:
+					w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s/token"`, server.URL))
+					w.WriteHeader(http.StatusUnauthorized)
+				case denyPush:
+					w.WriteHeader(http.StatusForbidden)
+				case r.Method == http.MethodPost && r.URL.Path == uploadPath:
+					w.Header().Set("Location", sessionPath)
+					w.WriteHeader(http.StatusAccepted)
+				case r.Method == http.MethodDelete && r.URL.Path == sessionPath:
+					cancelled = true
+					w.WriteHeader(http.StatusNoContent)
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			})
+		})
+
+		AfterEach(func() {
+			server.Close()
+		})
+
+		It("should request push,pull scope, initiate an upload and cancel it", func() {
+			Expect(New(probeUser, probePassword, true).CheckPushPermission(ctx, repoNameOf(server))).To(Succeed())
+			Expect(gotScope).To(Equal("repository:" + probeRepoPath + ":push,pull"))
+			Expect(cancelled).To(BeTrue())
+		})
+
+		It("should classify auth required when credentials are wrong", func() {
+			err := New(probeUser, "wrong", true).CheckPushPermission(ctx, repoNameOf(server))
+			Expect(IsAuthRequired(err)).To(BeTrue())
+		})
+
+		It("should classify auth required when the account cannot push", func() {
+			denyPush = true
+
+			err := New(probeUser, probePassword, true).CheckPushPermission(ctx, repoNameOf(server))
+			Expect(IsAuthRequired(err)).To(BeTrue())
+		})
+
+		It("should return endpoint not found when /v2/ returns 404", func() {
+			notRegistry := httptest.NewServer(http.NotFoundHandler())
+			defer notRegistry.Close()
+
+			err := New(probeUser, probePassword, true).CheckPushPermission(ctx, repoNameOf(notRegistry))
+			Expect(err).To(MatchError(ErrRegistryEndpointNotFound))
 		})
 	})
 

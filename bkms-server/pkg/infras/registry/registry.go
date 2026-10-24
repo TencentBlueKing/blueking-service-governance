@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -73,10 +74,18 @@ const (
 	defaultTLSHandshakeTimeout = 10 * time.Second
 )
 
+// ErrRegistryEndpointNotFound 仓库的 /v2/ 端点返回 404，地址不是 Docker Registry V2 兼容仓库或路径有误
+var ErrRegistryEndpointNotFound = errors.New("registry v2 endpoint not found")
+
 // IsTagNotFound 判断错误链中是否包含“镜像 tag 不存在”错误
 func IsTagNotFound(err error) bool {
+	return hasStatusCode(err, http.StatusNotFound)
+}
+
+// hasStatusCode 错误链中的 transport.Error 是否为指定 HTTP 状态码
+func hasStatusCode(err error, statusCode int) bool {
 	var transportErr *transport.Error
-	return errors.As(err, &transportErr) && transportErr.StatusCode == http.StatusNotFound
+	return errors.As(err, &transportErr) && transportErr.StatusCode == statusCode
 }
 
 // IsAuthRequired 判断错误链中是否包含“镜像仓库鉴权失败”错误。
@@ -96,15 +105,19 @@ func IsAuthRequired(err error) bool {
 type Client struct {
 	nameOpts   []name.Option
 	remoteOpts []remote.Option
+	// auth 与 baseTransport 供需要自行完成鉴权握手的方法（如 CheckPushPermission）使用
+	auth          authn.Authenticator
+	baseTransport http.RoundTripper
 }
 
 // New ...
 func New(username, password string, insecure bool) *Client {
-	client := &Client{}
+	client := &Client{auth: authn.Anonymous}
 
 	// 设置用户认证
 	if username != "" && password != "" {
 		auth := &authn.Basic{Username: username, Password: password}
+		client.auth = auth
 		client.remoteOpts = append(client.remoteOpts, remote.WithAuth(auth))
 	}
 	// 构建 Transport，强制设置超时时间
@@ -120,9 +133,71 @@ func New(username, password string, insecure bool) *Client {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // G402
 	}
 
+	client.baseTransport = transport
 	client.remoteOpts = append(client.remoteOpts, remote.WithTransport(transport))
 
 	return client
+}
+
+// CheckPushPermission 发起一次 blob 上传并立即取消，确认账密对该仓库路径有推送权限，不会留下镜像
+//
+// 与 remote.CheckPushPermission 思路相同，但它内部使用 context.TODO()，无法受调用方超时控制，所以自行实现；
+// /v2/ 返回 404 时返回 ErrRegistryEndpointNotFound
+func (c *Client) CheckPushPermission(ctx context.Context, repoName string) error {
+	repo, err := name.NewRepository(repoName, c.nameOpts...)
+	if err != nil {
+		return errors.Wrapf(err, "parse repo name %s", repoName)
+	}
+
+	authed, err := transport.NewWithContext(
+		ctx, repo.Registry, c.auth, c.baseTransport, []string{repo.Scope(transport.PushScope)},
+	)
+	if err != nil {
+		if hasStatusCode(err, http.StatusNotFound) {
+			return errors.Wrapf(ErrRegistryEndpointNotFound, "handshake with %s: %s", repo.RegistryStr(), err)
+		}
+		return errors.Wrapf(err, "handshake with registry %s", repo.RegistryStr())
+	}
+
+	client := &http.Client{Transport: authed}
+	uploadURL := &url.URL{
+		Scheme: repo.Scheme(),
+		Host:   repo.RegistryStr(),
+		Path:   fmt.Sprintf("/v2/%s/blobs/uploads/", repo.RepositoryStr()),
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL.String(), nil)
+	if err != nil {
+		return errors.Wrapf(err, "build upload request for %s", repoName)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.Wrapf(err, "initiate upload to %s", repoName)
+	}
+	defer resp.Body.Close()
+
+	if err = transport.CheckError(resp, http.StatusCreated, http.StatusAccepted); err != nil {
+		return errors.Wrapf(err, "initiate upload to %s", repoName)
+	}
+
+	if location := resp.Header.Get("Location"); location != "" {
+		c.cancelUpload(ctx, client, uploadURL, location)
+	}
+	return nil
+}
+
+// cancelUpload 取消上传会话以释放仓库侧资源；只是清理，失败不影响权限检查的结论
+func (c *Client) cancelUpload(ctx context.Context, client *http.Client, base *url.URL, location string) {
+	loc, err := base.Parse(location)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, loc.String(), nil)
+	if err != nil {
+		return
+	}
+	if resp, err := client.Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
 }
 
 // ListAllTags 获取仓库的全量 TAG 列表（按名称降序排列）

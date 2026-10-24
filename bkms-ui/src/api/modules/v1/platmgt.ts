@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListRoleBindingsRequest, RoleBindingOutput, AssignRolesRequest, ListRolesRequest, RoleOutput, RevokeRoleRequest, ListPlatWorkspacesRequest, PaginatedWorkspaceOutput, GetPlatWorkspaceStatsRequest, WorkspaceStatsOutput, GetPlatWorkspaceRequest, WorkspaceInfoOutput, GetWorkspaceRoleStatusRequest, RoleStatusOutput, GrantWorkspaceAdminRequest, RevokeWorkspaceAdminRequest } from '~/@types/v1/platmgt';
+import type { ListRoleBindingsRequest, RoleBindingOutput, AssignRolesRequest, ListRolesRequest, RoleOutput, RevokeRoleRequest, ListPlatWorkspacesRequest, PaginatedWorkspaceOutput, GetPlatWorkspaceStatsRequest, WorkspaceStatsOutput, GetPlatWorkspaceRequest, WorkspaceInfoOutput, GetWorkspaceRoleStatusRequest, RoleStatusOutput, GrantWorkspaceAdminRequest, RevokeWorkspaceAdminRequest, GetPlatWorkspaceImageRegistryRequest, ImageRegistryOutput, UpdatePlatWorkspaceImageRegistryRequest } from '~/@types/v1/platmgt';
 
 export const PlatmgtService = {
   /**
@@ -165,4 +165,37 @@ export const PlatmgtService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.delete<Request, ResponseData>('/plat-mgt/workspaces/{workspaceID}/admins')(params, config),
+  /**
+   * 查询空间当前生效的镜像仓库
+   *
+   * @method GET
+   * @path /plat-mgt/workspaces/{workspaceID}/image-registry
+   * @tag platmgt
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 ImageRegistryResponse OK
+   * @response 403 GinErrorOutput Forbidden
+   * @response 404 GinErrorOutput Not Found
+   */
+  getPlatWorkspaceImageRegistry: async <Request extends GetPlatWorkspaceImageRegistryRequest = GetPlatWorkspaceImageRegistryRequest, ResponseData = ImageRegistryOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/plat-mgt/workspaces/{workspaceID}/image-registry')(params, config),
+  /**
+   * 切换空间的镜像仓库，或修改外部镜像仓库
+   *
+   * @method PUT
+   * @path /plat-mgt/workspaces/{workspaceID}/image-registry
+   * @tag platmgt
+   * @param workspaceID path string required 工作空间 ID
+   * @param body body UpdateImageRegistryInput required 镜像仓库信息
+   * @response 200 ImageRegistryResponse OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 403 GinErrorOutput Forbidden
+   * @response 404 GinErrorOutput Not Found
+   * @response 409 GinErrorOutput Conflict
+   */
+  updatePlatWorkspaceImageRegistry: async <Request extends UpdatePlatWorkspaceImageRegistryRequest = UpdatePlatWorkspaceImageRegistryRequest, ResponseData = ImageRegistryOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/plat-mgt/workspaces/{workspaceID}/image-registry')(params, config),
 };
