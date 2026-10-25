@@ -67,7 +67,7 @@ type fieldSelection struct {
 //	// 更新对象中除 ownerID 外的全部字段，obj 中为空的 omitempty 字段会从库中删除
 //	err := widgets.Update(ctx, obj, store.UpdateOmit("ownerID"), ByName(name))
 //
-// 支持的选项：CondOpt、UpdateOpt、TimestampOpt
+// 支持的选项：CondOpt、UpdateOpt、TimestampOpt、TenantOpt
 func (s *GenericStore[T]) Update(ctx context.Context, target any, opts ...Opt) error {
 	q, update, err := s.prepareUpdate(ctx, "update", target, opts)
 	if err != nil {
@@ -77,7 +77,7 @@ func (s *GenericStore[T]) Update(ctx context.Context, target any, opts ...Opt) e
 }
 
 // UpdateMany 更新全部匹配的文档，返回匹配的文档数量，没有匹配时不返回错误。
-// target 与字段规则同 Update，每个文档写入相同的值。支持的选项：CondOpt、UpdateOpt、TimestampOpt
+// target 与字段规则同 Update，每个文档写入相同的值。支持的选项：CondOpt、UpdateOpt、TimestampOpt、TenantOpt
 func (s *GenericStore[T]) UpdateMany(ctx context.Context, target any, opts ...Opt) (int64, error) {
 	q, update, err := s.prepareUpdate(ctx, "update many in", target, opts)
 	if err != nil {

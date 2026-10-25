@@ -226,9 +226,9 @@ const ticketCollection = "store_test_tickets"
 var ErrTicketNotFound = errors.New("ticket not found")
 
 var ticketMeta = store.Meta[Ticket]{
-	Collection:     ticketCollection,
-	TenantIsolated: true,
-	NotFound:       ErrTicketNotFound,
+	Collection:   ticketCollection,
+	TenantScoped: true,
+	NotFound:     ErrTicketNotFound,
 }
 
 // storeFixture 汇总测试用例需要的依赖
@@ -245,7 +245,7 @@ type storeFixture struct {
 	// owner 当前用例的 ownerID，让过滤条件贴近领域包中 byXxx 的真实用法；
 	// 用例之间的隔离依靠每个用例开始前清空测试集合
 	owner string
-	// ctxA / ctxB 分属两个租户的上下文，用于验证 Tenanted 集合的隔离
+	// ctxA / ctxB 分属两个租户的上下文，用于验证 TenantScoped 集合的租户过滤
 	ctxA context.Context
 	ctxB context.Context
 }

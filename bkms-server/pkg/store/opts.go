@@ -44,8 +44,11 @@ import (
 //	UpdateOpt      UpdateSelected / UpdateOmit                      Update、UpdateMany、Upsert、UpsertMany
 //	TimestampOpt   KeepUpdatedAt                                    Update、UpdateMany、Modify、ModifyMany
 //	ArrayFilterOpt ArrayFilters                                     Modify、ModifyMany
+//	TenantOpt      TenantOf                                         全部操作（仅 TenantScoped 集合）
+//	TenantOpt      TenantAll                                        读、Update、Modify、删除（仅 TenantScoped 集合）
 //
-// 只有 CondOpt 影响匹配哪些文档，其余选项只决定结果的顺序、数量、读出哪些字段或写入哪些字段。
+// 只有 CondOpt 与 TenantOpt 影响匹配哪些文档，其余选项只决定结果的顺序、数量、读出哪些字段或写入哪些字段。
+// TenantOpt 必须直接写在调用点，不能被 Combine 包住，见 TenantAll / TenantOf。
 //
 // 过滤条件、排序中的字段名既可以写 bson 路径，也可以写 Go 字段名（见 path.SchemaFields.Resolve），
 // 模型中不存在的字段原样保留；Update / Upsert 的字段则必须存在于模型中。
@@ -76,30 +79,48 @@ const (
 	kindPage
 	kindTimestamp
 	kindArrayFilter
-	// kindTenantFixed 指定租户，所有操作都支持
+	// kindTenantFixed 指定租户（TenantOf），所有操作都支持
 	kindTenantFixed
-	// kindTenantAll 跨租户，写入整个文档的操作不支持：新文档的租户必须是确定值
+	// kindTenantAll 跨租户（TenantAll），写入整个文档的操作不支持
 	kindTenantAll
 )
 
 // kindTenantAny 任一租户选项，用于判断某个 Opt 是否携带了租户范围
 const kindTenantAny = kindTenantFixed | kindTenantAll
 
-// 各操作支持的选项类别。
-// 读、局部更新与删除接受全部租户选项，写入整个文档的操作只接受 kindTenantFixed
+// 各操作支持的选项类别分两步确定。第一步：按操作自身的语义列出租户以外的类别
 const (
-	getOpts          = kindCond | kindSort | kindProject | kindTenantAny
-	listOpts         = kindCond | kindSort | kindLimit | kindProject | kindTenantAny
-	latestOpts       = kindCond | kindSort | kindProject | kindTenantAny
-	pageOpts         = kindCond | kindSort | kindProject | kindPage | kindTenantAny
-	getAndDeleteOpts = kindCond | kindSort | kindTenantAny
-	condOpts         = kindCond | kindTenantAny
-	updateOpts       = kindCond | kindUpdate | kindTimestamp | kindTenantAny
-	upsertOpts       = kindCond | kindUpdate | kindTenantFixed
-	modifyOpts       = kindCond | kindTimestamp | kindArrayFilter | kindTenantAny
-	replaceOpts      = kindCond | kindTenantFixed
-	// insertOpts 插入只需要选租户，没有过滤条件可言
-	insertOpts = kindTenantFixed
+	getKinds          = kindCond | kindSort | kindProject
+	listKinds         = kindCond | kindSort | kindLimit | kindProject
+	latestKinds       = kindCond | kindSort | kindProject
+	pageKinds         = kindCond | kindSort | kindProject | kindPage
+	getAndDeleteKinds = kindCond | kindSort
+	condKinds         = kindCond
+	updateKinds       = kindCond | kindUpdate | kindTimestamp
+	modifyKinds       = kindCond | kindTimestamp | kindArrayFilter
+	upsertKinds       = kindCond | kindUpdate
+	replaceKinds      = kindCond
+	// insertKinds 插入只需要选租户，没有过滤条件可言
+	insertKinds optKind = 0
+)
+
+// 第二步：按是否写入整个文档，二选一地加上租户选项。
+//   - 读、局部更新（Update / Modify）与删除只作用于已存在的文档，接受全部租户选项，平台管理可以跨租户
+//   - 写入整个文档的操作（Create / Replace / Upsert）可能产生新文档，新文档的 tenantID 必须是确定值，
+//     因此只接受 TenantOf，不接受 TenantAll
+const (
+	getOpts          = getKinds | kindTenantAny
+	listOpts         = listKinds | kindTenantAny
+	latestOpts       = latestKinds | kindTenantAny
+	pageOpts         = pageKinds | kindTenantAny
+	getAndDeleteOpts = getAndDeleteKinds | kindTenantAny
+	condOpts         = condKinds | kindTenantAny
+	updateOpts       = updateKinds | kindTenantAny
+	modifyOpts       = modifyKinds | kindTenantAny
+
+	upsertOpts  = upsertKinds | kindTenantFixed
+	replaceOpts = replaceKinds | kindTenantFixed
+	insertOpts  = insertKinds | kindTenantFixed
 )
 
 // kindNames 按位序排列，与上面的 kindXxx 一一对应

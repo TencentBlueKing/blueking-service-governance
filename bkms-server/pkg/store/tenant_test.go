@@ -31,7 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var _ = Describe("Test tenant isolation", func() {
+var _ = Describe("Test tenant scope", func() {
 	var f *storeFixture
 
 	BeforeEach(func() {
@@ -89,7 +89,7 @@ var _ = Describe("Test tenant isolation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inserted).To(BeTrue())
 
-			n, err := f.tickets.Count(f.ctx, f.byName("t1"), store.AllTenants())
+			n, err := f.tickets.Count(f.ctx, f.byName("t1"), store.TenantAll())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(n).To(Equal(int64(2)))
 		})
@@ -229,53 +229,53 @@ var _ = Describe("Test tenant isolation", func() {
 			f.mustCreateTicket(f.ctxB, "b1")
 		})
 
-		It("AllTenants reads across tenants", func() {
-			list, err := f.tickets.List(f.ctx, f.byOwner(), store.Asc("name"), store.AllTenants())
+		It("TenantAll reads across tenants", func() {
+			list, err := f.tickets.List(f.ctx, f.byOwner(), store.Asc("name"), store.TenantAll())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(Equal([]string{"a1", "b1"}))
 		})
 
-		It("AllTenants allows filtering by tenant explicitly", func() {
-			list, err := f.tickets.List(f.ctx, f.byOwner(), store.Where("tenantID", tenantB), store.AllTenants())
+		It("TenantAll allows filtering by tenant explicitly", func() {
+			list, err := f.tickets.List(f.ctx, f.byOwner(), store.Where("tenantID", tenantB), store.TenantAll())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(Equal([]string{"b1"}))
 		})
 
-		It("AllTenants is not accepted by operations writing a whole document", func() {
-			err := f.tickets.Create(f.ctx, &Ticket{OwnerID: f.owner, Name: "t1"}, store.AllTenants())
+		It("TenantAll is not accepted by operations writing a whole document", func() {
+			err := f.tickets.Create(f.ctx, &Ticket{OwnerID: f.owner, Name: "t1"}, store.TenantAll())
 			Expect(err).To(MatchError(ContainSubstring("all tenants")))
 
-			err = f.tickets.Replace(f.ctx, &Ticket{OwnerID: f.owner, Name: "a1"}, f.byName("a1"), store.AllTenants())
+			err = f.tickets.Replace(f.ctx, &Ticket{OwnerID: f.owner, Name: "a1"}, f.byName("a1"), store.TenantAll())
 			Expect(err).To(MatchError(ContainSubstring("all tenants")))
 
-			_, err = f.tickets.Upsert(f.ctx, &Ticket{OwnerID: f.owner, Name: "a1"}, f.byName("a1"), store.AllTenants())
+			_, err = f.tickets.Upsert(f.ctx, &Ticket{OwnerID: f.owner, Name: "a1"}, f.byName("a1"), store.TenantAll())
 			Expect(err).To(MatchError(ContainSubstring("all tenants")))
 		})
 
-		It("AllTenants can still update and delete across tenants", func() {
-			n, err := f.tickets.UpdateMany(f.ctx, bson.M{"priority": 7}, f.byOwner(), store.AllTenants())
+		It("TenantAll can still update and delete across tenants", func() {
+			n, err := f.tickets.UpdateMany(f.ctx, bson.M{"priority": 7}, f.byOwner(), store.TenantAll())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(n).To(Equal(int64(2)))
 
-			n, err = f.tickets.DeleteMany(f.ctx, f.byOwner(), store.AllTenants())
+			n, err = f.tickets.DeleteMany(f.ctx, f.byOwner(), store.TenantAll())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(n).To(Equal(int64(2)))
 		})
 
-		It("ForTenant takes precedence over the context", func() {
-			list, err := f.tickets.List(f.ctxA, f.byOwner(), store.ForTenant(tenantB))
+		It("TenantOf takes precedence over the context", func() {
+			list, err := f.tickets.List(f.ctxA, f.byOwner(), store.TenantOf(tenantB))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(Equal([]string{"b1"}))
 		})
 
-		It("ForTenant works without a tenant in the context", func() {
-			list, err := f.tickets.List(f.ctx, f.byOwner(), store.ForTenant(tenantA))
+		It("TenantOf works without a tenant in the context", func() {
+			list, err := f.tickets.List(f.ctx, f.byOwner(), store.TenantOf(tenantA))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(Equal([]string{"a1"}))
 		})
 
-		It("ForTenant writes to the given tenant", func() {
-			err := f.tickets.Create(f.ctx, &Ticket{OwnerID: f.owner, Name: "c1"}, store.ForTenant(tenantB))
+		It("TenantOf writes to the given tenant", func() {
+			err := f.tickets.Create(f.ctx, &Ticket{OwnerID: f.owner, Name: "c1"}, store.TenantOf(tenantB))
 			Expect(err).NotTo(HaveOccurred())
 
 			list, err := f.tickets.List(f.ctxB, f.byOwner(), store.Asc("name"))
@@ -283,23 +283,23 @@ var _ = Describe("Test tenant isolation", func() {
 			Expect(ticketNames(list)).To(Equal([]string{"b1", "c1"}))
 		})
 
-		It("ForTenant with an empty id fails instead of matching everything", func() {
-			_, err := f.tickets.List(f.ctx, f.byOwner(), store.ForTenant(""))
+		It("TenantOf with an empty id fails instead of matching everything", func() {
+			_, err := f.tickets.List(f.ctx, f.byOwner(), store.TenantOf(""))
 			Expect(errors.Is(err, store.ErrTenantIDRequired)).To(BeTrue())
 		})
 
 		It("rejects specifying the scope twice", func() {
-			_, err := f.tickets.List(f.ctx, f.byOwner(), store.AllTenants(), store.ForTenant(tenantA))
+			_, err := f.tickets.List(f.ctx, f.byOwner(), store.TenantAll(), store.TenantOf(tenantA))
 			Expect(errors.Is(err, store.ErrTenantScopeDuplicated)).To(BeTrue())
 		})
 
-		It("rejects a scope on a collection that is not tenant isolated", func() {
-			_, err := f.widgets.List(f.ctx, f.byOwner(), store.AllTenants())
+		It("rejects a scope on a collection that is not tenant scoped", func() {
+			_, err := f.widgets.List(f.ctx, f.byOwner(), store.TenantAll())
 			Expect(errors.Is(err, store.ErrTenantScopeNotSupported)).To(BeTrue())
 		})
 
 		It("rejects a scope hidden inside Combine", func() {
-			hidden := store.Combine(f.byOwner(), store.AllTenants())
+			hidden := store.Combine(f.byOwner(), store.TenantAll())
 			_, err := f.tickets.List(f.ctx, hidden)
 			Expect(errors.Is(err, store.ErrTenantScopeCombined)).To(BeTrue())
 		})
@@ -326,19 +326,19 @@ var _ = Describe("Test tenant isolation", func() {
 			Expect(errors.Is(err, store.ErrTenantScopeRequired)).To(BeTrue(), "got %v", err)
 		})
 
-		It("accepts AllTenants", func() {
-			list, err := f.tickets.List(platCtx, f.byOwner(), store.Asc("name"), store.AllTenants())
+		It("accepts TenantAll", func() {
+			list, err := f.tickets.List(platCtx, f.byOwner(), store.Asc("name"), store.TenantAll())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(Equal([]string{"a1", "b1"}))
 		})
 
-		It("accepts ForTenant", func() {
-			list, err := f.tickets.List(platCtx, f.byOwner(), store.ForTenant(tenantB))
+		It("accepts TenantOf", func() {
+			list, err := f.tickets.List(platCtx, f.byOwner(), store.TenantOf(tenantB))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(Equal([]string{"b1"}))
 		})
 
-		It("does not affect collections that are not tenant isolated", func() {
+		It("does not affect collections that are not tenant scoped", func() {
 			f.mustCreateWidget("w1")
 			_, err := f.widgets.Get(platCtx, f.byName("w1"))
 			Expect(err).NotTo(HaveOccurred())
@@ -398,7 +398,52 @@ var _ = Describe("Test tenant isolation", func() {
 				{{Key: "$lookup", Value: bson.M{"from": widgetCollection, "as": "w"}}},
 			})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("bypasses tenant isolation"))
+			Expect(err.Error()).To(ContainSubstring("bypasses the tenant filter"))
+		})
+
+		DescribeTable("rejects cross-collection stages nested in sub-pipelines",
+			func(pipeline mongo.Pipeline, stage string) {
+				_, err := store.Aggregate[bson.M](f.ctxA, f.tickets, pipeline)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("stage " + stage + " "))
+			},
+			Entry("$lookup inside $facet", mongo.Pipeline{
+				{{Key: "$facet", Value: bson.M{
+					"joined": mongo.Pipeline{
+						{{Key: "$lookup", Value: bson.M{"from": widgetCollection, "as": "w"}}},
+					},
+				}}},
+			}, "$lookup"),
+			Entry("$unionWith inside $facet written as bson.A", mongo.Pipeline{
+				{{Key: "$facet", Value: bson.D{
+					{Key: "all", Value: bson.A{bson.M{"$unionWith": bson.M{"coll": widgetCollection}}}},
+				}}},
+			}, "$unionWith"),
+			Entry("$graphLookup inside $facet written as []bson.M", mongo.Pipeline{
+				{{Key: "$facet", Value: bson.M{
+					"graph": []bson.M{{"$graphLookup": bson.M{"from": widgetCollection, "as": "g"}}},
+				}}},
+			}, "$graphLookup"),
+		)
+
+		It("accepts $facet whose sub-pipelines stay in the collection", func() {
+			f.mustCreateTicket(f.ctxA, "a1")
+			f.mustCreateTicket(f.ctxB, "b1")
+
+			type row struct {
+				Total []struct {
+					Count int64 `bson:"count"`
+				} `bson:"total"`
+			}
+			rows, err := store.Aggregate[row](f.ctxA, f.tickets, mongo.Pipeline{
+				{{Key: "$facet", Value: bson.M{
+					"total": mongo.Pipeline{{{Key: "$count", Value: "count"}}},
+				}}},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rows).To(HaveLen(1))
+			Expect(rows[0].Total).To(HaveLen(1))
+			Expect(rows[0].Total[0].Count).To(Equal(int64(1)))
 		})
 
 		It("keeps Upsert matching by the object _id", func() {
@@ -436,23 +481,23 @@ var _ = Describe("Test tenancy declaration", func() {
 		DeferCleanup(f.tearDown)
 	})
 
-	It("rejects a tenant isolated meta whose model has no tenantID field", func() {
-		_, err := store.New(db, store.Meta[Widget]{Collection: widgetCollection, TenantIsolated: true})
+	It("rejects a tenant scoped meta whose model has no tenantID field", func() {
+		_, err := store.New(db, store.Meta[Widget]{Collection: widgetCollection, TenantScoped: true})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring(`requires a "tenantID" field`))
 	})
 
-	It("rejects a meta that has a tenantID field but is not declared isolated", func() {
+	It("rejects a meta that has a tenantID field but is not declared tenant scoped", func() {
 		_, err := store.New(db, store.Meta[Ticket]{Collection: ticketCollection})
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("set TenantIsolated to true"))
+		Expect(err.Error()).To(ContainSubstring("set TenantScoped to true"))
 	})
 
 	It("rejects a tenantID field that is not a string", func() {
 		type badTenant struct {
 			TenantID int `bson:"tenantID"`
 		}
-		_, err := store.New(db, store.Meta[badTenant]{Collection: "store_test_bad", TenantIsolated: true})
+		_, err := store.New(db, store.Meta[badTenant]{Collection: "store_test_bad", TenantScoped: true})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("must be a string"))
 	})

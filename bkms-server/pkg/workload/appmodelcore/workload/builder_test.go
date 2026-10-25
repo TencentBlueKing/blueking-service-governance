@@ -56,7 +56,7 @@ var _ = Describe("Builder", func() {
 	var builderSvc *workload.BuilderService
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),
