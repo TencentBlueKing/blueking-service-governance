@@ -40,7 +40,8 @@ import (
 var validate = validator.New()
 
 // Workspace 创建一个已持久化的测试用 Workspace，其名称和 ID 使用随机后缀避免冲突。
-// workspaces 按租户隔离，ctx 里没有租户时落到默认租户，便于不关心租户的用例直接用 context.Background()
+// ctx 里没有租户时写入默认租户，但只作用于这一次 Create，不会改写调用方的 ctx：
+// 用例后续读写 workspaces 仍要用 testutil.WithTenantOrDefault 构造的 ctx
 func Workspace(ctx context.Context, store *bkmsworkspace.WorkspaceStore) *bkmsworkspace.Workspace {
 	workspaceName := "test-workspace-" + stringx.Random(6)
 	ws := &bkmsworkspace.Workspace{
@@ -48,7 +49,7 @@ func Workspace(ctx context.Context, store *bkmsworkspace.WorkspaceStore) *bkmswo
 		DisplayName: workspaceName,
 		State:       bkmsworkspace.StateReady,
 	}
-	err := store.Create(testutil.WithDefaultTenant(ctx), ws)
+	err := store.Create(testutil.WithTenantOrDefault(ctx), ws)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	return ws
 }

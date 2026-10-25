@@ -186,7 +186,7 @@ func enableBscpCfgForApp(
 		return errors.Wrapf(err, "get app %s", appID)
 	}
 
-	ws, err := store.Of(reg.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID), store.AllTenants())
+	ws, err := store.Of(reg.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID), store.TenantAll())
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", app.WorkspaceID)
 	}

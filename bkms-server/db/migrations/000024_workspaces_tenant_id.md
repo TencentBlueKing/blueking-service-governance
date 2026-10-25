@@ -2,7 +2,7 @@
 
 ## 背景
 
-`workspaces` 是第一个接入 store 层租户隔离的集合（`Meta.Tenancy = store.Tenanted`）。
+`workspaces` 是第一个接入 store 层租户过滤的集合（`Meta.TenantScoped = true`）。
 接入后 GenericStore 会在所有读写的过滤条件上自动补 `tenantID`，存量文档没有这个字段，
 不回填就会一条都查不到，因此**本迁移必须先于新代码上线**。
 
@@ -30,7 +30,21 @@
 先删 `tenantID_1`，再 `$unset` 值为 `default` 的 `tenantID`。
 已经是其它租户值的文档不回滚，避免回退时误删真实的多租数据。
 
+## 发布顺序
+
+1. 执行本迁移。
+2. 发布新版本代码。
+3. **全部实例升级完成后，手动再回填一次**。步骤 1 到旧 Pod 全部退出之间，旧版本创建的 workspace 不带 `tenantID`，
+   新代码查不到也改不了（`id` 仍全局唯一，用户用同一 ID 重建会报 Duplicate）。
+   golang-migrate 不会重复执行已记录的版本，因此直接执行与 up 相同的回填命令，幂等、可安全重跑：
+
+```js
+db.workspaces.updateMany({ tenantID: { $exists: false } }, { $set: { tenantID: "default" } })
+```
+
 ## 验证
+
+在发布顺序第 3 步之后执行：
 
 ```js
 db.workspaces.countDocuments({ tenantID: { $exists: false } }) // 应为 0

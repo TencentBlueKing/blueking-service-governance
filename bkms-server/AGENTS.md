@@ -69,6 +69,7 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * Domain code receives `*mongo.Database` explicitly instead of accessing `storereg.G()`. Functions that read or write more than one model must list those models in their doc comment, since the signature no longer shows them.
 * When adding new migrations, read the guide in `README.md`, specifically the "数据库迁移" section
 * ALWAYS add a comment for extra indexes in the store source file
+* Before writing code that touches multi-tenancy (`Meta.TenantScoped`, `store.TenantAll` / `store.TenantOf`, tenant in ctx, taskq envelope, tests of tenant scoped collections), read `design_notes/tenant_isolation.md`
 
 ### API Tests
 

@@ -90,7 +90,7 @@ var _ = Describe("DeployPreChecker Check", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		fxApp = fxtest.New(
@@ -144,7 +144,7 @@ var _ = Describe("DeployPreChecker Check", func() {
 	AfterEach(func() {
 		statusMock.UnPatch()
 		for _, id := range createdWorkspaces {
-			_ = workspace.Delete(ctx, workspaceStore, id)
+			Expect(workspace.Delete(ctx, workspaceStore, id)).To(Succeed())
 		}
 		fxApp.RequireStop()
 	})

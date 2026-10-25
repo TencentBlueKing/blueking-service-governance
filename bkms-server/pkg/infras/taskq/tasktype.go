@@ -99,6 +99,8 @@ type TaskType[Args any] struct {
 	name        string
 	defaultOpts []asynq.Option
 	handler     HandlerFunc[Args]
+	// global 为 true 表示任务只读写全局集合，不属于任何租户，见 Global
+	global bool
 }
 
 // HandlerFunc 强类型业务处理函数。
@@ -121,7 +123,7 @@ func (t *TaskType[Args]) Name() string { return t.name }
 func (t *TaskType[Args]) OnExhausted(fn func(ctx context.Context, args Args, lastErr error)) *TaskType[Args] {
 	registerExhaustedHandler(t.name, func(ctx context.Context, payload []byte, lastErr error) {
 		var args Args
-		ctx, argsPayload := restoreEnvelope(ctx, payload)
+		ctx, argsPayload := restoreEnvelope(ctx, payload, t.global)
 		if err := json.Unmarshal(argsPayload, &args); err != nil {
 			logging.ErrorNoContextf("taskq: unmarshal args in exhausted handler for %q: %v", t.name, err)
 			return
@@ -140,6 +142,14 @@ func (t *TaskType[Args]) WithFixedRetryInterval(d time.Duration) *TaskType[Args]
 	return t
 }
 
+// Global 声明该任务只读写全局集合（如运行时镜像快照），不属于任何租户。
+// 投递时不要求、也不记录租户；消费时 ctx 不带租户，handler 误访问 TenantScoped 集合会直接报错，
+// 而不是读到某个租户的数据。返回 TaskType 自身以支持链式调用。
+func (t *TaskType[Args]) Global() *TaskType[Args] {
+	t.global = true
+	return t
+}
+
 // Handler 返回可挂载到 asynq.ServeMux 的底层处理函数。
 //
 // 它负责: 拆 envelope 恢复用户身份 -> 反序列化 Args -> 调用业务 handler ->
@@ -152,7 +162,7 @@ func (t *TaskType[Args]) Handler() asynq.HandlerFunc {
 		taskID, retried, maxRetry := handlerMeta(ctx)
 
 		var args Args
-		ctx, argsPayload := restoreEnvelope(ctx, task.Payload())
+		ctx, argsPayload := restoreEnvelope(ctx, task.Payload(), t.global)
 		err := json.Unmarshal(argsPayload, &args)
 		// 反序列化失败时 args 为零值，不拼进日志
 		argsPart := ""
@@ -232,5 +242,5 @@ func (t *TaskType[Args]) NewTask(args Args) *Task {
 		logging.ErrorNoContextf("taskq: marshal args for task %s: %v", t.name, err)
 		return nil
 	}
-	return &Task{name: t.name, payload: payload, defaultOpts: t.defaultOpts}
+	return &Task{name: t.name, payload: payload, defaultOpts: t.defaultOpts, global: t.global}
 }
