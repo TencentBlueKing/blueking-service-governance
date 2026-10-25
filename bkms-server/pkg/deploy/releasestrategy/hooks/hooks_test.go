@@ -47,7 +47,7 @@ var _ = Describe("Release strategy lifecycle hooks", func() {
 	var workspaces []*bkmsworkspace.Workspace
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		bkmsworkspace.ResetLifecycleHooksForTest()
 
 		db := testutil.NewDB(GinkgoT())

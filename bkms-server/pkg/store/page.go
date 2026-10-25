@@ -50,7 +50,7 @@ type Page[T any] struct {
 //	// 第 2 页，每页 20 条，按创建时间倒序
 //	page, err := records.ListPage(ctx, 2, 20, ByApp(appID), store.Desc("createdAt"), store.Desc("_id"))
 //
-// 支持的选项：CondOpt、SortOpt、ProjectOpt、PageOpt；数量由 size 决定，不接受 LimitOpt
+// 支持的选项：CondOpt、SortOpt、ProjectOpt、PageOpt、TenantOpt；数量由 size 决定，不接受 LimitOpt
 func (s *GenericStore[T]) ListPage(ctx context.Context, page, size int64, opts ...Opt) (*Page[T], error) {
 	if page < 1 || size < 1 {
 		return nil, errors.Errorf("list page of %s: page and size must be >= 1, got page %d, size %d",

@@ -20,6 +20,7 @@ package workspace
 
 import (
 	"context"
+	"slices"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -36,16 +37,16 @@ type WorkspaceStore = store.GenericStore[Workspace]
 
 // Meta 工作空间的存储元数据。模型没有 _id 字段，工作空间 ID 存在 id 字段中，按 ID 查询须用 ByWorkspaceID。
 //
-// 集合按租户隔离：租户默认取自 ctx，平台管理与运维命令用 AllTenants / ForTenant 改变范围。
+// 集合按租户划分：租户默认取自 ctx，平台管理与运维命令用 TenantAll / TenantOf 改变范围。
 // id 目前仍是全局唯一，即不同租户不能使用同一个工作空间 ID。
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：id
 // - 普通：tenantID
 var Meta = store.Meta[Workspace]{
-	Collection:     "workspaces",
-	TenantIsolated: true,
-	NotFound:       ErrWorkspaceNotFound,
+	Collection:   "workspaces",
+	TenantScoped: true,
+	NotFound:     ErrWorkspaceNotFound,
 }
 
 // ByWorkspaceID 按工作空间 ID 匹配
@@ -78,12 +79,20 @@ func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace, opts
 	return nil
 }
 
-// Delete 依次执行已注册的删除前钩子并删除工作空间，工作空间不存在时不报错
-func Delete(ctx context.Context, workspaces *WorkspaceStore, id string) error {
-	if err := runPreDeleteHooks(ctx, id); err != nil {
+// Delete 依次执行已注册的删除前钩子并删除工作空间，工作空间不存在时不报错。
+func Delete(ctx context.Context, workspaces *WorkspaceStore, id string, opts ...store.Opt) error {
+	// 执行前先确认工作空间在本次的租户范围内存在
+	exists, err := workspaces.Exists(ctx, append(slices.Clone(opts), ByWorkspaceID(id))...)
+	if err != nil {
+		return errors.Wrapf(err, "check workspace %s before deleting", id)
+	}
+	if !exists {
+		return nil
+	}
+	if err = runPreDeleteHooks(ctx, id); err != nil {
 		return errors.Wrapf(err, "before deleting workspace %s", id)
 	}
-	if err := workspaces.DeleteIfExists(ctx, ByWorkspaceID(id)); err != nil {
+	if err = workspaces.DeleteIfExists(ctx, append(slices.Clone(opts), ByWorkspaceID(id))...); err != nil {
 		return errors.Wrapf(err, "delete workspace %s", id)
 	}
 	return nil

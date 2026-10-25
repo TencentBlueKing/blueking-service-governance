@@ -50,7 +50,7 @@ var _ = Describe("PlatWorkspaceService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithDefaultTenant(context.Background())
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		platCtx = store.RequireExplicitTenantScope(ctx)
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(

@@ -30,7 +30,7 @@ var _ = Describe("Application default resolution", func() {
 	var workspace *bkmsworkspace.Workspace
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		bkmsworkspace.ResetLifecycleHooksForTest()
 		bkmsenv.ResetHooksForTest()
 

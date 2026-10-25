@@ -90,6 +90,9 @@ type Task struct {
 	name        string
 	payload     []byte
 	defaultOpts []asynq.Option
+	// global 标识任务是否为全局任务。
+	// 全局任务不要求租户，投递时不从 ctx 中提取租户，envelope 中 tenantID 留空。
+	global bool
 }
 
 // Enqueue 投递一个 Task 实例(由 TaskType.NewTask 产出)。
@@ -100,6 +103,7 @@ type Task struct {
 //  3. 本次调用 opts —— 最后, 覆盖以上。
 //
 // ctx 必须带已认证用户与租户；两者写入 payload envelope，不进入业务 Args。
+// 声明了 TaskType.Global 的任务不要求租户，ctx 中即使有租户也不会写入。
 // 去重冲突(同名 + 同负载在途)视为正常, 返回 nil。
 func Enqueue(ctx context.Context, t *Task, opts ...asynq.Option) error {
 	if t == nil {
@@ -111,9 +115,11 @@ func Enqueue(ctx context.Context, t *Task, opts ...asynq.Option) error {
 		return err
 	}
 
-	tenantID, err := tenantFromContext(ctx)
-	if err != nil {
-		return err
+	var tenantID string
+	if !t.global {
+		if tenantID, err = tenantFromContext(ctx); err != nil {
+			return err
+		}
 	}
 
 	payload, err := wrapEnvelope(user, tenantID, t.payload)

@@ -70,7 +70,7 @@ func (s *Service) GetRoleStatus(
 	ctx context.Context,
 	workspaceID, roleCode, username string,
 ) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.AllTenants()); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll()); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 	_, hasRole, err := s.loadRoleState(ctx, workspaceID, roleCode, username)
@@ -86,7 +86,7 @@ func (s *Service) GrantAdmin(
 	workspaceID, username string,
 	isTemporary bool,
 ) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.AllTenants()); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll()); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 
@@ -139,7 +139,7 @@ func (s *Service) GrantAdmin(
 
 // RevokeAdmin 统一回收目标空间管理员权限。
 func (s *Service) RevokeAdmin(ctx context.Context, workspaceID, username string) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.AllTenants()); err != nil {
+	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll()); err != nil {
 		return nil, errors.Wrap(err, "get workspace")
 	}
 

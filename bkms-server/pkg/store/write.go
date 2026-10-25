@@ -33,7 +33,7 @@ import (
 const duplicateKeyCode = 11000
 
 // Create 插入一个文档。ID（零值时）、时间戳与租户会回填到 obj 中；唯一键冲突时返回 Duplicate 错误。
-// 支持的选项：ForTenant
+// 支持的选项：TenantOf
 func (s *GenericStore[T]) Create(ctx context.Context, obj *T, opts ...Opt) error {
 	tenantID, err := s.insertTenant(ctx, "insert into", opts)
 	if err != nil {
@@ -50,7 +50,7 @@ func (s *GenericStore[T]) Create(ctx context.Context, obj *T, opts ...Opt) error
 }
 
 // CreateMany 批量插入文档，遇到唯一键冲突时返回 Duplicate 错误（冲突之前的文档已写入）。
-// 支持的选项：ForTenant
+// 支持的选项：TenantOf
 func (s *GenericStore[T]) CreateMany(ctx context.Context, objs []*T, opts ...Opt) error {
 	docs, err := s.prepareInsertMany(ctx, "insert many into", objs, opts)
 	if err != nil || len(docs) == 0 {
@@ -62,7 +62,7 @@ func (s *GenericStore[T]) CreateMany(ctx context.Context, objs []*T, opts ...Opt
 	return nil
 }
 
-// CreateManyIfAbsent 批量插入文档并跳过已存在（唯一键冲突）的文档。支持的选项：ForTenant。
+// CreateManyIfAbsent 批量插入文档并跳过已存在（唯一键冲突）的文档。支持的选项：TenantOf。
 // 注意：被跳过的对象同样会被回填 ID 与时间戳，但它们与数据库中已有的文档并不一致
 func (s *GenericStore[T]) CreateManyIfAbsent(ctx context.Context, objs []*T, opts ...Opt) error {
 	docs, err := s.prepareInsertMany(ctx, "insert many into", objs, opts)
@@ -78,7 +78,7 @@ func (s *GenericStore[T]) CreateManyIfAbsent(ctx context.Context, objs []*T, opt
 
 // Replace 用 obj 整体替换匹配的一个文档，并更新 obj 的 updatedAt；不存在时返回 NotFound 错误。
 // obj 应是完整的文档（通常来自 Get），其 createdAt 会原样写入；obj 的 _id 被忽略，文档保留原有 _id。
-// 支持的选项：CondOpt、ForTenant
+// 支持的选项：CondOpt、TenantOf
 func (s *GenericStore[T]) Replace(ctx context.Context, obj *T, opts ...Opt) error {
 	q, err := s.writeQuery(ctx, "replace in", opts, replaceOpts)
 	if err != nil {

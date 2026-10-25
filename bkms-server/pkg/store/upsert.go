@@ -32,7 +32,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// Upsert 更新匹配的一个文档，不存在时插入，返回是否发生了插入。支持的选项：CondOpt、UpdateOpt。
+// Upsert 更新匹配的一个文档，不存在时插入，返回是否发生了插入。
+// 支持的选项：CondOpt、UpdateOpt、TenantOf（可能插入新文档，因此不接受 TenantAll）。
 //
 // target 的形式与字段规则同 Update，区别在于：
 //   - 传入 *T 时会先执行 BeforeSave，未传入 UpdateOpt 时更新全部顶层字段（相当于 UpdateSelected("*")），
@@ -92,7 +93,7 @@ func (s *GenericStore[T]) Upsert(ctx context.Context, target any, opts ...Opt) (
 // 全部写入在一次 BulkWrite 中按顺序执行，遇到错误即停止（之前的对象已写入），唯一键冲突时返回 Duplicate 错误。
 // 返回插入的文档数量，插入的对象会回填 _id 与 createdAt。
 // 出错时不做回填且返回的数量为 0：出错前已插入的对象也拿不到 _id 与 createdAt，
-// 需要它们时请按 key 重新查询。支持的选项：CondOpt、UpdateOpt
+// 需要它们时请按 key 重新查询。支持的选项：CondOpt、UpdateOpt、TenantOf
 func (s *GenericStore[T]) UpsertMany(ctx context.Context, objs []*T, key func(*T) Opt, opts ...Opt) (int64, error) {
 	if len(objs) == 0 {
 		return 0, nil

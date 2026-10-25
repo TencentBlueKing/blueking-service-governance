@@ -33,7 +33,7 @@ import (
 // 字段名前缀 `_` 避免与业务 Args 字段冲突；身份与租户禁止放进业务 Args
 type payloadEnvelope struct {
 	AuthUser auth.User       `json:"_authUser"`
-	TenantID string          `json:"_tenantID"`
+	TenantID string          `json:"_tenantID,omitempty"`
 	Args     json.RawMessage `json:"_args"`
 }
 
@@ -55,15 +55,17 @@ func tenantFromContext(ctx context.Context) (string, error) {
 	return tenantID, nil
 }
 
-// wrapEnvelope 把用户身份、租户与业务 Args JSON 打成 envelope，两者都不进入业务 Args
+// wrapEnvelope 把用户身份、租户与业务 Args JSON 打成 envelope，两者都不进入业务 Args；
+// 全局任务的 tenantID 为空，envelope 中不出现 `_tenantID`
 func wrapEnvelope(user auth.User, tenantID string, argsPayload []byte) ([]byte, error) {
 	return json.Marshal(payloadEnvelope{AuthUser: user, TenantID: tenantID, Args: argsPayload})
 }
 
 // restoreEnvelope 从 envelope 恢复用户与租户到 ctx，并抽出业务 Args JSON
 // 没有 `_args` 的旧 payload 原样返回，兼容单测与存量任务；
-// 没有 `_tenantID` 的存量任务（多租户上线前已入队）回落到默认租户，队列排空后可以去掉这个回落
-func restoreEnvelope(ctx context.Context, payload []byte) (context.Context, []byte) {
+// global 为 true 时不恢复租户，即使 payload 中带有 `_tenantID`（升级前入队的任务）也忽略；
+// todo 其余任务没有 `_tenantID` 时（多租户上线前已入队）回落到默认租户，队列排空后可以去掉这个回落
+func restoreEnvelope(ctx context.Context, payload []byte, global bool) (context.Context, []byte) {
 	var env payloadEnvelope
 	if err := json.Unmarshal(payload, &env); err != nil || len(env.Args) == 0 {
 		return ctx, payload
@@ -71,6 +73,8 @@ func restoreEnvelope(ctx context.Context, payload []byte) (context.Context, []by
 	if env.AuthUser.ID != "" {
 		ctx = auth.WithUser(ctx, env.AuthUser)
 	}
-	ctx = tenant.WithTenantID(ctx, lo.CoalesceOrEmpty(env.TenantID, tenant.DefaultTenantID))
+	if !global {
+		ctx = tenant.WithTenantID(ctx, lo.CoalesceOrEmpty(env.TenantID, tenant.DefaultTenantID))
+	}
 	return ctx, env.Args
 }

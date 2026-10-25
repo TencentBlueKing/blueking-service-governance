@@ -27,8 +27,25 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 )
+
+var _ = Describe("DetailSyncTask", func() {
+	// 运维命令（如 upsert-runtime-image）的 ctx 只有维护用户、没有租户，也要能投递
+	It("enqueues without a tenant in ctx", func() {
+		ctx := auth.WithMaintenanceUser(context.Background())
+		err := taskq.Enqueue(
+			ctx,
+			DetailSyncTask.NewTask(ImageDetailSyncArgs{RepoKey: "repo-1", RepoName: "example/app"}),
+		)
+
+		// 本套件不初始化 taskq client：越过租户校验后才会走到 client 判空
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).NotTo(ContainSubstring("tenant id not found"))
+		Expect(err.Error()).To(ContainSubstring("client not initialized"))
+	})
+})
 
 var _ = Describe("DetailSyncManager Handle", func() {
 	var (

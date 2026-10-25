@@ -245,6 +245,25 @@ var _ = Describe("Test taskq NewTask and Enqueue", func() {
 		Expect(err.Error()).To(ContainSubstring("tenant id not found"))
 	})
 
+	It("Enqueue does not require a tenant for a global task", func() {
+		origClient := client
+		client = nil
+		defer func() { client = origClient }()
+
+		tt := NewTaskType[sampleArgs]("test.global-enqueue", func(_ context.Context, _ sampleArgs) error {
+			return nil
+		}).Global()
+		task := tt.NewTask(sampleArgs{ID: "x"})
+		Expect(task).NotTo(BeNil())
+		Expect(task.global).To(BeTrue())
+
+		// 越过租户校验后才会走到 client 判空
+		ctx := auth.WithUser(context.Background(), auth.User{ID: "tester"})
+		err := Enqueue(ctx, task)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("client not initialized"))
+	})
+
 	It("Enqueue returns error when auth user is missing", func() {
 		tt := NewTaskType[sampleArgs]("test.nouser", func(_ context.Context, _ sampleArgs) error {
 			return nil
@@ -267,7 +286,7 @@ var _ = Describe("Test taskq auth envelope", func() {
 		Expect(string(wrapped)).To(ContainSubstring(`"_tenantID"`))
 		Expect(string(wrapped)).To(ContainSubstring(`"_args"`))
 
-		ctx, rawArgs := restoreEnvelope(context.Background(), wrapped)
+		ctx, rawArgs := restoreEnvelope(context.Background(), wrapped, false)
 		gotUser, err := auth.GetUser(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(gotUser.ID).To(Equal("alice"))
@@ -290,7 +309,7 @@ var _ = Describe("Test taskq auth envelope", func() {
 			"_args":     json.RawMessage(lo.Must(json.Marshal(sampleArgs{ID: "legacy"}))),
 		}))
 
-		ctx, rawArgs := restoreEnvelope(context.Background(), legacy)
+		ctx, rawArgs := restoreEnvelope(context.Background(), legacy, false)
 		gotTenant, ok := tenant.GetTenantID(ctx)
 		Expect(ok).To(BeTrue())
 		Expect(gotTenant).To(Equal(tenant.DefaultTenantID))
@@ -317,6 +336,32 @@ var _ = Describe("Test taskq auth envelope", func() {
 		Expect(gotUser.ID).To(Equal("bob"))
 		Expect(got.ID).To(Equal("x"))
 		Expect(got.Step).To(Equal(3))
+	})
+
+	It("omits _tenantID from the envelope of a global task", func() {
+		wrapped := lo.Must(wrapEnvelope(auth.User{ID: "alice"}, "", lo.Must(json.Marshal(sampleArgs{ID: "x"}))))
+		Expect(string(wrapped)).NotTo(ContainSubstring(`"_tenantID"`))
+	})
+
+	It("Handler of a global task restores the user but no tenant", func() {
+		var (
+			gotUser   auth.User
+			hasTenant bool
+		)
+		task := NewTaskType[sampleArgs]("test.global-handler", func(ctx context.Context, _ sampleArgs) error {
+			gotUser, _ = auth.GetUser(ctx)
+			_, hasTenant = tenant.GetTenantID(ctx)
+			return nil
+		}).Global()
+		argsPayload := lo.Must(json.Marshal(sampleArgs{ID: "x"}))
+
+		// 升级前入队的任务带有 _tenantID，全局任务同样不恢复
+		for _, tenantID := range []string{"", "tenant-a"} {
+			wrapped := lo.Must(wrapEnvelope(auth.User{ID: "bob"}, tenantID, argsPayload))
+			Expect(task.Handler()(context.Background(), asynq.NewTask(task.Name(), wrapped))).To(Succeed())
+			Expect(gotUser.ID).To(Equal("bob"))
+			Expect(hasTenant).To(BeFalse())
+		}
 	})
 
 	It("Handler still decodes raw args payload without envelope", func() {

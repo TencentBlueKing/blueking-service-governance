@@ -57,7 +57,7 @@ type ModifyResult struct {
 //	res, err := models.Modify(ctx, bson.M{"$pull": bson.M{"components": bson.M{"name": name}}},
 //		ByApp(appID), store.KeepUpdatedAt())
 //
-// 支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt
+// 支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt、TenantOpt
 func (s *GenericStore[T]) Modify(ctx context.Context, update bson.M, opts ...Opt) (ModifyResult, error) {
 	q, doc, err := s.prepareModify(ctx, "modify", update, opts)
 	if err != nil {
@@ -78,7 +78,7 @@ func (s *GenericStore[T]) Modify(ctx context.Context, update bson.M, opts ...Opt
 }
 
 // ModifyMany 用 update 中的操作符修改全部匹配的文档，没有匹配时不返回错误。
-// update 的规则同 Modify。支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt
+// update 的规则同 Modify。支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt、TenantOpt
 func (s *GenericStore[T]) ModifyMany(ctx context.Context, update bson.M, opts ...Opt) (ModifyResult, error) {
 	q, doc, err := s.prepareModify(ctx, "modify many in", update, opts)
 	if err != nil {

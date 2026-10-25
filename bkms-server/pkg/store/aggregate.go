@@ -20,6 +20,7 @@ package store
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strconv"
 
@@ -36,7 +37,7 @@ import (
 // 排序发生在分组之前，让 SortOpt 以分组字段开头并为（分组字段, 排序字段）建立索引，可以避免内存排序。
 // 聚合没有显式设置 allowDiskUse：用不上索引时，$sort 的数据超过内存限制（默认 100MB）后是落盘还是报错
 // 取决于服务端配置（MongoDB 6.0 起默认落盘，更早的版本报错），匹配的文档较多时应建立上述索引或用 CondOpt 缩小范围。
-// 支持的选项：CondOpt、SortOpt、ProjectOpt
+// 支持的选项：CondOpt、SortOpt、ProjectOpt、TenantOpt
 func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, opts ...Opt) ([]T, error) {
 	q, err := s.parseOpts(ctx, "list latest in", opts, latestOpts)
 	if err != nil {
@@ -103,7 +104,7 @@ func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, op
 //		{{Key: "$group", Value: bson.M{"_id": "$state", "count": bson.M{"$sum": 1}}}},
 //	}, workspace.KeywordMatches(keyword))
 //
-// 支持的选项：CondOpt
+// 支持的选项：CondOpt、TenantOpt
 func Aggregate[R, T any](ctx context.Context, s *GenericStore[T], pipeline mongo.Pipeline, opts ...Opt) ([]R, error) {
 	q, err := s.parseOpts(ctx, "aggregate", opts, condOpts)
 	if err != nil {
@@ -129,23 +130,61 @@ func Aggregate[R, T any](ctx context.Context, s *GenericStore[T], pipeline mongo
 // crossCollStages 会读写本集合之外的数据，租户条件只加在管道首部，约束不到它们
 var crossCollStages = []string{"$lookup", "$graphLookup", "$unionWith", "$merge", "$out"}
 
-// checkAggStages 拒绝租户隔离集合上跨集合的聚合阶段。
+// checkAggStages 拒绝 TenantScoped 集合上跨集合的聚合阶段。
 //
-// 目前项目没有用到这几种阶段，因此直接拒绝； 后续确有需要时，再在这里为目标集合补充租户注入条件
+// 目前项目没有用到这几种阶段，因此直接拒绝； 后续确有需要时，再在这里为目标集合补充租户注入条件。
+// 这些阶段可以藏在 $facet、$lookup.pipeline、$unionWith.pipeline 的子管道里，所以要检查整个管道而不只是顶层
 func (s *GenericStore[T]) checkAggStages(pipeline mongo.Pipeline) error {
-	if !s.meta.TenantIsolated {
+	if !s.meta.TenantScoped {
 		return nil
 	}
-	for _, stage := range pipeline {
-		for _, e := range stage {
-			if slices.Contains(crossCollStages, e.Key) {
-				return errors.Errorf(
-					"aggregate %s: stage %s reads or writes other collections and bypasses tenant isolation, "+
-						"query each collection through its own store and join the results in code",
-					s.coll.Name(), e.Key,
-				)
-			}
-		}
+	if stage, found := findCrossCollStage(pipeline); found {
+		return errors.Errorf(
+			"aggregate %s: stage %s reads or writes other collections and bypasses the tenant filter, "+
+				"query each collection through its own store and join the results in code",
+			s.coll.Name(), stage,
+		)
 	}
 	return nil
+}
+
+// findCrossCollStage 递归查找 v 中任意层级的跨集合阶段，返回找到的第一个阶段名。
+// 以 $ 开头的字段名在文档字面量里不合法，所以 key 命中即可认定是阶段，不必区分它出现在哪个位置
+func findCrossCollStage(v any) (string, bool) {
+	switch v := v.(type) {
+	case bson.D:
+		for _, e := range v {
+			if stage, found := findCrossCollStage(e); found {
+				return stage, true
+			}
+		}
+		return "", false
+	case bson.E:
+		if slices.Contains(crossCollStages, v.Key) {
+			return v.Key, true
+		}
+		return findCrossCollStage(v.Value)
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Map:
+		iter := rv.MapRange()
+		for iter.Next() {
+			if iter.Key().Kind() == reflect.String && slices.Contains(crossCollStages, iter.Key().String()) {
+				return iter.Key().String(), true
+			}
+			if stage, found := findCrossCollStage(iter.Value().Interface()); found {
+				return stage, true
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range rv.Len() {
+			if stage, found := findCrossCollStage(rv.Index(i).Interface()); found {
+				return stage, true
+			}
+		}
+	default:
+	}
+	return "", false
 }

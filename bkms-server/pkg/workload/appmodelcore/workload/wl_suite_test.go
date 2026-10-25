@@ -76,7 +76,7 @@ func newWorkspaceID(ctx context.Context) string {
 func cleanupWorkspaces(ctx context.Context) {
 	store := newWorkspaceStore()
 	for _, id := range trackedWorkspaces {
-		_ = workspace.Delete(ctx, store, id)
+		Expect(workspace.Delete(ctx, store, id)).To(Succeed())
 	}
 	trackedWorkspaces = nil
 }

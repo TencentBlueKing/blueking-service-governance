@@ -94,9 +94,9 @@ func (q *query) projection() bson.D {
 }
 
 // parseOpts 依次应用 opts，遇到 accepted 之外类别的选项时返回错误；
-// 过滤条件与排序中的字段名会被转换为 bson 路径，Tenanted 集合最后再注入租户条件。
+// 过滤条件与排序中的字段名会被转换为 bson 路径，TenantScoped 集合最后再注入租户条件。
 //
-// 所有读写操作都经由它（或 writeQuery）构造过滤条件，因此这里是租户隔离唯一需要收口的地方
+// 所有读写操作都经由它（或 writeQuery）构造过滤条件，因此这里是租户过滤唯一需要收口的地方
 func (s *GenericStore[T]) parseOpts(ctx context.Context, op string, opts []Opt, accepted optKind) (*query, error) {
 	q := &query{}
 	for _, opt := range opts {
@@ -106,8 +106,8 @@ func (s *GenericStore[T]) parseOpts(ctx context.Context, op string, opts []Opt, 
 		if k := opt.kind() &^ accepted; k != 0 {
 			return nil, errors.Wrapf(errUnsupportedOpt, "%s %s: %s", op, s.coll.Name(), k)
 		}
-		// 拒绝被 Combine 包住的租户范围（AllTenants / ForTenant）：combinedOpt 的 kind 是内部各选项的并集，
-		// 带上 kindTenantAny 位就说明里面藏了租户范围。否则领域包可以把 AllTenants 收进具名 Opt，
+		// 拒绝被 Combine 包住的租户范围（TenantAll / TenantOf）：combinedOpt 的 kind 是内部各选项的并集，
+		// 带上 kindTenantAny 位就说明里面藏了租户范围。否则领域包可以把 TenantAll 收进具名 Opt，
 		// 调用点上看不出这次操作跨了租户
 		if _, combined := opt.(combinedOpt); combined && opt.kind()&kindTenantAny != 0 {
 			return nil, errors.Wrapf(ErrTenantScopeCombined, "%s %s", op, s.coll.Name())
