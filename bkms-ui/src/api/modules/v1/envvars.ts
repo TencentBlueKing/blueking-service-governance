@@ -326,6 +326,7 @@ export const EnvvarsService = {
    * @param body body CreateScopedEnvVarInput required 创建作用域级别环境变量请求
    * @response 200 CreateScopedEnvVarOutput OK
    * @response 400 GinErrorOutput Bad Request
+   * @response 409 GinErrorOutput Conflict
    */
   createScopedEnvVar: async <Request extends CreateScopedEnvVarRequest = CreateScopedEnvVarRequest, ResponseData = ScopedEnvVarOutputObj>(
     params?: NoInfer<Request>,
@@ -406,6 +407,7 @@ export const EnvvarsService = {
    * @param body body UpdateScopedEnvVarInput required 更新作用域级别环境变量请求
    * @response 200 UpdateScopedEnvVarOutput OK
    * @response 400 GinErrorOutput Bad Request
+   * @response 409 GinErrorOutput Conflict
    */
   updateScopedEnvVar: async <Request extends UpdateScopedEnvVarRequest = UpdateScopedEnvVarRequest, ResponseData = ScopedEnvVarOutputObj>(
     params?: NoInfer<Request>,

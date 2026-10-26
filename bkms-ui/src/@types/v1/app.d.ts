@@ -236,6 +236,10 @@ export interface AppModelSpecInput {
    */
   envVars?: VariableInput[];
   /**
+   * 容器启动脚本，以 /bin/sh 执行，与 command、args 互斥，不能为纯空白；开发模式下 tRPC 应用需在脚本中以绝对路径启动二进制
+   */
+  shCommand?: string;
+  /**
    * TAF 框架配置
    */
   tafSpec?: TafSpecInput;
@@ -830,6 +834,10 @@ export interface AppModelSpecOutputObj {
    * 容器环境变量
    */
   envVars?: VariableOutputObj[];
+  /**
+   * 容器启动脚本，以 /bin/sh 执行
+   */
+  shCommand?: string;
   /**
    * TAF 框架配置
    */

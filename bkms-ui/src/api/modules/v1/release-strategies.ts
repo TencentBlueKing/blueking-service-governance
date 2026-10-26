@@ -18,7 +18,6 @@ export const ReleaseStrategiesService = {
    * @param workspaceID path string required 工作空间 ID
    * @response 200 ListReleaseStrategiesOutput OK
    * @response 400 GinErrorOutput Bad Request
-   * @response 404 GinErrorOutput Not Found
    */
   listReleaseStrategies: async <Request extends ListReleaseStrategiesRequest = ListReleaseStrategiesRequest, ResponseData = ReleaseStrategyOutputObj[]>(
     params?: NoInfer<Request>,
@@ -34,7 +33,6 @@ export const ReleaseStrategiesService = {
    * @param body body ReleaseStrategyInput required 发布策略
    * @response 200 ReleaseStrategyOutput OK
    * @response 400 GinErrorOutput Bad Request
-   * @response 404 GinErrorOutput Not Found
    */
   createReleaseStrategy: async <Request extends CreateReleaseStrategyRequest = CreateReleaseStrategyRequest, ResponseData = ReleaseStrategyOutputObj>(
     params?: NoInfer<Request>,
@@ -50,7 +48,6 @@ export const ReleaseStrategiesService = {
    * @param strategyID path string required 发布策略 ID
    * @response 200 ReleaseStrategyOutput OK
    * @response 400 GinErrorOutput Bad Request
-   * @response 404 GinErrorOutput Not Found
    */
   getReleaseStrategy: async <Request extends GetReleaseStrategyRequest = GetReleaseStrategyRequest, ResponseData = ReleaseStrategyOutputObj>(
     params?: NoInfer<Request>,
@@ -67,7 +64,6 @@ export const ReleaseStrategiesService = {
    * @param body body ReleaseStrategyInput required 发布策略
    * @response 200 ReleaseStrategyOutput OK
    * @response 400 GinErrorOutput Bad Request
-   * @response 404 GinErrorOutput Not Found
    */
   updateReleaseStrategy: async <Request extends UpdateReleaseStrategyRequest = UpdateReleaseStrategyRequest, ResponseData = ReleaseStrategyOutputObj>(
     params?: NoInfer<Request>,
@@ -83,7 +79,6 @@ export const ReleaseStrategiesService = {
    * @param strategyID path string required 发布策略 ID
    * @response 200 EmptyOutput OK
    * @response 400 GinErrorOutput Bad Request
-   * @response 404 GinErrorOutput Not Found
    */
   deleteReleaseStrategy: async <Request extends DeleteReleaseStrategyRequest = DeleteReleaseStrategyRequest, ResponseData = EmptyOutput>(
     params?: NoInfer<Request>,

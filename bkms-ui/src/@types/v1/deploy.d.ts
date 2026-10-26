@@ -428,6 +428,10 @@ export interface CreateAppModelDeployInput {
    */
   imageTag: string;
   /**
+   * 发布策略 ID：指定时按该策略分批更新实例（仅支持非联邦集群），不指定时一次更新全部实例
+   */
+  releaseStrategyID?: string;
+  /**
    * 副本数量
    */
   replicas: number;
