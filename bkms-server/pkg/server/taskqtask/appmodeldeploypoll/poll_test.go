@@ -20,6 +20,7 @@ package appmodeldeploypoll
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -323,5 +324,57 @@ var _ = Describe("Poller Handle", func() {
 		Entry("deployed", appmodeldeploy.StatusDeployed, int32(1)),
 		Entry("failed", appmodeldeploy.StatusFailed, int32(0)),
 		Entry("canceled", appmodeldeploy.StatusCanceled, int32(0)),
+	)
+})
+
+var _ = Describe("stableAuditOptions", func() {
+	args := Args{WorkspaceID: "ws", AppID: "app", EnvName: "prod", TrafficLaneName: "lane", DeployID: "deploy-1"}
+
+	apply := func(record *appmodeldeploy.Record) (*audit.OperationRecord, map[string]string) {
+		r := &audit.OperationRecord{}
+		for _, opt := range stableAuditOptions(record, args) {
+			opt(r)
+		}
+		var extras map[string]string
+		if len(r.Data.Extras) > 0 {
+			Expect(json.Unmarshal(r.Data.Extras, &extras)).To(Succeed())
+		}
+		return r, extras
+	}
+
+	DescribeTable("releasing all at once keeps the plain deploy audit",
+		func(status appmodeldeploy.Status, result audit.Result) {
+			r, extras := apply(&appmodeldeploy.Record{Status: status})
+			Expect(r.Result).To(Equal(result))
+			Expect(r.Attribute).To(BeEmpty())
+			Expect(extras).To(BeNil())
+		},
+		Entry("deployed", appmodeldeploy.StatusDeployed, audit.ResultSuccess),
+		Entry("failed", appmodeldeploy.StatusFailed, audit.ResultFailed),
+	)
+
+	DescribeTable("canary release pairs with the dispatch audit by deployID",
+		func(status appmodeldeploy.Status, result audit.Result) {
+			r, extras := apply(&appmodeldeploy.Record{
+				Status:          status,
+				ReleaseMode:     appmodeldeploy.ReleaseModeCanary,
+				ReleaseStrategy: &appmodeldeploy.ReleaseStrategySnapshot{ID: "strategy-1", Name: "careful"},
+			})
+			Expect(r.Result).To(Equal(result))
+			Expect(r.Attribute).To(Equal(audit.AttributeReleaseStrategy))
+			Expect(r.Group.EnvName).To(Equal("prod"))
+			Expect(extras).To(Equal(map[string]string{
+				"trafficLaneName":     "lane",
+				"deployID":            "deploy-1",
+				"releaseMode":         "canary",
+				"releaseStrategyID":   "strategy-1",
+				"releaseStrategyName": "careful",
+				"status":              string(status),
+			}))
+		},
+		Entry("deployed", appmodeldeploy.StatusDeployed, audit.ResultSuccess),
+		Entry("rolled back by the user", appmodeldeploy.StatusRolledBack, audit.ResultSuccess),
+		Entry("polling broken", appmodeldeploy.StatusPollingBroken, audit.ResultFailed),
+		Entry("superseded by a new deploy", appmodeldeploy.StatusCanceled, audit.ResultFailed),
 	)
 })

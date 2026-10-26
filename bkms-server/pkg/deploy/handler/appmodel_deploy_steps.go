@@ -530,7 +530,8 @@ func toAppModelDeployAPIError(
 }
 
 // recordBatchDeployAudit 记录按策略分批部署的操作记录（含策略名称）。
-// 分批发布可能长期暂停等待人工确认，因此在下发时记录，不等待轮询任务进入终态。
+// 分批发布可能长期暂停等待人工确认，因此在下发时记录，结果表示下发成功；
+// 轮询任务进入终态时另写一条带同样 attribute 与 deployID 的终态记录。
 func recordBatchDeployAudit(
 	ctx context.Context,
 	app *bkmsapp.Application,
@@ -542,6 +543,8 @@ func recordBatchDeployAudit(
 		audit.OperationTypeDeploy,
 		audit.ResourceTypeApp,
 		app.ID,
+		audit.WithResult(audit.ResultSuccess),
+		audit.WithAttribute(audit.AttributeReleaseStrategy),
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
 		audit.WithEnvName(envName),

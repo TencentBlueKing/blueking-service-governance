@@ -134,7 +134,12 @@ GameDeployment 首次创建时没有旧版本实例，无需分批：仍先下�
 
 **资源追踪**：Rollout 不写入部署记录的 `ResourceKeys`（其删除必须先于工作负载更新，通用的过期资源删除在更新之后执行），因此单独处理：分批部署时 Rollout CR 写入资源清单快照；下架时先删除与主工作负载同名的 Rollout，不以最新记录的发布方式判断（全量实例更新生成的新记录不带发布方式）。
 
-**审计**：按策略分批部署在下发成功时写入空间操作记录（`deploy` / `app`，extras 含策略 ID 与名称），不等待轮询任务进入终态。
+**审计**：一次分批发布写两条空间操作记录（`deploy` / `app`，attribute 均为 `releaseStrategy`，extras 均含 `deployID`、策略 ID 与名称），通过 `deployID` 关联：
+
+- 下发记录：下发成功时写入，结果为成功，表示"已发起"。分批发布可能长期暂停，不能等到终态才留痕。
+- 终态记录：轮询任务进入终态时写入，extras 另含终态 `status`。`deployed` 与 `rolled-back` 记为成功（回滚是用户操作的结果，不是故障），其余终态（`polling-broken`、被新部署取代的 `canceled` 等）记为失败。
+
+一次更新全部的部署只写终态记录，不带 attribute 与 extras，保持原有行为。
 
 **不要在发布进行中重新 Apply 批次不同的 Rollout**：控制器发现 Rollout spec 变化后，会清理灰度资源并从第 0 批重新开始。
 
@@ -281,7 +286,7 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 - **`rolled-back` 状态的下游语义**：回滚后工作负载 spec 引用的仍是新镜像，但现有逻辑大多只认 `deployed`。已处理：
   - 镜像 tag 删除保护：`rolled-back` 记录的镜像视为占用；旧版本 Pod 所用的镜像由回退到的最近一次 `deployed` 记录保护。
   - 泳道部署前检查：基线泳道为 `rolled-back` 时工作负载仍在运行，视为已部署。
-  - 轮询收尾：审计结果记为失败；部署耗时指标的结果归为 `cancelled`（用户主动终止，不计入错误）。
+  - 轮询收尾：审计结果记为成功，extras 的 `status` 为 `rolled-back`；部署耗时指标的结果归为 `cancelled`（用户主动终止，不计入错误）。
 
   待处理：前端状态枚举；全量 / 灰度实例更新仍要求最新记录为 `deployed`，回滚后只能重新部署。
 - **进度写入与其他写操作的竞争**：通用的 `UpdateRecord` 不写 `batchProgress`，进度由 `UpdateBatchProgress` 定向更新。轮询接入时必须走这个函数，不能把进度放进 `UpdateRecord` 的整记录写回。

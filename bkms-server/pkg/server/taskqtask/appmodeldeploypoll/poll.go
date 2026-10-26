@@ -324,16 +324,39 @@ func (p *Poller) onStable(ctx context.Context, record *appmodeldeploy.Record, ar
 		handleDeploySucceeded(ctx, args, record)
 	}
 
-	opResult := lo.Ternary(
-		record.Status == appmodeldeploy.StatusDeployed,
-		audit.ResultSuccess,
-		audit.ResultFailed,
-	)
 	go audit.AddOperationRecordAsync(
 		context.WithoutCancel(ctx),
 		audit.OperationTypeDeploy, audit.ResourceTypeApp, args.AppID,
-		audit.WithResult(opResult), audit.WithWorkspaceID(args.WorkspaceID),
-		audit.WithAppID(args.AppID), audit.WithEnvName(args.EnvName),
+		stableAuditOptions(record, args)...,
 	)
 	return nil
+}
+
+// stableAuditOptions 终态部署审计的选项。
+// 分批发布在下发时已写过一条审计（attribute 为发布策略），终态记录带同样的 attribute 与 deployID 与之关联；
+// 回滚是用户操作的结果而非故障，结果记为成功，具体终态见 extras 的 status
+func stableAuditOptions(record *appmodeldeploy.Record, args Args) []audit.Option {
+	opts := []audit.Option{
+		audit.WithWorkspaceID(args.WorkspaceID), audit.WithAppID(args.AppID), audit.WithEnvName(args.EnvName),
+	}
+	if record.GetReleaseMode() != appmodeldeploy.ReleaseModeCanary {
+		return append(opts, audit.WithResult(
+			lo.Ternary(record.Status == appmodeldeploy.StatusDeployed, audit.ResultSuccess, audit.ResultFailed),
+		))
+	}
+
+	succeeded := record.Status == appmodeldeploy.StatusDeployed || record.Status == appmodeldeploy.StatusRolledBack
+	strategy := lo.FromPtr(record.ReleaseStrategy)
+	return append(opts,
+		audit.WithResult(lo.Ternary(succeeded, audit.ResultSuccess, audit.ResultFailed)),
+		audit.WithAttribute(audit.AttributeReleaseStrategy),
+		audit.WithExtras(map[string]string{
+			"trafficLaneName":     args.TrafficLaneName,
+			"deployID":            args.DeployID,
+			"releaseMode":         string(appmodeldeploy.ReleaseModeCanary),
+			"releaseStrategyID":   strategy.ID,
+			"releaseStrategyName": strategy.Name,
+			"status":              string(record.Status),
+		}),
+	)
 }
