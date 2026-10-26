@@ -36,6 +36,7 @@ import (
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -212,54 +213,58 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args)
 	return deployID, nil
 }
 
-// enqueueRecordImageDigest 投递记录构建产物镜像 digest 的任务，失败由任务按 imageDigestMaxRetry 重试
+// enqueueRecordImageDigest 投递记录构建产物镜像 digest 的任务。投递失败不会重试，该构建的 digest 留空，由调用方决定如何处理
 func enqueueRecordImageDigest(ctx context.Context, appID, buildID string) error {
-	task := ImageDigestTask.NewTask(ImageDigestArgs{AppID: appID, BuildID: buildID})
+	task := ImageDigestTask.NewTask(ImageDigestArgs{AppID: appID, BuildID: buildID, EnqueuedAt: time.Now()})
 	return errors.Wrap(taskq.Enqueue(ctx, task), "enqueue record image digest task")
 }
 
-// handleRecordImageDigest asynq 入口：数据库缺失则 ErrStopRetry，否则交给 recordImageDigestOfBuild
+// handleRecordImageDigest asynq 入口：数据库缺失则 ErrStopRetry，否则交给 recordImageDigest
 func handleRecordImageDigest(ctx context.Context, args ImageDigestArgs) error {
 	reg := storereg.G()
 	if reg == nil || reg.DB == nil {
 		return errors.Wrapf(taskq.ErrStopRetry, "record image digest of build %s: stores not initialized", args)
 	}
-	return recordImageDigestOfBuild(ctx, reg.DB, args)
+	return recordImageDigest(ctx, reg.DB, args)
 }
 
-// recordImageDigestOfBuild 为一条成功构建记录 digest。已记录过则跳过，保证重复投递与重试幂等；
-// 超出 imageDigestRecordWindow（如 worker 停机后积压的任务）则放弃
-func recordImageDigestOfBuild(ctx context.Context, db *mongo.Database, args ImageDigestArgs) error {
-	record, err := store.Of(db, build.RecordMeta).Get(ctx, build.ByBuild(args.AppID, args.BuildID))
+// recordImageDigest 构建成功后从镜像仓库读取产物 digest 并回写构建记录，供制品列表按 tag + digest 精确关联构建记录。
+// 返回 ErrStopRetry 表示放弃记录，其余错误交由任务重试
+func recordImageDigest(ctx context.Context, db *mongo.Database, args ImageDigestArgs) error {
+	records := store.Of(db, build.RecordMeta)
+	record, err := records.Get(ctx, build.ByBuild(args.AppID, args.BuildID))
 	if err != nil {
 		if errors.Is(err, build.ErrRecordNotFound) {
 			return errors.Wrapf(taskq.ErrStopRetry, "get build record %s: %v", args, err)
 		}
 		return errors.Wrapf(err, "get build record %s", args)
 	}
+	// 已记录过即跳过，省去一次镜像仓库读取；不覆盖先前读到的 digest 由回写时的条件保证
 	if record.Status != build.StatusSuccess || record.ImageDigest != "" {
 		return nil
 	}
-	if elapsed := time.Since(record.EndedAt); elapsed > imageDigestRecordWindow {
+	// digest 按 tag 回查镜像仓库，投递后越晚读越可能读到被外部覆盖后的镜像（如 worker 停机后积压的任务），
+	// 超出窗口宁可留空展示 --，也不关联到错误的构建
+	if elapsed := time.Since(args.EnqueuedAt); elapsed > imageDigestRecordWindow {
 		return errors.Wrapf(
-			taskq.ErrStopRetry, "build %s ended %s ago, beyond image digest record window %s",
+			taskq.ErrStopRetry, "build %s digest task enqueued %s ago, beyond image digest record window %s",
 			args, elapsed, imageDigestRecordWindow,
 		)
 	}
-	return recordImageDigest(ctx, db, record)
-}
 
-// recordImageDigest 构建成功后从镜像仓库读取产物 digest 并回写构建记录，供制品列表按 digest 精确关联构建记录。
-// 产物不在应用制品仓库时跳过：这类镜像不会出现在制品列表中，且仓库凭证也不一定适用
-func recordImageDigest(ctx context.Context, db *mongo.Database, record *build.Record) error {
 	imageTag := record.Params[pipelineparam.ImageTag]
 	if imageTag == "" {
 		return nil
 	}
 	info, err := snapshot.NewService(db).ResolveRepoKeyForApp(ctx, record.AppID)
 	if err != nil {
+		// 应用或构建配置已删除，重试也不会恢复
+		if errors.Is(err, bkmsapp.ErrAppNotFound) || errors.Is(err, build.ErrConfigNotFound) {
+			return errors.Wrapf(taskq.ErrStopRetry, "resolve image repo for app %s: %v", record.AppID, err)
+		}
 		return errors.Wrapf(err, "resolve image repo for app %s", record.AppID)
 	}
+	// 产物不在应用制品仓库（如应用配置了自定义制品仓库）时跳过：这类镜像不会出现在制品列表中，仓库凭证也不一定适用
 	if record.Artifact != info.RepoName+":"+imageTag {
 		log.Infof(
 			ctx, "build %s artifact %s is not in app image repo %s, skip recording image digest",
@@ -268,12 +273,20 @@ func recordImageDigest(ctx context.Context, db *mongo.Database, record *build.Re
 		return nil
 	}
 
+	// 与镜像快照详情同步使用同一读取方式，保证两侧 digest 含义一致（多架构镜像同为 index digest）
 	detail, err := registry.New(info.Username, info.Password, true).GetTagDetail(ctx, info.RepoName, imageTag)
 	if err != nil {
 		return errors.Wrapf(err, "get image %s detail", record.Artifact)
 	}
-	records := store.Of(db, build.RecordMeta)
-	return build.UpdateRecordImageDigest(ctx, records, record.AppID, record.BuildID, detail.Digest)
+	err = build.UpdateRecordImageDigest(ctx, records, record.AppID, record.BuildID, detail.Digest)
+	// 其他执行已先写入（如 asynq 重新投递后并发执行）则以先写入的为准；记录被删除同样无需重试
+	if errors.Is(err, build.ErrRecordNotFound) {
+		log.Infof(
+			ctx, "build %s image digest already recorded or record removed, skip writing %s", args, detail.Digest,
+		)
+		return nil
+	}
+	return err
 }
 
 // refreshSnapshots 构建成功后刷新镜像快照。

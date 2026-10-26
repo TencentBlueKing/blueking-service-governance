@@ -5740,6 +5740,11 @@ definitions:
         description: 镜像仓库用户名
         type: string
     type: object
+  serializer.ImageRegistryResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.ImageRegistryOutput'
+    type: object
   serializer.ImageSourceMaterialOutputObj:
     properties:
       commitID:
@@ -5757,11 +5762,6 @@ definitions:
       revisionType:
         description: 代码来源类型（branch / tag / commit）
         type: string
-    type: object
-  serializer.ImageRegistryResponse:
-    properties:
-      data:
-        $ref: '#/definitions/serializer.ImageRegistryOutput'
     type: object
   serializer.ImageTagDeployRecordOutputObj:
     properties:
@@ -10419,10 +10419,6 @@ paths:
           description: 文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "409":
-          description: 文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -10570,10 +10566,6 @@ paths:
             $ref: '#/definitions/appcfgfiledef.UpdateHelmFileOutput'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-        "409":
-          description: 文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
         "409":

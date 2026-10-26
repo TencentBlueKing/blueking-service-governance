@@ -29,6 +29,7 @@ import (
 
 	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -139,24 +140,8 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 		return
 	}
 
-	sourceRecords, err := imgbuild.LatestSucceededRecordsByImages(
-		ctx,
-		store.Of(h.registry.DB, imgbuild.RecordMeta),
-		uriInput.AppID,
-		lo.SliceToMap(snapshots, func(snap snapshot.Image) (string, string) { return snap.Tag, snap.Digest }),
-	)
-	if err != nil {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "match build records for app %s", uriInput.AppID),
-		)
-		return
-	}
-
-	repository := ""
-	if status != nil {
-		repository = status.RepoName
-	}
+	sourceRecords := h.buildSourceRecordMap(ctx, uriInput.AppID, snapshots)
+	repository := lo.FromPtr(status).RepoName
 	results := make([]*serializer.AppImageOutputObj, 0, len(snapshots))
 	for _, snap := range snapshots {
 		results = append(results, new(serializer.AppImageOutputObj).FromModel(
@@ -611,6 +596,26 @@ func (h *Handler) buildPromotionMap(
 		result[promotions[i].Tag] = &promotions[i]
 	}
 	return result, nil
+}
+
+// buildSourceRecordMap 按 tag + digest 找出产出各镜像的构建记录，供响应组装源材料。
+// 源材料只是展示列，查询失败只打日志并按「无关联」返回，不影响镜像列表本身
+func (h *Handler) buildSourceRecordMap(
+	ctx context.Context,
+	appID string,
+	snapshots []snapshot.Image,
+) map[string]*imgbuild.Record {
+	result, err := imgbuild.LatestSucceededRecordsByImages(
+		ctx,
+		store.Of(h.registry.DB, imgbuild.RecordMeta),
+		appID,
+		lo.SliceToMap(snapshots, func(snap snapshot.Image) (string, string) { return snap.Tag, snap.Digest }),
+	)
+	if err != nil {
+		log.Errorf(ctx, "match build records of app %s images failed, source material omitted: %v", appID, err)
+		return nil
+	}
+	return result
 }
 
 // buildDeployedEnvsMap groups deploy records by image tag. Environment

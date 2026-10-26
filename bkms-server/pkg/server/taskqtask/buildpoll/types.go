@@ -18,7 +18,10 @@
 
 package buildpoll
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // AutoDeployArgs 构建成功后自动部署参数
 type AutoDeployArgs struct {
@@ -41,11 +44,15 @@ type Args struct {
 type ImageDigestArgs struct {
 	AppID   string `json:"appID"`
 	BuildID string `json:"buildID"`
+	// EnqueuedAt 发现构建成功并投递任务的时间，imageDigestRecordWindow 从此起算
+	EnqueuedAt time.Time `json:"enqueuedAt"`
 }
 
-// String 输出构建身份，便于日志对齐同一构建
+// String 输出构建身份与投递时间，便于日志对齐同一构建
 func (args ImageDigestArgs) String() string {
-	return fmt.Sprintf("<appID: %s, buildID: %s>", args.AppID, args.BuildID)
+	return fmt.Sprintf(
+		"<appID: %s, buildID: %s, enqueuedAt: %s>", args.AppID, args.BuildID, args.EnqueuedAt.Format(time.RFC3339),
+	)
 }
 
 // String 输出轮询身份、自动部署目标与剩余失败次数，便于日志对齐同一构建的连续 tick

@@ -640,12 +640,6 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
-                    },
-                    "409": {
-                        "description": "文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
                     }
                 }
             }
@@ -28078,6 +28072,14 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ImageRegistryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ImageRegistryOutput"
+                }
+            }
+        },
         "serializer.ImageSourceMaterialOutputObj": {
             "type": "object",
             "properties": {
@@ -28100,14 +28102,6 @@ const docTemplate = `{
                 "revisionType": {
                     "description": "代码来源类型（branch / tag / commit）",
                     "type": "string"
-                }
-            }
-        },
-        "serializer.ImageRegistryResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/serializer.ImageRegistryOutput"
                 }
             }
         },

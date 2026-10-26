@@ -339,6 +339,17 @@ var _ = Describe("RecordStore", func() {
 			Expect(r.Artifact).To(Equal(buildRecordB.Artifact))
 		})
 
+		It("should keep the image digest recorded first", func() {
+			Expect(CreateRecord(ctx, db, &buildRecordB)).To(Succeed())
+			Expect(UpdateRecordImageDigest(ctx, records, appID, buildID2, "sha256:first")).To(Succeed())
+
+			err := UpdateRecordImageDigest(ctx, records, appID, buildID2, "sha256:second")
+			Expect(err).To(MatchError(ErrRecordNotFound))
+			r, err := records.Get(ctx, ByBuild(appID, buildID2))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(r.ImageDigest).To(Equal("sha256:first"))
+		})
+
 		It("should return ErrRecordNotFound when updating digest of a missing record", func() {
 			err := UpdateRecordImageDigest(ctx, records, appID, "missing-build", "sha256:aaa")
 			Expect(err).To(MatchError(ErrRecordNotFound))
@@ -370,6 +381,20 @@ var _ = Describe("RecordStore", func() {
 			result, err := LatestSucceededRecordsByImages(ctx, records, appID, pushed)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(BeEmpty())
+		})
+
+		It("should pair tag and digest within the same record", func() {
+			now := time.Now()
+			// tag 与 digest 各自落在当前页集合内，但不是同一对
+			Expect(CreateRecord(ctx, db, newSucceeded("b-cross", "v1", "sha256:bbb", now))).To(Succeed())
+			Expect(CreateRecord(ctx, db, newSucceeded("b-v2", "v2", "sha256:bbb", now.Add(-time.Hour)))).To(Succeed())
+
+			result, err := LatestSucceededRecordsByImages(
+				ctx, records, appID, map[string]string{"v1": "sha256:aaa", "v2": "sha256:bbb"},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveLen(1))
+			Expect(result["v2"].BuildID).To(Equal("b-v2"))
 		})
 
 		It("should skip images whose digest is not synced yet", func() {

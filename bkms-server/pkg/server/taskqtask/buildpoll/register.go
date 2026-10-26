@@ -43,8 +43,8 @@ const (
 	imageDigestName = "taskq.recordBuildImageDigest"
 	// imageDigestMaxRetry 记录 digest 失败的重试上限；按 asynq 默认退避，全部重试落在 imageDigestRecordWindow 内
 	imageDigestMaxRetry = 3
-	// imageDigestRecordWindow 构建结束后允许记录 digest 的时长。digest 按 tag 回查镜像仓库，
-	// 越晚读越可能读到被外部覆盖后的镜像，超出后放弃：宁可展示 --，也不关联到错误的构建
+	// imageDigestRecordWindow 投递任务后允许记录 digest 的时长。digest 按 tag 回查，读得越晚越可能读到被覆盖后的镜像，
+	// 超出则放弃。从投递时而非构建结束时起算，否则轮询间隔长的构建会一律记录不上
 	imageDigestRecordWindow = 5 * time.Minute
 )
 
