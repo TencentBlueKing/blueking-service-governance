@@ -70,6 +70,9 @@ type HelmDeployHandler interface {
 	GetTafResourceSnapshot(c *gin.Context)
 	// GetLatestTafDeployStatus 获取 TAF 应用最新一次部署的状态
 	GetLatestTafDeployStatus(c *gin.Context)
+
+	// GetBatchReleaseProgress 获取应用模型应用最新一次部署的分批发布进度
+	GetBatchReleaseProgress(c *gin.Context)
 }
 
 // Register 注册 Helm 应用部署 Gin v2 路由
@@ -127,4 +130,7 @@ func Register(rg *gin.RouterGroup, h HelmDeployHandler) {
 	rg.GET("/apps/:appID/envs/:envName/taf-deploys/:deployID/resource-snapshots/:snapshotID", h.GetTafResourceSnapshot)
 	// 获取 TAF 应用最新一次部署的状态
 	rg.GET("/apps/:appID/envs/:envName/taf-deploys/latest-status", h.GetLatestTafDeployStatus)
+
+	// 获取应用最新一次部署的分批发布进度
+	rg.GET("/apps/:appID/envs/:envName/batch-release", h.GetBatchReleaseProgress)
 }

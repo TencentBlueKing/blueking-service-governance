@@ -37,7 +37,8 @@ import (
 
 // collectLatestAppModelLaneUsages 从单条 appmodel 部署记录中判断目标 tag 是否仍在使用，
 // 若仍在使用则返回该记录对应的 workload 名称列表与部署状态
-// 仅当记录状态为 deployed 或正在进行中的部署状态时，才认为 tag 仍被占用
+// 仅当记录状态为 deployed、rolled-back 或正在进行中的部署状态时，才认为 tag 仍被占用。
+// 分批发布回滚后 Pod 为旧版本，但工作负载 spec 仍引用本次的镜像，旧版本镜像由回退到的已部署记录保护
 func collectLatestAppModelLaneUsages(
 	record *appmodeldeploy.Record,
 	tag string,
@@ -45,7 +46,9 @@ func collectLatestAppModelLaneUsages(
 	if record == nil || record.ImageTag != tag {
 		return nil
 	}
-	if record.Status == appmodeldeploy.StatusDeployed || isAppModelOngoingDeployStatus(record.Status) {
+	if record.Status == appmodeldeploy.StatusDeployed ||
+		record.Status == appmodeldeploy.StatusRolledBack ||
+		isAppModelOngoingDeployStatus(record.Status) {
 		workloadNames := collectAppModelWorkloadNames(record.ResourceKeys)
 		usages := make([]ImageUsage, 0, len(workloadNames))
 		for _, workloadName := range workloadNames {

@@ -24,12 +24,16 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
+	releasestrategyserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 )
@@ -116,6 +120,7 @@ var _ = Describe("AppModel deploy serializers", func() {
 			Expect(buildStatus.ImageTag).To(Equal("v2.0.0"))
 			Expect(buildStatus.Operator).To(Equal("builder"))
 			Expect(buildStatus.PipelineID).To(Equal("pipeline-1"))
+			Expect(buildStatus.ReleaseMode).To(Equal("all"))
 
 			recordID := bson.NewObjectID()
 			directStatus := new(serializer.LatestDeployStatus).FromDeployRecord(&appmodeldeploy.Record{
@@ -132,6 +137,18 @@ var _ = Describe("AppModel deploy serializers", func() {
 			Expect(directStatus.DeployID).To(Equal(recordID.Hex()))
 			Expect(directStatus.BuildID).To(BeEmpty())
 			Expect(directStatus.ImageTag).To(BeEmpty())
+			Expect(directStatus.ReleaseMode).To(Equal("all"))
+		})
+
+		It("exposes the release mode of a batch release deploy record", func() {
+			status := new(serializer.LatestDeployStatus).FromDeployRecord(&appmodeldeploy.Record{
+				ID:          bson.NewObjectID(),
+				Status:      appmodeldeploy.StatusDeploying,
+				ReleaseMode: appmodeldeploy.ReleaseModeCanary,
+			})
+
+			Expect(status.Status).To(Equal("deploying"))
+			Expect(status.ReleaseMode).To(Equal("canary"))
 		})
 
 		It("keeps tag and commit out of the legacy branch field", func() {
@@ -174,6 +191,20 @@ var _ = Describe("AppModel deploy serializers", func() {
 			Expect(output.Replicas).To(Equal(int32(3)))
 			Expect(output.WorkloadKind).To(Equal("Deployment"))
 			Expect(output.CommitID).To(Equal("commit-123"))
+			Expect(output.ReleaseMode).To(Equal("all"))
+			Expect(output.ReleaseStrategyName).To(BeEmpty())
+		})
+
+		It("returns the release mode and strategy name of a batch release record", func() {
+			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
+				ID:              bson.NewObjectID(),
+				Status:          appmodeldeploy.StatusDeploying,
+				ReleaseMode:     appmodeldeploy.ReleaseModeCanary,
+				ReleaseStrategy: &appmodeldeploy.ReleaseStrategySnapshot{ID: "strategy-1", Name: "careful"},
+			})
+
+			Expect(output.ReleaseMode).To(Equal("canary"))
+			Expect(output.ReleaseStrategyName).To(Equal("careful"))
 		})
 
 		It("reads commit revision without presenting it as a branch", func() {
@@ -228,6 +259,82 @@ var _ = Describe("AppModel deploy serializers", func() {
 			detailOutput := new(serializer.AppModelResourceSnapshot).FromModel(snapshot, true)
 			Expect(detailOutput.Manifest).NotTo(BeNil())
 			Expect(*detailOutput.Manifest).To(Equal("kind: Deployment"))
+		})
+	})
+
+	Describe("BatchReleaseProgressOutputObj FromModel", func() {
+		var record *appmodeldeploy.Record
+
+		BeforeEach(func() {
+			record = &appmodeldeploy.Record{
+				ID:          bson.NewObjectID(),
+				ImageTag:    "v2",
+				Replicas:    4,
+				Status:      appmodeldeploy.StatusDeploying,
+				ReleaseMode: appmodeldeploy.ReleaseModeCanary,
+				ReleaseStrategy: &appmodeldeploy.ReleaseStrategySnapshot{
+					ID:   "strategy-1",
+					Name: "careful",
+					Batches: []releasestrategy.Batch{
+						{Target: "1", PauseMode: releasestrategy.PauseModePermanent},
+						{Target: "50%", PauseMode: releasestrategy.PauseModeDuration, PauseSeconds: 600},
+					},
+				},
+			}
+		})
+
+		It("returns the progress with the strategy snapshot", func() {
+			pauseStartTime := time.Date(2026, 10, 22, 2, 0, 0, 0, time.UTC)
+			record.BatchProgress = &appmodeldeploy.BatchProgress{
+				CurrentBatchIndex: lo.ToPtr(int64(0)),
+				BatchPhase:        batchrelease.BatchPhaseManualPaused,
+				RolloutPhase:      "Running",
+				Message:           "Rollout is running canary step 0",
+				PauseStartTime:    &pauseStartTime,
+				UpdatedReplicas:   1,
+				Replicas:          4,
+				OldImageTag:       "v1",
+				NewImageTag:       "v2",
+			}
+
+			output := new(serializer.BatchReleaseProgressOutputObj).FromModel(record)
+			Expect(output).To(Equal(&serializer.BatchReleaseProgressOutputObj{
+				DeployID:     record.ID.Hex(),
+				Status:       "deploying",
+				StrategyID:   "strategy-1",
+				StrategyName: "careful",
+				Batches: []releasestrategyserializer.BatchOutputObj{
+					{Target: "1", PauseMode: "permanent"},
+					{Target: "50%", PauseMode: "duration", PauseSeconds: 600},
+				},
+				CurrentBatchIndex: lo.ToPtr(int64(0)),
+				BatchPhase:        "manual-paused",
+				RolloutPhase:      "Running",
+				Message:           "Rollout is running canary step 0",
+				PauseStartTime:    &pauseStartTime,
+				UpdatedReplicas:   1,
+				Replicas:          4,
+				OldImageTag:       "v1",
+				NewImageTag:       "v2",
+			}))
+		})
+
+		It("keeps a missing batch index as null rather than 0", func() {
+			record.BatchProgress = &appmodeldeploy.BatchProgress{BatchPhase: batchrelease.BatchPhaseUpdating}
+
+			payload, err := json.Marshal(new(serializer.BatchReleaseProgressOutputObj).FromModel(record))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(payload)).To(ContainSubstring(`"currentBatchIndex":null`))
+			Expect(string(payload)).To(ContainSubstring(`"pauseStartTime":null`))
+		})
+
+		It("falls back to a pending progress before the poller writes one", func() {
+			output := new(serializer.BatchReleaseProgressOutputObj).FromModel(record)
+			Expect(output.BatchPhase).To(Equal("pending"))
+			Expect(output.CurrentBatchIndex).To(BeNil())
+			Expect(output.Replicas).To(Equal(int32(4)))
+			Expect(output.NewImageTag).To(Equal("v2"))
+			Expect(output.StrategyName).To(Equal("careful"))
 		})
 	})
 })

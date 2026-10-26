@@ -121,8 +121,11 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 	// 查状态失败走业务计数；首 tick 未带 remain 时补满
 	remain := lo.Ternary(args.FailureRetryRemain > 0, args.FailureRetryRemain, totalFailureRetryCount)
 	// 窗口按 StartedAt 计算，worker 积压时本 tick 可能一上来就在窗口外，
-	// 故先查一次真实状态再据此收尾，避免把已经成功的部署误判为超时
-	windowExceeded := time.Since(record.StartedAt) >= pollingTimeout()
+	// 故先查一次真实状态再据此收尾，避免把已经成功的部署误判为超时。
+	// 分批发布可以长期停在永久暂停等待人工继续，不受窗口限制：超时后记录不再是"分批发布中"，
+	// 冲突拦截与手动操作都会失效
+	windowExceeded := record.GetReleaseMode() != appmodeldeploy.ReleaseModeCanary &&
+		time.Since(record.StartedAt) >= pollingTimeout()
 
 	curStatus := record.Status
 	state, err := appmodeldeploy.NewDeployStateGetter(record).Get(ctx)
@@ -132,6 +135,17 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 	}
 	// 查到状态即复位失败额度，额度约束的是连续失败
 	remain = totalFailureRetryCount
+
+	// 先于状态落库写入，进入终态后进度停在终态时的值。终态写失败交回 asynq 重试（终态后不再有下一 tick），
+	// 中间态失败只打日志，下一 tick 会重写
+	if state.BatchProgress != nil {
+		if err = appmodeldeploy.UpdateBatchProgress(ctx, p.db, args.DeployID, state.BatchProgress); err != nil {
+			if state.Status.IsStable() {
+				return errors.Wrap(err, "update batch progress before stable status")
+			}
+			log.Errorf(ctx, "failed to update batch progress of deploy %s: %v", args, err)
+		}
+	}
 
 	if state.Status != record.Status {
 		record.Status = state.Status

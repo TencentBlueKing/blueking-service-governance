@@ -36,6 +36,14 @@ func pauseInput(pauseMode string, pauseSeconds int) serializer.ReleaseStrategyIn
 	return inputWithBatch(serializer.BatchInput{Target: "1", PauseMode: pauseMode, PauseSeconds: pauseSeconds})
 }
 
+func repeatBatches(n int) []serializer.BatchInput {
+	batches := make([]serializer.BatchInput, n)
+	for i := range batches {
+		batches[i] = serializer.BatchInput{Target: "1", PauseMode: "none"}
+	}
+	return batches
+}
+
 var _ = Describe("ReleaseStrategyInput", func() {
 	DescribeTable(
 		"validates strategy fields",
@@ -48,11 +56,31 @@ var _ = Describe("ReleaseStrategyInput", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(invalidField))
 		},
-		// 名称长度按字符而非字节计算
-		Entry("name with 32 multi-byte characters", serializer.ReleaseStrategyInput{
-			Name:    strings.Repeat("名", 32),
+		// 名称长度按 trim 后的字符数计算，首尾空白不入库
+		Entry("name with 64 multi-byte characters", serializer.ReleaseStrategyInput{
+			Name:    strings.Repeat("名", 64),
 			Batches: []serializer.BatchInput{{Target: "1", PauseMode: "none"}},
 		}, ""),
+		Entry("name with surrounding spaces within 64 characters", serializer.ReleaseStrategyInput{
+			Name:    "  " + strings.Repeat("名", 64) + "  ",
+			Batches: []serializer.BatchInput{{Target: "1", PauseMode: "none"}},
+		}, ""),
+		Entry("blank name", serializer.ReleaseStrategyInput{
+			Name:    "   ",
+			Batches: []serializer.BatchInput{{Target: "1", PauseMode: "none"}},
+		}, "Name"),
+		Entry("name longer than 64 characters after trim", serializer.ReleaseStrategyInput{
+			Name:    " " + strings.Repeat("名", 65),
+			Batches: []serializer.BatchInput{{Target: "1", PauseMode: "none"}},
+		}, "Name"),
+		Entry("eleven batches", serializer.ReleaseStrategyInput{
+			Name:    "abcde",
+			Batches: repeatBatches(11),
+		}, ""),
+		Entry("no batches", serializer.ReleaseStrategyInput{
+			Name:    "abcde",
+			Batches: nil,
+		}, "Batches"),
 		Entry("target rejected by batch_target",
 			inputWithBatch(serializer.BatchInput{Target: "101%", PauseMode: "none"}), "Target"),
 

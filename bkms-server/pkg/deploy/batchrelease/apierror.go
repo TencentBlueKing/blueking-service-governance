@@ -28,21 +28,21 @@ import (
 // APIError 将发布策略与分批发布相关的错误转换为 API 错误，msg 作为错误信息传给 bkerrs.Wrap。
 // 只映射现有 ErrCode，不附加详情码；集群返回的信息保留在错误链中。
 //
-//   - 策略名称已存在、批次目标值不合法 → INVALID_ARGUMENT
+//   - 批次目标值不合法 → INVALID_ARGUMENT
 //   - 策略不存在、Rollout CR 不存在、集群未安装 Rollout → NOT_FOUND
-//   - 分批发布进行中、主工作负载不支持、当前状态不满足、没有进行中的分批发布 → INVALID_REQUEST
+//   - 策略名称已存在、分批发布进行中、主工作负载不支持、当前状态不满足、没有进行中的分批发布 → INVALID_REQUEST
 //   - 其他错误（含 Rollout CR 读写失败）→ INTERNAL_SERVER_ERROR
 func APIError(err error, msg string) error {
 	code := bkerrs.ErrCodeInternalServerError
 	switch {
-	case errors.Is(err, releasestrategy.ErrStrategyNameConflict),
-		errors.Is(err, releasestrategy.ErrInvalidBatchTarget):
+	case errors.Is(err, releasestrategy.ErrInvalidBatchTarget):
 		code = bkerrs.ErrCodeInvalidArgument
 	case errors.Is(err, releasestrategy.ErrStrategyNotFound),
 		errors.Is(err, ErrRolloutNotFound),
 		errors.Is(err, ErrRolloutNotInstalled):
 		code = bkerrs.ErrCodeNotFound
-	case errors.Is(err, ErrBatchReleaseInProgress),
+	case errors.Is(err, releasestrategy.ErrStrategyNameConflict),
+		errors.Is(err, ErrBatchReleaseInProgress),
 		errors.Is(err, ErrWorkloadNotSupported),
 		errors.Is(err, ErrActionNotAllowed),
 		errors.Is(err, ErrNoBatchReleaseInProgress):

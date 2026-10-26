@@ -178,6 +178,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
+                    },
+                    "409": {
+                        "description": "文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
                     }
                 }
             }
@@ -334,6 +340,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "409": {
+                        "description": "文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -619,6 +631,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "409": {
+                        "description": "文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -7871,6 +7889,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/envs/{envName}/batch-release": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回环境 / 泳道最新部署记录的分批发布进度，进度由部署轮询任务写入，不实时请求集群；\n没有部署记录或最新记录不是分批发布时 data 为 null",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deploy"
+                ],
+                "summary": "获取分批发布进度",
+                "operationId": "GetBatchReleaseProgress",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署的泳道名称（空字符串表示不使用泳道）",
+                        "name": "trafficLaneName",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetBatchReleaseProgressOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/envs/{envName}/bg-env-vars": {
             "get": {
                 "security": [
@@ -11936,6 +12011,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
+                    },
+                    "409": {
+                        "description": "文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
                     }
                 }
             }
@@ -11988,6 +12069,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "409": {
+                        "description": "文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -22229,6 +22316,14 @@ const docTemplate = `{
                 "operator": {
                     "type": "string"
                 },
+                "releaseMode": {
+                    "description": "发布方式：all 一次更新全部 / canary 分批发布",
+                    "type": "string"
+                },
+                "releaseStrategyName": {
+                    "description": "分批发布时发起时的策略名称（快照），一次更新全部时为空",
+                    "type": "string"
+                },
                 "replicas": {
                     "type": "integer"
                 },
@@ -23086,6 +23181,70 @@ const docTemplate = `{
                 "target": {
                     "description": "本批\"累计更新到\"的实例数：正整数或百分比",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.BatchReleaseProgressOutputObj": {
+            "type": "object",
+            "properties": {
+                "batchPhase": {
+                    "description": "当前批次状态：pending / updating / timed-paused / manual-paused / completed",
+                    "type": "string"
+                },
+                "batches": {
+                    "description": "下发时的批次（快照）",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BatchOutputObj"
+                    }
+                },
+                "currentBatchIndex": {
+                    "description": "当前批次序号，从 0 开始，-1 表示回滚；尚未进入批次或全部批次已走完时为 null",
+                    "type": "integer"
+                },
+                "deployID": {
+                    "description": "部署记录 ID",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "Rollout 提示信息，批次出错时为出错原因",
+                    "type": "string"
+                },
+                "newImageTag": {
+                    "description": "新镜像标签",
+                    "type": "string"
+                },
+                "oldImageTag": {
+                    "description": "旧镜像标签",
+                    "type": "string"
+                },
+                "pauseStartTime": {
+                    "description": "当前批次暂停开始时间，未暂停时为 null",
+                    "type": "string"
+                },
+                "replicas": {
+                    "description": "总实例数",
+                    "type": "integer"
+                },
+                "rolloutPhase": {
+                    "description": "Rollout 原始 phase",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "部署记录状态：deploying 分批发布中 / deployed 已部署 / rolled-back 已回滚 / failed 等",
+                    "type": "string"
+                },
+                "strategyID": {
+                    "description": "发起时的策略 ID（快照，策略之后被修改或删除不影响）",
+                    "type": "string"
+                },
+                "strategyName": {
+                    "description": "发起时的策略名称（快照）",
+                    "type": "string"
+                },
+                "updatedReplicas": {
+                    "description": "已更新为新版本的实例数",
+                    "type": "integer"
                 }
             }
         },
@@ -26912,6 +27071,19 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.GetBatchReleaseProgressOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "最新部署记录的分批发布进度；没有部署记录或最新记录不是分批发布时为 null",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.BatchReleaseProgressOutputObj"
+                        }
+                    ]
+                }
+            }
+        },
         "serializer.GetBkCIOAuthUrlOutput": {
             "type": "object",
             "properties": {
@@ -27931,6 +28103,10 @@ const docTemplate = `{
                 "endedAt": {
                     "type": "string"
                 },
+                "hasBatchReleaseInProgress": {
+                    "description": "最新部署记录是否为进行中的分批发布，与本接口返回的是构建记录还是部署记录无关；\n为 true 时通过分批发布进度接口查询进度",
+                    "type": "boolean"
+                },
                 "hasDeployRecord": {
                     "type": "boolean"
                 },
@@ -27948,6 +28124,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "pipelineID": {
+                    "type": "string"
+                },
+                "releaseMode": {
+                    "description": "本条记录的发布方式：all 一次更新全部 / canary 分批发布；构建记录固定为 all",
                     "type": "string"
                 },
                 "revision": {
@@ -31162,9 +31342,8 @@ const docTemplate = `{
             ],
             "properties": {
                 "batches": {
-                    "description": "批次列表，1 ~ 10 个；不校验跨批次递增",
+                    "description": "批次列表，至少 1 个，不设上限；不校验跨批次递增",
                     "type": "array",
-                    "maxItems": 10,
                     "minItems": 1,
                     "items": {
                         "$ref": "#/definitions/serializer.BatchInput"
@@ -31176,9 +31355,8 @@ const docTemplate = `{
                     "maxLength": 200
                 },
                 "name": {
-                    "description": "策略名称，1 ~ 32 个字符，同一空间内唯一",
-                    "type": "string",
-                    "maxLength": 32
+                    "description": "策略名称，去掉首尾空白后 1 ~ 64 个字符，同一空间内唯一",
+                    "type": "string"
                 }
             }
         },

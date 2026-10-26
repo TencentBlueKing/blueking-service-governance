@@ -28,6 +28,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
+	releasestrategyserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/serializer"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 )
@@ -191,6 +193,10 @@ type AppModelDeployRecordOutputObj struct {
 	// Commit ID（仅构建+部署记录返回）
 	CommitID string `json:"commitID"`
 	Replicas int32  `json:"replicas"`
+	// 发布方式：all 一次更新全部 / canary 分批发布
+	ReleaseMode string `json:"releaseMode"`
+	// 分批发布时发起时的策略名称（快照），一次更新全部时为空
+	ReleaseStrategyName string `json:"releaseStrategyName"`
 	// 本次部署的主工作负载类型（GameDeployment 或 Deployment）
 	WorkloadKind string    `json:"workloadKind"`
 	Message      string    `json:"message"`
@@ -225,6 +231,8 @@ func (o *AppModelDeployRecordOutputObj) FromModel(record appmodeldeploy.Record) 
 		o.CommitID = record.Extras[appmodeldeploy.ExtraKeyBuildCommitID]
 	}
 	o.Replicas = record.Replicas
+	o.ReleaseMode = string(record.GetReleaseMode())
+	o.ReleaseStrategyName = lo.FromPtr(record.ReleaseStrategy).Name
 	kind, _ := record.MainWorkload()
 	o.WorkloadKind = kind
 	o.Message = record.Message
@@ -248,10 +256,12 @@ type LatestDeployStatus struct {
 	BuildID  string `json:"buildID"`
 	DeployID string `json:"deployID"`
 	// 兼容字段：供前端迁移期使用，待前端全部改用 deploySource 后删除。
-	IsBuildAutoDeploy bool      `json:"isBuildAutoDeploy"`
-	DeploySource      string    `json:"deploySource"`
-	StartedAt         time.Time `json:"startedAt"`
-	EndedAt           time.Time `json:"endedAt"`
+	IsBuildAutoDeploy bool   `json:"isBuildAutoDeploy"`
+	DeploySource      string `json:"deploySource"`
+	// 本条记录的发布方式：all 一次更新全部 / canary 分批发布；构建记录固定为 all
+	ReleaseMode string    `json:"releaseMode"`
+	StartedAt   time.Time `json:"startedAt"`
+	EndedAt     time.Time `json:"endedAt"`
 	// 代码来源类型 branch / tag / commit；历史记录为 branch
 	RevisionType string `json:"revisionType"`
 	// 分支名、Tag 名或 CommitID
@@ -262,6 +272,9 @@ type LatestDeployStatus struct {
 	Operator        string `json:"operator"`
 	PipelineID      string `json:"pipelineID"`
 	HasDeployRecord bool   `json:"hasDeployRecord"`
+	// 最新部署记录是否为进行中的分批发布，与本接口返回的是构建记录还是部署记录无关；
+	// 为 true 时通过分批发布进度接口查询进度
+	HasBatchReleaseInProgress bool `json:"hasBatchReleaseInProgress"`
 }
 
 // FromBuildAutoDeployRecord converts a build auto deploy record to latest status output.
@@ -273,6 +286,7 @@ func (o *LatestDeployStatus) FromBuildAutoDeployRecord(record *autodeploy.Record
 	o.DeployID = record.DeployID
 	o.IsBuildAutoDeploy = true
 	o.DeploySource = appmodeldeploy.DeploySourceBuildAutoDeploy
+	o.ReleaseMode = string(appmodeldeploy.ReleaseModeAll)
 	o.StartedAt = record.StartedAt
 	o.EndedAt = record.EndedAt
 	// 历史记录只有 Branch，按分支还原，避免把 Tag / Commit 再写回 branch
@@ -294,8 +308,81 @@ func (o *LatestDeployStatus) FromDeployRecord(record *appmodeldeploy.Record) *La
 	o.DeployID = record.ID.Hex()
 	o.IsBuildAutoDeploy = false
 	o.DeploySource = appmodeldeploy.DeploySourceDirectDeploy
+	o.ReleaseMode = string(record.GetReleaseMode())
 	o.StartedAt = record.StartedAt
 	o.EndedAt = record.EndedAt
+	return o
+}
+
+// GetBatchReleaseProgressInput contains query parameters for batch release progress.
+type GetBatchReleaseProgressInput struct {
+	// 部署的泳道名称（空字符串表示不使用泳道）
+	TrafficLaneName string `form:"trafficLaneName"`
+}
+
+// GetBatchReleaseProgressOutput is the response body for batch release progress.
+type GetBatchReleaseProgressOutput struct {
+	// 最新部署记录的分批发布进度；没有部署记录或最新记录不是分批发布时为 null
+	Data *BatchReleaseProgressOutputObj `json:"data"`
+}
+
+// BatchReleaseProgressOutputObj contains the batch release progress of a deploy record.
+type BatchReleaseProgressOutputObj struct {
+	// 部署记录 ID
+	DeployID string `json:"deployID"`
+	// 部署记录状态：deploying 分批发布中 / deployed 已部署 / rolled-back 已回滚 / failed 等
+	Status string `json:"status"`
+	// 发起时的策略 ID（快照，策略之后被修改或删除不影响）
+	StrategyID string `json:"strategyID"`
+	// 发起时的策略名称（快照）
+	StrategyName string `json:"strategyName"`
+	// 下发时的批次（快照）
+	Batches []releasestrategyserializer.BatchOutputObj `json:"batches"`
+	// 当前批次序号，从 0 开始，-1 表示回滚；尚未进入批次或全部批次已走完时为 null
+	CurrentBatchIndex *int64 `json:"currentBatchIndex"`
+	// 当前批次状态：pending / updating / timed-paused / manual-paused / completed
+	BatchPhase string `json:"batchPhase"`
+	// Rollout 原始 phase
+	RolloutPhase string `json:"rolloutPhase"`
+	// Rollout 提示信息，批次出错时为出错原因
+	Message string `json:"message"`
+	// 当前批次暂停开始时间，未暂停时为 null
+	PauseStartTime *time.Time `json:"pauseStartTime"`
+	// 已更新为新版本的实例数
+	UpdatedReplicas int32 `json:"updatedReplicas"`
+	// 总实例数
+	Replicas int32 `json:"replicas"`
+	// 旧镜像标签
+	OldImageTag string `json:"oldImageTag"`
+	// 新镜像标签
+	NewImageTag string `json:"newImageTag"`
+}
+
+// FromModel converts a batch release deploy record to progress output.
+// 记录尚无进度（轮询任务未写入）时，批次状态视为 pending，新镜像取部署记录的镜像
+func (o *BatchReleaseProgressOutputObj) FromModel(record *appmodeldeploy.Record) *BatchReleaseProgressOutputObj {
+	progress := lo.FromPtrOr(record.BatchProgress, appmodeldeploy.BatchProgress{
+		BatchPhase:  batchrelease.BatchPhasePending,
+		Replicas:    record.Replicas,
+		NewImageTag: record.ImageTag,
+	})
+	strategy := lo.FromPtr(record.ReleaseStrategy)
+	*o = BatchReleaseProgressOutputObj{
+		DeployID:          record.ID.Hex(),
+		Status:            string(record.Status),
+		StrategyID:        strategy.ID,
+		StrategyName:      strategy.Name,
+		Batches:           releasestrategyserializer.NewBatchOutputObjs(strategy.Batches),
+		CurrentBatchIndex: progress.CurrentBatchIndex,
+		BatchPhase:        string(progress.BatchPhase),
+		RolloutPhase:      progress.RolloutPhase,
+		Message:           progress.Message,
+		PauseStartTime:    progress.PauseStartTime,
+		UpdatedReplicas:   progress.UpdatedReplicas,
+		Replicas:          progress.Replicas,
+		OldImageTag:       progress.OldImageTag,
+		NewImageTag:       progress.NewImageTag,
+	}
 	return o
 }
 

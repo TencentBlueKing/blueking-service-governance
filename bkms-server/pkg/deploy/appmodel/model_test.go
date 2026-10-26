@@ -132,8 +132,8 @@ var _ = Describe("Record", func() {
 		})
 
 		It("returns the stored release mode", func() {
-			record := &appmodel.Record{ReleaseMode: appmodel.ReleaseModeBatch}
-			Expect(record.GetReleaseMode()).To(Equal(appmodel.ReleaseModeBatch))
+			record := &appmodel.Record{ReleaseMode: appmodel.ReleaseModeCanary}
+			Expect(record.GetReleaseMode()).To(Equal(appmodel.ReleaseModeCanary))
 		})
 	})
 
@@ -143,12 +143,12 @@ var _ = Describe("Record", func() {
 				record := &appmodel.Record{ReleaseMode: mode, Status: status}
 				Expect(record.IsBatchReleasing()).To(Equal(expected))
 			},
-			Entry("batch release deploying", appmodel.ReleaseModeBatch, appmodel.StatusDeploying, true),
+			Entry("canary release deploying", appmodel.ReleaseModeCanary, appmodel.StatusDeploying, true),
 			Entry("legacy record deploying", appmodel.ReleaseMode(""), appmodel.StatusDeploying, false),
 			Entry("release all deploying", appmodel.ReleaseModeAll, appmodel.StatusDeploying, false),
-			Entry("batch release deployed", appmodel.ReleaseModeBatch, appmodel.StatusDeployed, false),
-			Entry("batch release rolled back", appmodel.ReleaseModeBatch, appmodel.StatusRolledBack, false),
-			Entry("batch release polling broken", appmodel.ReleaseModeBatch, appmodel.StatusPollingBroken, false),
+			Entry("canary release deployed", appmodel.ReleaseModeCanary, appmodel.StatusDeployed, false),
+			Entry("canary release rolled back", appmodel.ReleaseModeCanary, appmodel.StatusRolledBack, false),
+			Entry("canary release polling broken", appmodel.ReleaseModeCanary, appmodel.StatusPollingBroken, false),
 		)
 
 		It("returns false when there is no record", func() {

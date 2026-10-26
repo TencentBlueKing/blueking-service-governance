@@ -152,8 +152,8 @@ type ReleaseMode string
 const (
 	// ReleaseModeAll 一次更新全部实例；存量部署记录未写入发布方式，同样视为该值
 	ReleaseModeAll ReleaseMode = "all"
-	// ReleaseModeBatch 按发布策略分批更新（Kourse Rollout Canary）
-	ReleaseModeBatch ReleaseMode = "batch"
+	// ReleaseModeCanary 按发布策略分批更新（Kourse Rollout Canary）
+	ReleaseModeCanary ReleaseMode = "canary"
 )
 
 // ReleaseStrategySnapshot 发起分批发布时所用发布策略的快照；
@@ -319,5 +319,5 @@ func (r *Record) IsBatchReleasing() bool {
 	if r == nil {
 		return false
 	}
-	return r.GetReleaseMode() == ReleaseModeBatch && r.Status == StatusDeploying
+	return r.GetReleaseMode() == ReleaseModeCanary && r.Status == StatusDeploying
 }

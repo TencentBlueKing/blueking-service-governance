@@ -66,6 +66,12 @@ var _ = Describe("Tag deletion helpers", func() {
 			appmodeldeploy.StatusPollingTimeout,
 			[]ImageUsage{{WorkloadName: "workload-a", Status: string(appmodeldeploy.StatusPollingTimeout)}},
 		),
+		// 回滚后工作负载 spec 仍引用本次的镜像
+		Entry(
+			"returns workload names for rolled back batch release",
+			appmodeldeploy.StatusRolledBack,
+			[]ImageUsage{{WorkloadName: "workload-a", Status: string(appmodeldeploy.StatusRolledBack)}},
+		),
 		Entry("ignores failed record", appmodeldeploy.StatusFailed, nil),
 	)
 
@@ -137,6 +143,12 @@ var _ = Describe("Tag deletion helpers", func() {
 			false,
 		),
 		Entry("falls back failed record", &appmodeldeploy.Record{Status: appmodeldeploy.StatusFailed}, true),
+		// 回滚后 Pod 运行的是最近一次成功部署的镜像
+		Entry(
+			"falls back rolled back record",
+			&appmodeldeploy.Record{Status: appmodeldeploy.StatusRolledBack},
+			true,
+		),
 		Entry(
 			"does not fallback uninstalled record",
 			&appmodeldeploy.Record{Status: appmodeldeploy.StatusUninstalled},

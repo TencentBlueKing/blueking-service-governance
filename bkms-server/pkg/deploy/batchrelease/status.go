@@ -186,6 +186,14 @@ func (s Status) IsRolledBack(workload WorkloadSnapshot) bool {
 	return s.isRollingBack() && s.Phase == RolloutPhaseRollbackCompleted && workload.IsRolledBack()
 }
 
+// ProgressMessage 进度提示：批次出错时原因只写在步骤提示中，此时取步骤提示，否则取 Rollout 整体提示
+func (s Status) ProgressMessage() string {
+	if s.CurrentStepPhase == StepPhaseError && s.StepMessage != "" {
+		return s.StepMessage
+	}
+	return s.Message
+}
+
 // IsPaused 是否处于暂停中（手动、永久或定时暂停）
 func (p BatchPhase) IsPaused() bool {
 	return p == BatchPhaseManualPaused || p == BatchPhaseTimedPaused

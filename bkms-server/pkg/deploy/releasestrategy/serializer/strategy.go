@@ -20,31 +20,13 @@
 package serializer
 
 import (
+	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin/binding"
-	"github.com/go-playground/validator/v10"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
-	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 )
-
-func init() {
-	v, ok := binding.Validator.Engine().(*validator.Validate)
-	if !ok {
-		return
-	}
-	if err := v.RegisterValidation("batch_target", validateBatchTarget); err != nil {
-		panic("failed to register batch_target validator: " + err.Error())
-	}
-}
-
-// validateBatchTarget 校验批次目标值：正整数（≥ 1）或百分比（1% ~ 100%）
-func validateBatchTarget(fl validator.FieldLevel) bool {
-	_, err := releasestrategy.ParseBatchTarget(fl.Field().String())
-	return err == nil
-}
 
 // WorkspaceURIInput binds a workspace-scoped path.
 type WorkspaceURIInput struct {
@@ -72,20 +54,20 @@ type BatchInput struct {
 
 // ReleaseStrategyInput is the JSON body shared by creating and updating a release strategy.
 type ReleaseStrategyInput struct {
-	// 策略名称，1 ~ 32 个字符，同一空间内唯一
-	Name string `json:"name" binding:"required,max=32"`
+	// 策略名称，去掉首尾空白后 1 ~ 64 个字符，同一空间内唯一
+	Name string `json:"name" binding:"required,release_strategy_name"`
 	// 策略描述，不超过 200 个字符
 	Description string `json:"description" binding:"max=200"`
-	// 批次列表，1 ~ 10 个；不校验跨批次递增
-	Batches []BatchInput `json:"batches" binding:"required,min=1,max=10,dive"`
+	// 批次列表，至少 1 个，不设上限；不校验跨批次递增
+	Batches []BatchInput `json:"batches" binding:"required,min=1,dive"`
 }
 
 // ToModel converts the input into a release strategy model of the given workspace.
-// 审计字段（创建人 / 更新人 / 时间）由调用方与 store 填写
+// 名称去掉首尾空白；审计字段（创建人 / 更新人 / 时间）由调用方与 store 填写
 func (i ReleaseStrategyInput) ToModel(workspaceID string) *releasestrategy.ReleaseStrategy {
 	return &releasestrategy.ReleaseStrategy{
 		WorkspaceID: workspaceID,
-		Name:        i.Name,
+		Name:        strings.TrimSpace(i.Name),
 		Description: i.Description,
 		Batches: lo.Map(i.Batches, func(b BatchInput, _ int) releasestrategy.Batch {
 			return releasestrategy.Batch{
@@ -105,6 +87,17 @@ type BatchOutputObj struct {
 	PauseMode string `json:"pauseMode"`
 	// 定时暂停时长（秒），pauseMode 不为 duration 时为 0
 	PauseSeconds int `json:"pauseSeconds"`
+}
+
+// NewBatchOutputObjs converts batches of a release strategy to their JSON representation.
+func NewBatchOutputObjs(batches []releasestrategy.Batch) []BatchOutputObj {
+	return lo.Map(batches, func(b releasestrategy.Batch, _ int) BatchOutputObj {
+		return BatchOutputObj{
+			Target:       b.Target,
+			PauseMode:    string(b.PauseMode),
+			PauseSeconds: b.PauseSeconds,
+		}
+	})
 }
 
 // ReleaseStrategyOutputObj is the JSON representation of one release strategy.
@@ -136,17 +129,11 @@ func (o *ReleaseStrategyOutputObj) FromModel(s releasestrategy.ReleaseStrategy) 
 		WorkspaceID: s.WorkspaceID,
 		Name:        s.Name,
 		Description: s.Description,
-		Batches: lo.Map(s.Batches, func(b releasestrategy.Batch, _ int) BatchOutputObj {
-			return BatchOutputObj{
-				Target:       b.Target,
-				PauseMode:    string(b.PauseMode),
-				PauseSeconds: b.PauseSeconds,
-			}
-		}),
-		Creator:   s.Creator,
-		CreatedAt: s.CreatedAt,
-		Updater:   s.Updater,
-		UpdatedAt: s.UpdatedAt,
+		Batches:     NewBatchOutputObjs(s.Batches),
+		Creator:     s.Creator,
+		CreatedAt:   s.CreatedAt,
+		Updater:     s.Updater,
+		UpdatedAt:   s.UpdatedAt,
 	}
 	return o
 }

@@ -552,7 +552,7 @@ func normalizeResultStatus(rawStatus string) string {
 		return StatusOK
 	case StatusTimeout, "polling-timeout", "pollingtimeout":
 		return StatusTimeout
-	case StatusCancelled, "canceled":
+	case StatusCancelled, "canceled", "rolled-back":
 		return StatusCancelled
 	default:
 		return StatusErr

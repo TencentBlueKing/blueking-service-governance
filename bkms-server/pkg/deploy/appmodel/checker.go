@@ -25,7 +25,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-// CheckIfTrafficLaneDeployed 检查指定的流量泳道是否已部署
+// CheckIfTrafficLaneDeployed 检查指定的流量泳道是否已部署；分批发布已回滚时工作负载仍在运行，同样视为已部署
 func CheckIfTrafficLaneDeployed(ctx context.Context, db *mongo.Database, appID, envName, laneName string) error {
 	// 获取指定泳道的部署情况
 	record, err := GetLatest(ctx, db, appID, envName, laneName)
@@ -33,7 +33,7 @@ func CheckIfTrafficLaneDeployed(ctx context.Context, db *mongo.Database, appID, 
 		return errors.Wrapf(err, "get app model deploy record (app: %s, env: %s, lane: %s)", appID, envName, laneName)
 	}
 	// 如果指定泳道未部署，返回错误
-	if record.Status != StatusDeployed {
+	if record.Status != StatusDeployed && record.Status != StatusRolledBack {
 		return errors.Errorf("app %s env %s lane: %s not deployed", appID, envName, laneName)
 	}
 	return nil

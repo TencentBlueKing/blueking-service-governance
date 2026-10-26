@@ -272,6 +272,27 @@ var _ = Describe("Status.IsRolledBack", func() {
 	)
 })
 
+var _ = Describe("Status.ProgressMessage", func() {
+	DescribeTable("picks the message to show in the progress",
+		func(status batchrelease.Status, expected string) {
+			Expect(status.ProgressMessage()).To(Equal(expected))
+		},
+		Entry("rollout message while running",
+			batchrelease.Status{
+				Message: "Running canary step 1", CurrentStepPhase: "ScalingReplicas", StepMessage: "scaling",
+			},
+			"Running canary step 1"),
+		Entry("step message on step error",
+			batchrelease.Status{
+				Message: "Running canary step 1", CurrentStepPhase: "Error", StepMessage: "step index out of range",
+			},
+			"step index out of range"),
+		Entry("rollout message on step error without step message",
+			batchrelease.Status{Message: "Running canary step 1", CurrentStepPhase: "Error"},
+			"Running canary step 1"),
+	)
+})
+
 var _ = Describe("ParseWorkloadSnapshot", func() {
 	It("parses generation, revisions and replicas", func() {
 		snapshot, err := batchrelease.ParseWorkloadSnapshot(map[string]any{

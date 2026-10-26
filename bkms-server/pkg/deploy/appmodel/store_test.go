@@ -155,14 +155,14 @@ var _ = Describe("RecordStore", func() {
 				},
 			}
 			recordA.Status = appmodel.StatusDeploying
-			recordA.ReleaseMode = appmodel.ReleaseModeBatch
+			recordA.ReleaseMode = appmodel.ReleaseModeCanary
 			recordA.ReleaseStrategy = strategy
 			Expect(recordStore.Create(ctx, &recordA)).To(Succeed())
 			recordID := recordA.ID.Hex()
 
 			record, err := appmodel.GetRecord(ctx, db, appID, recordID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(record.ReleaseMode).To(Equal(appmodel.ReleaseModeBatch))
+			Expect(record.ReleaseMode).To(Equal(appmodel.ReleaseModeCanary))
 			Expect(record.ReleaseStrategy).To(Equal(strategy))
 			Expect(record.BatchProgress).To(BeNil())
 			Expect(record.IsBatchReleasing()).To(BeTrue())
@@ -853,7 +853,7 @@ var _ = Describe("RecordStore", func() {
 		It("should return true when latest record is rolled back", func() {
 			recordA.EnvName = "staging"
 			recordA.TrafficLaneName = "base"
-			recordA.ReleaseMode = appmodel.ReleaseModeBatch
+			recordA.ReleaseMode = appmodel.ReleaseModeCanary
 			recordA.Status = appmodel.StatusRolledBack
 			err := recordStore.Create(ctx, &recordA)
 			Expect(err).NotTo(HaveOccurred())

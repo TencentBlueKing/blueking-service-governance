@@ -41,7 +41,7 @@ var _ = Describe("APIError", func() {
 			Expect(apiErr.Details()).To(BeEmpty())
 			Expect(errors.Is(err, cause)).To(BeTrue())
 		},
-		Entry("strategy name conflict", releasestrategy.ErrStrategyNameConflict, bkerrs.ErrCodeInvalidArgument),
+		Entry("strategy name conflict", releasestrategy.ErrStrategyNameConflict, bkerrs.ErrCodeInvalidRequest),
 		Entry("invalid batch target", releasestrategy.ErrInvalidBatchTarget, bkerrs.ErrCodeInvalidArgument),
 		Entry("strategy not found", releasestrategy.ErrStrategyNotFound, bkerrs.ErrCodeNotFound),
 		Entry("rollout not found", batchrelease.ErrRolloutNotFound, bkerrs.ErrCodeNotFound),

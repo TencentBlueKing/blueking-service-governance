@@ -1,0 +1,28 @@
+meta {
+  name: 09-batch-release-progress-release-all
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{serviceURL}}/apps/{{trpcLifecycleAppID}}/envs/{{trpcLifecycleEnvName}}/batch-release?trafficLaneName=
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should return null progress when the latest deploy released all at once", () => {
+    // 本套件的部署均未指定发布策略，最新记录为一次更新全部
+    expect(res.body).to.deep.equal({data: null});
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
