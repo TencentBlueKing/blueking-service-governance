@@ -253,15 +253,10 @@
 
     const data = await appRef.value.getValue();
     appConfig.value.appModelSpec.trpcSpec.fileContent = data.content.trim();
-    if (data.command.length) {
-      appConfig.value.appModelSpec.command = data.command;
-    }
-    if (data.args.length) {
-      appConfig.value.appModelSpec.args = data.args;
-    }
-    if (data.env.length) {
-      appConfig.value.appModelSpec.envVars = data.env as unknown as VariableInput[];
-    }
+    appConfig.value.appModelSpec.command = data.command;
+    appConfig.value.appModelSpec.args = data.args;
+    appConfig.value.appModelSpec.shCommand = data.shCommand;
+    appConfig.value.appModelSpec.envVars = data.env as unknown as VariableInput[];
 
     if (appConfig.value.buildConfig.sourceType === 'pipeline') {
       // 流水线构建 -> 清除源码仓库配置

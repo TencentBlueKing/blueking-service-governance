@@ -39,7 +39,27 @@
     <div class="bg-[#FFF] p-[16px]">
       <!-- 查看态 -->
       <template v-if="!isEditing">
-        <div class="grid grid-cols-2 gap-[12px] gap-y-2">
+        <FieldItem
+          class="mb-[12px]"
+          :field-value="$t('启动模式')"
+          :field-width="205"
+          :value="appModelSpec?.shCommand ? 'shell' : 'exec'"
+        />
+        <FieldItem
+          v-if="appModelSpec?.shCommand"
+          class="!items-start"
+          container-height="auto"
+          :field-value="$t('启动命令')"
+          :field-width="205"
+        >
+          <template #value>
+            {{ appModelSpec.shCommand }}
+          </template>
+        </FieldItem>
+        <div
+          v-else
+          class="grid grid-cols-2 gap-[12px] gap-y-2"
+        >
           <FieldItem
             class="min-h-[20px]"
             :class="[appModelSpec?.command?.length ? '!items-start' : '']"
@@ -91,26 +111,11 @@
       </template>
       <!-- 编辑态 -->
       <div v-else>
-        <div class="flex items-start gap-x-[24px]">
-          <div class="!w-[400px]">
-            <div class="mb-[6px] text-[14px] text-[#4D4F56]">{{ $t('启动命令') }}</div>
-            <RepeatableInput
-              ref="commandRef"
-              v-model="editForm.command"
-              required
-              trim-on-input
-            />
-          </div>
-          <div class="!w-[400px]">
-            <div class="mb-[6px] text-[14px] text-[#4D4F56]">{{ $t('命令参数') }}</div>
-            <RepeatableInput
-              ref="argsRef"
-              v-model="editForm.args"
-              required
-              trim-on-input
-            />
-          </div>
-        </div>
+        <StartupCommandInput
+          ref="startupCommandRef"
+          class="max-w-[1000px] err-relative"
+          :value="appModelSpec"
+        />
 
         <div class="!mb-0 mt-[16px] flex items-center">
           <Button
@@ -136,22 +141,22 @@
   import { computed, ref } from 'vue';
 
   import { Button, Message, OverflowTitle, Tag } from 'bkui-vue';
-  import { cloneDeep, set } from 'lodash-es';
+  import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
-  import { AppModelSpecInput } from '~/@types/v1/app';
   import BkmsContent from '~/components/bkms-content.vue';
   import FieldItem from '~/components/field-item.vue';
-  import RepeatableInput from '~/components/repeatable-input.vue';
+  import StartupCommandInput from '~/components/startup-command-input.vue';
   import useSpecField from '~/composables/use-spec-field';
   import { useAppDetail } from '~/stores/app-detail';
 
   import type { ExtendedEnv } from './types';
+  import type { AppModelSpecInput } from '~/@types/v1/app';
 
   interface Props {
     currentEnv: ExtendedEnv | null;
   }
 
-  defineProps<Props>();
+  const props = defineProps<Props>();
 
   const { t } = useI18n();
   const appDetailStore = useAppDetail();
@@ -163,74 +168,49 @@
   // ========== 编辑态控制 ==========
   const isEditing = ref(false);
   const saving = ref(false);
-  const commandRef = ref<InstanceType<typeof RepeatableInput> | null>(null);
-  const argsRef = ref<InstanceType<typeof RepeatableInput> | null>(null);
-
-  // 编辑表单（编辑态使用的本地副本）
-  const editForm = ref<{ args: string[]; command: string[] }>({
-    command: [],
-    args: [],
-  });
-
-  // 编辑前快照（用于取消时恢复）
-  let snapshot: null | { args: string[]; command: string[] } = null;
+  const startupCommandRef = ref<InstanceType<typeof StartupCommandInput> | null>(null);
 
   /** 取消编辑 */
   function handleCancel() {
-    if (snapshot) {
-      editForm.value = { ...snapshot };
-    }
     isEditing.value = false;
   }
 
   /** 进入编辑态 */
   function handleEdit() {
-    const currentCommand = appModelSpec.value?.command || [];
-    const currentArgs = appModelSpec.value?.args || [];
-    editForm.value = {
-      command: [...currentCommand],
-      args: [...currentArgs],
-    };
-    snapshot = {
-      command: [...currentCommand],
-      args: [...currentArgs],
-    };
+    if (!props.currentEnv?.isDefault) return;
     isEditing.value = true;
   }
 
   /** 保存编辑 */
   async function handleSave() {
     const appDetail = appDetailStore.appDetail;
-    if (!appDetail) return;
-
-    // 校验必填项：当字段为空时无需校验
-    const commandValid = editForm.value.command.length === 0 ? true : await commandRef.value?.validate();
-    const argsValid = editForm.value.args.length === 0 ? true : await argsRef.value?.validate();
-
-    if (!commandValid || !argsValid) return;
+    if (!appDetail || !props.currentEnv?.isDefault || !startupCommandRef.value || saving.value) return;
+    if (!(await startupCommandRef.value.validate())) return;
 
     saving.value = true;
     const updatedAppModelSpec = cloneDeep(appDetail.appModelSpec || {}) as AppModelSpecInput;
-    set(updatedAppModelSpec, 'command', editForm.value.command);
-    set(updatedAppModelSpec, 'args', editForm.value.args);
+    Object.assign(updatedAppModelSpec, startupCommandRef.value.getValue());
 
-    const result = await updateSpecApi
-      .value({
-        appID: appDetailStore.appID,
-        appModelSpec: updatedAppModelSpec,
-      })
-      .then(() => true)
-      .catch(() => false);
+    try {
+      const result = await updateSpecApi
+        .value({
+          appID: appDetailStore.appID,
+          appModelSpec: updatedAppModelSpec,
+        })
+        .then(() => true)
+        .catch(() => false);
 
-    if (result) {
-      Message({
-        message: t('操作成功'),
-        theme: 'success',
-      });
-      await appDetailStore.fetchAppDetail();
-      isEditing.value = false;
+      if (result) {
+        Message({
+          message: t('操作成功'),
+          theme: 'success',
+        });
+        await appDetailStore.fetchAppDetail();
+        isEditing.value = false;
+      }
+    } finally {
+      saving.value = false;
     }
-    saving.value = false;
   }
 </script>
 

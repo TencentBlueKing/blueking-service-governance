@@ -176,6 +176,12 @@
                     <Radio.Button label="shell">shell</Radio.Button>
                     <Radio.Button label="exec">exec</Radio.Button>
                   </Radio.Group>
+                  <p
+                    v-if="preStopExecMode === 'shell'"
+                    class="mb-[8px] text-[12px] text-[#979BA5]"
+                  >
+                    {{ $t('按脚本执行，可以用 && 和管道。例如 echo ready && ./server --port=8080') }}
+                  </p>
                   <RepeatableInput
                     v-if="preStopExecMode === 'exec'"
                     ref="preStopCommandRef"

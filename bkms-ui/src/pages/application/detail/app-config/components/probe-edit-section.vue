@@ -94,12 +94,17 @@
             <Radio.Button label="exec">exec</Radio.Button>
           </Radio.Group>
           <!-- shell 模式：textarea 输入 shCommand -->
-          <Input
-            v-if="execMode === 'shell'"
-            v-model="probeData.probeHandler!.shCommand"
-            :rows="4"
-            type="textarea"
-          />
+          <template v-if="execMode === 'shell'">
+            <p class="mb-[8px] text-[12px] text-[#979BA5]">
+              {{ $t('按脚本执行，可以用 && 和管道。例如 echo ready && ./server --port=8080') }}
+            </p>
+            <Input
+              v-model="probeData.probeHandler!.shCommand"
+              :placeholder="$t('请输入')"
+              :rows="4"
+              type="textarea"
+            />
+          </template>
           <!-- exec 模式：RepeatableInput 输入 command -->
           <RepeatableInput
             v-else

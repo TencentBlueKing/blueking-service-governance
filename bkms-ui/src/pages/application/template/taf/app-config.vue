@@ -28,23 +28,12 @@
       :name="$t('应用配置')"
     >
       <Form.FormItem :label="$t('启动命令')">
-        <RepeatableInput
-          ref="commandRef"
-          v-model="formData.command"
-          :add-text="$t('添加启动命令')"
+        <StartupCommandInput
+          ref="startupCommandRef"
           class="max-w-[600px]"
-          :required="formData.command.length > 0"
-          trim-on-input
-        />
-      </Form.FormItem>
-      <Form.FormItem :label="$t('命令参数')">
-        <RepeatableInput
-          ref="argsRef"
-          v-model="formData.args"
-          :add-text="$t('添加命令参数')"
-          class="max-w-[600px]"
-          :required="formData.args.length > 0"
-          trim-on-input
+          default-mode="shell"
+          shell-placeholder="./server --config=/data/conf/trpc_go.yaml"
+          :value="formData"
         />
       </Form.FormItem>
       <Form.FormItem :label="$t('环境变量')">
@@ -210,7 +199,7 @@
   import FlexRow from '~/components/flex-row.vue';
   import KeyValue from '~/components/key-value.vue';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
-  import RepeatableInput from '~/components/repeatable-input.vue';
+  import StartupCommandInput from '~/components/startup-command-input.vue';
   import useEnvManager from '~/composables/use-env-manager';
 
   import type { AppModelSpecOutputObj } from '~/@types/v1/app';
@@ -301,7 +290,10 @@
       value: item.value,
       description: '',
     }));
-    return formData.value;
+    return {
+      ...formData.value,
+      ...startupCommandRef.value?.getValue(),
+    };
   }
   function handleEditorErr(err: IMonacoEditorErrorMarkerItem[]) {
     // 捕获编辑器错误提示
@@ -328,23 +320,12 @@
   const firstTrigger = ref(false);
   const isShowContentTip = computed(() => !formData.value.tafSpec.fileContent && firstTrigger.value);
   const formRef = ref<InstanceType<typeof Form> | null>(null);
-  const commandRef = ref<InstanceType<typeof RepeatableInput> | null>(null);
-  const argsRef = ref<InstanceType<typeof RepeatableInput> | null>(null);
+  const startupCommandRef = ref<InstanceType<typeof StartupCommandInput> | null>(null);
   async function validate() {
     firstTrigger.value = true;
-    const [valid, commandValid, argsValid] = await Promise.all([
-      formRef.value?.validate(),
-      commandRef.value?.validate(),
-      argsRef.value?.validate(),
-    ]);
+    const [valid, commandValid] = await Promise.all([formRef.value?.validate(), startupCommandRef.value?.validate()]);
 
-    if (
-      !valid ||
-      !commandValid ||
-      !argsValid ||
-      editorErr.value?.message?.length ||
-      !formData.value.tafSpec.fileContent
-    )
+    if (!valid || !commandValid || editorErr.value?.message?.length || !formData.value.tafSpec.fileContent)
       return false;
     return true;
   }

@@ -276,7 +276,7 @@ describe('创建应用向导：tRPC 参数与应用配置', () => {
     mocks.paramValidate.mockResolvedValue(true);
     mocks.paramGetValue.mockReturnValue({});
     mocks.appValidate.mockResolvedValue(true);
-    mocks.appGetValue.mockReturnValue({ content: 'a: 1', command: [], args: [], env: [] });
+    mocks.appGetValue.mockReturnValue({ content: 'a: 1', command: [], args: [], env: [], shCommand: '' });
     mocks.createApp.mockResolvedValue({});
     renderTrpcWizard();
     // 参数配置 → 应用配置
@@ -290,7 +290,7 @@ describe('创建应用向导：tRPC 参数与应用配置', () => {
     mocks.paramValidate.mockResolvedValue(true);
     mocks.paramGetValue.mockReturnValue({});
     mocks.appValidate.mockResolvedValue(true);
-    mocks.appGetValue.mockReturnValue({ content: 'a: 1', command: [], args: [], env: [] });
+    mocks.appGetValue.mockReturnValue({ content: 'a: 1', command: [], args: [], env: [], shCommand: '' });
     mocks.createApp.mockRejectedValue({ msg: '代码仓库不可达' });
     renderTrpcWizard();
     await userEvent.click(await screen.findByRole('button', { name: '下一步' }));
@@ -298,5 +298,33 @@ describe('创建应用向导：tRPC 参数与应用配置', () => {
     expect(await screen.findByText(/应用创建失败/)).toBeTruthy();
     expect(screen.getByText('代码仓库不可达')).toBeTruthy();
     expect(screen.getByRole('button', { name: '重新创建' })).toBeTruthy();
+  });
+
+  it('创建失败后切换启动模式重试，应提交当前模式并清理之前的启动字段', async () => {
+    mocks.createApp.mockClear();
+    mocks.paramValidate.mockResolvedValue(true);
+    mocks.paramGetValue.mockReturnValue({});
+    mocks.appValidate.mockResolvedValue(true);
+    mocks.createApp.mockRejectedValue({ msg: '创建失败' });
+    renderTrpcWizard();
+    const startupConfigs = [
+      { command: ['/server'], args: ['--port=8080'], shCommand: '' },
+      { command: [], args: [], shCommand: ' echo ready\nexec /server\n' },
+      { command: [], args: [], shCommand: '' },
+    ];
+    for (const [index, startup] of startupConfigs.entries()) {
+      mocks.appGetValue.mockReturnValue({ content: 'a: 1', env: [], ...startup });
+      await userEvent.click(await screen.findByRole('button', { name: '下一步' }));
+      await userEvent.click(await screen.findByRole('button', { name: '创建' }));
+      expect(await screen.findByText(/应用创建失败/)).toBeTruthy();
+      expect(mocks.createApp).toHaveBeenLastCalledWith(
+        expect.objectContaining({ appModelSpec: expect.objectContaining(startup) }),
+        { needRes: true },
+      );
+      if (index < startupConfigs.length - 1) {
+        await userEvent.click(screen.getByRole('button', { name: '重新创建' }));
+      }
+    }
+    expect(mocks.createApp).toHaveBeenCalledTimes(3);
   });
 });
