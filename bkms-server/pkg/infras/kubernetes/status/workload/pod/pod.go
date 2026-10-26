@@ -30,6 +30,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status/workload"
 )
 
+// evictedReason kubelet 因节点资源压力驱逐 Pod 时写入 status.reason 的值
+const evictedReason = "Evicted"
+
 // Parser Pod 状态解析器
 type Parser struct {
 	Manifest     map[string]any
@@ -161,6 +164,15 @@ func IsReady(manifest map[string]any) bool {
 		return false
 	}
 	return mapx.GetStr(cond, "status") == string(v1.ConditionTrue)
+}
+
+// IsEvicted 判断 Pod 是否被 kubelet 因节点资源压力（DiskPressure、MemoryPressure 等）驱逐。
+//
+// 被驱逐的 Pod 停在 Failed 终态，对象会一直保留到被 GC 或手动删除，
+// 而工作负载控制器早已另起新 Pod 补足副本。
+func IsEvicted(manifest map[string]any) bool {
+	return mapx.GetStr(manifest, "status.phase") == string(v1.PodFailed) &&
+		mapx.GetStr(manifest, "status.reason") == evictedReason
 }
 
 // hasPodInitializedCondition 判断 pod 是否 initialized

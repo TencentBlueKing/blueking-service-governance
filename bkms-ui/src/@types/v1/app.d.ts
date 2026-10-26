@@ -704,7 +704,7 @@ export interface DeployOverviewClusterObj {
 
 export interface DeployOverviewInstancesObj {
   /**
-   * 存在但未 Ready 的 Pod 数
+   * 存在但未 Ready 的 Pod 数，不含被驱逐的 Pod
    */
   abnormal?: number;
   /**

@@ -25808,7 +25808,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "abnormal": {
-                    "description": "存在但未 Ready 的 Pod 数",
+                    "description": "存在但未 Ready 的 Pod 数，不含被驱逐的 Pod",
                     "type": "integer"
                 },
                 "expected": {

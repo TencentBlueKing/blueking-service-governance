@@ -500,7 +500,7 @@ type DeployOverviewInstancesObj struct {
 	Running int32 `json:"running"`
 	// 期望副本数（workload spec.replicas）
 	Expected int32 `json:"expected"`
-	// 存在但未 Ready 的 Pod 数
+	// 存在但未 Ready 的 Pod 数，不含被驱逐的 Pod
 	Abnormal int32 `json:"abnormal"`
 }
 

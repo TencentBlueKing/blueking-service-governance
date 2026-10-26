@@ -490,3 +490,33 @@ var _ = Describe("IsReady", func() {
 		})).To(BeFalse())
 	})
 })
+
+var _ = Describe("IsEvicted", func() {
+	It("should return true when the pod failed with reason Evicted", func() {
+		Expect(podstatus.IsEvicted(map[string]any{
+			"status": map[string]any{
+				"phase":   "Failed",
+				"reason":  "Evicted",
+				"message": "The node was low on resource: ephemeral-storage.",
+			},
+		})).To(BeTrue())
+	})
+
+	It("should return false when the pod failed for other reasons", func() {
+		Expect(podstatus.IsEvicted(failedPodManifest)).To(BeFalse())
+		Expect(podstatus.IsEvicted(map[string]any{
+			"status": map[string]any{"phase": "Failed", "reason": "OutOfmemory"},
+		})).To(BeFalse())
+	})
+
+	It("should return false when the pod is not in Failed phase", func() {
+		Expect(podstatus.IsEvicted(runningPodManifest1)).To(BeFalse())
+		Expect(podstatus.IsEvicted(map[string]any{
+			"status": map[string]any{"phase": "Running", "reason": "Evicted"},
+		})).To(BeFalse())
+	})
+
+	It("should return false when the pod has no status", func() {
+		Expect(podstatus.IsEvicted(map[string]any{})).To(BeFalse())
+	})
+})

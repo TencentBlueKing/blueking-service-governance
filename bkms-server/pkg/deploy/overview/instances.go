@@ -284,8 +284,14 @@ func instanceCounts(replicas *int32, pods []unstructured.Unstructured, podsOK bo
 }
 
 // countPodStates 统计 Ready 与非 Ready 的 Pod 数。
+//
+// 被驱逐的 Pod 不计入异常：控制器已另起新 Pod 补位，残留对象只待清理，
+// 计入异常会让总览长期误报；实例列表页仍会展示这些 Pod。
 func countPodStates(pods []unstructured.Unstructured) (running, abnormal int32) {
 	for _, pod := range pods {
+		if podstatus.IsEvicted(pod.Object) {
+			continue
+		}
 		if podstatus.IsReady(pod.Object) {
 			running++
 		} else {

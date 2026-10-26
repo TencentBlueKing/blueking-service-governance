@@ -27,7 +27,7 @@ type InstanceCounts struct {
 	Running int32
 	// Expected 期望副本数，取集群中 workload 的 spec.replicas
 	Expected int32
-	// Abnormal 存在但未 Ready 的 Pod 数
+	// Abnormal 存在但未 Ready 的 Pod 数，不含被驱逐的 Pod
 	Abnormal int32
 }
 

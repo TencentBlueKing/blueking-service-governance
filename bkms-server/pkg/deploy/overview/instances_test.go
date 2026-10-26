@@ -64,6 +64,21 @@ var _ = Describe("instance helpers", func() {
 			Expect(abnormal).To(Equal(int32(1)))
 		})
 
+		It("excludes evicted pods from both running and abnormal", func() {
+			evicted := unstructured.Unstructured{Object: map[string]any{"status": map[string]any{
+				"phase":  "Failed",
+				"reason": "Evicted",
+				"conditions": []any{
+					map[string]any{"type": "Ready", "status": "False", "reason": "PodCompleted"},
+				},
+			}}}
+			running, abnormal := countPodStates([]unstructured.Unstructured{
+				newPod("Running", "True"), evicted, newPod("Running", "False"), evicted,
+			})
+			Expect(running).To(Equal(int32(1)))
+			Expect(abnormal).To(Equal(int32(1)))
+		})
+
 		It("counts pods without a Ready condition as abnormal", func() {
 			running, abnormal := countPodStates([]unstructured.Unstructured{
 				{Object: map[string]any{"status": map[string]any{"phase": "Running"}}},
