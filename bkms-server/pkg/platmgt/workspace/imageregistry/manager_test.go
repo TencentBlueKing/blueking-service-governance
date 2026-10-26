@@ -35,6 +35,7 @@ import (
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
@@ -97,7 +98,7 @@ var _ = Describe("Manager", func() {
 				}
 				return probeErr
 			}).Build()
-		// UT 配置启用了蓝盾 stub，这里只记录凭证的创建与删除
+		// suite 打开了蓝盾 stub，这里只记录凭证的创建与删除
 		mockey.Mock((*bkciapi.StubApiClient).CreateCredential).
 			To(func(_ *bkciapi.StubApiClient, _ context.Context, _, credID, _, _, _ string) error {
 				createdCredIDs = append(createdCredIDs, credID)
@@ -180,6 +181,35 @@ var _ = Describe("Manager", func() {
 			_, err = getExternal()
 			Expect(err).To(MatchError(bkmsreg.ErrImageRegistryNotFound))
 		})
+
+		It("should not roll back the saved record when the update lock is no longer held", func() {
+			probeHook = func() {
+				// 锁已过期并被别人拿走；类型切换仍会因空间被删而失败
+				Expect(redis.Client().Del(ctx, manager.buildUpdateLockKey(ws.ID)).Err()).NotTo(HaveOccurred())
+				Expect(workspaceStore.Delete(ctx, bkmsworkspace.ByWorkspaceID(ws.ID))).To(Succeed())
+			}
+
+			_, err := manager.Update(ctx, ws.ID, params)
+			Expect(err).To(MatchError(bkmsworkspace.ErrWorkspaceNotFound))
+			Expect(mustGetExternal().Registry).To(Equal(registry))
+			Expect(deletedCredIDs).To(BeEmpty())
+		})
+	})
+
+	Describe("registry address", func() {
+		DescribeTable("should reject an address that would not stay on the given registry",
+			func(address string) {
+				_, err := manager.Update(ctx, ws.ID, UpdateParams{
+					Type: external, Registry: address, Username: username, Password: password,
+				})
+				Expect(err).To(MatchError(ErrInvalidRegistryAddress))
+				Expect(createdCredIDs).To(BeEmpty())
+			},
+			Entry("short host is parsed as Docker Hub", "harbor/ns"),
+			Entry("scheme prefix", "https://mirrors.example.com/ns"),
+			Entry("uppercase namespace", "mirrors.example.com/TeamNs"),
+			Entry("missing namespace", "mirrors.example.com"),
+		)
 	})
 
 	Describe("with an existing external record", func() {

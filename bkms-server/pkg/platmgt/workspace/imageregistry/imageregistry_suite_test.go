@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 )
@@ -37,6 +38,8 @@ var _ = BeforeSuite(func() {
 	if err := testutil.SetUpGlobalDatabase(); err != nil {
 		panic("failed to set up global database: " + err.Error())
 	}
+	// 用例 mock 的是 StubApiClient。不依赖本地配置里的 development.useStubBkCI，否则会打到真实蓝盾网关
+	config.G.Development.UseStubBkCI = true
 	// Update 按空间加 Redis 锁，这里用 miniredis
 	redis.InitClientForTest()
 })

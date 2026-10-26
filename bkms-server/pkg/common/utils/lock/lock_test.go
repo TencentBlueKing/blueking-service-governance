@@ -68,5 +68,20 @@ var _ = Describe("RedisLock", func() {
 			ok = rdsLock.Acquire(ctx)
 			Expect(ok).To(BeTrue())
 		})
+
+		It("should not delete a lock re-acquired by someone else", func() {
+			Expect(rdsLock.Acquire(ctx)).To(BeTrue())
+			// 模拟本实例的锁已过期，另一个持有者重新拿到了同一把锁
+			Expect(redis.Client().Del(ctx, key).Err()).NotTo(HaveOccurred())
+			other := lock.NewRedisLock(key, 10)
+			Expect(other.Acquire(ctx)).To(BeTrue())
+
+			rdsLock.Release(ctx)
+
+			third := lock.NewRedisLock(key, 10)
+			Expect(third.Acquire(ctx)).To(BeFalse())
+			other.Release(ctx)
+			Expect(third.Acquire(ctx)).To(BeTrue())
+		})
 	})
 })

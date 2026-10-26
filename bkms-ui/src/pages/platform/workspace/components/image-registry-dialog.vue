@@ -197,7 +197,7 @@
       emit('saved', saved);
       handleClose();
     } catch (err) {
-      // 接口错误已由请求拦截器弹出后端返回的提示（如账密错误、命名空间不可访问）
+      // 接口错误已由请求拦截器弹出后端返回的英文提示
       console.error(err);
     } finally {
       isSubmitting.value = false;

@@ -159,13 +159,29 @@
         <BkmsContent
           class="mt-[24px] shadow-[0_2px_4px_0_#1919290d]"
           :collapsible="true"
+          :edit-disabled="imageRegistryLoadFailed"
+          :edit-disabled-tips="t('镜像仓库加载失败，请刷新页面后再修改')"
           :show-edit-icon="true"
           :title="t('镜像仓库')"
-          @edit="isImageRegistryDialogShow = true"
+          @edit="handleEditImageRegistry"
         >
           <div class="flex items-center min-h-[80px] px-[120px] bg-[#fff]">
             <div
-              v-if="!imageRegistry?.registry"
+              v-if="imageRegistryLoadFailed"
+              class="flex items-center text-[14px] text-[#ea3636]"
+            >
+              <span>{{ t('镜像仓库加载失败') }}</span>
+              <Button
+                class="ml-[8px]"
+                text
+                theme="primary"
+                @click="fetchWorkspaceDetail"
+              >
+                {{ t('重试') }}
+              </Button>
+            </div>
+            <div
+              v-else-if="!imageRegistry?.registry"
               class="text-[14px] text-[#979ba5]"
             >
               {{ t('暂未配置镜像仓库') }}
@@ -307,6 +323,8 @@
   const isPermissionSubmitting = ref(false);
   /** 空间当前生效的镜像仓库，含明文密码，仅通过 SecretToggle 展示 */
   const imageRegistry = ref<ImageRegistryOutput | null>(null);
+  /** 与「未配置」分开：加载失败时不能打开编辑弹窗，否则会默认选中平台仓库并可能误切换 */
+  const imageRegistryLoadFailed = ref(false);
   const isImageRegistryDialogShow = ref(false);
   /** 竞态控制：workspaceID 快速切换时，仅最后一次请求的结果生效 */
   const requestSequence = ref(0);
@@ -369,22 +387,21 @@
     isError.value = false;
 
     try {
-      const [detail, registry] = await Promise.all([
+      const [detail, registryState] = await Promise.all([
         PlatmgtService.getPlatWorkspace({ workspaceID: workspaceID.value }),
-        // 镜像仓库加载失败只让卡片展示空态，不让整个详情页进入失败态
-        PlatmgtService.getPlatWorkspaceImageRegistry(
-          { workspaceID: workspaceID.value },
-          { interceptorErr: false, validateCode: false },
-        ).catch(() => null),
+        // 镜像仓库加载失败只影响这张卡片，不让整个详情页进入失败态
+        fetchImageRegistry(workspaceID.value),
         fetchWorkspaceAdminStatus(workspaceID.value),
       ]);
       if (currentSequence !== requestSequence.value) return; // 丢弃过期请求
       workspaceDetail.value = detail;
-      imageRegistry.value = registry;
+      imageRegistry.value = registryState.registry;
+      imageRegistryLoadFailed.value = registryState.failed;
     } catch {
       if (currentSequence !== requestSequence.value) return;
       workspaceDetail.value = null;
       imageRegistry.value = null;
+      imageRegistryLoadFailed.value = false;
       isCurrentUserWorkspaceAdmin.value = false;
       isError.value = true;
     } finally {
@@ -392,6 +409,26 @@
         isLoading.value = false;
       }
     }
+  }
+
+  /** 拉取镜像仓库。失败时返回 failed，避免和「确实未配置」共用同一个空值 */
+  async function fetchImageRegistry(id: string) {
+    try {
+      const registry = await PlatmgtService.getPlatWorkspaceImageRegistry(
+        { workspaceID: id },
+        { interceptorErr: false, validateCode: false },
+      );
+      return { registry, failed: false };
+    } catch {
+      return { registry: null, failed: true };
+    }
+  }
+
+  /** 仓库状态未知时不打开弹窗，弹窗会把空配置默认成平台仓库 */
+  function handleEditImageRegistry() {
+    if (imageRegistryLoadFailed.value) return;
+
+    isImageRegistryDialogShow.value = true;
   }
 
   function handleBack() {

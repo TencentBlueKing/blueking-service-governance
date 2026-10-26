@@ -82,12 +82,6 @@ func IsTagNotFound(err error) bool {
 	return hasStatusCode(err, http.StatusNotFound)
 }
 
-// hasStatusCode 错误链中的 transport.Error 是否为指定 HTTP 状态码
-func hasStatusCode(err error, statusCode int) bool {
-	var transportErr *transport.Error
-	return errors.As(err, &transportErr) && transportErr.StatusCode == statusCode
-}
-
 // IsAuthRequired 判断错误链中是否包含“镜像仓库鉴权失败”错误。
 func IsAuthRequired(err error) bool {
 	var transportErr *transport.Error
@@ -144,7 +138,9 @@ func New(username, password string, insecure bool) *Client {
 // 与 remote.CheckPushPermission 思路相同，但它内部使用 context.TODO()，无法受调用方超时控制，所以自行实现；
 // /v2/ 返回 404 时返回 ErrRegistryEndpointNotFound
 func (c *Client) CheckPushPermission(ctx context.Context, repoName string) error {
-	repo, err := name.NewRepository(repoName, c.nameOpts...)
+	// 不用 name.Insecure。它会把 scheme 固定成 http，HTTPS 仓库上的 POST 上传遇到 301/302 会被降级成 GET
+	// 自签证书由 New 的 insecure 参数通过 InsecureSkipVerify 放行；localhost 与私网地址仍由 name 库走 http
+	repo, err := name.NewRepository(repoName)
 	if err != nil {
 		return errors.Wrapf(err, "parse repo name %s", repoName)
 	}
@@ -420,4 +416,10 @@ func (c *Client) withContext(ctx context.Context) []remote.Option {
 	opts := make([]remote.Option, 0, len(c.remoteOpts)+1)
 	opts = append(opts, c.remoteOpts...)
 	return append(opts, remote.WithContext(ctx))
+}
+
+// hasStatusCode 错误链中的 transport.Error 是否为指定 HTTP 状态码
+func hasStatusCode(err error, statusCode int) bool {
+	var transportErr *transport.Error
+	return errors.As(err, &transportErr) && transportErr.StatusCode == statusCode
 }

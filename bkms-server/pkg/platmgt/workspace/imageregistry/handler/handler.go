@@ -55,7 +55,6 @@ func New(registry *storereg.Registry) *Handler {
 //	@Security	BkUserCredential
 //	@Param		workspaceID	path		string	true	"工作空间 ID"
 //	@Success	200			{object}	serializer.ImageRegistryResponse
-//	@Failure	403			{object}	bkerrs.GinErrorOutput
 //	@Failure	404			{object}	bkerrs.GinErrorOutput
 //	@Router		/plat-mgt/workspaces/{workspaceID}/image-registry [get]
 func (h *Handler) GetPlatWorkspaceImageRegistry(c *gin.Context) {
@@ -87,9 +86,6 @@ func (h *Handler) GetPlatWorkspaceImageRegistry(c *gin.Context) {
 //	@Param		body		body		serializer.UpdateImageRegistryInput	true	"镜像仓库信息"
 //	@Success	200			{object}	serializer.ImageRegistryResponse
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	403			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
-//	@Failure	409			{object}	bkerrs.GinErrorOutput
 //	@Router		/plat-mgt/workspaces/{workspaceID}/image-registry [put]
 func (h *Handler) UpdatePlatWorkspaceImageRegistry(c *gin.Context) {
 	var path serializer.WorkspacePath
@@ -117,27 +113,39 @@ func (h *Handler) manager() *imageregistry.Manager {
 	return imageregistry.NewManager(h.registry.DB)
 }
 
-// toAPIError 把 Manager 的错误映射为接口错误，中文提示会直接展示给平台管理员
+// toAPIError 把 Manager 的错误映射为接口错误。文案使用英文，由前端拦截器直接展示
 func toAPIError(err error, internalMessage string) error {
 	switch {
 	case errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "platform workspace not found")
 	case errors.Is(err, imageregistry.ErrInvalidRegistryAddress):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "镜像仓库地址格式不正确，需为「仓库地址/命名空间」且不带协议前缀")
+		return bkerrs.Wrap(
+			err,
+			bkerrs.ErrCodeInvalidArgument,
+			"invalid image registry address, expected host/namespace without a protocol prefix",
+		)
 	case errors.Is(err, imageregistry.ErrPasswordRequired):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "请填写镜像密码")
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "image registry password is required")
 	case errors.Is(err, imageregistry.ErrBuiltinRegistryNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "该空间没有平台镜像仓库，无法切换")
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "builtin image registry not found")
 	case errors.Is(err, imageregistry.ErrRegistryAuthFailed):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "镜像账号或密码错误，或该账号没有推送权限")
+		return bkerrs.Wrap(
+			err,
+			bkerrs.ErrCodeInvalidRequest,
+			"image registry authentication failed or push permission denied",
+		)
 	case errors.Is(err, imageregistry.ErrRegistryNamespaceInaccessible):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "目标命名空间不存在或无权访问")
+		return bkerrs.Wrap(
+			err,
+			bkerrs.ErrCodeInvalidRequest,
+			"image registry namespace does not exist or is inaccessible",
+		)
 	case errors.Is(err, imageregistry.ErrRegistryUnreachable):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "目标仓库访问失败，请检查地址与网络")
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "image registry is unreachable")
 	case errors.Is(err, imageregistry.ErrBkCICredentialCreateFailed):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "创建蓝盾凭证失败，请先成为空间管理员后重试")
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "failed to create bkci image credential")
 	case errors.Is(err, imageregistry.ErrConcurrentUpdate):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeAborted, "该空间的镜像仓库正在被修改，请稍后重试")
+		return bkerrs.Wrap(err, bkerrs.ErrCodeAborted, "workspace image registry is being updated")
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
 	}

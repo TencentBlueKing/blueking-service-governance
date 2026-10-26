@@ -2227,6 +2227,8 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 外部镜像仓库: External Image Registry
 镜像密码: Registry Password
 暂未配置镜像仓库: No image registry configured
+镜像仓库加载失败: Failed to load the image registry
+镜像仓库加载失败，请刷新页面后再修改: Image registry failed to load. Refresh the page before editing
 修改后，新构建的镜像将推送到新仓库: After the change, newly built images will be pushed to the new registry
 存量镜像不会迁移，使用旧镜像的应用仍需重新构建后再部署: Existing images will not be migrated; apps using old images must be rebuilt before deploying
 当前运行中的实例不受此影响: Running instances are not affected

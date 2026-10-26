@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -45,8 +46,10 @@ const (
 	probeTimeout = 8 * time.Second
 	// probeImageName 探测推送权限时拼在命名空间后的镜像名；上传会立即取消，不会真的创建该镜像
 	probeImageName = "bkms-registry-probe"
-	// updateLockTimeoutSeconds 修改锁的过期时间，需覆盖探测、创建凭证与两次落库的耗时；进程异常退出时靠它自动释放
-	updateLockTimeoutSeconds = 60
+	// updateLockTimeoutSeconds 修改锁的过期时间。最坏路径是探测 8s、创建凭证（蓝盾超时 60s）、
+	// 失败后再删一次凭证（再一个 60s）加上两次落库，取 180s 留出余量
+	// 进程异常退出时靠它自动释放；过期前本请求必须结束，否则补偿会和后进入的请求交错
+	updateLockTimeoutSeconds = 180
 )
 
 var (
@@ -140,7 +143,7 @@ func (m *Manager) Update(
 	if params.Type == bkmsreg.ImageRegistryTypeBuiltin {
 		after, err = m.switchToBuiltin(ctx, ws)
 	} else {
-		after, err = m.applyExternal(ctx, ws, params)
+		after, err = m.applyExternal(ctx, updateLock, ws, params)
 	}
 	if err != nil {
 		return nil, err
@@ -184,7 +187,7 @@ func (m *Manager) switchToBuiltin(ctx context.Context, ws *bkmsworkspace.Workspa
 //
 // 任一步失败都清理本次新建的凭证并恢复外部仓库记录，空间原配置保持生效
 func (m *Manager) applyExternal(
-	ctx context.Context, ws *bkmsworkspace.Workspace, params UpdateParams,
+	ctx context.Context, updateLock *lock.RedisLock, ws *bkmsworkspace.Workspace, params UpdateParams,
 ) (*bkmsreg.ImageRegistry, error) {
 	params.Registry = strings.TrimRight(strings.TrimSpace(params.Registry), "/")
 	params.Username = strings.TrimSpace(params.Username)
@@ -231,25 +234,33 @@ func (m *Manager) applyExternal(
 		BkCICredentialID: credID,
 	}
 	if err = m.saveExternal(ctx, existing, after); err != nil {
-		m.deleteCredential(ctx, ws.BkSystems.BkCIProjectID, newCredID)
+		m.compensateExternal(ctx, updateLock, ws, existing, newCredID, false)
 		return nil, err
 	}
 
 	if ws.ImageRegistryType != bkmsreg.ImageRegistryTypeExternal {
 		if err = m.setRegistryType(ctx, ws.ID, bkmsreg.ImageRegistryTypeExternal); err != nil {
-			m.restoreExternal(ctx, ws.ID, existing)
-			m.deleteCredential(ctx, ws.BkSystems.BkCIProjectID, newCredID)
+			m.compensateExternal(ctx, updateLock, ws, existing, newCredID, true)
 			return nil, err
 		}
 	}
 	return after, nil
 }
 
-// validateRegistry 地址需为 host/namespace，不带协议前缀
+// validateRegistry 地址需能被解析成「指定仓库主机 + 命名空间」，不能落到 Docker Hub
 func (m *Manager) validateRegistry(registry string) error {
-	host, namespace, _ := strings.Cut(registry, "/")
-	if strings.Contains(registry, "://") || host == "" || namespace == "" {
+	host, namespace, found := strings.Cut(registry, "/")
+	if strings.Contains(registry, "://") || !found || host == "" || namespace == "" {
 		return errors.Wrapf(ErrInvalidRegistryAddress, "registry %q", registry)
+	}
+
+	// 与探测使用同一套解析规则。短主机名（如 harbor/ns）会被当成仓库路径，实际访问 index.docker.io
+	repo, err := name.NewRepository(registry + "/" + probeImageName)
+	if err != nil {
+		return errors.Wrapf(ErrInvalidRegistryAddress, "registry %q: %s", registry, err.Error())
+	}
+	if repo.RegistryStr() == name.DefaultRegistry {
+		return errors.Wrapf(ErrInvalidRegistryAddress, "registry %q resolves to %s", registry, repo.RegistryStr())
 	}
 	return nil
 }
@@ -259,7 +270,7 @@ func (m *Manager) probe(ctx context.Context, registry, username, password string
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
-	// insecure 与构建、镜像查询链路一致：允许自签证书
+	// insecure 只跳过证书校验，允许自签证书；协议由 CheckPushPermission 决定，公网主机走 HTTPS
 	err := infrasreg.New(username, password, true).CheckPushPermission(ctx, registry+"/"+probeImageName)
 	switch {
 	case err == nil:
@@ -283,6 +294,25 @@ func (m *Manager) createCredential(
 		return "", errors.Wrap(ErrBkCICredentialCreateFailed, err.Error())
 	}
 	return credID, nil
+}
+
+// compensateExternal 清理本次新建的凭证；restore 为 true 时同时把外部仓库记录恢复成进入本请求前的状态
+//
+// 锁已经不属于本次请求时跳过：另一个请求可能正在写同一条记录，按本请求读到的旧值回滚会抹掉它的配置
+func (m *Manager) compensateExternal(
+	ctx context.Context, updateLock *lock.RedisLock, ws *bkmsworkspace.Workspace,
+	existing *bkmsreg.ImageRegistry, newCredID string, restore bool,
+) {
+	ctx = context.WithoutCancel(ctx)
+	if !updateLock.Held(ctx) {
+		log.Errorf(ctx, "skip image registry compensation for workspace %s: update lock lost", ws.ID)
+		return
+	}
+
+	if restore {
+		m.restoreExternal(ctx, ws.ID, existing)
+	}
+	m.deleteCredential(ctx, ws.BkSystems.BkCIProjectID, newCredID)
 }
 
 // deleteCredential 补偿删除本次新建的蓝盾凭证（credID 为空时跳过），失败只记日志，不覆盖原始错误
