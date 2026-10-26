@@ -27,6 +27,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
+	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -95,6 +98,72 @@ var _ = Describe("Image serializers", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(body)).To(ContainSubstring(`"count":"1"`))
 		Expect(string(body)).To(ContainSubstring(`"size":"1024"`))
+	})
+
+	Describe("NewImageSourceMaterial", func() {
+		newRecord := func(checkoutBy, revision string) *imgbuild.Record {
+			return &imgbuild.Record{
+				Params: map[string]string{
+					pipelineparam.RepoURL:        "https://git.example.com/team/platform.git",
+					pipelineparam.RepoCheckoutBy: checkoutBy,
+					pipelineparam.RepoRevision:   revision,
+				},
+				Extras: map[string]string{
+					pipelinevar.GitRepoURL:          "https://git.example.com/team/demo.git",
+					pipelinevar.GitRepoHeadCommitID: "5c9e0b41d2a64f0e9c8b7a6d5e4f3a2b1c0d9e8f",
+				},
+			}
+		}
+
+		It("returns nil without build record", func() {
+			Expect(serializer.NewImageSourceMaterial(nil)).To(BeNil())
+		})
+
+		It("builds branch source material from the checked out repository", func() {
+			material := serializer.NewImageSourceMaterial(newRecord("BRANCH", "main"))
+			Expect(material).To(Equal(&serializer.ImageSourceMaterialOutputObj{
+				RevisionType: "branch",
+				Revision:     "main",
+				CommitID:     "5c9e0b41d2a64f0e9c8b7a6d5e4f3a2b1c0d9e8f",
+				RepoURL:      "https://git.example.com/team/demo.git",
+				CommitURL:    "https://git.example.com/team/demo/commit/5c9e0b41d2a64f0e9c8b7a6d5e4f3a2b1c0d9e8f",
+			}))
+		})
+
+		It("keeps revision type of tag and commit builds", func() {
+			tagBuild := serializer.NewImageSourceMaterial(newRecord("TAG", "v1.9.0"))
+			Expect(tagBuild.RevisionType).To(Equal("tag"))
+			commitBuild := serializer.NewImageSourceMaterial(newRecord("COMMIT_ID", "a1b2c3d4"))
+			Expect(commitBuild.RevisionType).To(Equal("commit"))
+		})
+
+		It("falls back to the platform repository when pipeline repo url is missing", func() {
+			record := newRecord("BRANCH", "main")
+			delete(record.Extras, pipelinevar.GitRepoURL)
+			material := serializer.NewImageSourceMaterial(record)
+			Expect(material.RepoURL).To(Equal("https://git.example.com/team/platform.git"))
+			Expect(material.CommitURL).To(HavePrefix("https://git.example.com/team/platform/commit/"))
+		})
+
+		It("returns nil when commit id is missing", func() {
+			record := newRecord("BRANCH", "main")
+			record.Extras[pipelinevar.GitRepoHeadCommitID] = ""
+			Expect(serializer.NewImageSourceMaterial(record)).To(BeNil())
+		})
+
+		It("leaves commit url empty for non-http repository", func() {
+			record := newRecord("BRANCH", "main")
+			record.Extras[pipelinevar.GitRepoURL] = "git@git.example.com:team/demo.git"
+			Expect(serializer.NewImageSourceMaterial(record).CommitURL).To(BeEmpty())
+		})
+
+		It("marshals null source material for images without build record", func() {
+			body, err := json.Marshal(new(serializer.AppImageOutputObj).FromModel(
+				snapshot.Image{Tag: "synced"}, "repo/test", nil, nil, nil, nil,
+			))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(body)).To(ContainSubstring(`"sourceMaterial":null`))
+		})
 	})
 
 	It("marshals refresh counters as strings", func() {

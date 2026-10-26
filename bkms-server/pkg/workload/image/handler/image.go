@@ -25,7 +25,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
+	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -137,6 +139,20 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 		return
 	}
 
+	sourceRecords, err := imgbuild.LatestSucceededRecordsByImages(
+		ctx,
+		store.Of(h.registry.DB, imgbuild.RecordMeta),
+		uriInput.AppID,
+		lo.SliceToMap(snapshots, func(snap snapshot.Image) (string, string) { return snap.Tag, snap.Digest }),
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(
+			c,
+			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "match build records for app %s", uriInput.AppID),
+		)
+		return
+	}
+
 	repository := ""
 	if status != nil {
 		repository = status.RepoName
@@ -149,6 +165,7 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 			promotionMap[snap.Tag],
 			deployedEnvsMap[snap.Tag],
 			envTypeMap,
+			sourceRecords[snap.Tag],
 		))
 	}
 

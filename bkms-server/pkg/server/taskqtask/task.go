@@ -53,6 +53,8 @@ import (
 func Setup(mux *asynq.ServeMux) error {
 	// 构建状态轮询
 	mux.Handle(buildpoll.Task.Name(), buildpoll.Task.Handler())
+	// 构建产物镜像 digest 记录
+	mux.Handle(buildpoll.ImageDigestTask.Name(), buildpoll.ImageDigestTask.Handler())
 	// Helm Chart 构建状态轮询
 	mux.Handle(chartbuildpoll.Task.Name(), chartbuildpoll.Task.Handler())
 	// AppModel 部署状态轮询

@@ -38,10 +38,23 @@ const (
 	saveStatusTimeout = 10 * time.Second
 	// pollingTimeout 从 record.StartedAt 起算的轮询窗口，超时标 StatusPollingTimeout
 	pollingTimeout = 24 * time.Hour
+
+	// imageDigestName 记录构建产物镜像 digest 的 asynq 任务类型名
+	imageDigestName = "taskq.recordBuildImageDigest"
+	// imageDigestMaxRetry 记录 digest 失败的重试上限；按 asynq 默认退避，全部重试落在 imageDigestRecordWindow 内
+	imageDigestMaxRetry = 3
+	// imageDigestRecordWindow 构建结束后允许记录 digest 的时长。digest 按 tag 回查镜像仓库，
+	// 越晚读越可能读到被外部覆盖后的镜像，超出后放弃：宁可展示 --，也不关联到错误的构建
+	imageDigestRecordWindow = 5 * time.Minute
 )
 
 // Task 构建状态轮询任务；init 赋值避免与 enqueueNext 引用形成包初始化环
 var Task *taskq.TaskType[Args]
+
+// ImageDigestTask 构建成功后记录产物镜像 digest 的任务
+var ImageDigestTask = taskq.NewTaskType[ImageDigestArgs](
+	imageDigestName, handleRecordImageDigest, asynq.MaxRetry(imageDigestMaxRetry),
+)
 
 func init() {
 	Task = taskq.NewTaskType[Args](name, handle, asynq.MaxRetry(tickMaxRetry)).OnExhausted(onExhausted)

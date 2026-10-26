@@ -82,6 +82,9 @@ type Record struct {
 	Status Status `bson:"status"`
 	// Artifact 构建产物（镜像）
 	Artifact string `bson:"artifact"`
+	// ImageDigest 构建成功后从镜像仓库读到的产物 digest，用于把制品列表中的镜像精确关联回构建记录；
+	// 本字段上线前的记录、产物不在应用制品仓库或读取失败时为空
+	ImageDigest string `bson:"imageDigest,omitempty"`
 	// Operator 操作人
 	Operator string `bson:"operator"`
 	// Extras 额外信息

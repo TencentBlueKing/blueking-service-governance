@@ -22,8 +22,11 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -124,4 +127,48 @@ func UpdateRecord(ctx context.Context, records *RecordStore, record *Record) err
 		return errors.Wrapf(err, "update app %s build record %s", record.AppID, record.BuildID)
 	}
 	return nil
+}
+
+// UpdateRecordImageDigest 回写构建产物的镜像 digest，记录不存在时返回 ErrRecordNotFound
+func UpdateRecordImageDigest(ctx context.Context, records *RecordStore, appID, buildID, digest string) error {
+	if err := records.Update(
+		ctx, &Record{ImageDigest: digest}, store.UpdateSelected("imageDigest"), ByBuild(appID, buildID),
+	); err != nil {
+		return errors.Wrapf(err, "update app %s build record %s image digest", appID, buildID)
+	}
+	return nil
+}
+
+// LatestSucceededRecordsByImages 找出产出各镜像的成功构建记录，digestByTag 为镜像 tag 到 digest 的映射，
+// 返回 tag 到构建记录的映射，关联不上的 tag 不出现在结果中。
+//
+// 构建缓存全部命中时，不同 tag 的构建可能产出同一 digest，因此 tag 与 digest 须同时匹配；多条命中时取最近结束的。
+// 查询由唯一索引 appID + buildID 的 appID 前缀支撑，单个应用的构建记录量有限，不另建索引
+func LatestSucceededRecordsByImages(
+	ctx context.Context, records *RecordStore, appID string, digestByTag map[string]string,
+) (map[string]*Record, error) {
+	digests := lo.Uniq(lo.Without(lo.Values(digestByTag), ""))
+	if len(digests) == 0 {
+		return map[string]*Record{}, nil
+	}
+	list, err := records.List(
+		ctx,
+		ByApp(appID),
+		store.Where("status", StatusSuccess),
+		store.Where("imageDigest", bson.M{"$in": digests}),
+		store.Desc("endedAt"),
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list app %s succeeded build records by image digests", appID)
+	}
+
+	result := make(map[string]*Record, len(digestByTag))
+	for i := range list {
+		tag := list[i].Params[pipelineparam.ImageTag]
+		if _, found := result[tag]; found || digestByTag[tag] != list[i].ImageDigest {
+			continue
+		}
+		result[tag] = &list[i]
+	}
+	return result, nil
 }

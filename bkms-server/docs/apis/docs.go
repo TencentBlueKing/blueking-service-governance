@@ -640,6 +640,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
+                    },
+                    "409": {
+                        "description": "文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
                     }
                 }
             }
@@ -22204,6 +22210,14 @@ const docTemplate = `{
                     "type": "string",
                     "example": "0"
                 },
+                "sourceMaterial": {
+                    "description": "源材料（构建所用代码），非平台构建或无法精确关联到构建记录时为 null",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.ImageSourceMaterialOutputObj"
+                        }
+                    ]
+                },
                 "tag": {
                     "description": "镜像 TAG",
                     "type": "string"
@@ -28060,6 +28074,31 @@ const docTemplate = `{
                 },
                 "username": {
                     "description": "镜像仓库用户名",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ImageSourceMaterialOutputObj": {
+            "type": "object",
+            "properties": {
+                "commitID": {
+                    "description": "构建实际检出的完整 CommitID",
+                    "type": "string"
+                },
+                "commitURL": {
+                    "description": "代码仓库中该提交的页面地址，仓库地址不是 http(s) 时为空",
+                    "type": "string"
+                },
+                "repoURL": {
+                    "description": "代码仓库地址",
+                    "type": "string"
+                },
+                "revision": {
+                    "description": "代码修订：分支名、Tag 名或 CommitID，按构建时填写原样返回",
+                    "type": "string"
+                },
+                "revisionType": {
+                    "description": "代码来源类型（branch / tag / commit）",
                     "type": "string"
                 }
             }

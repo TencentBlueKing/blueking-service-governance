@@ -256,6 +256,9 @@ func (p *poller) onTerminated(ctx context.Context, record *build.Record, args Ar
 	)
 
 	if record.Status == build.StatusSuccess {
+		if err := enqueueRecordImageDigest(ctx, args.AppID, args.BuildID); err != nil {
+			log.Errorf(ctx, "record image digest of build %s failed: %v", args, err)
+		}
 		imageTag := record.Params[pipelineparam.ImageTag]
 		go func() {
 			tCtx := context.WithoutCancel(ctx)

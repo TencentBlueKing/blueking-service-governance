@@ -32,14 +32,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 func newRunningRecord(workspaceID, appID, buildID string) *build.Record {
@@ -80,6 +83,7 @@ var _ = Describe("Poller RunTick", func() {
 		plr             *poller
 		deployHook      func() error
 		snapshotHook    func(context.Context, string, string) error
+		digestHook      func(appID, buildID string) error
 	)
 
 	createRecord := func() {
@@ -109,6 +113,7 @@ var _ = Describe("Poller RunTick", func() {
 		plr = newPoller(db)
 		deployHook = nil
 		snapshotHook = nil
+		digestHook = nil
 
 		Expect(pipelineStore.Create(ctx, &bkci.Pipeline{
 			ID:          "p-" + stringx.Random(8),
@@ -141,6 +146,12 @@ var _ = Describe("Poller RunTick", func() {
 		mockey.Mock(refreshSnapshots).To(func(ctx context.Context, appID, imageTag string) error {
 			if snapshotHook != nil {
 				return snapshotHook(ctx, appID, imageTag)
+			}
+			return nil
+		}).Build()
+		mockey.Mock(enqueueRecordImageDigest).To(func(_ context.Context, appID, buildID string) error {
+			if digestHook != nil {
+				return digestHook(appID, buildID)
 			}
 			return nil
 		}).Build()
@@ -247,5 +258,190 @@ var _ = Describe("Poller RunTick", func() {
 		Expect(plr.runTick(ctx, args)).To(Succeed())
 		Expect(reloadRecord().Status).To(Equal(build.StatusSuccess))
 		Eventually(done).Should(BeClosed())
+	})
+
+	It("still refreshes snapshots when enqueueing image digest task fails", func() {
+		createRecord()
+		stubFetch(build.StatusSuccess)
+		digested := make(chan string, 1)
+		digestHook = func(_, buildID string) error {
+			digested <- buildID
+			return errors.New("redis unavailable")
+		}
+		refreshed := make(chan struct{})
+		snapshotHook = func(context.Context, string, string) error {
+			close(refreshed)
+			return nil
+		}
+
+		Expect(plr.runTick(ctx, args)).To(Succeed())
+		Eventually(digested).Should(Receive(Equal(rec.BuildID)))
+		Eventually(refreshed).Should(BeClosed())
+		Expect(reloadRecord().Status).To(Equal(build.StatusSuccess))
+	})
+
+	It("does not record image digest when build fails", func() {
+		createRecord()
+		stubFetch(build.StatusFailed)
+		digestCalled := make(chan struct{}, 1)
+		digestHook = func(_, _ string) error {
+			digestCalled <- struct{}{}
+			return nil
+		}
+
+		Expect(plr.runTick(ctx, args)).To(Succeed())
+		Consistently(digestCalled, 100*time.Millisecond).ShouldNot(Receive())
+	})
+})
+
+var _ = Describe("recordImageDigest", func() {
+	const repoName = "mirrors.example.com/bkms/demo"
+
+	var (
+		ctx       context.Context
+		db        *mongo.Database
+		records   *build.RecordStore
+		rec       *build.Record
+		fetchedAt []string
+		detailErr error
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		db = testutil.NewDB(GinkgoT())
+		records = store.Of(db, build.RecordMeta)
+		fetchedAt = nil
+		detailErr = nil
+
+		rec = newRunningRecord("ws-"+stringx.Random(8), "app-"+stringx.Random(8), "b-"+stringx.Random(8))
+		rec.Status = build.StatusSuccess
+		rec.Params = map[string]string{pipelineparam.ImageTag: "v1.0.0"}
+		rec.Artifact = repoName + ":v1.0.0"
+		Expect(build.CreateRecord(ctx, db, rec)).To(Succeed())
+
+		mockey.Mock((*snapshot.Service).ResolveRepoKeyForApp).Return(
+			&snapshot.RepoKeyInfo{RepoKey: "rk", RepoName: repoName}, nil,
+		).Build()
+		mockey.Mock((*registry.Client).GetTagDetail).To(
+			func(_ *registry.Client, _ context.Context, repo, tag string) (registry.ImageDetail, error) {
+				fetchedAt = append(fetchedAt, repo+":"+tag)
+				if detailErr != nil {
+					return registry.ImageDetail{}, detailErr
+				}
+				return registry.ImageDetail{Tag: tag, Digest: "sha256:abc"}, nil
+			},
+		).Build()
+	})
+
+	AfterEach(func() {
+		mockey.UnPatchAll()
+	})
+
+	reload := func() *build.Record {
+		got, err := records.Get(ctx, build.ByBuild(rec.AppID, rec.BuildID))
+		Expect(err).NotTo(HaveOccurred())
+		return got
+	}
+
+	It("records digest of the artifact in app image repo", func() {
+		Expect(recordImageDigest(ctx, db, rec)).To(Succeed())
+		Expect(fetchedAt).To(Equal([]string{repoName + ":v1.0.0"}))
+		Expect(reload().ImageDigest).To(Equal("sha256:abc"))
+	})
+
+	It("skips when artifact is not in app image repo", func() {
+		rec.Artifact = "other.example.com/bkms/demo:v1.0.0"
+		Expect(recordImageDigest(ctx, db, rec)).To(Succeed())
+		Expect(fetchedAt).To(BeEmpty())
+		Expect(reload().ImageDigest).To(BeEmpty())
+	})
+
+	It("skips when image tag is empty", func() {
+		rec.Params = map[string]string{}
+		Expect(recordImageDigest(ctx, db, rec)).To(Succeed())
+		Expect(fetchedAt).To(BeEmpty())
+	})
+
+	It("returns error and keeps digest empty when registry fails", func() {
+		detailErr = errors.New("boom")
+		Expect(recordImageDigest(ctx, db, rec)).To(MatchError(ContainSubstring("boom")))
+		Expect(reload().ImageDigest).To(BeEmpty())
+	})
+})
+
+var _ = Describe("recordImageDigestOfBuild", func() {
+	var (
+		ctx       context.Context
+		db        *mongo.Database
+		rec       *build.Record
+		args      ImageDigestArgs
+		recorded  []string
+		recordErr error
+	)
+
+	createRecord := func() {
+		Expect(build.CreateRecord(ctx, db, rec)).To(Succeed())
+	}
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		db = testutil.NewDB(GinkgoT())
+		recorded = nil
+		recordErr = nil
+
+		rec = newRunningRecord("ws-"+stringx.Random(8), "app-"+stringx.Random(8), "b-"+stringx.Random(8))
+		rec.Status = build.StatusSuccess
+		rec.EndedAt = time.Now()
+		args = ImageDigestArgs{AppID: rec.AppID, BuildID: rec.BuildID}
+
+		mockey.Mock(recordImageDigest).To(func(_ context.Context, _ *mongo.Database, record *build.Record) error {
+			recorded = append(recorded, record.BuildID)
+			return recordErr
+		}).Build()
+	})
+
+	AfterEach(func() {
+		mockey.UnPatchAll()
+	})
+
+	It("records digest of a succeeded build within the record window", func() {
+		createRecord()
+		Expect(recordImageDigestOfBuild(ctx, db, args)).To(Succeed())
+		Expect(recorded).To(Equal([]string{rec.BuildID}))
+	})
+
+	It("skips when digest is already recorded", func() {
+		rec.ImageDigest = "sha256:abc"
+		createRecord()
+		Expect(recordImageDigestOfBuild(ctx, db, args)).To(Succeed())
+		Expect(recorded).To(BeEmpty())
+	})
+
+	It("skips when build is not succeeded", func() {
+		rec.Status = build.StatusFailed
+		createRecord()
+		Expect(recordImageDigestOfBuild(ctx, db, args)).To(Succeed())
+		Expect(recorded).To(BeEmpty())
+	})
+
+	It("stops retrying without reading registry when beyond the record window", func() {
+		rec.EndedAt = time.Now().Add(-imageDigestRecordWindow - time.Minute)
+		createRecord()
+		err := recordImageDigestOfBuild(ctx, db, args)
+		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeTrue())
+		Expect(recorded).To(BeEmpty())
+	})
+
+	It("stops retrying when build record is missing", func() {
+		err := recordImageDigestOfBuild(ctx, db, args)
+		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeTrue())
+	})
+
+	It("returns a retryable error when recording fails", func() {
+		createRecord()
+		recordErr = errors.New("registry unavailable")
+		err := recordImageDigestOfBuild(ctx, db, args)
+		Expect(err).To(MatchError(ContainSubstring("registry unavailable")))
+		Expect(errors.Is(err, taskq.ErrStopRetry)).To(BeFalse())
 	})
 })

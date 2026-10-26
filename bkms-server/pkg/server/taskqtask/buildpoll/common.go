@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
@@ -38,9 +39,11 @@ import (
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/appmodeldeploypoll"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
@@ -207,6 +210,70 @@ func startDeployAfterBuild(ctx context.Context, record *build.Record, args Args)
 		return deployID, errors.Wrap(err, "enqueue polling deploy status task")
 	}
 	return deployID, nil
+}
+
+// enqueueRecordImageDigest 投递记录构建产物镜像 digest 的任务，失败由任务按 imageDigestMaxRetry 重试
+func enqueueRecordImageDigest(ctx context.Context, appID, buildID string) error {
+	task := ImageDigestTask.NewTask(ImageDigestArgs{AppID: appID, BuildID: buildID})
+	return errors.Wrap(taskq.Enqueue(ctx, task), "enqueue record image digest task")
+}
+
+// handleRecordImageDigest asynq 入口：数据库缺失则 ErrStopRetry，否则交给 recordImageDigestOfBuild
+func handleRecordImageDigest(ctx context.Context, args ImageDigestArgs) error {
+	reg := storereg.G()
+	if reg == nil || reg.DB == nil {
+		return errors.Wrapf(taskq.ErrStopRetry, "record image digest of build %s: stores not initialized", args)
+	}
+	return recordImageDigestOfBuild(ctx, reg.DB, args)
+}
+
+// recordImageDigestOfBuild 为一条成功构建记录 digest。已记录过则跳过，保证重复投递与重试幂等；
+// 超出 imageDigestRecordWindow（如 worker 停机后积压的任务）则放弃
+func recordImageDigestOfBuild(ctx context.Context, db *mongo.Database, args ImageDigestArgs) error {
+	record, err := store.Of(db, build.RecordMeta).Get(ctx, build.ByBuild(args.AppID, args.BuildID))
+	if err != nil {
+		if errors.Is(err, build.ErrRecordNotFound) {
+			return errors.Wrapf(taskq.ErrStopRetry, "get build record %s: %v", args, err)
+		}
+		return errors.Wrapf(err, "get build record %s", args)
+	}
+	if record.Status != build.StatusSuccess || record.ImageDigest != "" {
+		return nil
+	}
+	if elapsed := time.Since(record.EndedAt); elapsed > imageDigestRecordWindow {
+		return errors.Wrapf(
+			taskq.ErrStopRetry, "build %s ended %s ago, beyond image digest record window %s",
+			args, elapsed, imageDigestRecordWindow,
+		)
+	}
+	return recordImageDigest(ctx, db, record)
+}
+
+// recordImageDigest 构建成功后从镜像仓库读取产物 digest 并回写构建记录，供制品列表按 digest 精确关联构建记录。
+// 产物不在应用制品仓库时跳过：这类镜像不会出现在制品列表中，且仓库凭证也不一定适用
+func recordImageDigest(ctx context.Context, db *mongo.Database, record *build.Record) error {
+	imageTag := record.Params[pipelineparam.ImageTag]
+	if imageTag == "" {
+		return nil
+	}
+	info, err := snapshot.NewService(db).ResolveRepoKeyForApp(ctx, record.AppID)
+	if err != nil {
+		return errors.Wrapf(err, "resolve image repo for app %s", record.AppID)
+	}
+	if record.Artifact != info.RepoName+":"+imageTag {
+		log.Infof(
+			ctx, "build %s artifact %s is not in app image repo %s, skip recording image digest",
+			record.BuildID, record.Artifact, info.RepoName,
+		)
+		return nil
+	}
+
+	detail, err := registry.New(info.Username, info.Password, true).GetTagDetail(ctx, info.RepoName, imageTag)
+	if err != nil {
+		return errors.Wrapf(err, "get image %s detail", record.Artifact)
+	}
+	records := store.Of(db, build.RecordMeta)
+	return build.UpdateRecordImageDigest(ctx, records, record.AppID, record.BuildID, detail.Digest)
 }
 
 // refreshSnapshots 构建成功后刷新镜像快照。

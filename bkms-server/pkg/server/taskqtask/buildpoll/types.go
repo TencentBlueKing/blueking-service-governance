@@ -37,6 +37,17 @@ type Args struct {
 	FailureRetryRemain int             `json:"failureRetryRemain,omitempty"`
 }
 
+// ImageDigestArgs 记录构建产物镜像 digest 的任务参数
+type ImageDigestArgs struct {
+	AppID   string `json:"appID"`
+	BuildID string `json:"buildID"`
+}
+
+// String 输出构建身份，便于日志对齐同一构建
+func (args ImageDigestArgs) String() string {
+	return fmt.Sprintf("<appID: %s, buildID: %s>", args.AppID, args.BuildID)
+}
+
 // String 输出轮询身份、自动部署目标与剩余失败次数，便于日志对齐同一构建的连续 tick
 func (args Args) String() string {
 	autoDeploy := "off"

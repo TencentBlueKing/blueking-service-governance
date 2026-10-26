@@ -19,8 +19,15 @@
 package serializer
 
 import (
+	"strings"
 	"time"
 
+	"github.com/samber/lo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
+	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
@@ -167,23 +174,28 @@ type AppImageOutputObj struct {
 	PromotedBy string `json:"promotedBy"`
 	// 已部署环境列表
 	DeployedEnvs []*DeployedEnvInfoOutputObj `json:"deployedEnvs"`
+	// 源材料（构建所用代码），非平台构建或无法精确关联到构建记录时为 null
+	SourceMaterial *ImageSourceMaterialOutputObj `json:"sourceMaterial"`
 }
 
 // FromModel fills output fields from image snapshot and related model data.
+// source 为产出该镜像的构建记录，可为 nil
 func (o *AppImageOutputObj) FromModel(
 	snap snapshot.Image,
 	repository string,
 	promo *promotion.Image,
 	deployed []deploytypes.ImageTagEnvPair,
 	envTypeMap map[string]string,
+	source *imgbuild.Record,
 ) *AppImageOutputObj {
 	*o = AppImageOutputObj{
-		Repository:   repository,
-		Tag:          snap.Tag,
-		Digest:       snap.Digest,
-		Size:         snap.Size,
-		BuiltAt:      snap.BuiltAt,
-		DeployedEnvs: deployedEnvOutputs(deployed, envTypeMap),
+		Repository:     repository,
+		Tag:            snap.Tag,
+		Digest:         snap.Digest,
+		Size:           snap.Size,
+		BuiltAt:        snap.BuiltAt,
+		DeployedEnvs:   deployedEnvOutputs(deployed, envTypeMap),
+		SourceMaterial: NewImageSourceMaterial(source),
 	}
 	if promo != nil {
 		o.IsPromoted = true
@@ -191,6 +203,48 @@ func (o *AppImageOutputObj) FromModel(
 		o.PromotedBy = promo.PromotedBy
 	}
 	return o
+}
+
+// ImageSourceMaterialOutputObj is the JSON representation of the code that built an image.
+type ImageSourceMaterialOutputObj struct {
+	// 代码来源类型（branch / tag / commit）
+	RevisionType string `json:"revisionType"`
+	// 代码修订：分支名、Tag 名或 CommitID，按构建时填写原样返回
+	Revision string `json:"revision"`
+	// 构建实际检出的完整 CommitID
+	CommitID string `json:"commitID"`
+	// 代码仓库地址
+	RepoURL string `json:"repoURL"`
+	// 代码仓库中该提交的页面地址，仓库地址不是 http(s) 时为空
+	CommitURL string `json:"commitURL"`
+}
+
+// NewImageSourceMaterial 由构建记录生成源材料；记录为空或缺少仓库地址、CommitID 时返回 nil
+func NewImageSourceMaterial(r *imgbuild.Record) *ImageSourceMaterialOutputObj {
+	if r == nil {
+		return nil
+	}
+	// 优先取流水线实际检出的仓库：自定义流水线不一定按平台传入的仓库拉代码
+	repoURL := lo.CoalesceOrEmpty(r.Extras[pipelinevar.GitRepoURL], r.Params[pipelineparam.RepoURL])
+	commitID := r.Extras[pipelinevar.GitRepoHeadCommitID]
+	if repoURL == "" || commitID == "" {
+		return nil
+	}
+	return &ImageSourceMaterialOutputObj{
+		RevisionType: string(revision.TypeFromCheckoutBy(r.Params[pipelineparam.RepoCheckoutBy])),
+		Revision:     r.Params[pipelineparam.RepoRevision],
+		CommitID:     commitID,
+		RepoURL:      repoURL,
+		CommitURL:    commitPageURL(repoURL, commitID),
+	}
+}
+
+// commitPageURL 按工蜂 / GitHub 共用的 {仓库}/commit/{sha} 规则拼提交页地址
+func commitPageURL(repoURL, commitID string) string {
+	if !strings.HasPrefix(repoURL, "http://") && !strings.HasPrefix(repoURL, "https://") {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimSuffix(repoURL, "/"), ".git") + "/commit/" + commitID
 }
 
 // PaginatedAppImagesOutputObjs is the paginated app images payload.
