@@ -109,7 +109,7 @@ func (s *Service) DeleteImageTag(ctx context.Context, appID, tag string) error {
 	}
 	// suppression 必须先于快照删除写入，否则两步之间的刷新会把 tag 当成新增写回。
 	if err = snapshot.UpsertTagSuppression(ctx, s.db, info.RepoKey, info.RepoName, tag); err != nil {
-		return err
+		return errors.Wrapf(err, "record suppression before deleting local snapshot %s:%s", info.RepoKey, tag)
 	}
 	if _, err = s.snapshots.DeleteMany(ctx, snapshot.ByRepoTag(info.RepoKey, tag)); err != nil {
 		return errors.Wrapf(err, "delete local snapshot %s:%s", info.RepoKey, tag)

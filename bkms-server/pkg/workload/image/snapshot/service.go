@@ -298,7 +298,7 @@ func (s *Service) RefreshAppSnapshots(
 ) (*RefreshResult, error) {
 	info, err := s.ResolveRepoKeyForApp(ctx, appID)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "resolve repo key for app %s", appID)
 	}
 	return s.refreshSnapshotsByRepoInfo(ctx, info, forceDetailSyncTags...)
 }
@@ -309,7 +309,7 @@ func (s *Service) RefreshAppSnapshots(
 func (s *Service) RefreshRepositorySnapshots(ctx context.Context, repoName string) (*RefreshResult, error) {
 	info, err := s.ResolveRepoKeyForRepository(repoName)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "resolve repo key for repository %s", repoName)
 	}
 	return s.refreshSnapshotsByRepoInfo(ctx, info)
 }
@@ -320,14 +320,14 @@ func (s *Service) refreshSnapshotsByRepoInfo(
 	// 先落库标记，确保即使抢不到刷新权，这些标签也会在后续任意一次刷新中被重新拉取详情
 	if len(forceDetailSyncTags) > 0 {
 		if err := MarkDetailSyncPending(ctx, s.db, info.RepoKey, forceDetailSyncTags); err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "mark detail sync pending for %s", info.RepoKey)
 		}
 	}
 
 	// 幂等性检查
 	acquired, err := TrySetRefreshing(ctx, s.db, info.RepoKey)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "acquire refresh for %s", info.RepoKey)
 	}
 	if !acquired {
 		log.Infof(ctx, "snapshot refresh for %s is already in progress", info.RepoKey)
@@ -373,11 +373,11 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	// 获取本地已有标签
 	localTags, err := ListAllTags(persistCtx, s.db, info.RepoKey)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "list local tags for %s", info.RepoKey)
 	}
 	suppressedTags, err := ListSuppressedTags(persistCtx, s.db, info.RepoKey)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "list suppressed tags for %s", info.RepoKey)
 	}
 
 	localTagSet := set.NewStringSetWithValues(localTags)
@@ -400,7 +400,7 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		return !remoteTagSet.Has(tag)
 	})
 	if err = DeleteTagSuppressions(persistCtx, s.db, info.RepoKey, staleSuppressions); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "delete stale suppressions for %s", info.RepoKey)
 	}
 
 	// 只对新增标签进行插入
@@ -415,7 +415,7 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	// 删除远程已消失的标签
 	removedCount, err := DeleteTagsNotIn(persistCtx, s.db, info.RepoKey, remoteTags)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "delete snapshots absent from remote tags for %s", info.RepoKey)
 	}
 
 	// 更新状态为 idle + lastRefreshedAt（必须在提交异步任务之前，确保状态已重置为 idle，
@@ -436,7 +436,7 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	resultMsg := "Snapshot refresh completed, no tags need detail sync"
 	unsyncedDetailTags, err := ListUnsyncedDetailTags(persistCtx, s.db, info.RepoKey)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "list unsynced detail tags for %s", info.RepoKey)
 	}
 
 	if len(unsyncedDetailTags) > 0 || len(recheckTags) > 0 {
@@ -473,7 +473,7 @@ func (s *Service) clearMissingRepo(ctx context.Context, info *RepoKeyInfo, listE
 	ctx = context.WithoutCancel(ctx)
 	removedCount, err := DeleteTagsNotIn(ctx, s.db, info.RepoKey, nil)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "clear local snapshots for missing repo %s", info.RepoKey)
 	}
 	log.Infof(ctx, "repository %s is empty or not found, removed %d local snapshots", info.RepoName, removedCount)
 	return errors.Wrapf(ErrRepoNotFound, "list all tags for %s: %v", info.RepoName, listErr)
