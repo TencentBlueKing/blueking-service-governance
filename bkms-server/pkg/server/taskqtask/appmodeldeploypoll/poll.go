@@ -111,7 +111,6 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 		log.Infof(ctx, "deploy %s already %s, skip polling", args, record.Status)
 		return p.finishIfStable(ctx, record, args)
 	}
-
 	// 拓扑刷新整轮只做一次，标记随 enqueueNext 透传
 	if !args.TopologyRefreshed {
 		go triggerTopologyRefresh(context.WithoutCancel(ctx), args, record)
@@ -120,10 +119,7 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 
 	// 查状态失败走业务计数；首 tick 未带 remain 时补满
 	remain := lo.Ternary(args.FailureRetryRemain > 0, args.FailureRetryRemain, totalFailureRetryCount)
-	// 窗口按 StartedAt 计算，worker 积压时本 tick 可能一上来就在窗口外，
-	// 故先查一次真实状态再据此收尾，避免把已经成功的部署误判为超时。
-	// 分批发布可以长期停在永久暂停等待人工继续，不受窗口限制：超时后记录不再是"分批发布中"，
-	// 冲突拦截与手动操作都会失效
+	// 判断断超时窗口，当分批发布时不做限制（人工暂停可以长时间暂停）
 	windowExceeded := record.GetReleaseMode() != appmodeldeploy.ReleaseModeCanary &&
 		time.Since(record.StartedAt) >= pollingTimeout()
 
@@ -146,7 +142,6 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 			log.Errorf(ctx, "failed to update batch progress of deploy %s: %v", args, err)
 		}
 	}
-
 	if state.Status != record.Status {
 		record.Status = state.Status
 		record.Message = state.Message
@@ -154,7 +149,6 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 			record.EndedAt = time.Now()
 		}
 	}
-
 	p.markCanceledIfSuperseded(ctx, record, args)
 
 	// 窗口已过且仍未达终态：直接落超时终态，中间态不必再写一次库
@@ -163,7 +157,6 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 		log.Warnf(ctx, "deploy %s polling window exceeded at status %s, mark pollingTimeout", args, record.Status)
 		return p.terminate(ctx, record, args, appmodeldeploy.StatusPollingTimeout, "")
 	}
-
 	if record.Status != curStatus {
 		if err = p.save(ctx, record, args); err != nil {
 			// 终态落库失败交回 asynq 重试；中间态失败只打日志，下一 tick 会重写
