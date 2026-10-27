@@ -70,8 +70,9 @@ func (s *Service) GetRoleStatus(
 	ctx context.Context,
 	workspaceID, roleCode, username string,
 ) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll()); err != nil {
-		return nil, errors.Wrap(err, "get workspace")
+	ctx, err := s.scopeToWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, err
 	}
 	_, hasRole, err := s.loadRoleState(ctx, workspaceID, roleCode, username)
 	if err != nil {
@@ -86,8 +87,9 @@ func (s *Service) GrantAdmin(
 	workspaceID, username string,
 	isTemporary bool,
 ) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll()); err != nil {
-		return nil, errors.Wrap(err, "get workspace")
+	ctx, err := s.scopeToWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, err
 	}
 
 	roleID, hasAdminRole, record, err := s.loadAdminRoleAndRecord(ctx, workspaceID, username)
@@ -139,8 +141,9 @@ func (s *Service) GrantAdmin(
 
 // RevokeAdmin 统一回收目标空间管理员权限。
 func (s *Service) RevokeAdmin(ctx context.Context, workspaceID, username string) (*RoleStatus, error) {
-	if _, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll()); err != nil {
-		return nil, errors.Wrap(err, "get workspace")
+	ctx, err := s.scopeToWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, err
 	}
 
 	roleID, hasAdminRole, record, err := s.loadAdminRoleAndRecord(ctx, workspaceID, username)
@@ -165,6 +168,16 @@ func (s *Service) RevokeAdmin(ctx context.Context, workspaceID, username string)
 	}
 
 	return &RoleStatus{HasRole: false}, nil
+}
+
+// scopeToWorkspace 跨租户查出目标空间，返回以该空间所属租户为当前租户的 ctx，
+// 后续的角色与授权记录读写都落在这个租户下
+func (s *Service) scopeToWorkspace(ctx context.Context, workspaceID string) (context.Context, error) {
+	ws, err := s.workspaceStore.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll())
+	if err != nil {
+		return nil, errors.Wrap(err, "get workspace")
+	}
+	return store.ScopeToTenant(ctx, ws.TenantID), nil
 }
 
 // loadAdminRoleAndRecord 加载当前用户在目标空间的管理员角色与活跃临时授权记录。

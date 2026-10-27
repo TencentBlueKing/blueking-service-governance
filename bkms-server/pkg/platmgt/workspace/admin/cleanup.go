@@ -32,10 +32,11 @@ import (
 // systemUpdater 权限过期平台统一回收更新人。
 const systemUpdater = "system"
 
-// CleanupExpiredGrants 扫描并清理所有未回收且已过期的临时管理员授权记录。
+// CleanupExpiredGrants 扫描并清理全部租户中未回收且已过期的临时管理员授权记录。
 func (s *Service) CleanupExpiredGrants(ctx context.Context) error {
 	records, err := s.records.List(
 		ctx, ExpiredGrants(time.Now()), store.Asc("expiresAt"), store.Asc("updatedAt"), store.Asc("_id"),
+		store.TenantAll(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "find expired temporary admin records")
@@ -73,6 +74,7 @@ func (s *Service) CleanupExpiredGrants(ctx context.Context) error {
 }
 
 func (s *Service) cleanupExpiredGrant(ctx context.Context, record *WorkspaceTempAdmin) error {
+	ctx = store.ScopeToTenant(ctx, record.TenantID)
 	roleID, hasAdminRole, err := s.loadRoleState(ctx, record.WorkspaceID, perm.RoleCodeAdmin, record.Username)
 	if err != nil {
 		return errors.Wrap(err, "load admin role state")
