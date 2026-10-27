@@ -135,6 +135,8 @@ type RemoteStrategyRef struct {
 type AlertStrategy struct {
 	// ID 策略 ID。
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// WorkspaceID 所属工作空间 ID。
 	WorkspaceID string `bson:"workspaceID" validate:"required"`

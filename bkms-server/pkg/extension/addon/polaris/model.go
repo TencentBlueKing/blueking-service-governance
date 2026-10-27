@@ -99,6 +99,8 @@ type Properties struct {
 type PolarisConfig struct {
 	// Name 配置名称，应用内唯一
 	Name string `bson:"name" validate:"required"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// AppID 所属应用 ID
 	AppID string `bson:"appID" validate:"required"`
 

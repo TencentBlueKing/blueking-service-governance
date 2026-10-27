@@ -42,8 +42,9 @@ type RecordStore = store.GenericStore[Record]
 // - 查询提速：appID + trafficLaneName + createdAt(倒序)
 // - 条件唯一：appID + deployID（仅 deployID 非空）
 var RecordMeta = store.Meta[Record]{
-	Collection: "build_auto_deploy_records",
-	NotFound:   ErrRecordNotFound,
+	Collection:   "build_auto_deploy_records",
+	TenantScoped: true,
+	NotFound:     ErrRecordNotFound,
 }
 
 // ByBuild 按应用与 buildID 匹配记录

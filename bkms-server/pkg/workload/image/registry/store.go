@@ -34,10 +34,11 @@ type ImageRegistryStore = store.GenericStore[ImageRegistry]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID + type
 var ImageRegistryMeta = store.Meta[ImageRegistry]{
-	Collection: "image_registries",
-	NotFound:   ErrImageRegistryNotFound,
-	Encode:     []func(*ImageRegistry) error{encryptPassword},
-	Decode:     []func(*ImageRegistry) error{decryptPassword},
+	Collection:   "image_registries",
+	TenantScoped: true,
+	NotFound:     ErrImageRegistryNotFound,
+	Encode:       []func(*ImageRegistry) error{encryptPassword},
+	Decode:       []func(*ImageRegistry) error{decryptPassword},
 }
 
 func encryptPassword(r *ImageRegistry) (err error) {

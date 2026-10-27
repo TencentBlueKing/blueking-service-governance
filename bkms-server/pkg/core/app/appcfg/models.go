@@ -34,10 +34,12 @@ import (
 // AppConfigFileDef 配置文件的逻辑身份，存储在 app_config_file_defs 集合。
 // 一条 def 对应一或多条 AppConfigFile（默认实例 + 环境实例）。
 type AppConfigFileDef struct {
-	ID         bson.ObjectID `bson:"_id,omitempty"`
-	AppID      string        `bson:"appID"`
-	Name       string        `bson:"name"`
-	ConfigKind ConfigKind    `bson:"configKind"`
+	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID   string     `json:"-" bson:"tenantID"`
+	AppID      string     `bson:"appID"`
+	Name       string     `bson:"name"`
+	ConfigKind ConfigKind `bson:"configKind"`
 	// MountDir 容器内挂载目录（如 /usr/local/trpc/bin）。
 	// 容器内完整路径 = filepath.Join(MountDir, Name)。
 	MountDir string `bson:"mountDir,omitempty"`
@@ -64,6 +66,8 @@ type AppConfigFileDef struct {
 //   - tRPC/TAF：EnvName 为空表示默认配置，非空表示环境配置；同一 appID + envName 最多一条记录
 type AppConfigFile struct {
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// DefID 关联的 AppConfigFileDef 记录 ID。
 	DefID bson.ObjectID `bson:"defID,omitempty"`
 	// AppID 所属应用 ID。
@@ -89,7 +93,9 @@ type AppConfigFile struct {
 
 // AppConfigFileVersion 配置文件的不可变版本记录。
 type AppConfigFileVersion struct {
-	ID              bson.ObjectID `bson:"_id,omitempty"`
+	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID        string        `json:"-" bson:"tenantID"`
 	AppConfigFileID bson.ObjectID `bson:"appConfigFileID"`
 	// DefID 关联的 AppConfigFileDef 记录 ID。
 	DefID bson.ObjectID `bson:"defID,omitempty"`

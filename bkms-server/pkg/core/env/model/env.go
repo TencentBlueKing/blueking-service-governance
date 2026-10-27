@@ -49,6 +49,8 @@ const (
 type Environment struct {
 	// ID 环境 ID
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// Name 环境名称, 即英文标识
 	Name string `bson:"name"`

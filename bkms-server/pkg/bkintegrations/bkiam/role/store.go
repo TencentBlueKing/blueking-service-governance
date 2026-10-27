@@ -39,13 +39,19 @@ type GradeManagerStore = store.GenericStore[WorkspaceGradeManager]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：id
 // - 查询提速：workspaceID + userGroupID
-var RoleMeta = store.Meta[Role]{Collection: "iam_roles"}
+var RoleMeta = store.Meta[Role]{
+	Collection:   "iam_roles",
+	TenantScoped: true,
+}
 
 // GradeManagerMeta workspace 分级管理员表的存储元信息。
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID
-var GradeManagerMeta = store.Meta[WorkspaceGradeManager]{Collection: "iam_grade_managers"}
+var GradeManagerMeta = store.Meta[WorkspaceGradeManager]{
+	Collection:   "iam_grade_managers",
+	TenantScoped: true,
+}
 
 // ByRoleID 按角色 ID 匹配角色
 func ByRoleID(roleID string) store.Opt {

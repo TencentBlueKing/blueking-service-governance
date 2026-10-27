@@ -86,12 +86,13 @@ type AppModelStore = store.GenericStore[AppModel]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID
 var AppModelMeta = store.Meta[AppModel]{
-	Collection: CollectionName,
-	NotFound:   ErrAppModelNotFound,
-	Duplicate:  ErrAppModelAlreadyExists,
-	BeforeSave: []func(*AppModel) error{validateAppModel},
-	Encode:     []func(*AppModel) error{encryptAppModelEnvVars},
-	Decode:     []func(*AppModel) error{decodeAppModel},
+	Collection:   CollectionName,
+	TenantScoped: true,
+	NotFound:     ErrAppModelNotFound,
+	Duplicate:    ErrAppModelAlreadyExists,
+	BeforeSave:   []func(*AppModel) error{validateAppModel},
+	Encode:       []func(*AppModel) error{encryptAppModelEnvVars},
+	Decode:       []func(*AppModel) error{decodeAppModel},
 }
 
 // ByApp 按应用 ID 匹配应用模型

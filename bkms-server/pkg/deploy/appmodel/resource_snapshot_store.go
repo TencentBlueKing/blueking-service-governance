@@ -39,8 +39,9 @@ type ResourceSnapshotStore = store.GenericStore[ResourceSnapshot]
 // 索引（由 golang-migrate 维护）：
 // - 查询提速：appID + deployRecordId
 var ResourceSnapshotMeta = store.Meta[ResourceSnapshot]{
-	Collection: "app_model_resource_snapshots",
-	NotFound:   ErrResourceSnapshotRowNotFound,
+	Collection:   "app_model_resource_snapshots",
+	TenantScoped: true,
+	NotFound:     ErrResourceSnapshotRowNotFound,
 }
 
 // ByDeployRecord 按应用 ID 与部署记录 ID 匹配资源清单快照

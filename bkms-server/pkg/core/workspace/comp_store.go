@@ -59,11 +59,12 @@ type WorkspaceCompsStore = store.GenericStore[Component]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID + name
 var ComponentMeta = store.Meta[Component]{
-	Collection: workspaceComponentCollectionName,
-	NotFound:   ErrComponentNotFound,
-	Duplicate:  ErrComponentAlreadyExists,
-	BeforeSave: []func(*Component) error{setComponentDefaults},
-	Decode:     []func(*Component) error{normalizeComponentProperties},
+	Collection:   workspaceComponentCollectionName,
+	TenantScoped: true,
+	NotFound:     ErrComponentNotFound,
+	Duplicate:    ErrComponentAlreadyExists,
+	BeforeSave:   []func(*Component) error{setComponentDefaults},
+	Decode:       []func(*Component) error{normalizeComponentProperties},
 }
 
 // ComponentsIn 匹配工作空间内的组件

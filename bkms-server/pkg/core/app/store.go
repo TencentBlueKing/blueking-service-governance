@@ -56,12 +56,13 @@ type ApplicationStore = store.GenericStore[Application]
 // - 唯一：id
 // - 唯一：workspaceID + name
 var AppMeta = store.Meta[Application]{
-	Collection: collectionName,
-	NotFound:   ErrAppNotFound,
-	Duplicate:  ErrAppAlreadyExists,
-	BeforeSave: []func(*Application) error{validateApp},
-	Encode:     []func(*Application) error{encryptHelmRepoPassword},
-	Decode:     []func(*Application) error{decryptHelmRepoPassword},
+	Collection:   collectionName,
+	TenantScoped: true,
+	NotFound:     ErrAppNotFound,
+	Duplicate:    ErrAppAlreadyExists,
+	BeforeSave:   []func(*Application) error{validateApp},
+	Encode:       []func(*Application) error{encryptHelmRepoPassword},
+	Decode:       []func(*Application) error{decryptHelmRepoPassword},
 }
 
 // ByID 按应用 id 匹配。应用 id 是业务主键，与 MongoDB 自动生成的 _id 无关，不能使用 store.ByID

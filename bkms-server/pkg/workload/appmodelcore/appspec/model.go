@@ -38,6 +38,8 @@ const (
 type AppSpec struct {
 	// AppID is the application ID.
 	AppID string `bson:"appID" validate:"required"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// EnvName is the environment name, e.g., "stag", "prod". Name is used instead of EnvID for
 	// better readability. EnvName="" represents the default spec for the application, which applies
@@ -118,8 +120,9 @@ func Clone(spec *AppSpec) *AppSpec {
 	}
 
 	cloned := &AppSpec{
-		AppID:   spec.AppID,
-		EnvName: spec.EnvName,
+		AppID:    spec.AppID,
+		TenantID: spec.TenantID,
+		EnvName:  spec.EnvName,
 	}
 	for _, section := range registeredSections {
 		section.cloneTo(spec, cloned)

@@ -36,9 +36,10 @@ type Store = store.GenericStore[ReleaseStrategy]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID + name，约束同一空间内策略名称唯一
 var Meta = store.Meta[ReleaseStrategy]{
-	Collection: "release_strategies",
-	NotFound:   ErrStrategyNotFound,
-	Duplicate:  ErrStrategyNameConflict,
+	Collection:   "release_strategies",
+	TenantScoped: true,
+	NotFound:     ErrStrategyNotFound,
+	Duplicate:    ErrStrategyNameConflict,
 }
 
 // ByWorkspace 匹配空间内的全部发布策略

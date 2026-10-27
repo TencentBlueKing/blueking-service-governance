@@ -44,9 +44,10 @@ type Store = store.GenericStore[WorkspaceTempAdmin]
 // - 条件唯一：workspaceID + username（仅 isRecycled = false）
 // - 查询提速：isRecycled + expiresAt
 var Meta = store.Meta[WorkspaceTempAdmin]{
-	Collection: collectionName,
-	NotFound:   ErrRecordNotFound,
-	Duplicate:  ErrRecordAlreadyExists,
+	Collection:   collectionName,
+	TenantScoped: true,
+	NotFound:     ErrRecordNotFound,
+	Duplicate:    ErrRecordAlreadyExists,
 }
 
 // ByActiveGrant 匹配某个空间/用户当前仍生效（未回收）的临时管理员授权记录。

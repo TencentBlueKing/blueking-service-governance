@@ -44,6 +44,8 @@ const (
 type Service struct {
 	// AppID 为 Service 所属的应用标识
 	AppID string `bson:"appID" validate:"required"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// Name 服务名称
 	Name string `bson:"name" validate:"required"`

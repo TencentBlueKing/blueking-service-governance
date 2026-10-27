@@ -24,6 +24,8 @@ import "time"
 type Project struct {
 	// ID 项目 UID，内容与蓝盾项目的 Code 相同，可读 & 唯一，如：bkms
 	ID string `bson:"id"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// WorkspaceID 工作空间 ID
 	WorkspaceID string `bson:"workspaceID"`
 	// Username 公共账号用户名
@@ -41,6 +43,8 @@ type Project struct {
 type Repository struct {
 	// ProjectID 项目 ID
 	ProjectID string `bson:"projectID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// WorkspaceID 工作空间 ID
 	WorkspaceID string `bson:"workspaceID"`
 	// Name 仓库名称

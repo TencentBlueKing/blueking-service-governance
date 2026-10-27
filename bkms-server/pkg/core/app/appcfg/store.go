@@ -57,9 +57,10 @@ type AppConfigFileStore = store.GenericStore[AppConfigFile]
 // - 唯一（partial，defID 为 ObjectID）：defID + envName
 // - 查询提速：defID、baseAppConfigFileID
 var AppConfigFileMeta = store.Meta[AppConfigFile]{
-	Collection: collectionName,
-	NotFound:   ErrAppConfigFileNotFound,
-	Duplicate:  ErrAppConfigFileAlreadyExists,
+	Collection:   collectionName,
+	TenantScoped: true,
+	NotFound:     ErrAppConfigFileNotFound,
+	Duplicate:    ErrAppConfigFileAlreadyExists,
 }
 
 // FilesByApp 按应用 ID 匹配文件记录

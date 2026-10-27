@@ -52,6 +52,8 @@ const (
 type PublishRecord struct {
 	// ID 发布记录 ID（唯一）
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// AppID 应用 ID
 	AppID string `bson:"appID"`

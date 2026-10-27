@@ -22,6 +22,8 @@ package credential
 type HelmRepoCredential struct {
 	// WorkspaceID 工作空间 ID
 	WorkspaceID string `bson:"workspaceID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// CredentialID 蓝盾凭证 ID（固定值 bkms_helm_repo_credential）
 	CredentialID string `bson:"credentialID"`
 	// Username bkrepo 用户名

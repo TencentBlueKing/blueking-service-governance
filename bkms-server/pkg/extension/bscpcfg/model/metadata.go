@@ -27,6 +27,8 @@ import (
 type Metadata struct {
 	// AppID bkms 应用 ID（唯一键，一个 App 只有一条记录）
 	AppID string `bson:"appID" validate:"required"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// PostHookID BSCP 后置脚本 ID
 	PostHookID string `bson:"postHookID,omitempty"`
 

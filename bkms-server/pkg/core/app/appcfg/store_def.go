@@ -43,9 +43,10 @@ type AppConfigFileDefStore = store.GenericStore[AppConfigFileDef]
 // - 唯一：appID + mountDir + name。mountDir 为空时字段不落库，按空值参与唯一约束，同一应用下文件名仍然唯一。
 // - 查询：appID + configKind
 var AppConfigFileDefMeta = store.Meta[AppConfigFileDef]{
-	Collection: "app_config_file_defs",
-	NotFound:   ErrAppConfigFileDefNotFound,
-	Duplicate:  ErrAppConfigFileDefAlreadyExists,
+	Collection:   "app_config_file_defs",
+	TenantScoped: true,
+	NotFound:     ErrAppConfigFileDefNotFound,
+	Duplicate:    ErrAppConfigFileDefAlreadyExists,
 }
 
 // DefsByApp 按应用 ID 匹配 def 记录

@@ -1,0 +1,1365 @@
+[
+  {
+    "update": "app_config_file_defs",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "app_config_file_defs",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "app_config_file_versions",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "app_config_file_versions",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "app_config_files",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "app_config_files",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "app_model_deploy_records",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "app_model_deploy_records",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "app_model_resource_snapshots",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "app_model_resource_snapshots",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "app_models",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "app_models",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "app_specs",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "app_specs",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "applications",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "applications",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bkci_pipelines",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bkci_pipelines",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bkci_projects",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bkci_projects",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bkci_repositories",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bkci_repositories",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bkmonitor_alert_strategy",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bkmonitor_alert_strategy",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bkmonitor_apm_inst_config",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bkmonitor_apm_inst_config",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bkmonitor_app_dashboard",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bkmonitor_app_dashboard",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bkrepo_projects",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bkrepo_projects",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bkrepo_repositories",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bkrepo_repositories",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bscpcfg_env_bindings",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bscpcfg_env_bindings",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "bscpcfg_metadata",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "bscpcfg_metadata",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "build_auto_deploy_records",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "build_auto_deploy_records",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "build_configs",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "build_configs",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "build_records",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "build_records",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "custom_runtime_images",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "custom_runtime_images",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "depservice_bindings",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "depservice_bindings",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "depservice_instances",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "depservice_instances",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "devmode_publish_records",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "devmode_publish_records",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "environments",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "environments",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "gpa_configs",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "gpa_configs",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "helm_app_components",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "helm_app_components",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "helm_chart_build_records",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "helm_chart_build_records",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "helm_chart_semver_counters",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "helm_chart_semver_counters",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "helm_deploy_records",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "helm_deploy_records",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "helm_repo_credentials",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "helm_repo_credentials",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "hostport_configs",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "hostport_configs",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "iam_grade_managers",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "iam_grade_managers",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "iam_roles",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "iam_roles",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "image_promotions",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "image_promotions",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "image_registries",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "image_registries",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "networking_services",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "networking_services",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "operation_records",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "operation_records",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "plat_admin_port_forward_whitelist",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "plat_admin_port_forward_whitelist",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "polaris_configs",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "polaris_configs",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "release_strategies",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "release_strategies",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "scoped_env_vars",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "scoped_env_vars",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "topology_resource_snapshots",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "topology_resource_snapshots",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "workspace_app_spec_rules",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "workspace_app_spec_rules",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "workspace_components",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "workspace_components",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "update": "workspace_temp_admin_records",
+    "updates": [
+      {
+        "q": {
+          "tenantID": {
+            "$exists": false
+          }
+        },
+        "u": {
+          "$set": {
+            "tenantID": "default"
+          }
+        },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "workspace_temp_admin_records",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  }
+]
