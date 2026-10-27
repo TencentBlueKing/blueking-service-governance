@@ -25,6 +25,7 @@ import (
 
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
@@ -64,8 +65,9 @@ func wrapEnvelope(user auth.User, tenantID string, argsPayload []byte) ([]byte, 
 // restoreEnvelope 从 envelope 恢复用户与租户到 ctx，并抽出业务 Args JSON
 // 没有 `_args` 的旧 payload 原样返回，兼容单测与存量任务；
 // global 为 true 时不恢复租户，即使 payload 中带有 `_tenantID`（升级前入队的任务）也忽略；
-// todo 其余任务没有 `_tenantID` 时（多租户上线前已入队）回落到默认租户，队列排空后可以去掉这个回落
-func restoreEnvelope(ctx context.Context, payload []byte, global bool) (context.Context, []byte) {
+// todo 其余任务没有 `_tenantID` 时（多租户上线前已入队）回落到默认租户并打 warn，
+// 投递端已强制写入租户，多租户上线后队列排空即可去掉这个回落
+func restoreEnvelope(ctx context.Context, name string, payload []byte, global bool) (context.Context, []byte) {
 	var env payloadEnvelope
 	if err := json.Unmarshal(payload, &env); err != nil || len(env.Args) == 0 {
 		return ctx, payload
@@ -74,6 +76,11 @@ func restoreEnvelope(ctx context.Context, payload []byte, global bool) (context.
 		ctx = auth.WithUser(ctx, env.AuthUser)
 	}
 	if !global {
+		if env.TenantID == "" {
+			taskID, _, _ := handlerMeta(ctx)
+			logging.Warnf(ctx, "taskq: task type=%s id=%s has no _tenantID, falling back to tenant %s",
+				name, taskID, tenant.DefaultTenantID)
+		}
 		ctx = tenant.WithTenantID(ctx, lo.CoalesceOrEmpty(env.TenantID, tenant.DefaultTenantID))
 	}
 	return ctx, env.Args
