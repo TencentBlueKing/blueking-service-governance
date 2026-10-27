@@ -123,7 +123,7 @@ func (t *TaskType[Args]) Name() string { return t.name }
 func (t *TaskType[Args]) OnExhausted(fn func(ctx context.Context, args Args, lastErr error)) *TaskType[Args] {
 	registerExhaustedHandler(t.name, func(ctx context.Context, payload []byte, lastErr error) {
 		var args Args
-		ctx, argsPayload := restoreEnvelope(ctx, payload, t.global)
+		ctx, argsPayload := restoreEnvelope(ctx, t.name, payload, t.global)
 		if err := json.Unmarshal(argsPayload, &args); err != nil {
 			logging.ErrorNoContextf("taskq: unmarshal args in exhausted handler for %q: %v", t.name, err)
 			return
@@ -162,7 +162,7 @@ func (t *TaskType[Args]) Handler() asynq.HandlerFunc {
 		taskID, retried, maxRetry := handlerMeta(ctx)
 
 		var args Args
-		ctx, argsPayload := restoreEnvelope(ctx, task.Payload(), t.global)
+		ctx, argsPayload := restoreEnvelope(ctx, t.name, task.Payload(), t.global)
 		err := json.Unmarshal(argsPayload, &args)
 		// 反序列化失败时 args 为零值，不拼进日志
 		argsPart := ""

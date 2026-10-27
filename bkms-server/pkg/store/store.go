@@ -100,7 +100,10 @@ func schemaOf(typ reflect.Type) (*schema, error) {
 }
 
 // Collection 返回底层集合，用于 GenericStore 未覆盖的操作（如建立索引）。
-// 聚合请使用 Aggregate，数组与计数类的修改请使用 Modify，它们会校验字段并维护 updatedAt
+// 聚合请使用 Aggregate，数组与计数类的修改请使用 Modify，它们会校验字段并维护 updatedAt。
+//
+// 直接操作集合不会注入租户条件，也不检查 RequireExplicitTenantScope：
+// 读写 TenantScoped 集合时调用方必须自己带上 tenantID 条件，否则会读写到所有租户的数据
 func (s *GenericStore[T]) Collection() *mongo.Collection {
 	return s.coll
 }
@@ -135,7 +138,7 @@ func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
 }
 
 // GetByID 按 _id 获取文档，等价于 Get(ctx, ByID(id))；不存在时返回 NotFound 错误。
-// opts 用于指定租户范围，需要附加过滤条件时（如 _id 须属于某个工作空间）改用 Get 并组合 ByID 与其它条件
+// opts 与 Get 相同，会和 ByID 一起生效，可以附加租户范围、过滤条件（如 _id 须属于某个工作空间）与排序
 func (s *GenericStore[T]) GetByID(ctx context.Context, id any, opts ...Opt) (*T, error) {
 	return s.Get(ctx, append(slices.Clone(opts), ByID(id))...)
 }

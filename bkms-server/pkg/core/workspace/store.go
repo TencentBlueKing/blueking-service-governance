@@ -72,8 +72,7 @@ func DefaultOrder() store.Opt {
 // Update 更新已经存在的工作空间的可变字段，不存在时返回 ErrWorkspaceNotFound
 func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace, opts ...store.Opt) error {
 	mutable := store.UpdateSelected("displayName", "description", "bkSystems", "imageRegistryType", "state", "updater")
-	opts = append(opts, mutable, ByWorkspaceID(ws.ID))
-	if err := workspaces.Update(ctx, ws, opts...); err != nil {
+	if err := workspaces.Update(ctx, ws, append(slices.Clone(opts), mutable, ByWorkspaceID(ws.ID))...); err != nil {
 		return errors.Wrapf(err, "update workspace %s", ws.ID)
 	}
 	return nil

@@ -286,7 +286,7 @@ var _ = Describe("Test taskq auth envelope", func() {
 		Expect(string(wrapped)).To(ContainSubstring(`"_tenantID"`))
 		Expect(string(wrapped)).To(ContainSubstring(`"_args"`))
 
-		ctx, rawArgs := restoreEnvelope(context.Background(), wrapped, false)
+		ctx, rawArgs := restoreEnvelope(context.Background(), "test", wrapped, false)
 		gotUser, err := auth.GetUser(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(gotUser.ID).To(Equal("alice"))
@@ -309,7 +309,7 @@ var _ = Describe("Test taskq auth envelope", func() {
 			"_args":     json.RawMessage(lo.Must(json.Marshal(sampleArgs{ID: "legacy"}))),
 		}))
 
-		ctx, rawArgs := restoreEnvelope(context.Background(), legacy, false)
+		ctx, rawArgs := restoreEnvelope(context.Background(), "test", legacy, false)
 		gotTenant, ok := tenant.GetTenantID(ctx)
 		Expect(ok).To(BeTrue())
 		Expect(gotTenant).To(Equal(tenant.DefaultTenantID))
