@@ -178,7 +178,7 @@
                         <Input
                           v-model.trim="fileInfoFormData.name"
                           :disabled="(isFrameworkFile && !isFileNameEditable) || isFileInfoSaving"
-                          :maxlength="isFrameworkFile ? 100 : 64"
+                          :maxlength="64"
                         />
                       </Form.FormItem>
                       <Form.FormItem
@@ -537,8 +537,6 @@
       :def-order="mountPreviewDefOrder"
       :env-list="envList"
       :files="fileListItems"
-      :framework-file-name="currentFileSpec?.fileName || ''"
-      :framework-file-path="currentFileSpec?.filePath || ''"
     />
     <VersionListSideslider
       v-model:visible="showVersionListSideslider"
@@ -589,13 +587,12 @@
     Tag,
   } from 'bkui-vue';
   import { RightShape } from 'bkui-vue/lib/icon';
-  import { cloneDeep, set } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import { parse as parseYaml } from 'yaml';
   import { AppConfigFilesService, EnvService, EnvvarsService } from '~/api/modules/v1';
   import { BKMS_REGEX } from '~/common/const';
-  import { hasErrorCode } from '~/common/util';
+  import { hasErrorCode, showApiErrorMessage } from '~/common/util';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
@@ -621,7 +618,6 @@
   import VersionListSideslider from '~/pages/application/detail/app-config/version-list-sideslider.vue';
   import { useAppDetail } from '~/stores/app-detail';
 
-  import type { AppDetailOutputObj, AppModelSpecInput, TafSpecOutputObj, TrpcSpecOutputObj } from '~/@types/v1/app';
   import type { UpdateDefInput } from '~/@types/v1/app-config-file-defs';
   import type { EnvOutput } from '~/@types/v1/env';
   import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
@@ -639,7 +635,7 @@
   const { t } = useI18n();
   const appDetailStore = useAppDetail();
   const { confirmBox } = useLeaveConfirm();
-  const { appType, specFieldName, updateSpecApi } = useSpecField();
+  const { appType } = useSpecField();
   const mountPreviewVisible = inject(MOUNT_PREVIEW_VISIBLE_KEY, ref(false));
   const appID = computed(() => appDetailStore.appID);
   const {
@@ -662,7 +658,6 @@
     updateDef,
   } = useConfigFileDefs(appID);
 
-  const appData = ref<AppDetailOutputObj>(); // 应用详情（appModelSpec 为框架配置文件名/路径来源）
   const envList = ref<EnvOutput[]>([]); // 环境列表
   const envListLoading = ref(false);
   const envListLoadFailed = ref(false);
@@ -699,7 +694,6 @@
   const defaultEnv = computed(() => ({ name: '', displayName: t('默认配置'), type: '' }) as EnvOutput);
   const currentEnv = ref<EnvOutput>({ name: '', displayName: '', type: '' } as EnvOutput); // 当前查看/编辑的环境
   const allEnvNames = computed(() => envList.value.map(env => env.name).filter((name): name is string => !!name));
-  const currentFileSpec = computed(() => appData.value?.appModelSpec?.[specFieldName.value]); // 当前应用框架（taf/trpc）的 spec
   const isFrameworkFile = computed(() => activeDef.value?.configKind === 'framework');
   const activeEnvContentStrategy = computed(
     () => detail.value?.envContentStrategy ?? activeDef.value?.envContentStrategy ?? 'overlay',
@@ -716,15 +710,9 @@
   );
   // 编辑器语言：框架文件 taf 用 xml、trpc 用 yaml，普通文件用 plaintext
   const editorLang = computed(() => (isFrameworkFile.value ? (isTafApp.value ? 'xml' : 'yaml') : 'plaintext'));
-  // 展示用文件名/路径：框架文件取 spec 中的值，普通文件取 def 本身
-  const activeDisplayName = computed(() =>
-    isFrameworkFile.value
-      ? currentFileSpec.value?.fileName || activeDef.value?.name || ''
-      : activeDef.value?.name || '',
-  );
-  const activeDisplayPath = computed(() =>
-    isFrameworkFile.value ? currentFileSpec.value?.filePath || '' : activeDef.value?.mountDir || '',
-  );
+  // 框架文件和普通文件的名称、目录均以 def 为准。
+  const activeDisplayName = computed(() => activeDef.value?.name || '');
+  const activeDisplayPath = computed(() => activeDef.value?.mountDir || '');
   // 挂载范围归一化：框架文件固定「全部环境」，普通文件覆盖全部现存环境即视为「全部环境」（忽略已删除环境名）
   function resolveMountScope(def: ConfigFileDefView): MountScope {
     if (def.configKind === 'framework' || def.mountScope === 'all') return 'all';
@@ -749,12 +737,12 @@
     });
     return map;
   });
-  // 文件列表展示项：框架文件用 spec 的文件名/路径
+  // 文件列表展示项
   const fileListItems = computed<ConfigFileListItem[]>(() =>
     defs.value.map(file => ({
       ...file,
-      displayName: file.configKind === 'framework' ? currentFileSpec.value?.fileName || file.name : file.name,
-      displayPath: file.configKind === 'framework' ? currentFileSpec.value?.filePath || file.mountDir : file.mountDir,
+      displayName: file.name,
+      displayPath: file.mountDir,
       mountedEnvDisplayNames: file.mountedEnvNames.map(name => envDisplayNameMap.value[name] || name),
       mountScope: resolveMountScope(file),
     })),
@@ -863,10 +851,10 @@
   const fileInfoFormRules = {
     name: [
       {
-        message: t('文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.)'),
+        message: t('文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间'),
         trigger: 'blur',
         validator: (value: string) =>
-          isFrameworkFile.value ||
+          !isFileNameEditable.value ||
           !activeDef.value ||
           value === activeDef.value.name ||
           BKMS_REGEX.appConfigFileNameRegex.test(value),
@@ -1000,8 +988,7 @@
 
   // 拉取应用详情
   async function getAppData() {
-    const result = await appDetailStore.fetchAppDetail();
-    appData.value = result || ({} as AppDetailOutputObj);
+    await appDetailStore.fetchAppDetail();
   }
 
   // 按实际可编辑字段取编辑器应展示的内容
@@ -1117,15 +1104,19 @@
     discardCurrentEdits();
     isCreateSubmitting.value = true;
     try {
-      await createPlain(input);
+      let createdID: string;
+      try {
+        createdID = await createPlain(input);
+      } catch (error) {
+        showFileWriteError(error);
+        return;
+      }
       showCreateSideslider.value = false;
+      await fetchDefs(createdID);
+      // 列表刷新成功后再切换环境，失败时保留原环境与详情、编辑器内容的一致性。
       currentEnv.value = { ...defaultEnv.value };
       await loadCurrentDetail('');
       Message({ theme: 'success', message: t('已创建，请填写文件内容') });
-    } catch (error) {
-      currentEnv.value = { ...defaultEnv.value };
-      if (activeDefID.value) await loadCurrentDetail('').catch(() => undefined);
-      throw error;
     } finally {
       isCreateSubmitting.value = false;
     }
@@ -1259,47 +1250,56 @@
         )
           return;
       }
-      if (isFrameworkFile.value) {
-        const metadataChanged =
-          fileInfoFormData.mountDir !== activeDisplayPath.value ||
-          (isFileNameEditable.value && fileInfoFormData.name !== activeDisplayName.value);
-        if (metadataChanged) {
-          const updatedSpec = cloneDeep(appData.value?.appModelSpec || {}) as AppModelSpecInput;
-          const target = updatedSpec[specFieldName.value] as TafSpecOutputObj | TrpcSpecOutputObj;
-          if (isFileNameEditable.value) set(target, 'fileName', fileInfoFormData.name);
-          set(target, 'filePath', fileInfoFormData.mountDir);
-          await updateSpecApi.value({ appID: appDetailStore.appID, appModelSpec: updatedSpec });
-          await getAppData();
-        }
-        if (strategyChanged) {
-          try {
-            await updateDef({ envContentStrategy: fileInfoFormData.envContentStrategy });
-          } catch (error) {
-            // 元信息已落库、仅策略未生效：保留编辑态让用户重试（重试只提交策略），并明确告知部分成功
-            if (metadataChanged) {
-              Message({ theme: 'warning', message: t('文件信息已保存，生效方式保存失败，请重试') });
-              return;
+      try {
+        if (isFrameworkFile.value) {
+          const changes: UpdateDefInput = {};
+          if (isFileNameEditable.value && fileInfoFormData.name !== activeDef.value.name) {
+            changes.name = fileInfoFormData.name;
+          }
+          if (fileInfoFormData.mountDir !== activeDef.value.mountDir) changes.mountDir = fileInfoFormData.mountDir;
+          const metadataChanged = Object.keys(changes).length > 0;
+          if (metadataChanged) {
+            await updateDef(changes, { interceptorErr: false });
+            fileInfoFormData.mountDir = activeDisplayPath.value;
+            // def 已同步，应用详情刷新失败时由请求层提示，不阻断后续策略保存。
+            await getAppData().catch(() => undefined);
+          }
+          if (strategyChanged) {
+            try {
+              await updateDef({ envContentStrategy: fileInfoFormData.envContentStrategy }, { interceptorErr: false });
+            } catch (error) {
+              // 元信息已落库、仅策略未生效：保留编辑态，重试只提交策略。
+              if (metadataChanged) {
+                Message({ theme: 'warning', message: t('文件信息已保存，生效方式保存失败，请重试') });
+                return;
+              }
+              throw error;
             }
-            throw error;
+          }
+        } else {
+          const changes: UpdateDefInput = {};
+          if (fileInfoFormData.name !== activeDef.value.name) changes.name = fileInfoFormData.name;
+          if (fileInfoFormData.mountDir !== activeDef.value.mountDir) changes.mountDir = fileInfoFormData.mountDir;
+          if (fileInfoFormData.enableEnvVarRender !== activeDef.value.enableEnvVarRender) {
+            changes.enableEnvVarRender = fileInfoFormData.enableEnvVarRender;
+          }
+          // 后端当前无法通过更新接口把指定范围恢复成 nil；切换到全部时提交当前全部环境作为兼容值。
+          // 原本就是全部环境时保留原值，避免无修改保存把 nil 语义改成环境快照。
+          const nextEnvNames =
+            fileInfoFormData.scope === 'all'
+              ? fileInfoOriginalScope.value === 'all'
+                ? activeDef.value.mountedEnvNames
+                : allEnvNames.value
+              : fileInfoFormData.mountedEnvNames;
+          if (!sameStringSet(nextEnvNames, activeDef.value.mountedEnvNames)) changes.mountedEnvNames = nextEnvNames;
+          if (Object.keys(changes).length) {
+            await updateDef(changes, { interceptorErr: false });
+            fileInfoFormData.mountDir = activeDisplayPath.value;
           }
         }
-      } else {
-        const changes: UpdateDefInput = {};
-        if (fileInfoFormData.name !== activeDef.value.name) changes.name = fileInfoFormData.name;
-        if (fileInfoFormData.mountDir !== activeDef.value.mountDir) changes.mountDir = fileInfoFormData.mountDir;
-        if (fileInfoFormData.enableEnvVarRender !== activeDef.value.enableEnvVarRender) {
-          changes.enableEnvVarRender = fileInfoFormData.enableEnvVarRender;
-        }
-        // 后端当前无法通过更新接口把指定范围恢复成 nil；切换到全部时提交当前全部环境作为兼容值。
-        // 原本就是全部环境时保留原值，避免无修改保存把 nil 语义改成环境快照。
-        const nextEnvNames =
-          fileInfoFormData.scope === 'all'
-            ? fileInfoOriginalScope.value === 'all'
-              ? activeDef.value.mountedEnvNames
-              : allEnvNames.value
-            : fileInfoFormData.mountedEnvNames;
-        if (!sameStringSet(nextEnvNames, activeDef.value.mountedEnvNames)) changes.mountedEnvNames = nextEnvNames;
-        if (Object.keys(changes).length) await updateDef(changes);
+      } catch (error) {
+        showFileWriteError(error);
+        return;
       }
       const shouldResetEnv =
         !isFrameworkFile.value &&
@@ -1318,6 +1318,14 @@
 
   function handleFileInfoScopeChange(scope: MountScope) {
     if (scope === 'all') fileInfoFormRef.value?.clearValidate('mountedEnvNames');
+  }
+
+  function showFileWriteError(error: unknown) {
+    if (hasErrorCode(error, 'APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT')) {
+      Message({ theme: 'error', message: t('该目录下已存在同名文件') });
+    } else {
+      showApiErrorMessage(error);
+    }
   }
 
   // 挂载环境由自定义组件承载，bkui Form 无法感知其变更触发校验，
@@ -1488,7 +1496,6 @@
     envListRequestID += 1;
     fullContentRequestID += 1;
     reset();
-    appData.value = {} as AppDetailOutputObj;
     envList.value = [];
     envListLoading.value = false;
     envListLoadFailed.value = false;
@@ -1527,14 +1534,7 @@
     }
   }
 
-  // 同步 store 中的应用详情；appID 变化时重新初始化页面
-  watch(
-    () => appDetailStore.appDetail,
-    value => {
-      appData.value = value || ({} as AppDetailOutputObj);
-    },
-    { immediate: true },
-  );
+  // appID 变化时重新初始化页面
   watch(() => appDetailStore.appID, initPage, { immediate: true });
 </script>
 

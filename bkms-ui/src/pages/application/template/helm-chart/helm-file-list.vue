@@ -174,7 +174,8 @@
   import { Del, EditLine, InfoLine, Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { ApiServerService } from '~/api/modules/bkmsserver';
-  import { AppConfigFileDefsService, AppConfigFilesService } from '~/api/modules/v1';
+  import { AppConfigFileDefsService } from '~/api/modules/v1';
+  import { hasErrorCode, showApiErrorMessage } from '~/common/util';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
@@ -342,8 +343,11 @@
         configKind: 'framework',
         fileFormat: appDetailStore.appType === 'taf' ? 'taf' : 'yaml',
       },
-      { needRes: true },
-    ).catch(() => null);
+      { interceptorErr: false, needRes: true },
+    ).catch(error => {
+      showFileWriteError(error);
+      return null;
+    });
     if (result?.item) {
       Message({
         theme: 'success',
@@ -393,32 +397,39 @@
 
   // 编辑文件
   function handleEditFile(file: DefDetailObj) {
-    currentFile.value = file;
+    // 固定编辑开始时的版本及元信息，列表刷新不能改变本次保存的并发检查基准。
+    currentFile.value = { ...file, bscpConfig: file.bscpConfig ? { ...file.bscpConfig } : undefined };
     isEdit.value = true;
     fileDialogVisible.value = true;
   }
 
   // 编辑文件
   async function handleEditFileSubmit(formData: FileFormData) {
-    const result = await AppConfigFilesService.updateAppConfigFile({
-      appID: appDetailStore.appID,
-      id: currentFile.value?.fileId || '',
-      name: formData.name,
-      baseAppConfigFileID: formData.baseAppConfigFileId,
-      bscpConfig: formData.bscpConfig,
-      currentVersion: currentFile.value?.currentVersion,
-      description: formData.description,
-    })
-      .then(() => true)
-      .catch(() => false);
-    if (result) {
+    const file = currentFile.value;
+    if (!file?.id) return;
+    const result = await AppConfigFileDefsService.updateHelmFile(
+      {
+        appID: appDetailStore.appID,
+        id: file.id,
+        name: formData.name,
+        ...(file.fileType === 'overlay' ? { baseAppConfigFileId: formData.baseAppConfigFileId } : {}),
+        ...(file.contentSourceType === 'bscp' ? { bscpConfig: formData.bscpConfig } : {}),
+        currentVersion: file.currentVersion,
+        description: formData.description,
+      },
+      { interceptorErr: false, needRes: true },
+    ).catch(error => {
+      showFileWriteError(error);
+      return null;
+    });
+    if (result?.item) {
       Message({
         theme: 'success',
         message: t('更新成功'),
       });
       fileDialogVisible.value = false;
       await fetchFileList();
-      if (currentFile.value?.id === activeDefID.value) await refetchCurrentFile();
+      if (file.id === activeDefID.value) await refetchCurrentFile();
     }
   }
 
@@ -501,6 +512,19 @@
   // PopConfirm 显示和隐藏事件处理
   function popConfirmShow(fileId: string) {
     activePopConfirmId.value = fileId;
+  }
+
+  function showFileWriteError(error: unknown) {
+    if (hasErrorCode(error, 'APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT')) {
+      Message({ theme: 'error', message: t('当前应用已存在同名文件') });
+    } else if (hasErrorCode(error, 'APP_CONFIG_FILE_VERSION_CONFLICT')) {
+      Message({
+        theme: 'error',
+        message: t('当前配置已被他人更新。为避免数据被覆盖，请刷新页面获取最新版本后重新编辑。'),
+      });
+    } else {
+      showApiErrorMessage(error);
+    }
   }
 
   watch(

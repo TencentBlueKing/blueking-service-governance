@@ -114,7 +114,7 @@
   import type { EnvOutput } from '~/@types/v1/env';
   import type { ConfigFileListItem } from '~/pages/application/detail/app-config/use-config-file-defs';
 
-  /** 预览表格行：补充框架配置的展示字段 */
+  /** 预览表格行：补齐展示字段 */
   interface PreviewRow extends MountPreviewItemObj {
     mountDir: string;
     name: string;
@@ -130,13 +130,9 @@
       envList: EnvOutput[];
       /** 文件列表中的挂载范围 */
       files: ConfigFileListItem[];
-      /** 框架配置文件名（用于展示兜底） */
-      frameworkFileName?: string;
-      /** 框架配置挂载路径 */
-      frameworkFilePath?: string;
       isShow: boolean;
     }>(),
-    { defOrder: () => [], frameworkFileName: '', frameworkFilePath: '' },
+    { defOrder: () => [] },
   );
   const emit = defineEmits<{ 'update:isShow': [value: boolean] }>();
   const { t } = useI18n();
@@ -156,7 +152,7 @@
   const rows = computed(() => sortRowsByListOrder(rawRows.value, props.defOrder));
   let previewRequestID = 0;
 
-  /** 按环境拉取挂载预览数据；框架配置使用外部传入的路径/文件名兜底 */
+  /** 按环境拉取挂载预览数据，文件名和目录以接口返回值为准 */
   async function fetchPreview() {
     const requestID = ++previewRequestID;
     const requestedAppID = props.appId;
@@ -182,9 +178,8 @@
       }
       rawRows.value = (result.items || []).map(item => ({
         ...item,
-        mountDir:
-          item.configKind === 'framework' ? props.frameworkFilePath || item.mountDir || '' : item.mountDir || '',
-        name: item.configKind === 'framework' ? props.frameworkFileName || item.name || '' : item.name || '',
+        mountDir: item.mountDir || '',
+        name: item.name || '',
       }));
     } catch {
       if (requestID === previewRequestID) rawRows.value = [];

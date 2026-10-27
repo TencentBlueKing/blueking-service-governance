@@ -41,7 +41,8 @@
         >
           <Input
             v-model.trim="formData.name"
-            :placeholder="$t('包含字母、数字、下划线(_)和连字符(-)，长度 1-20 之间')"
+            :maxlength="64"
+            :placeholder="$t('文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间')"
           />
         </Form.FormItem>
         <Form.FormItem
@@ -228,8 +229,8 @@
         trigger: 'blur',
       },
       {
-        validator: () => BKMS_REGEX.fileNameRegex.test(formData.name || ''),
-        message: t('包含字母、数字、下划线(_)和连字符(-)，长度 1-20 之间'),
+        validator: () => BKMS_REGEX.appConfigFileNameRegex.test(formData.name || ''),
+        message: t('文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间'),
         trigger: 'blur',
       },
     ],
@@ -405,14 +406,14 @@
     if (formData.contentSourceType === 'local') {
       delete (submitData as Partial<FileFormData>).bscpConfig;
     }
-    forceCleanDirtyTag(() => {
-      emit('submit', submitData as FileFormData);
-    });
+    // 保存失败时保留未保存标记，避免关闭侧栏时直接丢弃输入。
+    emit('submit', submitData as FileFormData);
   }
 
   // 重置表单数据和验证状态
   function resetForm() {
     Object.assign(formData, { ...defaultFormData });
+    forceCleanDirtyTag();
     formRef.value?.clearValidate();
     bcspSelectorRef.value?.clearValidate();
     isBscpYamlValid.value = true;

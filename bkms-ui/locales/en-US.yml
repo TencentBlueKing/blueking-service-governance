@@ -2197,6 +2197,9 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 点击查看配置文件说明: Click to view the configuration file guide
 文件名: File name
 文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.): The file name only supports numbers, letters, underscores (_), hyphens (-), and dots (.).
+文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间: File names must be 1-64 characters and contain only numbers, letters, underscores (_), hyphens (-), and dots (.).
+该目录下已存在同名文件: A file with this name already exists in this directory.
+当前应用已存在同名文件: A file with this name already exists in this application.
 文件名与配置文件路径不能为空: File name and configuration path are required
 保存失败，请稍后重试: Save failed. Please try again later.
 "文件最终挂载到 {0}": "The file will be mounted at {0}"
