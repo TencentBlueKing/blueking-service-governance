@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
@@ -56,7 +57,7 @@ var _ = Describe("GPAService K8s interactions", func() {
 
 	BeforeEach(func() {
 		svc = &GPAService{}
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		env = newTestEnv()
 	})
 

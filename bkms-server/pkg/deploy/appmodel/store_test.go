@@ -83,7 +83,7 @@ var _ = Describe("RecordStore", func() {
 		db = testutil.NewDB(GinkgoT())
 		recordStore = store.Of(db, appmodel.RecordMeta)
 
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		appID = "test-app-" + stringx.Random(6)
 		envName = "staging"

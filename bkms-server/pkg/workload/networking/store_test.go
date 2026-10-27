@@ -40,7 +40,7 @@ var _ = Describe("Networking service store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		services = testutil.NewStore(GinkgoT(), ServiceMeta)
 
 		appID1 = "test-app-" + stringx.Random(6)

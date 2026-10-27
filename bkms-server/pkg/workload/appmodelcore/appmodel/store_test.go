@@ -56,7 +56,7 @@ var _ = Describe("AppModel store", func() {
 		Expect(err).NotTo(HaveOccurred())
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		models = store.Of(db, appmodel.AppModelMeta)
@@ -880,7 +880,7 @@ var _ = Describe("ComponentDef ref count maintained by AppModel functions", func
 		Expect(err).NotTo(HaveOccurred())
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		db = testutil.NewDB(GinkgoT())

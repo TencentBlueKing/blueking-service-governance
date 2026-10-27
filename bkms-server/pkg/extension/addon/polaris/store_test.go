@@ -44,7 +44,7 @@ var _ = Describe("PolarisConfigStore", func() {
 	BeforeEach(func() {
 		db = testutil.NewDB(GinkgoT())
 		configStore = store.Of(db, polaris.ConfigMeta)
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		testAppID = "test-app-" + stringx.Random(5)
 	})
 

@@ -79,7 +79,7 @@ var _ = Describe("NewLogManager", func() {
 
 	It("returns deploy record not found errors from the store", func() {
 		_, err := NewLogManager(
-			context.Background(),
+			testutil.WithTenantOrDefault(context.Background()),
 			testutil.NewDB(GinkgoT()),
 			&bkmsapp.Application{ID: "app-" + stringx.Random(6), Type: bkmsapp.AppTypeTRPC},
 			&envmodel.Environment{
@@ -99,7 +99,7 @@ var _ = Describe("NewLogManager", func() {
 	})
 
 	It("rejects appmodel deploy records without label selectors", func() {
-		ctx := context.Background()
+		ctx := testutil.WithTenantOrDefault(context.Background())
 		db := testutil.NewDB(GinkgoT())
 		app := &bkmsapp.Application{ID: "app-" + stringx.Random(6), Type: bkmsapp.AppTypeTRPC}
 		env := &envmodel.Environment{
@@ -134,7 +134,7 @@ var _ = Describe("LogManager logs", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		manager = &LogManager{
 			namespace:     testNamespace,
 			containerName: testContainerName,

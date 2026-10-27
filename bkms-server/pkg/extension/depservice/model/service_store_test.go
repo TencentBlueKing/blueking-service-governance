@@ -38,7 +38,7 @@ var _ = Describe("Service store", func() {
 	var userPlan ServicePlan
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		services = testutil.NewStore(GinkgoT(), ServiceMeta)
 
 		systemPlan = ServicePlan{

@@ -31,6 +31,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -50,7 +51,7 @@ var _ = Describe("Service", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		workspaceID = "ws-" + stringx.Random(8)
 
 		diApp := fxtest.New(GinkgoT(), bkmsenv.FxModule, fx.Populate(&envSvc))
@@ -152,6 +153,44 @@ var _ = Describe("Service", func() {
 			envIDs, err := service.List(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envIDs).To(ConsistOf("env-1", "env-2", "env-3"))
+		})
+	})
+
+	// 运维命令的 ctx 没有租户，白名单记录归属各自环境所在的租户
+	Describe("across tenants", func() {
+		var (
+			cmdCtx, otherCtx  context.Context
+			defaultEnv, other string
+		)
+
+		BeforeEach(func() {
+			cmdCtx = context.Background()
+			otherCtx = tenant.WithTenantID(context.Background(), "tenant-other")
+			defaultEnv = newEnvID(bkmsenv.TypeTest)
+			other = dbfactory.EnvWithOpts(otherCtx, envSvc, &dbfactory.EnvOpts{
+				WorkspaceID: workspaceID, Type: string(bkmsenv.TypeTest),
+			}).ID.Hex()
+		})
+
+		It("should store each entry under the tenant of its environment", func() {
+			Expect(service.Add(cmdCtx, []string{defaultEnv, other})).To(Succeed())
+
+			envIDs, err := service.List(cmdCtx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envIDs).To(ConsistOf(defaultEnv, other))
+
+			Expect(service.CheckPermission(otherCtx, other)).To(Succeed())
+			Expect(service.CheckPermission(ctx, other)).To(Equal(ErrPermissionDenied))
+			Expect(service.CheckPermission(ctx, defaultEnv)).To(Succeed())
+		})
+
+		It("should remove entries of any tenant", func() {
+			Expect(service.Add(cmdCtx, []string{defaultEnv, other})).To(Succeed())
+			Expect(service.Remove(cmdCtx, []string{other})).To(Succeed())
+
+			envIDs, err := service.List(cmdCtx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envIDs).To(ConsistOf(defaultEnv))
 		})
 	})
 })

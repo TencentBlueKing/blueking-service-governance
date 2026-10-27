@@ -36,7 +36,7 @@ var _ = Describe("ServiceBinding store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		bindings = testutil.NewStore(GinkgoT(), ServiceBindingMeta)
 	})
 

@@ -90,7 +90,7 @@ var _ = Describe("injectDeployID", func() {
 
 var _ = Describe("syncBuildAutoDeployStatus", func() {
 	It("should update linked build auto deploy record by deploy ID", func() {
-		ctx := context.Background()
+		ctx := testutil.WithTenantOrDefault(context.Background())
 		db := testutil.NewDB(GinkgoT())
 		records := store.Of(db, autodeploy.RecordMeta)
 		appID := "app-" + stringx.Random(6)

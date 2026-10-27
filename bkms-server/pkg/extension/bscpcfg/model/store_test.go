@@ -40,7 +40,7 @@ var _ = Describe("GetSnapshot", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		metas = testutil.NewStore(GinkgoT(), model.MetadataMeta)
 		bindings = testutil.NewStore(GinkgoT(), model.EnvBindingMeta)

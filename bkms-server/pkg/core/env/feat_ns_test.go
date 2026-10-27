@@ -67,7 +67,7 @@ var _ = Describe("FeatureEnvNamespaceInitializer against a real cluster", Label(
 
 		mocker = mockey.Mock(cluster.NewConfig).Return(clusterCfg).Build()
 		initializer = bkmsenv.NewFeatureEnvNamespaceInitializer()
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 
 		suffix := stringx.Random(6)
 		namespace = "feat-it-" + suffix

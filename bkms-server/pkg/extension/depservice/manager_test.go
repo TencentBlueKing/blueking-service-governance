@@ -52,7 +52,7 @@ var _ = Describe("ServiceManager", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		fake.Reset()
 
 		svcStore = testutil.NewStore(GinkgoT(), model.ServiceMeta)

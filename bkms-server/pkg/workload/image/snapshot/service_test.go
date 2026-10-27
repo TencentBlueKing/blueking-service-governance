@@ -62,7 +62,7 @@ var _ = Describe("Service", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		var err error
 		db = testutil.NewDB(GinkgoT())
 		DeferCleanup(cleanupSnapshotCollections)

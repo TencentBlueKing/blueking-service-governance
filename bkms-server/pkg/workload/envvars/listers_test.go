@@ -48,7 +48,7 @@ var _ = Describe("ListBuiltinVars", func() {
 	var environment envmodel.Environment
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 
 		diApp = fxtest.New(
 			GinkgoT(),

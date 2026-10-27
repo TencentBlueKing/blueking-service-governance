@@ -151,7 +151,7 @@ var _ = Describe("AlertStrategyServiceRealDB", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		client = &captureAlertStrategyClient{StubClient: bkmapi.NewStub("test-user")}
 
 		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())

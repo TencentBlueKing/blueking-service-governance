@@ -53,7 +53,7 @@ var _ = Describe("Audit", func() {
 
 	BeforeEach(func() {
 		records = testutil.NewStore(GinkgoT(), OperationRecordMeta)
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 	})
 
 	AfterEach(func() {

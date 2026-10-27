@@ -60,6 +60,18 @@ var _ = Describe("Test tenant scope", func() {
 			Expect(t.TenantID).To(Equal(tenantA))
 		})
 
+		It("keeps the tenant when an Encode hook rebuilds the object", func() {
+			meta := ticketMeta
+			meta.Encode = []func(*Ticket) error{func(t *Ticket) error {
+				*t = Ticket{OwnerID: t.OwnerID, Name: t.Name, Priority: t.Priority}
+				return nil
+			}}
+			tickets := store.Of(f.db, meta)
+
+			Expect(tickets.Create(f.ctxA, &Ticket{OwnerID: f.owner, Name: "t1"})).To(Succeed())
+			Expect(f.rawTicketTenant("t1")).To(Equal(tenantA))
+		})
+
 		It("stores the tenant for every object of CreateMany", func() {
 			objs := []*Ticket{{OwnerID: f.owner, Name: "t1"}, {OwnerID: f.owner, Name: "t2"}}
 			Expect(f.tickets.CreateMany(f.ctxA, objs)).To(Succeed())
@@ -336,6 +348,18 @@ var _ = Describe("Test tenant scope", func() {
 			list, err := f.tickets.List(platCtx, f.byOwner(), store.TenantOf(tenantB))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(Equal([]string{"b1"}))
+		})
+
+		It("uses the tenant given by ScopeToTenant without an explicit scope", func() {
+			scoped := store.ScopeToTenant(platCtx, tenantB)
+			list, err := f.tickets.List(scoped, f.byOwner())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ticketNames(list)).To(Equal([]string{"b1"}))
+
+			Expect(f.tickets.Create(scoped, &Ticket{OwnerID: f.owner, Name: "b2"})).To(Succeed())
+			list, err = f.tickets.List(f.ctxB, f.byOwner(), store.Asc("name"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ticketNames(list)).To(Equal([]string{"b1", "b2"}))
 		})
 
 		It("does not affect collections that are not tenant scoped", func() {

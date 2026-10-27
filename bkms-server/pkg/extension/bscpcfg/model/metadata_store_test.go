@@ -36,7 +36,7 @@ var _ = Describe("MetadataStore", func() {
 
 	BeforeEach(func() {
 		store = testutil.NewStore(GinkgoT(), model.MetadataMeta)
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		testAppID = "test-app-" + stringx.Random(5)
 	})
 

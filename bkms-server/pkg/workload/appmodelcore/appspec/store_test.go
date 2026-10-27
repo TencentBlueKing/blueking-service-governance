@@ -40,7 +40,7 @@ var _ = Describe("AppSpec store", func() {
 	var spec *AppSpec
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		specs = store.Of(db, AppSpecMeta)
 

@@ -42,7 +42,7 @@ type defServiceFixture struct {
 
 // setupDefServiceFixture 初始化测试 fixture，应在 BeforeEach 中调用。
 func setupDefServiceFixture() *defServiceFixture {
-	f := &defServiceFixture{Ctx: context.Background()}
+	f := &defServiceFixture{Ctx: testutil.WithTenantOrDefault(context.Background())}
 
 	Expect(testutil.CleanupCollection("app_config_file_versions")).To(Succeed())
 	Expect(testutil.CleanupCollection("app_config_files")).To(Succeed())

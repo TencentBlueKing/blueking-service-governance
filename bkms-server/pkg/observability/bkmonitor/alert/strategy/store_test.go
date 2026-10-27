@@ -54,7 +54,7 @@ var _ = Describe("AlertStrategyStore", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		strategies = testutil.NewStore(GinkgoT(), Meta)
 	})
 

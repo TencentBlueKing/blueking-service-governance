@@ -37,7 +37,7 @@ var _ = Describe("RoleStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		roles = testutil.NewStore(GinkgoT(), RoleMeta)
 		gradeManagers = testutil.NewStore(GinkgoT(), GradeManagerMeta)
 	})

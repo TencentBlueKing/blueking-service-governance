@@ -70,7 +70,7 @@ var _ = Describe("Environment store", func() {
 	var env1, env2 *envmodel.Environment
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 
 		db = testutil.NewDB(GinkgoT())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)

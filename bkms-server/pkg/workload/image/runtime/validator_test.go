@@ -38,7 +38,7 @@ var _ = Describe("ImageReferenceValidator", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		images = testutil.NewStore(GinkgoT(), Meta)
 		db = testutil.NewDB(GinkgoT())
 		validator = NewImageReferenceValidator(db)

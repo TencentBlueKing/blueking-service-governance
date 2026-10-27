@@ -53,7 +53,7 @@ var _ = Describe("ComponentDefStore", func() {
 
 	BeforeEach(func() {
 		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 
 		// The default component for testing
 		compDef = &component.ComponentDef{

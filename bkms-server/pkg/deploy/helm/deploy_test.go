@@ -373,7 +373,7 @@ var _ = Describe("genValuesVariables", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		configs = testutil.NewStore(GinkgoT(), build.ConfigMeta)
 		workspaceID = "test-workspace"
@@ -582,7 +582,7 @@ var _ = Describe("genHelmDeployValues", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		app = &bkmsapp.Application{
 			WorkspaceID: "test-workspace",
@@ -840,7 +840,7 @@ var _ = Describe("buildEnvContext", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		app = &bkmsapp.Application{WorkspaceID: "ws", ID: "app", Name: "app", Type: bkmsapp.AppTypeHelm}
 		env = &bkmsenv.Environment{Name: "dev", Type: "development"}
 		reader = envvars.NewUnifiedEnvVarsReader(nil, nil, nil)
@@ -963,7 +963,7 @@ var _ = Describe("UninstallHelmRelease", func() {
 			ChartName:    "test-chart",
 			ChartVersion: "1.0.0",
 		}
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 	})
 
 	Context("when release does not exist", func() {

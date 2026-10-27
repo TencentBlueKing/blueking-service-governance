@@ -46,7 +46,7 @@ var _ = Describe("Env delete hooks from appcfg", func() {
 	var defStore *appcfg.AppConfigFileDefStore
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		bkmsenv.ResetHooksForTest()
 
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)

@@ -35,7 +35,7 @@ var _ = Describe("entities tests", func() {
 
 	BeforeEach(func() {
 		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 	})
 
 	Context("Property NormalizedDefaultValue", func() {

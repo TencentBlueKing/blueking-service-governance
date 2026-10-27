@@ -46,7 +46,7 @@ var _ = Describe("HostPortStore", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		configs = store.Of(db, hostport.HostPortConfigMeta)
 		testAppID = "hostport-app-" + stringx.Random(6)
