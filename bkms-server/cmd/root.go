@@ -38,6 +38,7 @@ func init() {
 	rootCmd.AddCommand(NewMigrateCmd())
 	rootCmd.AddCommand(migration.NewLoadBuiltinComponentCmd())
 	rootCmd.AddCommand(migration.NewBackfillDefaultAlertStrategiesCmd())
+	rootCmd.AddCommand(migration.NewBackfillBuildImageDigestCmd())
 	rootCmd.AddCommand(migration.NewMigrateComponentPatchCmd())
 	rootCmd.AddCommand(migration.NewMigrateTkeRouteEniComponentCmd())
 	rootCmd.AddCommand(migration.NewMigrateIAMSystemModelCmd())
