@@ -46,7 +46,7 @@ var _ = Describe("GetFrameworkMountableFile", func() {
 	BeforeEach(func() {
 		var err error
 
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		err = testutil.CleanupCollection("app_config_file_defs")
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("app_config_files")
@@ -270,7 +270,7 @@ var _ = Describe("ListPlainMountableFiles", func() {
 	BeforeEach(func() {
 		var err error
 
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		err = testutil.CleanupCollection("app_config_file_defs")
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("app_config_files")

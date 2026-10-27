@@ -39,7 +39,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 
 	BeforeEach(func() {
 		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 	})
 
 	Context("LoadBuiltinFromFolder valid input", func() {

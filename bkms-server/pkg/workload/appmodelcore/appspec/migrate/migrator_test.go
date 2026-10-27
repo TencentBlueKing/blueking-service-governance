@@ -31,7 +31,7 @@ var _ = Describe("tkeRouteEni component migration", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		Expect(testutil.CleanupMetaColl(appmodel.AppModelMeta)).To(Succeed())
 		Expect(testutil.CleanupCollection("app_specs")).To(Succeed())
 		Expect(testutil.CleanupCollection("workspace_components")).To(Succeed())

@@ -41,7 +41,7 @@ var _ = Describe("Default AppSpec", func() {
 	var db *mongo.Database
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		db = testutil.NewDB(GinkgoT())
 	})

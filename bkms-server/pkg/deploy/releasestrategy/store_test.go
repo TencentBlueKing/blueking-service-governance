@@ -51,7 +51,7 @@ var _ = Describe("Release strategy store", func() {
 	var store *releasestrategy.Store
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		store = testutil.NewStore(GinkgoT(), releasestrategy.Meta)
 	})
 

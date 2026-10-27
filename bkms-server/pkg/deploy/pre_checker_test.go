@@ -55,7 +55,9 @@ func persistEnv(ctx context.Context, env *envmodel.Environment) {
 	envs := testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 	Expect(envs.Create(ctx, env)).To(Succeed())
 	DeferCleanup(func() {
-		Expect(envs.DeleteIfExists(context.Background(), store.ByID(env.ID))).To(Succeed())
+		Expect(
+			envs.DeleteIfExists(testutil.WithTenantOrDefault(context.Background()), store.ByID(env.ID)),
+		).To(Succeed())
 	})
 }
 
@@ -78,7 +80,7 @@ var _ = Describe("PreDeployChecker", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		envName = "staging"
 		trafficLaneName = "lane-01"

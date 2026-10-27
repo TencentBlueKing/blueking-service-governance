@@ -24,9 +24,12 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Counter", func() {
@@ -37,7 +40,7 @@ var _ = Describe("Counter", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		appID = "semver-test-" + stringx.Random(8)
 	})
@@ -159,6 +162,26 @@ var _ = Describe("Counter", func() {
 			c2, err := Get(ctx, db, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c1.Patch).To(Equal(c2.Patch))
+		})
+	})
+
+	Describe("tenant", func() {
+		It("should require a tenant in ctx", func() {
+			_, err := Next(context.Background(), db, appID, BumpPatch)
+			Expect(errors.Is(err, store.ErrTenantIDRequired)).To(BeTrue(), "got %v", err)
+		})
+
+		It("should write the counter under the tenant in ctx", func() {
+			expectNext(BumpPatch, "0.0.1")
+
+			otherCtx := tenant.WithTenantID(context.Background(), "tenant-other")
+			c, err := Get(otherCtx, db, appID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.FormatSemver()).To(Equal("0.0.0"))
+
+			c, err = Get(ctx, db, appID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.FormatSemver()).To(Equal("0.0.1"))
 		})
 	})
 })

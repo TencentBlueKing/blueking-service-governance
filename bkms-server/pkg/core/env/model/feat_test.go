@@ -32,7 +32,7 @@ var _ = Describe("FeatureEnvCounter", func() {
 	var ctx context.Context
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 	})
 
 	AfterEach(func() {

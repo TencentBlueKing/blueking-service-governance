@@ -127,7 +127,7 @@ var _ = Describe("ProjectManager Initialize", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		manager = NewProjectManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		projectStore, _, _ = setupManagerTestStores()
 	})
@@ -233,7 +233,7 @@ var _ = Describe("PipelineManager Initialize", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		manager = NewPipelineManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		_, pipelineStore, templateStore = setupManagerTestStores()
 	})

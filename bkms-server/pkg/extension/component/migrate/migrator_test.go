@@ -97,7 +97,7 @@ var _ = Describe("Component patch migration", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		Expect(testutil.CleanupCollection(componentDefsCollection)).To(Succeed())
 		db = database.Client().Database(database.Name())
 		migrator = migrate.New(db)

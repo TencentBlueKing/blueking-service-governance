@@ -55,7 +55,7 @@ var _ = Describe("ApmInstConfigStore", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		Expect(testutil.CleanupMetaColl(ApmInstConfigMeta)).To(Succeed())
 		db = testutil.NewDB(GinkgoT())
 		apms = store.Of(db, ApmInstConfigMeta)

@@ -51,7 +51,7 @@ var _ = Describe("Service build validation", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		oldConfig = config.G
 		config.G = &config.Config{}
 		config.G.ImageBuild.ToolchainBaseURL = "https://bkrepo.example.com/image-build-toolchain"
@@ -225,7 +225,7 @@ var _ = Describe("Service build revision check", func() {
 	BeforeEach(func() {
 		configStore = testutil.NewStore(GinkgoT(), imagebuild.ConfigMeta)
 
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		app = &bkmsapp.Application{
 			ID:          "test-app-" + stringx.Random(6),
 			Name:        "test-app",

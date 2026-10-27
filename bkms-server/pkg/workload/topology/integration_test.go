@@ -139,7 +139,7 @@ var _ = Describe("Integration - HelmRelease Topology", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 
 		// ========== 构造所有 mock 资源对象 ==========
 		allResources = make(map[string]*unstructured.Unstructured)

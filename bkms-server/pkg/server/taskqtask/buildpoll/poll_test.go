@@ -98,7 +98,7 @@ var _ = Describe("Poller RunTick", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = auth.WithUser(context.Background(), auth.User{ID: "alice"})
+		ctx = auth.WithUser(testutil.WithTenantOrDefault(context.Background()), auth.User{ID: "alice"})
 		db = testutil.NewDB(GinkgoT())
 		pipelineStore = store.Of(db, bkci.PipelineMeta)
 		autoDeployStore = store.Of(db, autodeploy.RecordMeta)

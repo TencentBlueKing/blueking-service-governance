@@ -55,7 +55,7 @@ var _ = Describe("Build Functions", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		rev = revision.CodeRevision{Type: revision.TypeBranch, Value: "main"}
 		db = testutil.NewDB(GinkgoT())
 		imageTag = "v1.0.0"

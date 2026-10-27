@@ -43,7 +43,7 @@ var _ = Describe("PublishRecord store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		db = testutil.NewDB(GinkgoT())
 		records = store.Of(db, devmode.PublishRecordMeta)
 		appID = "test-app-" + stringx.Random(6)

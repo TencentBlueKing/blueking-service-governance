@@ -53,7 +53,7 @@ var _ = Describe("OperationRecordStore", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		Expect(testutil.CleanupMetaColl(OperationRecordMeta)).To(Succeed())
 		db = testutil.NewDB(GinkgoT())
 		records = store.Of(db, OperationRecordMeta)

@@ -73,7 +73,7 @@ var _ = Describe("FeatureEnvService", func() {
 		diApp.RequireStart()
 		db = testutil.NewDB(GinkgoT())
 
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		envvarhooks.RegisterDeleteHooks(db)
 	})
 
@@ -498,6 +498,7 @@ func expectEnvironmentsEqual(actual, expected *model.Environment) {
 func deriveFeatureEnv(sourceEnv *model.Environment, overrides model.Environment) *model.Environment {
 	env := &model.Environment{
 		ID:          overrides.ID,
+		TenantID:    sourceEnv.TenantID,
 		Name:        overrides.Name,
 		DisplayName: overrides.DisplayName,
 		Type:        sourceEnv.Type,

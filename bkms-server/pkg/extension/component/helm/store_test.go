@@ -55,7 +55,7 @@ var _ = Describe("HelmAppComponent store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		comps = testutil.NewStore(GinkgoT(), Meta)
 
 		// 清理测试数据

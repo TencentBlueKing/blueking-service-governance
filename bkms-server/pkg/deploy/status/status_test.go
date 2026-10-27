@@ -89,7 +89,7 @@ var _ = Describe("DeployStatusService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 		diApp = fxtest.New(

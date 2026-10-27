@@ -45,7 +45,7 @@ var _ = Describe("Env delete hooks from envvars", func() {
 	var db *mongo.Database
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 
 		diApp = fxtest.New(
 			GinkgoT(),

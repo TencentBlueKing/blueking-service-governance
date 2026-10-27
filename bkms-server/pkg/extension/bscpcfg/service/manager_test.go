@@ -43,7 +43,7 @@ var _ = Describe("Manager", func() {
 		metas = testutil.NewStore(GinkgoT(), model.MetadataMeta)
 		bindings = testutil.NewStore(GinkgoT(), model.EnvBindingMeta)
 
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		testAppID = "test-app-" + stringx.Random(5)
 
 		var err error

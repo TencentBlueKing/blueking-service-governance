@@ -86,7 +86,7 @@ var _ = Describe("Query", func() {
 			}
 			repoIndex = clusteraddon.NewRepoIndex(indexFile)
 
-			ctx = context.Background()
+			ctx = testutil.WithTenantOrDefault(context.Background())
 		})
 
 		AfterEach(func() {

@@ -32,6 +32,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -69,36 +70,37 @@ var _ = Describe("PlatWorkspaceService", func() {
 		}
 	})
 
-	It("should list platform workspaces with aggregated counts", func() {
+	It("should list platform workspaces with aggregated counts across tenants", func() {
+		otherCtx := tenant.WithTenantID(context.Background(), "tenant-other")
 		wsA := dbfactory.Workspace(ctx, workspaceStore)
-		wsB := dbfactory.Workspace(ctx, workspaceStore)
+		wsB := dbfactory.Workspace(otherCtx, workspaceStore)
 		defer func() {
 			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsA.ID)
-			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsB.ID)
+			_ = bkmsworkspace.Delete(otherCtx, workspaceStore, wsB.ID)
 		}()
 
 		helmStores := &dbfactory.HelmApplicationStores{AppStore: appStore}
 		appA1 := dbfactory.HelmApplication(ctx, helmStores, &dbfactory.HelmApplicationOpts{WorkspaceID: wsA.ID})
 		appA2 := dbfactory.HelmApplication(ctx, helmStores, &dbfactory.HelmApplicationOpts{WorkspaceID: wsA.ID})
-		appB1 := dbfactory.HelmApplication(ctx, helmStores, &dbfactory.HelmApplicationOpts{WorkspaceID: wsB.ID})
+		appB1 := dbfactory.HelmApplication(otherCtx, helmStores, &dbfactory.HelmApplicationOpts{WorkspaceID: wsB.ID})
 		defer func() {
 			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsA.ID, appA1.Name))
 			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsA.ID, appA2.Name))
-			_ = appStore.DeleteIfExists(ctx, bkmsapp.ByName(wsB.ID, appB1.Name))
+			_ = appStore.DeleteIfExists(otherCtx, bkmsapp.ByName(wsB.ID, appB1.Name))
 		}()
 
 		envA1 := dbfactory.Env(ctx, envSvc, wsA.ID)
-		envB1 := dbfactory.Env(ctx, envSvc, wsB.ID)
-		envB2 := dbfactory.Env(ctx, envSvc, wsB.ID)
+		envB1 := dbfactory.Env(otherCtx, envSvc, wsB.ID)
+		envB2 := dbfactory.Env(otherCtx, envSvc, wsB.ID)
 		defer func() {
 			_ = envSvc.Delete(ctx, envA1.ID)
-			_ = envSvc.Delete(ctx, envB1.ID)
-			_ = envSvc.Delete(ctx, envB2.ID)
+			_ = envSvc.Delete(otherCtx, envB1.ID)
+			_ = envSvc.Delete(otherCtx, envB2.ID)
 		}()
 
 		time.Sleep(workspaceTimestampPrecisionWait)
 		wsB.Description = "workspace b updated"
-		Expect(bkmsworkspace.Update(ctx, workspaceStore, wsB)).To(Succeed())
+		Expect(bkmsworkspace.Update(otherCtx, workspaceStore, wsB)).To(Succeed())
 
 		items, err := service.List(platCtx, WorkspaceListOptions{
 			Page:     1,
