@@ -26,10 +26,8 @@
       <Radio.Button label="shell">shell</Radio.Button>
       <Radio.Button label="exec">exec</Radio.Button>
     </Radio.Group>
+    <CommandModeHint :mode="mode" />
     <template v-if="mode === 'shell'">
-      <p class="mb-[8px] text-[12px] text-[#979BA5]">
-        {{ $t('按脚本执行，可以用 && 和管道。例如 echo ready && ./server --port=8080') }}
-      </p>
       <Form
         ref="shellFormRef"
         form-type="vertical"
@@ -82,6 +80,7 @@
 
   import { Form, Input, Radio } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
+  import CommandModeHint from '~/components/command-mode-hint.vue';
   import RepeatableInput from '~/components/repeatable-input.vue';
 
   import type { AppModelSpecInput } from '~/@types/v1/app';

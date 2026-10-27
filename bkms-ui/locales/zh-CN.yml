@@ -411,7 +411,8 @@ VPC网络 (underlay): VPC网络 (underlay)
 为空间下 tRPC / TAF 应用设置默认配置。: 为空间下 tRPC / TAF 应用设置默认配置。
 启动命令: 启动命令
 启动模式: 启动模式
-按脚本执行，可以用 && 和管道。例如 echo ready && ./server --port=8080: 按脚本执行，可以用 && 和管道。例如 echo ready && ./server --port=8080
+按脚本执行，可以用 && 和管道，例如 cd /usr/local/trpc/bin && ./server --port=8080: 按脚本执行，可以用 && 和管道，例如 cd /usr/local/trpc/bin && ./server --port=8080
+命令和参数每行填一项，例如 /usr/local/trpc/bin/server: 命令和参数每行填一项，例如 /usr/local/trpc/bin/server
 环境变量: 环境变量
 策略配置: 策略配置
 流水线: 流水线

@@ -19,6 +19,7 @@ declare module 'vue' {
     CollapsibleAsideLayout: typeof import('./components/collapsible-aside-layout.vue')['default']
     CollapsiblePanel: typeof import('./components/collapsible-panel.vue')['default']
     ColorIcon: typeof import('./components/color-icon.vue')['default']
+    CommandModeHint: typeof import('./components/command-mode-hint.vue')['default']
     ComponentItem: typeof import('./components/modules/component-item.vue')['default']
     ComponentLabel: typeof import('./components/component-label.vue')['default']
     ComponentsSelect: typeof import('./components/modules/components-select.vue')['default']

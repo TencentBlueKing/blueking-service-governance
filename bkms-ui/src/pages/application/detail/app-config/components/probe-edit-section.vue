@@ -93,11 +93,9 @@
             <Radio.Button label="shell">shell</Radio.Button>
             <Radio.Button label="exec">exec</Radio.Button>
           </Radio.Group>
+          <CommandModeHint :mode="execMode" />
           <!-- shell 模式：textarea 输入 shCommand -->
           <template v-if="execMode === 'shell'">
-            <p class="mb-[8px] text-[12px] text-[#979BA5]">
-              {{ $t('按脚本执行，可以用 && 和管道。例如 echo ready && ./server --port=8080') }}
-            </p>
             <Input
               v-model="probeData.probeHandler!.shCommand"
               :placeholder="$t('请输入')"
@@ -281,6 +279,7 @@
   import { Button, Divider, Form, Input, PopConfirm, Radio, Select } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { ProbeOutput } from '~/@types/v1/app-spec';
+  import CommandModeHint from '~/components/command-mode-hint.vue';
   import RepeatableInput from '~/components/repeatable-input.vue';
 
   import { ProbeType } from './types';

@@ -176,12 +176,10 @@
                     <Radio.Button label="shell">shell</Radio.Button>
                     <Radio.Button label="exec">exec</Radio.Button>
                   </Radio.Group>
-                  <p
-                    v-if="preStopExecMode === 'shell'"
-                    class="mb-[8px] text-[12px] text-[#979BA5]"
-                  >
-                    {{ $t('按脚本执行，可以用 && 和管道。例如 echo ready && ./server --port=8080') }}
-                  </p>
+                  <CommandModeHint
+                    :class="{ 'whitespace-nowrap': preStopExecMode === 'shell' }"
+                    :mode="preStopExecMode"
+                  />
                   <RepeatableInput
                     v-if="preStopExecMode === 'exec'"
                     ref="preStopCommandRef"
@@ -282,6 +280,7 @@
   } from '~/@types/v1/app-spec';
   import { AppSpecService } from '~/api/modules/v1';
   import BkmsContent from '~/components/bkms-content.vue';
+  import CommandModeHint from '~/components/command-mode-hint.vue';
   import FieldItem from '~/components/field-item.vue';
   import RepeatableInput from '~/components/repeatable-input.vue';
   import { useAppDetail } from '~/stores/app-detail';
