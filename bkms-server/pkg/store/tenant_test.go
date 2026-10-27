@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -484,6 +485,78 @@ var _ = Describe("Test tenant scope", func() {
 		})
 	})
 
+	Context("shared from the platform tenant", func() {
+		var (
+			shared      *store.GenericStore[Ticket]
+			platform    string
+			ctxPlatform context.Context
+		)
+
+		BeforeEach(func() {
+			meta := ticketMeta
+			meta.SharedFromPlatform = bson.D{{Key: "Priority", Value: 9}}
+			shared = store.Of(f.db, meta)
+
+			var err error
+			platform, err = tenant.PlatformTenantID()
+			Expect(err).NotTo(HaveOccurred())
+			ctxPlatform = tenant.WithTenantID(f.ctx, platform)
+
+			for _, t := range []struct {
+				ctx      context.Context
+				name     string
+				priority int
+			}{
+				{ctxPlatform, "p-shared", 9},
+				{ctxPlatform, "p-private", 1},
+				{f.ctxA, "a1", 1},
+				{f.ctxB, "b1", 1},
+			} {
+				Expect(shared.Create(t.ctx, &Ticket{OwnerID: f.owner, Name: t.name, Priority: t.priority})).
+					To(Succeed())
+			}
+		})
+
+		It("reads its own documents and the shared platform documents", func() {
+			list, err := shared.List(f.ctxA, f.byOwner())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ticketNames(list)).To(ConsistOf("a1", "p-shared"))
+
+			got, err := shared.Get(f.ctxB, f.byName("p-shared"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.TenantID).To(Equal(platform))
+
+			n, err := shared.Count(f.ctxA, f.byOwner())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(2)))
+			Expect(shared.Exists(f.ctxA, f.byName("p-private"))).To(BeFalse())
+		})
+
+		It("keeps the caller's own $or conditions", func() {
+			list, err := shared.List(f.ctxA, f.byOwner(), store.Filter(bson.M{
+				"$or": []bson.M{{"name": "a1"}, {"name": "p-private"}},
+			}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ticketNames(list)).To(Equal([]string{"a1"}))
+		})
+
+		It("does not share with explicit tenant scopes", func() {
+			list, err := shared.List(f.ctxA, f.byOwner(), store.TenantOf(tenantA))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ticketNames(list)).To(Equal([]string{"a1"}))
+		})
+
+		It("does not share with writes", func() {
+			err := shared.Update(f.ctxA, bson.M{"priority": 1}, f.byName("p-shared"))
+			Expect(errors.Is(err, store.ErrNotFound)).To(BeTrue())
+			Expect(errors.Is(shared.Delete(f.ctxA, f.byName("p-shared")), store.ErrNotFound)).To(BeTrue())
+
+			got, err := shared.Get(ctxPlatform, f.byName("p-shared"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Priority).To(Equal(9))
+		})
+	})
+
 	Context("global collections are unaffected", func() {
 		It("reads and writes without a tenant in the context", func() {
 			w := f.mustCreateWidget("w1")
@@ -515,6 +588,13 @@ var _ = Describe("Test tenancy declaration", func() {
 		_, err := store.New(db, store.Meta[Ticket]{Collection: ticketCollection})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("set TenantScoped to true"))
+	})
+
+	It("rejects SharedFromPlatform on a collection that is not tenant scoped", func() {
+		_, err := store.New(db, store.Meta[Widget]{
+			Collection: widgetCollection, SharedFromPlatform: bson.D{{Key: "priority", Value: 1}},
+		})
+		Expect(err).To(MatchError(ContainSubstring("SharedFromPlatform requires TenantScoped")))
 	})
 
 	It("rejects a tenantID field that is not a string", func() {

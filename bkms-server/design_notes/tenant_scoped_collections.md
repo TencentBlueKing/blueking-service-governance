@@ -6,13 +6,13 @@
 
 - 按租户隔离：`workspaces` + 47 个集合（清单见 `db/migrations/000025_tenant_scoped_collections_tenant_id.up.json`），
   模型加 `TenantID`，`Meta` 设 `TenantScoped: true`。
+- `component_defs` 单独接入（迁移 000026），平台内置定义共享给所有租户读取，见 `component_def_tenancy.md`。
 - 保持全局：
 
 | 集合 | 原因 |
 |---|---|
 | `runtime_images`、`cluster_addon_defs`、`depservice_services`、`bkci_pipeline_templates` | 平台目录，启动或命令行写入，租户只读 |
 | `image_snapshots`、`image_tag_suppressions`、`repo_snapshot_statuses` | 按仓库凭据哈希 `repoKey` 存储，没有凭据算不出 key |
-| `component_defs` | 混有租户自建定义，后续拆表 |
 | `plat_admin_role_bindings` | 平台角色，按用户名全局唯一 |
 | `store.NewCounter` 计数器（镜像/Chart 构建号、特性环境序号） | key 为应用 ID，本身不会跨租户冲突 |
 
@@ -78,8 +78,9 @@ appspec 的 `normalizeSpec` 通过 `Clone` 整体重建对象，`Clone` 没复�
 ## 5. 遗留
 
 - `semver` 计数器按租户隔离，而 `store.NewCounter` 计数器保持全局，两者 key 都是应用 ID，后续可统一。
-- 全局集合中由租户产生的数据（`component_defs` 自建定义、快照）无法按租户清理。
+- 全局集合中由租户产生的数据（镜像快照）无法按租户清理。
 
 ## 6. 发布
 
-先执行迁移 000025，再发布代码，全部实例升级后再回填一次，详见 `db/migrations/000025_tenant_scoped_collections_tenant_id.md`。
+先执行迁移 000025、000026，再发布代码，全部实例升级后再回填一次，000026 另需重算组件实例计数，
+详见 `db/migrations/` 下对应的 `.md`。

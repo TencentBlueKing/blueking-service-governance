@@ -18,9 +18,7 @@
 
 package tenant
 
-import (
-	"errors"
-)
+import "errors"
 
 const (
 	// HeaderTenantID 多租户请求头，对齐 ConfigCenter TenantHeader。

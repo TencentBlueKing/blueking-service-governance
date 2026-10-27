@@ -27,6 +27,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -113,22 +114,6 @@ var _ = Describe("ComponentDefStore", func() {
 			Expect(retrieved.Description).To(Equal(compDef.Description))
 			Expect(retrieved.Specs).To(BeEmpty())
 			Expect(retrieved.Specs).NotTo(BeNil())
-		})
-
-		It("should keep instance counts maintained by UpdateInstanceCount", func() {
-			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
-			Expect(component.UpdateInstanceCount(
-				ctx, compDefStore, compDef.Name, component.FieldWorkspaceCompInstance, 2,
-			)).To(Succeed())
-
-			// 调用方对象中的计数是旧值（0），覆盖时不应写回
-			compDef.DisplayName = "Updated Name"
-			Expect(component.UpsertDef(ctx, compDefStore, compDef)).To(Succeed())
-
-			retrieved, err := get(compDef.Name, compDef.Version)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.DisplayName).To(Equal("Updated Name"))
-			Expect(retrieved.WorkspaceCompInstanceCount).To(Equal(int32(2)))
 		})
 
 		It("should update an existing component-def", func() {
@@ -251,75 +236,150 @@ var _ = Describe("ComponentDefStore", func() {
 		})
 	})
 
-	Describe("UpdateInstanceCount", func() {
-		Context("incrementing appCompInstanceCount", func() {
-			It("should accumulate multiple increments", func() {
-				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
+	Describe("tenancy", func() {
+		var ctxOther context.Context
+		var builtin *component.ComponentDef
 
-				for i := 0; i < 5; i++ {
-					err = component.UpdateInstanceCount(
-						ctx,
-						compDefStore,
-						compDef.Name,
-						component.FieldAppCompInstance,
-						1,
-					)
-					Expect(err).NotTo(HaveOccurred())
-				}
+		BeforeEach(func() {
+			ctxOther = tenant.WithTenantID(context.Background(), "tenant-"+stringx.Random(6))
 
-				retrieved, err := get(compDef.Name, compDef.Version)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.AppCompInstanceCount).To(Equal(int32(5)))
-			})
-
-			It("should decrement appCompInstanceCount with negative delta", func() {
-				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				// 先增加 3
-				err = component.UpdateInstanceCount(ctx, compDefStore, compDef.Name, component.FieldAppCompInstance, 3)
-				Expect(err).NotTo(HaveOccurred())
-
-				// 再减少 2
-				err = component.UpdateInstanceCount(
-					ctx,
-					compDefStore,
-					compDef.Name,
-					component.FieldAppCompInstance,
-					-2,
-				)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err := get(compDef.Name, compDef.Version)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.AppCompInstanceCount).To(Equal(int32(1)))
+			platform, err := tenant.PlatformTenantID()
+			Expect(err).NotTo(HaveOccurred())
+			builtin = &component.ComponentDef{
+				Name:      "Builtin-" + stringx.Random(6),
+				Version:   component.DefaultComponentDefVersion,
+				Patchers:  []string{"foo: bar\n"},
+				ScopeType: component.ScopeTypeGlobal,
+				IsBuiltin: true,
+			}
+			Expect(component.UpsertDef(ctx, compDefStore, builtin, store.TenantOf(platform))).To(Succeed())
+			DeferCleanup(func() {
+				Expect(compDefStore.DeleteIfExists(ctx, component.ByNameVersion(builtin.Name, builtin.Version),
+					store.TenantAll())).To(Succeed())
 			})
 		})
 
-		It("should not refresh updatedAt of the definition", func() {
+		It("should share builtin definitions of the platform tenant with other tenants", func() {
+			got, err := component.GetDef(ctxOther, compDefStore, builtin.Name, builtin.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsBuiltin).To(BeTrue())
+			Expect(component.BuiltinDefExists(ctxOther, compDefStore, builtin.Name, builtin.Version)).To(BeTrue())
+		})
+
+		It("should not share custom definitions of the platform tenant", func() {
 			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
-			before, err := get(compDef.Name, compDef.Version)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = component.UpdateInstanceCount(
-				ctx,
-				compDefStore,
-				compDef.Name,
-				component.FieldWorkspaceCompInstance,
-				1,
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			after, err := get(compDef.Name, compDef.Version)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(after.WorkspaceCompInstanceCount).To(Equal(before.WorkspaceCompInstanceCount + 1))
-			Expect(after.UpdatedAt).To(Equal(before.UpdatedAt))
+			_, err := component.GetDef(ctxOther, compDefStore, compDef.Name, compDef.Version)
+			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
 		})
 
-		It("should ignore a missing definition", func() {
-			err := component.UpdateInstanceCount(ctx, compDefStore, "not-exists", component.FieldAppCompInstance, 1)
-			Expect(err).NotTo(HaveOccurred())
+		It("should allow the same name in different tenants", func() {
+			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
+			other := *compDef
+			Expect(compDefStore.Create(ctxOther, &other)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(compDefStore.DeleteIfExists(ctxOther,
+					component.ByNameVersion(other.Name, other.Version))).To(Succeed())
+			})
 		})
+
+		Context("a tenant definition shadows a builtin one of the same name", func() {
+			BeforeEach(func() {
+				owned := &component.ComponentDef{
+					Name:        builtin.Name,
+					Version:     builtin.Version,
+					Description: "owned",
+					Patchers:    []string{"foo: owned\n"},
+					ScopeType:   component.ScopeTypeGlobal,
+				}
+				Expect(compDefStore.Create(ctxOther, owned)).To(Succeed())
+				DeferCleanup(func() {
+					Expect(compDefStore.DeleteIfExists(ctxOther,
+						component.ByNameVersion(owned.Name, owned.Version))).To(Succeed())
+				})
+			})
+
+			It("should resolve to the tenant definition", func() {
+				got, err := component.GetDef(ctxOther, compDefStore, builtin.Name, builtin.Version)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got.IsBuiltin).To(BeFalse())
+				Expect(got.Description).To(Equal("owned"))
+			})
+
+			It("should hide the shadowed builtin definition from the list", func() {
+				exclude, err := component.ExcludeShadowedBuiltins(ctxOther, compDefStore)
+				Expect(err).NotTo(HaveOccurred())
+				defs, err := compDefStore.List(ctxOther, store.Where("name", builtin.Name), exclude)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(defs).To(HaveLen(1))
+				Expect(defs[0].IsBuiltin).To(BeFalse())
+			})
+
+			It("should keep the builtin definition visible to other tenants", func() {
+				exclude, err := component.ExcludeShadowedBuiltins(ctx, compDefStore)
+				Expect(err).NotTo(HaveOccurred())
+				defs, err := compDefStore.List(ctx, store.Where("name", builtin.Name), exclude)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(defs).To(HaveLen(1))
+				Expect(defs[0].IsBuiltin).To(BeTrue())
+			})
+		})
+	})
+})
+
+var _ = Describe("InstanceCount", func() {
+	var counts *component.InstanceCountStore
+	var ctx, ctxOther context.Context
+	var name string
+
+	countOf := func(ctx context.Context) component.InstanceCount {
+		got, err := component.ListInstanceCounts(ctx, counts, []component.ComponentDef{
+			{Name: name, Version: component.DefaultComponentDefVersion},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return got[name+":"+component.DefaultComponentDefVersion]
+	}
+	update := func(ctx context.Context, instanceType component.InstanceType, delta int) {
+		Expect(component.UpdateInstanceCount(ctx, counts, name, instanceType, delta)).To(Succeed())
+	}
+
+	BeforeEach(func() {
+		counts = testutil.NewStore(GinkgoT(), component.InstanceCountMeta)
+		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctxOther = tenant.WithTenantID(context.Background(), "tenant-"+stringx.Random(6))
+		name = "Comp-" + stringx.Random(6)
+		DeferCleanup(func() {
+			Expect(counts.DeleteMany(ctx, component.ByDef(name, component.DefaultComponentDefVersion),
+				store.TenantAll())).Error().NotTo(HaveOccurred())
+		})
+	})
+
+	It("should create the record on the first increment and accumulate", func() {
+		for range 3 {
+			update(ctx, component.FieldAppCompInstance, 1)
+		}
+		update(ctx, component.FieldWorkspaceCompInstance, 2)
+		update(ctx, component.FieldAppCompInstance, -1)
+
+		got := countOf(ctx)
+		Expect(got.AppCompInstanceCount).To(Equal(int32(2)))
+		Expect(got.WorkspaceCompInstanceCount).To(Equal(int32(2)))
+	})
+
+	It("should ignore a decrement without a record", func() {
+		update(ctx, component.FieldAppCompInstance, -1)
+		Expect(counts.Exists(ctx, component.ByDef(name, component.DefaultComponentDefVersion))).To(BeFalse())
+	})
+
+	It("should count each tenant separately", func() {
+		update(ctx, component.FieldAppCompInstance, 1)
+		update(ctxOther, component.FieldAppCompInstance, 5)
+
+		Expect(countOf(ctx).AppCompInstanceCount).To(Equal(int32(1)))
+		Expect(countOf(ctxOther).AppCompInstanceCount).To(Equal(int32(5)))
+	})
+
+	It("should reject an unknown instance type", func() {
+		Expect(component.UpdateInstanceCount(ctx, counts, name, "unknown", 1)).
+			To(MatchError(ContainSubstring("invalid instance type")))
 	})
 })

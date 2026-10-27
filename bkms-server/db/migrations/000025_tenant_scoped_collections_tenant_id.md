@@ -8,7 +8,7 @@
 存量数据全部归属保留租户 `default`。各集合的唯一索引保持不变，不改为租户内唯一。
 
 保持全局、不在本迁移中的集合：`runtime_images`、`image_snapshots`、`image_tag_suppressions`、
-`repo_snapshot_statuses`、`component_defs`、`cluster_addon_defs`、`depservice_services`、
+`repo_snapshot_statuses`、`component_defs`（由 000026 单独接入）、`cluster_addon_defs`、`depservice_services`、
 `bkci_pipeline_templates`、`plat_admin_role_bindings`，以及计数器集合。
 
 ## up

@@ -96,8 +96,19 @@ func (q *query) projection() bson.D {
 // parseOpts 依次应用 opts，遇到 accepted 之外类别的选项时返回错误；
 // 过滤条件与排序中的字段名会被转换为 bson 路径，TenantScoped 集合最后再注入租户条件。
 //
-// 所有读写操作都经由它（或 writeQuery）构造过滤条件，因此这里是租户过滤唯一需要收口的地方
+// 所有读写操作都经由它（或 readQuery、writeQuery）构造过滤条件，因此这里是租户过滤唯一需要收口的地方
 func (s *GenericStore[T]) parseOpts(ctx context.Context, op string, opts []Opt, accepted optKind) (*query, error) {
+	return s.parse(ctx, op, opts, accepted, false)
+}
+
+// readQuery 用于读操作：在 parseOpts 的基础上让 Meta.SharedFromPlatform 生效
+func (s *GenericStore[T]) readQuery(ctx context.Context, op string, opts []Opt, accepted optKind) (*query, error) {
+	return s.parse(ctx, op, opts, accepted, true)
+}
+
+func (s *GenericStore[T]) parse(
+	ctx context.Context, op string, opts []Opt, accepted optKind, read bool,
+) (*query, error) {
 	q := &query{}
 	for _, opt := range opts {
 		if opt == nil {
@@ -134,7 +145,7 @@ func (s *GenericStore[T]) parseOpts(ctx context.Context, op string, opts []Opt, 
 	}
 	// 注入必须在字段名解析之后：注入的已经是 bson 路径，不应再被解析一次
 	q.callerCondCount = len(q.conds)
-	if err = s.injectTenant(ctx, op, q); err != nil {
+	if err = s.injectTenant(ctx, op, q, read); err != nil {
 		return nil, err
 	}
 	return q, nil

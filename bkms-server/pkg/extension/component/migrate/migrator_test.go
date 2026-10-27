@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/migrate"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -104,12 +105,13 @@ var _ = Describe("Component patch migration", func() {
 		insertLegacyComponents = func() {
 			_, err := db.Collection(componentDefsCollection).InsertMany(ctx, []any{
 				bson.M{
-					"name": "Demo", "version": component.DefaultComponentDefVersion,
+					"tenantID": tenant.DefaultTenantID, "name": "Demo", "version": component.DefaultComponentDefVersion,
 					"properties": bson.A{}, "output": "patcher:\n  spec.replicas: 2\n",
 				},
 				bson.M{
-					"name": importPolarisComponentName, "version": component.DefaultComponentDefVersion,
-					"properties": bson.A{}, "output": legacyImportPolarisOutput, "isBuiltin": true,
+					"tenantID": tenant.DefaultTenantID, "name": importPolarisComponentName,
+					"version": component.DefaultComponentDefVersion, "properties": bson.A{},
+					"output": legacyImportPolarisOutput, "isBuiltin": true,
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())

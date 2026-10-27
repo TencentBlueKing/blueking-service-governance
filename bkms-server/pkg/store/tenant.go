@@ -152,8 +152,11 @@ func (s *GenericStore[T]) resolveTenant(
 //
 // 调用方自己写 tenantID 条件会被拒绝，而不是被覆盖：条件不能靠追加来覆盖（query.filter 遇到重复 key
 // 会退化成 $and，调用方的条件仍会参与匹配），而静默丢弃又会让「以为自己在按租户过滤」的代码继续跑。
-// TenantAll 下不做这个检查，此时按 tenantID 过滤是平台管理筛选租户的正常用法
-func (s *GenericStore[T]) injectTenant(ctx context.Context, op string, q *query) error {
+// TenantAll 下不做这个检查，此时按 tenantID 过滤是平台管理筛选租户的正常用法。
+//
+// read 为 true、集合声明了 SharedFromPlatform 且租户取自 ctx 时，条件放宽为
+// 「本租户」或「平台租户中满足共享条件」
+func (s *GenericStore[T]) injectTenant(ctx context.Context, op string, q *query, read bool) error {
 	id, filterByTenant, err := s.resolveTenant(ctx, op, q)
 	if err != nil {
 		return err
@@ -168,7 +171,22 @@ func (s *GenericStore[T]) injectTenant(ctx context.Context, op string, q *query)
 			op, s.coll.Name(), keyTenantID,
 		)
 	}
-	q.conds = append(q.conds, bson.E{Key: keyTenantID, Value: id})
+	cond := bson.E{Key: keyTenantID, Value: id}
+	if read && len(s.meta.SharedFromPlatform) > 0 && q.tenantOptCount == 0 {
+		platform, err := tenant.PlatformTenantID()
+		if err != nil {
+			return errors.Wrapf(err, "%s %s", op, s.coll.Name())
+		}
+		if platform != id {
+			shared, err := mapFilterKeys(s.meta.SharedFromPlatform, s.schema.resolveKey)
+			if err != nil {
+				return errors.Wrapf(err, "%s %s: SharedFromPlatform", op, s.coll.Name())
+			}
+			sharedCond := append(bson.D{{Key: keyTenantID, Value: platform}}, shared...)
+			cond = bson.E{Key: "$or", Value: bson.A{bson.D{cond}, sharedCond}}
+		}
+	}
+	q.conds = append(q.conds, cond)
 	return nil
 }
 

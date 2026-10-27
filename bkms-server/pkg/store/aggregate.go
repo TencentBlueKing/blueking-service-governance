@@ -39,7 +39,7 @@ import (
 // 取决于服务端配置（MongoDB 6.0 起默认落盘，更早的版本报错），匹配的文档较多时应建立上述索引或用 CondOpt 缩小范围。
 // 支持的选项：CondOpt、SortOpt、ProjectOpt、TenantOpt
 func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, opts ...Opt) ([]T, error) {
-	q, err := s.parseOpts(ctx, "list latest in", opts, latestOpts)
+	q, err := s.readQuery(ctx, "list latest in", opts, latestOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (s *GenericStore[T]) ListLatestBy(ctx context.Context, groupBy []string, op
 //
 // 支持的选项：CondOpt、TenantOpt
 func Aggregate[R, T any](ctx context.Context, s *GenericStore[T], pipeline mongo.Pipeline, opts ...Opt) ([]R, error) {
-	q, err := s.parseOpts(ctx, "aggregate", opts, condOpts)
+	q, err := s.readQuery(ctx, "aggregate", opts, condOpts)
 	if err != nil {
 		return nil, err
 	}

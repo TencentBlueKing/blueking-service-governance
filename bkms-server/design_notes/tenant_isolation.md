@@ -21,6 +21,7 @@
 | 类型 | 声明 | 说明 |
 |---|---|---|
 | 租户集合 | 模型有 `TenantID string \`bson:"tenantID"\``，`TenantScoped: true` | 绝大多数业务集合 |
+| 共享读取的租户集合 | 租户集合，另声明 `Meta.SharedFromPlatform` | 平台租户中满足条件的文档对所有租户可读，如 `component_defs` 的内置定义，见 `component_def_tenancy.md` |
 | 全局集合 | 无该字段，`TenantScoped` 为零值 false | 全系统一份，如 `cluster_addon_defs`、`plat_admin_role_bindings`、`runtime_images` |
 | 计数器 | `store.Counter`，文档为 `{_id: key, seq}` | 不经过 Meta，key 中带有 `appID` 等业务 ID，由业务对象区分 |
 
@@ -31,7 +32,6 @@
 - `image_snapshots` / `repo_snapshot_statuses`：远端镜像仓库的缓存，平台镜像与租户私有仓库的快照都在其中。
   以 `repoKey = SHA256(仓库名 + 账号 + 密码)` 为 key，只有持有凭据才能算出 key，读不到其他租户的快照。
   代价是删除租户时无法按租户清理。
-- `component_defs`：除内置组件外还存放租户通过接口创建的定义，暂时保持全局，后续拆为平台表与租户表。
 
 ### 2.2 每个租户集合都冗余 `tenantID`
 
@@ -88,7 +88,7 @@ err := apps.Create(ctx, &app, store.TenantOf("tenant-a"))
 
 ### 3.3 注入点
 
-所有读写都经过 `parseOpts`（写操作经 `writeQuery`），租户条件在这里统一注入：
+所有读写都经过 `parseOpts`（读操作经 `readQuery`，写操作经 `writeQuery`），租户条件在这里统一注入：
 字段名解析完成后，向 `q.conds` 追加 `tenantID = <租户>`。
 
 - 调用方自己在条件里写 `tenantID` 会报错，而不是覆盖或丢弃：重复 key 会被 `filter()` 合成 `$and` 仍参与匹配，

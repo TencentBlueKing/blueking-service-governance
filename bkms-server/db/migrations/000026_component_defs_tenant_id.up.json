@@ -1,0 +1,88 @@
+[
+  {
+    "update": "component_defs",
+    "updates": [
+      {
+        "q": { "tenantID": { "$exists": false } },
+        "u": { "$set": { "tenantID": "default" } },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "createIndexes": "component_defs",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1,
+          "name": 1,
+          "version": 1
+        },
+        "name": "tenantID_1_name_1_version_1",
+        "unique": true
+      }
+    ]
+  },
+  {
+    "dropIndexes": "component_defs",
+    "index": "name_1_version_1"
+  },
+  {
+    "createIndexes": "component_def_instance_counts",
+    "indexes": [
+      {
+        "key": {
+          "tenantID": 1,
+          "defName": 1,
+          "version": 1
+        },
+        "name": "tenantID_1_defName_1_version_1",
+        "unique": true
+      }
+    ]
+  },
+  {
+    "aggregate": "component_defs",
+    "pipeline": [
+      {
+        "$match": {
+          "$or": [
+            { "appCompInstanceCount": { "$gt": 0 } },
+            { "workspaceCompInstanceCount": { "$gt": 0 } }
+          ]
+        }
+      },
+      {
+        "$project": {
+          "_id": 0,
+          "tenantID": "$tenantID",
+          "defName": "$name",
+          "version": "$version",
+          "appCompInstanceCount": { "$ifNull": ["$appCompInstanceCount", 0] },
+          "workspaceCompInstanceCount": { "$ifNull": ["$workspaceCompInstanceCount", 0] },
+          "createdAt": "$$NOW",
+          "updatedAt": "$$NOW"
+        }
+      },
+      {
+        "$merge": {
+          "into": "component_def_instance_counts",
+          "on": ["tenantID", "defName", "version"],
+          "whenMatched": "keepExisting",
+          "whenNotMatched": "insert"
+        }
+      }
+    ],
+    "cursor": {}
+  },
+  {
+    "update": "component_defs",
+    "updates": [
+      {
+        "q": {},
+        "u": { "$unset": { "appCompInstanceCount": "", "workspaceCompInstanceCount": "" } },
+        "multi": true
+      }
+    ]
+  }
+]

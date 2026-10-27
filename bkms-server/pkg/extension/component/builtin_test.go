@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 var _ = Describe("Builtin ComponentDefs Tests", func() {
@@ -52,6 +53,17 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(compDef.Name).To(Equal("MemLimits"))
 			Expect(len(compDef.Properties)).To(Equal(2))
+		})
+
+		It("should mark loaded components as builtin and share them with other tenants", func() {
+			// 测试文件中没有写 isBuiltin
+			Expect(component.LoadBuiltinFromFolder(ctx, compDefStore, filepath.Join(testCompsPath, "valid"))).
+				To(Succeed())
+
+			ctxOther := tenant.WithTenantID(context.Background(), "tenant-builtin-test")
+			compDef, err := component.GetDef(ctxOther, compDefStore, "MemLimits", "v1.0.0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(compDef.IsBuiltin).To(BeTrue())
 		})
 
 		It("should load VolumeConfigMap and preserve newlines in data", func() {
