@@ -1252,25 +1252,12 @@
       }
       const { name, mountDir } = fileInfoFormData;
       try {
+        const changes: UpdateDefInput = {};
+        if (isFileNameEditable.value && name !== activeDef.value.name) changes.name = name;
+        if (mountDir !== activeDef.value.mountDir) changes.mountDir = mountDir;
         if (isFrameworkFile.value) {
-          const changes: UpdateDefInput = {};
-          if (isFileNameEditable.value && fileInfoFormData.name !== activeDef.value.name) {
-            changes.name = fileInfoFormData.name;
-          }
-          if (fileInfoFormData.mountDir !== activeDef.value.mountDir) changes.mountDir = fileInfoFormData.mountDir;
           if (strategyChanged) changes.envContentStrategy = fileInfoFormData.envContentStrategy;
-          if (Object.keys(changes).length) {
-            const updatedDef = await updateDef(changes, { interceptorErr: false });
-            fileInfoFormData.mountDir = updatedDef?.mountDir ?? mountDir;
-            if (changes.name !== undefined || changes.mountDir !== undefined) {
-              // def 已保存，应用详情刷新失败时由请求层提示。
-              await getAppData().catch(() => undefined);
-            }
-          }
         } else {
-          const changes: UpdateDefInput = {};
-          if (fileInfoFormData.name !== activeDef.value.name) changes.name = fileInfoFormData.name;
-          if (fileInfoFormData.mountDir !== activeDef.value.mountDir) changes.mountDir = fileInfoFormData.mountDir;
           if (fileInfoFormData.enableEnvVarRender !== activeDef.value.enableEnvVarRender) {
             changes.enableEnvVarRender = fileInfoFormData.enableEnvVarRender;
           }
@@ -1283,9 +1270,15 @@
                 : allEnvNames.value
               : fileInfoFormData.mountedEnvNames;
           if (!sameStringSet(nextEnvNames, activeDef.value.mountedEnvNames)) changes.mountedEnvNames = nextEnvNames;
-          if (Object.keys(changes).length) {
-            const updatedDef = await updateDef(changes, { interceptorErr: false });
-            fileInfoFormData.mountDir = updatedDef?.mountDir ?? mountDir;
+        }
+        if (Object.keys(changes).length) {
+          const shouldRefreshApp =
+            isFrameworkFile.value && (changes.name !== undefined || changes.mountDir !== undefined);
+          const updatedDef = await updateDef(changes, { interceptorErr: false });
+          fileInfoFormData.mountDir = updatedDef?.mountDir ?? mountDir;
+          if (shouldRefreshApp) {
+            // def 已保存，应用详情刷新失败时由请求层提示。
+            await getAppData().catch(() => undefined);
           }
         }
       } catch (error) {
