@@ -74,12 +74,13 @@ type ServiceInstanceStore = store.GenericStore[ServiceInstance]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID + serviceName + name
 var ServiceInstanceMeta = store.Meta[ServiceInstance]{
-	Collection: serviceInstanceCollName,
-	NotFound:   ErrInstanceNotFound,
-	Duplicate:  ErrInstanceNameExists,
-	BeforeSave: []func(*ServiceInstance) error{validateServiceInstance},
-	Encode:     []func(*ServiceInstance) error{encodeInstanceSecrets},
-	Decode:     []func(*ServiceInstance) error{decodeInstanceSecrets},
+	Collection:   serviceInstanceCollName,
+	TenantScoped: true,
+	NotFound:     ErrInstanceNotFound,
+	Duplicate:    ErrInstanceNameExists,
+	BeforeSave:   []func(*ServiceInstance) error{validateServiceInstance},
+	Encode:       []func(*ServiceInstance) error{encodeInstanceSecrets},
+	Decode:       []func(*ServiceInstance) error{decodeInstanceSecrets},
 }
 
 func validateServiceInstance(inst *ServiceInstance) error {

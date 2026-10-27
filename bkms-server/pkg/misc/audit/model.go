@@ -338,6 +338,8 @@ type OperationGroup struct {
 type OperationRecord struct {
 	// ID 操作记录 ID
 	ID bson.ObjectID `bson:"_id"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// Username 操作人
 	Username string `bson:"username"`
 	// AccessType 访问类型（如：web, api, client），默认为 web

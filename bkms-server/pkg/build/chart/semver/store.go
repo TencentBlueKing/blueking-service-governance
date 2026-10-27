@@ -27,17 +27,26 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // CounterMeta semver 计数器的存储元数据，文档 _id 即为 appID，无需额外索引
-var CounterMeta = store.Meta[Counter]{Collection: "helm_chart_semver_counters"}
+var CounterMeta = store.Meta[Counter]{
+	Collection:   "helm_chart_semver_counters",
+	TenantScoped: true,
+}
 
 // Next 原子递增并返回下一个 semver 版本号
 // 经典归零语义：递增 major 时 minor+patch 归零，递增 minor 时 patch 归零
 // 初始版本：0.0.1（首次调用 BumpPatch 时）
 func Next(ctx context.Context, db *mongo.Database, appID string, bumpType BumpType) (string, error) {
-	filter := bson.M{"_id": appID}
+	// 直接操作底层集合，store 不会注入租户：手动加进过滤条件，upsert 新建文档时等值条件会一并写入
+	tenantID, ok := tenant.GetTenantID(ctx)
+	if !ok {
+		return "", errors.Wrapf(store.ErrTenantIDRequired, "next semver for app %s", appID)
+	}
+	filter := bson.M{"_id": appID, "tenantID": tenantID}
 	var update bson.M
 
 	switch bumpType {

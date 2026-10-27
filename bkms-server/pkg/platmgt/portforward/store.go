@@ -28,7 +28,10 @@ import (
 type Store = store.GenericStore[WhitelistEntry]
 
 // Meta port-forward 白名单的存储元数据，每个被允许的环境 ID 对应集合中的一条独立文档（_id = envID）
-var Meta = store.Meta[WhitelistEntry]{Collection: "plat_admin_port_forward_whitelist"}
+var Meta = store.Meta[WhitelistEntry]{
+	Collection:   "plat_admin_port_forward_whitelist",
+	TenantScoped: true,
+}
 
 // ByEnvIDs 按环境 ID 列表匹配白名单记录
 func ByEnvIDs(envIDs []string) store.Opt {

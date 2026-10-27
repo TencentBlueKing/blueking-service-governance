@@ -48,8 +48,9 @@ type RecordStore = store.GenericStore[Record]
 // - 查询提速：appID + envName + trafficLaneName + createdAt(倒序)
 // - 查询提速：appID + trafficLaneName + createdAt(倒序)
 var RecordMeta = store.Meta[Record]{
-	Collection: "helm_deploy_records",
-	NotFound:   ErrRecordNotFound,
+	Collection:   "helm_deploy_records",
+	TenantScoped: true,
+	NotFound:     ErrRecordNotFound,
 }
 
 // imageTagHistoryStatuses 按镜像标签查询部署记录时关注的状态（经讨论确认该功能仅关注部分状态）

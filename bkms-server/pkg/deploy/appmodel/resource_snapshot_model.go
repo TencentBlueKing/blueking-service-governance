@@ -33,6 +33,8 @@ var ErrResourceSnapshotRowNotFound = errors.New("app model resource snapshot row
 type ResourceSnapshot struct {
 	// ID 快照 ID
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// DeployRecordID 部署记录 ID
 	DeployRecordID bson.ObjectID `bson:"deployRecordId"`
 	// AppID 应用 ID

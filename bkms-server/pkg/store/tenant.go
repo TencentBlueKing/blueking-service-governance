@@ -55,6 +55,16 @@ func RequireExplicitTenantScope(ctx context.Context) context.Context {
 	return context.WithValue(ctx, explicitTenantScopeKey{}, true)
 }
 
+// ScopeToTenant 返回以 tenantID 为当前租户的 ctx，并解除 RequireExplicitTenantScope 标记。
+//
+// 用于平台管理、运维命令已经定位到某个租户的资源，接下来要调用的业务函数并不接受租户选项、
+// 只从 ctx 取租户的场景，例如为指定工作空间授予临时管理员。tenantID 应来自已查出的文档，
+// 不能来自请求参数
+func ScopeToTenant(ctx context.Context, tenantID string) context.Context {
+	ctx = context.WithValue(ctx, explicitTenantScopeKey{}, false)
+	return tenant.WithTenantID(ctx, tenantID)
+}
+
 func explicitTenantScopeRequired(ctx context.Context) bool {
 	required, _ := ctx.Value(explicitTenantScopeKey{}).(bool)
 	return required

@@ -37,6 +37,8 @@ const (
 // Record 表示一次 build auto deploy 执行记录
 type Record struct {
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	WorkspaceID     string `bson:"workspaceID"`
 	AppID           string `bson:"appID"`

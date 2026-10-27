@@ -23,7 +23,9 @@ import "time"
 
 // HostPortConfig is the app-level HostPort mapping document (1:1 with app).
 type HostPortConfig struct {
-	AppID     string                      `bson:"appID"`
+	AppID string `bson:"appID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID  string                      `json:"-" bson:"tenantID"`
 	Ports     []int32                     `bson:"ports"`
 	EnvStates map[string]HostPortEnvState `bson:"envStates"`
 	CreatedAt time.Time                   `bson:"createdAt"`

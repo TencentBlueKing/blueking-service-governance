@@ -42,10 +42,11 @@ type EnvBindingStore = store.GenericStore[EnvBinding]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + envName
 var EnvBindingMeta = store.Meta[EnvBinding]{
-	Collection: "bscpcfg_env_bindings",
-	NotFound:   ErrEnvBindingNotFound,
-	Duplicate:  ErrEnvBindingAlreadyExists,
-	BeforeSave: []func(*EnvBinding) error{validateEnvBinding},
+	Collection:   "bscpcfg_env_bindings",
+	TenantScoped: true,
+	NotFound:     ErrEnvBindingNotFound,
+	Duplicate:    ErrEnvBindingAlreadyExists,
+	BeforeSave:   []func(*EnvBinding) error{validateEnvBinding},
 }
 
 func validateEnvBinding(binding *EnvBinding) error {

@@ -43,8 +43,9 @@ type OperationRecordStore = store.GenericStore[OperationRecord]
 // - 查询提速：username + group.workspaceID + group.appID + createdAt(倒序)
 // - 应用最近成功操作：group.workspaceID + result + group.appID + createdAt(倒序) + _id(倒序)
 var OperationRecordMeta = store.Meta[OperationRecord]{
-	Collection: "operation_records",
-	NotFound:   ErrOperationRecordNotFound,
+	Collection:   "operation_records",
+	TenantScoped: true,
+	NotFound:     ErrOperationRecordNotFound,
 }
 
 // NewestFirst 按创建时间倒序，以 _id 兜底保证翻页稳定

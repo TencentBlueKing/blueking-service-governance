@@ -40,6 +40,8 @@ type Component struct {
 
 	// ID 组件唯一标识
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// Name 组件名称，用于引用标识
 	// 默认由后端负责生成，生成规则为 "[type]-stringx.Random(5)"
 	Name string `bson:"name" validate:"required"`

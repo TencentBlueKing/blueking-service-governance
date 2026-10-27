@@ -38,9 +38,10 @@ type HostPortStore = store.GenericStore[HostPortConfig]
 // HostPortConfigMeta is the storage metadata of HostPortConfig, one document per app keyed by appID.
 // Reads normalize ports and never return a nil EnvStates map.
 var HostPortConfigMeta = store.Meta[HostPortConfig]{
-	Collection: "hostport_configs",
-	NotFound:   ErrConfigNotFound,
-	Decode:     []func(*HostPortConfig) error{normalizeConfig},
+	Collection:   "hostport_configs",
+	TenantScoped: true,
+	NotFound:     ErrConfigNotFound,
+	Decode:       []func(*HostPortConfig) error{normalizeConfig},
 }
 
 // ByApp matches the HostPort config of an app.

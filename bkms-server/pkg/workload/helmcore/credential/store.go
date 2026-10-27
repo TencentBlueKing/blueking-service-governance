@@ -38,10 +38,11 @@ type Store = store.GenericStore[HelmRepoCredential]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID
 var Meta = store.Meta[HelmRepoCredential]{
-	Collection: "helm_repo_credentials",
-	NotFound:   ErrHelmRepoCredentialNotFound,
-	Encode:     []func(*HelmRepoCredential) error{encryptPassword},
-	Decode:     []func(*HelmRepoCredential) error{decryptPassword},
+	Collection:   "helm_repo_credentials",
+	TenantScoped: true,
+	NotFound:     ErrHelmRepoCredentialNotFound,
+	Encode:       []func(*HelmRepoCredential) error{encryptPassword},
+	Decode:       []func(*HelmRepoCredential) error{decryptPassword},
 }
 
 // ByWorkspace 按工作空间 ID 匹配凭证

@@ -34,10 +34,12 @@ type RuleDefinition struct {
 // Rule stores one complete AppSpec section for one or more workspace
 // environment types.
 type Rule struct {
-	ID          bson.ObjectID `bson:"_id,omitempty"`
-	WorkspaceID string        `bson:"workspaceID"`
-	ConfigType  ConfigType    `bson:"configType"`
-	EnvTypes    []string      `bson:"envTypes"`
+	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID    string     `json:"-" bson:"tenantID"`
+	WorkspaceID string     `bson:"workspaceID"`
+	ConfigType  ConfigType `bson:"configType"`
+	EnvTypes    []string   `bson:"envTypes"`
 
 	// Spec contains exactly the section identified by ConfigType. Identity
 	// fields stay empty because a rule is a workspace template, not an app spec.

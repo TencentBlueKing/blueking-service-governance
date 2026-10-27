@@ -35,7 +35,10 @@ type Store = store.GenericStore[Image]
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + repoKey + tag
-var Meta = store.Meta[Image]{Collection: "image_promotions"}
+var Meta = store.Meta[Image]{
+	Collection:   "image_promotions",
+	TenantScoped: true,
+}
 
 // ByApp 按应用 ID 匹配晋级记录
 func ByApp(appID string) store.Opt {

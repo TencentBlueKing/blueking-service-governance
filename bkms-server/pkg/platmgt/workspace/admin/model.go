@@ -34,13 +34,15 @@ type RoleStatus struct {
 
 // WorkspaceTempAdmin 存储工作空间临时管理员授权记录
 type WorkspaceTempAdmin struct {
-	ID          bson.ObjectID `bson:"_id,omitempty"`
-	WorkspaceID string        `bson:"workspaceID"`
-	Username    string        `bson:"username"`
-	ExpiresAt   time.Time     `bson:"expiresAt"`
-	IsRecycled  bool          `bson:"isRecycled"`
-	Creator     string        `bson:"creator"`
-	Updater     string        `bson:"updater"`
-	CreatedAt   time.Time     `bson:"createdAt"`
-	UpdatedAt   time.Time     `bson:"updatedAt"`
+	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID    string    `json:"-" bson:"tenantID"`
+	WorkspaceID string    `bson:"workspaceID"`
+	Username    string    `bson:"username"`
+	ExpiresAt   time.Time `bson:"expiresAt"`
+	IsRecycled  bool      `bson:"isRecycled"`
+	Creator     string    `bson:"creator"`
+	Updater     string    `bson:"updater"`
+	CreatedAt   time.Time `bson:"createdAt"`
+	UpdatedAt   time.Time `bson:"updatedAt"`
 }

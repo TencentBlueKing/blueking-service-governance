@@ -62,6 +62,8 @@ type ServiceInstance struct {
 	// Name 服务实例名称
 	Name string        `bson:"name" validate:"required"`
 	ID   bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	ServiceName string `bson:"serviceName" validate:"required"`
 	// PlanName 服务方案名

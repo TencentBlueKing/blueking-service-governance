@@ -34,6 +34,8 @@ import (
 type ScopedEnvVar struct {
 	// ID 环境变量 ID
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// WorkspaceID 环境所属空间 ID
 	WorkspaceID string `bson:"workspaceID"`

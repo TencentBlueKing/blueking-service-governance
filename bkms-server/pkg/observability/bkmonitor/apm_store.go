@@ -46,10 +46,11 @@ type ApmInstConfigStore = store.GenericStore[ApmInstConfig]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：apmID
 var ApmInstConfigMeta = store.Meta[ApmInstConfig]{
-	Collection: "bkmonitor_apm_inst_config",
-	NotFound:   ErrApmInstConfigNotFound,
-	Duplicate:  ErrApmInstConfigExists,
-	BeforeSave: []func(*ApmInstConfig) error{validateApmInstConfig},
+	Collection:   "bkmonitor_apm_inst_config",
+	TenantScoped: true,
+	NotFound:     ErrApmInstConfigNotFound,
+	Duplicate:    ErrApmInstConfigExists,
+	BeforeSave:   []func(*ApmInstConfig) error{validateApmInstConfig},
 }
 
 func validateApmInstConfig(apm *ApmInstConfig) error {

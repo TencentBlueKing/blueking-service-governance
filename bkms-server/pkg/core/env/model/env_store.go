@@ -89,11 +89,12 @@ type EnvironmentStore = store.GenericStore[Environment]
 // - 唯一（partial）：cluster.clusterID + cluster.namespace（仅非空时生效）
 // - 查询提速：ownerAppID
 var EnvMeta = store.Meta[Environment]{
-	Collection: environmentCollectionName,
-	NotFound:   ErrEnvNotFound,
-	Duplicate:  ErrEnvAlreadyExists,
-	BeforeSave: []func(*Environment) error{setEnvDefaults},
-	Decode:     []func(*Environment) error{fillEnvStatus},
+	Collection:   environmentCollectionName,
+	TenantScoped: true,
+	NotFound:     ErrEnvNotFound,
+	Duplicate:    ErrEnvAlreadyExists,
+	BeforeSave:   []func(*Environment) error{setEnvDefaults},
+	Decode:       []func(*Environment) error{fillEnvStatus},
 }
 
 // -----------------------------------------------------------------------------
