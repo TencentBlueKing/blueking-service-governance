@@ -457,7 +457,9 @@ func (h *Handler) latestAppModelDeployStatus(
 	// 实时判断是否存在部署记录，前端判断是否轮询 instance
 	status.HasDeployRecord = latestDeploy != nil
 	// 与返回哪条记录无关：构建记录较新时，最新部署记录仍可能是进行中的分批发布
-	status.HasBatchReleaseInProgress = latestDeploy.IsBatchReleasing()
+	if latestDeploy.IsBatchReleasing() {
+		status.InProgressReleaseMode = string(latestDeploy.GetReleaseMode())
+	}
 	return status, nil
 }
 

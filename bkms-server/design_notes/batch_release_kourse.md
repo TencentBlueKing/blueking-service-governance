@@ -275,16 +275,22 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 - 最新记录是分批发布：返回策略快照（ID、名称、批次）、`batchProgress` 各字段，以及部署记录 ID 与状态（前端据此区分进行中 / 已部署 / 已回滚）。
 - 没有部署记录，或最新记录是一次更新全部：`data` 为 `null`，不报错。
 
-前端发现进行中的分批发布不依赖该接口：部署状态接口（`trpc-deploys/latest-status`、`taf-deploys/latest-status`）返回 `hasBatchReleaseInProgress`，部署页轮询到为 `true` 时再调用进度查询接口取批次详情。该字段按最新部署记录的 `IsBatchReleasing()` 计算，与 `hasDeployRecord` 一样不受接口返回构建记录还是部署记录影响：构建记录较新时 `status` / `releaseMode` 取自构建记录，不能用来判断。部署状态接口和部署记录列表还返回本条记录的 `releaseMode`（`all` / `canary`，存量记录为 `all`），列表另返回策略名称快照 `releaseStrategyName`。
+前端发现进行中的分批发布不依赖该接口：部署状态接口（`trpc-deploys/latest-status`、`taf-deploys/latest-status`）返回 `inProgressReleaseMode`（空表示没有进行中的渐进式发布，`canary` 表示分批发布进行中，以后可扩展 `blueGreen` 等），部署页轮询到为 `canary` 时再调用进度查询接口取批次详情。该字段在最新部署记录 `IsBatchReleasing()` 为真时取其发布方式，与 `hasDeployRecord` 一样不受接口返回构建记录还是部署记录影响：构建记录较新时 `status` / `releaseMode` 取自构建记录，不能用来判断。部署状态接口和部署记录列表还返回本条记录的 `releaseMode`（`all` / `canary`，存量记录为 `all`），列表另返回策略名称快照 `releaseStrategyName`。
 
 ### 5.3 冲突拦截
 
 尚未实现，以下为设计约束。环境 / 泳道的最新部署记录处于分批发布中时，拒绝新部署（全量和分批）、下架、实例灰度更新、删除实例、手动扩缩容，返回 `ErrBatchReleaseInProgress`。重启实例、执行管理命令、调整北极星权重 / 隔离不受影响。拦截只读库，不请求集群。
 
+- 拦截放在 `Deployer` 层，不能只放在 HTTP handler：构建自动部署在构建完成后从 `buildpoll` 直接调 `DeployByAppID`，不经过部署接口。分批发布暂停期间构建完成的自动部署应被拒绝，构建自动部署记录标失败。
+- 部署创建没有按环境 / 泳道加锁，拦截是"先读最新记录、再创建新记录"，并发请求仍可能同时通过检查，新记录取代进行中的分批发布记录。轮询任务需要兜底：
+  - 被全量部署取代时，`Cleanup` 已删除 Rollout，旧记录取状态返回 `ErrRolloutNotFound` 走 `onFetchFailed`，走不到 `markCanceledIfSuperseded`，失败额度耗尽后落 `polling-broken`，而不是 `canceled`。
+  - 被另一次分批发布取代时，Rollout 被重新 Apply，旧记录在标 `canceled` 之前会先经 `UpdateBatchProgress` 写入新一轮的批次进度。
+  - 处理方式：把取代判断提到取状态之前，已被取代的记录直接 `terminate` 为 `canceled`，不再读 Rollout、不写进度。
+
 ## 6. 已知风险与待办
 
 - **`rolled-back` 状态的下游语义**：回滚后工作负载 spec 引用的仍是新镜像，但现有逻辑大多只认 `deployed`。已处理：
-  - 镜像 tag 删除保护：`rolled-back` 记录的镜像视为占用；旧版本 Pod 所用的镜像由回退到的最近一次 `deployed` 记录保护。
+  - 镜像 tag 占用提示（usages 接口，只用于删除前提示，删除接口不拦截）：`rolled-back` 记录的镜像视为占用；分批发布记录处于回滚完成或进行中（含 `polling-broken`）时，回退检查最近一次 `deployed` 记录，未更新 / 已回退的实例所用的旧镜像同样视为占用。
   - 泳道部署前检查：基线泳道为 `rolled-back` 时工作负载仍在运行，视为已部署。
   - 轮询收尾：审计结果记为成功，extras 的 `status` 为 `rolled-back`；部署耗时指标的结果归为 `cancelled`（用户主动终止，不计入错误）。
 

@@ -53,7 +53,7 @@ tests {
     expect(latest.status).to.equal("deployed");
     expect(latest.isBuildAutoDeploy).to.equal(false);
     expect(latest.releaseMode).to.equal("all");
-    expect(latest.hasBatchReleaseInProgress).to.equal(false);
+    expect(latest.inProgressReleaseMode).to.equal("");
   });
 }
 

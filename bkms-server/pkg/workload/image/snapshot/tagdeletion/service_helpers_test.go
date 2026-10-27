@@ -142,6 +142,22 @@ var _ = Describe("Tag deletion helpers", func() {
 			&appmodeldeploy.Record{Status: appmodeldeploy.StatusPollingBroken},
 			false,
 		),
+		Entry(
+			"falls back ongoing batch release record",
+			&appmodeldeploy.Record{
+				Status:      appmodeldeploy.StatusDeploying,
+				ReleaseMode: appmodeldeploy.ReleaseModeCanary,
+			},
+			true,
+		),
+		Entry(
+			"falls back polling broken batch release record",
+			&appmodeldeploy.Record{
+				Status:      appmodeldeploy.StatusPollingBroken,
+				ReleaseMode: appmodeldeploy.ReleaseModeCanary,
+			},
+			true,
+		),
 		Entry("falls back failed record", &appmodeldeploy.Record{Status: appmodeldeploy.StatusFailed}, true),
 		// 回滚后 Pod 运行的是最近一次成功部署的镜像
 		Entry(

@@ -794,8 +794,7 @@ func (d *Deployer) createDeployRecord(
 	return record.ID.Hex(), nil
 }
 
-// getRunningImageTag 返回环境 / 泳道中旧版本实例正在使用的镜像标签，即最近一次已部署记录的镜像，
-// 没有时返回空串。不取最新记录：最新记录可能已回滚或失败，其镜像不是旧版本实例所用的镜像
+// getRunningImageTag 返回环境 / 泳道中旧版本实例正在使用的镜像标签
 func (d *Deployer) getRunningImageTag(ctx context.Context, envName, trafficLaneName string) (string, error) {
 	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName, StatusDeployed)
 	if errors.Is(err, ErrDeployRecordNotFound) {

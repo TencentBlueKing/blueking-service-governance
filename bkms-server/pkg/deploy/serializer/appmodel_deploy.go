@@ -272,9 +272,9 @@ type LatestDeployStatus struct {
 	Operator        string `json:"operator"`
 	PipelineID      string `json:"pipelineID"`
 	HasDeployRecord bool   `json:"hasDeployRecord"`
-	// 最新部署记录是否为进行中的分批发布，与本接口返回的是构建记录还是部署记录无关；
-	// 为 true 时通过分批发布进度接口查询进度
-	HasBatchReleaseInProgress bool `json:"hasBatchReleaseInProgress"`
+	// 进行中的渐进式发布的发布方式：空表示没有，canary 表示分批发布进行中（通过分批发布进度接口查询进度）。
+	// 按最新部署记录计算，与本接口返回的是构建记录还是部署记录无关
+	InProgressReleaseMode string `json:"inProgressReleaseMode"`
 }
 
 // FromBuildAutoDeployRecord converts a build auto deploy record to latest status output.

@@ -28103,14 +28103,14 @@ const docTemplate = `{
                 "endedAt": {
                     "type": "string"
                 },
-                "hasBatchReleaseInProgress": {
-                    "description": "最新部署记录是否为进行中的分批发布，与本接口返回的是构建记录还是部署记录无关；\n为 true 时通过分批发布进度接口查询进度",
-                    "type": "boolean"
-                },
                 "hasDeployRecord": {
                     "type": "boolean"
                 },
                 "imageTag": {
+                    "type": "string"
+                },
+                "inProgressReleaseMode": {
+                    "description": "进行中的渐进式发布的发布方式：空表示没有，canary 表示分批发布进行中（通过分批发布进度接口查询进度）。\n按最新部署记录计算，与本接口返回的是构建记录还是部署记录无关",
                     "type": "string"
                 },
                 "isBuildAutoDeploy": {
