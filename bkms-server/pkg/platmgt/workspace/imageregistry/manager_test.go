@@ -35,7 +35,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
@@ -49,6 +51,7 @@ var _ = Describe("Manager", func() {
 
 	var (
 		ctx            context.Context
+		platCtx        context.Context
 		diApp          *fxtest.App
 		manager        *Manager
 		workspaceStore *bkmsworkspace.WorkspaceStore
@@ -78,7 +81,9 @@ var _ = Describe("Manager", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = auth.WithUser(context.Background(), auth.User{ID: "plat-admin"})
+		ctx = auth.WithUser(testutil.WithTenantOrDefault(context.Background()), auth.User{ID: "plat-admin"})
+		// 与平台管理请求一致：操作者在另一个租户，且 ctx 要求显式指定租户范围
+		platCtx = store.RequireExplicitTenantScope(tenant.WithTenantID(ctx, "plat-admin-tenant"))
 		probeErr, probeHook = nil, nil
 		createdCredIDs, deletedCredIDs = nil, nil
 
@@ -121,7 +126,7 @@ var _ = Describe("Manager", func() {
 		params := UpdateParams{Type: external, Registry: registry, Username: username, Password: password}
 
 		It("should create the credential, the external record and switch the type", func() {
-			_, err := manager.Update(ctx, ws.ID, params)
+			_, err := manager.Update(platCtx, ws.ID, params)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(getRegistryType()).To(Equal(external))
@@ -131,14 +136,18 @@ var _ = Describe("Manager", func() {
 		})
 
 		It("should require password", func() {
-			_, err := manager.Update(ctx, ws.ID, UpdateParams{Type: external, Registry: registry, Username: username})
+			_, err := manager.Update(
+				platCtx,
+				ws.ID,
+				UpdateParams{Type: external, Registry: registry, Username: username},
+			)
 			Expect(err).To(MatchError(ErrPasswordRequired))
 		})
 
 		It("should reject without side effects when probe fails", func() {
 			probeErr = &transport.Error{StatusCode: http.StatusUnauthorized}
 
-			_, err := manager.Update(ctx, ws.ID, params)
+			_, err := manager.Update(platCtx, ws.ID, params)
 			Expect(err).To(MatchError(ErrRegistryAuthFailed))
 			Expect(createdCredIDs).To(BeEmpty())
 			_, err = getExternal()
@@ -147,11 +156,11 @@ var _ = Describe("Manager", func() {
 
 		It("should allow another update after a failed one", func() {
 			probeErr = &transport.Error{StatusCode: http.StatusUnauthorized}
-			_, err := manager.Update(ctx, ws.ID, params)
+			_, err := manager.Update(platCtx, ws.ID, params)
 			Expect(err).To(MatchError(ErrRegistryAuthFailed))
 
 			probeErr = nil
-			_, err = manager.Update(ctx, ws.ID, params)
+			_, err = manager.Update(platCtx, ws.ID, params)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getRegistryType()).To(Equal(external))
 		})
@@ -162,7 +171,7 @@ var _ = Describe("Manager", func() {
 				Expect(workspaceStore.Delete(ctx, bkmsworkspace.ByWorkspaceID(ws.ID))).To(Succeed())
 			}
 
-			_, err := manager.Update(ctx, ws.ID, params)
+			_, err := manager.Update(platCtx, ws.ID, params)
 			Expect(err).To(MatchError(bkmsworkspace.ErrWorkspaceNotFound))
 			Expect(deletedCredIDs).To(Equal(createdCredIDs))
 			_, err = getExternal()
@@ -173,7 +182,7 @@ var _ = Describe("Manager", func() {
 	Describe("registry address", func() {
 		DescribeTable("should reject an address that would not stay on the given registry",
 			func(address string) {
-				_, err := manager.Update(ctx, ws.ID, UpdateParams{
+				_, err := manager.Update(platCtx, ws.ID, UpdateParams{
 					Type: external, Registry: address, Username: username, Password: password,
 				})
 				Expect(err).To(MatchError(ErrInvalidRegistryAddress))
@@ -198,7 +207,7 @@ var _ = Describe("Manager", func() {
 
 		// 空间先前切回过平台仓库，外部仓库记录仍保留
 		It("should overwrite the leftover record and reuse its credential when switching to external again", func() {
-			_, err := manager.Update(ctx, ws.ID, UpdateParams{
+			_, err := manager.Update(platCtx, ws.ID, UpdateParams{
 				Type: external, Registry: "mirrors.example.com/new-ns", Username: username,
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -215,7 +224,7 @@ var _ = Describe("Manager", func() {
 			})
 
 			It("should keep the password and credential when the password is empty", func() {
-				_, err := manager.Update(ctx, ws.ID, UpdateParams{
+				_, err := manager.Update(platCtx, ws.ID, UpdateParams{
 					Type: external, Registry: "mirrors.example.com/new-ns", Username: username,
 				})
 				Expect(err).NotTo(HaveOccurred())
@@ -228,7 +237,7 @@ var _ = Describe("Manager", func() {
 			})
 
 			It("should create a new credential without deleting the old one when the password changes", func() {
-				_, err := manager.Update(ctx, ws.ID, UpdateParams{
+				_, err := manager.Update(platCtx, ws.ID, UpdateParams{
 					Type: external, Registry: registry, Username: username, Password: "new-pass",
 				})
 				Expect(err).NotTo(HaveOccurred())
@@ -244,7 +253,7 @@ var _ = Describe("Manager", func() {
 					WorkspaceID: ws.ID, Type: bkmsreg.ImageRegistryTypeBuiltin, Registry: "bkrepo.example.com/ns",
 				})).To(Succeed())
 
-				reg, err := manager.Update(ctx, ws.ID, UpdateParams{Type: bkmsreg.ImageRegistryTypeBuiltin})
+				reg, err := manager.Update(platCtx, ws.ID, UpdateParams{Type: bkmsreg.ImageRegistryTypeBuiltin})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(reg.Registry).To(Equal("bkrepo.example.com/ns"))
 
