@@ -39,7 +39,14 @@ const mocks = vi.hoisted(() => ({
   editorValue: '',
   saveContent: vi.fn(),
 }));
-vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockFactory());
+vi.mock('vue-i18n', async importOriginal => ({
+  ...(await importOriginal<object>()),
+  useI18n: () => ({
+    t: (key: string, params: unknown[] = []) =>
+      key.replace(/\{(\d+)\}/g, (_, index: string) => String(params[Number(index)])),
+    te: () => true,
+  }),
+}));
 vi.mock('~/modules/i18n', () => ({ i18n: { global: { t: (key: string) => key } } }));
 vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn(), onBeforeRouteUpdate: vi.fn() }));
 vi.mock('~/stores/app-detail', () => ({
@@ -253,15 +260,22 @@ describe('配置文件信息编辑', () => {
     });
   });
 
-  it('目录冲突只提示一次，保留输入且可修改后重试', async () => {
+  it.each(['framework', 'plain'])('%s 文件目录冲突只提示一次，保留输入且可修改后重试', async configKind => {
+    savedFile.configKind = configKind;
     const view = await openEditor();
-    await view.findAll('input')[1].setValue('/occupied');
+    await view.findAll('input')[0].setValue('112x.conf');
+    await view.findAll('input')[1].setValue('/data//conf/t4/');
     mocks.update.mockRejectedValueOnce({
       error: { details: [{ code: 'APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT' }] },
     });
     await save();
-    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({ theme: 'error', message: '该目录下已存在同名文件' });
-    expect(view.findAll('input')[1].element.value).toBe('/occupied');
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+      theme: 'error',
+      delay: 8000,
+      message: '目录 /data/conf/t4 下已存在文件 112x.conf，请修改文件名或挂载目录',
+    });
+    expect(view.findAll('input')[0].element.value).toBe('112x.conf');
+    expect(view.findAll('input')[1].element.value).toBe('/data/conf/t4');
     await view.findAll('input')[1].setValue('/available');
     await save();
     expect(mocks.update).toHaveBeenCalledTimes(2);
@@ -277,9 +291,13 @@ describe('配置文件信息编辑', () => {
     mocks.create.mockRejectedValue({
       error: { details: [{ code: 'APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT' }] },
     });
-    form.vm.$emit('submit', { name: 'app.conf', mountDir: '/config', enableEnvVarRender: false });
+    form.vm.$emit('submit', { name: '112x.conf', mountDir: '/data/conf/t4', enableEnvVarRender: false });
     await flushPromises();
-    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({ theme: 'error', message: '该目录下已存在同名文件' });
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+      theme: 'error',
+      delay: 8000,
+      message: '目录 /data/conf/t4 下已存在文件 112x.conf，请修改文件名或挂载目录',
+    });
     expect(form.props('isShow')).toBe(true);
     expect(mocks.list).toHaveBeenCalledTimes(1);
   });

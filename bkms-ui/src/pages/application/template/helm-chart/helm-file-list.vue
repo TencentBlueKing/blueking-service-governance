@@ -345,7 +345,7 @@
       },
       { interceptorErr: false, needRes: true },
     ).catch(error => {
-      showFileWriteError(error);
+      showFileWriteError(error, formData.name);
       return null;
     });
     if (result?.item) {
@@ -419,7 +419,7 @@
       },
       { interceptorErr: false, needRes: true },
     ).catch(error => {
-      showFileWriteError(error);
+      showFileWriteError(error, formData.name);
       return null;
     });
     if (result?.item) {
@@ -514,9 +514,9 @@
     activePopConfirmId.value = fileId;
   }
 
-  function showFileWriteError(error: unknown) {
+  function showFileWriteError(error: unknown, name: string) {
     if (hasErrorCode(error, 'APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT')) {
-      Message({ theme: 'error', message: t('当前应用已存在同名文件') });
+      Message({ theme: 'error', delay: 8000, message: t('当前应用已存在文件 {0}，请修改文件名', [name]) });
     } else if (hasErrorCode(error, 'APP_CONFIG_FILE_VERSION_CONFLICT')) {
       Message({
         theme: 'error',

@@ -32,7 +32,14 @@ const mocks = vi.hoisted(() => ({
   message: vi.fn(),
   bscp: vi.fn(),
 }));
-vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockFactory());
+vi.mock('vue-i18n', async importOriginal => ({
+  ...(await importOriginal<object>()),
+  useI18n: () => ({
+    t: (key: string, params: unknown[] = []) =>
+      key.replace(/\{(\d+)\}/g, (_, index: string) => String(params[Number(index)])),
+    te: () => true,
+  }),
+}));
 vi.mock('~/modules/i18n', () => ({ i18n: { global: { t: (key: string) => key } } }));
 vi.mock('~/stores/app-detail', () => ({ useAppDetail: () => ({ appID: 'app-id', appType: 'helm' }) }));
 vi.mock('~/stores/space', () => ({ useSpaceStore: () => ({ currentSpace: 'space' }) }));
@@ -201,15 +208,19 @@ describe('Helm 文件保存', () => {
   });
 
   it.each([
-    ['APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT', '当前应用已存在同名文件'],
+    ['APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT', '当前应用已存在文件 values-dev.yaml，请修改文件名'],
     ['APP_CONFIG_FILE_VERSION_CONFLICT', '当前配置已被他人更新。为避免数据被覆盖，请刷新页面获取最新版本后重新编辑。'],
   ])('编辑遇到 %s 时仅提示一次并保留表单', async (code, message) => {
     const form = await openEditor();
     mocks.update.mockRejectedValue({ error: { details: [{ code }] } });
-    form.vm.$emit('submit', formData());
+    form.vm.$emit('submit', { ...formData(), name: 'values-dev.yaml' });
     await flushPromises();
 
-    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({ theme: 'error', message });
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+      theme: 'error',
+      message,
+      ...(code === 'APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT' ? { delay: 8000 } : {}),
+    });
     expect(form.props('visible')).toBe(true);
     expect(form.props('loading')).toBe(false);
     expect(mocks.list).toHaveBeenCalledTimes(1);
@@ -226,10 +237,14 @@ describe('Helm 文件保存', () => {
     mocks.create.mockRejectedValue({
       error: { details: [{ code: 'APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT' }] },
     });
-    form.vm.$emit('submit', formData());
+    form.vm.$emit('submit', { ...formData(), name: 'values-dev.yaml' });
     await flushPromises();
     expect(mocks.create).toHaveBeenCalledWith(expect.any(Object), { interceptorErr: false, needRes: true });
-    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({ theme: 'error', message: '当前应用已存在同名文件' });
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+      theme: 'error',
+      delay: 8000,
+      message: '当前应用已存在文件 values-dev.yaml，请修改文件名',
+    });
     expect(form.props('visible')).toBe(true);
   });
 

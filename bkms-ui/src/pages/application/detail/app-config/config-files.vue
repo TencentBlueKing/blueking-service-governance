@@ -1108,7 +1108,7 @@
       try {
         createdID = await createPlain(input);
       } catch (error) {
-        showFileWriteError(error);
+        showFileWriteError(error, input.name, input.mountDir);
         return;
       }
       showCreateSideslider.value = false;
@@ -1250,6 +1250,7 @@
         )
           return;
       }
+      const { name, mountDir } = fileInfoFormData;
       try {
         if (isFrameworkFile.value) {
           const changes: UpdateDefInput = {};
@@ -1298,7 +1299,7 @@
           }
         }
       } catch (error) {
-        showFileWriteError(error);
+        showFileWriteError(error, name, mountDir);
         return;
       }
       const shouldResetEnv =
@@ -1320,9 +1321,13 @@
     if (scope === 'all') fileInfoFormRef.value?.clearValidate('mountedEnvNames');
   }
 
-  function showFileWriteError(error: unknown) {
+  function showFileWriteError(error: unknown, name: string, mountDir: string) {
     if (hasErrorCode(error, 'APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT')) {
-      Message({ theme: 'error', message: t('该目录下已存在同名文件') });
+      Message({
+        theme: 'error',
+        delay: 8000,
+        message: t('目录 {0} 下已存在文件 {1}，请修改文件名或挂载目录', [normalizeMountDir(mountDir), name]),
+      });
     } else {
       showApiErrorMessage(error);
     }
