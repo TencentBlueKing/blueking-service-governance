@@ -33,12 +33,15 @@ import (
 var _ = Describe("CheckIfTrafficLaneDeployed", func() {
 	DescribeTable("checks the latest record of the lane",
 		func(status appmodel.Status, deployed bool) {
-			ctx := context.Background()
+			ctx := testutil.WithTenantOrDefault(context.Background())
 			db := testutil.NewDB(GinkgoT())
 			appID := "lane-check-" + stringx.Random(6)
 			records := store.Of(db, appmodel.RecordMeta)
 			DeferCleanup(func() {
-				_, _ = records.DeleteMany(context.Background(), store.Where("appID", appID))
+				_, _ = records.DeleteMany(
+					testutil.WithTenantOrDefault(context.Background()),
+					store.Where("appID", appID),
+				)
 			})
 			Expect(records.Create(ctx, &appmodel.Record{
 				AppID: appID, EnvName: "prod", TrafficLaneName: "base", Status: status,

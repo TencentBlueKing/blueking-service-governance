@@ -85,7 +85,7 @@ var _ = Describe("DeployStateGetter for batch release", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.WithTenantOrDefault(context.Background())
 		fake = newFakeCluster()
 		server = httptest.NewServer(fake)
 		cfg := &cluster.Config{Rest: &rest.Config{Host: server.URL}, ClusterID: "BCS-K8S-00000"}
@@ -261,12 +261,12 @@ var _ = Describe("createDeployRecord for batch release", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = auth.WithUser(context.Background(), auth.User{ID: "tester"})
+		ctx = auth.WithUser(testutil.WithTenantOrDefault(context.Background()), auth.User{ID: "tester"})
 		db := testutil.NewDB(GinkgoT())
 		records = store.Of(db, RecordMeta)
 		appID = "batch-progress-" + stringx.Random(6)
 		DeferCleanup(func() {
-			_, _ = records.DeleteMany(context.Background(), store.Where("appID", appID))
+			_, _ = records.DeleteMany(testutil.WithTenantOrDefault(context.Background()), store.Where("appID", appID))
 		})
 		deployer = &Deployer{db: db, app: &bkmsapp.Application{ID: appID}}
 		env = &bkmsenv.Environment{Name: "prod"}
