@@ -18,6 +18,12 @@
 
 package tenant
 
+import (
+	"errors"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+)
+
 // ValidateTenantMode 验证租户模式
 func ValidateTenantMode(tenantID string, enableMultiTenantMode bool) (string, error) {
 	// 未开启多租户时仅允许租户为 "" 或 default
@@ -34,4 +40,16 @@ func ValidateTenantMode(tenantID string, enableMultiTenantMode bool) (string, er
 		return "", ErrTenantIDRequired
 	}
 	return tenantID, nil
+}
+
+// PlatformTenantID 返回平台数据（如内置组件定义）所在的租户：多租户模式下为 system，否则为 default。
+// 多租户环境只支持全新部署，不存在两种模式的数据并存，因此平台租户在一个环境内是固定的
+func PlatformTenantID() (string, error) {
+	if config.G == nil {
+		return "", errors.New("config is not loaded, cannot determine the platform tenant")
+	}
+	if config.G.Tenant.EnableMultiTenantMode {
+		return SystemTenantID, nil
+	}
+	return DefaultTenantID, nil
 }

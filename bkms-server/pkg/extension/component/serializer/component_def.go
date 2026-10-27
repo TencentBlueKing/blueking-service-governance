@@ -232,8 +232,10 @@ type ComponentDefOutputObj struct {
 	WorkspaceCompInstanceCount int32                  `json:"workspaceCompInstanceCount"`
 }
 
-// FromModel 将组件定义模型转换为响应对象。
-func (o *ComponentDefOutputObj) FromModel(compDef *component.ComponentDef) *ComponentDefOutputObj {
+// FromModel 将组件定义模型及其在当前租户下的实例计数转换为响应对象。
+func (o *ComponentDefOutputObj) FromModel(
+	compDef *component.ComponentDef, count component.InstanceCount,
+) *ComponentDefOutputObj {
 	*o = ComponentDefOutputObj{
 		Name:    compDef.Name,
 		Version: compDef.Version,
@@ -253,8 +255,8 @@ func (o *ComponentDefOutputObj) FromModel(compDef *component.ComponentDef) *Comp
 		CreatedAt:                  compDef.CreatedAt,
 		Updater:                    compDef.Updater,
 		UpdatedAt:                  compDef.UpdatedAt,
-		AppCompInstanceCount:       compDef.AppCompInstanceCount,
-		WorkspaceCompInstanceCount: compDef.WorkspaceCompInstanceCount,
+		AppCompInstanceCount:       count.AppCompInstanceCount,
+		WorkspaceCompInstanceCount: count.WorkspaceCompInstanceCount,
 	}
 	return o
 }

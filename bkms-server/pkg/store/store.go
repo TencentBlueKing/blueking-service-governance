@@ -77,6 +77,9 @@ func New[T any](db *mongo.Database, meta Meta[T]) (*GenericStore[T], error) {
 	if !meta.TenantScoped && sc.tenantID != nil {
 		return nil, errors.Errorf("meta of %s: model has a %q field, set TenantScoped to true", typ, keyTenantID)
 	}
+	if len(meta.SharedFromPlatform) > 0 && !meta.TenantScoped {
+		return nil, errors.Errorf("meta of %s: SharedFromPlatform requires TenantScoped", typ)
+	}
 	return &GenericStore[T]{coll: db.Collection(meta.Collection), meta: meta, schema: sc}, nil
 }
 
@@ -105,7 +108,7 @@ func (s *GenericStore[T]) Collection() *mongo.Collection {
 // Get 获取一个匹配的文档，可通过 Asc / Desc 指定取哪一个；不存在时返回 NotFound 错误。
 // 支持的选项：CondOpt、SortOpt、ProjectOpt、TenantOpt
 func (s *GenericStore[T]) Get(ctx context.Context, opts ...Opt) (*T, error) {
-	q, err := s.parseOpts(ctx, "find one in", opts, getOpts)
+	q, err := s.readQuery(ctx, "find one in", opts, getOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +143,7 @@ func (s *GenericStore[T]) GetByID(ctx context.Context, id any, opts ...Opt) (*T,
 // List 获取所有匹配的文档，可通过 Asc / Desc / Limit 指定排序与数量；无结果时返回空切片而非 nil。
 // 支持的选项：CondOpt、SortOpt、LimitOpt、ProjectOpt、TenantOpt
 func (s *GenericStore[T]) List(ctx context.Context, opts ...Opt) ([]T, error) {
-	q, err := s.parseOpts(ctx, "find in", opts, listOpts)
+	q, err := s.readQuery(ctx, "find in", opts, listOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +185,7 @@ func (s *GenericStore[T]) decodeAll(ctx context.Context, cur *mongo.Cursor) ([]T
 
 // Exists 判断是否存在匹配的文档。支持的选项：CondOpt、TenantOpt
 func (s *GenericStore[T]) Exists(ctx context.Context, opts ...Opt) (bool, error) {
-	q, err := s.parseOpts(ctx, "exists in", opts, condOpts)
+	q, err := s.readQuery(ctx, "exists in", opts, condOpts)
 	if err != nil {
 		return false, err
 	}
@@ -195,7 +198,7 @@ func (s *GenericStore[T]) Exists(ctx context.Context, opts ...Opt) (bool, error)
 
 // Count 统计匹配的文档数量。支持的选项：CondOpt、TenantOpt
 func (s *GenericStore[T]) Count(ctx context.Context, opts ...Opt) (int64, error) {
-	q, err := s.parseOpts(ctx, "count in", opts, condOpts)
+	q, err := s.readQuery(ctx, "count in", opts, condOpts)
 	if err != nil {
 		return 0, err
 	}

@@ -31,6 +31,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // builtinCompCreator is the creator/updater name for built-in components.
@@ -85,9 +87,13 @@ func LoadBuiltinFromFolder(ctx context.Context, defs *ComponentDefStore, folderP
 		}
 	}
 
-	// Save the components to the store
+	// 内置定义写入平台租户，由 SharedFromPlatform 共享给所有租户
+	platform, tenantErr := tenant.PlatformTenantID()
+	if tenantErr != nil {
+		return tenantErr
+	}
 	for _, compDef := range compDefs {
-		if err := UpsertDef(ctx, defs, compDef); err != nil {
+		if err := UpsertDef(ctx, defs, compDef, store.TenantOf(platform)); err != nil {
 			return errors.Wrap(err, "upserting builtin componentDef")
 		}
 	}
@@ -117,5 +123,7 @@ func parseCompFile(path string) (*ComponentDef, error) {
 	// Set the Creator and Updater to "admin" as system reserved
 	compDef.Creator = builtinCompCreator
 	compDef.Updater = builtinCompCreator
+	// 共享读取以 isBuiltin 为准，不依赖文件中的字段，漏写会让内置定义对其他租户不可见
+	compDef.IsBuiltin = true
 	return compDef, nil
 }

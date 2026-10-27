@@ -60,7 +60,7 @@ func (s *GenericStore[T]) ListPage(ctx context.Context, page, size int64, opts .
 	if size == math.MaxInt64 || page-1 > (math.MaxInt64-size)/size {
 		return nil, errors.Errorf("list page of %s: page %d is too large for size %d", s.coll.Name(), page, size)
 	}
-	q, err := s.parseOpts(ctx, "list page of", opts, pageOpts)
+	q, err := s.readQuery(ctx, "list page of", opts, pageOpts)
 	if err != nil {
 		return nil, err
 	}

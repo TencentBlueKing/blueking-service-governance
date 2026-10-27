@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -39,14 +40,19 @@ type ComponentDefStore = store.GenericStore[ComponentDef]
 
 // ComponentDefMeta 组件定义的存储元数据，写入前校验完整模型。
 //
+// 集合按租户划分，平台租户中的内置定义（isBuiltin 为 true）对所有租户可读，写入只作用于本租户。
+// 租户自建定义可能与内置定义同名，按名称取定义请使用 GetDef，不要直接 Get。
+//
 // 索引（由 golang-migrate 维护）：
-// - 唯一：name + version
+// - 唯一：tenantID + name + version
 var ComponentDefMeta = store.Meta[ComponentDef]{
-	Collection: "component_defs",
-	NotFound:   ErrComponentDefNotFound,
-	Duplicate:  ErrComponentDefAlreadyExists,
-	BeforeSave: []func(*ComponentDef) error{validateDef},
-	Encode:     []func(*ComponentDef) error{defaultEmptyFragments},
+	Collection:         "component_defs",
+	TenantScoped:       true,
+	SharedFromPlatform: bson.D{{Key: "isBuiltin", Value: true}},
+	NotFound:           ErrComponentDefNotFound,
+	Duplicate:          ErrComponentDefAlreadyExists,
+	BeforeSave:         []func(*ComponentDef) error{validateDef},
+	Encode:             []func(*ComponentDef) error{defaultEmptyFragments},
 }
 
 func validateDef(compDef *ComponentDef) error {
@@ -98,42 +104,51 @@ func KeywordMatches(keyword string) store.Opt {
 	return store.ContainsIgnoreCase(keyword, "name", "displayName")
 }
 
-// UpsertDef 按 name + version 创建或覆盖组件定义；实例计数由 UpdateInstanceCount 维护，不会被覆盖
-func UpsertDef(ctx context.Context, defs *ComponentDefStore, compDef *ComponentDef) error {
-	if _, err := defs.Upsert(
-		ctx, compDef,
-		store.UpdateOmit("appCompInstanceCount", "workspaceCompInstanceCount"),
-		ByNameVersion(compDef.Name, compDef.Version),
-	); err != nil {
-		return errors.Wrapf(err, "upsert component def %s:%s", compDef.Name, compDef.Version)
-	}
-	return nil
+// GetDef 按名称与版本获取当前租户可用的组件定义，不存在时返回 ErrComponentDefNotFound。
+// 租户自建定义与平台内置定义同名时以自建的为准
+func GetDef(ctx context.Context, defs *ComponentDefStore, name, version string) (*ComponentDef, error) {
+	// 自建定义的 isBuiltin 总是 false，升序排在内置定义之前
+	return defs.Get(ctx, ByNameVersion(name, version), store.Asc("isBuiltin"))
 }
 
-// UpdateInstanceCount 原子更新组件定义的实例计数。
-// 使用 MongoDB $inc 操作符实现原子递增/递减，适用于并发场景。
-//
-// - ctx: The context object for cancellation and timeout
-// - name: 组件定义名称（使用默认版本 DefaultComponentDefVersion）
-// - instanceType: 计数字段，FieldAppCompInstance 或 FieldWorkspaceCompInstance
-// - delta: 增量，正数表示增加，负数表示减少
-func UpdateInstanceCount(
-	ctx context.Context, defs *ComponentDefStore, name string, instanceType InstanceType, delta int,
-) error {
-	var fieldName string
-	switch instanceType {
-	case FieldAppCompInstance:
-		fieldName = "appCompInstanceCount"
-	case FieldWorkspaceCompInstance:
-		fieldName = "workspaceCompInstanceCount"
-	default:
-		return errors.Errorf("invalid instance type: %s", instanceType)
+// BuiltinDefExists 判断是否存在同名的平台内置定义，租户新建定义时不能与之重名
+func BuiltinDefExists(ctx context.Context, defs *ComponentDefStore, name, version string) (bool, error) {
+	exists, err := defs.Exists(ctx, ByNameVersion(name, version), store.Where("isBuiltin", true))
+	return exists, errors.Wrapf(err, "check builtin component def %s:%s", name, version)
+}
+
+// ExcludeShadowedBuiltins 返回过滤掉被本租户同名定义覆盖的内置定义的条件，没有被覆盖的内置定义时返回 nil。
+// 新建定义时会拒绝与内置定义重名，但内置定义可能在租户自建之后才加入
+func ExcludeShadowedBuiltins(ctx context.Context, defs *ComponentDefStore) (store.Opt, error) {
+	builtins, err := defs.List(ctx, store.Where("isBuiltin", true), store.SelectFields("name", "version"))
+	if err != nil {
+		return nil, errors.Wrap(err, "list builtin component defs")
 	}
-	// 计数不是对组件定义的编辑，不刷新 updatedAt；组件定义不存在时静默忽略
-	_, err := defs.Modify(ctx, bson.M{"$inc": bson.M{fieldName: delta}},
-		store.Where("name", name), store.Where("version", DefaultComponentDefVersion), store.KeepUpdatedAt())
-	if err = store.IgnoreNotFound(err); err != nil {
-		return errors.Wrapf(err, "incr ref count for component def(%s) field(%s) delta(%d)", name, instanceType, delta)
+	if len(builtins) == 0 {
+		return nil, nil
+	}
+	names := lo.Uniq(lo.Map(builtins, func(d ComponentDef, _ int) string { return d.Name }))
+	owned, err := defs.List(ctx,
+		store.Where("isBuiltin", false), store.Where("name", bson.M{"$in": names}),
+		store.SelectFields("name", "version"),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "list component defs shadowing builtin ones")
+	}
+	if len(owned) == 0 {
+		return nil, nil
+	}
+	shadowed := lo.Map(owned, func(d ComponentDef, _ int) bson.M {
+		return bson.M{"isBuiltin": true, "name": d.Name, "version": d.Version}
+	})
+	return store.Where("$nor", shadowed), nil
+}
+
+// UpsertDef 按 name + version 创建或覆盖组件定义
+func UpsertDef(ctx context.Context, defs *ComponentDefStore, compDef *ComponentDef, opts ...store.Opt) error {
+	opts = append([]store.Opt{ByNameVersion(compDef.Name, compDef.Version)}, opts...)
+	if _, err := defs.Upsert(ctx, compDef, opts...); err != nil {
+		return errors.Wrapf(err, "upsert component def %s:%s", compDef.Name, compDef.Version)
 	}
 	return nil
 }

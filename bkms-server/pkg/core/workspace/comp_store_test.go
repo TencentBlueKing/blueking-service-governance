@@ -56,10 +56,10 @@ var _ = Describe("Workspace component store", func() {
 	}
 
 	instanceCount := func() int32 {
-		def, err := defs.Get(ctx, store.Where("name", compType),
-			store.Where("version", component.DefaultComponentDefVersion))
+		counts, err := component.ListInstanceCounts(ctx, store.Of(db, component.InstanceCountMeta),
+			[]component.ComponentDef{{Name: compType, Version: component.DefaultComponentDefVersion}})
 		Expect(err).NotTo(HaveOccurred())
-		return def.WorkspaceCompInstanceCount
+		return counts[compType+":"+component.DefaultComponentDefVersion].WorkspaceCompInstanceCount
 	}
 
 	listOf := func(workspaceID string) []Component {
@@ -89,6 +89,7 @@ var _ = Describe("Workspace component store", func() {
 	AfterEach(func() {
 		Expect(testutil.CleanupMetaColl(ComponentMeta)).To(Succeed())
 		Expect(testutil.CleanupMetaColl(component.ComponentDefMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(component.InstanceCountMeta)).To(Succeed())
 	})
 
 	Context("AddComponents", func() {
