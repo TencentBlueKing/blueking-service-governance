@@ -32,11 +32,14 @@
           ref="startupCommandRef"
           class="max-w-[600px]"
           default-mode="shell"
-          shell-placeholder="./server --config=/data/conf/trpc_go.yaml"
+          exec-background
           :value="formData"
         />
       </Form.FormItem>
-      <Form.FormItem :label="$t('环境变量')">
+      <Form.FormItem
+        class="!mb-0"
+        :label="$t('环境变量')"
+      >
         <KeyValue
           v-model="formData.envVars"
           class="max-w-[600px]"

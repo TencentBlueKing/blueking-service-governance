@@ -42,7 +42,6 @@
         >
           <Input
             v-model="formData.shCommand"
-            :placeholder="shellPlaceholder || $t('请输入')"
             :rows="4"
             type="textarea"
           />
@@ -52,23 +51,24 @@
     <div
       v-else
       class="grid grid-cols-2 gap-x-[24px]"
+      :class="{ 'bg-[#F5F7FA] p-[16px] py-[12px]': execBackground }"
     >
       <div class="min-w-0">
-        <div class="mb-[6px] text-[14px] text-[#4D4F56]">{{ $t('启动命令') }}</div>
+        <div class="mb-[8px] text-[12px] leading-[22px] text-[#4D4F56]">{{ $t('启动命令') }}</div>
         <RepeatableInput
           ref="commandRef"
           v-model="formData.command"
-          :add-text="$t('添加启动命令')"
+          :add-text="$t('添加')"
           :required="formData.command.length > 0"
           trim-on-input
         />
       </div>
       <div class="min-w-0">
-        <div class="mb-[6px] text-[14px] text-[#4D4F56]">{{ $t('命令参数') }}</div>
+        <div class="mb-[8px] text-[12px] leading-[22px] text-[#4D4F56]">{{ $t('命令参数') }}</div>
         <RepeatableInput
           ref="argsRef"
           v-model="formData.args"
-          :add-text="$t('添加命令参数')"
+          :add-text="$t('添加')"
           :required="formData.args.length > 0"
           trim-on-input
         />
@@ -88,7 +88,7 @@
 
   const props = defineProps<{
     defaultMode?: 'exec' | 'shell';
-    shellPlaceholder?: string;
+    execBackground?: boolean;
     value?: Pick<AppModelSpecInput, 'args' | 'command' | 'shCommand'>;
   }>();
 

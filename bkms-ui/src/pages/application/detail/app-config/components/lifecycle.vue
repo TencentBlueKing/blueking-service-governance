@@ -145,7 +145,7 @@
             >
               <div class="flex flex-col gap-[8px]">
                 <Radio label="wait">
-                  {{ $t('停止等待时间') }}
+                  <span class="text-[14px]">{{ $t('停止等待时间') }}</span>
                 </Radio>
                 <Input
                   v-if="preStopMode === 'wait'"
@@ -161,7 +161,7 @@
               <!-- 自定义命令 -->
               <div>
                 <Radio label="command">
-                  {{ $t('自定义命令') }}
+                  <span class="text-[14px]">{{ $t('自定义命令') }}</span>
                 </Radio>
                 <div
                   v-if="preStopMode === 'command'"

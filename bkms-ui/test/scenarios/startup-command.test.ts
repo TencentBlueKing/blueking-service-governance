@@ -93,7 +93,10 @@ describe('启动命令输入', () => {
       global: { mocks: i18nGlobalMocks },
     });
     const ui = within(wrapper.get('div').element);
-    await userEvent.click(ui.getByRole('button', { name: '添加启动命令' }));
+    const addButtons = ui.getAllByRole('button', { name: '添加' });
+    expect(addButtons).toHaveLength(2);
+    await userEvent.click(addButtons[0]);
+    await userEvent.click(addButtons[1]);
     expect(await wrapper.vm.validate()).toBe(false);
     await userEvent.click(ui.getByText('shell', { exact: true }));
     await wrapper.get('textarea').setValue(SCRIPT);
@@ -105,10 +108,16 @@ describe('启动命令输入', () => {
       '/server',
       '',
       '--port=8080',
+      '',
     ]);
     await wrapper.findAll('input[type="text"]')[1].setValue('serve');
+    await wrapper.findAll('input[type="text"]')[3].setValue('--verbose');
     expect(await wrapper.vm.validate()).toBe(true);
-    expect(wrapper.vm.getValue()).toEqual({ command: ['/server', 'serve'], args: EXEC_SPEC.args, shCommand: '' });
+    expect(wrapper.vm.getValue()).toEqual({
+      command: ['/server', 'serve'],
+      args: [...EXEC_SPEC.args, '--verbose'],
+      shCommand: '',
+    });
     await userEvent.click(ui.getByText('shell', { exact: true }));
     expect(wrapper.get('textarea').element.value).toBe(SCRIPT);
     // 编辑草稿不修改传入的已保存配置。
@@ -152,9 +161,9 @@ describe('创建应用的启动配置', () => {
       global: { mocks: i18nGlobalMocks, stubs: createPageStubs },
     });
     await flushPromises();
-    expect(wrapper.find('textarea[placeholder="./server --config=/data/conf/trpc_go.yaml"]').exists()).toBe(true);
+    expect(wrapper.get('textarea').attributes('placeholder')).toBe('请输入');
     expect(await wrapper.vm.validate()).toBe(false);
-    await wrapper.get('textarea[placeholder="./server --config=/data/conf/trpc_go.yaml"]').setValue(SCRIPT);
+    await wrapper.get('textarea').setValue(SCRIPT);
     expect(await wrapper.vm.validate()).toBe(true);
     expect(wrapper.vm.getValue()).toMatchObject({ command: [], args: [], shCommand: SCRIPT, content: 'config: value' });
   });
@@ -173,7 +182,7 @@ describe('创建应用的启动配置', () => {
       global: { mocks: i18nGlobalMocks, stubs: createPageStubs },
     });
     await flushPromises();
-    expect(wrapper.find('textarea[placeholder="./server --config=/data/conf/trpc_go.yaml"]').exists()).toBe(true);
+    expect(wrapper.get('textarea').attributes('placeholder')).toBe('请输入');
     expect(await wrapper.vm.validate()).toBe(false);
     await userEvent.click(within(wrapper.get('form').element).getByText('exec', { exact: true }));
     expect(await wrapper.vm.validate()).toBe(true);
@@ -195,10 +204,7 @@ describe('创建应用的启动配置', () => {
       global: { mocks: i18nGlobalMocks, stubs: createPageStubs },
     });
     await flushPromises();
-    expect(
-      wrapper.get<HTMLTextAreaElement>('textarea[placeholder="./server --config=/data/conf/trpc_go.yaml"]').element
-        .value,
-    ).toBe(SCRIPT);
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe(SCRIPT);
     expect(await wrapper.vm.validate()).toBe(true);
     expect(wrapper.vm.getValue()).toMatchObject({ command: [], args: [], shCommand: SCRIPT });
     await userEvent.click(within(wrapper.get('form').element).getByText('exec', { exact: true }));

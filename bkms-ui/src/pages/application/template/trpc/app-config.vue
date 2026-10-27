@@ -20,11 +20,12 @@
   <div class="flex flex-col p-[20px] !max-w-[1400px] w-full">
     <ToggleCard
       class="bg-[#fff] shadow-sm px-[16px]"
+      content-class="overflow-x-auto"
       :name="$t('应用配置')"
     >
       <Form
         ref="formRef"
-        class="px-[245px]"
+        class="mx-auto w-[calc(100%-490px)] min-w-[640px]"
         :label-width="135"
         :model="formData"
       >
@@ -32,11 +33,14 @@
           <StartupCommandInput
             ref="startupCommandRef"
             default-mode="shell"
-            shell-placeholder="./server --config=/data/conf/trpc_go.yaml"
+            exec-background
             :value="formData"
           />
         </Form.FormItem>
-        <Form.FormItem :label="$t('环境变量')">
+        <Form.FormItem
+          class="!mb-0"
+          :label="$t('环境变量')"
+        >
           <KeyValue
             v-model="formData.env"
             :key-placeholder="$t('请输入变量名')"

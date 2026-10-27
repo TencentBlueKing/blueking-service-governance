@@ -1362,8 +1362,6 @@ APM 实例: APM Instance
   Detects whether the application in
   the container has finished starting. Other probes will not take effect until
   successful. On probe failure, the container will be killed and restarted.
-添加启动命令: Add Startup Command
-添加命令参数: Add Command Argument
 暂无可用的环境: No Available Environment
 环境必须先配置集群资源后才能部署应用:
   Environments must be configured with cluster resources
