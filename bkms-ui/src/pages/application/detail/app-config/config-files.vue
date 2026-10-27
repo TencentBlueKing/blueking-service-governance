@@ -1220,7 +1220,7 @@
     isFileInfoEditing.value = true;
   }
 
-  // 文件元信息与策略分别保存，只提交变更；切策略不调用内容接口、不创建版本。
+  // 文件元信息与策略合并保存，只提交变更；切策略不调用内容接口、不创建版本。
   async function handleFileInfoSave() {
     if (!activeDef.value || isFileInfoSaving.value) return;
     isFileInfoSaving.value = true;
@@ -1258,23 +1258,13 @@
             changes.name = fileInfoFormData.name;
           }
           if (fileInfoFormData.mountDir !== activeDef.value.mountDir) changes.mountDir = fileInfoFormData.mountDir;
-          const metadataChanged = Object.keys(changes).length > 0;
-          if (metadataChanged) {
-            await updateDef(changes, { interceptorErr: false });
-            fileInfoFormData.mountDir = activeDisplayPath.value;
-            // def 已同步，应用详情刷新失败时由请求层提示，不阻断后续策略保存。
-            await getAppData().catch(() => undefined);
-          }
-          if (strategyChanged) {
-            try {
-              await updateDef({ envContentStrategy: fileInfoFormData.envContentStrategy }, { interceptorErr: false });
-            } catch (error) {
-              // 元信息已落库、仅策略未生效：保留编辑态，重试只提交策略。
-              if (metadataChanged) {
-                Message({ theme: 'warning', message: t('文件信息已保存，生效方式保存失败，请重试') });
-                return;
-              }
-              throw error;
+          if (strategyChanged) changes.envContentStrategy = fileInfoFormData.envContentStrategy;
+          if (Object.keys(changes).length) {
+            const updatedDef = await updateDef(changes, { interceptorErr: false });
+            fileInfoFormData.mountDir = updatedDef?.mountDir ?? mountDir;
+            if (changes.name !== undefined || changes.mountDir !== undefined) {
+              // def 已保存，应用详情刷新失败时由请求层提示。
+              await getAppData().catch(() => undefined);
             }
           }
         } else {
@@ -1294,8 +1284,8 @@
               : fileInfoFormData.mountedEnvNames;
           if (!sameStringSet(nextEnvNames, activeDef.value.mountedEnvNames)) changes.mountedEnvNames = nextEnvNames;
           if (Object.keys(changes).length) {
-            await updateDef(changes, { interceptorErr: false });
-            fileInfoFormData.mountDir = activeDisplayPath.value;
+            const updatedDef = await updateDef(changes, { interceptorErr: false });
+            fileInfoFormData.mountDir = updatedDef?.mountDir ?? mountDir;
           }
         }
       } catch (error) {

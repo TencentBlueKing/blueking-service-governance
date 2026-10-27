@@ -16,12 +16,10 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { ref } from 'vue';
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConfigFileDefs } from '~/pages/application/detail/app-config/use-config-file-defs';
 
-import type { DefDetailObj, UpdateDefOutput } from '~/@types/v1/app-config-file-defs';
+import type { DefDetailObj } from '~/@types/v1/app-config-file-defs';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -61,10 +59,12 @@ beforeEach(() => {
 });
 
 describe('配置文件元信息保存', () => {
-  it('使用 def ID 保存并合并服务端归一化目录，保留各自内容与版本', async () => {
+  it('使用 def ID 保存并返回服务端元信息，不合并或刷新列表与详情', async () => {
     const state = useConfigFileDefs('app-id');
     await state.fetchDefs();
     await state.refreshActive('dev');
+    const originalDefs = state.defs.value;
+    const originalDetail = state.detail.value;
     mocks.update.mockResolvedValue({ item: { id: 'def-id', name: 'renamed.conf', mountDir: '/new' } });
 
     const result = await state.updateDef({ name: 'renamed.conf', mountDir: '/new/' }, { interceptorErr: false });
@@ -73,49 +73,39 @@ describe('配置文件元信息保存', () => {
       { appID: 'app-id', id: 'def-id', name: 'renamed.conf', mountDir: '/new/' },
       { interceptorErr: false, needRes: true },
     );
-    expect(result?.mountDir).toBe('/new');
+    expect(result).toEqual({ id: 'def-id', name: 'renamed.conf', mountDir: '/new' });
+    expect(state.defs.value).toBe(originalDefs);
+    expect(state.detail.value).toBe(originalDetail);
+    expect(mocks.list).toHaveBeenCalledTimes(1);
+    expect(mocks.detail).toHaveBeenCalledTimes(1);
+    expect(mocks.instances).toHaveBeenCalledTimes(1);
     expect(state.activeDef.value).toMatchObject({
-      name: 'renamed.conf',
-      mountDir: '/new',
+      name: 'app.conf',
+      mountDir: '/old',
       content: 'default content',
       currentVersion: 3,
       fileId: 'default-file-id',
     });
     expect(state.detail.value).toMatchObject({
-      name: 'renamed.conf',
-      mountDir: '/new',
+      name: 'app.conf',
+      mountDir: '/old',
       content: 'env content',
       currentVersion: 5,
       fileId: 'env-file-id',
     });
-
-    const error = { error: { message: 'strategy failed' } };
-    mocks.update.mockRejectedValueOnce(error);
-    await expect(state.updateDef({ envContentStrategy: 'overwrite' })).rejects.toBe(error);
-    expect(state.activeDef.value).toMatchObject({
-      name: 'renamed.conf',
-      mountDir: '/new',
-      envContentStrategy: 'overlay',
-    });
   });
 
-  it('应用切换后不把旧保存响应合并到新应用', async () => {
-    const appID = ref('app-id');
-    const state = useConfigFileDefs(appID);
+  it('保存失败透传异常并保留已有列表与详情', async () => {
+    const state = useConfigFileDefs('app-id');
     await state.fetchDefs();
-    let resolveSave!: (result: UpdateDefOutput) => void;
-    mocks.update.mockImplementation(
-      () =>
-        new Promise<UpdateDefOutput>(resolve => {
-          resolveSave = resolve;
-        }),
-    );
-    const saving = state.updateDef({ name: 'old-response.conf' });
-    appID.value = 'other-app';
-    await state.fetchDefs();
-    resolveSave({ item: { id: 'def-id', name: 'old-response.conf' } });
-    await saving;
-    expect(state.activeDef.value?.name).toBe('app.conf');
+    await state.refreshActive('dev');
+    const originalDefs = state.defs.value;
+    const originalDetail = state.detail.value;
+    const error = { error: { message: 'save failed' } };
+    mocks.update.mockRejectedValueOnce(error);
+    await expect(state.updateDef({ envContentStrategy: 'overwrite' })).rejects.toBe(error);
+    expect(state.defs.value).toBe(originalDefs);
+    expect(state.detail.value).toBe(originalDetail);
   });
 
   it('创建失败透传冲突，不刷新列表或改变当前选中项', async () => {

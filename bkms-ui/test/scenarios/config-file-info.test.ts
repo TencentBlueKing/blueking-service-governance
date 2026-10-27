@@ -233,31 +233,74 @@ describe('配置文件信息编辑', () => {
     );
   });
 
-  it('元信息成功而策略失败后保留输入，重试只保存策略', async () => {
+  it('元信息与策略通过一次请求保存，随后刷新列表、详情及应用信息', async () => {
     const view = await openEditor();
     await view.findAll('input')[0].setValue('renamed.conf');
+    await view.findAll('input')[1].setValue('/new/');
     view.getComponent(Radio.Group).vm.$emit('update:modelValue', 'overwrite');
     await flushPromises();
-    mocks.update
-      .mockImplementationOnce(async (input: UpdateDefInput) => {
-        savedFile = { ...savedFile, ...input };
-        return { item: { id: savedFile.id, name: savedFile.name, mountDir: '/config' } };
-      })
-      .mockRejectedValueOnce({ error: { message: 'strategy failed' } });
     await save();
 
-    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
-      theme: 'warning',
-      message: '文件信息已保存，生效方式保存失败，请重试',
-    });
-    expect(view.findAll('input')[0].element.value).toBe('renamed.conf');
+    expect(mocks.update).toHaveBeenCalledExactlyOnceWith(
+      { appID: 'app-id', id: 'def-id', name: 'renamed.conf', mountDir: '/new', envContentStrategy: 'overwrite' },
+      { interceptorErr: false, needRes: true },
+    );
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    expect(mocks.detail).toHaveBeenCalledTimes(2);
+    expect(mocks.appDetail).toHaveBeenCalledTimes(2);
+    expect(view.text()).toContain('renamed.conf');
+    expect(view.text()).toContain('/new');
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({ theme: 'success', message: '操作成功' });
+  });
+
+  it('联合保存失败后保留输入，重试仍一次提交元信息与策略', async () => {
+    const view = await openEditor();
+    await view.findAll('input')[0].setValue('renamed.conf');
+    await view.findAll('input')[1].setValue('/new/');
+    view.getComponent(Radio.Group).vm.$emit('update:modelValue', 'overwrite');
+    await flushPromises();
+    mocks.update.mockRejectedValueOnce({ error: { message: 'save failed' } });
     await save();
-    expect(mocks.update).toHaveBeenCalledTimes(3);
-    expect(mocks.update.mock.calls[2][0]).toEqual({
+
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ theme: 'error', message: expect.objectContaining({ overview: 'save failed' }) }),
+    );
+    expect(view.findAll('input')[0].element.value).toBe('renamed.conf');
+    expect(view.findAll('input')[1].element.value).toBe('/new');
+    expect(view.getComponent(Radio.Group).props('modelValue')).toBe('overwrite');
+    expect(savedFile).toMatchObject({ name: 'app.conf', mountDir: '/config', envContentStrategy: 'overlay' });
+    expect(mocks.list).toHaveBeenCalledTimes(1);
+    expect(mocks.detail).toHaveBeenCalledTimes(1);
+    expect(mocks.appDetail).toHaveBeenCalledTimes(1);
+    await save();
+    expect(mocks.update).toHaveBeenCalledTimes(2);
+    expect(mocks.update.mock.calls[1][0]).toEqual({
       appID: 'app-id',
       id: 'def-id',
+      name: 'renamed.conf',
+      mountDir: '/new',
       envContentStrategy: 'overwrite',
     });
+    expect(view.text()).toContain('renamed.conf');
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    expect(mocks.detail).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['framework', 'plain'])('%s 保存后刷新失败时，表单保留响应中的目录', async configKind => {
+    savedFile.configKind = configKind;
+    const view = await openEditor();
+    await view.findAll('input')[1].setValue('/new/');
+    mocks.list.mockRejectedValueOnce(new MockedApiError('list refresh unavailable'));
+    await save();
+
+    expect(mocks.update).toHaveBeenCalledExactlyOnceWith(
+      { appID: 'app-id', id: 'def-id', mountDir: '/new' },
+      { interceptorErr: false, needRes: true },
+    );
+    expect(view.findAll('input')[1].element.value).toBe('/new');
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    expect(mocks.detail).toHaveBeenCalledTimes(1);
   });
 
   it.each(['framework', 'plain'])('%s 文件目录冲突只提示一次，保留输入且可修改后重试', async configKind => {

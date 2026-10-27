@@ -206,22 +206,12 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
     return result.item?.id || '';
   }
 
-  /** 更新当前定义的基础信息（名称、挂载目录、环境变量渲染等） */
+  /** 更新当前定义的基础信息并返回元信息，列表与详情由调用方刷新 */
   async function updateDef(changes: UpdateDefInput, config: Pick<Config, 'interceptorErr'> = {}) {
-    const requestedAppID = toValue(appID);
-    const requestedDefID = activeDefID.value;
     const result = await AppConfigFileDefsService.updateAppConfigFileDef(
-      { appID: requestedAppID, id: requestedDefID, ...changes },
+      { appID: toValue(appID), id: activeDefID.value, ...changes },
       { ...config, needRes: true },
     );
-    // 响应只有 def 元信息，合并后再归一化，保留默认文件及环境实例的内容、版本。
-    if (result.item && requestedAppID === toValue(appID)) {
-      const updatedDef = result.item;
-      defs.value = defs.value.map(def => (def.id === requestedDefID ? normalizeDef({ ...def, ...updatedDef }) : def));
-      if (detail.value?.id === requestedDefID) {
-        detail.value = normalizeDef({ ...detail.value, ...updatedDef });
-      }
-    }
     return result.item;
   }
 
