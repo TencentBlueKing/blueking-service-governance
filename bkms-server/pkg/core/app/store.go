@@ -104,12 +104,13 @@ func CreateApp(ctx context.Context, db *mongo.Database, app *Application) error 
 // GetAppsByIDs gets applications by id list in one query.
 // The returned slice is in the same order as ids.
 // If any requested id is missing from storage, returns an error wrapping ErrAppNotFound.
-func GetAppsByIDs(ctx context.Context, db *mongo.Database, ids []string) ([]*Application, error) {
+// opts 只用于选择租户范围，如运维命令跨租户查询时传 store.TenantAll()
+func GetAppsByIDs(ctx context.Context, db *mongo.Database, ids []string, opts ...store.Opt) ([]*Application, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 
-	apps, err := store.Of(db, AppMeta).List(ctx, store.Where("id", bson.M{"$in": lo.Uniq(ids)}))
+	apps, err := store.Of(db, AppMeta).List(ctx, append(opts, store.Where("id", bson.M{"$in": lo.Uniq(ids)}))...)
 	if err != nil {
 		return nil, errors.Wrap(err, "list applications by ids")
 	}
@@ -143,7 +144,10 @@ type appCountByWorkspace struct {
 }
 
 // CountByWorkspaceIDs returns application counts grouped by workspace ID.
-func CountByWorkspaceIDs(ctx context.Context, db *mongo.Database, workspaceIDs []string) (map[string]int, error) {
+// opts 透传给 store.Aggregate，平台管理跨租户统计时传 store.TenantAll()
+func CountByWorkspaceIDs(
+	ctx context.Context, db *mongo.Database, workspaceIDs []string, opts ...store.Opt,
+) (map[string]int, error) {
 	if len(workspaceIDs) == 0 {
 		return map[string]int{}, nil
 	}
@@ -155,7 +159,7 @@ func CountByWorkspaceIDs(ctx context.Context, db *mongo.Database, workspaceIDs [
 			"count": bson.M{"$sum": 1},
 		}}},
 	}
-	results, err := store.Aggregate[appCountByWorkspace](ctx, store.Of(db, AppMeta), pipeline)
+	results, err := store.Aggregate[appCountByWorkspace](ctx, store.Of(db, AppMeta), pipeline, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "aggregate application counts by workspace IDs")
 	}

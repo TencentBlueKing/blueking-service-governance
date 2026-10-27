@@ -239,7 +239,10 @@ type envCountByWorkspace struct {
 }
 
 // CountByWorkspaceIDs returns standard environment counts grouped by workspace ID.
-func CountByWorkspaceIDs(ctx context.Context, db *mongo.Database, workspaceIDs []string) (map[string]int, error) {
+// opts 透传给 store.Aggregate，平台管理跨租户统计时传 store.TenantAll()
+func CountByWorkspaceIDs(
+	ctx context.Context, db *mongo.Database, workspaceIDs []string, opts ...store.Opt,
+) (map[string]int, error) {
 	if len(workspaceIDs) == 0 {
 		return map[string]int{}, nil
 	}
@@ -254,7 +257,7 @@ func CountByWorkspaceIDs(ctx context.Context, db *mongo.Database, workspaceIDs [
 			"count": bson.M{"$sum": 1},
 		}}},
 	}
-	results, err := store.Aggregate[envCountByWorkspace](ctx, store.Of(db, EnvMeta), pipeline)
+	results, err := store.Aggregate[envCountByWorkspace](ctx, store.Of(db, EnvMeta), pipeline, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "aggregate environment counts by workspace IDs")
 	}

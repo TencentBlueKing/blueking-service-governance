@@ -68,11 +68,11 @@ func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*Workspa
 	workspaceIDs := lo.Map(workspaces, func(ws bkmsworkspace.Workspace, _ int) string {
 		return ws.ID
 	})
-	appCounts, err := bkmsapp.CountByWorkspaceIDs(ctx, s.db, workspaceIDs)
+	appCounts, err := bkmsapp.CountByWorkspaceIDs(ctx, s.db, workspaceIDs, store.TenantAll())
 	if err != nil {
 		return nil, errors.Wrap(err, "count applications by workspace IDs")
 	}
-	envCounts, err := envmodel.CountByWorkspaceIDs(ctx, s.db, workspaceIDs)
+	envCounts, err := envmodel.CountByWorkspaceIDs(ctx, s.db, workspaceIDs, store.TenantAll())
 	if err != nil {
 		return nil, errors.Wrap(err, "count environments by workspace IDs")
 	}
