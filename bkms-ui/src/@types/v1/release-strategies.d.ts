@@ -59,7 +59,7 @@ export interface ListReleaseStrategiesOutput {
 
 export interface ReleaseStrategyInput {
   /**
-   * 批次列表，1 ~ 10 个；不校验跨批次递增
+   * 批次列表，至少 1 个，不设上限；不校验跨批次递增
    */
   batches: BatchInput[];
   /**
@@ -67,7 +67,7 @@ export interface ReleaseStrategyInput {
    */
   description?: string;
   /**
-   * 策略名称，1 ~ 32 个字符，同一空间内唯一
+   * 策略名称，去掉首尾空白后 1 ~ 64 个字符，同一空间内唯一
    */
   name: string;
 }

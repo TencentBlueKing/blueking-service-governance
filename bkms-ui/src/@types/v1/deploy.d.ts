@@ -3,6 +3,21 @@
 // 来源：apps/bkms-server/docs/apis/swagger.json
 // 模块：deploy
 
+export interface GetBatchReleaseProgressRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+  /**
+   * 部署的泳道名称（空字符串表示不使用泳道）
+   */
+  trafficLaneName?: string;
+}
+
 export interface ListHelmDeployRecordsRequest {
   /**
    * 应用 ID
@@ -363,6 +378,13 @@ export interface GetTrpcResourceSnapshotRequest {
   snapshotID: string;
 }
 
+export interface GetBatchReleaseProgressOutput {
+  /**
+   * 最新部署记录的分批发布进度；没有部署记录或最新记录不是分批发布时为 null
+   */
+  data?: BatchReleaseProgressOutputObj;
+}
+
 export interface ListHelmDeployRecordsOutput {
   /**
    * 分页 Helm 部署记录列表
@@ -503,12 +525,21 @@ export interface LatestDeployStatus {
   hasDeployRecord?: boolean;
   imageTag?: string;
   /**
+   * 进行中的渐进式发布的发布方式：空表示没有，canary 表示分批发布进行中（通过分批发布进度接口查询进度）。
+   * 按最新部署记录计算，与本接口返回的是构建记录还是部署记录无关
+   */
+  inProgressReleaseMode?: string;
+  /**
    * 兼容字段：供前端迁移期使用，待前端全部改用 deploySource 后删除。
    */
   isBuildAutoDeploy?: boolean;
   message?: string;
   operator?: string;
   pipelineID?: string;
+  /**
+   * 本条记录的发布方式：all 一次更新全部 / canary 分批发布；构建记录固定为 all
+   */
+  releaseMode?: string;
   /**
    * 分支名、Tag 名或 CommitID
    */
@@ -551,6 +582,14 @@ export interface AppModelDeployRecordOutputObj {
   message?: string;
   namespace?: string;
   operator?: string;
+  /**
+   * 发布方式：all 一次更新全部 / canary 分批发布
+   */
+  releaseMode?: string;
+  /**
+   * 分批发布时发起时的策略名称（快照），一次更新全部时为空
+   */
+  releaseStrategyName?: string;
   replicas?: number;
   /**
    * 分支名、Tag 名或 CommitID（仅构建+部署记录返回）
@@ -648,4 +687,78 @@ export interface HelmDeployRecordOutputObj {
    * 部署使用的 ValuesFile ID
    */
   valuesFileID?: string;
+}
+
+export interface BatchReleaseProgressOutputObj {
+  /**
+   * 当前批次状态：pending / updating / timed-paused / manual-paused / completed
+   */
+  batchPhase?: string;
+  /**
+   * 下发时的批次（快照）
+   */
+  batches?: BatchOutputObj[];
+  /**
+   * 当前批次序号，从 0 开始，-1 表示回滚；尚未进入批次或全部批次已走完时为 null
+   */
+  currentBatchIndex?: number;
+  /**
+   * 部署记录 ID
+   */
+  deployID?: string;
+  /**
+   * Rollout 提示信息，批次出错时为出错原因
+   */
+  message?: string;
+  /**
+   * 新镜像标签
+   */
+  newImageTag?: string;
+  /**
+   * 旧镜像标签
+   */
+  oldImageTag?: string;
+  /**
+   * 当前批次暂停开始时间，未暂停时为 null
+   */
+  pauseStartTime?: string;
+  /**
+   * 总实例数
+   */
+  replicas?: number;
+  /**
+   * Rollout 原始 phase
+   */
+  rolloutPhase?: string;
+  /**
+   * 部署记录状态：deploying 分批发布中 / deployed 已部署 / rolled-back 已回滚 / failed 等
+   */
+  status?: string;
+  /**
+   * 发起时的策略 ID（快照，策略之后被修改或删除不影响）
+   */
+  strategyID?: string;
+  /**
+   * 发起时的策略名称（快照）
+   */
+  strategyName?: string;
+  /**
+   * 已更新为新版本的实例数
+   */
+  updatedReplicas?: number;
+}
+
+export interface BatchOutputObj {
+  /**
+   * 本批完成后的暂停方式：none / duration / permanent
+   */
+  pauseMode?: string;
+  /**
+   * 定时暂停时长（秒），pauseMode 不为 duration 时为 0
+   */
+  pauseSeconds?: number;
+  /**
+   * 本批"累计更新到"的实例数：正整数或百分比
+   */
+  target?: string;
 }

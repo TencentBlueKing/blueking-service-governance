@@ -173,7 +173,6 @@ export const PlatmgtService = {
    * @tag platmgt
    * @param workspaceID path string required 工作空间 ID
    * @response 200 ImageRegistryResponse OK
-   * @response 403 GinErrorOutput Forbidden
    * @response 404 GinErrorOutput Not Found
    */
   getPlatWorkspaceImageRegistry: async <Request extends GetPlatWorkspaceImageRegistryRequest = GetPlatWorkspaceImageRegistryRequest, ResponseData = ImageRegistryOutput>(
@@ -190,9 +189,6 @@ export const PlatmgtService = {
    * @param body body UpdateImageRegistryInput required 镜像仓库信息
    * @response 200 ImageRegistryResponse OK
    * @response 400 GinErrorOutput Bad Request
-   * @response 403 GinErrorOutput Forbidden
-   * @response 404 GinErrorOutput Not Found
-   * @response 409 GinErrorOutput Conflict
    */
   updatePlatWorkspaceImageRegistry: async <Request extends UpdatePlatWorkspaceImageRegistryRequest = UpdatePlatWorkspaceImageRegistryRequest, ResponseData = ImageRegistryOutput>(
     params?: NoInfer<Request>,

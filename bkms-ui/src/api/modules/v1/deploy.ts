@@ -6,9 +6,28 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListHelmDeployRecordsRequest, PaginatedHelmDeployRecordOutputObjs, CreateHelmDeployRequest, PreviewHelmDeployRequest, PreviewHelmDeployOutput, RollbackHelmDeployRequest, EmptyOutput, DeleteHelmDeployRequest, PreviewRollbackHelmDeployRequest, ListTafDeployRecordsRequest, PaginatedAppModelDeployRecordsOutputObjs, CreateTafDeployRequest, DeleteTafDeployRequest, GetLatestTafDeployStatusRequest, LatestDeployStatus, PreCheckTafDeployRequest, DeployPreCheckOutput, ListTafResourceSnapshotsRequest, PaginatedAppModelResourceSnapshotsOutputObjs, GetTafResourceSnapshotRequest, GetAppModelResourceSnapshotOutput, ListTrpcDeployRecordsRequest, CreateTrpcDeployRequest, DeleteTrpcDeployRequest, GetLatestTrpcDeployStatusRequest, PreCheckTrpcDeployRequest, ListTrpcResourceSnapshotsRequest, GetTrpcResourceSnapshotRequest } from '~/@types/v1/deploy';
+import type { GetBatchReleaseProgressRequest, BatchReleaseProgressOutputObj, ListHelmDeployRecordsRequest, PaginatedHelmDeployRecordOutputObjs, CreateHelmDeployRequest, PreviewHelmDeployRequest, PreviewHelmDeployOutput, RollbackHelmDeployRequest, EmptyOutput, DeleteHelmDeployRequest, PreviewRollbackHelmDeployRequest, ListTafDeployRecordsRequest, PaginatedAppModelDeployRecordsOutputObjs, CreateTafDeployRequest, DeleteTafDeployRequest, GetLatestTafDeployStatusRequest, LatestDeployStatus, PreCheckTafDeployRequest, DeployPreCheckOutput, ListTafResourceSnapshotsRequest, PaginatedAppModelResourceSnapshotsOutputObjs, GetTafResourceSnapshotRequest, GetAppModelResourceSnapshotOutput, ListTrpcDeployRecordsRequest, CreateTrpcDeployRequest, DeleteTrpcDeployRequest, GetLatestTrpcDeployStatusRequest, PreCheckTrpcDeployRequest, ListTrpcResourceSnapshotsRequest, GetTrpcResourceSnapshotRequest } from '~/@types/v1/deploy';
 
 export const DeployService = {
+  /**
+   * 获取分批发布进度
+   *
+   * 返回环境 / 泳道最新部署记录的分批发布进度，进度由部署轮询任务写入，不实时请求集群；
+   * 没有部署记录或最新记录不是分批发布时 data 为 null
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/batch-release
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param trafficLaneName query string 部署的泳道名称（空字符串表示不使用泳道）
+   * @response 200 GetBatchReleaseProgressOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getBatchReleaseProgress: async <Request extends GetBatchReleaseProgressRequest = GetBatchReleaseProgressRequest, ResponseData = BatchReleaseProgressOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/batch-release')(params, config),
   /**
    * 获取 Helm 应用部署记录列表
    *
