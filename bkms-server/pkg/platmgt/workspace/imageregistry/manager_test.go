@@ -31,11 +31,9 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
@@ -147,18 +145,7 @@ var _ = Describe("Manager", func() {
 			Expect(err).To(MatchError(bkmsreg.ErrImageRegistryNotFound))
 		})
 
-		It("should reject without side effects when another update holds the lock", func() {
-			updateLock := lock.NewRedisLock(manager.buildUpdateLockKey(ws.ID), updateLockTimeoutSeconds)
-			Expect(updateLock.Acquire(ctx)).To(BeTrue())
-			defer updateLock.Release(ctx)
-
-			_, err := manager.Update(ctx, ws.ID, params)
-			Expect(err).To(MatchError(ErrConcurrentUpdate))
-			Expect(createdCredIDs).To(BeEmpty())
-			Expect(getRegistryType()).NotTo(Equal(external))
-		})
-
-		It("should release the lock after a failed update", func() {
+		It("should allow another update after a failed one", func() {
 			probeErr = &transport.Error{StatusCode: http.StatusUnauthorized}
 			_, err := manager.Update(ctx, ws.ID, params)
 			Expect(err).To(MatchError(ErrRegistryAuthFailed))
@@ -180,19 +167,6 @@ var _ = Describe("Manager", func() {
 			Expect(deletedCredIDs).To(Equal(createdCredIDs))
 			_, err = getExternal()
 			Expect(err).To(MatchError(bkmsreg.ErrImageRegistryNotFound))
-		})
-
-		It("should not roll back the saved record when the update lock is no longer held", func() {
-			probeHook = func() {
-				// 锁已过期并被别人拿走；类型切换仍会因空间被删而失败
-				Expect(redis.Client().Del(ctx, manager.buildUpdateLockKey(ws.ID)).Err()).NotTo(HaveOccurred())
-				Expect(workspaceStore.Delete(ctx, bkmsworkspace.ByWorkspaceID(ws.ID))).To(Succeed())
-			}
-
-			_, err := manager.Update(ctx, ws.ID, params)
-			Expect(err).To(MatchError(bkmsworkspace.ErrWorkspaceNotFound))
-			Expect(mustGetExternal().Registry).To(Equal(registry))
-			Expect(deletedCredIDs).To(BeEmpty())
 		})
 	})
 

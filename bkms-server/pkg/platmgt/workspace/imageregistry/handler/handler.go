@@ -144,8 +144,6 @@ func toAPIError(err error, internalMessage string) error {
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "image registry is unreachable")
 	case errors.Is(err, imageregistry.ErrBkCICredentialCreateFailed):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "failed to create bkci image credential")
-	case errors.Is(err, imageregistry.ErrConcurrentUpdate):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeAborted, "workspace image registry is being updated")
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
 	}

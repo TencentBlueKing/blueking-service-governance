@@ -21,7 +21,6 @@ package imageregistry
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -31,7 +30,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -46,10 +44,6 @@ const (
 	probeTimeout = 8 * time.Second
 	// probeImageName 探测推送权限时拼在命名空间后的镜像名；上传会立即取消，不会真的创建该镜像
 	probeImageName = "bkms-registry-probe"
-	// updateLockTimeoutSeconds 修改锁的过期时间。最坏路径是探测 8s、创建凭证（蓝盾超时 60s）、
-	// 失败后再删一次凭证（再一个 60s）加上两次落库，取 180s 留出余量
-	// 进程异常退出时靠它自动释放；过期前本请求必须结束，否则补偿会和后进入的请求交错
-	updateLockTimeoutSeconds = 180
 )
 
 var (
@@ -67,8 +61,6 @@ var (
 	ErrBkCICredentialCreateFailed = errors.New("create bkci image credential failed")
 	// ErrBuiltinRegistryNotFound 空间没有平台镜像仓库记录，无法切回平台仓库
 	ErrBuiltinRegistryNotFound = errors.New("builtin image registry not found")
-	// ErrConcurrentUpdate 同一空间的镜像仓库正在被另一个请求修改
-	ErrConcurrentUpdate = errors.New("workspace image registry is being updated")
 )
 
 // UpdateParams 设置空间镜像仓库的参数
@@ -120,15 +112,6 @@ func (m *Manager) Get(ctx context.Context, workspaceID string) (*bkmsreg.ImageRe
 func (m *Manager) Update(
 	ctx context.Context, workspaceID string, params UpdateParams,
 ) (*bkmsreg.ImageRegistry, error) {
-	// 外部仓库记录与生效类型是两次独立写入，失败补偿会按本请求读到的旧值删除或写回记录；
-	// 同一空间并发修改时，补偿可能抹掉另一个请求已提交的配置，所以按空间串行化，拿不到锁直接拒绝
-	updateLock := lock.NewRedisLock(m.buildUpdateLockKey(workspaceID), updateLockTimeoutSeconds)
-	if !updateLock.Acquire(ctx) {
-		return nil, errors.Wrapf(ErrConcurrentUpdate, "workspace %s", workspaceID)
-	}
-	// 请求被取消时仍要释放锁，否则同一空间要等锁过期才能再次修改
-	defer updateLock.Release(context.WithoutCancel(ctx))
-
 	ws, err := m.workspaces.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get workspace %s", workspaceID)
@@ -143,7 +126,7 @@ func (m *Manager) Update(
 	if params.Type == bkmsreg.ImageRegistryTypeBuiltin {
 		after, err = m.switchToBuiltin(ctx, ws)
 	} else {
-		after, err = m.applyExternal(ctx, updateLock, ws, params)
+		after, err = m.applyExternal(ctx, ws, params)
 	}
 	if err != nil {
 		return nil, err
@@ -187,7 +170,7 @@ func (m *Manager) switchToBuiltin(ctx context.Context, ws *bkmsworkspace.Workspa
 //
 // 任一步失败都清理本次新建的凭证并恢复外部仓库记录，空间原配置保持生效
 func (m *Manager) applyExternal(
-	ctx context.Context, updateLock *lock.RedisLock, ws *bkmsworkspace.Workspace, params UpdateParams,
+	ctx context.Context, ws *bkmsworkspace.Workspace, params UpdateParams,
 ) (*bkmsreg.ImageRegistry, error) {
 	params.Registry = strings.TrimRight(strings.TrimSpace(params.Registry), "/")
 	params.Username = strings.TrimSpace(params.Username)
@@ -234,13 +217,14 @@ func (m *Manager) applyExternal(
 		BkCICredentialID: credID,
 	}
 	if err = m.saveExternal(ctx, existing, after); err != nil {
-		m.compensateExternal(ctx, updateLock, ws, existing, newCredID, false)
+		m.deleteCredential(ctx, ws.BkSystems.BkCIProjectID, newCredID)
 		return nil, err
 	}
 
 	if ws.ImageRegistryType != bkmsreg.ImageRegistryTypeExternal {
 		if err = m.setRegistryType(ctx, ws.ID, bkmsreg.ImageRegistryTypeExternal); err != nil {
-			m.compensateExternal(ctx, updateLock, ws, existing, newCredID, true)
+			m.restoreExternal(ctx, ws.ID, existing)
+			m.deleteCredential(ctx, ws.BkSystems.BkCIProjectID, newCredID)
 			return nil, err
 		}
 	}
@@ -294,25 +278,6 @@ func (m *Manager) createCredential(
 		return "", errors.Wrap(ErrBkCICredentialCreateFailed, err.Error())
 	}
 	return credID, nil
-}
-
-// compensateExternal 清理本次新建的凭证；restore 为 true 时同时把外部仓库记录恢复成进入本请求前的状态
-//
-// 锁已经不属于本次请求时跳过：另一个请求可能正在写同一条记录，按本请求读到的旧值回滚会抹掉它的配置
-func (m *Manager) compensateExternal(
-	ctx context.Context, updateLock *lock.RedisLock, ws *bkmsworkspace.Workspace,
-	existing *bkmsreg.ImageRegistry, newCredID string, restore bool,
-) {
-	ctx = context.WithoutCancel(ctx)
-	if !updateLock.Held(ctx) {
-		log.Errorf(ctx, "skip image registry compensation for workspace %s: update lock lost", ws.ID)
-		return
-	}
-
-	if restore {
-		m.restoreExternal(ctx, ws.ID, existing)
-	}
-	m.deleteCredential(ctx, ws.BkSystems.BkCIProjectID, newCredID)
 }
 
 // deleteCredential 补偿删除本次新建的蓝盾凭证（credID 为空时跳过），失败只记日志，不覆盖原始错误
@@ -373,10 +338,6 @@ func (m *Manager) getRegistry(
 		return nil, nil
 	}
 	return reg, errors.Wrapf(err, "get workspace %s %s image registry", workspaceID, t)
-}
-
-func (m *Manager) buildUpdateLockKey(workspaceID string) string {
-	return fmt.Sprintf("lock:workspace-image-registry:%s", workspaceID)
 }
 
 func (m *Manager) byExternal(workspaceID string) store.Opt {
