@@ -24,6 +24,8 @@
 | 全局集合 | 无该字段，`TenantScoped` 为零值 false | 全系统一份，如 `cluster_addon_defs`、`plat_admin_role_bindings`、`runtime_images` |
 | 计数器 | `store.Counter`，文档为 `{_id: key, seq}` | 不经过 Meta，key 中带有 `appID` 等业务 ID，由业务对象区分 |
 
+各集合的归属见 `tenant_scoped_collections.md`。
+
 全局集合只存放平台数据，写入只来自平台路径（启动加载、命令行、平台管理接口），任何租户的请求都能读到全量数据。
 
 - `image_snapshots` / `repo_snapshot_statuses`：远端镜像仓库的缓存，平台镜像与租户私有仓库的快照都在其中。
@@ -132,7 +134,7 @@ err := apps.Create(ctx, &app, store.TenantOf("tenant-a"))
 | HTTP 业务 API | `/bkms/v1/bkms-server` 路由组挂 `tenant.Required`，写入 ctx |
 | 平台管理 API | 同上，另由 `RequirePlatformRole` 打显式范围标记，见 5.2 |
 | 异步任务 | envelope 增加 `_tenantID`：投递时 ctx 无租户直接失败，消费时写回 ctx，详见 4.1；只访问全局集合的任务声明 `Global()`，见 4.2 |
-| `cmd/migration/*` 与命令行 | ctx 无租户，访问租户集合时显式传 `TenantAll()`；投递租户任务的命令要给 ctx 设置目标租户 |
+| `cmd/migration/*` 与命令行 | ctx 无租户，访问租户集合时显式传 `TenantAll()`；后续调用业务函数或投递任务前用 `store.ScopeToTenant` 设置资源所属租户，见 5.1 |
 | 定时 / worker 自发逻辑 | 显式 `TenantAll()` 遍历，或按租户 `TenantOf` 循环 |
 | 单测 | `testutil.WithTenantOrDefault(ctx)` 补默认租户，见 4.3 |
 
@@ -176,7 +178,12 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 
 - 平台管理（`pkg/platmgt/**`）：已有调用点均显式传 `TenantAll()`。
 - 运维命令（`cmd/migration/*`）：`refresh_workspace_bkmonitor_perms`、`backfill_default_alert_strategies`、
-  `bind_bscp_project`、`list_bscp_projects`、`app_bscpcfg_mgr`。
+  `bind_bscp_project`、`list_bscp_projects`、`app_bscpcfg_mgr`、`repair_trpc_taf_framework_defs`；
+  以及 `cmd/portforward_whitelist.go`（经 `platmgt/portforward` 服务）。
+
+跨租户查出资源后，要调用不接受租户选项、只从 ctx 取租户的函数（如 perm 管理器），
+用 `store.ScopeToTenant(ctx, doc.TenantID)` 把 ctx 租户切到资源所属租户，同时解除 5.2 的显式范围标记。
+`tenantID` 只能取自已查出的文档，不能取自请求参数。
 
 谁有权跨租户由路由上的 `RequirePlatformRole` 决定；哪次查询跨租户由调用点的 `TenantAll()` 决定，store 不做权限判断。
 
