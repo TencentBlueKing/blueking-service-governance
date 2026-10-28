@@ -59,9 +59,8 @@ func (h *Handler) CreateWorkspaceComponent(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	newComp := input.ToModel(uriInput.WorkspaceID)
-	if _, err := component.GetDef(
-		ctx, store.Of(h.registry.DB, component.ComponentDefMeta), newComp.Type, newComp.Version,
-	); err != nil {
+	if _, err := store.Of(h.registry.DB, component.ComponentDefMeta).
+		Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version)); err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			bkerrs.AbortWithErr(
 				c,

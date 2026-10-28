@@ -78,20 +78,12 @@ func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace, opts
 	return nil
 }
 
-// Delete 依次执行已注册的删除前钩子并删除工作空间，工作空间不存在时不报错。
-func Delete(ctx context.Context, workspaces *WorkspaceStore, id string, opts ...store.Opt) error {
-	// 执行前先确认工作空间在本次的租户范围内存在
-	exists, err := workspaces.Exists(ctx, append(slices.Clone(opts), ByWorkspaceID(id))...)
-	if err != nil {
-		return errors.Wrapf(err, "check workspace %s before deleting", id)
-	}
-	if !exists {
-		return nil
-	}
-	if err = runPreDeleteHooks(ctx, id); err != nil {
+// Delete 依次执行已注册的删除前钩子并删除工作空间，工作空间不存在时不报错
+func Delete(ctx context.Context, workspaces *WorkspaceStore, id string) error {
+	if err := runPreDeleteHooks(ctx, id); err != nil {
 		return errors.Wrapf(err, "before deleting workspace %s", id)
 	}
-	if err = workspaces.DeleteIfExists(ctx, append(slices.Clone(opts), ByWorkspaceID(id))...); err != nil {
+	if err := workspaces.DeleteIfExists(ctx, ByWorkspaceID(id)); err != nil {
 		return errors.Wrapf(err, "delete workspace %s", id)
 	}
 	return nil
