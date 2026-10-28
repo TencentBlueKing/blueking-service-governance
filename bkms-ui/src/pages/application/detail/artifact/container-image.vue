@@ -378,7 +378,7 @@
   import { useI18n } from 'vue-i18n';
   import { AppImageOutputObj } from '~/@types/v1/images';
   import { EnvService, ImagesService } from '~/api/modules/v1';
-  import { formatSize } from '~/common/util';
+  import { formatSize, hasErrorCode, showApiErrorMessage } from '~/common/util';
   import { sourceMaterialText } from '~/components/code-revision/revision';
   import FieldItem from '~/components/field-item.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
@@ -715,10 +715,17 @@
     if (isRefreshing.value) return;
     isRefreshing.value = true;
     try {
-      await ImagesService.refreshAppImages({ appID: appDetailStore.appID });
+      await ImagesService.refreshAppImages(
+        { appID: appDetailStore.appID },
+        { interceptorErr: false, needStatus: true },
+      );
       await fetchArtifactList(true);
     } catch (err) {
-      console.error(err);
+      if (hasErrorCode(err, 'IMAGE_REPOSITORY_NOT_FOUND')) {
+        Message({ message: t('镜像仓库为空或不存在'), theme: 'error', delay: 8000 });
+      } else {
+        showApiErrorMessage(err);
+      }
     } finally {
       isRefreshing.value = false;
     }

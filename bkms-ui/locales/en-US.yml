@@ -1440,6 +1440,7 @@ Agones 应用不支持该功能: Agones Application does not support this featur
 一键同步: One-click Sync
 将远程镜像源中的镜像同步至服务治理平台: Sync images from remote image source to service governance platform
 镜像同步成功: Image sync successful
+镜像仓库为空或不存在: Image repository is empty or does not exist
 实例当前未处于运行状态，无法登录: The instance is not currently running and cannot be logged into
 实例尚未创建成功或宿主机异常，暂无法获取日志: The instance has not been created successfully or the host is abnormal. Unable to retrieve logs temporarily
 未获取到北极星信息，无法调整权重: No Polaris information found, unable to adjust weight
