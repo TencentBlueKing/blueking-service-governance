@@ -239,7 +239,7 @@ type BuildCommandsInput struct {
 	Build []string `json:"build"`
 	// 运行环境命令列表
 	RuntimeEnv []string `json:"runtimeEnv"`
-	// 启动命令
+	// 启动命令。未填编译命令时可留空，镜像入口为 /app/<镜像名>；填写了编译命令时必填
 	Start string `json:"start"`
 }
 
@@ -248,16 +248,29 @@ func (c *BuildCommandsInput) Validate() error {
 	if c == nil {
 		return nil
 	}
+
 	if err := ValidatePlatformBuildCommands(platformBuildCommandsField, "preBuild", c.PreBuild); err != nil {
 		return err
 	}
+
 	if err := ValidatePlatformBuildCommands(platformBuildCommandsField, "build", c.Build); err != nil {
 		return err
 	}
+
 	if err := ValidatePlatformBuildCommands(platformBuildCommandsField, "runtimeEnv", c.RuntimeEnv); err != nil {
 		return err
 	}
-	return ValidatePlatformBuildStart(platformBuildCommandsField+".start", c.Start)
+
+	if err := ValidatePlatformBuildStart(platformBuildCommandsField+".start", c.Start); err != nil {
+		return err
+	}
+
+	// 填了编译命令就不会走默认构建，Dockerfile 不写 /app/<镜像名> 入口，启动命令必须自己给出
+	if len(c.Build) > 0 && strings.TrimSpace(c.Start) == "" {
+		return errors.New(platformBuildCommandsField + ".start is required when build commands are set")
+	}
+
+	return nil
 }
 
 // ToModel converts BuildCommandsInput to imagebuild.BuildCommands.
