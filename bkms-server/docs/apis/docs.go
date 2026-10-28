@@ -21087,6 +21087,10 @@ const docTemplate = `{
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput": {
             "type": "object",
             "properties": {
+                "artifactDir": {
+                    "description": "构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_ARTIFACT_DIR} 引用，\n目录内全部内容会拷贝到运行镜像的 /app。必须是绝对路径、不能是根目录、不能包含 .. 路径段，\n只允许字母、数字和 . _ - /，最长 128；保存时会去掉末尾 / 等冗余写法",
+                    "type": "string"
+                },
                 "builderImage": {
                     "description": "构建阶段基础镜像",
                     "type": "string"
@@ -21106,10 +21110,6 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "publishPath": {
-                    "description": "构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_ARTIFACT_DIR} 引用，\n目录内全部内容会拷贝到运行镜像的 /app。必须是绝对路径、不能是根目录、不能包含 .. 路径段，\n只允许字母、数字和 . _ - /，最长 128；保存时会去掉末尾 / 等冗余写法",
-                    "type": "string"
-                },
                 "runnerImage": {
                     "description": "运行阶段基础镜像",
                     "type": "string"
@@ -21119,6 +21119,10 @@ const docTemplate = `{
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigOutputObj": {
             "type": "object",
             "properties": {
+                "artifactDir": {
+                    "description": "构建产物目录，原样返回存储值；未配置时为空串，生效值为语言默认值",
+                    "type": "string"
+                },
                 "builderImage": {
                     "description": "构建阶段基础镜像",
                     "type": "string"
@@ -21137,10 +21141,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "publishPath": {
-                    "description": "构建产物目录，原样返回存储值；未配置时为空串，生效值为语言默认值",
-                    "type": "string"
                 },
                 "runnerImage": {
                     "description": "运行阶段基础镜像",
@@ -21375,6 +21375,10 @@ const docTemplate = `{
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_app_serializer.PlatformBuildConfigOutputObj": {
             "type": "object",
             "properties": {
+                "artifactDir": {
+                    "description": "构建产物目录，原样返回存储值；未配置时为空串，生效值为语言默认值",
+                    "type": "string"
+                },
                 "builderImage": {
                     "description": "构建阶段基础镜像",
                     "type": "string"
@@ -21393,10 +21397,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "publishPath": {
-                    "description": "构建产物目录，原样返回存储值；未配置时为空串，生效值为语言默认值",
-                    "type": "string"
                 },
                 "runnerImage": {
                     "description": "运行阶段基础镜像",

@@ -184,7 +184,7 @@ type PlatformBuildConfigOutputObj struct {
 	// 运行阶段基础镜像
 	RunnerImage string `json:"runnerImage"`
 	// 构建产物目录，原样返回存储值；未配置时为空串，生效值为语言默认值
-	PublishPath string `json:"publishPath"`
+	ArtifactDir string `json:"artifactDir"`
 	// 命令配置
 	Commands *BuildCommandsOutputObj `json:"commands,omitempty"`
 	// 打包额外文件路径，相对构建目录
@@ -253,7 +253,7 @@ func (o *BuildConfigOutputObj) FromModel(cfg *build.Config) *BuildConfigOutputOb
 				BuilderImage: platformCfg.BuilderImage,
 				RunnerImage:  platformCfg.RunnerImage,
 				ExtraFiles:   platformCfg.ExtraFiles,
-				PublishPath:  platformCfg.PublishPath,
+				ArtifactDir:  platformCfg.ArtifactDir,
 			}
 			if platformCfg.Commands != nil {
 				o.RepoBuildConfig.PlatformBuildConfig.Commands = &BuildCommandsOutputObj{

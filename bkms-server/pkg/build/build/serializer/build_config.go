@@ -34,7 +34,7 @@ const (
 	platformBuildConfigField       = "buildConfig.repoBuildConfig.platformBuildConfig"
 	platformBuildCommandsField     = platformBuildConfigField + ".commands"
 	platformBuildExtraFilesField   = platformBuildConfigField + ".extraFiles"
-	platformBuildPublishPathField  = platformBuildConfigField + ".publishPath"
+	platformBuildArtifactDirField  = platformBuildConfigField + ".artifactDir"
 	repoBuildConfigDockerfileField = "buildConfig.repoBuildConfig.dockerfile"
 	repoBuildConfigSourceDirField  = "buildConfig.repoBuildConfig.sourceDir"
 )
@@ -183,7 +183,7 @@ type PlatformBuildConfigInput struct {
 	// 构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_ARTIFACT_DIR} 引用，
 	// 目录内全部内容会拷贝到运行镜像的 /app。必须是绝对路径、不能是根目录、不能包含 .. 路径段，
 	// 只允许字母、数字和 . _ - /，最长 128；保存时会去掉末尾 / 等冗余写法
-	PublishPath string `json:"publishPath"`
+	ArtifactDir string `json:"artifactDir"`
 	// 命令配置
 	Commands *BuildCommandsInput `json:"commands"`
 	// 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
@@ -201,8 +201,8 @@ func (c *PlatformBuildConfigInput) Validate() error {
 	}
 
 	// 产物目录会拼进生成的 Dockerfile，保存前必须挡住非法值，不落库
-	if _, err := imagebuild.NormalizePlatformBuildPublishPath(c.PublishPath); err != nil {
-		return errors.Wrapf(err, "%s %q", platformBuildPublishPathField, c.PublishPath)
+	if _, err := imagebuild.NormalizePlatformBuildArtifactDir(c.ArtifactDir); err != nil {
+		return errors.Wrapf(err, "%s %q", platformBuildArtifactDirField, c.ArtifactDir)
 	}
 
 	return c.Commands.Validate()
@@ -220,12 +220,12 @@ func (c *PlatformBuildConfigInput) ToModel() *imagebuild.PlatformBuildConfig {
 
 	// 调用方已经通过 Validate 校验过，这里只取规范化结果；万一未校验就转换，
 	// 非法值会被丢弃为空串（按默认值生效），不会把非法路径写入模型
-	publishPath, _ := imagebuild.NormalizePlatformBuildPublishPath(c.PublishPath)
+	artifactDir, _ := imagebuild.NormalizePlatformBuildArtifactDir(c.ArtifactDir)
 
 	return &imagebuild.PlatformBuildConfig{
 		BuilderImage: c.BuilderImage,
 		RunnerImage:  c.RunnerImage,
-		PublishPath:  publishPath,
+		ArtifactDir:  artifactDir,
 		Commands:     commands,
 		ExtraFiles:   normalizePlatformBuildExtraFiles(c.ExtraFiles),
 	}
@@ -465,7 +465,7 @@ type PlatformBuildConfigOutputObj struct {
 	// 运行阶段基础镜像
 	RunnerImage string `json:"runnerImage"`
 	// 构建产物目录，原样返回存储值；未配置时为空串，生效值为语言默认值
-	PublishPath string `json:"publishPath"`
+	ArtifactDir string `json:"artifactDir"`
 	// 命令配置
 	Commands *BuildCommandsOutputObj `json:"commands,omitempty"`
 	// 打包额外文件路径，相对构建目录
@@ -543,7 +543,7 @@ func (o *BuildConfigOutputObj) FromModel(cfg *imagebuild.Config) *BuildConfigOut
 				BuilderImage: platformCfg.BuilderImage,
 				RunnerImage:  platformCfg.RunnerImage,
 				ExtraFiles:   platformCfg.ExtraFiles,
-				PublishPath:  platformCfg.PublishPath,
+				ArtifactDir:  platformCfg.ArtifactDir,
 			}
 			if commands := platformCfg.Commands; commands != nil {
 				o.CodeRepo.PlatformBuildConfig.Commands = &BuildCommandsOutputObj{

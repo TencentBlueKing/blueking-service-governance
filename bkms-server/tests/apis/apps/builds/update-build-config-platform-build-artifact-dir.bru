@@ -1,7 +1,7 @@
 meta {
-  name: update-build-config-platform-build-publish-path-cleared-when-omitted
+  name: update-build-config-platform-build-artifact-dir
   type: http
-  seq: 7
+  seq: 6
 }
 
 put {
@@ -23,8 +23,12 @@ body:json {
       "platformBuildConfig": {
         "builderImage": "golang:1.24",
         "runnerImage": "debian:12",
+        "artifactDir": "/dist//bin/",
         "commands": {
-          "start": "./app"
+          "build": [
+            "go build -o ${BKMS_ARTIFACT_DIR}/svr-a ./cmd/a"
+          ],
+          "start": "/app/svr-a"
         }
       }
     }
@@ -37,9 +41,8 @@ assert {
 }
 
 tests {
-  // 构建配置是整体覆盖：上一个用例写入的 /dist/bin 会因请求不带 publishPath 而被清空
-  test("should clear publish path when omitted", () => {
-    expect(res.body.data.codeRepo.platformBuildConfig.publishPath).to.equal('');
+  test("should store normalized artifact dir", () => {
+    expect(res.body.data.codeRepo.platformBuildConfig.artifactDir).to.equal('/dist/bin');
   });
 }
 

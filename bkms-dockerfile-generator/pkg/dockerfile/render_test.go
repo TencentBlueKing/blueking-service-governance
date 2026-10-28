@@ -65,13 +65,13 @@ var _ = Describe("Dockerfile render", func() {
 		languageSpecs = map[string]languageSpec{
 			LanguageGo: {
 				templatePath:        goTemplatePath,
-				defaultPublishPath:  defaultPublishPath,
+				defaultArtifactDir:  defaultArtifactDir,
 				defaultBuildCommand: defaultGoBuildCommand,
 				prepareTemplateData: prepareGoTemplateData,
 			},
 			LanguageCpp: {
 				templatePath:        cppTemplatePath,
-				defaultPublishPath:  defaultPublishPath,
+				defaultArtifactDir:  defaultArtifactDir,
 				defaultBuildCommand: defaultCppBuildCommand,
 			},
 		}
@@ -100,7 +100,7 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).To(ContainSubstring("RUN go mod download"))
 		Expect(content).To(ContainSubstring("COPY . ."))
 		Expect(content).To(ContainSubstring("RUN CGO_ENABLED=0 go build -trimpath -o /out/demo-api ."))
-		Expect(content).To(ContainSubstring(publishPathCheck("/out")))
+		Expect(content).To(ContainSubstring(artifactDirCheck("/out")))
 		Expect(content).NotTo(ContainSubstring("test -f"))
 		Expect(content).To(ContainSubstring("FROM alpine:3.20 AS runner"))
 		Expect(content).To(ContainSubstring("WORKDIR /app"))
@@ -116,9 +116,9 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(indexOf(content, "RUN go mod download")).To(BeNumerically("<", indexOf(content, "COPY . .")))
 		Expect(indexOf(content, "COPY . .")).To(BeNumerically("<", indexOf(content, "RUN CGO_ENABLED=0 go build")))
 		Expect(indexOf(content, "RUN CGO_ENABLED=0 go build")).To(BeNumerically(
-			"<", indexOf(content, publishPathCheck("/out")),
+			"<", indexOf(content, artifactDirCheck("/out")),
 		))
-		Expect(indexOf(content, publishPathCheck("/out"))).To(BeNumerically(
+		Expect(indexOf(content, artifactDirCheck("/out"))).To(BeNumerically(
 			"<", indexOf(content, "FROM alpine:3.20 AS runner"),
 		))
 	})
@@ -288,7 +288,7 @@ var _ = Describe("Dockerfile render", func() {
 			"<", indexOf(content, "RUN go build -o /out/demo-api ./cmd/server"),
 		))
 		Expect(indexOf(content, "RUN chmod +x /out/demo-api")).To(BeNumerically(
-			"<", indexOf(content, publishPathCheck("/out")),
+			"<", indexOf(content, artifactDirCheck("/out")),
 		))
 		Expect(indexOf(content, "WORKDIR /app")).To(BeNumerically(
 			"<", indexOf(content, "COPY --from=builder /out/ /app/"),
@@ -424,7 +424,7 @@ var _ = Describe("Dockerfile render", func() {
 				" && cp build/demo-api /out/demo-api",
 		))
 		Expect(content).To(ContainSubstring("ENV BKMS_ARTIFACT_DIR=/out\n"))
-		Expect(content).To(ContainSubstring(publishPathCheck("/out")))
+		Expect(content).To(ContainSubstring(artifactDirCheck("/out")))
 		Expect(content).NotTo(ContainSubstring("test -f"))
 		Expect(content).To(ContainSubstring("FROM alpine:3.20 AS runner"))
 		Expect(content).To(ContainSubstring("COPY --from=builder /out/ /app/\n"))
@@ -433,7 +433,7 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(indexOf(content, "RUN mkdir -p /out")).To(BeNumerically("<", indexOf(content, "COPY . .")))
 		Expect(indexOf(content, "COPY . .")).To(BeNumerically("<", indexOf(content, "RUN cmake -S . -B build")))
 		Expect(indexOf(content, "RUN cmake -S . -B build")).To(BeNumerically(
-			"<", indexOf(content, publishPathCheck("/out")),
+			"<", indexOf(content, artifactDirCheck("/out")),
 		))
 	})
 
@@ -476,9 +476,9 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).To(ContainSubstring("ENTRYPOINT [\"/app/demo.api_1-2\"]\n"))
 	})
 
-	It("renders custom publish path for Go builder and runner stages", func() {
+	It("renders custom artifact dir for Go builder and runner stages", func() {
 		input := defaultInput(LanguageGo)
-		input.PublishPath = "/dist"
+		input.ArtifactDir = "/dist"
 
 		content, err := Render(input)
 		Expect(err).NotTo(HaveOccurred())
@@ -486,7 +486,7 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).To(ContainSubstring("ENV BKMS_ARTIFACT_DIR=/dist\n"))
 		Expect(content).To(ContainSubstring("RUN mkdir -p /dist\n"))
 		Expect(content).To(ContainSubstring("RUN CGO_ENABLED=0 go build -trimpath -o /dist/demo-api ."))
-		Expect(content).To(ContainSubstring(publishPathCheck("/dist")))
+		Expect(content).To(ContainSubstring(artifactDirCheck("/dist")))
 		Expect(content).To(ContainSubstring("COPY --from=builder /dist/ /app/\n"))
 		Expect(content).To(ContainSubstring("ENTRYPOINT [\"/app/demo-api\"]\n"))
 		Expect(content).NotTo(ContainSubstring("/out"))
@@ -508,7 +508,7 @@ var _ = Describe("Dockerfile render", func() {
 
 	It("keeps custom build commands that reference BKMS_ARTIFACT_DIR", func() {
 		input := defaultInput(LanguageGo)
-		input.PublishPath = "/dist"
+		input.ArtifactDir = "/dist"
 		input.BuildCommands = encodeCommandsParam([]string{
 			"go build -o ${BKMS_ARTIFACT_DIR}/svr-a ./cmd/a",
 			"go build -o ${BKMS_ARTIFACT_DIR}/svr-b ./cmd/b",
@@ -530,24 +530,24 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(runnerStage).NotTo(ContainSubstring("ENV BKMS_ARTIFACT_DIR"))
 	})
 
-	It("renders custom publish path for C++ default build command", func() {
+	It("renders custom artifact dir for C++ default build command", func() {
 		input := defaultInput(LanguageCpp)
-		input.PublishPath = "/opt/release/"
+		input.ArtifactDir = "/opt/release/"
 
 		content, err := Render(input)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(content).To(ContainSubstring("ENV BKMS_ARTIFACT_DIR=/opt/release\n"))
 		Expect(content).To(ContainSubstring(" && cp build/demo-api /opt/release/demo-api"))
-		Expect(content).To(ContainSubstring(publishPathCheck("/opt/release")))
+		Expect(content).To(ContainSubstring(artifactDirCheck("/opt/release")))
 		Expect(content).To(ContainSubstring("COPY --from=builder /opt/release/ /app/\n"))
 		Expect(content).To(ContainSubstring("ENTRYPOINT [\"/app/demo-api\"]\n"))
 	})
 
-	DescribeTable("normalizes valid publish paths",
-		func(publishPath string, expected string) {
+	DescribeTable("normalizes valid artifact dirs",
+		func(artifactDir string, expected string) {
 			input := defaultInput(LanguageGo)
-			input.PublishPath = publishPath
+			input.ArtifactDir = artifactDir
 
 			content, err := Render(input)
 			Expect(err).NotTo(HaveOccurred())
@@ -560,19 +560,19 @@ var _ = Describe("Dockerfile render", func() {
 		Entry("duplicated slashes", "/out//bin", "/out/bin"),
 		Entry("dot segment", "/out/./bin", "/out/bin"),
 		Entry("dots inside segment", "/out/a..b", "/out/a..b"),
-		Entry("max length", "/"+strings.Repeat("a", maxPublishPathLen-1), "/"+strings.Repeat("a", maxPublishPathLen-1)),
+		Entry("max length", "/"+strings.Repeat("a", maxArtifactDirLen-1), "/"+strings.Repeat("a", maxArtifactDirLen-1)),
 	)
 
-	DescribeTable("rejects invalid publish paths",
-		func(publishPath string, rule string) {
+	DescribeTable("rejects invalid artifact dirs",
+		func(artifactDir string, rule string) {
 			input := defaultInput(LanguageGo)
-			input.PublishPath = publishPath
+			input.ArtifactDir = artifactDir
 
 			content, err := Render(input)
 
 			Expect(content).To(Equal(""))
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("%q", publishPath)))
+			Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("%q", artifactDir)))
 			Expect(err.Error()).To(ContainSubstring(rule))
 		},
 		Entry("parent segment", "/out/../etc", "must not contain '..' path segment"),
@@ -582,7 +582,7 @@ var _ = Describe("Dockerfile render", func() {
 		Entry("space", "/out/my dir", "only letters, digits, dot, underscore, hyphen and slash are allowed"),
 		Entry("shell metacharacter", "/out;rm -rf /", "only letters, digits, dot, underscore, hyphen and slash are allowed"),
 		Entry("leading whitespace", " /out", "only letters, digits, dot, underscore, hyphen and slash are allowed"),
-		Entry("too long", "/"+strings.Repeat("a", maxPublishPathLen), "length must not exceed 128"),
+		Entry("too long", "/"+strings.Repeat("a", maxArtifactDirLen), "length must not exceed 128"),
 	)
 
 	It("returns error when image name is unsafe", func() {
@@ -640,11 +640,11 @@ func indexOf(content string, fragment string) int {
 	return index
 }
 
-// publishPathCheck 返回 builder 阶段末尾对产物目录做非空检查的完整 RUN 指令
-func publishPathCheck(publishPath string) string {
+// artifactDirCheck 返回 builder 阶段末尾对产物目录做非空检查的完整 RUN 指令
+func artifactDirCheck(artifactDir string) string {
 	return fmt.Sprintf(
 		"RUN test -n \"$(ls -A %s 2>/dev/null)\" || (echo \"build output directory %s is missing or empty\" && exit 1)",
-		publishPath, publishPath,
+		artifactDir, artifactDir,
 	)
 }
 

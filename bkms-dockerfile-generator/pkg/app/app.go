@@ -63,7 +63,7 @@ func Run(environ []string, out io.Writer) error {
 		RuntimeEnvCommands:  cfg.RuntimeEnvCommands,
 		StartCommand:        cfg.StartCommand,
 		ExtraFiles:          cfg.ExtraFiles,
-		PublishPath:         cfg.PublishPath,
+		ArtifactDir:         cfg.ArtifactDir,
 		DockerBuildArgNames: cfg.DockerBuildArgNames,
 		DockerBuildDir:      cfg.DockerBuildDir,
 		ImageName:           cfg.ImageName,

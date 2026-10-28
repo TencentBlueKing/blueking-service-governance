@@ -216,7 +216,7 @@ func genDockerfilePath(cfg *RepositoryConfig, buildDir string) string {
 // genPlatformBuildParams 生成镜像构建方式相关的流水线参数。
 //
 // - repositoryDockerfile 模式：sourceType=repository，其余平台生成 Dockerfile 参数为空字符串。
-// - platform 模式：sourceType=bkms_generated，写入 language / builderImage / runnerImage / publishPath /
+// - platform 模式：sourceType=bkms_generated，写入 language / builderImage / runnerImage / artifactDir /
 // 各命令数组 / start / extraFiles。
 //
 // 命令数组以 JSON 字符串数组传递，避免流水线环境变量注入吞掉真实换行
@@ -234,7 +234,7 @@ func genPlatformBuildParams(cfg *RepositoryConfig, app *bkmsapp.Application) (ma
 		pipelineparam.DockerfileRuntimeEnvCommands: "",
 		pipelineparam.DockerfileStartCommand:       "",
 		pipelineparam.DockerfileExtraFiles:         "",
-		pipelineparam.DockerfilePublishPath:        "",
+		pipelineparam.DockerfileArtifactDir:        "",
 	}
 	if cfg.EffectiveImageBuildMode() != ImageBuildModePlatform || cfg.PlatformBuildConfig == nil {
 		return params, nil
@@ -255,7 +255,7 @@ func genPlatformBuildParams(cfg *RepositoryConfig, app *bkmsapp.Application) (ma
 	params[pipelineparam.DockerfileBuilderImage] = platBuildCfg.BuilderImage
 	params[pipelineparam.DockerfileRunnerImage] = platBuildCfg.RunnerImage
 	// 传存储值而不是生效值：未配置时保持空串，默认值只由生成器按语言决定，避免两边各维护一份默认值
-	params[pipelineparam.DockerfilePublishPath] = platBuildCfg.PublishPath
+	params[pipelineparam.DockerfileArtifactDir] = platBuildCfg.ArtifactDir
 
 	if cmds := platBuildCfg.Commands; cmds != nil {
 		var preBuildCommands, buildCommands, runtimeEnvCommands string

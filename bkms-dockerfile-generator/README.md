@@ -24,7 +24,7 @@ Dockerfile，并将生成结果写入 `BKMS_DOCKERFILE_PATH` 指定的位置。
 | `BKMS_DOCKERFILE_BUILD_COMMANDS`       | 编译命令，多条命令使用换行分隔；为空时使用语言默认构建命令                      |
 | `BKMS_DOCKERFILE_RUNTIME_ENV_COMMANDS` | 运行环境命令，多条命令使用换行分隔                                  |
 | `BKMS_DOCKERFILE_START_COMMAND`        | 容器启动命令，可为空；默认构建时入口为 `/app/<镜像名>`                  |
-| `BKMS_DOCKERFILE_PUBLISH_PATH`         | 构建产物目录，可为空；为空或未定义时 `go`、`cpp` 使用 `/out`              |
+| `BKMS_DOCKERFILE_ARTIFACT_DIR`         | 构建产物目录，可为空；为空或未定义时 `go`、`cpp` 使用 `/out`              |
 | `BKMS_IMAGE_NAME`                      | 镜像名称，同时用于默认构建产物名                                   |
 
 在 `bkms_generated` 模式下，`BKMS_DOCKERFILE_LANGUAGE`、`BKMS_DOCKERFILE_PATH`、`BKMS_DOCKERFILE_BUILDER_IMAGE`、

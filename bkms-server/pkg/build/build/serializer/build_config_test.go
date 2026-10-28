@@ -61,7 +61,7 @@ var _ = Describe("Build config serializers", func() {
 				PlatformBuildConfig: &imagebuild.PlatformBuildConfig{
 					BuilderImage: "golang:1.24",
 					RunnerImage:  "debian:12",
-					PublishPath:  "/dist",
+					ArtifactDir:  "/dist",
 					Commands: &imagebuild.BuildCommands{
 						PreBuild: []string{"go mod download"},
 						Start:    "./app",
@@ -75,7 +75,7 @@ var _ = Describe("Build config serializers", func() {
 		Expect(output.CodeRepo.PlatformBuildConfig).To(Equal(&serializer.PlatformBuildConfigOutputObj{
 			BuilderImage: "golang:1.24",
 			RunnerImage:  "debian:12",
-			PublishPath:  "/dist",
+			ArtifactDir:  "/dist",
 			Commands: &serializer.BuildCommandsOutputObj{
 				PreBuild:   []string{"go mod download"},
 				Build:      []string{},
@@ -180,14 +180,14 @@ var _ = Describe("Build config serializers", func() {
 			))
 		})
 
-		DescribeTable("stores normalized publish path",
-			func(publishPath, expected string) {
+		DescribeTable("stores normalized artifact dir",
+			func(artifactDir, expected string) {
 				cfg, err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
-					input.PlatformBuildConfig.PublishPath = publishPath
+					input.PlatformBuildConfig.ArtifactDir = artifactDir
 				}).ToModel()
 
 				Expect(err).NotTo(HaveOccurred())
-				Expect(cfg.PlatformBuildConfig.PublishPath).To(Equal(expected))
+				Expect(cfg.PlatformBuildConfig.ArtifactDir).To(Equal(expected))
 			},
 			// 空串表示未配置，构建时由生成器按语言默认值 /out 生效
 			Entry("empty keeps unset", "", ""),
@@ -198,21 +198,21 @@ var _ = Describe("Build config serializers", func() {
 			Entry("dots inside segment", "/out/a..b", "/out/a..b"),
 			Entry(
 				"max length",
-				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildPublishPathLen-1),
-				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildPublishPathLen-1),
+				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildArtifactDirLen-1),
+				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildArtifactDirLen-1),
 			),
 		)
 
 		DescribeTable(
-			"rejects invalid publish path",
-			func(publishPath, rule string) {
+			"rejects invalid artifact dir",
+			func(artifactDir, rule string) {
 				cfg, err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
-					input.PlatformBuildConfig.PublishPath = publishPath
+					input.PlatformBuildConfig.ArtifactDir = artifactDir
 				}).ToModel()
 
 				Expect(cfg).To(BeNil())
 				Expect(err).To(MatchError(ContainSubstring(
-					"buildConfig.repoBuildConfig.platformBuildConfig.publishPath",
+					"buildConfig.repoBuildConfig.platformBuildConfig.artifactDir",
 				)))
 				Expect(err).To(MatchError(ContainSubstring(rule)))
 			},
@@ -228,7 +228,7 @@ var _ = Describe("Build config serializers", func() {
 			),
 			Entry(
 				"too long",
-				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildPublishPathLen),
+				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildArtifactDirLen),
 				"length must not exceed 128",
 			),
 		)

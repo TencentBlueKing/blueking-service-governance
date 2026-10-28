@@ -1,7 +1,7 @@
 meta {
-  name: update-build-config-platform-build-should-fail-when-publish-path-invalid
+  name: update-build-config-platform-build-artifact-dir-cleared-when-omitted
   type: http
-  seq: 8
+  seq: 7
 }
 
 put {
@@ -23,7 +23,6 @@ body:json {
       "platformBuildConfig": {
         "builderImage": "golang:1.24",
         "runnerImage": "debian:12",
-        "publishPath": "/out/../etc",
         "commands": {
           "start": "./app"
         }
@@ -33,14 +32,14 @@ body:json {
 }
 
 assert {
-  res.status: eq 400
+  res.status: eq 200
   res.body: isJson
 }
 
 tests {
-  test("should reject publish path containing parent segment", () => {
-    expect(res.body.error.message).to.contains("buildConfig.repoBuildConfig.platformBuildConfig.publishPath");
-    expect(res.body.error.message).to.contains("must not contain '..' path segment");
+  // 构建配置是整体覆盖：上一个用例写入的 /dist/bin 会因请求不带 artifactDir 而被清空
+  test("should clear artifact dir when omitted", () => {
+    expect(res.body.data.codeRepo.platformBuildConfig.artifactDir).to.equal('');
   });
 }
 

@@ -1,7 +1,7 @@
 meta {
-  name: update-build-config-platform-build-publish-path
+  name: update-build-config-platform-build-should-fail-when-artifact-dir-invalid
   type: http
-  seq: 6
+  seq: 8
 }
 
 put {
@@ -23,12 +23,9 @@ body:json {
       "platformBuildConfig": {
         "builderImage": "golang:1.24",
         "runnerImage": "debian:12",
-        "publishPath": "/dist//bin/",
+        "artifactDir": "/out/../etc",
         "commands": {
-          "build": [
-            "go build -o ${BKMS_ARTIFACT_DIR}/svr-a ./cmd/a"
-          ],
-          "start": "/app/svr-a"
+          "start": "./app"
         }
       }
     }
@@ -36,13 +33,14 @@ body:json {
 }
 
 assert {
-  res.status: eq 200
+  res.status: eq 400
   res.body: isJson
 }
 
 tests {
-  test("should store normalized publish path", () => {
-    expect(res.body.data.codeRepo.platformBuildConfig.publishPath).to.equal('/dist/bin');
+  test("should reject artifact dir containing parent segment", () => {
+    expect(res.body.error.message).to.contains("buildConfig.repoBuildConfig.platformBuildConfig.artifactDir");
+    expect(res.body.error.message).to.contains("must not contain '..' path segment");
   });
 }
 

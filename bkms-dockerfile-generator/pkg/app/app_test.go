@@ -62,7 +62,7 @@ var _ = Describe("App run", func() {
 		content, err := os.ReadFile(dockerfilePath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(content)).To(ContainSubstring("FROM golang:1.25 AS builder"))
-		// 旧版流水线模板不传 BKMS_DOCKERFILE_PUBLISH_PATH，产物目录回落到 /out
+		// 旧版流水线模板不传 BKMS_DOCKERFILE_ARTIFACT_DIR，产物目录回落到 /out
 		Expect(string(content)).To(ContainSubstring("ENV BKMS_ARTIFACT_DIR=/out\n"))
 		Expect(string(content)).To(ContainSubstring("ENTRYPOINT [\"/app/demo-api\"]\n"))
 		Expect(out.String()).To(ContainSubstring("generated Dockerfile: " + dockerfilePath))
@@ -84,9 +84,9 @@ var _ = Describe("App run", func() {
 		Expect(string(content)).To(ContainSubstring("COPY --from=builder /out/ /app/"))
 	})
 
-	It("writes publish path from pipeline variable to generated Dockerfile", func() {
+	It("writes artifact dir from pipeline variable to generated Dockerfile", func() {
 		dockerfilePath := filepath.Join(workDir, ".bkms", "Dockerfile.generated")
-		environ := append(validEnviron(dockerfilePath), config.EnvDockerfilePublishPath+"=/dist/")
+		environ := append(validEnviron(dockerfilePath), config.EnvDockerfileArtifactDir+"=/dist/")
 		var out bytes.Buffer
 
 		err := Run(environ, &out)
@@ -98,15 +98,15 @@ var _ = Describe("App run", func() {
 		Expect(string(content)).To(ContainSubstring("COPY --from=builder /dist/ /app/"))
 	})
 
-	It("returns readable error when publish path is unsafe", func() {
+	It("returns readable error when artifact dir is unsafe", func() {
 		dockerfilePath := filepath.Join(workDir, ".bkms", "Dockerfile.generated")
-		environ := append(validEnviron(dockerfilePath), config.EnvDockerfilePublishPath+"=/out/../etc")
+		environ := append(validEnviron(dockerfilePath), config.EnvDockerfileArtifactDir+"=/out/../etc")
 		var out bytes.Buffer
 
 		err := Run(environ, &out)
 
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring(`invalid publish path "/out/../etc"`))
+		Expect(err.Error()).To(ContainSubstring(`invalid artifact dir "/out/../etc"`))
 		Expect(dockerfilePath).NotTo(BeAnExistingFile())
 	})
 
