@@ -158,6 +158,8 @@ type PlatformBuildConfig struct {
 	BuilderImage string `bson:"builderImage"`
 	// RunnerImage 运行阶段基础镜像
 	RunnerImage string `bson:"runnerImage"`
+	// PublishPath 构建产物目录，保存的是规范化后的值；为空表示未配置，由 Dockerfile 生成器按语言默认值处理
+	PublishPath string `bson:"publishPath,omitempty"`
 	// Commands 命令配置
 	Commands *BuildCommands `bson:"commands,omitempty"`
 	// ExtraFiles 相对构建目录的额外文件路径，runner 阶段从构建上下文 COPY 到 /app

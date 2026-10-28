@@ -1,0 +1,50 @@
+meta {
+  name: update-build-config-platform-build-should-fail-when-publish-path-invalid
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{serviceURL}}/apps/{{testBuildTrpcAppID}}/build-configs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "sourceType": "codeRepository",
+    "codeRepo": {
+      "type": "TGit",
+      "defaultBranch": "main",
+      "repoAlias": "test-repo",
+      "repoURL": "https://git.com/bkms-govern.git",
+      "sourceDir": ".",
+      "imageBuildMode": "platform",
+      "platformBuildConfig": {
+        "builderImage": "golang:1.24",
+        "runnerImage": "debian:12",
+        "publishPath": "/out/../etc",
+        "commands": {
+          "start": "./app"
+        }
+      }
+    }
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject publish path containing parent segment", () => {
+    expect(res.body.error.message).to.contains("buildConfig.repoBuildConfig.platformBuildConfig.publishPath");
+    expect(res.body.error.message).to.contains("must not contain '..' path segment");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

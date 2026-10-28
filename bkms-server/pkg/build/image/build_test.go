@@ -278,7 +278,22 @@ var _ = Describe("Build Functions", func() {
 				pipelineparam.DockerfileRuntimeEnvCommands: "",
 				pipelineparam.DockerfileStartCommand:       "",
 				pipelineparam.DockerfileExtraFiles:         "",
+				pipelineparam.DockerfilePublishPath:        "",
 			}))
+		})
+
+		It("should pass empty publish path when platform build config has no publish path", func() {
+			testCfg.CodeRepo.ImageBuildMode = ImageBuildModePlatform
+			testCfg.CodeRepo.PlatformBuildConfig = &PlatformBuildConfig{
+				BuilderImage: "golang:1.24",
+				RunnerImage:  "debian:12",
+			}
+
+			params, err := genPlatformBuildParams(testCfg.CodeRepo, testApp)
+
+			// 存量配置没有产物目录字段：传空串，由生成器按语言默认值 /out 生效
+			Expect(err).NotTo(HaveOccurred())
+			Expect(params).To(HaveKeyWithValue(pipelineparam.DockerfilePublishPath, ""))
 		})
 
 		It("should generate platform build params with commands", func() {
@@ -286,6 +301,7 @@ var _ = Describe("Build Functions", func() {
 			testCfg.CodeRepo.PlatformBuildConfig = &PlatformBuildConfig{
 				BuilderImage: "golang:1.24",
 				RunnerImage:  "debian:12",
+				PublishPath:  "/dist",
 				Commands: &BuildCommands{
 					PreBuild:   []string{"go mod download", "go env"},
 					Build:      []string{"go build -o app ./cmd/server"},
@@ -303,6 +319,7 @@ var _ = Describe("Build Functions", func() {
 			Expect(params[pipelineparam.DockerfileLanguage]).To(Equal(appmodel.LanguageGo))
 			Expect(params[pipelineparam.DockerfileBuilderImage]).To(Equal("golang:1.24"))
 			Expect(params[pipelineparam.DockerfileRunnerImage]).To(Equal("debian:12"))
+			Expect(params[pipelineparam.DockerfilePublishPath]).To(Equal("/dist"))
 			Expect(decodeDockerfileCommandsParam(params[pipelineparam.DockerfilePreBuildCommands])).To(Equal(
 				[]string{"go mod download", "go env"},
 			))
@@ -416,6 +433,7 @@ var _ = Describe("Build Functions", func() {
 			Expect(params[pipelineparam.DockerfileRuntimeEnvCommands]).To(Equal(""))
 			Expect(params[pipelineparam.DockerfileStartCommand]).To(Equal(""))
 			Expect(params[pipelineparam.DockerfileExtraFiles]).To(Equal(""))
+			Expect(params[pipelineparam.DockerfilePublishPath]).To(Equal(""))
 		})
 
 		It("should fill registry host for repository Dockerfile mode", func() {

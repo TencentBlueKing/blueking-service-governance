@@ -20,6 +20,7 @@ package dockerfile
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,11 +65,13 @@ var _ = Describe("Dockerfile render", func() {
 		languageSpecs = map[string]languageSpec{
 			LanguageGo: {
 				templatePath:        goTemplatePath,
+				defaultPublishPath:  defaultPublishPath,
 				defaultBuildCommand: defaultGoBuildCommand,
 				prepareTemplateData: prepareGoTemplateData,
 			},
 			LanguageCpp: {
 				templatePath:        cppTemplatePath,
+				defaultPublishPath:  defaultPublishPath,
 				defaultBuildCommand: defaultCppBuildCommand,
 			},
 		}
@@ -79,6 +82,7 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(content).To(ContainSubstring("FROM golang:1.25 AS builder"))
+		Expect(content).To(ContainSubstring("ENV BKMS_PUBLISH_PATH=/out\n"))
 		Expect(content).To(ContainSubstring("WORKDIR /workspace"))
 		Expect(content).To(ContainSubstring("RUN mkdir -p /out"))
 		Expect(content).To(ContainSubstring("command -v git"))
@@ -96,14 +100,15 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).To(ContainSubstring("RUN go mod download"))
 		Expect(content).To(ContainSubstring("COPY . ."))
 		Expect(content).To(ContainSubstring("RUN CGO_ENABLED=0 go build -trimpath -o /out/demo-api ."))
-		Expect(content).To(ContainSubstring(
-			"RUN test -f /out/demo-api || (echo \"build artifact /out/demo-api not found\" && exit 1)",
-		))
+		Expect(content).To(ContainSubstring(publishPathCheck("/out")))
+		Expect(content).NotTo(ContainSubstring("test -f"))
 		Expect(content).To(ContainSubstring("FROM alpine:3.20 AS runner"))
 		Expect(content).To(ContainSubstring("WORKDIR /app"))
-		Expect(content).To(ContainSubstring("COPY --from=builder /out/demo-api /app/demo-api"))
-		Expect(content).To(ContainSubstring("ENTRYPOINT [\"/app/demo-api\"]"))
+		Expect(content).To(ContainSubstring("COPY --from=builder /out/ /app/\n"))
+		// 未填启动命令时不写入口，交给运行镜像自带入口或部署时的容器启动命令
+		Expect(content).NotTo(ContainSubstring("ENTRYPOINT"))
 
+		Expect(indexOf(content, "ENV BKMS_PUBLISH_PATH=/out")).To(BeNumerically("<", indexOf(content, "RUN mkdir -p /out")))
 		Expect(indexOf(content, "RUN mkdir -p /out")).To(BeNumerically("<", indexOf(content, "command -v git")))
 		Expect(indexOf(content, "command -v git")).To(BeNumerically("<", indexOf(content, "COPY go.mod ./")))
 		Expect(indexOf(content, "COPY go.mod ./")).To(BeNumerically("<", indexOf(content, "COPY go.sum ./")))
@@ -111,7 +116,10 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(indexOf(content, "RUN go mod download")).To(BeNumerically("<", indexOf(content, "COPY . .")))
 		Expect(indexOf(content, "COPY . .")).To(BeNumerically("<", indexOf(content, "RUN CGO_ENABLED=0 go build")))
 		Expect(indexOf(content, "RUN CGO_ENABLED=0 go build")).To(BeNumerically(
-			"<", indexOf(content, "RUN test -f /out/demo-api"),
+			"<", indexOf(content, publishPathCheck("/out")),
+		))
+		Expect(indexOf(content, publishPathCheck("/out"))).To(BeNumerically(
+			"<", indexOf(content, "FROM alpine:3.20 AS runner"),
 		))
 	})
 
@@ -137,7 +145,7 @@ var _ = Describe("Dockerfile render", func() {
 			Expect(content).To(ContainSubstring("COPY data/*.pem /app/data/\n"))
 			Expect(content).To(ContainSubstring("COPY *.json /app/\n"))
 			Expect(content).NotTo(ContainSubstring(`COPY "data/*.pem"`))
-			Expect(indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api")).To(BeNumerically(
+			Expect(indexOf(content, "COPY --from=builder /out/ /app/")).To(BeNumerically(
 				"<", indexOf(content, "COPY data/privatekey.pem /app/data/privatekey.pem"),
 			))
 			Expect(indexOf(content, "COPY data/privatekey.pem /app/data/privatekey.pem")).To(BeNumerically(
@@ -155,9 +163,8 @@ var _ = Describe("Dockerfile render", func() {
 			Expect(indexOf(content, "RUN test -f /app/data/privatekey.pem")).To(BeNumerically(
 				"<", indexOf(content, "RUN mv /app/data/privatekey.pem /app/privatekey.pem"),
 			))
-			Expect(indexOf(content, "RUN mv /app/data/privatekey.pem /app/privatekey.pem")).To(BeNumerically(
-				"<", indexOf(content, `ENTRYPOINT ["/app/demo-api"]`),
-			))
+			// 未填启动命令时不写入口，运行环境命令就是最后一条指令
+			Expect(content).NotTo(ContainSubstring("ENTRYPOINT"))
 		},
 		Entry("Go", LanguageGo),
 		Entry("C++", LanguageCpp),
@@ -279,12 +286,12 @@ var _ = Describe("Dockerfile render", func() {
 			"<", indexOf(content, "RUN go build -o /out/demo-api ./cmd/server"),
 		))
 		Expect(indexOf(content, "RUN chmod +x /out/demo-api")).To(BeNumerically(
-			"<", indexOf(content, "RUN test -f /out/demo-api"),
+			"<", indexOf(content, publishPathCheck("/out")),
 		))
 		Expect(indexOf(content, "WORKDIR /app")).To(BeNumerically(
-			"<", indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api"),
+			"<", indexOf(content, "COPY --from=builder /out/ /app/"),
 		))
-		Expect(indexOf(content, "COPY --from=builder /out/demo-api /app/demo-api")).To(BeNumerically(
+		Expect(indexOf(content, "COPY --from=builder /out/ /app/")).To(BeNumerically(
 			"<", indexOf(content, "RUN apk add --no-cache ca-certificates\n"),
 		))
 		Expect(indexOf(content, "RUN apk add --no-cache ca-certificates")).To(BeNumerically(
@@ -413,17 +420,17 @@ var _ = Describe("Dockerfile render", func() {
 				" && cmake --build build --target demo-api -j$(nproc)" +
 				" && cp build/demo-api /out/demo-api",
 		))
-		Expect(content).To(ContainSubstring(
-			"RUN test -f /out/demo-api || (echo \"build artifact /out/demo-api not found\" && exit 1)",
-		))
+		Expect(content).To(ContainSubstring("ENV BKMS_PUBLISH_PATH=/out\n"))
+		Expect(content).To(ContainSubstring(publishPathCheck("/out")))
+		Expect(content).NotTo(ContainSubstring("test -f"))
 		Expect(content).To(ContainSubstring("FROM alpine:3.20 AS runner"))
-		Expect(content).To(ContainSubstring("COPY --from=builder /out/demo-api /app/demo-api"))
-		Expect(content).To(ContainSubstring("ENTRYPOINT [\"/app/demo-api\"]"))
+		Expect(content).To(ContainSubstring("COPY --from=builder /out/ /app/\n"))
+		Expect(content).NotTo(ContainSubstring("ENTRYPOINT"))
 
 		Expect(indexOf(content, "RUN mkdir -p /out")).To(BeNumerically("<", indexOf(content, "COPY . .")))
 		Expect(indexOf(content, "COPY . .")).To(BeNumerically("<", indexOf(content, "RUN cmake -S . -B build")))
 		Expect(indexOf(content, "RUN cmake -S . -B build")).To(BeNumerically(
-			"<", indexOf(content, "RUN test -f /out/demo-api"),
+			"<", indexOf(content, publishPathCheck("/out")),
 		))
 	})
 
@@ -462,11 +469,101 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(content).To(ContainSubstring("RUN CGO_ENABLED=0 go build -trimpath -o /out/demo.api_1-2 ."))
-		Expect(content).To(ContainSubstring("RUN test -f /out/demo.api_1-2"))
-		Expect(content).To(ContainSubstring("COPY --from=builder /out/demo.api_1-2 /app/demo.api_1-2"))
-		Expect(content).To(ContainSubstring("ENTRYPOINT [\"/app/demo.api_1-2\"]"))
 		Expect(content).NotTo(ContainSubstring("/out/ demo.api_1-2 "))
 	})
+
+	It("renders custom publish path for Go builder and runner stages", func() {
+		input := defaultInput(LanguageGo)
+		input.PublishPath = "/dist"
+
+		content, err := Render(input)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(content).To(ContainSubstring("ENV BKMS_PUBLISH_PATH=/dist\n"))
+		Expect(content).To(ContainSubstring("RUN mkdir -p /dist\n"))
+		Expect(content).To(ContainSubstring("RUN CGO_ENABLED=0 go build -trimpath -o /dist/demo-api ."))
+		Expect(content).To(ContainSubstring(publishPathCheck("/dist")))
+		Expect(content).To(ContainSubstring("COPY --from=builder /dist/ /app/\n"))
+		Expect(content).NotTo(ContainSubstring("/out"))
+	})
+
+	It("keeps custom build commands that reference BKMS_PUBLISH_PATH", func() {
+		input := defaultInput(LanguageGo)
+		input.PublishPath = "/dist"
+		input.BuildCommands = encodeCommandsParam([]string{
+			"go build -o ${BKMS_PUBLISH_PATH}/svr-a ./cmd/a",
+			"go build -o ${BKMS_PUBLISH_PATH}/svr-b ./cmd/b",
+		})
+		input.StartCommand = "/app/svr-a -conf /app/trpc_go.yaml"
+
+		content, err := Render(input)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(content).To(ContainSubstring("RUN go build -o ${BKMS_PUBLISH_PATH}/svr-a ./cmd/a\n"))
+		Expect(content).To(ContainSubstring("RUN go build -o ${BKMS_PUBLISH_PATH}/svr-b ./cmd/b\n"))
+		Expect(content).NotTo(ContainSubstring("RUN CGO_ENABLED=0 go build"))
+		Expect(content).To(ContainSubstring(
+			"ENTRYPOINT [\"/bin/sh\", \"-ec\", \"/app/svr-a -conf /app/trpc_go.yaml\"]",
+		))
+
+		// BKMS_PUBLISH_PATH 只在 builder 阶段声明，runner 阶段不能出现，避免泄漏到运行镜像
+		runnerStage := content[indexOf(content, "FROM alpine:3.20 AS runner"):]
+		Expect(runnerStage).NotTo(ContainSubstring("ENV BKMS_PUBLISH_PATH"))
+	})
+
+	It("renders custom publish path for C++ default build command", func() {
+		input := defaultInput(LanguageCpp)
+		input.PublishPath = "/opt/release/"
+
+		content, err := Render(input)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(content).To(ContainSubstring("ENV BKMS_PUBLISH_PATH=/opt/release\n"))
+		Expect(content).To(ContainSubstring(" && cp build/demo-api /opt/release/demo-api"))
+		Expect(content).To(ContainSubstring(publishPathCheck("/opt/release")))
+		Expect(content).To(ContainSubstring("COPY --from=builder /opt/release/ /app/\n"))
+	})
+
+	DescribeTable("normalizes valid publish paths",
+		func(publishPath string, expected string) {
+			input := defaultInput(LanguageGo)
+			input.PublishPath = publishPath
+
+			content, err := Render(input)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(content).To(ContainSubstring("ENV BKMS_PUBLISH_PATH=" + expected + "\n"))
+			Expect(content).To(ContainSubstring("COPY --from=builder " + expected + "/ /app/\n"))
+		},
+		Entry("empty uses default", "", "/out"),
+		Entry("trailing slash", "/dist/", "/dist"),
+		Entry("duplicated slashes", "/out//bin", "/out/bin"),
+		Entry("dot segment", "/out/./bin", "/out/bin"),
+		Entry("dots inside segment", "/out/a..b", "/out/a..b"),
+		Entry("max length", "/"+strings.Repeat("a", maxPublishPathLen-1), "/"+strings.Repeat("a", maxPublishPathLen-1)),
+	)
+
+	DescribeTable("rejects invalid publish paths",
+		func(publishPath string, rule string) {
+			input := defaultInput(LanguageGo)
+			input.PublishPath = publishPath
+
+			content, err := Render(input)
+
+			Expect(content).To(Equal(""))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("%q", publishPath)))
+			Expect(err.Error()).To(ContainSubstring(rule))
+		},
+		Entry("parent segment", "/out/../etc", "must not contain '..' path segment"),
+		Entry("root", "/", "must not be the root directory"),
+		Entry("root after clean", "/./", "must not be the root directory"),
+		Entry("relative path", "out", "must be an absolute path"),
+		Entry("space", "/out/my dir", "only letters, digits, dot, underscore, hyphen and slash are allowed"),
+		Entry("shell metacharacter", "/out;rm -rf /", "only letters, digits, dot, underscore, hyphen and slash are allowed"),
+		Entry("leading whitespace", " /out", "only letters, digits, dot, underscore, hyphen and slash are allowed"),
+		Entry("too long", "/"+strings.Repeat("a", maxPublishPathLen), "length must not exceed 128"),
+	)
 
 	It("returns error when image name is unsafe", func() {
 		unsafeImageNames := []string{"demo/api", "demo:api", "demo api", ".", ".."}
@@ -521,6 +618,14 @@ func indexOf(content string, fragment string) int {
 	index := strings.Index(content, fragment)
 	ExpectWithOffset(1, index).NotTo(Equal(-1), "fragment %q should exist", fragment)
 	return index
+}
+
+// publishPathCheck 返回 builder 阶段末尾对产物目录做非空检查的完整 RUN 指令
+func publishPathCheck(publishPath string) string {
+	return fmt.Sprintf(
+		"RUN test -n \"$(ls -A %s 2>/dev/null)\" || (echo \"build output directory %s is missing or empty\" && exit 1)",
+		publishPath, publishPath,
+	)
 }
 
 func encodeCommandsParam(commands []string) string {

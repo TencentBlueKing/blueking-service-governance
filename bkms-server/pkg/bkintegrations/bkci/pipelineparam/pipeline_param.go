@@ -80,6 +80,9 @@ const (
 	// DockerfileExtraFiles 平台生成 Dockerfile 模式下的打包额外文件路径列表
 	// 当前使用 JSON 字符串数组传递，需要 Dockerfile Generator 按相同协议解析
 	DockerfileExtraFiles = "BKMS_DOCKERFILE_EXTRA_FILES"
+	// DockerfilePublishPath 平台生成 Dockerfile 模式下的构建产物目录，可为空；
+	// 为空时由 Dockerfile Generator 按语言默认值处理（go / cpp 为 /out）
+	DockerfilePublishPath = "BKMS_DOCKERFILE_PUBLISH_PATH"
 
 	// 基于 Git 源码仓库构建 HelmChart 流水线变量
 

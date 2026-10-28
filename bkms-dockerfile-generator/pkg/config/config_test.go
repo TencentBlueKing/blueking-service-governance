@@ -40,6 +40,17 @@ var _ = Describe("Config load", func() {
 		Expect(cfg.DockerBuildArgNames).To(Equal(`["GOPROXY","GOSUMDB"]`))
 		Expect(cfg.ImageName).To(Equal("demo.api_1-2"))
 		Expect(cfg.ExtraFiles).To(Equal(`["data/key.pem","certs"]`))
+		// 旧版流水线模板没有该变量，读取为空串，由渲染阶段回落到语言默认值
+		Expect(cfg.PublishPath).To(Equal(""))
+	})
+
+	It("loads publish path without trimming whitespace", func() {
+		environ := append(validGeneratedEnviron("demo-api"), EnvDockerfilePublishPath+"= /dist ")
+
+		cfg, err := LoadFromEnviron(environ)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.PublishPath).To(Equal(" /dist "))
 	})
 
 	It("returns error when generated config image name is unsafe", func() {

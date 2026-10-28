@@ -25,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 )
@@ -78,7 +79,7 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 
 			var rendered map[string]any
 			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
-			Expect(rendered["version"]).To(Equal("1.4.0"))
+			Expect(rendered["version"]).To(Equal("1.5.0"))
 
 			stages := rendered["stages"].([]any)
 			triggerContainer := stages[0].(map[string]any)["containers"].([]any)[0].(map[string]any)
@@ -95,7 +96,14 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			Expect(paramIDs).To(ContainElement("BKMS_DOCKERFILE_BUILDER_IMAGE"))
 			Expect(paramIDs).To(ContainElement("BKMS_DOCKERFILE_START_COMMAND"))
 			Expect(paramIDs).To(ContainElement("BKMS_DOCKERFILE_EXTRA_FILES"))
+			Expect(paramIDs).To(ContainElement("BKMS_DOCKERFILE_PUBLISH_PATH"))
 			Expect(paramIDs).NotTo(ContainElement("BKMS_DOCKERFILE_GENERATOR_BASE_URL"))
+
+			// 产物目录允许为空：未配置时由生成器套用语言默认值
+			publishPathParam := lo.FindOrElse(params, nil, func(param any) bool {
+				return param.(map[string]any)["id"] == "BKMS_DOCKERFILE_PUBLISH_PATH"
+			}).(map[string]any)
+			Expect(publishPathParam["valueNotEmpty"]).To(BeFalse())
 
 			buildContainer := stages[1].(map[string]any)["containers"].([]any)[0].(map[string]any)
 			elements := buildContainer["elements"].([]any)
@@ -132,6 +140,7 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			Expect(script).To(ContainSubstring("BKMS_DOCKERFILE_SOURCE_TYPE"))
 			Expect(script).To(ContainSubstring("BKMS_DOCKERFILE_LANGUAGE"))
 			Expect(script).To(ContainSubstring("BKMS_DOCKERFILE_EXTRA_FILES"))
+			Expect(script).To(ContainSubstring(`echo "BKMS_DOCKERFILE_PUBLISH_PATH" "$BKMS_DOCKERFILE_PUBLISH_PATH"`))
 			Expect(script).To(ContainSubstring("bkms_generated"))
 			Expect(script).NotTo(ContainSubstring("BKMS_DOCKERFILE_GENERATOR_BASE_URL"))
 			Expect(script).To(ContainSubstring(`if [ "$BKMS_DOCKERFILE_SOURCE_TYPE" != "bkms_generated" ]; then`))

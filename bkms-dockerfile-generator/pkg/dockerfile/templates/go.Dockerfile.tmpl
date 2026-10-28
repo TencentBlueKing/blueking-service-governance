@@ -7,7 +7,9 @@ ARG {{ . }}
 
 WORKDIR /workspace
 
-RUN mkdir -p /out
+# BKMS_PUBLISH_PATH is only visible in the builder stage, build commands should write artifacts into it.
+ENV BKMS_PUBLISH_PATH={{ .PublishPath }}
+RUN mkdir -p {{ .PublishPath }}
 
 # go mod download 需要 git；镜像里已有则跳过，否则按 apk/apt-get/dnf/yum 安装
 # dnf 必须在 yum 之前：TencentOS 4 minimal 容器只提供 dnf，不一定有 yum 兼容命令
@@ -40,14 +42,14 @@ RUN {{ . }}
 RUN {{ . }}
 {{ end -}}
 
-RUN test -f /out/{{ .AppName }} || (echo "build artifact /out/{{ .AppName }} not found" && exit 1)
+RUN test -n "$(ls -A {{ .PublishPath }} 2>/dev/null)" || (echo "build output directory {{ .PublishPath }} is missing or empty" && exit 1)
 
 # -------------- runner container --------------
 FROM {{ .RunnerImage }} AS runner
 
 WORKDIR /app
 
-COPY --from=builder /out/{{ .AppName }} /app/{{ .AppName }}
+COPY --from=builder {{ .PublishPath }}/ /app/
 
 {{ range .ExtraFileCopies -}}
 COPY {{ .Source }} {{ .Dest }}
@@ -59,6 +61,4 @@ RUN {{ . }}
 
 {{ if .StartCommand -}}
 ENTRYPOINT ["/bin/sh", "-ec", {{ quoteStartCommand .StartCommand }}]
-{{ else -}}
-ENTRYPOINT ["/app/{{ .AppName }}"]
 {{ end -}}

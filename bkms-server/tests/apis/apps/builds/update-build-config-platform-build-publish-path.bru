@@ -1,0 +1,52 @@
+meta {
+  name: update-build-config-platform-build-publish-path
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{serviceURL}}/apps/{{testBuildTrpcAppID}}/build-configs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "sourceType": "codeRepository",
+    "codeRepo": {
+      "type": "TGit",
+      "defaultBranch": "main",
+      "repoAlias": "test-repo",
+      "repoURL": "https://git.com/bkms-govern.git",
+      "sourceDir": ".",
+      "imageBuildMode": "platform",
+      "platformBuildConfig": {
+        "builderImage": "golang:1.24",
+        "runnerImage": "debian:12",
+        "publishPath": "/dist//bin/",
+        "commands": {
+          "build": [
+            "go build -o ${BKMS_PUBLISH_PATH}/svr-a ./cmd/a"
+          ],
+          "start": "/app/svr-a"
+        }
+      }
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should store normalized publish path", () => {
+    expect(res.body.data.codeRepo.platformBuildConfig.publishPath).to.equal('/dist/bin');
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

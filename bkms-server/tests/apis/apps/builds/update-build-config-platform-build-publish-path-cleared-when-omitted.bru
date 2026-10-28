@@ -1,0 +1,49 @@
+meta {
+  name: update-build-config-platform-build-publish-path-cleared-when-omitted
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{serviceURL}}/apps/{{testBuildTrpcAppID}}/build-configs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "sourceType": "codeRepository",
+    "codeRepo": {
+      "type": "TGit",
+      "defaultBranch": "main",
+      "repoAlias": "test-repo",
+      "repoURL": "https://git.com/bkms-govern.git",
+      "sourceDir": ".",
+      "imageBuildMode": "platform",
+      "platformBuildConfig": {
+        "builderImage": "golang:1.24",
+        "runnerImage": "debian:12",
+        "commands": {
+          "start": "./app"
+        }
+      }
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  // 构建配置是整体覆盖：上一个用例写入的 /dist/bin 会因请求不带 publishPath 而被清空
+  test("should clear publish path when omitted", () => {
+    expect(res.body.data.codeRepo.platformBuildConfig.publishPath).to.equal('');
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
