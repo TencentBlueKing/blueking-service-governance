@@ -20,8 +20,11 @@ package component_test
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
@@ -30,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Builtin ComponentDefs Tests", func() {
@@ -61,7 +65,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 				To(Succeed())
 
 			ctxOther := tenant.WithTenantID(context.Background(), "tenant-builtin-test")
-			compDef, err := component.GetDef(ctxOther, compDefStore, "MemLimits", "v1.0.0")
+			compDef, err := compDefStore.Get(ctxOther, component.ByNameVersion("MemLimits", "v1.0.0"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(compDef.IsBuiltin).To(BeTrue())
 		})
@@ -130,6 +134,80 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			}
 		})
 	})
+	Context("LoadBuiltinFromFolder in the platform tenant", func() {
+		var platform, name, path string
+
+		writeDef := func(description string) {
+			content := fmt.Sprintf("name: %s\nversion: %s\ndescription: %s\npatchers:\n- 'foo: bar'\n",
+				name, component.DefaultComponentDefVersion, description)
+			Expect(os.WriteFile(path, []byte(content), 0o600)).To(Succeed())
+		}
+		getDef := func() *component.ComponentDef {
+			compDef, err := compDefStore.Get(ctx, component.ByNameVersion(name, component.DefaultComponentDefVersion),
+				store.TenantOf(platform))
+			Expect(err).NotTo(HaveOccurred())
+			return compDef
+		}
+
+		BeforeEach(func() {
+			var err error
+			platform, err = tenant.PlatformTenantID()
+			Expect(err).NotTo(HaveOccurred())
+			name = "Builtin-" + stringx.Random(6)
+			path = filepath.Join(GinkgoT().TempDir(), name+".yaml")
+			DeferCleanup(func() {
+				Expect(
+					compDefStore.DeleteIfExists(
+						ctx,
+						component.ByNameVersion(name, component.DefaultComponentDefVersion),
+						store.TenantAll(),
+					),
+				).To(Succeed())
+			})
+		})
+
+		It("should update an existing builtin definition on reload", func() {
+			writeDef("v1")
+			Expect(component.LoadBuiltinFromFolder(ctx, compDefStore, path)).To(Succeed())
+			writeDef("v2")
+			Expect(component.LoadBuiltinFromFolder(ctx, compDefStore, path)).To(Succeed())
+
+			compDef := getDef()
+			Expect(compDef.Description).To(Equal("v2"))
+			Expect(compDef.IsBuiltin).To(BeTrue())
+		})
+
+		DescribeTable("should reject a custom definition of the same name in any tenant",
+			func(tenantOf func() string) {
+				custom := &component.ComponentDef{
+					Name:        name,
+					Version:     component.DefaultComponentDefVersion,
+					Description: "custom",
+					Patchers:    []string{"foo: custom\n"},
+					ScopeType:   component.ScopeTypeGlobal,
+				}
+				customTenant := tenantOf()
+				Expect(compDefStore.Create(ctx, custom, store.TenantOf(customTenant))).To(Succeed())
+
+				writeDef("builtin")
+				err := component.LoadBuiltinFromFolder(ctx, compDefStore, path)
+				Expect(err).To(MatchError(ContainSubstring(customTenant + "/" + custom.Key())))
+
+				defs, err := compDefStore.List(
+					ctx,
+					component.ByNameVersion(name, component.DefaultComponentDefVersion),
+					store.TenantAll(),
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(defs).To(HaveLen(1))
+				Expect(defs[0].Description).To(Equal("custom"))
+				Expect(defs[0].IsBuiltin).To(BeFalse())
+			},
+			Entry("the platform tenant", func() string { return platform }),
+			Entry("another tenant", func() string { return "tenant-" + stringx.Random(6) }),
+		)
+	})
+
 	Context("LoadBuiltinFromFolder invalid input", func() {
 		It("should fail with bad properties", func() {
 			err := component.LoadBuiltinFromFolder(

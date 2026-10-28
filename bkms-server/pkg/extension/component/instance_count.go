@@ -63,14 +63,15 @@ func ByDef(name, version string) store.Opt {
 	return store.Filter(bson.M{"defName": name, "version": version})
 }
 
-func instanceCountField(instanceType InstanceType) (string, error) {
+// instanceCountField 返回计数类型对应的 bson 字段名，以及 count 上对应字段的指针
+func instanceCountField(count *InstanceCount, instanceType InstanceType) (string, *int32, error) {
 	switch instanceType {
 	case FieldAppCompInstance:
-		return "appCompInstanceCount", nil
+		return "appCompInstanceCount", &count.AppCompInstanceCount, nil
 	case FieldWorkspaceCompInstance:
-		return "workspaceCompInstanceCount", nil
+		return "workspaceCompInstanceCount", &count.WorkspaceCompInstanceCount, nil
 	default:
-		return "", errors.Errorf("invalid instance type: %s", instanceType)
+		return "", nil, errors.Errorf("invalid instance type: %s", instanceType)
 	}
 }
 
@@ -82,7 +83,8 @@ func instanceCountField(instanceType InstanceType) (string, error) {
 func UpdateInstanceCount(
 	ctx context.Context, counts *InstanceCountStore, name string, instanceType InstanceType, delta int,
 ) error {
-	field, err := instanceCountField(instanceType)
+	count := &InstanceCount{DefName: name, Version: DefaultComponentDefVersion}
+	field, value, err := instanceCountField(count, instanceType)
 	if err != nil {
 		return err
 	}
@@ -104,12 +106,7 @@ func UpdateInstanceCount(
 	if delta < 0 {
 		return nil
 	}
-	count := &InstanceCount{DefName: name, Version: DefaultComponentDefVersion}
-	if instanceType == FieldAppCompInstance {
-		count.AppCompInstanceCount = int32(delta) //nolint:gosec // G115: counts fit in int32
-	} else {
-		count.WorkspaceCompInstanceCount = int32(delta) //nolint:gosec // G115: counts fit in int32
-	}
+	*value = int32(delta) //nolint:gosec // G115: counts fit in int32
 	err = counts.Create(ctx, count)
 	// 并发下记录可能已被其他请求创建，此时改为递增
 	if errors.Is(err, store.ErrDuplicate) {

@@ -1,0 +1,147 @@
+[
+  {
+    "aggregate": "component_def_instance_counts",
+    "pipeline": [
+      {
+        "$project": {
+          "_id": 0,
+          "tenantID": "$tenantID",
+          "name": "$defName",
+          "version": "$version",
+          "appCompInstanceCount": "$appCompInstanceCount",
+          "workspaceCompInstanceCount": "$workspaceCompInstanceCount"
+        }
+      },
+      {
+        "$merge": {
+          "into": "component_defs",
+          "on": [
+            "tenantID",
+            "name",
+            "version"
+          ],
+          "whenMatched": "merge",
+          "whenNotMatched": "discard"
+        }
+      }
+    ],
+    "cursor": {}
+  },
+  {
+    "drop": "component_def_instance_counts"
+  },
+  {
+    "createIndexes": "component_defs",
+    "indexes": [
+      {
+        "key": {
+          "name": 1,
+          "version": 1
+        },
+        "name": "name_1_version_1",
+        "unique": true
+      }
+    ]
+  },
+  {
+    "dropIndexes": "component_defs",
+    "index": "tenantID_1_name_1_version_1"
+  },
+  {"update": "component_defs", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "app_config_file_defs", "index": "tenantID_1"},
+  {"update": "app_config_file_defs", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "app_config_file_versions", "index": "tenantID_1"},
+  {"update": "app_config_file_versions", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "app_config_files", "index": "tenantID_1"},
+  {"update": "app_config_files", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "app_model_deploy_records", "index": "tenantID_1"},
+  {"update": "app_model_deploy_records", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "app_model_resource_snapshots", "index": "tenantID_1"},
+  {"update": "app_model_resource_snapshots", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "app_models", "index": "tenantID_1"},
+  {"update": "app_models", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "app_specs", "index": "tenantID_1"},
+  {"update": "app_specs", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "applications", "index": "tenantID_1"},
+  {"update": "applications", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bkci_pipelines", "index": "tenantID_1"},
+  {"update": "bkci_pipelines", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bkci_projects", "index": "tenantID_1"},
+  {"update": "bkci_projects", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bkci_repositories", "index": "tenantID_1"},
+  {"update": "bkci_repositories", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bkmonitor_alert_strategy", "index": "tenantID_1"},
+  {"update": "bkmonitor_alert_strategy", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bkmonitor_apm_inst_config", "index": "tenantID_1"},
+  {"update": "bkmonitor_apm_inst_config", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bkmonitor_app_dashboard", "index": "tenantID_1"},
+  {"update": "bkmonitor_app_dashboard", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bkrepo_projects", "index": "tenantID_1"},
+  {"update": "bkrepo_projects", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bkrepo_repositories", "index": "tenantID_1"},
+  {"update": "bkrepo_repositories", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bscpcfg_env_bindings", "index": "tenantID_1"},
+  {"update": "bscpcfg_env_bindings", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "bscpcfg_metadata", "index": "tenantID_1"},
+  {"update": "bscpcfg_metadata", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "build_auto_deploy_records", "index": "tenantID_1"},
+  {"update": "build_auto_deploy_records", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "build_configs", "index": "tenantID_1"},
+  {"update": "build_configs", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "build_records", "index": "tenantID_1"},
+  {"update": "build_records", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "custom_runtime_images", "index": "tenantID_1"},
+  {"update": "custom_runtime_images", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "depservice_bindings", "index": "tenantID_1"},
+  {"update": "depservice_bindings", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "depservice_instances", "index": "tenantID_1"},
+  {"update": "depservice_instances", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "devmode_publish_records", "index": "tenantID_1"},
+  {"update": "devmode_publish_records", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "environments", "index": "tenantID_1"},
+  {"update": "environments", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "gpa_configs", "index": "tenantID_1"},
+  {"update": "gpa_configs", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "helm_app_components", "index": "tenantID_1"},
+  {"update": "helm_app_components", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "helm_chart_build_records", "index": "tenantID_1"},
+  {"update": "helm_chart_build_records", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "helm_chart_semver_counters", "index": "tenantID_1"},
+  {"update": "helm_chart_semver_counters", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "helm_deploy_records", "index": "tenantID_1"},
+  {"update": "helm_deploy_records", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "helm_repo_credentials", "index": "tenantID_1"},
+  {"update": "helm_repo_credentials", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "hostport_configs", "index": "tenantID_1"},
+  {"update": "hostport_configs", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "iam_grade_managers", "index": "tenantID_1"},
+  {"update": "iam_grade_managers", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "iam_roles", "index": "tenantID_1"},
+  {"update": "iam_roles", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "image_promotions", "index": "tenantID_1"},
+  {"update": "image_promotions", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "image_registries", "index": "tenantID_1"},
+  {"update": "image_registries", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "networking_services", "index": "tenantID_1"},
+  {"update": "networking_services", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "operation_records", "index": "tenantID_1"},
+  {"update": "operation_records", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "plat_admin_port_forward_whitelist", "index": "tenantID_1"},
+  {"update": "plat_admin_port_forward_whitelist", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "polaris_configs", "index": "tenantID_1"},
+  {"update": "polaris_configs", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "release_strategies", "index": "tenantID_1"},
+  {"update": "release_strategies", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "scoped_env_vars", "index": "tenantID_1"},
+  {"update": "scoped_env_vars", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "topology_resource_snapshots", "index": "tenantID_1"},
+  {"update": "topology_resource_snapshots", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "workspace_app_spec_rules", "index": "tenantID_1"},
+  {"update": "workspace_app_spec_rules", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "workspace_components", "index": "tenantID_1"},
+  {"update": "workspace_components", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "workspace_temp_admin_records", "index": "tenantID_1"},
+  {"update": "workspace_temp_admin_records", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]},
+  {"dropIndexes": "workspaces", "index": "tenantID_1"},
+  {"update": "workspaces", "updates": [{"q": {"tenantID": "default"}, "u": {"$unset": {"tenantID": ""}}, "multi": true}]}
+]

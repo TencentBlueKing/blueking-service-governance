@@ -260,7 +260,7 @@ var _ = Describe("ComponentDefStore", func() {
 		})
 
 		It("should share builtin definitions of the platform tenant with other tenants", func() {
-			got, err := component.GetDef(ctxOther, compDefStore, builtin.Name, builtin.Version)
+			got, err := compDefStore.Get(ctxOther, component.ByNameVersion(builtin.Name, builtin.Version))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.IsBuiltin).To(BeTrue())
 			Expect(component.BuiltinDefExists(ctxOther, compDefStore, builtin.Name, builtin.Version)).To(BeTrue())
@@ -268,7 +268,7 @@ var _ = Describe("ComponentDefStore", func() {
 
 		It("should not share custom definitions of the platform tenant", func() {
 			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
-			_, err := component.GetDef(ctxOther, compDefStore, compDef.Name, compDef.Version)
+			_, err := compDefStore.Get(ctxOther, component.ByNameVersion(compDef.Name, compDef.Version))
 			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
 		})
 
@@ -279,48 +279,6 @@ var _ = Describe("ComponentDefStore", func() {
 			DeferCleanup(func() {
 				Expect(compDefStore.DeleteIfExists(ctxOther,
 					component.ByNameVersion(other.Name, other.Version))).To(Succeed())
-			})
-		})
-
-		Context("a tenant definition shadows a builtin one of the same name", func() {
-			BeforeEach(func() {
-				owned := &component.ComponentDef{
-					Name:        builtin.Name,
-					Version:     builtin.Version,
-					Description: "owned",
-					Patchers:    []string{"foo: owned\n"},
-					ScopeType:   component.ScopeTypeGlobal,
-				}
-				Expect(compDefStore.Create(ctxOther, owned)).To(Succeed())
-				DeferCleanup(func() {
-					Expect(compDefStore.DeleteIfExists(ctxOther,
-						component.ByNameVersion(owned.Name, owned.Version))).To(Succeed())
-				})
-			})
-
-			It("should resolve to the tenant definition", func() {
-				got, err := component.GetDef(ctxOther, compDefStore, builtin.Name, builtin.Version)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(got.IsBuiltin).To(BeFalse())
-				Expect(got.Description).To(Equal("owned"))
-			})
-
-			It("should hide the shadowed builtin definition from the list", func() {
-				exclude, err := component.ExcludeShadowedBuiltins(ctxOther, compDefStore)
-				Expect(err).NotTo(HaveOccurred())
-				defs, err := compDefStore.List(ctxOther, store.Where("name", builtin.Name), exclude)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(defs).To(HaveLen(1))
-				Expect(defs[0].IsBuiltin).To(BeFalse())
-			})
-
-			It("should keep the builtin definition visible to other tenants", func() {
-				exclude, err := component.ExcludeShadowedBuiltins(ctx, compDefStore)
-				Expect(err).NotTo(HaveOccurred())
-				defs, err := compDefStore.List(ctx, store.Where("name", builtin.Name), exclude)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(defs).To(HaveLen(1))
-				Expect(defs[0].IsBuiltin).To(BeTrue())
 			})
 		})
 	})

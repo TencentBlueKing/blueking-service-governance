@@ -20,15 +20,11 @@
 package handler
 
 import (
-	"context"
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"github.com/samber/lo"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -56,29 +52,6 @@ func (h *Handler) instanceCounts() *component.InstanceCountStore {
 	return store.Of(h.registry.DB, component.InstanceCountMeta)
 }
 
-// validateWorkspaceIDs 校验工作空间都属于当前租户，避免组件定义的生效、管理范围指向其他租户的工作空间
-func (h *Handler) validateWorkspaceIDs(ctx context.Context, field string, ids []string) error {
-	ids = lo.Uniq(ids)
-	if len(ids) == 0 {
-		return nil
-	}
-	n, err := store.Of(h.registry.DB, workspace.Meta).Count(ctx, store.Where("id", bson.M{"$in": ids}))
-	if err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "count workspaces")
-	}
-	if n != int64(len(ids)) {
-		return bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "%s contains workspaces that do not exist", field)
-	}
-	return nil
-}
-
-func (h *Handler) validateScope(ctx context.Context, compDef *component.ComponentDef) error {
-	if err := h.validateWorkspaceIDs(ctx, "scopeWorkspaceIDs", compDef.ScopeWorkspaceIDs); err != nil {
-		return err
-	}
-	return h.validateWorkspaceIDs(ctx, "managedByWorkspaceIDs", compDef.ManagedByWorkspaceIDs)
-}
-
 // ListComponentDefs 获取组件定义列表。
 //
 //	@ID			ListComponentDefs
@@ -101,13 +74,7 @@ func (h *Handler) ListComponentDefs(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	defs := h.componentDefs()
-	excludeShadowed, err := component.ExcludeShadowedBuiltins(ctx, defs)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list component defs"))
-		return
-	}
-	compDefs, err := defs.List(ctx, queryInput.ToListOpt(), excludeShadowed)
+	compDefs, err := h.componentDefs().List(ctx, queryInput.ToListOpt())
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list component defs"))
 		return
@@ -151,10 +118,6 @@ func (h *Handler) CreateComponentDef(c *gin.Context) {
 	compDef := input.ToModel(auth.MustGetUser(c.Request.Context()).ID)
 
 	ctx := c.Request.Context()
-	if err := h.validateScope(ctx, compDef); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
 	defs := h.componentDefs()
 	alreadyExists := bkerrs.Errorf(
 		bkerrs.ErrCodeAlreadyExists, "component def(%s:%s) already exists", compDef.Name, compDef.Version,
@@ -213,7 +176,9 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
-	existingCompDef, err := component.GetDef(ctx, defs, uriInput.CompDefName, component.DefaultComponentDefVersion)
+	existingCompDef, err := defs.Get(
+		ctx, component.ByNameVersion(uriInput.CompDefName, component.DefaultComponentDefVersion),
+	)
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			bkerrs.AbortWithErr(
@@ -231,15 +196,6 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 			"builtin component def(%s) cannot be updated",
 			uriInput.CompDefName,
 		))
-		return
-	}
-	// 只校验本次传入的范围，存量范围中已删除的工作空间不阻塞其他字段的修改
-	if err = h.validateWorkspaceIDs(ctx, "scopeWorkspaceIDs", input.ScopeWorkspaceIDs); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	if err = h.validateWorkspaceIDs(ctx, "managedByWorkspaceIDs", input.ManagedByWorkspaceIDs); err != nil {
-		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -291,7 +247,7 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
 	name, version := uriInput.CompDefName, component.DefaultComponentDefVersion
-	existingCompDef, err := component.GetDef(ctx, defs, name, version)
+	existingCompDef, err := defs.Get(ctx, component.ByNameVersion(name, version))
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			ginutils.OK(c, serializer.EmptyOutput{})

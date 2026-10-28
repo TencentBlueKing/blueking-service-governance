@@ -32,7 +32,6 @@ import (
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	genericstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
@@ -260,35 +259,6 @@ var _ = Describe("WorkspaceStore", func() {
 
 		It("should not fail when the workspace does not exist", func() {
 			Expect(Delete(ctx, store, "non-existent-workspace-id")).To(Succeed())
-		})
-
-		It("should not run pre-delete hooks for a workspace of another tenant", func() {
-			Expect(store.Create(ctx, &workspaceA)).To(Succeed())
-			hooked := false
-			Expect(RegisterPreDeleteHook("record", func(context.Context, string) error {
-				hooked = true
-				return nil
-			})).To(BeTrue())
-
-			otherTenantCtx := tenant.WithTenantID(context.Background(), "other-tenant")
-			Expect(Delete(otherTenantCtx, store, workspaceA.ID)).To(Succeed())
-			Expect(hooked).To(BeFalse())
-			Expect(store.Exists(ctx, ByWorkspaceID(workspaceA.ID))).To(BeTrue())
-		})
-
-		It("should delete a workspace of another tenant with an explicit tenant scope", func() {
-			Expect(store.Create(ctx, &workspaceA)).To(Succeed())
-			hooked := false
-			Expect(RegisterPreDeleteHook("record", func(context.Context, string) error {
-				hooked = true
-				return nil
-			})).To(BeTrue())
-
-			otherTenantCtx := tenant.WithTenantID(context.Background(), "other-tenant")
-			Expect(Delete(otherTenantCtx, store, workspaceA.ID, genericstore.TenantOf(tenant.DefaultTenantID))).
-				To(Succeed())
-			Expect(hooked).To(BeTrue())
-			Expect(store.Exists(ctx, ByWorkspaceID(workspaceA.ID))).To(BeFalse())
 		})
 	})
 })

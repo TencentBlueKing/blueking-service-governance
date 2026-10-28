@@ -20,18 +20,19 @@
 
 | 类型 | 声明 | 说明 |
 |---|---|---|
-| 租户集合 | 模型有 `TenantID string \`bson:"tenantID"\``，`TenantScoped: true` | 绝大多数业务集合 |
-| 共享读取的租户集合 | 租户集合，另声明 `Meta.SharedFromPlatform` | 平台租户中满足条件的文档对所有租户可读，如 `component_defs` 的内置定义，见 `component_def_tenancy.md` |
-| 全局集合 | 无该字段，`TenantScoped` 为零值 false | 全系统一份，如 `cluster_addon_defs`、`plat_admin_role_bindings`、`runtime_images` |
+| 租户集合 | 模型有 `TenantID string \`bson:"tenantID"\``，`TenantScoped: true` | `workspaces` 与其余 47 个业务集合，清单见迁移 `000024_tenant_id.up.json` |
+| 共享读取的租户集合 | 租户集合，另声明 `Meta.SharedFromPlatform` | 平台租户中满足条件的文档对所有租户可读，目前只有 `component_defs`，见第 6 节 |
+| 全局集合 | 无该字段，`TenantScoped` 为零值 false | 全系统一份，见下表 |
 | 计数器 | `store.Counter`，文档为 `{_id: key, seq}` | 不经过 Meta，key 中带有 `appID` 等业务 ID，由业务对象区分 |
-
-各集合的归属见 `tenant_scoped_collections.md`。
 
 全局集合只存放平台数据，写入只来自平台路径（启动加载、命令行、平台管理接口），任何租户的请求都能读到全量数据。
 
-- `image_snapshots` / `repo_snapshot_statuses`：远端镜像仓库的缓存，平台镜像与租户私有仓库的快照都在其中。
-  以 `repoKey = SHA256(仓库名 + 账号 + 密码)` 为 key，只有持有凭据才能算出 key，读不到其他租户的快照。
-  代价是删除租户时无法按租户清理。
+| 集合 | 原因 |
+|---|---|
+| `runtime_images`、`cluster_addon_defs`、`depservice_services`、`bkci_pipeline_templates` | 平台目录，启动或命令行写入，租户只读 |
+| `image_snapshots`、`image_tag_suppressions`、`repo_snapshot_statuses` | 远端镜像仓库的缓存，以 `repoKey = SHA256(仓库名 + 账号 + 密码)` 为 key，没有凭据算不出 key，读不到其他租户的快照 |
+| `plat_admin_role_bindings` | 平台角色，按用户名全局唯一 |
+| `store.NewCounter` 计数器（镜像/Chart 构建号、特性环境序号） | key 为应用 ID，本身不会跨租户冲突 |
 
 ### 2.2 每个租户集合都冗余 `tenantID`
 
@@ -56,6 +57,7 @@ TenantID string `json:"-" bson:"tenantID"`
 - `Meta.TenantScoped bool`：零值 false 表示全局集合，因此可以逐个集合迁入，未声明的模型行为不变。
 - `schema` 识别 `tenantID` 字段并要求类型为 `string`。
 - `store.New` 交叉校验：声明隔离但没有字段、或有字段但没声明，都直接报错（`Of` 会 panic，模型单测即可发现）。
+  `SharedFromPlatform` 只能用在租户集合上。
 
 ### 3.2 租户范围
 
@@ -106,6 +108,9 @@ err := apps.Create(ctx, &app, store.TenantOf("tenant-a"))
 | `Upsert` | 过滤条件中的 `tenantID` 等值条件在插入时由 MongoDB 写入，`$set` 不含 `tenantID` |
 | `Delete*` / `GetAndDelete` | 仅靠过滤条件注入 |
 
+Encode 钩子可能整体重建对象（如 appspec 的 `normalizeSpec` 经 `Clone` 重建），重建时漏复制租户会写出空 `tenantID`。
+store 在 Encode 钩子执行后，按已填好租户的原对象把租户写回副本。
+
 ### 3.4 聚合
 
 `Aggregate` / `ListLatestBy` 把租户条件作为管道首个 `$match`。
@@ -125,6 +130,30 @@ err := apps.Create(ctx, &app, store.TenantOf("tenant-a"))
 - `$facet`：递归处理每个子管道。
 - `$merge` / `$out`：继续拒绝，回填放在迁移里做。
 
+### 3.5 共享读取
+
+`Meta.SharedFromPlatform` 声明平台租户中哪些文档共享给所有租户只读，例如 `component_defs` 的 `{isBuiltin: true}`：
+
+| 操作 | 默认过滤 |
+|---|---|
+| 读（Get / List / ListPage / Exists / Count / ListLatestBy / Aggregate） | `tenantID = ctx 租户` 或 `tenantID = 平台租户 且满足共享条件` |
+| 写（Update / Modify / Replace / Delete） | `tenantID = ctx 租户`，租户改不到平台数据 |
+| 插入（Create / Upsert） | ctx 租户；平台数据由平台路径用 `TenantOf` 写入 |
+
+- 平台租户由 `tenant.PlatformTenantID()` 给出：多租户模式为 `system`，单租户模式为 `default`；配置未加载时返回错误。
+  多租户环境为全新部署，不存在从单租户原地切换，平台租户在一个环境内是固定的。
+- 共享只出现在读路径（`readQuery`）上，写路径仍走 `parseOpts` / `writeQuery`。
+- `TenantAll()` / `TenantOf()` 语义不变，不叠加共享条件；ctx 租户就是平台租户时只按本租户过滤。
+- 共享条件要能区分平台数据与平台租户用户自己的数据：多租户下 `system` 也是登录租户。
+
+### 3.6 绕过 store 的操作
+
+`Collection()` 返回底层集合，直接操作不会注入租户条件，调用方须自己带上 `tenantID`。
+目前只有 `semver.Next` 用 `FindOneAndUpdate` + upsert 直接写 `helm_chart_semver_counters`：
+从 ctx 取租户加进过滤条件，upsert 插入时 MongoDB 会把等值条件写进新文档；ctx 无租户返回 `ErrTenantIDRequired`。
+
+其余直接操作原始集合的只有 `db/migrations` 和部分 `cmd/migration`（清理、扫描），按设计不受租户约束。
+
 ## 4. 租户来源
 
 数据层只认 ctx（或 `TenantOf`），每个入口都要保证 ctx 里有租户：
@@ -138,9 +167,12 @@ err := apps.Create(ctx, &app, store.TenantOf("tenant-a"))
 | 定时 / worker 自发逻辑 | 显式 `TenantAll()` 遍历，或按租户 `TenantOf` 循环 |
 | 单测 | `testutil.WithTenantOrDefault(ctx)` 补默认租户，见 4.3 |
 
+命令行写入租户数据时按资源所属租户写入。例如端口转发白名单：先跨租户查出环境（同时校验存在、非生产），
+按环境所属租户分组，用 `TenantOf` 写入；`List` / `Remove` 用 `TenantAll()`；`CheckPermission` 按请求租户过滤。
+
 ### 4.1 存量异步任务
 
-- 带 envelope 但没有 `_tenantID` 的任务（升级前入队）消费时回落到 `default`。前提是回填迁移已先执行。
+- 带 envelope 但没有 `_tenantID` 的任务（升级前入队）消费时回落到 `default`，并打 warn 日志。前提是回填迁移已先执行。
 - 没有 envelope 的更早期任务不会恢复租户，访问租户集合会失败。
 - 滚动升级期间新旧版本混跑无影响：旧 worker 忽略 `_tenantID`；新 worker 对旧任务走回落。
 - 轮询类任务在 handler 内重新投递时使用恢复后的 ctx，会自动带上 `_tenantID`。
@@ -168,15 +200,21 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 ### 4.3 单测
 
 租户集合的用例在 `BeforeEach` 里用 `testutil.WithTenantOrDefault(context.Background())` 构造 ctx，
-后续所有读写（包括 `AfterEach` 的清理）都要用这个 ctx。
+后续所有读写（包括 `AfterEach` 的清理）都要用这个 ctx；直接插入的原始文档需带 `tenantID`。
 `dbfactory` 只会给自己内部的 `Create` 补租户，不会改写调用方传入的 ctx。
 验证租户过滤本身的用例应直接用 `tenant.WithTenantID` 构造两个不同租户的 ctx。
+
+跨租户行为的用例：`pkg/store/tenant_test.go`（`ScopeToTenant`、Encode 回写、共享读取）、
+`platmgt/workspace`（跨租户统计）、`platmgt/workspace/admin`（其它租户的空间授权与回收）、
+`platmgt/workspace/imageregistry`（按空间所属租户读写）、`platmgt/portforward`（按环境租户写入）、
+`build/chart/semver`（按租户写计数器）、`extension/component`（内置定义共享、加载时跨租户检查同名）。
 
 ## 5. 跨租户访问
 
 ### 5.1 使用方
 
 - 平台管理（`pkg/platmgt/**`）：已有调用点均显式传 `TenantAll()`。
+  平台工作空间列表的应用数、环境数经 `app.CountByWorkspaceIDs` / `env.CountByWorkspaceIDs` 的 `opts` 透传 `TenantAll()`。
 - 运维命令（`cmd/migration/*`）：`refresh_workspace_bkmonitor_perms`、`backfill_default_alert_strategies`、
   `bind_bscp_project`、`list_bscp_projects`、`app_bscpcfg_mgr`、`repair_trpc_taf_framework_defs`；
   以及 `cmd/portforward_whitelist.go`（经 `platmgt/portforward` 服务）。
@@ -184,12 +222,11 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 跨租户查出资源后，要调用不接受租户选项、只从 ctx 取租户的函数（如 perm 管理器），
 用 `store.ScopeToTenant(ctx, doc.TenantID)` 把 ctx 租户切到资源所属租户，同时解除 5.2 的显式范围标记。
 `tenantID` 只能取自已查出的文档，不能取自请求参数。
+使用点：`platmgt/workspace/admin`（GetRoleStatus / GrantAdmin / RevokeAdmin / 过期回收）、
+`platmgt/workspace/imageregistry`、`cmd/migration` 的 `app_bscpcfg_mgr`、`backfill_default_alert_strategies`、
+`repair_trpc_taf_framework_defs`、`refresh_workspace_bkmonitor_perms`，以及 appspec 迁移器。
 
 谁有权跨租户由路由上的 `RequirePlatformRole` 决定；哪次查询跨租户由调用点的 `TenantAll()` 决定，store 不做权限判断。
-
-`RequirePlatformRole` 目前只按用户名查 `plat_admin_role_bindings`，不校验操作者所属租户。
-多租户模式下，普通租户的用户只要被加进绑定表，就能跨租户读取数据；中心方案要求平台管理员只能是 `system` 租户的人员。
-后续在中间件中补充：多租户模式下要求 ctx 中的租户为 `system`，单租户模式行为不变。
 
 ### 5.2 防止漏传 `TenantAll()`
 
@@ -203,20 +240,62 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 - 全局集合不受影响；`cmd/migration` 的 ctx 本来没有租户，漏传会报 `ErrTenantIDRequired`，无需标记。
 - 平台管理 service 的用例在带标记的 ctx 下调用，漏传会直接失败。
 
-## 6. 索引与迁移
+## 6. 组件定义
 
-### 6.1 索引
+`component_defs` 原为全局集合，混存平台内置定义与租户自建定义：租户自建定义对所有租户可见，`name + version` 全局唯一，
+内置定义上的实例计数是全部租户的累加值。改为租户集合，内置定义通过 3.5 的共享读取对所有租户可读，不拆表。
 
-- 查询索引：现有索引多以 `workspaceID` 开头，选择性已足够，不批量加 `tenantID` 前缀，出现慢查询再调整。
-- 唯一索引：`workspaces.id` 是用户自选的 slug，第一期保持全局唯一。
-  改为租户内唯一涉及 IAM 资源 ID 和外部系统命名，作为产品决策单独评估。
-  其余集合的唯一键多以 `workspaceID` / `appID` 开头，无需调整。
+### 6.1 内置定义
 
-### 6.2 迁移
+- `LoadBuiltinFromFolder` 写入平台租户（`store.TenantOf(平台租户)`），并强制设置 `IsBuiltin = true`，不依赖 YAML 中的字段。
+- `Meta.SharedFromPlatform: {isBuiltin: true}`：共享条件带 `isBuiltin`，`system` 租户用户自建的定义不会因此对所有租户可见。
+- 加载按 `平台租户 + name + version + isBuiltin = true` upsert，只覆盖已有的内置定义。
+- 修改、删除接口拒绝内置定义。
 
-- 每个集合（或每批集合）一个迁移，回填 `tenantID = "default"`，条件 `{"tenantID": {"$exists": false}}` 保证幂等，并建 `tenantID_1` 索引。
-- `down` 先删索引，再只 `$unset` 值为 `default` 的字段。
+### 6.2 名称与可见范围
+
+- 唯一索引由 `name + version` 改为 `tenantID + name + version`，租户之间名称互不影响；内置定义保留原名，不加前缀。
+- 自建定义不能与内置定义同名，保证每个租户按名称最多查到一条定义，按名称解析仍直接 `Get`：
+  - 租户创建定义时由 `BuiltinDefExists` 拒绝；
+  - 加载内置定义时跨租户检查已有的同名自建定义（含平台租户自己的），有冲突则整体失败并列出冲突的租户与定义。
+    组件实例按名称引用定义，自建定义没有改名入口，平台新增内置定义时应避开已被占用的名称。
+- 租户自建定义只在本租户内可见，`scopeType=global` 的含义变为本租户内全局。
+  `scopeWorkspaceIDs`、`managedByWorkspaceIDs` 不做租户校验：定义本身按租户过滤，填入其他租户的空间也匹配不到。
+
+### 6.3 实例计数
+
+计数拆到 `component_def_instance_counts`（租户集合），唯一键 `tenantID + defName + version`，
+字段 `appCompInstanceCount`、`workspaceCompInstanceCount`。
+
+- `workspace/comp_store.go`、`appmodel/store.go` 的 `adjustInstanceCounts` 调用 `component.UpdateInstanceCount`：
+  先 `Modify` `$inc`；记录不存在时 `Create`，并发下撞唯一键则再 `Modify` 一次；记录不存在时的减少直接忽略。
+  项目没有使用 Mongo 事务，撞唯一键不会中止外层操作，因此不需要给 store 增加 upsert `$inc`。
+- 列表接口按本页定义批量查询计数后拼装，返回结构不变。
+- 删除保护只看本租户计数；删除定义时一并删除其计数记录。
+- 计数与实例写入不在同一事务，会有偏差（现状如此）。
+
+## 7. 索引与迁移
+
+### 7.1 索引
+
+- 只新增 `tenantID_1`：用于只按租户的查询、平台管理按租户筛选、租户清理与回填核对。
+  区分度低，日常查询仍走原有索引，写入多维护一个索引，代价可忽略。
+- 不加 `{tenantID, ...}` 联合查询索引：查询索引多以 `workspaceID` / `appID` 开头，二者全局唯一，
+  同一 workspace / app 的文档 `tenantID` 必然相同，加前缀不会少扫文档，只会增大索引。
+- 唯一索引不改为租户内唯一（`component_defs` 除外，见 6.2）：
+  - 以 `workspaceID` / `appID` 开头的已经等价于租户内唯一；
+  - 对应外部或物理资源的（`environments` 的集群 + 命名空间、`bkci_projects.code`、`bkmonitor_apm_inst_config.apmID`）
+    本应全局唯一，改成租户内唯一反而允许两个租户占用同一资源；
+  - 业务主键 `workspaces.id` 是用户自选的 slug，改为租户内唯一涉及 IAM 资源 ID 和外部系统命名，作为产品决策单独评估。
+- `plat_admin_port_forward_whitelist` 以环境 ID 作 `_id`，按环境查询走 `_id` 索引，无需额外索引。
+
+### 7.2 迁移
+
+迁移 `000024_tenant_id`，细节与发布顺序见对应的 `.md`：
+
+- 回填 `tenantID = "default"`，条件 `{"tenantID": {"$exists": false}}` 保证幂等，并建 `tenantID_1` 索引；
+  `down` 先删索引，再只 `$unset` 值为 `default` 的字段。
+- `component_defs` 另外替换唯一索引，并把定义上的计数搬到计数表。
 - webserver 启动不自动跑迁移。**回填迁移必须先于新代码上线**，否则存量文档按租户过滤会全部查不到。
 - **全部实例升级完成后再执行一次回填**：迁移执行完到旧 Pod 全部退出之间，旧版本写入的文档不带 `tenantID`，
-  对新代码不可见。回填是幂等的，重跑只会补上这部分文档。上线 checklist 中确认
-  `countDocuments({tenantID: {$exists: false}}) == 0`。
+  对新代码不可见。回填是幂等的，重跑只会补上这部分文档。
