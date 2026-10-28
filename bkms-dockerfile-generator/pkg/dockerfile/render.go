@@ -122,6 +122,11 @@ type templateData struct {
 	AppName             string
 	PublishPath         string
 	DependencyFiles     []string
+	// UseDefaultAppEntrypoint 为 true 时，未配置启动命令也写 ENTRYPOINT ["/app/<AppName>"]
+	//
+	// 只有语言默认构建命令能保证产物文件名是 AppName，整目录拷贝后路径是 /app/<AppName>
+	// 自定义构建命令可能产出别的文件名，这时不能写默认入口，否则容器会去执行一个不存在的文件
+	UseDefaultAppEntrypoint bool
 }
 
 // Render 使用与语言类型匹配的模板渲染 BKMS 默认应用 Dockerfile
@@ -190,9 +195,13 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 	if err != nil {
 		return nil, errors.Wrap(err, "parse build commands")
 	}
-	if len(buildCommands) == 0 {
+
+	// 空命令才会换成默认构建命令；先记下这个事实，后面才能判断 /app/<appName> 是否一定存在
+	useDefaultBuildCommand := len(buildCommands) == 0
+	if useDefaultBuildCommand {
 		buildCommands = []string{spec.defaultBuildCommand(appName, publishPath)}
 	}
+
 	preBuildCommands, err := parseCommands("pre-build commands", input.PreBuildCommands)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse pre-build commands")
@@ -210,16 +219,17 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 		return nil, errors.Wrap(err, "parse extra files")
 	}
 	data := &templateData{
-		BuilderImage:        input.BuilderImage,
-		RunnerImage:         input.RunnerImage,
-		DockerBuildArgNames: dockerBuildArgs,
-		PreBuildCommands:    preBuildCommands,
-		BuildCommands:       buildCommands,
-		RuntimeEnvCommands:  runtimeEnvCommands,
-		StartCommand:        strings.TrimSpace(input.StartCommand),
-		ExtraFileCopies:     extraFileCopies,
-		AppName:             appName,
-		PublishPath:         publishPath,
+		BuilderImage:            input.BuilderImage,
+		RunnerImage:             input.RunnerImage,
+		DockerBuildArgNames:     dockerBuildArgs,
+		PreBuildCommands:        preBuildCommands,
+		BuildCommands:           buildCommands,
+		RuntimeEnvCommands:      runtimeEnvCommands,
+		StartCommand:            strings.TrimSpace(input.StartCommand),
+		ExtraFileCopies:         extraFileCopies,
+		AppName:                 appName,
+		PublishPath:             publishPath,
+		UseDefaultAppEntrypoint: useDefaultBuildCommand,
 	}
 	if spec.prepareTemplateData != nil {
 		if err = spec.prepareTemplateData(input, data); err != nil {
@@ -232,8 +242,8 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 // defaultGoBuildCommand 构造未指定 BuildCommands 时使用的默认 go build 命令
 //
 // 这里的 appName 来自 ImageName 的安全转换结果：BKMS 平台约定应用名与镜像名、构建产物文件名保持一致，
-// 因此可以直接用它作为 `-o <publishPath>/<appName>` 的产物路径；未配置产物目录时即 `/out/<appName>`，
-// 与历史渲染结果一致，存量应用镜像中的 `/app/<appName>` 不受影响
+// 因此可以直接用它作为 `-o <publishPath>/<appName>` 的产物路径；未配置产物目录时即 `/out/<appName>`。
+// 整目录拷贝后二进制在 `/app/<appName>`，未配置启动命令时模板会写回 ENTRYPOINT ["/app/<appName>"]
 func defaultGoBuildCommand(appName string, publishPath string) string {
 	return fmt.Sprintf(defaultGoBuildCommandTemplate, publishPath, appName)
 }
@@ -241,7 +251,7 @@ func defaultGoBuildCommand(appName string, publishPath string) string {
 // defaultCppBuildCommand 构造未指定 BuildCommands 时使用的默认 C++ 构建命令
 //
 // 默认约定 CMake target、构建产物文件名与应用名保持一致，构建完成后统一复制到 `<publishPath>/<appName>`，
-// 这样后续产物校验与 runner 阶段可以复用跨语言的产物目录规则
+// 整目录拷贝后二进制在 `/app/<appName>`，未配置启动命令时与 Go 共用默认 ENTRYPOINT
 func defaultCppBuildCommand(appName string, publishPath string) string {
 	return fmt.Sprintf(defaultCppBuildCommandTemplate, appName, appName, publishPath, appName)
 }

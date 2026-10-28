@@ -26,7 +26,7 @@ body:json {
         "publishPath": "/dist//bin/",
         "commands": {
           "build": [
-            "go build -o ${BKMS_PUBLISH_PATH}/svr-a ./cmd/a"
+            "go build -o ${BKMS_ARTIFACT_DIR}/svr-a ./cmd/a"
           ],
           "start": "/app/svr-a"
         }

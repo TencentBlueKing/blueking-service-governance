@@ -7,8 +7,8 @@ ARG {{ . }}
 
 WORKDIR /workspace
 
-# BKMS_PUBLISH_PATH is only visible in the builder stage, build commands should write artifacts into it.
-ENV BKMS_PUBLISH_PATH={{ .PublishPath }}
+# BKMS_ARTIFACT_DIR is only visible in the builder stage, build commands should write artifacts into it.
+ENV BKMS_ARTIFACT_DIR={{ .PublishPath }}
 RUN mkdir -p {{ .PublishPath }}
 
 # go mod download 需要 git；镜像里已有则跳过，否则按 apk/apt-get/dnf/yum 安装
@@ -61,4 +61,6 @@ RUN {{ . }}
 
 {{ if .StartCommand -}}
 ENTRYPOINT ["/bin/sh", "-ec", {{ quoteStartCommand .StartCommand }}]
+{{ else if .UseDefaultAppEntrypoint -}}
+ENTRYPOINT ["/app/{{ .AppName }}"]
 {{ end -}}

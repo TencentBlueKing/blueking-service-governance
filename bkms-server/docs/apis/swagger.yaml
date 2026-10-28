@@ -975,7 +975,7 @@ definitions:
         type: array
       publishPath:
         description: |-
-          构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_PUBLISH_PATH} 引用，
+          构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_ARTIFACT_DIR} 引用，
           目录内全部内容会拷贝到运行镜像的 /app。必须是绝对路径、不能是根目录、不能包含 .. 路径段，
           只允许字母、数字和 . _ - /，最长 128；保存时会去掉末尾 / 等冗余写法
         type: string

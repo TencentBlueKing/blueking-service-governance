@@ -23,7 +23,7 @@ Dockerfile，并将生成结果写入 `BKMS_DOCKERFILE_PATH` 指定的位置。
 | `BKMS_DOCKERFILE_PRE_BUILD_COMMANDS`   | 编译前置命令，多条命令使用换行分隔                                  |
 | `BKMS_DOCKERFILE_BUILD_COMMANDS`       | 编译命令，多条命令使用换行分隔；为空时使用语言默认构建命令                      |
 | `BKMS_DOCKERFILE_RUNTIME_ENV_COMMANDS` | 运行环境命令，多条命令使用换行分隔                                  |
-| `BKMS_DOCKERFILE_START_COMMAND`        | 容器启动命令，可为空；为空时不写 `ENTRYPOINT`                       |
+| `BKMS_DOCKERFILE_START_COMMAND`        | 容器启动命令，可为空；默认构建时入口为 `/app/<镜像名>`                  |
 | `BKMS_DOCKERFILE_PUBLISH_PATH`         | 构建产物目录，可为空；为空或未定义时 `go`、`cpp` 使用 `/out`              |
 | `BKMS_IMAGE_NAME`                      | 镜像名称，同时用于默认构建产物名                                   |
 
@@ -32,14 +32,16 @@ Dockerfile，并将生成结果写入 `BKMS_DOCKERFILE_PATH` 指定的位置。
 
 ### 产物目录与入口
 
-- builder 阶段声明 `ENV BKMS_PUBLISH_PATH=<产物目录>`，编译前置命令和构建命令可以用 `${BKMS_PUBLISH_PATH}` 引用；runner 阶段不提供该变量。
+- builder 阶段声明 `ENV BKMS_ARTIFACT_DIR=<产物目录>`，编译前置命令和构建命令可以用 `${BKMS_ARTIFACT_DIR}` 引用；runner 阶段不提供该变量。
 - 未填构建命令时，默认构建命令把产物输出到 `<产物目录>/<镜像名>`，未配置产物目录时即 `/out/<镜像名>`。
 - 构建命令执行后，产物目录必须存在且至少有一个条目（隐藏文件、空子目录都算），否则构建失败并输出
   `build output directory <产物目录> is missing or empty`。
 - runner 阶段把产物目录内的全部内容拷到 `/app`，保持相对目录结构，例如 `/dist/conf/a.yaml` 落到 `/app/conf/a.yaml`。
 - 产物目录非空时依次校验：长度不超过 128；只包含字母、数字、`.`、`_`、`-`、`/`；以 `/` 开头；不包含 `..` 路径段；
   规范化（去掉末尾 `/`、合并连续 `/`、去掉 `.` 段）后不是根目录 `/`。任一不满足即退出并报错，不生成 Dockerfile。
-- 填写启动命令时入口为 `["/bin/sh", "-ec", <启动命令>]`；未填写时不写 `ENTRYPOINT`，沿用运行镜像自带入口或部署时的容器启动命令。
+- 填写启动命令时入口为 `["/bin/sh", "-ec", <启动命令>]`。
+- 未填写启动命令、且使用默认构建命令时，产物文件名固定为镜像名，入口为 `["/app/<镜像名>"]`。自定义了产物目录也一样，因为整个目录会拷进 `/app`。
+- 未填写启动命令、且自定义了构建命令时，不写 `ENTRYPOINT`。自定义命令不一定会产出 `/app/<镜像名>`，这时沿用运行镜像自带入口或部署时的容器启动命令。
 
 ### 主要输出
 

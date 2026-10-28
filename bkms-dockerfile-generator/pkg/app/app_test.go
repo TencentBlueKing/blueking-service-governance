@@ -63,8 +63,8 @@ var _ = Describe("App run", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(content)).To(ContainSubstring("FROM golang:1.25 AS builder"))
 		// 旧版流水线模板不传 BKMS_DOCKERFILE_PUBLISH_PATH，产物目录回落到 /out
-		Expect(string(content)).To(ContainSubstring("ENV BKMS_PUBLISH_PATH=/out\n"))
-		Expect(string(content)).NotTo(ContainSubstring("ENTRYPOINT"))
+		Expect(string(content)).To(ContainSubstring("ENV BKMS_ARTIFACT_DIR=/out\n"))
+		Expect(string(content)).To(ContainSubstring("ENTRYPOINT [\"/app/demo-api\"]\n"))
 		Expect(out.String()).To(ContainSubstring("generated Dockerfile: " + dockerfilePath))
 
 		dirInfo, err := os.Stat(filepath.Dir(dockerfilePath))
@@ -94,7 +94,7 @@ var _ = Describe("App run", func() {
 
 		content, err := os.ReadFile(dockerfilePath)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(string(content)).To(ContainSubstring("ENV BKMS_PUBLISH_PATH=/dist\n"))
+		Expect(string(content)).To(ContainSubstring("ENV BKMS_ARTIFACT_DIR=/dist\n"))
 		Expect(string(content)).To(ContainSubstring("COPY --from=builder /dist/ /app/"))
 	})
 
