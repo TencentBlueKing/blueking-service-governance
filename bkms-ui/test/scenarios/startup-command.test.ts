@@ -246,7 +246,8 @@ describe('部署启动配置', () => {
       }),
     );
     await waitFor(() => expect(wrapper.find('textarea').exists()).toBe(false));
-    expect(wrapper.get('pre').element.textContent).toBe(SCRIPT);
+    expect(ui.getByText('shell', { exact: true })).toBeVisible();
+    expect(ui.getByText(SCRIPT, { normalizer: text => text })).toBeVisible();
     expect(mocks.getApp).toHaveBeenCalledWith({ appID: 'app-1' });
   });
 
@@ -267,7 +268,8 @@ describe('部署启动配置', () => {
       }),
     );
     await waitFor(() => expect(wrapper.find('textarea').exists()).toBe(false));
-    expect(wrapper.find('pre').exists()).toBe(false);
+    expect(ui.getByText('exec', { exact: true })).toBeVisible();
+    expect(ui.queryByText(SCRIPT, { normalizer: text => text })).not.toBeInTheDocument();
   });
 
   it('取消编辑后恢复已保存模式和内容', async () => {
@@ -276,7 +278,8 @@ describe('部署启动配置', () => {
     await wrapper.get('textarea').setValue('changed');
     await userEvent.click(ui.getByText('exec', { exact: true }));
     await userEvent.click(ui.getByRole('button', { name: '取消' }));
-    expect(wrapper.get('pre').element.textContent).toBe(SCRIPT);
+    expect(ui.getByText('shell', { exact: true })).toBeVisible();
+    expect(ui.getByText(SCRIPT, { normalizer: text => text })).toBeVisible();
     expect(store.appDetail?.appModelSpec?.shCommand).toBe(SCRIPT);
     await userEvent.click(ui.getByRole('button', { name: '编辑' }));
     expect(wrapper.get('textarea').element.value).toBe(SCRIPT);
