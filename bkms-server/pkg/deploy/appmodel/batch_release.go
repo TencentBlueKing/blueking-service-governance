@@ -84,6 +84,18 @@ func newWorkloadRollout(
 	return r, nil
 }
 
+// SetDeployID 在待下发的 Rollout 上标记本次部署 ID，手动操作据此确认集群中的 Rollout 属于最新部署记录。
+// 部署 ID 在创建部署记录后才有，所以不在 newWorkloadRollout 中生成；一次更新全部时不下发 Rollout，不做处理。
+func (r *workloadRollout) SetDeployID(deployID string) error {
+	if r.manifest == nil {
+		return nil
+	}
+	return errors.Wrap(
+		unstructured.SetNestedField(r.manifest, deployID, "metadata", "annotations", AnnotationKeyDeployID),
+		"set deploy ID annotation of rollout",
+	)
+}
+
 // BeforeWorkloadUpdate 在更新主工作负载之前调用，依据不同的发布方式确认如何下发 Rollout，并修改待下发的
 // 主工作负载 main。
 //
@@ -205,6 +217,7 @@ func (r *workloadRollout) SnapshotObjects(extraObjs []unstructured.Unstructured)
 }
 
 // OperateBatchRelease 对环境 / 泳道进行中的分批发布执行手动操作，返回被操作的部署记录。
+// 集群中的 Rollout 不属于最新部署记录时返回 ErrReleaseSwitching，读取之后 Rollout 又被修改时返回 ErrRolloutChanged。
 func OperateBatchRelease(
 	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string, action batchrelease.Action,
 ) (*Record, error) {
@@ -223,9 +236,20 @@ func OperateBatchRelease(
 	}
 
 	rollouts := batchrelease.NewRolloutClient(cluster.NewConfig(record.ClusterID))
-	status, err := rollouts.GetStatus(ctx, record.Namespace, name)
+	rollout, err := rollouts.Get(ctx, record.Namespace, name)
 	if err != nil {
-		return nil, errors.Wrap(err, "get rollout status")
+		return nil, errors.Wrap(err, "get rollout")
+	}
+	// 再次部署时部署记录先于 Rollout 切换，这期间集群中仍是上一次发布的 Rollout，批次数等都与最新记录对不上
+	if deployID := rollout.GetAnnotations()[AnnotationKeyDeployID]; deployID != record.ID.Hex() {
+		return nil, errors.Wrapf(
+			batchrelease.ErrReleaseSwitching, "rollout %s/%s belongs to deploy %q rather than deploy record %s",
+			record.Namespace, name, deployID, record.ID.Hex(),
+		)
+	}
+	status, err := batchrelease.ParseStatus(rollout.Object)
+	if err != nil {
+		return nil, errors.Wrapf(err, "rollout %s/%s", record.Namespace, name)
 	}
 	var batchCount int
 	if record.ReleaseStrategy != nil {
@@ -235,7 +259,8 @@ func OperateBatchRelease(
 	if err != nil {
 		return nil, err
 	}
-	if err = rollouts.UpdateStatus(ctx, record.Namespace, name, patch); err != nil {
+	// patch 基于这次读到的状态生成，Rollout 此后有任何修改都应让用户刷新后重新决定，而不是重试这个 patch
+	if err = rollouts.UpdateStatus(ctx, record.Namespace, name, rollout.GetResourceVersion(), patch); err != nil {
 		return nil, errors.Wrapf(err, "%s batch release of deploy record %s", action, record.ID.Hex())
 	}
 	return record, nil

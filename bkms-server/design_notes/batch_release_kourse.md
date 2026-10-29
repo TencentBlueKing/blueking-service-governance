@@ -130,25 +130,6 @@ spec:
 
 GameDeployment 首次创建时没有旧版本实例，无需分批：仍先下发 Rollout、带上标签，但跳过第 2、4 步（Rollout 指向不存在的工作负载时控制器不会写入 `workloadRevision`）。
 
-**上一次发布未结束时再次分批部署**：分批发布进行中也允许部署（见 5.3）。Rollout 的 phase 不是 `Healthy`（发布中、`UpdatingPrimary`、`CleaningCanary`、回滚后的 `RollbackCompleted`）时，GameDeployment 的 `updateRevision` 是上一次发布的版本 X（发布中途的版本或被回滚的版本）。此时修改 Rollout spec，控制器会在平台更新工作负载之前，先按新 spec 从第 0 批开始发布 X：新策略第 0 批的目标比当前进度大时 X 会被扩大，回滚后则会重新发布被回滚的版本。因此这种情况下、且工作负载已存在时（不论策略是否变化），改为以下顺序：
-
-1. 删除 Rollout 并等待删除完成，保留 `rollout` 标签。Rollout 没有 finalizer，删除不会改动 `partition`。
-2. 更新 GameDeployment，在同一次写入中带上 `rollout` 标签与 `partition = replicas`（由平台写入，不依赖 webhook）。没有 Rollout 时，`partition = replicas` 使所有实例回到 `currentRevision`（最后一次完整发布的版本 A），X 的实例全部退回 A，不会更新为本次的版本。
-3. 校验 `partition >= replicas`，再下发 Rollout 并等待 `workloadRevision` 写入。控制器发现 partition 已设置、实例不是目标版本，按新 spec 从第 0 批开始发布**本次的版本**。
-
-行为统一为"先回到 A，再从第 0 批发布本次的版本"，代价是 X 的实例先全部退回 A，替换次数更多。phase 为空（控制器尚未调谐）视为没有进行中的发布，走正常顺序。第 3 步失败时部署记录置为失败，实例停在 A；重试时已没有遗留的 Rollout，走正常顺序。
-
-集群验证（GameDeployment 4 副本，A 为最后一次完整发布的版本）：
-
-| 场景 | 下发顺序 | 结果 |
-|------|------|------|
-| `RollbackCompleted` 时删除 Rollout | — | partition 保持 4，实例不变 |
-| 没有 Rollout、partition = 4 时修改 Pod 模板 | — | 30 秒内无实例更新为新版本 |
-| A→B 停在第 0 批（1 个 B），策略不变，改发 C | 直接更新工作负载 | B 被替换为 C，结果 1 个 C、3 个 A；旧一轮记录为 `Interrupted by workload revision change` |
-| A→C 停在第 1 批（2 个 C），策略不变，改发 D | 直接更新工作负载 | 2 个 C 同时被删，1 个换成 D、1 个退回 A，结果 1 个 D、3 个 A |
-| 停在第 0 批（1 个 D），策略改为第 0 批 3 个，改发 E | 先改 spec 再更新工作负载 | 改 spec 后 D 先扩到 3 个，更新工作负载后再被替换，结果 3 个 E、1 个 A |
-| 3 个 E、1 个 A，策略改为第 0 批 1 个，改发 F | 本节顺序 | 写入 partition = 4 后 3 个 E 全部退回 A；重建 Rollout 后 1 个实例更新为 F，结果 1 个 F、3 个 A |
-
 **全量部署清理**：不传策略时，如果主工作负载存在同名 Rollout CR 或 `rollout` 标签，先删除 CR（CR 不存在或集群未安装 CRD 都视为没有遗留）并等待删除完成、移除标签，再走现有部署流程。否则遗留的 Rollout 会继续按旧策略分批。删除失败时整个部署失败，不更新工作负载。
 
 **资源追踪**：Rollout 不写入部署记录的 `ResourceKeys`（其删除必须先于工作负载更新，通用的过期资源删除在更新之后执行），因此单独处理：分批部署时 Rollout CR 写入资源清单快照；下架时先删除与主工作负载同名的 Rollout，不以最新记录的发布方式判断（全量实例更新生成的新记录不带发布方式）。
@@ -255,8 +236,11 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 **接口**：`POST /apps/:appID/envs/:envName/batch-release/operations`，请求体 `{trafficLaneName, action}`，权限与部署相同（应用编辑 + 环境部署）。`appmodel.OperateBatchRelease` 的处理顺序：
 
 1. 读取环境 / 泳道的最新部署记录，不是"分批发布中"时返回 `ErrNoBatchReleaseInProgress`，不请求集群；
-2. 读取与主工作负载同名的 Rollout，按其**实时 status** 调用 `ActionPatch` 校验前置条件。不使用部署记录中的进度：进度由轮询写入，可能落后一个周期（如定时暂停已到期、控制器已进入下一批）；
-3. `UpdateStatus` 修改 status 子资源，Rollout 不存在时返回 `ErrRolloutNotFound`，其他集群错误原样透传。
+2. 读取与主工作负载同名的 Rollout，确认它的注解 `bkms.tencent.com/deploy-id` 等于最新部署记录的 ID，否则返回 `ErrReleaseSwitching`（HTTP 409，`ABORTED`），见下文；
+3. 按 Rollout 的**实时 status** 调用 `ActionPatch` 校验前置条件。不使用部署记录中的进度：进度由轮询写入，可能落后一个周期（如定时暂停已到期、控制器已进入下一批）；
+4. `UpdateStatus` 修改 status 子资源，Merge Patch 中带上第 2 步读到的 `metadata.resourceVersion`（乐观锁）。读取之后 Rollout 又被修改过（控制器推进了批次、其他用户的操作、对象被删除重建）时 apiserver 返回 409，映射为 `ErrRolloutChanged`（HTTP 409，`ABORTED`），提示刷新后重试。不自动重试：patch 是按读取时的状态算出的，例如回退上一批写入的是绝对序号，控制器已进入下一批时重试会回退两批。Rollout 不存在时返回 `ErrRolloutNotFound`，其他集群错误原样透传。
+
+**Rollout 与部署记录的绑定**：分批发布进行中允许再次部署，而部署记录先于 Rollout 切换——从创建新记录到删除旧 Rollout 之间（同步镜像拉取凭证、下发额外资源、删除并等待），集群中仍是上一次发布的 Rollout。此时如果只看最新记录，会用新发布的批次数去修改旧 Rollout（如 `skip` 写入错误的批次序号），审计也会关联到新发布。因此部署时在 `applyMainWorkload` 中给 Rollout 打上本次的部署 ID（manifest 在创建部署记录之前生成，拿不到 ID），手动操作发现不一致时拒绝，提示稍后重试。上一轮已结束时走直接 Apply 路径，注解先于工作负载更新，但此时 Rollout 尚未进入 `Running`，`ActionPatch` 本就会拒绝，不产生新的窗口。没有该注解的 Rollout（本改动之前下发）同样被拒绝，再次部署即可恢复。
 
 操作成功后写一条空间操作记录（resource 为 `app`，attribute 为 `batchRelease`，extras 含 `trafficLaneName`、`deployID`、策略 ID 与名称），操作类型为 `continue` / `pause` / `backward` / `skip` / `rollback`；前置条件不满足等失败情况不写记录。部署记录的进度不在操作时更新，由下一个轮询周期同步。
 

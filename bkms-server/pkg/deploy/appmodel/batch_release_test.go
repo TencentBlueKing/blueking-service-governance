@@ -66,6 +66,8 @@ const (
 //     observeSpecAfterGets 大于 0 时，rolloutRevision 在之后第 observeSpecAfterGets 次 GET 该 Rollout 时才写入，
 //     模拟控制器滞后观察到新 spec
 //   - staleWebhook 为 true 时模拟 webhook 缓存未同步，JSON Patch 修改 Pod 模板时仍注入 partition = replicas
+//   - status 子资源的 Merge Patch 带有 resourceVersion 且与对象当前值不同时返回 409，写入后递增 resourceVersion；
+//     afterRolloutGet 在每次返回 Rollout 之后修改它，模拟读取与写入之间控制器或其他请求的修改
 type fakeCluster struct {
 	mu                   sync.Mutex
 	rolloutInstalled     bool
@@ -73,6 +75,7 @@ type fakeCluster struct {
 	observeSpecAfterGets int
 	failRolloutDelete    bool
 	staleWebhook         bool
+	afterRolloutGet      func(rollout map[string]any)
 	rollouts             map[string]map[string]any
 	gameDeploys          map[string]map[string]any
 	pods                 map[string]map[string]any
@@ -156,8 +159,18 @@ func (s *fakeCluster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPatch && contentType == "application/merge-patch+json" && isStatus:
 		var body map[string]any
 		Expect(json.Unmarshal(data, &body)).To(Succeed())
+		metadata := obj["metadata"].(map[string]any)
+		if rv, _, _ := unstructured.NestedString(body, "metadata", "resourceVersion"); rv != "" &&
+			rv != metadata["resourceVersion"] {
+			fakeWriteJSON(w, http.StatusConflict, map[string]any{
+				"kind": "Status", "apiVersion": "v1", "status": "Failure",
+				"reason": "Conflict", "code": http.StatusConflict,
+			})
+			return
+		}
 		// status 子资源只接受对 status 的修改
 		applyFakeMergePatch(obj, map[string]any{"status": body["status"]})
+		bumpFakeResourceVersion(obj)
 		fakeWriteJSON(w, http.StatusOK, obj)
 	case r.Method == http.MethodPatch && contentType == "application/json-patch+json":
 		var ops []map[string]any
@@ -176,7 +189,17 @@ func (s *fakeCluster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		fakeWriteJSON(w, http.StatusOK, obj)
+		if prefix == fakeRolloutsPath && s.afterRolloutGet != nil {
+			s.afterRolloutGet(obj)
+		}
 	}
+}
+
+// bumpFakeResourceVersion 模拟 apiserver 在对象每次写入后更新 resourceVersion
+func bumpFakeResourceVersion(obj map[string]any) {
+	metadata := obj["metadata"].(map[string]any)
+	rv, _ := strconv.Atoi(fmt.Sprint(metadata["resourceVersion"]))
+	metadata["resourceVersion"] = strconv.Itoa(rv + 1)
 }
 
 func (s *fakeCluster) applyRollout(name string, body map[string]any) {
@@ -399,8 +422,12 @@ var _ = Describe("workloadRollout", func() {
 			fake.gameDeploys["demo"] = fakeGameDeploy(nil, 4, 0)
 
 			rollout := newRollout(k8skind.GameDeploy, strategy)
+			Expect(rollout.SetDeployID("deploy-1")).To(Succeed())
 			Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 
+			Expect(fake.rollouts["demo"]).To(HaveKeyWithValue("metadata", HaveKeyWithValue(
+				"annotations", HaveKeyWithValue(AnnotationKeyDeployID, "deploy-1"),
+			)))
 			Expect(fake.rollouts["demo"]).To(HaveKeyWithValue("spec", And(
 				HaveKeyWithValue("type", "Canary"),
 				HaveKeyWithValue("failurePolicy", "Present"),
@@ -526,6 +553,7 @@ var _ = Describe("workloadRollout", func() {
 
 			It("deletes the rollout, holds the partition and applies the rollout after the workload update", func() {
 				rollout := newRollout(k8skind.GameDeploy, strategy)
+				Expect(rollout.SetDeployID("deploy-2")).To(Succeed())
 				Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 
 				// 修改 spec 会让控制器立即按新批次发布上一次的版本，更新工作负载前不能下发 Rollout
@@ -537,6 +565,9 @@ var _ = Describe("workloadRollout", func() {
 				live := &unstructured.Unstructured{Object: fakeGameDeploy(map[string]any{"rollout": "true"}, 4, 4)}
 				Expect(rollout.AfterWorkloadUpdate(ctx, live)).To(Succeed())
 				Expect(fake.rollouts["demo"]).To(And(
+					HaveKeyWithValue("metadata", HaveKeyWithValue(
+						"annotations", HaveKeyWithValue(AnnotationKeyDeployID, "deploy-2"),
+					)),
 					HaveKeyWithValue("spec", HaveKeyWithValue("steps", HaveLen(2))),
 					HaveKeyWithValue("status", HaveKeyWithValue("workloadRevision", "demo-1")),
 				))

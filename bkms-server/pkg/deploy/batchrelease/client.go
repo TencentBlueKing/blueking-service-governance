@@ -37,6 +37,9 @@ var (
 	ErrRolloutNotInstalled = errors.New("rollout CRD is not installed in cluster")
 	// ErrRolloutNotFound 集群中不存在指定的 Rollout CR
 	ErrRolloutNotFound = errors.New("rollout not found")
+	// ErrRolloutChanged 读取 Rollout 之后它又被修改（控制器推进了批次、其他用户的操作、被删除重建等），
+	// 基于读取时状态生成的修改已不再可靠，需要重新读取后再决定
+	ErrRolloutChanged = errors.New("batch release status has changed, please refresh and retry")
 )
 
 // StatusPatch Rollout status 子资源的修改内容，nil 字段不修改
@@ -113,8 +116,14 @@ func (c *RolloutClient) Delete(ctx context.Context, namespace, name string) erro
 	return nil
 }
 
-// UpdateStatus 修改 Rollout 的 status 子资源，用于继续、暂停、回退、跳过与回滚等手动操作
-func (c *RolloutClient) UpdateStatus(ctx context.Context, namespace, name string, patch StatusPatch) error {
+// UpdateStatus 修改 Rollout 的 status 子资源，用于继续、暂停、回退、跳过与回滚等手动操作。
+// resourceVersion 为生成 patch 时读到的 metadata.resourceVersion，Rollout 此后被修改过时返回 ErrRolloutChanged。
+func (c *RolloutClient) UpdateStatus(
+	ctx context.Context, namespace, name, resourceVersion string, patch StatusPatch,
+) error {
+	if resourceVersion == "" {
+		return errors.New("empty resource version of rollout")
+	}
 	status := map[string]any{}
 	if patch.Paused != nil {
 		status["paused"] = *patch.Paused
@@ -130,13 +139,20 @@ func (c *RolloutClient) UpdateStatus(ctx context.Context, namespace, name string
 	if len(status) == 0 {
 		return errors.New("empty rollout status patch")
 	}
-	// Merge Patch 在 stepStatus 等父节点缺失时也能写入，JSON Patch 的 replace 则会失败
-	data, err := json.Marshal(map[string]any{"status": status})
+	// Merge Patch 在 stepStatus 等父节点缺失时也能写入，JSON Patch 的 replace 则会失败。
+	// patch 中带上 resourceVersion 时，apiserver 只在对象未被修改过时才写入，否则返回 409
+	data, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{"resourceVersion": resourceVersion},
+		"status":   status,
+	})
 	if err != nil {
 		return errors.Wrap(err, "marshal rollout status patch")
 	}
 
 	_, err = c.cli.Patch(ctx, namespace, name, types.MergePatchType, data, metav1.PatchOptions{}, "status")
+	if k8serrors.IsConflict(err) {
+		return errors.Wrapf(ErrRolloutChanged, "rollout %s/%s in cluster %s: %v", namespace, name, c.clusterID, err)
+	}
 	if k8serrors.IsNotFound(err) {
 		if installErr := c.checkInstalled(ctx, namespace); installErr != nil {
 			return installErr

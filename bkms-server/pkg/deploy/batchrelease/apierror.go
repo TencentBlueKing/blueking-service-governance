@@ -47,6 +47,8 @@ func APIError(err error, msg string) error {
 		errors.Is(err, ErrActionNotAllowed),
 		errors.Is(err, ErrNoBatchReleaseInProgress):
 		code = bkerrs.ErrCodeInvalidRequest
+	case errors.Is(err, ErrReleaseSwitching), errors.Is(err, ErrRolloutChanged):
+		code = bkerrs.ErrCodeAborted
 	}
 	return bkerrs.Wrap(err, code, msg)
 }

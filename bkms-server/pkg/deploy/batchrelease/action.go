@@ -32,6 +32,9 @@ var (
 	ErrNoBatchReleaseInProgress = errors.New("no batch release is in progress")
 	// ErrActionNotAllowed 当前批次状态不满足手动操作的前置条件
 	ErrActionNotAllowed = errors.New("batch release action is not allowed in current state")
+	// ErrReleaseSwitching 集群中的 Rollout 不属于最新部署记录：再次部署时部署记录先于 Rollout 切换，
+	// 此时 Rollout 仍是上一次发布的，不能执行手动操作
+	ErrReleaseSwitching = errors.New("batch release is switching to the latest deploy, please retry later")
 )
 
 // Action 分批发布手动操作类型

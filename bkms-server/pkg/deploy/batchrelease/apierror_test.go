@@ -50,6 +50,8 @@ var _ = Describe("APIError", func() {
 		Entry("workload not supported", batchrelease.ErrWorkloadNotSupported, bkerrs.ErrCodeInvalidRequest),
 		Entry("action not allowed", batchrelease.ErrActionNotAllowed, bkerrs.ErrCodeInvalidRequest),
 		Entry("no batch release in progress", batchrelease.ErrNoBatchReleaseInProgress, bkerrs.ErrCodeInvalidRequest),
+		Entry("release switching", batchrelease.ErrReleaseSwitching, bkerrs.ErrCodeAborted),
+		Entry("rollout changed", batchrelease.ErrRolloutChanged, bkerrs.ErrCodeAborted),
 		Entry("cluster error", errors.New("apiserver: connection refused"), bkerrs.ErrCodeInternalServerError),
 	)
 

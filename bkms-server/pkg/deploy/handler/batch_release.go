@@ -93,7 +93,9 @@ func (h *Handler) GetBatchReleaseProgress(c *gin.Context) {
 //	@ID			OperateBatchRelease
 //	@Summary	分批发布手动操作
 //	@Description	对环境 / 泳道最新部署记录对应的进行中分批发布执行继续、暂停、回退上一批、跳过剩余批次或回滚，
-//	@Description	权限同部署。前置条件按集群中 Rollout 的实时状态校验；不满足前置条件、或没有进行中的分批发布时返回 400
+//	@Description	权限同部署。前置条件按集群中 Rollout 的实时状态校验；不满足前置条件、或没有进行中的分批发布时返回 400；
+//	@Description	再次部署正在切换 Rollout（集群中的 Rollout 不属于最新部署记录）、或读取 Rollout 后它又被修改时返回 409，
+//	@Description	刷新状态后重试即可
 //	@Tags		deploy
 //	@Accept		json
 //	@Produce	json

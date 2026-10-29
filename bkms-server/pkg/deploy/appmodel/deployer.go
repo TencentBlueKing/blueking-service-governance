@@ -60,7 +60,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
-// AnnotationKeyDeployID 部署 ID 的 Annotation Key，用于在主工作负载及其 PodTemplate 中标记当前部署 ID
+// AnnotationKeyDeployID 部署 ID 的 Annotation Key，用于在主工作负载及其 PodTemplate、分批发布的 Rollout 中标记当前部署 ID
 const AnnotationKeyDeployID = "bkms.tencent.com/deploy-id"
 
 // Deployer appmodel 应用部署器
@@ -958,6 +958,9 @@ func (d *Deployer) applyMainWorkload(
 ) error {
 	// 在主工作负载中注入 deployID，确保每次部署都能触发 Pod 滚动更新
 	d.injectDeployID(buildResult, deployID)
+	if err := rollout.SetDeployID(deployID); err != nil {
+		return err
+	}
 	if err := rollout.BeforeWorkloadUpdate(ctx, buildResult.MainWorkload); err != nil {
 		return err
 	}

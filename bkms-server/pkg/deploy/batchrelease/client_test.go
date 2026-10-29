@@ -104,6 +104,16 @@ func (s *fakeAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodDelete:
 		delete(s.objects, name)
 		writeJSON(w, http.StatusOK, map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Success"})
+	case r.Method == http.MethodPatch && resourceVersionOf(req.Body) != resourceVersionOf(obj):
+		// 与 apiserver 一致：patch 中的 resourceVersion 与对象当前值不同时拒绝写入
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"kind":       "Status",
+			"apiVersion": "v1",
+			"status":     "Failure",
+			"message":    fmt.Sprintf("Operation cannot be fulfilled on rollouts.tkex.tencent.com %q", name),
+			"reason":     "Conflict",
+			"code":       http.StatusConflict,
+		})
 	default:
 		writeJSON(w, http.StatusOK, obj)
 	}
@@ -113,6 +123,12 @@ func (s *fakeAPIServer) lastRequest() recordedRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.requests[len(s.requests)-1]
+}
+
+func resourceVersionOf(obj map[string]any) string {
+	metadata, _ := obj["metadata"].(map[string]any)
+	rv, _ := metadata["resourceVersion"].(string)
+	return rv
 }
 
 func writeJSON(w http.ResponseWriter, code int, body any) {
@@ -189,24 +205,29 @@ var _ = Describe("RolloutClient", func() {
 			Expect(status.BatchPhase(batchrelease.WorkloadSnapshot{})).To(Equal(batchrelease.BatchPhaseTimedPaused))
 		})
 
-		It("patches the status subresource", func() {
+		It("patches the status subresource with the resource version read before", func() {
+			rollout["metadata"].(map[string]any)["resourceVersion"] = "7"
 			fake.objects["demo"] = rollout
 
-			Expect(client.UpdateStatus(ctx, "demo-ns", "demo", batchrelease.StatusPatch{
+			Expect(client.UpdateStatus(ctx, "demo-ns", "demo", "7", batchrelease.StatusPatch{
 				Paused: lo.ToPtr(batchrelease.PausedFalse),
 			})).To(Succeed())
 			Expect(fake.lastRequest()).To(Equal(recordedRequest{
 				Method:      http.MethodPatch,
 				Path:        rolloutsPath + "/demo/status",
 				ContentType: "application/merge-patch+json",
-				Body:        map[string]any{"status": map[string]any{"paused": "false"}},
+				Body: map[string]any{
+					"metadata": map[string]any{"resourceVersion": "7"},
+					"status":   map[string]any{"paused": "false"},
+				},
 			}))
 
-			Expect(client.UpdateStatus(ctx, "demo-ns", "demo", batchrelease.StatusPatch{
+			Expect(client.UpdateStatus(ctx, "demo-ns", "demo", "7", batchrelease.StatusPatch{
 				Paused:           lo.ToPtr(batchrelease.PausedFalse),
 				CurrentStepIndex: lo.ToPtr(int64(-1)),
 			})).To(Succeed())
 			Expect(fake.lastRequest().Body).To(Equal(map[string]any{
+				"metadata": map[string]any{"resourceVersion": "7"},
 				"status": map[string]any{
 					"paused": "false",
 					"stepStatus": map[string]any{
@@ -217,15 +238,29 @@ var _ = Describe("RolloutClient", func() {
 			}))
 		})
 
-		It("rejects an empty status patch", func() {
-			Expect(client.UpdateStatus(ctx, "demo-ns", "demo", batchrelease.StatusPatch{})).NotTo(Succeed())
+		It("reports a rollout modified after being read as changed", func() {
+			rollout["metadata"].(map[string]any)["resourceVersion"] = "8"
+			fake.objects["demo"] = rollout
+
+			err := client.UpdateStatus(ctx, "demo-ns", "demo", "7", batchrelease.StatusPatch{
+				Paused: lo.ToPtr(batchrelease.PausedTrue),
+			})
+			Expect(errors.Is(err, batchrelease.ErrRolloutChanged)).To(BeTrue())
+		})
+
+		It("rejects an empty status patch or resource version without requesting the cluster", func() {
+			Expect(client.UpdateStatus(ctx, "demo-ns", "demo", "7", batchrelease.StatusPatch{})).NotTo(Succeed())
+			Expect(client.UpdateStatus(ctx, "demo-ns", "demo", "", batchrelease.StatusPatch{
+				Paused: lo.ToPtr(batchrelease.PausedTrue),
+			})).To(MatchError(ContainSubstring("empty resource version")))
+			Expect(fake.requests).To(BeEmpty())
 		})
 
 		It("reports missing rollouts as not found", func() {
 			_, err := client.Get(ctx, "demo-ns", "missing")
 			Expect(errors.Is(err, batchrelease.ErrRolloutNotFound)).To(BeTrue())
 
-			err = client.UpdateStatus(ctx, "demo-ns", "missing", batchrelease.StatusPatch{
+			err = client.UpdateStatus(ctx, "demo-ns", "missing", "7", batchrelease.StatusPatch{
 				Paused: lo.ToPtr(batchrelease.PausedTrue),
 			})
 			Expect(errors.Is(err, batchrelease.ErrRolloutNotFound)).To(BeTrue())
@@ -248,7 +283,7 @@ var _ = Describe("RolloutClient", func() {
 			_, err = client.Apply(ctx, "demo-ns", rollout)
 			Expect(errors.Is(err, batchrelease.ErrRolloutNotInstalled)).To(BeTrue())
 
-			err = client.UpdateStatus(ctx, "demo-ns", "demo", batchrelease.StatusPatch{
+			err = client.UpdateStatus(ctx, "demo-ns", "demo", "7", batchrelease.StatusPatch{
 				Paused: lo.ToPtr(batchrelease.PausedTrue),
 			})
 			Expect(errors.Is(err, batchrelease.ErrRolloutNotInstalled)).To(BeTrue())

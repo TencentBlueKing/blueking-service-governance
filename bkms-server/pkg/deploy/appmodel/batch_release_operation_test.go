@@ -102,7 +102,7 @@ func (f *batchReleaseFixture) createRecord() {
 }
 
 // setRolloutStatus 设置集群中 Rollout 的 status：paused 为 status.paused，stepPhase 为当前批次阶段，
-// 暂停中的批次带上暂停开始时间
+// 暂停中的批次带上暂停开始时间。Rollout 标记为由当前部署记录下发
 func (f *batchReleaseFixture) setRolloutStatus(paused, stepPhase string, stepIndex int64) {
 	stepStatus := map[string]any{"currentStepIndex": stepIndex, "currentStepPhase": stepPhase}
 	if paused != batchrelease.PausedFalse {
@@ -110,7 +110,10 @@ func (f *batchReleaseFixture) setRolloutStatus(paused, stepPhase string, stepInd
 	}
 	f.fake.rollouts["demo"] = map[string]any{
 		"apiVersion": batchrelease.APIVersion, "kind": batchrelease.Kind,
-		"metadata": map[string]any{"name": "demo", "namespace": "demo-ns"},
+		"metadata": map[string]any{
+			"name": "demo", "namespace": "demo-ns", "resourceVersion": "1",
+			"annotations": map[string]any{AnnotationKeyDeployID: f.record.ID.Hex()},
+		},
 		"status": map[string]any{
 			"phase": batchrelease.RolloutPhaseRunning, "paused": paused, "stepStatus": stepStatus,
 		},
@@ -220,6 +223,46 @@ var _ = Describe("OperateBatchRelease", func() {
 
 		_, err := operate(batchrelease.ActionContinue)
 		Expect(errors.Is(err, batchrelease.ErrNoBatchReleaseInProgress)).To(BeTrue())
+	})
+
+	DescribeTable("rejects the action without patching when the rollout does not belong to the latest deploy record",
+		func(annotations map[string]any) {
+			f.createRecord()
+			f.setRolloutStatus(batchrelease.PausedTrue, batchrelease.StepPhasePausedPermanently, 0)
+			metadata := f.fake.rollouts["demo"]["metadata"].(map[string]any)
+			if annotations == nil {
+				delete(metadata, "annotations")
+			} else {
+				metadata["annotations"] = annotations
+			}
+
+			_, err := operate(batchrelease.ActionSkip)
+			Expect(errors.Is(err, batchrelease.ErrReleaseSwitching)).To(BeTrue())
+			Expect(f.fake.requestsWith(http.MethodPatch)).To(BeEmpty())
+		},
+		// 再次部署已创建新记录，集群中仍是上一次发布的 Rollout
+		Entry("left by the previous deploy", map[string]any{AnnotationKeyDeployID: bson.NewObjectID().Hex()}),
+		Entry("without the deploy ID annotation", (map[string]any)(nil)),
+	)
+
+	It("rejects the action without retrying when the rollout is modified after being read", func() {
+		f.createRecord()
+		f.setRolloutStatus(batchrelease.PausedTemporary, batchrelease.StepPhasePausedTemporarily, 0)
+		// 读取之后定时暂停恰好到期，控制器进入下一批
+		f.fake.afterRolloutGet = func(rollout map[string]any) {
+			rollout["status"] = map[string]any{
+				"phase": batchrelease.RolloutPhaseRunning, "paused": batchrelease.PausedFalse,
+				"stepStatus": map[string]any{
+					"currentStepIndex": int64(1), "currentStepPhase": batchrelease.StepPhaseScalingReplicas,
+				},
+			}
+			bumpFakeResourceVersion(rollout)
+		}
+
+		_, err := operate(batchrelease.ActionContinue)
+		Expect(errors.Is(err, batchrelease.ErrRolloutChanged)).To(BeTrue())
+		Expect(f.fake.requestsWith(http.MethodPatch)).To(HaveLen(1))
+		Expect(f.rolloutStatus()["stepStatus"]).To(HaveKeyWithValue("currentStepIndex", int64(1)))
 	})
 
 	It("returns the cluster error when the rollout does not exist", func() {
