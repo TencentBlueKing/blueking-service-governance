@@ -20,10 +20,10 @@
 
 | 类型 | 声明 | 说明 |
 |---|---|---|
-| 租户集合 | 模型有 `TenantID string \`bson:"tenantID"\``，`TenantScoped: true` | `workspaces` 与其余 47 个业务集合，清单见迁移 `000024_tenant_id.up.json` |
+| 租户集合 | 模型有 `TenantID string \`bson:"tenantID"\``，`TenantScoped: true` | `workspaces` 与其余 50 个集合，清单见迁移 `000024_tenant_id.up.json` |
 | 共享读取的租户集合 | 租户集合，另声明 `Meta.SharedFromPlatform` | 平台租户中满足条件的文档对所有租户可读，目前只有 `component_defs`，见第 6 节 |
+| 计数器 | `store.Counter`，文档为 `{_id: key, tenantID, seq}` | 经 `ModifyOrCreate` 按租户写入，见 3.6；镜像/Chart 构建号、特性环境序号 |
 | 全局集合 | 无该字段，`TenantScoped` 为零值 false | 全系统一份，见下表 |
-| 计数器 | `store.Counter`，文档为 `{_id: key, seq}` | 不经过 Meta，key 中带有 `appID` 等业务 ID，由业务对象区分 |
 
 全局集合只存放平台数据，写入只来自平台路径（启动加载、命令行、平台管理接口），任何租户的请求都能读到全量数据。
 
@@ -32,7 +32,6 @@
 | `runtime_images`、`cluster_addon_defs`、`depservice_services`、`bkci_pipeline_templates` | 平台目录，启动或命令行写入，租户只读 |
 | `image_snapshots`、`image_tag_suppressions`、`repo_snapshot_statuses` | 远端镜像仓库的缓存，以 `repoKey = SHA256(仓库名 + 账号 + 密码)` 为 key，没有凭据算不出 key，读不到其他租户的快照 |
 | `plat_admin_role_bindings` | 平台角色，按用户名全局唯一 |
-| `store.NewCounter` 计数器（镜像/Chart 构建号、特性环境序号） | key 为应用 ID，本身不会跨租户冲突 |
 
 ### 2.2 每个租户集合都冗余 `tenantID`
 
@@ -106,6 +105,7 @@ err := apps.Create(ctx, &app, store.TenantOf("tenant-a"))
 | `Replace` | 同上；过滤条件已注入，跨租户替换返回 NotFound |
 | `Update` / `Modify` | 拒绝修改 `tenantID`；全字段更新时跳过 `tenantID` |
 | `Upsert` | 过滤条件中的 `tenantID` 等值条件在插入时由 MongoDB 写入，`$set` 不含 `tenantID` |
+| `ModifyOrCreate` | 同 `Upsert`；只接受 `TenantOf` |
 | `Delete*` / `GetAndDelete` | 仅靠过滤条件注入 |
 
 Encode 钩子可能整体重建对象（如 appspec 的 `normalizeSpec` 经 `Clone` 重建），重建时漏复制租户会写出空 `tenantID`。
@@ -148,11 +148,20 @@ store 在 Encode 钩子执行后，按已填好租户的原对象把租户写回
 
 ### 3.6 绕过 store 的操作
 
-`Collection()` 返回底层集合，直接操作不会注入租户条件，调用方须自己带上 `tenantID`。
-目前只有 `semver.Next` 用 `FindOneAndUpdate` + upsert 直接写 `helm_chart_semver_counters`：
-从 ctx 取租户加进过滤条件，upsert 插入时 MongoDB 会把等值条件写进新文档；ctx 无租户返回 `ErrTenantIDRequired`。
+`Collection()` 返回底层集合，直接操作不会注入租户条件，调用方须自己带上 `tenantID`。业务代码不再直接操作集合。
 
-其余直接操作原始集合的只有 `db/migrations` 和部分 `cmd/migration`（清理、扫描），按设计不受租户约束。
+计数器需要原子递增并取回新值，走 `ModifyOrCreate`（`FindOneAndUpdate` + upsert）：
+`store.Counter.Next`（`build_counters`、`helm_chart_build_counters`、`feature_environment_counters`）
+与 `semver.Next`（`helm_chart_semver_counters`，归零用 `$mul: 0`，因为 `Modify` 不接受普通字段的 `$set`）。
+`_id` 仍只是 key（应用 ID），因此 key 必须跨租户唯一，被其它租户占用时返回 `ErrDuplicate`。
+
+直接操作原始集合的只剩迁移与运维命令，按设计跨租户：
+
+- `db/migrations`
+- `cmd/migration` 的 `scan_app_runtime_model`（只读）、`cleanup_orphan_app_config_file_versions`（按 appID 清理）
+- `extension/component/migrate`（`migrate_component_patch`）：遍历全部组件定义并原地更新
+- `workload/appmodelcore/appspec/migrate`（`migrate_tke_route_eni_component`）：跨租户读出，写入经 store 并用
+  `ScopeToTenant` 落到文档所属租户
 
 ## 4. 租户来源
 
@@ -207,7 +216,7 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 跨租户行为的用例：`pkg/store/tenant_test.go`（`ScopeToTenant`、Encode 回写、共享读取）、
 `platmgt/workspace`（跨租户统计）、`platmgt/workspace/admin`（其它租户的空间授权与回收）、
 `platmgt/workspace/imageregistry`（按空间所属租户读写）、`platmgt/portforward`（按环境租户写入）、
-`build/chart/semver`（按租户写计数器）、`extension/component`（内置定义共享、加载时跨租户检查同名）。
+`store`（`ModifyOrCreate`、`Counter` 按租户计数）、`build/chart/semver`（按租户写计数器）、`extension/component`（内置定义共享、加载时跨租户检查同名）。
 
 ## 5. 跨租户访问
 

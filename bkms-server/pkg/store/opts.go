@@ -106,7 +106,7 @@ const (
 
 // 第二步：按是否写入整个文档，二选一地加上租户选项。
 //   - 读、局部更新（Update / Modify）与删除只作用于已存在的文档，接受全部租户选项，平台管理可以跨租户
-//   - 写入整个文档的操作（Create / Replace / Upsert）可能产生新文档，新文档的 tenantID 必须是确定值，
+//   - 可能产生新文档的操作（Create / Replace / Upsert / ModifyOrCreate），新文档的 tenantID 必须是确定值，
 //     因此只接受 TenantOf，不接受 TenantAll
 const (
 	getOpts          = getKinds | kindTenantAny
@@ -118,9 +118,10 @@ const (
 	updateOpts       = updateKinds | kindTenantAny
 	modifyOpts       = modifyKinds | kindTenantAny
 
-	upsertOpts  = upsertKinds | kindTenantFixed
-	replaceOpts = replaceKinds | kindTenantFixed
-	insertOpts  = insertKinds | kindTenantFixed
+	upsertOpts         = upsertKinds | kindTenantFixed
+	modifyOrCreateOpts = condKinds | kindTenantFixed
+	replaceOpts        = replaceKinds | kindTenantFixed
+	insertOpts         = insertKinds | kindTenantFixed
 )
 
 // kindNames 按位序排列，与上面的 kindXxx 一一对应

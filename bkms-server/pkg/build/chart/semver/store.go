@@ -25,9 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -41,43 +39,29 @@ var CounterMeta = store.Meta[Counter]{
 // 经典归零语义：递增 major 时 minor+patch 归零，递增 minor 时 patch 归零
 // 初始版本：0.0.1（首次调用 BumpPatch 时）
 func Next(ctx context.Context, db *mongo.Database, appID string, bumpType BumpType) (string, error) {
-	// 直接操作底层集合，store 不会注入租户：手动加进过滤条件，upsert 新建文档时等值条件会一并写入
-	tenantID, ok := tenant.GetTenantID(ctx)
-	if !ok {
-		return "", errors.Wrapf(store.ErrTenantIDRequired, "next semver for app %s", appID)
-	}
-	filter := bson.M{"_id": appID, "tenantID": tenantID}
+	// 归零用 $mul 0 而不是 $set 0：Modify 不接受普通字段的 $set；字段不存在时 $mul 同样写入 0
 	var update bson.M
-
 	switch bumpType {
 	case BumpPatch:
 		update = bson.M{"$inc": bson.M{"patch": 1}}
 	case BumpMinor:
 		update = bson.M{
 			"$inc": bson.M{"minor": 1},
-			"$set": bson.M{"patch": 0},
+			"$mul": bson.M{"patch": 0},
 		}
 	case BumpMajor:
 		update = bson.M{
 			"$inc": bson.M{"major": 1},
-			"$set": bson.M{"minor": 0, "patch": 0},
+			"$mul": bson.M{"minor": 0, "patch": 0},
 		}
 	default:
 		return "", errors.Errorf("unknown bump type: %s", bumpType)
 	}
 
-	opts := options.FindOneAndUpdate().
-		SetUpsert(true).
-		SetReturnDocument(options.After)
-
-	// 按段递增并归零其余段，且需要原子地取回递增后的值（FindOneAndUpdate + upsert），
-	// GenericStore 不提供这类操作，直接操作底层集合
-	coll := store.Of(db, CounterMeta).Collection()
-	var c Counter
-	if err := coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&c); err != nil {
+	c, err := store.Of(db, CounterMeta).ModifyOrCreate(ctx, update, store.ByID(appID))
+	if err != nil {
 		return "", errors.Wrapf(err, "next semver for app %s", appID)
 	}
-
 	return c.FormatSemver(), nil
 }
 

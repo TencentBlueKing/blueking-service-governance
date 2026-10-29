@@ -100,7 +100,7 @@ func schemaOf(typ reflect.Type) (*schema, error) {
 }
 
 // Collection 返回底层集合，用于 GenericStore 未覆盖的操作（如建立索引）。
-// 聚合请使用 Aggregate，数组与计数类的修改请使用 Modify，它们会校验字段并维护 updatedAt。
+// 聚合请使用 Aggregate，数组与计数类的修改请使用 Modify / ModifyOrCreate，它们会校验字段并维护 updatedAt。
 //
 // 直接操作集合不会注入租户条件，也不检查 RequireExplicitTenantScope：
 // 读写 TenantScoped 集合时调用方必须自己带上 tenantID 条件，否则会读写到所有租户的数据

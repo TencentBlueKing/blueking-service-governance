@@ -19,10 +19,12 @@
 package store_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -165,4 +167,90 @@ var _ = Describe("GenericStore Modify", func() {
 			Expect(res).To(Equal(store.ModifyResult{}))
 		})
 	})
+})
+
+var _ = Describe("GenericStore ModifyOrCreate", func() {
+	var f *storeFixture
+
+	BeforeEach(func() { f = setUpStores() })
+	AfterEach(func() { f.tearDown() })
+
+	incHits := bson.M{"$inc": bson.M{"hits": 1}}
+
+	// byTicket 匹配当前 owner 下指定名称的 Ticket
+	byTicket := func(name string) store.Opt {
+		return store.Combine(f.byOwner(), store.Where("name", name))
+	}
+
+	It("should create the document from equality conditions when nothing matches", func() {
+		got, err := f.tickets.ModifyOrCreate(f.ctxA, incHits, byTicket("t1"))
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(got.ID.IsZero()).To(BeFalse())
+		Expect(got.OwnerID).To(Equal(f.owner))
+		Expect(got.Name).To(Equal("t1"))
+		Expect(got.TenantID).To(Equal(tenantA))
+		Expect(got.Hits).To(Equal(int64(1)))
+		Expect(got.CreatedAt).To(BeTemporally("~", time.Now(), time.Second))
+		Expect(got.UpdatedAt).To(BeTemporally("~", time.Now(), time.Second))
+		Expect(f.rawTicketTenant("t1")).To(Equal(tenantA))
+	})
+
+	It("should modify the existing document and keep createdAt", func() {
+		t := f.mustCreateTicket(f.ctxA, "t1")
+
+		got, err := f.tickets.ModifyOrCreate(f.ctxA, incHits, byTicket("t1"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.ID).To(Equal(t.ID))
+		Expect(got.Hits).To(Equal(int64(1)))
+		Expect(got.Priority).To(Equal(1))
+		Expect(got.CreatedAt).To(beStoredTime(t.CreatedAt))
+
+		got, err = f.tickets.ModifyOrCreate(f.ctxA, incHits, byTicket("t1"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Hits).To(Equal(int64(2)))
+	})
+
+	It("should not modify the document of another tenant", func() {
+		f.mustCreateTicket(f.ctxA, "t1")
+
+		got, err := f.tickets.ModifyOrCreate(f.ctxB, incHits, byTicket("t1"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.TenantID).To(Equal(tenantB))
+
+		a, err := f.tickets.Get(f.ctxA, byTicket("t1"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(a.Hits).To(BeZero())
+	})
+
+	It("should create the document under the tenant given by TenantOf", func() {
+		got, err := f.tickets.ModifyOrCreate(f.ctx, incHits, byTicket("t1"), store.TenantOf(tenantB))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.TenantID).To(Equal(tenantB))
+	})
+
+	DescribeTable("should reject a ctx without a usable tenant",
+		func(ctx func(f *storeFixture) context.Context, want error) {
+			_, err := f.tickets.ModifyOrCreate(ctx(f), incHits, byTicket("t1"))
+			Expect(errors.Is(err, want)).To(BeTrue(), "got %v", err)
+		},
+		Entry("no tenant", func(f *storeFixture) context.Context { return f.ctx }, store.ErrTenantIDRequired),
+		Entry("explicit tenant scope required", func(f *storeFixture) context.Context {
+			return store.RequireExplicitTenantScope(f.ctxA)
+		}, store.ErrTenantScopeRequired),
+	)
+
+	DescribeTable("should reject invalid calls without writing",
+		func(update bson.M, opts []store.Opt, msg string) {
+			_, err := f.tickets.ModifyOrCreate(f.ctxA, update, opts...)
+			Expect(err).To(MatchError(ContainSubstring(msg)))
+			n, err := f.tickets.Count(f.ctx, store.TenantAll())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(BeZero())
+		},
+		Entry("TenantAll", incHits, []store.Opt{store.Where("name", "t1"), store.TenantAll()}, "all tenants"),
+		Entry("$set of a plain field", bson.M{"$set": bson.M{"priority": 2}}, []store.Opt{store.Where("name", "t1")},
+			"use Update"),
+		Entry("no filter", incHits, nil, "filter is required"),
+	)
 })
