@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	// ErrBatchReleaseInProgress 分批发布进行中，拒绝新部署、下架、实例灰度更新、删除实例、手动扩缩容等冲突操作
+	// ErrBatchReleaseInProgress 分批发布进行中，拒绝实例更新、删除实例、手动扩缩容等冲突操作
 	ErrBatchReleaseInProgress = errors.New("batch release is in progress, complete, skip or roll it back first")
 	// ErrNoBatchReleaseInProgress 当前没有进行中的分批发布，无法执行手动操作
 	ErrNoBatchReleaseInProgress = errors.New("no batch release is in progress")
@@ -60,27 +60,30 @@ const (
 func (s Status) ActionPatch(action Action, batchCount int) (StatusPatch, error) {
 	if s.Phase != RolloutPhaseRunning || s.CurrentStepIndex == nil ||
 		*s.CurrentStepIndex < 0 || *s.CurrentStepIndex >= int64(batchCount) {
-		return StatusPatch{}, s.actionNotAllowed(action)
+		return StatusPatch{}, s.actionNotAllowed(action, "no batch is being executed")
 	}
 	stepIndex := *s.CurrentStepIndex
 	paused := s.stepBatchPhase().IsPaused()
 
 	switch action {
 	case ActionContinue:
-		if paused {
-			return StatusPatch{Paused: lo.ToPtr(PausedFalse)}, nil
-		}
-	case ActionPause:
 		if !paused {
-			return StatusPatch{Paused: lo.ToPtr(PausedTrue)}, nil
+			return StatusPatch{}, s.actionNotAllowed(action, "current batch is not paused")
 		}
+		return StatusPatch{Paused: lo.ToPtr(PausedFalse)}, nil
+	case ActionPause:
+		if paused {
+			return StatusPatch{}, s.actionNotAllowed(action, "current batch is already paused")
+		}
+		return StatusPatch{Paused: lo.ToPtr(PausedTrue)}, nil
 	case ActionBackward:
-		if stepIndex >= 1 {
-			return StatusPatch{
-				Paused:           lo.ToPtr(PausedFalse),
-				CurrentStepIndex: lo.ToPtr(stepIndex - 1),
-			}, nil
+		if stepIndex < 1 {
+			return StatusPatch{}, s.actionNotAllowed(action, "current batch is the first batch")
 		}
+		return StatusPatch{
+			Paused:           lo.ToPtr(PausedFalse),
+			CurrentStepIndex: lo.ToPtr(stepIndex - 1),
+		}, nil
 	case ActionSkip:
 		return StatusPatch{
 			Paused:           lo.ToPtr(PausedFalse),
@@ -94,14 +97,15 @@ func (s Status) ActionPatch(action Action, batchCount int) (StatusPatch, error) 
 	default:
 		return StatusPatch{}, errors.Wrapf(ErrActionNotAllowed, "unknown action %q", action)
 	}
-	return StatusPatch{}, s.actionNotAllowed(action)
 }
 
-func (s Status) actionNotAllowed(action Action) error {
+// actionNotAllowed 返回前置条件不满足的错误，reason 为面向用户的原因，同时附上 Rollout 当前状态便于排障
+func (s Status) actionNotAllowed(action Action, reason string) error {
 	stepIndex := "none"
 	if s.CurrentStepIndex != nil {
 		stepIndex = strconv.FormatInt(*s.CurrentStepIndex, 10)
 	}
-	return errors.Wrapf(ErrActionNotAllowed, "action %s: rollout phase %q, step index %s, step phase %q, paused %q",
-		action, s.Phase, stepIndex, s.CurrentStepPhase, s.Paused)
+	return errors.Wrapf(ErrActionNotAllowed,
+		"action %s: %s (rollout phase %q, step index %s, step phase %q, paused %q)",
+		action, reason, s.Phase, stepIndex, s.CurrentStepPhase, s.Paused)
 }

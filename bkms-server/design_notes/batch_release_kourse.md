@@ -13,7 +13,7 @@
 | 批次推进 | — | 按 `steps` 调整 GameDeployment `partition`，处理暂停 |
 | 人工干预 | 校验前置条件后修改 Rollout status 子资源 | 响应 `paused`、`currentStepIndex` 的变化 |
 | 进度与终态 | 轮询任务读取 Rollout + GameDeployment 状态，写入部署记录 | 维护 Rollout status |
-| 冲突拦截 | 分批发布中拒绝新部署、下架、扩缩容等操作 | — |
+| 冲突拦截 | 分批发布中拒绝实例更新、扩缩容等操作，新部署会终止进行中的分批发布 | — |
 
 ```
 用户选择策略部署
@@ -36,9 +36,9 @@
 | 全量部署清理 | 不传策略时，先删除遗留的 Rollout CR 和 `rollout` 标签，再一次更新全部实例；实例更新（全量 / 灰度）修改镜像前同样清理 | 已完成 |
 | 进度同步与查询 | 部署轮询任务同步 Rollout 状态到部署记录；进度查询接口只读库 | 已完成 |
 | 终态判定 | 已部署 / 已回滚；分批发布记录不受轮询超时限制 | 已完成 |
-| 手动操作 | 继续、暂停、回退上一批、跳过剩余批次、回滚 | 待实现（前置条件校验已完成） |
-| 冲突拦截 | 分批发布中拒绝新部署、下架、实例灰度更新、删除实例、手动扩缩容 | 待实现（判定方法已完成） |
-| 审计 | 策略增删改、分批部署、手动操作写入空间操作记录 | 部分完成（策略增删改、分批部署） |
+| 手动操作 | 继续、暂停、回退上一批、跳过剩余批次、回滚 | 已完成 |
+| 冲突拦截 | 分批发布中拒绝实例更新、删除实例、手动扩缩容；新部署与下架不拦截 | 已完成 |
+| 审计 | 策略增删改、分批部署、手动操作写入空间操作记录 | 已完成 |
 
 一期**不包含**：
 
@@ -130,6 +130,25 @@ spec:
 
 GameDeployment 首次创建时没有旧版本实例，无需分批：仍先下发 Rollout、带上标签，但跳过第 2、4 步（Rollout 指向不存在的工作负载时控制器不会写入 `workloadRevision`）。
 
+**上一次发布未结束时再次分批部署**：分批发布进行中也允许部署（见 5.3）。Rollout 的 phase 不是 `Healthy`（发布中、`UpdatingPrimary`、`CleaningCanary`、回滚后的 `RollbackCompleted`）时，GameDeployment 的 `updateRevision` 是上一次发布的版本 X（发布中途的版本或被回滚的版本）。此时修改 Rollout spec，控制器会在平台更新工作负载之前，先按新 spec 从第 0 批开始发布 X：新策略第 0 批的目标比当前进度大时 X 会被扩大，回滚后则会重新发布被回滚的版本。因此这种情况下、且工作负载已存在时（不论策略是否变化），改为以下顺序：
+
+1. 删除 Rollout 并等待删除完成，保留 `rollout` 标签。Rollout 没有 finalizer，删除不会改动 `partition`。
+2. 更新 GameDeployment，在同一次写入中带上 `rollout` 标签与 `partition = replicas`（由平台写入，不依赖 webhook）。没有 Rollout 时，`partition = replicas` 使所有实例回到 `currentRevision`（最后一次完整发布的版本 A），X 的实例全部退回 A，不会更新为本次的版本。
+3. 校验 `partition >= replicas`，再下发 Rollout 并等待 `workloadRevision` 写入。控制器发现 partition 已设置、实例不是目标版本，按新 spec 从第 0 批开始发布**本次的版本**。
+
+行为统一为"先回到 A，再从第 0 批发布本次的版本"，代价是 X 的实例先全部退回 A，替换次数更多。phase 为空（控制器尚未调谐）视为没有进行中的发布，走正常顺序。第 3 步失败时部署记录置为失败，实例停在 A；重试时已没有遗留的 Rollout，走正常顺序。
+
+集群验证（GameDeployment 4 副本，A 为最后一次完整发布的版本）：
+
+| 场景 | 下发顺序 | 结果 |
+|------|------|------|
+| `RollbackCompleted` 时删除 Rollout | — | partition 保持 4，实例不变 |
+| 没有 Rollout、partition = 4 时修改 Pod 模板 | — | 30 秒内无实例更新为新版本 |
+| A→B 停在第 0 批（1 个 B），策略不变，改发 C | 直接更新工作负载 | B 被替换为 C，结果 1 个 C、3 个 A；旧一轮记录为 `Interrupted by workload revision change` |
+| A→C 停在第 1 批（2 个 C），策略不变，改发 D | 直接更新工作负载 | 2 个 C 同时被删，1 个换成 D、1 个退回 A，结果 1 个 D、3 个 A |
+| 停在第 0 批（1 个 D），策略改为第 0 批 3 个，改发 E | 先改 spec 再更新工作负载 | 改 spec 后 D 先扩到 3 个，更新工作负载后再被替换，结果 3 个 E、1 个 A |
+| 3 个 E、1 个 A，策略改为第 0 批 1 个，改发 F | 本节顺序 | 写入 partition = 4 后 3 个 E 全部退回 A；重建 Rollout 后 1 个实例更新为 F，结果 1 个 F、3 个 A |
+
 **全量部署清理**：不传策略时，如果主工作负载存在同名 Rollout CR 或 `rollout` 标签，先删除 CR（CR 不存在或集群未安装 CRD 都视为没有遗留）并等待删除完成、移除标签，再走现有部署流程。否则遗留的 Rollout 会继续按旧策略分批。删除失败时整个部署失败，不更新工作负载。
 
 **资源追踪**：Rollout 不写入部署记录的 `ResourceKeys`（其删除必须先于工作负载更新，通用的过期资源删除在更新之后执行），因此单独处理：分批部署时 Rollout CR 写入资源清单快照；下架时先删除与主工作负载同名的 Rollout，不以最新记录的发布方式判断（全量实例更新生成的新记录不带发布方式）。
@@ -137,7 +156,7 @@ GameDeployment 首次创建时没有旧版本实例，无需分批：仍先下�
 **审计**：一次分批发布写两条空间操作记录（`deploy` / `app`，attribute 均为 `releaseStrategy`，extras 均含 `deployID`、策略 ID 与名称），通过 `deployID` 关联：
 
 - 下发记录：下发成功时写入，结果为成功，表示"已发起"。分批发布可能长期暂停，不能等到终态才留痕。
-- 终态记录：轮询任务进入终态时写入，extras 另含终态 `status`。`deployed` 与 `rolled-back` 记为成功（回滚是用户操作的结果，不是故障），其余终态（`polling-broken`、被新部署取代的 `canceled` 等）记为失败。
+- 终态记录：轮询任务进入终态时写入，extras 另含终态 `status`。`deployed` 与 `rolled-back` 记为成功（回滚是用户操作的结果，不是故障），其余终态（`polling-broken`、因有更新的部署而取消的 `canceled` 等）记为失败。
 
 一次更新全部的部署只写终态记录，不带 attribute 与 extras，保持原有行为。
 
@@ -231,6 +250,16 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 | 跳过剩余批次 `skip` | — | `paused: "false"`，`currentStepIndex` = 批次总数 | 放开 partition，所有实例更新为新版本，最终进入 `Healthy` |
 | 回滚 `rollback` | — | `paused: "false"`，`currentStepIndex: -1` | 所有 Pod 恢复旧版本 |
 
+所有操作都要求 Rollout 处于 `Running` 且批次序号在 `[0, 批次总数)` 内，否则返回 `ErrActionNotAllowed`，错误信息中带有面向用户的原因（如 `current batch is not paused`）与 Rollout 当前状态。
+
+**接口**：`POST /apps/:appID/envs/:envName/batch-release/operations`，请求体 `{trafficLaneName, action}`，权限与部署相同（应用编辑 + 环境部署）。`appmodel.OperateBatchRelease` 的处理顺序：
+
+1. 读取环境 / 泳道的最新部署记录，不是"分批发布中"时返回 `ErrNoBatchReleaseInProgress`，不请求集群；
+2. 读取与主工作负载同名的 Rollout，按其**实时 status** 调用 `ActionPatch` 校验前置条件。不使用部署记录中的进度：进度由轮询写入，可能落后一个周期（如定时暂停已到期、控制器已进入下一批）；
+3. `UpdateStatus` 修改 status 子资源，Rollout 不存在时返回 `ErrRolloutNotFound`，其他集群错误原样透传。
+
+操作成功后写一条空间操作记录（resource 为 `app`，attribute 为 `batchRelease`，extras 含 `trafficLaneName`、`deployID`、策略 ID 与名称），操作类型为 `continue` / `pause` / `backward` / `skip` / `rollback`；前置条件不满足等失败情况不写记录。部署记录的进度不在操作时更新，由下一个轮询周期同步。
+
 **回滚的语义与判定**
 
 回滚是 Kourse 的"完全回滚"：控制器把 partition 恢复为副本数，已更新的 Pod 退回旧版本（`currentRevision`）。**工作负载 spec 和 `updateRevision` 仍是新版本**，只有 Pod 是旧版本。部署记录因此置为 `rolled-back`，镜像字段保留新镜像。
@@ -279,13 +308,22 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 
 ### 5.3 冲突拦截
 
-尚未实现，以下为设计约束。环境 / 泳道的最新部署记录处于分批发布中时，拒绝新部署（全量和分批）、下架、实例灰度更新、删除实例、手动扩缩容，返回 `ErrBatchReleaseInProgress`。重启实例、执行管理命令、调整北极星权重 / 隔离不受影响。拦截只读库，不请求集群。
+环境 / 泳道的最新部署记录处于分批发布中时，拒绝实例更新（灰度和全量）、删除实例、手动扩缩容，返回 `ErrBatchReleaseInProgress`（API 映射为 400 `INVALID_REQUEST`）。拦截只读库，不请求集群。
 
-- 拦截放在 `Deployer` 层，不能只放在 HTTP handler：构建自动部署在构建完成后从 `buildpoll` 直接调 `DeployByAppID`，不经过部署接口。分批发布暂停期间构建完成的自动部署应被拒绝，构建自动部署记录标失败。
-- 部署创建没有按环境 / 泳道加锁，拦截是"先读最新记录、再创建新记录"，并发请求仍可能同时通过检查，新记录取代进行中的分批发布记录。轮询任务需要兜底：
-  - 被全量部署取代时，`Cleanup` 已删除 Rollout，旧记录取状态返回 `ErrRolloutNotFound` 走 `onFetchFailed`，走不到 `markCanceledIfSuperseded`，失败额度耗尽后落 `polling-broken`，而不是 `canceled`。
-  - 被另一次分批发布取代时，Rollout 被重新 Apply，旧记录在标 `canceled` 之前会先经 `UpdateBatchProgress` 写入新一轮的批次进度。
-  - 处理方式：把取代判断提到取状态之前，已被取代的记录直接 `terminate` 为 `canceled`，不再读 Rollout、不写进度。
+**新部署不拦截**（与需求原文不同，已确认）：分批发布进行中（包括 Rollout 卡在 `Running` 以外的状态）也允许全量和分批部署。全量部署先删除 Rollout 再整批更新；分批部署按 4.2"上一次发布未结束时再次分批部署"的顺序，先让实例回到最后一次完整发布的版本，再从第 0 批发布本次的版本。进行中的部署记录由轮询任务发现有更新的部署后置为 `canceled`。
+
+**下架不拦截**（与需求 R-010 原文不同，已确认）：下架先删除 Rollout 再删除工作负载，不会与控制器并发修改工作负载；而 Rollout 离开 `Running`（如回滚后 Pod 一直不就绪、`UpdatingPrimary` 卡住）时手动操作全部不可用，记录又不受轮询超时限制会一直停在 `deploying`，下架是平台内唯一的退路。
+
+拦截放在 `Deployer` 的 `UpdateInstances`、`BatchDeleteInstances`、`Scale` 中，在读取最新部署记录后、任何集群操作之前以 `IsBatchReleasing` 判断。
+
+重启实例、执行管理命令、调整北极星权重 / 隔离不经过上述方法，不受影响。
+
+- 分批发布暂停期间构建完成的自动部署（`buildpoll` 调 `DeployByAppID`）同样会开始新的发布，终止进行中的分批发布。
+- 新部署开始后，进行中的分批发布记录由轮询任务收尾：每个 tick 取状态之后、处理取状态的错误和写进度之前，判断同环境 / 泳道是否已有更新的部署记录，有则直接 `terminate` 为 `canceled`，丢弃本次取到的状态或错误，不写进度。否则：
+  - 新部署是全量部署时，`Cleanup` 已删除 Rollout，旧记录取状态返回 `ErrRolloutNotFound` 走 `onFetchFailed`，失败额度耗尽后落 `polling-broken`，而不是 `canceled`。
+  - 新部署再次分批时，Rollout 被重新 Apply，旧记录会写入新一轮的批次进度。
+
+  一次判断同时覆盖取状态之前与取状态期间创建的新记录：`Deploy` 先创建部署记录再修改集群，取状态之后仍没有更新的记录，说明读到的状态不受新部署影响。代价是已有新部署时白取一次状态，随后记录即进入终态。
 
 ## 6. 已知风险与待办
 
@@ -297,5 +335,6 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
   待处理：前端状态枚举；全量 / 灰度实例更新仍要求最新记录为 `deployed`，回滚后只能重新部署。
 - **进度写入与其他写操作的竞争**：通用的 `UpdateRecord` 不写 `batchProgress`，进度由 `UpdateBatchProgress` 定向更新。轮询接入时必须走这个函数，不能把进度放进 `UpdateRecord` 的整记录写回。
 - **webhook 缓存竞争**：4.2 的第 2、4 步是对 webhook 缓存未同步的兜底，需要在真实集群验证。
-- **回滚后换策略会重新发布被回滚的版本**：回滚后 GameDeployment 的 `updateRevision` 仍是被回滚的版本。Rollout 处于 `RollbackCompleted` 时，修改其 spec 或删除后重建，控制器都会立即从第 0 批开始发布被回滚的版本，早于平台更新工作负载（已在集群中复现）。策略不变时 spec 不变，不受影响。处理方式待定。
+- **回滚后换策略会重新发布被回滚的版本**：已处理，见 4.2"上一次发布未结束时再次分批部署"。
+- **未模拟的卡住状态**：`UpdatingPrimary` 卡住、回滚后 Pod 一直不就绪时再次部署，未在集群中构造验证。按控制器的检查顺序（工作负载版本变化先于其他检查），预计与发布中途再次部署的行为一致。
 - **轮询中断**：记录置为 `polling-broken` 后不再是"分批发布中"，但集群中的 Rollout 可能仍在进行，兜底方式另行设计。

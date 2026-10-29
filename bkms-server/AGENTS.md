@@ -61,6 +61,7 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * make changes to the router, handler, and serializer files in each feature package
 * keep handler code simple, place complex logic in other modules
 * add Swagger annotations and run `make apidocs`
+* In Swagger annotations, only declare `@Failure 400`; do NOT add other error codes such as 401, 403, 404, or 5xx (e.g. a handler should have just `@Success 200` and `@Failure 400 {object} bkerrs.GinErrorOutput`)
 * `make build` to build the binary
 
 #### Database model & migrations

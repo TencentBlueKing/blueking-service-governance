@@ -32,12 +32,15 @@ import (
 	"sync"
 	"time"
 
+	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -114,6 +117,7 @@ func (s *fakeCluster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	name, isStatus := strings.CutSuffix(name, "/status")
 	if name == "" {
 		items := make([]any, 0, len(store))
 		for _, obj := range store {
@@ -149,6 +153,12 @@ func (s *fakeCluster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodDelete:
 		delete(store, name)
 		fakeWriteJSON(w, http.StatusOK, map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Success"})
+	case r.Method == http.MethodPatch && contentType == "application/merge-patch+json" && isStatus:
+		var body map[string]any
+		Expect(json.Unmarshal(data, &body)).To(Succeed())
+		// status 子资源只接受对 status 的修改
+		applyFakeMergePatch(obj, map[string]any{"status": body["status"]})
+		fakeWriteJSON(w, http.StatusOK, obj)
 	case r.Method == http.MethodPatch && contentType == "application/json-patch+json":
 		var ops []map[string]any
 		Expect(json.Unmarshal(data, &ops)).To(Succeed())
@@ -237,6 +247,28 @@ func applyFakeJSONPatch(obj map[string]any, ops []map[string]any) {
 	}
 }
 
+// applyFakeMergePatch 按 JSON Merge Patch（RFC 7386）语义修改 obj：null 删除字段，对象逐层合并
+func applyFakeMergePatch(obj, patch map[string]any) {
+	for key, value := range patch {
+		if value == nil {
+			delete(obj, key)
+			continue
+		}
+		patchChild, isObject := value.(map[string]any)
+		objChild, objIsObject := obj[key].(map[string]any)
+		if isObject && objIsObject {
+			applyFakeMergePatch(objChild, patchChild)
+			continue
+		}
+		if isObject {
+			objChild = map[string]any{}
+			applyFakeMergePatch(objChild, patchChild)
+			value = objChild
+		}
+		obj[key] = value
+	}
+}
+
 func fakeIndex(field string) int {
 	idx, err := strconv.Atoi(field)
 	Expect(err).NotTo(HaveOccurred())
@@ -318,7 +350,7 @@ var _ = Describe("workloadRollout", func() {
 		fake   *fakeCluster
 		server *httptest.Server
 		cfg    *cluster.Config
-		meta   *metav1.ObjectMeta
+		gd     *tkex.GameDeployment
 
 		origTimeout, origInterval time.Duration
 	)
@@ -339,7 +371,13 @@ var _ = Describe("workloadRollout", func() {
 		fake = newFakeCluster()
 		server = httptest.NewServer(fake)
 		cfg = &cluster.Config{Rest: &rest.Config{Host: server.URL}, ClusterID: "BCS-K8S-00000"}
-		meta = &metav1.ObjectMeta{Name: "demo"}
+		gd = &tkex.GameDeployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo"},
+			Spec: tkex.GameDeploymentSpec{
+				Replicas:       lo.ToPtr(int32(4)),
+				UpdateStrategy: tkex.GameDeploymentUpdateStrategy{Partition: lo.ToPtr(intstr.FromInt32(0))},
+			},
+		}
 
 		origTimeout, origInterval = rolloutWaitTimeout, rolloutWaitInterval
 		rolloutWaitTimeout, rolloutWaitInterval = 300*time.Millisecond, 10*time.Millisecond
@@ -361,7 +399,7 @@ var _ = Describe("workloadRollout", func() {
 			fake.gameDeploys["demo"] = fakeGameDeploy(nil, 4, 0)
 
 			rollout := newRollout(k8skind.GameDeploy, strategy)
-			Expect(rollout.EnsureRollout(ctx, meta)).To(Succeed())
+			Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 
 			Expect(fake.rollouts["demo"]).To(HaveKeyWithValue("spec", And(
 				HaveKeyWithValue("type", "Canary"),
@@ -371,12 +409,12 @@ var _ = Describe("workloadRollout", func() {
 					map[string]any{"replicas": "50%"},
 				})),
 			)))
-			Expect(meta.Labels).To(HaveKeyWithValue("rollout", "true"))
+			Expect(gd.Labels).To(HaveKeyWithValue("rollout", "true"))
 
 			injected := &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 4)}
-			Expect(rollout.EnsurePartition(ctx, injected)).To(Succeed())
+			Expect(rollout.AfterWorkloadUpdate(ctx, injected)).To(Succeed())
 			notInjected := &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 0)}
-			Expect(rollout.EnsurePartition(ctx, notInjected)).To(
+			Expect(rollout.AfterWorkloadUpdate(ctx, notInjected)).To(
 				MatchError(ContainSubstring("rollout webhook did not take effect")),
 			)
 		})
@@ -385,11 +423,11 @@ var _ = Describe("workloadRollout", func() {
 			fake.reconcile = false
 
 			rollout := newRollout(k8skind.GameDeploy, strategy)
-			Expect(rollout.EnsureRollout(ctx, meta)).To(Succeed())
+			Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 			Expect(fake.rollouts).To(HaveKey("demo"))
-			Expect(meta.Labels).To(HaveKeyWithValue("rollout", "true"))
+			Expect(gd.Labels).To(HaveKeyWithValue("rollout", "true"))
 			Expect(
-				rollout.EnsurePartition(ctx, &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 0)}),
+				rollout.AfterWorkloadUpdate(ctx, &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 0)}),
 			).To(Succeed())
 		})
 
@@ -397,7 +435,7 @@ var _ = Describe("workloadRollout", func() {
 			fake.reconcile = false
 			fake.gameDeploys["demo"] = fakeGameDeploy(nil, 4, 0)
 
-			err := newRollout(k8skind.GameDeploy, strategy).EnsureRollout(ctx, meta)
+			err := newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)
 			Expect(err).To(MatchError(ContainSubstring("wait rollout demo-ns/demo to be reconciled")))
 		})
 
@@ -407,14 +445,14 @@ var _ = Describe("workloadRollout", func() {
 				previous := &releasestrategy.ReleaseStrategy{Batches: []releasestrategy.Batch{
 					{Target: "3", PauseMode: releasestrategy.PauseModePermanent},
 				}}
-				Expect(newRollout(k8skind.GameDeploy, previous).EnsureRollout(ctx, meta)).To(Succeed())
+				Expect(newRollout(k8skind.GameDeploy, previous).BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 				Expect(fake.rollouts["demo"]["status"]).To(HaveKeyWithValue("rolloutRevision", "demo-rev-1"))
 			})
 
 			It("waits for the controller to observe the changed spec", func() {
 				fake.observeSpecAfterGets = 3
 
-				Expect(newRollout(k8skind.GameDeploy, strategy).EnsureRollout(ctx, meta)).To(Succeed())
+				Expect(newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 				// workloadRevision 早已写入，只有等到 rolloutRevision 更新才能返回
 				Expect(fake.pendingGets).To(BeZero())
 				Expect(fake.rollouts["demo"]["status"]).To(HaveKeyWithValue("rolloutRevision", "demo-rev-2"))
@@ -423,16 +461,113 @@ var _ = Describe("workloadRollout", func() {
 			It("fails when the controller does not observe the changed spec in time", func() {
 				fake.observeSpecAfterGets = 1000
 
-				err := newRollout(k8skind.GameDeploy, strategy).EnsureRollout(ctx, meta)
+				err := newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)
 				Expect(err).To(MatchError(ContainSubstring("wait rollout demo-ns/demo to be reconciled")))
 			})
 
 			It("does not wait for the rollout revision when the spec is unchanged", func() {
-				Expect(newRollout(k8skind.GameDeploy, strategy).EnsureRollout(ctx, meta)).To(Succeed())
+				Expect(newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 				fake.observeSpecAfterGets = 1000
 
-				Expect(newRollout(k8skind.GameDeploy, strategy).EnsureRollout(ctx, meta)).To(Succeed())
+				Expect(newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 				Expect(fake.rollouts["demo"]["metadata"]).To(HaveKeyWithValue("generation", BeNumerically("==", 2)))
+			})
+		})
+
+		Context("with a leftover rollout having an unfinished release", func() {
+			// leftoverRollout 返回上一次发布遗留的 Rollout，stepStatus 为 nil 时为批次全部走完后的 {}
+			leftoverRollout := func(phase string, stepStatus map[string]any) map[string]any {
+				return map[string]any{
+					"apiVersion": batchrelease.APIVersion, "kind": batchrelease.Kind,
+					"metadata": map[string]any{"name": "demo", "generation": int64(1)},
+					"spec":     map[string]any{"steps": []any{map[string]any{"replicas": int64(3)}}},
+					"status": map[string]any{
+						"phase":            phase,
+						"workloadRevision": "demo-1",
+						"rolloutRevision":  "demo-rev-1",
+						"stepStatus":       lo.Ternary(stepStatus == nil, map[string]any{}, stepStatus),
+					},
+				}
+			}
+
+			BeforeEach(func() {
+				fake.gameDeploys["demo"] = fakeGameDeploy(map[string]any{"rollout": "true"}, 4, 4)
+				fake.rollouts["demo"] = leftoverRollout(
+					batchrelease.RolloutPhaseRollbackCompleted, map[string]any{"currentStepIndex": int64(-1)},
+				)
+			})
+
+			DescribeTable("defers the rollout until the workload is updated",
+				func(phase string, stepStatus map[string]any) {
+					fake.rollouts["demo"] = leftoverRollout(phase, stepStatus)
+
+					rollout := newRollout(k8skind.GameDeploy, strategy)
+					Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
+					Expect(fake.rollouts).NotTo(HaveKey("demo"))
+					Expect(gd.Spec.UpdateStrategy.Partition).To(Equal(lo.ToPtr(intstr.FromInt32(4))))
+				},
+				Entry("paused in the middle of the release", batchrelease.RolloutPhaseRunning,
+					map[string]any{"currentStepIndex": int64(1), "currentStepPhase": "PausedPermanently"}),
+				Entry("updating the remaining instances", batchrelease.RolloutPhaseUpdatingPrimary, nil),
+				Entry("cleaning the canary at the start or end of a release",
+					batchrelease.RolloutPhaseCleaningCanary, nil),
+				Entry("rolled back", batchrelease.RolloutPhaseRollbackCompleted,
+					map[string]any{"currentStepIndex": int64(-1)}),
+			)
+
+			It("applies the rollout directly when the leftover rollout is healthy", func() {
+				fake.rollouts["demo"] = leftoverRollout(batchrelease.RolloutPhaseHealthy, nil)
+
+				Expect(newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
+				Expect(fake.requestsWith(http.MethodDelete)).To(BeEmpty())
+				Expect(fake.rollouts["demo"]).To(HaveKeyWithValue("spec", HaveKeyWithValue("steps", HaveLen(2))))
+				Expect(gd.Spec.UpdateStrategy.Partition).To(Equal(lo.ToPtr(intstr.FromInt32(0))))
+			})
+
+			It("deletes the rollout, holds the partition and applies the rollout after the workload update", func() {
+				rollout := newRollout(k8skind.GameDeploy, strategy)
+				Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
+
+				// 修改 spec 会让控制器立即按新批次发布上一次的版本，更新工作负载前不能下发 Rollout
+				Expect(fake.rollouts).NotTo(HaveKey("demo"))
+				Expect(fake.requestsWith("apply-patch")).To(BeEmpty())
+				Expect(gd.Labels).To(HaveKeyWithValue("rollout", "true"))
+				Expect(gd.Spec.UpdateStrategy.Partition).To(Equal(lo.ToPtr(intstr.FromInt32(4))))
+
+				live := &unstructured.Unstructured{Object: fakeGameDeploy(map[string]any{"rollout": "true"}, 4, 4)}
+				Expect(rollout.AfterWorkloadUpdate(ctx, live)).To(Succeed())
+				Expect(fake.rollouts["demo"]).To(And(
+					HaveKeyWithValue("spec", HaveKeyWithValue("steps", HaveLen(2))),
+					HaveKeyWithValue("status", HaveKeyWithValue("workloadRevision", "demo-1")),
+				))
+			})
+
+			It("fails without applying the rollout when the partition is overwritten", func() {
+				rollout := newRollout(k8skind.GameDeploy, strategy)
+				Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
+
+				live := &unstructured.Unstructured{Object: fakeGameDeploy(map[string]any{"rollout": "true"}, 4, 0)}
+				Expect(rollout.AfterWorkloadUpdate(ctx, live)).To(
+					MatchError(ContainSubstring("instances are updated before batch release")),
+				)
+				Expect(fake.rollouts).NotTo(HaveKey("demo"))
+			})
+
+			It("fails without modifying the workload when deleting the rollout fails", func() {
+				fake.failRolloutDelete = true
+
+				err := newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)
+				Expect(err).To(MatchError(ContainSubstring("delete rollout with unfinished release")))
+				Expect(gd.Labels).NotTo(HaveKey("rollout"))
+				Expect(gd.Spec.UpdateStrategy.Partition).To(Equal(lo.ToPtr(intstr.FromInt32(0))))
+			})
+
+			It("applies the rollout directly when the workload does not exist", func() {
+				delete(fake.gameDeploys, "demo")
+
+				Expect(newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
+				Expect(fake.rollouts["demo"]).To(HaveKeyWithValue("spec", HaveKeyWithValue("steps", HaveLen(2))))
+				Expect(gd.Spec.UpdateStrategy.Partition).To(Equal(lo.ToPtr(intstr.FromInt32(0))))
 			})
 		})
 
@@ -440,10 +575,10 @@ var _ = Describe("workloadRollout", func() {
 			fake.rolloutInstalled = false
 			fake.gameDeploys["demo"] = fakeGameDeploy(nil, 4, 0)
 
-			err := newRollout(k8skind.GameDeploy, strategy).EnsureRollout(ctx, meta)
+			err := newRollout(k8skind.GameDeploy, strategy).BeforeWorkloadUpdate(ctx, gd)
 			Expect(errors.Is(err, batchrelease.ErrRolloutNotInstalled)).To(BeTrue())
 			Expect(err.Error()).To(ContainSubstring("the server could not find the requested resource"))
-			Expect(meta.Labels).NotTo(HaveKey("rollout"))
+			Expect(gd.Labels).NotTo(HaveKey("rollout"))
 		})
 
 		It("appends the rollout to the snapshot objects without modifying the extra objects", func() {
@@ -466,7 +601,7 @@ var _ = Describe("workloadRollout", func() {
 			fake.gameDeploys["demo"] = fakeGameDeploy(map[string]any{"rollout": "true", "app": "demo"}, 4, 0)
 
 			rollout := newRollout(k8skind.GameDeploy, nil)
-			Expect(rollout.EnsureRollout(ctx, meta)).To(Succeed())
+			Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 			Expect(fake.rollouts).NotTo(HaveKey("demo"))
 			labels := fake.gameDeploys["demo"]["metadata"].(map[string]any)["labels"]
 			Expect(labels).To(Equal(map[string]any{"app": "demo"}))
@@ -474,7 +609,7 @@ var _ = Describe("workloadRollout", func() {
 			// webhook 缓存未同步时仍注入了 partition，更新后需放开
 			fake.gameDeploys["demo"] = fakeGameDeploy(nil, 4, 4)
 			Expect(
-				rollout.EnsurePartition(ctx, &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 4)}),
+				rollout.AfterWorkloadUpdate(ctx, &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 4)}),
 			).To(Succeed())
 			updateStrategy := fake.gameDeploys["demo"]["spec"].(map[string]any)["updateStrategy"]
 			Expect(updateStrategy).To(HaveKeyWithValue("partition", BeNumerically("==", 0)))
@@ -484,9 +619,9 @@ var _ = Describe("workloadRollout", func() {
 			fake.gameDeploys["demo"] = fakeGameDeploy(map[string]any{"app": "demo"}, 4, 0)
 
 			rollout := newRollout(k8skind.GameDeploy, nil)
-			Expect(rollout.EnsureRollout(ctx, meta)).To(Succeed())
+			Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 			Expect(
-				rollout.EnsurePartition(ctx, &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 0)}),
+				rollout.AfterWorkloadUpdate(ctx, &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 0)}),
 			).To(Succeed())
 			Expect(fake.requestsWith(http.MethodDelete)).To(BeEmpty())
 			Expect(fake.requestsWith(http.MethodPatch)).To(BeEmpty())
@@ -496,9 +631,9 @@ var _ = Describe("workloadRollout", func() {
 			fake.gameDeploys["demo"] = fakeGameDeploy(map[string]any{"app": "demo"}, 4, 4)
 
 			rollout := newRollout(k8skind.GameDeploy, nil)
-			Expect(rollout.EnsureRollout(ctx, meta)).To(Succeed())
+			Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 			Expect(
-				rollout.EnsurePartition(ctx, &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 4)}),
+				rollout.AfterWorkloadUpdate(ctx, &unstructured.Unstructured{Object: fakeGameDeploy(nil, 4, 4)}),
 			).To(Succeed())
 			Expect(fake.requestsWith(http.MethodDelete)).To(BeEmpty())
 			updateStrategy := fake.gameDeploys["demo"]["spec"].(map[string]any)["updateStrategy"]
@@ -508,7 +643,7 @@ var _ = Describe("workloadRollout", func() {
 		It("treats a cluster without the rollout CRD as having nothing to clean up", func() {
 			fake.rolloutInstalled = false
 
-			Expect(newRollout(k8skind.GameDeploy, nil).EnsureRollout(ctx, meta)).To(Succeed())
+			Expect(newRollout(k8skind.GameDeploy, nil).BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
 			Expect(fake.requestsWith(http.MethodDelete)).To(BeEmpty())
 		})
 
@@ -520,7 +655,7 @@ var _ = Describe("workloadRollout", func() {
 			}
 			fake.gameDeploys["demo"] = fakeGameDeploy(map[string]any{"rollout": "true"}, 4, 0)
 
-			err := newRollout(k8skind.GameDeploy, nil).EnsureRollout(ctx, meta)
+			err := newRollout(k8skind.GameDeploy, nil).BeforeWorkloadUpdate(ctx, gd)
 			Expect(err).To(MatchError(ContainSubstring("etcd unavailable")))
 			Expect(fake.requestsWith(fakeGameDeploysPath)).To(BeEmpty())
 		})
@@ -533,8 +668,8 @@ var _ = Describe("workloadRollout", func() {
 
 	It("does nothing for a Deployment main workload", func() {
 		rollout := newRollout(k8skind.Deploy, nil)
-		Expect(rollout.EnsureRollout(ctx, meta)).To(Succeed())
-		Expect(rollout.EnsurePartition(ctx, nil)).To(Succeed())
+		Expect(rollout.BeforeWorkloadUpdate(ctx, gd)).To(Succeed())
+		Expect(rollout.AfterWorkloadUpdate(ctx, nil)).To(Succeed())
 		Expect(fake.requestsWith("/")).To(BeEmpty())
 	})
 })

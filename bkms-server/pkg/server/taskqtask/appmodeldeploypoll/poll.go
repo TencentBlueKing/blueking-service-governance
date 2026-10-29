@@ -125,6 +125,12 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 
 	curStatus := record.Status
 	state, err := appmodeldeploy.NewDeployStateGetter(record).Get(ctx)
+	// 查状态之前或期间，同环境 / 泳道又发起了部署：集群资源已由新部署接管（全量部署删除 Rollout，
+	// 再次分批重新下发同名 Rollout），本次查询失败或读到的进度都不属于本记录，不计失败、不写进度。
+	// 新部署先建记录再修改集群，查询结束时仍没有更新的记录，读到的状态就不受新部署影响
+	if p.hasNewerDeploy(ctx, args) {
+		return p.cancelForNewerDeploy(ctx, record, args)
+	}
 	if err != nil {
 		remain--
 		return p.onFetchFailed(ctx, record, args, remain, windowExceeded, err)
@@ -149,10 +155,8 @@ func (p *Poller) Handle(ctx context.Context, args Args) error {
 			record.EndedAt = time.Now()
 		}
 	}
-	p.markCanceledIfSuperseded(ctx, record, args)
 
 	// 窗口已过且仍未达终态：直接落超时终态，中间态不必再写一次库
-	// 被更新部署取代的记录已在上一步标 canceled，属终态，不受此分支影响
 	if windowExceeded && !record.Status.IsStable() && !record.Status.IsUninstall() {
 		log.Warnf(ctx, "deploy %s polling window exceeded at status %s, mark pollingTimeout", args, record.Status)
 		return p.terminate(ctx, record, args, appmodeldeploy.StatusPollingTimeout, "")
@@ -197,21 +201,26 @@ func (p *Poller) onFetchFailed(
 	return p.enqueueNext(ctx, args, remain)
 }
 
-// markCanceledIfSuperseded 同环境出现更新部署时把当前记录标取消
-// 查最新记录失败只打日志，不影响本 tick 状态推进
-func (p *Poller) markCanceledIfSuperseded(ctx context.Context, record *appmodeldeploy.Record, args Args) {
+// hasNewerDeploy 同环境 / 泳道的最新部署记录不是当前记录时返回 true
+// 查最新记录失败只打日志，按没有更新的部署处理，不影响本 tick 状态推进
+func (p *Poller) hasNewerDeploy(ctx context.Context, args Args) bool {
 	latest, err := appmodeldeploy.GetLatest(ctx, p.db, args.AppID, args.EnvName, args.TrafficLaneName)
 	if err != nil {
 		log.Errorf(ctx, "failed to get latest deploy record: %v", err)
-		return
+		return false
 	}
 	if latest == nil || latest.ID.Hex() == args.DeployID {
-		return
+		return false
 	}
 	log.Warnf(ctx, "deploy %s status polling stopped by newer deployment %s", args, latest.ID.Hex())
-	record.Status = appmodeldeploy.StatusCanceled
-	record.Message = "deployment canceled: superseded by newer deployment"
-	record.EndedAt = time.Now()
+	return true
+}
+
+// cancelForNewerDeploy 同环境 / 泳道有更新的部署时，把当前记录标为 canceled 终态，不再查状态、不写进度
+func (p *Poller) cancelForNewerDeploy(ctx context.Context, record *appmodeldeploy.Record, args Args) error {
+	return p.terminate(
+		ctx, record, args, appmodeldeploy.StatusCanceled, "deployment canceled: superseded by newer deployment",
+	)
 }
 
 // enqueueNext 按配置间隔 ProcessIn 投递下一 tick

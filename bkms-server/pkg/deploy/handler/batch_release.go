@@ -19,13 +19,19 @@
 package handler
 
 import (
+	"context"
 	"errors"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 )
@@ -80,4 +86,89 @@ func (h *Handler) GetBatchReleaseProgress(c *gin.Context) {
 	ginutils.OK(c, serializer.GetBatchReleaseProgressOutput{
 		Data: new(serializer.BatchReleaseProgressOutputObj).FromModel(record),
 	})
+}
+
+// OperateBatchRelease 对应用模型应用在环境 / 泳道下进行中的分批发布执行手动操作
+//
+//	@ID			OperateBatchRelease
+//	@Summary	分批发布手动操作
+//	@Description	对环境 / 泳道最新部署记录对应的进行中分批发布执行继续、暂停、回退上一批、跳过剩余批次或回滚，
+//	@Description	权限同部署。前置条件按集群中 Rollout 的实时状态校验；不满足前置条件、或没有进行中的分批发布时返回 400
+//	@Tags		deploy
+//	@Accept		json
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID	path		string								true	"应用 ID"
+//	@Param		envName	path		string								true	"部署环境名称"
+//	@Param		body	body		serializer.OperateBatchReleaseInput	true	"分批发布手动操作请求"
+//	@Success	200		{object}	serializer.EmptyOutput
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/envs/{envName}/batch-release/operations [post]
+func (h *Handler) OperateBatchRelease(c *gin.Context) {
+	var uriInput serializer.AppEnvURIInput
+	var input serializer.OperateBatchReleaseInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeEdit, true)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	record, err := appmodeldeploy.OperateBatchRelease(
+		ctx, h.registry.DB, app.ID, uriInput.EnvName, input.TrafficLaneName, input.Action,
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, fmt.Sprintf(
+			"%s batch release of %s", input.Action,
+			genDeployInfo(app.WorkspaceID, app.ID, uriInput.EnvName, input.TrafficLaneName),
+		)))
+		return
+	}
+
+	recordBatchReleaseActionAudit(ctx, app, uriInput.EnvName, input.TrafficLaneName, input.Action, record)
+	ginutils.OK(c, serializer.EmptyOutput{})
+}
+
+// batchReleaseActionOperationTypes 分批发布手动操作对应的操作记录类型
+var batchReleaseActionOperationTypes = map[batchrelease.Action]audit.OperationType{
+	batchrelease.ActionContinue: audit.OperationTypeContinue,
+	batchrelease.ActionPause:    audit.OperationTypePause,
+	batchrelease.ActionBackward: audit.OperationTypeBackward,
+	batchrelease.ActionSkip:     audit.OperationTypeSkip,
+	batchrelease.ActionRollback: audit.OperationTypeRollback,
+}
+
+// recordBatchReleaseActionAudit 记录分批发布手动操作的操作记录，只在修改 Rollout 成功后调用，
+// 通过 extras 中的 deployID 与该次分批发布的下发、终态记录关联
+func recordBatchReleaseActionAudit(
+	ctx context.Context,
+	app *bkmsapp.Application,
+	envName, trafficLaneName string,
+	action batchrelease.Action,
+	record *appmodeldeploy.Record,
+) {
+	strategy := lo.FromPtr(record.ReleaseStrategy)
+	go audit.AddOperationRecordAsync(
+		context.WithoutCancel(ctx),
+		batchReleaseActionOperationTypes[action],
+		audit.ResourceTypeApp,
+		app.ID,
+		audit.WithResult(audit.ResultSuccess),
+		audit.WithAttribute(audit.AttributeBatchRelease),
+		audit.WithWorkspaceID(app.WorkspaceID),
+		audit.WithAppID(app.ID),
+		audit.WithEnvName(envName),
+		audit.WithExtras(map[string]string{
+			"trafficLaneName":     trafficLaneName,
+			"deployID":            record.ID.Hex(),
+			"releaseStrategyID":   strategy.ID,
+			"releaseStrategyName": strategy.Name,
+		}),
+	)
 }

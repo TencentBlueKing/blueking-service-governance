@@ -215,6 +215,18 @@ var _ = Describe("Poller Handle", func() {
 		Expect(enqCount).To(Equal(0))
 	})
 
+	// 新部署是全量部署时 Rollout 已删除，查状态必然失败，不能计入失败额度、耗尽后落 pollingBroken
+	It("marks canceled instead of pollingBroken when fetching fails after a newer deploy", func() {
+		insert()
+		args.FailureRetryRemain = 1
+		mockey.Mock((*appmodeldeploy.DeployStateGetter).Get).Return(nil, errors.New("rollout not found")).Build()
+		time.Sleep(5 * time.Millisecond)
+		Expect(records.Create(ctx, newDeployingRecord(rec.AppID))).To(Succeed())
+		Expect(plr.Handle(ctx, args)).To(Succeed())
+		Expect(reload().Status).To(Equal(appmodeldeploy.StatusCanceled))
+		Expect(enqCount).To(Equal(0))
+	})
+
 	Context("with a batch release", func() {
 		pausedProgress := &appmodeldeploy.BatchProgress{
 			CurrentBatchIndex: lo.ToPtr(int64(0)),
@@ -278,6 +290,37 @@ var _ = Describe("Poller Handle", func() {
 			mockey.Mock((*appmodeldeploy.DeployStateGetter).Get).Return(nil, errors.New("cluster down")).Build()
 			Expect(plr.Handle(ctx, args)).To(Succeed())
 			Expect(reload().Status).To(Equal(appmodeldeploy.StatusPollingBroken))
+			Expect(enqCount).To(Equal(0))
+		})
+
+		// 新部署再次分批时会重新下发同名 Rollout，读到的是新一轮的进度
+		It("keeps the progress when a newer deploy exists before fetching", func() {
+			insert()
+			stubBatchFetch(appmodeldeploy.StatusDeploying, pausedProgress)
+			time.Sleep(5 * time.Millisecond)
+			Expect(records.Create(ctx, newDeployingRecord(rec.AppID))).To(Succeed())
+			Expect(plr.Handle(ctx, args)).To(Succeed())
+			got := reload()
+			Expect(got.Status).To(Equal(appmodeldeploy.StatusCanceled))
+			Expect(got.BatchProgress).To(Equal(rec.BatchProgress))
+			Expect(enqCount).To(Equal(0))
+		})
+
+		It("keeps the progress when a newer deploy is created while fetching", func() {
+			insert()
+			mockey.Mock((*appmodeldeploy.DeployStateGetter).Get).To(
+				func(*appmodeldeploy.DeployStateGetter, context.Context) (*appmodeldeploy.DeployState, error) {
+					time.Sleep(5 * time.Millisecond)
+					Expect(records.Create(ctx, newDeployingRecord(rec.AppID))).To(Succeed())
+					return &appmodeldeploy.DeployState{
+						Status: appmodeldeploy.StatusDeploying, BatchProgress: pausedProgress,
+					}, nil
+				},
+			).Build()
+			Expect(plr.Handle(ctx, args)).To(Succeed())
+			got := reload()
+			Expect(got.Status).To(Equal(appmodeldeploy.StatusCanceled))
+			Expect(got.BatchProgress).To(Equal(rec.BatchProgress))
 			Expect(enqCount).To(Equal(0))
 		})
 
@@ -375,6 +418,6 @@ var _ = Describe("stableAuditOptions", func() {
 		Entry("deployed", appmodeldeploy.StatusDeployed, audit.ResultSuccess),
 		Entry("rolled back by the user", appmodeldeploy.StatusRolledBack, audit.ResultSuccess),
 		Entry("polling broken", appmodeldeploy.StatusPollingBroken, audit.ResultFailed),
-		Entry("superseded by a new deploy", appmodeldeploy.StatusCanceled, audit.ResultFailed),
+		Entry("canceled by a newer deploy", appmodeldeploy.StatusCanceled, audit.ResultFailed),
 	)
 })

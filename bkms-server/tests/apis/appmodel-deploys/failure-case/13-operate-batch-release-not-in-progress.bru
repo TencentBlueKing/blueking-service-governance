@@ -1,0 +1,37 @@
+meta {
+  name: 13-operate-batch-release-not-in-progress
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{serviceURL}}/apps/{{appmodelDeployFailTrpcAppID}}/envs/{{appmodelDeployFailEnvName}}/batch-release/operations
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "trafficLaneName": "",
+    "action": "rollback"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject the action when no batch release is in progress", () => {
+    // 该应用从未部署，没有进行中的分批发布
+    expect(res.body.error).to.be.an("object");
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+    expect(res.body.error.message).to.include("no batch release is in progress");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 5000
+}

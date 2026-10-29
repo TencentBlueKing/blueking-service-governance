@@ -7946,6 +7946,69 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/envs/{envName}/batch-release/operations": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "对环境 / 泳道最新部署记录对应的进行中分批发布执行继续、暂停、回退上一批、跳过剩余批次或回滚，\n权限同部署。前置条件按集群中 Rollout 的实时状态校验；不满足前置条件、或没有进行中的分批发布时返回 400",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deploy"
+                ],
+                "summary": "分批发布手动操作",
+                "operationId": "OperateBatchRelease",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "分批发布手动操作请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.OperateBatchReleaseInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_deploy_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/envs/{envName}/bg-env-vars": {
             "get": {
                 "security": [
@@ -20206,6 +20269,23 @@ const docTemplate = `{
                 }
             }
         },
+        "batchrelease.Action": {
+            "type": "string",
+            "enum": [
+                "continue",
+                "pause",
+                "backward",
+                "skip",
+                "rollback"
+            ],
+            "x-enum-varnames": [
+                "ActionContinue",
+                "ActionPause",
+                "ActionBackward",
+                "ActionSkip",
+                "ActionRollback"
+            ]
+        },
         "bkerrs.ErrCode": {
             "type": "string",
             "enum": [
@@ -29470,6 +29550,33 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "runtimeVersion": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.OperateBatchReleaseInput": {
+            "type": "object",
+            "required": [
+                "action"
+            ],
+            "properties": {
+                "action": {
+                    "description": "手动操作：continue 继续发布 / pause 暂停 / backward 回退上一批 / skip 跳过剩余批次 / rollback 回滚",
+                    "enum": [
+                        "continue",
+                        "pause",
+                        "backward",
+                        "skip",
+                        "rollback"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/batchrelease.Action"
+                        }
+                    ]
+                },
+                "trafficLaneName": {
+                    "description": "部署的泳道名称（空字符串表示不使用泳道）",
                     "type": "string"
                 }
             }

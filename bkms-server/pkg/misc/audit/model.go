@@ -67,6 +67,14 @@ const (
 	OperationTypePublish OperationType = "publish"
 	// OperationTypeRestart 开发模式进程重启操作
 	OperationTypeRestart OperationType = "restart"
+	// OperationTypeContinue 分批发布继续发布操作
+	OperationTypeContinue OperationType = "continue"
+	// OperationTypePause 分批发布暂停操作
+	OperationTypePause OperationType = "pause"
+	// OperationTypeBackward 分批发布回退上一批操作
+	OperationTypeBackward OperationType = "backward"
+	// OperationTypeSkip 分批发布跳过剩余批次操作
+	OperationTypeSkip OperationType = "skip"
 )
 
 // AllOperationTypes 所有操作类型
@@ -82,6 +90,10 @@ var AllOperationTypes = []OperationType{
 	OperationTypeExecute,
 	OperationTypePublish,
 	OperationTypeRestart,
+	OperationTypeContinue,
+	OperationTypePause,
+	OperationTypeBackward,
+	OperationTypeSkip,
 }
 
 // DisplayName 操作类型展示用名称 TODO 国际化
@@ -111,6 +123,14 @@ func (t OperationType) DisplayName() string {
 		return "热更新"
 	case OperationTypeRestart:
 		return "进程重启"
+	case OperationTypeContinue:
+		return "继续发布"
+	case OperationTypePause:
+		return "暂停"
+	case OperationTypeBackward:
+		return "回退上一批"
+	case OperationTypeSkip:
+		return "跳过剩余批次"
 	default:
 		// 默认返回原始值
 		return string(t)
@@ -231,6 +251,8 @@ const (
 	AttributeVisibleEnvNames Attribute = "visibleEnvNames"
 	// AttributeImageRegistry 空间镜像仓库
 	AttributeImageRegistry Attribute = "imageRegistry"
+	// AttributeBatchRelease 分批发布（手动操作）
+	AttributeBatchRelease Attribute = "batchRelease"
 )
 
 // DisplayName 属性展示用名称 TODO 国际化
@@ -282,6 +304,8 @@ func (t Attribute) DisplayName() string {
 		return "可见环境"
 	case AttributeImageRegistry:
 		return "镜像仓库"
+	case AttributeBatchRelease:
+		return "分批发布"
 	default:
 		// 默认返回原始值
 		return string(t)

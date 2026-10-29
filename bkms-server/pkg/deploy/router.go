@@ -73,6 +73,8 @@ type HelmDeployHandler interface {
 
 	// GetBatchReleaseProgress 获取应用模型应用最新一次部署的分批发布进度
 	GetBatchReleaseProgress(c *gin.Context)
+	// OperateBatchRelease 对进行中的分批发布执行手动操作（继续、暂停、回退上一批、跳过剩余批次、回滚）
+	OperateBatchRelease(c *gin.Context)
 }
 
 // Register 注册 Helm 应用部署 Gin v2 路由
@@ -133,4 +135,6 @@ func Register(rg *gin.RouterGroup, h HelmDeployHandler) {
 
 	// 获取应用最新一次部署的分批发布进度
 	rg.GET("/apps/:appID/envs/:envName/batch-release", h.GetBatchReleaseProgress)
+	// 对进行中的分批发布执行手动操作
+	rg.POST("/apps/:appID/envs/:envName/batch-release/operations", h.OperateBatchRelease)
 }

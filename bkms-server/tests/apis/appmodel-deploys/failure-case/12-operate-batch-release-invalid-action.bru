@@ -1,0 +1,35 @@
+meta {
+  name: 12-operate-batch-release-invalid-action
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{serviceURL}}/apps/{{appmodelDeployFailTrpcAppID}}/envs/{{appmodelDeployFailEnvName}}/batch-release/operations
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "trafficLaneName": "",
+    "action": "restart"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject an unknown batch release action", () => {
+    expect(res.body.error).to.be.an("object");
+    expect(res.body.error.code).to.equal("INVALID_REQUEST");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 5000
+}

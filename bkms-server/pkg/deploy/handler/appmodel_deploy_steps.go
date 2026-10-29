@@ -253,9 +253,7 @@ func (h *Handler) deleteAppModelDeploy(c *gin.Context) {
 	if err = deployer.Uninstall(ctx, env, input.TrafficLaneName); err != nil {
 		metricStatus = metrics.StatusErr
 		deployInfo := genDeployInfo(app.WorkspaceID, app.ID, uriInput.EnvName, input.TrafficLaneName)
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "uninstall app model app: %s", deployInfo,
-		))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "uninstall app model app: "+deployInfo))
 		return
 	}
 

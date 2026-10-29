@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -190,7 +191,7 @@ func (h *Handler) UpdateAppInstances(c *gin.Context) {
 		input.InstanceIDs,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "update app %s instances", app.ID))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "update app "+app.ID+" instances"))
 		return
 	}
 
@@ -286,7 +287,7 @@ func (h *Handler) ScaleAppInstances(c *gin.Context) {
 	// 获取应用部署器，执行实例扩缩容操作
 	deployer := h.newDeployer(app)
 	if err = deployer.Scale(ctx, uriInput.EnvName, input.TrafficLaneName, input.TargetReplicas); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "scale app %s instances", app.ID))
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "scale app "+app.ID+" instances"))
 		return
 	}
 
@@ -346,9 +347,7 @@ func (h *Handler) BatchDeleteAppInstances(c *gin.Context) {
 	deployer := h.newDeployer(app)
 	err = deployer.BatchDeleteInstances(ctx, uriInput.EnvName, input.TrafficLaneName, input.InstanceIDs)
 	if err != nil {
-		bkerrs.AbortWithErr(
-			c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "batch delete app %s instances", app.ID),
-		)
+		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "batch delete app "+app.ID+" instances"))
 		return
 	}
 

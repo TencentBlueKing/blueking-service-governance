@@ -191,7 +191,7 @@ func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, traf
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
-	// 检查是否为可卸载的状态（部署中/卸载中也可以卸载，适用于出错的情况）
+	// 检查是否为可卸载的状态（部署中/卸载中也可以卸载，适用于出错的情况）。
 	if record.Status == StatusUninstalled {
 		return errors.Errorf("deploy record status is %s, cannot uninstall", record.Status)
 	}
@@ -289,6 +289,10 @@ func (d *Deployer) UpdateInstances(
 	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return "", errors.Wrap(err, "get latest deploy record")
+	}
+	// 分批发布中拒绝更新应用实例
+	if record.IsBatchReleasing() {
+		return "", errors.Wrapf(batchrelease.ErrBatchReleaseInProgress, "deploy record %s", record.ID.Hex())
 	}
 	// 检查是否为可更新的状态
 	if record.Status != StatusDeployed {
@@ -413,6 +417,10 @@ func (d *Deployer) Scale(ctx context.Context, envName, trafficLaneName string, r
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
+	// 分批发布中拒绝扩缩容
+	if record.IsBatchReleasing() {
+		return errors.Wrapf(batchrelease.ErrBatchReleaseInProgress, "deploy record %s", record.ID.Hex())
+	}
 	kind, name := record.MainWorkload()
 	if name == "" {
 		return errors.Errorf("main workload not found in deploy record %s", record.ID.Hex())
@@ -461,6 +469,10 @@ func (d *Deployer) BatchDeleteInstances(
 	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
+	}
+	// 分批发布中拒绝删除实例
+	if record.IsBatchReleasing() {
+		return errors.Wrapf(batchrelease.ErrBatchReleaseInProgress, "deploy record %s", record.ID.Hex())
 	}
 
 	// 查询 Pod 状态并分类为终止态和运行态
@@ -946,14 +958,14 @@ func (d *Deployer) applyMainWorkload(
 ) error {
 	// 在主工作负载中注入 deployID，确保每次部署都能触发 Pod 滚动更新
 	d.injectDeployID(buildResult, deployID)
-	if err := rollout.EnsureRollout(ctx, buildResult.ObjectMeta()); err != nil {
+	if err := rollout.BeforeWorkloadUpdate(ctx, buildResult.MainWorkload); err != nil {
 		return err
 	}
 	liveWorkload, err := d.upsertWorkload(ctx, clusterID, namespace, buildResult.GVR(), buildResult.MainWorkload)
 	if err != nil {
 		return errors.Wrap(err, "upsert main workload")
 	}
-	return rollout.EnsurePartition(ctx, liveWorkload)
+	return rollout.AfterWorkloadUpdate(ctx, liveWorkload)
 }
 
 // reconcileEnvStates 部署完成后调谐北极星、HostPort 的环境状态：部署已带上最新 PolarisConfig，

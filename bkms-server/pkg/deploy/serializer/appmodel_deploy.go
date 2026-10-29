@@ -320,6 +320,14 @@ type GetBatchReleaseProgressInput struct {
 	TrafficLaneName string `form:"trafficLaneName"`
 }
 
+// OperateBatchReleaseInput contains the request body for a batch release manual action.
+type OperateBatchReleaseInput struct {
+	// 部署的泳道名称（空字符串表示不使用泳道）
+	TrafficLaneName string `json:"trafficLaneName"`
+	// 手动操作：continue 继续发布 / pause 暂停 / backward 回退上一批 / skip 跳过剩余批次 / rollback 回滚
+	Action batchrelease.Action `json:"action" binding:"required,oneof=continue pause backward skip rollback"`
+}
+
 // GetBatchReleaseProgressOutput is the response body for batch release progress.
 type GetBatchReleaseProgressOutput struct {
 	// 最新部署记录的分批发布进度；没有部署记录或最新记录不是分批发布时为 null
