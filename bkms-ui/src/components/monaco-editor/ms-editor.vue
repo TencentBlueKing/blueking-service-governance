@@ -84,10 +84,12 @@
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
   import { Copy } from 'bkui-vue/lib/icon';
-  import { isEqual } from 'lodash-es';
   import * as monaco from 'monaco-editor';
   import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker.js?worker';
+  import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker.js?worker';
+  import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker.js?worker';
   import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker.js?worker';
+  import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker.js?worker';
   import { copyText, validateYAML } from '~/common/util';
 
   import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
@@ -128,6 +130,15 @@
       if (label === 'json') {
         return new jsonWorker();
       }
+      if (['css', 'scss', 'less'].includes(label)) {
+        return new cssWorker();
+      }
+      if (['html', 'handlebars', 'razor'].includes(label)) {
+        return new htmlWorker();
+      }
+      if (['typescript', 'javascript'].includes(label)) {
+        return new tsWorker();
+      }
 
       return new editorWorker();
     },
@@ -137,7 +148,6 @@
   const editorContentRef = ref<HTMLElement>();
 
   const localValue = ref(props.modelValue);
-  const localErrorLines = ref<IMonacoEditorErrorMarkerItem[]>([]);
 
   const lightTheme = computed(() => ['vs', 'hc-light'].includes(props.theme));
 
@@ -204,12 +214,14 @@
   function handleContentChange() {
     const code = getValue() || '';
     localValue.value = code;
+    validate();
     emits('update:modelValue', localValue.value);
     emits('change', localValue.value);
   }
 
   // 变量联想功能
   function initAutoCompletion() {
+    editorVariableProvide?.dispose();
     editorVariableProvide = monaco.languages.registerCompletionItemProvider(props.lang, {
       triggerCharacters: ['{'], // 触发自动补全的字符
       provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
@@ -269,7 +281,7 @@
       wordWrap: 'on',
       scrollBeyondLastLine: false,
       fixedOverflowWidgets: true,
-      overflowWidgetsDomNode: document.body,
+      // 保留默认浮层容器，避免脱离 .monaco-editor 后丢失主题背景和边框。
       ...props.options,
     };
     if (props.isDiff) {
@@ -321,6 +333,7 @@
         handleContentChange();
       });
     }
+    validate();
   }
 
   // 将某一行滚动到编辑器中心并选中
@@ -382,6 +395,11 @@
   // 设置值
   function setValue(value: string) {
     if (!editor) return;
+    // 相同内容不会触发内容变化，但切换文件或环境后仍需同步校验状态。
+    if (getValue() === value) {
+      validate();
+      return;
+    }
     if (props.isDiff) {
       return (editor as monaco.editor.IStandaloneDiffEditor).getModel()?.modified?.setValue(value);
     }
@@ -394,18 +412,19 @@
     if (!editor) return false;
 
     // 校验不同语言格式（空内容时不跑 YAML 校验）
-    const yamlErrors = localValue.value && props.lang === 'yaml' ? validateYAML(localValue.value) : [];
+    const value = getValue() || '';
+    const yamlErrors = value && props.lang === 'yaml' ? validateYAML(value) : [];
     // 自定义校验（调用每个 validator 函数，传入当前值）
-    const customErrors = props.validator.flatMap(fn => fn(localValue.value));
-    localErrorLines.value = [...yamlErrors, ...customErrors];
+    const customErrors = props.validator.flatMap(fn => fn(value));
+    const errors = [...yamlErrors, ...customErrors];
 
     // 设置编辑器模型的标记(只设置能修改的model)
     const models = getModels();
     if (models[0]) {
-      monaco.editor.setModelMarkers(models[0], 'error', localErrorLines.value);
+      monaco.editor.setModelMarkers(models[0], 'error', errors);
     }
-
-    return !!localErrorLines.value.length;
+    emits('error', errors);
+    return !!errors.length;
   }
 
   watch(
@@ -436,6 +455,8 @@
           monaco.editor.setModelMarkers(model, 'error', []);
         }
       });
+      initAutoCompletion();
+      validate();
     },
   );
 
@@ -471,15 +492,6 @@
     },
     { immediate: true },
   );
-
-  // 校验（initMonaco 末尾已触发首次校验，此处只需响应内容变化）
-  watch(localValue, validate);
-
-  watch(localErrorLines, (newValue, oldValue) => {
-    if (isEqual(newValue, oldValue)) return;
-
-    emits('error', localErrorLines.value);
-  });
 
   onMounted(() => {
     document.addEventListener('fullscreenchange', handleFullscreenChange);

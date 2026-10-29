@@ -589,6 +589,7 @@
     Tag,
   } from 'bkui-vue';
   import { RightShape } from 'bkui-vue/lib/icon';
+  import { languages } from 'monaco-editor';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import { parse as parseYaml } from 'yaml';
@@ -717,11 +718,24 @@
   const isIndependentConfig = computed(
     () => !(detail.value?.isUnifiedConfig ?? activeDef.value?.isUnifiedConfig ?? true),
   );
-  // 编辑器语言：框架文件 taf 用 xml、trpc 用 yaml，普通文件用 plaintext
+  // 框架文件使用运行时声明的格式，普通文件按已注册语言的最长后缀匹配。
   const editorLang = computed(() => {
-    if (!isFrameworkFile.value) return 'plaintext';
-    const format = getFrameworkFileFormat(appDetailStore.runtime);
-    return format === 'taf' ? 'xml' : format || 'plaintext';
+    if (isFrameworkFile.value) {
+      const format = getFrameworkFileFormat(appDetailStore.runtime);
+      return format === 'taf' ? 'xml' : format || 'plaintext';
+    }
+    const fileName = (activeDef.value?.name || '').toLowerCase();
+    let language = 'plaintext';
+    let extensionLength = 0;
+    for (const { id, extensions = [] } of languages.getLanguages()) {
+      for (const extension of extensions) {
+        if (extension.length > extensionLength && fileName.endsWith(extension.toLowerCase())) {
+          language = id;
+          extensionLength = extension.length;
+        }
+      }
+    }
+    return language;
   });
   // 框架文件和普通文件的名称、目录均以 def 为准。
   const activeDisplayName = computed(() => activeDef.value?.name || '');
@@ -1037,6 +1051,7 @@
   // 合并模式下清空已有环境差异走原确认流程，其余情况预览新版本。
   function handleBeforeSave() {
     if (!detail.value || isEditorLoading.value) return;
+    if (msEditorRef.value?.validate()) return;
     const content = msEditorRef.value?.getValue() ?? '';
     if (shouldShowClearFileContentDialog(content)) {
       showClearFileContentDialog.value = true;
