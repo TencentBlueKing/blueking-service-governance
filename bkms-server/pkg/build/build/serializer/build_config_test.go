@@ -145,15 +145,12 @@ var _ = Describe("Build config serializers", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("rejects empty start command when build commands are set", func() {
+		It("accepts empty start command when build commands are set", func() {
 			err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
 				input.PlatformBuildConfig.Commands.Start = ""
 			}).ValidatePlatformBuildConfig()
 
-			Expect(err).To(MatchError(
-				"buildConfig.repoBuildConfig.platformBuildConfig.commands.start " +
-					"is required when build commands are set",
-			))
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("rejects command lists exceeding the max count", func() {

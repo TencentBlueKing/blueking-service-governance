@@ -492,7 +492,7 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(content).NotTo(ContainSubstring("/out"))
 	})
 
-	It("omits default entrypoint when custom build commands may not emit /app/<appName>", func() {
+	It("writes default entrypoint when start command is empty even if build commands are custom", func() {
 		input := defaultInput(LanguageGo)
 		input.BuildCommands = encodeCommandsParam([]string{
 			"go build -o ${BKMS_ARTIFACT_DIR}/svr-a ./cmd/a",
@@ -503,7 +503,7 @@ var _ = Describe("Dockerfile render", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(content).To(ContainSubstring("RUN go build -o ${BKMS_ARTIFACT_DIR}/svr-a ./cmd/a\n"))
-		Expect(content).NotTo(ContainSubstring("ENTRYPOINT"))
+		Expect(content).To(ContainSubstring("ENTRYPOINT [\"/app/demo-api\"]\n"))
 	})
 
 	It("keeps custom build commands that reference BKMS_ARTIFACT_DIR", func() {

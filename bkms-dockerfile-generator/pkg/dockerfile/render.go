@@ -122,11 +122,6 @@ type templateData struct {
 	AppName             string
 	ArtifactDir         string
 	DependencyFiles     []string
-	// UseDefaultAppEntrypoint 为 true 时，未配置启动命令也写 ENTRYPOINT ["/app/<AppName>"]
-	//
-	// 只有语言默认构建命令能保证产物文件名是 AppName，整目录拷贝后路径是 /app/<AppName>
-	// 自定义构建命令可能产出别的文件名，这时不能写默认入口，否则容器会去执行一个不存在的文件
-	UseDefaultAppEntrypoint bool
 }
 
 // Render 使用与语言类型匹配的模板渲染 BKMS 默认应用 Dockerfile
@@ -196,9 +191,8 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 		return nil, errors.Wrap(err, "parse build commands")
 	}
 
-	// 空命令才会换成默认构建命令；先记下这个事实，后面才能判断 /app/<appName> 是否一定存在
-	useDefaultBuildCommand := len(buildCommands) == 0
-	if useDefaultBuildCommand {
+	// 空命令换成语言默认构建命令，输出路径用上面解析出的产物目录
+	if len(buildCommands) == 0 {
 		buildCommands = []string{spec.defaultBuildCommand(appName, artifactDir)}
 	}
 
@@ -219,17 +213,17 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 		return nil, errors.Wrap(err, "parse extra files")
 	}
 	data := &templateData{
-		BuilderImage:            input.BuilderImage,
-		RunnerImage:             input.RunnerImage,
-		DockerBuildArgNames:     dockerBuildArgs,
-		PreBuildCommands:        preBuildCommands,
-		BuildCommands:           buildCommands,
-		RuntimeEnvCommands:      runtimeEnvCommands,
-		StartCommand:            strings.TrimSpace(input.StartCommand),
-		ExtraFileCopies:         extraFileCopies,
-		AppName:                 appName,
-		ArtifactDir:             artifactDir,
-		UseDefaultAppEntrypoint: useDefaultBuildCommand,
+		BuilderImage:        input.BuilderImage,
+		RunnerImage:         input.RunnerImage,
+		DockerBuildArgNames: dockerBuildArgs,
+		PreBuildCommands:    preBuildCommands,
+		BuildCommands:       buildCommands,
+		RuntimeEnvCommands:  runtimeEnvCommands,
+		// 留空时模板写 ENTRYPOINT ["/app/<appName>"]，自定义编译命令产出别的文件名时需自行填写启动命令
+		StartCommand:    strings.TrimSpace(input.StartCommand),
+		ExtraFileCopies: extraFileCopies,
+		AppName:         appName,
+		ArtifactDir:     artifactDir,
 	}
 	if spec.prepareTemplateData != nil {
 		if err = spec.prepareTemplateData(input, data); err != nil {

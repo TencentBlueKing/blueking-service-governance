@@ -41,6 +41,6 @@ RUN {{ . }}
 
 {{ if .StartCommand -}}
 ENTRYPOINT ["/bin/sh", "-ec", {{ quoteStartCommand .StartCommand }}]
-{{ else if .UseDefaultAppEntrypoint -}}
+{{ else -}}
 ENTRYPOINT ["/app/{{ .AppName }}"]
 {{ end -}}

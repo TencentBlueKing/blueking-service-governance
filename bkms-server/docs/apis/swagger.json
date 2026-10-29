@@ -20851,7 +20851,7 @@
                     }
                 },
                 "start": {
-                    "description": "启动命令。未填编译命令时可留空，镜像入口为 /app/\u003c镜像名\u003e；填写了编译命令时必填",
+                    "description": "启动命令。留空时镜像入口为 /app/\u003c镜像名\u003e；填写后入口为 shell 形式",
                     "type": "string"
                 }
             }
