@@ -20,11 +20,14 @@ package semver
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -104,6 +107,30 @@ var _ = Describe("Counter", func() {
 		})
 	})
 
+	Describe("concurrency", func() {
+		It("should hand out unique versions when the counter is created concurrently", func() {
+			const n = 10
+			var (
+				wg  sync.WaitGroup
+				mu  sync.Mutex
+				got []string
+			)
+			for range n {
+				wg.Go(func() {
+					defer GinkgoRecover()
+					v, err := Next(ctx, db, appID, BumpPatch)
+					Expect(err).NotTo(HaveOccurred())
+					mu.Lock()
+					got = append(got, v)
+					mu.Unlock()
+				})
+			}
+			wg.Wait()
+			Expect(lo.Uniq(got)).To(HaveLen(n))
+			expectNext(BumpPatch, fmt.Sprintf("0.0.%d", n+1))
+		})
+	})
+
 	Describe("unknown bump type", func() {
 		It("should return error", func() {
 			_, err := Next(ctx, db, appID, BumpType("unknown"))
@@ -169,6 +196,11 @@ var _ = Describe("Counter", func() {
 		It("should require a tenant in ctx", func() {
 			_, err := Next(context.Background(), db, appID, BumpPatch)
 			Expect(errors.Is(err, store.ErrTenantIDRequired)).To(BeTrue(), "got %v", err)
+		})
+
+		It("should reject a ctx that requires an explicit tenant scope", func() {
+			_, err := Next(store.RequireExplicitTenantScope(ctx), db, appID, BumpPatch)
+			Expect(errors.Is(err, store.ErrTenantScopeRequired)).To(BeTrue(), "got %v", err)
 		})
 
 		It("should write the counter under the tenant in ctx", func() {
