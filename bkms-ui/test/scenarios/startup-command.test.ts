@@ -152,6 +152,7 @@ describe('启动命令输入', () => {
 });
 
 const createPageStubs = {
+  FrameworkTemplateSelect: true,
   ToggleCard: { template: '<div><slot /></div>' },
   ResizeLayout: defineComponent({
     setup(_props, { expose }) {
@@ -232,7 +233,11 @@ describe('创建应用的启动配置', () => {
   it('tRPC 创建表单默认使用 shell，校验并将原始脚本交给创建流程', async () => {
     const wrapper = mount(TrpcAppConfig, {
       attachTo: document.body,
-      props: { value: { appModelSpec: { command: [], args: [] } } },
+      props: {
+        language: 'go',
+        value: { appModelSpec: { command: [], args: [] } },
+        workspaceId: 'workspace-1',
+      },
       global: { mocks: i18nGlobalMocks, stubs: createPageStubs },
     });
     await flushPromises();
@@ -247,12 +252,14 @@ describe('创建应用的启动配置', () => {
     const wrapper = mount(TafAppConfig, {
       attachTo: document.body,
       props: {
+        language: 'cpp',
         value: {
           command: [],
           args: [],
           envVars: [],
           tafSpec: { fileName: 'app.conf', filePath: '/etc/app', fileContent: 'config' },
         },
+        workspaceId: 'workspace-1',
       },
       global: { mocks: i18nGlobalMocks, stubs: createPageStubs },
     });
@@ -268,6 +275,7 @@ describe('创建应用的启动配置', () => {
     const wrapper = mount(TafAppConfig, {
       attachTo: document.body,
       props: {
+        language: 'cpp',
         value: {
           command: [],
           args: [],
@@ -275,6 +283,7 @@ describe('创建应用的启动配置', () => {
           envVars: [],
           tafSpec: { fileName: 'app.conf', filePath: '/etc/app', fileContent: 'config' },
         },
+        workspaceId: 'workspace-1',
       },
       global: { mocks: i18nGlobalMocks, stubs: createPageStubs },
     });

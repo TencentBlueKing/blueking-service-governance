@@ -122,7 +122,7 @@ docker run --rm \
 
 ### 构建管理 Spec（普通 Playwright）
 
-文件：`tests/build-management-execute-build.spec.ts`（与个人 aitest 副本 `../tests/e2e/build-management-execute-build.spec.ts` 对偶）。
+文件：`tests/build-management-execute-build.spec.ts`。
 
 ```bash
 cd e2e

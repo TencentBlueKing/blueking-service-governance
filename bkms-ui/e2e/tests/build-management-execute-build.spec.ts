@@ -18,8 +18,6 @@
 
 /**
  * 团队入口（e2e/tests + pnpm test:spec）。
- * 对偶 aitest 副本：tests/e2e/build-management-execute-build.spec.ts（个人本地 aitest run）。
- * 改断言时请两边同步，避免漂移。
  *
  * Fixture 约定（公开测试应用名，可进仓库）：
  * - e2e-build-pipeline：固定流水线构建（分支为 Input）
@@ -116,7 +114,7 @@ function tagInput(page: Page) {
   return page.getByPlaceholder(/请输入，例如v1\.0\.0-alpha\.1/);
 }
 
-/** 等待推荐 Tag 接口真实响应（替代 aitest apiRecorder） */
+/** 等待推荐 Tag 接口真实响应 */
 function waitForRecommendTag(page: Page) {
   return page.waitForResponse(response => response.url().includes(RECOMMENDED_TAG_API));
 }

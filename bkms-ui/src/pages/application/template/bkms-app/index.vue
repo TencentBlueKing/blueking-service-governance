@@ -104,14 +104,18 @@
         :content="form.frameworkConfigFile.content"
         :editor-lang="editorLang"
         :editor-title="form.frameworkConfigFile.name"
+        :language="language"
         :value="{ appModelSpec: form.appModelSpec }"
+        :workspace-id="workspaceID"
       />
       <TafAppConfig
         v-else-if="step === 3 && form.framework === APP_FRAMEWORKS.TAF"
         :key="`${framework}:${language}`"
         ref="tafRef"
         :editor-lang="editorLang"
+        :language="language"
         :value="tafValue"
+        :workspace-id="workspaceID"
       />
       <Result
         v-else-if="step === 4"
@@ -237,6 +241,11 @@
       fileContent: form.value?.frameworkConfigFile.content || '',
     },
   }));
+  function createCurrentAppForm() {
+    const currentForm = createBKMSAppForm(workspaceID.value, framework.value, language.value);
+    if (framework.value === APP_FRAMEWORKS.TRPC) currentForm.frameworkConfigFile.content = trpcTemplate;
+    return currentForm;
+  }
 
   watch([definitions, framework, language], () => {
     if (!definitions.value) return;
@@ -245,8 +254,7 @@
       return;
     }
     if (form.value?.framework === framework.value && form.value.language === language.value) return;
-    form.value = createBKMSAppForm(workspaceID.value, framework.value, language.value);
-    if (framework.value === APP_FRAMEWORKS.TRPC) form.value.frameworkConfigFile.content = trpcTemplate;
+    form.value = createCurrentAppForm();
     emit('update-text', {
       type: framework.value === APP_FRAMEWORKS.BLANK ? APP_FRAMEWORKS.BLANK : APP_TYPES.BKMS_APP,
     });
@@ -313,7 +321,7 @@
       if (!(await validateCurrentStep()) || !form.value || !runtime.value) return;
       await submit(buildBKMSAppPayload(form.value, runtime.value));
     } finally {
-      submitting.value = false;
+      if (!disposed) submitting.value = false;
     }
   }
   async function next() {
@@ -329,8 +337,7 @@
   }
   function recreate() {
     if (result.value.status === 'SUCCESS') {
-      form.value = createBKMSAppForm(workspaceID.value, framework.value, language.value);
-      if (framework.value === APP_FRAMEWORKS.TRPC) form.value.frameworkConfigFile.content = trpcTemplate;
+      form.value = createCurrentAppForm();
       forceCleanDirtyTag();
     }
     emit('update-step', 2);

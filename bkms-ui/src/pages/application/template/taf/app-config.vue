@@ -82,6 +82,21 @@
           class="max-w-[600px]"
         />
       </Form.FormItem>
+      <Form.FormItem
+        v-show="showTemplateSelect"
+        class="mb-[16px]"
+        :label="$t('配置模板')"
+        :label-width="110"
+      >
+        <FrameworkTemplateSelect
+          app-type="taf"
+          :language="language"
+          :workspace-id="workspaceId"
+          @availability="handleTemplateAvailability"
+          @loading="handleTemplateLoading"
+          @select="handleTemplateSelect"
+        />
+      </Form.FormItem>
       <ResizeLayout
         ref="resizeLayoutRef"
         :border="false"
@@ -122,6 +137,7 @@
                 v-model="formData.tafSpec.fileContent"
                 class="h-full"
                 :lang="editorLang || 'xml'"
+                :readonly="templateLoading"
                 @error="handleEditorErr"
               >
                 <template #title>
@@ -196,24 +212,27 @@
   </Form>
 </template>
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
 
   import { Button, Form, Input, Popover, ResizeLayout } from 'bkui-vue';
   import { EditLine } from 'bkui-vue/lib/icon';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
-  import { ApiServerService } from '~/api/modules/bkmsserver';
   import KeyValue from '~/components/key-value.vue';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import StartupCommandInput from '~/components/startup-command-input.vue';
-  import useEnvManager from '~/composables/use-env-manager';
+
+  import FrameworkTemplateSelect from '../components/framework-template-select.vue';
+  import { useAppConfigCommon } from '../composables/use-app-config-common';
 
   import type { AppModelSpecOutputObj } from '~/@types/v1/app';
-  import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
+  import type { TemplateOutputObj } from '~/@types/v1/framework-config-templates';
 
   interface IProps {
     editorLang?: string;
+    language: string;
     value: TafAppModelSpecForm;
+    workspaceId: string;
   }
 
   /** 表单场景下，tafSpec/command/args/envVars 是确定存在的，需要声明为必需 */
@@ -231,7 +250,23 @@
 
   const { t } = useI18n();
 
-  const { envList, handleGetEnvList } = useEnvManager();
+  const {
+    editorErr,
+    errorRef,
+    envList,
+    handleEditorErr,
+    handleGetVarEnv,
+    handleTemplateAvailability,
+    handleTemplateLoading,
+    handleYamlCardChange,
+    isYamlCardExpanded,
+    resetStatus,
+    resizeLayoutRef,
+    showEnvVar,
+    showTemplateSelect,
+    templateLoading,
+    toggleEnvVarShow,
+  } = useAppConfigCommon();
 
   const formData = ref<TafAppModelSpecForm>(cloneDeep(props.value));
 
@@ -258,6 +293,18 @@
     }
   });
 
+  function getValue() {
+    formData.value.envVars = formData.value.envVars.map(item => ({
+      key: item.key,
+      value: item.value,
+      description: '',
+    }));
+    return {
+      ...formData.value,
+      ...startupCommandRef.value?.getValue(),
+    };
+  }
+
   function handleCancel() {
     isPopoverShow.value = false;
     popoverFormData.value.fileName = '';
@@ -282,52 +329,17 @@
     popoverFormRef.value?.clearValidate();
   }
 
-  // yaml异常
-  const editorErr = ref<{
-    message: string[];
-    type: string;
-  }>({
-    type: '',
-    message: [],
-  });
-  const errorRef = ref<InstanceType<typeof ResizeLayout> | null>(null);
-  function getValue() {
-    formData.value.envVars = formData.value.envVars.map(item => ({
-      key: item.key,
-      value: item.value,
-      description: '',
-    }));
-    return {
-      ...formData.value,
-      ...startupCommandRef.value?.getValue(),
-    };
-  }
-  function handleEditorErr(err: IMonacoEditorErrorMarkerItem[]) {
-    // 捕获编辑器错误提示
-    editorErr.value.type = 'content'; // 编辑内容错误
-    editorErr.value.message = err.map(item => item.message);
-    hideOrShowError();
+  function handleTemplateSelect(template: TemplateOutputObj) {
+    if (template.content === undefined) return;
+    formData.value.tafSpec.fileContent = template.content;
+    resetStatus();
   }
 
-  function hideOrShowError() {
-    if (!editorErr.value?.message?.length && errorRef.value) {
-      errorRef.value.asideRef.hidden = true;
-    } else if (editorErr.value?.message?.length && errorRef.value) {
-      errorRef.value.asideRef.hidden = false;
-    }
-  }
-
-  function resetStatus() {
-    editorErr.value = {
-      type: '',
-      message: [],
-    };
-    hideOrShowError();
-  }
   const firstTrigger = ref(false);
   const isShowContentTip = computed(() => !formData.value.tafSpec.fileContent && firstTrigger.value);
   const formRef = ref<InstanceType<typeof Form> | null>(null);
   const startupCommandRef = ref<InstanceType<typeof StartupCommandInput> | null>(null);
+  const msEditorRef = ref<InstanceType<typeof MsEditor> | null>(null);
   async function validate() {
     firstTrigger.value = true;
     const [valid, commandValid] = await Promise.all([formRef.value?.validate(), startupCommandRef.value?.validate()]);
@@ -336,47 +348,6 @@
       return false;
     return true;
   }
-
-  const showEnvVar = ref(false);
-  const isYamlCardExpanded = ref(true);
-  const resizeLayoutRef = ref<InstanceType<typeof ResizeLayout> | null>(null);
-
-  // 获取应用环境变量
-  function handleGetVarEnv(env: string) {
-    const envID = envList.value.find(item => item.name === env)?.id;
-    if (!envID) return Promise.resolve([]);
-    return ApiServerService.ListEnvAvailableEnvVars({ envID });
-  }
-
-  // 处理yaml卡片展开/收起状态变化
-  function handleYamlCardChange(expanded: boolean) {
-    isYamlCardExpanded.value = expanded;
-  }
-
-  function setEnvVarAsideVisible(visible: boolean) {
-    if (resizeLayoutRef.value?.asideRef) {
-      resizeLayoutRef.value.asideRef.hidden = !visible;
-    }
-  }
-
-  function toggleEnvVarShow() {
-    showEnvVar.value = !showEnvVar.value;
-    setEnvVarAsideVisible(showEnvVar.value);
-  }
-
-  // 初始化隐藏错误侧栏
-  watch(
-    [editorErr.value, errorRef],
-    () => {
-      hideOrShowError();
-    },
-    { immediate: true },
-  );
-
-  onMounted(async () => {
-    await handleGetEnvList();
-    setEnvVarAsideVisible(showEnvVar.value);
-  });
 
   defineExpose({
     getValue,

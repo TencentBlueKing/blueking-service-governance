@@ -1121,6 +1121,23 @@ Pod 中的管理脚本将在重新部署后移除: Management scripts in the Pod
 采用 TAF 框架实现的服务端应用: Services implemented using the TAF framework
 请先选择流水线: Please select the pipeline first
 框架配置: Framework Configuration
+框架配置模板: Framework Configuration Template
+配置模板: Configuration Template
+搜索模板名称: Search template name
+新建模板: New Template
+编辑模板: Edit Template
+查看模板: View Template
+平台默认: Platform Default
+空间自定义: Custom
+设为默认: Set as Default
+确认切换配置模板？: Confirm switching configuration template?
+切换后，之前填写的框架配置内容将不会保留。: The previously entered framework configuration content will not be retained after switching.
+切换: Switch
+框架配置模板加载失败: Failed to load framework configuration templates
+模板详情加载失败，请重试: Failed to load template details. Please try again.
+这里新建的模板用于创建 tRPC、TAF 应用时选择框架配置，只影响本空间之后新建的应用。: Templates created here are used to select framework configurations when creating tRPC and TAF applications. They only affect new applications created in this space.
+请输入模板名称: Please enter the template name
+请输入配置文件内容: Please enter the configuration file content
 TAF 应用: TAF Application
 TAEF 应用: TAEF Application
 查看指引: View Guide
