@@ -46,10 +46,12 @@ func New(registry *storereg.Registry) *Handler {
 	return &Handler{registry: registry}
 }
 
-// ListReleaseStrategies lists all release strategies in a workspace.
+// ListReleaseStrategies lists all release strategies available in a workspace.
+//
+// 先返回平台内置策略（按批次数升序），再返回空间自定义策略（按创建时间升序）
 //
 //	@ID			ListReleaseStrategies
-//	@Summary	查询空间内全部发布策略
+//	@Summary	查询空间可用的全部发布策略
 //	@Tags		release-strategies
 //	@Produce	json
 //	@Security	BkUserInfo
@@ -72,11 +74,7 @@ func (h *Handler) ListReleaseStrategies(c *gin.Context) {
 		return
 	}
 
-	strategies, err := h.strategies().List(
-		ctx,
-		releasestrategy.ByWorkspace(workspace.ID),
-		releasestrategy.OldestFirst(),
-	)
+	strategies, err := releasestrategy.ListStrategies(ctx, h.strategies(), workspace.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "list release strategies"))
 		return
@@ -88,7 +86,9 @@ func (h *Handler) ListReleaseStrategies(c *gin.Context) {
 	ginutils.OK(c, serializer.ListReleaseStrategiesOutput{Data: data})
 }
 
-// GetReleaseStrategy returns a release strategy in a workspace.
+// GetReleaseStrategy returns a release strategy available in a workspace.
+//
+// 平台内置策略在所有空间可见
 //
 //	@ID			GetReleaseStrategy
 //	@Summary	查询发布策略详情
@@ -127,6 +127,8 @@ func (h *Handler) GetReleaseStrategy(c *gin.Context) {
 
 // CreateReleaseStrategy creates a release strategy in a workspace.
 //
+// 名称不能与空间内已有策略或平台内置策略重复
+//
 //	@ID			CreateReleaseStrategy
 //	@Summary	新建发布策略
 //	@Tags		release-strategies
@@ -157,7 +159,7 @@ func (h *Handler) CreateReleaseStrategy(c *gin.Context) {
 	created := input.ToModel(workspace.ID)
 	username := auth.MustGetUser(ctx).ID
 	created.Creator, created.Updater = username, username
-	if err = h.strategies().Create(ctx, created); err != nil {
+	if err = releasestrategy.CreateStrategy(ctx, h.strategies(), created); err != nil {
 		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "create release strategy"))
 		return
 	}
@@ -169,7 +171,8 @@ func (h *Handler) CreateReleaseStrategy(c *gin.Context) {
 
 // UpdateReleaseStrategy replaces the editable content of a release strategy.
 //
-// 策略被进行中的分批发布使用时仍允许修改，已下发的 Rollout 不受影响
+// 策略被进行中的分批发布使用时仍允许修改，已下发的 Rollout 不受影响；
+// 平台内置策略不可修改，名称不能与空间内已有策略或平台内置策略重复
 //
 //	@ID			UpdateReleaseStrategy
 //	@Summary	修改发布策略
@@ -220,7 +223,8 @@ func (h *Handler) UpdateReleaseStrategy(c *gin.Context) {
 
 // DeleteReleaseStrategy deletes a release strategy.
 //
-// 策略被进行中的分批发布使用时仍允许删除，已下发的 Rollout 与部署记录中的策略快照不受影响
+// 策略被进行中的分批发布使用时仍允许删除，已下发的 Rollout 与部署记录中的策略快照不受影响；
+// 平台内置策略不可删除
 //
 //	@ID			DeleteReleaseStrategy
 //	@Summary	删除发布策略

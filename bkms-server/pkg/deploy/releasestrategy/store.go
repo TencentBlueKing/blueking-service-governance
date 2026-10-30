@@ -60,8 +60,36 @@ func byWorkspaceAndID(workspaceID, id string) (store.Opt, error) {
 	return store.Combine(ByWorkspace(workspaceID), store.ByID(objID)), nil
 }
 
-// GetStrategy 获取空间内指定 ID 的发布策略，不存在（含 ID 不合法）时返回 ErrStrategyNotFound
+// ListStrategies 返回空间可用的全部发布策略：先是平台内置策略（按批次数升序），再是空间自定义策略（按创建时间升序）。
+// 内置策略的 WorkspaceID 填为查询所在的空间
+func ListStrategies(ctx context.Context, strategies *Store, workspaceID string) ([]ReleaseStrategy, error) {
+	custom, err := strategies.List(ctx, ByWorkspace(workspaceID), OldestFirst())
+	if err != nil {
+		return nil, errors.Wrapf(err, "list release strategies in workspace %s", workspaceID)
+	}
+	builtins := BuiltinStrategies()
+	for i := range builtins {
+		builtins[i].WorkspaceID = workspaceID
+	}
+	return append(builtins, custom...), nil
+}
+
+// CreateStrategy 新建空间发布策略，名称与平台内置策略或空间内已有策略重复时返回 ErrStrategyNameConflict
+func CreateStrategy(ctx context.Context, strategies *Store, strategy *ReleaseStrategy) error {
+	if IsBuiltinName(strategy.Name) {
+		return errors.Wrapf(ErrStrategyNameConflict, "name %q is used by a builtin release strategy", strategy.Name)
+	}
+	err := strategies.Create(ctx, strategy)
+	return errors.Wrapf(err, "create release strategy in workspace %s", strategy.WorkspaceID)
+}
+
+// GetStrategy 获取空间可用的指定 ID 的发布策略，平台内置策略在所有空间可见，其 WorkspaceID 填为查询所在的空间；
+// 不存在（含 ID 不合法）时返回 ErrStrategyNotFound
 func GetStrategy(ctx context.Context, strategies *Store, workspaceID, id string) (*ReleaseStrategy, error) {
+	if builtin, ok := getBuiltinStrategy(id); ok {
+		builtin.WorkspaceID = workspaceID
+		return builtin, nil
+	}
 	opt, err := byWorkspaceAndID(workspaceID, id)
 	if err != nil {
 		return nil, err
@@ -73,9 +101,16 @@ func GetStrategy(ctx context.Context, strategies *Store, workspaceID, id string)
 	return strategy, nil
 }
 
-// UpdateStrategy 整体替换发布策略的可编辑内容（名称、描述、批次）及更新人，
-// 名称冲突返回 ErrStrategyNameConflict，不存在返回 ErrStrategyNotFound
+// UpdateStrategy 整体替换发布策略的可编辑内容（名称、描述、批次）及更新人。
+// 平台内置策略返回 ErrBuiltinStrategyReadOnly，名称与平台内置策略或空间内已有策略重复时返回 ErrStrategyNameConflict，
+// 不存在返回 ErrStrategyNotFound
 func UpdateStrategy(ctx context.Context, strategies *Store, strategy *ReleaseStrategy) error {
+	if strategy.IsBuiltin() {
+		return errors.Wrapf(ErrBuiltinStrategyReadOnly, "update release strategy %s", strategy.ID.Hex())
+	}
+	if IsBuiltinName(strategy.Name) {
+		return errors.Wrapf(ErrStrategyNameConflict, "name %q is used by a builtin release strategy", strategy.Name)
+	}
 	err := strategies.Update(ctx, strategy,
 		store.UpdateSelected("name", "description", "batches", "updater"),
 		ByWorkspace(strategy.WorkspaceID),
@@ -84,8 +119,12 @@ func UpdateStrategy(ctx context.Context, strategies *Store, strategy *ReleaseStr
 	return errors.Wrapf(err, "update release strategy %s in workspace %s", strategy.ID.Hex(), strategy.WorkspaceID)
 }
 
-// DeleteStrategy 删除并返回空间内指定 ID 的发布策略，不存在（含 ID 不合法）时返回 ErrStrategyNotFound
+// DeleteStrategy 删除并返回空间内指定 ID 的发布策略，平台内置策略返回 ErrBuiltinStrategyReadOnly，
+// 不存在（含 ID 不合法）时返回 ErrStrategyNotFound
 func DeleteStrategy(ctx context.Context, strategies *Store, workspaceID, id string) (*ReleaseStrategy, error) {
+	if _, ok := getBuiltinStrategy(id); ok {
+		return nil, errors.Wrapf(ErrBuiltinStrategyReadOnly, "delete release strategy %s", id)
+	}
 	opt, err := byWorkspaceAndID(workspaceID, id)
 	if err != nil {
 		return nil, err
