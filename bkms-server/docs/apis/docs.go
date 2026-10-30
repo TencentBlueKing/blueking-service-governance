@@ -19604,7 +19604,7 @@ const docTemplate = `{
                 "tags": [
                     "release-strategies"
                 ],
-                "summary": "查询空间内全部发布策略",
+                "summary": "查询空间可用的全部发布策略",
                 "operationId": "ListReleaseStrategies",
                 "parameters": [
                     {
@@ -24190,10 +24190,9 @@ const docTemplate = `{
                     ]
                 },
                 "pauseSeconds": {
-                    "description": "定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，范围 60 ~ 86400",
+                    "description": "定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，至少 1 秒，不设上限",
                     "type": "integer",
-                    "maximum": 86400,
-                    "minimum": 60
+                    "minimum": 1
                 },
                 "target": {
                     "description": "本批\"累计更新到\"的实例数：正整数（如 \"1\"）或百分比（如 \"25%\"），百分比范围 1% ~ 100%",
@@ -30200,7 +30199,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "data": {
-                    "description": "空间内全部发布策略，按创建时间升序，不分页",
+                    "description": "空间可用的全部发布策略，不分页：先是平台内置策略（按批次数升序），再是空间自定义策略（按创建时间升序）",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/serializer.ReleaseStrategyOutputObj"
@@ -32623,6 +32622,10 @@ const docTemplate = `{
                 "id": {
                     "description": "策略 ID",
                     "type": "string"
+                },
+                "isBuiltin": {
+                    "description": "是否为平台内置策略：内置策略所有空间可见且不可修改、删除",
+                    "type": "boolean"
                 },
                 "name": {
                     "description": "策略名称",

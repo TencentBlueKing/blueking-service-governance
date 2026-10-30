@@ -71,6 +71,27 @@ var _ = Describe("BuildManifest", func() {
 		}
 	})
 
+	It("renders every builtin strategy", func() {
+		for _, s := range releasestrategy.BuiltinStrategies() {
+			manifest, err := batchrelease.BuildManifest("GameDeployment", "demo", s.Batches)
+			Expect(err).NotTo(HaveOccurred(), s.Name)
+			steps, _, err := unstructured.NestedSlice(manifest, "spec", "steps")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(steps).To(HaveLen(len(s.Batches)))
+		}
+
+		threeBatches := releasestrategy.BuiltinStrategies()[0].Batches
+		manifest, err := batchrelease.BuildManifest("GameDeployment", "demo", threeBatches)
+		Expect(err).NotTo(HaveOccurred())
+		steps, _, err := unstructured.NestedSlice(manifest, "spec", "steps")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(steps).To(Equal([]any{
+			map[string]any{"replicas": int64(1), "pause": map[string]any{}},
+			map[string]any{"replicas": "50%", "pause": map[string]any{"duration": "30s"}},
+			map[string]any{"replicas": "100%"},
+		}))
+	})
+
 	It("rejects workloads other than GameDeployment", func() {
 		_, err := batchrelease.BuildManifest("Deployment", "demo", []releasestrategy.Batch{
 			{Target: "1", PauseMode: releasestrategy.PauseModeNone},
