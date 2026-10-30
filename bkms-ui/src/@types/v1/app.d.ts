@@ -3,6 +3,9 @@
 // 来源：apps/bkms-server/docs/apis/swagger.json
 // 模块：app
 
+export interface GetAppRuntimeDefinitionsRequest {
+}
+
 export interface GetAppIDAutoSuffixRequest {
 }
 
@@ -42,6 +45,20 @@ export type UpdateAppDisplayNameRequest = UpdateAppDisplayNameInput & {
 };
 
 export type UpdateHelmSpecRequest = UpdateHelmSpecInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+};
+
+export interface GetAppRuntimeModsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+}
+
+export type UpdateAppStartupConfigRequest = UpdateAppStartupConfigInput & {
   /**
    * 应用 ID
    */
@@ -98,6 +115,17 @@ export interface ResolveAppRequest {
   app: string;
 }
 
+export type CreateBKMSAppRequest = CreateBKMSAppInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+};
+
+export interface GetAppRuntimeDefinitionsOutput {
+  data?: AppRuntimeDefinitionsOutputObj;
+}
+
 export interface GetAppIDAutoSuffixOutput {
   /**
    * 后缀字符串
@@ -138,6 +166,29 @@ export interface UpdateHelmSpecInput {
    * 待更新的 Helm Chart 配置
    */
   helmSpec: HelmSpecInput;
+}
+
+export interface GetAppRuntimeModsOutput {
+  data?: PublicView;
+}
+
+export interface UpdateAppStartupConfigInput {
+  /**
+   * 容器启动参数，整体替换
+   */
+  args?: string[];
+  /**
+   * 容器启动命令，整体替换
+   */
+  command?: string[];
+  /**
+   * 框架扩展配置：缺省不修改，null 拒绝，对象（含 {}）整体替换并重新校验
+   */
+  frameworkConfig?: Record<string, unknown>;
+  /**
+   * 容器启动脚本，整体替换；与 command、args 互斥，不能为纯空白
+   */
+  shCommand?: string;
 }
 
 export interface UpdateAppModelSpecInput {
@@ -194,35 +245,39 @@ export interface ResolveAppOutput {
   data?: ResolveAppOutputObj;
 }
 
-export interface ResolveAppOutputObj {
-  id?: string;
-  name?: string;
+export interface CreateBKMSAppInput {
+  /**
+   * 应用模型规范
+   */
+  appModelSpec: BKMSAppModelSpecInput;
+  /**
+   * 构建配置
+   */
+  buildConfig: BuildConfigInput;
+  /**
+   * 框架：trpc、taf、blank，可选值见 /app-runtime-definitions
+   */
+  framework: string;
+  /**
+   * 框架配置文件。框架支持框架配置文件时必填，blank 不能传
+   */
+  frameworkConfigFile?: FrameworkConfigFileInput;
+  /**
+   * 应用 ID. 应用在全局范围内的唯一标识，默认情况下基于 name 自动生成，在 name 后追加后缀。
+   * 长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
+   */
+  id: string;
+  /**
+   * 语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs、python 仅 blank 支持）
+   */
+  language: string;
+  /**
+   * 应用名称. 长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
+   */
+  name: string;
 }
 
-export interface AppOutputObj {
-  /**
-   * 应用显示名称
-   */
-  displayName?: string;
-  /**
-   * 应用 ID
-   */
-  id?: string;
-  /**
-   * 应用名称
-   */
-  name?: string;
-  /**
-   * 应用类型
-   */
-  type?: string;
-  /**
-   * 工作空间 ID
-   */
-  workspaceID?: string;
-}
-
-export interface AppModelSpecInput {
+export interface BKMSAppModelSpecInput {
   /**
    * 容器启动参数
    */
@@ -232,21 +287,17 @@ export interface AppModelSpecInput {
    */
   command?: string[];
   /**
-   * 容器环境变量，仅创建应用时生效；更新 tRPC/TAF Spec 时为兼容旧客户端接收但忽略
+   * 容器环境变量
    */
   envVars?: VariableInput[];
   /**
-   * 容器启动脚本，以 /bin/sh 执行，与 command、args 互斥，不能为纯空白；开发模式下 tRPC 应用需在脚本中以绝对路径启动二进制
+   * 框架扩展配置，按框架严格校验；缺省为空对象
+   */
+  frameworkConfig?: Record<string, unknown>;
+  /**
+   * 容器启动脚本，以 /bin/sh 执行，与 command、args 互斥，不能为纯空白
    */
   shCommand?: string;
-  /**
-   * TAF 框架配置
-   */
-  tafSpec?: TafSpecInput;
-  /**
-   * tRPC 框架配置
-   */
-  trpcSpec?: TrpcSpecInput;
 }
 
 export interface BuildConfigInput {
@@ -268,91 +319,19 @@ export interface BuildConfigInput {
   sourceType: "imageRegistry" | "codeRepository" | "pipeline";
 }
 
-export interface HelmSpecInput {
+export interface FrameworkConfigFileInput {
   /**
-   * Helm 源配置
+   * 文件内容
    */
-  helmSource: HelmSourceInput;
-}
-
-export interface HelmSourceInput {
+  content?: string;
   /**
-   * BCS 仓库配置。如果 repoType 为 BCSRepo，bcsRepoConfig 需要有有效值
+   * 挂载目录
    */
-  bcsRepoConfig?: BCSRepoConfigInput;
+  mountDir: string;
   /**
-   * Git 仓库配置。如果 repoType 为 GitRepo，gitRepoConfig 需要有有效值
+   * 文件名
    */
-  gitRepoConfig?: HelmGitRepoConfigInput;
-  /**
-   * Helm 仓库配置。如果 repoType 为 HelmRepo，helmRepoConfig 需要有有效值
-   */
-  helmRepoConfig?: HelmRepoConfigInput;
-  /**
-   * 仓库类型
-   */
-  repoType: "GitRepo" | "HelmRepo" | "BCSRepo";
-  /**
-   * Value 文件列表
-   */
-  valueFiles?: string[];
-}
-
-export interface BCSRepoConfigInput {
-  /**
-   * Chart 名称
-   */
-  chartName: string;
-  /**
-   * 项目 Code
-   */
-  projectCode: string;
-  /**
-   * 仓库名称
-   */
-  repoName: string;
-}
-
-export interface HelmGitRepoConfigInput {
-  /**
-   * 代码库别名
-   */
-  repoAlias: string;
-  /**
-   * 代码库地址
-   */
-  repoURL: string;
-  /**
-   * 代码库分支
-   */
-  revision: string;
-  /**
-   * Helm Chart 目录
-   */
-  sourceDir: string;
-  /**
-   * 代码库类型
-   */
-  type: "TGit" | "GitHub";
-}
-
-export interface HelmRepoConfigInput {
-  /**
-   * Chart 名称
-   */
-  chartName: string;
-  /**
-   * 密码（可选）
-   */
-  password?: string;
-  /**
-   * 仓库地址
-   */
-  repoURL: string;
-  /**
-   * 用户名（可选）
-   */
-  username?: string;
+  name: string;
 }
 
 export interface ImageBuildConfigInput {
@@ -483,6 +462,148 @@ export interface VariableInput {
   value?: string;
 }
 
+export interface ResolveAppOutputObj {
+  id?: string;
+  name?: string;
+}
+
+export interface AppOutputObj {
+  /**
+   * 应用显示名称
+   */
+  displayName?: string;
+  /**
+   * 应用 ID
+   */
+  id?: string;
+  /**
+   * 应用名称
+   */
+  name?: string;
+  /**
+   * 应用类型
+   */
+  type?: string;
+  /**
+   * 工作空间 ID
+   */
+  workspaceID?: string;
+}
+
+export interface AppModelSpecInput {
+  /**
+   * 容器启动参数
+   */
+  args?: string[];
+  /**
+   * 容器启动命令
+   */
+  command?: string[];
+  /**
+   * 容器环境变量，仅创建应用时生效；更新 tRPC/TAF Spec 时为兼容旧客户端接收但忽略
+   */
+  envVars?: VariableInput[];
+  /**
+   * 容器启动脚本，以 /bin/sh 执行，与 command、args 互斥，不能为纯空白；开发模式下 tRPC 应用需在脚本中以绝对路径启动二进制
+   */
+  shCommand?: string;
+  /**
+   * TAF 框架配置
+   */
+  tafSpec?: TafSpecInput;
+  /**
+   * tRPC 框架配置
+   */
+  trpcSpec?: TrpcSpecInput;
+}
+
+export interface HelmSpecInput {
+  /**
+   * Helm 源配置
+   */
+  helmSource: HelmSourceInput;
+}
+
+export interface HelmSourceInput {
+  /**
+   * BCS 仓库配置。如果 repoType 为 BCSRepo，bcsRepoConfig 需要有有效值
+   */
+  bcsRepoConfig?: BCSRepoConfigInput;
+  /**
+   * Git 仓库配置。如果 repoType 为 GitRepo，gitRepoConfig 需要有有效值
+   */
+  gitRepoConfig?: HelmGitRepoConfigInput;
+  /**
+   * Helm 仓库配置。如果 repoType 为 HelmRepo，helmRepoConfig 需要有有效值
+   */
+  helmRepoConfig?: HelmRepoConfigInput;
+  /**
+   * 仓库类型
+   */
+  repoType: "GitRepo" | "HelmRepo" | "BCSRepo";
+  /**
+   * Value 文件列表
+   */
+  valueFiles?: string[];
+}
+
+export interface BCSRepoConfigInput {
+  /**
+   * Chart 名称
+   */
+  chartName: string;
+  /**
+   * 项目 Code
+   */
+  projectCode: string;
+  /**
+   * 仓库名称
+   */
+  repoName: string;
+}
+
+export interface HelmGitRepoConfigInput {
+  /**
+   * 代码库别名
+   */
+  repoAlias: string;
+  /**
+   * 代码库地址
+   */
+  repoURL: string;
+  /**
+   * 代码库分支
+   */
+  revision: string;
+  /**
+   * Helm Chart 目录
+   */
+  sourceDir: string;
+  /**
+   * 代码库类型
+   */
+  type: "TGit" | "GitHub";
+}
+
+export interface HelmRepoConfigInput {
+  /**
+   * Chart 名称
+   */
+  chartName: string;
+  /**
+   * 密码（可选）
+   */
+  password?: string;
+  /**
+   * 仓库地址
+   */
+  repoURL: string;
+  /**
+   * 用户名（可选）
+   */
+  username?: string;
+}
+
 export interface TafSpecInput {
   /**
    * 配置文件内容
@@ -606,6 +727,46 @@ export interface AppDeployedEnvOutputObj {
    */
   type?: string;
 }
+
+export interface PublicView {
+  /**
+   * Framework 框架，helm、agones 应用为空。
+   */
+  framework?: string;
+  /**
+   * Language 语言，未记录时为空。
+   */
+  language?: string;
+  /**
+   * Mods 能力 ID 到能力的映射，包含全部能力；新增能力只会增加 key。
+   */
+  mods?: Record<string, PublicModView>;
+  /**
+   * SchemaVersion 结构版本号。
+   */
+  schemaVersion?: number;
+  /**
+   * Type 应用类型，如 bkmsApp、helm。
+   */
+  type?: string;
+}
+
+export interface PublicModView {
+  /**
+   * Props 对外参数，没有时省略。
+   */
+  props?: unknown;
+  /**
+   * ReasonCode 不支持的原因，支持时省略。
+   */
+  reasonCode?: ReasonCode;
+  /**
+   * Supported 是否支持。
+   */
+  supported?: boolean;
+}
+
+export type ReasonCode = "unsupported_app_type" | "unsupported_stack" | "invalid_stack" | "incomplete_language";
 
 export interface AppDeployOverviewEnvObj {
   /**
@@ -844,6 +1005,10 @@ export interface AppModelSpecOutputObj {
    * 容器环境变量
    */
   envVars?: VariableOutputObj[];
+  /**
+   * 框架扩展配置，仅 bkmsApp 应用返回
+   */
+  frameworkConfig?: Record<string, unknown>;
   /**
    * 容器启动脚本，以 /bin/sh 执行
    */
@@ -1179,4 +1344,30 @@ export interface TrpcSpecOutputObj {
    * 编程语言
    */
   language?: string;
+}
+
+export interface AppRuntimeDefinitionsOutputObj {
+  /**
+   * 框架目录
+   */
+  frameworks?: FrameworkDefOutputObj[];
+  /**
+   * 每个合法技术栈组合的能力集合
+   */
+  matrix?: PublicView[];
+}
+
+export interface FrameworkDefOutputObj {
+  /**
+   * frameworkConfig 的 schema 版本
+   */
+  configVersion?: number;
+  /**
+   * 框架名
+   */
+  name?: string;
+  /**
+   * 支持的语言
+   */
+  supportedLanguages?: string[];
 }
