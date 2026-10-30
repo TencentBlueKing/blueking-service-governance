@@ -27,6 +27,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/apptype"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/clierr"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
@@ -55,17 +56,14 @@ func DeleteDeployBatch(
 // deleteDeploy 根据应用类型路由到对应的删除接口，执行部署删除并打印成功消息
 func deleteDeploy(ctx context.Context, cli client.Client, appType, appID, envName, deployID string) error {
 	var err error
-	switch appType {
-	case constant.AppTypeHelm:
+	if appType == constant.AppTypeHelm {
 		if deployID == "" {
 			return errors.New("--deploy-id is required for helm applications (use 'deploy list' to get deploy IDs)")
 		}
 		err = cli.DeleteHelmDeploy(ctx, appID, envName, deployID)
-	case constant.AppTypeTrpc:
-		err = cli.DeleteTrpcDeploy(ctx, appID, envName)
-	case constant.AppTypeTaf:
-		err = cli.DeleteTafDeploy(ctx, appID, envName)
-	default:
+	} else if apptype.IsAppModel(appType) {
+		err = cli.DeleteBKMSAppDeploy(ctx, appID, envName)
+	} else {
 		return errors.Errorf("unsupported app type '%s' for deploy delete", appType)
 	}
 	if err != nil {

@@ -120,6 +120,9 @@ func printDeployDeleteConfirmInfo(app *client.AppFull, envNames []string, deploy
 	console.Info("  App:  %s (%s)", app.Name, app.ID)
 	console.Info("  Env:  %s", strings.Join(envNames, ", "))
 	console.Info("  Type: %s", app.Type)
+	if app.Framework != "" {
+		console.Info("  Framework: %s", app.Framework)
+	}
 	if deployID != "" {
 		console.Info("  DeployID: %s", deployID)
 	}

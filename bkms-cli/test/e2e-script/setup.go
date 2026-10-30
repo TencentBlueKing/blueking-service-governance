@@ -178,16 +178,17 @@ func injectEnv(env *testscript.Env, cfg *envConfig, binPath, cfgPath string) {
 // 写入失败时返回空串，脚本会因找不到文件而自然失败。
 func writeAppSpec(workDir, unique string) string {
 	spec := fmt.Sprintf(`name: %s
-type: trpc
+framework: trpc
+language: go
 buildConfig:
   sourceType: imageRegistry
   imageBuildConfig:
     name: mirrors.example.com/test/e2e-image
 appModelSpec:
-  trpcSpec:
-    language: go
-    fileName: trpc_go.yaml
-    filePath: /usr/local/trpc/conf
+  command: ["/usr/local/trpc/bin/server"]
+frameworkConfigFile:
+  name: trpc_go.yaml
+  mountDir: /usr/local/trpc/conf
 `, unique)
 
 	path := filepath.Join(workDir, "app-spec.yaml")

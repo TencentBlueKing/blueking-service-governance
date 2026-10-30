@@ -13,7 +13,9 @@
 | `id` | 应用 ID |
 | `name` | 应用名称 |
 | `displayName` | 应用显示名称 |
-| `type` | 应用类型（trpc / taf / helm / agones） |
+| `type` | 应用类型（bkmsApp / trpc / taf / helm / agones） |
+| `framework` | 技术栈框架（trpc / taf / blank），Helm / Agones 为空 |
+| `language` | 应用语言（go / cpp / nodejs / python） |
 | `creator` | 创建者 |
 
 ## 常用场景

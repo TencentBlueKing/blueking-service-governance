@@ -122,7 +122,10 @@ bkms-cli app appspec start-command view --app my-app -o json
 
 ### start-command edit
 
-从 YAML 文件更新启动命令。`--app` 和 `-f/--file` 均为必填。对于 trpc/taf 类型应用，当前的 trpcSpec/tafSpec 会自动保留，除非在 YAML 中显式覆盖。
+从 YAML 文件更新启动命令。`--app` 和 `-f/--file` 均为必填。
+
+- `type=bkmsApp` 的应用走 startup-config 接口，`command` / `args` / `shCommand` **整体替换**，YAML 里没写的字段会被清空；
+- 旧的 trpc / taf 应用走各自的 spec 接口，当前的 trpcSpec/tafSpec 会自动保留，除非在 YAML 中显式覆盖。
 
 ```bash
 # 从 YAML 文件更新启动命令（-f 必填）
@@ -562,7 +565,7 @@ bkms-cli app appspec dev-mode view --app my-app --env stag -o json
 - `workPath`：开发模式工作根目录。
 - `mountPath`：脚本挂载路径。
 
-其中 `workPath` 与 `mountPath` 由服务端按应用类型（trpc / taf）推导，**只读**，CLI 不提供修改入口。
+其中 `workPath` 与 `mountPath` 由服务端按应用框架（trpc / taf）推导，**只读**，CLI 不提供修改入口。
 
 ### dev-mode enable / disable
 

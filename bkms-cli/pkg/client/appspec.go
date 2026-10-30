@@ -45,6 +45,8 @@ const (
 // AppDetail represents the app detail response from GET /apps/:appID.
 type AppDetail struct {
 	Type         string        `json:"type"`
+	Framework    string        `json:"framework"`
+	Language     string        `json:"language"`
 	AppModelSpec *AppModelSpec `json:"appModelSpec"`
 }
 

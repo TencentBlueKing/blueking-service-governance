@@ -10,7 +10,9 @@ stdout $UNIQUE
 
 exec $BKMS_CLI_BIN app get --app $UNIQUE -o json
 jsonhas name
-jsonfield type=trpc
+jsonfield type=bkmsApp
+jsonfield framework=trpc
+jsonfield language=go
 
 ! exec $BKMS_CLI_BIN app get --app nonexistent-app-xyz-e2e
 stderr 'not found'

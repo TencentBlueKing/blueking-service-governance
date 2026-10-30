@@ -15,48 +15,60 @@ stderr '''name'' is invalid'
 ! exec $BKMS_CLI_BIN app create -f invalid-type.yaml
 stderr '''type'' is invalid'
 
-! exec $BKMS_CLI_BIN app create -f invalid-build-source.yaml
-stderr 'is invalid'
+! exec $BKMS_CLI_BIN app create -f legacy-type-trpc.yaml
+stderr 'no longer supported'
 
-! exec $BKMS_CLI_BIN app create -f invalid-trpc-language.yaml
+! exec $BKMS_CLI_BIN app create -f legacy-trpc-spec.yaml
+stderr 'no longer supported'
+
+! exec $BKMS_CLI_BIN app create -f invalid-build-source.yaml
 stderr 'is invalid'
 
 ! exec $BKMS_CLI_BIN app create -f invalid-helm-repo-type.yaml
 stderr 'is invalid'
 
+! exec $BKMS_CLI_BIN app create -f id-not-allowed.yaml
+stderr '''id'' is not supported'
+
+! exec $BKMS_CLI_BIN app create -f blank-with-framework-file.yaml
+stderr 'not supported for framework ''blank'''
+
+! exec $BKMS_CLI_BIN app create -f missing-framework.yaml
+stderr 'either ''framework'
+
+! exec $BKMS_CLI_BIN app create -f framework-missing-language.yaml
+stderr '''language'' is required'
+
 -- missing-name.yaml --
-type: trpc
+framework: trpc
+language: go
 buildConfig:
   sourceType: imageRegistry
   imageBuildConfig:
     name: example.com/myns/my-app
-appModelSpec:
-  trpcSpec:
-    language: go
-    fileName: trpc_go.yaml
-    filePath: /app/conf
+frameworkConfigFile:
+  name: trpc_go.yaml
+  mountDir: /app/conf
 
 -- missing-build.yaml --
 name: my-app
-type: trpc
-appModelSpec:
-  trpcSpec:
-    language: go
-    fileName: trpc_go.yaml
-    filePath: /app/conf
+framework: trpc
+language: go
+frameworkConfigFile:
+  name: trpc_go.yaml
+  mountDir: /app/conf
 
 -- invalid-name-format.yaml --
 name: MyApp
-type: trpc
+framework: trpc
+language: go
 buildConfig:
   sourceType: imageRegistry
   imageBuildConfig:
     name: example.com/myns/my-app
-appModelSpec:
-  trpcSpec:
-    language: go
-    fileName: trpc_go.yaml
-    filePath: /app/conf
+frameworkConfigFile:
+  name: trpc_go.yaml
+  mountDir: /app/conf
 
 -- invalid-type.yaml --
 name: my-app
@@ -68,29 +80,15 @@ buildConfig:
 
 -- invalid-build-source.yaml --
 name: my-app
-type: trpc
+framework: trpc
+language: go
 buildConfig:
   sourceType: docker
   imageBuildConfig:
     name: example.com/myns/my-app
-appModelSpec:
-  trpcSpec:
-    language: go
-    fileName: trpc_go.yaml
-    filePath: /app/conf
-
--- invalid-trpc-language.yaml --
-name: my-app
-type: trpc
-buildConfig:
-  sourceType: imageRegistry
-  imageBuildConfig:
-    name: example.com/myns/my-app
-appModelSpec:
-  trpcSpec:
-    language: java
-    fileName: trpc_go.yaml
-    filePath: /app/conf
+frameworkConfigFile:
+  name: trpc_go.yaml
+  mountDir: /app/conf
 
 -- invalid-helm-repo-type.yaml --
 name: my-helm-app
@@ -105,3 +103,64 @@ helmSpec:
     helmRepoConfig:
       repoURL: https://charts.example.com
       chartName: my-chart
+
+-- id-not-allowed.yaml --
+name: my-app
+id: my-app-abc123
+framework: blank
+language: go
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+
+-- blank-with-framework-file.yaml --
+name: my-app
+framework: blank
+language: go
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+appModelSpec: {}
+frameworkConfigFile:
+  name: trpc_go.yaml
+  mountDir: /app/conf
+
+-- missing-framework.yaml --
+name: my-app
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+
+-- framework-missing-language.yaml --
+name: my-app
+framework: blank
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+appModelSpec: {}
+
+-- legacy-type-trpc.yaml --
+name: my-app
+type: trpc
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+
+-- legacy-trpc-spec.yaml --
+name: my-app
+framework: trpc
+language: go
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+appModelSpec:
+  trpcSpec:
+    language: go
+    fileName: trpc_go.yaml
+    filePath: /app/conf

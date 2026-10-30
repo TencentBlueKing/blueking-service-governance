@@ -24,7 +24,11 @@ type AppMinimal struct {
 	Name        string `json:"name" yaml:"name"`
 	DisplayName string `json:"displayName" yaml:"displayName"`
 	Type        string `json:"type" yaml:"type"`
-	Creator     string `json:"creator" yaml:"creator"`
+	// Framework 技术栈框架：trpc | taf | blank，Helm / Agones 应用为空
+	Framework string `json:"framework" yaml:"framework"`
+	// Language 应用语言，未记录语言的存量应用为空
+	Language string `json:"language" yaml:"language"`
+	Creator  string `json:"creator" yaml:"creator"`
 }
 
 // ListAppsRespData 获取应用列表返回数据
@@ -207,10 +211,13 @@ type DevModePublishRecordsResp struct {
 
 // AppFull 应用完整定义
 type AppFull struct {
-	ID              string        `json:"id" yaml:"id"`
+	// ID 应用 ID。YAML 输出不包含它：应用 ID 由服务端生成，无法通过 'app create -f' 复用
+	ID              string        `json:"id" yaml:"-"`
 	Name            string        `json:"name" yaml:"name"`
 	DisplayName     string        `json:"displayName" yaml:"displayName"`
 	Type            string        `json:"type" yaml:"type"`
+	Framework       string        `json:"framework" yaml:"framework"`
+	Language        string        `json:"language" yaml:"language"`
 	VisibleEnvNames []string      `json:"visibleEnvNames" yaml:"visibleEnvNames"`
 	BuildConfig     *BuildConfig  `json:"buildConfig" yaml:"buildConfig"`
 	AppModelSpec    *AppModelSpec `json:"appModelSpec,omitempty" yaml:"appModelSpec,omitempty"`
