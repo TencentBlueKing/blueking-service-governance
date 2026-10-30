@@ -18,6 +18,17 @@ export interface GetBatchReleaseProgressRequest {
   trafficLaneName?: string;
 }
 
+export type OperateBatchReleaseRequest = OperateBatchReleaseInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+};
+
 export interface ListHelmDeployRecordsRequest {
   /**
    * 应用 ID
@@ -385,6 +396,20 @@ export interface GetBatchReleaseProgressOutput {
   data?: BatchReleaseProgressOutputObj;
 }
 
+export interface OperateBatchReleaseInput {
+  /**
+   * 手动操作：continue 继续发布 / pause 暂停 / backward 回退上一批 / skip 跳过剩余批次 / rollback 回滚
+   */
+  action: Action;
+  /**
+   * 部署的泳道名称（空字符串表示不使用泳道）
+   */
+  trafficLaneName?: string;
+}
+
+export interface EmptyOutput {
+}
+
 export interface ListHelmDeployRecordsOutput {
   /**
    * 分页 Helm 部署记录列表
@@ -435,9 +460,6 @@ export interface RollbackHelmDeployInput {
    * 部署的泳道名称（空字符串表示不使用泳道）
    */
   trafficLaneName?: string;
-}
-
-export interface EmptyOutput {
 }
 
 export interface ListAppModelDeployRecordsOutput {
@@ -688,6 +710,8 @@ export interface HelmDeployRecordOutputObj {
    */
   valuesFileID?: string;
 }
+
+export type Action = "continue" | "pause" | "backward" | "skip" | "rollback";
 
 export interface BatchReleaseProgressOutputObj {
   /**
