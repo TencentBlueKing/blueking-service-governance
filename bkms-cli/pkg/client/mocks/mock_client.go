@@ -265,6 +265,86 @@ func (_c *MockClient_CheckPortForwardPermission_Call) RunAndReturn(run func(ctx 
 	return _c
 }
 
+// CompareAppConfigFileVersions provides a mock function for the type MockClient
+func (_mock *MockClient) CompareAppConfigFileVersions(ctx context.Context, appID string, previousVersionID string, currentVersionID string) (*client.AppConfigFileVersionComparison, error) {
+	ret := _mock.Called(ctx, appID, previousVersionID, currentVersionID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CompareAppConfigFileVersions")
+	}
+
+	var r0 *client.AppConfigFileVersionComparison
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (*client.AppConfigFileVersionComparison, error)); ok {
+		return returnFunc(ctx, appID, previousVersionID, currentVersionID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) *client.AppConfigFileVersionComparison); ok {
+		r0 = returnFunc(ctx, appID, previousVersionID, currentVersionID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.AppConfigFileVersionComparison)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, previousVersionID, currentVersionID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_CompareAppConfigFileVersions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CompareAppConfigFileVersions'
+type MockClient_CompareAppConfigFileVersions_Call struct {
+	*mock.Call
+}
+
+// CompareAppConfigFileVersions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - previousVersionID string
+//   - currentVersionID string
+func (_e *MockClient_Expecter) CompareAppConfigFileVersions(ctx any, appID any, previousVersionID any, currentVersionID any) *MockClient_CompareAppConfigFileVersions_Call {
+	return &MockClient_CompareAppConfigFileVersions_Call{Call: _e.mock.On("CompareAppConfigFileVersions", ctx, appID, previousVersionID, currentVersionID)}
+}
+
+func (_c *MockClient_CompareAppConfigFileVersions_Call) Run(run func(ctx context.Context, appID string, previousVersionID string, currentVersionID string)) *MockClient_CompareAppConfigFileVersions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_CompareAppConfigFileVersions_Call) Return(appConfigFileVersionComparison *client.AppConfigFileVersionComparison, err error) *MockClient_CompareAppConfigFileVersions_Call {
+	_c.Call.Return(appConfigFileVersionComparison, err)
+	return _c
+}
+
+func (_c *MockClient_CompareAppConfigFileVersions_Call) RunAndReturn(run func(ctx context.Context, appID string, previousVersionID string, currentVersionID string) (*client.AppConfigFileVersionComparison, error)) *MockClient_CompareAppConfigFileVersions_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateApp provides a mock function for the type MockClient
 func (_mock *MockClient) CreateApp(ctx context.Context, workspaceID string, body any) (*client.AppMinimal, error) {
 	ret := _mock.Called(ctx, workspaceID, body)
@@ -474,48 +554,48 @@ func (_c *MockClient_CreateAppComponent_Call) RunAndReturn(run func(ctx context.
 	return _c
 }
 
-// CreateAppConfigFile provides a mock function for the type MockClient
-func (_mock *MockClient) CreateAppConfigFile(ctx context.Context, appID string, opts client.CreateAppConfigFileOptions) (*client.AppConfigFile, error) {
-	ret := _mock.Called(ctx, appID, opts)
+// CreateAppConfigFileDef provides a mock function for the type MockClient
+func (_mock *MockClient) CreateAppConfigFileDef(ctx context.Context, appID string, body client.CreateAppConfigFileDefBody) (*client.AppConfigFileDef, error) {
+	ret := _mock.Called(ctx, appID, body)
 
 	if len(ret) == 0 {
-		panic("no return value specified for CreateAppConfigFile")
+		panic("no return value specified for CreateAppConfigFileDef")
 	}
 
-	var r0 *client.AppConfigFile
+	var r0 *client.AppConfigFileDef
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateAppConfigFileOptions) (*client.AppConfigFile, error)); ok {
-		return returnFunc(ctx, appID, opts)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateAppConfigFileDefBody) (*client.AppConfigFileDef, error)); ok {
+		return returnFunc(ctx, appID, body)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateAppConfigFileOptions) *client.AppConfigFile); ok {
-		r0 = returnFunc(ctx, appID, opts)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, client.CreateAppConfigFileDefBody) *client.AppConfigFileDef); ok {
+		r0 = returnFunc(ctx, appID, body)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*client.AppConfigFile)
+			r0 = ret.Get(0).(*client.AppConfigFileDef)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, client.CreateAppConfigFileOptions) error); ok {
-		r1 = returnFunc(ctx, appID, opts)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, client.CreateAppConfigFileDefBody) error); ok {
+		r1 = returnFunc(ctx, appID, body)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockClient_CreateAppConfigFile_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAppConfigFile'
-type MockClient_CreateAppConfigFile_Call struct {
+// MockClient_CreateAppConfigFileDef_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAppConfigFileDef'
+type MockClient_CreateAppConfigFileDef_Call struct {
 	*mock.Call
 }
 
-// CreateAppConfigFile is a helper method to define mock.On call
+// CreateAppConfigFileDef is a helper method to define mock.On call
 //   - ctx context.Context
 //   - appID string
-//   - opts client.CreateAppConfigFileOptions
-func (_e *MockClient_Expecter) CreateAppConfigFile(ctx any, appID any, opts any) *MockClient_CreateAppConfigFile_Call {
-	return &MockClient_CreateAppConfigFile_Call{Call: _e.mock.On("CreateAppConfigFile", ctx, appID, opts)}
+//   - body client.CreateAppConfigFileDefBody
+func (_e *MockClient_Expecter) CreateAppConfigFileDef(ctx any, appID any, body any) *MockClient_CreateAppConfigFileDef_Call {
+	return &MockClient_CreateAppConfigFileDef_Call{Call: _e.mock.On("CreateAppConfigFileDef", ctx, appID, body)}
 }
 
-func (_c *MockClient_CreateAppConfigFile_Call) Run(run func(ctx context.Context, appID string, opts client.CreateAppConfigFileOptions)) *MockClient_CreateAppConfigFile_Call {
+func (_c *MockClient_CreateAppConfigFileDef_Call) Run(run func(ctx context.Context, appID string, body client.CreateAppConfigFileDefBody)) *MockClient_CreateAppConfigFileDef_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -525,9 +605,9 @@ func (_c *MockClient_CreateAppConfigFile_Call) Run(run func(ctx context.Context,
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 client.CreateAppConfigFileOptions
+		var arg2 client.CreateAppConfigFileDefBody
 		if args[2] != nil {
-			arg2 = args[2].(client.CreateAppConfigFileOptions)
+			arg2 = args[2].(client.CreateAppConfigFileDefBody)
 		}
 		run(
 			arg0,
@@ -538,12 +618,12 @@ func (_c *MockClient_CreateAppConfigFile_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockClient_CreateAppConfigFile_Call) Return(appConfigFile *client.AppConfigFile, err error) *MockClient_CreateAppConfigFile_Call {
-	_c.Call.Return(appConfigFile, err)
+func (_c *MockClient_CreateAppConfigFileDef_Call) Return(appConfigFileDef *client.AppConfigFileDef, err error) *MockClient_CreateAppConfigFileDef_Call {
+	_c.Call.Return(appConfigFileDef, err)
 	return _c
 }
 
-func (_c *MockClient_CreateAppConfigFile_Call) RunAndReturn(run func(ctx context.Context, appID string, opts client.CreateAppConfigFileOptions) (*client.AppConfigFile, error)) *MockClient_CreateAppConfigFile_Call {
+func (_c *MockClient_CreateAppConfigFileDef_Call) RunAndReturn(run func(ctx context.Context, appID string, body client.CreateAppConfigFileDefBody) (*client.AppConfigFileDef, error)) *MockClient_CreateAppConfigFileDef_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1300,6 +1380,69 @@ func (_c *MockClient_DeleteAppComponent_Call) Return(err error) *MockClient_Dele
 }
 
 func (_c *MockClient_DeleteAppComponent_Call) RunAndReturn(run func(ctx context.Context, appID string, compName string) error) *MockClient_DeleteAppComponent_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteAppConfigFileDef provides a mock function for the type MockClient
+func (_mock *MockClient) DeleteAppConfigFileDef(ctx context.Context, appID string, defID string) error {
+	ret := _mock.Called(ctx, appID, defID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteAppConfigFileDef")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, appID, defID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_DeleteAppConfigFileDef_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteAppConfigFileDef'
+type MockClient_DeleteAppConfigFileDef_Call struct {
+	*mock.Call
+}
+
+// DeleteAppConfigFileDef is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - defID string
+func (_e *MockClient_Expecter) DeleteAppConfigFileDef(ctx any, appID any, defID any) *MockClient_DeleteAppConfigFileDef_Call {
+	return &MockClient_DeleteAppConfigFileDef_Call{Call: _e.mock.On("DeleteAppConfigFileDef", ctx, appID, defID)}
+}
+
+func (_c *MockClient_DeleteAppConfigFileDef_Call) Run(run func(ctx context.Context, appID string, defID string)) *MockClient_DeleteAppConfigFileDef_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_DeleteAppConfigFileDef_Call) Return(err error) *MockClient_DeleteAppConfigFileDef_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_DeleteAppConfigFileDef_Call) RunAndReturn(run func(ctx context.Context, appID string, defID string) error) *MockClient_DeleteAppConfigFileDef_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2524,48 +2667,128 @@ func (_c *MockClient_GetApp_Call) RunAndReturn(run func(ctx context.Context, app
 	return _c
 }
 
-// GetAppConfigFileDetails provides a mock function for the type MockClient
-func (_mock *MockClient) GetAppConfigFileDetails(ctx context.Context, appID string, fileID string) (*client.AppConfigFileDetails, error) {
-	ret := _mock.Called(ctx, appID, fileID)
+// GetAppConfigFileDef provides a mock function for the type MockClient
+func (_mock *MockClient) GetAppConfigFileDef(ctx context.Context, appID string, defID string, envName string) (*client.AppConfigFileDef, error) {
+	ret := _mock.Called(ctx, appID, defID, envName)
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetAppConfigFileDetails")
+		panic("no return value specified for GetAppConfigFileDef")
 	}
 
-	var r0 *client.AppConfigFileDetails
+	var r0 *client.AppConfigFileDef
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*client.AppConfigFileDetails, error)); ok {
-		return returnFunc(ctx, appID, fileID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (*client.AppConfigFileDef, error)); ok {
+		return returnFunc(ctx, appID, defID, envName)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.AppConfigFileDetails); ok {
-		r0 = returnFunc(ctx, appID, fileID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) *client.AppConfigFileDef); ok {
+		r0 = returnFunc(ctx, appID, defID, envName)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*client.AppConfigFileDetails)
+			r0 = ret.Get(0).(*client.AppConfigFileDef)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, appID, fileID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, defID, envName)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockClient_GetAppConfigFileDetails_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAppConfigFileDetails'
-type MockClient_GetAppConfigFileDetails_Call struct {
+// MockClient_GetAppConfigFileDef_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAppConfigFileDef'
+type MockClient_GetAppConfigFileDef_Call struct {
 	*mock.Call
 }
 
-// GetAppConfigFileDetails is a helper method to define mock.On call
+// GetAppConfigFileDef is a helper method to define mock.On call
 //   - ctx context.Context
 //   - appID string
-//   - fileID string
-func (_e *MockClient_Expecter) GetAppConfigFileDetails(ctx any, appID any, fileID any) *MockClient_GetAppConfigFileDetails_Call {
-	return &MockClient_GetAppConfigFileDetails_Call{Call: _e.mock.On("GetAppConfigFileDetails", ctx, appID, fileID)}
+//   - defID string
+//   - envName string
+func (_e *MockClient_Expecter) GetAppConfigFileDef(ctx any, appID any, defID any, envName any) *MockClient_GetAppConfigFileDef_Call {
+	return &MockClient_GetAppConfigFileDef_Call{Call: _e.mock.On("GetAppConfigFileDef", ctx, appID, defID, envName)}
 }
 
-func (_c *MockClient_GetAppConfigFileDetails_Call) Run(run func(ctx context.Context, appID string, fileID string)) *MockClient_GetAppConfigFileDetails_Call {
+func (_c *MockClient_GetAppConfigFileDef_Call) Run(run func(ctx context.Context, appID string, defID string, envName string)) *MockClient_GetAppConfigFileDef_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_GetAppConfigFileDef_Call) Return(appConfigFileDef *client.AppConfigFileDef, err error) *MockClient_GetAppConfigFileDef_Call {
+	_c.Call.Return(appConfigFileDef, err)
+	return _c
+}
+
+func (_c *MockClient_GetAppConfigFileDef_Call) RunAndReturn(run func(ctx context.Context, appID string, defID string, envName string) (*client.AppConfigFileDef, error)) *MockClient_GetAppConfigFileDef_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetAppConfigFileMountPreview provides a mock function for the type MockClient
+func (_mock *MockClient) GetAppConfigFileMountPreview(ctx context.Context, appID string, envName string) ([]client.AppConfigFileMountPreviewItem, error) {
+	ret := _mock.Called(ctx, appID, envName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAppConfigFileMountPreview")
+	}
+
+	var r0 []client.AppConfigFileMountPreviewItem
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]client.AppConfigFileMountPreviewItem, error)); ok {
+		return returnFunc(ctx, appID, envName)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []client.AppConfigFileMountPreviewItem); ok {
+		r0 = returnFunc(ctx, appID, envName)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.AppConfigFileMountPreviewItem)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, envName)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_GetAppConfigFileMountPreview_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAppConfigFileMountPreview'
+type MockClient_GetAppConfigFileMountPreview_Call struct {
+	*mock.Call
+}
+
+// GetAppConfigFileMountPreview is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - envName string
+func (_e *MockClient_Expecter) GetAppConfigFileMountPreview(ctx any, appID any, envName any) *MockClient_GetAppConfigFileMountPreview_Call {
+	return &MockClient_GetAppConfigFileMountPreview_Call{Call: _e.mock.On("GetAppConfigFileMountPreview", ctx, appID, envName)}
+}
+
+func (_c *MockClient_GetAppConfigFileMountPreview_Call) Run(run func(ctx context.Context, appID string, envName string)) *MockClient_GetAppConfigFileMountPreview_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -2588,12 +2811,12 @@ func (_c *MockClient_GetAppConfigFileDetails_Call) Run(run func(ctx context.Cont
 	return _c
 }
 
-func (_c *MockClient_GetAppConfigFileDetails_Call) Return(appConfigFileDetails *client.AppConfigFileDetails, err error) *MockClient_GetAppConfigFileDetails_Call {
-	_c.Call.Return(appConfigFileDetails, err)
+func (_c *MockClient_GetAppConfigFileMountPreview_Call) Return(appConfigFileMountPreviewItems []client.AppConfigFileMountPreviewItem, err error) *MockClient_GetAppConfigFileMountPreview_Call {
+	_c.Call.Return(appConfigFileMountPreviewItems, err)
 	return _c
 }
 
-func (_c *MockClient_GetAppConfigFileDetails_Call) RunAndReturn(run func(ctx context.Context, appID string, fileID string) (*client.AppConfigFileDetails, error)) *MockClient_GetAppConfigFileDetails_Call {
+func (_c *MockClient_GetAppConfigFileMountPreview_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) ([]client.AppConfigFileMountPreviewItem, error)) *MockClient_GetAppConfigFileMountPreview_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3531,6 +3754,148 @@ func (_c *MockClient_ImportPublicEnvVars_Call) RunAndReturn(run func(ctx context
 	return _c
 }
 
+// ListAppConfigFileDefs provides a mock function for the type MockClient
+func (_mock *MockClient) ListAppConfigFileDefs(ctx context.Context, appID string) ([]client.AppConfigFileDef, error) {
+	ret := _mock.Called(ctx, appID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListAppConfigFileDefs")
+	}
+
+	var r0 []client.AppConfigFileDef
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]client.AppConfigFileDef, error)); ok {
+		return returnFunc(ctx, appID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []client.AppConfigFileDef); ok {
+		r0 = returnFunc(ctx, appID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.AppConfigFileDef)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, appID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_ListAppConfigFileDefs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAppConfigFileDefs'
+type MockClient_ListAppConfigFileDefs_Call struct {
+	*mock.Call
+}
+
+// ListAppConfigFileDefs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+func (_e *MockClient_Expecter) ListAppConfigFileDefs(ctx any, appID any) *MockClient_ListAppConfigFileDefs_Call {
+	return &MockClient_ListAppConfigFileDefs_Call{Call: _e.mock.On("ListAppConfigFileDefs", ctx, appID)}
+}
+
+func (_c *MockClient_ListAppConfigFileDefs_Call) Run(run func(ctx context.Context, appID string)) *MockClient_ListAppConfigFileDefs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ListAppConfigFileDefs_Call) Return(appConfigFileDefs []client.AppConfigFileDef, err error) *MockClient_ListAppConfigFileDefs_Call {
+	_c.Call.Return(appConfigFileDefs, err)
+	return _c
+}
+
+func (_c *MockClient_ListAppConfigFileDefs_Call) RunAndReturn(run func(ctx context.Context, appID string) ([]client.AppConfigFileDef, error)) *MockClient_ListAppConfigFileDefs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListAppConfigFileEnvInstances provides a mock function for the type MockClient
+func (_mock *MockClient) ListAppConfigFileEnvInstances(ctx context.Context, appID string, defID string) ([]client.AppConfigFileEnvInstance, error) {
+	ret := _mock.Called(ctx, appID, defID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListAppConfigFileEnvInstances")
+	}
+
+	var r0 []client.AppConfigFileEnvInstance
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]client.AppConfigFileEnvInstance, error)); ok {
+		return returnFunc(ctx, appID, defID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []client.AppConfigFileEnvInstance); ok {
+		r0 = returnFunc(ctx, appID, defID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.AppConfigFileEnvInstance)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, defID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_ListAppConfigFileEnvInstances_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAppConfigFileEnvInstances'
+type MockClient_ListAppConfigFileEnvInstances_Call struct {
+	*mock.Call
+}
+
+// ListAppConfigFileEnvInstances is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - defID string
+func (_e *MockClient_Expecter) ListAppConfigFileEnvInstances(ctx any, appID any, defID any) *MockClient_ListAppConfigFileEnvInstances_Call {
+	return &MockClient_ListAppConfigFileEnvInstances_Call{Call: _e.mock.On("ListAppConfigFileEnvInstances", ctx, appID, defID)}
+}
+
+func (_c *MockClient_ListAppConfigFileEnvInstances_Call) Run(run func(ctx context.Context, appID string, defID string)) *MockClient_ListAppConfigFileEnvInstances_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ListAppConfigFileEnvInstances_Call) Return(appConfigFileEnvInstances []client.AppConfigFileEnvInstance, err error) *MockClient_ListAppConfigFileEnvInstances_Call {
+	_c.Call.Return(appConfigFileEnvInstances, err)
+	return _c
+}
+
+func (_c *MockClient_ListAppConfigFileEnvInstances_Call) RunAndReturn(run func(ctx context.Context, appID string, defID string) ([]client.AppConfigFileEnvInstance, error)) *MockClient_ListAppConfigFileEnvInstances_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListAppConfigFileVersions provides a mock function for the type MockClient
 func (_mock *MockClient) ListAppConfigFileVersions(ctx context.Context, appID string, opts client.ListAppConfigFileVersionsOptions) (*client.PaginatedAppConfigFileVersions, error) {
 	ret := _mock.Called(ctx, appID, opts)
@@ -3601,80 +3966,6 @@ func (_c *MockClient_ListAppConfigFileVersions_Call) Return(paginatedAppConfigFi
 }
 
 func (_c *MockClient_ListAppConfigFileVersions_Call) RunAndReturn(run func(ctx context.Context, appID string, opts client.ListAppConfigFileVersionsOptions) (*client.PaginatedAppConfigFileVersions, error)) *MockClient_ListAppConfigFileVersions_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ListAppConfigFiles provides a mock function for the type MockClient
-func (_mock *MockClient) ListAppConfigFiles(ctx context.Context, appID string, envName string) ([]client.AppConfigFile, error) {
-	ret := _mock.Called(ctx, appID, envName)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListAppConfigFiles")
-	}
-
-	var r0 []client.AppConfigFile
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]client.AppConfigFile, error)); ok {
-		return returnFunc(ctx, appID, envName)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []client.AppConfigFile); ok {
-		r0 = returnFunc(ctx, appID, envName)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]client.AppConfigFile)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, appID, envName)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockClient_ListAppConfigFiles_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAppConfigFiles'
-type MockClient_ListAppConfigFiles_Call struct {
-	*mock.Call
-}
-
-// ListAppConfigFiles is a helper method to define mock.On call
-//   - ctx context.Context
-//   - appID string
-//   - envName string
-func (_e *MockClient_Expecter) ListAppConfigFiles(ctx any, appID any, envName any) *MockClient_ListAppConfigFiles_Call {
-	return &MockClient_ListAppConfigFiles_Call{Call: _e.mock.On("ListAppConfigFiles", ctx, appID, envName)}
-}
-
-func (_c *MockClient_ListAppConfigFiles_Call) Run(run func(ctx context.Context, appID string, envName string)) *MockClient_ListAppConfigFiles_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_ListAppConfigFiles_Call) Return(appConfigFiles []client.AppConfigFile, err error) *MockClient_ListAppConfigFiles_Call {
-	_c.Call.Return(appConfigFiles, err)
-	return _c
-}
-
-func (_c *MockClient_ListAppConfigFiles_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) ([]client.AppConfigFile, error)) *MockClient_ListAppConfigFiles_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -5735,6 +6026,75 @@ func (_c *MockClient_ReportDevModePublish_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// ResetAppConfigFileDefEnv provides a mock function for the type MockClient
+func (_mock *MockClient) ResetAppConfigFileDefEnv(ctx context.Context, appID string, defID string, envName string) error {
+	ret := _mock.Called(ctx, appID, defID, envName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ResetAppConfigFileDefEnv")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = returnFunc(ctx, appID, defID, envName)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_ResetAppConfigFileDefEnv_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResetAppConfigFileDefEnv'
+type MockClient_ResetAppConfigFileDefEnv_Call struct {
+	*mock.Call
+}
+
+// ResetAppConfigFileDefEnv is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - defID string
+//   - envName string
+func (_e *MockClient_Expecter) ResetAppConfigFileDefEnv(ctx any, appID any, defID any, envName any) *MockClient_ResetAppConfigFileDefEnv_Call {
+	return &MockClient_ResetAppConfigFileDefEnv_Call{Call: _e.mock.On("ResetAppConfigFileDefEnv", ctx, appID, defID, envName)}
+}
+
+func (_c *MockClient_ResetAppConfigFileDefEnv_Call) Run(run func(ctx context.Context, appID string, defID string, envName string)) *MockClient_ResetAppConfigFileDefEnv_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ResetAppConfigFileDefEnv_Call) Return(err error) *MockClient_ResetAppConfigFileDefEnv_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_ResetAppConfigFileDefEnv_Call) RunAndReturn(run func(ctx context.Context, appID string, defID string, envName string) error) *MockClient_ResetAppConfigFileDefEnv_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ResolveApp provides a mock function for the type MockClient
 func (_mock *MockClient) ResolveApp(ctx context.Context, workspaceID string, input string) (string, error) {
 	ret := _mock.Called(ctx, workspaceID, input)
@@ -5882,23 +6242,23 @@ func (_c *MockClient_RestartDevModeProcesses_Call) RunAndReturn(run func(ctx con
 }
 
 // RollbackAppConfigFileVersion provides a mock function for the type MockClient
-func (_mock *MockClient) RollbackAppConfigFileVersion(ctx context.Context, appID string, versionID string, opts client.RollbackAppConfigFileVersionOptions) (*client.AppConfigFile, error) {
+func (_mock *MockClient) RollbackAppConfigFileVersion(ctx context.Context, appID string, versionID string, opts client.RollbackAppConfigFileVersionOptions) (*client.RollbackAppConfigFileVersionResult, error) {
 	ret := _mock.Called(ctx, appID, versionID, opts)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RollbackAppConfigFileVersion")
 	}
 
-	var r0 *client.AppConfigFile
+	var r0 *client.RollbackAppConfigFileVersionResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.RollbackAppConfigFileVersionOptions) (*client.AppConfigFile, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.RollbackAppConfigFileVersionOptions) (*client.RollbackAppConfigFileVersionResult, error)); ok {
 		return returnFunc(ctx, appID, versionID, opts)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.RollbackAppConfigFileVersionOptions) *client.AppConfigFile); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.RollbackAppConfigFileVersionOptions) *client.RollbackAppConfigFileVersionResult); ok {
 		r0 = returnFunc(ctx, appID, versionID, opts)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*client.AppConfigFile)
+			r0 = ret.Get(0).(*client.RollbackAppConfigFileVersionResult)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, client.RollbackAppConfigFileVersionOptions) error); ok {
@@ -5951,12 +6311,12 @@ func (_c *MockClient_RollbackAppConfigFileVersion_Call) Run(run func(ctx context
 	return _c
 }
 
-func (_c *MockClient_RollbackAppConfigFileVersion_Call) Return(appConfigFile *client.AppConfigFile, err error) *MockClient_RollbackAppConfigFileVersion_Call {
-	_c.Call.Return(appConfigFile, err)
+func (_c *MockClient_RollbackAppConfigFileVersion_Call) Return(rollbackAppConfigFileVersionResult *client.RollbackAppConfigFileVersionResult, err error) *MockClient_RollbackAppConfigFileVersion_Call {
+	_c.Call.Return(rollbackAppConfigFileVersionResult, err)
 	return _c
 }
 
-func (_c *MockClient_RollbackAppConfigFileVersion_Call) RunAndReturn(run func(ctx context.Context, appID string, versionID string, opts client.RollbackAppConfigFileVersionOptions) (*client.AppConfigFile, error)) *MockClient_RollbackAppConfigFileVersion_Call {
+func (_c *MockClient_RollbackAppConfigFileVersion_Call) RunAndReturn(run func(ctx context.Context, appID string, versionID string, opts client.RollbackAppConfigFileVersionOptions) (*client.RollbackAppConfigFileVersionResult, error)) *MockClient_RollbackAppConfigFileVersion_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -6168,49 +6528,49 @@ func (_c *MockClient_UpdateAppBuildConfig_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
-// UpdateAppConfigFileContent provides a mock function for the type MockClient
-func (_mock *MockClient) UpdateAppConfigFileContent(ctx context.Context, appID string, fileID string, opts client.AppConfigFileContentOptions) (*client.AppConfigFileContentUpdateResult, error) {
-	ret := _mock.Called(ctx, appID, fileID, opts)
+// UpdateAppConfigFileDef provides a mock function for the type MockClient
+func (_mock *MockClient) UpdateAppConfigFileDef(ctx context.Context, appID string, defID string, body client.UpdateAppConfigFileDefBody) (*client.AppConfigFileDef, error) {
+	ret := _mock.Called(ctx, appID, defID, body)
 
 	if len(ret) == 0 {
-		panic("no return value specified for UpdateAppConfigFileContent")
+		panic("no return value specified for UpdateAppConfigFileDef")
 	}
 
-	var r0 *client.AppConfigFileContentUpdateResult
+	var r0 *client.AppConfigFileDef
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.AppConfigFileContentOptions) (*client.AppConfigFileContentUpdateResult, error)); ok {
-		return returnFunc(ctx, appID, fileID, opts)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.UpdateAppConfigFileDefBody) (*client.AppConfigFileDef, error)); ok {
+		return returnFunc(ctx, appID, defID, body)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.AppConfigFileContentOptions) *client.AppConfigFileContentUpdateResult); ok {
-		r0 = returnFunc(ctx, appID, fileID, opts)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.UpdateAppConfigFileDefBody) *client.AppConfigFileDef); ok {
+		r0 = returnFunc(ctx, appID, defID, body)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*client.AppConfigFileContentUpdateResult)
+			r0 = ret.Get(0).(*client.AppConfigFileDef)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, client.AppConfigFileContentOptions) error); ok {
-		r1 = returnFunc(ctx, appID, fileID, opts)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, client.UpdateAppConfigFileDefBody) error); ok {
+		r1 = returnFunc(ctx, appID, defID, body)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockClient_UpdateAppConfigFileContent_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateAppConfigFileContent'
-type MockClient_UpdateAppConfigFileContent_Call struct {
+// MockClient_UpdateAppConfigFileDef_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateAppConfigFileDef'
+type MockClient_UpdateAppConfigFileDef_Call struct {
 	*mock.Call
 }
 
-// UpdateAppConfigFileContent is a helper method to define mock.On call
+// UpdateAppConfigFileDef is a helper method to define mock.On call
 //   - ctx context.Context
 //   - appID string
-//   - fileID string
-//   - opts client.AppConfigFileContentOptions
-func (_e *MockClient_Expecter) UpdateAppConfigFileContent(ctx any, appID any, fileID any, opts any) *MockClient_UpdateAppConfigFileContent_Call {
-	return &MockClient_UpdateAppConfigFileContent_Call{Call: _e.mock.On("UpdateAppConfigFileContent", ctx, appID, fileID, opts)}
+//   - defID string
+//   - body client.UpdateAppConfigFileDefBody
+func (_e *MockClient_Expecter) UpdateAppConfigFileDef(ctx any, appID any, defID any, body any) *MockClient_UpdateAppConfigFileDef_Call {
+	return &MockClient_UpdateAppConfigFileDef_Call{Call: _e.mock.On("UpdateAppConfigFileDef", ctx, appID, defID, body)}
 }
 
-func (_c *MockClient_UpdateAppConfigFileContent_Call) Run(run func(ctx context.Context, appID string, fileID string, opts client.AppConfigFileContentOptions)) *MockClient_UpdateAppConfigFileContent_Call {
+func (_c *MockClient_UpdateAppConfigFileDef_Call) Run(run func(ctx context.Context, appID string, defID string, body client.UpdateAppConfigFileDefBody)) *MockClient_UpdateAppConfigFileDef_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -6224,9 +6584,9 @@ func (_c *MockClient_UpdateAppConfigFileContent_Call) Run(run func(ctx context.C
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 client.AppConfigFileContentOptions
+		var arg3 client.UpdateAppConfigFileDefBody
 		if args[3] != nil {
-			arg3 = args[3].(client.AppConfigFileContentOptions)
+			arg3 = args[3].(client.UpdateAppConfigFileDefBody)
 		}
 		run(
 			arg0,
@@ -6238,59 +6598,60 @@ func (_c *MockClient_UpdateAppConfigFileContent_Call) Run(run func(ctx context.C
 	return _c
 }
 
-func (_c *MockClient_UpdateAppConfigFileContent_Call) Return(appConfigFileContentUpdateResult *client.AppConfigFileContentUpdateResult, err error) *MockClient_UpdateAppConfigFileContent_Call {
-	_c.Call.Return(appConfigFileContentUpdateResult, err)
+func (_c *MockClient_UpdateAppConfigFileDef_Call) Return(appConfigFileDef *client.AppConfigFileDef, err error) *MockClient_UpdateAppConfigFileDef_Call {
+	_c.Call.Return(appConfigFileDef, err)
 	return _c
 }
 
-func (_c *MockClient_UpdateAppConfigFileContent_Call) RunAndReturn(run func(ctx context.Context, appID string, fileID string, opts client.AppConfigFileContentOptions) (*client.AppConfigFileContentUpdateResult, error)) *MockClient_UpdateAppConfigFileContent_Call {
+func (_c *MockClient_UpdateAppConfigFileDef_Call) RunAndReturn(run func(ctx context.Context, appID string, defID string, body client.UpdateAppConfigFileDefBody) (*client.AppConfigFileDef, error)) *MockClient_UpdateAppConfigFileDef_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// UpdateAppConfigFileOverlayContent provides a mock function for the type MockClient
-func (_mock *MockClient) UpdateAppConfigFileOverlayContent(ctx context.Context, appID string, fileID string, opts client.AppConfigFileContentOptions) (*client.AppConfigFileContentUpdateResult, error) {
-	ret := _mock.Called(ctx, appID, fileID, opts)
+// UpdateAppConfigFileDefContent provides a mock function for the type MockClient
+func (_mock *MockClient) UpdateAppConfigFileDefContent(ctx context.Context, appID string, defID string, envName string, body client.UpdateAppConfigFileDefContentBody) (*client.AppConfigFileDefContentUpdateResult, error) {
+	ret := _mock.Called(ctx, appID, defID, envName, body)
 
 	if len(ret) == 0 {
-		panic("no return value specified for UpdateAppConfigFileOverlayContent")
+		panic("no return value specified for UpdateAppConfigFileDefContent")
 	}
 
-	var r0 *client.AppConfigFileContentUpdateResult
+	var r0 *client.AppConfigFileDefContentUpdateResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.AppConfigFileContentOptions) (*client.AppConfigFileContentUpdateResult, error)); ok {
-		return returnFunc(ctx, appID, fileID, opts)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, client.UpdateAppConfigFileDefContentBody) (*client.AppConfigFileDefContentUpdateResult, error)); ok {
+		return returnFunc(ctx, appID, defID, envName, body)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.AppConfigFileContentOptions) *client.AppConfigFileContentUpdateResult); ok {
-		r0 = returnFunc(ctx, appID, fileID, opts)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, client.UpdateAppConfigFileDefContentBody) *client.AppConfigFileDefContentUpdateResult); ok {
+		r0 = returnFunc(ctx, appID, defID, envName, body)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*client.AppConfigFileContentUpdateResult)
+			r0 = ret.Get(0).(*client.AppConfigFileDefContentUpdateResult)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, client.AppConfigFileContentOptions) error); ok {
-		r1 = returnFunc(ctx, appID, fileID, opts)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, client.UpdateAppConfigFileDefContentBody) error); ok {
+		r1 = returnFunc(ctx, appID, defID, envName, body)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockClient_UpdateAppConfigFileOverlayContent_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateAppConfigFileOverlayContent'
-type MockClient_UpdateAppConfigFileOverlayContent_Call struct {
+// MockClient_UpdateAppConfigFileDefContent_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateAppConfigFileDefContent'
+type MockClient_UpdateAppConfigFileDefContent_Call struct {
 	*mock.Call
 }
 
-// UpdateAppConfigFileOverlayContent is a helper method to define mock.On call
+// UpdateAppConfigFileDefContent is a helper method to define mock.On call
 //   - ctx context.Context
 //   - appID string
-//   - fileID string
-//   - opts client.AppConfigFileContentOptions
-func (_e *MockClient_Expecter) UpdateAppConfigFileOverlayContent(ctx any, appID any, fileID any, opts any) *MockClient_UpdateAppConfigFileOverlayContent_Call {
-	return &MockClient_UpdateAppConfigFileOverlayContent_Call{Call: _e.mock.On("UpdateAppConfigFileOverlayContent", ctx, appID, fileID, opts)}
+//   - defID string
+//   - envName string
+//   - body client.UpdateAppConfigFileDefContentBody
+func (_e *MockClient_Expecter) UpdateAppConfigFileDefContent(ctx any, appID any, defID any, envName any, body any) *MockClient_UpdateAppConfigFileDefContent_Call {
+	return &MockClient_UpdateAppConfigFileDefContent_Call{Call: _e.mock.On("UpdateAppConfigFileDefContent", ctx, appID, defID, envName, body)}
 }
 
-func (_c *MockClient_UpdateAppConfigFileOverlayContent_Call) Run(run func(ctx context.Context, appID string, fileID string, opts client.AppConfigFileContentOptions)) *MockClient_UpdateAppConfigFileOverlayContent_Call {
+func (_c *MockClient_UpdateAppConfigFileDefContent_Call) Run(run func(ctx context.Context, appID string, defID string, envName string, body client.UpdateAppConfigFileDefContentBody)) *MockClient_UpdateAppConfigFileDefContent_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -6304,26 +6665,31 @@ func (_c *MockClient_UpdateAppConfigFileOverlayContent_Call) Run(run func(ctx co
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 client.AppConfigFileContentOptions
+		var arg3 string
 		if args[3] != nil {
-			arg3 = args[3].(client.AppConfigFileContentOptions)
+			arg3 = args[3].(string)
+		}
+		var arg4 client.UpdateAppConfigFileDefContentBody
+		if args[4] != nil {
+			arg4 = args[4].(client.UpdateAppConfigFileDefContentBody)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
 }
 
-func (_c *MockClient_UpdateAppConfigFileOverlayContent_Call) Return(appConfigFileContentUpdateResult *client.AppConfigFileContentUpdateResult, err error) *MockClient_UpdateAppConfigFileOverlayContent_Call {
-	_c.Call.Return(appConfigFileContentUpdateResult, err)
+func (_c *MockClient_UpdateAppConfigFileDefContent_Call) Return(appConfigFileDefContentUpdateResult *client.AppConfigFileDefContentUpdateResult, err error) *MockClient_UpdateAppConfigFileDefContent_Call {
+	_c.Call.Return(appConfigFileDefContentUpdateResult, err)
 	return _c
 }
 
-func (_c *MockClient_UpdateAppConfigFileOverlayContent_Call) RunAndReturn(run func(ctx context.Context, appID string, fileID string, opts client.AppConfigFileContentOptions) (*client.AppConfigFileContentUpdateResult, error)) *MockClient_UpdateAppConfigFileOverlayContent_Call {
+func (_c *MockClient_UpdateAppConfigFileDefContent_Call) RunAndReturn(run func(ctx context.Context, appID string, defID string, envName string, body client.UpdateAppConfigFileDefContentBody) (*client.AppConfigFileDefContentUpdateResult, error)) *MockClient_UpdateAppConfigFileDefContent_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -110,32 +110,46 @@ type Client interface {
 
 	// ---------- 应用配置文件 ----------
 
-	// ListAppConfigFiles 获取应用配置文件列表
-	ListAppConfigFiles(ctx context.Context, appID, envName string) ([]AppConfigFile, error)
-	// GetAppConfigFileDetails 获取应用配置文件详情
-	GetAppConfigFileDetails(ctx context.Context, appID, fileID string) (*AppConfigFileDetails, error)
-	// CreateAppConfigFile 创建应用配置文件
-	CreateAppConfigFile(ctx context.Context, appID string, opts CreateAppConfigFileOptions) (*AppConfigFile, error)
+	// ListAppConfigFileDefs 获取应用下所有配置文件定义及其默认文件信息
+	ListAppConfigFileDefs(ctx context.Context, appID string) ([]AppConfigFileDef, error)
+	// GetAppConfigFileDef 获取配置文件定义详情，envName 为空时返回默认文件
+	GetAppConfigFileDef(ctx context.Context, appID, defID, envName string) (*AppConfigFileDef, error)
+	// CreateAppConfigFileDef 创建配置文件定义及默认文件
+	CreateAppConfigFileDef(
+		ctx context.Context, appID string, body CreateAppConfigFileDefBody,
+	) (*AppConfigFileDef, error)
+	// UpdateAppConfigFileDef 更新配置文件定义信息
+	UpdateAppConfigFileDef(
+		ctx context.Context, appID, defID string, body UpdateAppConfigFileDefBody,
+	) (*AppConfigFileDef, error)
+	// DeleteAppConfigFileDef 删除配置文件定义及其所有关联文件和版本
+	DeleteAppConfigFileDef(ctx context.Context, appID, defID string) error
+	// ListAppConfigFileEnvInstances 列出配置文件定义下的所有文件实例（含默认文件）
+	ListAppConfigFileEnvInstances(ctx context.Context, appID, defID string) ([]AppConfigFileEnvInstance, error)
+	// UpdateAppConfigFileDefContent 更新配置内容，envName 为空时更新默认文件
+	UpdateAppConfigFileDefContent(
+		ctx context.Context, appID, defID, envName string, body UpdateAppConfigFileDefContentBody,
+	) (*AppConfigFileDefContentUpdateResult, error)
+	// ResetAppConfigFileDefEnv 将指定环境恢复为默认配置
+	ResetAppConfigFileDefEnv(ctx context.Context, appID, defID, envName string) error
+	// GetAppConfigFileMountPreview 获取指定环境下最终挂载到容器的配置文件
+	GetAppConfigFileMountPreview(ctx context.Context, appID, envName string) ([]AppConfigFileMountPreviewItem, error)
 	// ListAppConfigFileVersions 获取应用配置文件历史版本列表
 	ListAppConfigFileVersions(
 		ctx context.Context, appID string, opts ListAppConfigFileVersionsOptions,
 	) (*PaginatedAppConfigFileVersions, error)
 	// GetAppConfigFileVersion 获取应用配置文件某个历史版本详情
 	GetAppConfigFileVersion(ctx context.Context, appID, versionID string) (*AppConfigFileVersion, error)
+	// CompareAppConfigFileVersions 对比同一配置文件的两个历史版本
+	CompareAppConfigFileVersions(
+		ctx context.Context, appID, previousVersionID, currentVersionID string,
+	) (*AppConfigFileVersionComparison, error)
 	// DeleteAppConfigFileVersion 删除应用配置文件某个历史版本
 	DeleteAppConfigFileVersion(ctx context.Context, appID, versionID string) error
 	// RollbackAppConfigFileVersion 回滚到应用配置文件某个历史版本
 	RollbackAppConfigFileVersion(
 		ctx context.Context, appID, versionID string, opts RollbackAppConfigFileVersionOptions,
-	) (*AppConfigFile, error)
-	// UpdateAppConfigFileContent 更新应用配置文件 Content
-	UpdateAppConfigFileContent(
-		ctx context.Context, appID, fileID string, opts AppConfigFileContentOptions,
-	) (*AppConfigFileContentUpdateResult, error)
-	// UpdateAppConfigFileOverlayContent 更新应用配置文件 OverlayContent
-	UpdateAppConfigFileOverlayContent(
-		ctx context.Context, appID, fileID string, opts AppConfigFileContentOptions,
-	) (*AppConfigFileContentUpdateResult, error)
+	) (*RollbackAppConfigFileVersionResult, error)
 
 	// ---------- 部署 ----------
 

@@ -643,82 +643,191 @@ func (c *SvcBasedClient) ListAppImages(ctx context.Context, appID, keyword strin
 	return respData.Data.Results, nil
 }
 
-// ListAppConfigFiles 获取应用配置文件列表
-func (c *SvcBasedClient) ListAppConfigFiles(ctx context.Context, appID, envName string) ([]AppConfigFile, error) {
-	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-files", url.PathEscape(appID))
-
-	var respData ListAppConfigFilesRespData
-	req := c.cli.R().SetContext(ctx).SetResult(&respData)
-	if envName != "" {
-		req.SetQueryParam("envName", envName)
+// appConfigFileDefsPath 返回配置文件定义的接口路径，subPaths 会被逐段转义后追加。
+func appConfigFileDefsPath(appID string, subPaths ...string) string {
+	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-file-defs", url.PathEscape(appID))
+	for _, p := range subPaths {
+		path += "/" + url.PathEscape(p)
 	}
+	return path
+}
 
-	resp, err := req.Get(path)
+// appConfigFileVersionsPath 返回配置文件版本的接口路径，subPaths 会被逐段转义后追加。
+func appConfigFileVersionsPath(appID string, subPaths ...string) string {
+	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-file/versions", url.PathEscape(appID))
+	for _, p := range subPaths {
+		path += "/" + url.PathEscape(p)
+	}
+	return path
+}
+
+// ListAppConfigFileDefs 获取应用下所有配置文件定义及其默认文件信息
+func (c *SvcBasedClient) ListAppConfigFileDefs(ctx context.Context, appID string) ([]AppConfigFileDef, error) {
+	var respData ListAppConfigFileDefsRespData
+	resp, err := c.cli.R().SetContext(ctx).SetResult(&respData).Get(appConfigFileDefsPath(appID, "defaults"))
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, formatAPIError(resp, "list app config files")
+		return nil, formatAPIError(resp, "list app config file defs")
 	}
 
 	return respData.Items, nil
 }
 
-// GetAppConfigFileDetails 获取应用配置文件详情
-func (c *SvcBasedClient) GetAppConfigFileDetails(
+// GetAppConfigFileDef 获取配置文件定义详情，envName 为空时返回默认文件
+func (c *SvcBasedClient) GetAppConfigFileDef(
 	ctx context.Context,
-	appID, fileID string,
-) (*AppConfigFileDetails, error) {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/app-config-files/%s/details",
-		url.PathEscape(appID),
-		url.PathEscape(fileID),
-	)
+	appID, defID, envName string,
+) (*AppConfigFileDef, error) {
+	var respData AppConfigFileDefItemRespData
+	req := c.cli.R().SetContext(ctx).SetResult(&respData)
+	if envName != "" {
+		req.SetQueryParam("envName", envName)
+	}
 
-	var details AppConfigFileDetails
-	resp, err := c.cli.R().SetContext(ctx).SetResult(&details).Get(path)
+	resp, err := req.Get(appConfigFileDefsPath(appID, defID))
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, formatAPIError(resp, "get app config file details")
-	}
-
-	return &details, nil
-}
-
-// CreateAppConfigFile 创建应用配置文件
-func (c *SvcBasedClient) CreateAppConfigFile(
-	ctx context.Context,
-	appID string,
-	opts CreateAppConfigFileOptions,
-) (*AppConfigFile, error) {
-	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-files", url.PathEscape(appID))
-	body := map[string]any{
-		"name":                opts.Name,
-		"type":                opts.Type,
-		"baseAppConfigFileID": opts.BaseAppConfigFileID,
-		"contentSourceType":   opts.ContentSourceType,
-		"envName":             opts.EnvName,
-		"fileFormat":          opts.FileFormat,
-		"description":         opts.Description,
-	}
-
-	var respData struct {
-		Item *AppConfigFile `json:"item"`
-	}
-	resp, err := c.cli.R().SetContext(ctx).SetBody(body).SetResult(&respData).Post(path)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("create app config file failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "get app config file def")
 	}
 	if respData.Item == nil {
-		return nil, errors.New("create app config file returned empty item")
+		return nil, errors.New("get app config file def returned empty item")
 	}
 
 	return respData.Item, nil
+}
+
+// CreateAppConfigFileDef 创建配置文件定义及默认文件（非幂等，不自动重试）
+func (c *SvcBasedClient) CreateAppConfigFileDef(
+	ctx context.Context,
+	appID string,
+	body CreateAppConfigFileDefBody,
+) (*AppConfigFileDef, error) {
+	var respData AppConfigFileDefItemRespData
+	resp, err := c.noRetryCli.R().SetContext(ctx).SetBody(body).SetResult(&respData).Post(appConfigFileDefsPath(appID))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, formatAPIError(resp, "create app config file def")
+	}
+	if respData.Item == nil {
+		return nil, errors.New("create app config file def returned empty item")
+	}
+
+	return respData.Item, nil
+}
+
+// UpdateAppConfigFileDef 更新配置文件定义信息
+func (c *SvcBasedClient) UpdateAppConfigFileDef(
+	ctx context.Context,
+	appID, defID string,
+	body UpdateAppConfigFileDefBody,
+) (*AppConfigFileDef, error) {
+	var respData AppConfigFileDefItemRespData
+	resp, err := c.cli.R().SetContext(ctx).SetBody(body).SetResult(&respData).Put(appConfigFileDefsPath(appID, defID))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, formatAPIError(resp, "update app config file def")
+	}
+	if respData.Item == nil {
+		return nil, errors.New("update app config file def returned empty item")
+	}
+
+	return respData.Item, nil
+}
+
+// DeleteAppConfigFileDef 删除配置文件定义及其所有关联文件和版本
+func (c *SvcBasedClient) DeleteAppConfigFileDef(ctx context.Context, appID, defID string) error {
+	resp, err := c.cli.R().SetContext(ctx).Delete(appConfigFileDefsPath(appID, defID))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return formatAPIError(resp, "delete app config file def")
+	}
+
+	return nil
+}
+
+// ListAppConfigFileEnvInstances 列出配置文件定义下的所有文件实例（含默认文件）
+func (c *SvcBasedClient) ListAppConfigFileEnvInstances(
+	ctx context.Context,
+	appID, defID string,
+) ([]AppConfigFileEnvInstance, error) {
+	var respData ListAppConfigFileEnvInstancesRespData
+	resp, err := c.cli.R().
+		SetContext(ctx).
+		SetResult(&respData).
+		Get(appConfigFileDefsPath(appID, defID, "env-instances"))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, formatAPIError(resp, "list app config file env instances")
+	}
+
+	return respData.Items, nil
+}
+
+// UpdateAppConfigFileDefContent 更新配置内容，envName 为空时更新默认文件（非幂等，不自动重试）
+func (c *SvcBasedClient) UpdateAppConfigFileDefContent(
+	ctx context.Context,
+	appID, defID, envName string,
+	body UpdateAppConfigFileDefContentBody,
+) (*AppConfigFileDefContentUpdateResult, error) {
+	var result AppConfigFileDefContentUpdateResult
+	req := c.noRetryCli.R().SetContext(ctx).SetBody(body).SetResult(&result)
+	if envName != "" {
+		req.SetQueryParam("envName", envName)
+	}
+
+	resp, err := req.Put(appConfigFileDefsPath(appID, defID, "content"))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, formatAPIError(resp, "update app config file content")
+	}
+
+	return &result, nil
+}
+
+// ResetAppConfigFileDefEnv 将指定环境恢复为默认配置（删除该环境的独立实例）
+func (c *SvcBasedClient) ResetAppConfigFileDefEnv(ctx context.Context, appID, defID, envName string) error {
+	resp, err := c.cli.R().SetContext(ctx).Delete(appConfigFileDefsPath(appID, defID, "envs", envName))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return formatAPIError(resp, "reset app config file env")
+	}
+
+	return nil
+}
+
+// GetAppConfigFileMountPreview 获取指定环境下最终挂载到容器的配置文件
+func (c *SvcBasedClient) GetAppConfigFileMountPreview(
+	ctx context.Context,
+	appID, envName string,
+) ([]AppConfigFileMountPreviewItem, error) {
+	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/mount-preview", url.PathEscape(appID))
+
+	var respData AppConfigFileMountPreviewRespData
+	resp, err := c.cli.R().SetContext(ctx).SetQueryParam("envName", envName).SetResult(&respData).Get(path)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, formatAPIError(resp, "get app config file mount preview")
+	}
+
+	return respData.Items, nil
 }
 
 // ListAppConfigFileVersions 获取应用配置文件历史版本列表
@@ -727,8 +836,6 @@ func (c *SvcBasedClient) ListAppConfigFileVersions(
 	appID string,
 	opts ListAppConfigFileVersionsOptions,
 ) (*PaginatedAppConfigFileVersions, error) {
-	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-file/versions", url.PathEscape(appID))
-
 	page := opts.Page
 	if page <= 0 {
 		page = 1
@@ -746,23 +853,11 @@ func (c *SvcBasedClient) ListAppConfigFileVersions(
 	if opts.AppConfigFileID != "" {
 		req.SetQueryParam("appConfigFileID", opts.AppConfigFileID)
 	}
-	if opts.EnvName != "" {
-		req.SetQueryParam("envName", opts.EnvName)
-	}
-	if opts.Name != "" {
-		req.SetQueryParam("name", opts.Name)
-	}
 	if opts.Version != nil {
 		req.SetQueryParam("version", strconv.FormatInt(*opts.Version, 10))
 	}
-	if opts.Creator != "" {
-		req.SetQueryParam("creator", opts.Creator)
-	}
-	if opts.Description != "" {
-		req.SetQueryParam("description", opts.Description)
-	}
 
-	resp, err := req.Get(path)
+	resp, err := req.Get(appConfigFileVersionsPath(appID))
 	if err != nil {
 		return nil, err
 	}
@@ -778,14 +873,8 @@ func (c *SvcBasedClient) GetAppConfigFileVersion(
 	ctx context.Context,
 	appID, versionID string,
 ) (*AppConfigFileVersion, error) {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/app-config-file/versions/%s",
-		url.PathEscape(appID),
-		url.PathEscape(versionID),
-	)
-
 	var respData GetAppConfigFileVersionRespData
-	resp, err := c.cli.R().SetContext(ctx).SetResult(&respData).Get(path)
+	resp, err := c.cli.R().SetContext(ctx).SetResult(&respData).Get(appConfigFileVersionsPath(appID, versionID))
 	if err != nil {
 		return nil, err
 	}
@@ -796,18 +885,38 @@ func (c *SvcBasedClient) GetAppConfigFileVersion(
 	return &respData.Data, nil
 }
 
+// CompareAppConfigFileVersions 对比同一配置文件的两个历史版本
+func (c *SvcBasedClient) CompareAppConfigFileVersions(
+	ctx context.Context,
+	appID, previousVersionID, currentVersionID string,
+) (*AppConfigFileVersionComparison, error) {
+	body := map[string]string{
+		"previousVersionID": previousVersionID,
+		"currentVersionID":  currentVersionID,
+	}
+
+	var result AppConfigFileVersionComparison
+	resp, err := c.cli.R().
+		SetContext(ctx).
+		SetBody(body).
+		SetResult(&result).
+		Post(appConfigFileVersionsPath(appID, "compare"))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, formatAPIError(resp, "compare app config file versions")
+	}
+
+	return &result, nil
+}
+
 // DeleteAppConfigFileVersion 删除应用配置文件某个历史版本
 func (c *SvcBasedClient) DeleteAppConfigFileVersion(
 	ctx context.Context,
 	appID, versionID string,
 ) error {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/app-config-file/versions/%s",
-		url.PathEscape(appID),
-		url.PathEscape(versionID),
-	)
-
-	resp, err := c.cli.R().SetContext(ctx).Delete(path)
+	resp, err := c.cli.R().SetContext(ctx).Delete(appConfigFileVersionsPath(appID, versionID))
 	if err != nil {
 		return err
 	}
@@ -818,24 +927,18 @@ func (c *SvcBasedClient) DeleteAppConfigFileVersion(
 	return nil
 }
 
-// RollbackAppConfigFileVersion 回滚到应用配置文件某个历史版本
+// RollbackAppConfigFileVersion 回滚到应用配置文件某个历史版本（非幂等，不自动重试）
 func (c *SvcBasedClient) RollbackAppConfigFileVersion(
 	ctx context.Context,
 	appID, versionID string,
 	opts RollbackAppConfigFileVersionOptions,
-) (*AppConfigFile, error) {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/app-config-file/versions/%s/rollback",
-		url.PathEscape(appID),
-		url.PathEscape(versionID),
-	)
-	body := map[string]any{
-		"currentVersion": opts.CurrentVersion,
-		"description":    opts.Description,
-	}
-
+) (*RollbackAppConfigFileVersionResult, error) {
 	var respData RollbackAppConfigFileVersionRespData
-	resp, err := c.cli.R().SetContext(ctx).SetBody(body).SetResult(&respData).Post(path)
+	resp, err := c.noRetryCli.R().
+		SetContext(ctx).
+		SetBody(opts).
+		SetResult(&respData).
+		Post(appConfigFileVersionsPath(appID, versionID, "rollback"))
 	if err != nil {
 		return nil, err
 	}
@@ -844,64 +947,6 @@ func (c *SvcBasedClient) RollbackAppConfigFileVersion(
 	}
 
 	return &respData.Data, nil
-}
-
-// UpdateAppConfigFileContent 更新应用配置文件 Content
-func (c *SvcBasedClient) UpdateAppConfigFileContent(
-	ctx context.Context,
-	appID, fileID string,
-	opts AppConfigFileContentOptions,
-) (*AppConfigFileContentUpdateResult, error) {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/app-config-files/%s/content",
-		url.PathEscape(appID),
-		url.PathEscape(fileID),
-	)
-	body := map[string]any{
-		"content":        opts.Content,
-		"description":    opts.Description,
-		"currentVersion": opts.CurrentVersion,
-	}
-
-	var result AppConfigFileContentUpdateResult
-	resp, err := c.cli.R().SetContext(ctx).SetBody(body).SetResult(&result).Put(path)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return nil, formatAPIError(resp, "update app config file content")
-	}
-
-	return &result, nil
-}
-
-// UpdateAppConfigFileOverlayContent 更新应用配置文件 OverlayContent
-func (c *SvcBasedClient) UpdateAppConfigFileOverlayContent(
-	ctx context.Context,
-	appID, fileID string,
-	opts AppConfigFileContentOptions,
-) (*AppConfigFileContentUpdateResult, error) {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/app-config-files/%s/overlay-content",
-		url.PathEscape(appID),
-		url.PathEscape(fileID),
-	)
-	body := map[string]any{
-		"overlayContent": opts.Content,
-		"description":    opts.Description,
-		"currentVersion": opts.CurrentVersion,
-	}
-
-	var result AppConfigFileContentUpdateResult
-	resp, err := c.cli.R().SetContext(ctx).SetBody(body).SetResult(&result).Put(path)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return nil, formatAPIError(resp, "update app config file overlay content")
-	}
-
-	return &result, nil
 }
 
 // ListBuildRecords 获取应用构建记录（因 cli 场景，默认只提供前 10 条）
