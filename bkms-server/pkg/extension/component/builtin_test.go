@@ -41,10 +41,16 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 	const testCompsPath = "./assets/testcomps"
 	var compDefStore *component.ComponentDefStore
 	var ctx context.Context
+	// getBuiltin 以请求租户的身份读取内置定义。内置定义写在平台租户中，多租户模式下平台租户（system）
+	// 与请求租户不同，必须带上 TenantWithPlatform 才能读到，不能依赖单租户下两者恰好都是 default
+	getBuiltin := func(name string) (*component.ComponentDef, error) {
+		return compDefStore.Get(ctx, component.ByNameVersion(name, "v1.0.0"),
+			store.TenantWithPlatform(component.BuiltinShared()))
+	}
 
 	BeforeEach(func() {
 		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 	})
 
 	Context("LoadBuiltinFromFolder valid input", func() {
@@ -53,7 +59,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			Expect(err).To(Not(HaveOccurred()))
 
 			// Get the loaded component and verify its content
-			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("MemLimits", "v1.0.0"))
+			compDef, err := getBuiltin("MemLimits")
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(compDef.Name).To(Equal("MemLimits"))
 			Expect(len(compDef.Properties)).To(Equal(2))
@@ -65,7 +71,8 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 				To(Succeed())
 
 			ctxOther := tenant.WithTenantID(context.Background(), "tenant-builtin-test")
-			compDef, err := compDefStore.Get(ctxOther, component.ByNameVersion("MemLimits", "v1.0.0"))
+			compDef, err := compDefStore.Get(ctxOther, component.ByNameVersion("MemLimits", "v1.0.0"),
+				store.TenantWithPlatform(component.BuiltinShared()))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(compDef.IsBuiltin).To(BeTrue())
 		})
@@ -78,7 +85,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("VolumeConfigMap", "v1.0.0"))
+			compDef, err := getBuiltin("VolumeConfigMap")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(compDef.Specs).To(HaveLen(1))
 			Expect(component.ValidateFragmentTemplate(compDef.Specs[0])).To(Succeed())
@@ -104,7 +111,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("ImportPolaris", "v1.0.0"))
+			compDef, err := getBuiltin("ImportPolaris")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(compDef.Patchers).To(HaveLen(1))
 			Expect(compDef.Specs).To(HaveLen(2))

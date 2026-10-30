@@ -56,7 +56,7 @@ func persistEnv(ctx context.Context, env *envmodel.Environment) {
 	Expect(envs.Create(ctx, env)).To(Succeed())
 	DeferCleanup(func() {
 		Expect(
-			envs.DeleteIfExists(testutil.WithTenantOrDefault(context.Background()), store.ByID(env.ID)),
+			envs.DeleteIfExists(testutil.NewDefaultTenantContext(), store.ByID(env.ID)),
 		).To(Succeed())
 	})
 }
@@ -80,7 +80,7 @@ var _ = Describe("PreDeployChecker", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		envName = "staging"
 		trafficLaneName = "lane-01"

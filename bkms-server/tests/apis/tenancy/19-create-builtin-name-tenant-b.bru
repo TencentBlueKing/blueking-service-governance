@@ -1,0 +1,55 @@
+docs {
+  测的是：普通租户不能创建与内置组件定义同名同版本的组件定义（409）。
+  内置定义在平台租户下，租户内唯一索引拦不住，必须由接口显式检查共享的内置定义，
+  否则租户内会出现一份同名定义"遮蔽"内置定义。
+}
+
+meta {
+  name: 19-create-builtin-name-tenant-b
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{serviceURL}}/component-defs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "compDefName": "VolumeConfigMap",
+    "displayName": "Shadow Builtin",
+    "description": "should be rejected",
+    "properties": [
+      {
+        "name": "serviceName",
+        "type": "STRING",
+        "defaultValue": "my-service",
+        "description": "Service name"
+      }
+    ],
+    "patchers": [
+      "spec:\n  template:\n    spec:\n      containers:\n        - name: \"{{ .bkmsContainerName }}\"\n          env:\n            - name: SERVICE_NAME\n              value: \"{{ .serviceName }}\""
+    ],
+    "specs": [
+      "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: \"{{ .name }}-config\"\ndata:\n  serviceName: \"{{ .serviceName }}\""
+    ],
+    "scopeType": "global",
+    "scopeWorkspaceIDs": []
+  }
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 409
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

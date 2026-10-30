@@ -31,7 +31,7 @@ import (
 
 var _ = Describe("BuildBindingEnvVars", func() {
 	It("renders templates from credentials and skips empty env vars", func() {
-		ctx := testutil.WithTenantOrDefault(context.Background())
+		ctx := testutil.NewDefaultTenantContext()
 		vars, err := depenvvars.BuildBindingEnvVars(ctx, nil, map[string]any{
 			"REDIS_HOST": "127.0.0.1",
 		})

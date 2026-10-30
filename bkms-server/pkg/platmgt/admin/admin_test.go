@@ -40,7 +40,7 @@ var _ = Describe("Platform administrators", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		testPrefix = "plat-admin-service-test-" + stringx.Random(6)
 
 		roleBindings = NewService(testutil.NewDB(GinkgoT()))

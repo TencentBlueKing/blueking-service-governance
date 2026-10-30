@@ -36,7 +36,7 @@ var _ = Describe("Runtime image store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		images = testutil.NewStore(GinkgoT(), Meta)
 	})
 

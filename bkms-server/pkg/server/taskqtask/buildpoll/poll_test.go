@@ -98,7 +98,7 @@ var _ = Describe("Poller RunTick", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = auth.WithUser(testutil.WithTenantOrDefault(context.Background()), auth.User{ID: "alice"})
+		ctx = auth.WithUser(testutil.NewDefaultTenantContext(), auth.User{ID: "alice"})
 		db = testutil.NewDB(GinkgoT())
 		pipelineStore = store.Of(db, bkci.PipelineMeta)
 		autoDeployStore = store.Of(db, autodeploy.RecordMeta)
@@ -321,7 +321,7 @@ var _ = Describe("recordImageDigest", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		records = store.Of(db, build.RecordMeta)
 		fetchedAt = nil

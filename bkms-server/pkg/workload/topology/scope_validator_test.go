@@ -45,7 +45,7 @@ var _ = Describe("ScopeValidator", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		cfg = &cluster.Config{}
 		scope = &ResourceSnapshot{
 			ClusterID: "test-cluster",

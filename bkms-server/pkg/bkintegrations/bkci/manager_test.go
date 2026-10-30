@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/tof"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const (
@@ -127,7 +128,7 @@ var _ = Describe("ProjectManager Initialize", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		manager = NewProjectManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		projectStore, _, _ = setupManagerTestStores()
 	})
@@ -204,6 +205,20 @@ var _ = Describe("ProjectManager Initialize", func() {
 			Expect(errors.Is(err, ErrProjectCodeAlreadyUsed)).To(BeTrue())
 			Expect(proj).To(BeNil())
 		})
+
+		// 测的是：蓝盾项目 Code 全局唯一，其他租户已绑定的项目也算占用，在写库前就以
+		// ErrProjectCodeAlreadyUsed 拒绝（而不是撞唯一索引），且报错里不暴露对方的工作空间
+		It("should fail when project code used by a workspace of another tenant", func() {
+			existingProj := mockProject()
+			existingProj.WorkspaceID = "another-tenant-workspace"
+			Expect(projectStore.Create(ctx, existingProj, store.TenantOf("another-tenant"))).To(Succeed())
+
+			proj, err := manager.Initialize(ctx, managerTestProjectCode, "test-obs-id", "test-obs-name")
+
+			Expect(errors.Is(err, ErrProjectCodeAlreadyUsed)).To(BeTrue())
+			Expect(err.Error()).NotTo(ContainSubstring("another-tenant-workspace"))
+			Expect(proj).To(BeNil())
+		})
 	})
 })
 
@@ -233,7 +248,7 @@ var _ = Describe("PipelineManager Initialize", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		manager = NewPipelineManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		_, pipelineStore, templateStore = setupManagerTestStores()
 	})

@@ -1,0 +1,37 @@
+docs {
+  准备数据：租户 A 创建工作空间，后续用例以租户 B 的身份访问它。
+}
+
+meta {
+  name: 01-create-workspace-tenant-a
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{serviceURL}}/workspaces
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": "tenancy-ws-{{randomSuffix}}",
+    "displayName": "多租户隔离 {{randomSuffix}}",
+    "description": "多租户隔离 API 测试",
+    "bkCIProjectID": "tenancy-bkci-{{randomSuffix}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  bru.setVar("tenancyWorkspaceID", res.body.data.id);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

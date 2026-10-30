@@ -66,7 +66,7 @@ var _ = Describe("AppConfigFileVersion", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		Expect(testutil.CleanupMetaColl(appcfg.AppConfigFileVersionMeta)).To(Succeed())
 		Expect(testutil.CleanupCollection("app_config_files")).To(Succeed())
 

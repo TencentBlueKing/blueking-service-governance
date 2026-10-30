@@ -90,7 +90,7 @@ var _ = Describe("DeployPreChecker Check", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		fxApp = fxtest.New(

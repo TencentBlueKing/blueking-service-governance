@@ -40,7 +40,7 @@ var _ = Describe("TAF application service", func() {
 	var application *bkmsapp.Application
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),

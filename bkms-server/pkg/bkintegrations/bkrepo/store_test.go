@@ -41,7 +41,7 @@ var _ = Describe("ProjectStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		// 清理测试数据
 		err := testutil.CleanupMetaColl(ProjectMeta)
 		Expect(err).NotTo(HaveOccurred())
@@ -165,7 +165,7 @@ var _ = Describe("RepositoryStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		// 清理测试数据
 		err := testutil.CleanupMetaColl(RepositoryMeta)
 		Expect(err).NotTo(HaveOccurred())

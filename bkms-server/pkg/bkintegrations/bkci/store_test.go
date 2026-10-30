@@ -36,7 +36,7 @@ var _ = Describe("ProjectStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		// 清理测试数据
 		err := testutil.CleanupCollection("bkci_projects")
 		Expect(err).NotTo(HaveOccurred())
@@ -136,7 +136,7 @@ var _ = Describe("PipelineTemplateStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		// 清理测试数据
 		err := testutil.CleanupCollection("bkci_pipeline_templates")
 		Expect(err).NotTo(HaveOccurred())
@@ -162,7 +162,7 @@ var _ = Describe("PipelineStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		// 清理测试数据
 		err := testutil.CleanupCollection("bkci_pipelines")
 		Expect(err).NotTo(HaveOccurred())
@@ -358,7 +358,7 @@ var _ = Describe("RepositoryStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		// 清理测试数据
 		err := testutil.CleanupCollection("bkci_repositories")
 		Expect(err).NotTo(HaveOccurred())

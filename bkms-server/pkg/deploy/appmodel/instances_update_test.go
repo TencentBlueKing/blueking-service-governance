@@ -44,7 +44,7 @@ var _ = Describe("createInstancesUpdateRecord", func() {
 	var appID string
 
 	BeforeEach(func() {
-		ctx = auth.WithUser(testutil.WithTenantOrDefault(context.Background()), auth.User{ID: "tester"})
+		ctx = auth.WithUser(testutil.NewDefaultTenantContext(), auth.User{ID: "tester"})
 		appID = "inst-update-app-" + stringx.Random(6)
 		db = testutil.NewDB(GinkgoT())
 		recordStore = store.Of(db, RecordMeta)
@@ -317,7 +317,7 @@ var _ = Describe("copyInstancesUpdateResourceSnapshots", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appID = "inst-update-snap-" + stringx.Random(6)
 		db = testutil.NewDB(GinkgoT())
 		snapStore = store.Of(db, ResourceSnapshotMeta)

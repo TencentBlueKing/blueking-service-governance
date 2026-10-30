@@ -42,7 +42,7 @@ var _ = Describe("AppConfigFile store", func() {
 
 	BeforeEach(func() {
 		files = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileMeta)
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appID = "test-app-" + stringx.Random(6)
 		appID2 = appID + stringx.Random(2)
 

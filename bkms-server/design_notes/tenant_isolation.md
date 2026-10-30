@@ -21,7 +21,7 @@
 | 类型 | 声明 | 说明 |
 |---|---|---|
 | 租户集合 | 模型有 `TenantID string \`bson:"tenantID"\``，`TenantScoped: true` | `workspaces` 与其余 50 个集合，清单见迁移 `000024_tenant_id.up.json` |
-| 共享读取的租户集合 | 租户集合，另声明 `Meta.SharedFromPlatform` | 平台租户中满足条件的文档对所有租户可读，目前只有 `component_defs`，见第 6 节 |
+| 共享读取的租户集合 | 租户集合，读取时传 `TenantWithPlatform` | 平台租户中满足条件的文档对传了该选项的读取可见，目前只有 `component_defs`，见 3.5 与第 6 节 |
 | 计数器 | `store.Counter`，文档为 `{_id: key, tenantID, seq}` | 经 `ModifyOrCreate` 按租户写入，见 3.6；镜像/Chart 构建号、特性环境序号 |
 | 全局集合 | 无该字段，`TenantScoped` 为零值 false | 全系统一份，见下表 |
 
@@ -56,7 +56,6 @@ TenantID string `json:"-" bson:"tenantID"`
 - `Meta.TenantScoped bool`：零值 false 表示全局集合，因此可以逐个集合迁入，未声明的模型行为不变。
 - `schema` 识别 `tenantID` 字段并要求类型为 `string`。
 - `store.New` 交叉校验：声明隔离但没有字段、或有字段但没声明，都直接报错（`Of` 会 panic，模型单测即可发现）。
-  `SharedFromPlatform` 只能用在租户集合上。
 
 ### 3.2 租户范围
 
@@ -69,6 +68,9 @@ list, err := workspaces.ListPage(ctx, page, size, opts, store.TenantAll())
 
 // 指定租户（忽略 ctx）
 err := apps.Create(ctx, &app, store.TenantOf("tenant-a"))
+
+// 本租户加平台共享数据（只读），见 3.5
+def, err := defs.Get(ctx, component.ByNameVersion(name, version), store.TenantWithPlatform(component.BuiltinShared()))
 ```
 
 一次操作的租户按以下顺序确定：
@@ -76,20 +78,21 @@ err := apps.Create(ctx, &app, store.TenantOf("tenant-a"))
 1. 全局集合：不注入；若传了租户选项，报 `ErrTenantScopeNotSupported`。
 2. 传了 `TenantAll()`：不按租户过滤。
 3. 传了 `TenantOf(id)`：用 `id`，为空报 `ErrTenantIDRequired`。
-4. 都没传：ctx 带显式范围标记时报 `ErrTenantScopeRequired`（见 5.2）；否则取 ctx 租户，取不到报 `ErrTenantIDRequired`。
+4. 没传，或传了 `TenantWithPlatform`：ctx 带显式范围标记时报 `ErrTenantScopeRequired`（见 5.2）；
+   否则取 ctx 租户，取不到报 `ErrTenantIDRequired`。`TenantWithPlatform` 再按 3.5 放宽条件。
 
 约束：
 
 - 租户选项只能传一个，重复传报 `ErrTenantScopeDuplicated`。
 - `TenantAll()` 只用于读、局部更新（`Update` / `Modify`）和删除；`Create` / `Replace` / `Upsert` 只接受 `TenantOf`，
-  因为新文档必须落在确定的租户。由 `optKind` 的类别检查实现，无需额外规则。
+  因为新文档必须落在确定的租户；`TenantWithPlatform` 只用于读。由 `optKind` 的类别检查实现，无需额外规则。
 - 被 `Combine` 包住的租户选项报 `ErrTenantScopeCombined`，保证跨租户在调用点可见、可被 `grep store.TenantAll()` 找全。
 - 租户范围只存在于每次调用新建的 `query` 中，`GenericStore` 实例不持有任何租户状态，多处共用同一实例互不影响。
   不要在 store 上增加会修改实例状态的方法。
 
 ### 3.3 注入点
 
-所有读写都经过 `parseOpts`（读操作经 `readQuery`，写操作经 `writeQuery`），租户条件在这里统一注入：
+所有读写都经过 `parseOpts`（写操作经 `writeQuery`），租户条件在这里统一注入：
 字段名解析完成后，向 `q.conds` 追加 `tenantID = <租户>`。
 
 - 调用方自己在条件里写 `tenantID` 会报错，而不是覆盖或丢弃：重复 key 会被 `filter()` 合成 `$and` 仍参与匹配，
@@ -132,19 +135,24 @@ store 在 Encode 钩子执行后，按已填好租户的原对象把租户写回
 
 ### 3.5 共享读取
 
-`Meta.SharedFromPlatform` 声明平台租户中哪些文档共享给所有租户只读，例如 `component_defs` 的 `{isBuiltin: true}`：
+平台维护、所有租户只读共用的数据存放在平台租户中，读取时在调用点传 `store.TenantWithPlatform(cond)`，
+`cond` 指明平台租户中哪些文档共享，例如 `component_defs` 的 `{isBuiltin: true}`（由 `component.BuiltinShared()` 给出）：
 
-| 操作 | 默认过滤 |
+| 操作 | 传 `TenantWithPlatform` 时的过滤 |
 |---|---|
-| 读（Get / List / ListPage / Exists / Count / ListLatestBy / Aggregate） | `tenantID = ctx 租户` 或 `tenantID = 平台租户 且满足共享条件` |
-| 写（Update / Modify / Replace / Delete） | `tenantID = ctx 租户`，租户改不到平台数据 |
-| 插入（Create / Upsert） | ctx 租户；平台数据由平台路径用 `TenantOf` 写入 |
+| 读（Get / List / ListPage / Exists / Count / ListLatestBy / Aggregate） | `tenantID = ctx 租户` 或 `tenantID = 平台租户 且满足 cond` |
+| 写（Update / Modify / Replace / Delete / Create / Upsert / ModifyOrCreate） | 不接受该选项，报 option not supported；租户改不到平台数据 |
 
+- 共享是一次读取的范围，而不是集合的属性：不传就只读本租户，默认读写对称，与其它集合一致。
+  "读得到平台数据、写不到"只出现在显式传了该选项的调用点上，这些调用点读到结果后要先判断是否为平台数据再决定能否写
+  （如修改、删除组件定义前检查 `IsBuiltin`）。
 - 平台租户由 `tenant.PlatformTenantID()` 给出：多租户模式为 `system`，单租户模式为 `default`；配置未加载时返回错误。
   多租户环境为全新部署，不存在从单租户原地切换，平台租户在一个环境内是固定的。
-- 共享只出现在读路径（`readQuery`）上，写路径仍走 `parseOpts` / `writeQuery`。
-- `TenantAll()` / `TenantOf()` 语义不变，不叠加共享条件；ctx 租户就是平台租户时只按本租户过滤。
-- 共享条件要能区分平台数据与平台租户用户自己的数据：多租户下 `system` 也是登录租户。
+- 它是 `TenantOpt`，与 `TenantAll()` / `TenantOf()` 互斥，同样不能放进 `Combine`。
+  与 `TenantAll()` 一样写在调用点上，`grep store.TenantWithPlatform` 能找全所有读到平台数据的地方；
+  领域包只封装共享条件（返回 `bson.D` 的函数），不封装选项本身。
+- ctx 租户就是平台租户时只按本租户过滤；`cond` 为空时报错，避免把平台租户的全部数据共享出去。
+- `cond` 要能区分平台数据与平台租户用户自己的数据：多租户下 `system` 也是登录租户。
 
 ### 3.6 绕过 store 的操作
 
@@ -174,7 +182,7 @@ store 在 Encode 钩子执行后，按已填好租户的原对象把租户写回
 | 异步任务 | envelope 增加 `_tenantID`：投递时 ctx 无租户直接失败，消费时写回 ctx，详见 4.1；只访问全局集合的任务声明 `Global()`，见 4.2 |
 | `cmd/migration/*` 与命令行 | ctx 无租户，访问租户集合时显式传 `TenantAll()`；后续调用业务函数或投递任务前用 `store.ScopeToTenant` 设置资源所属租户，见 5.1 |
 | 定时 / worker 自发逻辑 | 显式 `TenantAll()` 遍历，或按租户 `TenantOf` 循环 |
-| 单测 | `testutil.WithTenantOrDefault(ctx)` 补默认租户，见 4.3 |
+| 单测 | `testutil.NewDefaultTenantContext()` 构造带默认租户的 ctx，见 4.3 |
 
 命令行写入租户数据时按资源所属租户写入。例如端口转发白名单：先跨租户查出环境（同时校验存在、非生产），
 按环境所属租户分组，用 `TenantOf` 写入；`List` / `Remove` 用 `TenantAll()`；`CheckPermission` 按请求租户过滤。
@@ -208,7 +216,7 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 
 ### 4.3 单测
 
-租户集合的用例在 `BeforeEach` 里用 `testutil.WithTenantOrDefault(context.Background())` 构造 ctx，
+租户集合的用例在 `BeforeEach` 里用 `testutil.NewDefaultTenantContext()` 构造 ctx（带默认租户，用例对 ctx 的统一要求都加在这里），
 后续所有读写（包括 `AfterEach` 的清理）都要用这个 ctx；直接插入的原始文档需带 `tenantID`。
 `dbfactory` 只会给自己内部的 `Create` 补租户，不会改写调用方传入的 ctx。
 验证租户过滤本身的用例应直接用 `tenant.WithTenantID` 构造两个不同租户的 ctx。
@@ -223,7 +231,9 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 ### 5.1 使用方
 
 - 平台管理（`pkg/platmgt/**`）：已有调用点均显式传 `TenantAll()`。
-  平台工作空间列表的应用数、环境数经 `app.CountByWorkspaceIDs` / `env.CountByWorkspaceIDs` 的 `opts` 透传 `TenantAll()`。
+  平台工作空间列表的应用数、环境数经 `app.CountByWorkspaceIDs` / `env.CountByWorkspaceIDs` 的 `scope` 透传 `TenantAll()`。
+  领域函数需要让调用方选择租户范围时，参数写成 `scope ...store.TenantOpt` 并用 `store.ScopeOpts` 转换，
+  而不是开放 `opts ...store.Opt`：调用方改不了函数的过滤、投影等语义，租户范围藏进 `Combine` 也会在编译期失败。
 - 运维命令（`cmd/migration/*`）：`refresh_workspace_bkmonitor_perms`、`backfill_default_alert_strategies`、
   `bind_bscp_project`、`list_bscp_projects`、`app_bscpcfg_mgr`、`repair_trpc_taf_framework_defs`；
   以及 `cmd/portforward_whitelist.go`（经 `platmgt/portforward` 服务）。
@@ -257,7 +267,8 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 ### 6.1 内置定义
 
 - `LoadBuiltinFromFolder` 写入平台租户（`store.TenantOf(平台租户)`），并强制设置 `IsBuiltin = true`，不依赖 YAML 中的字段。
-- `Meta.SharedFromPlatform: {isBuiltin: true}`：共享条件带 `isBuiltin`，`system` 租户用户自建的定义不会因此对所有租户可见。
+- 共享条件 `component.BuiltinShared()` 为 `{isBuiltin: true}`，`system` 租户用户自建的定义不会因此对所有租户可见。
+  按名称解析定义（渲染、创建实例、预览）、列表、修改 / 删除前的查询都传 `store.TenantWithPlatform(component.BuiltinShared())`；修改、删除前带上它是为了明确拒绝内置定义，而不是当作不存在。
 - 加载按 `平台租户 + name + version + isBuiltin = true` upsert，只覆盖已有的内置定义。
 - 修改、删除接口拒绝内置定义。
 
@@ -287,7 +298,7 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 
 ### 7.1 索引
 
-- 只新增 `tenantID_1`：用于只按租户的查询、平台管理按租户筛选、租户清理与回填核对。
+- 只新增 `tenantID_1`：用于只 按租户的查询、平台管理按租户筛选、租户清理与回填核对。
   区分度低，日常查询仍走原有索引，写入多维护一个索引，代价可忽略。
 - 不加 `{tenantID, ...}` 联合查询索引：查询索引多以 `workspaceID` / `appID` 开头，二者全局唯一，
   同一 workspace / app 的文档 `tenantID` 必然相同，加前缀不会少扫文档，只会增大索引。

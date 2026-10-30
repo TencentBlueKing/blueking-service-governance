@@ -1,0 +1,36 @@
+docs {
+  测的是：工作空间列表只返回本租户的数据，租户 B 的列表中看不到租户 A 的工作空间。
+}
+
+meta {
+  name: 05-list-workspaces-tenant-b
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{serviceURL}}/workspaces
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should not list the workspace of tenant A", () => {
+    const ids = res.body.data.map((ws) => ws.id);
+    expect(ids).to.not.include(bru.getVar("tenancyWorkspaceID"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

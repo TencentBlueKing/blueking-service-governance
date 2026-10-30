@@ -46,7 +46,7 @@ var _ = Describe("AppEnvVarService", func() {
 		Expect(err).NotTo(HaveOccurred())
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		service = appmodel.NewAppEnvVarService(testutil.NewDB(GinkgoT()))
 	})

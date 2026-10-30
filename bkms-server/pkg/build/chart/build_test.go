@@ -81,7 +81,7 @@ var _ = Describe("buildPipelineParams", func() {
 	DescribeTable("should map revision type to checkout params",
 		func(rev revision.CodeRevision, checkoutBy string) {
 			params, chartVersion, err := svc.buildPipelineParams(
-				testutil.WithTenantOrDefault(context.Background()), app, "patch", rev, "https://helm.example.com",
+				testutil.NewDefaultTenantContext(), app, "patch", rev, "https://helm.example.com",
 			)
 
 			Expect(err).NotTo(HaveOccurred())

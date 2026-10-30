@@ -38,7 +38,7 @@ var _ = Describe("AppConfigFileDef store", func() {
 	BeforeEach(func() {
 		defs = testutil.NewStore(GinkgoT(), appcfg.AppConfigFileDefMeta)
 		Expect(testutil.CleanupMetaColl(appcfg.AppConfigFileDefMeta)).To(Succeed())
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appID = "def-test-app-" + stringx.Random(6)
 	})
 

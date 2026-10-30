@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
@@ -54,7 +55,7 @@ var _ = Describe("ComponentDefStore", func() {
 
 	BeforeEach(func() {
 		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 
 		// The default component for testing
 		compDef = &component.ComponentDef{
@@ -260,16 +261,30 @@ var _ = Describe("ComponentDefStore", func() {
 		})
 
 		It("should share builtin definitions of the platform tenant with other tenants", func() {
-			got, err := compDefStore.Get(ctxOther, component.ByNameVersion(builtin.Name, builtin.Version))
+			got, err := compDefStore.Get(ctxOther, component.ByNameVersion(builtin.Name, builtin.Version),
+				store.TenantWithPlatform(component.BuiltinShared()))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.IsBuiltin).To(BeTrue())
 			Expect(component.BuiltinDefExists(ctxOther, compDefStore, builtin.Name, builtin.Version)).To(BeTrue())
 		})
 
+		It("should not include builtin definitions without TenantWithPlatform", func() {
+			_, err := compDefStore.Get(ctxOther, component.ByNameVersion(builtin.Name, builtin.Version))
+			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
+		})
+
 		It("should not share custom definitions of the platform tenant", func() {
 			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
-			_, err := compDefStore.Get(ctxOther, component.ByNameVersion(compDef.Name, compDef.Version))
+			_, err := compDefStore.Get(ctxOther, component.ByNameVersion(compDef.Name, compDef.Version),
+				store.TenantWithPlatform(component.BuiltinShared()))
 			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
+		})
+
+		It("should not allow other tenants to modify builtin definitions", func() {
+			err := compDefStore.Update(ctxOther, bson.M{"description": "changed"},
+				component.ByNameVersion(builtin.Name, builtin.Version),
+				store.TenantWithPlatform(component.BuiltinShared()))
+			Expect(err).To(MatchError(ContainSubstring("option not supported by this operation")))
 		})
 
 		It("should allow the same name in different tenants", func() {
@@ -302,7 +317,7 @@ var _ = Describe("InstanceCount", func() {
 
 	BeforeEach(func() {
 		counts = testutil.NewStore(GinkgoT(), component.InstanceCountMeta)
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		ctxOther = tenant.WithTenantID(context.Background(), "tenant-"+stringx.Random(6))
 		name = "Comp-" + stringx.Random(6)
 		DeferCleanup(func() {

@@ -42,7 +42,7 @@ var _ = Describe("RecordStore", func() {
 	BeforeEach(func() {
 		db = testutil.NewDB(GinkgoT())
 		records = store.Of(db, RecordMeta)
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appID = "store-test-app-" + stringx.Random(8)
 	})
 

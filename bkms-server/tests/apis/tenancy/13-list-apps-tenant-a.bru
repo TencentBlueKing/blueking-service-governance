@@ -1,0 +1,32 @@
+docs {
+  测的是：租户 A 列出自己工作空间的应用时能看到该应用，且租户 B 的删除没有生效。
+  同时作为 07 号用例的对照：同一个请求，换成所属租户就能列出应用。
+}
+
+meta {
+  name: 13-list-apps-tenant-a
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}/apps
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should list the app to tenant A", () => {
+    const ids = res.body.data.map((app) => app.id);
+    expect(ids).to.include(bru.getVar("tenancyAppID"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

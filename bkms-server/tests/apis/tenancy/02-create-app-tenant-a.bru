@@ -1,0 +1,52 @@
+docs {
+  准备数据：租户 A 在自己的工作空间下创建应用。
+}
+
+meta {
+  name: 02-create-app-tenant-a
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}/apps
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "tenancy-app-{{randomSuffix}}",
+    "id": "tenancy-app-{{randomSuffix}}",
+    "type": "trpc",
+    "appModelSpec": {
+      "trpcSpec": {
+        "language": "go",
+        "fileName": "trpc_go.yaml",
+        "filePath": "/usr/local/trpc/bin/",
+        "fileContent": "dGVzdAo="
+      }
+    },
+    "buildConfig": {
+      "sourceType": "pipeline",
+      "pipelineType": "pipeline",
+      "pipelineBuildConfig": {
+        "pipelineID": "p-tenancy-pipeline",
+        "params": {}
+      }
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  bru.setVar("tenancyAppID", res.body.data.id);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -60,7 +60,7 @@ var _ = Describe("TagQueryManager", func() {
 
 	BeforeEach(func() {
 		images = testutil.NewStore(GinkgoT(), Meta)
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 
 		db = testutil.NewDB(GinkgoT())
 		manager = NewTagQueryManager(db, snapshot.NewService(db))

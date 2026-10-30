@@ -1,0 +1,31 @@
+docs {
+  测的是：租户 B 的删除请求没有越过租户影响租户 A，租户 A 仍能正常访问自己的工作空间。
+  同时作为 06 号用例的对照：同一个请求，换成所属租户就是 200。
+}
+
+meta {
+  name: 12-get-workspace-tenant-a
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should still return the workspace to tenant A", () => {
+    expect(res.body.data.id).to.equal(bru.getVar("tenancyWorkspaceID"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

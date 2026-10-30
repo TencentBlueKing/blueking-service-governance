@@ -41,7 +41,7 @@ var _ = Describe("Test EnvService", func() {
 	var ctx context.Context
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 
 		diApp = fxtest.New(
 			GinkgoT(),

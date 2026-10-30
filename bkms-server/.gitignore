@@ -37,6 +37,7 @@ go.work.sum
 tests/utdeps/gitea
 tests/utdeps/charts/repo/*.tgz
 tests/.env
+tests/configs/*.generated.yaml
 /tests/utdeps_db/mongo8/*
 specs
 docs/reqs

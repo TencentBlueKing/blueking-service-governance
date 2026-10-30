@@ -1,0 +1,30 @@
+docs {
+  测的是：用户不能通过伪造租户头进入自己不属于的租户。
+  租户 B 的用户带租户 A 的租户头访问租户 A 的工作空间，被租户中间件拒绝（403）。
+}
+
+meta {
+  name: 04-reject-foreign-tenant-header
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B", bru.getVar("tenancyTenantA"));
+}
+
+assert {
+  res.status: eq 403
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -1,0 +1,54 @@
+docs {
+  测的是：租户 B 不能在租户 A 的工作空间下创建应用（跨租户引用）。
+  租户 B 中不存在这个工作空间，应当在任何写入之前返回 404。
+}
+
+meta {
+  name: 09-create-app-in-foreign-workspace
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}/apps
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "tenancy-cross-{{randomSuffix}}",
+    "id": "tenancy-cross-{{randomSuffix}}",
+    "type": "trpc",
+    "appModelSpec": {
+      "trpcSpec": {
+        "language": "go",
+        "fileName": "trpc_go.yaml",
+        "filePath": "/usr/local/trpc/bin/",
+        "fileContent": "dGVzdAo="
+      }
+    },
+    "buildConfig": {
+      "sourceType": "pipeline",
+      "pipelineType": "pipeline",
+      "pipelineBuildConfig": {
+        "pipelineID": "p-tenancy-pipeline",
+        "params": {}
+      }
+    }
+  }
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

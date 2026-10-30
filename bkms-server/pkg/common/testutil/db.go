@@ -38,6 +38,11 @@ const (
 	// Q: Why not use the flag "--svrCfg" like other commands did?
 	// A: It's would be too complicated for ginkgo command to support the flag.
 	EnvServerConfigPath = "BKMS_SERVER_CONFIG_PATH"
+
+	// EnvMultiTenantMode 为 "true" 时，单测以多租户模式运行，无需另备一份配置文件。
+	// 多租户模式下平台租户为 system，与测试默认使用的 default 租户不同，
+	// 用于发现隐含"平台租户就是请求租户"的代码；CI 应分别以两种模式各跑一遍
+	EnvMultiTenantMode = "BKMS_TEST_MULTI_TENANT"
 )
 
 // SetUpGlobalDatabase sets up the global database client for the project, it tries to connect
@@ -63,6 +68,12 @@ func SetUpGlobalDatabase() error {
 	// Force using kubeconfig for cluster access in tests
 	// TODO: Update tests to not depend on this setting if possible
 	cfg.Development.UseKubeConfigCluster = true
+
+	if os.Getenv(EnvMultiTenantMode) == "true" {
+		cfg.Tenant.EnableMultiTenantMode = true
+		cfg.FeatureIntegrations.EnableBkUserTenantVerify = true
+		log.Info(ctx, "Running tests in multi-tenant mode")
+	}
 
 	// Change the database name and initialize the global database client
 	mongoCfg := cfg.Mongo

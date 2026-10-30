@@ -55,7 +55,7 @@ var _ = Describe("Snapshot store", func() {
 	var db *mongo.Database
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		DeferCleanup(cleanupSnapshotCollections)
 	})

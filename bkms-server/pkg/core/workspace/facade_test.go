@@ -44,7 +44,7 @@ var _ = Describe("GetWorkspaceImageRegistry", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		oldConfig = svccfg.G
 		secret, err := crypto.GenerateKey(32)
 		Expect(err).NotTo(HaveOccurred())

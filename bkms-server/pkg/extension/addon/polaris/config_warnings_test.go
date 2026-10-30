@@ -51,7 +51,7 @@ var _ = Describe("CollectConfigWarnings", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		testAppID = "test-validate-" + stringx.Random(6)
 
 		diApp = fxtest.New(

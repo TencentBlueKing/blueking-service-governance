@@ -1,0 +1,53 @@
+docs {
+  测的是：租户 A 能创建自定义组件定义，为后续"同名组件定义在两个租户中各自独立"的用例准备数据。
+  组件定义名在脚本中固定下来，因为集合级脚本每个请求都会刷新 randomSuffix。
+}
+
+meta {
+  name: 14-create-comp-def-tenant-a
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{serviceURL}}/component-defs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "compDefName": "{{tenancyCompDefName}}",
+    "displayName": "Tenancy Component A",
+    "description": "created by tenant A",
+    "properties": [
+      {
+        "name": "serviceName",
+        "type": "STRING",
+        "defaultValue": "my-service",
+        "description": "Service name"
+      }
+    ],
+    "patchers": [
+      "spec:\n  template:\n    spec:\n      containers:\n        - name: \"{{ .bkmsContainerName }}\"\n          env:\n            - name: SERVICE_NAME\n              value: \"{{ .serviceName }}\""
+    ],
+    "specs": [
+      "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: \"{{ .name }}-config\"\ndata:\n  serviceName: \"{{ .serviceName }}\""
+    ],
+    "scopeType": "global",
+    "scopeWorkspaceIDs": []
+  }
+}
+
+script:pre-request {
+  bru.setVar("tenancyCompDefName", `tenancy-comp-${bru.getVar("randomSuffix")}`);
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

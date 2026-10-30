@@ -1,0 +1,30 @@
+docs {
+  测的是：租户 B 按名称删除组件定义时，只删掉自己那一份。
+  租户 A 的同名记录是否仍然存在由 21 号用例验证。
+}
+
+meta {
+  name: 20-delete-comp-def-tenant-b
+  type: http
+  seq: 20
+}
+
+delete {
+  url: {{serviceURL}}/component-defs/{{tenancyCompDefName}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

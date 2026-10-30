@@ -81,7 +81,7 @@ var _ = Describe("Manager", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = auth.WithUser(testutil.WithTenantOrDefault(context.Background()), auth.User{ID: "plat-admin"})
+		ctx = auth.WithUser(testutil.NewDefaultTenantContext(), auth.User{ID: "plat-admin"})
 		// 与平台管理请求一致：操作者在另一个租户，且 ctx 要求显式指定租户范围
 		platCtx = store.RequireExplicitTenantScope(tenant.WithTenantID(ctx, "plat-admin-tenant"))
 		probeErr, probeHook = nil, nil

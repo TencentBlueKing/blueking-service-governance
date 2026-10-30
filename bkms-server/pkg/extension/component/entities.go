@@ -75,7 +75,7 @@ type ComponentDef struct {
 	ScopeWorkspaceIDs []string `bson:"scopeWorkspaceIDs"`
 
 	// IsBuiltin 是否为官方内置组件，仅由 LoadBuiltinFromFolder 写入平台租户的定义为 true。
-	// 平台租户中为 true 的定义对所有租户可读，见 ComponentDefMeta
+	// 平台租户中为 true 的定义对所有租户可读，见 BuiltinShared
 	IsBuiltin bool `bson:"isBuiltin"`
 
 	// Invisible 标记组件定义是否对前端不可见。当设置为 true 时，该组件定义不会返回给前端，

@@ -1,0 +1,29 @@
+docs {
+  测的是：租户 B 删除不了租户 A 的应用，返回 404；应用仍存在由 13 号用例验证。
+}
+
+meta {
+  name: 10-delete-app-tenant-b
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{serviceURL}}/apps/{{tenancyAppID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

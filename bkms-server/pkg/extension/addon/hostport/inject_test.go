@@ -43,7 +43,7 @@ var _ = Describe("InjectFromStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		testAppID = "hostport-inject-" + stringx.Random(6)
 		DeferCleanup(func() {

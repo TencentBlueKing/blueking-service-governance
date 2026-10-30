@@ -47,7 +47,7 @@ var _ = Describe("AppConfigFileService", func() {
 	BeforeEach(func() {
 		var err error
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		err = testutil.CleanupCollection("app_config_file_versions")
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("app_config_files")

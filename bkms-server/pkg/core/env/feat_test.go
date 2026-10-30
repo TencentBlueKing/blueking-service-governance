@@ -73,7 +73,7 @@ var _ = Describe("FeatureEnvService", func() {
 		diApp.RequireStart()
 		db = testutil.NewDB(GinkgoT())
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		envvarhooks.RegisterDeleteHooks(db)
 	})
 

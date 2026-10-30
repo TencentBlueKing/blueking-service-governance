@@ -43,7 +43,7 @@ var _ = Describe("Local Provider", func() {
 	var normalAcf, overlayAcf *AppConfigFile
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		files = testutil.NewStore(GinkgoT(), AppConfigFileMeta)
 		db = testutil.NewDB(GinkgoT())
 		defStore = testutil.NewStore(GinkgoT(), AppConfigFileDefMeta)
@@ -122,7 +122,7 @@ var _ = Describe("BSCP Provider", func() {
 	var normalAcf, overlayAcf *AppConfigFile
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		files = testutil.NewStore(GinkgoT(), AppConfigFileMeta)
 		db = testutil.NewDB(GinkgoT())
 		defStore = testutil.NewStore(GinkgoT(), AppConfigFileDefMeta)

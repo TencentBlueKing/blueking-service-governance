@@ -115,7 +115,7 @@ var _ = Describe("Restarter", func() {
 
 	BeforeEach(func() {
 		records = testutil.NewStore(GinkgoT(), devmode.PublishRecordMeta)
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appID = "test-app-" + stringx.Random(6)
 		executor = newFakePodExecutor()
 		restarter = devmode.NewRestarter(

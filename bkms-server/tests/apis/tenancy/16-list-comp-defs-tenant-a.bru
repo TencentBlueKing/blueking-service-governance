@@ -1,0 +1,34 @@
+docs {
+  测的是：租户 A 按名称搜索只能看到自己创建的那一份组件定义，看不到租户 B 的同名记录。
+  通过 creator 和 displayName 区分两份记录归属。
+}
+
+meta {
+  name: 16-list-comp-defs-tenant-a
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{serviceURL}}/component-defs?keyword={{tenancyCompDefName}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should list only the component def of tenant A", () => {
+    const defs = res.body.data.filter((d) => d.name === bru.getVar("tenancyCompDefName"));
+    expect(defs).to.have.lengthOf(1);
+    expect(defs[0].creator).to.equal(bru.getVar("tenancyUserA"));
+    expect(defs[0].displayName).to.equal("Tenancy Component A");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

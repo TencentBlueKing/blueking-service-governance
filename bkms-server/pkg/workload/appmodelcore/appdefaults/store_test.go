@@ -17,7 +17,7 @@ var _ = Describe("Application default rule store", func() {
 	var store *appdefaults.RuleStore
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		store = testutil.NewStore(GinkgoT(), appdefaults.RuleMeta)
 	})
 

@@ -47,7 +47,7 @@ var _ = Describe("validateScopedEnvVarScopeValue", func() {
 	var workspaceID string
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 		diApp = fxtest.New(GinkgoT(), bkmsenv.FxModule, fx.Populate(&envSvc))
 		diApp.RequireStart()

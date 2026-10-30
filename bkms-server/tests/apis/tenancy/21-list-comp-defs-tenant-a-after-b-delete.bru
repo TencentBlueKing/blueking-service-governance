@@ -1,0 +1,32 @@
+docs {
+  测的是：租户 B 删除同名组件定义后，租户 A 的那一份仍然存在、内容未变。
+}
+
+meta {
+  name: 21-list-comp-defs-tenant-a-after-b-delete
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{serviceURL}}/component-defs?keyword={{tenancyCompDefName}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should keep the component def of tenant A", () => {
+    const defs = res.body.data.filter((d) => d.name === bru.getVar("tenancyCompDefName"));
+    expect(defs).to.have.lengthOf(1);
+    expect(defs[0].creator).to.equal(bru.getVar("tenancyUserA"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
